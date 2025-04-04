@@ -9,7 +9,7 @@ describe('Appsec Rasp Telemetry metrics', () => {
   const wafVersion = '0.0.1'
   const rulesVersion = '0.0.2'
 
-  let count, inc, req, distribution, track
+  let count, inc, req
 
   beforeEach(() => {
     req = {}
@@ -19,13 +19,7 @@ describe('Appsec Rasp Telemetry metrics', () => {
       inc
     })
 
-    track = sinon.spy()
-    distribution = sinon.stub(appsecNamespace, 'distribution').returns({
-      track
-    })
-
     appsecNamespace.metrics.clear()
-    appsecNamespace.distributions.clear()
   })
 
   afterEach(sinon.restore)
