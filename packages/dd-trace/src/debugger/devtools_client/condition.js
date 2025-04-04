@@ -57,7 +57,7 @@ function compile (node) {
       }
     })()`
   } else if (type === 'instanceof') {
-    return `Function.prototype[Symbol.hasInstance].call(${value[1]}, ${compile(value[0])})`
+    return `Function.prototype[Symbol.hasInstance].call(${assertIdentifier(value[1])}, ${compile(value[0])})`
   } else if (type === 'ref') {
     if (value === '@it') {
       return '$dd_it'
