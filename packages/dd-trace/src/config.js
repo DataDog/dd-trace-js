@@ -22,6 +22,8 @@ const { appendRules } = require('./payload-tagging/config')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
+const configChangedCh = require('dc-polyfill').channel('dd-trace:configChanged')
+
 const telemetryCounters = {
   'otel.env.hiding': {},
   'otel.env.invalid': {}
@@ -1468,6 +1470,7 @@ class Config {
 
     this.sampler.sampleRate = this.sampleRate
     updateConfig(changes, this)
+    configChangedCh.publish(changes)
   }
 
   // TODO: Refactor the Config class so it never produces any config objects that are incompatible with MessageChannel

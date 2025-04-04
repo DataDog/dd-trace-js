@@ -18,6 +18,8 @@ const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('../w
 const beforeCh = dc.channel('dd-trace:storage:before')
 const enterCh = dc.channel('dd-trace:storage:enter')
 const spanFinishCh = dc.channel('dd-trace:span:finish')
+const configChangedCh = dc.channel('dd-trace:configChanged')
+
 const profilerTelemetryMetrics = telemetryMetrics.manager.namespace('profilers')
 
 const ProfilingContext = Symbol('NativeWallProfiler.ProfilingContext')
@@ -30,6 +32,7 @@ function getActiveSpan () {
 }
 
 let channelsActivated = false
+let shouldActivateChannels = false
 function ensureChannelsActivated () {
   if (channelsActivated) return
 
@@ -65,13 +68,34 @@ function ensureChannelsActivated () {
   })
 
   channelsActivated = true
+  shouldActivateChannels = false
+  configChangedCh.unsubscribe(observeConfigChange)
 }
+
+function observeConfigChange (changes) {
+  if (!channelsActivated) {
+    const traceEnabledChange = changes.find(change => change.key === 'traceEnabled')
+    if (traceEnabledChange !== undefined) {
+      if (traceEnabledChange.value === true) {
+        if (beforeCh.hasSubscribers()) {
+          ensureChannelsActivated()
+        } else {
+          shouldActivateChannels = true
+        }
+      } else {
+        shouldActivateChannels = false
+      }
+    }
+  }
+}
+configChangedCh.subscribe(observeConfigChange)
 
 class NativeWallProfiler {
   constructor (options = {}) {
     this.type = 'wall'
     this._samplingIntervalMicros = options.samplingInterval || 1e6 / 99 // 99hz
     this._flushIntervalMillis = options.flushInterval || 60 * 1e3 // 60 seconds
+
     this._codeHotspotsEnabled = !!options.codeHotspotsEnabled
     this._endpointCollectionEnabled = !!options.endpointCollectionEnabled
     this._timelineEnabled = !!options.timelineEnabled
@@ -99,6 +123,8 @@ class NativeWallProfiler {
 
     this._logger = options.logger
     this._started = false
+    // Capture initial value of whether tracing is enabled
+    shouldActivateChannels = options.tracing
   }
 
   codeHotspotsEnabled () {
@@ -111,8 +137,6 @@ class NativeWallProfiler {
 
   start ({ mapper } = {}) {
     if (this._started) return
-
-    ensureChannelsActivated()
 
     this._mapper = mapper
     this._pprof = require('@datadog/pprof')
@@ -143,6 +167,9 @@ class NativeWallProfiler {
         this._profilerState = this._pprof.time.getState()
         this._lastSampleCount = 0
 
+        if (shouldActivateChannels) {
+          ensureChannelsActivated()
+        }
         beforeCh.subscribe(this._enter)
         enterCh.subscribe(this._enter)
         spanFinishCh.subscribe(this._spanFinished)

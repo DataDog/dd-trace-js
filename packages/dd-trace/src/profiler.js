@@ -8,7 +8,19 @@ process.once('beforeExit', () => { profiler.stop() })
 
 module.exports = {
   start: config => {
-    const { service, version, env, url, hostname, port, tags, repositoryUrl, commitSHA, injectionEnabled } = config
+    const {
+      commitSHA,
+      env,
+      hostname,
+      injectionEnabled,
+      port,
+      repositoryUrl,
+      service,
+      tags,
+      tracing,
+      url,
+      version
+    } = config
     const { enabled, sourceMap, exporters } = config.profiling
     const logger = {
       debug: (message) => log.debug(message),
@@ -28,20 +40,21 @@ module.exports = {
     } // else activation = undefined
 
     return profiler.start({
-      service,
-      version,
-      env,
-      logger,
-      sourceMap,
-      exporters,
-      url,
-      hostname,
-      port,
-      tags,
-      repositoryUrl,
+      activation,
       commitSHA,
+      env,
+      exporters,
+      hostname,
       libraryInjected,
-      activation
+      logger,
+      port,
+      repositoryUrl,
+      service,
+      sourceMap,
+      tags,
+      tracing,
+      url,
+      version
     })
   },
 
