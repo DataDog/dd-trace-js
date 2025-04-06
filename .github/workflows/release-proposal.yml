@@ -38,4 +38,4 @@ jobs:
           mkdir -p ~/.config/changelog-maker
           echo "{\"token\":\"${{secrets.GITHUB_TOKEN}}\",\"user\":\"${{github.actor}}\"}" > ~/.config/changelog-maker/config.json
       - run: node scripts/release/proposal 5 -y --{{ inputs.increment }}
-        if: ${{ inputs.release-line == 'all' || inputs.release-line == '5' }}
+        if: inputs.release-line == 'all' || inputs.release-line == '5'
