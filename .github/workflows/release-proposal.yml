@@ -6,19 +6,20 @@ on:
       release-line:
         description: 'Release line'
         required: true
-        default: 5
+        default: all
         type: choice
         options:
-          - 5
+          - 'all'
+          - '5'
       increment:
         description: 'Version increment'
         required: true
         default: auto
         type: choice
         options:
-          - auto
-          - minor
-          - patch
+          - 'auto'
+          - 'minor'
+          - 'patch'
 jobs:
   create-proposal:
     runs-on: ubuntu-latest
@@ -36,4 +37,5 @@ jobs:
       - run: |
           mkdir -p ~/.config/changelog-maker
           echo "{\"token\":\"${{secrets.GITHUB_TOKEN}}\",\"user\":\"${{github.actor}}\"}" > ~/.config/changelog-maker/config.json
-      - run: node scripts/release/proposal ${{ inputs.release-line }} -y --{{ inputs.increment }}
+      - run: node scripts/release/proposal 5 -y --{{ inputs.increment }}
+        if: ${{ inputs.release-line == 'all' || inputs.release-line == '5' }}
