@@ -37,7 +37,9 @@ const PRIMITIVE_TYPES = new Set(['string', 'number', 'bigint', 'boolean', 'undef
 
 // TODO: Consider storing some of these functions on `process` so they can be reused across probes
 function compile (node) {
-  if (node === null || typeof node === 'number' || typeof node === 'boolean' || typeof node === 'string') {
+  if (node === null || typeof node === 'number' || typeof node === 'boolean') {
+    return node
+  } else if (typeof node === 'string') {
     return JSON.stringify(node)
   }
 
@@ -220,6 +222,9 @@ function guardAgainstPropertyAccessSideEffects (variable, propertyName) {
 }
 
 function guardAgainstCoercionSideEffects (variable) {
+  // shortcut if we're comparing number literals
+  if (typeof variable === 'number') return variable
+
   return `((val) => {
     if (
       typeof val === 'object' && val !== null && (
