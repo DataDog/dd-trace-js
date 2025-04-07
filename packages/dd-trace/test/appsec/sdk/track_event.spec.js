@@ -14,7 +14,6 @@ describe('track_event - Internal API', () => {
   let setUserTags
   let waf
   let telemetry
-  let telemetryMetrics, count, inc
   let trackUserLoginSuccessEvent, trackUserLoginFailureEvent, trackCustomEvent
   let trackUserLoginSuccessV2, trackUserLoginFailureV2
 
@@ -37,28 +36,6 @@ describe('track_event - Internal API', () => {
 
     setUserTags = sinon.stub()
 
-    inc = sinon.stub()
-
-    count = sinon.stub().callsFake(() => {
-      return {
-        inc
-      }
-    })
-
-    telemetryMetrics = {
-      manager: {
-        namespace: function (name) {
-          if (name === 'appsec') {
-            return {
-              count
-            }
-          }
-
-          return null
-        }
-      }
-    }
-
     waf = {
       run: sinon.spy()
     }
@@ -76,8 +53,7 @@ describe('track_event - Internal API', () => {
         setUserTags
       },
       '../waf': waf,
-      '../telemetry': telemetry,
-      '../../telemetry/metrics': telemetryMetrics
+      '../telemetry': telemetry
     })
 
     trackUserLoginSuccessEvent = trackEvents.trackUserLoginSuccessEvent
