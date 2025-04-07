@@ -34,7 +34,6 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/node
       - run: npm i -g branch-diff
-      - run: npm i --no-save application-config-path@0.1.1
       - run: |
           mkdir -p ~/.config/changelog-maker
           echo "{\"token\":\"${{secrets.GITHUB_TOKEN}}\",\"user\":\"${{github.actor}}\"}" > ~/.config/changelog-maker/config.json
