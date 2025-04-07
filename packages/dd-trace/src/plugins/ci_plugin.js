@@ -28,7 +28,9 @@ const {
   DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
   DI_DEBUG_ERROR_FILE_SUFFIX,
   DI_DEBUG_ERROR_LINE_SUFFIX,
-  getLibraryCapabilitiesTags
+  getLibraryCapabilitiesTags,
+  getPullRequestDiff,
+  getModifiedTestsFromDiff
 } = require('./util/test')
 const Plugin = require('./plugin')
 const { COMPONENT } = require('../constants')
@@ -45,7 +47,9 @@ const {
   GIT_COMMIT_SHA,
   GIT_BRANCH,
   CI_WORKSPACE_PATH,
-  GIT_COMMIT_MESSAGE
+  GIT_COMMIT_MESSAGE,
+  GIT_PULL_REQUEST_BASE_BRANCH_SHA,
+  GIT_COMMIT_HEAD_SHA
 } = require('./util/tags')
 const { OS_VERSION, OS_PLATFORM, OS_ARCHITECTURE, RUNTIME_NAME, RUNTIME_VERSION } = require('./util/env')
 const getDiClient = require('../ci-visibility/dynamic-instrumentation')
@@ -194,6 +198,41 @@ module.exports = class CiPlugin extends Plugin {
         onDone({ err, testManagementTests })
       })
     })
+
+    this.addSub(`ci:${this.constructor.id}:modified-tests`, ({ onDone }) => {
+      const { pullRequestBaseSha, commitHeadSha } = this.testEnvironmentMetadata
+
+      if (pullRequestBaseSha && commitHeadSha) {
+        const diff = getPullRequestDiff(pullRequestBaseSha, commitHeadSha)
+        const modifiedTests = getModifiedTestsFromDiff(diff)
+        if (modifiedTests) {
+          return onDone({ err: null, modifiedTests })
+        }
+      }
+
+      if (!this.tracer._exporter?.getModifiedTests) {
+        return onDone({ err: new Error('Test optimization was not initialized correctly') })
+      }
+      this.tracer._exporter.getModifiedTests(this.testConfiguration, (err, { baseSha, modifiedTests }) => {
+        if (err) {
+          log.error('Modified tests could not be fetched. %s', err.message)
+          this.libraryConfig.isImpactedTestsEnabled = false
+          return onDone({ err, modifiedTests: null })
+        }
+
+        // If we got a baseSha from API, try local diff again
+        if (baseSha) {
+          const diff = getPullRequestDiff(baseSha, commitHeadSha)
+          const localModifiedTests = getModifiedTestsFromDiff(diff)
+          if (localModifiedTests) {
+            return onDone({ err: null, modifiedTests: localModifiedTests })
+          }
+        }
+
+        // If everything else failed, use modifiedTests from API
+        onDone({ err: null, modifiedTests })
+      })
+    })
   }
 
   get telemetry () {
@@ -240,7 +279,9 @@ module.exports = class CiPlugin extends Plugin {
       [GIT_BRANCH]: branch,
       [CI_PROVIDER_NAME]: ciProviderName,
       [CI_WORKSPACE_PATH]: repositoryRoot,
-      [GIT_COMMIT_MESSAGE]: commitMessage
+      [GIT_COMMIT_MESSAGE]: commitMessage,
+      [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseSha,
+      [GIT_COMMIT_HEAD_SHA]: commitHeadSha
     } = this.testEnvironmentMetadata
 
     this.repositoryRoot = repositoryRoot || process.cwd()
@@ -259,7 +300,9 @@ module.exports = class CiPlugin extends Plugin {
       runtimeVersion,
       branch,
       testLevel: 'suite',
-      commitMessage
+      commitMessage,
+      pullRequestBaseSha,
+      commitHeadSha
     }
   }
 
