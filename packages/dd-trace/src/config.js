@@ -1123,13 +1123,6 @@ class Config {
     this._setTags(opts, 'tags', tags)
     this._setBoolean(opts, 'traceId128BitGenerationEnabled', options.traceId128BitGenerationEnabled)
     this._setBoolean(opts, 'traceId128BitLoggingEnabled', options.traceId128BitLoggingEnabled)
-    if (options.tracePropagationBehaviorExtract) {
-      const stringPropagationBehaviorExtract = String(options.tracePropagationBehaviorExtract)
-      this._setValue(opts, 'tracePropagationBehaviorExtract',
-        VALID_PROPAGATION_BEHAVIOR_EXTRACT.has(stringPropagationBehaviorExtract)
-          ? stringPropagationBehaviorExtract
-          : 'continue')
-    }
     this._setString(opts, 'version', options.version || tags.version)
     this._setBoolean(opts, 'inferredProxyServicesEnabled', options.inferredProxyServicesEnabled)
     this._setBoolean(opts, 'graphqlErrorExtensions', options.graphqlErrorExtensions)
