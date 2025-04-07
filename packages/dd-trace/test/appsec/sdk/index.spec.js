@@ -89,7 +89,8 @@ describe('Appsec SDK', () => {
   })
 
   describe('eventTrackingV2', () => {
-    it('eventTrackingV2.trackUserLoginSuccess(login, user, metadata) should call internal function with proper params', () => {
+    it('eventTrackingV2.trackUserLoginSuccess(login, user, metadata) should ' +
+      'call internal function with proper params', () => {
       const login = 'login'
       const user = { id: 'user_id' }
       const metadata = { key: 'value' }
@@ -116,7 +117,8 @@ describe('Appsec SDK', () => {
       expect(trackUserLoginSuccessV2).to.have.been.calledOnceWithExactly(tracer, login, undefined, undefined)
     })
 
-    it('eventTrackingV2.trackUserLoginFailure(login, exists, meta) should call internal function with proper params', () => {
+    it('eventTrackingV2.trackUserLoginFailure(login, exists, meta) should ' +
+      'call internal function with proper params', () => {
       const login = 'login'
       const exists = false
       const metadata = { key: 'value' }

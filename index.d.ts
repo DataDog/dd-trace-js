@@ -910,7 +910,7 @@ declare namespace tracer {
      *
      * @beta This method is in beta and could change in future versions.
      *
-     * @deprecated In favor of v2.trackUserLoginSuccess
+     * @deprecated In favor of eventTrackingV2.trackUserLoginSuccess
      */
     trackUserLoginSuccessEvent(user: User, metadata?: { [key: string]: string }): void
 
@@ -922,7 +922,7 @@ declare namespace tracer {
      *
      * @beta This method is in beta and could change in future versions.
      *
-     * @deprecated In favor of v2.trackUserLoginFailure
+     * @deprecated In favor of eventTrackingV2.trackUserLoginFailure
      */
     trackUserLoginFailureEvent(userId: string, exists: boolean, metadata?: { [key: string]: string }): void
 

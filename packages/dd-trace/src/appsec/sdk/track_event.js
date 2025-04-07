@@ -224,9 +224,9 @@ function runWaf (eventName, user) {
 module.exports = {
   trackUserLoginSuccessEvent,
   trackUserLoginFailureEvent,
+  trackCustomEvent,
   trackUserLoginSuccessV2,
   trackUserLoginFailureV2,
-  trackCustomEvent,
   trackEvent,
   runWaf
 }
