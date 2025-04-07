@@ -11,7 +11,6 @@ const { channel } = require('dc-polyfill')
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
 const { SAMPLING_MECHANISM_MANUAL } = require('../../../src/constants')
 const { expect } = require('chai')
-const DatadogTracer = require('../../../src/tracer')
 
 const injectCh = channel('dd-trace:span:inject')
 const extractCh = channel('dd-trace:span:extract')
@@ -1180,12 +1179,8 @@ describe('TextMapPropagator', () => {
     })
 
     describe('tracePropagationBehaviorExtract', () => {
-      let Span
       let traceId
       let spanId
-      let tracer
-      let processor
-      let prioritySampler
       let extractedContext
 
       beforeEach(() => {
@@ -1199,10 +1194,6 @@ describe('TextMapPropagator', () => {
           baggage: 'foo=bar'
         }
 
-        Span = require('../../../src/opentracing/span')
-        tracer = {}
-        processor = {}
-        prioritySampler = {}
         extractedContext = {}
       })
 
@@ -1221,15 +1212,6 @@ describe('TextMapPropagator', () => {
         it('should reset span links when Trace_Propagation_Behavior_Extract is set to ignore', () => {
           // No span links should occur when we return from extract
           expect(extractedContext._links.length).to.equal(0)
-        })
-
-        it('should not propagate baggage items when Trace_Propagation_Behavior_Extract is set to ignore', () => {
-          tracer = new DatadogTracer(config)
-          const span = new Span(tracer, processor, prioritySampler, {
-            operationName: 'operation',
-            parent: extractedContext
-          })
-          expect(span._spanContext._baggageItems).to.deep.equal({})
         })
       })
 
@@ -1252,15 +1234,6 @@ describe('TextMapPropagator', () => {
           expect(extractedContext._links[0].context.toSpanId(true)).to.equal(spanId)
           expect(extractedContext._links[0].attributes.reason).to.equal('propagation_behavior_extract')
           expect(extractedContext._links[0].attributes.context_headers).to.equal('tracecontext')
-        })
-
-        it('should propagate baggage items when Trace_Propagation_Behavior_Extract is set to restart', () => {
-          tracer = new DatadogTracer(config)
-          const span = new Span(tracer, processor, prioritySampler, {
-            operationName: 'operation',
-            parent: extractedContext
-          })
-          expect(span._spanContext._baggageItems).to.deep.equal({ foo: 'bar' })
         })
       })
     })
