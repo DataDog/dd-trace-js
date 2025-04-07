@@ -423,7 +423,7 @@ describe('Dynamic Instrumentation', function () {
         }))
       })
 
-      it('should report error if condition is invalid', function (done) {
+      it('should report error if condition cannot be compiled', function (done) {
         t.agent.on('debugger-diagnostics', ({ payload }) => {
           payload.forEach(({ debugger: { diagnostics } }) => {
             if (diagnostics.status === 'ERROR') {
