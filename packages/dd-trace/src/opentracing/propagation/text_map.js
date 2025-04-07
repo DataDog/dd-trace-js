@@ -355,7 +355,7 @@ class TextMapPropagator {
 
     this._extractBaggageItems(carrier, context)
 
-    if (this._config.tracePropagationBehaviorExtract !== 'continue') {
+    if (this._config.tracePropagationBehaviorExtract === 'ignore') {
       context._links = []
     } else if (this._config.tracePropagationBehaviorExtract === 'restart') {
       context._links = []
