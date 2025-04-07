@@ -230,7 +230,7 @@ module.exports = class CiPlugin extends Plugin {
         }
 
         // If everything else failed, use modifiedTests from API
-        onDone({ err: null, modifiedTests: response.modifiedTests })
+        onDone({ err: null, modifiedTests: { apiTests: response.modifiedTests } })
       })
     })
   }

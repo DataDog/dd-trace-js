@@ -52,7 +52,8 @@ const {
   DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_HAS_FAILED_ALL_RETRIES,
-  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED
+  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
+  TEST_IS_MODIFIED
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -3505,6 +3506,150 @@ describe('jest CommonJS', () => {
           done()
         }).catch(done)
       })
+    })
+  })
+
+  context.only('impacted tests', () => {
+    const NUM_RETRIES_EFD = 3
+    beforeEach(() => {
+      receiver.setImpactedTests({
+        // TODO - CHANGE THIS
+        // base_sha: '1234567890',
+        files: [
+          'ci-visibility/test-impacted-test/test-impacted-1.js'
+        ]
+      })
+    })
+
+    const getTestAssertions = (isImpacting, isEfd, isParallel) =>
+      receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+
+          // TODO - REVIEW TO ADD IMPACTED TEST SESSION?
+          if (isEfd) {
+            assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
+          } else {
+            assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
+          }
+
+          const resourceNames = tests.map(span => span.resource)
+
+          assert.includeMembers(resourceNames,
+            [
+              'ci-visibility/test-impacted-test/test-impacted-1.js.impacted tests can pass normally',
+              'ci-visibility/test-impacted-test/test-impacted-1.js.impacted tests can fail'
+            ]
+          )
+
+          if (isParallel) {
+            // Parallel mode in jest requires more than a single test suite
+            // Here we check that the second test suite is actually running,
+            // so we can be sure that parallel mode is on
+            assert.includeMembers(resourceNames, [
+              'ci-visibility/test-impacted-test/test-impacted-2.js.impacted tests 2 can pass normally',
+              'ci-visibility/test-impacted-test/test-impacted-2.js.impacted tests 2 can fail'
+            ])
+          }
+
+          if (isImpacting) {
+            const impactedTests = tests.filter(test =>
+              test.meta[TEST_SOURCE_FILE] === 'ci-visibility/test-impacted-test/test-impacted.js'
+            )
+            impactedTests.forEach(test => {
+              assert.propertyVal(test.meta, TEST_IS_MODIFIED, 'true')
+            })
+          }
+
+          if (isEfd) {
+            const newTests = tests.filter(test =>
+              test.meta[TEST_SUITE] === 'ci-visibility/test-impacted-test/test-impacted-1.js'
+            )
+            newTests.forEach(test => {
+              assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
+            })
+            const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            // all but two has been retried
+            assert.equal(
+              newTests.length - 2,
+              retriedTests.length
+            )
+            assert.equal(retriedTests.length, NUM_RETRIES_EFD * 2)
+            retriedTests.forEach(test => {
+              assert.propertyVal(test.meta, TEST_RETRY_REASON, 'efd')
+            })
+          }
+        })
+
+    const runImpactedTest = (done, isImpacting, extraEnvVars = {}, isEfd = false, isParallel = false) => {
+      const testAssertionsPromise = getTestAssertions(isImpacting, isEfd, isParallel)
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'test-impacted-test/test-impacted-1',
+            ...extraEnvVars
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        testAssertionsPromise.then(done).catch(done)
+      })
+    }
+
+    it('can impacted tests', (done) => {
+      receiver.setSettings({ impacted_tests_enabled: true })
+
+      runImpactedTest(done, true)
+    })
+
+    it('does not impact tests if disabled', (done) => {
+      receiver.setSettings({ impacted_tests_enabled: false })
+
+      runImpactedTest(done, false)
+    })
+
+    it('does not impact tests DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED is set to false', (done) => {
+      receiver.setSettings({ impacted_tests_enabled: false })
+
+      runImpactedTest(done, false, { DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0' }, false)
+    })
+
+    it('can impact tests in and activate EFD if modified', (done) => {
+      receiver.setSettings({
+        impacted_tests_enabled: { enabled: true },
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': NUM_RETRIES_EFD
+          }
+          // faulty_session_threshold: 100
+        },
+        known_tests_enabled: true
+      })
+      receiver.setKnownTests(['ci-visibility/test-impacted-test/test-impacted-1.js'])
+      runImpactedTest(done, true, null, true)
+    })
+
+    it('can impact tests in parallel mode', (done) => {
+      receiver.setSettings({ test_management: { enabled: true } })
+
+      runImpactedTest(
+        done,
+        true,
+        {
+          // we need to run more than 1 suite for parallel mode to kick in
+          TESTS_TO_RUN: 'test-impacted-test/test-impacted',
+          RUN_IN_PARALLEL: true
+        }
+      )
     })
   })
 })

@@ -26,7 +26,7 @@ const {
   CI_WORKSPACE_PATH
 } = require('../../../src/plugins/util/tags')
 
-const { getGitMetadata, unshallowRepository } = proxyquire('../../../src/plugins/util/git',
+const { getGitMetadata, unshallowRepository, getGitDiff } = proxyquire('../../../src/plugins/util/git',
   {
     child_process: {
       execFileSync: execFileSyncStub
@@ -397,5 +397,35 @@ describe('isGitAvailable', () => {
     process.env.PATH = ''
 
     expect(isGitAvailable()).to.be.false
+  })
+})
+
+describe('getGitDiff', () => {
+  afterEach(() => {
+    execFileSyncStub.reset()
+  })
+
+  it('returns the diff between two commits', () => {
+    const expectedDiff = 'diff --git a/file.js b/file.js'
+    execFileSyncStub.returns(expectedDiff)
+
+    const diff = getGitDiff('base-commit', 'target-commit')
+
+    expect(diff).to.equal(expectedDiff)
+    expect(execFileSyncStub).to.have.been.calledWith('git', [
+      'diff',
+      '-U0',
+      '--word-diff=porcelain',
+      'base-commit',
+      'target-commit'
+    ])
+  })
+
+  it('returns empty string when git command fails', () => {
+    execFileSyncStub.throws(new Error('git command failed'))
+
+    const diff = getGitDiff('base-commit', 'target-commit')
+
+    expect(diff).to.equal('')
   })
 })

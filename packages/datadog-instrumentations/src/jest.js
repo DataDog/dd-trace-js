@@ -394,7 +394,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           if (isModified && !retriedTestsToNumAttempts.has(originalTestName) && this.isEarlyFlakeDetectionEnabled) {
             retriedTestsToNumAttempts.set(originalTestName, 0)
             this.retryTest(
-              originalTestName,
+              event.testName,
               earlyFlakeDetectionNumRetries,
               addEfdStringToTestName,
               'Early flake detection',

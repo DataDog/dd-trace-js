@@ -847,13 +847,13 @@ function getModifiedTestsFromDiff (diff) {
 }
 
 function isModifiedTest (testPath, testStartLine, testEndLine, modifiedTests) {
-  if (modifiedTests !== undefined && modifiedTests.files === undefined) { // If tests come from the local diff
+  if (modifiedTests !== undefined && modifiedTests.apiTests === undefined) { // If tests come from the local diff
     const lines = modifiedTests[testPath]
     if (lines) {
       return lines.some(line => line >= testStartLine && line <= testEndLine)
     }
-  } else if (modifiedTests.files !== undefined) { // If tests come from the API
-    const isModified = modifiedTests.files.some(file => file.path === testPath)
+  } else if (modifiedTests.apiTests !== undefined) { // If tests come from the API
+    const isModified = modifiedTests.apiTests.some(file => file === testPath)
     if (isModified) {
       return true
     }
