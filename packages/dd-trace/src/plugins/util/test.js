@@ -6,7 +6,7 @@ const log = require('../../log')
 const istanbul = require('istanbul-lib-coverage')
 const ignore = require('ignore')
 
-const { getGitMetadata } = require('./git')
+const { getGitMetadata, getGitDiff } = require('./git')
 const { getUserProviderGitMetadata, validateGitRepositoryUrl, validateGitCommitSha } = require('./user-provided-git')
 const { getCIMetadata } = require('./ci')
 const { getRuntimeAndOSMetadata } = require('./env')
@@ -59,7 +59,7 @@ const TEST_EARLY_FLAKE_ENABLED = 'test.early_flake.enabled'
 const TEST_EARLY_FLAKE_ABORT_REASON = 'test.early_flake.abort_reason'
 const TEST_RETRY_REASON = 'test.retry_reason'
 const TEST_HAS_FAILED_ALL_RETRIES = 'test.has_failed_all_retries'
-
+const TEST_IS_MODIFIED = 'test.is_modified'
 const CI_APP_ORIGIN = 'ciapp-test'
 
 const JEST_TEST_RUNNER = 'test.jest.test_runner'
@@ -174,6 +174,7 @@ module.exports = {
   TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_RETRY_REASON,
   TEST_HAS_FAILED_ALL_RETRIES,
+  TEST_IS_MODIFIED,
   getTestEnvironmentMetadata,
   getTestParametersString,
   finishAllTraceSpans,
@@ -206,6 +207,7 @@ module.exports = {
   mergeCoverage,
   fromCoverageMapToCoverage,
   getTestLineStart,
+  getTestEndLine,
   removeInvalidMetadata,
   parseAnnotations,
   EFD_STRING,
@@ -241,7 +243,10 @@ module.exports = {
   TEST_MANAGEMENT_IS_QUARANTINED,
   TEST_MANAGEMENT_ENABLED,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
-  getLibraryCapabilitiesTags
+  getLibraryCapabilitiesTags,
+  getPullRequestDiff,
+  getModifiedTestsFromDiff,
+  isModifiedTest
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
@@ -618,6 +623,13 @@ function getTestLineStart (err, testSuitePath) {
   }
 }
 
+// Get the end line of a test by inspecting a given function's source code
+function getTestEndLine (testFn, startLine = 0) {
+  const source = testFn.toString()
+  const lineCount = source.split('\n').length
+  return startLine + lineCount - 1
+}
+
 /**
  * Gets an object of test tags from an Playwright annotations array.
  * @param {Object[]} annotations - Annotations from a Playwright test.
@@ -782,4 +794,69 @@ function getLibraryCapabilitiesTags (testFramework, isParallel) {
       ? '2'
       : undefined
   }
+}
+
+function getPullRequestDiff (baseCommit, targetCommit) {
+  if (!baseCommit || !targetCommit) {
+    return
+  }
+  return getGitDiff(baseCommit, targetCommit)
+}
+
+function getModifiedTestsFromDiff (diff) {
+  const result = {}
+  if (!diff) return null
+
+  const filesRegex = /^diff --git a\/(?<file>.+) b\/(?<file2>.+)$/g
+  const linesRegex = /^@@ -\d+(,\d+)? \+(?<start>\d+)(,(?<count>\d+))? @@/g
+
+  let currentFile = null
+
+  // Go line by line
+  const lines = diff.split('\n')
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+
+    // Check for new file
+    const fileMatch = filesRegex.exec(line)
+    if (fileMatch && fileMatch.groups.file) {
+      currentFile = fileMatch.groups.file
+      result[currentFile] = []
+      continue
+    }
+
+    // Check for changed lines
+    const lineMatch = linesRegex.exec(line)
+    if (lineMatch && currentFile) {
+      const start = parseInt(lineMatch.groups.start, 10)
+      const count = lineMatch.groups.count ? parseInt(lineMatch.groups.count, 10) : 1
+      for (let j = 0; j < count; j++) {
+        result[currentFile].push(start + j)
+      }
+    }
+
+    // Reset regexes to allow re-use
+    filesRegex.lastIndex = 0
+    linesRegex.lastIndex = 0
+  }
+
+  if (Object.keys(result).length === 0) {
+    return null
+  }
+  return result
+}
+
+function isModifiedTest (testPath, testStartLine, testEndLine, modifiedTests) {
+  if (modifiedTests !== undefined && modifiedTests.files === undefined) { // If tests come from the local diff
+    const lines = modifiedTests[testPath]
+    if (lines) {
+      return lines.some(line => line >= testStartLine && line <= testEndLine)
+    }
+  } else if (modifiedTests.files !== undefined) { // If tests come from the API
+    const isModified = modifiedTests.files.some(file => file.path === testPath)
+    if (isModified) {
+      return true
+    }
+  }
+  return false
 }

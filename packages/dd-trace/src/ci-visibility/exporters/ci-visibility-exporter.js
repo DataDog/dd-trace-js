@@ -8,6 +8,8 @@ const { getSkippableSuites: getSkippableSuitesRequest } = require('../intelligen
 const { getKnownTests: getKnownTestsRequest } = require('../early-flake-detection/get-known-tests')
 const { getTestManagementTests: getTestManagementTestsRequest } =
   require('../test-management/get-test-management-tests')
+const { getModifiedTests: getModifiedTestsRequest } =
+  require('../test-management/get-modified-tests')
 const log = require('../../log')
 const AgentInfoExporter = require('../../exporters/common/agent-info-exporter')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../../plugins/util/tags')
@@ -102,6 +104,14 @@ class CiVisibilityExporter extends AgentInfoExporter {
     )
   }
 
+  shouldRequestImpactedTests () {
+    return !!(
+      this._canUseCiVisProtocol &&
+      this._config.isImpactedTestsEnabled &&
+      this._libraryConfig?.isImpactedTestsEnabled
+    )
+  }
+
   shouldRequestLibraryConfiguration () {
     return this._config.isIntelligentTestRunnerEnabled
   }
@@ -153,6 +163,13 @@ class CiVisibilityExporter extends AgentInfoExporter {
       return callback(null)
     }
     getTestManagementTestsRequest(this.getRequestConfiguration(testConfiguration), callback)
+  }
+
+  getModifiedTests (testConfiguration, callback) {
+    if (!this.shouldRequestModifiedTests()) {
+      return callback(null)
+    }
+    getModifiedTestsRequest(this.getRequestConfiguration(testConfiguration), callback)
   }
 
   /**
@@ -216,7 +233,8 @@ class CiVisibilityExporter extends AgentInfoExporter {
       isDiEnabled,
       isKnownTestsEnabled,
       isTestManagementEnabled,
-      testManagementAttemptToFixRetries
+      testManagementAttemptToFixRetries,
+      isImpactedTestsEnabled
     } = remoteConfiguration
     return {
       isCodeCoverageEnabled,
@@ -232,7 +250,8 @@ class CiVisibilityExporter extends AgentInfoExporter {
       isKnownTestsEnabled,
       isTestManagementEnabled: isTestManagementEnabled && this._config.isTestManagementEnabled,
       testManagementAttemptToFixRetries:
-        testManagementAttemptToFixRetries ?? this._config.testManagementAttemptToFixRetries
+        testManagementAttemptToFixRetries ?? this._config.testManagementAttemptToFixRetries,
+      isImpactedTestsEnabled: isImpactedTestsEnabled && this._config.isImpactedTestsEnabled
     }
   }
 

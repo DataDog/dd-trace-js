@@ -15,7 +15,9 @@ const {
   getIsFaultyEarlyFlakeDetection,
   JEST_WORKER_LOGS_PAYLOAD_CODE,
   addAttemptToFixStringToTestName,
-  removeAttemptToFixStringFromTestName
+  removeAttemptToFixStringFromTestName,
+  getTestEndLine,
+  isModifiedTest
 } = require('../../dd-trace/src/plugins/util/test')
 const {
   getFormattedJestTestParameters,
@@ -46,6 +48,7 @@ const skippableSuitesCh = channel('ci:jest:test-suite:skippable')
 const libraryConfigurationCh = channel('ci:jest:library-configuration')
 const knownTestsCh = channel('ci:jest:known-tests')
 const testManagementTestsCh = channel('ci:jest:test-management-tests')
+const impactedTestsCh = channel('ci:jest:modified-tests')
 
 const itrSkippedSuitesCh = channel('ci:jest:itr:skipped-suites')
 
@@ -76,6 +79,8 @@ let isKnownTestsEnabled = false
 let isTestManagementTestsEnabled = false
 let testManagementTests = {}
 let testManagementAttemptToFixRetries = 0
+let isImpactedTestsEnabled = false
+let modifiedTests = {}
 
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
@@ -148,6 +153,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.isDiEnabled = this.testEnvironmentOptions._ddIsDiEnabled
       this.isKnownTestsEnabled = this.testEnvironmentOptions._ddIsKnownTestsEnabled
       this.isTestManagementTestsEnabled = this.testEnvironmentOptions._ddIsTestManagementTestsEnabled
+      this.isImpactedTestsEnabled = this.testEnvironmentOptions._ddIsImpactedTestsEnabled
 
       if (this.isKnownTestsEnabled) {
         try {
@@ -326,6 +332,13 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           }
         }
 
+        let isModified = false
+        if (this.isImpactedTestsEnabled) {
+          const testStartLine = getTestLineStart(event.test.asyncError, this.testSuite)
+          const testEndLine = getTestEndLine(event.test.fn, testStartLine)
+          isModified = isModifiedTest(this.testSourceFile, testStartLine, testEndLine, modifiedTests)
+        }
+
         if (this.isKnownTestsEnabled) {
           isNewTest = retriedTestsToNumAttempts.has(originalTestName)
           if (isNewTest) {
@@ -349,7 +362,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             isAttemptToFixRetry: numOfAttemptsToFixRetries > 0,
             isJestRetry,
             isDisabled,
-            isQuarantined
+            isQuarantined,
+            isModified
           })
           originalTestFns.set(event.test, event.test.fn)
           event.test.fn = asyncResource.bind(event.test.fn)
@@ -369,6 +383,21 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
               testManagementAttemptToFixRetries,
               addAttemptToFixStringToTestName,
               'Test Management (Attempt to Fix)',
+              event
+            )
+          }
+        }
+        if (this.isImpactedTestsEnabled) {
+          const testStartLine = getTestLineStart(event.asyncError, this.testSuite)
+          const testEndLine = getTestEndLine(event.fn, testStartLine)
+          const isModified = isModifiedTest(this.testSourceFile, testStartLine, testEndLine, modifiedTests)
+          if (isModified && !retriedTestsToNumAttempts.has(originalTestName) && this.isEarlyFlakeDetectionEnabled) {
+            retriedTestsToNumAttempts.set(originalTestName, 0)
+            this.retryTest(
+              originalTestName,
+              earlyFlakeDetectionNumRetries,
+              addEfdStringToTestName,
+              'Early flake detection',
               event
             )
           }
@@ -625,6 +654,7 @@ function cliWrapper (cli, jestVersion) {
         isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
         isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
         testManagementAttemptToFixRetries = libraryConfig.testManagementAttemptToFixRetries
+        isImpactedTestsEnabled = libraryConfig.isImpactedTestsEnabled
       }
     } catch (err) {
       log.error('Jest library configuration error', err)
@@ -688,6 +718,25 @@ function cliWrapper (cli, jestVersion) {
         }
       } catch (err) {
         log.error('Jest test management tests error', err)
+      }
+    }
+
+    if (isImpactedTestsEnabled) {
+      const impactedTestsPromise = new Promise((resolve) => {
+        onDone = resolve
+      })
+
+      sessionAsyncResource.runInAsyncScope(() => {
+        impactedTestsCh.publish({ onDone })
+      })
+
+      try {
+        const { err, modifiedTests: receivedModifiedTests } = await impactedTestsPromise
+        if (!err) {
+          modifiedTests = receivedModifiedTests
+        }
+      } catch (err) {
+        log.error('Jest impacted tests error', err)
       }
     }
 
