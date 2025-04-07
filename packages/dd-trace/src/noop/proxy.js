@@ -10,25 +10,17 @@ const noopAppsec = new NoopAppsecSdk()
 const noopDogStatsDClient = new NoopDogStatsDClient()
 const noopLLMObs = new NoopLLMObsSDK(noop)
 
-const {
-  setBaggageItem,
-  getBaggageItem,
-  getAllBaggageItems,
-  removeBaggageItem,
-  removeAllBaggageItems
-} = require('../../src/baggage')
-
 class NoopProxy {
   constructor () {
     this._tracer = noop
     this.appsec = noopAppsec
     this.dogstatsd = noopDogStatsDClient
     this.llmobs = noopLLMObs
-    this.setBaggageItem = setBaggageItem
-    this.getBaggageItem = getBaggageItem
-    this.getAllBaggageItems = getAllBaggageItems
-    this.removeBaggageItem = removeBaggageItem
-    this.removeAllBaggageItems = removeAllBaggageItems
+    this.setBaggageItem = () => {}
+    this.getBaggageItem = () => {}
+    this.getAllBaggageItems = () => {}
+    this.removeBaggageItem = () => {}
+    this.removeAllBaggageItems = () => {}
   }
 
   init () {
