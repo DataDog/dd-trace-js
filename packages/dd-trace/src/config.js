@@ -1395,7 +1395,6 @@ class Config {
 
   _setString (obj, name, value) {
     obj[name] = value ? String(value) : undefined // unset for empty strings
-    console.log("Setting:", name, obj[name])
   }
 
   _setTags (obj, name, value) {
