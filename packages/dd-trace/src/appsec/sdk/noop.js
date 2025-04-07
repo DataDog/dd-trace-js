@@ -1,6 +1,6 @@
 'use strict'
 
-class NoopAppsecSdkV2 {
+class NoopEventTrackingV2 {
   trackUserLoginSuccess () {}
 
   trackUserLoginFailure () {}
@@ -8,7 +8,7 @@ class NoopAppsecSdkV2 {
 
 class NoopAppsecSdk {
   constructor () {
-    this.v2 = new NoopAppsecSdkV2()
+    this.eventTrackingV2 = new NoopEventTrackingV2()
   }
 
   trackUserLoginSuccessEvent () {}

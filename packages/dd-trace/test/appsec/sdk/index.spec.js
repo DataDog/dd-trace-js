@@ -88,66 +88,66 @@ describe('Appsec SDK', () => {
     expect(setUser).to.have.been.calledOnceWithExactly(tracer, user)
   })
 
-  describe('v2', () => {
-    it('v2.trackUserLoginSuccess(login, user, metadata) should call internal function with proper params', () => {
+  describe('eventTrackingV2', () => {
+    it('eventTrackingV2.trackUserLoginSuccess(login, user, metadata) should call internal function with proper params', () => {
       const login = 'login'
       const user = { id: 'user_id' }
       const metadata = { key: 'value' }
 
-      appsecSdk.v2.trackUserLoginSuccess(login, user, metadata)
+      appsecSdk.eventTrackingV2.trackUserLoginSuccess(login, user, metadata)
 
       expect(trackUserLoginSuccessV2).to.have.been.calledOnceWithExactly(tracer, login, user, metadata)
     })
 
-    it('v2.trackUserLoginSuccess(login, user) should call internal function with proper params', () => {
+    it('eventTrackingV2.trackUserLoginSuccess(login, user) should call internal function with proper params', () => {
       const login = 'login'
       const user = { id: 'user_id' }
 
-      appsecSdk.v2.trackUserLoginSuccess(login, user)
+      appsecSdk.eventTrackingV2.trackUserLoginSuccess(login, user)
 
       expect(trackUserLoginSuccessV2).to.have.been.calledOnceWithExactly(tracer, login, user, undefined)
     })
 
-    it('v2.trackUserLoginSuccess(login) should call internal function with proper params', () => {
+    it('eventTrackingV2.trackUserLoginSuccess(login) should call internal function with proper params', () => {
       const login = 'login'
 
-      appsecSdk.v2.trackUserLoginSuccess(login)
+      appsecSdk.eventTrackingV2.trackUserLoginSuccess(login)
 
       expect(trackUserLoginSuccessV2).to.have.been.calledOnceWithExactly(tracer, login, undefined, undefined)
     })
 
-    it('v2.trackUserLoginFailure(login, exists, meta) should call internal function with proper params', () => {
+    it('eventTrackingV2.trackUserLoginFailure(login, exists, meta) should call internal function with proper params', () => {
       const login = 'login'
       const exists = false
       const metadata = { key: 'value' }
 
-      appsecSdk.v2.trackUserLoginFailure(login, exists, metadata)
+      appsecSdk.eventTrackingV2.trackUserLoginFailure(login, exists, metadata)
 
       expect(trackUserLoginFailureV2).to.have.been.calledOnceWithExactly(tracer, login, exists, metadata)
     })
 
-    it('v2.trackUserLoginFailure(login) should call internal function with proper params', () => {
+    it('eventTrackingV2.trackUserLoginFailure(login) should call internal function with proper params', () => {
       const login = 'login'
 
-      appsecSdk.v2.trackUserLoginFailure(login)
+      appsecSdk.eventTrackingV2.trackUserLoginFailure(login)
 
       expect(trackUserLoginFailureV2).to.have.been.calledOnceWithExactly(tracer, login, undefined, undefined)
     })
 
-    it('v2.trackUserLoginFailure(login, exists) should call internal function with proper params', () => {
+    it('eventTrackingV2.trackUserLoginFailure(login, exists) should call internal function with proper params', () => {
       const login = 'login'
       const exists = false
 
-      appsecSdk.v2.trackUserLoginFailure(login, exists)
+      appsecSdk.eventTrackingV2.trackUserLoginFailure(login, exists)
 
       expect(trackUserLoginFailureV2).to.have.been.calledOnceWithExactly(tracer, login, exists, undefined)
     })
 
-    it('v2.trackUserLoginFailure(login, meta) should call internal function with proper params', () => {
+    it('eventTrackingV2.trackUserLoginFailure(login, meta) should call internal function with proper params', () => {
       const login = 'login'
       const metadata = { key: 'value' }
 
-      appsecSdk.v2.trackUserLoginFailure(login, metadata)
+      appsecSdk.eventTrackingV2.trackUserLoginFailure(login, metadata)
 
       expect(trackUserLoginFailureV2).to.have.been.calledOnceWithExactly(tracer, login, metadata, undefined)
     })

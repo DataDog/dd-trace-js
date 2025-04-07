@@ -11,7 +11,7 @@ const { checkUserAndSetUser, blockRequest } = require('./user_blocking')
 const { setTemplates } = require('../blocking')
 const { setUser } = require('./set_user')
 
-class AppsecSdkV2 {
+class EventTrackingV2 {
   constructor (tracer) {
     this._tracer = tracer
   }
@@ -32,7 +32,7 @@ class AppsecSdk {
       setTemplates(config)
     }
 
-    this.v2 = new AppsecSdkV2(tracer)
+    this.eventTrackingV2 = new EventTrackingV2(tracer)
   }
 
   trackUserLoginSuccessEvent (user, metadata) {

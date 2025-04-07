@@ -869,7 +869,7 @@ declare namespace tracer {
     flush(): void
   }
 
-  export interface AppsecV2 {
+  export interface EventTrackingV2 {
     /**
      * Links a successful login event to the current trace. Will link the passed user to the current trace with Appsec.setUser() internally.
      * @param {string} login the login data (username, email...) used by the user to authenticate
@@ -964,7 +964,7 @@ declare namespace tracer {
      */
     setUser(user: User): void
 
-    v2: AppsecV2
+    eventTrackingV2: EventTrackingV2
   }
 
   /** @hidden */
