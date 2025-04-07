@@ -52,15 +52,15 @@ async function addBreakpoint (probe) {
 
   const release = await lock()
 
-  log.debug(
-    '[debugger:devtools_client] Adding breakpoint at %s:%d:%d (probe: %s, version: %d)',
-    url, lineNumber, columnNumber, probe.id, probe.version
-  )
-
-  const locationKey = generateLocationKey(scriptId, lineNumber, columnNumber)
-  const breakpoint = locationToBreakpoint.get(locationKey)
-
   try {
+    log.debug(
+      '[debugger:devtools_client] Adding breakpoint at %s:%d:%d (probe: %s, version: %d)',
+      url, lineNumber, columnNumber, probe.id, probe.version
+    )
+
+    const locationKey = generateLocationKey(scriptId, lineNumber, columnNumber)
+    const breakpoint = locationToBreakpoint.get(locationKey)
+
     if (breakpoint) {
       // A breakpoint already exists at this location, so we need to add the probe to the existing breakpoint
       await updateBreakpoint(breakpoint, probe)
