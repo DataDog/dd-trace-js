@@ -8,8 +8,7 @@ const { getSkippableSuites: getSkippableSuitesRequest } = require('../intelligen
 const { getKnownTests: getKnownTestsRequest } = require('../early-flake-detection/get-known-tests')
 const { getTestManagementTests: getTestManagementTestsRequest } =
   require('../test-management/get-test-management-tests')
-const { getModifiedTests: getModifiedTestsRequest } =
-  require('../test-management/get-modified-tests')
+const { getModifiedTests: getModifiedTestsRequest } = require('../impacted-tests/get-modified-tests')
 const log = require('../../log')
 const AgentInfoExporter = require('../../exporters/common/agent-info-exporter')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../../plugins/util/tags')
@@ -166,7 +165,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
   }
 
   getModifiedTests (testConfiguration, callback) {
-    if (!this.shouldRequestModifiedTests()) {
+    if (!this.shouldRequestImpactedTests()) {
       return callback(null)
     }
     getModifiedTestsRequest(this.getRequestConfiguration(testConfiguration), callback)
