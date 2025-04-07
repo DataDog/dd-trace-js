@@ -591,10 +591,10 @@ class Config {
     this._setValue(defaults, 'url', undefined)
     this._setValue(defaults, 'version', pkg.version)
     this._setValue(defaults, 'instrumentation_config_id', undefined)
-    this._setValue(defaults, 'aws.dynamoDb.tablePrimaryKeys', undefined)
     this._setValue(defaults, 'vertexai.spanCharLimit', 128)
     this._setValue(defaults, 'vertexai.spanPromptCompletionSampleRate', 1.0)
     this._setValue(defaults, 'trace.aws.addSpanPointers', true)
+    this._setValue(defaults, 'trace.dynamoDb.tablePrimaryKeys', undefined)
     this._setValue(defaults, 'trace.nativeSpanEvents', false)
   }
 
@@ -1395,6 +1395,7 @@ class Config {
 
   _setString (obj, name, value) {
     obj[name] = value ? String(value) : undefined // unset for empty strings
+    console.log("Setting:", name, obj[name])
   }
 
   _setTags (obj, name, value) {
