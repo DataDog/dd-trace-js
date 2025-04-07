@@ -522,12 +522,14 @@ describe('encode', () => {
             rating: { type: 3, double_value: 9.8 },
             other: {
               type: 4,
-              array_value: [
-                { type: 0, string_value: 'hi' },
-                { type: 1, bool_value: false },
-                { type: 2, int_value: 1 },
-                { type: 3, double_value: 1.2 }
-              ]
+              array_value: {
+                values: [
+                  { type: 0, string_value: 'hi' },
+                  { type: 1, bool_value: false },
+                  { type: 2, int_value: 1 },
+                  { type: 3, double_value: 1.2 }
+                ]
+              }
             }
           }
         }
@@ -568,7 +570,7 @@ describe('encode', () => {
         {
           name: 'I can sing!!!',
           time_unix_nano: 1633023102000000,
-          attributes: { array: { type: 4, array_value: [{ type: 0, string_value: 'valid_value' }] } }
+          attributes: { array: { type: 4, array_value: { values: [{ type: 0, string_value: 'valid_value' }] } } }
         }
       ]
 

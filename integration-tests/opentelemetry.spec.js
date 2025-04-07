@@ -61,7 +61,7 @@ describe('opentelemetry', () => {
       '@opentelemetry/instrumentation',
       '@opentelemetry/instrumentation-http',
       '@opentelemetry/instrumentation-express@0.47.1',
-      'express'
+      'express@4' // TODO: Remove pinning once our tests support Express v5
     ]
     if (satisfies(process.version.slice(1), '>=14')) {
       dependencies.push('@opentelemetry/sdk-node')
@@ -79,7 +79,7 @@ describe('opentelemetry', () => {
     await sandbox.remove()
   })
 
-  it('should not capture telemetry DD and OTEL vars dont conflict', () => {
+  it("should not capture telemetry DD and OTEL vars don't conflict", () => {
     proc = fork(join(cwd, 'opentelemetry/basic.js'), {
       cwd,
       env: {
