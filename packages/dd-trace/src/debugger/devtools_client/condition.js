@@ -172,8 +172,12 @@ function getSize (variable) {
       return ${guardAgainstPropertyAccessSideEffects('val', '"length"')}
     } else if (${isInstanceOfCoreType('Set', 'val')} || ${isInstanceOfCoreType('Map', 'val')}) {
       return ${guardAgainstPropertyAccessSideEffects('val', '"size"')}
+    } else if (${isInstanceOfCoreType('WeakSet', 'val')} || ${isInstanceOfCoreType('WeakMap', 'val')}) {
+      throw new TypeError('Cannot get size of WeakSet or WeakMap')
+    } else if (typeof val === 'object' && val !== null) {
+      return Object.keys(val).length
     } else {
-      throw new TypeError('Cannot get length or size of string/collection')
+      throw new TypeError('Cannot get length of variable')
     }
   })(${variable})`
 }

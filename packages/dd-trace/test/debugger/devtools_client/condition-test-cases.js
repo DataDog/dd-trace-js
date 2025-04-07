@@ -195,12 +195,12 @@ const sizes = [
   [
     { len: { ref: 'wset' } },
     { wset: new WeakSet([weakKey]) },
-    new TypeError('Cannot get length or size of string/collection')
+    new TypeError('Cannot get size of WeakSet or WeakMap')
   ],
   [
     { len: { ref: 'wmap' } },
     { wmap: new WeakMap([[weakKey, 2]]) },
-    new TypeError('Cannot get length or size of string/collection')
+    new TypeError('Cannot get size of WeakSet or WeakMap')
   ],
   [{ len: { getmember: [{ ref: 'obj' }, 'arr'] } }, { obj: { arr: Array(10).fill(0) } }, 10],
   [{ len: { getmember: [{ ref: 'obj' }, 'tarr'] } }, { obj: { tarr: new Int16Array([10, 20, 30]) } }, 3],
@@ -212,7 +212,7 @@ const sizes = [
   [
     { len: { getmember: [{ ref: 'obj' }, 'unknownProp'] } },
     { obj: {} },
-    new TypeError('Cannot get length or size of string/collection')
+    new TypeError('Cannot get length of variable')
   ],
   [{ len: { ref: 'invalid' } }, {}, new ReferenceError('invalid is not defined')],
 
@@ -237,7 +237,7 @@ const sizes = [
   [
     { isEmpty: { ref: 'obj' } },
     { obj: new WeakSet() },
-    new TypeError('Cannot get length or size of string/collection')
+    new TypeError('Cannot get size of WeakSet or WeakMap')
   ]
 ]
 
