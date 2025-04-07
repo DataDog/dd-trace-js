@@ -208,11 +208,11 @@ describe('Dynamic Instrumentation', function () {
         t.agent.on('debugger-input', ({ payload: [{ 'debugger.snapshot': { captures } }] }) => {
           const { locals } = captures.lines[t.breakpoint.line]
 
-          assert.deepEqual(Object.keys(locals), [
-            // Up to 3 properties from the local scope
-            'request', 'nil', 'undef',
+          assert.deepStrictEqual(Object.keys(locals), [
             // Up to 3 properties from the closure scope
-            'fastify', 'getUndefined'
+            'fastify', 'getUndefined',
+            // Up to 3 properties from the local scope
+            'request', 'nil', 'undef'
           ])
 
           assert.strictEqual(locals.request.type, 'Request')

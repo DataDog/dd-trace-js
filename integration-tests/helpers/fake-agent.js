@@ -10,7 +10,8 @@ const upload = require('multer')()
 
 module.exports = class FakeAgent extends EventEmitter {
   constructor (port = 0) {
-    super()
+    // Redirect rejections to the error event
+    super({ captureRejections: true })
     this.port = port
     this.resetRemoteConfig()
   }

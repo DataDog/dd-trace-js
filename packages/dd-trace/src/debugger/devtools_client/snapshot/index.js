@@ -24,13 +24,13 @@ async function getLocalStateForCallFrame (
   const rawState = []
   let processedState = null
 
-  for (const scope of callFrame.scopeChain) {
-    if (scope.type === 'global') continue // The global scope is too noisy
+  await Promise.all(callFrame.scopeChain.map(async (scope) => {
+    if (scope.type === 'global') return // The global scope is too noisy
     rawState.push(...await getRuntimeObject(
       scope.object.objectId,
       { maxReferenceDepth, maxCollectionSize, maxFieldCount }
     ))
-  }
+  }))
 
   // Deplay calling `processRawState` so the caller gets a chance to resume the main thread before processing `rawState`
   return () => {

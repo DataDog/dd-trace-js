@@ -1,5 +1,7 @@
 'use strict'
 
+const proxyquire = require('proxyquire')
+
 describe('blocking', () => {
   const defaultBlockedTemplate = {
     html: 'block test',
@@ -26,7 +28,7 @@ describe('blocking', () => {
       updateBlockFailureMetric: sinon.stub()
     }
 
-    const blocking = proxyquire('../src/appsec/blocking', {
+    const blocking = proxyquire('../../src/appsec/blocking', {
       '../log': log,
       './blocked_templates': defaultBlockedTemplate,
       './telemetry': telemetry
