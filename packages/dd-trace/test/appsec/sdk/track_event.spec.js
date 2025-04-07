@@ -386,7 +386,7 @@ describe('track_event - Internal API', () => {
     })
   })
 
-  describe('v2', () => {
+  describe('eventTrackingV2', () => {
     describe('trackUserLoginSuccessV2', () => {
       it('should log warning when root span is not available', () => {
         rootSpan = undefined

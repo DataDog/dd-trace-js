@@ -82,6 +82,8 @@ function trackUserLoginSuccessV2 (tracer, login, user, metadata) {
     return
   }
 
+  incrementSdkEventMetric('login_success', 'v2')
+
   const rootSpan = getRootSpan(tracer)
   if (!rootSpan) {
     log.warn('[ASM] Root span not available in v2.trackUserLoginSuccess')
@@ -110,8 +112,6 @@ function trackUserLoginSuccessV2 (tracer, login, user, metadata) {
   trackEvent('users.login.success', metadata, 'v2.trackUserLoginSuccess', rootSpan)
 
   runWaf('users.login.success', wafData)
-
-  incrementSdkEventMetric('login_success', 'v2')
 }
 
 function trackUserLoginFailureV2 (tracer, login, exists, metadata) {
@@ -119,6 +119,8 @@ function trackUserLoginFailureV2 (tracer, login, exists, metadata) {
     log.warn('[ASM] Invalid login provided to v2.trackUserLoginFailure')
     return
   }
+
+  incrementSdkEventMetric('login_failure', 'v2')
 
   const rootSpan = getRootSpan(tracer)
   if (!rootSpan) {
@@ -128,7 +130,7 @@ function trackUserLoginFailureV2 (tracer, login, exists, metadata) {
 
   const wafData = { login }
 
-  if (typeof exists === 'object' && typeof metadata === 'undefined') {
+  if (typeof exists === 'object' && metadata === undefined) {
     metadata = exists
     exists = false
   }
@@ -142,8 +144,6 @@ function trackUserLoginFailureV2 (tracer, login, exists, metadata) {
   trackEvent('users.login.failure', metadata, 'v2.trackUserLoginFailure', rootSpan)
 
   runWaf('users.login.failure', wafData)
-
-  incrementSdkEventMetric('login_failure', 'v2')
 }
 
 function flattenFields (fields, sdkMethodName, depth = 0) {
