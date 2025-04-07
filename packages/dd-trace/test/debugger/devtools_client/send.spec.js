@@ -92,6 +92,6 @@ function getPayload (_message = message) {
     message: _message,
     logger,
     dd,
-    'debugger.snapshot': snapshot
+    debugger: { snapshot }
   }
 }
