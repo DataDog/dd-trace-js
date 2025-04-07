@@ -621,8 +621,21 @@ const membershipAndMatching = [
 ]
 
 const typeAndDefinitionChecks = [
+  // Primitive types
+  [{ instanceof: [{ ref: 'foo' }, 'string'] }, { foo: 'foo' }, true],
+  [{ instanceof: [{ ref: 'foo' }, 'number'] }, { foo: 42 }, true],
+  [{ instanceof: [{ ref: 'foo' }, 'number'] }, { foo: '42' }, false],
+  [{ instanceof: [{ ref: 'foo' }, 'bigint'] }, { foo: 42n }, true],
+  [{ instanceof: [{ ref: 'foo' }, 'boolean'] }, { foo: false }, true],
+  [{ instanceof: [{ ref: 'foo' }, 'boolean'] }, { foo: 0 }, false],
+  [{ instanceof: [{ ref: 'foo' }, 'undefined'] }, { foo: undefined }, true],
+  [{ instanceof: [{ ref: 'foo' }, 'symbol'] }, { foo: Symbol('foo') }, true],
+  [{ instanceof: [{ ref: 'foo' }, 'null'] }, { foo: null }, false], // typeof null is 'object'
+
+  // Objects
   [{ instanceof: [{ ref: 'bar' }, 'Object'] }, { bar: {} }, true],
   [{ instanceof: [{ ref: 'bar' }, 'Error'] }, { bar: new Error() }, true],
+  [{ instanceof: [{ ref: 'bar' }, 'Error'] }, { bar: {} }, false],
   [{ instanceof: [{ ref: 'bar' }, 'CustomObject'] }, { bar: new CustomObject(), CustomObject }, true],
   [
     { instanceof: [{ ref: 'bar' }, 'HasInstanceSideEffect'] },

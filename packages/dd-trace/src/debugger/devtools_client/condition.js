@@ -33,6 +33,8 @@ const reservedWords = new Set([
   'NaN'
 ])
 
+const PRIMITIVE_TYPES = new Set(['string', 'number', 'bigint', 'boolean', 'undefined', 'symbol', 'null'])
+
 // TODO: Consider storing some of these functions on `process` so they can be reused across probes
 function compile (node) {
   if (node === null || typeof node === 'number' || typeof node === 'boolean' || typeof node === 'string') {
@@ -57,7 +59,11 @@ function compile (node) {
       }
     })()`
   } else if (type === 'instanceof') {
-    return `Function.prototype[Symbol.hasInstance].call(${value[1]}, ${compile(value[0])})`
+    if (isPrimitiveType(value[1])) {
+      return `(typeof ${compile(value[0])} === '${value[1]}')` // TODO: Is parenthesizing necessary?
+    } else {
+      return `Function.prototype[Symbol.hasInstance].call(${value[1]}, ${compile(value[0])})`
+    }
   } else if (type === 'ref') {
     if (value === '@it') {
       return '$dd_it'
@@ -147,6 +153,10 @@ function iterateOn (fnName, variable, callbackCode) {
 
 function isString (variable) {
   return `(typeof ${variable} === 'string' || ${variable} instanceof String)`
+}
+
+function isPrimitiveType (type) {
+  return PRIMITIVE_TYPES.has(type)
 }
 
 function isIterableCollection (variable) {
