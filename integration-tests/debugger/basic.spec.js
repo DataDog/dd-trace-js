@@ -318,7 +318,7 @@ describe('Dynamic Instrumentation', function () {
         })
 
         t.agent.on('debugger-input', ({ payload }) => {
-          payload.forEach(({ 'debugger.snapshot': { timestamp } }) => {
+          payload.forEach(({ debugger: { snapshot: { timestamp } } }) => {
             if (prev !== undefined) {
               const duration = timestamp - prev
               clearTimeout(timer)
@@ -364,8 +364,8 @@ describe('Dynamic Instrumentation', function () {
 
         t.agent.on('debugger-input', ({ payload }) => {
           payload.forEach((result) => {
-            const _state = state[result['debugger.snapshot'].probe.id]
-            const { timestamp } = result['debugger.snapshot']
+            const _state = state[result.debugger.snapshot.probe.id]
+            const { timestamp } = result.debugger.snapshot
             if (_state.prev !== undefined) {
               const duration = timestamp - _state.prev
               clearTimeout(_state.timer)
@@ -588,13 +588,15 @@ function assertBasicInputPayload (t, payload) {
       version,
       thread_name: 'MainThread'
     },
-    'debugger.snapshot': {
-      probe: {
-        id: t.rcConfig.config.id,
-        version: 0,
-        location: { file: t.breakpoint.deployedFile, lines: [String(t.breakpoint.line)] }
-      },
-      language: 'javascript'
+    debugger: {
+      snapshot: {
+        probe: {
+          id: t.rcConfig.config.id,
+          version: 0,
+          location: { file: t.breakpoint.deployedFile, lines: [String(t.breakpoint.line)] }
+        },
+        language: 'javascript'
+      }
     }
   }
 
@@ -602,14 +604,14 @@ function assertBasicInputPayload (t, payload) {
 
   assert.match(payload.logger.thread_id, /^pid:\d+$/)
 
-  assertUUID(payload['debugger.snapshot'].id)
-  assert.isNumber(payload['debugger.snapshot'].timestamp)
-  assert.isTrue(payload['debugger.snapshot'].timestamp > Date.now() - 1000 * 60)
-  assert.isTrue(payload['debugger.snapshot'].timestamp <= Date.now())
+  assertUUID(payload.debugger.snapshot.id)
+  assert.isNumber(payload.debugger.snapshot.timestamp)
+  assert.isTrue(payload.debugger.snapshot.timestamp > Date.now() - 1000 * 60)
+  assert.isTrue(payload.debugger.snapshot.timestamp <= Date.now())
 
-  assert.isArray(payload['debugger.snapshot'].stack)
-  assert.isAbove(payload['debugger.snapshot'].stack.length, 0)
-  for (const frame of payload['debugger.snapshot'].stack) {
+  assert.isArray(payload.debugger.snapshot.stack)
+  assert.isAbove(payload.debugger.snapshot.stack.length, 0)
+  for (const frame of payload.debugger.snapshot.stack) {
     assert.isObject(frame)
     assert.hasAllKeys(frame, ['fileName', 'function', 'lineNumber', 'columnNumber'])
     assert.isString(frame.fileName)
@@ -617,7 +619,7 @@ function assertBasicInputPayload (t, payload) {
     assert.isAbove(frame.lineNumber, 0)
     assert.isAbove(frame.columnNumber, 0)
   }
-  const topFrame = payload['debugger.snapshot'].stack[0]
+  const topFrame = payload.debugger.snapshot.stack[0]
   // path seems to be prefeixed with `/private` on Mac
   assert.match(topFrame.fileName, new RegExp(`${t.appFile}$`))
   assert.strictEqual(topFrame.function, 'fooHandler')

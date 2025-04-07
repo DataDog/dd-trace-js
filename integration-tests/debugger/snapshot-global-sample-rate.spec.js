@@ -50,7 +50,7 @@ describe('Dynamic Instrumentation', function () {
         })
 
         t.agent.on('debugger-input', ({ payload }) => {
-          payload.forEach(({ 'debugger.snapshot': { timestamp } }) => {
+          payload.forEach(({ debugger: { snapshot: { timestamp } } }) => {
             if (isDone) return
             if (start === 0) start = timestamp
             if (++hitBreakpoints <= MAX_SNAPSHOTS_PER_SECOND_GLOBALLY) {
