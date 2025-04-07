@@ -16,7 +16,7 @@ const {
   getAllBaggageItems,
   removeBaggageItem,
   removeAllBaggageItems
-} = require('dd-trace/src/baggage')
+} = require('./baggage')
 
 class LazyModule {
   constructor (provider) {
