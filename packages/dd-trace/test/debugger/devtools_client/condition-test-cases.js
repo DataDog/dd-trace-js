@@ -209,6 +209,7 @@ const sizes = [
     { obj: { tarr: overloadPropertyWithGetter(new Int16Array([10, 20, 30]), 'length') } },
     new Error('Possibility of side effect')
   ],
+  [{ len: { ref: 'pojo' } }, { pojo: { a: 1, b: 2, c: 3 } }, 3],
   [
     { len: { getmember: [{ ref: 'obj' }, 'unknownProp'] } },
     { obj: {} },
