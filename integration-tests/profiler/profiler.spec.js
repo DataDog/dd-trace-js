@@ -326,9 +326,10 @@ describe('profiler', () => {
       //   'local root span id's
       // - samples with spans also must have a 'trace endpoint' label with values 'endpoint-0',
       //   'endpoint-1', or 'endpoint-2'
-      // - every occurrence of a span must have the same root span and endpoint
+      // - every occurrence of a span must have the same root span, endpoint, and asyncId
       const rootSpans = new Set()
       const endpoints = new Set()
+      const asyncIds = new Set()
       const spans = new Map()
       const strings = profile.stringTable
       const tsKey = strings.dedup('end_timestamp_ns')
@@ -338,11 +339,13 @@ describe('profiler', () => {
       const threadNameKey = strings.dedup('thread name')
       const threadIdKey = strings.dedup('thread id')
       const osThreadIdKey = strings.dedup('os thread id')
+      const asyncIdKey = strings.dedup('async id')
       const threadNameValue = strings.dedup('Main Event Loop')
       const nonJSThreadNameValue = strings.dedup('Non-JS threads')
 
+      const asyncIdWorks = require('semifies')(process.versions.node, '>=22.10.0')
       for (const sample of profile.sample) {
-        let ts, spanId, rootSpanId, endpoint, threadName, threadId, osThreadId
+        let ts, spanId, rootSpanId, endpoint, threadName, threadId, osThreadId, asyncId
         for (const label of sample.label) {
           switch (label.key) {
             case tsKey: ts = label.num; break
@@ -352,6 +355,12 @@ describe('profiler', () => {
             case threadNameKey: threadName = label.str; break
             case threadIdKey: threadId = label.str; break
             case osThreadIdKey: osThreadId = label.str; break
+            case asyncIdKey:
+              asyncId = label.num
+              if (asyncId === 0) {
+                asyncId = undefined
+              }
+              break
             default: assert.fail(`Unexpected label key ${strings.dedup(label.key)} ${encoded}`)
           }
         }
@@ -385,11 +394,27 @@ describe('profiler', () => {
             // 3 of them.
             continue
           }
-          const spanData = { rootSpanId, endpoint }
+          const spanData = { rootSpanId, endpoint, asyncId }
+          // Record async ID so we can verify we encountered 9 different values.
+          // Async ID can be sporadically missing if sampling hits an intrinsified
+          // function.
+          if (asyncId !== undefined) {
+            asyncIds.add(asyncId)
+          }
           const existingSpanData = spans.get(spanId)
           if (existingSpanData) {
-            // Span's root span and endpoint must be consistent across samples
-            assert.deepEqual(spanData, existingSpanData, encoded)
+            // Span's root span, endpoint, and async ID must be consistent
+            // across samples.
+            assert.equal(existingSpanData.rootSpanId, rootSpanId, encoded)
+            assert.equal(existingSpanData.endpoint, endpoint, encoded)
+            if (asyncIdWorks) {
+              // Account for asyncID sporadically missing
+              if (existingSpanData.asyncId === undefined) {
+                existingSpanData.asyncId = asyncId
+              } else if (asyncId !== undefined) {
+                assert.equal(existingSpanData.asyncId, asyncId, encoded)
+              }
+            }
           } else {
             // New span id, store span data
             spans.set(spanId, spanData)
@@ -407,9 +432,10 @@ describe('profiler', () => {
           }
         }
       }
-      // Need to have a total of 9 different spans, with 3 different root spans
-      // and 3 different endpoints.
+      // Need to have a total of 9 different spans, with 9 different async IDs,
+      // 3 different root spans, and 3 different endpoints.
       assert.equal(spans.size, 9, encoded)
+      assert.equal(asyncIds.size, asyncIdWorks ? 9 : 0, encoded)
       assert.equal(rootSpans.size, 3, encoded)
       assert.equal(endpoints.size, 3, encoded)
     })
