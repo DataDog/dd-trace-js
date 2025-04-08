@@ -207,7 +207,8 @@ class MochaPlugin extends CiPlugin {
       isLastRetry,
       hasFailedAllRetries,
       attemptToFixPassed,
-      isAttemptToFixRetry
+      isAttemptToFixRetry,
+      isAtrRetry
     }) => {
       const store = storage('legacy').getStore()
       const span = store?.span
@@ -216,6 +217,11 @@ class MochaPlugin extends CiPlugin {
         span.setTag(TEST_STATUS, status)
         if (hasBeenRetried) {
           span.setTag(TEST_IS_RETRY, 'true')
+          if (isAtrRetry) {
+            span.setTag(TEST_RETRY_REASON, 'atr')
+          } else {
+            span.setTag(TEST_RETRY_REASON, 'native_retry')
+          }
         }
         if (hasFailedAllRetries) {
           span.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
@@ -273,13 +279,18 @@ class MochaPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:mocha:test:retry', ({ isFirstAttempt, willBeRetried, err, test }) => {
+    this.addSub('ci:mocha:test:retry', ({ isFirstAttempt, willBeRetried, err, test, isAtrRetry }) => {
       const store = storage('legacy').getStore()
       const span = store?.span
       if (span) {
         span.setTag(TEST_STATUS, 'fail')
         if (!isFirstAttempt) {
           span.setTag(TEST_IS_RETRY, 'true')
+          if (isAtrRetry) {
+            span.setTag(TEST_RETRY_REASON, 'atr')
+          } else {
+            span.setTag(TEST_RETRY_REASON, 'native_retry')
+          }
         }
         if (err) {
           span.setTag('error', err)
