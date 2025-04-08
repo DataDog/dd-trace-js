@@ -1181,7 +1181,6 @@ describe('TextMapPropagator', () => {
     describe('tracePropagationBehaviorExtract', () => {
       let traceId
       let spanId
-      let extractedContext
 
       beforeEach(() => {
         traceId = '1111aaaa2222bbbb3333cccc4444dddd'
@@ -1193,48 +1192,38 @@ describe('TextMapPropagator', () => {
           traceparent: `00-${traceId}-${spanId}-01`,
           baggage: 'foo=bar'
         }
-
-        extractedContext = {}
       })
 
-      describe('tracePropagationBehaviorExtract="ignore"', () => {
-        beforeEach(() => {
-          process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'ignore'
-          config = new Config({
-            tracePropagationStyle: {
-              extract: ['tracecontext', 'datadog']
-            }
-          })
-          propagator = new TextMapPropagator(config)
-          extractedContext = propagator.extract(textMap)
+      it('should reset span links when Trace_Propagation_Behavior_Extract is set to ignore', () => {
+        process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'ignore'
+        config = new Config({
+          tracePropagationStyle: {
+            extract: ['tracecontext', 'datadog']
+          }
         })
+        propagator = new TextMapPropagator(config)
+        const extractedContext = propagator.extract(textMap)
 
-        it('should reset span links when Trace_Propagation_Behavior_Extract is set to ignore', () => {
-          // No span links should occur when we return from extract
-          expect(extractedContext._links.length).to.equal(0)
-        })
+        // No span links should occur when we return from extract
+        expect(extractedContext._links.length).to.equal(0)
       })
 
-      describe('tracePropagationBehaviorExtract="restart"', () => {
-        beforeEach(() => {
-          process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'restart'
-          config = new Config({
-            tracePropagationStyle: {
-              extract: ['tracecontext', 'datadog']
-            }
-          })
-          propagator = new TextMapPropagator(config)
-          extractedContext = propagator.extract(textMap)
+      it('should set span link to extracted trace when Trace_Propagation_Behavior_Extract is set to restart', () => {
+        process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'restart'
+        config = new Config({
+          tracePropagationStyle: {
+            extract: ['tracecontext', 'datadog']
+          }
         })
+        propagator = new TextMapPropagator(config)
+        const extractedContext = propagator.extract(textMap)
 
-        it('should set span link to extracted trace when Trace_Propagation_Behavior_Extract is set to restart', () => {
-          // Expect to see span links related to the extracted span
-          expect(extractedContext._links.length).to.equal(1)
-          expect(extractedContext._links[0].context.toTraceId(true)).to.equal(traceId)
-          expect(extractedContext._links[0].context.toSpanId(true)).to.equal(spanId)
-          expect(extractedContext._links[0].attributes.reason).to.equal('propagation_behavior_extract')
-          expect(extractedContext._links[0].attributes.context_headers).to.equal('tracecontext')
-        })
+        // Expect to see span links related to the extracted span
+        expect(extractedContext._links.length).to.equal(1)
+        expect(extractedContext._links[0].context.toTraceId(true)).to.equal(traceId)
+        expect(extractedContext._links[0].context.toSpanId(true)).to.equal(spanId)
+        expect(extractedContext._links[0].attributes.reason).to.equal('propagation_behavior_extract')
+        expect(extractedContext._links[0].attributes.context_headers).to.equal('tracecontext')
       })
     })
   })

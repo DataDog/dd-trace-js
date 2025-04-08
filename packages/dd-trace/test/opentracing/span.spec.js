@@ -3,7 +3,6 @@
 require('../setup/tap')
 
 const Config = require('../../src/config')
-const DatadogTracer = require('../../src/tracer')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
 
 const { channel } = require('dc-polyfill')
@@ -491,17 +490,21 @@ describe('Span', () => {
       })
 
       it('should not propagate baggage items when Trace_Propagation_Behavior_Extract is set to ignore', () => {
-        process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'ignore'
-        const config = new Config()
-        const tracers = new DatadogTracer(config, undefined)
-        span = new Span(tracers, processor, prioritySampler, { operationName: 'operation', parent })
+        tracer = {
+          _config: {
+            tracePropagationBehaviorExtract: 'ignore'
+          }
+        }
+        span = new Span(tracer, processor, prioritySampler, { operationName: 'operation', parent })
         expect(span._spanContext._baggageItems).to.deep.equal({})
       })
 
       it('should propagate baggage items when Trace_Propagation_Behavior_Extract is set to restart', () => {
-        process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'restart'
-        const config = new Config()
-        const tracer = new DatadogTracer(config, undefined)
+        tracer = {
+          _config: {
+            tracePropagationBehaviorExtract: 'restart'
+          }
+        }
         span = new Span(tracer, processor, prioritySampler, { operationName: 'operation', parent })
         expect(span._spanContext._baggageItems).to.deep.equal({ foo: 'bar' })
       })
