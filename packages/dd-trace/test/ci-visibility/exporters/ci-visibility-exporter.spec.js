@@ -918,4 +918,180 @@ describe('CI Visibility Exporter', () => {
       })
     })
   })
+
+  describe('getModifiedTests', () => {
+    context('if impacted tests is disabled', () => {
+      it('should resolve to undefined', (done) => {
+        const modifiedTestsScope = nock(`http://localhost:${port}`)
+          .post('/api/v2/ci/tests/diffs')
+          .reply(200)
+
+        const ciVisibilityExporter = new CiVisibilityExporter({
+          port
+        })
+
+        ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+        ciVisibilityExporter._libraryConfig = { isImpactedTestsEnabled: false }
+
+        ciVisibilityExporter.getModifiedTests({}, (err, modifiedTests) => {
+          expect(err).to.be.null
+          expect(modifiedTests).to.eql(undefined)
+          expect(modifiedTestsScope.isDone()).not.to.be.true
+          done()
+        })
+      })
+    })
+
+    context('if impacted tests is enabled but can not use CI Visibility protocol', () => {
+      it('should not request impacted tests', (done) => {
+        const scope = nock(`http://localhost:${port}`)
+          .post('/api/v2/ci/tests/diffs')
+          .reply(200)
+
+        const ciVisibilityExporter = new CiVisibilityExporter({ port })
+
+        ciVisibilityExporter._resolveCanUseCiVisProtocol(false)
+        ciVisibilityExporter._libraryConfig = { isImpactedTestsEnabled: true }
+
+        ciVisibilityExporter.getModifiedTests({}, (err) => {
+          expect(err).to.be.null
+          expect(scope.isDone()).not.to.be.true
+          done()
+        })
+      })
+    })
+
+    context('if impacted tests is enabled and can use CI Vis Protocol', () => {
+      it('should request impacted tests', (done) => {
+        const scope = nock(`http://localhost:${port}`)
+          .post('/api/v2/ci/tests/diffs')
+          .reply(200, JSON.stringify({
+            data: {
+              attributes: {
+                base_sha: 'base-sha',
+                files: [
+                  'file1',
+                  'file2'
+                ]
+              }
+            }
+          }))
+
+        const ciVisibilityExporter = new CiVisibilityExporter({ port })
+
+        ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+        ciVisibilityExporter._libraryConfig = { isImpactedTestsEnabled: true }
+        ciVisibilityExporter.getModifiedTests({}, (err, modifiedTests) => {
+          expect(err).to.be.null
+          expect(modifiedTests).to.eql({
+            baseSha: 'base-sha',
+            modifiedTests: [
+              'file1',
+              'file2'
+            ]
+          })
+          expect(scope.isDone()).to.be.true
+          done()
+        })
+      })
+
+      it('should return an error if the request fails', (done) => {
+        const scope = nock(`http://localhost:${port}`)
+          .post('/api/v2/ci/tests/diffs')
+          .reply(500)
+        const ciVisibilityExporter = new CiVisibilityExporter({ port })
+
+        ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+        ciVisibilityExporter._libraryConfig = { isImpactedTestsEnabled: true }
+        ciVisibilityExporter.getModifiedTests({}, (err) => {
+          expect(err).not.to.be.null
+          expect(scope.isDone()).to.be.true
+          done()
+        })
+      })
+
+      it('should accept gzip if the exporter is gzip compatible', (done) => {
+        let requestHeaders = {}
+        const scope = nock(`http://localhost:${port}`)
+          .post('/api/v2/ci/tests/diffs')
+          .reply(200, function () {
+            requestHeaders = this.req.headers
+
+            return zlib.gzipSync(JSON.stringify({
+              data: {
+                attributes: {
+                  base_sha: 'base-sha',
+                  files: [
+                    'file1',
+                    'file2'
+                  ]
+                }
+              }
+            }))
+          }, {
+            'content-encoding': 'gzip'
+          })
+
+        const ciVisibilityExporter = new CiVisibilityExporter({ port })
+
+        ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+        ciVisibilityExporter._libraryConfig = { isImpactedTestsEnabled: true }
+        ciVisibilityExporter._isGzipCompatible = true
+        ciVisibilityExporter.getModifiedTests({}, (err, modifiedTests) => {
+          expect(err).to.be.null
+          expect(modifiedTests).to.eql({
+            baseSha: 'base-sha',
+            modifiedTests: [
+              'file1',
+              'file2'
+            ]
+          })
+          expect(scope.isDone()).to.be.true
+          expect(requestHeaders['accept-encoding']).to.equal('gzip')
+          done()
+        })
+      })
+
+      it('should not accept gzip if the exporter is gzip incompatible', (done) => {
+        let requestHeaders = {}
+        const scope = nock(`http://localhost:${port}`)
+          .post('/api/v2/ci/tests/diffs')
+          .reply(200, function () {
+            requestHeaders = this.req.headers
+
+            return JSON.stringify({
+              data: {
+                attributes: {
+                  base_sha: 'base-sha',
+                  files: [
+                    'file1',
+                    'file2'
+                  ]
+                }
+              }
+            })
+          })
+
+        const ciVisibilityExporter = new CiVisibilityExporter({ port })
+
+        ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+        ciVisibilityExporter._libraryConfig = { isImpactedTestsEnabled: true }
+        ciVisibilityExporter._isGzipCompatible = false
+
+        ciVisibilityExporter.getModifiedTests({}, (err, modifiedTests) => {
+          expect(err).to.be.null
+          expect(modifiedTests).to.eql({
+            baseSha: 'base-sha',
+            modifiedTests: [
+              'file1',
+              'file2'
+            ]
+          })
+          expect(scope.isDone()).to.be.true
+          expect(requestHeaders['accept-encoding']).not.to.equal('gzip')
+          done()
+        })
+      })
+    })
+  })
 })

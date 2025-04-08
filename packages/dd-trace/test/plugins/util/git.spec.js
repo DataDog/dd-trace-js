@@ -422,10 +422,23 @@ describe('getGitDiff', () => {
   })
 
   it('returns empty string when git command fails', () => {
+    const logErrorSpy = sinon.spy()
+
+    const { getGitDiff } = proxyquire('../../../src/plugins/util/git',
+      {
+        child_process: {
+          execFileSync: execFileSyncStub
+        },
+        '../../log': {
+          error: logErrorSpy
+        }
+      }
+    )
     execFileSyncStub.throws(new Error('git command failed'))
 
     const diff = getGitDiff('base-commit', 'target-commit')
 
+    expect(logErrorSpy).to.have.been.called
     expect(diff).to.equal('')
   })
 })

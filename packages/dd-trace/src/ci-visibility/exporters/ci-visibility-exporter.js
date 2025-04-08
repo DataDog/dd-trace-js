@@ -106,7 +106,6 @@ class CiVisibilityExporter extends AgentInfoExporter {
   shouldRequestImpactedTests () {
     return !!(
       this._canUseCiVisProtocol &&
-      this._config.isImpactedTestsEnabled &&
       this._libraryConfig?.isImpactedTestsEnabled
     )
   }
