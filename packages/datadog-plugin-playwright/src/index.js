@@ -266,6 +266,7 @@ class PlaywrightPlugin extends CiPlugin {
       isAttemptToFixRetry,
       hasFailedAllRetries,
       hasPassedAttemptToFixRetries,
+      isAtrRetry,
       onDone
     }) => {
       const store = storage('legacy').getStore()
@@ -291,6 +292,11 @@ class PlaywrightPlugin extends CiPlugin {
       }
       if (isRetry) {
         span.setTag(TEST_IS_RETRY, 'true')
+        if (isAtrRetry) {
+          span.setTag(TEST_RETRY_REASON, 'atr')
+        } else {
+          span.setTag(TEST_RETRY_REASON, 'native_retry')
+        }
       }
       if (hasFailedAllRetries) {
         span.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
