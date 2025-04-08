@@ -2,6 +2,7 @@
 
 const { fork, exec } = require('child_process')
 const path = require('path')
+const fs = require('fs')
 
 const { assert } = require('chai')
 
@@ -3509,26 +3510,90 @@ describe('jest CommonJS', () => {
     })
   })
 
-  context.only('impacted tests', () => {
+  context('impacted tests', () => {
     const NUM_RETRIES_EFD = 3
+    let baseCommitSha = null
+    let commitHeadSha = null
+    let eventPath = null
+
+    function promiseExec (command) {
+      return new Promise((resolve) => {
+        const child = exec(command, { cwd })
+        let data = ''
+        child.stdout.on('data', chunk => { data += chunk })
+        child.stdout.on('end', () => resolve(data.trim()))
+      })
+    }
+
     beforeEach(() => {
       receiver.setImpactedTests({
-        // TODO - CHANGE THIS
-        // base_sha: '1234567890',
         files: [
           'ci-visibility/test-impacted-test/test-impacted-1.js'
         ]
       })
     })
 
-    const getTestAssertions = (isImpacting, isEfd, isParallel) =>
+    // Add git setup before running impacted tests
+    before(async function () {
+      // Create initial test file on main
+      const testDir = path.join(cwd, 'ci-visibility/test-impacted-test')
+      await exec(`mkdir -p ${testDir}`, { cwd })
+      const testContent = `
+const { expect } = require('chai')
+
+describe('impacted tests', () => {
+  it('can pass normally', () => {
+    expect(1 + 2).to.equal(3)
+  })
+
+  it('can fail', () => {
+    expect(1 + 2).to.equal(4)
+  })
+})
+`
+      fs.writeFileSync(path.join(testDir, 'test-impacted-1.js'), testContent)
+
+      await promiseExec('git add ci-visibility/test-impacted-test/test-impacted-1.js')
+      await promiseExec('git commit -m "add test-impacted-1.js"')
+      // Get base commit SHA from main after creating the file
+      baseCommitSha = await promiseExec('git rev-parse HEAD')
+
+      await promiseExec('git checkout -b feature-branch')
+      const modifiedTestContent = `
+const { expect } = require('chai')
+
+describe('impacted tests', () => {
+  it('can pass normally', () => {
+    expect(2 + 2).to.equal(3)
+  })
+
+  it('can fail', () => {
+    expect(1 + 2).to.equal(4)
+  })
+})
+`
+      fs.writeFileSync(path.join(testDir, 'test-impacted-1.js'), modifiedTestContent)
+      await promiseExec('git add ci-visibility/test-impacted-test/test-impacted-1.js')
+      await promiseExec('git commit -m "modify test-impacted-1.js"')
+      commitHeadSha = await promiseExec('git rev-parse HEAD')
+    })
+
+    // Clean up git branches and temp files after impacted tests
+    after(async () => {
+      await promiseExec('git checkout main')
+      await promiseExec('git branch -D feature-branch')
+      if (fs.existsSync(eventPath)) {
+        fs.unlinkSync(eventPath)
+      }
+    })
+
+    const getTestAssertions = (isImpacting, isLocalDiff, isEfd, isParallel) =>
       receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
           const testSession = events.find(event => event.type === 'test_session_end').content
 
-          // TODO - REVIEW TO ADD IMPACTED TEST SESSION?
           if (isEfd) {
             assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
           } else {
@@ -3555,9 +3620,12 @@ describe('jest CommonJS', () => {
           }
 
           if (isImpacting) {
-            const impactedTests = tests.filter(test =>
-              test.meta[TEST_SOURCE_FILE] === 'ci-visibility/test-impacted-test/test-impacted.js'
+            let impactedTests = tests.filter(test =>
+              test.meta[TEST_SOURCE_FILE] === 'ci-visibility/test-impacted-test/test-impacted-1.js'
             )
+            if (isLocalDiff) {
+              impactedTests = impactedTests.filter(test => test[TEST_NAME] === 'impacted tests can pass normally')
+            }
             impactedTests.forEach(test => {
               assert.propertyVal(test.meta, TEST_IS_MODIFIED, 'true')
             })
@@ -3583,8 +3651,15 @@ describe('jest CommonJS', () => {
           }
         })
 
-    const runImpactedTest = (done, isImpacting, extraEnvVars = {}, isEfd = false, isParallel = false) => {
-      const testAssertionsPromise = getTestAssertions(isImpacting, isEfd, isParallel)
+    const runImpactedTest = (
+      done,
+      isImpacting,
+      extraEnvVars = {},
+      isLocalDiff = false,
+      isEfd = false,
+      isParallel = false
+    ) => {
+      const testAssertionsPromise = getTestAssertions(isImpacting, isLocalDiff, isEfd, isParallel)
 
       childProcess = exec(
         runTestsWithCoverageCommand,
@@ -3622,24 +3697,66 @@ describe('jest CommonJS', () => {
       runImpactedTest(done, false, { DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0' }, false)
     })
 
-    it('can impact tests in and activate EFD if modified', (done) => {
-      receiver.setSettings({
-        impacted_tests_enabled: { enabled: true },
-        early_flake_detection: {
-          enabled: true,
-          slow_test_retries: {
-            '5s': NUM_RETRIES_EFD
+    it('can impact tests with git diff', (done) => {
+      receiver.setSettings({ impacted_tests_enabled: true })
+      const eventContent = {
+        pull_request: {
+          base: {
+            sha: baseCommitSha,
+            ref: 'master'
+          },
+          head: {
+            sha: commitHeadSha,
+            ref: 'master'
           }
-          // faulty_session_threshold: 100
-        },
-        known_tests_enabled: true
+        }
+      }
+      eventPath = path.join(cwd, 'event.json')
+      fs.writeFileSync(eventPath, JSON.stringify(eventContent, null, 2))
+
+      const testConfig = {
+        GITHUB_ACTIONS: true,
+        GITHUB_BASE_REF: 'master',
+        GITHUB_HEAD_REF: 'feature-branch',
+        GITHUB_EVENT_PATH: eventPath
+      }
+      runImpactedTest(done, true, testConfig, true)
+    })
+
+    it('can impact tests with git diff with base sha from API', (done) => {
+      receiver.setSettings({ impacted_tests_enabled: true })
+      receiver.setImpactedTests({
+        base_sha: baseCommitSha,
+        files: [
+          'ci-visibility/test-impacted-test/test-impacted-1.js'
+        ]
       })
-      receiver.setKnownTests(['ci-visibility/test-impacted-test/test-impacted-1.js'])
-      runImpactedTest(done, true, null, true)
+      const eventContent = {
+        pull_request: {
+          base: {
+            sha: '',
+            ref: 'master'
+          },
+          head: {
+            sha: commitHeadSha,
+            ref: 'master'
+          }
+        }
+      }
+      eventPath = path.join(cwd, 'event.json')
+      fs.writeFileSync(eventPath, JSON.stringify(eventContent, null, 2))
+
+      const testConfig = {
+        GITHUB_ACTIONS: true,
+        GITHUB_BASE_REF: 'master',
+        GITHUB_HEAD_REF: 'feature-branch',
+        GITHUB_EVENT_PATH: eventPath
+      }
+      runImpactedTest(done, true, testConfig, true)
     })
 
     it('can impact tests in parallel mode', (done) => {
-      receiver.setSettings({ test_management: { enabled: true } })
+      receiver.setSettings({ impacted_tests_enabled: true })
 
       runImpactedTest(
         done,
@@ -3648,8 +3765,26 @@ describe('jest CommonJS', () => {
           // we need to run more than 1 suite for parallel mode to kick in
           TESTS_TO_RUN: 'test-impacted-test/test-impacted',
           RUN_IN_PARALLEL: true
-        }
+        },
+        false,
+        false,
+        true
       )
+    })
+
+    it('can impact tests in and activate EFD if modified', (done) => {
+      receiver.setSettings({
+        impacted_tests_enabled: true,
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': NUM_RETRIES_EFD
+          }
+        },
+        known_tests_enabled: true
+      })
+      receiver.setKnownTests(['ci-visibility/test-impacted-test/test-impacted-1.js'])
+      runImpactedTest(done, true, null, false, true)
     })
   })
 })

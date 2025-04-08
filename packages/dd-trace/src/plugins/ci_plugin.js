@@ -200,7 +200,10 @@ module.exports = class CiPlugin extends Plugin {
     })
 
     this.addSub(`ci:${this.constructor.id}:modified-tests`, ({ onDone }) => {
-      const { pullRequestBaseSha, commitHeadSha } = this.testEnvironmentMetadata
+      const {
+        [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseSha,
+        [GIT_COMMIT_HEAD_SHA]: commitHeadSha
+      } = this.testEnvironmentMetadata
 
       if (pullRequestBaseSha && commitHeadSha) {
         const diff = getPullRequestDiff(pullRequestBaseSha, commitHeadSha)
@@ -221,7 +224,7 @@ module.exports = class CiPlugin extends Plugin {
         }
 
         // If we got a baseSha from API, try local diff again
-        if (response.baseSha) {
+        if (response.baseSha && commitHeadSha) {
           const diff = getPullRequestDiff(response.baseSha, commitHeadSha)
           const localModifiedTests = getModifiedTestsFromDiff(diff)
           if (localModifiedTests) {

@@ -188,6 +188,18 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           this.isTestManagementTestsEnabled = false
         }
       }
+
+      if (this.isImpactedTestsEnabled) {
+        try {
+          const hasImpactedTests = Object.keys(modifiedTests).length > 0
+          this.modifiedTestsForThisSuite = hasImpactedTests
+            ? this.getModifiedTestForThisSuite(modifiedTests)
+            : this.getModifiedTestForThisSuite(this.testEnvironmentOptions._ddModifiedTests)
+        } catch (e) {
+          log.error('Error parsing impacted tests', e)
+          this.isImpactedTestsEnabled = false
+        }
+      }
     }
 
     getHasSnapshotTests () {
@@ -257,6 +269,19 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       })
 
       return result
+    }
+
+    getModifiedTestForThisSuite (modifiedTests) {
+      if (this.modifiedTestsForThisSuite) {
+        return this.modifiedTestsForThisSuite
+      }
+      let modifiedTestsForThisSuite = modifiedTests
+      // If jest is using workers, modified tests are serialized to json.
+      // If jest runs in band, they are not.
+      if (typeof modifiedTestsForThisSuite === 'string') {
+        modifiedTestsForThisSuite = JSON.parse(modifiedTestsForThisSuite)
+      }
+      return modifiedTestsForThisSuite
     }
 
     // Generic function to handle test retries
@@ -336,7 +361,12 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         if (this.isImpactedTestsEnabled) {
           const testStartLine = getTestLineStart(event.test.asyncError, this.testSuite)
           const testEndLine = getTestEndLine(event.test.fn, testStartLine)
-          isModified = isModifiedTest(this.testSourceFile, testStartLine, testEndLine, modifiedTests)
+          isModified = isModifiedTest(
+            this.testSourceFile,
+            testStartLine,
+            testEndLine,
+            this.modifiedTestsForThisSuite
+          )
         }
 
         if (this.isKnownTestsEnabled) {
@@ -390,7 +420,12 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         if (this.isImpactedTestsEnabled) {
           const testStartLine = getTestLineStart(event.asyncError, this.testSuite)
           const testEndLine = getTestEndLine(event.fn, testStartLine)
-          const isModified = isModifiedTest(this.testSourceFile, testStartLine, testEndLine, modifiedTests)
+          const isModified = isModifiedTest(
+            this.testSourceFile,
+            testStartLine,
+            testEndLine,
+            this.modifiedTestsForThisSuite
+          )
           if (isModified && !retriedTestsToNumAttempts.has(originalTestName) && this.isEarlyFlakeDetectionEnabled) {
             retriedTestsToNumAttempts.set(originalTestName, 0)
             this.retryTest(
@@ -1082,6 +1117,7 @@ addHook({
       _ddIsTestManagementTestsEnabled,
       _ddTestManagementTests,
       _ddTestManagementAttemptToFixRetries,
+      _ddModifiedTests,
       ...restOfTestEnvironmentOptions
     } = testEnvironmentOptions
 
@@ -1205,7 +1241,7 @@ addHook({
 }, (childProcessWorker) => {
   const ChildProcessWorker = childProcessWorker.default
   shimmer.wrap(ChildProcessWorker.prototype, 'send', send => function (request) {
-    if (!isKnownTestsEnabled && !isTestManagementTestsEnabled) {
+    if (!isKnownTestsEnabled && !isTestManagementTestsEnabled && !isImpactedTestsEnabled) {
       return send.apply(this, arguments)
     }
     const [type] = request
@@ -1228,12 +1264,17 @@ addHook({
 
       const suiteTestManagementTests = testManagementTests.jest?.suites?.[testSuite]?.tests || {}
 
+      const suiteModifiedTests = Object.keys(modifiedTests).length > 0
+        ? modifiedTests
+        : {}
+
       args[0].config = {
         ...config,
         testEnvironmentOptions: {
           ...config.testEnvironmentOptions,
           _ddKnownTests: suiteKnownTests,
-          _ddTestManagementTests: suiteTestManagementTests
+          _ddTestManagementTests: suiteTestManagementTests,
+          _ddModifiedTests: suiteModifiedTests
         }
       }
     }
