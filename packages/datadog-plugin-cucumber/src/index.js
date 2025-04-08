@@ -252,11 +252,16 @@ class CucumberPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:cucumber:test:retry', ({ isFirstAttempt, error }) => {
+    this.addSub('ci:cucumber:test:retry', ({ isFirstAttempt, error, isAtrRetry }) => {
       const store = storage('legacy').getStore()
       const span = store.span
       if (!isFirstAttempt) {
         span.setTag(TEST_IS_RETRY, 'true')
+        if (isAtrRetry) {
+          span.setTag(TEST_RETRY_REASON, 'atr')
+        } else {
+          span.setTag(TEST_RETRY_REASON, 'native_retry')
+        }
       }
       span.setTag('error', error)
       if (isFirstAttempt && this.di && error && this.libraryConfig?.isDiEnabled) {
@@ -363,6 +368,7 @@ class CucumberPlugin extends CiPlugin {
 
       if (isFlakyRetry > 0) {
         span.setTag(TEST_IS_RETRY, 'true')
+        span.setTag(TEST_RETRY_REASON, 'atr')
       }
 
       if (hasFailedAllRetries) {
