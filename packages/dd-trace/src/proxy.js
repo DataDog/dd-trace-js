@@ -71,7 +71,7 @@ class Tracer extends NoopProxy {
       appsec: new LazyModule(() => require('./appsec')),
       iast: new LazyModule(() => require('./appsec/iast')),
       llmobs: new LazyModule(() => require('./llmobs')),
-      rewriter: new LazyModule(() => require('./appsec/iast/taint-tracking/rewriter')),
+      rewriter: new LazyModule(() => require('./appsec/iast/taint-tracking/rewriter'))
     }
   }
 
@@ -263,7 +263,6 @@ class Tracer extends NoopProxy {
       DynamicInstrumentation.configure(config)
       setStartupLogPluginManager(this._pluginManager)
     }
-
   }
 
   profilerStarted () {

@@ -84,7 +84,6 @@ for (const extension of extensions) {
 
           wrap(self, 'embedQuery', 'apm:@langchain/core:Embeddings_embedQuery', namespace)
           wrap(self, 'embedDocuments', 'apm:@langchain/core:Embeddings_embedDocuments', namespace)
-
         }
       })
     }

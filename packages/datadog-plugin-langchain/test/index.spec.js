@@ -17,7 +17,7 @@ const openAiBaseCompletionInfo = { base: 'https://api.openai.com', path: '/v1/co
 const openAiBaseChatInfo = { base: 'https://api.openai.com', path: '/v1/chat/completions' }
 const openAiBaseEmbeddingInfo = { base: 'https://api.openai.com', path: '/v1/embeddings' }
 
-let isDdTrace = iastFilter.isDdTrace
+const isDdTrace = iastFilter.isDdTrace
 
 describe('Plugin', () => {
   let langchainOpenai

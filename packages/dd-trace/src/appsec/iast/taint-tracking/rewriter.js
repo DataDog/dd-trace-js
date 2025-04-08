@@ -1,7 +1,5 @@
 'use strict'
 
-const fs = require('fs')
-
 const Module = require('module')
 const { pathToFileURL } = require('url')
 const { MessageChannel } = require('worker_threads')
@@ -37,15 +35,17 @@ let getRewriterOriginalPathAndLineFromSourceMap = function (path, line, column) 
 function setGetOriginalPathAndLineFromSourceMapFunction (chainSourceMap, { getOriginalPathAndLineFromSourceMap }) {
   if (!getOriginalPathAndLineFromSourceMap) return
 
-  getRewriterOriginalPathAndLineFromSourceMap = chainSourceMap ? (path, line, column) => {
+  getRewriterOriginalPathAndLineFromSourceMap = chainSourceMap
+    ? (path, line, column) => {
       // if --enable-source-maps is present stacktraces of the rewritten files contain the original path, file and
       // column because the sourcemap chaining is done during the rewriting process so we can skip it
-      if (isPrivateModule(path) && !isDdTrace(path)) {
-        return { path, line, column }
-      } else {
-        return getOriginalPathAndLineFromSourceMap(path, line, column)
+        if (isPrivateModule(path) && !isDdTrace(path)) {
+          return { path, line, column }
+        } else {
+          return getOriginalPathAndLineFromSourceMap(path, line, column)
+        }
       }
-    } : getOriginalPathAndLineFromSourceMap
+    : getOriginalPathAndLineFromSourceMap
 }
 
 function getRewriter (telemetryVerbosity) {

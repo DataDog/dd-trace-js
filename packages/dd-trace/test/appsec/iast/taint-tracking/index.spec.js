@@ -11,11 +11,6 @@ describe('IAST TaintTracking', () => {
     }
   }
 
-  const rewriter = {
-    enableRewriter: sinon.spy(),
-    disableRewriter: sinon.spy()
-  }
-
   const taintTrackingOperations = {
     enableTaintOperations: sinon.spy(),
     disableTaintOperations: sinon.spy(),

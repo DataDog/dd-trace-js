@@ -3,10 +3,6 @@
 const log = require('../../../log')
 const LLMObsPlugin = require('../base')
 
-const shimmer = require('../../../../../datadog-shimmer')
-
-const { tracingChannel } = require('dc-polyfill')
-
 const pluginManager = require('../../../../../..')._pluginManager
 
 const ANTHROPIC_PROVIDER_NAME = 'anthropic'
@@ -169,7 +165,6 @@ class BaseLLMGeneratePlugin extends BaseLangChainLLMObsPlugin {
   }
 }
 
-
 class EmbeddingsEmbedQueryPlugin extends BaseLangChainLLMObsPlugin {
   static get id () { return 'llmobs_langchain_embeddings_embed_query' }
   static get lcType () { return 'embedding' }
@@ -185,8 +180,6 @@ class EmbeddingsEmbedDocumentsPlugin extends BaseLangChainLLMObsPlugin {
     return 'tracing:apm:@langchain/core:Embeddings_embedDocuments'
   }
 }
-
-// module.exports = LangChainLLMObsPlugin
 
 module.exports = [
   RunnableSequenceInvokePlugin,
