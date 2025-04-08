@@ -3,7 +3,7 @@
 const { getGeneratedPosition } = require('./source-maps')
 const lock = require('./lock')()
 const session = require('./session')
-const compileCondition = require('./condition')
+const { compile: compileCondition, compileSegments, templateRequiresEvaluation } = require('./condition')
 const { MAX_SNAPSHOTS_PER_SECOND_PER_PROBE, MAX_NON_SNAPSHOTS_PER_SECOND_PER_PROBE } = require('./defaults')
 const { findScriptFromPartialPath, locationToBreakpoint, breakpointToProbes, probeToLocation } = require('./state')
 const log = require('../../log')
@@ -25,6 +25,12 @@ async function addBreakpoint (probe) {
   // Optimize for sending data to /debugger/v1/input endpoint
   probe.location = { file, lines: [String(lineNumber)] }
   delete probe.where
+
+  // Optimize for fast calculations when probe is hit
+  if (templateRequiresEvaluation(probe.segments)) {
+    probe.templateForEvaluation = `\`${compileSegments(probe.segments)}\``
+  }
+  delete probe.segments
 
   // Optimize for fast calculations when probe is hit
   const snapshotsPerSecond = probe.sampling?.snapshotsPerSecond ?? (probe.captureSnapshot

@@ -45,6 +45,7 @@ session.on('Debugger.paused', async ({ params }) => {
   let sampled = false
   let numberOfProbesWithSnapshots = 0
   const probes = []
+  const templateResults = []
 
   // V8 doesn't allow setting more than one breakpoint at a specific location, however, it's possible to set two
   // breakpoints just next to each other that will "snap" to the same logical location, which in turn will be hit at the
@@ -110,6 +111,16 @@ session.on('Debugger.paused', async ({ params }) => {
       sampled = true
       probe.lastCaptureNs = start
 
+      if (probe.templateForEvaluation) {
+        // TODO: If a snapshot is being collected, compute the message based on it instead (perf)
+        const { result } = await session.post('Debugger.evaluateOnCallFrame', {
+          callFrameId: params.callFrames[0].callFrameId,
+          expression: probe.templateForEvaluation,
+          returnByValue: true
+        })
+        templateResults.push(result)
+      }
+
       probes.push(probe)
     }
   }
@@ -155,6 +166,7 @@ session.on('Debugger.paused', async ({ params }) => {
   }
 
   const stack = getStackFromCallFrames(params.callFrames)
+  let i = 0
 
   // TODO: Send multiple probes in one HTTP request as an array (DEBUG-2848)
   for (const probe of probes) {
@@ -179,9 +191,24 @@ session.on('Debugger.paused', async ({ params }) => {
       }
     }
 
+    let message = probe.template
+    if (probe.templateForEvaluation) {
+      const result = templateResults[i++]
+      if (result.type === 'object' && result.subtype === 'error') {
+        const errorMessage = result.description.split('\n')[0]
+        log.debug('[debugger:devtools_client] Error evaluating probe template: %s', errorMessage)
+        snapshot.evaluationErrors = [{ expr: probe.template, message: errorMessage }]
+        message = ''
+      } else {
+        // There's no evidence that the fallback to an empty string is ever needed, but is there in case `result` is an
+        // unexpected type
+        message = result.value ?? ''
+      }
+    }
+
     ackEmitting(probe)
-    // TODO: Process template (DEBUG-2628)
-    send(probe.template, logger, dd, snapshot)
+
+    send(message, logger, dd, snapshot)
   }
 })
 

@@ -1,6 +1,10 @@
 'use strict'
 
-module.exports = compile
+module.exports = {
+  compile,
+  compileSegments,
+  templateRequiresEvaluation
+}
 
 const identifierRegex = /^[@a-zA-Z_$][\w$]*$/
 
@@ -34,6 +38,20 @@ const reservedWords = new Set([
 ])
 
 const PRIMITIVE_TYPES = new Set(['string', 'number', 'bigint', 'boolean', 'undefined', 'symbol', 'null'])
+
+function templateRequiresEvaluation (segments) {
+  if (segments === undefined) return false // There should always be segments, but just in case
+  for (const { str } of segments) {
+    if (str === undefined) return true
+  }
+  return false
+}
+
+function compileSegments (segments) {
+  return segments
+    .map(({ str, json }) => str !== undefined ? str : `\${${compile(json)}}`)
+    .join('')
+}
 
 // TODO: Consider storing some of these functions on `process` so they can be reused across probes
 function compile (node) {

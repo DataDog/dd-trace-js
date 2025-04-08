@@ -447,6 +447,58 @@ describe('Dynamic Instrumentation', function () {
 
         t.agent.addRemoteConfig(t.rcConfig)
       })
+
+      describe('template evaluation', function () {
+        it('should evaluate template if it requires evaluation', function (done) {
+          t.agent.on('debugger-input', ({ payload: [payload] }) => {
+            assert.strictEqual(payload.message, 'Hello bar!')
+            done()
+          })
+
+          t.agent.addRemoteConfig(t.generateRemoteConfig({
+            template: 'Hello {request.params.name}!',
+            segments: [
+              { str: 'Hello ' },
+              {
+                dsl: 'request.params.name',
+                json: { getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }
+              },
+              { str: '!' }
+            ]
+          }))
+
+          t.triggerBreakpoint()
+        })
+
+        it('should report evaluation error if template cannot be evaluated', function (done) {
+          t.agent.on('debugger-input', ({ payload: [payload] }) => {
+            assert.strictEqual(payload.message, '')
+
+            const evaluationErrors = payload.debugger.snapshot.evaluationErrors
+
+            assert.isArray(evaluationErrors)
+            assert.strictEqual(evaluationErrors.length, 1)
+            assert.strictEqual(evaluationErrors[0].expr, 'Hello {request.invalid.name}!')
+            assert.strictEqual(evaluationErrors[0].message, 'TypeError: Cannot convert undefined or null to object')
+
+            done()
+          })
+
+          t.agent.addRemoteConfig(t.generateRemoteConfig({
+            template: 'Hello {request.invalid.name}!',
+            segments: [
+              { str: 'Hello ' },
+              {
+                dsl: 'request.invalid.name',
+                json: { getmember: [{ getmember: [{ ref: 'request' }, 'invalid'] }, 'name'] }
+              },
+              { str: '!' }
+            ]
+          }))
+
+          t.triggerBreakpoint()
+        })
+      })
     })
 
     describe('sampling', function () {
