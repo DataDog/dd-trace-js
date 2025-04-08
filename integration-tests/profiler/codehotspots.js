@@ -1,16 +1,21 @@
 'use strict'
 
 const DDTrace = require('dd-trace')
-
 const tracer = DDTrace.init()
+
+// Busy cycle duration is communicated in nanoseconds through the environment
+// variable by the test. On first execution, it'll be 10 * the sampling period
+// at 99Hz (so, 101010101ns). If subsequent executions are needed, it will be
+// prolonged.
+const busyCycleTime = BigInt(process.env.BUSY_CYCLE_TIME)
 
 function busyLoop () {
   const start = process.hrtime.bigint()
   let x = 0
   for (;;) {
     const now = process.hrtime.bigint()
-    // Busy cycle for 100ms
-    if (now - start > 100000000n) {
+    // Busy cycle
+    if (now - start > busyCycleTime) {
       break
     }
     // Do something in addition to invoking hrtime

@@ -286,6 +286,20 @@ describe('profiler', () => {
   let oomExecArgv
   const timeout = 30000
 
+  // Target sample count per span for the code hotspots test
+  const idealSamplesPerSpan = 10
+
+  // Intrinsic invariants for the code hotspots test
+  const expectedSpans = 9 // codehotspots.js creates 3x3 spans
+  const profilerSamplingFrequency = 99 // Hz
+
+  // Computed values for the code hotspots test. busyCycleTimeNs is adaptively adjusted by the test
+  // when it needs to be repeated.
+  const idealSampleCount = idealSamplesPerSpan * expectedSpans // we'd like 10 samples per span, ideally
+  const acceptedSampleCount = (idealSampleCount * 0.6) | 0 // we'll settle for 60% of that
+  let busyCycleTimeNs = 1000000000 * idealSamplesPerSpan / profilerSamplingFrequency
+  const maxBusyCycleTimeNs = (timeout - 1000) * 1000000 / expectedSpans
+
   before(async () => {
     sandbox = await createSandbox()
     cwd = sandbox.folder
@@ -307,7 +321,8 @@ describe('profiler', () => {
         cwd,
         env: {
           DD_PROFILING_EXPORTERS: 'file',
-          DD_PROFILING_ENABLED: 1
+          DD_PROFILING_ENABLED: 1,
+          BUSY_CYCLE_TIME: (busyCycleTimeNs | 0).toString()
         }
       })
 
@@ -320,12 +335,16 @@ describe('profiler', () => {
 
       const { profile, encoded } = await getLatestProfile(cwd, /^wall_.+\.pprof$/)
 
-      // Fail fast (and retry) if we gathered a small number of samples. This can happen if the
-      // machine is CPU-constrained. We run 9 spans each for 100ms, sampled at 99Hz, so we should
-      // ideally have 89 samples. We'll settle for 60% of that.
-      assert.isAtLeast(profile.sample.length, 53, encoded)
+      // Recompute in case we need to retry
+      busyCycleTimeNs = Math.min(maxBusyCycleTimeNs, busyCycleTimeNs * idealSampleCount / profile.sample.length)
 
-      this.retries(0) // stop retrying, as with 53+ samples the rest of the test should pass
+      // Fail fast (and retry) if we gathered a small number of samples. This can happen if the
+      // machine is CPU-constrained so the V8 thread that triggers PROF signals gets CPU starved. If
+      // we need to retry, the busyCycleTime was prolonged above to have the program run for long
+      // enough for the profiler to capture the ideal number of samples.
+      assert.isAtLeast(profile.sample.length, acceptedSampleCount, encoded)
+
+      this.retries(0) // stop retrying, as with 60% of samples the rest of the test should pass
 
       // We check the profile for following invariants:
       // - every sample needs to have an 'end_timestamp_ns' label that has values (nanos since UNIX
