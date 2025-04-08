@@ -399,10 +399,11 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
         let attemptToFixPassed = false
         let failedAllTests = false
+        let isAttemptToFix = false
         if (this.isTestManagementTestsEnabled) {
           const testName = getJestTestName(event.test)
           const originalTestName = removeAttemptToFixStringFromTestName(testName)
-          const isAttemptToFix = this.testManagementTestsForThisSuite?.attemptToFix?.includes(originalTestName)
+          isAttemptToFix = this.testManagementTestsForThisSuite?.attemptToFix?.includes(originalTestName)
           if (isAttemptToFix) {
             if (attemptToFixRetriedTestsStatuses.has(originalTestName)) {
               attemptToFixRetriedTestsStatuses.get(originalTestName).push(status)
@@ -423,6 +424,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           }
         }
 
+        let isEfdRetry = false
         // We'll store the test statuses of the retries
         if (this.isKnownTestsEnabled) {
           const testName = getJestTestName(event.test)
@@ -431,6 +433,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           if (isNewTest) {
             if (newTestsTestStatuses.has(originalTestName)) {
               newTestsTestStatuses.get(originalTestName).push(status)
+              isEfdRetry = true
             } else {
               newTestsTestStatuses.set(originalTestName, [status])
             }
@@ -466,12 +469,18 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           })
         }
 
+        let isAtrRetry = false
+        if (this.isFlakyTestRetriesEnabled && event.test?.invocations > 1 && !isAttemptToFix && !isEfdRetry) {
+          isAtrRetry = true
+        }
+
         asyncResource.runInAsyncScope(() => {
           testFinishCh.publish({
             status,
             testStartLine: getTestLineStart(event.test.asyncError, this.testSuite),
             attemptToFixPassed,
-            failedAllTests
+            failedAllTests,
+            isAtrRetry
           })
         })
 

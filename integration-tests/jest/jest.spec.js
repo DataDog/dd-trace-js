@@ -531,7 +531,7 @@ describe('jest CommonJS', () => {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
-          const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === 'atr')
 
           assert.equal(retriedTests.length, 2)
           const retriedTest = retriedTests.find(test => test.meta[TEST_SUITE].includes('test-hit-breakpoint.js'))
@@ -2406,6 +2406,7 @@ describe('jest CommonJS', () => {
           assert.equal(eventuallyPassingTest.filter(test => test.meta[TEST_STATUS] === 'fail').length, 2)
           assert.equal(eventuallyPassingTest.filter(test => test.meta[TEST_STATUS] === 'pass').length, 1)
           assert.equal(eventuallyPassingTest.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 2)
+          assert.equal(eventuallyPassingTest.filter(test => test.meta[TEST_RETRY_REASON] === 'atr').length, 2)
 
           const neverPassingTest = tests.filter(
             test => test.resource ===
@@ -2415,6 +2416,7 @@ describe('jest CommonJS', () => {
           assert.equal(neverPassingTest.filter(test => test.meta[TEST_STATUS] === 'fail').length, 6)
           assert.equal(neverPassingTest.filter(test => test.meta[TEST_STATUS] === 'pass').length, 0)
           assert.equal(neverPassingTest.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 5)
+          assert.equal(neverPassingTest.filter(test => test.meta[TEST_RETRY_REASON] === 'atr').length, 5)
 
           const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
 
@@ -2473,7 +2475,7 @@ describe('jest CommonJS', () => {
             'ci-visibility/jest-flaky/flaky-fails.js.test-flaky-test-retries can retry failed tests'
           ])
 
-          const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === 'atr')
 
           assert.equal(retriedTests.length, 0)
         })
@@ -2514,6 +2516,8 @@ describe('jest CommonJS', () => {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          assert.equal(tests.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 2)
+          assert.equal(tests.filter(test => test.meta[TEST_RETRY_REASON] === 'atr').length, 2)
 
           assert.equal(tests.length, 5)
           // only one retry
@@ -2556,7 +2560,7 @@ describe('jest CommonJS', () => {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
-          const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === 'atr')
 
           assert.equal(retriedTests.length, 1)
           const [retriedTest] = retriedTests
@@ -2605,7 +2609,7 @@ describe('jest CommonJS', () => {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
-          const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === 'atr')
 
           assert.equal(retriedTests.length, 1)
           const [retriedTest] = retriedTests
@@ -2654,7 +2658,7 @@ describe('jest CommonJS', () => {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
-          const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === 'atr')
 
           assert.equal(retriedTests.length, 1)
           const [retriedTest] = retriedTests
@@ -2738,7 +2742,7 @@ describe('jest CommonJS', () => {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
-          const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === 'atr')
 
           assert.equal(retriedTests.length, 1)
           const [retriedTest] = retriedTests
@@ -2786,7 +2790,7 @@ describe('jest CommonJS', () => {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
-          const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === 'atr')
 
           assert.equal(retriedTests.length, 1)
           const [retriedTest] = retriedTests
