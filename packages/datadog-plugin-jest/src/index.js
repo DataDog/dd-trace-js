@@ -473,6 +473,7 @@ class JestPlugin extends CiPlugin {
 
     if (isJestRetry) {
       extraTags[TEST_IS_RETRY] = 'true'
+      extraTags[TEST_RETRY_REASON] = 'native_retry'
     }
 
     return super.startTestSpan(name, suite, this.testSuiteSpan, extraTags)
