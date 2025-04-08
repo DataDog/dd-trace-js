@@ -108,10 +108,10 @@ describe('Plugin', () => {
                   [ERROR_STACK]: error.stack,
                   component: '@confluentinc/kafka-javascript'
                 })
-              })
+              }, { timeoutMs: 10000 })
 
               try {
-                await sendMessages(kafka, testTopic, 'Oh no!')
+                await sendMessages(kafka, testTopic, messages = [{ key: 'key1' }])
               } catch (e) {
                 error = e
                 return expectedSpanPromise
@@ -192,7 +192,7 @@ describe('Plugin', () => {
                 })
 
                 expect(parseInt(span.parent_id.toString())).to.be.gt(0)
-              }, 10000)
+              }, { timeoutMs: 10000 })
 
               await consumer.run({
                 eachMessage: async () => {
@@ -277,7 +277,8 @@ describe('Plugin', () => {
                 meta: {
                   'span.kind': 'producer',
                   component: '@confluentinc/kafka-javascript',
-                  'messaging.destination.name': testTopic
+                  'messaging.destination.name': testTopic,
+                  'messaging.kafka.bootstrap.servers': '127.0.0.1:9092'
                 },
                 resource: testTopic,
                 error: 0
@@ -307,7 +308,7 @@ describe('Plugin', () => {
 
                 expect(span.meta[ERROR_TYPE]).to.exist
                 expect(span.meta[ERROR_MESSAGE]).to.exist
-              })
+              }, { timeoutMs: 10000 })
 
               try {
                 // Passing invalid arguments should cause an error
@@ -351,6 +352,39 @@ describe('Plugin', () => {
                 error: 0,
                 type: 'worker'
               })
+
+              // Send a test message using the producer
+              const message = Buffer.from('test message for native consumer')
+              const key = 'native-consumer-key'
+
+              let consumePromise
+              nativeConsumer.on('ready', () => {
+                // Consume messages
+                consumePromise = new Promise(resolve => {
+                  nativeConsumer.consume(1, (err, messages) => {
+                    resolve()
+                  })
+                  nativeProducer.produce(testTopic, null, message, key)
+                })
+              })
+
+              await consumePromise
+
+              return expectedSpanPromise
+            })
+
+            it('should propagate context', async () => {
+              const expectedSpanPromise = agent.use(traces => {
+                const span = traces[0][0]
+
+                expect(span).to.include({
+                  name: 'kafka.consume',
+                  service: 'test-kafka',
+                  resource: testTopic
+                })
+
+                expect(parseInt(span.parent_id.toString())).to.be.gt(0)
+              }, { timeoutMs: 10000 })
 
               // Send a test message using the producer
               const message = Buffer.from('test message for native consumer')

@@ -32,7 +32,6 @@ const latestConsumerOffsets = new Map()
 addHook({ name: '@confluentinc/kafka-javascript', versions: ['>=1.0.0'] }, (module) => {
   // Hook native module classes first
   instrumentBaseModule(module)
-  instrumentBaseModule(module.RdKafka)
 
   // Then hook KafkaJS if it exists
   if (module.KafkaJS) {
@@ -57,7 +56,7 @@ function instrumentBaseModule (module) {
                 return produce.apply(this, arguments)
               }
 
-              const brokers = this.client && this.client.brokers ? this.client.brokers.join(',') : ''
+              const brokers = this.globalConfig?.['bootstrap.servers']
 
               const asyncResource = new AsyncResource('bound-anonymous-fn')
               return asyncResource.runInAsyncScope(() => {
