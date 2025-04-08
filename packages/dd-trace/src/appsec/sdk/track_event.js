@@ -78,7 +78,7 @@ function trackCustomEvent (tracer, eventName, metadata) {
 
 function trackUserLoginSuccessV2 (tracer, login, user, metadata) {
   if (!login || typeof login !== 'string') {
-    log.warn('[ASM] Invalid login provided to v2.trackUserLoginSuccess')
+    log.warn('[ASM] Invalid login provided to eventTrackingV2.trackUserLoginSuccess')
     return
   }
 
@@ -86,7 +86,7 @@ function trackUserLoginSuccessV2 (tracer, login, user, metadata) {
 
   const rootSpan = getRootSpan(tracer)
   if (!rootSpan) {
-    log.warn('[ASM] Root span not available in v2.trackUserLoginSuccess')
+    log.warn('[ASM] Root span not available in eventTrackingV2.trackUserLoginSuccess')
     return
   }
 
@@ -109,14 +109,14 @@ function trackUserLoginSuccessV2 (tracer, login, user, metadata) {
     }
   }
 
-  trackEvent('users.login.success', metadata, 'v2.trackUserLoginSuccess', rootSpan)
+  trackEvent('users.login.success', metadata, 'eventTrackingV2.trackUserLoginSuccess', rootSpan)
 
   runWaf('users.login.success', wafData)
 }
 
 function trackUserLoginFailureV2 (tracer, login, exists, metadata) {
   if (!login || typeof login !== 'string') {
-    log.warn('[ASM] Invalid login provided to v2.trackUserLoginFailure')
+    log.warn('[ASM] Invalid login provided to eventTrackingV2.trackUserLoginFailure')
     return
   }
 
@@ -124,7 +124,7 @@ function trackUserLoginFailureV2 (tracer, login, exists, metadata) {
 
   const rootSpan = getRootSpan(tracer)
   if (!rootSpan) {
-    log.warn('[ASM] Root span not available in v2.trackUserLoginFailure')
+    log.warn('[ASM] Root span not available in eventTrackingV2.trackUserLoginFailure')
     return
   }
 
@@ -141,7 +141,7 @@ function trackUserLoginFailureV2 (tracer, login, exists, metadata) {
     ...metadata
   }
 
-  trackEvent('users.login.failure', metadata, 'v2.trackUserLoginFailure', rootSpan)
+  trackEvent('users.login.failure', metadata, 'eventTrackingV2.trackUserLoginFailure', rootSpan)
 
   runWaf('users.login.failure', wafData)
 }
