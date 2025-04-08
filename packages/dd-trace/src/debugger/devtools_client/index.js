@@ -1,7 +1,7 @@
 'use strict'
 
 const { randomUUID } = require('crypto')
-const { breakpoints } = require('./state')
+const { breakpointToProbes } = require('./state')
 const session = require('./session')
 const { getLocalStateForCallFrame } = require('./snapshot')
 const send = require('./send')
@@ -11,6 +11,7 @@ const { parentThreadId } = require('./config')
 const { MAX_SNAPSHOTS_PER_SECOND_GLOBALLY } = require('./defaults')
 const log = require('../../log')
 const { version } = require('../../../../../package.json')
+const { NODE_MAJOR } = require('../../../../../version')
 
 require('./remote_config')
 
@@ -25,57 +26,92 @@ const expression = `
 const threadId = parentThreadId === 0 ? `pid:${process.pid}` : `pid:${process.pid};tid:${parentThreadId}`
 const threadName = parentThreadId === 0 ? 'MainThread' : `WorkerThread:${parentThreadId}`
 
+const SUPPORT_ITERATOR_METHODS = NODE_MAJOR >= 22
+const SUPPORT_ARRAY_BUFFER_RESIZE = NODE_MAJOR >= 20
 const oneSecondNs = 1_000_000_000n
 let globalSnapshotSamplingRateWindowStart = 0n
 let snapshotsSampledWithinTheLastSecond = 0
+// TODO: Is a limit of 256 snapshots ever going to be a problem?
+const snapshotProbeIndexBuffer = new ArrayBuffer(1, { maxByteLength: 256 })
+// TODO: Is a limit of 256 probes ever going to be a problem?
+// TODO: Change to const once we drop support for Node.js 18
+let snapshotProbeIndex = new Uint8Array(snapshotProbeIndexBuffer)
 
 // WARNING: The code above the line `await session.post('Debugger.resume')` is highly optimized. Please edit with care!
 session.on('Debugger.paused', async ({ params }) => {
   const start = process.hrtime.bigint()
 
   let maxReferenceDepth, maxCollectionSize, maxFieldCount, maxLength
+  let sampled = false
+  let numberOfProbesWithSnapshots = 0
+  const probes = []
 
   // V8 doesn't allow setting more than one breakpoint at a specific location, however, it's possible to set two
   // breakpoints just next to each other that will "snap" to the same logical location, which in turn will be hit at the
   // same time. E.g. index.js:1:1 and index.js:1:2.
-  // TODO: Investigate if it will improve performance to create a fast-path for when there's only a single breakpoint
-  let sampled = false
-  const length = params.hitBreakpoints.length
-  const probes = []
-  // TODO: Consider reusing this array between pauses and only recreating it if it needs to grow
-  const snapshotProbeIndex = new Uint8Array(length) // TODO: Is a limit of 256 probes ever going to be a problem?
-  let numberOfProbesWithSnapshots = 0
-  for (let i = 0; i < length; i++) {
-    const id = params.hitBreakpoints[i]
-    const probe = breakpoints.get(id)
+  let numberOfProbesOnBreakpoint = params.hitBreakpoints.length
 
-    if (start - probe.lastCaptureNs < probe.nsBetweenSampling) {
-      continue
+  // TODO: Investigate if it will improve performance to create a fast-path for when there's only a single breakpoint
+  for (let i = 0; i < params.hitBreakpoints.length; i++) {
+    const probesAtLocation = breakpointToProbes.get(params.hitBreakpoints[i])
+
+    if (probesAtLocation.size !== 1) {
+      numberOfProbesOnBreakpoint = numberOfProbesOnBreakpoint + probesAtLocation.size - 1
+      if (numberOfProbesOnBreakpoint > snapshotProbeIndex.length) {
+        if (SUPPORT_ARRAY_BUFFER_RESIZE) {
+          snapshotProbeIndexBuffer.resize(numberOfProbesOnBreakpoint)
+        } else {
+          snapshotProbeIndex = new Uint8Array(numberOfProbesOnBreakpoint)
+        }
+      }
     }
 
-    if (probe.captureSnapshot === true) {
-      // This algorithm to calculate number of sampled snapshots within the last second is not perfect, as it's not a
-      // sliding window. But it's quick and easy :)
-      if (i === 0 && start - globalSnapshotSamplingRateWindowStart > oneSecondNs) {
-        snapshotsSampledWithinTheLastSecond = 1
-        globalSnapshotSamplingRateWindowStart = start
-      } else if (snapshotsSampledWithinTheLastSecond >= MAX_SNAPSHOTS_PER_SECOND_GLOBALLY) {
+    // If all the probes have a condition, we know that it triggered. If at least one probe doesn't have a condition, we
+    // need to verify which conditions are met.
+    const shouldVerifyConditions = (
+      SUPPORT_ITERATOR_METHODS
+        ? probesAtLocation.values()
+        : Array.from(probesAtLocation.values())
+    ).some((probe) => probe.condition === undefined)
+
+    for (const probe of probesAtLocation.values()) {
+      if (start - probe.lastCaptureNs < probe.nsBetweenSampling) {
         continue
-      } else {
-        snapshotsSampledWithinTheLastSecond++
       }
 
-      snapshotProbeIndex[numberOfProbesWithSnapshots++] = probes.length
-      maxReferenceDepth = highestOrUndefined(probe.capture.maxReferenceDepth, maxReferenceDepth)
-      maxCollectionSize = highestOrUndefined(probe.capture.maxCollectionSize, maxCollectionSize)
-      maxFieldCount = highestOrUndefined(probe.capture.maxFieldCount, maxFieldCount)
-      maxLength = highestOrUndefined(probe.capture.maxLength, maxLength)
+      if (shouldVerifyConditions && probe.condition !== undefined) {
+        const { result } = await session.post('Debugger.evaluateOnCallFrame', {
+          callFrameId: params.callFrames[0].callFrameId,
+          expression: probe.condition,
+          returnByValue: true
+        })
+        if (result.value !== true) continue
+      }
+
+      if (probe.captureSnapshot === true) {
+        // This algorithm to calculate number of sampled snapshots within the last second is not perfect, as it's not a
+        // sliding window. But it's quick and easy :)
+        if (i === 0 && start - globalSnapshotSamplingRateWindowStart > oneSecondNs) {
+          snapshotsSampledWithinTheLastSecond = 1
+          globalSnapshotSamplingRateWindowStart = start
+        } else if (snapshotsSampledWithinTheLastSecond >= MAX_SNAPSHOTS_PER_SECOND_GLOBALLY) {
+          continue
+        } else {
+          snapshotsSampledWithinTheLastSecond++
+        }
+
+        snapshotProbeIndex[numberOfProbesWithSnapshots++] = probes.length
+        maxReferenceDepth = highestOrUndefined(probe.capture.maxReferenceDepth, maxReferenceDepth)
+        maxCollectionSize = highestOrUndefined(probe.capture.maxCollectionSize, maxCollectionSize)
+        maxFieldCount = highestOrUndefined(probe.capture.maxFieldCount, maxFieldCount)
+        maxLength = highestOrUndefined(probe.capture.maxLength, maxLength)
+      }
+
+      sampled = true
+      probe.lastCaptureNs = start
+
+      probes.push(probe)
     }
-
-    sampled = true
-    probe.lastCaptureNs = start
-
-    probes.push(probe)
   }
 
   if (sampled === false) {
