@@ -24,7 +24,8 @@ const {
   OUTPUT_TOKENS_METRIC_KEY,
   TOTAL_TOKENS_METRIC_KEY,
   INTEGRATION,
-  DECORATOR
+  DECORATOR,
+  PROPAGATED_ML_APP_KEY
 } = require('./constants/tags')
 
 // global registry of LLMObs spans
@@ -73,7 +74,14 @@ class LLMObsTagger {
     if (integration) this._setTag(span, INTEGRATION, integration)
     if (_decorator) this._setTag(span, DECORATOR, _decorator)
 
-    if (!mlApp) mlApp = registry.get(parent)?.[ML_APP] || this._config.llmobs.mlApp
+    mlApp =
+      mlApp ??
+      registry.get(parent)?.[ML_APP] ??
+      this._config.llmobs.mlApp ??
+      span.context()._trace.tags[PROPAGATED_ML_APP_KEY]
+
+    // hard throw here, even in auto-instrumentation
+    if (!mlApp) throw new Error('[LLMObs] Cannot start an LLMObs span without an mlApp configured.')
     this._setTag(span, ML_APP, mlApp)
 
     const parentId =

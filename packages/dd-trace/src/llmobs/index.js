@@ -1,7 +1,7 @@
 'use strict'
 
 const log = require('../log')
-const { PROPAGATED_PARENT_ID_KEY } = require('./constants/tags')
+const { PROPAGATED_PARENT_ID_KEY, ML_APP, PROPAGATED_ML_APP_KEY } = require('./constants/tags')
 const { storage } = require('./storage')
 
 const LLMObsSpanProcessor = require('./span_processor')
@@ -16,6 +16,7 @@ const injectCh = channel('dd-trace:span:inject')
 const LLMObsAgentlessSpanWriter = require('./writers/spans/agentless')
 const LLMObsAgentProxySpanWriter = require('./writers/spans/agentProxy')
 const LLMObsEvalMetricsWriter = require('./writers/evaluations')
+const LLMObsTagger = require('./tagger')
 
 /**
  * Setting writers and processor globally when LLMObs is enabled
@@ -29,7 +30,12 @@ let spanProcessor
 let spanWriter
 let evalWriter
 
+/** @type {import('../config')} */
+let globalTracerConfig
+
 function enable (config) {
+  globalTracerConfig = config
+
   const startTime = performance.now()
   // create writers and eval writer append and flush channels
   // span writer append is handled by the span processor
@@ -64,14 +70,19 @@ function disable () {
 }
 
 // since LLMObs traces can extend between services and be the same trace,
-// we need to propogate the parent id.
+// we need to propagate the parent id and mlApp.
 function handleLLMObsParentIdInjection ({ carrier }) {
   const parent = storage.getStore()?.span
-  if (!parent) return
+  let parentId, mlApp
+  if (parent) {
+    parentId = parent.context().toSpanId()
+    mlApp = LLMObsTagger.tagMap.get(parent)?.[ML_APP] || globalTracerConfig.llmobs.mlApp
+  } else {
+    mlApp = globalTracerConfig.llmobs.mlApp
+  }
 
-  const parentId = parent?.context().toSpanId()
-
-  carrier['x-datadog-tags'] += `,${PROPAGATED_PARENT_ID_KEY}=${parentId}`
+  if (parentId) carrier['x-datadog-tags'] += `,${PROPAGATED_PARENT_ID_KEY}=${parentId}`
+  if (mlApp) carrier['x-datadog-tags'] += `,${PROPAGATED_ML_APP_KEY}=${mlApp}`
 }
 
 function createSpanWriter (config) {
