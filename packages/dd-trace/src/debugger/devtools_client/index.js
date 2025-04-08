@@ -66,13 +66,13 @@ session.on('Debugger.paused', async ({ params }) => {
       }
     }
 
-    // If all the probes has a condition, we know that it triggered. If at least one probe doesn't have a condition, we
+    // If all the probes have a condition, we know that it triggered. If at least one probe doesn't have a condition, we
     // need to verify which conditions are met.
-    const shouldVerifyConditions = !(
+    const shouldVerifyConditions = (
       SUPPORT_ITERATOR_METHODS
         ? probesAtLocation.values()
         : Array.from(probesAtLocation.values())
-    ).every((probe) => probe.condition !== undefined)
+    ).some((probe) => probe.condition === undefined)
 
     for (const probe of probesAtLocation.values()) {
       if (start - probe.lastCaptureNs < probe.nsBetweenSampling) {
