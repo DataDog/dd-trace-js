@@ -300,7 +300,8 @@ describe('profiler', () => {
   })
 
   if (process.platform !== 'win32') {
-    it('code hotspots and endpoint tracing works', async () => {
+    it('code hotspots and endpoint tracing works', async function () {
+      this.retries(9) // see fail-fast comment below
       const procStart = BigInt(Date.now() * 1000000)
       const proc = fork(path.join(cwd, 'profiler/codehotspots.js'), {
         cwd,
@@ -318,6 +319,13 @@ describe('profiler', () => {
       assert.deepEqual(event.endpoint_counts, { 'endpoint-0': 1, 'endpoint-1': 1, 'endpoint-2': 1 })
 
       const { profile, encoded } = await getLatestProfile(cwd, /^wall_.+\.pprof$/)
+
+      // Fail fast (and retry) if we gathered a small number of samples. This can happen if the
+      // machine is CPU-constrained. We run 9 spans each for 100ms, sampled at 99Hz, so we should
+      // ideally have 89 samples. We'll settle for 60% of that.
+      assert.isAtLeast(profile.sample.length, 53, encoded)
+
+      this.retries(0) // stop retrying, as with 53+ samples the rest of the test should pass
 
       // We check the profile for following invariants:
       // - every sample needs to have an 'end_timestamp_ns' label that has values (nanos since UNIX
