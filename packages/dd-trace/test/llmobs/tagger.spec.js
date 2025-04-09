@@ -171,9 +171,6 @@ describe('tagger', () => {
 
           const tags = Tagger.tagMap.get(span)
           expect(tags['_ml_obs.meta.ml_app']).to.equal('my-propagated-ml-app')
-          expect(tags['_ml_obs.tags']).to.deep.equal({
-            'ml-proxy': 'custom'
-          })
         })
 
         it('throws an error if no mlApp is provided and no propagated mlApp is provided', () => {

@@ -1,7 +1,14 @@
 'use strict'
 
 const log = require('../log')
-const { PROPAGATED_PARENT_ID_KEY, ML_APP, PROPAGATED_ML_APP_KEY } = require('./constants/tags')
+const {
+  TAGS,
+  ML_APP,
+  ML_PROXY_TAG,
+  CUSTOM_ML_PROXY_VALUE,
+  PROPAGATED_ML_APP_KEY,
+  PROPAGATED_PARENT_ID_KEY
+} = require('./constants/tags')
 const { storage } = require('./storage')
 
 const LLMObsSpanProcessor = require('./span_processor')
@@ -17,6 +24,8 @@ const LLMObsAgentlessSpanWriter = require('./writers/spans/agentless')
 const LLMObsAgentProxySpanWriter = require('./writers/spans/agentProxy')
 const LLMObsEvalMetricsWriter = require('./writers/evaluations')
 const LLMObsTagger = require('./tagger')
+
+const tracer = require('../../../..')
 
 /**
  * Setting writers and processor globally when LLMObs is enabled
@@ -73,16 +82,20 @@ function disable () {
 // we need to propagate the parent id and mlApp.
 function handleLLMObsParentIdInjection ({ carrier }) {
   const parent = storage.getStore()?.span
-  let parentId, mlApp
-  if (parent) {
-    parentId = parent.context().toSpanId()
-    mlApp = LLMObsTagger.tagMap.get(parent)?.[ML_APP] || globalTracerConfig.llmobs.mlApp
-  } else {
-    mlApp = globalTracerConfig.llmobs.mlApp
-  }
+  const mlObsSpanTags = LLMObsTagger.tagMap.get(parent)
+
+  const parentId = parent?.context().toSpanId()
+  const mlApp = mlObsSpanTags?.[ML_APP] || globalTracerConfig.llmobs.mlApp
 
   if (parentId) carrier['x-datadog-tags'] += `,${PROPAGATED_PARENT_ID_KEY}=${parentId}`
   if (mlApp) carrier['x-datadog-tags'] += `,${PROPAGATED_ML_APP_KEY}=${mlApp}`
+
+  const hasProxyTag = mlObsSpanTags?.[TAGS]?.[ML_PROXY_TAG]
+  if (parent && !hasProxyTag) { // it's possible that the tag might already be set by an integration
+    tracer.llmobs.annotate(parent, {
+      tags: { [ML_PROXY_TAG]: CUSTOM_ML_PROXY_VALUE }
+    })
+  }
 }
 
 function createSpanWriter (config) {

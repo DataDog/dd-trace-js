@@ -25,9 +25,7 @@ const {
   TOTAL_TOKENS_METRIC_KEY,
   INTEGRATION,
   DECORATOR,
-  PROPAGATED_ML_APP_KEY,
-  CUSTOM_ML_PROXY_VALUE,
-  ML_PROXY_TAG
+  PROPAGATED_ML_APP_KEY
 } = require('./constants/tags')
 
 // global registry of LLMObs spans
@@ -76,27 +74,20 @@ class LLMObsTagger {
     if (integration) this._setTag(span, INTEGRATION, integration)
     if (_decorator) this._setTag(span, DECORATOR, _decorator)
 
-    const directParentMlApp = registry.get(parent)?.[ML_APP]
-    const globalMlApp = this._config.llmobs.mlApp
-    const propagatedMlApp = span.context()._trace.tags[PROPAGATED_ML_APP_KEY]
+    const spanMlApp =
+      mlApp ||
+      registry.get(parent)?.[ML_APP] ||
+      this._config.llmobs.mlApp ||
+      span.context()._trace.tags[PROPAGATED_ML_APP_KEY]
 
-    if (!mlApp) {
-      if (directParentMlApp) {
-        mlApp = directParentMlApp
-      } else if (globalMlApp) {
-        mlApp = globalMlApp
-      } else if (propagatedMlApp) {
-        mlApp = propagatedMlApp
-        this.tagSpanTags(span, { [ML_PROXY_TAG]: CUSTOM_ML_PROXY_VALUE })
-      } else {
-        throw new Error(
-          '[LLMObs] Cannot start an LLMObs span without an mlApp configured.' +
-          'Ensure this configuration is set before running your application.'
-        )
-      }
+    if (!spanMlApp) {
+      throw new Error(
+        '[LLMObs] Cannot start an LLMObs span without an mlApp configured.' +
+        'Ensure this configuration is set before running your application.'
+      )
     }
 
-    this._setTag(span, ML_APP, mlApp)
+    this._setTag(span, ML_APP, spanMlApp)
 
     const parentId =
       parent?.context().toSpanId() ??
