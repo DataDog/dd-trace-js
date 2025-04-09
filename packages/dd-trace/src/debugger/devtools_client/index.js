@@ -80,15 +80,6 @@ session.on('Debugger.paused', async ({ params }) => {
         continue
       }
 
-      if (shouldVerifyConditions && probe.condition !== undefined) {
-        const { result } = await session.post('Debugger.evaluateOnCallFrame', {
-          callFrameId: params.callFrames[0].callFrameId,
-          expression: probe.condition,
-          returnByValue: true
-        })
-        if (result.value !== true) continue
-      }
-
       if (probe.captureSnapshot === true) {
         // This algorithm to calculate number of sampled snapshots within the last second is not perfect, as it's not a
         // sliding window. But it's quick and easy :)
@@ -106,6 +97,15 @@ session.on('Debugger.paused', async ({ params }) => {
         maxCollectionSize = highestOrUndefined(probe.capture.maxCollectionSize, maxCollectionSize)
         maxFieldCount = highestOrUndefined(probe.capture.maxFieldCount, maxFieldCount)
         maxLength = highestOrUndefined(probe.capture.maxLength, maxLength)
+      }
+
+      if (shouldVerifyConditions && probe.condition !== undefined) {
+        const { result } = await session.post('Debugger.evaluateOnCallFrame', {
+          callFrameId: params.callFrames[0].callFrameId,
+          expression: probe.condition,
+          returnByValue: true
+        })
+        if (result.value !== true) continue
       }
 
       sampled = true
