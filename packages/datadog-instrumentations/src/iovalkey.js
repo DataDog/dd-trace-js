@@ -26,7 +26,7 @@ addHook({ name: 'iovalkey', versions: ['>=0'] }, Redis => {
     return asyncResource.runInAsyncScope(() => {
       startCh.publish({ db, command: command.name, args: command.args, connectionOptions, connectionName })
 
-      const onResolve = asyncResource.bind(() => finish(finishCh, errorCh))
+      const onResolve = asyncResource.bind(() => finishCh.publish())
       const onReject = asyncResource.bind(err => finish(finishCh, errorCh, err))
 
       command.promise.then(onResolve, onReject)
