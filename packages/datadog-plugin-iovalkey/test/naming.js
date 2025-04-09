@@ -3,11 +3,11 @@ const { resolveNaming } = require('../../dd-trace/test/plugins/helpers')
 const rawExpectedSchema = {
   outbound: {
     v0: {
-      opName: 'redis.command',
+      opName: 'valkey.command',
       serviceName: 'test-redis'
     },
     v1: {
-      opName: 'redis.command',
+      opName: 'valkey.command',
       serviceName: 'test'
     }
   }
