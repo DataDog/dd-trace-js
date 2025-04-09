@@ -92,20 +92,15 @@ function getPrepareStackTraceAccessor () {
 function getCompileMethodFn (compileMethod) {
   let delegate = function (content, filename) {
     try {
-      let passes
       if (isDdTrace(filename)) {
         return compileMethod.apply(this, [content, filename])
       }
-      if (isPrivateModule(filename)) {
-        // TODO error tracking needs to be added based on config
-        passes = ['error_tracking']
-        if (config.iast?.enabled) {
-          passes.push('iast')
-        }
-      } else {
-        passes = ['orchestrion']
+      if (!isPrivateModule(filename) || !config.iast?.enabled) {
+        return compileMethod.apply(this, [content, filename])
       }
-      const rewritten = rewriter.rewrite(content, filename, passes)
+      // TODO when we have CJS support for orchestrion and taint-tracking, add
+      // them here as appropriate
+      const rewritten = rewriter.rewrite(content, filename, ['iast'])
 
       incrementTelemetryIfNeeded(rewritten.metrics)
 
