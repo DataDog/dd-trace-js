@@ -295,7 +295,7 @@ class PlaywrightPlugin extends CiPlugin {
         if (isAtrRetry) {
           span.setTag(TEST_RETRY_REASON, 'atr')
         } else {
-          span.setTag(TEST_RETRY_REASON, 'native_retry')
+          span.setTag(TEST_RETRY_REASON, 'unknown')
         }
       }
       if (hasFailedAllRetries) {
