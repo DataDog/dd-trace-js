@@ -243,6 +243,7 @@ versions.forEach((version) => {
           assert.equal(eventuallyPassingTest.filter(test => test.content.meta[TEST_STATUS] === 'fail').length, 3)
           assert.equal(eventuallyPassingTest.filter(test => test.content.meta[TEST_STATUS] === 'pass').length, 1)
           assert.equal(eventuallyPassingTest.filter(test => test.content.meta[TEST_IS_RETRY] === 'true').length, 3)
+          assert.equal(eventuallyPassingTest.filter(test => test.content.meta[TEST_RETRY_REASON] === 'atr').length, 3)
 
           const neverPassingTest = testEvents.filter(
             test => test.content.resource ===
@@ -252,6 +253,7 @@ versions.forEach((version) => {
           assert.equal(neverPassingTest.filter(test => test.content.meta[TEST_STATUS] === 'fail').length, 6)
           assert.equal(neverPassingTest.filter(test => test.content.meta[TEST_STATUS] === 'pass').length, 0)
           assert.equal(neverPassingTest.filter(test => test.content.meta[TEST_IS_RETRY] === 'true').length, 5)
+          assert.equal(neverPassingTest.filter(test => test.content.meta[TEST_RETRY_REASON] === 'atr').length, 5)
         }).then(() => done()).catch(done)
 
         childProcess = exec(
@@ -289,7 +291,7 @@ versions.forEach((version) => {
             'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
             'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries does not retry if unnecessary'
           ])
-          assert.equal(testEvents.filter(test => test.content.meta[TEST_IS_RETRY] === 'true').length, 0)
+          assert.equal(testEvents.filter(test => test.content.meta[TEST_RETRY_REASON] === 'atr').length, 0)
         }).then(() => done()).catch(done)
 
         childProcess = exec(
@@ -330,7 +332,7 @@ versions.forEach((version) => {
             'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
             'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries does not retry if unnecessary'
           ])
-          assert.equal(testEvents.filter(test => test.content.meta[TEST_IS_RETRY] === 'true').length, 2)
+          assert.equal(testEvents.filter(test => test.content.meta[TEST_RETRY_REASON] === 'atr').length, 2)
         }).then(() => done()).catch(done)
 
         childProcess = exec(

@@ -104,7 +104,8 @@ class VitestPlugin extends CiPlugin {
       isDisabled,
       mightHitProbe,
       isRetryReasonEfd,
-      isRetryReasonAttemptToFix
+      isRetryReasonAttemptToFix,
+      isRetryReasonAtr
     }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
       const store = storage('legacy').getStore()
@@ -114,18 +115,21 @@ class VitestPlugin extends CiPlugin {
       }
       if (isRetry) {
         extraTags[TEST_IS_RETRY] = 'true'
+        if (isRetryReasonAttemptToFix) {
+          extraTags[TEST_RETRY_REASON] = 'attempt_to_fix'
+        } else if (isRetryReasonEfd) {
+          extraTags[TEST_RETRY_REASON] = 'efd'
+        } else if (isRetryReasonAtr) {
+          extraTags[TEST_RETRY_REASON] = 'atr'
+        } else {
+          extraTags[TEST_RETRY_REASON] = 'unknown'
+        }
       }
       if (isNew) {
         extraTags[TEST_IS_NEW] = 'true'
       }
-      if (isRetryReasonEfd) {
-        extraTags[TEST_RETRY_REASON] = 'efd'
-      }
       if (isAttemptToFix) {
         extraTags[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] = 'true'
-      }
-      if (isRetryReasonAttemptToFix) {
-        extraTags[TEST_RETRY_REASON] = 'attempt_to_fix'
       }
       if (isQuarantined) {
         extraTags[TEST_MANAGEMENT_IS_QUARANTINED] = 'true'
