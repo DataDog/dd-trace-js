@@ -27,8 +27,9 @@ async function addBreakpoint (probe) {
   delete probe.where
 
   // Optimize for fast calculations when probe is hit
-  if (templateRequiresEvaluation(probe.segments)) {
-    probe.templateForEvaluation = `\`${compileSegments(probe.segments)}\``
+  probe.templateRequiresEvaluation = templateRequiresEvaluation(probe.segments)
+  if (probe.templateRequiresEvaluation) {
+    probe.template = compileSegments(probe.segments)
   }
   delete probe.segments
 

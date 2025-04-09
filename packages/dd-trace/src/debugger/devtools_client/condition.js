@@ -48,9 +48,18 @@ function templateRequiresEvaluation (segments) {
 }
 
 function compileSegments (segments) {
-  return segments
-    .map(({ str, json }) => str !== undefined ? str : `\${${compile(json)}}`)
-    .join('')
+  return `[${segments
+    .map(({ str, dsl, json }) => str !== undefined
+      ? JSON.stringify(str)
+      : `(() => {
+          try {
+            return ${compile(json)}
+          } catch (e) {
+            return { expr: ${JSON.stringify(dsl)}, message: \`\${e.name}: \${e.message}\` }
+          }
+        })()`
+    )
+    .join(',')}]`
 }
 
 // TODO: Consider storing some of these functions that doesn't require closure access to the current scope on `process`

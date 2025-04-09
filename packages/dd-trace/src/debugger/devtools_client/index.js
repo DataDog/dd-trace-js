@@ -111,11 +111,11 @@ session.on('Debugger.paused', async ({ params }) => {
       sampled = true
       probe.lastCaptureNs = start
 
-      if (probe.templateForEvaluation) {
+      if (probe.templateRequiresEvaluation) {
         // TODO: If a snapshot is being collected, compute the message based on it instead (perf)
         const { result } = await session.post('Debugger.evaluateOnCallFrame', {
           callFrameId: params.callFrames[0].callFrameId,
-          expression: probe.templateForEvaluation,
+          expression: probe.template,
           returnByValue: true
         })
         templateResults.push(result)
@@ -192,7 +192,7 @@ session.on('Debugger.paused', async ({ params }) => {
     }
 
     let message = probe.template
-    if (probe.templateForEvaluation) {
+    if (probe.templateRequiresEvaluation) {
       const result = templateResults[i++]
       if (result.type === 'object' && result.subtype === 'error') {
         const errorMessage = result.description.split('\n')[0]
@@ -202,7 +202,15 @@ session.on('Debugger.paused', async ({ params }) => {
       } else {
         // There's no evidence that the fallback to an empty string is ever needed, but is there in case `result` is an
         // unexpected type
-        message = result.value ?? ''
+        message = result.value?.reduce((message, result) => {
+          if (typeof result === 'string') return message + result
+          if (snapshot.evaluationErrors === undefined) {
+            snapshot.evaluationErrors = [result]
+          } else {
+            snapshot.evaluationErrors.push(result)
+          }
+          return `${message}{${result.message}}`
+        }, '') ?? ''
       }
     }
 

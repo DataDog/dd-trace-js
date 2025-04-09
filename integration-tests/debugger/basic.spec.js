@@ -470,29 +470,44 @@ describe('Dynamic Instrumentation', function () {
           t.triggerBreakpoint()
         })
 
-        it('should report evaluation error if template cannot be evaluated', function (done) {
+        it('should report evaluation errors for each template segment that cannot be evaluated', function (done) {
           t.agent.on('debugger-input', ({ payload: [payload] }) => {
-            assert.strictEqual(payload.message, '')
+            assert.strictEqual(
+              payload.message,
+              'This should fail: {TypeError: Cannot convert undefined or null to object}, ' +
+                'this should work: bar, ' +
+                'and this should fail: {ReferenceError: invalid is not defined}'
+            )
 
-            const evaluationErrors = payload.debugger.snapshot.evaluationErrors
+            const { evaluationErrors } = payload.debugger.snapshot
 
             assert.isArray(evaluationErrors)
-            assert.strictEqual(evaluationErrors.length, 1)
-            assert.strictEqual(evaluationErrors[0].expr, 'Hello {request.invalid.name}!')
+            assert.strictEqual(evaluationErrors.length, 2)
+            assert.strictEqual(evaluationErrors[0].expr, 'request.invalid.name')
             assert.strictEqual(evaluationErrors[0].message, 'TypeError: Cannot convert undefined or null to object')
-
+            assert.strictEqual(evaluationErrors[1].expr, 'invalid')
+            assert.strictEqual(evaluationErrors[1].message, 'ReferenceError: invalid is not defined')
             done()
           })
 
           t.agent.addRemoteConfig(t.generateRemoteConfig({
             template: 'Hello {request.invalid.name}!',
             segments: [
-              { str: 'Hello ' },
+              { str: 'This should fail: ' },
               {
                 dsl: 'request.invalid.name',
                 json: { getmember: [{ getmember: [{ ref: 'request' }, 'invalid'] }, 'name'] }
               },
-              { str: '!' }
+              { str: ', this should work: ' },
+              {
+                dsl: 'request.params.name',
+                json: { getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }
+              },
+              { str: ', and this should fail: ' },
+              {
+                dsl: 'invalid',
+                json: { ref: 'invalid' }
+              }
             ]
           }))
 

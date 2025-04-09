@@ -114,23 +114,39 @@ describe('Expresion language', function () {
 
   describe('compileSegments', function () {
     it('strings only: should return expected string', function () {
-      expect(compileSegments([{ str: 'foo' }])).to.equal('foo')
-      expect(compileSegments([{ str: 'foo' }, { str: 'bar' }])).to.equal('foobar')
+      expect(compileSegments([{ str: 'foo' }])).to.deep.equal('["foo"]')
+      expect(compileSegments([{ str: 'foo' }, { str: 'bar' }])).to.deep.equal('["foo","bar"]')
     })
 
     it('dsl only: should return expected string if dsl compiles to simple evaluation', function () {
-      // eslint-disable-next-line no-template-curly-in-string
-      expect(compileSegments([{ dsl: '', json: { ref: 'foo' } }])).to.equal('${foo}')
+      expect(compileSegments([{ dsl: 'foo', json: { ref: 'foo' } }])).to.deep.equal(
+        `[(() => {
+          try {
+            return foo
+          } catch (e) {
+            return { expr: "foo", message: \`\${e.name}: \${e.message}\` }
+          }
+        })()]`
+      )
     })
 
     it('dsl only: should return expected string if dsl compiles to function', function () {
-      const result = compileSegments([{ dsl: '', json: { getmember: [{ ref: 'foo' }, 'bar'] } }])
-      expect(result).to.match(/^\$\{\(\([^)]+\) => \{/)
+      const result = compileSegments([{ dsl: 'foo.bar', json: { getmember: [{ ref: 'foo' }, 'bar'] } }])
+      const prefix = '[(() => {\n          try {\n            return '
+      expect(result.slice(0, prefix.length)).to.equal(prefix)
+      expect(result.slice(prefix.length)).to.match(/^\(\([^)]+\) => \{/)
     })
 
     it('mixed: should return expected string', function () {
-      // eslint-disable-next-line no-template-curly-in-string
-      expect(compileSegments([{ str: 'foo: ' }, { dsl: '', json: { ref: 'foo' } }])).to.equal('foo: ${foo}')
+      expect(compileSegments([{ str: 'foo: ' }, { dsl: 'foo', json: { ref: 'foo' } }])).to.deep.equal(
+        `["foo: ",(() => {
+          try {
+            return foo
+          } catch (e) {
+            return { expr: "foo", message: \`\${e.name}: \${e.message}\` }
+          }
+        })()]`
+      )
     })
   })
 })
