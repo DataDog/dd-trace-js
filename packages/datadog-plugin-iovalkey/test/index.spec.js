@@ -42,7 +42,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('db.type', 'redis')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
-              expect(traces[0][0].meta).to.have.property('redis.raw_command', 'GET foo')
+              expect(traces[0][0].meta).to.have.property('valkey.raw_command', 'GET foo')
               expect(traces[0][0].metrics).to.have.property('network.destination.port', 6379)
             })
             .then(done)
@@ -95,7 +95,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('db.type', 'redis')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
-              expect(traces[0][0].meta).to.have.property('redis.raw_command', 'GET foo')
+              expect(traces[0][0].meta).to.have.property('valkey.raw_command', 'GET foo')
               expect(traces[0][0].meta).to.have.property('component', 'iovalkey')
               expect(traces[0][0].metrics).to.have.property('network.destination.port', 6379)
             })
@@ -149,11 +149,11 @@ describe('Plugin', () => {
           done => redis.get('foo').catch(done),
           {
             v0: {
-              opName: 'redis.command',
+              opName: 'valkey.command',
               serviceName: 'custom-test'
             },
             v1: {
-              opName: 'redis.command',
+              opName: 'valkey.command',
               serviceName: 'custom'
             }
           }
