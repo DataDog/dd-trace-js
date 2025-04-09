@@ -287,13 +287,13 @@ class PlaywrightPlugin extends CiPlugin {
         span.setTag(TEST_IS_NEW, 'true')
         if (isEfdRetry) {
           span.setTag(TEST_IS_RETRY, 'true')
-          span.setTag(TEST_RETRY_REASON, 'efd')
+          span.setTag(TEST_RETRY_REASON, 'early_flake_detection')
         }
       }
       if (isRetry) {
         span.setTag(TEST_IS_RETRY, 'true')
         if (isAtrRetry) {
-          span.setTag(TEST_RETRY_REASON, 'atr')
+          span.setTag(TEST_RETRY_REASON, 'auto_test_retry')
         } else {
           span.setTag(TEST_RETRY_REASON, 'unknown')
         }

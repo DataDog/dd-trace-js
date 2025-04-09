@@ -218,7 +218,7 @@ class MochaPlugin extends CiPlugin {
         if (hasBeenRetried) {
           span.setTag(TEST_IS_RETRY, 'true')
           if (isAtrRetry) {
-            span.setTag(TEST_RETRY_REASON, 'atr')
+            span.setTag(TEST_RETRY_REASON, 'auto_test_retry')
           } else {
             span.setTag(TEST_RETRY_REASON, 'unknown')
           }
@@ -287,7 +287,7 @@ class MochaPlugin extends CiPlugin {
         if (!isFirstAttempt) {
           span.setTag(TEST_IS_RETRY, 'true')
           if (isAtrRetry) {
-            span.setTag(TEST_RETRY_REASON, 'atr')
+            span.setTag(TEST_RETRY_REASON, 'auto_test_retry')
           } else {
             span.setTag(TEST_RETRY_REASON, 'unknown')
           }
@@ -484,7 +484,7 @@ class MochaPlugin extends CiPlugin {
       extraTags[TEST_IS_NEW] = 'true'
       if (isEfdRetry) {
         extraTags[TEST_IS_RETRY] = 'true'
-        extraTags[TEST_RETRY_REASON] = 'efd'
+        extraTags[TEST_RETRY_REASON] = 'early_flake_detection'
       }
     }
 

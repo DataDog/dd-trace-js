@@ -330,7 +330,7 @@ versions.forEach((version) => {
               assert.equal(retriedTests.length, NUM_RETRIES_EFD)
 
               retriedTests.forEach(test => {
-                assert.propertyVal(test.meta, TEST_RETRY_REASON, 'efd')
+                assert.propertyVal(test.meta, TEST_RETRY_REASON, 'early_flake_detection')
               })
 
               // all but one has been retried
@@ -659,13 +659,13 @@ versions.forEach((version) => {
             const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
             assert.equal(failedTests.length, 2)
 
-            const failedRetryTests = failedTests.filter(test => test.meta[TEST_RETRY_REASON] === 'atr')
+            const failedRetryTests = failedTests.filter(test => test.meta[TEST_RETRY_REASON] === 'auto_test_retry')
             assert.equal(failedRetryTests.length, 1) // the first one is not a retry
 
             const passedTests = tests.filter(test => test.meta[TEST_STATUS] === 'pass')
             assert.equal(passedTests.length, 1)
             assert.equal(passedTests[0].meta[TEST_IS_RETRY], 'true')
-            assert.equal(passedTests[0].meta[TEST_RETRY_REASON], 'atr')
+            assert.equal(passedTests[0].meta[TEST_RETRY_REASON], 'auto_test_retry')
           }, 30000)
 
         childProcess = exec(
@@ -705,7 +705,7 @@ versions.forEach((version) => {
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
             assert.equal(tests.length, 1)
-            assert.equal(tests.filter((test) => test.meta[TEST_RETRY_REASON] === 'atr').length, 0)
+            assert.equal(tests.filter((test) => test.meta[TEST_RETRY_REASON] === 'auto_test_retry').length, 0)
           }, 30000)
 
         childProcess = exec(
@@ -750,7 +750,7 @@ versions.forEach((version) => {
             const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
             assert.equal(failedTests.length, 2)
 
-            const failedRetryTests = failedTests.filter(test => test.meta[TEST_RETRY_REASON] === 'atr')
+            const failedRetryTests = failedTests.filter(test => test.meta[TEST_RETRY_REASON] === 'auto_test_retry')
             assert.equal(failedRetryTests.length, 1)
           }, 30000)
 

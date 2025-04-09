@@ -897,7 +897,7 @@ versions.forEach(version => {
                 )
                 assert.equal(retriedTests.length, NUM_RETRIES_EFD)
                 retriedTests.forEach(test => {
-                  assert.propertyVal(test.meta, TEST_RETRY_REASON, 'efd')
+                  assert.propertyVal(test.meta, TEST_RETRY_REASON, 'early_flake_detection')
                 })
                 // Test name does not change
                 newTests.forEach(test => {
@@ -1486,7 +1486,9 @@ versions.forEach(version => {
                   // All but the first one are retries
                   const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
                   assert.equal(retriedTests.length, 2)
-                  assert.equal(retriedTests.filter(test => test.meta[TEST_RETRY_REASON] === 'atr').length, 2)
+                  assert.equal(retriedTests.filter(
+                    test => test.meta[TEST_RETRY_REASON] === 'auto_test_retry'
+                  ).length, 2)
                 })
 
               childProcess = exec(
@@ -1524,7 +1526,7 @@ versions.forEach(version => {
 
                   assert.equal(tests.length, 1)
 
-                  const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === 'atr')
+                  const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === 'auto_test_retry')
                   assert.equal(retriedTests.length, 0)
                 })
 
@@ -1573,7 +1575,7 @@ versions.forEach(version => {
                   assert.equal(passedTests.length, 0)
 
                   // All but the first one are retries
-                  const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === 'atr')
+                  const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === 'auto_test_retry')
                   assert.equal(retriedTests.length, 1)
                 })
 
@@ -1609,7 +1611,7 @@ versions.forEach(version => {
                   const events = payloads.flatMap(({ payload }) => payload.events)
 
                   const tests = events.filter(event => event.type === 'test').map(event => event.content)
-                  const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === 'atr')
+                  const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === 'auto_test_retry')
 
                   assert.equal(retriedTests.length, 1)
                   const [retriedTest] = retriedTests
@@ -1658,7 +1660,7 @@ versions.forEach(version => {
                   const events = payloads.flatMap(({ payload }) => payload.events)
 
                   const tests = events.filter(event => event.type === 'test').map(event => event.content)
-                  const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === 'atr')
+                  const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === 'auto_test_retry')
 
                   assert.equal(retriedTests.length, 1)
                   const [retriedTest] = retriedTests
@@ -1707,7 +1709,7 @@ versions.forEach(version => {
 
                   const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
-                  const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === 'atr')
+                  const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === 'auto_test_retry')
 
                   assert.equal(retriedTests.length, 1)
                   const [retriedTest] = retriedTests
@@ -1785,7 +1787,7 @@ versions.forEach(version => {
                   const events = payloads.flatMap(({ payload }) => payload.events)
 
                   const tests = events.filter(event => event.type === 'test').map(event => event.content)
-                  const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === 'atr')
+                  const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === 'auto_test_retry')
 
                   assert.equal(retriedTests.length, 1)
                   const [retriedTest] = retriedTests

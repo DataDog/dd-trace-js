@@ -663,9 +663,9 @@ class CypressPlugin {
           if (attemptIndex > 0) {
             finishedTest.testSpan.setTag(TEST_IS_RETRY, 'true')
             if (finishedTest.isEfdRetry) {
-              finishedTest.testSpan.setTag(TEST_RETRY_REASON, 'efd')
+              finishedTest.testSpan.setTag(TEST_RETRY_REASON, 'early_flake_detection')
             } else if (isAtrRetry) {
-              finishedTest.testSpan.setTag(TEST_RETRY_REASON, 'atr')
+              finishedTest.testSpan.setTag(TEST_RETRY_REASON, 'auto_test_retry')
             } else {
               finishedTest.testSpan.setTag(TEST_RETRY_REASON, 'unknown')
             }
@@ -826,7 +826,7 @@ class CypressPlugin {
           this.activeTestSpan.setTag(TEST_IS_NEW, 'true')
           if (isEfdRetry) {
             this.activeTestSpan.setTag(TEST_IS_RETRY, 'true')
-            this.activeTestSpan.setTag(TEST_RETRY_REASON, 'efd')
+            this.activeTestSpan.setTag(TEST_RETRY_REASON, 'early_flake_detection')
           }
         }
         if (isAttemptToFix) {

@@ -118,9 +118,9 @@ class VitestPlugin extends CiPlugin {
         if (isRetryReasonAttemptToFix) {
           extraTags[TEST_RETRY_REASON] = 'attempt_to_fix'
         } else if (isRetryReasonEfd) {
-          extraTags[TEST_RETRY_REASON] = 'efd'
+          extraTags[TEST_RETRY_REASON] = 'early_flake_detection'
         } else if (isRetryReasonAtr) {
-          extraTags[TEST_RETRY_REASON] = 'atr'
+          extraTags[TEST_RETRY_REASON] = 'auto_test_retry'
         } else {
           extraTags[TEST_RETRY_REASON] = 'unknown'
         }

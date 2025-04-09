@@ -1199,7 +1199,7 @@ describe('mocha CommonJS', function () {
           )
           assert.equal(retriedTests.length, NUM_RETRIES_EFD)
           retriedTests.forEach(test => {
-            assert.propertyVal(test.meta, TEST_RETRY_REASON, 'efd')
+            assert.propertyVal(test.meta, TEST_RETRY_REASON, 'early_flake_detection')
           })
           // Test name does not change
           newTests.forEach(test => {
@@ -1777,7 +1777,7 @@ describe('mocha CommonJS', function () {
             // Test name does not change
             retriedTests.forEach(test => {
               assert.equal(test.meta[TEST_NAME], 'fail occasionally fails')
-              assert.equal(test.meta[TEST_RETRY_REASON], 'efd')
+              assert.equal(test.meta[TEST_RETRY_REASON], 'early_flake_detection')
             })
           })
 
@@ -2031,12 +2031,12 @@ describe('mocha CommonJS', function () {
           })
 
           // The first attempt is not marked as a retry
-          const retriedFailure = failedAttempts.filter(test => test.meta[TEST_RETRY_REASON] === 'atr')
+          const retriedFailure = failedAttempts.filter(test => test.meta[TEST_RETRY_REASON] === 'auto_test_retry')
           assert.equal(retriedFailure.length, 1)
 
           const passedAttempt = tests.find(test => test.meta[TEST_STATUS] === 'pass')
           assert.equal(passedAttempt.meta[TEST_IS_RETRY], 'true')
-          assert.equal(passedAttempt.meta[TEST_RETRY_REASON], 'atr')
+          assert.equal(passedAttempt.meta[TEST_RETRY_REASON], 'auto_test_retry')
         })
 
       childProcess.on('exit', () => {
@@ -2064,7 +2064,7 @@ describe('mocha CommonJS', function () {
 
           assert.equal(tests.length, 1)
 
-          const retries = tests.filter(test => test.meta[TEST_RETRY_REASON] === 'atr')
+          const retries = tests.filter(test => test.meta[TEST_RETRY_REASON] === 'auto_test_retry')
           assert.equal(retries.length, 0)
         })
 
@@ -2111,7 +2111,7 @@ describe('mocha CommonJS', function () {
           const failedAttempts = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
           assert.equal(failedAttempts.length, 2)
 
-          const retriedFailure = failedAttempts.filter(test => test.meta[TEST_RETRY_REASON] === 'atr')
+          const retriedFailure = failedAttempts.filter(test => test.meta[TEST_RETRY_REASON] === 'auto_test_retry')
           assert.equal(retriedFailure.length, 1)
         })
 
@@ -2234,7 +2234,7 @@ describe('mocha CommonJS', function () {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
-          const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === 'atr')
+          const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === 'auto_test_retry')
 
           assert.equal(retriedTests.length, 1)
           const [retriedTest] = retriedTests
@@ -2287,7 +2287,7 @@ describe('mocha CommonJS', function () {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
-          const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === 'atr')
+          const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === 'auto_test_retry')
 
           assert.equal(retriedTests.length, 1)
           const [retriedTest] = retriedTests
@@ -2342,7 +2342,7 @@ describe('mocha CommonJS', function () {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
-          const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === 'atr')
+          const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === 'auto_test_retry')
 
           assert.equal(retriedTests.length, 1)
           const [retriedTest] = retriedTests
@@ -2430,7 +2430,7 @@ describe('mocha CommonJS', function () {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
-          const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === 'atr')
+          const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === 'auto_test_retry')
 
           assert.equal(retriedTests.length, 1)
           const [retriedTest] = retriedTests
@@ -2510,7 +2510,7 @@ describe('mocha CommonJS', function () {
           newTests.forEach(test => {
             assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
           })
-          const retriedTests = newTests.filter(test => test.meta[TEST_RETRY_REASON] === 'atr')
+          const retriedTests = newTests.filter(test => test.meta[TEST_RETRY_REASON] === 'auto_test_retry')
           // no test has been retried
           assert.equal(retriedTests.length, 0)
         })

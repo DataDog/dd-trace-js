@@ -258,7 +258,7 @@ class CucumberPlugin extends CiPlugin {
       if (!isFirstAttempt) {
         span.setTag(TEST_IS_RETRY, 'true')
         if (isAtrRetry) {
-          span.setTag(TEST_RETRY_REASON, 'atr')
+          span.setTag(TEST_RETRY_REASON, 'auto_test_retry')
         } else {
           span.setTag(TEST_RETRY_REASON, 'unknown')
         }
@@ -352,7 +352,7 @@ class CucumberPlugin extends CiPlugin {
         span.setTag(TEST_IS_NEW, 'true')
         if (isEfdRetry) {
           span.setTag(TEST_IS_RETRY, 'true')
-          span.setTag(TEST_RETRY_REASON, 'efd')
+          span.setTag(TEST_RETRY_REASON, 'early_flake_detection')
         }
       }
 
@@ -368,7 +368,7 @@ class CucumberPlugin extends CiPlugin {
 
       if (isFlakyRetry > 0) {
         span.setTag(TEST_IS_RETRY, 'true')
-        span.setTag(TEST_RETRY_REASON, 'atr')
+        span.setTag(TEST_RETRY_REASON, 'auto_test_retry')
       }
 
       if (hasFailedAllRetries) {
