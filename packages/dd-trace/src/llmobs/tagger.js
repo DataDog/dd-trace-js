@@ -80,18 +80,20 @@ class LLMObsTagger {
     const globalMlApp = this._config.llmobs.mlApp
     const propagatedMlApp = span.context()._trace.tags[PROPAGATED_ML_APP_KEY]
 
-    if (directParentMlApp) {
-      mlApp = directParentMlApp
-    } else if (globalMlApp) {
-      mlApp = globalMlApp
-    } else if (propagatedMlApp) {
-      mlApp = propagatedMlApp
-      this.tagSpanTags(span, { [ML_PROXY_TAG]: CUSTOM_ML_PROXY_VALUE })
-    } else {
-      throw new Error(
-        '[LLMObs] Cannot start an LLMObs span without an mlApp configured.' +
-        'Ensure this configuration is set before running your application.'
-      )
+    if (!mlApp) {
+      if (directParentMlApp) {
+        mlApp = directParentMlApp
+      } else if (globalMlApp) {
+        mlApp = globalMlApp
+      } else if (propagatedMlApp) {
+        mlApp = propagatedMlApp
+        this.tagSpanTags(span, { [ML_PROXY_TAG]: CUSTOM_ML_PROXY_VALUE })
+      } else {
+        throw new Error(
+          '[LLMObs] Cannot start an LLMObs span without an mlApp configured.' +
+          'Ensure this configuration is set before running your application.'
+        )
+      }
     }
 
     this._setTag(span, ML_APP, mlApp)

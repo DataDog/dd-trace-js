@@ -1247,7 +1247,7 @@ describe('sdk', () => {
         injectCh.publish({ carrier })
       })
 
-      expect(carrier['x-datadog-tags']).to.equal(`,_dd.p.llmobs_parent_id=${parentId}`)
+      expect(carrier['x-datadog-tags']).to.equal(`,_dd.p.llmobs_parent_id=${parentId},_dd.p.llmobs_ml_app=mlApp`)
     })
   })
 })

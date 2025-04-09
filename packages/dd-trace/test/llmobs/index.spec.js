@@ -71,7 +71,7 @@ describe('module', () => {
   })
 
   describe('handle llmobs info injection', () => {
-    it('injects LLMObs parent ID when there is a parent LLMObs span', () => {
+    it('injects LLMObs info when there is a parent LLMObs span', () => {
       llmobsModule.enable(config)
       store.span = {
         context () {
@@ -88,11 +88,21 @@ describe('module', () => {
       }
       injectCh.publish({ carrier })
 
-      expect(carrier['x-datadog-tags']).to.equal(',_dd.p.llmobs_parent_id=parent-id')
+      expect(carrier['x-datadog-tags']).to.include(',_dd.p.llmobs_parent_id=parent-id,_dd.p.llmobs_ml_app=test')
     })
 
-    it('does not inject LLMObs parent ID when there is no parent LLMObs span', () => {
+    it('does not inject LLMObs parent ID info when there is no parent LLMObs span', () => {
       llmobsModule.enable(config)
+
+      const carrier = {
+        'x-datadog-tags': ''
+      }
+      injectCh.publish({ carrier })
+      expect(carrier['x-datadog-tags']).to.equal(',_dd.p.llmobs_ml_app=test')
+    })
+
+    it('does not inject LLMOBs info when there is no mlApp configured and no parent LLMObs span', () => {
+      llmobsModule.enable({ llmobs: {} })
 
       const carrier = {
         'x-datadog-tags': ''
