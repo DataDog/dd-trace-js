@@ -42,7 +42,7 @@ export async function load (url, context, nextLoad) {
     if (isDdTrace(url)) {
       return result
     }
-    if (isPrivateModule(url) && isDdTrace(url)) {
+    if (isPrivateModule(url)) {
       // TODO error tracking needs to be added based on config
       passes = ['error_tracking']
       if (iastEnabled) {
