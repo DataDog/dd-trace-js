@@ -7,7 +7,6 @@ const {
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
-const { execSync } = require('child_process')
 
 describe('esm', () => {
   let agent
@@ -24,8 +23,6 @@ describe('esm', () => {
       ], false, [
         './packages/datadog-plugin-langchain/test/integration-test/*'
       ])
-      // TODO - remove this once the branch is merged/published
-      execSync('yarn link @datadog/wasm-js-rewriter', { cwd: sandbox.folder })
     })
 
     after(async () => {
