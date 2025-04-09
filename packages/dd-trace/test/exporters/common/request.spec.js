@@ -43,7 +43,9 @@ describe('request', function () {
       debug: sinon.spy()
     }
     docker = {
-      id: sinon.stub().returns('abcd')
+      inject (carrier) {
+        carrier['datadog-container-id'] = 'abcd'
+      }
     }
     request = proxyquire('../src/exporters/common/request', {
       './docker': docker,
