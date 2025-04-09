@@ -45,7 +45,7 @@ session.on('Debugger.paused', async ({ params }) => {
   let sampled = false
   let numberOfProbesWithSnapshots = 0
   const probes = []
-  const templateResults = []
+  const templateExpressions = []
 
   // V8 doesn't allow setting more than one breakpoint at a specific location, however, it's possible to set two
   // breakpoints just next to each other that will "snap" to the same logical location, which in turn will be hit at the
@@ -113,12 +113,7 @@ session.on('Debugger.paused', async ({ params }) => {
 
       if (probe.templateRequiresEvaluation) {
         // TODO: If a snapshot is being collected, compute the message based on it instead (perf)
-        const { result } = await session.post('Debugger.evaluateOnCallFrame', {
-          callFrameId: params.callFrames[0].callFrameId,
-          expression: probe.template,
-          returnByValue: true
-        })
-        templateResults.push(result)
+        templateExpressions.push(probe.template)
       }
 
       probes.push(probe)
@@ -131,6 +126,21 @@ session.on('Debugger.paused', async ({ params }) => {
 
   const timestamp = Date.now()
   const dd = await getDD(params.callFrames[0].callFrameId)
+
+  let templateResults = null
+  if (templateExpressions.length > 0) {
+    const { result } = await session.post('Debugger.evaluateOnCallFrame', {
+      callFrameId: params.callFrames[0].callFrameId,
+      expression: `[${templateExpressions.join(',')}]`,
+      returnByValue: true
+    })
+    if (result?.subtype === 'error') {
+      log.error('[debugger:devtools_client] Error evaluating probe templates: %s', result?.description)
+      templateResults = []
+    } else {
+      templateResults = result?.value ?? []
+    }
+  }
 
   let processLocalState
   if (numberOfProbesWithSnapshots !== 0) {
@@ -166,7 +176,7 @@ session.on('Debugger.paused', async ({ params }) => {
   }
 
   const stack = getStackFromCallFrames(params.callFrames)
-  let i = 0
+  let messageIndex = 0
 
   // TODO: Send multiple probes in one HTTP request as an array (DEBUG-2848)
   for (const probe of probes) {
@@ -191,27 +201,23 @@ session.on('Debugger.paused', async ({ params }) => {
       }
     }
 
-    let message = probe.template
+    let message = ''
     if (probe.templateRequiresEvaluation) {
-      const result = templateResults[i++]
-      if (result.type === 'object' && result.subtype === 'error') {
-        const errorMessage = result.description.split('\n')[0]
-        log.debug('[debugger:devtools_client] Error evaluating probe template: %s', errorMessage)
-        snapshot.evaluationErrors = [{ expr: probe.template, message: errorMessage }]
-        message = ''
-      } else {
-        // There's no evidence that the fallback to an empty string is ever needed, but is there in case `result` is an
-        // unexpected type
-        message = result.value?.reduce((message, result) => {
-          if (typeof result === 'string') return message + result
-          if (snapshot.evaluationErrors === undefined) {
-            snapshot.evaluationErrors = [result]
-          } else {
-            snapshot.evaluationErrors.push(result)
-          }
-          return `${message}{${result.message}}`
-        }, '') ?? ''
+      for (const result of templateResults[messageIndex++]) {
+        if (typeof result === 'string') {
+          message += result
+          continue
+        }
+
+        if (snapshot.evaluationErrors === undefined) {
+          snapshot.evaluationErrors = [result]
+        } else {
+          snapshot.evaluationErrors.push(result)
+        }
+        message += `{${result.message}}`
       }
+    } else {
+      message = probe.template
     }
 
     ackEmitting(probe)
