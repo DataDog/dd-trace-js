@@ -53,7 +53,8 @@ function compileSegments (segments) {
     .join('')
 }
 
-// TODO: Consider storing some of these functions on `process` so they can be reused across probes
+// TODO: Consider storing some of these functions that doesn't require closure access to the current scope on `process`
+// so they can be reused across probes
 function compile (node) {
   if (node === null || typeof node === 'number' || typeof node === 'boolean') {
     return node
