@@ -16,10 +16,10 @@ const { NODE_MAJOR } = require('../../../../../version')
 require('./remote_config')
 
 // Expression to run on a call frame of the paused thread to get its active trace and span id.
-const expression = `
+const getDDTagsExpression = `(() => {
   const context = global.require('dd-trace').scope().active()?.context();
-  ({ trace_id: context?.toTraceId(), span_id: context?.toSpanId() })
-`
+  return { trace_id: context?.toTraceId(), span_id: context?.toSpanId() }
+})()`
 
 // There doesn't seem to be an official standard for the content of these fields, so we're just populating them with
 // something that should be useful to a Node.js developer.
@@ -45,7 +45,7 @@ session.on('Debugger.paused', async ({ params }) => {
   let sampled = false
   let numberOfProbesWithSnapshots = 0
   const probes = []
-  const templateExpressions = []
+  const expressions = [getDDTagsExpression]
 
   // V8 doesn't allow setting more than one breakpoint at a specific location, however, it's possible to set two
   // breakpoints just next to each other that will "snap" to the same logical location, which in turn will be hit at the
@@ -112,8 +112,7 @@ session.on('Debugger.paused', async ({ params }) => {
       probe.lastCaptureNs = start
 
       if (probe.templateRequiresEvaluation) {
-        // TODO: If a snapshot is being collected, compute the message based on it instead (perf)
-        templateExpressions.push(probe.template)
+        expressions.push(probe.template)
       }
 
       probes.push(probe)
@@ -125,21 +124,19 @@ session.on('Debugger.paused', async ({ params }) => {
   }
 
   const timestamp = Date.now()
-  const dd = await getDD(params.callFrames[0].callFrameId)
 
-  let templateResults = null
-  if (templateExpressions.length > 0) {
-    const { result } = await session.post('Debugger.evaluateOnCallFrame', {
-      callFrameId: params.callFrames[0].callFrameId,
-      expression: `[${templateExpressions.join(',')}]`,
-      returnByValue: true
-    })
-    if (result?.subtype === 'error') {
-      log.error('[debugger:devtools_client] Error evaluating probe templates: %s', result?.description)
-      templateResults = []
-    } else {
-      templateResults = result?.value ?? []
-    }
+  let evalResults = null
+  const { result } = await session.post('Debugger.evaluateOnCallFrame', {
+    callFrameId: params.callFrames[0].callFrameId,
+    expression: `[${expressions.join(',')}]`,
+    returnByValue: true,
+    includeCommandLineAPI: true
+  })
+  if (result?.subtype === 'error') {
+    log.error('[debugger:devtools_client] Error evaluating code on call frame: %s', result?.description)
+    evalResults = []
+  } else {
+    evalResults = result?.value ?? []
   }
 
   let processLocalState
@@ -176,6 +173,7 @@ session.on('Debugger.paused', async ({ params }) => {
   }
 
   const stack = getStackFromCallFrames(params.callFrames)
+  const dd = processDD(evalResults.shift()) // the first result is the dd tags, the rest are the probe template results
   let messageIndex = 0
 
   // TODO: Send multiple probes in one HTTP request as an array (DEBUG-2848)
@@ -203,7 +201,7 @@ session.on('Debugger.paused', async ({ params }) => {
 
     let message = ''
     if (probe.templateRequiresEvaluation) {
-      for (const result of templateResults[messageIndex++]) {
+      for (const result of evalResults[messageIndex++]) {
         if (typeof result === 'string') {
           message += result
           continue
@@ -230,22 +228,6 @@ function highestOrUndefined (num, max) {
   return num === undefined ? max : Math.max(num, max ?? 0)
 }
 
-async function getDD (callFrameId) {
-  // TODO: Consider if an `objectGroup` should be used, so it can be explicitly released using
-  // `Runtime.releaseObjectGroup`
-  const { result } = await session.post('Debugger.evaluateOnCallFrame', {
-    callFrameId,
-    expression,
-    returnByValue: true,
-    includeCommandLineAPI: true
-  })
-
-  if (result?.value?.trace_id === undefined) {
-    if (result?.subtype === 'error') {
-      log.error('[debugger:devtools_client] Error getting trace/span id:', result.description)
-    }
-    return
-  }
-
-  return result.value
+function processDD (result) {
+  return result?.trace_id === undefined ? undefined : result
 }
