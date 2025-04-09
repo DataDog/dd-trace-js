@@ -491,7 +491,9 @@ describe('Dynamic Instrumentation', function () {
           })
 
           t.agent.addRemoteConfig(t.generateRemoteConfig({
-            template: 'Hello {request.invalid.name}!',
+            template: 'This should fail: {request.invalid.name}, ' +
+              'this should work: {request.params.name}, ' +
+              'and this should fail: {invalid}',
             segments: [
               { str: 'This should fail: ' },
               {
