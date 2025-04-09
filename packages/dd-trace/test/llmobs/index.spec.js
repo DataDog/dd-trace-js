@@ -88,7 +88,7 @@ describe('module', () => {
       }
       injectCh.publish({ carrier })
 
-      expect(carrier['x-datadog-tags']).to.include(',_dd.p.llmobs_parent_id=parent-id,_dd.p.llmobs_ml_app=test')
+      expect(carrier['x-datadog-tags']).to.equal(',_dd.p.llmobs_parent_id=parent-id,_dd.p.llmobs_ml_app=test')
     })
 
     it('does not inject LLMObs parent ID info when there is no parent LLMObs span', () => {
