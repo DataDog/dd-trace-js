@@ -229,6 +229,7 @@ class CypressPlugin {
     this.isTestsSkipped = false
     this.isSuitesSkippingEnabled = false
     this.isCodeCoverageEnabled = false
+    this.isFlakyTestRetriesEnabled = false
     this.isEarlyFlakeDetectionEnabled = false
     this.isKnownTestsEnabled = false
     this.earlyFlakeDetectionNumRetries = 0
@@ -278,6 +279,7 @@ class CypressPlugin {
           this.earlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
           this.isKnownTestsEnabled = isKnownTestsEnabled
           if (isFlakyTestRetriesEnabled) {
+            this.isFlakyTestRetriesEnabled = true
             this.cypressConfig.retries.runMode = flakyTestRetriesCount
           }
           this.isTestManagementTestsEnabled = isTestManagementEnabled
@@ -654,10 +656,18 @@ class CypressPlugin {
         let cypressTestStatus = CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state]
         if (cypressTest.attempts && cypressTest.attempts[attemptIndex]) {
           cypressTestStatus = CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.attempts[attemptIndex].state]
+          const isAtrRetry = attemptIndex > 0 &&
+            this.isFlakyTestRetriesEnabled &&
+            !finishedTest.isAttemptToFix &&
+            !finishedTest.isEfdRetry
           if (attemptIndex > 0) {
             finishedTest.testSpan.setTag(TEST_IS_RETRY, 'true')
             if (finishedTest.isEfdRetry) {
               finishedTest.testSpan.setTag(TEST_RETRY_REASON, 'efd')
+            } else if (isAtrRetry) {
+              finishedTest.testSpan.setTag(TEST_RETRY_REASON, 'atr')
+            } else {
+              finishedTest.testSpan.setTag(TEST_RETRY_REASON, 'native_retry')
             }
           }
         }
@@ -840,7 +850,8 @@ class CypressPlugin {
           testStatus,
           finishTime: this.activeTestSpan._getTime(), // we store the finish time here
           testSpan: this.activeTestSpan,
-          isEfdRetry
+          isEfdRetry,
+          isAttemptToFix
         }
         if (this.finishedTestsByFile[testSuite]) {
           this.finishedTestsByFile[testSuite].push(finishedTest)

@@ -1432,6 +1432,7 @@ moduleTypes.forEach(({
             assert.equal(eventuallyPassingTest.filter(test => test.meta[TEST_STATUS] === 'fail').length, 2)
             assert.equal(eventuallyPassingTest.filter(test => test.meta[TEST_STATUS] === 'pass').length, 1)
             assert.equal(eventuallyPassingTest.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 2)
+            assert.equal(eventuallyPassingTest.filter(test => test.meta[TEST_RETRY_REASON] === 'atr').length, 2)
 
             const neverPassingTest = tests.filter(
               test => test.resource === 'cypress/e2e/flaky-test-retries.js.flaky test retry never passes'
@@ -1440,6 +1441,7 @@ moduleTypes.forEach(({
             assert.equal(neverPassingTest.filter(test => test.meta[TEST_STATUS] === 'fail').length, 6)
             assert.equal(neverPassingTest.filter(test => test.meta[TEST_STATUS] === 'pass').length, 0)
             assert.equal(neverPassingTest.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 5)
+            assert.equal(neverPassingTest.filter(test => test.meta[TEST_RETRY_REASON] === 'atr').length, 5)
           })
 
         const {
@@ -1495,7 +1497,7 @@ moduleTypes.forEach(({
               'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
               'cypress/e2e/flaky-test-retries.js.flaky test retry always passes'
             ])
-            assert.equal(tests.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 0)
+            assert.equal(tests.filter(test => test.meta[TEST_RETRY_REASON] === 'atr').length, 0)
           })
 
         const {
@@ -1553,7 +1555,7 @@ moduleTypes.forEach(({
               'cypress/e2e/flaky-test-retries.js.flaky test retry always passes'
             ])
 
-            assert.equal(tests.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 2)
+            assert.equal(tests.filter(test => test.meta[TEST_RETRY_REASON] === 'atr').length, 2)
           })
 
         const {
