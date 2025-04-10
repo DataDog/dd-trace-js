@@ -146,15 +146,24 @@ function esmRewritePostProcess (rewritten, filename) {
   }
 }
 
+let shimmedPrepareStackTrace = false
+function shimPrepareStackTrace () {
+  if (shimmedPrepareStackTrace) {
+    return
+  }
+  const pstDescriptor = Object.getOwnPropertyDescriptor(global.Error, 'prepareStackTrace')
+  if (!pstDescriptor || pstDescriptor.configurable) {
+    Object.defineProperty(global.Error, 'prepareStackTrace', getPrepareStackTraceAccessor())
+  }
+  shimmedPrepareStackTrace = true
+}
+
 function enableRewriter (telemetryVerbosity) {
   try {
     if (config.iast?.enabled) {
       const rewriter = getRewriter(telemetryVerbosity)
       if (rewriter) {
-        const pstDescriptor = Object.getOwnPropertyDescriptor(global.Error, 'prepareStackTrace')
-        if (!pstDescriptor || pstDescriptor.configurable) {
-          Object.defineProperty(global.Error, 'prepareStackTrace', getPrepareStackTraceAccessor())
-        }
+        shimPrepareStackTrace()
         shimmer.wrap(Module.prototype, '_compile', compileMethod => getCompileMethodFn(compileMethod))
       }
     }
@@ -175,6 +184,8 @@ function isEsmConfigured () {
 
 function enableEsmRewriter (telemetryVerbosity) {
   if (isMainThread && Module.register && !esmRewriterEnabled && isEsmConfigured()) {
+    shimPrepareStackTrace()
+
     esmRewriterEnabled = true
 
     const { port1, port2 } = new MessageChannel()
