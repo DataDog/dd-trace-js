@@ -82,7 +82,8 @@ function getProvidedContext () {
       isKnownTestsEnabled: false,
       isTestManagementTestsEnabled: false,
       testManagementAttemptToFixRetries: 0,
-      testManagementTests: {}
+      testManagementTests: {},
+      isFlakyTestRetriesEnabled: false
     }
   }
 }
@@ -466,7 +467,8 @@ addHook({
       isEarlyFlakeDetectionEnabled,
       isDiEnabled,
       isTestManagementTestsEnabled,
-      testManagementTests
+      testManagementTests,
+      isFlakyTestRetriesEnabled
     } = getProvidedContext()
 
     if (isKnownTestsEnabled) {
@@ -566,6 +568,11 @@ addHook({
       }
     }
 
+    const isRetryReasonAtr = numAttempt > 0 &&
+      isFlakyTestRetriesEnabled &&
+      !isRetryReasonAttemptToFix &&
+      !isRetryReasonEfd
+
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     taskToAsync.set(task, asyncResource)
 
@@ -580,7 +587,8 @@ addHook({
         mightHitProbe: isDiEnabled && numAttempt > 0,
         isAttemptToFix: attemptToFixTasks.has(task),
         isDisabled: disabledTasks.has(task),
-        isQuarantined
+        isQuarantined,
+        isRetryReasonAtr
       })
     })
     return onBeforeTryTask.apply(this, arguments)

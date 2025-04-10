@@ -348,6 +348,10 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout, isMain
   if (isMainProcess) {
     const testResult = results[results.length - 1]
     const testAsyncResource = testToAr.get(test)
+    const isAtrRetry = testResult?.retry > 0 &&
+      isFlakyTestRetriesEnabled &&
+      !test._ddIsAttemptToFix &&
+      !test._ddIsEfdRetry
     testAsyncResource.runInAsyncScope(() => {
       testFinishCh.publish({
         testStatus,
@@ -361,7 +365,8 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout, isMain
         isQuarantined: test._ddIsQuarantined,
         isEfdRetry: test._ddIsEfdRetry,
         hasFailedAllRetries: test._ddHasFailedAllRetries,
-        hasPassedAttemptToFixRetries: test._ddHasPassedAttemptToFixRetries
+        hasPassedAttemptToFixRetries: test._ddHasPassedAttemptToFixRetries,
+        isAtrRetry
       })
     })
   }
@@ -469,6 +474,11 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
 
       const isTimeout = status === 'timedOut'
       testEndHandler(test, annotations, STATUS_TO_TEST_STATUS[status], errors && errors[0], isTimeout, false)
+      const testResult = test.results[test.results.length - 1]
+      const isAtrRetry = testResult?.retry > 0 &&
+        isFlakyTestRetriesEnabled &&
+        !test._ddIsAttemptToFix &&
+        !test._ddIsEfdRetry
       // We want to send the ddProperties to the worker
       worker.process.send({
         type: 'ddProperties',
@@ -481,7 +491,8 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
           _ddIsNew: test._ddIsNew,
           _ddIsEfdRetry: test._ddIsEfdRetry,
           _ddHasFailedAllRetries: test._ddHasFailedAllRetries,
-          _ddHasPassedAttemptToFixRetries: test._ddHasPassedAttemptToFixRetries
+          _ddHasPassedAttemptToFixRetries: test._ddHasPassedAttemptToFixRetries,
+          _ddIsAtrRetry: isAtrRetry
         }
       })
     })
@@ -961,6 +972,7 @@ addHook({
         isAttemptToFixRetry: test._ddIsAttemptToFixRetry,
         hasFailedAllRetries: test._ddHasFailedAllRetries,
         hasPassedAttemptToFixRetries: test._ddHasPassedAttemptToFixRetries,
+        isAtrRetry: test._ddIsAtrRetry,
         onDone
       })
     })
