@@ -2,6 +2,7 @@
 
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 const coalesce = require('koalas')
+const { isTrue } = require('../../dd-trace/src/util')
 
 class MongodbCorePlugin extends DatabasePlugin {
   static get id () { return 'mongodb-core' }
@@ -14,7 +15,7 @@ class MongodbCorePlugin extends DatabasePlugin {
     super.configure(config)
     this.config.heartbeatEnabled = coalesce(
       config.heartbeatEnabled,
-      process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED === 'false' ? false : null,
+      isTrue(process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED),
       true
     )
   }
