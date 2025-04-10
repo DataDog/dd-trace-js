@@ -2,10 +2,10 @@ Component,Origin,License,Copyright
 require,@datadog/libdatadog,Apache license 2.0,Copyright 2024 Datadog Inc.
 require,@datadog/native-appsec,Apache license 2.0,Copyright 2018 Datadog Inc.
 require,@datadog/native-metrics,Apache license 2.0,Copyright 2018 Datadog Inc.
-require,@datadog/wasm-js-rewriter,Apache license 2.0,Copyright 2018 Datadog Inc.
 require,@datadog/native-iast-taint-tracking,Apache license 2.0,Copyright 2018 Datadog Inc.
 require,@datadog/pprof,Apache license 2.0,Copyright 2019 Google Inc.
 require,@datadog/sketches-js,Apache license 2.0,Copyright 2020 Datadog Inc.
+require,@datadog/wasm-js-rewriter,Apache license 2.0,Copyright 2018 Datadog Inc.
 require,@opentelemetry/api,Apache license 2.0,Copyright OpenTelemetry Authors
 require,@opentelemetry/core,Apache license 2.0,Copyright OpenTelemetry Authors
 require,@isaacs/ttlcache,ISC,Copyright (c) 2022-2023 - Isaac Z. Schlueter and Contributors
