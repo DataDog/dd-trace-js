@@ -122,7 +122,8 @@ describe('Expresion language', function () {
       expect(compileSegments([{ dsl: 'foo', json: { ref: 'foo' } }])).to.deep.equal(
         `[(() => {
           try {
-            return foo
+            const result = foo
+            return typeof result === 'string' ? result : $dd_inspect(result, $dd_segmentInspectOptions)
           } catch (e) {
             return { expr: "foo", message: \`\${e.name}: \${e.message}\` }
           }
@@ -132,7 +133,7 @@ describe('Expresion language', function () {
 
     it('dsl only: should return expected string if dsl compiles to function', function () {
       const result = compileSegments([{ dsl: 'foo.bar', json: { getmember: [{ ref: 'foo' }, 'bar'] } }])
-      const prefix = '[(() => {\n          try {\n            return '
+      const prefix = '[(() => {\n          try {\n            const result = '
       expect(result.slice(0, prefix.length)).to.equal(prefix)
       expect(result.slice(prefix.length)).to.match(/^\(\([^)]+\) => \{/)
     })
@@ -141,7 +142,8 @@ describe('Expresion language', function () {
       expect(compileSegments([{ str: 'foo: ' }, { dsl: 'foo', json: { ref: 'foo' } }])).to.deep.equal(
         `["foo: ",(() => {
           try {
-            return foo
+            const result = foo
+            return typeof result === 'string' ? result : $dd_inspect(result, $dd_segmentInspectOptions)
           } catch (e) {
             return { expr: "foo", message: \`\${e.name}: \${e.message}\` }
           }

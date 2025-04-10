@@ -16,6 +16,16 @@ const { NODE_MAJOR } = require('../../../../../version')
 require('./remote_config')
 
 // Expression to run on a call frame of the paused thread to get its active trace and span id.
+const expressionSetupCode = `
+  const $dd_inspect = global.require('node:util').inspect;
+  const $dd_segmentInspectOptions = {
+    depth: 0,
+    customInspect: false,
+    maxArrayLength: 3,
+    maxStringLength: 8 * 1024,
+    breakLength: Infinity
+  };
+`
 const getDDTagsExpression = `(() => {
   const context = global.require('dd-trace').scope().active()?.context();
   return { trace_id: context?.toTraceId(), span_id: context?.toSpanId() }
@@ -130,7 +140,10 @@ session.on('Debugger.paused', async ({ params }) => {
   let evalResults = null
   const { result } = await session.post('Debugger.evaluateOnCallFrame', {
     callFrameId: params.callFrames[0].callFrameId,
-    expression: `[${expressions.join(',')}]`,
+    expression: `
+      ${expressionSetupCode}
+      [${expressions.join(',')}]
+    `,
     returnByValue: true,
     includeCommandLineAPI: true
   })
@@ -203,18 +216,22 @@ session.on('Debugger.paused', async ({ params }) => {
 
     let message = ''
     if (probe.templateRequiresEvaluation) {
-      for (const result of evalResults[messageIndex++]) {
-        if (typeof result === 'string') {
-          message += result
-          continue
+      if (evalResults.length === 0) {
+        log.error('[debugger:devtools_client] No evaluation results for probe %s', probe.id)
+      } else {
+        for (const result of evalResults[messageIndex++]) {
+          if (typeof result === 'string') {
+            message += result
+          } else {
+            // If `result` isn't a string, it's an evaluation error object
+            if (snapshot.evaluationErrors === undefined) {
+              snapshot.evaluationErrors = [result]
+            } else {
+              snapshot.evaluationErrors.push(result)
+            }
+            message += `{${result.message}}`
+          }
         }
-
-        if (snapshot.evaluationErrors === undefined) {
-          snapshot.evaluationErrors = [result]
-        } else {
-          snapshot.evaluationErrors.push(result)
-        }
-        message += `{${result.message}}`
       }
     } else {
       message = probe.template

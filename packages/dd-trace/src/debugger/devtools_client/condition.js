@@ -53,7 +53,8 @@ function compileSegments (segments) {
       ? JSON.stringify(str)
       : `(() => {
           try {
-            return ${compile(json)}
+            const result = ${compile(json)}
+            return typeof result === 'string' ? result : $dd_inspect(result, $dd_segmentInspectOptions)
           } catch (e) {
             return { expr: ${JSON.stringify(dsl)}, message: \`\${e.name}: \${e.message}\` }
           }
