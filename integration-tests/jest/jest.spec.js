@@ -3655,7 +3655,7 @@ describe('impacted tests', () => {
             )
             assert.equal(retriedTests.length, NUM_RETRIES_EFD * 2)
             retriedTests.forEach(test => {
-              assert.propertyVal(test.meta, TEST_RETRY_REASON, 'efd')
+              assert.propertyVal(test.meta, TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
             })
           }
         })
