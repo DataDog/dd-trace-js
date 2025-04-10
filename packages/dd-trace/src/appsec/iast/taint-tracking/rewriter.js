@@ -148,13 +148,15 @@ function esmRewritePostProcess (rewritten, filename) {
 
 function enableRewriter (telemetryVerbosity) {
   try {
-    const rewriter = getRewriter(telemetryVerbosity)
-    if (rewriter) {
-      const pstDescriptor = Object.getOwnPropertyDescriptor(global.Error, 'prepareStackTrace')
-      if (!pstDescriptor || pstDescriptor.configurable) {
-        Object.defineProperty(global.Error, 'prepareStackTrace', getPrepareStackTraceAccessor())
+    if (config.iast?.enabled) {
+      const rewriter = getRewriter(telemetryVerbosity)
+      if (rewriter) {
+        const pstDescriptor = Object.getOwnPropertyDescriptor(global.Error, 'prepareStackTrace')
+        if (!pstDescriptor || pstDescriptor.configurable) {
+          Object.defineProperty(global.Error, 'prepareStackTrace', getPrepareStackTraceAccessor())
+        }
+        shimmer.wrap(Module.prototype, '_compile', compileMethod => getCompileMethodFn(compileMethod))
       }
-      shimmer.wrap(Module.prototype, '_compile', compileMethod => getCompileMethodFn(compileMethod))
     }
 
     enableEsmRewriter(telemetryVerbosity)
@@ -211,6 +213,8 @@ function enableEsmRewriter (telemetryVerbosity) {
       port1.close()
       port2.close()
     }
+
+    cacheRewrittenSourceMap = require('@datadog/wasm-js-rewriter/js/source-map').cacheRewrittenSourceMap
   }
 }
 
