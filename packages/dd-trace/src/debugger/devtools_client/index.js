@@ -100,6 +100,8 @@ session.on('Debugger.paused', async ({ params }) => {
       }
 
       if (shouldVerifyConditions && probe.condition !== undefined) {
+        // TODO: Bundle all conditions and evaluate them in a single call
+        // TODO: Handle errors
         const { result } = await session.post('Debugger.evaluateOnCallFrame', {
           callFrameId: params.callFrames[0].callFrameId,
           expression: probe.condition,
