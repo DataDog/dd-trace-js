@@ -260,7 +260,7 @@ class CucumberPlugin extends CiPlugin {
         if (isAtrRetry) {
           span.setTag(TEST_RETRY_REASON, 'auto_test_retry')
         } else {
-          span.setTag(TEST_RETRY_REASON, 'unknown')
+          span.setTag(TEST_RETRY_REASON, 'external')
         }
       }
       span.setTag('error', error)

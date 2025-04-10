@@ -122,7 +122,7 @@ class VitestPlugin extends CiPlugin {
         } else if (isRetryReasonAtr) {
           extraTags[TEST_RETRY_REASON] = 'auto_test_retry'
         } else {
-          extraTags[TEST_RETRY_REASON] = 'unknown'
+          extraTags[TEST_RETRY_REASON] = 'external'
         }
       }
       if (isNew) {

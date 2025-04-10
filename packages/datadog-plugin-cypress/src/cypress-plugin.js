@@ -667,7 +667,7 @@ class CypressPlugin {
             } else if (isAtrRetry) {
               finishedTest.testSpan.setTag(TEST_RETRY_REASON, 'auto_test_retry')
             } else {
-              finishedTest.testSpan.setTag(TEST_RETRY_REASON, 'unknown')
+              finishedTest.testSpan.setTag(TEST_RETRY_REASON, 'external')
             }
           }
         }

@@ -220,7 +220,7 @@ class MochaPlugin extends CiPlugin {
           if (isAtrRetry) {
             span.setTag(TEST_RETRY_REASON, 'auto_test_retry')
           } else {
-            span.setTag(TEST_RETRY_REASON, 'unknown')
+            span.setTag(TEST_RETRY_REASON, 'external')
           }
         }
         if (hasFailedAllRetries) {
@@ -289,7 +289,7 @@ class MochaPlugin extends CiPlugin {
           if (isAtrRetry) {
             span.setTag(TEST_RETRY_REASON, 'auto_test_retry')
           } else {
-            span.setTag(TEST_RETRY_REASON, 'unknown')
+            span.setTag(TEST_RETRY_REASON, 'external')
           }
         }
         if (err) {
