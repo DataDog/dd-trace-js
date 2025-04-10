@@ -25,7 +25,8 @@ const {
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_HAS_FAILED_ALL_RETRIES,
-  getLibraryCapabilitiesTags
+  getLibraryCapabilitiesTags,
+  TEST_RETRY_REASON_TYPES
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -116,13 +117,13 @@ class VitestPlugin extends CiPlugin {
       if (isRetry) {
         extraTags[TEST_IS_RETRY] = 'true'
         if (isRetryReasonAttemptToFix) {
-          extraTags[TEST_RETRY_REASON] = 'attempt_to_fix'
+          extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.atf
         } else if (isRetryReasonEfd) {
-          extraTags[TEST_RETRY_REASON] = 'early_flake_detection'
+          extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.efd
         } else if (isRetryReasonAtr) {
-          extraTags[TEST_RETRY_REASON] = 'auto_test_retry'
+          extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.atr
         } else {
-          extraTags[TEST_RETRY_REASON] = 'external'
+          extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.ext
         }
       }
       if (isNew) {

@@ -33,7 +33,8 @@ const {
   TEST_SUITE_ID,
   TEST_NAME,
   TEST_IS_RUM_ACTIVE,
-  TEST_BROWSER_VERSION
+  TEST_BROWSER_VERSION,
+  TEST_RETRY_REASON_TYPES
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -287,15 +288,15 @@ class PlaywrightPlugin extends CiPlugin {
         span.setTag(TEST_IS_NEW, 'true')
         if (isEfdRetry) {
           span.setTag(TEST_IS_RETRY, 'true')
-          span.setTag(TEST_RETRY_REASON, 'early_flake_detection')
+          span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
         }
       }
       if (isRetry) {
         span.setTag(TEST_IS_RETRY, 'true')
         if (isAtrRetry) {
-          span.setTag(TEST_RETRY_REASON, 'auto_test_retry')
+          span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atr)
         } else {
-          span.setTag(TEST_RETRY_REASON, 'external')
+          span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.ext)
         }
       }
       if (hasFailedAllRetries) {
@@ -306,7 +307,7 @@ class PlaywrightPlugin extends CiPlugin {
       }
       if (isAttemptToFixRetry) {
         span.setTag(TEST_IS_RETRY, 'true')
-        span.setTag(TEST_RETRY_REASON, 'attempt_to_fix')
+        span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atf)
       }
       if (hasPassedAttemptToFixRetries) {
         span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')

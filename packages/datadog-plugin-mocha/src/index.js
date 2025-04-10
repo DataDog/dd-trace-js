@@ -36,7 +36,8 @@ const {
   TEST_MANAGEMENT_IS_DISABLED,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_HAS_FAILED_ALL_RETRIES,
-  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED
+  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
+  TEST_RETRY_REASON_TYPES
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -218,9 +219,9 @@ class MochaPlugin extends CiPlugin {
         if (hasBeenRetried) {
           span.setTag(TEST_IS_RETRY, 'true')
           if (isAtrRetry) {
-            span.setTag(TEST_RETRY_REASON, 'auto_test_retry')
+            span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atr)
           } else {
-            span.setTag(TEST_RETRY_REASON, 'external')
+            span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.ext)
           }
         }
         if (hasFailedAllRetries) {
@@ -231,7 +232,7 @@ class MochaPlugin extends CiPlugin {
         }
         if (isAttemptToFixRetry) {
           span.setTag(TEST_IS_RETRY, 'true')
-          span.setTag(TEST_RETRY_REASON, 'attempt_to_fix')
+          span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atf)
         }
 
         const spanTags = span.context()._tags
@@ -287,9 +288,9 @@ class MochaPlugin extends CiPlugin {
         if (!isFirstAttempt) {
           span.setTag(TEST_IS_RETRY, 'true')
           if (isAtrRetry) {
-            span.setTag(TEST_RETRY_REASON, 'auto_test_retry')
+            span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atr)
           } else {
-            span.setTag(TEST_RETRY_REASON, 'external')
+            span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.ext)
           }
         }
         if (err) {

@@ -51,7 +51,8 @@ const {
   DD_CAPABILITIES_AUTO_TEST_RETRIES,
   DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
   DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
-  DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX
+  DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
+  TEST_RETRY_REASON_TYPES
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -1107,7 +1108,7 @@ moduleTypes.forEach(({
             assert.equal(retriedTests.length, NUM_RETRIES_EFD)
 
             retriedTests.forEach((retriedTest) => {
-              assert.equal(retriedTest.meta[TEST_RETRY_REASON], 'early_flake_detection')
+              assert.equal(retriedTest.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
             })
 
             newTests.forEach(newTest => {
@@ -1433,7 +1434,7 @@ moduleTypes.forEach(({
             assert.equal(eventuallyPassingTest.filter(test => test.meta[TEST_STATUS] === 'pass').length, 1)
             assert.equal(eventuallyPassingTest.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 2)
             assert.equal(eventuallyPassingTest.filter(test =>
-              test.meta[TEST_RETRY_REASON] === 'auto_test_retry'
+              test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
             ).length, 2)
 
             const neverPassingTest = tests.filter(
@@ -1443,7 +1444,9 @@ moduleTypes.forEach(({
             assert.equal(neverPassingTest.filter(test => test.meta[TEST_STATUS] === 'fail').length, 6)
             assert.equal(neverPassingTest.filter(test => test.meta[TEST_STATUS] === 'pass').length, 0)
             assert.equal(neverPassingTest.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 5)
-            assert.equal(neverPassingTest.filter(test => test.meta[TEST_RETRY_REASON] === 'auto_test_retry').length, 5)
+            assert.equal(neverPassingTest.filter(
+              test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+            ).length, 5)
           })
 
         const {
@@ -1499,7 +1502,7 @@ moduleTypes.forEach(({
               'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
               'cypress/e2e/flaky-test-retries.js.flaky test retry always passes'
             ])
-            assert.equal(tests.filter(test => test.meta[TEST_RETRY_REASON] === 'auto_test_retry').length, 0)
+            assert.equal(tests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr).length, 0)
           })
 
         const {
@@ -1557,7 +1560,7 @@ moduleTypes.forEach(({
               'cypress/e2e/flaky-test-retries.js.flaky test retry always passes'
             ])
 
-            assert.equal(tests.filter(test => test.meta[TEST_RETRY_REASON] === 'auto_test_retry').length, 2)
+            assert.equal(tests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr).length, 2)
           })
 
         const {
@@ -1867,7 +1870,7 @@ moduleTypes.forEach(({
                   assert.notProperty(test.meta, TEST_RETRY_REASON)
                 } else {
                   assert.propertyVal(test.meta, TEST_IS_RETRY, 'true')
-                  assert.propertyVal(test.meta, TEST_RETRY_REASON, 'attempt_to_fix')
+                  assert.propertyVal(test.meta, TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atf)
                 }
                 if (isLastAttempt) {
                   if (shouldFailSometimes) {

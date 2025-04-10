@@ -55,7 +55,8 @@ const {
   DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_HAS_FAILED_ALL_RETRIES,
-  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED
+  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
+  TEST_RETRY_REASON_TYPES
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 
@@ -897,7 +898,7 @@ versions.forEach(version => {
                 )
                 assert.equal(retriedTests.length, NUM_RETRIES_EFD)
                 retriedTests.forEach(test => {
-                  assert.propertyVal(test.meta, TEST_RETRY_REASON, 'early_flake_detection')
+                  assert.propertyVal(test.meta, TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
                 })
                 // Test name does not change
                 newTests.forEach(test => {
@@ -1487,7 +1488,7 @@ versions.forEach(version => {
                   const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
                   assert.equal(retriedTests.length, 2)
                   assert.equal(retriedTests.filter(
-                    test => test.meta[TEST_RETRY_REASON] === 'auto_test_retry'
+                    test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
                   ).length, 2)
                 })
 
@@ -1526,7 +1527,9 @@ versions.forEach(version => {
 
                   assert.equal(tests.length, 1)
 
-                  const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === 'auto_test_retry')
+                  const retriedTests = tests.filter(
+                    test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+                  )
                   assert.equal(retriedTests.length, 0)
                 })
 
@@ -1575,7 +1578,9 @@ versions.forEach(version => {
                   assert.equal(passedTests.length, 0)
 
                   // All but the first one are retries
-                  const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === 'auto_test_retry')
+                  const retriedTests = tests.filter(
+                    test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+                  )
                   assert.equal(retriedTests.length, 1)
                 })
 
@@ -1611,7 +1616,9 @@ versions.forEach(version => {
                   const events = payloads.flatMap(({ payload }) => payload.events)
 
                   const tests = events.filter(event => event.type === 'test').map(event => event.content)
-                  const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === 'auto_test_retry')
+                  const retriedTests = tests.filter(
+                    test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+                  )
 
                   assert.equal(retriedTests.length, 1)
                   const [retriedTest] = retriedTests
@@ -1660,7 +1667,9 @@ versions.forEach(version => {
                   const events = payloads.flatMap(({ payload }) => payload.events)
 
                   const tests = events.filter(event => event.type === 'test').map(event => event.content)
-                  const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === 'auto_test_retry')
+                  const retriedTests = tests.filter(
+                    test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+                  )
 
                   assert.equal(retriedTests.length, 1)
                   const [retriedTest] = retriedTests
@@ -1709,7 +1718,9 @@ versions.forEach(version => {
 
                   const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
-                  const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === 'auto_test_retry')
+                  const retriedTests = tests.filter(
+                    test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+                  )
 
                   assert.equal(retriedTests.length, 1)
                   const [retriedTest] = retriedTests
@@ -1787,7 +1798,9 @@ versions.forEach(version => {
                   const events = payloads.flatMap(({ payload }) => payload.events)
 
                   const tests = events.filter(event => event.type === 'test').map(event => event.content)
-                  const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === 'auto_test_retry')
+                  const retriedTests = tests.filter(
+                    test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+                  )
 
                   assert.equal(retriedTests.length, 1)
                   const [retriedTest] = retriedTests
@@ -2112,7 +2125,7 @@ versions.forEach(version => {
                   assert.propertyVal(test.meta, TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX, 'true')
                   if (!isFirstAttempt) {
                     assert.propertyVal(test.meta, TEST_IS_RETRY, 'true')
-                    assert.propertyVal(test.meta, TEST_RETRY_REASON, 'attempt_to_fix')
+                    assert.propertyVal(test.meta, TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atf)
                   }
                   if (isLastAttempt) {
                     if (shouldFailSometimes) {
