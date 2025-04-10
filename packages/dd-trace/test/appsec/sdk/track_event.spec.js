@@ -101,13 +101,13 @@ describe('track_event - Internal API', () => {
       expect(log.warn).to.not.have.been.called
       expect(setUserTags).to.have.been.calledOnceWithExactly(user, rootSpan)
       expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
-          'appsec.events.users.login.success.track': 'true',
-          '_dd.appsec.events.users.login.success.sdk': 'true',
-          'appsec.events.users.login.success.usr.login': 'user_id',
-          'appsec.events.users.login.success.metakey1': 'metaValue1',
-          'appsec.events.users.login.success.metakey2': 'metaValue2',
-          'appsec.events.users.login.success.metakey3': 'metaValue3'
-        })
+        'appsec.events.users.login.success.track': 'true',
+        '_dd.appsec.events.users.login.success.sdk': 'true',
+        'appsec.events.users.login.success.usr.login': 'user_id',
+        'appsec.events.users.login.success.metakey1': 'metaValue1',
+        'appsec.events.users.login.success.metakey2': 'metaValue2',
+        'appsec.events.users.login.success.metakey3': 'metaValue3'
+      })
       expect(prioritySampler.setPriority)
         .to.have.been.calledOnceWithExactly(rootSpan, USER_KEEP, ASM)
       expect(waf.run).to.have.been.calledOnceWithExactly({
@@ -394,10 +394,10 @@ describe('track_event - Internal API', () => {
         expect(setUserTags).to.not.have.been.called
 
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
-            'appsec.events.users.login.success.track': 'true',
-            '_dd.appsec.events.users.login.success.sdk': 'true',
-            'appsec.events.users.login.success.usr.login': 'login'
-          })
+          'appsec.events.users.login.success.track': 'true',
+          '_dd.appsec.events.users.login.success.sdk': 'true',
+          'appsec.events.users.login.success.usr.login': 'login'
+        })
 
         expect(waf.run).to.have.been.calledOnceWithExactly({
           persistent: {
@@ -414,11 +414,11 @@ describe('track_event - Internal API', () => {
         expect(setUserTags).to.have.been.calledOnceWithExactly({ id: 'userId' }, rootSpan)
 
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
-            'appsec.events.users.login.success.track': 'true',
-            '_dd.appsec.events.users.login.success.sdk': 'true',
-            'appsec.events.users.login.success.usr.id': 'userId',
-            'appsec.events.users.login.success.usr.login': 'login'
-          })
+          'appsec.events.users.login.success.track': 'true',
+          '_dd.appsec.events.users.login.success.sdk': 'true',
+          'appsec.events.users.login.success.usr.id': 'userId',
+          'appsec.events.users.login.success.usr.login': 'login'
+        })
 
         expect(waf.run).to.have.been.calledOnceWithExactly({
           persistent: {
@@ -441,12 +441,12 @@ describe('track_event - Internal API', () => {
         expect(setUserTags).to.have.been.calledOnceWithExactly(user, rootSpan)
 
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
-            'appsec.events.users.login.success.track': 'true',
-            '_dd.appsec.events.users.login.success.sdk': 'true',
-            'appsec.events.users.login.success.usr.id': 'userId',
-            'appsec.events.users.login.success.usr.email': 'email@to.com',
-            'appsec.events.users.login.success.usr.login': 'login'
-          })
+          'appsec.events.users.login.success.track': 'true',
+          '_dd.appsec.events.users.login.success.sdk': 'true',
+          'appsec.events.users.login.success.usr.id': 'userId',
+          'appsec.events.users.login.success.usr.email': 'email@to.com',
+          'appsec.events.users.login.success.usr.login': 'login'
+        })
 
         expect(waf.run).to.have.been.calledOnceWithExactly({
           persistent: {
@@ -470,13 +470,13 @@ describe('track_event - Internal API', () => {
         expect(setUserTags).to.not.have.been.called
 
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
-            'appsec.events.users.login.success.track': 'true',
-            '_dd.appsec.events.users.login.success.sdk': 'true',
-            'appsec.events.users.login.success.usr.login': 'login',
-            'appsec.events.users.login.success.metakey1': 'metaValue1',
-            'appsec.events.users.login.success.metakey2': 'metaValue2',
-            'appsec.events.users.login.success.metakey3': 'metaValue3'
-          })
+          'appsec.events.users.login.success.track': 'true',
+          '_dd.appsec.events.users.login.success.sdk': 'true',
+          'appsec.events.users.login.success.usr.login': 'login',
+          'appsec.events.users.login.success.metakey1': 'metaValue1',
+          'appsec.events.users.login.success.metakey2': 'metaValue2',
+          'appsec.events.users.login.success.metakey3': 'metaValue3'
+        })
 
         expect(waf.run).to.have.been.calledOnceWithExactly({
           persistent: {
@@ -501,14 +501,14 @@ describe('track_event - Internal API', () => {
         }, rootSpan)
 
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
-            'appsec.events.users.login.success.track': 'true',
-            '_dd.appsec.events.users.login.success.sdk': 'true',
-            'appsec.events.users.login.success.usr.login': 'login',
-            'appsec.events.users.login.success.usr.id': 'userId',
-            'appsec.events.users.login.success.metakey1': 'metaValue1',
-            'appsec.events.users.login.success.metakey2': 'metaValue2',
-            'appsec.events.users.login.success.metakey3': 'metaValue3'
-          })
+          'appsec.events.users.login.success.track': 'true',
+          '_dd.appsec.events.users.login.success.sdk': 'true',
+          'appsec.events.users.login.success.usr.login': 'login',
+          'appsec.events.users.login.success.usr.id': 'userId',
+          'appsec.events.users.login.success.metakey1': 'metaValue1',
+          'appsec.events.users.login.success.metakey2': 'metaValue2',
+          'appsec.events.users.login.success.metakey3': 'metaValue3'
+        })
 
         expect(waf.run).to.have.been.calledOnceWithExactly({
           persistent: {
@@ -545,9 +545,9 @@ describe('track_event - Internal API', () => {
             }
           },
           arr: [{
-              key: 'metavalue2'
-            },
-            'metavalue3'
+            key: 'metavalue2'
+          },
+          'metavalue3'
           ]
         }
 
@@ -559,13 +559,13 @@ describe('track_event - Internal API', () => {
         )
 
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
-            'appsec.events.users.login.success.track': 'true',
-            '_dd.appsec.events.users.login.success.sdk': 'true',
-            'appsec.events.users.login.success.usr.login': 'login',
-            'appsec.events.users.login.success.prop1.prop2.prop3.prop4.data1': 'metavalue1',
-            'appsec.events.users.login.success.arr.0.key': 'metavalue2',
-            'appsec.events.users.login.success.arr.1': 'metavalue3'
-          })
+          'appsec.events.users.login.success.track': 'true',
+          '_dd.appsec.events.users.login.success.sdk': 'true',
+          'appsec.events.users.login.success.usr.login': 'login',
+          'appsec.events.users.login.success.prop1.prop2.prop3.prop4.data1': 'metavalue1',
+          'appsec.events.users.login.success.arr.0.key': 'metavalue2',
+          'appsec.events.users.login.success.arr.1': 'metavalue3'
+        })
       })
 
       it('Should ignore undefined properties and set to \'null\' the null values in the metadata', () => {
@@ -577,11 +577,11 @@ describe('track_event - Internal API', () => {
         trackUserLoginSuccessV2(tracer, 'login', null, metadata)
 
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
-            'appsec.events.users.login.success.track': 'true',
-            '_dd.appsec.events.users.login.success.sdk': 'true',
-            'appsec.events.users.login.success.usr.login': 'login',
-            'appsec.events.users.login.success.prop2': 'null'
-          })
+          'appsec.events.users.login.success.track': 'true',
+          '_dd.appsec.events.users.login.success.sdk': 'true',
+          'appsec.events.users.login.success.usr.login': 'login',
+          'appsec.events.users.login.success.prop2': 'null'
+        })
       })
 
       it('should keep the trace', () => {
@@ -630,11 +630,11 @@ describe('track_event - Internal API', () => {
         expect(setUserTags).to.not.have.been.called
 
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
-            'appsec.events.users.login.failure.track': 'true',
-            '_dd.appsec.events.users.login.failure.sdk': 'true',
-            'appsec.events.users.login.failure.usr.login': 'login',
-            'appsec.events.users.login.failure.usr.exists': 'false'
-          })
+          'appsec.events.users.login.failure.track': 'true',
+          '_dd.appsec.events.users.login.failure.sdk': 'true',
+          'appsec.events.users.login.failure.usr.login': 'login',
+          'appsec.events.users.login.failure.usr.exists': 'false'
+        })
 
         expect(waf.run).to.have.been.calledOnceWithExactly({
           persistent: {
@@ -650,11 +650,11 @@ describe('track_event - Internal API', () => {
         expect(log.warn).to.not.have.been.called
 
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
-            'appsec.events.users.login.failure.track': 'true',
-            '_dd.appsec.events.users.login.failure.sdk': 'true',
-            'appsec.events.users.login.failure.usr.login': 'login',
-            'appsec.events.users.login.failure.usr.exists': 'true'
-          })
+          'appsec.events.users.login.failure.track': 'true',
+          '_dd.appsec.events.users.login.failure.sdk': 'true',
+          'appsec.events.users.login.failure.usr.login': 'login',
+          'appsec.events.users.login.failure.usr.exists': 'true'
+        })
 
         expect(waf.run).to.have.been.calledOnceWithExactly({
           persistent: {
@@ -670,11 +670,11 @@ describe('track_event - Internal API', () => {
         expect(log.warn).to.not.have.been.called
 
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
-            'appsec.events.users.login.failure.track': 'true',
-            '_dd.appsec.events.users.login.failure.sdk': 'true',
-            'appsec.events.users.login.failure.usr.login': 'login',
-            'appsec.events.users.login.failure.usr.exists': 'false'
-          })
+          'appsec.events.users.login.failure.track': 'true',
+          '_dd.appsec.events.users.login.failure.sdk': 'true',
+          'appsec.events.users.login.failure.usr.login': 'login',
+          'appsec.events.users.login.failure.usr.exists': 'false'
+        })
 
         expect(waf.run).to.have.been.calledOnceWithExactly({
           persistent: {
@@ -696,14 +696,14 @@ describe('track_event - Internal API', () => {
         expect(log.warn).to.not.have.been.called
 
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
-            'appsec.events.users.login.failure.track': 'true',
-            '_dd.appsec.events.users.login.failure.sdk': 'true',
-            'appsec.events.users.login.failure.usr.login': 'login',
-            'appsec.events.users.login.failure.usr.exists': 'false',
-            'appsec.events.users.login.failure.metakey1': 'metaValue1',
-            'appsec.events.users.login.failure.metakey2': 'metaValue2',
-            'appsec.events.users.login.failure.metakey3': 'metaValue3'
-          })
+          'appsec.events.users.login.failure.track': 'true',
+          '_dd.appsec.events.users.login.failure.sdk': 'true',
+          'appsec.events.users.login.failure.usr.login': 'login',
+          'appsec.events.users.login.failure.usr.exists': 'false',
+          'appsec.events.users.login.failure.metakey1': 'metaValue1',
+          'appsec.events.users.login.failure.metakey2': 'metaValue2',
+          'appsec.events.users.login.failure.metakey3': 'metaValue3'
+        })
 
         expect(waf.run).to.have.been.calledOnceWithExactly({
           persistent: {
@@ -725,14 +725,14 @@ describe('track_event - Internal API', () => {
         expect(log.warn).to.not.have.been.called
 
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
-            'appsec.events.users.login.failure.track': 'true',
-            '_dd.appsec.events.users.login.failure.sdk': 'true',
-            'appsec.events.users.login.failure.usr.login': 'login',
-            'appsec.events.users.login.failure.usr.exists': 'true',
-            'appsec.events.users.login.failure.metakey1': 'metaValue1',
-            'appsec.events.users.login.failure.metakey2': 'metaValue2',
-            'appsec.events.users.login.failure.metakey3': 'metaValue3'
-          })
+          'appsec.events.users.login.failure.track': 'true',
+          '_dd.appsec.events.users.login.failure.sdk': 'true',
+          'appsec.events.users.login.failure.usr.login': 'login',
+          'appsec.events.users.login.failure.usr.exists': 'true',
+          'appsec.events.users.login.failure.metakey1': 'metaValue1',
+          'appsec.events.users.login.failure.metakey2': 'metaValue2',
+          'appsec.events.users.login.failure.metakey3': 'metaValue3'
+        })
 
         expect(waf.run).to.have.been.calledOnceWithExactly({
           persistent: {
@@ -768,9 +768,9 @@ describe('track_event - Internal API', () => {
             }
           },
           arr: [{
-              key: 'metavalue2'
-            },
-            'metavalue3'
+            key: 'metavalue2'
+          },
+          'metavalue3'
           ]
         }
 
@@ -782,14 +782,14 @@ describe('track_event - Internal API', () => {
         )
 
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
-            'appsec.events.users.login.failure.track': 'true',
-            '_dd.appsec.events.users.login.failure.sdk': 'true',
-            'appsec.events.users.login.failure.usr.login': 'login',
-            'appsec.events.users.login.failure.usr.exists': 'false',
-            'appsec.events.users.login.failure.prop1.prop2.prop3.prop4.data1': 'metavalue1',
-            'appsec.events.users.login.failure.arr.0.key': 'metavalue2',
-            'appsec.events.users.login.failure.arr.1': 'metavalue3'
-          })
+          'appsec.events.users.login.failure.track': 'true',
+          '_dd.appsec.events.users.login.failure.sdk': 'true',
+          'appsec.events.users.login.failure.usr.login': 'login',
+          'appsec.events.users.login.failure.usr.exists': 'false',
+          'appsec.events.users.login.failure.prop1.prop2.prop3.prop4.data1': 'metavalue1',
+          'appsec.events.users.login.failure.arr.0.key': 'metavalue2',
+          'appsec.events.users.login.failure.arr.1': 'metavalue3'
+        })
       })
 
       it('Should ignore undefined properties and set to \'null\' the null values in the metadata', () => {
@@ -801,12 +801,12 @@ describe('track_event - Internal API', () => {
         trackUserLoginFailureV2(tracer, 'login', true, metadata)
 
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
-            'appsec.events.users.login.failure.track': 'true',
-            '_dd.appsec.events.users.login.failure.sdk': 'true',
-            'appsec.events.users.login.failure.usr.login': 'login',
-            'appsec.events.users.login.failure.usr.exists': 'true',
-            'appsec.events.users.login.failure.prop2': 'null'
-          })
+          'appsec.events.users.login.failure.track': 'true',
+          '_dd.appsec.events.users.login.failure.sdk': 'true',
+          'appsec.events.users.login.failure.usr.login': 'login',
+          'appsec.events.users.login.failure.usr.exists': 'true',
+          'appsec.events.users.login.failure.prop2': 'null'
+        })
       })
 
       it('should keep the trace', () => {
