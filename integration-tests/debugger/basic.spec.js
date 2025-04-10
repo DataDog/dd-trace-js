@@ -646,6 +646,8 @@ describe('Dynamic Instrumentation', function () {
             if (diagnostics.status === 'ERROR') {
               assert.strictEqual(diagnostics.exception.message, 'Cannot compile expression: original dsl')
               done()
+            } else if (diagnostics.status === 'INSTALLED') {
+              assert.fail('Should not install when condition cannot be compiled')
             }
           })
         })
