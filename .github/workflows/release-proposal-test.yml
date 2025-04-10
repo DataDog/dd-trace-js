@@ -22,4 +22,6 @@ jobs:
       - run: |
           mkdir -p ~/.config/changelog-maker
           echo "{\"token\":\"${{secrets.GITHUB_TOKEN}}\",\"user\":\"${{github.actor}}\"}" > ~/.config/changelog-maker/config.json
+          git config user.name github-actions[bot]
+          git config user.email github-actions[bot]@users.noreply.github.com
       - run: node scripts/release/proposal 5 --auto --debug
