@@ -238,6 +238,8 @@ function disable () {
     delete Error.prepareStackTrace
 
     Error.prepareStackTrace = originalPrepareStackTrace
+
+    shimmedPrepareStackTrace = false
   } catch (e) {
     log.warn('Error disabling Rewriter', e)
   }
