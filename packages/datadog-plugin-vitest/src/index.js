@@ -25,7 +25,8 @@ const {
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_HAS_FAILED_ALL_RETRIES,
-  getLibraryCapabilitiesTags
+  getLibraryCapabilitiesTags,
+  TEST_RETRY_REASON_TYPES
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -104,7 +105,8 @@ class VitestPlugin extends CiPlugin {
       isDisabled,
       mightHitProbe,
       isRetryReasonEfd,
-      isRetryReasonAttemptToFix
+      isRetryReasonAttemptToFix,
+      isRetryReasonAtr
     }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
       const store = storage('legacy').getStore()
@@ -114,18 +116,21 @@ class VitestPlugin extends CiPlugin {
       }
       if (isRetry) {
         extraTags[TEST_IS_RETRY] = 'true'
+        if (isRetryReasonAttemptToFix) {
+          extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.atf
+        } else if (isRetryReasonEfd) {
+          extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.efd
+        } else if (isRetryReasonAtr) {
+          extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.atr
+        } else {
+          extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.ext
+        }
       }
       if (isNew) {
         extraTags[TEST_IS_NEW] = 'true'
       }
-      if (isRetryReasonEfd) {
-        extraTags[TEST_RETRY_REASON] = 'efd'
-      }
       if (isAttemptToFix) {
         extraTags[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] = 'true'
-      }
-      if (isRetryReasonAttemptToFix) {
-        extraTags[TEST_RETRY_REASON] = 'attempt_to_fix'
       }
       if (isQuarantined) {
         extraTags[TEST_MANAGEMENT_IS_QUARANTINED] = 'true'
