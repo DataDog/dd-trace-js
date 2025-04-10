@@ -15,6 +15,7 @@ const { LOG_MESSAGE, REWRITTEN_MESSAGE } = require('./constants')
 
 const hardcodedSecretCh = dc.channel('datadog:secrets:result')
 let rewriter
+let unwrapCompile = () => {}
 let getPrepareStackTrace, cacheRewrittenSourceMap
 let kSymbolPrepareStackTrace
 let esmRewriterEnabled = false
@@ -90,7 +91,8 @@ function getPrepareStackTraceAccessor () {
 
 function getCompileMethodFn (compileMethod) {
   const rewriteFn = getRewriteFunction(rewriter)
-  return function (content, filename) {
+
+  let delegate = function (content, filename) {
     try {
       if (isPrivateModule(filename) && isNotLibraryFile(filename)) {
         const rewritten = rewriteFn(content, filename)
@@ -108,6 +110,16 @@ function getCompileMethodFn (compileMethod) {
     }
     return compileMethod.apply(this, [content, filename])
   }
+
+  const shim = function () {
+    return delegate.apply(this, arguments)
+  }
+
+  unwrapCompile = function () {
+    delegate = compileMethod
+  }
+
+  return shim
 }
 
 function esmRewritePostProcess (rewritten, filename) {
@@ -198,7 +210,7 @@ function enableEsmRewriter (telemetryVerbosity) {
 }
 
 function disableRewriter () {
-  shimmer.unwrap(Module.prototype, '_compile')
+  unwrapCompile()
 
   if (!Error.prepareStackTrace?.[kSymbolPrepareStackTrace]) return
 
