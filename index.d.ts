@@ -874,7 +874,7 @@ declare namespace tracer {
      * Links a successful login event to the current trace. Will link the passed user to the current trace with Appsec.setUser() internally.
      * @param {string} login The login key (username, email...) used by the user to authenticate.
      * @param {User} user Properties of the authenticated user. Accepts custom fields. Can be null.
-     * @param {[key: string]: string} metadata Custom fields to link to the login success event.
+     * @param {any} metadata Custom fields to link to the login success event.
      */
     trackUserLoginSuccess(login: string, user?: User | null, metadata?: any): void;
 
@@ -882,7 +882,7 @@ declare namespace tracer {
      * Links a successful login event to the current trace. Will link the passed user to the current trace with Appsec.setUser() internally.
      * @param {string} login the login data (username, email...) used by the user to authenticate
      * @param {string} userId Identifier of the authenticated user.
-     * @param {[key: string]: string} metadata Custom fields to link to the login success event.
+     * @param {any} metadata Custom fields to link to the login success event.
      */
     trackUserLoginSuccess(login: string, userId: string, metadata?: any): void;
 
@@ -890,14 +890,14 @@ declare namespace tracer {
      * Links a failed login event to the current trace.
      * @param {string} login the login data (username, email...) used by the user to authenticate
      * @param {boolean} exists If the user exists.
-     * @param {[key: string]: string} metadata Custom fields to link to the login failure event.
+     * @param {any} metadata Custom fields to link to the login failure event.
      */
     trackUserLoginFailure(login: string, exists: boolean, metadata?: any): void;
 
     /**
      * Links a failed login event to the current trace.
      * @param {string} login the login data (username, email...) used by the user to authenticate
-     * @param {[key: string]: string} metadata Custom fields to link to the login failure event.
+     * @param {any} metadata Custom fields to link to the login failure event.
      */
     trackUserLoginFailure(login: string, metadata?: any): void;
   }

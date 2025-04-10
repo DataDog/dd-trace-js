@@ -146,7 +146,7 @@ function trackUserLoginFailureV2 (tracer, login, exists, metadata) {
   runWaf('users.login.failure', wafData)
 }
 
-function flattenFields (fields, sdkMethodName, depth = 0) {
+function flattenFields (fields, depth = 0) {
   if (depth > 4) {
     return {
       truncated: true
@@ -159,7 +159,7 @@ function flattenFields (fields, sdkMethodName, depth = 0) {
     const value = fields[key]
 
     if (value && typeof value === 'object') {
-      const { result: flatValue, truncated: inheritTruncated } = flattenFields(value, sdkMethodName, depth + 1)
+      const { result: flatValue, truncated: inheritTruncated } = flattenFields(value, depth + 1)
       truncated = truncated || inheritTruncated
 
       if (flatValue) {
@@ -189,7 +189,7 @@ function trackEvent (eventName, fields, sdkMethodName, rootSpan) {
   }
 
   if (fields) {
-    const { result: flatFields, truncated } = flattenFields(fields, sdkMethodName)
+    const { result: flatFields, truncated } = flattenFields(fields)
 
     if (truncated) {
       log.warn('[ASM] Too deep object provided in the SDK method %s, object truncated', sdkMethodName)
