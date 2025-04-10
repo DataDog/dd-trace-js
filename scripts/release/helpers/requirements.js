@@ -81,6 +81,8 @@ function checkGitHub () {
 }
 
 function checkGitHubScopes (token, requiredScopes, source) {
+  if (process.env.CI) return
+
   const url = 'https://api.github.com'
   const headers = [
     'Accept: application/vnd.github.v3+json',
