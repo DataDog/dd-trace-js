@@ -88,7 +88,7 @@
     "@datadog/native-appsec": "8.5.1",
     "@datadog/native-iast-taint-tracking": "3.3.0",
     "@datadog/native-metrics": "^3.1.0",
-    "@datadog/pprof": "5.7.0",
+    "@datadog/pprof": "5.7.1",
     "@datadog/sketches-js": "^2.1.0",
     "@datadog/wasm-js-rewriter": "3.1.0",
     "@isaacs/ttlcache": "^1.4.1",
