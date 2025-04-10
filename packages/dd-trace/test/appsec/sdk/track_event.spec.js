@@ -369,7 +369,7 @@ describe('track_event - Internal API', () => {
         trackUserLoginSuccessV2(tracer, 'login')
 
         expect(log.warn)
-          .to.have.been.calledOnceWithExactly('[ASM] Root span not available in v2.trackUserLoginSuccess')
+          .to.have.been.calledOnceWithExactly('[ASM] Root span not available in eventTrackingV2.trackUserLoginSuccess')
         expect(setUserTags).to.not.have.been.called
       })
 
@@ -379,9 +379,9 @@ describe('track_event - Internal API', () => {
 
         expect(log.warn).to.have.been.calledTwice
         expect(log.warn.firstCall)
-          .to.have.been.calledWithExactly('[ASM] Invalid login provided to v2.trackUserLoginSuccess')
+          .to.have.been.calledWithExactly('[ASM] Invalid login provided to eventTrackingV2.trackUserLoginSuccess')
         expect(log.warn.secondCall)
-          .to.have.been.calledWithExactly('[ASM] Invalid login provided to v2.trackUserLoginSuccess')
+          .to.have.been.calledWithExactly('[ASM] Invalid login provided to eventTrackingV2.trackUserLoginSuccess')
         expect(setUserTags).to.not.have.been.called
         expect(rootSpan.addTags).to.not.have.been.called
         expect(waf.run).to.not.have.been.called
@@ -555,7 +555,7 @@ describe('track_event - Internal API', () => {
 
         expect(log.warn).to.have.been.calledOnceWithExactly(
           '[ASM] Too deep object provided in the SDK method %s, object truncated',
-          'v2.trackUserLoginSuccess'
+          'eventTrackingV2.trackUserLoginSuccess'
         )
 
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
@@ -605,7 +605,7 @@ describe('track_event - Internal API', () => {
         trackUserLoginFailureV2(tracer, 'login', false)
 
         expect(log.warn)
-          .to.have.been.calledOnceWithExactly('[ASM] Root span not available in v2.trackUserLoginFailure')
+          .to.have.been.calledOnceWithExactly('[ASM] Root span not available in eventTrackingV2.trackUserLoginFailure')
         expect(setUserTags).to.not.have.been.called
       })
 
@@ -615,9 +615,9 @@ describe('track_event - Internal API', () => {
 
         expect(log.warn).to.have.been.calledTwice
         expect(log.warn.firstCall)
-          .to.have.been.calledWithExactly('[ASM] Invalid login provided to v2.trackUserLoginFailure')
+          .to.have.been.calledWithExactly('[ASM] Invalid login provided to eventTrackingV2.trackUserLoginFailure')
         expect(log.warn.secondCall)
-          .to.have.been.calledWithExactly('[ASM] Invalid login provided to v2.trackUserLoginFailure')
+          .to.have.been.calledWithExactly('[ASM] Invalid login provided to eventTrackingV2.trackUserLoginFailure')
         expect(setUserTags).to.not.have.been.called
         expect(rootSpan.addTags).to.not.have.been.called
         expect(waf.run).to.not.have.been.called
@@ -778,7 +778,7 @@ describe('track_event - Internal API', () => {
 
         expect(log.warn).to.have.been.calledOnceWithExactly(
           '[ASM] Too deep object provided in the SDK method %s, object truncated',
-          'v2.trackUserLoginFailure'
+          'eventTrackingV2.trackUserLoginFailure'
         )
 
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
