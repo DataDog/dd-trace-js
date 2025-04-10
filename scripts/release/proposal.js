@@ -67,7 +67,7 @@ try {
   start('Determine version increment')
 
   const { DD_MAJOR, DD_MINOR, DD_PATCH } = require('../../version')
-  const main = 'master'
+  const main = 'release-proposal-test-2'
   const lineDiff = capture(`${diffCmd} --markdown=true v${releaseLine}.x ${main}`)
   const isMinor = flags.minor || (!flags.patch && lineDiff.includes('SEMVER-MINOR'))
   const newVersion = isMinor
@@ -120,6 +120,7 @@ try {
 
       pass()
     } catch (err) {
+      console.log(err)
       fatal(
         'Cherry-pick failed. Resolve the conflicts and run `git cherry-pick --continue` to continue.',
         'When all conflicts have been resolved, run this script again.'
