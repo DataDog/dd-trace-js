@@ -1,0 +1,29 @@
+name: 'Release Proposal Test'
+
+on:
+  push:
+    branches:
+      - release-proposal-test-3
+
+jobs:
+  create-proposal:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - run: echo ${{ github.actor }}
+      - run: echo ${{ github.triggering_actor }}
+      # - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      #   with:
+      #     fetch-depth: 0
+      # - uses: ./.github/actions/node
+      # - run: npm i -g branch-diff
+      # - run: |
+      #     mkdir -p ~/.config/changelog-maker
+      #     echo "{\"token\":\"${{secrets.GITHUB_TOKEN}}\",\"user\":\"${{github.actor}}\"}" > ~/.config/changelog-maker/config.json
+      #     git config user.name ${{ github.actor }}
+      #     git config user.email ${{ github.actor }}@users.noreply.github.com
+      # - run: node scripts/release/proposal 5 --auto --debug
