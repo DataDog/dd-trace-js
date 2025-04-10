@@ -37,7 +37,7 @@ function send (message, logger, dd, snapshot) {
     ddsource,
     hostname,
     service,
-    message: message.length > MAX_MESSAGE_LENGTH
+    message: message?.length > MAX_MESSAGE_LENGTH
       ? message.slice(0, MAX_MESSAGE_LENGTH) + '…'
       : message,
     logger,
