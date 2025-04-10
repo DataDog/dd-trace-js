@@ -100,8 +100,7 @@ describe('track_event - Internal API', () => {
 
       expect(log.warn).to.not.have.been.called
       expect(setUserTags).to.have.been.calledOnceWithExactly(user, rootSpan)
-      expect(rootSpan.addTags).to.have.been.calledOnceWithExactly(
-        {
+      expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
           'appsec.events.users.login.success.track': 'true',
           '_dd.appsec.events.users.login.success.sdk': 'true',
           'appsec.events.users.login.success.usr.login': 'user_id',
@@ -394,8 +393,7 @@ describe('track_event - Internal API', () => {
         expect(log.warn).to.not.have.been.called
         expect(setUserTags).to.not.have.been.called
 
-        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly(
-          {
+        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
             'appsec.events.users.login.success.track': 'true',
             '_dd.appsec.events.users.login.success.sdk': 'true',
             'appsec.events.users.login.success.usr.login': 'login'
@@ -415,8 +413,7 @@ describe('track_event - Internal API', () => {
         expect(log.warn).to.not.have.been.called
         expect(setUserTags).to.have.been.calledOnceWithExactly({ id: 'userId' }, rootSpan)
 
-        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly(
-          {
+        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
             'appsec.events.users.login.success.track': 'true',
             '_dd.appsec.events.users.login.success.sdk': 'true',
             'appsec.events.users.login.success.usr.id': 'userId',
@@ -443,8 +440,7 @@ describe('track_event - Internal API', () => {
         expect(log.warn).to.not.have.been.called
         expect(setUserTags).to.have.been.calledOnceWithExactly(user, rootSpan)
 
-        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly(
-          {
+        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
             'appsec.events.users.login.success.track': 'true',
             '_dd.appsec.events.users.login.success.sdk': 'true',
             'appsec.events.users.login.success.usr.id': 'userId',
@@ -473,8 +469,7 @@ describe('track_event - Internal API', () => {
         expect(log.warn).to.not.have.been.called
         expect(setUserTags).to.not.have.been.called
 
-        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly(
-          {
+        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
             'appsec.events.users.login.success.track': 'true',
             '_dd.appsec.events.users.login.success.sdk': 'true',
             'appsec.events.users.login.success.usr.login': 'login',
@@ -505,8 +500,7 @@ describe('track_event - Internal API', () => {
           id: 'userId'
         }, rootSpan)
 
-        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly(
-          {
+        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
             'appsec.events.users.login.success.track': 'true',
             '_dd.appsec.events.users.login.success.sdk': 'true',
             'appsec.events.users.login.success.usr.login': 'login',
@@ -565,8 +559,7 @@ describe('track_event - Internal API', () => {
           'v2.trackUserLoginSuccess'
         )
 
-        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly(
-          {
+        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
             'appsec.events.users.login.success.track': 'true',
             '_dd.appsec.events.users.login.success.sdk': 'true',
             'appsec.events.users.login.success.usr.login': 'login',
@@ -584,8 +577,7 @@ describe('track_event - Internal API', () => {
 
         trackUserLoginSuccessV2(tracer, 'login', null, metadata)
 
-        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly(
-          {
+        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
             'appsec.events.users.login.success.track': 'true',
             '_dd.appsec.events.users.login.success.sdk': 'true',
             'appsec.events.users.login.success.usr.login': 'login',
@@ -638,8 +630,7 @@ describe('track_event - Internal API', () => {
         expect(log.warn).to.not.have.been.called
         expect(setUserTags).to.not.have.been.called
 
-        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly(
-          {
+        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
             'appsec.events.users.login.failure.track': 'true',
             '_dd.appsec.events.users.login.failure.sdk': 'true',
             'appsec.events.users.login.failure.usr.login': 'login',
@@ -659,8 +650,7 @@ describe('track_event - Internal API', () => {
 
         expect(log.warn).to.not.have.been.called
 
-        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly(
-          {
+        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
             'appsec.events.users.login.failure.track': 'true',
             '_dd.appsec.events.users.login.failure.sdk': 'true',
             'appsec.events.users.login.failure.usr.login': 'login',
@@ -680,8 +670,7 @@ describe('track_event - Internal API', () => {
 
         expect(log.warn).to.not.have.been.called
 
-        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly(
-          {
+        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
             'appsec.events.users.login.failure.track': 'true',
             '_dd.appsec.events.users.login.failure.sdk': 'true',
             'appsec.events.users.login.failure.usr.login': 'login',
@@ -707,8 +696,7 @@ describe('track_event - Internal API', () => {
 
         expect(log.warn).to.not.have.been.called
 
-        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly(
-          {
+        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
             'appsec.events.users.login.failure.track': 'true',
             '_dd.appsec.events.users.login.failure.sdk': 'true',
             'appsec.events.users.login.failure.usr.login': 'login',
@@ -737,8 +725,7 @@ describe('track_event - Internal API', () => {
 
         expect(log.warn).to.not.have.been.called
 
-        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly(
-          {
+        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
             'appsec.events.users.login.failure.track': 'true',
             '_dd.appsec.events.users.login.failure.sdk': 'true',
             'appsec.events.users.login.failure.usr.login': 'login',
@@ -796,8 +783,7 @@ describe('track_event - Internal API', () => {
           'v2.trackUserLoginFailure'
         )
 
-        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly(
-          {
+        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
             'appsec.events.users.login.failure.track': 'true',
             '_dd.appsec.events.users.login.failure.sdk': 'true',
             'appsec.events.users.login.failure.usr.login': 'login',
@@ -816,8 +802,7 @@ describe('track_event - Internal API', () => {
 
         trackUserLoginFailureV2(tracer, 'login', true, metadata)
 
-        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly(
-          {
+        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
             'appsec.events.users.login.failure.track': 'true',
             '_dd.appsec.events.users.login.failure.sdk': 'true',
             'appsec.events.users.login.failure.usr.login': 'login',
