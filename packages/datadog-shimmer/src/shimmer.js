@@ -24,9 +24,13 @@ function copyProperties (original, wrapped) {
 function wrapFunction (original, wrapper) {
   if (typeof original === 'function') assertNotClass(original)
 
-  return safeMode
+  const wrapped = safeMode
     ? safeWrapper(original, wrapper)
     : wrapper(original)
+
+  if (typeof original === 'function') copyProperties(original, wrapped)
+
+  return wrapped
 }
 
 const wrapFn = function (original, delegate) {
