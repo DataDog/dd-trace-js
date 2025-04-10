@@ -57,10 +57,10 @@ describe('track_event - Internal API', () => {
     })
 
     trackUserLoginSuccessEvent = trackEvents.trackUserLoginSuccessEvent
-    trackUserLoginSuccessV2 = trackEvents.trackUserLoginSuccessV2
-    trackUserLoginFailureV2 = trackEvents.trackUserLoginFailureV2
     trackUserLoginFailureEvent = trackEvents.trackUserLoginFailureEvent
     trackCustomEvent = trackEvents.trackCustomEvent
+    trackUserLoginSuccessV2 = trackEvents.trackUserLoginSuccessV2
+    trackUserLoginFailureV2 = trackEvents.trackUserLoginFailureV2
   })
 
   describe('trackUserLoginSuccessEvent', () => {
