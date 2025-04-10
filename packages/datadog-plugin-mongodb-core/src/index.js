@@ -1,8 +1,8 @@
 'use strict'
 
+const { isTrue } = require('../../dd-trace/src/util')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 const coalesce = require('koalas')
-const { isTrue } = require('../../dd-trace/src/util')
 
 class MongodbCorePlugin extends DatabasePlugin {
   static get id () { return 'mongodb-core' }
