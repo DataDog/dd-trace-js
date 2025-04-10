@@ -75,6 +75,9 @@ function getRewriter (telemetryVerbosity) {
 
 let originalPrepareStackTrace
 function getPrepareStackTraceAccessor () {
+  if (!getPrepareStackTrace) {
+    getPrepareStackTrace = require('@datadog/wasm-js-rewriter/js/stack-trace').getPrepareStackTrace
+  }
   originalPrepareStackTrace = Error.prepareStackTrace
   let actual = getPrepareStackTrace(originalPrepareStackTrace)
   return {
