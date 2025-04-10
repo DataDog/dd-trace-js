@@ -100,10 +100,19 @@ function generateTestCaseName (ast, dataOrSuffix, expected) {
     ? JSON.stringify(dataOrSuffix)
     : Object
       .entries(dataOrSuffix)
-      .map(([key, value]) => `${key} = ${JSON.stringify(value)}`)
+      .map(([key, value]) => `${key} = ${serialize(value)}`)
       .join('; ')
 
   return `${JSON.stringify(ast)} + "${code}" = ${expected}`
+}
+
+function serialize (value) {
+  try {
+    return JSON.stringify(value)
+  } catch (e) {
+    // Some values are not serializable to JSON, so we fall back to stringification
+    return String(value)
+  }
 }
 
 function runWithDebug (fn, args = []) {

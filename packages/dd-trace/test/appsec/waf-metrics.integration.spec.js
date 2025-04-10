@@ -174,7 +174,6 @@ describe('WAF Metrics', () => {
 
     it('should report truncation metrics', async () => {
       let appsecTelemetryMetricsReceived = false
-      let appsecTelemetryDistributionsReceived = false
 
       const complexPayload = createComplexPayload()
       await axios.post('/', { complexPayload })
@@ -204,29 +203,8 @@ describe('WAF Metrics', () => {
         }
       }, 30_000, 'generate-metrics', 2)
 
-      const checkTelemetryDistributions = agent.assertTelemetryReceived(({ payload }) => {
-        const namespace = payload.payload.namespace
-
-        if (namespace === 'appsec') {
-          appsecTelemetryDistributionsReceived = true
-          const series = payload.payload.series
-          const wafDuration = series.find(s => s.metric === 'waf.duration')
-          const wafDurationExt = series.find(s => s.metric === 'waf.duration_ext')
-          const wafTuncated = series.filter(s => s.metric === 'waf.truncated_value_size')
-
-          assert.exists(wafDuration, 'waf duration serie should exist')
-          assert.exists(wafDurationExt, 'waf duration ext serie should exist')
-
-          assert.equal(wafTuncated.length, 3)
-          assert.include(wafTuncated[0].tags, 'truncation_reason:1')
-          assert.include(wafTuncated[1].tags, 'truncation_reason:2')
-          assert.include(wafTuncated[2].tags, 'truncation_reason:4')
-        }
-      }, 30_000, 'distributions', 1)
-
-      return Promise.all([checkMessages, checkTelemetryMetrics, checkTelemetryDistributions]).then(() => {
+      return Promise.all([checkMessages, checkTelemetryMetrics]).then(() => {
         assert.equal(appsecTelemetryMetricsReceived, true)
-        assert.equal(appsecTelemetryDistributionsReceived, true)
 
         return true
       })

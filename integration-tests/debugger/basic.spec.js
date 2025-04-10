@@ -240,6 +240,154 @@ describe('Dynamic Instrumentation', function () {
           }
         })
       }
+
+      describe('multiple probes at the same location', function () {
+        it('should support adding multiple probes at the same location', function (done) {
+          const rcConfig1 = t.generateRemoteConfig()
+          const rcConfig2 = t.generateRemoteConfig()
+          const expectedPayloads = [{
+            ddsource: 'dd_debugger',
+            service: 'node',
+            debugger: { diagnostics: { probeId: rcConfig1.config.id, probeVersion: 0, status: 'RECEIVED' } }
+          }, {
+            ddsource: 'dd_debugger',
+            service: 'node',
+            debugger: { diagnostics: { probeId: rcConfig2.config.id, probeVersion: 0, status: 'RECEIVED' } }
+          }, {
+            ddsource: 'dd_debugger',
+            service: 'node',
+            debugger: { diagnostics: { probeId: rcConfig1.config.id, probeVersion: 0, status: 'INSTALLED' } }
+          }, {
+            ddsource: 'dd_debugger',
+            service: 'node',
+            debugger: { diagnostics: { probeId: rcConfig2.config.id, probeVersion: 0, status: 'INSTALLED' } }
+          }]
+
+          t.agent.on('debugger-diagnostics', ({ payload }) => {
+            payload.forEach((event) => {
+              const expected = expectedPayloads.shift()
+              assertObjectContains(event, expected)
+            })
+            endIfDone()
+          })
+
+          t.agent.addRemoteConfig(rcConfig1)
+          t.agent.addRemoteConfig(rcConfig2)
+
+          function endIfDone () {
+            if (expectedPayloads.length === 0) done()
+          }
+        })
+
+        it('should support triggering multiple probes added at the same location', function (done) {
+          let installed = 0
+          const rcConfig1 = t.generateRemoteConfig()
+          const rcConfig2 = t.generateRemoteConfig()
+          const expectedPayloads = new Map([
+            [rcConfig1.config.id, {
+              ddsource: 'dd_debugger',
+              service: 'node',
+              debugger: { diagnostics: { probeId: rcConfig1.config.id, probeVersion: 0, status: 'EMITTING' } }
+            }],
+            [rcConfig2.config.id, {
+              ddsource: 'dd_debugger',
+              service: 'node',
+              debugger: { diagnostics: { probeId: rcConfig2.config.id, probeVersion: 0, status: 'EMITTING' } }
+            }]
+          ])
+
+          t.agent.on('debugger-diagnostics', ({ payload }) => {
+            payload.forEach((event) => {
+              const { diagnostics } = event.debugger
+              if (diagnostics.status === 'INSTALLED') {
+                if (++installed === 2) {
+                  t.axios.get(t.breakpoint.url).catch(done)
+                }
+              } else if (diagnostics.status === 'EMITTING') {
+                const expected = expectedPayloads.get(diagnostics.probeId)
+                expectedPayloads.delete(diagnostics.probeId)
+                assertObjectContains(event, expected)
+              }
+            })
+            endIfDone()
+          })
+
+          t.agent.addRemoteConfig(rcConfig1)
+          t.agent.addRemoteConfig(rcConfig2)
+
+          function endIfDone () {
+            if (expectedPayloads.size === 0) done()
+          }
+        })
+
+        it('should support not triggering any probes when all conditions are not met', function (done) {
+          let installed = 0
+          const rcConfig1 = t.generateRemoteConfig({ when: { json: { eq: [{ ref: 'foo' }, 'bar'] } } })
+          const rcConfig2 = t.generateRemoteConfig({ when: { json: { eq: [{ ref: 'foo' }, 'baz'] } } })
+
+          t.agent.on('debugger-diagnostics', ({ payload }) => {
+            payload.forEach((event) => {
+              const { diagnostics } = event.debugger
+              if (diagnostics.status === 'INSTALLED') {
+                if (++installed === 2) {
+                  t.axios.get(t.breakpoint.url).catch(done)
+                  setTimeout(done, 2000)
+                }
+              } else if (diagnostics.status === 'EMITTING') {
+                assert.fail('should not trigger any probes when all conditions are not met')
+              }
+            })
+          })
+
+          t.agent.addRemoteConfig(rcConfig1)
+          t.agent.addRemoteConfig(rcConfig2)
+        })
+
+        it('should support only triggering the probes whos conditions are met', function (done) {
+          let installed = 0
+          const rcConfig1 = t.generateRemoteConfig({ when: { json: { eq: [{ ref: 'foo' }, 'bar'] } } })
+          const rcConfig2 = t.generateRemoteConfig({
+            when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'bar'] } }
+          })
+          const rcConfig3 = t.generateRemoteConfig()
+          const expectedPayloads = new Map([
+            [rcConfig2.config.id, {
+              ddsource: 'dd_debugger',
+              service: 'node',
+              debugger: { diagnostics: { probeId: rcConfig2.config.id, probeVersion: 0, status: 'EMITTING' } }
+            }],
+            [rcConfig3.config.id, {
+              ddsource: 'dd_debugger',
+              service: 'node',
+              debugger: { diagnostics: { probeId: rcConfig3.config.id, probeVersion: 0, status: 'EMITTING' } }
+            }]
+          ])
+
+          t.agent.on('debugger-diagnostics', ({ payload }) => {
+            payload.forEach((event) => {
+              const { diagnostics } = event.debugger
+              if (diagnostics.status === 'INSTALLED') {
+                if (++installed === 3) {
+                  t.axios.get(t.breakpoint.url).catch(done)
+                }
+              } else if (diagnostics.status === 'EMITTING') {
+                const expected = expectedPayloads.get(diagnostics.probeId)
+                expectedPayloads.delete(diagnostics.probeId)
+                assertObjectContains(event, expected)
+              }
+            })
+            endIfDone()
+          })
+
+          t.agent.addRemoteConfig(rcConfig1)
+          t.agent.addRemoteConfig(rcConfig2)
+          t.agent.addRemoteConfig(rcConfig3)
+
+          function endIfDone () {
+            if (expectedPayloads.size === 0) done()
+          }
+        })
+      })
     })
 
     describe('input messages', function () {
@@ -318,7 +466,7 @@ describe('Dynamic Instrumentation', function () {
         })
 
         t.agent.on('debugger-input', ({ payload }) => {
-          payload.forEach(({ 'debugger.snapshot': { timestamp } }) => {
+          payload.forEach(({ debugger: { snapshot: { timestamp } } }) => {
             if (prev !== undefined) {
               const duration = timestamp - prev
               clearTimeout(timer)
@@ -364,8 +512,8 @@ describe('Dynamic Instrumentation', function () {
 
         t.agent.on('debugger-input', ({ payload }) => {
           payload.forEach((result) => {
-            const _state = state[result['debugger.snapshot'].probe.id]
-            const { timestamp } = result['debugger.snapshot']
+            const _state = state[result.debugger.snapshot.probe.id]
+            const { timestamp } = result.debugger.snapshot
             if (_state.prev !== undefined) {
               const duration = timestamp - _state.prev
               clearTimeout(_state.timer)
@@ -395,7 +543,7 @@ describe('Dynamic Instrumentation', function () {
       beforeEach(t.triggerBreakpoint)
 
       it('should trigger when condition is met', function (done) {
-        t.agent.on('debugger-input', (x) => {
+        t.agent.on('debugger-input', () => {
           done()
         })
 
@@ -423,7 +571,7 @@ describe('Dynamic Instrumentation', function () {
         }))
       })
 
-      it('should report error if condition is invalid', function (done) {
+      it('should report error if condition cannot be compiled', function (done) {
         t.agent.on('debugger-diagnostics', ({ payload }) => {
           payload.forEach(({ debugger: { diagnostics } }) => {
             if (diagnostics.status === 'ERROR') {
@@ -588,13 +736,15 @@ function assertBasicInputPayload (t, payload) {
       version,
       thread_name: 'MainThread'
     },
-    'debugger.snapshot': {
-      probe: {
-        id: t.rcConfig.config.id,
-        version: 0,
-        location: { file: t.breakpoint.deployedFile, lines: [String(t.breakpoint.line)] }
-      },
-      language: 'javascript'
+    debugger: {
+      snapshot: {
+        probe: {
+          id: t.rcConfig.config.id,
+          version: 0,
+          location: { file: t.breakpoint.deployedFile, lines: [String(t.breakpoint.line)] }
+        },
+        language: 'javascript'
+      }
     }
   }
 
@@ -602,14 +752,14 @@ function assertBasicInputPayload (t, payload) {
 
   assert.match(payload.logger.thread_id, /^pid:\d+$/)
 
-  assertUUID(payload['debugger.snapshot'].id)
-  assert.isNumber(payload['debugger.snapshot'].timestamp)
-  assert.isTrue(payload['debugger.snapshot'].timestamp > Date.now() - 1000 * 60)
-  assert.isTrue(payload['debugger.snapshot'].timestamp <= Date.now())
+  assertUUID(payload.debugger.snapshot.id)
+  assert.isNumber(payload.debugger.snapshot.timestamp)
+  assert.isTrue(payload.debugger.snapshot.timestamp > Date.now() - 1000 * 60)
+  assert.isTrue(payload.debugger.snapshot.timestamp <= Date.now())
 
-  assert.isArray(payload['debugger.snapshot'].stack)
-  assert.isAbove(payload['debugger.snapshot'].stack.length, 0)
-  for (const frame of payload['debugger.snapshot'].stack) {
+  assert.isArray(payload.debugger.snapshot.stack)
+  assert.isAbove(payload.debugger.snapshot.stack.length, 0)
+  for (const frame of payload.debugger.snapshot.stack) {
     assert.isObject(frame)
     assert.hasAllKeys(frame, ['fileName', 'function', 'lineNumber', 'columnNumber'])
     assert.isString(frame.fileName)
@@ -617,7 +767,7 @@ function assertBasicInputPayload (t, payload) {
     assert.isAbove(frame.lineNumber, 0)
     assert.isAbove(frame.columnNumber, 0)
   }
-  const topFrame = payload['debugger.snapshot'].stack[0]
+  const topFrame = payload.debugger.snapshot.stack[0]
   // path seems to be prefeixed with `/private` on Mac
   assert.match(topFrame.fileName, new RegExp(`${t.appFile}$`))
   assert.strictEqual(topFrame.function, 'fooHandler')

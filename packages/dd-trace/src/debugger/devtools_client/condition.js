@@ -33,9 +33,13 @@ const reservedWords = new Set([
   'NaN'
 ])
 
+const PRIMITIVE_TYPES = new Set(['string', 'number', 'bigint', 'boolean', 'undefined', 'symbol', 'null'])
+
 // TODO: Consider storing some of these functions on `process` so they can be reused across probes
 function compile (node) {
-  if (node === null || typeof node === 'number' || typeof node === 'boolean' || typeof node === 'string') {
+  if (node === null || typeof node === 'number' || typeof node === 'boolean') {
+    return node
+  } else if (typeof node === 'string') {
     return JSON.stringify(node)
   }
 
@@ -57,7 +61,11 @@ function compile (node) {
       }
     })()`
   } else if (type === 'instanceof') {
-    return `Function.prototype[Symbol.hasInstance].call(${value[1]}, ${compile(value[0])})`
+    if (isPrimitiveType(value[1])) {
+      return `(typeof ${compile(value[0])} === '${value[1]}')` // TODO: Is parenthesizing necessary?
+    } else {
+      return `Function.prototype[Symbol.hasInstance].call(${assertIdentifier(value[1])}, ${compile(value[0])})`
+    }
   } else if (type === 'ref') {
     if (value === '@it') {
       return '$dd_it'
@@ -149,6 +157,10 @@ function isString (variable) {
   return `(typeof ${variable} === 'string' || ${variable} instanceof String)`
 }
 
+function isPrimitiveType (type) {
+  return PRIMITIVE_TYPES.has(type)
+}
+
 function isIterableCollection (variable) {
   return `(${isArrayOrTypedArray(variable)} || ${isInstanceOfCoreType('Set', variable)} || ` +
     `${isInstanceOfCoreType('WeakSet', variable)})`
@@ -172,8 +184,12 @@ function getSize (variable) {
       return ${guardAgainstPropertyAccessSideEffects('val', '"length"')}
     } else if (${isInstanceOfCoreType('Set', 'val')} || ${isInstanceOfCoreType('Map', 'val')}) {
       return ${guardAgainstPropertyAccessSideEffects('val', '"size"')}
+    } else if (${isInstanceOfCoreType('WeakSet', 'val')} || ${isInstanceOfCoreType('WeakMap', 'val')}) {
+      throw new TypeError('Cannot get size of WeakSet or WeakMap')
+    } else if (typeof val === 'object' && val !== null) {
+      return Object.keys(val).length
     } else {
-      throw new TypeError('Cannot get length or size of string/collection')
+      throw new TypeError('Cannot get length of variable')
     }
   })(${variable})`
 }
@@ -210,6 +226,9 @@ function guardAgainstPropertyAccessSideEffects (variable, propertyName) {
 }
 
 function guardAgainstCoercionSideEffects (variable) {
+  // shortcut if we're comparing number literals
+  if (typeof variable === 'number') return variable
+
   return `((val) => {
     if (
       typeof val === 'object' && val !== null && (
