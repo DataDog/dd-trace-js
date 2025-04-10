@@ -544,8 +544,7 @@ describe('track_event - Internal API', () => {
               }
             }
           },
-          arr: [
-            {
+          arr: [{
               key: 'metavalue2'
             },
             'metavalue3'
@@ -768,8 +767,7 @@ describe('track_event - Internal API', () => {
               }
             }
           },
-          arr: [
-            {
+          arr: [{
               key: 'metavalue2'
             },
             'metavalue3'
