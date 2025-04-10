@@ -1,5 +1,6 @@
 'use strict'
 
+const { isTrue } = require('../../dd-trace/src/util')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 const coalesce = require('koalas')
 
@@ -12,9 +13,12 @@ class MongodbCorePlugin extends DatabasePlugin {
 
   configure (config) {
     super.configure(config)
+
+    const heartbeatFromEnv = process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED
+
     this.config.heartbeatEnabled = coalesce(
       config.heartbeatEnabled,
-      process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED,
+      heartbeatFromEnv && isTrue(heartbeatFromEnv),
       true
     )
   }
