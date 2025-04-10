@@ -39,7 +39,7 @@ function send (message, logger, dd, snapshot) {
     message,
     logger,
     dd,
-    'debugger.snapshot': snapshot
+    debugger: { snapshot }
   }
 
   let json = JSON.stringify(payload)
@@ -47,7 +47,7 @@ function send (message, logger, dd, snapshot) {
 
   if (size > MAX_LOG_PAYLOAD_SIZE) {
     // TODO: This is a very crude way to handle large payloads. Proper pruning will be implemented later (DEBUG-2624)
-    const line = Object.values(payload['debugger.snapshot'].captures.lines)[0]
+    const line = Object.values(payload.debugger.snapshot.captures.lines)[0]
     line.locals = {
       notCapturedReason: 'Snapshot was too large',
       size: Object.keys(line.locals).length

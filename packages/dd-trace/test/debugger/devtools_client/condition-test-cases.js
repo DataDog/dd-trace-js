@@ -195,12 +195,12 @@ const sizes = [
   [
     { len: { ref: 'wset' } },
     { wset: new WeakSet([weakKey]) },
-    new TypeError('Cannot get length or size of string/collection')
+    new TypeError('Cannot get size of WeakSet or WeakMap')
   ],
   [
     { len: { ref: 'wmap' } },
     { wmap: new WeakMap([[weakKey, 2]]) },
-    new TypeError('Cannot get length or size of string/collection')
+    new TypeError('Cannot get size of WeakSet or WeakMap')
   ],
   [{ len: { getmember: [{ ref: 'obj' }, 'arr'] } }, { obj: { arr: Array(10).fill(0) } }, 10],
   [{ len: { getmember: [{ ref: 'obj' }, 'tarr'] } }, { obj: { tarr: new Int16Array([10, 20, 30]) } }, 3],
@@ -209,10 +209,11 @@ const sizes = [
     { obj: { tarr: overloadPropertyWithGetter(new Int16Array([10, 20, 30]), 'length') } },
     new Error('Possibility of side effect')
   ],
+  [{ len: { ref: 'pojo' } }, { pojo: { a: 1, b: 2, c: 3 } }, 3],
   [
     { len: { getmember: [{ ref: 'obj' }, 'unknownProp'] } },
     { obj: {} },
-    new TypeError('Cannot get length or size of string/collection')
+    new TypeError('Cannot get length of variable')
   ],
   [{ len: { ref: 'invalid' } }, {}, new ReferenceError('invalid is not defined')],
 
@@ -237,7 +238,7 @@ const sizes = [
   [
     { isEmpty: { ref: 'obj' } },
     { obj: new WeakSet() },
-    new TypeError('Cannot get length or size of string/collection')
+    new TypeError('Cannot get size of WeakSet or WeakMap')
   ]
 ]
 
@@ -280,6 +281,7 @@ const equality = [
   [{ gt: [{ ref: 'str' }, 'a'] }, { str: 'a' }, false],
   [{ gt: [{ ref: 'str' }, 'b'] }, { str: 'a' }, false],
   [{ gt: [{ or: [2, 0] }, { and: [1, 1] }] }, {}, true],
+  { ast: { gt: [1, 2] }, expected: '1 > 2', execute: false },
   [
     { gt: [{ ref: 'obj' }, 5] },
     { obj: objectWithToPrimitiveSymbol },
@@ -328,6 +330,7 @@ const equality = [
   [{ ge: [{ ref: 'str' }, 'a'] }, { str: 'a' }, true],
   [{ ge: [{ ref: 'str' }, 'b'] }, { str: 'a' }, false],
   [{ ge: [{ or: [1, 0] }, { and: [1, 2] }] }, {}, false],
+  { ast: { ge: [1, 2] }, expected: '1 >= 2', execute: false },
   [
     { ge: [{ ref: 'obj' }, 5] },
     { obj: objectWithToPrimitiveSymbol },
@@ -351,6 +354,7 @@ const equality = [
   [{ lt: [{ ref: 'str' }, 'a'] }, { str: 'a' }, false],
   [{ lt: [{ ref: 'str' }, 'b'] }, { str: 'a' }, true],
   [{ lt: [{ or: [1, 0] }, { and: [1, 0] }] }, {}, false],
+  { ast: { lt: [1, 2] }, expected: '1 < 2', execute: false },
   [
     { lt: [{ ref: 'obj' }, 5] },
     { obj: objectWithToPrimitiveSymbol },
@@ -374,6 +378,7 @@ const equality = [
   [{ le: [{ ref: 'str' }, 'a'] }, { str: 'a' }, true],
   [{ le: [{ ref: 'str' }, 'b'] }, { str: 'a' }, true],
   [{ le: [{ or: [2, 0] }, { and: [1, 1] }] }, {}, false],
+  { ast: { le: [1, 2] }, expected: '1 <= 2', execute: false },
   [
     { le: [{ ref: 'obj' }, 5] },
     { obj: objectWithToPrimitiveSymbol },
@@ -621,14 +626,32 @@ const membershipAndMatching = [
 ]
 
 const typeAndDefinitionChecks = [
+  // Primitive types
+  [{ instanceof: [{ ref: 'foo' }, 'string'] }, { foo: 'foo' }, true],
+  [{ instanceof: [{ ref: 'foo' }, 'number'] }, { foo: 42 }, true],
+  [{ instanceof: [{ ref: 'foo' }, 'number'] }, { foo: '42' }, false],
+  [{ instanceof: [{ ref: 'foo' }, 'bigint'] }, { foo: 42n }, true],
+  [{ instanceof: [{ ref: 'foo' }, 'boolean'] }, { foo: false }, true],
+  [{ instanceof: [{ ref: 'foo' }, 'boolean'] }, { foo: 0 }, false],
+  [{ instanceof: [{ ref: 'foo' }, 'undefined'] }, { foo: undefined }, true],
+  [{ instanceof: [{ ref: 'foo' }, 'symbol'] }, { foo: Symbol('foo') }, true],
+  [{ instanceof: [{ ref: 'foo' }, 'null'] }, { foo: null }, false], // typeof null is 'object'
+
+  // Objects
   [{ instanceof: [{ ref: 'bar' }, 'Object'] }, { bar: {} }, true],
   [{ instanceof: [{ ref: 'bar' }, 'Error'] }, { bar: new Error() }, true],
+  [{ instanceof: [{ ref: 'bar' }, 'Error'] }, { bar: {} }, false],
   [{ instanceof: [{ ref: 'bar' }, 'CustomObject'] }, { bar: new CustomObject(), CustomObject }, true],
   [
     { instanceof: [{ ref: 'bar' }, 'HasInstanceSideEffect'] },
     { bar: new HasInstanceSideEffect(), HasInstanceSideEffect },
     true
   ],
+  {
+    ast: { instanceof: [{ ref: 'foo' }, 'foo.bar'] },
+    expected: new SyntaxError('Illegal identifier: foo.bar'),
+    execute: false
+  },
 
   [{ isDefined: { ref: 'foo' } }, { bar: 42 }, false],
   [{ isDefined: { ref: 'bar' } }, { bar: 42 }, true],
