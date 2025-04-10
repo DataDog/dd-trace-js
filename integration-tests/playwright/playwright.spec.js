@@ -42,7 +42,8 @@ const {
   TEST_NAME,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_IS_RUM_ACTIVE,
-  TEST_BROWSER_VERSION
+  TEST_BROWSER_VERSION,
+  TEST_RETRY_REASON_TYPES
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -330,7 +331,7 @@ versions.forEach((version) => {
               assert.equal(retriedTests.length, NUM_RETRIES_EFD)
 
               retriedTests.forEach(test => {
-                assert.propertyVal(test.meta, TEST_RETRY_REASON, 'efd')
+                assert.propertyVal(test.meta, TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
               })
 
               // all but one has been retried
@@ -659,12 +660,15 @@ versions.forEach((version) => {
             const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
             assert.equal(failedTests.length, 2)
 
-            const failedRetryTests = failedTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            const failedRetryTests = failedTests.filter(
+              test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+            )
             assert.equal(failedRetryTests.length, 1) // the first one is not a retry
 
             const passedTests = tests.filter(test => test.meta[TEST_STATUS] === 'pass')
             assert.equal(passedTests.length, 1)
             assert.equal(passedTests[0].meta[TEST_IS_RETRY], 'true')
+            assert.equal(passedTests[0].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
           }, 30000)
 
         childProcess = exec(
@@ -704,7 +708,9 @@ versions.forEach((version) => {
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
             assert.equal(tests.length, 1)
-            assert.equal(tests.filter((test) => test.meta[TEST_IS_RETRY]).length, 0)
+            assert.equal(tests.filter(
+              (test) => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+            ).length, 0)
           }, 30000)
 
         childProcess = exec(
@@ -749,7 +755,9 @@ versions.forEach((version) => {
             const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
             assert.equal(failedTests.length, 2)
 
-            const failedRetryTests = failedTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            const failedRetryTests = failedTests.filter(
+              test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+            )
             assert.equal(failedRetryTests.length, 1)
           }, 30000)
 
@@ -977,7 +985,7 @@ versions.forEach((version) => {
                 const countRetriedAttemptToFixTests = attemptedToFixTests.filter(test =>
                   test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true' &&
                   test.meta[TEST_IS_RETRY] === 'true' &&
-                  test.meta[TEST_RETRY_REASON] === 'attempt_to_fix'
+                  test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atf
                 ).length
 
                 const testsMarkedAsFailedAllRetries = attemptedToFixTests.filter(test =>
