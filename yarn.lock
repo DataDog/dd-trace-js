@@ -361,17 +361,17 @@
   resolved "https://registry.yarnpkg.com/@datadog/libdatadog/-/libdatadog-0.5.0.tgz#0ef2a2a76bb9505a0e7e5bc9be1415b467dbf368"
   integrity sha512-YvLUVOhYVjJssm0f22/RnDQMc7ZZt/w1bA0nty1vvjyaDz5EWaHfWaaV4GYpCt5MRvnGjCBxIwwbRivmGseKeQ==
 
-"@datadog/native-appsec@8.5.1":
-  version "8.5.1"
-  resolved "https://registry.yarnpkg.com/@datadog/native-appsec/-/native-appsec-8.5.1.tgz#000fb06b91949d74298288ace5da51873922cc03"
-  integrity sha512-g6cjIafeObxVV+zJ2U1TDWVBio+MC8/4QR0EmgZ9afvhgtXRXyth3/DUOBSLUoMvCbduHwl6CV9sBf+tbSksVg==
+"@datadog/native-appsec@8.5.2":
+  version "8.5.2"
+  resolved "https://registry.yarnpkg.com/@datadog/native-appsec/-/native-appsec-8.5.2.tgz#93a2c15c71c2a90e19e12506fbbdec9ccbc91541"
+  integrity sha512-lETBaVhBk+9o0pc+LDnXvp2ImDyT8K2deuqLf8A6q4/QjzCCXyR/yZO9R5+Kdoc93jZMRTWV9Pr4pBwHEdJSVA==
   dependencies:
     node-gyp-build "^3.9.0"
 
-"@datadog/native-iast-taint-tracking@3.3.0":
-  version "3.3.0"
-  resolved "https://registry.yarnpkg.com/@datadog/native-iast-taint-tracking/-/native-iast-taint-tracking-3.3.0.tgz#5a9c87e07376e7c5a4b4d4985f140a60388eee00"
-  integrity sha512-OzmjOncer199ATSYeCAwSACCRyQimo77LKadSHDUcxa/n9FYU+2U/bYQTYsK3vquSA2E47EbSVq9rytrlTdvnA==
+"@datadog/native-iast-taint-tracking@3.3.1":
+  version "3.3.1"
+  resolved "https://registry.yarnpkg.com/@datadog/native-iast-taint-tracking/-/native-iast-taint-tracking-3.3.1.tgz#71d2c9bdb102b4482fea145d3f22ed5453628500"
+  integrity sha512-TgXpoX/CDgPfYAKu9qLmEyb9UXvRVC00D71islcSb70MCFmxQwkgXGl/gAk6YA6/NmZ4j8+cgY1lSNqStGvOMg==
   dependencies:
     node-gyp-build "^3.9.0"
 
