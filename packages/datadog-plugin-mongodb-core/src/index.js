@@ -13,9 +13,12 @@ class MongodbCorePlugin extends DatabasePlugin {
 
   configure (config) {
     super.configure(config)
+
+    const heartbeatFromEnv = process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED
+
     this.config.heartbeatEnabled = coalesce(
       config.heartbeatEnabled,
-      isTrue(process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED),
+      heartbeatFromEnv && isTrue(heartbeatFromEnv),
       true
     )
   }
