@@ -1,6 +1,10 @@
 'use strict'
 
-module.exports = compile
+module.exports = {
+  compile,
+  compileSegments,
+  templateRequiresEvaluation
+}
 
 const identifierRegex = /^[@a-zA-Z_$][\w$]*$/
 
@@ -35,7 +39,37 @@ const reservedWords = new Set([
 
 const PRIMITIVE_TYPES = new Set(['string', 'number', 'bigint', 'boolean', 'undefined', 'symbol', 'null'])
 
-// TODO: Consider storing some of these functions on `process` so they can be reused across probes
+function templateRequiresEvaluation (segments) {
+  if (segments === undefined) return false // There should always be segments, but just in case
+  for (const { str } of segments) {
+    if (str === undefined) return true
+  }
+  return false
+}
+
+function compileSegments (segments) {
+  let result = '['
+  for (let i = 0; i < segments.length; i++) {
+    const { str, dsl, json } = segments[i]
+    result += str !== undefined
+      ? JSON.stringify(str)
+      : `(() => {
+          try {
+            const result = ${compile(json)}
+            return typeof result === 'string' ? result : $dd_inspect(result, $dd_segmentInspectOptions)
+          } catch (e) {
+            return { expr: ${JSON.stringify(dsl)}, message: \`\${e.name}: \${e.message}\` }
+          }
+        })()`
+    if (i !== segments.length - 1) {
+      result += ','
+    }
+  }
+  return `${result}]`
+}
+
+// TODO: Consider storing some of these functions that doesn't require closure access to the current scope on `process`
+// so they can be reused across probes
 function compile (node) {
   if (node === null || typeof node === 'number' || typeof node === 'boolean') {
     return node
