@@ -16,7 +16,7 @@ const { NODE_MAJOR } = require('../../../../../version')
 require('./remote_config')
 
 // Expression to run on a call frame of the paused thread to get its active trace and span id.
-const expressionSetupCode = `
+const templateExpressionSetupCode = `
   const $dd_inspect = global.require('node:util').inspect;
   const $dd_segmentInspectOptions = {
     depth: 0,
@@ -55,7 +55,7 @@ session.on('Debugger.paused', async ({ params }) => {
   let sampled = false
   let numberOfProbesWithSnapshots = 0
   const probes = []
-  const expressions = [getDDTagsExpression]
+  let templateExpressions = ''
 
   // V8 doesn't allow setting more than one breakpoint at a specific location, however, it's possible to set two
   // breakpoints just next to each other that will "snap" to the same logical location, which in turn will be hit at the
@@ -124,7 +124,7 @@ session.on('Debugger.paused', async ({ params }) => {
       probe.lastCaptureNs = start
 
       if (probe.templateRequiresEvaluation) {
-        expressions.push(probe.template)
+        templateExpressions += `,${probe.template}`
       }
 
       probes.push(probe)
@@ -140,10 +140,9 @@ session.on('Debugger.paused', async ({ params }) => {
   let evalResults = null
   const { result } = await session.post('Debugger.evaluateOnCallFrame', {
     callFrameId: params.callFrames[0].callFrameId,
-    expression: `
-      ${expressionSetupCode}
-      [${expressions.join(',')}]
-    `,
+    expression: templateExpressions.length === 0
+      ? `[${getDDTagsExpression}]`
+      : `${templateExpressionSetupCode}[${getDDTagsExpression}${templateExpressions}]`,
     returnByValue: true,
     includeCommandLineAPI: true
   })
