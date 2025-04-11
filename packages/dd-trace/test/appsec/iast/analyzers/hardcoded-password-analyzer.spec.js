@@ -104,6 +104,7 @@ describe('Hardcoded Password Analyzer', () => {
   describe('full feature', () => {
     const filename = 'hardcoded-password-functions'
     const functionsPath = path.join(os.tmpdir(), filename)
+    let rewriter
 
     before(() => {
       fs.copyFileSync(path.join(__dirname, 'resources', `${filename}.js`), functionsPath)
@@ -120,18 +121,22 @@ describe('Hardcoded Password Analyzer', () => {
 
       beforeEach(() => {
         const tracer = require('../../../../')
-        iast.enable(new Config({
+        const config = new Config({
           experimental: {
             iast: {
               enabled: true,
               requestSampling: 100
             }
           }
-        }), tracer)
+        })
+        iast.enable(config, tracer)
+        rewriter = require('../../../../src/appsec/iast/taint-tracking/rewriter')
+        rewriter.enable(config)
       })
 
       afterEach(() => {
         iast.disable()
+        rewriter.disable()
         vulnerabilityReporter.clearCache()
       })
 

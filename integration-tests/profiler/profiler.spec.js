@@ -286,6 +286,19 @@ describe('profiler', () => {
   let oomExecArgv
   const timeout = 30000
 
+  // Target sample count per span for the code hotspots test
+  const idealSamplesPerSpan = 10
+
+  // Intrinsic invariants for the code hotspots test
+  const expectedSpans = 9 // codehotspots.js creates 3x3 spans
+  const profilerSamplingFrequency = 99 // Hz
+
+  // Computed values for the code hotspots test. busyCycleTimeNs is adaptively adjusted by the test
+  // when it needs to be repeated.
+  const idealSampleCount = idealSamplesPerSpan * expectedSpans // we'd like 10 samples per span, ideally
+  let busyCycleTimeNs = 1000000000 * idealSamplesPerSpan / profilerSamplingFrequency
+  const maxBusyCycleTimeNs = (timeout - 1000) * 1000000 / expectedSpans
+
   before(async () => {
     sandbox = await createSandbox()
     cwd = sandbox.folder
@@ -300,13 +313,17 @@ describe('profiler', () => {
   })
 
   if (process.platform !== 'win32') {
-    it('code hotspots and endpoint tracing works', async () => {
+    it('code hotspots and endpoint tracing works', async function () {
+      // see comment on busyCycleTimeNs recomputation below. Ideally a single retry should be enough
+      // with recomputed busyCycleTimeNs, but let's give ourselves more leeway.
+      this.retries(9)
       const procStart = BigInt(Date.now() * 1000000)
       const proc = fork(path.join(cwd, 'profiler/codehotspots.js'), {
         cwd,
         env: {
           DD_PROFILING_EXPORTERS: 'file',
-          DD_PROFILING_ENABLED: 1
+          DD_PROFILING_ENABLED: 1,
+          BUSY_CYCLE_TIME: (busyCycleTimeNs | 0).toString()
         }
       })
 
@@ -319,6 +336,14 @@ describe('profiler', () => {
 
       const { profile, encoded } = await getLatestProfile(cwd, /^wall_.+\.pprof$/)
 
+      // Recompute in case we need to retry. It is possible that some of the assertions in the test
+      // will fail because we gathered a too small number of samples. This can happen if the machine
+      // is CPU-constrained so the V8 thread that triggers PROF signals gets CPU starved. If we need
+      // to retry, the busyCycleTime will be prolonged to have the next execution of codehotspots.js
+      // run for long enough in the current environment for the profiler to capture the ideal number
+      // of samples.
+      busyCycleTimeNs = Math.min(maxBusyCycleTimeNs, busyCycleTimeNs * idealSampleCount / profile.sample.length)
+
       // We check the profile for following invariants:
       // - every sample needs to have an 'end_timestamp_ns' label that has values (nanos since UNIX
       //   epoch) between process start and end.
@@ -326,9 +351,10 @@ describe('profiler', () => {
       //   'local root span id's
       // - samples with spans also must have a 'trace endpoint' label with values 'endpoint-0',
       //   'endpoint-1', or 'endpoint-2'
-      // - every occurrence of a span must have the same root span and endpoint
+      // - every occurrence of a span must have the same root span, endpoint, and asyncId
       const rootSpans = new Set()
       const endpoints = new Set()
+      const asyncIds = new Set()
       const spans = new Map()
       const strings = profile.stringTable
       const tsKey = strings.dedup('end_timestamp_ns')
@@ -338,11 +364,13 @@ describe('profiler', () => {
       const threadNameKey = strings.dedup('thread name')
       const threadIdKey = strings.dedup('thread id')
       const osThreadIdKey = strings.dedup('os thread id')
+      const asyncIdKey = strings.dedup('async id')
       const threadNameValue = strings.dedup('Main Event Loop')
       const nonJSThreadNameValue = strings.dedup('Non-JS threads')
 
+      const asyncIdWorks = require('semifies')(process.versions.node, '>=22.10.0')
       for (const sample of profile.sample) {
-        let ts, spanId, rootSpanId, endpoint, threadName, threadId, osThreadId
+        let ts, spanId, rootSpanId, endpoint, threadName, threadId, osThreadId, asyncId
         for (const label of sample.label) {
           switch (label.key) {
             case tsKey: ts = label.num; break
@@ -352,6 +380,12 @@ describe('profiler', () => {
             case threadNameKey: threadName = label.str; break
             case threadIdKey: threadId = label.str; break
             case osThreadIdKey: osThreadId = label.str; break
+            case asyncIdKey:
+              asyncId = label.num
+              if (asyncId === 0) {
+                asyncId = undefined
+              }
+              break
             default: assert.fail(`Unexpected label key ${strings.dedup(label.key)} ${encoded}`)
           }
         }
@@ -385,11 +419,27 @@ describe('profiler', () => {
             // 3 of them.
             continue
           }
-          const spanData = { rootSpanId, endpoint }
+          const spanData = { rootSpanId, endpoint, asyncId }
+          // Record async ID so we can verify we encountered 9 different values.
+          // Async ID can be sporadically missing if sampling hits an intrinsified
+          // function.
+          if (asyncId !== undefined) {
+            asyncIds.add(asyncId)
+          }
           const existingSpanData = spans.get(spanId)
           if (existingSpanData) {
-            // Span's root span and endpoint must be consistent across samples
-            assert.deepEqual(spanData, existingSpanData, encoded)
+            // Span's root span, endpoint, and async ID must be consistent
+            // across samples.
+            assert.equal(existingSpanData.rootSpanId, rootSpanId, encoded)
+            assert.equal(existingSpanData.endpoint, endpoint, encoded)
+            if (asyncIdWorks) {
+              // Account for asyncID sporadically missing
+              if (existingSpanData.asyncId === undefined) {
+                existingSpanData.asyncId = asyncId
+              } else if (asyncId !== undefined) {
+                assert.equal(existingSpanData.asyncId, asyncId, encoded)
+              }
+            }
           } else {
             // New span id, store span data
             spans.set(spanId, spanData)
@@ -407,9 +457,10 @@ describe('profiler', () => {
           }
         }
       }
-      // Need to have a total of 9 different spans, with 3 different root spans
-      // and 3 different endpoints.
+      // Need to have a total of 9 different spans, with 9 different async IDs,
+      // 3 different root spans, and 3 different endpoints.
       assert.equal(spans.size, 9, encoded)
+      assert.equal(asyncIds.size, asyncIdWorks ? 9 : 0, encoded)
       assert.equal(rootSpans.size, 3, encoded)
       assert.equal(endpoints.size, 3, encoded)
     })

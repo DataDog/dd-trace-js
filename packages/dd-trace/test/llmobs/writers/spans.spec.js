@@ -108,8 +108,8 @@ describe('LLMObsSpanWriter', () => {
 
     const payload = writer.makePayload(events)
 
-    expect(payload['_dd.stage']).to.equal('raw')
-    expect(payload.event_type).to.equal('span')
-    expect(payload.spans).to.deep.equal(events)
+    expect(payload[0]['_dd.stage']).to.equal('raw')
+    expect(payload[0].event_type).to.equal('span')
+    expect(payload[0].spans).to.deep.equal(events)
   })
 })

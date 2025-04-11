@@ -16,8 +16,6 @@ const perf = require('perf_hooks').performance
 const telemetryMetrics = require('../../telemetry/metrics')
 const profilersNamespace = telemetryMetrics.manager.namespace('profilers')
 
-const containerId = docker.id()
-
 const statusCodeCounters = []
 const requestCounter = profilersNamespace.count('profile_api.requests', [])
 const sizeDistribution = profilersNamespace.distribution('profile_api.bytes', [])
@@ -155,9 +153,7 @@ class AgentExporter extends EventSerializer {
           timeout: this._backoffTime * Math.pow(2, attempt)
         }
 
-        if (containerId) {
-          options.headers['Datadog-Container-ID'] = containerId
-        }
+        docker.inject(options.headers)
 
         if (this._url.protocol === 'unix:') {
           options.socketPath = this._url.pathname

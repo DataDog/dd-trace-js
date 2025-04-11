@@ -31,7 +31,10 @@ const {
   TEST_MODULE,
   TEST_SUITE,
   TEST_SUITE_ID,
-  TEST_NAME
+  TEST_NAME,
+  TEST_IS_RUM_ACTIVE,
+  TEST_BROWSER_VERSION,
+  TEST_RETRY_REASON_TYPES
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -147,6 +150,36 @@ class PlaywrightPlugin extends CiPlugin {
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
     })
 
+    this.addSub('ci:playwright:test:page-goto', ({
+      isRumActive,
+      page
+    }) => {
+      const store = storage('legacy').getStore()
+      const span = store && store.span
+      if (!span) return
+
+      if (isRumActive) {
+        span.setTag(TEST_IS_RUM_ACTIVE, 'true')
+
+        if (page) {
+          const browserVersion = page.context().browser().version()
+
+          if (browserVersion) {
+            span.setTag(TEST_BROWSER_VERSION, browserVersion)
+          }
+
+          const url = page.url()
+          const domain = new URL(url).hostname
+          page.context().addCookies([{
+            name: 'datadog-ci-visibility-test-execution-id',
+            value: span.context().toTraceId(),
+            domain,
+            path: '/'
+          }])
+        }
+      }
+    })
+
     this.addSub('ci:playwright:test:start', ({
       testName,
       testSuiteAbsolutePath,
@@ -234,11 +267,14 @@ class PlaywrightPlugin extends CiPlugin {
       isAttemptToFixRetry,
       hasFailedAllRetries,
       hasPassedAttemptToFixRetries,
+      isAtrRetry,
       onDone
     }) => {
       const store = storage('legacy').getStore()
       const span = store && store.span
       if (!span) return
+
+      const isRUMActive = span.context()._tags[TEST_IS_RUM_ACTIVE]
 
       span.setTag(TEST_STATUS, testStatus)
 
@@ -252,11 +288,16 @@ class PlaywrightPlugin extends CiPlugin {
         span.setTag(TEST_IS_NEW, 'true')
         if (isEfdRetry) {
           span.setTag(TEST_IS_RETRY, 'true')
-          span.setTag(TEST_RETRY_REASON, 'efd')
+          span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
         }
       }
       if (isRetry) {
         span.setTag(TEST_IS_RETRY, 'true')
+        if (isAtrRetry) {
+          span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atr)
+        } else {
+          span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.ext)
+        }
       }
       if (hasFailedAllRetries) {
         span.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
@@ -266,7 +307,7 @@ class PlaywrightPlugin extends CiPlugin {
       }
       if (isAttemptToFixRetry) {
         span.setTag(TEST_IS_RETRY, 'true')
-        span.setTag(TEST_RETRY_REASON, 'attempt_to_fix')
+        span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atf)
       }
       if (hasPassedAttemptToFixRetries) {
         span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
@@ -307,6 +348,7 @@ class PlaywrightPlugin extends CiPlugin {
         {
           hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS],
           isNew,
+          isRum: isRUMActive,
           browserDriver: 'playwright'
         }
       )

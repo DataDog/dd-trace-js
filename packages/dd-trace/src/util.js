@@ -13,13 +13,7 @@ function isFalse (str) {
 }
 
 function isError (value) {
-  if (value instanceof Error) {
-    return true
-  }
-  if (value && value.message) {
-    return true
-  }
-  return false
+  return Boolean(value?.message || value instanceof Error)
 }
 
 // Matches a glob pattern to a given subject string
