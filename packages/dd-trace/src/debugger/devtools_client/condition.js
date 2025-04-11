@@ -61,9 +61,8 @@ function compileSegments (segments) {
             return { expr: ${JSON.stringify(dsl)}, message: \`\${e.name}: \${e.message}\` }
           }
         })()`
-      if (i !== segments.length - 1) {
-        result += ','
-      }
+    if (i !== segments.length - 1) {
+      result += ','
     }
   }
   return `${result}]`
