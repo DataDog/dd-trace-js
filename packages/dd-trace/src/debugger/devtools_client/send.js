@@ -12,6 +12,7 @@ const { version } = require('../../../../../package.json')
 
 module.exports = send
 
+const MAX_MESSAGE_LENGTH = 8 * 1024 // 8KB
 const MAX_LOG_PAYLOAD_SIZE = 1024 * 1024 // 1MB
 
 const ddsource = 'dd_debugger'
@@ -36,7 +37,9 @@ function send (message, logger, dd, snapshot) {
     ddsource,
     hostname,
     service,
-    message,
+    message: message?.length > MAX_MESSAGE_LENGTH
+      ? message.slice(0, MAX_MESSAGE_LENGTH) + '…'
+      : message,
     logger,
     dd,
     debugger: { snapshot }
