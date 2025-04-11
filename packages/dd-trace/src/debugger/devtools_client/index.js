@@ -216,10 +216,11 @@ session.on('Debugger.paused', async ({ params }) => {
 
     let message = ''
     if (probe.templateRequiresEvaluation) {
-      if (evalResults.length === 0) {
+      const results = evalResults[messageIndex++]
+      if (results === undefined) {
         log.error('[debugger:devtools_client] No evaluation results for probe %s', probe.id)
       } else {
-        for (const result of evalResults[messageIndex++]) {
+        for (const result of results) {
           if (typeof result === 'string') {
             message += result
           } else {
