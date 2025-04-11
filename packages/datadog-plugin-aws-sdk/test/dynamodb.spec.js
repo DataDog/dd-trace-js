@@ -673,11 +673,9 @@ describe('Plugin', () => {
                                 id: { N: '2' },
                                 binary: { B: Buffer.from('Hello world 2') }
                               },
-                              AttributeUpdates: {
-                                someOtherField: {
-                                  Action: 'PUT',
-                                  Value: { S: 'new value' }
-                                }
+                              UpdateExpression: 'SET someOtherField = :newvalue',
+                              ExpressionAttributeValues: {
+                                ':newvalue': { S: 'new value' }
                               }
                             }
                           },
