@@ -188,8 +188,8 @@ session.on('Debugger.paused', async ({ params }) => {
   }
 
   const stack = getStackFromCallFrames(params.callFrames)
-  const dd = processDD(evalResults.shift()) // the first result is the dd tags, the rest are the probe template results
-  let messageIndex = 0
+  const dd = processDD(evalResults[0]) // the first result is the dd tags, the rest are the probe template results
+  let messageIndex = 1
 
   // TODO: Send multiple probes in one HTTP request as an array (DEBUG-2848)
   for (const probe of probes) {
