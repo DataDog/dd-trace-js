@@ -8,7 +8,7 @@ const DynamoDb = require('../src/services/dynamodb')
 const { generatePointerHash } = require('../src/util')
 
 /* eslint-disable no-console */
-async function resetLocalStackDynamo () {
+async function resetLocalStackDynamo() {
   try {
     await axios.post('http://localhost:4566/reset')
     console.log('LocalStack Dynamo reset successful')
@@ -287,42 +287,38 @@ describe('Plugin', () => {
             return (done) => {
               operation((err) => {
                 if (err) {
-                  return done(err)
+                  done(err)
+                  return
                 }
 
                 agent.use(traces => {
-                  try {
-                    const span = traces[0][0]
-                    const links = JSON.parse(span.meta?.['_dd.span_links'] || '[]')
-                    expect(links).to.have.lengthOf(expectedLength)
+                  const span = traces[0][0]
+                  const links = JSON.parse(span.meta?.['_dd.span_links'] || '[]')
 
-                    if (expectedHashes) {
-                      if (Array.isArray(expectedHashes)) {
-                        expectedHashes.forEach((hash, i) => {
-                          expect(links[i].attributes['ptr.hash']).to.equal(hash)
-                        })
-                      } else {
-                        expect(links[0].attributes).to.deep.equal({
-                          'ptr.kind': DYNAMODB_PTR_KIND,
-                          'ptr.dir': SPAN_POINTER_DIRECTION.DOWNSTREAM,
-                          'ptr.hash': expectedHashes,
-                          'link.kind': 'span-pointer'
-                        })
-                      }
+                  expect(links).to.have.lengthOf(expectedLength)
+
+                  if (expectedHashes) {
+                    if (Array.isArray(expectedHashes)) {
+                      expectedHashes.forEach((hash, i) => {
+                        expect(links[i].attributes['ptr.hash']).to.equal(hash)
+                      })
+                    } else {
+                      expect(links[0].attributes).to.deep.equal({
+                        'ptr.kind': DYNAMODB_PTR_KIND,
+                        'ptr.dir': SPAN_POINTER_DIRECTION.DOWNSTREAM,
+                        'ptr.hash': expectedHashes,
+                        'link.kind': 'span-pointer'
+                      })
                     }
-                    return done()
-                  } catch (error) {
-                    return done(error)
                   }
-                }).catch(error => {
-                  done(error)
-                })
+                  done()
+                }).catch(done)
               })
             }
           }
 
           describe('1-key table', () => {
-            it('should add span pointer for putItem when config is valid', () => {
+            it('should add span pointer for putItem when config is valid',
               testSpanPointers({
                 expectedHashes: '27f424c8202ab35efbf8b0b444b1928f',
                 operation: (callback) => {
@@ -337,9 +333,9 @@ describe('Plugin', () => {
                   }, callback)
                 }
               })
-            })
+            )
 
-            it('should not add links or error for putItem when config is invalid', () => {
+            it('should not add links or error for putItem when config is invalid',
               testSpanPointers({
                 operation: (callback) => {
                   process.env.DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS = '{"DifferentTable": ["test"]}'
@@ -352,9 +348,9 @@ describe('Plugin', () => {
                   }, callback)
                 }
               })
-            })
+            )
 
-            it('should not add links or error for putItem when config is missing', () => {
+            it('should not add links or error for putItem when config is missing',
               testSpanPointers({
                 operation: (callback) => {
                   process.env.DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS = null
@@ -367,9 +363,9 @@ describe('Plugin', () => {
                   }, callback)
                 }
               })
-            })
+            )
 
-            it('should add span pointer for updateItem', () => {
+            it('should add span pointer for updateItem',
               testSpanPointers({
                 expectedHashes: '27f424c8202ab35efbf8b0b444b1928f',
                 operation: (callback) => {
@@ -385,9 +381,9 @@ describe('Plugin', () => {
                   }, callback)
                 }
               })
-            })
+            )
 
-            it('should add span pointer for deleteItem', () => {
+            it('should add span pointer for deleteItem',
               testSpanPointers({
                 expectedHashes: '27f424c8202ab35efbf8b0b444b1928f',
                 operation: (callback) => {
@@ -397,14 +393,14 @@ describe('Plugin', () => {
                   }, callback)
                 }
               })
-            })
+            )
 
-            it('should add span pointers for transactWriteItems', () => {
+            it('should add span pointers for transactWriteItems', function () {
               // Skip for older versions that don't support transactWriteItems
               if (typeof dynamo.transactWriteItems !== 'function') {
-                return
+                return this.skip();
               }
-              testSpanPointers({
+              return testSpanPointers({
                 expectedHashes: [
                   '955ab85fc7d1d63fe4faf18696514f13',
                   '856c95a173d9952008a70283175041fc',
@@ -442,15 +438,15 @@ describe('Plugin', () => {
                     ]
                   }, callback)
                 }
-              })
+              })()
             })
 
-            it('should add span pointers for batchWriteItem', () => {
+            it('should add span pointers for batchWriteItem', function () {
               // Skip for older versions that don't support batchWriteItem
               if (typeof dynamo.batchWriteItem !== 'function') {
-                return
+                return this.skip();
               }
-              testSpanPointers({
+              return testSpanPointers({
                 expectedHashes: [
                   '955ab85fc7d1d63fe4faf18696514f13',
                   '9682c132f1900106a792f166d0619e0b'
@@ -479,12 +475,12 @@ describe('Plugin', () => {
                     }
                   }, callback)
                 }
-              })
+              })()
             })
           })
 
           describe('2-key table', () => {
-            it('should add span pointer for putItem when config is valid', () => {
+            it('should add span pointer for putItem when config is valid',
               testSpanPointers({
                 expectedHashes: 'cc32f0e49ee05d3f2820ccc999bfe306',
                 operation: (callback) => {
@@ -498,9 +494,9 @@ describe('Plugin', () => {
                   }, callback)
                 }
               })
-            })
+            )
 
-            it('should not add links or error for putItem when config is invalid', () => {
+            it('should not add links or error for putItem when config is invalid',
               testSpanPointers({
                 operation: (callback) => {
                   process.env.DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS = '{"DifferentTable": ["test"]}'
@@ -513,9 +509,9 @@ describe('Plugin', () => {
                   }, callback)
                 }
               })
-            })
+            )
 
-            it('should not add links or error for putItem when config is missing', () => {
+            it('should not add links or error for putItem when config is missing',
               testSpanPointers({
                 operation: (callback) => {
                   process.env.DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS = null
@@ -528,7 +524,7 @@ describe('Plugin', () => {
                   }, callback)
                 }
               })
-            })
+            )
 
             it('should add span pointer for updateItem', function (done) {
               dynamo.putItem({
@@ -588,12 +584,12 @@ describe('Plugin', () => {
               })
             })
 
-            it('should add span pointers for transactWriteItems', () => {
+            it('should add span pointers for transactWriteItems', function () {
               // Skip for older versions that don't support transactWriteItems
               if (typeof dynamo.transactWriteItems !== 'function') {
-                return
+                return this.skip();
               }
-              testSpanPointers({
+              return testSpanPointers({
                 expectedHashes: [
                   'dd071963cd90e4b3088043f0b9a9f53c',
                   '7794824f72d673ac7844353bc3ea25d9',
@@ -639,15 +635,15 @@ describe('Plugin', () => {
                     ]
                   }, callback)
                 }
-              })
+              })()
             })
 
-            it('should add span pointers for batchWriteItem', () => {
+            it('should add span pointers for batchWriteItem', function () {
               // Skip for older versions that don't support batchWriteItem
               if (typeof dynamo.batchWriteItem !== 'function') {
-                return
+                return this.skip();
               }
-              testSpanPointers({
+              return testSpanPointers({
                 expectedHashes: [
                   '1f64650acbe1ae4d8413049c6bd9bbe8',
                   '8a6f801cc4e7d1d5e0dd37e0904e6316'
@@ -677,7 +673,7 @@ describe('Plugin', () => {
                     }
                   }, callback)
                 }
-              })
+              })()
             })
           })
         })
