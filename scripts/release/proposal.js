@@ -67,7 +67,8 @@ try {
   start('Determine version increment')
 
   const { DD_MAJOR, DD_MINOR, DD_PATCH } = require('../../version')
-  const lineDiff = capture(`${diffCmd} --markdown=true v${releaseLine}.x master`)
+  const main = 'master'
+  const lineDiff = capture(`${diffCmd} --markdown=true v${releaseLine}.x ${main}`)
   const isMinor = flags.minor || (!flags.patch && lineDiff.includes('SEMVER-MINOR'))
   const newVersion = isMinor
     ? `${releaseLine}.${DD_MINOR + 1}.0`
@@ -80,7 +81,7 @@ try {
   start('Checkout release proposal branch')
 
   // Checkout new or existing branch.
-  run(`git checkout --quiet v${newVersion}-proposal &> /dev/null || git checkout --quiet -b v${newVersion}-proposal`)
+  run(`git checkout --quiet v${newVersion}-proposal || git checkout --quiet -b v${newVersion}-proposal`)
 
   try {
     // Pull latest changes in case the release was started by someone else.
@@ -97,12 +98,12 @@ try {
 
   // Get the hashes of the last version and the commits to add.
   const lastCommit = capture('git log -1 --pretty=%B')
-  const proposalDiff = capture(`${diffCmd} --format=sha --reverse v${newVersion}-proposal master`)
+  const proposalDiff = capture(`${diffCmd} --format=sha --reverse v${newVersion}-proposal ${main}`)
     .replace(/\n/g, ' ').trim()
 
   if (proposalDiff) {
     // Get new changes since last commit of the proposal branch.
-    const newChanges = capture(`${diffCmd} v${newVersion}-proposal master`)
+    const newChanges = capture(`${diffCmd} v${newVersion}-proposal ${main}`)
 
     pass(`\n${newChanges}`)
 

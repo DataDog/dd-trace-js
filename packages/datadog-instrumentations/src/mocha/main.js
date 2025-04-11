@@ -417,7 +417,7 @@ addHook({
 
     this.on('test end', getOnTestEndHandler(config))
 
-    this.on('retry', getOnTestRetryHandler())
+    this.on('retry', getOnTestRetryHandler(config))
 
     // If the hook passes, 'hook end' will be emitted. Otherwise, 'fail' will be emitted
     this.on('hook end', getOnHookEndHandler())

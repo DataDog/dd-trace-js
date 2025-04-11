@@ -356,37 +356,37 @@
   resolved "https://registry.yarnpkg.com/@colors/colors/-/colors-1.5.0.tgz#bb504579c1cae923e6576a4f5da43d25f97bdbd9"
   integrity sha512-ooWCrlZP11i8GImSjTHYHLkvFDP48nS4+204nGb1RiX/WXYHmJA2III9/e2DWVabCESdW7hBAEzHRqUn9OUVvQ==
 
-"@datadog/libdatadog@^0.5.0":
-  version "0.5.0"
-  resolved "https://registry.yarnpkg.com/@datadog/libdatadog/-/libdatadog-0.5.0.tgz#0ef2a2a76bb9505a0e7e5bc9be1415b467dbf368"
-  integrity sha512-YvLUVOhYVjJssm0f22/RnDQMc7ZZt/w1bA0nty1vvjyaDz5EWaHfWaaV4GYpCt5MRvnGjCBxIwwbRivmGseKeQ==
+"@datadog/libdatadog@^0.5.1":
+  version "0.5.1"
+  resolved "https://registry.yarnpkg.com/@datadog/libdatadog/-/libdatadog-0.5.1.tgz#fe5c101c457998b74cb66f555f63197b34cad4ba"
+  integrity sha512-KsdOxTUmtjoygaZInSS5U0+KnqoxPKGpcBjGgOHR9NDKfXzmbpy5AmoaPL7JxmMxQzwknpxSi7qzBOSB3yMoJg==
 
-"@datadog/native-appsec@8.5.1":
-  version "8.5.1"
-  resolved "https://registry.yarnpkg.com/@datadog/native-appsec/-/native-appsec-8.5.1.tgz#000fb06b91949d74298288ace5da51873922cc03"
-  integrity sha512-g6cjIafeObxVV+zJ2U1TDWVBio+MC8/4QR0EmgZ9afvhgtXRXyth3/DUOBSLUoMvCbduHwl6CV9sBf+tbSksVg==
+"@datadog/native-appsec@8.5.2":
+  version "8.5.2"
+  resolved "https://registry.yarnpkg.com/@datadog/native-appsec/-/native-appsec-8.5.2.tgz#93a2c15c71c2a90e19e12506fbbdec9ccbc91541"
+  integrity sha512-lETBaVhBk+9o0pc+LDnXvp2ImDyT8K2deuqLf8A6q4/QjzCCXyR/yZO9R5+Kdoc93jZMRTWV9Pr4pBwHEdJSVA==
   dependencies:
     node-gyp-build "^3.9.0"
 
-"@datadog/native-iast-taint-tracking@3.3.0":
-  version "3.3.0"
-  resolved "https://registry.yarnpkg.com/@datadog/native-iast-taint-tracking/-/native-iast-taint-tracking-3.3.0.tgz#5a9c87e07376e7c5a4b4d4985f140a60388eee00"
-  integrity sha512-OzmjOncer199ATSYeCAwSACCRyQimo77LKadSHDUcxa/n9FYU+2U/bYQTYsK3vquSA2E47EbSVq9rytrlTdvnA==
+"@datadog/native-iast-taint-tracking@3.3.1":
+  version "3.3.1"
+  resolved "https://registry.yarnpkg.com/@datadog/native-iast-taint-tracking/-/native-iast-taint-tracking-3.3.1.tgz#71d2c9bdb102b4482fea145d3f22ed5453628500"
+  integrity sha512-TgXpoX/CDgPfYAKu9qLmEyb9UXvRVC00D71islcSb70MCFmxQwkgXGl/gAk6YA6/NmZ4j8+cgY1lSNqStGvOMg==
   dependencies:
     node-gyp-build "^3.9.0"
 
-"@datadog/native-metrics@^3.1.0":
-  version "3.1.0"
-  resolved "https://registry.yarnpkg.com/@datadog/native-metrics/-/native-metrics-3.1.0.tgz#c2378841accd9fdd6866d0e49bdf6e3d76e79f22"
-  integrity sha512-yOBi4x0OQRaGNPZ2bx9TGvDIgEdQ8fkudLTFAe7gEM1nAlvFmbE5YfpH8WenEtTSEBwojSau06m2q7axtEEmCg==
+"@datadog/native-metrics@^3.1.1":
+  version "3.1.1"
+  resolved "https://registry.yarnpkg.com/@datadog/native-metrics/-/native-metrics-3.1.1.tgz#4e5c9775751af13e353e64e573ab724104538cee"
+  integrity sha512-MU1gHrolwryrU4X9g+fylA1KPH3S46oqJPEtVyrO+3Kh29z80fegmtyrU22bNt8LigPUK/EdPCnSbMe88QbnxQ==
   dependencies:
     node-addon-api "^6.1.0"
     node-gyp-build "^3.9.0"
 
-"@datadog/pprof@5.6.0":
-  version "5.6.0"
-  resolved "https://registry.yarnpkg.com/@datadog/pprof/-/pprof-5.6.0.tgz#b6f5c566512ba5e55c6dbf46e9f0f020cfd5c6b5"
-  integrity sha512-x7yN0s4wMnRqv3PWQ6eXKH5XE5qvCOwWbOsXqpT2Irbsc7Wcl5w5JrJUcbPCdSJGihpIh6kAeIrS6w/ZCcHy2Q==
+"@datadog/pprof@5.7.1":
+  version "5.7.1"
+  resolved "https://registry.yarnpkg.com/@datadog/pprof/-/pprof-5.7.1.tgz#3ed62372af7331c37de401319bde9e3d4dc5a8c0"
+  integrity sha512-D5XTxsaPG36x41vZZn8hsAeC7QQDx0rv1a1Uhxo5xCXUB/9rc19+I7iCnjgJS5aH0ShXdPVOWRClo16hOSKKSw==
   dependencies:
     delay "^5.0.0"
     node-gyp-build "<4.0"
@@ -399,12 +399,14 @@
   resolved "https://registry.yarnpkg.com/@datadog/sketches-js/-/sketches-js-2.1.1.tgz#9ec2251b3c932b4f43e1d164461fa6cb6f28b7d0"
   integrity sha512-d5RjycE+MObE/hU+8OM5Zp4VjTwiPLRa8299fj7muOmR16fb942z8byoMbCErnGh0lBevvgkGrLclQDvINbIyg==
 
-"@datadog/wasm-js-rewriter@3.1.0":
-  version "3.1.0"
-  resolved "https://registry.yarnpkg.com/@datadog/wasm-js-rewriter/-/wasm-js-rewriter-3.1.0.tgz#88662cc997417bcda09bd8940c1c8235f4de3726"
-  integrity sha512-OE3QUGTriE3vhVxGRt2Df0Uk0xCd0OjqXb5Tjs9TdIvJu6VxYstxszdfyVK2+VHub5vGYY0ErJ4vkSB8z+3KPg==
+"@datadog/wasm-js-rewriter@4.0.0":
+  version "4.0.0"
+  resolved "https://registry.yarnpkg.com/@datadog/wasm-js-rewriter/-/wasm-js-rewriter-4.0.0.tgz#46963ffa39365f4bc0aff6114bba6545635f9c69"
+  integrity sha512-atw1uocrNlG3Fi7usLG5irTpasoz519YTZUyAxp7ZCppDNA+iLHpK1NksV9E2uCGMzF6dGifGmDaui0nK12nYg==
   dependencies:
+    js-yaml "^4.1.0"
     lru-cache "^7.14.0"
+    module-details-from-path "^1.0.3"
     node-gyp-build "^4.5.0"
 
 "@esbuild/aix-ppc64@0.25.1":
@@ -1083,11 +1085,6 @@ append-transform@^2.0.0:
   integrity sha512-7yeyCEurROLQJFv5Xj4lEGTy0borxepjFv1g22oAdqFu//SrAlDl1O1Nxx15SH1RoliUml6p8dwJW9jvZughhg==
   dependencies:
     default-require-extensions "^3.0.0"
-
-application-config-path@^0.1.1:
-  version "0.1.1"
-  resolved "https://registry.yarnpkg.com/application-config-path/-/application-config-path-0.1.1.tgz#8b5ac64ff6afdd9bd70ce69f6f64b6998f5f756e"
-  integrity sha512-zy9cHePtMP0YhwG+CfHm0bgwdnga2X3gZexpdCwEj//dpb+TKajtiC8REEUJUSq6Ab4f9cgNy2l8ObXzCXFkEw==
 
 archy@^1.0.0:
   version "1.0.0"
@@ -1788,10 +1785,10 @@ data-view-byte-offset@^1.0.1:
     es-errors "^1.3.0"
     is-data-view "^1.0.1"
 
-dc-polyfill@0.1.6:
-  version "0.1.6"
-  resolved "https://registry.yarnpkg.com/dc-polyfill/-/dc-polyfill-0.1.6.tgz#c2940fa68ffb24a7bf127cc6cfdd15b39f0e7f02"
-  integrity sha512-UV33cugmCC49a5uWAApM+6Ev9ZdvIUMTrtCO9fj96TPGOQiea54oeO3tiEVdVeo3J9N2UdJEmbS4zOkkEA35uQ==
+dc-polyfill@0.1.8:
+  version "0.1.8"
+  resolved "https://registry.yarnpkg.com/dc-polyfill/-/dc-polyfill-0.1.8.tgz#2d91dd4dd0f2e3575ce038d013f346161f5a413a"
+  integrity sha512-F9+06papa9GOFUMjxGiqM1bS98pOkinZpBF3Sygb46owrXaHdR2uLkftE6nygrqNcAurdwKjLAtX+0GJkSwIFQ==
 
 debug@2.6.9:
   version "2.6.9"

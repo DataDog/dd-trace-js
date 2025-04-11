@@ -2,6 +2,7 @@
 
 const { useEnv } = require('../../../integration-tests/helpers')
 const agent = require('../../dd-trace/test/plugins/agent')
+const iastFilter = require('../../dd-trace/src/appsec/iast/taint-tracking/filter')
 
 const nock = require('nock')
 const semver = require('semver')
@@ -15,6 +16,8 @@ function stubCall ({ base = '', path = '', code = 200, response = {} }) {
 const openAiBaseCompletionInfo = { base: 'https://api.openai.com', path: '/v1/completions' }
 const openAiBaseChatInfo = { base: 'https://api.openai.com', path: '/v1/chat/completions' }
 const openAiBaseEmbeddingInfo = { base: 'https://api.openai.com', path: '/v1/embeddings' }
+
+const isDdTrace = iastFilter.isDdTrace
 
 describe('Plugin', () => {
   let langchainOpenai
@@ -45,10 +48,18 @@ describe('Plugin', () => {
   describe('langchain', () => {
     withVersions('langchain', ['@langchain/core'], version => {
       before(() => {
+        iastFilter.isDdTrace = file => {
+          if (file.includes('dd-trace-js/versions/')) {
+            return false
+          }
+          return isDdTrace(file)
+        }
         return agent.load('langchain')
       })
 
       after(() => {
+        iastFilter.isDdTrace = isDdTrace
+        // wiping in order to read new env vars for the config each time
         return agent.close({ ritmReset: false })
       })
 

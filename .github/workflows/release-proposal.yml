@@ -24,7 +24,7 @@ jobs:
   create-proposal:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       pull-requests: write
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -33,9 +33,11 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/node
-      - run: npm i -g @bengl/branch-diff
+      - run: npm i -g branch-diff
       - run: |
           mkdir -p ~/.config/changelog-maker
           echo "{\"token\":\"${{secrets.GITHUB_TOKEN}}\",\"user\":\"${{github.actor}}\"}" > ~/.config/changelog-maker/config.json
+          git config user.name ${{ github.actor }}
+          git config user.email ${{ github.actor }}@users.noreply.github.com
       - run: node scripts/release/proposal 5 -y --{{ inputs.increment }}
         if: inputs.release-line == 'all' || inputs.release-line == '5'
