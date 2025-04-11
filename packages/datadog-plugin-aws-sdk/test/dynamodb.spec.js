@@ -8,7 +8,7 @@ const DynamoDb = require('../src/services/dynamodb')
 const { generatePointerHash } = require('../src/util')
 
 /* eslint-disable no-console */
-async function resetLocalStackDynamo() {
+async function resetLocalStackDynamo () {
   try {
     await axios.post('http://localhost:4566/reset')
     console.log('LocalStack Dynamo reset successful')
@@ -318,7 +318,7 @@ describe('Plugin', () => {
           }
 
           // Sets up a test with specific DynamoDB primary keys
-          async function setupTest(primaryKeysJSON) {
+          async function setupTest (primaryKeysJSON) {
             await agent.close({ ritmReset: false, wipe: true })
 
             if (primaryKeysJSON) {
@@ -331,9 +331,9 @@ describe('Plugin', () => {
             AWS = require(`../../../versions/${dynamoClientName}@${version}`).get()
             dynamo = new AWS.DynamoDB({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' })
           }
-          
+
           describe('1-key table', () => {
-            it('should add span pointer for putItem when config is valid', function(done) {
+            it('should add span pointer for putItem when config is valid', function (done) {
               setupTest('{"OneKeyTable": ["name"]}')
                 .then(() => {
                   testSpanPointers({
@@ -352,7 +352,7 @@ describe('Plugin', () => {
                 .catch(done)
             })
 
-            it('should not add links or error for putItem when config is invalid', function(done) {
+            it('should not add links or error for putItem when config is invalid', function (done) {
               setupTest('{"DifferentTable": ["test"]}')
                 .then(() => {
                   testSpanPointers({
@@ -370,7 +370,7 @@ describe('Plugin', () => {
                 .catch(done)
             })
 
-            it('should not add links or error for putItem when config is missing', function(done) {
+            it('should not add links or error for putItem when config is missing', function (done) {
               setupTest(null)
                 .then(() => {
                   testSpanPointers({
@@ -388,7 +388,7 @@ describe('Plugin', () => {
                 .catch(done)
             })
 
-            it('should add span pointer for updateItem', function(done) {
+            it('should add span pointer for updateItem', function (done) {
               setupTest('{"OneKeyTable": ["name"]}')
                 .then(() => {
                   testSpanPointers({
@@ -410,7 +410,7 @@ describe('Plugin', () => {
                 .catch(done)
             })
 
-            it('should add span pointer for deleteItem', function(done) {
+            it('should add span pointer for deleteItem', function (done) {
               setupTest('{"OneKeyTable": ["name"]}')
                 .then(() => {
                   testSpanPointers({
@@ -429,9 +429,9 @@ describe('Plugin', () => {
             it('should add span pointers for transactWriteItems', function (done) {
               // Skip for older versions that don't support transactWriteItems
               if (typeof dynamo.transactWriteItems !== 'function') {
-                return this.skip();
+                return this.skip()
               }
-              
+
               setupTest('{"OneKeyTable": ["name"]}')
                 .then(() => {
                   testSpanPointers({
@@ -479,9 +479,9 @@ describe('Plugin', () => {
             it('should add span pointers for batchWriteItem', function (done) {
               // Skip for older versions that don't support batchWriteItem
               if (typeof dynamo.batchWriteItem !== 'function') {
-                return this.skip();
+                return this.skip()
               }
-              
+
               setupTest('{"OneKeyTable": ["name"]}')
                 .then(() => {
                   testSpanPointers({
@@ -519,7 +519,7 @@ describe('Plugin', () => {
           })
 
           describe('2-key table', () => {
-            it('should add span pointer for putItem when config is valid', function(done) {
+            it('should add span pointer for putItem when config is valid', function (done) {
               setupTest('{"TwoKeyTable": ["id", "binary"]}')
                 .then(() => {
                   testSpanPointers({
@@ -538,7 +538,7 @@ describe('Plugin', () => {
                 .catch(done)
             })
 
-            it('should not add links or error for putItem when config is invalid', function(done) {
+            it('should not add links or error for putItem when config is invalid', function (done) {
               setupTest('{"DifferentTable": ["test"]}')
                 .then(() => {
                   testSpanPointers({
@@ -556,7 +556,7 @@ describe('Plugin', () => {
                 .catch(done)
             })
 
-            it('should not add links or error for putItem when config is missing', function(done) {
+            it('should not add links or error for putItem when config is missing', function (done) {
               setupTest(null)
                 .then(() => {
                   testSpanPointers({
@@ -643,9 +643,9 @@ describe('Plugin', () => {
             it('should add span pointers for transactWriteItems', function (done) {
               // Skip for older versions that don't support transactWriteItems
               if (typeof dynamo.transactWriteItems !== 'function') {
-                return this.skip();
+                return this.skip()
               }
-              
+
               setupTest('{"TwoKeyTable": ["id", "binary"]}')
                 .then(() => {
                   testSpanPointers({
@@ -699,9 +699,9 @@ describe('Plugin', () => {
             it('should add span pointers for batchWriteItem', function (done) {
               // Skip for older versions that don't support batchWriteItem
               if (typeof dynamo.batchWriteItem !== 'function') {
-                return this.skip();
+                return this.skip()
               }
-              
+
               setupTest('{"TwoKeyTable": ["id", "binary"]}')
                 .then(() => {
                   testSpanPointers({
