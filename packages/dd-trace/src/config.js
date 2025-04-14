@@ -825,7 +825,11 @@ class Config {
     this._setValue(env, 'baggageMaxBytes', DD_TRACE_BAGGAGE_MAX_BYTES)
     this._setValue(env, 'baggageMaxItems', DD_TRACE_BAGGAGE_MAX_ITEMS)
     this._setBoolean(env, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
-    this._setString(env, 'clientIpHeader', DD_TRACE_CLIENT_IP_HEADER.toLowerCase())
+    this._setString(env, 'clientIpHeader',
+      DD_TRACE_CLIENT_IP_HEADER
+        ? DD_TRACE_CLIENT_IP_HEADER.toLowerCase()
+        : undefined
+    )
     this._setBoolean(env, 'crashtracking.enabled', coalesce(
       DD_CRASHTRACKING_ENABLED,
       !this._isInServerlessEnvironment()
@@ -1032,7 +1036,7 @@ class Config {
     this._setValue(opts, 'appsec.wafTimeout', maybeInt(options.appsec.wafTimeout))
     this._optsUnprocessed['appsec.wafTimeout'] = options.appsec.wafTimeout
     this._setBoolean(opts, 'clientIpEnabled', options.clientIpEnabled)
-    this._setString(opts, 'clientIpHeader', options.clientIpHeader.toLowerCase())
+    this._setString(opts, 'clientIpHeader', options.clientIpHeader ? options.clientIpHeader.toLowerCase() : undefined)
     this._setValue(opts, 'baggageMaxBytes', options.baggageMaxBytes)
     this._setValue(opts, 'baggageMaxItems', options.baggageMaxItems)
     this._setBoolean(opts, 'codeOriginForSpans.enabled', options.codeOriginForSpans?.enabled)
