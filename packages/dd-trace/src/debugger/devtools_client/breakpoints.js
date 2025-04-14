@@ -48,6 +48,10 @@ async function addBreakpoint (probe) {
   const { url, scriptId, sourceMapURL, source } = script
 
   if (sourceMapURL) {
+    log.debug(
+      '[debugger:devtools_client] Translating location using source map for %s:%d:%d (probe: %s, version: %d)',
+      file, lineNumber, columnNumber, probe.id, probe.version
+    );
     ({ line: lineNumber, column: columnNumber } = await getGeneratedPosition(url, source, lineNumber, sourceMapURL))
   }
 
