@@ -315,13 +315,27 @@ describe('Plugin', () => {
             await Promise.all([agentPromise, operation()])
           }
 
+          function promisify (fn) {
+            return function (...args) {
+              const boundFn = typeof fn === 'function' ? fn.bind(dynamo) : fn
+
+              // For AWS SDK v3, it's already promise-based
+              if (moduleName === '@aws-sdk/smithy-client') {
+                return boundFn(...args)
+              }
+
+              // For AWS SDK v2, we need to promisify the function
+              return util.promisify(boundFn)(...args)
+            }
+          }
+
           describe('1-key table', () => {
             it('should add span pointer for putItem when config is valid', () => {
               return testSpanPointers({
                 env: '{"OneKeyTable": ["name"]}',
                 expectedHashes: '27f424c8202ab35efbf8b0b444b1928f',
                 operation () {
-                  return util.promisify(dynamo.putItem).bind(dynamo)({
+                  return promisify(dynamo.putItem)({
                     TableName: oneKeyTableName,
                     Item: {
                       name: { S: 'test1' },
@@ -336,7 +350,7 @@ describe('Plugin', () => {
               return testSpanPointers({
                 env: '{"DifferentTable": ["test"]}',
                 operation () {
-                  return util.promisify(dynamo.putItem).bind(dynamo)({
+                  return promisify(dynamo.putItem)({
                     TableName: oneKeyTableName,
                     Item: {
                       name: { S: 'test2' },
@@ -351,7 +365,7 @@ describe('Plugin', () => {
               return testSpanPointers({
                 env: null,
                 operation () {
-                  return util.promisify(dynamo.putItem).bind(dynamo)({
+                  return promisify(dynamo.putItem)({
                     TableName: oneKeyTableName,
                     Item: {
                       name: { S: 'test3' },
@@ -366,7 +380,7 @@ describe('Plugin', () => {
               return testSpanPointers({
                 expectedHashes: '27f424c8202ab35efbf8b0b444b1928f',
                 operation () {
-                  return util.promisify(dynamo.updateItem).bind(dynamo)({
+                  return promisify(dynamo.updateItem)({
                     TableName: oneKeyTableName,
                     Key: { name: { S: 'test1' } },
                     AttributeUpdates: {
@@ -384,7 +398,7 @@ describe('Plugin', () => {
               return testSpanPointers({
                 expectedHashes: '27f424c8202ab35efbf8b0b444b1928f',
                 operation () {
-                  return util.promisify(dynamo.deleteItem).bind(dynamo)({
+                  return promisify(dynamo.deleteItem)({
                     TableName: oneKeyTableName,
                     Key: { name: { S: 'test1' } }
                   })
@@ -406,7 +420,7 @@ describe('Plugin', () => {
                   '9682c132f1900106a792f166d0619e0b'
                 ],
                 operation () {
-                  return util.promisify(dynamo.transactWriteItems).bind(dynamo)({
+                  return promisify(dynamo.transactWriteItems)({
                     TransactItems: [
                       {
                         Put: {
@@ -452,7 +466,7 @@ describe('Plugin', () => {
                   '9682c132f1900106a792f166d0619e0b'
                 ],
                 operation () {
-                  return util.promisify(dynamo.batchWriteItem).bind(dynamo)({
+                  return promisify(dynamo.batchWriteItem)({
                     RequestItems: {
                       [oneKeyTableName]: [
                         {
@@ -484,7 +498,7 @@ describe('Plugin', () => {
                 env: '{"TwoKeyTable": ["id", "binary"]}',
                 expectedHashes: 'cc32f0e49ee05d3f2820ccc999bfe306',
                 operation () {
-                  return util.promisify(dynamo.putItem).bind(dynamo)({
+                  return promisify(dynamo.putItem)({
                     TableName: twoKeyTableName,
                     Item: {
                       id: { N: '1' },
@@ -499,7 +513,7 @@ describe('Plugin', () => {
               return testSpanPointers({
                 env: '{"DifferentTable": ["test"]}',
                 operation () {
-                  return util.promisify(dynamo.putItem).bind(dynamo)({
+                  return promisify(dynamo.putItem)({
                     TableName: twoKeyTableName,
                     Item: {
                       id: { N: '2' },
@@ -513,7 +527,7 @@ describe('Plugin', () => {
             it('should not add links or error for putItem when config is missing', function () {
               return testSpanPointers({
                 operation () {
-                  return util.promisify(dynamo.putItem).bind(dynamo)({
+                  return promisify(dynamo.putItem)({
                     TableName: twoKeyTableName,
                     Item: {
                       id: { N: '3' },
@@ -537,7 +551,7 @@ describe('Plugin', () => {
                 env: '{"TwoKeyTable": ["id", "binary"]}',
                 expectedHashes: '5dac7d25254d596482a3c2c187e51046',
                 operation () {
-                  return util.promisify(dynamo.updateItem).bind(dynamo)({
+                  return promisify(dynamo.updateItem)({
                     TableName: twoKeyTableName,
                     Key: {
                       id: { N: '100' },
@@ -567,7 +581,7 @@ describe('Plugin', () => {
                 env: '{"TwoKeyTable": ["id", "binary"]}',
                 expectedHashes: 'c356b0dd48c734d889e95122750c2679',
                 operation () {
-                  return util.promisify(dynamo.deleteItem).bind(dynamo)({
+                  return promisify(dynamo.deleteItem)({
                     TableName: twoKeyTableName,
                     Key: {
                       id: { N: '200' },
@@ -592,7 +606,7 @@ describe('Plugin', () => {
                   '8a6f801cc4e7d1d5e0dd37e0904e6316'
                 ],
                 operation () {
-                  return util.promisify(dynamo.transactWriteItems).bind(dynamo)({
+                  return promisify(dynamo.transactWriteItems)({
                     TransactItems: [
                       {
                         Put: {
@@ -644,7 +658,7 @@ describe('Plugin', () => {
                   '8a6f801cc4e7d1d5e0dd37e0904e6316'
                 ],
                 operation () {
-                  return util.promisify(dynamo.batchWriteItem).bind(dynamo)({
+                  return promisify(dynamo.batchWriteItem)({
                     RequestItems: {
                       [twoKeyTableName]: [
                         {
