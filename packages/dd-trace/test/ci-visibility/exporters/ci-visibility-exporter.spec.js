@@ -920,6 +920,14 @@ describe('CI Visibility Exporter', () => {
   })
 
   describe('getModifiedTests', () => {
+    beforeEach(() => {
+      process.env.CIVISIBILITY_IMPACTED_TESTS_BACKEND_REQUEST_ENABLED = 'true'
+    })
+
+    afterEach(() => {
+      delete process.env.CIVISIBILITY_IMPACTED_TESTS_BACKEND_REQUEST_ENABLED
+    })
+
     context('if impacted tests is disabled', () => {
       it('should resolve to undefined', (done) => {
         const modifiedTestsScope = nock(`http://localhost:${port}`)
