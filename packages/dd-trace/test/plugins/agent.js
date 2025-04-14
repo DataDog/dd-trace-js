@@ -408,6 +408,11 @@ module.exports = {
 
   // Stop the mock agent, reset all expectations and wipe the require cache.
   close (opts = {}) {
+    // Allow close to be called idempotent
+    if (listener === null) {
+      return Promise.resolve()
+    }
+
     const { ritmReset, wipe } = opts
 
     listener.close()
