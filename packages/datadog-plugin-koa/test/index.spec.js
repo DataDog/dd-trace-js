@@ -30,9 +30,12 @@ describe('Plugin', () => {
           [{}, { client: false }],
           {
             // this is needed to test the client IP header configuration and must be done before loading the tracer
-            // initially since we can't change the tracer config after it's loaded
+            // initially since we can't change the tracer config after it's loaded. Ideally, this clientIpHeader test
+            // would be located within the http plugin tests, but due to the way the tracer is loaded during testing,
+            // we can't do that since the tracer cannot be re-configured after it's loaded. So we added it here as the
+            // first test in this describe block.
             clientIpEnabled: true,
-            clientIpHeader: 'x-custom-client-ip-header'
+            clientIpHeader: 'X-Custom-Client-Ip-Header' // config should be case-insensitive
           })
         )
 

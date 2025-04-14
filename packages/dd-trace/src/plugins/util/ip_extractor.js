@@ -41,14 +41,14 @@ function extractIp (config, req) {
   if (config.clientIpHeader) {
     if (!headers) return
 
-    const ip = findFirstIp(headers[config.clientIpHeader])
+    const ip = findFirstIp(headers[config.clientIpHeader.toLowerCase()])
     return ip.public || ip.private
   }
 
   let firstPrivateIp
   if (headers) {
     for (const ipHeaderName of ipHeaderList) {
-      const firstIp = findFirstIp(headers[ipHeaderName])
+      const firstIp = findFirstIp(headers[ipHeaderName.toLowerCase()])
 
       if (firstIp.public) {
         return firstIp.public
