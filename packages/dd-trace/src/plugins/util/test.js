@@ -114,7 +114,7 @@ const DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX = '_dd.library_capabilities
 const UNSUPPORTED_TIA_FRAMEWORKS = ['playwright', 'vitest']
 const UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE = ['cucumber', 'mocha']
 const UNSUPPORTED_ATTEMPT_TO_FIX_FRAMEWORKS_PARALLEL_MODE = ['mocha']
-const UNSUPPORTED_IMPACTED_TESTS_FRAMEWORKS = ['mocha', 'cucumber', 'playwright', 'vitest', 'cypress']
+const UNSUPPORTED_IMPACTED_TESTS_FRAMEWORKS = ['cucumber', 'playwright', 'vitest', 'cypress']
 
 const TEST_LEVEL_EVENT_TYPES = [
   'test',
@@ -865,12 +865,14 @@ function getModifiedTestsFromDiff (diff) {
 }
 
 function isModifiedTest (testPath, testStartLine, testEndLine, modifiedTests) {
-  if (modifiedTests !== undefined && modifiedTests.apiTests === undefined) { // If tests come from the local diff
-    const lines = modifiedTests[testPath]
+  if (modifiedTests !== undefined && modifiedTests?.apiTests === undefined) { // If tests come from the local diff
+    // We want to get the path relative to the root of the project
+    const localTestPath = getTestSuitePath(testPath, path.dirname(process.cwd()))
+    const lines = modifiedTests[testPath] ? modifiedTests[testPath] : modifiedTests[localTestPath]
     if (lines) {
       return lines.some(line => line >= testStartLine && line <= testEndLine)
     }
-  } else if (modifiedTests.apiTests !== undefined) { // If tests come from the API
+  } else if (modifiedTests?.apiTests !== undefined) { // If tests come from the API
     const isModified = modifiedTests.apiTests.some(file => file === testPath)
     if (isModified) {
       return true

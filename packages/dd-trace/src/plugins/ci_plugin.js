@@ -224,7 +224,7 @@ module.exports = class CiPlugin extends Plugin {
         }
 
         // If we got a baseSha from API, try local diff again
-        if (response.baseSha && commitHeadSha) {
+        if (response?.baseSha && commitHeadSha) {
           const diff = getPullRequestDiff(response.baseSha, commitHeadSha)
           const localModifiedTests = getModifiedTestsFromDiff(diff)
           if (localModifiedTests) {
@@ -233,7 +233,7 @@ module.exports = class CiPlugin extends Plugin {
         }
 
         // If everything else failed, use modifiedTests from API
-        onDone({ err: null, modifiedTests: { apiTests: response.modifiedTests } })
+        onDone({ err: null, modifiedTests: { apiTests: response?.modifiedTests } })
       })
     })
   }
