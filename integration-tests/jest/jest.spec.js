@@ -55,7 +55,8 @@ const {
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_IS_MODIFIED,
-  TEST_RETRY_REASON_TYPES
+  TEST_RETRY_REASON_TYPES,
+  DD_CAPABILITIES_IMPACTED_TESTS
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -3491,6 +3492,7 @@ describe('jest CommonJS', () => {
             assert.equal(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], '1')
             assert.equal(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')
             assert.equal(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
+            assert.equal(metadata.test[DD_CAPABILITIES_IMPACTED_TESTS], '1')
             assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
             assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
             assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '2')
@@ -3681,7 +3683,7 @@ describe('impacted tests', () => {
     it('can impacted tests', (done) => {
       receiver.setSettings({ impacted_tests_enabled: true })
 
-      runImpactedTest(done, true)
+      runImpactedTest(done, true, { CIVISIBILITY_IMPACTED_TESTS_BACKEND_REQUEST_ENABLED: '1' })
     })
 
     it('does not impact tests if disabled', (done) => {
@@ -3746,6 +3748,7 @@ describe('impacted tests', () => {
       fs.writeFileSync(eventPath, JSON.stringify(eventContent, null, 2))
 
       const testConfig = {
+        CIVISIBILITY_IMPACTED_TESTS_BACKEND_REQUEST_ENABLED: '1',
         GITHUB_ACTIONS: true,
         GITHUB_BASE_REF: 'master',
         GITHUB_HEAD_REF: 'feature-branch',
@@ -3761,6 +3764,7 @@ describe('impacted tests', () => {
         done,
         true,
         {
+          CIVISIBILITY_IMPACTED_TESTS_BACKEND_REQUEST_ENABLED: '1',
           // we need to run more than 1 suite for parallel mode to kick in
           TESTS_TO_RUN: 'test-impacted-test/test-impacted',
           RUN_IN_PARALLEL: true
@@ -3783,7 +3787,7 @@ describe('impacted tests', () => {
         known_tests_enabled: true
       })
       receiver.setKnownTests(['ci-visibility/test-impacted-test/test-impacted-1.js'])
-      runImpactedTest(done, true, null, false, true)
+      runImpactedTest(done, true, { CIVISIBILITY_IMPACTED_TESTS_BACKEND_REQUEST_ENABLED: '1' }, false, true)
     })
   })
 })

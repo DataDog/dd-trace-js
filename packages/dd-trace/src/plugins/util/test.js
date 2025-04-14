@@ -107,12 +107,14 @@ const EFD_TEST_NAME_REGEX = new RegExp(EFD_STRING + ' \\(#\\d+\\): ', 'g')
 const DD_CAPABILITIES_TEST_IMPACT_ANALYSIS = '_dd.library_capabilities.test_impact_analysis'
 const DD_CAPABILITIES_EARLY_FLAKE_DETECTION = '_dd.library_capabilities.early_flake_detection'
 const DD_CAPABILITIES_AUTO_TEST_RETRIES = '_dd.library_capabilities.auto_test_retries'
+const DD_CAPABILITIES_IMPACTED_TESTS = '_dd.library_capabilities.impacted_tests'
 const DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE = '_dd.library_capabilities.test_management.quarantine'
 const DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE = '_dd.library_capabilities.test_management.disable'
 const DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX = '_dd.library_capabilities.test_management.attempt_to_fix'
 const UNSUPPORTED_TIA_FRAMEWORKS = ['playwright', 'vitest']
 const UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE = ['cucumber', 'mocha']
 const UNSUPPORTED_ATTEMPT_TO_FIX_FRAMEWORKS_PARALLEL_MODE = ['mocha']
+const UNSUPPORTED_IMPACTED_TESTS_FRAMEWORKS = ['mocha', 'cucumber', 'playwright', 'vitest', 'cypress']
 
 const TEST_LEVEL_EVENT_TYPES = [
   'test',
@@ -231,6 +233,7 @@ module.exports = {
   DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
   DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
   DD_CAPABILITIES_AUTO_TEST_RETRIES,
+  DD_CAPABILITIES_IMPACTED_TESTS,
   DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
   DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
   DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
@@ -791,10 +794,18 @@ function getLibraryCapabilitiesTags (testFramework, isParallel) {
     return true
   }
 
+  function isImpactedTestsSupported (testFramework) {
+    if (UNSUPPORTED_IMPACTED_TESTS_FRAMEWORKS.includes(testFramework)) {
+      return false
+    }
+    return true
+  }
+
   return {
     [DD_CAPABILITIES_TEST_IMPACT_ANALYSIS]: isTiaSupported(testFramework, isParallel) ? '1' : undefined,
     [DD_CAPABILITIES_EARLY_FLAKE_DETECTION]: '1',
     [DD_CAPABILITIES_AUTO_TEST_RETRIES]: '1',
+    [DD_CAPABILITIES_IMPACTED_TESTS]: isImpactedTestsSupported(testFramework) ? '1' : undefined,
     [DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE]: '1',
     [DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE]: '1',
     [DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX]: isAttemptToFixSupported(testFramework, isParallel)
