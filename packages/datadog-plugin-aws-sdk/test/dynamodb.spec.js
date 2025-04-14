@@ -6,6 +6,8 @@ const axios = require('axios')
 const { DYNAMODB_PTR_KIND, SPAN_POINTER_DIRECTION } = require('../../dd-trace/src/constants')
 const DynamoDb = require('../src/services/dynamodb')
 const { generatePointerHash } = require('../src/util')
+const util = require('node:util')
+const { setTimeout: wait } = require('node:timers/promises')
 
 /* eslint-disable no-console */
 async function resetLocalStackDynamo () {
@@ -33,14 +35,10 @@ describe('Plugin', () => {
       const twoKeyTableName = 'TwoKeyTable'
 
       describe('with configuration', () => {
-        before(() => {
+        before(async () => {
           tracer = require('../../dd-trace')
           tracer.init()
-          return agent.load('aws-sdk')
-        })
-
-        before(async () => {
-          await agent.load('aws-sdk')
+          await agent.load()
           await agent.close({ ritmReset: false, wipe: true })
           await agent.load(
             'aws-sdk',
@@ -96,43 +94,42 @@ describe('Plugin', () => {
             if (dynamoClientName === '@aws-sdk/client-dynamodb') {
               await dynamo.createTable(params)
             } else {
-              if (typeof dynamo.createTable({}).promise === 'function') {
-                await dynamo.createTable(params).promise()
-              } else {
-                await new Promise((resolve, reject) => {
-                  dynamo.createTable(params, (err, data) => {
-                    if (err) reject(err)
-                    else resolve(data)
-                  })
+              await new Promise((resolve, reject) => {
+                dynamo.createTable(params, (err, data) => {
+                  if (err) reject(err)
+                  else resolve(data)
                 })
-              }
+              })
             }
           }
 
           // Delete existing tables
-          await deleteTable(oneKeyTableName)
-          await deleteTable(twoKeyTableName)
+          await Promise.all([
+            deleteTable(oneKeyTableName),
+            deleteTable(twoKeyTableName)
+          ])
 
           // Create tables
-          await createTable({
-            TableName: oneKeyTableName,
-            KeySchema: [{ AttributeName: 'name', KeyType: 'HASH' }],
-            AttributeDefinitions: [{ AttributeName: 'name', AttributeType: 'S' }],
-            ProvisionedThroughput: { ReadCapacityUnits: 5, WriteCapacityUnits: 5 }
-          })
-
-          await createTable({
-            TableName: twoKeyTableName,
-            KeySchema: [
-              { AttributeName: 'id', KeyType: 'HASH' },
-              { AttributeName: 'binary', KeyType: 'RANGE' }
-            ],
-            AttributeDefinitions: [
-              { AttributeName: 'id', AttributeType: 'N' },
-              { AttributeName: 'binary', AttributeType: 'B' }
-            ],
-            ProvisionedThroughput: { ReadCapacityUnits: 5, WriteCapacityUnits: 5 }
-          })
+          await Promise.all([
+            createTable({
+              TableName: oneKeyTableName,
+              KeySchema: [{ AttributeName: 'name', KeyType: 'HASH' }],
+              AttributeDefinitions: [{ AttributeName: 'name', AttributeType: 'S' }],
+              ProvisionedThroughput: { ReadCapacityUnits: 5, WriteCapacityUnits: 5 }
+            }),
+            createTable({
+              TableName: twoKeyTableName,
+              KeySchema: [
+                { AttributeName: 'id', KeyType: 'HASH' },
+                { AttributeName: 'binary', KeyType: 'RANGE' }
+              ],
+              AttributeDefinitions: [
+                { AttributeName: 'id', AttributeType: 'N' },
+                { AttributeName: 'binary', AttributeType: 'B' }
+              ],
+              ProvisionedThroughput: { ReadCapacityUnits: 5, WriteCapacityUnits: 5 }
+            })
+          ])
         })
 
         after(async () => {
@@ -156,7 +153,7 @@ describe('Plugin', () => {
                   'aws.request.body.Item.data.S': 'test-data'
                 })
               })
-              .then(done, done)
+              .then(done).catch(done)
 
             dynamo.putItem(
               {
@@ -274,55 +271,11 @@ describe('Plugin', () => {
         })
 
         describe('span pointers', () => {
-          beforeEach(() => {
-            DynamoDb.dynamoPrimaryKeyConfig = null
-            delete process.env.DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS
-          })
-
-          function testSpanPointers ({ expectedHashes, operation }) {
-            let expectedLength = 0
-            if (expectedHashes) {
-              expectedLength = Array.isArray(expectedHashes) ? expectedHashes.length : 1
-            }
-            return (done) => {
-              operation((err) => {
-                if (err) {
-                  done(err)
-                  return
-                }
-
-                agent.use(traces => {
-                  const span = traces[0][0]
-                  const links = JSON.parse(span.meta?.['_dd.span_links'] || '[]')
-
-                  expect(links).to.have.lengthOf(expectedLength)
-
-                  if (expectedHashes) {
-                    if (Array.isArray(expectedHashes)) {
-                      expectedHashes.forEach((hash, i) => {
-                        expect(links[i].attributes['ptr.hash']).to.equal(hash)
-                      })
-                    } else {
-                      expect(links[0].attributes).to.deep.equal({
-                        'ptr.kind': DYNAMODB_PTR_KIND,
-                        'ptr.dir': SPAN_POINTER_DIRECTION.DOWNSTREAM,
-                        'ptr.hash': expectedHashes,
-                        'link.kind': 'span-pointer'
-                      })
-                    }
-                  }
-                  done()
-                }).catch(done)
-              })
-            }
-          }
-
-          // Sets up a test with specific DynamoDB primary keys
-          async function setupTest (primaryKeysJSON) {
+          async function testSpanPointers ({ env, expectedHashes, operation }) {
             await agent.close({ ritmReset: false, wipe: true })
 
-            if (primaryKeysJSON) {
-              process.env.DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS = primaryKeysJSON
+            if (env) {
+              process.env.DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS = env
             } else {
               delete process.env.DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS
             }
@@ -330,412 +283,391 @@ describe('Plugin', () => {
             await agent.load('aws-sdk')
             AWS = require(`../../../versions/${dynamoClientName}@${version}`).get()
             dynamo = new AWS.DynamoDB({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' })
+
+            let expectedLength = 0
+            if (expectedHashes) {
+              expectedLength = Array.isArray(expectedHashes) ? expectedHashes.length : 1
+            }
+            const agentPromise = agent.use(traces => {
+              const span = traces[0][0]
+              const links = JSON.parse(span.meta?.['_dd.span_links'] || '[]')
+
+              expect(links).to.have.lengthOf(expectedLength)
+
+              if (expectedHashes) {
+                if (Array.isArray(expectedHashes)) {
+                  expectedHashes.forEach((hash, i) => {
+                    expect(links[i].attributes['ptr.hash']).to.equal(hash)
+                  })
+                } else {
+                  expect(links[0].attributes).to.deep.equal({
+                    'ptr.kind': DYNAMODB_PTR_KIND,
+                    'ptr.dir': SPAN_POINTER_DIRECTION.DOWNSTREAM,
+                    'ptr.hash': expectedHashes,
+                    'link.kind': 'span-pointer'
+                  })
+                }
+              }
+            })
+
+            DynamoDb.dynamoPrimaryKeyConfig = null
+
+            await Promise.all([agentPromise, operation()])
           }
 
           describe('1-key table', () => {
-            it('should add span pointer for putItem when config is valid', function (done) {
-              setupTest('{"OneKeyTable": ["name"]}')
-                .then(() => {
-                  testSpanPointers({
-                    expectedHashes: '27f424c8202ab35efbf8b0b444b1928f',
-                    operation: (callback) => {
-                      dynamo.putItem({
-                        TableName: oneKeyTableName,
-                        Item: {
-                          name: { S: 'test1' },
-                          foo: { S: 'bar1' }
-                        }
-                      }, callback)
+            it('should add span pointer for putItem when config is valid', () => {
+              return testSpanPointers({
+                env: '{"OneKeyTable": ["name"]}',
+                expectedHashes: '27f424c8202ab35efbf8b0b444b1928f',
+                operation () {
+                  return util.promisify(dynamo.putItem).bind(dynamo)({
+                    TableName: oneKeyTableName,
+                    Item: {
+                      name: { S: 'test1' },
+                      foo: { S: 'bar1' }
                     }
-                  })(done)
-                })
-                .catch(done)
+                  })
+                }
+              })
             })
 
-            it('should not add links or error for putItem when config is invalid', function (done) {
-              setupTest('{"DifferentTable": ["test"]}')
-                .then(() => {
-                  testSpanPointers({
-                    operation: (callback) => {
-                      dynamo.putItem({
-                        TableName: oneKeyTableName,
-                        Item: {
-                          name: { S: 'test2' },
-                          foo: { S: 'bar2' }
-                        }
-                      }, callback)
+            it('should not add links or error for putItem when config is invalid', function () {
+              return testSpanPointers({
+                env: '{"DifferentTable": ["test"]}',
+                operation () {
+                  return util.promisify(dynamo.putItem).bind(dynamo)({
+                    TableName: oneKeyTableName,
+                    Item: {
+                      name: { S: 'test2' },
+                      foo: { S: 'bar2' }
                     }
-                  })(done)
-                })
-                .catch(done)
+                  })
+                }
+              })
             })
 
-            it('should not add links or error for putItem when config is missing', function (done) {
-              setupTest(null)
-                .then(() => {
-                  testSpanPointers({
-                    operation: (callback) => {
-                      dynamo.putItem({
-                        TableName: oneKeyTableName,
-                        Item: {
-                          name: { S: 'test3' },
-                          foo: { S: 'bar3' }
-                        }
-                      }, callback)
+            it('should not add links or error for putItem when config is missing', function () {
+              return testSpanPointers({
+                env: null,
+                operation () {
+                  return util.promisify(dynamo.putItem).bind(dynamo)({
+                    TableName: oneKeyTableName,
+                    Item: {
+                      name: { S: 'test3' },
+                      foo: { S: 'bar3' }
                     }
-                  })(done)
-                })
-                .catch(done)
+                  })
+                }
+              })
             })
 
-            it('should add span pointer for updateItem', function (done) {
-              setupTest('{"OneKeyTable": ["name"]}')
-                .then(() => {
-                  testSpanPointers({
-                    expectedHashes: '27f424c8202ab35efbf8b0b444b1928f',
-                    operation: (callback) => {
-                      dynamo.updateItem({
-                        TableName: oneKeyTableName,
-                        Key: { name: { S: 'test1' } },
-                        AttributeUpdates: {
-                          foo: {
-                            Action: 'PUT',
-                            Value: { S: 'bar4' }
-                          }
-                        }
-                      }, callback)
+            it('should add span pointer for updateItem', function () {
+              return testSpanPointers({
+                expectedHashes: '27f424c8202ab35efbf8b0b444b1928f',
+                operation () {
+                  return util.promisify(dynamo.updateItem).bind(dynamo)({
+                    TableName: oneKeyTableName,
+                    Key: { name: { S: 'test1' } },
+                    AttributeUpdates: {
+                      foo: {
+                        Action: 'PUT',
+                        Value: { S: 'bar4' }
+                      }
                     }
-                  })(done)
-                })
-                .catch(done)
+                  })
+                }
+              })
             })
 
-            it('should add span pointer for deleteItem', function (done) {
-              setupTest('{"OneKeyTable": ["name"]}')
-                .then(() => {
-                  testSpanPointers({
-                    expectedHashes: '27f424c8202ab35efbf8b0b444b1928f',
-                    operation: (callback) => {
-                      dynamo.deleteItem({
-                        TableName: oneKeyTableName,
-                        Key: { name: { S: 'test1' } }
-                      }, callback)
-                    }
-                  })(done)
-                })
-                .catch(done)
+            it('should add span pointer for deleteItem', async function () {
+              return testSpanPointers({
+                expectedHashes: '27f424c8202ab35efbf8b0b444b1928f',
+                operation () {
+                  return util.promisify(dynamo.deleteItem).bind(dynamo)({
+                    TableName: oneKeyTableName,
+                    Key: { name: { S: 'test1' } }
+                  })
+                }
+              })
             })
 
-            it('should add span pointers for transactWriteItems', function (done) {
+            it('should add span pointers for transactWriteItems', async function () {
               // Skip for older versions that don't support transactWriteItems
               if (typeof dynamo.transactWriteItems !== 'function') {
                 return this.skip()
               }
 
-              setupTest('{"OneKeyTable": ["name"]}')
-                .then(() => {
-                  testSpanPointers({
-                    expectedHashes: [
-                      '955ab85fc7d1d63fe4faf18696514f13',
-                      '856c95a173d9952008a70283175041fc',
-                      '9682c132f1900106a792f166d0619e0b'
-                    ],
-                    operation: (callback) => {
-                      dynamo.transactWriteItems({
-                        TransactItems: [
-                          {
-                            Put: {
-                              TableName: oneKeyTableName,
-                              Item: {
-                                name: { S: 'test4' },
-                                foo: { S: 'bar4' }
-                              }
-                            }
-                          },
-                          {
-                            Update: {
-                              TableName: oneKeyTableName,
-                              Key: { name: { S: 'test2' } },
-                              UpdateExpression: 'SET foo = :newfoo',
-                              ExpressionAttributeValues: {
-                                ':newfoo': { S: 'bar5' }
-                              }
-                            }
-                          },
-                          {
-                            Delete: {
-                              TableName: oneKeyTableName,
-                              Key: { name: { S: 'test3' } }
-                            }
+              return testSpanPointers({
+                env: '{"OneKeyTable": ["name"]}',
+                expectedHashes: [
+                  '955ab85fc7d1d63fe4faf18696514f13',
+                  '856c95a173d9952008a70283175041fc',
+                  '9682c132f1900106a792f166d0619e0b'
+                ],
+                operation () {
+                  return util.promisify(dynamo.transactWriteItems).bind(dynamo)({
+                    TransactItems: [
+                      {
+                        Put: {
+                          TableName: oneKeyTableName,
+                          Item: {
+                            name: { S: 'test4' },
+                            foo: { S: 'bar4' }
                           }
-                        ]
-                      }, callback)
-                    }
-                  })(done)
-                })
-                .catch(done)
+                        }
+                      },
+                      {
+                        Update: {
+                          TableName: oneKeyTableName,
+                          Key: { name: { S: 'test2' } },
+                          UpdateExpression: 'SET foo = :newfoo',
+                          ExpressionAttributeValues: {
+                            ':newfoo': { S: 'bar5' }
+                          }
+                        }
+                      },
+                      {
+                        Delete: {
+                          TableName: oneKeyTableName,
+                          Key: { name: { S: 'test3' } }
+                        }
+                      }
+                    ]
+                  })
+                }
+              })
             })
 
-            it('should add span pointers for batchWriteItem', function (done) {
+            it('should add span pointers for batchWriteItem', function () {
               // Skip for older versions that don't support batchWriteItem
               if (typeof dynamo.batchWriteItem !== 'function') {
                 return this.skip()
               }
 
-              setupTest('{"OneKeyTable": ["name"]}')
-                .then(() => {
-                  testSpanPointers({
-                    expectedHashes: [
-                      '955ab85fc7d1d63fe4faf18696514f13',
-                      '9682c132f1900106a792f166d0619e0b'
-                    ],
-                    operation: (callback) => {
-                      dynamo.batchWriteItem({
-                        RequestItems: {
-                          [oneKeyTableName]: [
-                            {
-                              PutRequest: {
-                                Item: {
-                                  name: { S: 'test4' },
-                                  foo: { S: 'bar4' }
-                                }
-                              }
-                            },
-                            {
-                              DeleteRequest: {
-                                Key: {
-                                  name: { S: 'test3' }
-                                }
-                              }
+              return testSpanPointers({
+                env: '{"OneKeyTable": ["name"]}',
+                expectedHashes: [
+                  '955ab85fc7d1d63fe4faf18696514f13',
+                  '9682c132f1900106a792f166d0619e0b'
+                ],
+                operation () {
+                  return util.promisify(dynamo.batchWriteItem).bind(dynamo)({
+                    RequestItems: {
+                      [oneKeyTableName]: [
+                        {
+                          PutRequest: {
+                            Item: {
+                              name: { S: 'test4' },
+                              foo: { S: 'bar4' }
                             }
-                          ]
+                          }
+                        },
+                        {
+                          DeleteRequest: {
+                            Key: {
+                              name: { S: 'test3' }
+                            }
+                          }
                         }
-                      }, callback)
+                      ]
                     }
-                  })(done)
-                })
-                .catch(done)
+                  })
+                }
+              })
             })
           })
 
           describe('2-key table', () => {
-            it('should add span pointer for putItem when config is valid', function (done) {
-              setupTest('{"TwoKeyTable": ["id", "binary"]}')
-                .then(() => {
-                  testSpanPointers({
-                    expectedHashes: 'cc32f0e49ee05d3f2820ccc999bfe306',
-                    operation: (callback) => {
-                      dynamo.putItem({
-                        TableName: twoKeyTableName,
-                        Item: {
-                          id: { N: '1' },
-                          binary: { B: Buffer.from('Hello world 1') }
-                        }
-                      }, callback)
+            it('should add span pointer for putItem when config is valid', function () {
+              return testSpanPointers({
+                env: '{"TwoKeyTable": ["id", "binary"]}',
+                expectedHashes: 'cc32f0e49ee05d3f2820ccc999bfe306',
+                operation () {
+                  return util.promisify(dynamo.putItem).bind(dynamo)({
+                    TableName: twoKeyTableName,
+                    Item: {
+                      id: { N: '1' },
+                      binary: { B: Buffer.from('Hello world 1') }
                     }
-                  })(done)
-                })
-                .catch(done)
+                  })
+                }
+              })
             })
 
-            it('should not add links or error for putItem when config is invalid', function (done) {
-              setupTest('{"DifferentTable": ["test"]}')
-                .then(() => {
-                  testSpanPointers({
-                    operation: (callback) => {
-                      dynamo.putItem({
-                        TableName: twoKeyTableName,
-                        Item: {
-                          id: { N: '2' },
-                          binary: { B: Buffer.from('Hello world 2') }
-                        }
-                      }, callback)
+            it('should not add links or error for putItem when config is invalid', function () {
+              return testSpanPointers({
+                env: '{"DifferentTable": ["test"]}',
+                operation () {
+                  return util.promisify(dynamo.putItem).bind(dynamo)({
+                    TableName: twoKeyTableName,
+                    Item: {
+                      id: { N: '2' },
+                      binary: { B: Buffer.from('Hello world 2') }
                     }
-                  })(done)
-                })
-                .catch(done)
+                  })
+                }
+              })
             })
 
-            it('should not add links or error for putItem when config is missing', function (done) {
-              setupTest(null)
-                .then(() => {
-                  testSpanPointers({
-                    operation: (callback) => {
-                      dynamo.putItem({
-                        TableName: twoKeyTableName,
-                        Item: {
-                          id: { N: '3' },
-                          binary: { B: Buffer.from('Hello world 3') }
-                        }
-                      }, callback)
+            it('should not add links or error for putItem when config is missing', function () {
+              return testSpanPointers({
+                operation () {
+                  return util.promisify(dynamo.putItem).bind(dynamo)({
+                    TableName: twoKeyTableName,
+                    Item: {
+                      id: { N: '3' },
+                      binary: { B: Buffer.from('Hello world 3') }
                     }
-                  })(done)
-                })
-                .catch(done)
+                  })
+                }
+              })
             })
 
-            it('should add span pointer for updateItem', function (done) {
-              dynamo.putItem({
+            it('should add span pointer for updateItem', async function () {
+              await dynamo.putItem({
                 TableName: twoKeyTableName,
                 Item: {
                   id: { N: '100' },
                   binary: { B: Buffer.from('abc') }
                 }
-              }, async function (err) {
-                if (err) {
-                  return done(err)
-                }
-                await new Promise(resolve => setTimeout(resolve, 100))
-                setupTest('{"TwoKeyTable": ["id", "binary"]}')
-                  .then(() => {
-                    testSpanPointers({
-                      expectedHashes: '5dac7d25254d596482a3c2c187e51046',
-                      operation: (callback) => {
-                        dynamo.updateItem({
-                          TableName: twoKeyTableName,
-                          Key: {
-                            id: { N: '100' },
-                            binary: { B: Buffer.from('abc') }
-                          },
-                          AttributeUpdates: {
-                            someOtherField: {
-                              Action: 'PUT',
-                              Value: { S: 'new value' }
-                            }
-                          }
-                        }, callback)
+              })
+              await wait(100)
+              return testSpanPointers({
+                env: '{"TwoKeyTable": ["id", "binary"]}',
+                expectedHashes: '5dac7d25254d596482a3c2c187e51046',
+                operation () {
+                  return util.promisify(dynamo.updateItem).bind(dynamo)({
+                    TableName: twoKeyTableName,
+                    Key: {
+                      id: { N: '100' },
+                      binary: { B: Buffer.from('abc') }
+                    },
+                    AttributeUpdates: {
+                      someOtherField: {
+                        Action: 'PUT',
+                        Value: { S: 'new value' }
                       }
-                    })(done)
+                    }
                   })
-                  .catch(done)
+                }
               })
             })
 
-            it('should add span pointer for deleteItem', function (done) {
-              dynamo.putItem({
+            it('should add span pointer for deleteItem', async function () {
+              await dynamo.putItem({
                 TableName: twoKeyTableName,
                 Item: {
                   id: { N: '200' },
                   binary: { B: Buffer.from('Hello world') }
                 }
-              }, async function (err) {
-                if (err) return done(err)
-                await new Promise(resolve => setTimeout(resolve, 100))
-                setupTest('{"TwoKeyTable": ["id", "binary"]}')
-                  .then(() => {
-                    testSpanPointers({
-                      expectedHashes: 'c356b0dd48c734d889e95122750c2679',
-                      operation: (callback) => {
-                        dynamo.deleteItem({
-                          TableName: twoKeyTableName,
-                          Key: {
-                            id: { N: '200' },
-                            binary: { B: Buffer.from('Hello world') }
-                          }
-                        }, callback)
-                      }
-                    })(done)
+              })
+              await wait(100)
+              return testSpanPointers({
+                env: '{"TwoKeyTable": ["id", "binary"]}',
+                expectedHashes: 'c356b0dd48c734d889e95122750c2679',
+                operation () {
+                  return util.promisify(dynamo.deleteItem).bind(dynamo)({
+                    TableName: twoKeyTableName,
+                    Key: {
+                      id: { N: '200' },
+                      binary: { B: Buffer.from('Hello world') }
+                    }
                   })
-                  .catch(done)
+                }
               })
             })
 
-            it('should add span pointers for transactWriteItems', function (done) {
+            it('should add span pointers for transactWriteItems', function () {
               // Skip for older versions that don't support transactWriteItems
               if (typeof dynamo.transactWriteItems !== 'function') {
                 return this.skip()
               }
 
-              setupTest('{"TwoKeyTable": ["id", "binary"]}')
-                .then(() => {
-                  testSpanPointers({
-                    expectedHashes: [
-                      'dd071963cd90e4b3088043f0b9a9f53c',
-                      '7794824f72d673ac7844353bc3ea25d9',
-                      '8a6f801cc4e7d1d5e0dd37e0904e6316'
-                    ],
-                    operation: (callback) => {
-                      dynamo.transactWriteItems({
-                        TransactItems: [
-                          {
-                            Put: {
-                              TableName: twoKeyTableName,
-                              Item: {
-                                id: { N: '4' },
-                                binary: { B: Buffer.from('Hello world 4') }
-                              }
-                            }
-                          },
-                          {
-                            Update: {
-                              TableName: twoKeyTableName,
-                              Key: {
-                                id: { N: '2' },
-                                binary: { B: Buffer.from('Hello world 2') }
-                              },
-                              UpdateExpression: 'SET someOtherField = :newvalue',
-                              ExpressionAttributeValues: {
-                                ':newvalue': { S: 'new value' }
-                              }
-                            }
-                          },
-                          {
-                            Delete: {
-                              TableName: twoKeyTableName,
-                              Key: {
-                                id: { N: '3' },
-                                binary: { B: Buffer.from('Hello world 3') }
-                              }
-                            }
+              return testSpanPointers({
+                env: '{"TwoKeyTable": ["id", "binary"]}',
+                expectedHashes: [
+                  'dd071963cd90e4b3088043f0b9a9f53c',
+                  '7794824f72d673ac7844353bc3ea25d9',
+                  '8a6f801cc4e7d1d5e0dd37e0904e6316'
+                ],
+                operation () {
+                  return util.promisify(dynamo.transactWriteItems).bind(dynamo)({
+                    TransactItems: [
+                      {
+                        Put: {
+                          TableName: twoKeyTableName,
+                          Item: {
+                            id: { N: '4' },
+                            binary: { B: Buffer.from('Hello world 4') }
                           }
-                        ]
-                      }, callback)
-                    }
-                  })(done)
-                })
-                .catch(done)
+                        }
+                      },
+                      {
+                        Update: {
+                          TableName: twoKeyTableName,
+                          Key: {
+                            id: { N: '2' },
+                            binary: { B: Buffer.from('Hello world 2') }
+                          },
+                          UpdateExpression: 'SET someOtherField = :newvalue',
+                          ExpressionAttributeValues: {
+                            ':newvalue': { S: 'new value' }
+                          }
+                        }
+                      },
+                      {
+                        Delete: {
+                          TableName: twoKeyTableName,
+                          Key: {
+                            id: { N: '3' },
+                            binary: { B: Buffer.from('Hello world 3') }
+                          }
+                        }
+                      }
+                    ]
+                  })
+                }
+              })
             })
 
-            it('should add span pointers for batchWriteItem', function (done) {
+            it('should add span pointers for batchWriteItem', function () {
               // Skip for older versions that don't support batchWriteItem
               if (typeof dynamo.batchWriteItem !== 'function') {
                 return this.skip()
               }
 
-              setupTest('{"TwoKeyTable": ["id", "binary"]}')
-                .then(() => {
-                  testSpanPointers({
-                    expectedHashes: [
-                      '1f64650acbe1ae4d8413049c6bd9bbe8',
-                      '8a6f801cc4e7d1d5e0dd37e0904e6316'
-                    ],
-                    operation: (callback) => {
-                      dynamo.batchWriteItem({
-                        RequestItems: {
-                          [twoKeyTableName]: [
-                            {
-                              PutRequest: {
-                                Item: {
-                                  id: { N: '5' },
-                                  binary: { B: Buffer.from('Hello world 5') }
-                                }
-                              }
-                            },
-                            {
-                              DeleteRequest: {
-                                Key: {
-                                  id: { N: '3' },
-                                  binary: { B: Buffer.from('Hello world 3') }
-                                }
-                              }
+              return testSpanPointers({
+                env: '{"TwoKeyTable": ["id", "binary"]}',
+                expectedHashes: [
+                  '1f64650acbe1ae4d8413049c6bd9bbe8',
+                  '8a6f801cc4e7d1d5e0dd37e0904e6316'
+                ],
+                operation () {
+                  return util.promisify(dynamo.batchWriteItem).bind(dynamo)({
+                    RequestItems: {
+                      [twoKeyTableName]: [
+                        {
+                          PutRequest: {
+                            Item: {
+                              id: { N: '5' },
+                              binary: { B: Buffer.from('Hello world 5') }
                             }
-                          ]
+                          }
+                        },
+                        {
+                          DeleteRequest: {
+                            Key: {
+                              id: { N: '3' },
+                              binary: { B: Buffer.from('Hello world 3') }
+                            }
+                          }
                         }
-                      }, callback)
+                      ]
                     }
-                  })(done)
-                })
-                .catch(done)
+                  })
+                }
+              })
             })
           })
         })
