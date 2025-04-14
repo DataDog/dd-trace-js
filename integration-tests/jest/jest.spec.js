@@ -3520,7 +3520,7 @@ describe('jest CommonJS', () => {
   })
 
   context('impacted tests', () => {
-    const NUM_RETRIES_EFD = 3
+    const NUM_RETRIES = 3
     let baseCommitSha = null
     let commitHeadSha = null
     let eventPath = null
@@ -3641,21 +3641,11 @@ describe('impacted tests', () => {
           }
 
           if (isEfd) {
-            const newTests = tests.filter(test =>
-              test.meta[TEST_SUITE] === 'ci-visibility/test-impacted-test/test-impacted-1.js'
-            )
-            newTests.forEach(test => {
-              assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
-            })
-            const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-            // all but two has been retried
-            assert.equal(
-              newTests.length - 2,
-              retriedTests.length
-            )
-            assert.equal(retriedTests.length, NUM_RETRIES_EFD * 2)
+            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.equal(retriedTests.length, NUM_RETRIES * 2)
             retriedTests.forEach(test => {
               assert.propertyVal(test.meta, TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
+              assert.notProperty(test.meta, TEST_IS_NEW)
             })
           }
         })
@@ -3787,7 +3777,7 @@ describe('impacted tests', () => {
         early_flake_detection: {
           enabled: true,
           slow_test_retries: {
-            '5s': NUM_RETRIES_EFD
+            '5s': NUM_RETRIES
           }
         },
         known_tests_enabled: true

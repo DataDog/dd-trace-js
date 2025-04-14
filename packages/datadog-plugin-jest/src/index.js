@@ -457,6 +457,12 @@ class JestPlugin extends CiPlugin {
     if (isAttemptToFixRetry) {
       extraTags[TEST_IS_RETRY] = 'true'
       extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.atf
+    } else if (isEfdRetry) {
+      extraTags[TEST_IS_RETRY] = 'true'
+      extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.efd
+    } else if (isJestRetry) {
+      extraTags[TEST_IS_RETRY] = 'true'
+      extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.ext
     }
 
     if (isDisabled) {
@@ -473,15 +479,6 @@ class JestPlugin extends CiPlugin {
 
     if (isNew) {
       extraTags[TEST_IS_NEW] = 'true'
-      if (isEfdRetry) {
-        extraTags[TEST_IS_RETRY] = 'true'
-        extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.efd
-      }
-    }
-
-    if (isJestRetry) {
-      extraTags[TEST_IS_RETRY] = 'true'
-      extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.ext
     }
 
     return super.startTestSpan(name, suite, this.testSuiteSpan, extraTags)

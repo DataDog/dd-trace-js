@@ -370,8 +370,11 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
 
         if (this.isKnownTestsEnabled) {
-          isNewTest = retriedTestsToNumAttempts.has(originalTestName)
-          if (isNewTest) {
+          isNewTest = retriedTestsToNumAttempts.has(originalTestName) && !isModified
+        }
+
+        if (this.isEarlyFlakeDetectionEnabled) {
+          if (isNewTest || isModified) {
             numEfdRetry = retriedTestsToNumAttempts.get(originalTestName)
             retriedTestsToNumAttempts.set(originalTestName, numEfdRetry + 1)
           }
