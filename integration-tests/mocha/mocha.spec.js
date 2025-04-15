@@ -3296,7 +3296,7 @@ describe('impacted tests', () => {
       }
     })
 
-    const getTestAssertions = (isImpacting, isLocalDiff, isEfd, isParallel) =>
+    const getTestAssertions = ({ isImpacting, isLocalDiff, isEfd, isParallel }) =>
       receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
@@ -3352,13 +3352,10 @@ describe('impacted tests', () => {
 
     const runImpactedTest = (
       done,
-      isImpacting,
-      extraEnvVars = {},
-      isLocalDiff = false,
-      isEfd = false,
-      isParallel = false
+      { isImpacting, isLocalDiff = false, isEfd = false, isParallel = false },
+      extraEnvVars = {}
     ) => {
-      const testAssertionsPromise = getTestAssertions(isImpacting, isLocalDiff, isEfd, isParallel)
+      const testAssertionsPromise = getTestAssertions({ isImpacting, isLocalDiff, isEfd, isParallel })
 
       childProcess = exec(
         runTestsWithCoverageCommand,
@@ -3383,19 +3380,19 @@ describe('impacted tests', () => {
     it('can impacted tests', (done) => {
       receiver.setSettings({ impacted_tests_enabled: true })
 
-      runImpactedTest(done, true, { CIVISIBILITY_IMPACTED_TESTS_BACKEND_REQUEST_ENABLED: '1' })
+      runImpactedTest(done, { isImpacting: true }, { CIVISIBILITY_IMPACTED_TESTS_BACKEND_REQUEST_ENABLED: '1' })
     })
 
     it('does not impact tests if disabled', (done) => {
       receiver.setSettings({ impacted_tests_enabled: false })
 
-      runImpactedTest(done, false)
+      runImpactedTest(done, { isImpacting: false })
     })
 
     it('does not impact tests DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED is set to false', (done) => {
       receiver.setSettings({ impacted_tests_enabled: false })
 
-      runImpactedTest(done, false, { DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0' }, false)
+      runImpactedTest(done, { isImpacting: false }, { DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0' })
     })
 
     it('can impact tests with git diff', (done) => {
@@ -3421,7 +3418,7 @@ describe('impacted tests', () => {
         GITHUB_HEAD_REF: 'feature-branch',
         GITHUB_EVENT_PATH: eventPath
       }
-      runImpactedTest(done, true, testConfig, true)
+      runImpactedTest(done, { isImpacting: true, isLocalDiff: true }, testConfig)
     })
 
     it('can impact tests with git diff with base sha from API', (done) => {
@@ -3454,7 +3451,7 @@ describe('impacted tests', () => {
         GITHUB_HEAD_REF: 'feature-branch',
         GITHUB_EVENT_PATH: eventPath
       }
-      runImpactedTest(done, true, testConfig, true)
+      runImpactedTest(done, { isImpacting: true, isLocalDiff: true }, testConfig)
     })
 
     it('can impact tests in parallel mode', (done) => {
@@ -3462,7 +3459,7 @@ describe('impacted tests', () => {
 
       runImpactedTest(
         done,
-        true,
+        { isImpacting: true, isParallel: true },
         {
           CIVISIBILITY_IMPACTED_TESTS_BACKEND_REQUEST_ENABLED: '1',
           // we need to run more than 1 suite for parallel mode to kick in
@@ -3471,10 +3468,7 @@ describe('impacted tests', () => {
             './test-impacted-test/test-impacted-2'
           ]),
           RUN_IN_PARALLEL: true
-        },
-        false,
-        false,
-        true
+        }
       )
     })
 
@@ -3490,7 +3484,10 @@ describe('impacted tests', () => {
         known_tests_enabled: true
       })
       receiver.setKnownTests(['ci-visibility/test-impacted-test/test-impacted-1.js'])
-      runImpactedTest(done, true, { CIVISIBILITY_IMPACTED_TESTS_BACKEND_REQUEST_ENABLED: '1' }, false, true)
+      runImpactedTest(done,
+        { isImpacting: true, isEfd: true },
+        { CIVISIBILITY_IMPACTED_TESTS_BACKEND_REQUEST_ENABLED: '1' }
+      )
     })
   })
 })

@@ -2681,10 +2681,7 @@ Feature: Impacted Test
       it('does not impact tests DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED is set to false', (done) => {
         receiver.setSettings({ impacted_tests_enabled: false })
 
-        runImpactedTest(done, {
-          isImpacting: false,
-          isLocalDiff: false
-        }, { DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0' })
+        runImpactedTest(done, { isImpacting: false }, { DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0' })
       })
 
       it('can impact tests with git diff', (done) => {
@@ -2710,10 +2707,7 @@ Feature: Impacted Test
           GITHUB_HEAD_REF: 'feature-branch',
           GITHUB_EVENT_PATH: eventPath
         }
-        runImpactedTest(done, {
-          isImpacting: true,
-          isLocalDiff: true
-        }, testConfig)
+        runImpactedTest(done, { isImpacting: true, isLocalDiff: true }, testConfig)
       })
 
       it('can impact tests with git diff with base sha from API', (done) => {
@@ -2746,10 +2740,7 @@ Feature: Impacted Test
           GITHUB_HEAD_REF: 'feature-branch',
           GITHUB_EVENT_PATH: eventPath
         }
-        runImpactedTest(done, {
-          isImpacting: true,
-          isLocalDiff: true
-        }, testConfig)
+        runImpactedTest(done, { isImpacting: true, isLocalDiff: true }, testConfig)
       })
 
       if (version !== '7.0.0') {
@@ -2776,11 +2767,10 @@ Feature: Impacted Test
           known_tests_enabled: true
         })
         receiver.setKnownTests(['ci-visibility/features-impacted-test/impacted-test.feature'])
-        runImpactedTest(done, {
-          isImpacting: true,
-          isLocalDiff: false,
-          isEfd: true
-        }, { CIVISIBILITY_IMPACTED_TESTS_BACKEND_REQUEST_ENABLED: '1' })
+        runImpactedTest(done,
+          { isImpacting: true, isEfd: true },
+          { CIVISIBILITY_IMPACTED_TESTS_BACKEND_REQUEST_ENABLED: '1' }
+        )
       })
     })
   })
