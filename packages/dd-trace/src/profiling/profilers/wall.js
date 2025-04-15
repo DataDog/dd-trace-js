@@ -115,8 +115,6 @@ class NativeWallProfiler {
   start ({ mapper } = {}) {
     if (this._started) return
 
-    ensureChannelsActivated()
-
     this._mapper = mapper
     this._pprof = require('@datadog/pprof')
     kSampleCount = this._pprof.time.constants.kSampleCount
@@ -146,6 +144,8 @@ class NativeWallProfiler {
       if (this._captureSpanData) {
         this._profilerState = this._pprof.time.getState()
         this._lastSampleCount = 0
+
+        ensureChannelsActivated()
 
         beforeCh.subscribe(this._enter)
         enterCh.subscribe(this._enter)
