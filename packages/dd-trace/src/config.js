@@ -825,11 +825,7 @@ class Config {
     this._setValue(env, 'baggageMaxBytes', DD_TRACE_BAGGAGE_MAX_BYTES)
     this._setValue(env, 'baggageMaxItems', DD_TRACE_BAGGAGE_MAX_ITEMS)
     this._setBoolean(env, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
-    this._setString(env, 'clientIpHeader',
-      DD_TRACE_CLIENT_IP_HEADER
-        ? DD_TRACE_CLIENT_IP_HEADER.toLowerCase()
-        : undefined
-    )
+    this._setString(env, 'clientIpHeader', DD_TRACE_CLIENT_IP_HEADER?.toLowerCase())
     this._setBoolean(env, 'crashtracking.enabled', coalesce(
       DD_CRASHTRACKING_ENABLED,
       !this._isInServerlessEnvironment()
