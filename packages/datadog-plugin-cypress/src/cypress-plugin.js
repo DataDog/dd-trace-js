@@ -41,7 +41,10 @@ const {
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_HAS_FAILED_ALL_RETRIES,
   getLibraryCapabilitiesTags,
-  TEST_RETRY_REASON_TYPES
+  TEST_RETRY_REASON_TYPES,
+  getPullRequestDiff,
+  getModifiedTestsFromDiff,
+  TEST_IS_MODIFIED
 } = require('../../dd-trace/src/plugins/util/test')
 const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
@@ -67,7 +70,9 @@ const {
   GIT_BRANCH,
   CI_PROVIDER_NAME,
   CI_WORKSPACE_PATH,
-  GIT_COMMIT_MESSAGE
+  GIT_COMMIT_MESSAGE,
+  GIT_PULL_REQUEST_BASE_BRANCH_SHA,
+  GIT_COMMIT_HEAD_SHA
 } = require('../../dd-trace/src/plugins/util/tags')
 const {
   OS_VERSION,
@@ -175,6 +180,46 @@ function getTestManagementTests (tracer, testConfiguration) {
   })
 }
 
+function getModifiedTests (tracer, testConfiguration, testEnvironmentMetadata) {
+  return new Promise(resolve => {
+    const {
+      [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseSha,
+      [GIT_COMMIT_HEAD_SHA]: commitHeadSha
+    } = testEnvironmentMetadata
+
+    if (pullRequestBaseSha && commitHeadSha) {
+      const diff = getPullRequestDiff(pullRequestBaseSha, commitHeadSha)
+      const modifiedTests = getModifiedTestsFromDiff(diff)
+      if (modifiedTests) {
+        return resolve({ err: null, modifiedTests })
+      }
+    }
+
+    if (!tracer._tracer._exporter?.getModifiedTests) {
+      return resolve({ err: new Error('Test optimization was not initialized correctly') })
+    }
+    tracer._tracer._exporter.getModifiedTests(testConfiguration, (err, response) => {
+      if (err) {
+        log.error('Modified tests could not be fetched. %s', err.message)
+        this.libraryConfig.isImpactedTestsEnabled = false
+        return resolve({ err, modifiedTests: null })
+      }
+
+      // If we got a baseSha from API, try local diff again
+      if (response?.baseSha && commitHeadSha) {
+        const diff = getPullRequestDiff(response.baseSha, commitHeadSha)
+        const localModifiedTests = getModifiedTestsFromDiff(diff)
+        if (localModifiedTests) {
+          return resolve({ err: null, modifiedTests: localModifiedTests })
+        }
+      }
+
+      // If everything else failed, use modifiedTests from API
+      resolve({ err: null, modifiedTests: { apiTests: response?.modifiedTests } })
+    })
+  })
+}
+
 function getSuiteStatus (suiteStats) {
   if (!suiteStats) {
     return 'skip'
@@ -205,10 +250,12 @@ class CypressPlugin {
       [GIT_BRANCH]: branch,
       [CI_PROVIDER_NAME]: ciProviderName,
       [CI_WORKSPACE_PATH]: repositoryRoot,
-      [GIT_COMMIT_MESSAGE]: commitMessage
+      [GIT_COMMIT_MESSAGE]: commitMessage,
+      [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseSha,
+      [GIT_COMMIT_HEAD_SHA]: commitHeadSha
     } = this.testEnvironmentMetadata
 
-    this.repositoryRoot = repositoryRoot
+    this.repositoryRoot = repositoryRoot || process.cwd()
     this.ciProviderName = ciProviderName
     this.codeOwnersEntries = getCodeOwnersFileEntries(repositoryRoot)
 
@@ -222,7 +269,9 @@ class CypressPlugin {
       runtimeVersion,
       branch,
       testLevel: 'test',
-      commitMessage
+      commitMessage,
+      pullRequestBaseSha,
+      commitHeadSha
     }
     this.finishedTestsByFile = {}
     this.testStatuses = {}
@@ -242,6 +291,8 @@ class CypressPlugin {
     this.knownTests = []
     this.isTestManagementTestsEnabled = false
     this.testManagementAttemptToFixRetries = 0
+    this.isImpactedTestsEnabled = false
+    this.modifiedTests = []
   }
 
   // Init function returns a promise that resolves with the Cypress configuration
@@ -271,7 +322,8 @@ class CypressPlugin {
               flakyTestRetriesCount,
               isKnownTestsEnabled,
               isTestManagementEnabled,
-              testManagementAttemptToFixRetries
+              testManagementAttemptToFixRetries,
+              isImpactedTestsEnabled
             }
           } = libraryConfigurationResponse
           this.isSuitesSkippingEnabled = isSuitesSkippingEnabled
@@ -285,6 +337,7 @@ class CypressPlugin {
           }
           this.isTestManagementTestsEnabled = isTestManagementEnabled
           this.testManagementAttemptToFixRetries = testManagementAttemptToFixRetries
+          this.isImpactedTestsEnabled = isImpactedTestsEnabled
         }
         return this.cypressConfig
       })
@@ -452,6 +505,20 @@ class CypressPlugin {
         this.isTestManagementTestsEnabled = false
       } else {
         this.testManagementTests = testManagementTestsResponse.testManagementTests
+      }
+    }
+
+    if (this.isImpactedTestsEnabled) {
+      const impactedTestsResponse = await getModifiedTests(
+        this.tracer,
+        this.testConfiguration,
+        this.testEnvironmentMetadata
+      )
+      if (impactedTestsResponse.err) {
+        log.error('Cypress impacted tests response error', impactedTestsResponse.err)
+        this.isImpactedTestsEnabled = false
+      } else {
+        this.modifiedTests = impactedTestsResponse.modifiedTests
       }
     }
 
@@ -725,7 +792,10 @@ class CypressPlugin {
           isKnownTestsEnabled: this.isKnownTestsEnabled,
           isTestManagementEnabled: this.isTestManagementTestsEnabled,
           testManagementAttemptToFixRetries: this.testManagementAttemptToFixRetries,
-          testManagementTests: this.getTestSuiteProperties(testSuite)
+          testManagementTests: this.getTestSuiteProperties(testSuite),
+          isImpactedTestsEnabled: this.isImpactedTestsEnabled,
+          modifiedTests: this.modifiedTests,
+          repositoryRoot: this.repositoryRoot
         }
 
         if (this.testSuiteSpan) {
@@ -783,7 +853,8 @@ class CypressPlugin {
           testName,
           isNew,
           isEfdRetry,
-          isAttemptToFix
+          isAttemptToFix,
+          isModified
         } = test
         if (coverage && this.isCodeCoverageEnabled && this.tracer._tracer._exporter?.exportCoverage) {
           const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
@@ -825,6 +896,13 @@ class CypressPlugin {
         }
         if (isNew) {
           this.activeTestSpan.setTag(TEST_IS_NEW, 'true')
+          if (isEfdRetry) {
+            this.activeTestSpan.setTag(TEST_IS_RETRY, 'true')
+            this.activeTestSpan.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
+          }
+        }
+        if (isModified) {
+          this.activeTestSpan.setTag(TEST_IS_MODIFIED, 'true')
           if (isEfdRetry) {
             this.activeTestSpan.setTag(TEST_IS_RETRY, 'true')
             this.activeTestSpan.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)

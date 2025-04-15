@@ -1,3 +1,5 @@
+const path = require('path')
+
 /* eslint-disable */
 let isEarlyFlakeDetectionEnabled = false
 let isKnownTestsEnabled = false
@@ -7,6 +9,10 @@ let earlyFlakeDetectionNumRetries = 0
 let isTestManagementEnabled = false
 let testManagementAttemptToFixRetries = 0
 let testManagementTests = {}
+let isImpactedTestsEnabled = false
+let modifiedTests = {}
+
+let repositoryRoot = ''
 // We need to grab the original window as soon as possible,
 // in case the test changes the origin. If the test does change the origin,
 // any call to `cy.window()` will result in a cross origin error.
@@ -48,10 +54,42 @@ function retryTest (test, suiteTests, numRetries, tags) {
   }
 }
 
+function getTestEndLine (testFn, startLine) {
+  const source = testFn.toString()
+  const lineCount = source.split('\n').length
+  return startLine + lineCount - 1
+}
+
+function getTestSuitePath (testSuiteAbsolutePath, sourceRoot) {
+  if (!testSuiteAbsolutePath) {
+    return sourceRoot
+  }
+  const testSuitePath = testSuiteAbsolutePath === sourceRoot
+    ? testSuiteAbsolutePath
+    : path.relative(sourceRoot, testSuiteAbsolutePath)
+
+  return testSuitePath.replace(path.sep, '/')
+}
+
+function isModifiedTest (testPath, testStartLine, testEndLine, modifiedTests) {
+  if (modifiedTests !== undefined && !modifiedTests.hasOwnProperty('apiTests')) { // If tests come from the local diff
+    const lines = modifiedTests[testPath]
+    if (lines) {
+      return lines.some(line => line >= testStartLine && line <= testEndLine)
+    }
+  } else if (modifiedTests?.apiTests !== undefined) { // If tests come from the API
+    const isModified = modifiedTests.apiTests.some(file => file === testPath)
+    if (isModified) {
+      return true
+    }
+  }
+  return false
+}
+
 
 const oldRunTests = Cypress.mocha.getRunner().runTests
 Cypress.mocha.getRunner().runTests = function (suite, fn) {
-  if (!isKnownTestsEnabled && !isTestManagementEnabled) {
+  if (!isKnownTestsEnabled && !isTestManagementEnabled && !isImpactedTestsEnabled) {
     return oldRunTests.apply(this, arguments)
   }
   // We copy the new tests at the beginning of the suite run (runTests), so that they're run
@@ -67,10 +105,23 @@ Cypress.mocha.getRunner().runTests = function (suite, fn) {
         retryTest(test, suite.tests, testManagementAttemptToFixRetries, ['_ddIsAttemptToFix'])
       }
     }
+    let isModified = false
+    if (isImpactedTestsEnabled) {
+      const testPath = getTestSuitePath(test.invocationDetails.absoluteFile, repositoryRoot)
+      const testStartLine = test.invocationDetails.line
+      const testEndLine = getTestEndLine(test.fn, testStartLine)
+      isModified = isModifiedTest(testPath, testStartLine, testEndLine, modifiedTests)
+      if (isModified) {
+        test._ddIsModified = true
+        if (isEarlyFlakeDetectionEnabled && !isAttemptToFix) {
+          retryTest(test, suite.tests, earlyFlakeDetectionNumRetries, ['_ddIsModified', '_ddIsEfdRetry'])
+        }
+      }
+    }
     if (isKnownTestsEnabled) {
       if (!test._ddIsNew && !test.isPending() && isNewTest(test)) {
         test._ddIsNew = true
-        if (isEarlyFlakeDetectionEnabled && !isAttemptToFix) {
+        if (isEarlyFlakeDetectionEnabled && !isAttemptToFix && !isModified) {
           retryTest(test, suite.tests, earlyFlakeDetectionNumRetries, ['_ddIsNew', '_ddIsEfdRetry'])
         }
       }
@@ -108,6 +159,9 @@ before(function () {
       isTestManagementEnabled = suiteConfig.isTestManagementEnabled
       testManagementAttemptToFixRetries = suiteConfig.testManagementAttemptToFixRetries
       testManagementTests = suiteConfig.testManagementTests
+      isImpactedTestsEnabled = suiteConfig.isImpactedTestsEnabled
+      modifiedTests = suiteConfig.modifiedTests
+      repositoryRoot = suiteConfig.repositoryRoot
     }
   })
 })
@@ -133,7 +187,8 @@ afterEach(function () {
     error: currentTest.err,
     isNew: currentTest._ddIsNew,
     isEfdRetry: currentTest._ddIsEfdRetry,
-    isAttemptToFix: currentTest._ddIsAttemptToFix
+    isAttemptToFix: currentTest._ddIsAttemptToFix,
+    isModified: currentTest._ddIsModified
   }
   try {
     testInfo.testSourceLine = Cypress.mocha.getRunner().currentRunnable.invocationDetails.line

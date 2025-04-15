@@ -114,7 +114,7 @@ const DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX = '_dd.library_capabilities
 const UNSUPPORTED_TIA_FRAMEWORKS = ['playwright', 'vitest']
 const UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE = ['cucumber', 'mocha']
 const UNSUPPORTED_ATTEMPT_TO_FIX_FRAMEWORKS_PARALLEL_MODE = ['mocha']
-const UNSUPPORTED_IMPACTED_TESTS_FRAMEWORKS = ['playwright', 'vitest', 'cypress']
+const UNSUPPORTED_IMPACTED_TESTS_FRAMEWORKS = ['playwright', 'vitest']
 
 const TEST_LEVEL_EVENT_TYPES = [
   'test',
