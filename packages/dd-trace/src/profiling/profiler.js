@@ -53,19 +53,11 @@ class Profiler extends EventEmitter {
     this.endpointCounts = new Map()
   }
 
-  start (options) {
-    return this._start(options).catch((err) => {
-      logError(options.logger, 'Error starting profiler. For troubleshooting tips, see ' +
-        '<https://dtdg.co/nodejs-profiler-troubleshooting>', err)
-      return false
-    })
-  }
-
   _logError (err) {
     logError(this._logger, err)
   }
 
-  async _start (options) {
+  start (options) {
     if (this._enabled) return true
 
     const config = this._config = new Config(options)
@@ -77,19 +69,34 @@ class Profiler extends EventEmitter {
     // Log errors if the source map finder fails, but don't prevent the rest
     // of the profiler from running without source maps.
     let mapper
-    try {
-      const { setLogger, SourceMapper } = require('@datadog/pprof')
-      setLogger(config.logger)
+    if (config.sourceMap) {
+      try {
+        const { setLogger, SourceMapper } = require('@datadog/pprof')
+        setLogger(config.logger)
 
-      mapper = await maybeSourceMap(config.sourceMap, SourceMapper, config.debugSourceMaps)
-      if (config.sourceMap && config.debugSourceMaps) {
-        this._logger.debug(() => {
-          return mapper.infoMap.size === 0
-            ? 'Found no source maps'
-            : `Found source maps for following files: [${[...mapper.infoMap.keys()].join(', ')}]`
+        let loadedMapper
+        maybeSourceMap(SourceMapper, config.debugSourceMaps).then((sourceMap) => {
+          loadedMapper = sourceMap
+          if (config.debugSourceMaps) {
+            this._logger.debug(() => {
+              return sourceMap.infoMap.size === 0
+                ? 'Found no source maps'
+                : `Found source maps for following files: [${[...mapper.infoMap.keys()].join(', ')}]`
+            })
+          }
+        }).catch((err) => {
+          this._logError(err)
         })
+        mapper = {
+          hasMappingInfo: (p) => loadedMapper?.hasMappingInfo(p) ?? false,
+          mappingInfo: (l) => loadedMapper?.mappingInfo(l) ?? l
+        }
+      } catch (err) {
+        this._logError(err)
       }
+    }
 
+    try {
       const clevel = config.uploadCompression.level
       switch (config.uploadCompression.method) {
         case 'gzip':
