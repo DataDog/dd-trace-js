@@ -6,8 +6,10 @@ const { storage } = require('../../../datadog-core')
 
 const hasOwn = (obj, prop) => Object.prototype.hasOwnProperty.call(obj, prop)
 
-function messageProxy (message, holder) {
-  const originalStack = message && typeof message === 'object' &&
+function messageProxy (message, holder, constructorId) {
+  // Only apply special stack handling for Winston to avoid breaking other plugins
+  const isWinston = constructorId === 'winston'
+  const originalStack = isWinston && message && typeof message === 'object' &&
     (message instanceof Error || message.stack)
     ? message.stack
     : undefined
@@ -66,7 +68,7 @@ module.exports = class LogPlugin extends Plugin {
       // so service, version, and env will always get injected.
       const holder = {}
       this.tracer.inject(span, LOG, holder)
-      arg.message = messageProxy(arg.message, holder)
+      arg.message = messageProxy(arg.message, holder, this.constructor.id)
     })
   }
 
