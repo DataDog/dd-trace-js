@@ -866,9 +866,7 @@ function getModifiedTestsFromDiff (diff) {
 
 function isModifiedTest (testPath, testStartLine, testEndLine, modifiedTests) {
   if (modifiedTests !== undefined && !modifiedTests.hasOwnProperty('apiTests')) { // If tests come from the local diff
-    // We want to get the path relative to the root of the project
-    const localTestPath = getTestSuitePath(testPath, path.dirname(process.cwd()))
-    const lines = modifiedTests[testPath] ? modifiedTests[testPath] : modifiedTests[localTestPath]
+    const lines = modifiedTests[testPath]
     if (lines) {
       return lines.some(line => line >= testStartLine && line <= testEndLine)
     }

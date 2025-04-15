@@ -5,9 +5,7 @@ const {
   removeEfdStringFromTestName,
   addEfdStringToTestName,
   addAttemptToFixStringToTestName,
-  removeAttemptToFixStringFromTestName,
-  isModifiedTest,
-  getTestEndLine
+  removeAttemptToFixStringFromTestName
 } = require('../../../dd-trace/src/plugins/util/test')
 const { channel, AsyncResource } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
@@ -19,7 +17,7 @@ const testFinishCh = channel('ci:mocha:test:finish')
 const testRetryCh = channel('ci:mocha:test:retry')
 const errorCh = channel('ci:mocha:test:error')
 const skipCh = channel('ci:mocha:test:skip')
-
+const isModifiedCh = channel('ci:mocha:test:is-modified')
 // suite channels
 const testSuiteErrorCh = channel('ci:mocha:test-suite:error')
 
@@ -456,26 +454,25 @@ function getRunTestsWrapper (runTests, config) {
 
     if (config.isImpactedTestsEnabled) {
       suite.tests.forEach((test) => {
-        const testStartLine = testToStartLine.get(test) || 0
-        const testEndLine = getTestEndLine(test.fn, testStartLine)
-        const testPath = getTestSuitePath(suite.file, process.cwd())
-        const isModified = isModifiedTest(
-          testPath,
-          testStartLine,
-          testEndLine,
-          config.modifiedTests
-        )
-        if (isModified) {
-          test._ddIsModified = true
-          if (!test.isPending() && !test._ddIsAttemptToFix && config.isEarlyFlakeDetectionEnabled) {
-            retryTest(
-              test,
-              config.earlyFlakeDetectionNumRetries,
-              addEfdStringToTestName,
-              ['_ddIsModified', '_ddIsEfdRetry']
-            )
+        isModifiedCh.publish({
+          modifiedTests: config.modifiedTests,
+          testStartLine: testToStartLine.get(test) || 0,
+          file: suite.file,
+          test,
+          onDone: (isModified) => {
+            if (isModified) {
+              test._ddIsModified = true
+              if (!test.isPending() && !test._ddIsAttemptToFix && config.isEarlyFlakeDetectionEnabled) {
+                retryTest(
+                  test,
+                  config.earlyFlakeDetectionNumRetries,
+                  addEfdStringToTestName,
+                  ['_ddIsModified', '_ddIsEfdRetry']
+                )
+              }
+            }
           }
-        }
+        })
       })
     }
 

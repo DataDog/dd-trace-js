@@ -38,7 +38,9 @@ const {
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_RETRY_REASON_TYPES,
-  TEST_IS_MODIFIED
+  TEST_IS_MODIFIED,
+  getTestEndLine,
+  isModifiedTest
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -189,6 +191,19 @@ class MochaPlugin extends CiPlugin {
         span.setTag('error', err)
         span.setTag(TEST_STATUS, 'fail')
       }
+    })
+
+    this.addSub('ci:mocha:test:is-modified', ({ modifiedTests, testStartLine, file, test, onDone }) => {
+      const testEndLine = getTestEndLine(test.fn, testStartLine)
+      const testPath = getTestSuitePath(file, this.repositoryRoot)
+      const isModified = isModifiedTest(
+        testPath,
+        testStartLine,
+        testEndLine,
+        modifiedTests
+      )
+
+      onDone(isModified)
     })
 
     this.addSub('ci:mocha:test:start', (testInfo) => {
