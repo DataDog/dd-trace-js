@@ -77,7 +77,7 @@ function isModifiedTest (testPath, testStartLine, testEndLine, modifiedTests) {
     if (lines) {
       return lines.some(line => line >= testStartLine && line <= testEndLine)
     }
-  } else if (modifiedTests?.apiTests !== undefined) { // If tests come from the API
+  } else if (modifiedTests && modifiedTests.apiTests !== undefined) { // If tests come from the API
     const isModified = modifiedTests.apiTests.some(file => file === testPath)
     if (isModified) {
       return true
