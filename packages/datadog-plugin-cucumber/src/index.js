@@ -34,7 +34,8 @@ const {
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
-  TEST_RETRY_REASON_TYPES
+  TEST_RETRY_REASON_TYPES,
+  TEST_IS_MODIFIED
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
@@ -342,7 +343,8 @@ class CucumberPlugin extends CiPlugin {
       hasFailedAllRetries,
       hasPassedAllRetries,
       isDisabled,
-      isQuarantined
+      isQuarantined,
+      isModified
     }) => {
       const span = storage('legacy').getStore().span
       const statusTag = isStep ? 'step.status' : TEST_STATUS
@@ -394,6 +396,14 @@ class CucumberPlugin extends CiPlugin {
 
       if (isQuarantined) {
         span.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+      }
+
+      if (isModified) {
+        span.setTag(TEST_IS_MODIFIED, 'true')
+        if (isEfdRetry) {
+          span.setTag(TEST_IS_RETRY, 'true')
+          span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
+        }
       }
 
       span.finish()
