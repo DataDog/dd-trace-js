@@ -7,6 +7,11 @@ const { storage } = require('../../../datadog-core')
 const hasOwn = (obj, prop) => Object.prototype.hasOwnProperty.call(obj, prop)
 
 function messageProxy (message, holder) {
+  const originalStack = message && typeof message === 'object' &&
+    (message instanceof Error || message.stack)
+    ? message.stack
+    : undefined
+
   return new Proxy(message, {
     get (target, p, receiver) {
       if (p === Symbol.toStringTag) {
@@ -15,6 +20,11 @@ function messageProxy (message, holder) {
 
       if (shouldOverride(target, p)) {
         return holder.dd
+      }
+
+      // Special handling for Error stack property in Node.js 22
+      if (p === 'stack' && originalStack !== undefined) {
+        return originalStack
       }
 
       return Reflect.get(target, p, receiver)
@@ -26,6 +36,15 @@ function messageProxy (message, holder) {
         : ['dd', ...ownKeys]
     },
     getOwnPropertyDescriptor (target, p) {
+      // explicit handling for stack property descriptor for Node.js 22
+      if (p === 'stack' && originalStack !== undefined) {
+        return {
+          value: originalStack,
+          writable: true,
+          enumerable: false,
+          configurable: true
+        }
+      }
       return Reflect.getOwnPropertyDescriptor(shouldOverride(target, p) ? holder : target, p)
     }
   })
