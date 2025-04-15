@@ -14,13 +14,6 @@ const zlib = require('zlib')
 const profileSubmittedChannel = dc.channel('datadog:profiling:profile-submitted')
 const spanFinishedChannel = dc.channel('dd-trace:span:finish')
 
-function maybeSourceMap (sourceMap, SourceMapper, debug) {
-  if (!sourceMap) return
-  return SourceMapper.create([
-    process.cwd()
-  ], debug)
-}
-
 function logError (logger, ...args) {
   if (logger) {
     logger.error(...args)
@@ -50,22 +43,19 @@ class Profiler extends EventEmitter {
     this._timer = undefined
     this._lastStart = undefined
     this._timeoutInterval = undefined
+    this._sourceMapsLoaded = undefined
     this.endpointCounts = new Map()
-  }
-
-  start (options) {
-    return this._start(options).catch((err) => {
-      logError(options.logger, 'Error starting profiler. For troubleshooting tips, see ' +
-        '<https://dtdg.co/nodejs-profiler-troubleshooting>', err)
-      return false
-    })
   }
 
   _logError (err) {
     logError(this._logger, err)
   }
 
-  async _start (options) {
+  sourceMapsLoaded () {
+    return this._sourceMapsLoaded
+  }
+
+  start (options) {
     if (this._enabled) return true
 
     const config = this._config = new Config(options)
@@ -77,19 +67,44 @@ class Profiler extends EventEmitter {
     // Log errors if the source map finder fails, but don't prevent the rest
     // of the profiler from running without source maps.
     let mapper
-    try {
-      const { setLogger, SourceMapper } = require('@datadog/pprof')
-      setLogger(config.logger)
+    if (config.sourceMap) {
+      try {
+        const { setLogger, SourceMapper } = require('@datadog/pprof')
+        setLogger(config.logger)
 
-      mapper = await maybeSourceMap(config.sourceMap, SourceMapper, config.debugSourceMaps)
-      if (config.sourceMap && config.debugSourceMaps) {
-        this._logger.debug(() => {
-          return mapper.infoMap.size === 0
-            ? 'Found no source maps'
-            : `Found source maps for following files: [${[...mapper.infoMap.keys()].join(', ')}]`
-        })
+        const maybeMapperLoadingPromise = SourceMapper.create([process.cwd()], config.debugSourceMaps)
+        if (maybeMapperLoadingPromise instanceof Promise) {
+          mapper = {
+            hasMappingInfo: () => false,
+            mappingInfo: (l) => l
+          }
+          this._sourceMapsLoaded = maybeMapperLoadingPromise.then((sourceMap) => {
+            if (config.debugSourceMaps) {
+              this._logger.debug(() => {
+                return sourceMap.infoMap.size === 0
+                  ? 'Found no source maps'
+                  : `Found source maps for following files: [${[...mapper.infoMap.keys()].join(', ')}]`
+              })
+            }
+            mapper.hasMappingInfo = sourceMap.hasMappingInfo.bind(sourceMap)
+            mapper.mappingInfo = sourceMap.mappingInfo.bind(sourceMap)
+          }).catch((err) => {
+            this._logError(err)
+          })
+        } else {
+          // If the result of SourceMapper.create is not a promise, it is already loaded
+          mapper = maybeMapperLoadingPromise
+        }
+      } catch (err) {
+        this._logError(err)
       }
+    }
 
+    if (this._sourceMapsLoaded === undefined) {
+      this._sourceMapsLoaded = Promise.resolve()
+    }
+
+    try {
       const clevel = config.uploadCompression.level
       switch (config.uploadCompression.method) {
         case 'gzip':
