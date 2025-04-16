@@ -11,8 +11,7 @@ describe('Plugin', () => {
 
   withVersions('elasticsearch', ['elasticsearch', '@elastic/elasticsearch'], (version, moduleName) => {
     const metaModule = require(`../../../versions/${moduleName}@${version}`)
-    const hasCallbackSupport = !(moduleName === '@elastic/elasticsearch' &&
-      metaModule.version().split('.')[0] >= 8)
+    const hasCallbackSupport = !(moduleName === '@elastic/elasticsearch' && metaModule.version().split('.')[0] >= 8)
 
     describe('elasticsearch', () => {
       beforeEach(() => {
