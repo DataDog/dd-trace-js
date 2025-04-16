@@ -271,9 +271,11 @@ describe('Plugin', () => {
         })
 
         describe('span pointers', () => {
-          async function testSpanPointers ({ env, expectedHashes, operation }) {
+          this.afterEach(async () => {
             await agent.close({ ritmReset: false, wipe: true })
+          })
 
+          async function testSpanPointers ({ env, expectedHashes, operation }) {
             if (env) {
               process.env.DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS = env
             } else {
