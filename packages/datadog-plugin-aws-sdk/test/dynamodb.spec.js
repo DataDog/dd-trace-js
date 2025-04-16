@@ -273,7 +273,7 @@ describe('Plugin', () => {
         })
 
         describe('span pointers', () => {
-          this.afterEach(async () => {
+          beforeEach(async () => {
             await agent.close({ ritmReset: false, wipe: true })
           })
 
