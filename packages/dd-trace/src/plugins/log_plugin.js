@@ -6,14 +6,7 @@ const { storage } = require('../../../datadog-core')
 
 const hasOwn = (obj, prop) => Object.prototype.hasOwnProperty.call(obj, prop)
 
-function messageProxy (message, holder, constructorId) {
-  // Only apply special stack handling for Winston to avoid breaking other plugins
-  const isWinston = constructorId === 'winston'
-  const originalStack = isWinston && message && typeof message === 'object' &&
-    (message instanceof Error || message.stack)
-    ? message.stack
-    : undefined
-
+function messageProxy (message, holder) {
   return new Proxy(message, {
     get (target, p, receiver) {
       if (p === Symbol.toStringTag) {
@@ -24,9 +17,9 @@ function messageProxy (message, holder, constructorId) {
         return holder.dd
       }
 
-      // Special handling for Error stack property in Node.js 22
-      if (p === 'stack' && originalStack !== undefined) {
-        return originalStack
+      // This is a workaround for a V8 bug that surfaced in Node.js 22
+      if (p === 'stack') {
+        return target.stack
       }
 
       return Reflect.get(target, p, receiver)
@@ -38,15 +31,6 @@ function messageProxy (message, holder, constructorId) {
         : ['dd', ...ownKeys]
     },
     getOwnPropertyDescriptor (target, p) {
-      // explicit handling for stack property descriptor for Node.js 22
-      if (p === 'stack' && originalStack !== undefined) {
-        return {
-          value: originalStack,
-          writable: true,
-          enumerable: false,
-          configurable: true
-        }
-      }
       return Reflect.getOwnPropertyDescriptor(shouldOverride(target, p) ? holder : target, p)
     }
   })
@@ -68,7 +52,7 @@ module.exports = class LogPlugin extends Plugin {
       // so service, version, and env will always get injected.
       const holder = {}
       this.tracer.inject(span, LOG, holder)
-      arg.message = messageProxy(arg.message, holder, this.constructor.id)
+      arg.message = messageProxy(arg.message, holder)
     })
   }
 
