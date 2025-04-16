@@ -132,141 +132,143 @@ describe('Plugin', () => {
           ])
         })
 
+        function promisify (fn) {
+          return function (...args) {
+            const boundFn = typeof fn === 'function' ? fn.bind(dynamo) : fn
+
+            // For AWS SDK v3, it's already promise-based
+            if (moduleName === '@aws-sdk/smithy-client') {
+              return boundFn(...args)
+            }
+
+            // For AWS SDK v2, we need to promisify the function
+            return util.promisify(boundFn)(...args)
+          }
+        }
+
         after(async () => {
           await resetLocalStackDynamo()
           return agent.close({ ritmReset: false })
         })
 
         describe('with payload tagging', () => {
-          it('adds request and response payloads as flattened tags for putItem', done => {
-            agent
-              .use(traces => {
-                const span = traces[0][0]
+          it('adds request and response payloads as flattened tags for putItem', async () => {
+            const agentPromise = agent.use(traces => {
+              const span = traces[0][0]
 
-                expect(span.resource).to.equal(`putItem ${oneKeyTableName}`)
-                expect(span.meta).to.include({
-                  'aws.dynamodb.table_name': oneKeyTableName,
-                  aws_service: 'DynamoDB',
-                  region: 'us-east-1',
-                  'aws.request.body.TableName': oneKeyTableName,
-                  'aws.request.body.Item.name': 'redacted',
-                  'aws.request.body.Item.data.S': 'test-data'
-                })
+              expect(span.resource).to.equal(`putItem ${oneKeyTableName}`)
+              expect(span.meta).to.include({
+                'aws.dynamodb.table_name': oneKeyTableName,
+                aws_service: 'DynamoDB',
+                region: 'us-east-1',
+                'aws.request.body.TableName': oneKeyTableName,
+                'aws.request.body.Item.name': 'redacted',
+                'aws.request.body.Item.data.S': 'test-data'
               })
-              .then(done).catch(done)
+            })
 
-            dynamo.putItem(
-              {
-                TableName: oneKeyTableName,
-                Item: {
-                  name: { S: 'test-name' },
-                  data: { S: 'test-data' }
-                }
-              },
-              e => e && done(e)
-            )
+            const operation = () => promisify(dynamo.putItem)({
+              TableName: oneKeyTableName,
+              Item: {
+                name: { S: 'test-name' },
+                data: { S: 'test-data' }
+              }
+            })
+
+            await Promise.all([agentPromise, operation()])
           })
 
-          it('adds request and response payloads as flattened tags for updateItem', (done) => {
-            agent
-              .use((traces) => {
-                const span = traces[0][0]
+          it('adds request and response payloads as flattened tags for updateItem', async () => {
+            const agentPromise = agent.use(traces => {
+              const span = traces[0][0]
 
-                expect(span.resource).to.equal(`updateItem ${oneKeyTableName}`)
-                expect(span.meta).to.include({
-                  'aws.dynamodb.table_name': oneKeyTableName,
-                  aws_service: 'DynamoDB',
-                  region: 'us-east-1',
-                  'aws.request.body.TableName': oneKeyTableName,
-                  'aws.request.body.Key.name.S': 'test-name',
-                  'aws.request.body.AttributeUpdates.data.Value.S': 'updated-data'
-                })
+              expect(span.resource).to.equal(`updateItem ${oneKeyTableName}`)
+              expect(span.meta).to.include({
+                'aws.dynamodb.table_name': oneKeyTableName,
+                aws_service: 'DynamoDB',
+                region: 'us-east-1',
+                'aws.request.body.TableName': oneKeyTableName,
+                'aws.request.body.Key.name.S': 'test-name',
+                'aws.request.body.AttributeUpdates.data.Value.S': 'updated-data'
               })
-              .then(done, done)
+            })
 
-            dynamo.updateItem(
-              {
-                TableName: oneKeyTableName,
-                Key: {
-                  name: { S: 'test-name' }
-                },
-                AttributeUpdates: {
-                  data: {
-                    Action: 'PUT',
-                    Value: { S: 'updated-data' }
-                  }
-                }
+            const operation = () => promisify(dynamo.updateItem)({
+              TableName: oneKeyTableName,
+              Key: {
+                name: { S: 'test-name' }
               },
-              (e) => e && done(e)
-            )
+              AttributeUpdates: {
+                data: {
+                  Action: 'PUT',
+                  Value: { S: 'updated-data' }
+                }
+              }
+            })
+
+            await Promise.all([agentPromise, operation()])
           })
 
-          it('adds request and response payloads as flattened tags for deleteItem', (done) => {
-            agent
-              .use((traces) => {
-                const span = traces[0][0]
+          it('adds request and response payloads as flattened tags for deleteItem', async () => {
+            const agentPromise = agent.use(traces => {
+              const span = traces[0][0]
 
-                expect(span.resource).to.equal(`deleteItem ${oneKeyTableName}`)
-                expect(span.meta).to.include({
-                  'aws.dynamodb.table_name': oneKeyTableName,
-                  aws_service: 'DynamoDB',
-                  region: 'us-east-1',
-                  'aws.request.body.TableName': oneKeyTableName,
-                  'aws.request.body.Key.name.S': 'test-name'
-                })
+              expect(span.resource).to.equal(`deleteItem ${oneKeyTableName}`)
+              expect(span.meta).to.include({
+                'aws.dynamodb.table_name': oneKeyTableName,
+                aws_service: 'DynamoDB',
+                region: 'us-east-1',
+                'aws.request.body.TableName': oneKeyTableName,
+                'aws.request.body.Key.name.S': 'test-name'
               })
-              .then(done, done)
+            })
 
-            dynamo.deleteItem(
-              {
-                TableName: oneKeyTableName,
-                Key: {
-                  name: { S: 'test-name' }
-                }
-              },
-              (e) => e && done(e)
-            )
+            const operation = () => promisify(dynamo.deleteItem)({
+              TableName: oneKeyTableName,
+              Key: {
+                name: { S: 'test-name' }
+              }
+            })
+
+            await Promise.all([agentPromise, operation()])
           })
 
-          it('adds request and response payloads as flattened tags for getItem', (done) => {
-            dynamo.putItem({
+          it('adds request and response payloads as flattened tags for getItem', async () => {
+            // First put an item for later retrieval
+            await promisify(dynamo.putItem)({
               TableName: oneKeyTableName,
               Item: {
                 name: { S: 'test-get-name' },
                 data: { S: 'test-get-data' }
               }
-            }, (putErr) => {
-              if (putErr) return done(putErr)
-
-              setTimeout(() => {
-                agent
-                  .use((traces) => {
-                    const span = traces[0][0]
-
-                    expect(span.resource).to.equal(`getItem ${oneKeyTableName}`)
-                    expect(span.meta).to.include({
-                      'aws.dynamodb.table_name': oneKeyTableName,
-                      aws_service: 'DynamoDB',
-                      region: 'us-east-1',
-                      'aws.request.body.TableName': oneKeyTableName,
-                      'aws.request.body.Key.name.S': 'test-get-name',
-                      'aws.response.body.Item.name.S': 'test-get-name',
-                      'aws.response.body.Item.data': 'redacted'
-                    })
-                  })
-                  .then(done, done)
-
-                dynamo.getItem(
-                  {
-                    TableName: oneKeyTableName,
-                    Key: {
-                      name: { S: 'test-get-name' }
-                    }
-                  },
-                  (e) => e && done(e)
-                )
-              }, 100) // Small delay to ensure put completes
             })
+
+            // Wait a bit to ensure the put completes
+            await wait(100)
+
+            const agentPromise = agent.use(traces => {
+              const span = traces[0][0]
+
+              expect(span.resource).to.equal(`getItem ${oneKeyTableName}`)
+              expect(span.meta).to.include({
+                'aws.dynamodb.table_name': oneKeyTableName,
+                aws_service: 'DynamoDB',
+                region: 'us-east-1',
+                'aws.request.body.TableName': oneKeyTableName,
+                'aws.request.body.Key.name.S': 'test-get-name',
+                'aws.response.body.Item.name.S': 'test-get-name',
+                'aws.response.body.Item.data': 'redacted'
+              })
+            })
+
+            const operation = () => promisify(dynamo.getItem)({
+              TableName: oneKeyTableName,
+              Key: {
+                name: { S: 'test-get-name' }
+              }
+            })
+
+            await Promise.all([agentPromise, operation()])
           })
         })
 
@@ -315,20 +317,6 @@ describe('Plugin', () => {
             DynamoDb.dynamoPrimaryKeyConfig = null
 
             await Promise.all([agentPromise, operation()])
-          }
-
-          function promisify (fn) {
-            return function (...args) {
-              const boundFn = typeof fn === 'function' ? fn.bind(dynamo) : fn
-
-              // For AWS SDK v3, it's already promise-based
-              if (moduleName === '@aws-sdk/smithy-client') {
-                return boundFn(...args)
-              }
-
-              // For AWS SDK v2, we need to promisify the function
-              return util.promisify(boundFn)(...args)
-            }
           }
 
           describe('1-key table', () => {
