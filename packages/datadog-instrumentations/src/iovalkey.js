@@ -11,7 +11,7 @@ const startCh = channel('apm:iovalkey:command:start')
 const finishCh = channel('apm:iovalkey:command:finish')
 const errorCh = channel('apm:iovalkey:command:error')
 
-addHook({ name: 'iovalkey', versions: ['>=0'] }, Redis => {
+addHook({ name: 'iovalkey', versions: ['>=0.0.1'] }, Redis => {
   shimmer.wrap(Redis.prototype, 'sendCommand', sendCommand => function (command, stream) {
     if (!startCh.hasSubscribers) return sendCommand.apply(this, arguments)
 
