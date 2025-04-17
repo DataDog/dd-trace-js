@@ -57,6 +57,9 @@ module.exports = {
   get koa () { return require('../../../datadog-plugin-koa/src') },
   get 'koa-router' () { return require('../../../datadog-plugin-koa/src') },
   get kafkajs () { return require('../../../datadog-plugin-kafkajs/src') },
+  get '@confluentinc/kafka-javascript' () {
+    return require('../../../datadog-plugin-confluentinc-kafka-javascript/src')
+  },
   get langchain () { return require('../../../datadog-plugin-langchain/src') },
   get mariadb () { return require('../../../datadog-plugin-mariadb/src') },
   get memcached () { return require('../../../datadog-plugin-memcached/src') },

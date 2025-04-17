@@ -36,7 +36,7 @@ function expectSomeSpan (agent, expected, timeout) {
     // output.
     error.message += '\n\nCandidate Traces:\n' + inspect(traces)
     throw error
-  }, timeout)
+  }, { timeoutMs: timeout })
 }
 
 // This is a bit like chai's `expect(expected).to.deep.include(actual)`, except
