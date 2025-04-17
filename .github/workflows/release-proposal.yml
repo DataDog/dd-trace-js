@@ -20,8 +20,19 @@ on:
           - 'auto'
           - 'minor'
           - 'patch'
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 jobs:
   create-proposal:
+    strategy:
+      fail-fast: false
+      matrix:
+        release-line: ['5']
+        exclude:
+          - release-line: ${{ inputs.release-line != 'all' && inputs.release-line != '5' && '5' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -36,6 +47,7 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
+      - run: git fetch origin master:master
       - uses: ./.github/actions/node
       - run: npm i -g branch-diff
       - run: |
@@ -43,7 +55,6 @@ jobs:
           echo "{\"token\":\"${{ secrets.GITHUB_TOKEN }}\",\"user\":\"${{ github.actor }}\"}" > ~/.config/changelog-maker/config.json
           git config user.name ${{ github.actor }}
           git config user.email ${{ github.actor }}@users.noreply.github.com
-      - if: inputs.release-line == 'all' || inputs.release-line == '5'
-        run: node scripts/release/proposal 5 -y --{{ inputs.increment }}
+      - run: node scripts/release/proposal ${{ matrix.release-line }} -y --{{ inputs.increment }}
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
