@@ -36,6 +36,7 @@ dev,@babel/helpers,MIT,Copyright (c) 2014-present Sebastian McKenzie and other c
 dev,@types/node,MIT,Copyright Authors
 dev,@eslint/eslintrc,MIT,Copyright OpenJS Foundation and other contributors, <www.openjsf.org>
 dev,@eslint/js,MIT,Copyright OpenJS Foundation and other contributors, <www.openjsf.org>
+dev,@koa/router,MIT,Copyright (c) 2015 Alexander C. Mingoia and @koajs contributors
 dev,@msgpack/msgpack,ISC,Copyright 2019 The MessagePack Community
 dev,@stylistic/eslint-plugin-js,MIT,Copyright OpenJS Foundation and other contributors, <www.openjsf.org>
 dev,autocannon,MIT,Copyright 2016 Matteo Collina
@@ -63,6 +64,7 @@ dev,globals,MIT,Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://si
 dev,graphql,MIT,Copyright 2015 Facebook Inc.
 dev,jszip,MIT,Copyright 2015-2016 Stuart Knightley and contributors
 dev,knex,MIT,Copyright (c) 2013-present Tim Griesser
+dev,koa,MIT,Copyright (c) 2019 Koa Contributors
 dev,mkdirp,MIT,Copyright 2010 James Halliday
 dev,mocha,MIT,Copyright 2011-2018 JS Foundation and contributors https://js.foundation
 dev,multer,MIT,Copyright 2014 Hage Yaapa
