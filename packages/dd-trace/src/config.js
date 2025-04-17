@@ -8,8 +8,6 @@ const log = require('./log')
 const pkg = require('./pkg')
 const coalesce = require('koalas')
 const tagger = require('./tagger')
-const get = require('../../datadog-core/src/utils/src/get')
-const has = require('../../datadog-core/src/utils/src/has')
 const set = require('../../datadog-core/src/utils/src/set')
 const { isTrue, isFalse, normalizeProfilingEnabledValue } = require('./util')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
@@ -21,6 +19,8 @@ const { ORIGIN_KEY, GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = r
 const { appendRules } = require('./payload-tagging/config')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
+
+const changeTracker = {}
 
 const telemetryCounters = {
   'otel.env.hiding': {},
@@ -1418,6 +1418,26 @@ class Config {
     obj[name] = value
   }
 
+  _setAndTrackChange ({ name, value, origin, unprocessedValue, changes }) {
+    set(this, name, value)
+
+    if (!changeTracker[name]) {
+      changeTracker[name] = {}
+    }
+
+    const originExists = origin in changeTracker[name]
+    const oldValue = changeTracker[name][origin]
+
+    if (!originExists || oldValue !== value) {
+      changeTracker[name][origin] = value
+      changes.push({
+        name,
+        value: unprocessedValue || value,
+        origin
+      })
+    }
+  }
+
   // TODO: Report origin changes and errors to telemetry.
   // TODO: Deeply merge configurations.
   // TODO: Move change tracking to telemetry.
@@ -1425,56 +1445,32 @@ class Config {
   // eslint-disable-next-line @stylistic/js/max-len
   // https://github.com/DataDog/dd-go/blob/prod/trace/apps/tracer-telemetry-intake/telemetry-payload/static/config_norm_rules.json
   _merge () {
-    const containers = [
-      this._remote,
-      this._options,
-      this._fleetStableConfig,
-      this._env,
-      this._localStableConfig,
-      this._calculated,
-      this._defaults
+    const sources = [
+      { container: this._defaults, origin: 'default', unprocessed: {} },
+      { container: this._calculated, origin: 'calculated', unprocessed: {} },
+      { container: this._localStableConfig, origin: 'local_stable_config', unprocessed: {} },
+      { container: this._env, origin: 'env_var', unprocessed: this._envUnprocessed },
+      { container: this._fleetStableConfig, origin: 'fleet_stable_config', unprocessed: {} },
+      { container: this._options, origin: 'code', unprocessed: this._optsUnprocessed },
+      { container: this._remote, origin: 'remote_config', unprocessed: this._remoteUnprocessed }
     ]
-    const origins = [
-      'remote_config',
-      'code',
-      'fleet_stable_config',
-      'env_var',
-      'local_stable_config',
-      'calculated',
-      'default'
-    ]
-    const unprocessedValues = [
-      this._remoteUnprocessed,
-      this._optsUnprocessed,
-      {},
-      this._envUnprocessed,
-      {},
-      {},
-      {}
-    ]
+
     const changes = []
 
     for (const name in this._defaults) {
-      for (let i = 0; i < containers.length; i++) {
-        const container = containers[i]
+      for (const { container, origin, unprocessed } of sources) {
         const value = container[name]
-
         if ((value !== null && value !== undefined) || container === this._defaults) {
-          if (get(this, name) === value && has(this, name)) break
-
-          set(this, name, value)
-
-          changes.push({
+          this._setAndTrackChange({
             name,
-            value: unprocessedValues[i][name] || value,
-            origin: origins[i]
+            value,
+            origin,
+            unprocessedValue: unprocessed[name],
+            changes
           })
-
-          break
         }
       }
     }
-
     this.sampler.sampleRate = this.sampleRate
     updateConfig(changes, this)
   }
