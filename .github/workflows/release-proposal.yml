@@ -55,6 +55,17 @@ jobs:
           echo "{\"token\":\"${{ secrets.GITHUB_TOKEN }}\",\"user\":\"${{ github.actor }}\"}" > ~/.config/changelog-maker/config.json
           git config user.name ${{ github.actor }}
           git config user.email ${{ github.actor }}@users.noreply.github.com
-      - run: node scripts/release/proposal ${{ matrix.release-line }} -y --{{ inputs.increment }}
+      - run: node scripts/release/proposal ${{ matrix.release-line }} -n --{{ inputs.increment }}
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+      - run: echo RELEASE_VERSION=$(git rev-parse --abbrev-ref HEAD | sed s/-proposal$//) >> $GITHUB_ENV
+      - run: git checkout v${{ matrix.release-line }}.x
+      - uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7.0.8
+        with:
+          base: v${{ matrix.release-line }}.x
+          body-path: ${{ runner.temp }}/release_notes/${{ env.RELEASE_VERSION }}.md
+          branch: ${{ env.RELEASE_VERSION }}-proposal
+          draft: true
+          sign-commits: true
+          title: ${{ env.RELEASE_VERSION }} proposal
+          token: ${{ steps.app-token.outputs.token }}
