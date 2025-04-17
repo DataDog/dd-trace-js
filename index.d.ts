@@ -138,6 +138,15 @@ interface Tracer extends opentracing.Tracer {
    * LLM Observability SDK
    */
   llmobs: tracer.llmobs.LLMObs;
+
+  /**
+   * Baggage
+   */
+  setBaggageItem (key: string, value: string): {[key: string]: string};
+  getBaggageItem (key: string): string | undefined;
+  getAllBaggageItems (): {[key: string]: string};
+  removeBaggageItem (key: string): {[key: string]: string};
+  removeAllBaggageItems (): {[key: string]: string};
 }
 
 // left out of the namespace, so it
