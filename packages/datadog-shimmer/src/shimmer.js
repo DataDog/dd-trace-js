@@ -14,6 +14,24 @@ function copyProperties (original, wrapped) {
 
   for (const key of keys) {
     try {
+      if (
+        key in wrapped &&
+        'value' in props[key] &&
+        wrapped[key] === props[key].value
+      ) {
+        continue
+      }
+      if (key === 'length' || key == 'caller' || key == 'arguments') {
+        continue
+      }
+      if (
+        key === 'prototype' && !original.prototype || (
+          Reflect.getPrototypeOf(original.prototype) === Object.prototype &&
+          Reflect.ownKeys(original.prototype).length === 0
+        )
+      ) {
+        continue
+      }
       Object.defineProperty(wrapped, key, props[key])
     } catch (e) {
       // TODO: figure out how to handle this without a try/catch
