@@ -26,7 +26,7 @@ addHook({ name: 'memcached', versions: ['>=2.2'] }, Memcached => {
       const query = queryCompiler.apply(this, arguments)
       const callback = callbackResource.bind(query.callback)
 
-      query.callback = shimmer.wrapFunction(callback, callback => asyncResource.bind(function (err) {
+      query.callback = shimmer.simpleWrapFunction(callback, callback => asyncResource.bind(function (err) {
         if (err) {
           errorCh.publish(err)
         }

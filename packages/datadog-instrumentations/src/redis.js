@@ -156,7 +156,7 @@ function start (client, command, args, url = {}) {
 }
 
 function wrapCallback (finishCh, errorCh, callback) {
-  return shimmer.wrapFunction(callback, callback => function (err) {
+  return shimmer.simpleWrapFunction(callback, callback => function (err) {
     finish(finishCh, errorCh, err)
     if (callback) {
       return callback.apply(this, arguments)

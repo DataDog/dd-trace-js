@@ -76,7 +76,7 @@ function wrapMethod (method) {
       if (typeof cb === 'function') {
         const outerAsyncResource = new AsyncResource('bound-anonymous-fn')
 
-        arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => innerAsyncResource.bind(function (error) {
+        arguments[arguments.length - 1] = shimmer.simpleWrapFunction(cb, cb => innerAsyncResource.bind(function (error) {
           if (error) {
             requestErrorCh.publish(error)
           }

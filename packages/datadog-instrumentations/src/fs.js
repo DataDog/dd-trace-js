@@ -233,7 +233,7 @@ function getMethodParamsRelationByPrefix (prefix) {
 }
 
 function createWatchWrapFunction (override = '') {
-  return function wrapFunction (original) {
+  return function simpleWrapFunction (original) {
     const name = override || original.name
     const method = name
     const operation = name
@@ -258,7 +258,7 @@ function createWatchWrapFunction (override = '') {
 }
 
 function createWrapFunction (prefix = '', override = '') {
-  return function wrapFunction (original) {
+  return function simpleWrapFunction (original) {
     const name = override || original.name
     const method = `${prefix}${name}`
     const operation = name.match(/^(.+?)(Sync)?(\.native)?$/)[1]
@@ -283,7 +283,7 @@ function createWrapFunction (prefix = '', override = '') {
       if (cb) {
         const outerResource = new AsyncResource('bound-anonymous-fn')
 
-        arguments[lastIndex] = shimmer.wrapFunction(cb, cb => innerResource.bind(function (e) {
+        arguments[lastIndex] = shimmer.simpleWrapFunction(cb, cb => innerResource.bind(function (e) {
           finish(e)
           return outerResource.runInAsyncScope(() => cb.apply(this, arguments))
         }))

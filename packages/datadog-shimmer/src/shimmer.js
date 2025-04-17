@@ -33,6 +33,19 @@ function wrapFunction (original, wrapper) {
   return wrapped
 }
 
+/**
+ * Equivalent to `wrapFunction(original, wrapper)` except it does not use `copyProperties()`
+ * Generally, you probably want to use wrapFunction instead for correctness. This should only
+ * be used when we need the performance gain of not using `copyProperties()`.
+ **/
+function simpleWrapFunction (original, wrapper) {
+  if (typeof original === 'function') assertNotClass(original)
+
+  return safeMode
+    ? safeWrapper(original, wrapper)
+    : wrapper(original)
+}
+
 const wrapFn = function (original, delegate) {
   throw new Error('calling `wrap()` with 2 args is deprecated. Use wrapFunction instead.')
 }
@@ -256,6 +269,7 @@ function assertNotClass (target) {
 module.exports = {
   wrap,
   wrapFunction,
+  simpleWrapFunction,
   massWrap,
   setSafe
 }

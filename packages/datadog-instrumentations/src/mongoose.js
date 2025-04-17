@@ -128,7 +128,7 @@ addHook({
                     const resolve = arguments[0]
                     const reject = arguments[1]
 
-                    arguments[0] = shimmer.wrapFunction(resolve, resolve => function wrappedResolve () {
+                    arguments[0] = shimmer.simpleWrapFunction(resolve, resolve => function wrappedResolve () {
                       finish()
 
                       if (resolve) {
@@ -136,7 +136,7 @@ addHook({
                       }
                     })
 
-                    arguments[1] = shimmer.wrapFunction(reject, reject => function wrappedReject () {
+                    arguments[1] = shimmer.simpleWrapFunction(reject, reject => function wrappedReject () {
                       finish()
 
                       if (reject) {
@@ -168,7 +168,7 @@ addHook({
   versions: ['6', '>=7'],
   file: 'lib/helpers/query/sanitizeFilter.js'
 }, sanitizeFilter => {
-  return shimmer.wrapFunction(sanitizeFilter, sanitizeFilter => function wrappedSanitizeFilter () {
+  return shimmer.simpleWrapFunction(sanitizeFilter, sanitizeFilter => function wrappedSanitizeFilter () {
     const sanitizedObject = sanitizeFilter.apply(this, arguments)
 
     if (sanitizeFilterFinishCh.hasSubscribers) {

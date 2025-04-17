@@ -164,7 +164,7 @@ function instrument (operation, command, ctx, args, server, ns, ops, options = {
   return asyncResource.runInAsyncScope(() => {
     startCh.publish({ ns, ops, options: serverInfo, name })
 
-    args[index] = shimmer.wrapFunction(callback, callback => asyncResource.bind(function (err, res) {
+    args[index] = shimmer.simpleWrapFunction(callback, callback => asyncResource.bind(function (err, res) {
       if (err) {
         errorCh.publish(err)
       }

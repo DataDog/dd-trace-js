@@ -72,7 +72,7 @@ function wrap (prefix, fn, expectedArgs, rrtype) {
     return asyncResource.runInAsyncScope(() => {
       startCh.publish(startArgs)
 
-      arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => asyncResource.bind(function (error, result) {
+      arguments[arguments.length - 1] = shimmer.simpleWrapFunction(cb, cb => asyncResource.bind(function (error, result) {
         if (error) {
           errorCh.publish(error)
         }

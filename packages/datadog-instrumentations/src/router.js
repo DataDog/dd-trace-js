@@ -19,7 +19,7 @@ function createWrapRouterMethod (name) {
   function wrapLayerHandle (layer, original) {
     original._name = original._name || layer.name
 
-    return shimmer.wrapFunction(original, original => function () {
+    return shimmer.simpleWrapFunction(original, original => function () {
       if (!enterChannel.hasSubscribers) return original.apply(this, arguments)
 
       const matchers = layerMatchers.get(layer)
@@ -84,7 +84,7 @@ function createWrapRouterMethod (name) {
   }
 
   function wrapNext (req, next) {
-    return shimmer.wrapFunction(next, next => function (error) {
+    return shimmer.simpleWrapFunction(next, next => function (error) {
       if (error && error !== 'route' && error !== 'router') {
         errorChannel.publish({ req, error })
       }
@@ -145,7 +145,7 @@ function createWrapRouterMethod (name) {
   }
 
   function wrapMethod (original) {
-    return shimmer.wrapFunction(original, original => function methodWithTrace (fn) {
+    return shimmer.simpleWrapFunction(original, original => function methodWithTrace (fn) {
       const offset = this.stack ? [].concat(this.stack).length : 0
       const router = original.apply(this, arguments)
 
@@ -174,7 +174,7 @@ addHook({ name: 'router', versions: ['>=1 <2'] }, Router => {
 const queryParserReadCh = channel('datadog:query:read:finish')
 
 addHook({ name: 'router', versions: ['>=2'] }, Router => {
-  const WrappedRouter = shimmer.wrapFunction(Router, function (originalRouter) {
+  const WrappedRouter = shimmer.simpleWrapFunction(Router, function (originalRouter) {
     return function wrappedMethod () {
       const router = originalRouter.apply(this, arguments)
 
@@ -235,7 +235,7 @@ addHook({
 
 function wrapParam (original) {
   return function wrappedProcessParams () {
-    arguments[1] = shimmer.wrapFunction(arguments[1], (originalFn) => {
+    arguments[1] = shimmer.simpleWrapFunction(arguments[1], (originalFn) => {
       return function wrappedFn (req, res) {
         if (routerParamStartCh.hasSubscribers && Object.keys(req.params).length && !visitedParams.has(req.params)) {
           visitedParams.add(req.params)

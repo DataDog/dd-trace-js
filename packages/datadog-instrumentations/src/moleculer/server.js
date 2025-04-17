@@ -24,7 +24,7 @@ function createMiddleware () {
     localAction (next, action) {
       const broker = this
 
-      return shimmer.wrapFunction(next, next => function datadogMiddleware (ctx) {
+      return shimmer.simpleWrapFunction(next, next => function datadogMiddleware (ctx) {
         const actionResource = new AsyncResource('bound-anonymous-fn')
 
         return actionResource.runInAsyncScope(() => {

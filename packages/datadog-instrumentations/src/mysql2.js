@@ -104,7 +104,7 @@ function wrapConnection (Connection, version) {
   return Connection
 
   function bindExecute (cmd, execute, asyncResource) {
-    return shimmer.wrapFunction(execute, execute => asyncResource.bind(function executeWithTrace (packet, connection) {
+    return shimmer.simpleWrapFunction(execute, execute => asyncResource.bind(function executeWithTrace (packet, connection) {
       if (this.onResult) {
         this.onResult = asyncResource.bind(this.onResult)
       }
@@ -116,7 +116,7 @@ function wrapConnection (Connection, version) {
   function wrapExecute (cmd, execute, asyncResource, config) {
     const callbackResource = new AsyncResource('bound-anonymous-fn')
 
-    return shimmer.wrapFunction(execute, execute => asyncResource.bind(function executeWithTrace (packet, connection) {
+    return shimmer.simpleWrapFunction(execute, execute => asyncResource.bind(function executeWithTrace (packet, connection) {
       const sql = cmd.statement ? cmd.statement.query : cmd.sql
       const payload = { sql, conf: config }
       startCh.publish(payload)
@@ -130,7 +130,7 @@ function wrapConnection (Connection, version) {
       if (this.onResult) {
         const onResult = callbackResource.bind(this.onResult)
 
-        this.onResult = shimmer.wrapFunction(onResult, onResult => asyncResource.bind(function (error) {
+        this.onResult = shimmer.simpleWrapFunction(onResult, onResult => asyncResource.bind(function (error) {
           if (error) {
             errorCh.publish(error)
           }

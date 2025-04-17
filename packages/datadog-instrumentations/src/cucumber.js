@@ -252,7 +252,7 @@ function wrapRun (pl, isLatestVersion) {
     })
     const promises = {}
     try {
-      this.eventBroadcaster.on('envelope', shimmer.wrapFunction(null, () => async (testCase) => {
+      this.eventBroadcaster.on('envelope', shimmer.simpleWrapFunction(null, () => async (testCase) => {
         // Only supported from >=8.0.0
         if (testCase?.testCaseFinished) {
           const { testCaseFinished: { willBeRetried } } = testCase

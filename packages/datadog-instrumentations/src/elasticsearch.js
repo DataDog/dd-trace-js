@@ -48,7 +48,7 @@ function createWrapSelect () {
     return function () {
       if (arguments.length === 1) {
         const cb = arguments[0]
-        arguments[0] = shimmer.wrapFunction(cb, cb => function (err, connection) {
+        arguments[0] = shimmer.simpleWrapFunction(cb, cb => function (err, connection) {
           if (connectCh.hasSubscribers && connection && connection.host) {
             connectCh.publish({ hostname: connection.host.host, port: connection.host.port })
           }
@@ -86,7 +86,7 @@ function createWrapRequest (name) {
           if (typeof cb === 'function') {
             cb = parentResource.bind(cb)
 
-            arguments[lastIndex] = shimmer.wrapFunction(cb, cb => asyncResource.bind(function (error) {
+            arguments[lastIndex] = shimmer.simpleWrapFunction(cb, cb => asyncResource.bind(function (error) {
               finish(params, error)
               return cb.apply(null, arguments)
             }))
