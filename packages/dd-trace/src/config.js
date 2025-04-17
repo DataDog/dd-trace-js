@@ -530,7 +530,7 @@ class Config {
     this._setValue(defaults, 'isManualApiEnabled', false)
     this._setValue(defaults, 'langchain.spanCharLimit', 128)
     this._setValue(defaults, 'langchain.spanPromptCompletionSampleRate', 1.0)
-    this._setValue(defaults, 'llmobs.agentlessEnabled', false)
+    this._setValue(defaults, 'llmobs.agentlessEnabled', undefined)
     this._setValue(defaults, 'llmobs.enabled', false)
     this._setValue(defaults, 'llmobs.mlApp', undefined)
     this._setValue(defaults, 'ciVisibilityTestSessionName', '')
