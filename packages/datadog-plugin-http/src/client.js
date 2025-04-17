@@ -18,6 +18,7 @@ const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 class HttpClientPlugin extends ClientPlugin {
   static get id () { return 'http' }
   static get prefix () { return 'apm:http:client:request' }
+  static get peerServicePrecursors () { return ['queuename'] }
 
   bindStart (message) {
     const { args, http = {} } = message
@@ -34,7 +35,8 @@ class HttpClientPlugin extends ClientPlugin {
     const allowed = this.config.filter(uri)
 
     const method = (options.method || 'GET').toUpperCase()
-    const childOf = store && allowed ? store.span : null
+    const parentSpan = store && allowed ? store.span : null
+    const childOf = parentSpan
     // TODO delegate to super.startspan
     const span = this.startSpan(this.operationName(), {
       childOf,
@@ -46,7 +48,7 @@ class HttpClientPlugin extends ClientPlugin {
         'span.type': 'http',
         'http.method': method,
         'http.url': uri,
-        'out.host': hostname
+        'out.host': hostname,
       },
       metrics: {
         [CLIENT_PORT_KEY]: parseInt(options.port)
@@ -72,6 +74,10 @@ class HttpClientPlugin extends ClientPlugin {
     message.span = span
     message.parentStore = store
     message.currentStore = { ...store, span }
+
+    if (parentSpan) {
+      span.setTag('queuename', parentSpan._spanContext._tags['queuename'])
+    }
 
     return message.currentStore
   }

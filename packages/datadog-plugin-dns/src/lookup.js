@@ -5,9 +5,13 @@ const ClientPlugin = require('../../dd-trace/src/plugins/client')
 class DNSLookupPlugin extends ClientPlugin {
   static get id () { return 'dns' }
   static get operation () { return 'lookup' }
+  static get peerServicePrecursors () { return ['queuename'] }
+
 
   start ([hostname]) {
-    this.startSpan('dns.lookup', {
+    const parentSpan = this.tracer.scope().active();
+
+    const span = this.startSpan('dns.lookup', {
       service: this.config.service,
       resource: hostname,
       kind: 'client',
@@ -17,6 +21,10 @@ class DNSLookupPlugin extends ClientPlugin {
         'dns.addresses': ''
       }
     })
+
+    if (parentSpan && parentSpan.context()._tags && parentSpan.context()._tags['queuename']) {
+      span.setTag('queuename', parentSpan.context()._tags['queuename']);
+    }
   }
 
   finish (result) {

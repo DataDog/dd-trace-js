@@ -102,7 +102,7 @@ class Sqs extends BaseAwsSdkPlugin {
     Object.assign(tags, {
       'resource.name': `${operation} ${params.QueueName || params.QueueUrl}`,
       'aws.sqs.queue_name': params.QueueName || params.QueueUrl,
-      queuename: queueName
+      //queuename: queueName
     })
 
     switch (operation) {
@@ -209,6 +209,16 @@ class Sqs extends BaseAwsSdkPlugin {
 
   requestInject (span, request) {
     const { operation, params } = request
+
+    if (params) {
+      let queueName = params.QueueName
+      if (!queueName && params.QueueUrl) {
+        queueName = params.QueueUrl.split('/').pop()
+      }
+      if (queueName) {
+        span.setTag('queuename', queueName)
+      }
+    }
 
     if (!params) return
 
