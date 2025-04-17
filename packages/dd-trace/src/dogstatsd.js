@@ -390,7 +390,14 @@ class CustomMetrics {
     if (!objTags) return arrTags
 
     for (const [key, value] of Object.entries(objTags)) {
-      arrTags.push(`${key}:${value}`)
+      if (!Array.isArray(value)) {
+        arrTags.push(`${key}:${value}`)
+        continue
+      }
+
+      for (const val of value) {
+        arrTags.push(`${key}:${val}`)
+      }
     }
 
     return arrTags
