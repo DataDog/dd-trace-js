@@ -166,12 +166,12 @@ describe('dogstatsd', () => {
   it('should support tags', () => {
     client = new DogStatsDClient()
 
-    client.gauge('test.avg', 10, ['foo:bar', 'baz:qux'])
+    client.gauge('test.avg', 10, ['foo:bar', 'foo:baz', 'baz:qux'])
     client.flush()
 
     expect(udp4.send).to.have.been.called
-    expect(udp4.send.firstCall.args[0].toString()).to.equal('test.avg:10|g|#foo:bar,baz:qux\n')
-    expect(udp4.send.firstCall.args[2]).to.equal(31)
+    expect(udp4.send.firstCall.args[0].toString()).to.equal('test.avg:10|g|#foo:bar,foo:baz,baz:qux\n')
+    expect(udp4.send.firstCall.args[2]).to.equal(39)
   })
 
   it('should buffer metrics', () => {
