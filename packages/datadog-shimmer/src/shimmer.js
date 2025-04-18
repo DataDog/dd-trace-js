@@ -1,13 +1,17 @@
 'use strict'
 
 const log = require('../../dd-trace/src/log')
+const assert = require('assert')
+const { isAsyncFunction } = require('node:util/types')
+
+const NOT_STARTED = 0
+const IN_PROGRESS = 1
+const COMPLETED = 2
 
 function copyProperties (original, wrapped) {
   if (original.constructor !== Function) {
     const proto = Object.getPrototypeOf(original)
-    if (proto !== Function.prototype) {
-      Object.setPrototypeOf(wrapped, proto)
-    }
+    Object.setPrototypeOf(wrapped, proto)
   }
 
   const descriptors = Object.getOwnPropertyDescriptors(original)
@@ -17,7 +21,8 @@ function copyProperties (original, wrapped) {
     Object.defineProperties(wrapped, descriptors)
   } catch {
     // Fallback for non-configurable properties
-    for (const [key, value] of Object.entries(descriptors)) {
+    for (const key of Reflect.ownKeys(descriptors)) {
+      const value = descriptors[key]
       if (value.configurable) {
         Object.defineProperty(wrapped, key, value)
       }
@@ -37,10 +42,6 @@ function wrapFunction (original, wrapper) {
   return wrapped
 }
 
-const wrapFn = function (original, delegate) {
-  throw new Error('calling `wrap()` with 2 args is deprecated. Use wrapFunction instead.')
-}
-
 function isPromise (obj) {
   return typeof obj?.then === 'function'
 }
@@ -50,10 +51,13 @@ function setSafe (value) {
   safeMode = value
 }
 
-function wrapMethod (target, name, wrapper, noAssert) {
+function wrap (target, name, wrapper, noAssert) {
+  assert(typeof name !== 'function', 'Implementor error: wrap() name should not be a function')
   if (!noAssert) {
     assertMethod(target, name)
-    assertFunction(wrapper)
+    if (typeof wrapper !== 'function') {
+      throw new Error(wrapper ? 'Target is not a function.' : 'No function provided.')
+    }
   }
 
   const original = target[name]
@@ -122,28 +126,83 @@ function safeWrapper (original, wrapper) {
   // We could do this inside the `wrapper` function defined below, which would simplify
   // managing the callState, but then we'd be calling `wrapper` on each invocation, so
   // instead we do it here, once.
-  const innerWrapped = wrapper(function (...args) {
-    // This is only used in safe mode. It's a simple state machine to track if the
-    // original method was called and if it returned. We need this to determine if
-    // an error was thrown by the original method, or by us. We'll use one of these
-    // per call to a wrapped method.
-    // We need to stash the callState here because of recursion.
-    const callState = currentCallState
-    callState[0] = 1
-    const retVal = original.apply(this, args)
-    if (isPromise(retVal)) {
-      // TODO: should this not be consistently be either a promise or not? I
-      // would expect we only have to check once and can safe that state.
-      retVal.then((value) => {
-        callState[0] = 2
+  let innerWrapped
+  // Fast path for async methods. Those are always returning promises, so need
+  // to check for that. That also prevents the need to change the prototype later.
+  if (isAsyncFunction(original)) {
+    innerWrapped = wrapper(function (...args) {
+      // This is only used in safe mode. It's a simple state machine to track if the
+      // original method was called and if it returned. We need this to determine if
+      // an error was thrown by the original method, or by us. We'll use one of these
+      // per call to a wrapped method.
+      // We need to stash the callState here because of recursion.
+      const callState = currentCallState
+      callState[0] = IN_PROGRESS
+      return original.apply(this, args).then((value) => {
+        callState[0] = COMPLETED
         callState[1] = value
+        return value
       })
-    } else {
-      callState[0] = 2
+    })
+  } else {
+    innerWrapped = wrapper(function (...args) {
+      // This is only used in safe mode. It's a simple state machine to track if the
+      // original method was called and if it returned. We need this to determine if
+      // an error was thrown by the original method, or by us. We'll use one of these
+      // per call to a wrapped method.
+      // We need to stash the callState here because of recursion.
+      const callState = currentCallState
+      callState[0] = IN_PROGRESS
+      const retVal = original.apply(this, args)
+      if (isPromise(retVal)) {
+        return retVal.then((value) => {
+          callState[0] = COMPLETED
+          callState[1] = value
+          return value
+        })
+      }
+      callState[0] = COMPLETED
       callState[1] = retVal
+      return retVal
+    })
+  }
+
+  // The wrapped function is the one that will be called by the user.
+  // It calls our version of the original function, which manages the
+  // callState. That way when we use the errorHandler, it can tell where
+  // the error originated.
+  if (isAsyncFunction(original)) {
+    // Fast path for async methods. Those are always returning promises, so need
+    // to check for that. That also prevents the need to change the prototype later.
+    // TODO(BridgeAR): Check if the overhead with async hooks and the async methods
+    // is higher than the overhead of the prototype change. That way it's possible
+    // to check for the async methods in copyProperties and skip the prototype change.
+    return function (...args) {
+      currentCallState = [NOT_STARTED, undefined]
+      const callState = currentCallState
+
+      return innerWrapped.apply(this, args).catch((error) => {
+        if (callState[0] !== IN_PROGRESS) {
+          if (callState[0] === NOT_STARTED) {
+            // error was thrown before original function was called, so
+            // it was us. log it.
+            log.error('Shimmer error was thrown before original function was called', error)
+            // original never ran. call it unwrapped.
+            return original.apply(this, args)
+          }
+          // error was thrown after original function returned/resolved, so
+          // it was us. log it.
+          log.error('Shimmer error was thrown after original function returned/resolved', error)
+          // original ran and returned something. return it.
+          return callState[1]
+        }
+
+        // error was thrown during original function execution, so
+        // it was them. throw.
+        throw error
+      })
     }
-    return retVal
-  })
+  }
 
   // This is the crux of what we're doing in safe mode. It handles errors
   // that _we_ cause, by logging them, and transparently providing results
@@ -151,8 +210,8 @@ function safeWrapper (original, wrapper) {
   // whether the function has already run or not, and if it has, returning
   // the result, and otherwise calling the original function unwrapped.
   const handleError = function (args, callState, error) {
-    if (callState[0] !== 1) {
-      if (callState[0] === 0) {
+    if (callState[0] !== IN_PROGRESS) {
+      if (callState[0] === NOT_STARTED) {
         // error was thrown before original function was called, so
         // it was us. log it.
         log.error('Shimmer error was thrown before original function was called', error)
@@ -170,13 +229,8 @@ function safeWrapper (original, wrapper) {
     // it was them. throw.
     throw error
   }
-
-  // The wrapped function is the one that will be called by the user.
-  // It calls our version of the original function, which manages the
-  // callState. That way when we use the errorHandler, it can tell where
-  // the error originated.
   return function (...args) {
-    currentCallState = [0, undefined]
+    currentCallState = [NOT_STARTED, undefined]
     const errorHandler = handleError.bind(this, args, currentCallState)
 
     try {
@@ -186,12 +240,6 @@ function safeWrapper (original, wrapper) {
       return errorHandler(e)
     }
   }
-}
-
-function wrap (target, name, wrapper) {
-  return typeof name === 'function'
-    ? wrapFn(target, name)
-    : wrapMethod(target, name, wrapper)
 }
 
 function massWrap (targets, names, wrapper) {
@@ -210,28 +258,18 @@ function toArray (maybeArray) {
 }
 
 function assertMethod (target, name) {
-  if (!target) {
-    throw new Error('No target object provided.')
-  }
+  if (typeof target?.[name] !== 'function') {
+    let message = 'No target object provided.'
 
-  if (typeof target !== 'object' && typeof target !== 'function') {
-    throw new Error('Invalid target.')
-  }
-
-  if (typeof target[name] !== 'function') {
-    if (!target[name]) {
-      throw new Error(`No original method ${name}.`)
+    if (target) {
+      if (typeof target !== 'object' && typeof target !== 'function') {
+        message = 'Invalid target.'
+      } else {
+        message = target[name] ? `Original method ${name} is not a function.` : `No original method ${name}.`
+      }
     }
-    throw new Error(`Original method ${name} is not a function.`)
-  }
-}
 
-function assertFunction (target) {
-  if (typeof target !== 'function') {
-    if (!target) {
-      throw new Error('No function provided.')
-    }
-    throw new Error('Target is not a function.')
+    throw new Error(message)
   }
 }
 
