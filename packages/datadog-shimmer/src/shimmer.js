@@ -2,7 +2,7 @@
 
 const log = require('../../dd-trace/src/log')
 const assert = require('assert')
-const { isAsyncFunction } = require('node:util/types')
+const { types: { isAsyncFunction } } = require('node:util')
 
 const NOT_STARTED = 0
 const IN_PROGRESS = 1
@@ -188,7 +188,7 @@ function safeWrapper (original, wrapper) {
     // TODO(BridgeAR): Check if the overhead with async hooks and the async methods
     // is higher than the overhead of the prototype change. That way it's possible
     // to check for the async methods in copyProperties and skip the prototype change.
-    return async function (...args) {
+    return function (...args) {
       currentCallState = [NOT_STARTED, undefined]
       const callState = currentCallState
 
