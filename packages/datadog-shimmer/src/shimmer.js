@@ -8,8 +8,6 @@ const NOT_STARTED = 0
 const IN_PROGRESS = 1
 const COMPLETED = 2
 
-const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
-
 const skipMethods = new Set([
   // 'prototype', // We have to define the prototype on some methods. Figure out which ones.
   'caller',
@@ -19,7 +17,7 @@ const skipMethods = new Set([
 ])
 
 function copyProperties (original, wrapped) {
-  if (original.constructor !== Function && original.constructor !== AsyncFunction) {
+  if (original.constructor !== wrapped.constructor) {
     const proto = Object.getPrototypeOf(original)
     Object.setPrototypeOf(wrapped, proto)
   }
