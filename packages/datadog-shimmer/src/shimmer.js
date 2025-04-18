@@ -10,25 +10,36 @@ const COMPLETED = 2
 
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
 
+const skipMethods = new Set([
+  // 'prototype', // We have to define the prototype on some methods. Figure out which ones.
+  'caller',
+  'arguments',
+  'name',
+  'length'
+])
+
 function copyProperties (original, wrapped) {
   if (original.constructor !== Function && original.constructor !== AsyncFunction) {
     const proto = Object.getPrototypeOf(original)
     Object.setPrototypeOf(wrapped, proto)
   }
 
-  const descriptors = Object.getOwnPropertyDescriptors(original)
-
-  try {
-    // Fast path
-    Object.defineProperties(wrapped, descriptors)
-  } catch {
-    // Fallback for non-configurable properties
-    for (const key of Reflect.ownKeys(descriptors)) {
-      const value = descriptors[key]
-      if (value.configurable) {
-        Object.defineProperty(wrapped, key, value)
-      }
-    }
+  const ownKeys = Reflect.ownKeys(original)
+  if (original.length !== wrapped.length) {
+    Object.defineProperty(wrapped, 'length', { value: original.length, configurable: true })
+  }
+  if (original.name !== wrapped.name) {
+    Object.defineProperty(wrapped, 'name', { value: original.name, configurable: true })
+  }
+  if (ownKeys.length === 2) {
+    return
+  }
+  for (const key of ownKeys) {
+    if (skipMethods.has(key)) continue
+    const descriptor = Object.getOwnPropertyDescriptor(original, key)
+    try {
+      Object.defineProperty(wrapped, key, descriptor)
+    } catch {}
   }
 }
 
@@ -67,13 +78,13 @@ function wrap (target, name, wrapper, noAssert) {
     ? safeWrapper(original, wrapper)
     : wrapper(original)
 
-  const descriptor = Object.getOwnPropertyDescriptor(target, name)
-
   if (typeof original === 'function') copyProperties(original, wrapped)
+
+  const descriptor = Object.getOwnPropertyDescriptor(target, name)
 
   if (descriptor) {
     if (descriptor.get || descriptor.set) {
-      // TODO(BridgeAR): What happens in case there is only a setter? This seems wrong?
+      // TODO(BridgeAR): What happens in case there is a setter? This seems wrong?
       // What happens in case the user does indeed set this to a different value?
       // In that case the getter would potentially return the wrong value?
       descriptor.get = () => wrapped
