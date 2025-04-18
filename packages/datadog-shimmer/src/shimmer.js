@@ -8,8 +8,10 @@ const NOT_STARTED = 0
 const IN_PROGRESS = 1
 const COMPLETED = 2
 
+const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
+
 function copyProperties (original, wrapped) {
-  if (original.constructor !== Function) {
+  if (original.constructor !== Function && original.constructor !== AsyncFunction) {
     const proto = Object.getPrototypeOf(original)
     Object.setPrototypeOf(wrapped, proto)
   }
@@ -46,7 +48,7 @@ function isPromise (obj) {
   return typeof obj?.then === 'function'
 }
 
-let safeMode = !!process.env.DD_INEJCTION_ENABLED
+let safeMode = !!process.env.DD_INJECTION_ENABLED
 function setSafe (value) {
   safeMode = value
 }
@@ -177,7 +179,7 @@ function safeWrapper (original, wrapper) {
     // TODO(BridgeAR): Check if the overhead with async hooks and the async methods
     // is higher than the overhead of the prototype change. That way it's possible
     // to check for the async methods in copyProperties and skip the prototype change.
-    return function (...args) {
+    return async function (...args) {
       currentCallState = [NOT_STARTED, undefined]
       const callState = currentCallState
 
