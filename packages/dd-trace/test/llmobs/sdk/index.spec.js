@@ -1238,8 +1238,9 @@ describe('sdk', () => {
   describe('distributed', () => {
     it('adds the current llmobs span id to the injection context', () => {
       const carrier = { 'x-datadog-tags': '' }
-      let parentId
-      llmobs.trace({ kind: 'workflow', name: 'myWorkflow' }, span => {
+      let parentId, span
+      llmobs.trace({ kind: 'workflow', name: 'myWorkflow' }, _span => {
+        span = _span
         parentId = span.context().toSpanId()
 
         // simulate injection from http integration or from tracer
@@ -1247,7 +1248,8 @@ describe('sdk', () => {
         injectCh.publish({ carrier })
       })
 
-      expect(carrier['x-datadog-tags']).to.equal(`,_dd.p.llmobs_parent_id=${parentId}`)
+      expect(carrier['x-datadog-tags']).to.equal(`,_dd.p.llmobs_parent_id=${parentId},_dd.p.llmobs_ml_app=mlApp`)
+      expect(LLMObsTagger.tagMap.get(span)['_ml_obs.tags']).to.deep.equal({ 'ml-proxy': 'custom' })
     })
   })
 })
