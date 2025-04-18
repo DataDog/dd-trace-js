@@ -1,20 +1,33 @@
 'use strict'
 
+const skipMethods = new Set([
+  'caller',
+  'arguments',
+  'name',
+  'length'
+])
+
 function copyProperties (original, wrapped) {
-  // TODO getPrototypeOf is not fast. Should we instead do this in specific
-  // instrumentations where needed?
-  const proto = Object.getPrototypeOf(original)
-  if (proto !== Function.prototype) {
+  if (original.constructor !== wrapped.constructor) {
+    const proto = Object.getPrototypeOf(original)
     Object.setPrototypeOf(wrapped, proto)
   }
-  const props = Object.getOwnPropertyDescriptors(original)
-  const keys = Reflect.ownKeys(props)
 
-  for (const key of keys) {
-    try {
-      Object.defineProperty(wrapped, key, props[key])
-    } catch (e) {
-      // TODO: figure out how to handle this without a try/catch
+  const ownKeys = Reflect.ownKeys(original)
+  if (original.length !== wrapped.length) {
+    Object.defineProperty(wrapped, 'length', { value: original.length, configurable: true })
+  }
+  if (original.name !== wrapped.name) {
+    Object.defineProperty(wrapped, 'name', { value: original.name, configurable: true })
+  }
+  if (ownKeys.length === 2) {
+    return
+  }
+  for (const key of ownKeys) {
+    if (skipMethods.has(key)) continue
+    const descriptor = Object.getOwnPropertyDescriptor(original, key)
+    if (descriptor?.writable || descriptor?.configurable || !Object.prototype.hasOwnProperty.call(wrapped, key)) {
+      Object.defineProperty(wrapped, key, descriptor)
     }
   }
 }
@@ -36,40 +49,40 @@ const wrapFn = function (original, delegate) {
 function wrapMethod (target, name, wrapper, noAssert) {
   if (!noAssert) {
     assertMethod(target, name)
-    assertFunction(wrapper)
+    if (typeof wrapper !== 'function') {
+      throw new Error(wrapper ? 'Target is not a function.' : 'No function provided.')
+    }
   }
 
   const original = target[name]
   const wrapped = wrapper(original)
 
-  const descriptor = Object.getOwnPropertyDescriptor(target, name)
-
-  const attributes = {
-    configurable: true,
-    ...descriptor
-  }
-
   if (typeof original === 'function') copyProperties(original, wrapped)
+
+  const descriptor = Object.getOwnPropertyDescriptor(target, name)
 
   if (descriptor) {
     if (descriptor.get || descriptor.set) {
-      attributes.get = () => wrapped
+      // TODO(BridgeAR): What happens in case there is a setter? This seems wrong?
+      // What happens in case the user does indeed set this to a different value?
+      // In that case the getter would potentially return the wrong value?
+      descriptor.get = () => wrapped
     } else {
-      attributes.value = wrapped
+      descriptor.value = wrapped
     }
 
     // TODO: create a single object for multiple wrapped methods
     if (descriptor.configurable === false) {
       return Object.create(target, {
-        [name]: attributes
+        [name]: descriptor
       })
     }
   } else { // no descriptor means original was on the prototype
-    attributes.value = wrapped
-    attributes.writable = true
+    target[name] = wrapped
+    return target
   }
 
-  Object.defineProperty(target, name, attributes)
+  Object.defineProperty(target, name, descriptor)
 
   return target
 }
@@ -96,30 +109,18 @@ function toArray (maybeArray) {
 }
 
 function assertMethod (target, name) {
-  if (!target) {
-    throw new Error('No target object provided.')
-  }
+  if (typeof target?.[name] !== 'function') {
+    let message = 'No target object provided.'
 
-  if (typeof target !== 'object' && typeof target !== 'function') {
-    throw new Error('Invalid target.')
-  }
+    if (target) {
+      if (typeof target !== 'object' && typeof target !== 'function') {
+        message = 'Invalid target.'
+      } else {
+        message = target[name] ? `Original method ${name} is not a function.` : `No original method ${name}.`
+      }
+    }
 
-  if (!target[name]) {
-    throw new Error(`No original method ${name}.`)
-  }
-
-  if (typeof target[name] !== 'function') {
-    throw new Error(`Original method ${name} is not a function.`)
-  }
-}
-
-function assertFunction (target) {
-  if (!target) {
-    throw new Error('No function provided.')
-  }
-
-  if (typeof target !== 'function') {
-    throw new Error('Target is not a function.')
+    throw new Error(message)
   }
 }
 
