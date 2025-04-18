@@ -182,7 +182,7 @@ function logResult (results, type, testAsyncHooks) {
 function getOpts () {
   const argv = process.argv.slice(2)
   const opts = {
-    duration: 10,
+    duration: process.env.DD_BENCH_DURATION || 30,
     url: 'http://localhost:9080/rest/api/config/countCustomers',
     appDir: 'acmeair-nodejs'
   }

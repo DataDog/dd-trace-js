@@ -1,4 +1,3 @@
-version: "2"
 services:
   aerospike:
     image: aerospike:ce-6.4.0.3

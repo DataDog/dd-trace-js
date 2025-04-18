@@ -1,7 +1,7 @@
 const crypto = require('crypto')
 const app = require('express')()
 
-for (let i = 0; i < 100; i++) {
+for (let i = 0; i < 1000; i++) {
   app.get(`/${crypto.randomBytes(8).toString('hex')}`, (req, res) => res.end(''))
 }
 
