@@ -3,20 +3,24 @@
 const log = require('../../dd-trace/src/log')
 
 function copyProperties (original, wrapped) {
-  // TODO getPrototypeOf is not fast. Should we instead do this in specific
-  // instrumentations where needed?
-  const proto = Object.getPrototypeOf(original)
-  if (proto !== Function.prototype) {
-    Object.setPrototypeOf(wrapped, proto)
+  if (original.constructor !== Function) {
+    const proto = Object.getPrototypeOf(original)
+    if (proto !== Function.prototype) {
+      Object.setPrototypeOf(wrapped, proto)
+    }
   }
-  const props = Object.getOwnPropertyDescriptors(original)
-  const keys = Reflect.ownKeys(props)
 
-  for (const key of keys) {
-    try {
-      Object.defineProperty(wrapped, key, props[key])
-    } catch (e) {
-      // TODO: figure out how to handle this without a try/catch
+  const descriptors = Object.getOwnPropertyDescriptors(original)
+
+  try {
+    // Fast path
+    Object.defineProperties(wrapped, descriptors)
+  } catch {
+    // Fallback for non-configurable properties
+    for (const [key, value] of Object.entries(descriptors)) {
+      if (value.configurable) {
+        Object.defineProperty(wrapped, key, value)
+      }
     }
   }
 }
@@ -37,29 +41,8 @@ const wrapFn = function (original, delegate) {
   throw new Error('calling `wrap()` with 2 args is deprecated. Use wrapFunction instead.')
 }
 
-// This is only used in safe mode. It's a simple state machine to track if the
-// original method was called and if it returned. We need this to determine if
-// an error was thrown by the original method, or by us. We'll use one of these
-// per call to a wrapped method.
-class CallState {
-  constructor () {
-    this.called = false
-    this.completed = false
-    this.retVal = undefined
-  }
-
-  startCall () {
-    this.called = true
-  }
-
-  endCall (retVal) {
-    this.completed = true
-    this.retVal = retVal
-  }
-}
-
 function isPromise (obj) {
-  return obj && typeof obj === 'object' && typeof obj.then === 'function'
+  return typeof obj?.then === 'function'
 }
 
 let safeMode = !!process.env.DD_INEJCTION_ENABLED
@@ -80,32 +63,30 @@ function wrapMethod (target, name, wrapper, noAssert) {
 
   const descriptor = Object.getOwnPropertyDescriptor(target, name)
 
-  const attributes = {
-    configurable: true,
-    ...descriptor
-  }
-
   if (typeof original === 'function') copyProperties(original, wrapped)
 
   if (descriptor) {
     if (descriptor.get || descriptor.set) {
-      attributes.get = () => wrapped
+      // TODO(BridgeAR): What happens in case there is only a setter? This seems wrong?
+      // What happens in case the user does indeed set this to a different value?
+      // In that case the getter would potentially return the wrong value?
+      descriptor.get = () => wrapped
     } else {
-      attributes.value = wrapped
+      descriptor.value = wrapped
     }
 
     // TODO: create a single object for multiple wrapped methods
     if (descriptor.configurable === false) {
       return Object.create(target, {
-        [name]: attributes
+        [name]: descriptor
       })
     }
   } else { // no descriptor means original was on the prototype
-    attributes.value = wrapped
-    attributes.writable = true
+    target[name] = wrapped
+    return target
   }
 
-  Object.defineProperty(target, name, attributes)
+  Object.defineProperty(target, name, descriptor)
 
   return target
 }
@@ -131,7 +112,7 @@ function safeWrapper (original, wrapper) {
 
   // We're going to hold on to current callState in this variable in this scope,
   // which is fine because any time we reference it, we're referencing it synchronously.
-  // We'll use it in the our wrapper (which, again, is called syncrhonously), and in the
+  // We'll use it in the our wrapper (which, again, is called synchronously), and in the
   // errorHandler, which will already have been bound to this callState.
   let currentCallState
 
@@ -142,14 +123,24 @@ function safeWrapper (original, wrapper) {
   // managing the callState, but then we'd be calling `wrapper` on each invocation, so
   // instead we do it here, once.
   const innerWrapped = wrapper(function (...args) {
+    // This is only used in safe mode. It's a simple state machine to track if the
+    // original method was called and if it returned. We need this to determine if
+    // an error was thrown by the original method, or by us. We'll use one of these
+    // per call to a wrapped method.
     // We need to stash the callState here because of recursion.
     const callState = currentCallState
-    callState.startCall()
+    callState[0] = 1
     const retVal = original.apply(this, args)
     if (isPromise(retVal)) {
-      retVal.then(callState.endCall.bind(callState))
+      // TODO: should this not be consistently be either a promise or not? I
+      // would expect we only have to check once and can safe that state.
+      retVal.then((value) => {
+        callState[0] = 2
+        callState[1] = value
+      })
     } else {
-      callState.endCall(retVal)
+      callState[0] = 2
+      callState[1] = retVal
     }
     return retVal
   })
@@ -159,26 +150,25 @@ function safeWrapper (original, wrapper) {
   // as if no wrapping was done at all. That means detecting (via callState)
   // whether the function has already run or not, and if it has, returning
   // the result, and otherwise calling the original function unwrapped.
-  const handleError = function (args, callState, e) {
-    if (callState.completed) {
+  const handleError = function (args, callState, error) {
+    if (callState[0] !== 1) {
+      if (callState[0] === 0) {
+        // error was thrown before original function was called, so
+        // it was us. log it.
+        log.error('Shimmer error was thrown before original function was called', error)
+        // original never ran. call it unwrapped.
+        return original.apply(this, args)
+      }
       // error was thrown after original function returned/resolved, so
       // it was us. log it.
-      log.error('Shimmer error was thrown after original function returned/resolved', e)
+      log.error('Shimmer error was thrown after original function returned/resolved', error)
       // original ran and returned something. return it.
-      return callState.retVal
-    }
-
-    if (!callState.called) {
-      // error was thrown before original function was called, so
-      // it was us. log it.
-      log.error('Shimmer error was thrown before original function was called', e)
-      // original never ran. call it unwrapped.
-      return original.apply(this, args)
+      return callState[1]
     }
 
     // error was thrown during original function execution, so
     // it was them. throw.
-    throw e
+    throw error
   }
 
   // The wrapped function is the one that will be called by the user.
@@ -186,7 +176,7 @@ function safeWrapper (original, wrapper) {
   // callState. That way when we use the errorHandler, it can tell where
   // the error originated.
   return function (...args) {
-    currentCallState = new CallState()
+    currentCallState = [0, undefined]
     const errorHandler = handleError.bind(this, args, currentCallState)
 
     try {
@@ -228,21 +218,19 @@ function assertMethod (target, name) {
     throw new Error('Invalid target.')
   }
 
-  if (!target[name]) {
-    throw new Error(`No original method ${name}.`)
-  }
-
   if (typeof target[name] !== 'function') {
+    if (!target[name]) {
+      throw new Error(`No original method ${name}.`)
+    }
     throw new Error(`Original method ${name} is not a function.`)
   }
 }
 
 function assertFunction (target) {
-  if (!target) {
-    throw new Error('No function provided.')
-  }
-
   if (typeof target !== 'function') {
+    if (!target) {
+      throw new Error('No function provided.')
+    }
     throw new Error('Target is not a function.')
   }
 }

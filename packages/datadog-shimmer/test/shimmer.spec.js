@@ -1,6 +1,7 @@
 'use strict'
 
 const { expect } = require('chai')
+const { rejects } = require('node:assert')
 const shimmer = require('../src/shimmer')
 
 describe('shimmer', () => {
@@ -302,6 +303,22 @@ describe('shimmer', () => {
           })
 
           expect(await obj.count()).to.equal(3)
+        })
+
+        it('should throw when actual code is throwing', async () => {
+          const obj = {
+            async count () {
+              throw new Error('Oops')
+            }
+          }
+          shimmer.wrap(obj, 'count', (count) => {
+            return async () => {
+              await count()
+              throw new Error('wrapper error')
+            }
+          })
+
+          await rejects(obj.count, { message: 'Oops' })
         })
       })
 
