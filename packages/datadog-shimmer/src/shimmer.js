@@ -2,14 +2,13 @@
 
 const log = require('../../dd-trace/src/log')
 const assert = require('assert')
-const { types: { isAsyncFunction } } = require('node:util')
+const { types: { isAsyncFunction } } = require('util')
 
 const NOT_STARTED = 0
 const IN_PROGRESS = 1
 const COMPLETED = 2
 
 const skipMethods = new Set([
-  // 'prototype', // We have to define the prototype on some methods. Figure out which ones.
   'caller',
   'arguments',
   'name',
@@ -35,9 +34,9 @@ function copyProperties (original, wrapped) {
   for (const key of ownKeys) {
     if (skipMethods.has(key)) continue
     const descriptor = Object.getOwnPropertyDescriptor(original, key)
-    try {
+    if (descriptor?.writable || descriptor?.configurable || !Object.prototype.hasOwnProperty.call(wrapped, key)) {
       Object.defineProperty(wrapped, key, descriptor)
-    } catch {}
+    }
   }
 }
 
