@@ -35,6 +35,7 @@ declare -a plugins=(
   "http"
   "http2"
   "ioredis"
+  "iovalkey"
   "jest"
   "kafkajs"
   "knex"
