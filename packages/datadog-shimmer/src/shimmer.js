@@ -178,6 +178,43 @@ function safeWrapper (original, wrapper) {
     })
   }
 
+  // The wrapped function is the one that will be called by the user.
+  // It calls our version of the original function, which manages the
+  // callState. That way when we use the errorHandler, it can tell where
+  // the error originated.
+  if (isAsyncFunction(original)) {
+    // Fast path for async methods. Those are always returning promises, so need
+    // to check for that. That also prevents the need to change the prototype later.
+    // TODO(BridgeAR): Check if the overhead with async hooks and the async methods
+    // is higher than the overhead of the prototype change. That way it's possible
+    // to check for the async methods in copyProperties and skip the prototype change.
+    return function (...args) {
+      currentCallState = [NOT_STARTED, undefined]
+      const callState = currentCallState
+
+      return innerWrapped.apply(this, args).catch((error) => {
+        if (callState[0] !== IN_PROGRESS) {
+          if (callState[0] === NOT_STARTED) {
+            // error was thrown before original function was called, so
+            // it was us. log it.
+            log.error('Shimmer error was thrown before original function was called', error)
+            // original never ran. call it unwrapped.
+            return original.apply(this, args)
+          }
+          // error was thrown after original function returned/resolved, so
+          // it was us. log it.
+          log.error('Shimmer error was thrown after original function returned/resolved', error)
+          // original ran and returned something. return it.
+          return callState[1]
+        }
+
+        // error was thrown during original function execution, so
+        // it was them. throw.
+        throw error
+      })
+    }
+  }
+
   // This is the crux of what we're doing in safe mode. It handles errors
   // that _we_ cause, by logging them, and transparently providing results
   // as if no wrapping was done at all. That means detecting (via callState)
@@ -202,25 +239,6 @@ function safeWrapper (original, wrapper) {
     // error was thrown during original function execution, so
     // it was them. throw.
     throw error
-  }
-
-  // The wrapped function is the one that will be called by the user.
-  // It calls our version of the original function, which manages the
-  // callState. That way when we use the errorHandler, it can tell where
-  // the error originated.
-  if (isAsyncFunction(original)) {
-    // Fast path for async methods. Those are always returning promises, so need
-    // to check for that. That also prevents the need to change the prototype later.
-    // TODO(BridgeAR): Check if the overhead with async hooks and the async methods
-    // is higher than the overhead of the prototype change. That way it's possible
-    // to check for the async methods in copyProperties and skip the prototype change.
-    return async function (...args) {
-      currentCallState = [NOT_STARTED, undefined]
-
-      const errorHandler = handleError.bind(this, args, currentCallState)
-
-      return innerWrapped.apply(this, args).catch(errorHandler)
-    }
   }
   return function (...args) {
     currentCallState = [NOT_STARTED, undefined]
