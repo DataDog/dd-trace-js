@@ -16,7 +16,9 @@ const {
   removeInvalidMetadata,
   parseAnnotations,
   getIsFaultyEarlyFlakeDetection,
-  getNumFromKnownTests
+  getNumFromKnownTests,
+  getModifiedTestsFromDiff,
+  isModifiedTest
 } = require('../../../src/plugins/util/test')
 
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA, CI_PIPELINE_URL } = require('../../../src/plugins/util/tags')
@@ -363,5 +365,115 @@ describe('getNumFromKnownTests', () => {
 
     const numTestsNull = getNumFromKnownTests(null)
     expect(numTestsNull).to.equal(0)
+  })
+})
+
+describe('getModifiedTestsFromDiff', () => {
+  it('should parse git diff and return modified lines per file', () => {
+    const diff = `diff --git a/test/file1.js b/test/file1.js
+index 1234567..89abcde 100644
+--- a/test/file1.js
++++ b/test/file1.js
+@@ -2 +2 @@
+-line2
++line2 modified
+@@ -4,0 +4,1 @@
++new line
+diff --git a/test/file2.js b/test/file2.js
+index 1234567..89abcde 100644
+--- a/test/file2.js
++++ b/test/file2.js
+@@ -5,0 +5,1 @@
++new line`
+
+    const expected = {
+      'test/file1.js': [2, 4],
+      'test/file2.js': [5]
+    }
+
+    expect(getModifiedTestsFromDiff(diff)).to.eql(expected)
+  })
+
+  it('should return null for empty or invalid diff', () => {
+    expect(getModifiedTestsFromDiff('')).to.be.null
+    expect(getModifiedTestsFromDiff(null)).to.be.null
+    expect(getModifiedTestsFromDiff(undefined)).to.be.null
+  })
+
+  it('should handle multiple line changes in a single hunk', () => {
+    const diff = `diff --git a/test/file.js b/test/file.js
+index 1234567..89abcde 100644
+--- a/test/file.js
++++ b/test/file.js
+@@ -2 +2 @@
+-line2
++line2 modified
+@@ -4,0 +4,1 @@
++new line
+@@ -6,0 +6,1 @@
++another new line`
+
+    const expected = {
+      'test/file.js': [2, 4, 6]
+    }
+
+    expect(getModifiedTestsFromDiff(diff)).to.eql(expected)
+  })
+})
+
+describe('isModifiedTest', () => {
+  describe('when tests come from local diff', () => {
+    it('should return true when test lines overlap with modified lines', () => {
+      const modifiedTests = {
+        'test/file.js': [2, 4, 6]
+      }
+      expect(isModifiedTest('test/file.js', 1, 3, modifiedTests)).to.be.true // overlaps with line 2
+      expect(isModifiedTest('test/file.js', 3, 5, modifiedTests)).to.be.true // overlaps with line 4
+      expect(isModifiedTest('test/file.js', 5, 7, modifiedTests)).to.be.true // overlaps with line 6
+    })
+
+    it('should return false when test lines do not overlap with modified lines', () => {
+      const modifiedTests = {
+        'test/file.js': [2, 4, 6]
+      }
+      expect(isModifiedTest('test/file.js', 7, 9, modifiedTests)).to.be.false
+      expect(isModifiedTest('test/file.js', 0, 1, modifiedTests)).to.be.false
+    })
+
+    it('should return false when file is not in modified tests', () => {
+      const modifiedTests = {
+        'test/file.js': [2, 4, 6]
+      }
+      expect(isModifiedTest('test/other.js', 1, 3, modifiedTests)).to.be.false
+    })
+
+    it('should handle single line tests', () => {
+      const modifiedTests = {
+        'test/file.js': [2, 4, 6]
+      }
+      expect(isModifiedTest('test/file.js', 2, 2, modifiedTests)).to.be.true
+      expect(isModifiedTest('test/file.js', 3, 3, modifiedTests)).to.be.false
+    })
+  })
+
+  describe('when tests come from API', () => {
+    it('should return true when test file is in apiTests', () => {
+      const modifiedTests = {
+        apiTests: ['test/file.js', 'test/other.js']
+      }
+      expect(isModifiedTest('test/file.js', 1, 10, modifiedTests)).to.be.true
+      expect(isModifiedTest('test/other.js', 1, 10, modifiedTests)).to.be.true
+    })
+
+    it('should return false when test file is not in apiTests', () => {
+      const modifiedTests = {
+        apiTests: ['test/file.js']
+      }
+      expect(isModifiedTest('test/other.js', 1, 10, modifiedTests)).to.be.false
+    })
+  })
+
+  it('should handle empty modifiedTests object', () => {
+    expect(isModifiedTest('test/file.js', 1, 10, {})).to.be.false
   })
 })
