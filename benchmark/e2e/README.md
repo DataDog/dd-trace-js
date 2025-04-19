@@ -23,14 +23,14 @@ the root of this repo, you should be ready.
 To start the test, run `yarn bench:e2e`. This will install AcmeAir if it hasn't
 yet been installed, and populate MongoDB if that hasn't already been done.
 
-Next, it will run three tests for 10 seconds each, sequentially, on each of the
+Next, it will run three tests for 30 seconds each, sequentially, on each of the
 2 endpoints. The three tests are:
 
 1. Without any tracing (i.e. a control test)
 2. With async hooks enabled
 3. With tracing enabled
 
-That means 60 seconds of testing. Results will appear on stdout.
+That means 180 seconds of testing. Results will appear on stdout.
 
 You can change the duration of the tests by setting the `DD_BENCH_DURATION`
 environment variable to the number of seconds to run. Keep in mind that this
