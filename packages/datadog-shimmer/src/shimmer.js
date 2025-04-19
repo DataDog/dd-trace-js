@@ -57,7 +57,7 @@ function isPromise (obj) {
   return typeof obj?.then === 'function'
 }
 
-let safeMode = !!process.env.DD_INJECTION_ENABLED
+let safeMode = !!process.env.DD_INEJCTION_ENABLED
 function setSafe (value) {
   safeMode = value
 }
