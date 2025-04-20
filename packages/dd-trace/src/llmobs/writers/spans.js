@@ -1,19 +1,27 @@
 'use strict'
 
-const { EVP_EVENT_SIZE_LIMIT, EVP_PAYLOAD_SIZE_LIMIT } = require('../../constants/writers')
-const { DROPPED_VALUE_TEXT } = require('../../constants/text')
-const { DROPPED_IO_COLLECTION_ERROR } = require('../../constants/tags')
-const BaseWriter = require('../base')
-const telemetry = require('../../telemetry')
-const logger = require('../../../log')
+const {
+  EVP_EVENT_SIZE_LIMIT,
+  EVP_PAYLOAD_SIZE_LIMIT,
+  SPANS_ENDPOINT,
+  SPANS_EVENT_TYPE,
+  SPANS_INTAKE
+} = require('../constants/writers')
+const { DROPPED_VALUE_TEXT } = require('../constants/text')
+const { DROPPED_IO_COLLECTION_ERROR } = require('../constants/tags')
+const BaseWriter = require('./base')
+const telemetry = require('../telemetry')
+const logger = require('../../log')
 
-const tracerVersion = require('../../../../../../package.json').version
+const tracerVersion = require('../../../../../package.json').version
 
 class LLMObsSpanWriter extends BaseWriter {
-  constructor (options) {
+  constructor (config) {
     super({
-      ...options,
-      eventType: 'span'
+      config,
+      eventType: SPANS_EVENT_TYPE,
+      intake: SPANS_INTAKE,
+      endpoint: SPANS_ENDPOINT
     })
   }
 
@@ -33,11 +41,11 @@ class LLMObsSpanWriter extends BaseWriter {
     telemetry.recordLLMObsSpanSize(event, processedEventSizeBytes, shouldTruncate)
 
     if (this._bufferSize + eventSizeBytes > EVP_PAYLOAD_SIZE_LIMIT) {
-      logger.debug('Flusing queue because queing next event will exceed EvP payload limit')
+      logger.debug('Flushing queue because queuing next event will exceed EvP payload limit')
       this.flush()
     }
 
-    super.append(event, eventSizeBytes)
+    super.append(event, processedEventSizeBytes)
   }
 
   makePayload (events) {
