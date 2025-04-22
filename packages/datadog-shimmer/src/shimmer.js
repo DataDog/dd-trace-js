@@ -20,12 +20,11 @@ function copyProperties (original, wrapped) {
 }
 
 function wrapFunction (original, wrapper) {
-  assertFunction(original)
-  assertNotClass(original)
+  if (typeof original === 'function') assertNotClass(original)
 
   const wrapped = wrapper(original)
 
-  copyProperties(original, wrapped)
+  if (typeof original === 'function') copyProperties(original, wrapped)
 
   return wrapped
 }
