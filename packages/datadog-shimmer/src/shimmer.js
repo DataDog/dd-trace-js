@@ -20,37 +20,33 @@ function copyProperties (original, wrapped) {
   if (original.name !== wrapped.name) {
     Object.defineProperty(wrapped, 'name', { value: original.name, configurable: true })
   }
-  if (ownKeys.length === 2) {
-    return
-  }
-  for (const key of ownKeys) {
-    if (skipMethods.has(key)) continue
-    const descriptor = Object.getOwnPropertyDescriptor(original, key)
-    if (descriptor?.writable || descriptor?.configurable || !Object.prototype.hasOwnProperty.call(wrapped, key)) {
-      Object.defineProperty(wrapped, key, descriptor)
+  if (ownKeys.length !== 2) {
+    for (const key of ownKeys) {
+      if (skipMethods.has(key)) continue
+      const descriptor = Object.getOwnPropertyDescriptor(original, key)
+      if (descriptor.writable || descriptor.configurable || !Object.hasOwn(wrapped, key)) {
+        Object.defineProperty(wrapped, key, descriptor)
+      }
     }
   }
 }
 
 function wrapFunction (original, wrapper) {
-  if (typeof original === 'function') assertNotClass(original)
-
   const wrapped = wrapper(original)
 
-  if (typeof original === 'function') copyProperties(original, wrapped)
+  if (typeof original === 'function') {
+    assertNotClass(original)
+    copyProperties(original, wrapped)
+  }
 
   return wrapped
 }
 
-const wrapFn = function (original, delegate) {
-  throw new Error('calling `wrap()` with 2 args is deprecated. Use wrapFunction instead.')
-}
-
-function wrapMethod (target, name, wrapper, noAssert) {
+function wrap (target, name, wrapper, noAssert) {
   if (!noAssert) {
     assertMethod(target, name)
     if (typeof wrapper !== 'function') {
-      throw new Error(wrapper ? 'Target is not a function.' : 'No function provided.')
+      throw new Error(wrapper ? 'Target is not a function' : 'No function provided')
     }
   }
 
@@ -87,12 +83,6 @@ function wrapMethod (target, name, wrapper, noAssert) {
   return target
 }
 
-function wrap (target, name, wrapper) {
-  return typeof name === 'function'
-    ? wrapFn(target, name)
-    : wrapMethod(target, name, wrapper)
-}
-
 function massWrap (targets, names, wrapper) {
   targets = toArray(targets)
   names = toArray(names)
@@ -110,13 +100,13 @@ function toArray (maybeArray) {
 
 function assertMethod (target, name) {
   if (typeof target?.[name] !== 'function') {
-    let message = 'No target object provided.'
+    let message = 'No target object provided'
 
     if (target) {
       if (typeof target !== 'object' && typeof target !== 'function') {
-        message = 'Invalid target.'
+        message = 'Invalid target'
       } else {
-        message = target[name] ? `Original method ${name} is not a function.` : `No original method ${name}.`
+        message = target[name] ? `Original method ${name} is not a function` : `No original method ${name}`
       }
     }
 
