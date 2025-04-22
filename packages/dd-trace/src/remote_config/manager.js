@@ -270,6 +270,7 @@ class RemoteConfigManager extends EventEmitter {
     for (const item of list) {
       // TODO: we need a way to tell if unapply configs were handled by kPreUpdate or not, because they're always
       // emitted unlike the apply and modify configs
+      console.log('\n\n@@ Dispatching item - before', item.apply_state, item.apply_error)
 
       this._callHandlerFor(action, item)
 
@@ -278,6 +279,7 @@ class RemoteConfigManager extends EventEmitter {
       } else {
         this.appliedConfigs.set(item.path, item)
       }
+      console.log('@@ Dispatching item - after', item.apply_state, item.apply_error)
     }
   }
 
@@ -305,7 +307,9 @@ class RemoteConfigManager extends EventEmitter {
         // If the handler doesn't accept an `ack` callback, assume `apply_state` is `ACKNOWLEDGED`,
         // unless it returns a promise, in which case we wait for the promise to be resolved or rejected.
         // TODO: do we want to pass old and new config ?
+        console.log('@@ _callHandlerFor before handler', item.apply_state, item.apply_error)
         const result = handler(action, item.file, item.id)
+        console.log('@@ _callHandlerFor after handler', item.apply_state, item.apply_error)
         if (result instanceof Promise) {
           result.then(
             () => { item.apply_state = ACKNOWLEDGED },

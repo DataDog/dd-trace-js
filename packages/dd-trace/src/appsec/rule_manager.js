@@ -26,6 +26,67 @@ function loadRules (config) {
 }
 
 function updateWafFromRC ({ toUnapply, toApply, toModify }) {
+  console.log('\n\nupdateWafFromRC')
+  //console.log('toUnapply', toUnapply)
+  //console.log('toApply', toApply)
+  //console.log('toModify', toModify)
+
+
+  for (const item of toUnapply) {
+    // TODO Maybe item.product.startsWith('ASM') ?? or setting product handler properly
+    console.log('toUnapply', item.product, item.path)
+    if (!['ASM_DD', 'ASM_DATA', 'ASM'].includes(item.product)) continue
+
+    waf.wafManager.remove(item.path)
+    console.log(item.path, item.apply_state, item.apply_error)
+  }
+
+  // TODO refactor and add try catch
+  for (const item of toApply) {
+    try {
+      // TODO Maybe item.product.startsWith('ASM') ?? or setting product handler properly
+      console.log('toApply', item.product, item.path)
+      if (!['ASM_DD', 'ASM_DATA', 'ASM'].includes(item.product)) continue
+
+      let updateResult
+      if (item.product === 'ASM_DD') {
+        updateResult = waf.wafManager.updateASMDD(item.file, item.path)
+      } else {
+        updateResult = waf.wafManager.update(item.file, item.path)
+      }
+
+      if (updateResult.success) {
+        item.apply_state = ACKNOWLEDGED
+      } else {
+        item.apply_state = ERROR
+        item.apply_error = updateResult.error
+      }
+      console.log(item.path, item.apply_state, item.apply_error)
+    } catch (e) {
+      console.log(e)
+    }
+  }
+
+  for (const item of toModify) {
+    try {
+      // TODO Maybe item.product.startsWith('ASM') ?? or setting product handler properly
+      console.log('toModify', item.product, item.path)
+      if (!['ASM_DD', 'ASM_DATA', 'ASM'].includes(item.product)) continue
+
+      const updateResult = waf.wafManager.update(item.file, item.path)
+      if (updateResult.success) {
+        item.apply_state = ACKNOWLEDGED
+      } else {
+        item.apply_state = ERROR
+        item.apply_error = updateResult.error
+      }
+      console.log(item.path, item.apply_state, item.apply_error)
+    } catch (e) {
+      console.log(e)
+    }
+  }
+
+  /*
   const batch = new Set()
 
   const newRulesData = new SpyMap(appliedRulesData)
@@ -155,9 +216,12 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
   }
 
   for (const config of batch) {
+    console.log('@@ Rule Manager applying states before', config.apply_state, config.apply_error)
     config.apply_state = newApplyState
     if (newApplyError) config.apply_error = newApplyError
+    console.log('@@ Rule Manager applying states', config.apply_state, config.apply_error)
   }
+  */
 }
 
 // A Map with a new prop `modified`, a bool that indicates if the Map was modified
