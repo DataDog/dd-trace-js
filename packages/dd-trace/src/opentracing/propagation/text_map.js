@@ -7,6 +7,7 @@ const log = require('../../log')
 const TraceState = require('./tracestate')
 const tags = require('../../../../../ext/tags')
 const { channel } = require('dc-polyfill')
+const { setBaggageItem, getAllBaggageItems, removeAllBaggageItems } = require('../../baggage')
 
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
 
@@ -55,9 +56,10 @@ class TextMapPropagator {
   }
 
   inject (spanContext, carrier) {
-    if (!spanContext || !carrier) return
-
+    if (!carrier) return
     this._injectBaggageItems(spanContext, carrier)
+    if (!spanContext) return
+
     this._injectDatadog(spanContext, carrier)
     this._injectB3MultipleHeaders(spanContext, carrier)
     this._injectB3SingleHeader(spanContext, carrier)
@@ -125,7 +127,7 @@ class TextMapPropagator {
 
   _injectBaggageItems (spanContext, carrier) {
     if (this._config.legacyBaggageEnabled) {
-      spanContext._baggageItems && Object.keys(spanContext._baggageItems).forEach(key => {
+      spanContext?._baggageItems && Object.keys(spanContext._baggageItems).forEach(key => {
         carrier[baggagePrefix + key] = String(spanContext._baggageItems[key])
       })
     }
@@ -134,7 +136,9 @@ class TextMapPropagator {
       let itemCounter = 0
       let byteCounter = 0
 
-      for (const [key, value] of Object.entries(spanContext._baggageItems)) {
+      const baggageItems = spanContext ? spanContext._baggageItems : getAllBaggageItems()
+      if (!baggageItems) return
+      for (const [key, value] of Object.entries(baggageItems)) {
         const item = `${this._encodeOtelBaggageKey(String(key).trim())}=${encodeURIComponent(String(value).trim())},`
         itemCounter += 1
         byteCounter += item.length
@@ -613,23 +617,27 @@ class TextMapPropagator {
   _extractBaggageItems (carrier, spanContext) {
     if (!this._hasPropagationStyle('extract', 'baggage')) return
     if (!carrier || !carrier.baggage) return
-    if (!spanContext) return
+    if (!spanContext) removeAllBaggageItems()
     const baggages = carrier.baggage.split(',')
     for (const keyValue of baggages) {
       if (!keyValue.includes('=')) {
-        spanContext._baggageItems = {}
+        if (spanContext) spanContext._baggageItems = {}
         return
       }
       let [key, value] = keyValue.split('=')
       key = this._decodeOtelBaggageKey(key.trim())
       value = decodeURIComponent(value.trim())
       if (!key || !value) {
-        spanContext._baggageItems = {}
+        if (spanContext) spanContext._baggageItems = {}
         return
       }
       // the current code assumes precedence of ot-baggage- (legacy opentracing baggage) over baggage
-      if (key in spanContext._baggageItems) return
-      spanContext._baggageItems[key] = value
+      if (spanContext) {
+        if (key in spanContext._baggageItems) return
+        spanContext._baggageItems[key] = value
+      } else {
+        setBaggageItem(key, value)
+      }
     }
   }
 
