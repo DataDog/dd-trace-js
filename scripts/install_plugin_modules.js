@@ -244,30 +244,34 @@ function extractLowerBound (range) {
 
 async function assertPackage (name, version, dependencyVersionRange, external) {
   // Apply version cap from latests.json if available
-  let cappedVersionRange = dependencyVersionRange
+  // let cappedVersionRange = dependencyVersionRange
 
-  // Handle simple major version numbers like "1" or exact versions like "1.0.0"
-  if (dependencyVersionRange) {
-    const simpleVersionMatch = dependencyVersionRange.match(/^(\d+)$/)
-    const exactVersionMatch = dependencyVersionRange.match(/^(\d+)\.(\d+)\.(\d+)$/)
+  // // Handle simple major version numbers like "1" or exact versions like "1.0.0"
+  // if (dependencyVersionRange) {
+  //   const simpleVersionMatch = dependencyVersionRange.match(/^(\d+)$/)
+  //   const exactVersionMatch = dependencyVersionRange.match(/^(\d+)\.(\d+)\.(\d+)$/)
 
-    // Attempt to fix issue seen with fastify
-    if (simpleVersionMatch) {
-      // For simple major versions like "1", restrict to that major version only
-      const majorVersion = simpleVersionMatch[1]
-      cappedVersionRange = `>=${majorVersion}.0.0 <${parseInt(majorVersion) + 1}.0.0`
-    } else if (exactVersionMatch) {
-      // For exact versions like "1.0.0" or "2.2.2", use exactly that version
-      // Don't allow newer versions even within the same major
-      cappedVersionRange = dependencyVersionRange
-    } else if (latests.latests[name]) {
-      // Apply normal capping for other version ranges
-      const latestVersion = latests.latests[name]
-      if (typeof dependencyVersionRange === 'string') {
-        cappedVersionRange = applyCap(dependencyVersionRange, latestVersion)
-      }
-    }
-  }
+  //   // Attempt to fix issue seen with fastify
+  //   if (simpleVersionMatch) {
+  //     // For simple major versions like "1", restrict to that major version only
+  //     const majorVersion = simpleVersionMatch[1]
+  //     cappedVersionRange = `>=${majorVersion}.0.0 <${parseInt(majorVersion) + 1}.0.0`
+  //   } else if (exactVersionMatch) {
+  //     // For exact versions like "1.0.0" or "2.2.2", use exactly that version
+  //     // Don't allow newer versions even within the same major
+  //     cappedVersionRange = dependencyVersionRange
+  //   } else if (latests.latests[name]) {
+  //     // Apply normal capping for other version ranges
+  //     const latestVersion = latests.latests[name]
+  //     if (typeof dependencyVersionRange === 'string') {
+  //       cappedVersionRange = applyCap(dependencyVersionRange, latestVersion)
+  //     }
+  //   }
+  // }
+
+  const cappedVersionRange = external
+    ? dependencyVersionRange
+    : `${dependencyVersionRange} <=${latests.latests[name]}`
 
   const dependencies = { [name]: cappedVersionRange }
   if (deps[name]) {
