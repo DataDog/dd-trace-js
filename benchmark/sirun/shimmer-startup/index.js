@@ -8,7 +8,7 @@ const {
   FUNCTION_NAME
 } = process.env
 
-const ITERATIONS = 1e7
+const ITERATIONS = 2e6
 
 let counter = 0
 function declared () {
