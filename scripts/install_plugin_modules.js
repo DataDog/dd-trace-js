@@ -269,7 +269,8 @@ async function assertPackage (name, version, dependencyVersionRange, external) {
   //   }
   // }
 
-  const cappedVersionRange = external
+  const alreadyCapped = dependencyVersionRange.includes('-')
+  const cappedVersionRange = external || alreadyCapped
     ? dependencyVersionRange
     : `${dependencyVersionRange} <=${latests.latests[name]}`
 
