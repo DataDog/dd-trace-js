@@ -12,6 +12,12 @@ const TEST_DIR = path.join(__dirname, '.')
 process.chdir(TEST_DIR)
 
 describe('esbuild', () => {
+  before(() => {
+    chproc.execSync('npm install', {
+      timeout: 1000 * 30
+    })
+  })
+
   it('works', () => {
     console.log('npm run build')
     chproc.execSync('npm run build')
