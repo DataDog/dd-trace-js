@@ -47,7 +47,7 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
-      - run: git fetch origin master:master
+      - run: git fetch origin master:master || exit 0
       - uses: ./.github/actions/node
       - run: npm i -g branch-diff
       - run: |
