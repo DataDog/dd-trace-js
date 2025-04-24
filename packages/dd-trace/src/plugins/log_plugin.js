@@ -17,6 +17,11 @@ function messageProxy (message, holder) {
         return holder.dd
       }
 
+      // This is a workaround for a V8 bug that surfaced in Node.js 22
+      if (p === 'stack') {
+        return target.stack
+      }
+
       return Reflect.get(target, p, receiver)
     },
     ownKeys (target) {

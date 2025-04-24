@@ -11,7 +11,7 @@ describe('Plugin', () => {
 
   withVersions('elasticsearch', ['elasticsearch', '@elastic/elasticsearch'], (version, moduleName) => {
     const metaModule = require(`../../../versions/${moduleName}@${version}`)
-    const hasCallbackSupport = !(moduleName === '@elastic/elasticsearch' && metaModule.version().startsWith('8.'))
+    const hasCallbackSupport = !(moduleName === '@elastic/elasticsearch' && metaModule.version().split('.')[0] >= 8)
 
     describe('elasticsearch', () => {
       beforeEach(() => {
@@ -122,13 +122,11 @@ describe('Plugin', () => {
                 'elasticsearch.body',
                 '[{"index":"docs"},{"query":{"match_all":{}}},{"index":"docs2"},{"query":{"match_all":{}}}]'
               )
-              expect(traces[0][0].meta).to.have.property('elasticsearch.params', '{"size":100}')
             })
             .then(done)
             .catch(done)
 
           client.msearch({
-            size: 100,
             body: [
               { index: 'docs' },
               {

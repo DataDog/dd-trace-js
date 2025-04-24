@@ -348,6 +348,10 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout, isMain
   if (isMainProcess) {
     const testResult = results[results.length - 1]
     const testAsyncResource = testToAr.get(test)
+    const isAtrRetry = testResult?.retry > 0 &&
+      isFlakyTestRetriesEnabled &&
+      !test._ddIsAttemptToFix &&
+      !test._ddIsEfdRetry
     testAsyncResource.runInAsyncScope(() => {
       testFinishCh.publish({
         testStatus,
@@ -361,7 +365,8 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout, isMain
         isQuarantined: test._ddIsQuarantined,
         isEfdRetry: test._ddIsEfdRetry,
         hasFailedAllRetries: test._ddHasFailedAllRetries,
-        hasPassedAttemptToFixRetries: test._ddHasPassedAttemptToFixRetries
+        hasPassedAttemptToFixRetries: test._ddHasPassedAttemptToFixRetries,
+        isAtrRetry
       })
     })
   }
@@ -469,6 +474,11 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
 
       const isTimeout = status === 'timedOut'
       testEndHandler(test, annotations, STATUS_TO_TEST_STATUS[status], errors && errors[0], isTimeout, false)
+      const testResult = test.results[test.results.length - 1]
+      const isAtrRetry = testResult?.retry > 0 &&
+        isFlakyTestRetriesEnabled &&
+        !test._ddIsAttemptToFix &&
+        !test._ddIsEfdRetry
       // We want to send the ddProperties to the worker
       worker.process.send({
         type: 'ddProperties',
@@ -481,7 +491,8 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
           _ddIsNew: test._ddIsNew,
           _ddIsEfdRetry: test._ddIsEfdRetry,
           _ddHasFailedAllRetries: test._ddHasFailedAllRetries,
-          _ddHasPassedAttemptToFixRetries: test._ddHasPassedAttemptToFixRetries
+          _ddHasPassedAttemptToFixRetries: test._ddHasPassedAttemptToFixRetries,
+          _ddIsAtrRetry: isAtrRetry
         }
       })
     })
@@ -750,9 +761,17 @@ addHook({
     return rootSuite
   }
 
-  loadUtilsPackage.createRootSuite = newCreateRootSuite
+  // We need to proxy the createRootSuite function because the function is not configurable
+  const proxy = new Proxy(loadUtilsPackage, {
+    get (target, prop) {
+      if (prop === 'createRootSuite') {
+        return newCreateRootSuite
+      }
+      return target[prop]
+    }
+  })
 
-  return loadUtilsPackage
+  return proxy
 })
 
 // main process hook
@@ -794,19 +813,25 @@ addHook({
 
     const page = this
 
-    const isRumActive = await page.evaluate(() => {
-      if (window.DD_RUM && window.DD_RUM.getInternalContext) {
-        return !!window.DD_RUM.getInternalContext()
-      } else {
-        return false
-      }
-    })
+    try {
+      if (page) {
+        const isRumActive = await page.evaluate(() => {
+          if (window.DD_RUM && window.DD_RUM.getInternalContext) {
+            return !!window.DD_RUM.getInternalContext()
+          } else {
+            return false
+          }
+        })
 
-    if (isRumActive) {
-      testPageGotoCh.publish({
-        isRumActive,
-        page
-      })
+        if (isRumActive) {
+          testPageGotoCh.publish({
+            isRumActive,
+            page
+          })
+        }
+      }
+    } catch (e) {
+      // ignore errors such as redirects, context destroyed, etc
     }
 
     return response
@@ -961,6 +986,7 @@ addHook({
         isAttemptToFixRetry: test._ddIsAttemptToFixRetry,
         hasFailedAllRetries: test._ddHasFailedAllRetries,
         hasPassedAttemptToFixRetries: test._ddHasPassedAttemptToFixRetries,
+        isAtrRetry: test._ddIsAtrRetry,
         onDone
       })
     })
