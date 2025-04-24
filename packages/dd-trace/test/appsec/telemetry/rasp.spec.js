@@ -20,7 +20,6 @@ describe('Appsec Rasp Telemetry metrics', () => {
     })
 
     appsecNamespace.metrics.clear()
-    appsecNamespace.distributions.clear()
   })
 
   afterEach(sinon.restore)
@@ -37,11 +36,21 @@ describe('Appsec Rasp Telemetry metrics', () => {
       it('should increment rasp.rule.eval metric', () => {
         appsecTelemetry.updateRaspRequestsMetricTags({
           duration: 42,
-          durationExt: 52
+          durationExt: 52,
+          wafVersion: '1.0.0',
+          rulesVersion: '2.0.0'
         }, req, { type: 'rule-type' })
 
-        expect(count).to.have.been.calledWith('rasp.rule.eval')
-        expect(count).to.not.have.been.calledWith('rasp.timeout')
+        expect(count).to.have.been.calledWith('rasp.rule.eval', {
+          rule_type: 'rule-type',
+          waf_version: '1.0.0',
+          event_rules_version: '2.0.0'
+        })
+        expect(count).to.not.have.been.calledWith('rasp.timeout', {
+          rule_type: 'rule-type',
+          waf_version: '1.0.0',
+          event_rules_version: '2.0.0'
+        })
         expect(count).to.not.have.been.calledWith('rasp.rule.match')
         expect(inc).to.have.been.calledOnceWith(1)
       })
@@ -50,26 +59,51 @@ describe('Appsec Rasp Telemetry metrics', () => {
         appsecTelemetry.updateRaspRequestsMetricTags({
           duration: 42,
           durationExt: 52,
-          wafTimeout: true
+          wafTimeout: true,
+          wafVersion: '1.0.0',
+          rulesVersion: '2.0.0'
         }, req, { type: 'rule-type' })
 
-        expect(count).to.have.been.calledWith('rasp.rule.eval')
-        expect(count).to.have.been.calledWith('rasp.timeout')
+        expect(count).to.have.been.calledWith('rasp.rule.eval', {
+          rule_type: 'rule-type',
+          waf_version: '1.0.0',
+          event_rules_version: '2.0.0'
+        })
+        expect(count).to.have.been.calledWith('rasp.timeout', {
+          rule_type: 'rule-type',
+          waf_version: '1.0.0',
+          event_rules_version: '2.0.0'
+        })
         expect(count).to.not.have.been.calledWith('rasp.rule.match')
         expect(inc).to.have.been.calledTwice
       })
 
-      it('should increment rasp.rule.match metric if ruleTriggered', () => {
+      it('should track rasp.error', () => {
         appsecTelemetry.updateRaspRequestsMetricTags({
-          duration: 42,
-          durationExt: 52,
-          ruleTriggered: true
+          errorCode: -127,
+          wafVersion: '1.0.0',
+          rulesVersion: '2.0.0'
         }, req, { type: 'rule-type' })
 
-        expect(count).to.have.been.calledWith('rasp.rule.match')
-        expect(count).to.have.been.calledWith('rasp.rule.eval')
-        expect(count).to.not.have.been.calledWith('rasp.timeout')
-        expect(inc).to.have.been.calledTwice
+        expect(count).to.have.been.calledWith('rasp.error', {
+          waf_version: '1.0.0',
+          event_rules_version: '2.0.0',
+          rule_type: 'rule-type',
+          waf_error: -127
+        })
+
+        appsecTelemetry.updateRaspRequestsMetricTags({
+          errorCode: -2,
+          wafVersion: '1.0.0',
+          rulesVersion: '2.0.0'
+        }, req, { type: 'rule-type' })
+
+        expect(count).to.have.been.calledWith('rasp.error', {
+          waf_version: '1.0.0',
+          event_rules_version: '2.0.0',
+          rule_type: 'rule-type',
+          waf_error: -2
+        })
       })
 
       it('should sum rasp.duration and eval metrics', () => {
@@ -115,6 +149,89 @@ describe('Appsec Rasp Telemetry metrics', () => {
       })
     })
 
+    describe('updateRaspRuleMatchMetricTags', () => {
+      const raspRule = { type: 'rule-type', variant: 'rule-variant' }
+
+      beforeEach(() => {
+        req = {}
+        appsecTelemetry.updateRaspRequestsMetricTags({
+          ruleTriggered: true,
+          wafVersion: '1.0.0',
+          rulesVersion: '2.0.0'
+        }, req, { type: 'rule-type' })
+
+        count.resetHistory()
+        inc.resetHistory()
+      })
+
+      it('should increment rasp.rule.match metric with success block status', () => {
+        appsecTelemetry.updateRaspRuleMatchMetricTags(req, raspRule, true, true)
+
+        expect(count).to.have.been.calledWith('rasp.rule.match', {
+          rule_type: 'rule-type',
+          rule_variant: 'rule-variant',
+          waf_version: '1.0.0',
+          event_rules_version: '2.0.0',
+          block: 'success'
+        })
+        expect(inc).to.have.been.called
+      })
+
+      it('should increment rasp.rule.match metric with failure block status', () => {
+        appsecTelemetry.updateRaspRuleMatchMetricTags(req, raspRule, true, false)
+
+        expect(count).to.have.been.calledWith('rasp.rule.match', {
+          rule_type: 'rule-type',
+          rule_variant: 'rule-variant',
+          waf_version: '1.0.0',
+          event_rules_version: '2.0.0',
+          block: 'failure'
+        })
+        expect(inc).to.have.been.called
+      })
+
+      it('should increment rasp.rule.match metric with irrelevant block status', () => {
+        appsecTelemetry.updateRaspRuleMatchMetricTags(req, raspRule, false, false)
+
+        expect(count).to.have.been.calledWith('rasp.rule.match', {
+          rule_type: 'rule-type',
+          rule_variant: 'rule-variant',
+          waf_version: '1.0.0',
+          event_rules_version: '2.0.0',
+          block: 'irrelevant'
+        })
+        expect(inc).to.have.been.called
+      })
+
+      it('should not increment any metric if ruleTriggered is not set', () => {
+        const newReq = {}
+        appsecTelemetry.updateRaspRuleMatchMetricTags(newReq, raspRule, true, true)
+
+        expect(count).to.not.have.been.called
+        expect(inc).to.not.have.been.called
+      })
+
+      it('should not increment any metric if req is not provided', () => {
+        appsecTelemetry.updateRaspRuleMatchMetricTags(null, raspRule, true, true)
+
+        expect(count).to.not.have.been.called
+        expect(inc).to.not.have.been.called
+      })
+    })
+
+    describe('updateRaspRuleSkippedMetricTags', () => {
+      it('should increment rasp.rule.skipped with reason', () => {
+        const raspRule = { type: 'rule-type', variant: 'rule-variant' }
+        appsecTelemetry.updateRaspRuleSkippedMetricTags(raspRule, 'after-request')
+
+        expect(count).to.have.been.calledWith('rasp.rule.skipped', {
+          reason: 'after-request',
+          rule_type: 'rule-type',
+          rule_variant: 'rule-variant'
+        })
+      })
+    })
+
     describe('incWafRequestsMetric', () => {
       it('should not modify waf.requests metric tags when rasp rule type is provided', () => {
         appsecTelemetry.updateWafRequestsMetricTags({
@@ -129,6 +246,7 @@ describe('Appsec Rasp Telemetry metrics', () => {
           blockTriggered: true,
           ruleTriggered: true,
           wafTimeout: true,
+          input_truncated: true,
           wafVersion,
           rulesVersion
         }, req, { type: 'rule-type' })
@@ -137,8 +255,12 @@ describe('Appsec Rasp Telemetry metrics', () => {
         appsecTelemetry.incrementWafRequestsMetric(req)
 
         expect(count).to.have.been.calledWithExactly('waf.requests', {
+          block_failure: false,
+          input_truncated: false,
           request_blocked: false,
+          rate_limited: false,
           rule_triggered: false,
+          waf_error: false,
           waf_timeout: false,
           waf_version: wafVersion,
           event_rules_version: rulesVersion

@@ -2,6 +2,7 @@
 
 const log = require('../log')
 const blockedTemplates = require('./blocked_templates')
+const { updateBlockFailureMetric } = require('./telemetry')
 
 const detectedSpecificEndpoints = {}
 
@@ -128,6 +129,7 @@ function block (req, res, rootSpan, abortController, actionParameters = defaultB
     rootSpan?.setTag('_dd.appsec.block.failed', 1)
     log.error('[ASM] Blocking error', err)
 
+    updateBlockFailureMetric(req)
     return false
   }
 }

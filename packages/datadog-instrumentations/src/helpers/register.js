@@ -6,8 +6,9 @@ const satisfies = require('semifies')
 const Hook = require('./hook')
 const requirePackageJson = require('../../../dd-trace/src/require-package-json')
 const log = require('../../../dd-trace/src/log')
-const checkRequireCache = require('../check_require_cache')
+const checkRequireCache = require('./check-require-cache')
 const telemetry = require('../../../dd-trace/src/guardrails/telemetry')
+const { isInServerlessEnvironment } = require('../../../dd-trace/src/serverless')
 
 const {
   DD_TRACE_DISABLED_INSTRUMENTATIONS = '',
@@ -50,6 +51,7 @@ if (DD_TRACE_DEBUG && DD_TRACE_DEBUG.toLowerCase() !== 'false') {
 }
 
 const seenCombo = new Set()
+const allInstrumentations = {}
 
 // TODO: make this more efficient
 for (const packageName of names) {
@@ -60,9 +62,14 @@ for (const packageName of names) {
   let hook = hooks[packageName]
 
   if (typeof hook === 'object') {
+    if (hook.serverless === false && isInServerlessEnvironment()) continue
+
     hookOptions.internals = hook.esmFirst
     hook = hook.fn
   }
+
+  // get the instrumentation file name to save all hooked versions
+  const instrumentationFileName = parseHookInstrumentationFileName(packageName)
 
   Hook([packageName], hookOptions, (moduleExports, moduleName, moduleBaseDir, moduleVersion) => {
     moduleName = moduleName.replace(pathSepExpr, '/')
@@ -102,6 +109,7 @@ for (const packageName of names) {
         let version = moduleVersion
         try {
           version = version || getVersion(moduleBaseDir)
+          allInstrumentations[instrumentationFileName] = allInstrumentations[instrumentationFileName] || false
         } catch (e) {
           log.error('Error getting version for "%s": %s', name, e.message, e)
           continue
@@ -111,6 +119,8 @@ for (const packageName of names) {
         }
 
         if (matchVersion(version, versions)) {
+          allInstrumentations[instrumentationFileName] = true
+
           // Check if the hook already has a set moduleExport
           if (hook[HOOK_SYMBOL].has(moduleExports)) {
             namesAndSuccesses[`${name}@${version}`] = true
@@ -140,7 +150,8 @@ for (const packageName of names) {
     for (const nameVersion of Object.keys(namesAndSuccesses)) {
       const [name, version] = nameVersion.split('@')
       const success = namesAndSuccesses[nameVersion]
-      if (!success && !seenCombo.has(nameVersion)) {
+      // we check allVersions to see if any version of the integration was successfully instrumented
+      if (!success && !seenCombo.has(nameVersion) && !allInstrumentations[instrumentationFileName]) {
         telemetry('abort.integration', [
           `integration:${name}`,
           `integration_version:${version}`
@@ -155,7 +166,7 @@ for (const packageName of names) {
 }
 
 function matchVersion (version, ranges) {
-  return !version || (ranges && ranges.some(range => satisfies(version, range)))
+  return !version || !ranges || ranges.some(range => satisfies(version, range))
 }
 
 function getVersion (moduleBaseDir) {
@@ -166,6 +177,38 @@ function getVersion (moduleBaseDir) {
 
 function filename (name, file) {
   return [name, file].filter(val => val).join('/')
+}
+
+// This function captures the instrumentation file name for a given package by parsing the hook require
+// function given the module name. It is used to ensure that instrumentations such as redis
+// that have several different modules being hooked, ie: 'redis' main package, and @redis/client submodule
+// return a consistent instrumentation name. This is used later to ensure that atleast some portion of
+// the integration was successfully instrumented. Prevents incorrect `Found incompatible integration version: ` messages
+// Example:
+//                  redis -> "() => require('../redis')" -> redis
+//          @redis/client -> "() => require('../redis')" -> redis
+//
+function parseHookInstrumentationFileName (packageName) {
+  let hook = hooks[packageName]
+  if (hook.fn) {
+    hook = hook.fn
+  }
+  const hookString = hook.toString()
+
+  const regex = /require\('([^']*)'\)/
+  const match = hookString.match(regex)
+
+  // try to capture the hook require file location.
+  if (match && match[1]) {
+    let moduleName = match[1]
+    // Remove leading '../' if present
+    if (moduleName.startsWith('../')) {
+      moduleName = moduleName.substring(3)
+    }
+    return moduleName
+  }
+
+  return null
 }
 
 module.exports = {

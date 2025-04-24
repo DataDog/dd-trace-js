@@ -6,15 +6,16 @@ const { storage } = require('./storage')
 
 const LLMObsSpanProcessor = require('./span_processor')
 
+const telemetry = require('./telemetry')
 const { channel } = require('dc-polyfill')
 const spanProcessCh = channel('dd-trace:span:process')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
 const flushCh = channel('llmobs:writers:flush')
 const injectCh = channel('dd-trace:span:inject')
 
-const LLMObsAgentlessSpanWriter = require('./writers/spans/agentless')
-const LLMObsAgentProxySpanWriter = require('./writers/spans/agentProxy')
 const LLMObsEvalMetricsWriter = require('./writers/evaluations')
+const LLMObsSpanWriter = require('./writers/spans')
+const { setAgentStrategy } = require('./writers/util')
 
 /**
  * Setting writers and processor globally when LLMObs is enabled
@@ -24,15 +25,22 @@ const LLMObsEvalMetricsWriter = require('./writers/evaluations')
  * if the tracer is `init`ed. But, in those cases, we don't want to start writers or subscribe
  * to channels.
  */
+
+/** @type {LLMObsSpanProcessor | null} */
 let spanProcessor
+
+/** @type {LLMObsSpanWriter | null} */
 let spanWriter
+
+/** @type {LLMObsEvalMetricsWriter | null} */
 let evalWriter
 
 function enable (config) {
+  const startTime = performance.now()
   // create writers and eval writer append and flush channels
   // span writer append is handled by the span processor
   evalWriter = new LLMObsEvalMetricsWriter(config)
-  spanWriter = createSpanWriter(config)
+  spanWriter = new LLMObsSpanWriter(config)
 
   evalMetricAppendCh.subscribe(handleEvalMetricAppend)
   flushCh.subscribe(handleFlush)
@@ -44,6 +52,20 @@ function enable (config) {
 
   // distributed tracing for llmobs
   injectCh.subscribe(handleLLMObsParentIdInjection)
+
+  setAgentStrategy(config, useAgentless => {
+    if (useAgentless && !(config.apiKey && config.site)) {
+      throw new Error(
+        'Cannot send LLM Observability data without a running agent or without both a Datadog API key and site.\n' +
+        'Ensure these configurations are set before running your application.'
+      )
+    }
+
+    evalWriter?.setAgentless(useAgentless)
+    spanWriter?.setAgentless(useAgentless)
+
+    telemetry.recordLLMObsEnabled(startTime, config)
+  })
 }
 
 function disable () {
@@ -69,11 +91,6 @@ function handleLLMObsParentIdInjection ({ carrier }) {
   const parentId = parent?.context().toSpanId()
 
   carrier['x-datadog-tags'] += `,${PROPAGATED_PARENT_ID_KEY}=${parentId}`
-}
-
-function createSpanWriter (config) {
-  const SpanWriter = config.llmobs.agentlessEnabled ? LLMObsAgentlessSpanWriter : LLMObsAgentProxySpanWriter
-  return new SpanWriter(config)
 }
 
 function handleFlush () {

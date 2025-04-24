@@ -10,7 +10,8 @@ const Histogram = require('../histogram')
 const { performance, PerformanceObserver } = require('perf_hooks')
 
 const { NODE_MAJOR, NODE_MINOR } = require('../../../../version')
-const INTERVAL = 10 * 1000
+const { DD_RUNTIME_METRICS_FLUSH_INTERVAL = '10000' } = process.env
+const INTERVAL = parseInt(DD_RUNTIME_METRICS_FLUSH_INTERVAL, 10)
 
 // Node >=16 has PerformanceObserver with `gc` type, but <16.7 had a critical bug.
 // See: https://github.com/nodejs/node/issues/39548
@@ -111,11 +112,11 @@ const runtimeMetrics = module.exports = {
   },
 
   increment (name, tag, monotonic) {
-    client && client.increment(name, 1, tag, monotonic)
+    this.count(name, 1, tag, monotonic)
   },
 
   decrement (name, tag) {
-    client && client.decrement(name, 1, tag)
+    this.count(name, -1, tag)
   }
 }
 
@@ -211,7 +212,7 @@ function captureGCMetrics () {
   histogram('runtime.node.gc.pause', pauseAll)
 
   for (const type in pause) {
-    histogram('runtime.node.gc.pause.by.type', pause[type], [`gc_type:${type}`])
+    histogram('runtime.node.gc.pause.by.type', pause[type], `gc_type:${type}`)
   }
 
   gcProfiler.start()
@@ -265,30 +266,29 @@ function captureNativeMetrics () {
     if (type === 'all') {
       histogram('runtime.node.gc.pause', stats.gc[type])
     } else {
-      histogram('runtime.node.gc.pause.by.type', stats.gc[type], [`gc_type:${type}`])
+      histogram('runtime.node.gc.pause.by.type', stats.gc[type], `gc_type:${type}`)
     }
   })
 
   for (let i = 0, l = spaces.length; i < l; i++) {
-    const tags = [`heap_space:${spaces[i].space_name}`]
+    const tag = `heap_space:${spaces[i].space_name}`
 
-    client.gauge('runtime.node.heap.size.by.space', spaces[i].space_size, tags)
-    client.gauge('runtime.node.heap.used_size.by.space', spaces[i].space_used_size, tags)
-    client.gauge('runtime.node.heap.available_size.by.space', spaces[i].space_available_size, tags)
-    client.gauge('runtime.node.heap.physical_size.by.space', spaces[i].physical_space_size, tags)
+    client.gauge('runtime.node.heap.size.by.space', spaces[i].space_size, tag)
+    client.gauge('runtime.node.heap.used_size.by.space', spaces[i].space_used_size, tag)
+    client.gauge('runtime.node.heap.available_size.by.space', spaces[i].space_available_size, tag)
+    client.gauge('runtime.node.heap.physical_size.by.space', spaces[i].physical_space_size, tag)
   }
 }
 
-function histogram (name, stats, tags) {
-  tags = tags ? [].concat(tags) : []
-
-  if (tags.length > 0) {
-    for (const tag of tags) {
-      client.histogram(name, stats, tag)
-    }
-  } else {
-    client.histogram(name, stats)
-  }
+function histogram (name, stats, tag) {
+  client.gauge(`${name}.min`, stats.min, tag)
+  client.gauge(`${name}.max`, stats.max, tag)
+  client.increment(`${name}.sum`, stats.sum, tag)
+  client.increment(`${name}.total`, stats.sum, tag)
+  client.gauge(`${name}.avg`, stats.avg, tag)
+  client.increment(`${name}.count`, stats.count, tag)
+  client.gauge(`${name}.median`, stats.median, tag)
+  client.gauge(`${name}.95percentile`, stats.p95, tag)
 }
 
 function startGCObserver () {

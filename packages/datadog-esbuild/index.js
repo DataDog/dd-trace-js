@@ -4,7 +4,9 @@
 
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations.js')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks.js')
-const extractPackageAndModulePath = require('../datadog-instrumentations/src/utils/src/extract-package-and-module-path')
+const extractPackageAndModulePath = require(
+  '../datadog-instrumentations/src/helpers/extract-package-and-module-path.js'
+)
 
 for (const hook of Object.values(hooks)) {
   if (typeof hook === 'object') {
@@ -45,8 +47,7 @@ const DEBUG = !!process.env.DD_TRACE_DEBUG
 // Those packages will still be handled via RITM
 // Attempting to instrument them would fail as they have no package.json file
 for (const pkg of INSTRUMENTED) {
-  if (builtins.has(pkg)) continue
-  if (pkg.startsWith('node:')) continue
+  if (builtins.has(pkg) || pkg.startsWith('node:')) continue
   modulesOfInterest.add(pkg)
 }
 
@@ -69,7 +70,9 @@ module.exports.setup = function (build) {
     }
 
     // TODO: Should this also check for namespace === 'file'?
-    if (args.path.startsWith('@') && !args.importer.includes('node_modules/')) {
+    if (!modulesOfInterest.has(args.path) &&
+        args.path.startsWith('@') &&
+        !args.importer.includes('node_modules/')) {
       // This is the Next.js convention for loading local files
       if (DEBUG) console.log(`@LOCAL: ${args.path}`)
       return

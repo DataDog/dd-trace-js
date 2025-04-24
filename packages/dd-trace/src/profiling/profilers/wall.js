@@ -70,12 +70,16 @@ function ensureChannelsActivated () {
 class NativeWallProfiler {
   constructor (options = {}) {
     this.type = 'wall'
-    this._samplingIntervalMicros = options.samplingInterval || 1e6 / 99 // 99hz
-    this._flushIntervalMillis = options.flushInterval || 60 * 1e3 // 60 seconds
+    // Currently there's a crash sometimes on worker threads trying to collect async IDs so for the
+    // time being we'll constrain it to only the main thread.
+    this._asyncIdEnabled = !!options.asyncIdEnabled && require('worker_threads').isMainThread
     this._codeHotspotsEnabled = !!options.codeHotspotsEnabled
-    this._endpointCollectionEnabled = !!options.endpointCollectionEnabled
-    this._timelineEnabled = !!options.timelineEnabled
     this._cpuProfilingEnabled = !!options.cpuProfilingEnabled
+    this._endpointCollectionEnabled = !!options.endpointCollectionEnabled
+    this._flushIntervalMillis = options.flushInterval || 60 * 1e3 // 60 seconds
+    this._samplingIntervalMicros = options.samplingInterval || 1e6 / 99 // 99hz
+    this._timelineEnabled = !!options.timelineEnabled
+    this._v8ProfilerBugWorkaroundEnabled = !!options.v8ProfilerBugWorkaroundEnabled
     // We need to capture span data into the sample context for either code hotspots
     // or endpoint collection.
     this._captureSpanData = this._codeHotspotsEnabled || this._endpointCollectionEnabled
@@ -84,7 +88,6 @@ class NativeWallProfiler {
     // timestamps require the sample contexts feature in the pprof wall profiler), or
     // cpu profiling is enabled.
     this._withContexts = this._captureSpanData || this._timelineEnabled || this._cpuProfilingEnabled
-    this._v8ProfilerBugWorkaroundEnabled = !!options.v8ProfilerBugWorkaroundEnabled
     this._mapper = undefined
     this._pprof = undefined
 
@@ -112,8 +115,6 @@ class NativeWallProfiler {
   start ({ mapper } = {}) {
     if (this._started) return
 
-    ensureChannelsActivated()
-
     this._mapper = mapper
     this._pprof = require('@datadog/pprof')
     kSampleCount = this._pprof.time.constants.kSampleCount
@@ -127,13 +128,14 @@ class NativeWallProfiler {
     }
 
     this._pprof.time.start({
-      intervalMicros: this._samplingIntervalMicros,
+      collectAsyncId: this._asyncIdEnabled,
+      collectCpuTime: this._cpuProfilingEnabled,
       durationMillis: this._flushIntervalMillis,
+      intervalMicros: this._samplingIntervalMicros,
+      lineNumbers: false,
       sourceMapper: this._mapper,
       withContexts: this._withContexts,
-      lineNumbers: false,
-      workaroundV8Bug: this._v8ProfilerBugWorkaroundEnabled,
-      collectCpuTime: this._cpuProfilingEnabled
+      workaroundV8Bug: this._v8ProfilerBugWorkaroundEnabled
     })
 
     if (this._withContexts) {
@@ -142,6 +144,8 @@ class NativeWallProfiler {
       if (this._captureSpanData) {
         this._profilerState = this._pprof.time.getState()
         this._lastSampleCount = 0
+
+        ensureChannelsActivated()
 
         beforeCh.subscribe(this._enter)
         enterCh.subscribe(this._enter)

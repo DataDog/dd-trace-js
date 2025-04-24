@@ -48,7 +48,14 @@ const {
   TEST_MANAGEMENT_IS_DISABLED,
   DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
   DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
-  DD_CAPABILITIES_AUTO_TEST_RETRIES
+  DD_CAPABILITIES_AUTO_TEST_RETRIES,
+  DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
+  DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
+  DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
+  TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
+  TEST_HAS_FAILED_ALL_RETRIES,
+  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
+  TEST_RETRY_REASON_TYPES
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -1193,7 +1200,7 @@ describe('mocha CommonJS', function () {
           )
           assert.equal(retriedTests.length, NUM_RETRIES_EFD)
           retriedTests.forEach(test => {
-            assert.propertyVal(test.meta, TEST_RETRY_REASON, 'efd')
+            assert.propertyVal(test.meta, TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
           })
           // Test name does not change
           newTests.forEach(test => {
@@ -1771,7 +1778,7 @@ describe('mocha CommonJS', function () {
             // Test name does not change
             retriedTests.forEach(test => {
               assert.equal(test.meta[TEST_NAME], 'fail occasionally fails')
-              assert.equal(test.meta[TEST_RETRY_REASON], 'efd')
+              assert.equal(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
             })
           })
 
@@ -2025,11 +2032,14 @@ describe('mocha CommonJS', function () {
           })
 
           // The first attempt is not marked as a retry
-          const retriedFailure = failedAttempts.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          const retriedFailure = failedAttempts.filter(
+            test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+          )
           assert.equal(retriedFailure.length, 1)
 
           const passedAttempt = tests.find(test => test.meta[TEST_STATUS] === 'pass')
           assert.equal(passedAttempt.meta[TEST_IS_RETRY], 'true')
+          assert.equal(passedAttempt.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
         })
 
       childProcess.on('exit', () => {
@@ -2057,7 +2067,7 @@ describe('mocha CommonJS', function () {
 
           assert.equal(tests.length, 1)
 
-          const retries = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          const retries = tests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr)
           assert.equal(retries.length, 0)
         })
 
@@ -2104,7 +2114,9 @@ describe('mocha CommonJS', function () {
           const failedAttempts = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
           assert.equal(failedAttempts.length, 2)
 
-          const retriedFailure = failedAttempts.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          const retriedFailure = failedAttempts.filter(
+            test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+          )
           assert.equal(retriedFailure.length, 1)
         })
 
@@ -2227,7 +2239,9 @@ describe('mocha CommonJS', function () {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
-          const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          const retriedTests = tests.filter(
+            test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+          )
 
           assert.equal(retriedTests.length, 1)
           const [retriedTest] = retriedTests
@@ -2280,7 +2294,9 @@ describe('mocha CommonJS', function () {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
-          const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          const retriedTests = tests.filter(
+            test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+          )
 
           assert.equal(retriedTests.length, 1)
           const [retriedTest] = retriedTests
@@ -2335,7 +2351,9 @@ describe('mocha CommonJS', function () {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
-          const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          const retriedTests = tests.filter(
+            test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+          )
 
           assert.equal(retriedTests.length, 1)
           const [retriedTest] = retriedTests
@@ -2423,7 +2441,9 @@ describe('mocha CommonJS', function () {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
-          const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          const retriedTests = tests.filter(
+            test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+          )
 
           assert.equal(retriedTests.length, 1)
           const [retriedTest] = retriedTests
@@ -2503,7 +2523,7 @@ describe('mocha CommonJS', function () {
           newTests.forEach(test => {
             assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
           })
-          const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          const retriedTests = newTests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr)
           // no test has been retried
           assert.equal(retriedTests.length, 0)
         })
@@ -2566,6 +2586,227 @@ describe('mocha CommonJS', function () {
   })
 
   context('test management', () => {
+    context('attempt to fix', () => {
+      beforeEach(() => {
+        receiver.setTestManagementTests({
+          mocha: {
+            suites: {
+              'ci-visibility/test-management/test-attempt-to-fix-1.js': {
+                tests: {
+                  'attempt to fix tests can attempt to fix a test': {
+                    properties: {
+                      attempt_to_fix: true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        })
+      })
+
+      const getTestAssertions = ({
+        isAttemptToFix,
+        shouldAlwaysPass,
+        shouldFailSometimes,
+        isQuarantined,
+        isDisabled
+      }) =>
+        receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+
+            if (isAttemptToFix) {
+              assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
+            } else {
+              assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+            }
+
+            const resourceNames = tests.map(span => span.resource)
+
+            assert.includeMembers(resourceNames,
+              [
+                'ci-visibility/test-management/test-attempt-to-fix-1.js.attempt to fix tests can attempt to fix a test'
+              ]
+            )
+
+            const retriedTests = tests.filter(
+              test => test.meta[TEST_NAME] === 'attempt to fix tests can attempt to fix a test'
+            )
+
+            for (let i = 0; i < retriedTests.length; i++) {
+              const test = retriedTests[i]
+              const isFirstAttempt = i === 0
+              const isLastAttempt = i === retriedTests.length - 1
+              if (!isAttemptToFix) {
+                assert.notProperty(test.meta, TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX)
+                assert.notProperty(test.meta, TEST_IS_RETRY)
+                assert.notProperty(test.meta, TEST_RETRY_REASON)
+                continue
+              }
+
+              assert.propertyVal(test.meta, TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX, 'true')
+              if (isFirstAttempt) {
+                assert.notProperty(test.meta, TEST_IS_RETRY)
+                assert.notProperty(test.meta, TEST_RETRY_REASON)
+              } else {
+                assert.propertyVal(test.meta, TEST_IS_RETRY, 'true')
+                assert.propertyVal(test.meta, TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atf)
+              }
+
+              if (isQuarantined) {
+                assert.propertyVal(test.meta, TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+              }
+
+              if (isDisabled) {
+                assert.propertyVal(test.meta, TEST_MANAGEMENT_IS_DISABLED, 'true')
+              }
+
+              if (isLastAttempt) {
+                if (shouldAlwaysPass) {
+                  assert.propertyVal(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
+                  assert.notProperty(test.meta, TEST_HAS_FAILED_ALL_RETRIES)
+                } else if (shouldFailSometimes) {
+                  assert.notProperty(test.meta, TEST_HAS_FAILED_ALL_RETRIES)
+                  assert.notProperty(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED)
+                } else {
+                  assert.propertyVal(test.meta, TEST_HAS_FAILED_ALL_RETRIES, 'true')
+                  assert.notProperty(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED)
+                }
+              }
+            }
+          })
+
+      const runAttemptToFixTest = (done, {
+        isAttemptToFix,
+        shouldAlwaysPass,
+        shouldFailSometimes,
+        isQuarantined,
+        isDisabled,
+        extraEnvVars = {}
+      } = {}) => {
+        let stdout = ''
+        const testAssertionsPromise = getTestAssertions({
+          isAttemptToFix,
+          shouldAlwaysPass,
+          shouldFailSometimes,
+          isQuarantined,
+          isDisabled
+        })
+
+        childProcess = exec(
+          runTestsWithCoverageCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: JSON.stringify([
+                './test-management/test-attempt-to-fix-1.js'
+              ]),
+              SHOULD_CHECK_RESULTS: '1',
+              ...extraEnvVars,
+              ...(shouldAlwaysPass ? { SHOULD_ALWAYS_PASS: '1' } : {}),
+              ...(shouldFailSometimes ? { SHOULD_FAIL_SOMETIMES: '1' } : {})
+            },
+            stdio: 'inherit'
+          }
+        )
+
+        childProcess.stdout.on('data', (data) => {
+          stdout += data
+        })
+
+        childProcess.on('exit', exitCode => {
+          testAssertionsPromise.then(() => {
+            assert.include(stdout, 'I am running when attempt to fix')
+            if (shouldAlwaysPass || isQuarantined || isDisabled) {
+              // even though a test fails, the exit code is 0 because the test is quarantined or disabled
+              assert.equal(exitCode, 0)
+            } else {
+              assert.equal(exitCode, 1)
+            }
+            done()
+          }).catch(done)
+        })
+      }
+
+      it('can attempt to fix and mark last attempt as failed if every attempt fails', (done) => {
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+        runAttemptToFixTest(done, { isAttemptToFix: true })
+      })
+
+      it('can attempt to fix and mark last attempt as passed if every attempt passes', (done) => {
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+        runAttemptToFixTest(done, { isAttemptToFix: true, shouldAlwaysPass: true })
+      })
+
+      it('can attempt to fix and not mark last attempt if attempts both pass and fail', (done) => {
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+        runAttemptToFixTest(done, { isAttemptToFix: true, shouldFailSometimes: true })
+      })
+
+      it('does not attempt to fix tests if test management is not enabled', (done) => {
+        receiver.setSettings({ test_management: { enabled: false, attempt_to_fix_retries: 3 } })
+
+        runAttemptToFixTest(done)
+      })
+
+      it('does not enable attempt to fix tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+        runAttemptToFixTest(done, { extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' } })
+      })
+
+      it('does not fail retry if a test is quarantined', (done) => {
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+        receiver.setTestManagementTests({
+          mocha: {
+            suites: {
+              'ci-visibility/test-management/test-attempt-to-fix-1.js': {
+                tests: {
+                  'attempt to fix tests can attempt to fix a test': {
+                    properties: {
+                      attempt_to_fix: true,
+                      quarantined: true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        })
+
+        runAttemptToFixTest(done, { isAttemptToFix: true, isQuarantined: true })
+      })
+
+      it('does not fail retry if a test is disabled', (done) => {
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+        receiver.setTestManagementTests({
+          mocha: {
+            suites: {
+              'ci-visibility/test-management/test-attempt-to-fix-1.js': {
+                tests: {
+                  'attempt to fix tests can attempt to fix a test': {
+                    properties: {
+                      attempt_to_fix: true,
+                      disabled: true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        })
+
+        runAttemptToFixTest(done, { isAttemptToFix: true, isDisabled: true })
+      })
+    })
+
     context('disabled', () => {
       beforeEach(() => {
         receiver.setTestManagementTests({
@@ -2817,27 +3058,77 @@ describe('mocha CommonJS', function () {
   })
 
   context('libraries capabilities', () => {
-    it('adds capabilities to tests', (done) => {
-      receiver.setSettings({
-        flaky_test_retries_enabled: true,
-        itr_enabled: true,
-        early_flake_detection: {
-          enabled: true
-        },
-        known_tests_enabled: true
-      })
-
-      const eventsPromise = receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('citestcycle'), (payloads) => {
+    const getTestAssertions = (isParallel) =>
+      receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('citestcycle'), (payloads) => {
         const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
         assert.isNotEmpty(metadataDicts)
         metadataDicts.forEach(metadata => {
-          assert.equal(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], 'true')
-          assert.equal(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], 'true')
-          assert.equal(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], 'true')
+          if (isParallel) {
+            assert.equal(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], undefined)
+            assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], undefined)
+          } else {
+            assert.equal(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], '1')
+            assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '2')
+          }
+          assert.equal(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')
+          assert.equal(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
+          assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
+          assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
           // capabilities logic does not overwrite test session name
           assert.equal(metadata.test[TEST_SESSION_NAME], 'my-test-session-name')
         })
+      })
+
+    const runTest = (done, isParallel, extraEnvVars = {}) => {
+      const testAssertionsPromise = getTestAssertions(isParallel)
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            DD_TEST_SESSION_NAME: 'my-test-session-name',
+            ...extraEnvVars
+          },
+          stdio: 'inherit'
+        }
+      )
+      childProcess.on('exit', () => {
+        testAssertionsPromise.then(() => done()).catch(done)
+      })
+    }
+
+    it('adds capabilities to tests', (done) => {
+      runTest(done, false)
+    })
+
+    it('adds capabilities to tests (parallel)', (done) => {
+      runTest(done, true, {
+        RUN_IN_PARALLEL: '1'
+      })
+    })
+  })
+
+  context('retry and hooks', () => {
+    it('works when tests are not retried', (done) => {
+      let stdout = ''
+      const eventsPromise = receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('citestcycle'), (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+        assert.equal(tests.length, 2)
+
+        assert.includeMembers(tests.map(test => test.meta[TEST_STATUS]), [
+          'pass',
+          'pass'
+        ])
+
+        assert.includeMembers(tests.map(test => test.resource), [
+          'ci-visibility/test-nested-hooks/test-nested-hooks.js.describe context nested test with retries',
+          'ci-visibility/test-nested-hooks/test-nested-hooks.js.describe is not nested'
+        ])
       })
 
       childProcess = exec(
@@ -2846,13 +3137,80 @@ describe('mocha CommonJS', function () {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
-            DD_TEST_SESSION_NAME: 'my-test-session-name'
+            TESTS_TO_RUN: JSON.stringify([
+              './test-nested-hooks/test-nested-hooks.js'
+            ])
           },
           stdio: 'inherit'
         }
       )
+
+      childProcess.stdout.on('data', (data) => {
+        stdout += data
+      })
+
       childProcess.on('exit', () => {
         eventsPromise.then(() => {
+          assert.include(stdout, 'beforeEach')
+          assert.include(stdout, 'beforeEach in context')
+          assert.include(stdout, 'test')
+          assert.include(stdout, 'afterEach')
+          assert.include(stdout, 'afterEach in context')
+          done()
+        }).catch(done)
+      })
+    })
+
+    it('works when tests are retried', (done) => {
+      let stdout = ''
+      const eventsPromise = receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('citestcycle'), (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+        assert.equal(tests.length, 3)
+
+        assert.includeMembers(tests.map(test => test.meta[TEST_STATUS]), [
+          'fail',
+          'pass',
+          'pass'
+        ])
+
+        assert.includeMembers(tests.map(test => test.resource), [
+          'ci-visibility/test-nested-hooks/test-nested-hooks.js.describe context nested test with retries',
+          'ci-visibility/test-nested-hooks/test-nested-hooks.js.describe is not nested'
+        ])
+
+        const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+        assert.equal(retriedTests.length, 1)
+        assert.equal(retriedTests[0].meta[TEST_STATUS], 'pass')
+      })
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './test-nested-hooks/test-nested-hooks.js'
+            ]),
+            SHOULD_FAIL: '1'
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.stdout.on('data', (data) => {
+        stdout += data
+      })
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          assert.include(stdout, 'beforeEach')
+          assert.include(stdout, 'beforeEach in context')
+          assert.include(stdout, 'test')
+          assert.include(stdout, 'afterEach')
+          assert.include(stdout, 'afterEach in context')
           done()
         }).catch(done)
       })
