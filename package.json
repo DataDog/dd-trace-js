@@ -1,6 +1,6 @@
 {
   "name": "dd-trace",
-  "version": "5.48.1",
+  "version": "5.49.0",
   "description": "Datadog APM tracing client for JavaScript",
   "main": "index.js",
   "typings": "index.d.ts",
@@ -48,6 +48,7 @@
     "test:integration:cucumber": "mocha --timeout 60000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/cucumber/*.spec.js\"",
     "test:integration:cypress": "mocha --timeout 60000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/cypress/*.spec.js\"",
     "test:integration:debugger": "mocha --timeout 60000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/debugger/*.spec.js\"",
+    "test:integration:esbuild": "mocha --timeout 60000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/esbuild/*.spec.js\"",
     "test:integration:jest": "mocha --timeout 60000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/jest/*.spec.js\"",
     "test:integration:mocha": "mocha --timeout 60000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/mocha/*.spec.js\"",
     "test:integration:playwright": "mocha --timeout 60000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/playwright/*.spec.js\"",

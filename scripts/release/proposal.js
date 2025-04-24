@@ -19,6 +19,7 @@ const {
 } = require('./helpers/terminal')
 const { checkBranchDiff, checkGitHub, checkGit } = require('./helpers/requirements')
 
+const tmpdir = process.env.RUNNER_TEMP || os.tmpdir()
 const releaseLine = params[0]
 
 // Validate release line argument.
@@ -26,7 +27,8 @@ if (!releaseLine || releaseLine === 'help' || flags.help) {
   log(
     'Usage: node scripts/release/proposal <release-line>\n',
     'Options:',
-    '  -y         Always accept prompts.',
+    '  -n         Do not push release proposal upstream.',
+    '  -y         Push release proposal upstream.',
     '  --debug    Print raw commands and their outputs.',
     '  --help     Show this help.',
     '  --auto     Automatically detect version increment. (this is default)',
@@ -73,8 +75,8 @@ try {
   const newVersion = isMinor
     ? `${releaseLine}.${DD_MINOR + 1}.0`
     : `${releaseLine}.${DD_MINOR}.${DD_PATCH + 1}`
-  const notesDir = path.join(os.tmpdir(), 'release_notes')
-  const notesFile = path.join(notesDir, `${newVersion}.md`)
+  const notesDir = path.join(tmpdir, 'release_notes')
+  const notesFile = path.join(notesDir, `v${newVersion}.md`)
 
   pass(`${isMinor ? 'minor' : 'patch'} (${DD_MAJOR}.${DD_MINOR}.${DD_PATCH} -> ${newVersion})`)
 
@@ -141,6 +143,7 @@ try {
 
   pass(notesFile)
 
+  if (flags.n) process.exit(0)
   if (!flags.y) {
     // Stop and ask the user if they want to proceed with pushing everything upstream.
     checkpoint('Push the release upstream and create/update PR?')

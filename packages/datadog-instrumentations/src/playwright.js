@@ -761,9 +761,17 @@ addHook({
     return rootSuite
   }
 
-  loadUtilsPackage.createRootSuite = newCreateRootSuite
+  // We need to proxy the createRootSuite function because the function is not configurable
+  const proxy = new Proxy(loadUtilsPackage, {
+    get (target, prop) {
+      if (prop === 'createRootSuite') {
+        return newCreateRootSuite
+      }
+      return target[prop]
+    }
+  })
 
-  return loadUtilsPackage
+  return proxy
 })
 
 // main process hook
@@ -805,19 +813,25 @@ addHook({
 
     const page = this
 
-    const isRumActive = await page.evaluate(() => {
-      if (window.DD_RUM && window.DD_RUM.getInternalContext) {
-        return !!window.DD_RUM.getInternalContext()
-      } else {
-        return false
-      }
-    })
+    try {
+      if (page) {
+        const isRumActive = await page.evaluate(() => {
+          if (window.DD_RUM && window.DD_RUM.getInternalContext) {
+            return !!window.DD_RUM.getInternalContext()
+          } else {
+            return false
+          }
+        })
 
-    if (isRumActive) {
-      testPageGotoCh.publish({
-        isRumActive,
-        page
-      })
+        if (isRumActive) {
+          testPageGotoCh.publish({
+            isRumActive,
+            page
+          })
+        }
+      }
+    } catch (e) {
+      // ignore errors such as redirects, context destroyed, etc
     }
 
     return response

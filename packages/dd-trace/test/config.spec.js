@@ -272,7 +272,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('installSignature.time', null)
     expect(config).to.have.nested.property('installSignature.type', null)
     expect(config).to.have.nested.property('llmobs.mlApp', undefined)
-    expect(config).to.have.nested.property('llmobs.agentlessEnabled', false)
+    expect(config).to.have.nested.property('llmobs.agentlessEnabled', undefined)
     expect(config).to.have.nested.property('llmobs.enabled', false)
 
     expect(updateConfig).to.be.calledOnce
@@ -346,7 +346,7 @@ describe('Config', () => {
       { name: 'isManualApiEnabled', value: false, origin: 'default' },
       { name: 'langchain.spanCharLimit', value: 128, origin: 'default' },
       { name: 'langchain.spanPromptCompletionSampleRate', value: 1.0, origin: 'default' },
-      { name: 'llmobs.agentlessEnabled', value: false, origin: 'default' },
+      { name: 'llmobs.agentlessEnabled', value: undefined, origin: 'default' },
       { name: 'llmobs.mlApp', value: undefined, origin: 'default' },
       { name: 'ciVisibilityTestSessionName', value: '', origin: 'default' },
       { name: 'ciVisAgentlessLogSubmissionEnabled', value: false, origin: 'default' },
