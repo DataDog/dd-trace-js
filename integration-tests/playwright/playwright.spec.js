@@ -1,6 +1,8 @@
 'use strict'
 
 const { exec, execSync } = require('child_process')
+const path = require('path')
+const fs = require('fs')
 
 const getPort = require('get-port')
 const { assert } = require('chai')
@@ -43,7 +45,8 @@ const {
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_IS_RUM_ACTIVE,
   TEST_BROWSER_VERSION,
-  TEST_RETRY_REASON_TYPES
+  TEST_RETRY_REASON_TYPES,
+  TEST_IS_MODIFIED
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -1458,6 +1461,271 @@ versions.forEach((version) => {
           childProcess.on('exit', () => {
             receiverPromise.then(() => done()).catch(done)
           })
+        })
+      })
+    }
+
+    if (version === 'latest') {
+      context('impacted tests', () => {
+        const NUM_RETRIES = 3
+        let baseCommitSha = null
+        let commitHeadSha = null
+        let eventPath = null
+        let testConfig = null
+
+        function promiseExec (command) {
+          return new Promise((resolve) => {
+            const child = exec(command, { cwd })
+            let data = ''
+            child.stdout.on('data', chunk => { data += chunk })
+            child.stdout.on('end', () => resolve(data.trim()))
+          })
+        }
+
+        beforeEach(() => {
+          const eventContent = {
+            pull_request: {
+              base: {
+                sha: baseCommitSha,
+                ref: 'master'
+              },
+              head: {
+                sha: commitHeadSha,
+                ref: 'master'
+              }
+            }
+          }
+          eventPath = path.join(cwd, 'event.json')
+          fs.writeFileSync(eventPath, JSON.stringify(eventContent, null, 2))
+
+          testConfig = {
+            GITHUB_ACTIONS: true,
+            GITHUB_BASE_REF: 'master',
+            GITHUB_HEAD_REF: 'feature-branch',
+            GITHUB_EVENT_PATH: eventPath
+          }
+        })
+
+        // Add git setup before running impacted tests
+        before(async function () {
+          // Create initial test file on main
+          const testDir = path.join(cwd, 'ci-visibility/playwright-tests-impacted-tests')
+          await exec(`mkdir -p ${testDir}`, { cwd })
+          const testContent = `
+const { test, expect } = require('@playwright/test')
+
+test.beforeEach(async ({ page }) => {
+  await page.goto(process.env.PW_BASE_URL)
+})
+
+test.describe('impacted test', () => {
+  test('should be impacted', async ({ page }) => {
+    await expect(page.locator('.hello-world')).toHaveText([
+      'Hello World'
+    ])
+  })
+})
+`
+          fs.writeFileSync(path.join(testDir, 'impacted-test.js'), testContent)
+
+          await promiseExec('git add ci-visibility/playwright-tests-impacted-tests/impacted-test.js')
+          await promiseExec('git commit -m "add impacted-test.js"')
+          // Get base commit SHA from main after creating the file
+          baseCommitSha = await promiseExec('git rev-parse HEAD')
+
+          await promiseExec('git checkout -b feature-branch')
+          const modifiedTestContent = `
+const { test, expect } = require('@playwright/test')
+
+test.beforeEach(async ({ page }) => {
+  await page.goto(process.env.PW_BASE_URL)
+})
+
+test.describe('impacted test', () => {
+  test('should be impacted', async ({ page }) => {
+    await expect(page.locator('.hello-world')).toHaveText([
+      'Hello Worldd'
+    ])
+  })
+})
+`
+          fs.writeFileSync(path.join(testDir, 'impacted-test.js'), modifiedTestContent)
+          await promiseExec('git add ci-visibility/playwright-tests-impacted-tests/impacted-test.js')
+          await promiseExec('git commit -m "modify impacted-test.js"')
+          commitHeadSha = await promiseExec('git rev-parse HEAD')
+        })
+
+        // Clean up git branches and temp files after impacted tests
+        after(async () => {
+          await promiseExec('git checkout main')
+          await promiseExec('git branch -D feature-branch')
+          if (fs.existsSync(eventPath)) {
+            fs.unlinkSync(eventPath)
+          }
+        })
+
+        const getTestAssertions = ({ isImpacting, isEfd }) =>
+          receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+
+              if (isEfd) {
+                assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
+              } else {
+                assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
+              }
+
+              const resourceNames = tests.map(span => span.resource)
+
+              assert.includeMembers(resourceNames,
+                [
+                  'impacted-test.js.impacted test should be impacted'
+                ]
+              )
+
+              const impactedTests = tests.filter(test =>
+                test.meta[TEST_SOURCE_FILE] === 'ci-visibility/playwright-tests-impacted-tests/impacted-test.js' &&
+                test.meta[TEST_NAME] === 'impacted test should be impacted')
+
+              if (isEfd) {
+                assert.equal(impactedTests.length, NUM_RETRIES + 1) // Retries + original test
+              } else {
+                assert.equal(impactedTests.length, 1)
+              }
+
+              if (isImpacting) {
+                impactedTests.forEach(test => {
+                  assert.propertyVal(test.meta, TEST_IS_MODIFIED, 'true')
+                })
+              } else {
+                impactedTests.forEach(test => {
+                  assert.notPropertyVal(test.meta, TEST_IS_MODIFIED)
+                })
+              }
+
+              if (isEfd) {
+                const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+                assert.equal(retriedTests.length, NUM_RETRIES)
+                let retriedTestNew = 0
+                let retriedTestsWithReason = 0
+                retriedTests.forEach(test => {
+                  if (test.meta[TEST_IS_NEW] === 'true') {
+                    retriedTestNew++
+                  }
+                  if (test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd) {
+                    retriedTestsWithReason++
+                  }
+                })
+                assert.equal(retriedTestNew, 0)
+                assert.equal(retriedTestsWithReason, NUM_RETRIES)
+              }
+            })
+
+        const runImpactedTest = (
+          done,
+          { isImpacting, isEfd = false },
+          extraEnvVars = {}
+        ) => {
+          const testAssertionsPromise = getTestAssertions({ isImpacting, isEfd })
+
+          childProcess = exec(
+            './node_modules/.bin/playwright test -c playwright.config.js impacted-test.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PW_BASE_URL: `http://localhost:${webAppPort}`,
+                TEST_DIR: './ci-visibility/playwright-tests-impacted-tests',
+                ...testConfig,
+                ...extraEnvVars
+              },
+              stdio: 'pipe'
+            }
+          )
+
+          childProcess.on('exit', () => {
+            testAssertionsPromise.then(done).catch(done)
+          })
+        }
+
+        it('can impacted tests', (done) => {
+          receiver.setSettings({ impacted_tests_enabled: true })
+
+          runImpactedTest(done, { isImpacting: true })
+        })
+
+        it('does not impact tests if disabled', (done) => {
+          receiver.setSettings({ impacted_tests_enabled: false })
+
+          runImpactedTest(done, { isImpacting: false })
+        })
+
+        it('does not impact tests DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED is set to false', (done) => {
+          receiver.setSettings({ impacted_tests_enabled: false })
+
+          runImpactedTest(done,
+            { isImpacting: false },
+            { DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0' }
+          )
+        })
+
+        it('can not impact tests with git diff with no base sha', (done) => {
+          receiver.setSettings({ impacted_tests_enabled: true })
+          const eventContent = {
+            pull_request: {
+              base: {
+                sha: '',
+                ref: 'master'
+              },
+              head: {
+                sha: commitHeadSha,
+                ref: 'master'
+              }
+            }
+          }
+          eventPath = path.join(cwd, 'event.json')
+          fs.writeFileSync(eventPath, JSON.stringify(eventContent, null, 2))
+
+          runImpactedTest(done, { isImpacting: false })
+        })
+
+        it('can not impact tests with git diff with no head sha', (done) => {
+          receiver.setSettings({ impacted_tests_enabled: true })
+          const eventContent = {
+            pull_request: {
+              base: {
+                sha: baseCommitSha,
+                ref: 'master'
+              },
+              head: {
+                sha: '',
+                ref: 'master'
+              }
+            }
+          }
+          eventPath = path.join(cwd, 'event.json')
+          fs.writeFileSync(eventPath, JSON.stringify(eventContent, null, 2))
+
+          runImpactedTest(done, { isImpacting: false })
+        })
+
+        it('can impact tests in and activate EFD if modified', (done) => {
+          receiver.setSettings({
+            impacted_tests_enabled: true,
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': NUM_RETRIES
+              }
+            },
+            known_tests_enabled: true
+          })
+          receiver.setKnownTests(['ci-visibility/test-impacted-test/test-impacted-1.js'])
+          runImpactedTest(done,
+            { isImpacting: true, isEfd: true }
+          )
         })
       })
     }
