@@ -199,7 +199,7 @@ class MochaPlugin extends CiPlugin {
         null,
         null,
         modifiedTests,
-        'mocha'
+        this.constructor.id
       )
 
       onDone(isModified)
