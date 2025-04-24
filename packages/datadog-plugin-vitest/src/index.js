@@ -26,7 +26,9 @@ const {
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_HAS_FAILED_ALL_RETRIES,
   getLibraryCapabilitiesTags,
-  TEST_RETRY_REASON_TYPES
+  TEST_RETRY_REASON_TYPES,
+  isModifiedTest,
+  TEST_IS_MODIFIED
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -82,6 +84,13 @@ class VitestPlugin extends CiPlugin {
       onDone(isQuarantined)
     })
 
+    this.addSub('ci:vitest:test:is-modified', ({ modifiedTests, testSuiteAbsolutePath, onDone }) => {
+      const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+      const isModified = isModifiedTest(testSuite, 0, 0, modifiedTests, this.constructor.id)
+
+      onDone(isModified)
+    })
+
     this.addSub('ci:vitest:is-early-flake-detection-faulty', ({
       knownTests,
       testFilepaths,
@@ -106,7 +115,8 @@ class VitestPlugin extends CiPlugin {
       mightHitProbe,
       isRetryReasonEfd,
       isRetryReasonAttemptToFix,
-      isRetryReasonAtr
+      isRetryReasonAtr,
+      isModified
     }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
       const store = storage('legacy').getStore()
@@ -137,6 +147,9 @@ class VitestPlugin extends CiPlugin {
       }
       if (isDisabled) {
         extraTags[TEST_MANAGEMENT_IS_DISABLED] = 'true'
+      }
+      if (isModified) {
+        extraTags[TEST_IS_MODIFIED] = 'true'
       }
 
       const span = this.startTestSpan(
