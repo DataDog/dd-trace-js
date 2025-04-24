@@ -260,8 +260,6 @@ moduleTypes.forEach(({
           stdio: 'pipe'
         }
       )
-      childProcess.stdout.pipe(process.stdout)
-      childProcess.stderr.pipe(process.stderr)
 
       childProcess.on('exit', () => {
         receiverPromise.then(() => {
@@ -931,9 +929,6 @@ moduleTypes.forEach(({
           }
         )
 
-        childProcess.stdout.pipe(process.stdout)
-        childProcess.stderr.pipe(process.stderr)
-
         childProcess.on('exit', () => {
           eventsPromise.then(() => {
             done()
@@ -1447,8 +1442,6 @@ moduleTypes.forEach(({
             stdio: 'pipe'
           }
         )
-        childProcess.stdout.pipe(process.stdout)
-        childProcess.stderr.pipe(process.stderr)
 
         childProcess.on('exit', () => {
           receiverPromise.then(() => {
