@@ -771,8 +771,10 @@ addHook({
         if (isEarlyFlakeDetectionEnabled && test.expectedStatus !== 'skipped') {
           const fileSuite = getSuiteType(test, 'file')
           const projectSuite = getSuiteType(test, 'project')
+          // If something change in the file, all tests in the file are impacted
+          const isModifiedTest = () => isModified
           for (let repeatEachIndex = 1; repeatEachIndex <= earlyFlakeDetectionNumRetries; repeatEachIndex++) {
-            const copyFileSuite = deepCloneSuite(fileSuite, isNewTest, [
+            const copyFileSuite = deepCloneSuite(fileSuite, isModifiedTest, [
               '_ddIsModified',
               '_ddIsEfdRetry'
             ])

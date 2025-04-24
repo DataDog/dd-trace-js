@@ -1711,7 +1711,7 @@ test.describe('impacted test', () => {
           runImpactedTest(done, { isImpacting: false })
         })
 
-        it('can impact tests in and activate EFD if modified', (done) => {
+        it('can impact tests in and activate EFD if modified (no known tests)', (done) => {
           receiver.setSettings({
             impacted_tests_enabled: true,
             early_flake_detection: {
@@ -1722,7 +1722,23 @@ test.describe('impacted test', () => {
             },
             known_tests_enabled: true
           })
-          receiver.setKnownTests(['ci-visibility/test-impacted-test/test-impacted-1.js'])
+          runImpactedTest(done,
+            { isImpacting: true, isEfd: true }
+          )
+        })
+
+        it('can impact tests in and activate EFD if modified (with known tests)', (done) => {
+          receiver.setSettings({
+            impacted_tests_enabled: true,
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': NUM_RETRIES
+              }
+            },
+            known_tests_enabled: true
+          })
+          receiver.setKnownTests({ playwright: { 'impacted-test.js': ['impacted test should be impacted'] } })
           runImpactedTest(done,
             { isImpacting: true, isEfd: true }
           )
