@@ -38,7 +38,7 @@ const testCases = [
     file: 'index',
     setup: (agent, results = {}) => {
       const llmobsRes = agent.assertLlmObsPayloadReceived(({ payload }) => {
-        results.llmobsSpans = payload.spans
+        results.llmobsSpans = payload.flatMap(item => item.spans)
       })
 
       const apmRes = agent.assertMessageReceived(({ payload }) => {

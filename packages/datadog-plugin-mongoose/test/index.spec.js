@@ -29,11 +29,11 @@ describe('Plugin', () => {
         })
       }
 
-      before(() => {
+      beforeEach(() => {
         return agent.load(['mongodb-core'])
       })
 
-      before(async () => {
+      beforeEach(async () => {
         tracer = require('../../dd-trace')
 
         mongoose = require(`../../../versions/mongoose@${version}`).get()
@@ -43,11 +43,11 @@ describe('Plugin', () => {
         await connect()
       })
 
-      after(async () => {
+      afterEach(async () => {
         return await mongoose.disconnect()
       })
 
-      after(() => {
+      afterEach(() => {
         return agent.close({ ritmReset: false })
       })
 

@@ -470,5 +470,44 @@ describe('Span', () => {
 
       expect(processor.process).to.have.been.calledOnce
     })
+
+    describe('tracePropagationBehaviorExtract and Baggage', () => {
+      let parent
+
+      beforeEach(() => {
+        parent = {
+          traceId: '123',
+          spanId: '456',
+          _baggageItems: {
+            foo: 'bar'
+          },
+          _trace: {
+            started: ['span'],
+            finished: ['span']
+          },
+          _isRemote: true
+        }
+      })
+
+      it('should not propagate baggage items when Trace_Propagation_Behavior_Extract is set to ignore', () => {
+        tracer = {
+          _config: {
+            tracePropagationBehaviorExtract: 'ignore'
+          }
+        }
+        span = new Span(tracer, processor, prioritySampler, { operationName: 'operation', parent })
+        expect(span._spanContext._baggageItems).to.deep.equal({})
+      })
+
+      it('should propagate baggage items when Trace_Propagation_Behavior_Extract is set to restart', () => {
+        tracer = {
+          _config: {
+            tracePropagationBehaviorExtract: 'restart'
+          }
+        }
+        span = new Span(tracer, processor, prioritySampler, { operationName: 'operation', parent })
+        expect(span._spanContext._baggageItems).to.deep.equal({ foo: 'bar' })
+      })
+    })
   })
 })

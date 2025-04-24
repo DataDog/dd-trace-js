@@ -4,6 +4,7 @@ const proxyquire = require('proxyquire')
 
 describe('Appsec SDK', () => {
   let trackUserLoginSuccessEvent, trackUserLoginFailureEvent, trackCustomEvent
+  let trackUserLoginSuccessV2, trackUserLoginFailureV2
   let checkUserAndSetUser, blockRequest, setUser, setTemplates
   let appsecSdk
   const tracer = {}
@@ -12,6 +13,8 @@ describe('Appsec SDK', () => {
   beforeEach(() => {
     trackUserLoginSuccessEvent = sinon.stub()
     trackUserLoginFailureEvent = sinon.stub()
+    trackUserLoginSuccessV2 = sinon.stub()
+    trackUserLoginFailureV2 = sinon.stub()
     trackCustomEvent = sinon.stub()
     checkUserAndSetUser = sinon.stub()
     blockRequest = sinon.stub()
@@ -19,7 +22,13 @@ describe('Appsec SDK', () => {
     setUser = sinon.stub()
 
     const AppsecSdk = proxyquire('../../../src/appsec/sdk', {
-      './track_event': { trackUserLoginSuccessEvent, trackUserLoginFailureEvent, trackCustomEvent },
+      './track_event': {
+        trackUserLoginSuccessEvent,
+        trackUserLoginFailureEvent,
+        trackCustomEvent,
+        trackUserLoginSuccessV2,
+        trackUserLoginFailureV2
+      },
       './user_blocking': { checkUserAndSetUser, blockRequest },
       '../blocking': { setTemplates },
       './set_user': { setUser }
@@ -77,5 +86,72 @@ describe('Appsec SDK', () => {
     appsecSdk.setUser(user)
 
     expect(setUser).to.have.been.calledOnceWithExactly(tracer, user)
+  })
+
+  describe('eventTrackingV2', () => {
+    it('eventTrackingV2.trackUserLoginSuccess(login, user, metadata) should ' +
+      'call internal function with proper params', () => {
+      const login = 'login'
+      const user = { id: 'user_id' }
+      const metadata = { key: 'value' }
+
+      appsecSdk.eventTrackingV2.trackUserLoginSuccess(login, user, metadata)
+
+      expect(trackUserLoginSuccessV2).to.have.been.calledOnceWithExactly(tracer, login, user, metadata)
+    })
+
+    it('eventTrackingV2.trackUserLoginSuccess(login, user) should call internal function with proper params', () => {
+      const login = 'login'
+      const user = { id: 'user_id' }
+
+      appsecSdk.eventTrackingV2.trackUserLoginSuccess(login, user)
+
+      expect(trackUserLoginSuccessV2).to.have.been.calledOnceWithExactly(tracer, login, user, undefined)
+    })
+
+    it('eventTrackingV2.trackUserLoginSuccess(login) should call internal function with proper params', () => {
+      const login = 'login'
+
+      appsecSdk.eventTrackingV2.trackUserLoginSuccess(login)
+
+      expect(trackUserLoginSuccessV2).to.have.been.calledOnceWithExactly(tracer, login, undefined, undefined)
+    })
+
+    it('eventTrackingV2.trackUserLoginFailure(login, exists, meta) should ' +
+      'call internal function with proper params', () => {
+      const login = 'login'
+      const exists = false
+      const metadata = { key: 'value' }
+
+      appsecSdk.eventTrackingV2.trackUserLoginFailure(login, exists, metadata)
+
+      expect(trackUserLoginFailureV2).to.have.been.calledOnceWithExactly(tracer, login, exists, metadata)
+    })
+
+    it('eventTrackingV2.trackUserLoginFailure(login) should call internal function with proper params', () => {
+      const login = 'login'
+
+      appsecSdk.eventTrackingV2.trackUserLoginFailure(login)
+
+      expect(trackUserLoginFailureV2).to.have.been.calledOnceWithExactly(tracer, login, undefined, undefined)
+    })
+
+    it('eventTrackingV2.trackUserLoginFailure(login, exists) should call internal function with proper params', () => {
+      const login = 'login'
+      const exists = false
+
+      appsecSdk.eventTrackingV2.trackUserLoginFailure(login, exists)
+
+      expect(trackUserLoginFailureV2).to.have.been.calledOnceWithExactly(tracer, login, exists, undefined)
+    })
+
+    it('eventTrackingV2.trackUserLoginFailure(login, meta) should call internal function with proper params', () => {
+      const login = 'login'
+      const metadata = { key: 'value' }
+
+      appsecSdk.eventTrackingV2.trackUserLoginFailure(login, metadata)
+
+      expect(trackUserLoginFailureV2).to.have.been.calledOnceWithExactly(tracer, login, metadata, undefined)
+    })
   })
 })

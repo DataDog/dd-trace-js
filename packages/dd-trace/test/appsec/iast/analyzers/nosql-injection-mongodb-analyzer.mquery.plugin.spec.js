@@ -10,8 +10,8 @@ const fs = require('fs')
 
 describe('nosql injection detection with mquery', () => {
   // https://github.com/fiznool/express-mongo-sanitize/issues/200
-  withVersions('mongodb', 'express', '>4.18.0 <5.0.0', expressVersion => {
-    withVersions('mongodb', 'mongodb', mongodbVersion => {
+  withVersions('mquery', 'express', '>4.18.0 <5.0.0', expressVersion => {
+    withVersions('mquery', 'mongodb', mongodbVersion => {
       const mongodb = require(`../../../../../../versions/mongodb@${mongodbVersion}`)
 
       const satisfiesNodeVersionForMongo3and4 =

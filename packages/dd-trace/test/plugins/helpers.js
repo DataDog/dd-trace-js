@@ -1,6 +1,7 @@
 'use strict'
 
 const { AssertionError } = require('assert')
+const { inspect } = require('util')
 const { AsyncResource } = require('../../../datadog-instrumentations/src/helpers/instrument')
 
 const Nomenclature = require('../../src/service-naming')
@@ -33,7 +34,7 @@ function expectSomeSpan (agent, expected, timeout) {
     const error = scoredErrors.sort((a, b) => a.score - b.score)[0].err
     // We'll append all the spans to this error message so it's visible in test
     // output.
-    error.message += '\n\nCandidate Traces:\n' + JSON.stringify(traces, null, 2)
+    error.message += '\n\nCandidate Traces:\n' + inspect(traces)
     throw error
   }, timeout)
 }

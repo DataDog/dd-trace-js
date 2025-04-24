@@ -238,6 +238,7 @@ describe('Config', () => {
     expect(config).to.have.deep.property('serviceMapping', {})
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['datadog', 'tracecontext', 'baggage'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['datadog', 'tracecontext', 'baggage'])
+    expect(config).to.have.nested.property('tracePropagationBehaviorExtract', 'continue')
     expect(config).to.have.nested.property('experimental.runtimeId', false)
     expect(config).to.have.nested.property('experimental.exporter', undefined)
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
@@ -271,7 +272,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('installSignature.time', null)
     expect(config).to.have.nested.property('installSignature.type', null)
     expect(config).to.have.nested.property('llmobs.mlApp', undefined)
-    expect(config).to.have.nested.property('llmobs.agentlessEnabled', false)
+    expect(config).to.have.nested.property('llmobs.agentlessEnabled', undefined)
     expect(config).to.have.nested.property('llmobs.enabled', false)
 
     expect(updateConfig).to.be.calledOnce
@@ -345,7 +346,7 @@ describe('Config', () => {
       { name: 'isManualApiEnabled', value: false, origin: 'default' },
       { name: 'langchain.spanCharLimit', value: 128, origin: 'default' },
       { name: 'langchain.spanPromptCompletionSampleRate', value: 1.0, origin: 'default' },
-      { name: 'llmobs.agentlessEnabled', value: false, origin: 'default' },
+      { name: 'llmobs.agentlessEnabled', value: undefined, origin: 'default' },
       { name: 'llmobs.mlApp', value: undefined, origin: 'default' },
       { name: 'ciVisibilityTestSessionName', value: '', origin: 'default' },
       { name: 'ciVisAgentlessLogSubmissionEnabled', value: false, origin: 'default' },
@@ -479,6 +480,7 @@ describe('Config', () => {
     ]`
     process.env.DD_TRACE_PROPAGATION_STYLE_INJECT = 'b3,tracecontext'
     process.env.DD_TRACE_PROPAGATION_STYLE_EXTRACT = 'b3,tracecontext'
+    process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'restart'
     process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_EXPORTER = 'log'
     process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = 'true'
@@ -602,6 +604,7 @@ describe('Config', () => {
     })
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['b3', 'tracecontext'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['b3', 'tracecontext'])
+    expect(config).to.have.nested.property('tracePropagationBehaviorExtract', 'restart')
     expect(config).to.have.nested.property('experimental.runtimeId', true)
     expect(config).to.have.nested.property('experimental.exporter', 'log')
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
@@ -770,6 +773,7 @@ describe('Config', () => {
     process.env.DD_TAGS = 'env:test,aKey:aVal bKey:bVal cKey:'
 
     config = new Config()
+
     expect(config.tags).to.have.property('env', 'test')
     expect(config.tags).to.have.property('aKey', 'aVal bKey:bVal cKey:')
 
@@ -1276,6 +1280,7 @@ describe('Config', () => {
     process.env.DD_TRACE_EXPERIMENTAL_TRACEPARENT_ENABLED = 'true'
     process.env.DD_TRACE_PROPAGATION_STYLE_INJECT = 'datadog'
     process.env.DD_TRACE_PROPAGATION_STYLE_EXTRACT = 'datadog'
+    process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'restart'
     process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_EXPORTER = 'log'
     process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = 'true'

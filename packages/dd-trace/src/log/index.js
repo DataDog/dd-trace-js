@@ -121,6 +121,8 @@ const log = {
   }
 }
 
+logWriter.setStackTraceLimitFunction(log.error)
+
 log.reset()
 
 log.toggle(log.isEnabled(), log.getLogLevel())

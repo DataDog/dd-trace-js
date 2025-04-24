@@ -11,8 +11,9 @@ const loadedScripts = []
 const scriptUrls = new Map()
 
 module.exports = {
-  probes: new Map(),
-  breakpoints: new Map(),
+  locationToBreakpoint: new Map(),
+  breakpointToProbes: new Map(),
+  probeToLocation: new Map(),
 
   /**
    * Find the script to inspect based on a partial or absolute path. Handles both Windows and POSIX paths.

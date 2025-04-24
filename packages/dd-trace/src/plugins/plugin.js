@@ -18,10 +18,12 @@ class Subscription {
   }
 
   enable () {
+    // TODO: Once Node.js v18.6.0 is no longer supported, we should use `dc.subscribe(event, handler)` instead
     this._channel.subscribe(this._handler)
   }
 
   disable () {
+    // TODO: Once Node.js v18.6.0 is no longer supported, we should use `dc.unsubscribe(event, handler)` instead
     this._channel.unsubscribe(this._handler)
   }
 }

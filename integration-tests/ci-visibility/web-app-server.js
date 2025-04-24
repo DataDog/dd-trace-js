@@ -11,6 +11,9 @@ module.exports = http.createServer((req, res) => {
       <title>Hello World</title>
       <script>
         window.DD_RUM = {
+          getInternalContext: () => {
+            return true
+          },
           stopSession: () => {
             return true
           }

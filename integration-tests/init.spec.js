@@ -3,7 +3,8 @@ const {
   runAndCheckWithTelemetry: testFile,
   useEnv,
   useSandbox,
-  sandboxCwd
+  sandboxCwd,
+  setShouldKill
 } = require('./helpers')
 const path = require('path')
 const fs = require('fs')
@@ -159,6 +160,7 @@ function stubTracerIfNeeded () {
 }
 
 describe('init.js', () => {
+  setShouldKill(false)
   useSandbox()
   stubTracerIfNeeded()
 
@@ -173,6 +175,7 @@ if (
   semver.satisfies(process.versions.node, '>=14.13.1')
 ) {
   describe('initialize.mjs', () => {
+    setShouldKill(false)
     useSandbox()
     stubTracerIfNeeded()
 

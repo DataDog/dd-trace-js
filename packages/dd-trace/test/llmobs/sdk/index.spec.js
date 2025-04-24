@@ -5,7 +5,7 @@ const Config = require('../../../src/config')
 
 const LLMObsTagger = require('../../../src/llmobs/tagger')
 const LLMObsEvalMetricsWriter = require('../../../src/llmobs/writers/evaluations')
-const LLMObsAgentProxySpanWriter = require('../../../src/llmobs/writers/spans/agentProxy')
+const LLMObsSpanWriter = require('../../../src/llmobs/writers/spans')
 const LLMObsSpanProcessor = require('../../../src/llmobs/span_processor')
 
 const tracerVersion = require('../../../../../package.json').version
@@ -24,7 +24,8 @@ describe('sdk', () => {
     tracer.init({
       service: 'service',
       llmobs: {
-        mlApp: 'mlApp'
+        mlApp: 'mlApp',
+        agentlessEnabled: false
       }
     })
     llmobs = tracer.llmobs
@@ -37,8 +38,8 @@ describe('sdk', () => {
     // stub writer functionality
     sinon.stub(LLMObsEvalMetricsWriter.prototype, 'append')
     sinon.stub(LLMObsEvalMetricsWriter.prototype, 'flush')
-    sinon.stub(LLMObsAgentProxySpanWriter.prototype, 'append')
-    sinon.stub(LLMObsAgentProxySpanWriter.prototype, 'flush')
+    sinon.stub(LLMObsSpanWriter.prototype, 'append')
+    sinon.stub(LLMObsSpanWriter.prototype, 'flush')
 
     LLMObsSDK = require('../../../src/llmobs/sdk')
 
@@ -56,8 +57,8 @@ describe('sdk', () => {
     LLMObsEvalMetricsWriter.prototype.append.resetHistory()
     LLMObsEvalMetricsWriter.prototype.flush.resetHistory()
 
-    LLMObsAgentProxySpanWriter.prototype.append.resetHistory()
-    LLMObsAgentProxySpanWriter.prototype.flush.resetHistory()
+    LLMObsSpanWriter.prototype.append.resetHistory()
+    LLMObsSpanWriter.prototype.flush.resetHistory()
 
     process.removeAllListeners('beforeExit')
   })
@@ -98,7 +99,7 @@ describe('sdk', () => {
 
       expect(disabledLLMObs.enabled).to.be.true
       expect(disabledLLMObs._config.llmobs.mlApp).to.equal('mlApp')
-      expect(disabledLLMObs._config.llmobs.agentlessEnabled).to.be.false
+      expect(disabledLLMObs._config.llmobs.agentlessEnabled).to.be.undefined
 
       expect(llmobsModule.enable).to.have.been.called
 
@@ -1072,16 +1073,6 @@ describe('sdk', () => {
       tracer._tracer._config.llmobs.enabled = true
     })
 
-    it('throws for a missing API key', () => {
-      const apiKey = tracer._tracer._config.apiKey
-      delete tracer._tracer._config.apiKey
-
-      expect(() => llmobs.submitEvaluation(spanCtx)).to.throw()
-      expect(LLMObsEvalMetricsWriter.prototype.append).to.not.have.been.called
-
-      tracer._tracer._config.apiKey = apiKey
-    })
-
     it('throws for an invalid span context', () => {
       const invalid = {}
 
@@ -1217,7 +1208,7 @@ describe('sdk', () => {
       llmobs.flush()
 
       expect(LLMObsEvalMetricsWriter.prototype.flush).to.not.have.been.called
-      expect(LLMObsAgentProxySpanWriter.prototype.flush).to.not.have.been.called
+      expect(LLMObsSpanWriter.prototype.flush).to.not.have.been.called
       tracer._tracer._config.llmobs.enabled = true
     })
 
@@ -1225,7 +1216,7 @@ describe('sdk', () => {
       llmobs.flush()
 
       expect(LLMObsEvalMetricsWriter.prototype.flush).to.have.been.called
-      expect(LLMObsAgentProxySpanWriter.prototype.flush).to.have.been.called
+      expect(LLMObsSpanWriter.prototype.flush).to.have.been.called
     })
 
     it('logs if there was an error flushing', () => {

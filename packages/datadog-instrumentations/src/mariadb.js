@@ -153,6 +153,18 @@ function wrapPoolMethod (createConnection) {
   }
 }
 
+function wrapPoolGetConnectionMethod (getConnection) {
+  return function wrappedGetConnection () {
+    const cb = arguments[arguments.length - 1]
+    if (typeof cb !== 'function') return getConnection.apply(this, arguments)
+
+    const callbackResource = new AsyncResource('bound-anonymous-fn')
+    arguments[arguments.length - 1] = callbackResource.bind(cb)
+
+    return getConnection.apply(this, arguments)
+  }
+}
+
 const name = 'mariadb'
 
 addHook({ name, file: 'lib/cmd/query.js', versions: ['>=3'] }, (Query) => {
@@ -161,6 +173,13 @@ addHook({ name, file: 'lib/cmd/query.js', versions: ['>=3'] }, (Query) => {
 
 addHook({ name, file: 'lib/cmd/execute.js', versions: ['>=3'] }, (Execute) => {
   return wrapCommand(Execute)
+})
+
+// in 3.4.1 getConnection method start to use callbacks instead of promises
+addHook({ name, file: 'lib/pool.js', versions: ['>=3.4.1'] }, (Pool) => {
+  shimmer.wrap(Pool.prototype, 'getConnection', wrapPoolGetConnectionMethod)
+
+  return Pool
 })
 
 addHook({ name, file: 'lib/pool.js', versions: ['>=3'] }, (Pool) => {

@@ -15,6 +15,7 @@ describe('RemoteConfigManager', () => {
   let RemoteConfigManager
   let config
   let rc
+  let tagger
 
   beforeEach(() => {
     uuid = sinon.stub().returns('1234-5678')
@@ -32,6 +33,10 @@ describe('RemoteConfigManager', () => {
       error: sinon.spy()
     }
 
+    tagger = {
+      add: sinon.stub()
+    }
+
     extraServices = []
 
     RemoteConfigManager = proxyquire('../src/remote_config/manager', {
@@ -40,6 +45,7 @@ describe('RemoteConfigManager', () => {
       '../../../../../package.json': { version: '3.0.0' },
       '../../exporters/common/request': request,
       '../../log': log,
+      '../tagger': tagger,
       '../../service-naming/extra-services': {
         getExtraServices: () => extraServices
       }
@@ -77,6 +83,10 @@ describe('RemoteConfigManager', () => {
     expect(rc.scheduler).to.equal(scheduler)
 
     expect(rc.url).to.deep.equal(config.url)
+
+    expect(tagger.add).to.have.been.calledOnceWithExactly(config.tags, {
+      '_dd.rc.client_id': '1234-5678'
+    })
 
     expect(rc.state).to.deep.equal({
       client: {

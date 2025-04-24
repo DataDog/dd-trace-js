@@ -14,7 +14,7 @@ describe('Dynamic Instrumentation', function () {
       beforeEach(t.triggerBreakpoint)
 
       it('should support source maps', function (done) {
-        t.agent.on('debugger-input', ({ payload: [{ 'debugger.snapshot': { probe: { location } } }] }) => {
+        t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { probe: { location } } } }] }) => {
           assert.deepEqual(location, {
             file: 'target-app/source-map-support/typescript.ts',
             lines: ['9']
@@ -35,7 +35,7 @@ describe('Dynamic Instrumentation', function () {
       beforeEach(t.triggerBreakpoint)
 
       it('should support source maps', function (done) {
-        t.agent.on('debugger-input', ({ payload: [{ 'debugger.snapshot': { probe: { location } } }] }) => {
+        t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { probe: { location } } } }] }) => {
           assert.deepEqual(location, {
             file: 'target-app/source-map-support/minify.js',
             lines: ['6']

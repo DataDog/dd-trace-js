@@ -4,6 +4,7 @@ const DatadogSpanContext = require('../../../src/opentracing/span_context')
 const Config = require('../../../src/config')
 const id = require('../../../src/id')
 const iast = require('../../../src/appsec/iast')
+const rewriter = require('../../../src/appsec/iast/taint-tracking/rewriter')
 const { testInRequest } = require('./utils')
 const agent = require('../../plugins/agent')
 const axios = require('axios')
@@ -271,6 +272,7 @@ describe('Overhead controller', () => {
         afterEach(() => {
           vulnerabilityReporter.clearCache()
           iast.disable()
+          rewriter.disable()
         })
 
         it('should detect vulnerabilities only in one if max concurrent is 1', (done) => {
@@ -393,6 +395,7 @@ describe('Overhead controller', () => {
             }
           })
           iast.enable(config)
+          rewriter.enable(config)
 
           let counter = 0
           const handler = function (traces) {
@@ -442,11 +445,12 @@ describe('Overhead controller', () => {
               axios.get(`http://localhost:${serverConfig.port}${FOURTH_REQUEST}`).then().catch(done)
               axios.get(`http://localhost:${serverConfig.port}${FIFTH_REQUEST}`).then().catch(done)
             } else if (url === SECOND_REQUEST) {
-              setImmediate(() => {
+              // Previously this was a setImmediate, but that made this flaky. Waiting 100ms de-flakes it.
+              setTimeout(() => {
                 requestResolvers[THIRD_REQUEST]()
                 requestResolvers[FOURTH_REQUEST]()
                 requestResolvers[FIFTH_REQUEST]()
-              })
+              }, 100)
             }
           })
 

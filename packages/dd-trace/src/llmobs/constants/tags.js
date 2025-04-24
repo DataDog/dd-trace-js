@@ -4,6 +4,8 @@ module.exports = {
   SPAN_KINDS: ['llm', 'agent', 'workflow', 'task', 'tool', 'embedding', 'retrieval'],
   SPAN_KIND: '_ml_obs.meta.span.kind',
   SESSION_ID: '_ml_obs.session_id',
+  DECORATOR: '_ml_obs.decorator',
+  INTEGRATION: '_ml_obs.integration',
   METADATA: '_ml_obs.meta.metadata',
   METRICS: '_ml_obs.metrics',
   ML_APP: '_ml_obs.meta.ml_app',

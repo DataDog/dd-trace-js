@@ -459,6 +459,184 @@ describe('Plugin', () => {
           }).toArray()
         })
       })
+
+      describe('with heartbeatEnabled configuration', () => {
+        describe('when heartbeat tracing is disabled via config', () => {
+          before(() => {
+            return agent.load('mongodb-core', {
+              heartbeatEnabled: false
+            })
+          })
+
+          after(() => {
+            return agent.close({ ritmReset: false })
+          })
+
+          beforeEach(async () => {
+            client = await createClient()
+            db = client.db('test')
+          })
+
+          it('should NOT create a span for heartbeat commands', (done) => {
+            const parentSpan = tracer.startSpan('test.parent')
+
+            agent
+              .use(traces => {
+                // Should only receive the trace for the parent span
+                expect(traces[0]).to.have.length(1)
+                const span = traces[0][0]
+                expect(span.name).to.equal('test.parent')
+              })
+              .then(done)
+
+            // Activate parent span scope and trigger heartbeat command
+            tracer.scope().activate(parentSpan, async () => {
+              // Admin connect should be all that is needed to trigger heartbeat command for newer versions of mongo
+              client = await createClient()
+              db = client.db('test')
+
+              // but we should send a test heartbeat command since older versions of mongo don't auto-send heartbeats
+              db.command({ hello: 1 })
+              setTimeout(() => parentSpan.finish(), 50)
+            })
+          })
+        })
+
+        describe('when heartbeat tracing is enabled via config (default)', () => {
+          before(() => {
+            return agent.load('mongodb-core', {
+              heartbeatEnabled: true
+            })
+          })
+
+          after(() => {
+            return agent.close({ ritmReset: false })
+          })
+
+          beforeEach(async () => {
+            client = await createClient()
+            db = client.db('test')
+          })
+
+          it('should create a child span for heartbeat commands', (done) => {
+            const parentSpan = tracer.startSpan('test.parent')
+
+            agent
+              .use(traces => {
+                expect(traces[0]).to.have.length.at.least(2)
+                const rootSpan = traces[0][0]
+
+                expect(rootSpan.name).to.equal('test.parent')
+
+                // assert that some child spans were created, these are the heartbeat spans
+                // don't assert on exact number of spans because it's dynamic
+                for (const childSpan of traces[0].slice(1)) {
+                  expect(childSpan.name).to.equal(expectedSchema.outbound.opName)
+                  expect(childSpan.parent_id.toString()).to.equal(rootSpan.span_id.toString()) // Verify parent-child
+                }
+              })
+              .then(done)
+
+            // Activate parent span scope and trigger heartbeat command
+            tracer.scope().activate(parentSpan, async () => {
+              // Admin connect should be all that is needed to trigger heartbeat command for newer versions of mongo
+              client = await createClient()
+              db = client.db('test')
+
+              // but we should send a test heartbeat command since older versions of mongo don't auto-send heartbeats
+              db.command({ hello: 1 })
+              setTimeout(() => parentSpan.finish(), 200)
+            })
+          })
+        })
+
+        describe('when heartbeat tracing is disabled via env var', () => {
+          before(() => {
+            process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED = 'false'
+            return agent.load('mongodb-core', {})
+          })
+
+          after(() => {
+            return agent.close({ ritmReset: false })
+          })
+
+          beforeEach(async () => {
+            client = await createClient()
+            db = client.db('test')
+          })
+
+          it('should NOT create a span for heartbeat commands', (done) => {
+            const parentSpan = tracer.startSpan('test.parent')
+
+            agent
+              .use(traces => {
+                // Should only receive the trace for the parent span
+                expect(traces[0]).to.have.length(1)
+                const span = traces[0][0]
+                expect(span.name).to.equal('test.parent')
+              })
+              .then(done)
+
+            // Activate parent span scope and trigger heartbeat command
+            tracer.scope().activate(parentSpan, async () => {
+              // Admin connect should be all that is needed to trigger heartbeat command for newer versions of mongo
+              client = await createClient()
+              db = client.db('test')
+
+              // but we should send a test heartbeat command since older versions of mongo don't auto-send heartbeats
+              db.command({ hello: 1 })
+              setTimeout(() => parentSpan.finish(), 50)
+            })
+          })
+        })
+
+        describe('when heartbeat tracing is enabled via env var', () => {
+          before(() => {
+            process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED = 'true'
+            return agent.load('mongodb-core', {})
+          })
+
+          after(() => {
+            return agent.close({ ritmReset: false })
+          })
+
+          beforeEach(async () => {
+            client = await createClient()
+            db = client.db('test')
+          })
+
+          it('should create a child span for heartbeat commands', (done) => {
+            const parentSpan = tracer.startSpan('test.parent')
+
+            agent
+              .use(traces => {
+                expect(traces[0]).to.have.length.at.least(2)
+                const rootSpan = traces[0][0]
+
+                expect(rootSpan.name).to.equal('test.parent')
+
+                // assert that some child spans were created, these are the heartbeat spans
+                // don't assert on exact number of spans because it's dynamic
+                for (const childSpan of traces[0].slice(1)) {
+                  expect(childSpan.name).to.equal(expectedSchema.outbound.opName)
+                  expect(childSpan.parent_id.toString()).to.equal(rootSpan.span_id.toString()) // Verify parent-child
+                }
+              })
+              .then(done)
+
+            // Activate parent span scope and trigger heartbeat command
+            tracer.scope().activate(parentSpan, async () => {
+              // Admin connect should be all that is needed to trigger heartbeat command for newer versions of mongo
+              client = await createClient()
+              db = client.db('test')
+
+              // but we should send a test heartbeat command since older versions of mongo don't auto-send heartbeats
+              db.command({ hello: 1 })
+              setTimeout(() => parentSpan.finish(), 200)
+            })
+          })
+        })
+      })
     })
   })
 })

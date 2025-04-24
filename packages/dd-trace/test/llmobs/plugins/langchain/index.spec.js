@@ -1,8 +1,10 @@
 'use strict'
 
-const LLMObsAgentProxySpanWriter = require('../../../../src/llmobs/writers/spans/agentProxy')
+const LLMObsSpanWriter = require('../../../../src/llmobs/writers/spans')
 const { useEnv } = require('../../../../../../integration-tests/helpers')
 const agent = require('../../../../../dd-trace/test/plugins/agent')
+const iastFilter = require('../../../../src/appsec/iast/taint-tracking/filter')
+
 const {
   expectedLLMObsLLMSpanEvent,
   expectedLLMObsNonLLMSpanEvent,
@@ -11,6 +13,8 @@ const {
   MOCK_STRING
 } = require('../../util')
 const chai = require('chai')
+
+const semver = require('semver')
 
 chai.Assertion.addMethod('deepEqualWithMockValues', deepEqualWithMockValues)
 
@@ -27,6 +31,8 @@ const openAiBaseCompletionInfo = { base: 'https://api.openai.com', path: '/v1/co
 const openAiBaseChatInfo = { base: 'https://api.openai.com', path: '/v1/chat/completions' }
 const openAiBaseEmbeddingInfo = { base: 'https://api.openai.com', path: '/v1/embeddings' }
 
+const isDdTrace = iastFilter.isDdTrace
+
 describe('integrations', () => {
   let langchainOpenai
   let langchainAnthropic
@@ -36,6 +42,15 @@ describe('integrations', () => {
   let langchainOutputParsers
   let langchainPrompts
   let langchainRunnables
+
+  /**
+   * In OpenAI 4.91.0, the default response format for embeddings was changed from `float` to `base64`.
+   * We do not have control in @langchain/openai embeddings to change this for an individual call,
+   * so we need to check the version and stub the response accordingly. If the OpenAI version installed with
+   * @langchain/openai is less than 4.91.0, we stub the response to be a float array of zeros.
+   * If it is 4.91.0 or greater, we stub with a pre-recorded fixture of a 1536 base64 encoded embedding.
+   */
+  let langchainOpenaiOpenAiVersion
 
   let llmobs
 
@@ -48,16 +63,24 @@ describe('integrations', () => {
 
   describe('langchain', () => {
     before(async () => {
-      sinon.stub(LLMObsAgentProxySpanWriter.prototype, 'append')
+      sinon.stub(LLMObsSpanWriter.prototype, 'append')
+
+      iastFilter.isDdTrace = file => {
+        if (file.includes('dd-trace-js/versions/')) {
+          return false
+        }
+        return isDdTrace(file)
+      }
 
       // reduce errors related to too many listeners
       process.removeAllListeners('beforeExit')
 
-      LLMObsAgentProxySpanWriter.prototype.append.reset()
+      LLMObsSpanWriter.prototype.append.reset()
 
       await agent.load('langchain', {}, {
         llmobs: {
-          mlApp: 'test'
+          mlApp: 'test',
+          agentlessEnabled: false
         }
       })
 
@@ -66,10 +89,11 @@ describe('integrations', () => {
 
     afterEach(() => {
       nock.cleanAll()
-      LLMObsAgentProxySpanWriter.prototype.append.reset()
+      LLMObsSpanWriter.prototype.append.reset()
     })
 
     after(() => {
+      iastFilter.isDdTrace = isDdTrace
       require('../../../../../dd-trace').llmobs.disable() // unsubscribe from all events
       sinon.restore()
       return agent.close({ ritmReset: false, wipe: true })
@@ -91,6 +115,11 @@ describe('integrations', () => {
             .get('@langchain/core/prompts')
           langchainRunnables = require(`../../../../../../versions/@langchain/core@${version}`)
             .get('@langchain/core/runnables')
+
+          langchainOpenaiOpenAiVersion =
+            require(`../../../../../../versions/@langchain/openai@${version}`)
+              .get('openai/version')
+              .VERSION
         })
 
         describe('llm', () => {
@@ -111,7 +140,7 @@ describe('integrations', () => {
 
             const checkTraces = agent.use(traces => {
               const span = traces[0][0]
-              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
@@ -123,7 +152,7 @@ describe('integrations', () => {
                 outputMessages: [{ content: 'Hello, world!' }],
                 metadata: MOCK_ANY,
                 tokenMetrics: { input_tokens: 8, output_tokens: 12, total_tokens: 20 },
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               expect(spanEvent).to.deepEqualWithMockValues(expected)
@@ -139,7 +168,7 @@ describe('integrations', () => {
 
             const checkTraces = agent.use(traces => {
               const span = traces[0][0]
-              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
@@ -151,7 +180,7 @@ describe('integrations', () => {
                 outputMessages: [{ content: '' }],
                 metadata: MOCK_ANY,
                 tokenMetrics: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
-                tags: { ml_app: 'test', language: 'javascript' },
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' },
                 error: 1,
                 errorType: 'Error',
                 errorMessage: MOCK_STRING,
@@ -197,7 +226,7 @@ describe('integrations', () => {
             const checkTraces = agent.use(traces => {
               const span = traces[0][0]
 
-              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
@@ -210,7 +239,7 @@ describe('integrations', () => {
                 metadata: MOCK_ANY,
                 // @langchain/cohere does not provide token usage in the response
                 tokenMetrics: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               expect(spanEvent).to.deepEqualWithMockValues(expected)
@@ -243,7 +272,7 @@ describe('integrations', () => {
 
             const checkTraces = agent.use(traces => {
               const span = traces[0][0]
-              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
@@ -255,7 +284,7 @@ describe('integrations', () => {
                 outputMessages: [{ content: 'Hello, world!', role: 'assistant' }],
                 metadata: MOCK_ANY,
                 tokenMetrics: { input_tokens: 8, output_tokens: 12, total_tokens: 20 },
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               expect(spanEvent).to.deepEqualWithMockValues(expected)
@@ -271,7 +300,7 @@ describe('integrations', () => {
 
             const checkTraces = agent.use(traces => {
               const span = traces[0][0]
-              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
@@ -283,7 +312,7 @@ describe('integrations', () => {
                 outputMessages: [{ content: '' }],
                 metadata: MOCK_ANY,
                 tokenMetrics: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
-                tags: { ml_app: 'test', language: 'javascript' },
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' },
                 error: 1,
                 errorType: 'Error',
                 errorMessage: MOCK_STRING,
@@ -322,7 +351,7 @@ describe('integrations', () => {
 
             const checkTraces = agent.use(traces => {
               const span = traces[0][0]
-              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
@@ -334,7 +363,7 @@ describe('integrations', () => {
                 outputMessages: [{ content: 'Hello!', role: 'assistant' }],
                 metadata: MOCK_ANY,
                 tokenMetrics: { input_tokens: 11, output_tokens: 6, total_tokens: 17 },
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               expect(spanEvent).to.deepEqualWithMockValues(expected)
@@ -375,7 +404,7 @@ describe('integrations', () => {
 
             const checkTraces = agent.use(traces => {
               const span = traces[0][0]
-              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
@@ -398,7 +427,7 @@ describe('integrations', () => {
                 metadata: MOCK_ANY,
                 // also tests tokens not sent on llm-type spans should be 0
                 tokenMetrics: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               expect(spanEvent).to.deepEqualWithMockValues(expected)
@@ -429,22 +458,30 @@ describe('integrations', () => {
 
         describe('embedding', () => {
           it('submits an embedding span for an `embedQuery` call', async () => {
-            stubCall({
-              ...openAiBaseEmbeddingInfo,
-              response: {
-                object: 'list',
-                data: [{
-                  object: 'embedding',
-                  index: 0,
-                  embedding: [-0.0034387498, -0.026400521]
-                }]
-              }
-            })
+            if (semver.satisfies(langchainOpenaiOpenAiVersion, '>=4.91.0')) {
+              stubCall({
+                ...openAiBaseEmbeddingInfo,
+                response: require('../../../../../datadog-plugin-langchain/test/fixtures/single-embedding.json')
+              })
+            } else {
+              stubCall({
+                ...openAiBaseEmbeddingInfo,
+                response: {
+                  object: 'list',
+                  data: [{
+                    object: 'embedding',
+                    index: 0,
+                    embedding: Array(1536).fill(0)
+                  }]
+                }
+              })
+            }
+
             const embeddings = new langchainOpenai.OpenAIEmbeddings()
 
             const checkTraces = agent.use(traces => {
               const span = traces[0][0]
-              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
@@ -453,9 +490,9 @@ describe('integrations', () => {
                 modelProvider: 'openai',
                 name: 'langchain.embeddings.openai.OpenAIEmbeddings',
                 inputDocuments: [{ text: 'Hello!' }],
-                outputValue: '[1 embedding(s) returned with size 2]',
+                outputValue: '[1 embedding(s) returned with size 1536]',
                 metadata: MOCK_ANY,
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               expect(spanEvent).to.deepEqualWithMockValues(expected)
@@ -471,7 +508,7 @@ describe('integrations', () => {
 
             const checkTraces = agent.use(traces => {
               const span = traces[0][0]
-              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
@@ -482,7 +519,7 @@ describe('integrations', () => {
                 inputDocuments: [{ text: 'Hello!' }],
                 outputValue: '',
                 metadata: MOCK_ANY,
-                tags: { ml_app: 'test', language: 'javascript' },
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' },
                 error: 1,
                 errorType: 'Error',
                 errorMessage: MOCK_STRING,
@@ -502,27 +539,34 @@ describe('integrations', () => {
           })
 
           it('submits an embedding span for an `embedDocuments` call', async () => {
-            stubCall({
-              ...openAiBaseEmbeddingInfo,
-              response: {
-                object: 'list',
-                data: [{
-                  object: 'embedding',
-                  index: 0,
-                  embedding: [-0.0034387498, -0.026400521]
-                }, {
-                  object: 'embedding',
-                  index: 1,
-                  embedding: [-0.026400521, -0.0034387498]
-                }]
-              }
-            })
+            if (semver.satisfies(langchainOpenaiOpenAiVersion, '>=4.91.0')) {
+              stubCall({
+                ...openAiBaseEmbeddingInfo,
+                response: require('../../../../../datadog-plugin-langchain/test/fixtures/double-embedding.json')
+              })
+            } else {
+              stubCall({
+                ...openAiBaseEmbeddingInfo,
+                response: {
+                  object: 'list',
+                  data: [{
+                    object: 'embedding',
+                    index: 0,
+                    embedding: Array(1536).fill(0)
+                  }, {
+                    object: 'embedding',
+                    index: 1,
+                    embedding: Array(1536).fill(0)
+                  }]
+                }
+              })
+            }
 
             const embeddings = new langchainOpenai.OpenAIEmbeddings()
 
             const checkTraces = agent.use(traces => {
               const span = traces[0][0]
-              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
@@ -531,9 +575,9 @@ describe('integrations', () => {
                 modelProvider: 'openai',
                 name: 'langchain.embeddings.openai.OpenAIEmbeddings',
                 inputDocuments: [{ text: 'Hello!' }, { text: 'World!' }],
-                outputValue: '[2 embedding(s) returned with size 2]',
+                outputValue: '[2 embedding(s) returned with size 1536]',
                 metadata: MOCK_ANY,
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               expect(spanEvent).to.deepEqualWithMockValues(expected)
@@ -573,8 +617,8 @@ describe('integrations', () => {
               const workflowSpan = spans[0]
               const llmSpan = spans[1]
 
-              const workflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
-              const llmSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(1).args[0]
+              const workflowSpanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
+              const llmSpanEvent = LLMObsSpanWriter.prototype.append.getCall(1).args[0]
 
               const expectedWorkflow = expectedLLMObsNonLLMSpanEvent({
                 span: workflowSpan,
@@ -583,7 +627,7 @@ describe('integrations', () => {
                 inputValue: JSON.stringify({ input: 'Can you tell me about LangSmith?' }),
                 outputValue: 'LangSmith can help with testing in several ways.',
                 metadata: MOCK_ANY,
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               const expectedLLM = expectedLLMObsLLMSpanEvent({
@@ -601,7 +645,7 @@ describe('integrations', () => {
                 outputMessages: [{ content: 'LangSmith can help with testing in several ways.' }],
                 metadata: MOCK_ANY,
                 tokenMetrics: { input_tokens: 8, output_tokens: 12, total_tokens: 20 },
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               expect(workflowSpanEvent).to.deepEqualWithMockValues(expectedWorkflow)
@@ -622,7 +666,7 @@ describe('integrations', () => {
 
               const workflowSpan = spans[0]
 
-              const workflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const workflowSpanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
               const expectedWorkflow = expectedLLMObsNonLLMSpanEvent({
                 span: workflowSpan,
@@ -631,7 +675,7 @@ describe('integrations', () => {
                 inputValue: 'Hello!',
                 outputValue: '',
                 metadata: MOCK_ANY,
-                tags: { ml_app: 'test', language: 'javascript' },
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' },
                 error: 1,
                 errorType: 'Error',
                 errorMessage: MOCK_STRING,
@@ -709,11 +753,11 @@ describe('integrations', () => {
               const secondSubWorkflow = spans[3]
               const secondLLM = spans[4]
 
-              const topLevelWorkflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
-              const firstSubWorkflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(1).args[0]
-              const firstLLMSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(2).args[0]
-              const secondSubWorkflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(3).args[0]
-              const secondLLMSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(4).args[0]
+              const topLevelWorkflowSpanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
+              const firstSubWorkflowSpanEvent = LLMObsSpanWriter.prototype.append.getCall(1).args[0]
+              const firstLLMSpanEvent = LLMObsSpanWriter.prototype.append.getCall(2).args[0]
+              const secondSubWorkflowSpanEvent = LLMObsSpanWriter.prototype.append.getCall(3).args[0]
+              const secondLLMSpanEvent = LLMObsSpanWriter.prototype.append.getCall(4).args[0]
 
               const expectedTopLevelWorkflow = expectedLLMObsNonLLMSpanEvent({
                 span: topLevelWorkflow,
@@ -721,7 +765,7 @@ describe('integrations', () => {
                 name: 'langchain_core.runnables.RunnableSequence',
                 inputValue: JSON.stringify({ person: 'Abraham Lincoln', language: 'Spanish' }),
                 outputValue: 'Springfield, Illinois está en los Estados Unidos.',
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               const expectedFirstSubWorkflow = expectedLLMObsNonLLMSpanEvent({
@@ -731,7 +775,7 @@ describe('integrations', () => {
                 name: 'langchain_core.runnables.RunnableSequence',
                 inputValue: JSON.stringify({ person: 'Abraham Lincoln', language: 'Spanish' }),
                 outputValue: 'Springfield, Illinois',
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               const expectedFirstLLM = expectedLLMObsLLMSpanEvent({
@@ -747,7 +791,7 @@ describe('integrations', () => {
                 outputMessages: [{ content: 'Springfield, Illinois', role: 'assistant' }],
                 metadata: MOCK_ANY,
                 tokenMetrics: { input_tokens: 8, output_tokens: 12, total_tokens: 20 },
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               const expectedSecondSubWorkflow = expectedLLMObsNonLLMSpanEvent({
@@ -757,7 +801,7 @@ describe('integrations', () => {
                 name: 'langchain_core.runnables.RunnableSequence',
                 inputValue: JSON.stringify({ language: 'Spanish', city: 'Springfield, Illinois' }),
                 outputValue: 'Springfield, Illinois está en los Estados Unidos.',
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               const expectedSecondLLM = expectedLLMObsLLMSpanEvent({
@@ -773,7 +817,7 @@ describe('integrations', () => {
                 outputMessages: [{ content: 'Springfield, Illinois está en los Estados Unidos.', role: 'assistant' }],
                 metadata: MOCK_ANY,
                 tokenMetrics: { input_tokens: 8, output_tokens: 12, total_tokens: 20 },
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               expect(topLevelWorkflowSpanEvent).to.deepEqualWithMockValues(expectedTopLevelWorkflow)
@@ -846,9 +890,9 @@ describe('integrations', () => {
               const firstLLMSpan = spans[1]
               const secondLLMSpan = spans[2]
 
-              const workflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
-              const firstLLMSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(1).args[0]
-              const secondLLMSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(2).args[0]
+              const workflowSpanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
+              const firstLLMSpanEvent = LLMObsSpanWriter.prototype.append.getCall(1).args[0]
+              const secondLLMSpanEvent = LLMObsSpanWriter.prototype.append.getCall(2).args[0]
 
               const expectedWorkflow = expectedLLMObsNonLLMSpanEvent({
                 span: workflowSpan,
@@ -859,7 +903,7 @@ describe('integrations', () => {
                   'Why did the chicken cross the road? To get to the other side!',
                   'Why was the dog confused? It was barking up the wrong tree!'
                 ]),
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               const expectedFirstLLM = expectedLLMObsLLMSpanEvent({
@@ -876,7 +920,7 @@ describe('integrations', () => {
                 }],
                 metadata: MOCK_ANY,
                 tokenMetrics: { input_tokens: 37, output_tokens: 10, total_tokens: 47 },
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               const expectedSecondLLM = expectedLLMObsLLMSpanEvent({
@@ -893,7 +937,7 @@ describe('integrations', () => {
                 }],
                 metadata: MOCK_ANY,
                 tokenMetrics: { input_tokens: 37, output_tokens: 10, total_tokens: 47 },
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               expect(workflowSpanEvent).to.deepEqualWithMockValues(expectedWorkflow)
@@ -937,8 +981,8 @@ describe('integrations', () => {
               const workflowSpan = spans[0]
               const llmSpan = spans[1]
 
-              const workflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
-              const llmSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(1).args[0]
+              const workflowSpanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
+              const llmSpanEvent = LLMObsSpanWriter.prototype.append.getCall(1).args[0]
 
               const expectedWorkflow = expectedLLMObsNonLLMSpanEvent({
                 span: workflowSpan,
@@ -963,7 +1007,7 @@ describe('integrations', () => {
                   content: 'Mitochondria',
                   role: 'assistant'
                 }),
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               const expectedLLM = expectedLLMObsLLMSpanEvent({
@@ -994,7 +1038,7 @@ describe('integrations', () => {
                 outputMessages: [{ content: 'Mitochondria', role: 'assistant' }],
                 metadata: MOCK_ANY,
                 tokenMetrics: { input_tokens: 8, output_tokens: 12, total_tokens: 20 },
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               expect(workflowSpanEvent).to.deepEqualWithMockValues(expectedWorkflow)
@@ -1054,9 +1098,9 @@ describe('integrations', () => {
               const taskSpan = spans[1]
               const llmSpan = spans[2]
 
-              const workflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
-              const taskSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(1).args[0]
-              const llmSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(2).args[0]
+              const workflowSpanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
+              const taskSpanEvent = LLMObsSpanWriter.prototype.append.getCall(1).args[0]
+              const llmSpanEvent = LLMObsSpanWriter.prototype.append.getCall(2).args[0]
 
               const expectedWorkflow = expectedLLMObsNonLLMSpanEvent({
                 span: workflowSpan,
@@ -1064,7 +1108,7 @@ describe('integrations', () => {
                 name: 'langchain_core.runnables.RunnableSequence',
                 inputValue: JSON.stringify({ foo: 'bar' }),
                 outputValue: '3 squared is 9',
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               const expectedTask = expectedLLMObsNonLLMSpanEvent({
@@ -1088,7 +1132,7 @@ describe('integrations', () => {
                 outputMessages: [{ content: '3 squared is 9', role: 'assistant' }],
                 metadata: MOCK_ANY,
                 tokenMetrics: { input_tokens: 8, output_tokens: 12, total_tokens: 20 },
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               expect(workflowSpanEvent).to.deepEqualWithMockValues(expectedWorkflow)

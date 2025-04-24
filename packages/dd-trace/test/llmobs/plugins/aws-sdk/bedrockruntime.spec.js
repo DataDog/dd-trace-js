@@ -6,7 +6,7 @@ const nock = require('nock')
 const { expectedLLMObsLLMSpanEvent, deepEqualWithMockValues } = require('../../util')
 const { models, modelConfig } = require('../../../../../datadog-plugin-aws-sdk/test/fixtures/bedrockruntime')
 const chai = require('chai')
-const LLMObsAgentProxySpanWriter = require('../../../../src/llmobs/writers/spans/agentProxy')
+const LLMObsSpanWriter = require('../../../../src/llmobs/writers/spans')
 
 chai.Assertion.addMethod('deepEqualWithMockValues', deepEqualWithMockValues)
 
@@ -33,15 +33,16 @@ describe('Plugin', () => {
 
       describe('with configuration', () => {
         before(() => {
-          sinon.stub(LLMObsAgentProxySpanWriter.prototype, 'append')
+          sinon.stub(LLMObsSpanWriter.prototype, 'append')
 
           // reduce errors related to too many listeners
           process.removeAllListeners('beforeExit')
-          LLMObsAgentProxySpanWriter.prototype.append.reset()
+          LLMObsSpanWriter.prototype.append.reset()
 
           return agent.load('aws-sdk', {}, {
             llmobs: {
-              mlApp: 'test'
+              mlApp: 'test',
+              agentlessEnabled: false
             }
           })
         })
@@ -57,7 +58,7 @@ describe('Plugin', () => {
 
         afterEach(() => {
           nock.cleanAll()
-          LLMObsAgentProxySpanWriter.prototype.append.reset()
+          LLMObsSpanWriter.prototype.append.reset()
         })
 
         after(() => {
@@ -91,7 +92,7 @@ describe('Plugin', () => {
 
             agent.use(traces => {
               const span = traces[0][0]
-              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
                 spanKind: 'llm',
@@ -109,7 +110,7 @@ describe('Plugin', () => {
                   temperature: modelConfig.temperature,
                   max_tokens: modelConfig.maxTokens
                 },
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'bedrock' }
               })
 
               expect(spanEvent).to.deepEqualWithMockValues(expected)

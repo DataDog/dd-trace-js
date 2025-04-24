@@ -17,6 +17,7 @@ const {
   apolloChannel,
   apolloServerCoreChannel
 } = require('./channels')
+const { updateBlockFailureMetric } = require('./telemetry')
 
 const graphqlRequestData = new WeakMap()
 
@@ -106,8 +107,9 @@ function beforeWriteApolloGraphqlResponse ({ abortController, abortData }) {
       abortController?.abort()
     } catch (err) {
       rootSpan.setTag('_dd.appsec.block.failed', 1)
-
       log.error('[ASM] Blocking error', err)
+
+      updateBlockFailureMetric(req)
     }
   }
 

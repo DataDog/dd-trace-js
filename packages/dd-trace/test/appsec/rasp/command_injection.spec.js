@@ -134,12 +134,13 @@ describe('RASP - command_injection.js', () => {
         const wafResult = { waf: 'waf' }
         const req = { req: 'req' }
         const res = { res: 'res' }
+        const raspRule = { type: 'command_injection', variant: 'shell' }
         waf.run.returns(wafResult)
         legacyStorage.getStore.returns({ req, res })
 
         start.publish(ctx)
 
-        sinon.assert.calledOnceWithExactly(utils.handleResult, wafResult, req, res, abortController, config)
+        sinon.assert.calledOnceWithExactly(utils.handleResult, wafResult, req, res, abortController, config, raspRule)
       })
     })
 
@@ -183,12 +184,13 @@ describe('RASP - command_injection.js', () => {
         const wafResult = { waf: 'waf' }
         const req = { req: 'req' }
         const res = { res: 'res' }
+        const raspRule = { type: 'command_injection', variant: 'exec' }
         waf.run.returns(wafResult)
         legacyStorage.getStore.returns({ req, res })
 
         start.publish(ctx)
 
-        sinon.assert.calledOnceWithExactly(utils.handleResult, wafResult, req, res, abortController, config)
+        sinon.assert.calledOnceWithExactly(utils.handleResult, wafResult, req, res, abortController, config, raspRule)
       })
     })
   })

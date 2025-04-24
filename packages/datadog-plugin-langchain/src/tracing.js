@@ -15,13 +15,10 @@ const LangChainLLMHandler = require('./handlers/language_models/llm')
 const LangChainChainHandler = require('./handlers/chain')
 const LangChainEmbeddingHandler = require('./handlers/embedding')
 
-class LangChainTracingPlugin extends TracingPlugin {
+class BaseLangChainTracingPlugin extends TracingPlugin {
   static get id () { return 'langchain' }
   static get operation () { return 'invoke' }
   static get system () { return 'langchain' }
-  static get prefix () {
-    return 'tracing:apm:langchain:invoke'
-  }
 
   constructor () {
     super(...arguments)
@@ -36,7 +33,15 @@ class LangChainTracingPlugin extends TracingPlugin {
   }
 
   bindStart (ctx) {
-    const { resource, type } = ctx
+    // TODO(bengl): All this renaming is just so we don't have to change the existing handlers
+    ctx.args = ctx.arguments
+    ctx.instance = ctx.self
+    const type = ctx.type = this.constructor.lcType
+
+    // Runnable interfaces have an `lc_namespace` property
+    const ns = ctx.self.lc_namespace || ctx.namespace
+    const resource = ctx.resource = [...ns, ctx.self.constructor.name].join('.')
+
     const handler = this.handlers[type]
 
     const instance = ctx.instance
@@ -85,4 +90,59 @@ class LangChainTracingPlugin extends TracingPlugin {
   }
 }
 
-module.exports = LangChainTracingPlugin
+class RunnableSequenceInvokePlugin extends BaseLangChainTracingPlugin {
+  static get id () { return 'langchain_rs_invoke' }
+  static get lcType () { return 'chain' }
+  static get prefix () {
+    return 'tracing:orchestrion:@langchain/core:RunnableSequence_invoke'
+  }
+}
+
+class RunnableSequenceBatchPlugin extends BaseLangChainTracingPlugin {
+  static get id () { return 'langchain_rs_batch' }
+  static get lcType () { return 'chain' }
+  static get prefix () {
+    return 'tracing:orchestrion:@langchain/core:RunnableSequence_batch'
+  }
+}
+
+class BaseChatModelGeneratePlugin extends BaseLangChainTracingPlugin {
+  static get id () { return 'langchain_chat_model_generate' }
+  static get lcType () { return 'chat_model' }
+  static get prefix () {
+    return 'tracing:orchestrion:@langchain/core:BaseChatModel_generate'
+  }
+}
+
+class BaseLLMGeneratePlugin extends BaseLangChainTracingPlugin {
+  static get id () { return 'langchain_llm_generate' }
+  static get lcType () { return 'llm' }
+  static get prefix () {
+    return 'tracing:orchestrion:@langchain/core:BaseLLM_generate'
+  }
+}
+
+class EmbeddingsEmbedQueryPlugin extends BaseLangChainTracingPlugin {
+  static get id () { return 'langchain_embeddings_embed_query' }
+  static get lcType () { return 'embedding' }
+  static get prefix () {
+    return 'tracing:apm:@langchain/core:Embeddings_embedQuery'
+  }
+}
+
+class EmbeddingsEmbedDocumentsPlugin extends BaseLangChainTracingPlugin {
+  static get id () { return 'langchain_embeddings_embed_documents' }
+  static get lcType () { return 'embedding' }
+  static get prefix () {
+    return 'tracing:apm:@langchain/core:Embeddings_embedDocuments'
+  }
+}
+
+module.exports = [
+  RunnableSequenceInvokePlugin,
+  RunnableSequenceBatchPlugin,
+  BaseChatModelGeneratePlugin,
+  BaseLLMGeneratePlugin,
+  EmbeddingsEmbedQueryPlugin,
+  EmbeddingsEmbedDocumentsPlugin
+]

@@ -65,3 +65,9 @@ only-tracing:
   extends: .macrobenchmarks
   variables:
     DD_BENCHMARKS_CONFIGURATION: only-tracing
+
+only-tracing-with-runtime-metrics-enabled:
+  extends: .macrobenchmarks
+  variables:
+    DD_BENCHMARKS_CONFIGURATION: only-tracing
+    DD_RUNTIME_METRICS_ENABLED: "true"

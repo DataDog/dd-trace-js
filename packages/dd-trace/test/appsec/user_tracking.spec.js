@@ -1,15 +1,16 @@
 'use strict'
 
 const assert = require('assert')
+const proxyquire = require('proxyquire')
 
 const telemetry = require('../../src/appsec/telemetry')
-const waf = require('../../src/appsec/waf')
 const { ASM } = require('../../src/standalone/product')
 
 describe('User Tracking', () => {
   let currentTags
   let rootSpan
   let log
+  let waf
   let keepTrace
 
   let setCollectionMode
@@ -19,7 +20,8 @@ describe('User Tracking', () => {
   beforeEach(() => {
     sinon.stub(telemetry, 'incrementMissingUserLoginMetric')
     sinon.stub(telemetry, 'incrementMissingUserIdMetric')
-    sinon.stub(waf, 'run').returns(['action1'])
+
+    waf = { run: sinon.stub().returns(['action1']) }
 
     currentTags = {}
 
@@ -36,9 +38,10 @@ describe('User Tracking', () => {
 
     keepTrace = sinon.stub()
 
-    const UserTracking = proxyquire('../src/appsec/user_tracking', {
+    const UserTracking = proxyquire('../../src/appsec/user_tracking', {
       '../log': log,
-      '../priority_sampler': { keepTrace }
+      '../priority_sampler': { keepTrace },
+      './waf': waf
     })
 
     setCollectionMode = UserTracking.setCollectionMode

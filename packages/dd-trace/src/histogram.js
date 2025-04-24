@@ -7,39 +7,28 @@ class Histogram {
     this.reset()
   }
 
-  get min () { return this._min }
-  get max () { return this._max }
-  get avg () { return this._count === 0 ? 0 : this._sum / this._count }
-  get sum () { return this._sum }
-  get count () { return this._count }
+  get min () { return this._sketch.count === 0 ? 0 : this._sketch.min }
+  get max () { return this._sketch.count === 0 ? 0 : this._sketch.max }
+  get avg () { return this._sketch.count === 0 ? 0 : this._sketch.sum / this._sketch.count }
+  get sum () { return this._sketch.sum }
+  get count () { return this._sketch.count }
   get median () { return this.percentile(50) }
   get p95 () { return this.percentile(95) }
 
   percentile (percentile) {
-    return this._histogram.getValueAtQuantile(percentile / 100) || 0
+    return this._sketch.getValueAtQuantile(percentile / 100) || 0
+  }
+
+  merge (histogram) {
+    return this._sketch.merge(histogram._sketch)
   }
 
   record (value) {
-    if (this._count === 0) {
-      this._min = this._max = value
-    } else {
-      this._min = Math.min(this._min, value)
-      this._max = Math.max(this._max, value)
-    }
-
-    this._count++
-    this._sum += value
-
-    this._histogram.accept(value)
+    this._sketch.accept(value)
   }
 
   reset () {
-    this._min = 0
-    this._max = 0
-    this._sum = 0
-    this._count = 0
-
-    this._histogram = new DDSketch()
+    this._sketch = new DDSketch()
   }
 }
 

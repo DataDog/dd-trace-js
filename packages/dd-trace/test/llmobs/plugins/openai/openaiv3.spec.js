@@ -9,7 +9,7 @@ const nock = require('nock')
 const { expectedLLMObsLLMSpanEvent, deepEqualWithMockValues } = require('../../util')
 const chai = require('chai')
 const semver = require('semver')
-const LLMObsAgentProxySpanWriter = require('../../../../src/llmobs/writers/spans/agentProxy')
+const LLMObsSpanWriter = require('../../../../src/llmobs/writers/spans')
 
 const { expect } = chai
 
@@ -22,7 +22,7 @@ describe('integrations', () => {
 
   describe('openai', () => {
     before(() => {
-      sinon.stub(LLMObsAgentProxySpanWriter.prototype, 'append')
+      sinon.stub(LLMObsSpanWriter.prototype, 'append')
 
       // reduce errors related to too many listeners
       process.removeAllListeners('beforeExit')
@@ -31,18 +31,19 @@ describe('integrations', () => {
       sinon.stub(NoopExternalLogger.prototype, 'log')
       sinon.stub(Sampler.prototype, 'isSampled').returns(true)
 
-      LLMObsAgentProxySpanWriter.prototype.append.reset()
+      LLMObsSpanWriter.prototype.append.reset()
 
       return agent.load('openai', {}, {
         llmobs: {
-          mlApp: 'test'
+          mlApp: 'test',
+          agentlessEnabled: false
         }
       })
     })
 
     afterEach(() => {
       nock.cleanAll()
-      LLMObsAgentProxySpanWriter.prototype.append.reset()
+      LLMObsSpanWriter.prototype.append.reset()
     })
 
     after(() => {
@@ -83,7 +84,7 @@ describe('integrations', () => {
 
         const checkSpan = agent.use(traces => {
           const span = traces[0][0]
-          const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+          const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
           const expected = expectedLLMObsLLMSpanEvent({
             span,
@@ -99,7 +100,7 @@ describe('integrations', () => {
             modelName: 'text-davinci-002',
             modelProvider: 'openai',
             metadata: {},
-            tags: { ml_app: 'test', language: 'javascript' }
+            tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
           })
 
           expect(spanEvent).to.deepEqualWithMockValues(expected)
@@ -139,7 +140,7 @@ describe('integrations', () => {
 
           const checkSpan = agent.use(traces => {
             const span = traces[0][0]
-            const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+            const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
             const expected = expectedLLMObsLLMSpanEvent({
               span,
@@ -156,7 +157,7 @@ describe('integrations', () => {
               modelName: 'gpt-3.5-turbo-0301',
               modelProvider: 'openai',
               metadata: {},
-              tags: { ml_app: 'test', language: 'javascript' }
+              tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
             })
 
             expect(spanEvent).to.deepEqualWithMockValues(expected)
@@ -193,7 +194,7 @@ describe('integrations', () => {
 
         const checkSpan = agent.use(traces => {
           const span = traces[0][0]
-          const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+          const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
           const expected = expectedLLMObsLLMSpanEvent({
             span,
@@ -207,7 +208,7 @@ describe('integrations', () => {
             modelName: 'text-embedding-ada-002-v2',
             modelProvider: 'openai',
             metadata: { encoding_format: 'float' },
-            tags: { ml_app: 'test', language: 'javascript' }
+            tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
           })
 
           expect(spanEvent).to.deepEqualWithMockValues(expected)
@@ -251,7 +252,7 @@ describe('integrations', () => {
 
           const checkSpan = agent.use(traces => {
             const span = traces[0][0]
-            const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+            const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
             const expected = expectedLLMObsLLMSpanEvent({
               span,
@@ -274,7 +275,7 @@ describe('integrations', () => {
                 ]
               }],
               metadata: { function_call: 'auto' },
-              tags: { ml_app: 'test', language: 'javascript' },
+              tags: { ml_app: 'test', language: 'javascript', integration: 'openai' },
               tokenMetrics: { input_tokens: 37, output_tokens: 10, total_tokens: 47 }
             })
 
@@ -300,7 +301,7 @@ describe('integrations', () => {
         let error
         const checkSpan = agent.use(traces => {
           const span = traces[0][0]
-          const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+          const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
           const expected = expectedLLMObsLLMSpanEvent({
             span,
@@ -311,7 +312,7 @@ describe('integrations', () => {
             modelName: 'gpt-3.5-turbo',
             modelProvider: 'openai',
             metadata: { max_tokens: 50 },
-            tags: { ml_app: 'test', language: 'javascript' },
+            tags: { ml_app: 'test', language: 'javascript', integration: 'openai' },
             error,
             errorType: error.type || error.name,
             errorMessage: error.message,
@@ -343,7 +344,7 @@ describe('integrations', () => {
           let error
           const checkSpan = agent.use(traces => {
             const span = traces[0][0]
-            const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+            const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
             const expected = expectedLLMObsLLMSpanEvent({
               span,
@@ -354,7 +355,7 @@ describe('integrations', () => {
               modelName: 'gpt-3.5-turbo',
               modelProvider: 'openai',
               metadata: { max_tokens: 50 },
-              tags: { ml_app: 'test', language: 'javascript' },
+              tags: { ml_app: 'test', language: 'javascript', integration: 'openai' },
               error,
               errorType: error.type || error.name,
               errorMessage: error.message,

@@ -100,7 +100,11 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
         path: '/api/v2/apmtelemetry'
       }
       if (backendUrl) {
-        request(data, backendOptions, (error) => { log.error('Error sending telemetry data', error) })
+        request(data, backendOptions, (error) => {
+          if (error) {
+            log.error('Error sending telemetry data', error)
+          }
+        })
       } else {
         log.error('Invalid Telemetry URL')
       }

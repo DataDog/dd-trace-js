@@ -11,7 +11,7 @@ describe('ESM Security controls', () => {
 
   before(async function () {
     this.timeout(process.platform === 'win32' ? 90000 : 30000)
-    sandbox = await createSandbox(['express'])
+    sandbox = await createSandbox(['express@4']) // TODO: Remove pinning once our tests support Express v5
     appPort = await getPort()
     cwd = sandbox.folder
     appFile = path.join(cwd, 'appsec', 'esm-security-controls', 'index.mjs')

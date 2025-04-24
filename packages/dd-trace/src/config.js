@@ -63,6 +63,8 @@ const otelDdEnvMapping = {
 
 const VALID_PROPAGATION_STYLES = new Set(['datadog', 'tracecontext', 'b3', 'b3 single header', 'none'])
 
+const VALID_PROPAGATION_BEHAVIOR_EXTRACT = new Set(['continue', 'restart', 'ignore'])
+
 const VALID_LOG_LEVELS = new Set(['debug', 'info', 'warn', 'error'])
 
 function getFromOtelSamplerMap (otelTracesSampler, otelTracesSamplerArg) {
@@ -528,7 +530,7 @@ class Config {
     this._setValue(defaults, 'isManualApiEnabled', false)
     this._setValue(defaults, 'langchain.spanCharLimit', 128)
     this._setValue(defaults, 'langchain.spanPromptCompletionSampleRate', 1.0)
-    this._setValue(defaults, 'llmobs.agentlessEnabled', false)
+    this._setValue(defaults, 'llmobs.agentlessEnabled', undefined)
     this._setValue(defaults, 'llmobs.enabled', false)
     this._setValue(defaults, 'llmobs.mlApp', undefined)
     this._setValue(defaults, 'ciVisibilityTestSessionName', '')
@@ -584,6 +586,7 @@ class Config {
     this._setValue(defaults, 'traceId128BitGenerationEnabled', true)
     this._setValue(defaults, 'traceId128BitLoggingEnabled', true)
     this._setValue(defaults, 'tracePropagationExtractFirst', false)
+    this._setValue(defaults, 'tracePropagationBehaviorExtract', 'continue')
     this._setValue(defaults, 'tracePropagationStyle.inject', ['datadog', 'tracecontext', 'baggage'])
     this._setValue(defaults, 'tracePropagationStyle.extract', ['datadog', 'tracecontext', 'baggage'])
     this._setValue(defaults, 'tracePropagationStyle.otelPropagators', false)
@@ -591,10 +594,10 @@ class Config {
     this._setValue(defaults, 'url', undefined)
     this._setValue(defaults, 'version', pkg.version)
     this._setValue(defaults, 'instrumentation_config_id', undefined)
-    this._setValue(defaults, 'aws.dynamoDb.tablePrimaryKeys', undefined)
     this._setValue(defaults, 'vertexai.spanCharLimit', 128)
     this._setValue(defaults, 'vertexai.spanPromptCompletionSampleRate', 1.0)
     this._setValue(defaults, 'trace.aws.addSpanPointers', true)
+    this._setValue(defaults, 'trace.dynamoDb.tablePrimaryKeys', undefined)
     this._setValue(defaults, 'trace.nativeSpanEvents', false)
   }
 
@@ -746,6 +749,7 @@ class Config {
       DD_TRACE_PARTIAL_FLUSH_MIN_SPANS,
       DD_TRACE_PEER_SERVICE_MAPPING,
       DD_TRACE_PROPAGATION_EXTRACT_FIRST,
+      DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT,
       DD_TRACE_PROPAGATION_STYLE,
       DD_TRACE_PROPAGATION_STYLE_INJECT,
       DD_TRACE_PROPAGATION_STYLE_EXTRACT,
@@ -821,7 +825,7 @@ class Config {
     this._setValue(env, 'baggageMaxBytes', DD_TRACE_BAGGAGE_MAX_BYTES)
     this._setValue(env, 'baggageMaxItems', DD_TRACE_BAGGAGE_MAX_ITEMS)
     this._setBoolean(env, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
-    this._setString(env, 'clientIpHeader', DD_TRACE_CLIENT_IP_HEADER)
+    this._setString(env, 'clientIpHeader', DD_TRACE_CLIENT_IP_HEADER?.toLowerCase())
     this._setBoolean(env, 'crashtracking.enabled', coalesce(
       DD_CRASHTRACKING_ENABLED,
       !this._isInServerlessEnvironment()
@@ -967,6 +971,11 @@ class Config {
     this._setBoolean(env, 'traceId128BitGenerationEnabled', DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED)
     this._setBoolean(env, 'traceId128BitLoggingEnabled', DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
     this._setBoolean(env, 'tracePropagationExtractFirst', DD_TRACE_PROPAGATION_EXTRACT_FIRST)
+    const stringPropagationBehaviorExtract = String(DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT)
+    this._setValue(env, 'tracePropagationBehaviorExtract',
+      VALID_PROPAGATION_BEHAVIOR_EXTRACT.has(stringPropagationBehaviorExtract)
+        ? stringPropagationBehaviorExtract
+        : 'continue')
     this._setBoolean(env, 'tracePropagationStyle.otelPropagators',
       DD_TRACE_PROPAGATION_STYLE ||
       DD_TRACE_PROPAGATION_STYLE_INJECT ||
@@ -1023,7 +1032,7 @@ class Config {
     this._setValue(opts, 'appsec.wafTimeout', maybeInt(options.appsec.wafTimeout))
     this._optsUnprocessed['appsec.wafTimeout'] = options.appsec.wafTimeout
     this._setBoolean(opts, 'clientIpEnabled', options.clientIpEnabled)
-    this._setString(opts, 'clientIpHeader', options.clientIpHeader)
+    this._setString(opts, 'clientIpHeader', options.clientIpHeader?.toLowerCase())
     this._setValue(opts, 'baggageMaxBytes', options.baggageMaxBytes)
     this._setValue(opts, 'baggageMaxItems', options.baggageMaxItems)
     this._setBoolean(opts, 'codeOriginForSpans.enabled', options.codeOriginForSpans?.enabled)

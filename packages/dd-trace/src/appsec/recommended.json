@@ -1,7 +1,7 @@
 {
   "version": "2.2",
   "metadata": {
-    "rules_version": "1.13.3"
+    "rules_version": "1.14.2"
   },
   "rules": [
     {
@@ -4865,6 +4865,36 @@
       "transformers": []
     },
     {
+      "id": "ua0-600-68x",
+      "name": "xorbot",
+      "tags": {
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "cwe": "200",
+        "capec": "1000/118/169",
+        "tool_name": "xorbot",
+        "confidence": "0",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "user-agent"
+                ]
+              }
+            ],
+            "regex": "\\bmasjesu\\b"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
       "id": "dog-913-001",
       "name": "BurpCollaborator OOB domain",
       "tags": {
@@ -5418,6 +5448,82 @@
             }
           },
           "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-913-013",
+      "name": "Public PoC for CVE-2025-24813",
+      "tags": {
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "cwe": "200",
+        "capec": "1000/118/169",
+        "confidence": "1",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.uri.raw"
+              }
+            ],
+            "regex": "/iSee857/session",
+            "options": {
+              "case_sensitive": false,
+              "min_length": 16
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-913-014",
+      "name": "Exploit attempt for Next.js Middleware Exploit (CVE-2025-29927)",
+      "tags": {
+        "type": "security_scanner",
+        "category": "attack_attempt",
+        "cwe": "200",
+        "capec": "1000/118/169",
+        "confidence": "0",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "x-middleware-subrequest"
+                ]
+              }
+            ],
+            "regex": ".*",
+            "options": {
+              "min_length": 1
+            }
+          },
+          "operator": "match_regex"
+        },
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "x-middleware-subrequest"
+                ]
+              }
+            ],
+            "regex": "[0-9a-fA-F]{40}|\\[\\w+\\]"
+          },
+          "operator": "!match_regex"
         }
       ],
       "transformers": []
@@ -6314,7 +6420,7 @@
                 "address": "server.request.uri.raw"
               }
             ],
-            "regex": "(?:/swagger\\b|/api[-/]docs?\\b)",
+            "regex": "(?:^|/)(?:swagger|api[-/]?docs?|openapi)\\b",
             "options": {
               "case_sensitive": false
             }
@@ -6331,7 +6437,7 @@
         "category": "vulnerability_trigger",
         "cwe": "22",
         "capec": "1000/255/153/126",
-        "confidence": "0",
+        "confidence": "1",
         "module": "rasp"
       },
       "conditions": [
@@ -6379,7 +6485,7 @@
         "category": "vulnerability_trigger",
         "cwe": "77",
         "capec": "1000/152/248/88",
-        "confidence": "0",
+        "confidence": "1",
         "module": "rasp"
       },
       "conditions": [
@@ -6427,7 +6533,7 @@
         "category": "vulnerability_trigger",
         "cwe": "77",
         "capec": "1000/152/248/88",
-        "confidence": "0",
+        "confidence": "1",
         "module": "rasp"
       },
       "conditions": [
@@ -6481,6 +6587,20 @@
       "conditions": [
         {
           "parameters": {
+            "inputs": [
+              {
+                "address": "server.io.net.url"
+              }
+            ],
+            "regex": "^(jar:)?https?:\\/\\/\\W*([0-9oq]{1,5}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}|[0-9]{1,10}|(\\[)?[:0-9a-f\\.x]{2,}(\\])?|metadata\\.google\\.internal|(?:[a-z0-9:@\\.\\-]*\\.)?(?:burpcollaborator\\.net|localtest\\.me|mail\\.ebc\\.apple\\.com|bugbounty\\.dod\\.network|.*\\.[nx]ip\\.io|oastify\\.com|oast\\.(?:pro|live|site|online|fun|me)|sslip\\.io|requestbin\\.com|requestbin\\.net|hookbin\\.com|webhook\\.site|canarytokens\\.com|interact\\.sh|ngrok\\.io|bugbounty\\.click|prbly\\.win|qualysperiscope\\.com|vii\\.one|act1on3\\.ru|ifconfig\\.pro|dnslog\\.\\w+))(:[0-9]{1,5})?(\\/[^:@]*)?$",
+            "options": {
+              "case_sensitive": false
+            }
+          },
+          "operator": "match_regex"
+        },
+        {
+          "parameters": {
             "resource": [
               {
                 "address": "server.io.net.url"
@@ -6523,7 +6643,7 @@
         "category": "vulnerability_trigger",
         "cwe": "89",
         "capec": "1000/152/248/66",
-        "confidence": "0",
+        "confidence": "1",
         "module": "rasp"
       },
       "conditions": [
@@ -6957,7 +7077,7 @@
                 "address": "graphql.server.resolver"
               }
             ],
-            "regex": "(http|https):\\/\\/(?:.*\\.)?(?:burpcollaborator\\.net|localtest\\.me|mail\\.ebc\\.apple\\.com|bugbounty\\.dod\\.network|.*\\.[nx]ip\\.io|oastify\\.com|oast\\.(?:pro|live|site|online|fun|me)|sslip\\.io|requestbin\\.com|requestbin\\.net|hookbin\\.com|webhook\\.site|canarytokens\\.com|interact\\.sh|ngrok\\.io|bugbounty\\.click|prbly\\.win|qualysperiscope\\.com|vii\\.one|act1on3\\.ru)"
+            "regex": "(http|https):\\/\\/(?:.*\\.)?(?:burpcollaborator\\.net|localtest\\.me|mail\\.ebc\\.apple\\.com|bugbounty\\.dod\\.network|.*\\.[nx]ip\\.io|oastify\\.com|oast\\.(?:pro|live|site|online|fun|me)|sslip\\.io|requestbin\\.com|requestbin\\.net|hookbin\\.com|webhook\\.site|canarytokens\\.com|interact\\.sh|ngrok\\.io|bugbounty\\.click|prbly\\.win|qualysperiscope\\.com|vii\\.one|act1on3\\.ru|dnslog\\.\\w+)"
           },
           "operator": "match_regex"
         }
@@ -7765,7 +7885,7 @@
                 ]
               }
             ],
-            "regex": "nmap (nse|scripting engine)"
+            "regex": "nmap (nse|scripting engine|icap-client/)"
           },
           "operator": "match_regex"
         }
@@ -8538,6 +8658,126 @@
       "transformers": []
     },
     {
+      "id": "ua0-600-64x",
+      "name": "ddg_win",
+      "tags": {
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "cwe": "200",
+        "capec": "1000/118/169",
+        "tool_name": "ddg_win",
+        "confidence": "1",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "user-agent"
+                ]
+              }
+            ],
+            "regex": "\\bddg_win\\b"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "ua0-600-65x",
+      "name": "ISS",
+      "tags": {
+        "type": "commercial_scanner",
+        "category": "attack_attempt",
+        "cwe": "200",
+        "capec": "1000/118/169",
+        "tool_name": "iss",
+        "confidence": "0",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "user-agent"
+                ]
+              }
+            ],
+            "regex": "\\bisscyberriskcrawler/\\d\\.\\d"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "ua0-600-66x",
+      "name": "BountyBot",
+      "tags": {
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "cwe": "200",
+        "capec": "1000/118/169",
+        "tool_name": "bountybot",
+        "confidence": "1",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "user-agent"
+                ]
+              }
+            ],
+            "regex": "\\bbountybot\\b"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "ua0-600-67x",
+      "name": "ZumBot",
+      "tags": {
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "cwe": "200",
+        "capec": "1000/118/169",
+        "tool_name": "zumbot",
+        "confidence": "1",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "user-agent"
+                ]
+              }
+            ],
+            "regex": "\\bzumbot\\b"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
       "id": "ua0-600-6xx",
       "name": "Stealthy scanner",
       "tags": {
@@ -8634,24 +8874,7 @@
     {
       "id": "http-endpoint-fingerprint",
       "generator": "http_endpoint_fingerprint",
-      "conditions": [
-        {
-          "operator": "exists",
-          "parameters": {
-            "inputs": [
-              {
-                "address": "waf.context.event"
-              },
-              {
-                "address": "server.business_logic.users.login.failure"
-              },
-              {
-                "address": "server.business_logic.users.login.success"
-              }
-            ]
-          }
-        }
-      ],
+      "conditions": [],
       "parameters": {
         "mappings": [
           {
@@ -8679,7 +8902,7 @@
           }
         ]
       },
-      "evaluate": false,
+      "evaluate": true,
       "output": true
     },
     {
@@ -8835,24 +9058,7 @@
     {
       "id": "http-header-fingerprint",
       "generator": "http_header_fingerprint",
-      "conditions": [
-        {
-          "operator": "exists",
-          "parameters": {
-            "inputs": [
-              {
-                "address": "waf.context.event"
-              },
-              {
-                "address": "server.business_logic.users.login.failure"
-              },
-              {
-                "address": "server.business_logic.users.login.success"
-              }
-            ]
-          }
-        }
-      ],
+      "conditions": [],
       "parameters": {
         "mappings": [
           {
@@ -8865,30 +9071,13 @@
           }
         ]
       },
-      "evaluate": false,
+      "evaluate": true,
       "output": true
     },
     {
       "id": "http-network-fingerprint",
       "generator": "http_network_fingerprint",
-      "conditions": [
-        {
-          "operator": "exists",
-          "parameters": {
-            "inputs": [
-              {
-                "address": "waf.context.event"
-              },
-              {
-                "address": "server.business_logic.users.login.failure"
-              },
-              {
-                "address": "server.business_logic.users.login.success"
-              }
-            ]
-          }
-        }
-      ],
+      "conditions": [],
       "parameters": {
         "mappings": [
           {
@@ -8901,30 +9090,13 @@
           }
         ]
       },
-      "evaluate": false,
+      "evaluate": true,
       "output": true
     },
     {
       "id": "session-fingerprint",
       "generator": "session_fingerprint",
-      "conditions": [
-        {
-          "operator": "exists",
-          "parameters": {
-            "inputs": [
-              {
-                "address": "waf.context.event"
-              },
-              {
-                "address": "server.business_logic.users.login.failure"
-              },
-              {
-                "address": "server.business_logic.users.login.success"
-              }
-            ]
-          }
-        }
-      ],
+      "conditions": [],
       "parameters": {
         "mappings": [
           {
@@ -8947,7 +9119,7 @@
           }
         ]
       },
-      "evaluate": false,
+      "evaluate": true,
       "output": true
     }
   ],

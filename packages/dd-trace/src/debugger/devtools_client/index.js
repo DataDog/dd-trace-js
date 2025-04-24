@@ -1,7 +1,7 @@
 'use strict'
 
 const { randomUUID } = require('crypto')
-const { breakpoints } = require('./state')
+const { breakpointToProbes } = require('./state')
 const session = require('./session')
 const { getLocalStateForCallFrame } = require('./snapshot')
 const send = require('./send')
@@ -11,71 +11,124 @@ const { parentThreadId } = require('./config')
 const { MAX_SNAPSHOTS_PER_SECOND_GLOBALLY } = require('./defaults')
 const log = require('../../log')
 const { version } = require('../../../../../package.json')
+const { NODE_MAJOR } = require('../../../../../version')
 
 require('./remote_config')
 
 // Expression to run on a call frame of the paused thread to get its active trace and span id.
-const expression = `
-  const context = global.require('dd-trace').scope().active()?.context();
-  ({ trace_id: context?.toTraceId(), span_id: context?.toSpanId() })
+const templateExpressionSetupCode = `
+  const $dd_inspect = global.require('node:util').inspect;
+  const $dd_segmentInspectOptions = {
+    depth: 0,
+    customInspect: false,
+    maxArrayLength: 3,
+    maxStringLength: 8 * 1024,
+    breakLength: Infinity
+  };
 `
+const getDDTagsExpression = `(() => {
+  const context = global.require('dd-trace').scope().active()?.context();
+  return { trace_id: context?.toTraceId(), span_id: context?.toSpanId() }
+})()`
 
 // There doesn't seem to be an official standard for the content of these fields, so we're just populating them with
 // something that should be useful to a Node.js developer.
 const threadId = parentThreadId === 0 ? `pid:${process.pid}` : `pid:${process.pid};tid:${parentThreadId}`
 const threadName = parentThreadId === 0 ? 'MainThread' : `WorkerThread:${parentThreadId}`
 
+const SUPPORT_ITERATOR_METHODS = NODE_MAJOR >= 22
+const SUPPORT_ARRAY_BUFFER_RESIZE = NODE_MAJOR >= 20
 const oneSecondNs = 1_000_000_000n
 let globalSnapshotSamplingRateWindowStart = 0n
 let snapshotsSampledWithinTheLastSecond = 0
+// TODO: Is a limit of 256 snapshots ever going to be a problem?
+const snapshotProbeIndexBuffer = new ArrayBuffer(1, { maxByteLength: 256 })
+// TODO: Is a limit of 256 probes ever going to be a problem?
+// TODO: Change to const once we drop support for Node.js 18
+let snapshotProbeIndex = new Uint8Array(snapshotProbeIndexBuffer)
 
 // WARNING: The code above the line `await session.post('Debugger.resume')` is highly optimized. Please edit with care!
 session.on('Debugger.paused', async ({ params }) => {
   const start = process.hrtime.bigint()
 
   let maxReferenceDepth, maxCollectionSize, maxFieldCount, maxLength
-
-  // V8 doesn't allow seting more than one breakpoint at a specific location, however, it's possible to set two
-  // breakpoints just next to eachother that will "snap" to the same logical location, which in turn will be hit at the
-  // same time. E.g. index.js:1:1 and index.js:1:2.
-  // TODO: Investigate if it will improve performance to create a fast-path for when there's only a single breakpoint
   let sampled = false
-  const length = params.hitBreakpoints.length
-  let probes = new Array(length)
-  // TODO: Consider reusing this array between pauses and only recreating it if it needs to grow
-  const snapshotProbeIndex = new Uint8Array(length) // TODO: Is a limit of 256 probes ever going to be a problem?
   let numberOfProbesWithSnapshots = 0
-  for (let i = 0; i < length; i++) {
-    const id = params.hitBreakpoints[i]
-    const probe = breakpoints.get(id)
+  const probes = []
+  let templateExpressions = ''
 
-    if (start - probe.lastCaptureNs < probe.nsBetweenSampling) {
-      continue
+  // V8 doesn't allow setting more than one breakpoint at a specific location, however, it's possible to set two
+  // breakpoints just next to each other that will "snap" to the same logical location, which in turn will be hit at the
+  // same time. E.g. index.js:1:1 and index.js:1:2.
+  let numberOfProbesOnBreakpoint = params.hitBreakpoints.length
+
+  // TODO: Investigate if it will improve performance to create a fast-path for when there's only a single breakpoint
+  for (let i = 0; i < params.hitBreakpoints.length; i++) {
+    const probesAtLocation = breakpointToProbes.get(params.hitBreakpoints[i])
+
+    if (probesAtLocation.size !== 1) {
+      numberOfProbesOnBreakpoint = numberOfProbesOnBreakpoint + probesAtLocation.size - 1
+      if (numberOfProbesOnBreakpoint > snapshotProbeIndex.length) {
+        if (SUPPORT_ARRAY_BUFFER_RESIZE) {
+          snapshotProbeIndexBuffer.resize(numberOfProbesOnBreakpoint)
+        } else {
+          snapshotProbeIndex = new Uint8Array(numberOfProbesOnBreakpoint)
+        }
+      }
     }
 
-    if (probe.captureSnapshot === true) {
-      // This algorithm to calculate number of sampled snapshots within the last second is not perfect, as it's not a
-      // sliding window. But it's quick and easy :)
-      if (i === 0 && start - globalSnapshotSamplingRateWindowStart > oneSecondNs) {
-        snapshotsSampledWithinTheLastSecond = 1
-        globalSnapshotSamplingRateWindowStart = start
-      } else if (snapshotsSampledWithinTheLastSecond >= MAX_SNAPSHOTS_PER_SECOND_GLOBALLY) {
+    // If all the probes have a condition, we know that it triggered. If at least one probe doesn't have a condition, we
+    // need to verify which conditions are met.
+    const shouldVerifyConditions = (
+      SUPPORT_ITERATOR_METHODS
+        ? probesAtLocation.values()
+        : Array.from(probesAtLocation.values())
+    ).some((probe) => probe.condition === undefined)
+
+    for (const probe of probesAtLocation.values()) {
+      if (start - probe.lastCaptureNs < probe.nsBetweenSampling) {
         continue
-      } else {
-        snapshotsSampledWithinTheLastSecond++
       }
 
-      snapshotProbeIndex[numberOfProbesWithSnapshots++] = i
-      maxReferenceDepth = highestOrUndefined(probe.capture.maxReferenceDepth, maxReferenceDepth)
-      maxCollectionSize = highestOrUndefined(probe.capture.maxCollectionSize, maxCollectionSize)
-      maxFieldCount = highestOrUndefined(probe.capture.maxFieldCount, maxFieldCount)
-      maxLength = highestOrUndefined(probe.capture.maxLength, maxLength)
+      if (probe.captureSnapshot === true) {
+        // This algorithm to calculate number of sampled snapshots within the last second is not perfect, as it's not a
+        // sliding window. But it's quick and easy :)
+        if (i === 0 && start - globalSnapshotSamplingRateWindowStart > oneSecondNs) {
+          snapshotsSampledWithinTheLastSecond = 1
+          globalSnapshotSamplingRateWindowStart = start
+        } else if (snapshotsSampledWithinTheLastSecond >= MAX_SNAPSHOTS_PER_SECOND_GLOBALLY) {
+          continue
+        } else {
+          snapshotsSampledWithinTheLastSecond++
+        }
+
+        snapshotProbeIndex[numberOfProbesWithSnapshots++] = probes.length
+        maxReferenceDepth = highestOrUndefined(probe.capture.maxReferenceDepth, maxReferenceDepth)
+        maxCollectionSize = highestOrUndefined(probe.capture.maxCollectionSize, maxCollectionSize)
+        maxFieldCount = highestOrUndefined(probe.capture.maxFieldCount, maxFieldCount)
+        maxLength = highestOrUndefined(probe.capture.maxLength, maxLength)
+      }
+
+      if (shouldVerifyConditions && probe.condition !== undefined) {
+        // TODO: Bundle all conditions and evaluate them in a single call
+        // TODO: Handle errors
+        const { result } = await session.post('Debugger.evaluateOnCallFrame', {
+          callFrameId: params.callFrames[0].callFrameId,
+          expression: probe.condition,
+          returnByValue: true
+        })
+        if (result.value !== true) continue
+      }
+
+      sampled = true
+      probe.lastCaptureNs = start
+
+      if (probe.templateRequiresEvaluation) {
+        templateExpressions += `,${probe.template}`
+      }
+
+      probes.push(probe)
     }
-
-    sampled = true
-    probe.lastCaptureNs = start
-
-    probes[i] = probe
   }
 
   if (sampled === false) {
@@ -83,7 +136,22 @@ session.on('Debugger.paused', async ({ params }) => {
   }
 
   const timestamp = Date.now()
-  const dd = await getDD(params.callFrames[0].callFrameId)
+
+  let evalResults = null
+  const { result } = await session.post('Debugger.evaluateOnCallFrame', {
+    callFrameId: params.callFrames[0].callFrameId,
+    expression: templateExpressions.length === 0
+      ? `[${getDDTagsExpression}]`
+      : `${templateExpressionSetupCode}[${getDDTagsExpression}${templateExpressions}]`,
+    returnByValue: true,
+    includeCommandLineAPI: true
+  })
+  if (result?.subtype === 'error') {
+    log.error('[debugger:devtools_client] Error evaluating code on call frame: %s', result?.description)
+    evalResults = []
+  } else {
+    evalResults = result?.value ?? []
+  }
 
   let processLocalState
   if (numberOfProbesWithSnapshots !== 0) {
@@ -108,9 +176,6 @@ session.on('Debugger.paused', async ({ params }) => {
     Number(diff) / 1000000
   )
 
-  // Due to the highly optimized algorithm above, the `probes` array might have gaps
-  probes = probes.filter((probe) => !!probe)
-
   const logger = {
     // We can safely use `location.file` from the first probe in the array, since all probes hit by `hitBreakpoints`
     // must exist in the same file since the debugger can only pause the main thread in one location.
@@ -122,6 +187,8 @@ session.on('Debugger.paused', async ({ params }) => {
   }
 
   const stack = getStackFromCallFrames(params.callFrames)
+  const dd = processDD(evalResults[0]) // the first result is the dd tags, the rest are the probe template results
+  let messageIndex = 1
 
   // TODO: Send multiple probes in one HTTP request as an array (DEBUG-2848)
   for (const probe of probes) {
@@ -146,9 +213,33 @@ session.on('Debugger.paused', async ({ params }) => {
       }
     }
 
+    let message = ''
+    if (probe.templateRequiresEvaluation) {
+      const results = evalResults[messageIndex++]
+      if (results === undefined) {
+        log.error('[debugger:devtools_client] No evaluation results for probe %s', probe.id)
+      } else {
+        for (const result of results) {
+          if (typeof result === 'string') {
+            message += result
+          } else {
+            // If `result` isn't a string, it's an evaluation error object
+            if (snapshot.evaluationErrors === undefined) {
+              snapshot.evaluationErrors = [result]
+            } else {
+              snapshot.evaluationErrors.push(result)
+            }
+            message += `{${result.message}}`
+          }
+        }
+      }
+    } else {
+      message = probe.template
+    }
+
     ackEmitting(probe)
-    // TODO: Process template (DEBUG-2628)
-    send(probe.template, logger, dd, snapshot)
+
+    send(message, logger, dd, snapshot)
   }
 })
 
@@ -156,22 +247,6 @@ function highestOrUndefined (num, max) {
   return num === undefined ? max : Math.max(num, max ?? 0)
 }
 
-async function getDD (callFrameId) {
-  // TODO: Consider if an `objectGroup` should be used, so it can be explicitly released using
-  // `Runtime.releaseObjectGroup`
-  const { result } = await session.post('Debugger.evaluateOnCallFrame', {
-    callFrameId,
-    expression,
-    returnByValue: true,
-    includeCommandLineAPI: true
-  })
-
-  if (result?.value?.trace_id === undefined) {
-    if (result?.subtype === 'error') {
-      log.error('[debugger:devtools_client] Error getting trace/span id:', result.description)
-    }
-    return
-  }
-
-  return result.value
+function processDD (result) {
+  return result?.trace_id === undefined ? undefined : result
 }
