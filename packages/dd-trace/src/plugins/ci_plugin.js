@@ -49,25 +49,13 @@ const {
 } = require('./util/tags')
 const { OS_VERSION, OS_PLATFORM, OS_ARCHITECTURE, RUNTIME_NAME, RUNTIME_VERSION } = require('./util/env')
 const getDiClient = require('../ci-visibility/dynamic-instrumentation')
+
 const FRAMEWORK_TO_TRIMMED_COMMAND = {
   vitest: 'vitest run',
   mocha: 'mocha',
   cucumber: 'cucumber-js',
   playwright: 'playwright test',
   jest: 'jest'
-}
-
-const UNSUPPORTED_TIA_FRAMEWORKS = ['playwright', 'vitest']
-const UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE = ['cucumber', 'mocha']
-
-function isTiaSupported (testFramework, isParallel) {
-  if (UNSUPPORTED_TIA_FRAMEWORKS.includes(testFramework)) {
-    return false
-  }
-  if (isParallel && UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE.includes(testFramework)) {
-    return false
-  }
-  return true
 }
 
 module.exports = class CiPlugin extends Plugin {
