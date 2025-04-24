@@ -11,11 +11,11 @@ const startCh = channel('apm:iovalkey:command:start')
 const finishCh = channel('apm:iovalkey:command:finish')
 const errorCh = channel('apm:iovalkey:command:error')
 
-addHook({ name: 'iovalkey', versions: ['>=0.0.1'] }, Redis => {
-  shimmer.wrap(Redis.prototype, 'sendCommand', sendCommand => function (command, stream) {
+addHook({ name: 'iovalkey', versions: ['>=0.0.1'] }, Valkey => {
+  shimmer.wrap(Valkey.prototype, 'sendCommand', sendCommand => function (command, stream) {
     if (!startCh.hasSubscribers) return sendCommand.apply(this, arguments)
 
-    if (!command || !command.promise) return sendCommand.apply(this, arguments)
+    if (!command?.promise) return sendCommand.apply(this, arguments)
 
     const options = this.options || {}
     const connectionName = options.connectionName
@@ -40,7 +40,7 @@ addHook({ name: 'iovalkey', versions: ['>=0.0.1'] }, Redis => {
       }
     })
   })
-  return Redis
+  return Valkey
 })
 
 function finish (finishCh, errorCh, error) {

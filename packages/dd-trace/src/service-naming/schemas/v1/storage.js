@@ -38,7 +38,10 @@ const storage = {
       serviceName: configWithFallback
     },
     ioredis: redisNaming,
-    iovalkey: redisNaming,
+    iovalkey: {
+      opName: () => 'valkey.command',
+      serviceName: configWithFallback
+    },
     mariadb: {
       opName: () => 'mariadb.query',
       serviceName: withFunction
