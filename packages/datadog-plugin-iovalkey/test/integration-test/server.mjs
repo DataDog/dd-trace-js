@@ -1,6 +1,6 @@
 import 'dd-trace/init.js'
-import Redis from 'iovalkey'
+import Valkey from 'iovalkey'
 
-const client = new Redis({ connectionName: 'test' })
+const client = new Valkey({ connectionName: 'test' })
 await client.get('foo')
 client.quit()

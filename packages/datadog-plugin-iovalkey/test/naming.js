@@ -4,7 +4,7 @@ const rawExpectedSchema = {
   outbound: {
     v0: {
       opName: 'valkey.command',
-      serviceName: 'test-redis'
+      serviceName: 'test-valkey'
     },
     v1: {
       opName: 'valkey.command',

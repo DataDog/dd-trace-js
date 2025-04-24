@@ -7,7 +7,7 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/c
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 describe('Plugin', () => {
-  let Redis
+  let Valkey
   let redis
   let tracer
 
@@ -15,8 +15,8 @@ describe('Plugin', () => {
     withVersions('iovalkey', 'iovalkey', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
-        Redis = require(`../../../versions/iovalkey@${version}`).get()
-        redis = new Redis({ connectionName: 'test' })
+        Valkey = require(`../../../versions/iovalkey@${version}`).get()
+        redis = new Valkey({ connectionName: 'test' })
       })
 
       afterEach(() => {
@@ -29,9 +29,9 @@ describe('Plugin', () => {
 
         after(() => agent.close({ ritmReset: false }))
 
-        it('should do automatic instrumentation when using callbacks', done => {
+        it('should do automatic instrumentation when using callbacks', async () => {
           agent.use(() => {}) // wait for initial info command
-          agent
+          const promise = agent
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
@@ -45,10 +45,11 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('valkey.raw_command', 'GET foo')
               expect(traces[0][0].metrics).to.have.property('network.destination.port', 6379)
             })
-            .then(done)
-            .catch(done)
 
-          redis.get('foo').catch(done)
+          return Promise.all([
+            redis.get('foo'),
+            promise
+          ])
         })
 
         it('should run the callback in the parent context', () => {
