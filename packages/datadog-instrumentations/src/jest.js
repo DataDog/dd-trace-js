@@ -81,6 +81,7 @@ const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
 const asyncResources = new WeakMap()
 const originalTestFns = new WeakMap()
+const originalHookFns = new WeakMap()
 const retriedTestsToNumAttempts = new Map()
 const newTestsTestStatuses = new Map()
 const attemptToFixRetriedTestsStatuses = new Map()
@@ -351,6 +352,15 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             isDisabled,
             isQuarantined
           })
+          for (const hook of event.test.parent.hooks) {
+            let hookFn = hook.fn
+            if (!originalHookFns.has(hook)) {
+              originalHookFns.set(hook, hookFn)
+            } else {
+              hookFn = originalHookFns.get(hook)
+            }
+            hook.fn = asyncResource.bind(hookFn)
+          }
           originalTestFns.set(event.test, event.test.fn)
           event.test.fn = asyncResource.bind(event.test.fn)
         })
