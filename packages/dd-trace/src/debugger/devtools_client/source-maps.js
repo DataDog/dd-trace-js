@@ -27,7 +27,7 @@ const self = module.exports = {
 
   async getGeneratedPosition (url, source, line, sourceMapURL) {
     const dir = dirname(new URL(url).pathname)
-    return await SourceMapConsumer.with(
+    return SourceMapConsumer.with(
       await self.loadSourceMap(dir, sourceMapURL),
       null,
       (consumer) => consumer.generatedPositionFor({ source, line, column: 0 })

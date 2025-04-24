@@ -10,6 +10,7 @@ const { getExtraServices } = require('../service-naming/extra-services')
 const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('./apply_states')
 const Scheduler = require('./scheduler')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
+const tagger = require('../tagger')
 
 const clientId = uuid()
 
@@ -33,6 +34,10 @@ class RemoteConfigManager extends EventEmitter {
       hostname: config.hostname || 'localhost',
       port: config.port
     }))
+
+    tagger.add(config.tags, {
+      '_dd.rc.client_id': clientId
+    })
 
     const tags = config.repositoryUrl
       ? {

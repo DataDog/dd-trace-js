@@ -36,6 +36,7 @@ describe('reporter', () => {
       incrementWafInitMetric: sinon.stub(),
       updateWafRequestsMetricTags: sinon.stub(),
       updateRaspRequestsMetricTags: sinon.stub(),
+      updateRaspRuleSkippedMetricTags: sinon.stub(),
       incrementWafUpdatesMetric: sinon.stub(),
       incrementWafRequestsMetric: sinon.stub(),
       updateRateLimitedMetric: sinon.stub(),
@@ -402,6 +403,15 @@ describe('reporter', () => {
       Reporter.reportWafUpdate('0.0.1', '0.0.2', true)
 
       expect(telemetry.incrementWafUpdatesMetric).to.have.been.calledOnceWithExactly('0.0.1', '0.0.2', true)
+    })
+  })
+
+  describe('reportRaspRuleSkipped', () => {
+    it('should call updateRaspRuleSkippedMetricTags', () => {
+      const raspRule = { type: 'rule-type' }
+      Reporter.reportRaspRuleSkipped(raspRule, 'after-request')
+
+      expect(telemetry.updateRaspRuleSkippedMetricTags).to.have.been.calledOnceWithExactly(raspRule, 'after-request')
     })
   })
 

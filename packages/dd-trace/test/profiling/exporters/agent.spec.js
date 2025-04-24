@@ -65,7 +65,7 @@ describe('exporters/agent', function () {
   let startSpan
 
   function verifyRequest (req, profiles, start, end) {
-    expect(req.headers).to.have.property('datadog-container-id', docker.id())
+    expect(req.headers).to.have.property('test', 'injected')
     expect(req.headers).to.have.property('dd-evp-origin', 'dd-trace-js')
     expect(req.headers).to.have.property('dd-evp-origin-version', version)
 
@@ -141,8 +141,8 @@ describe('exporters/agent', function () {
 
   beforeEach(() => {
     docker = {
-      id () {
-        return 'container-id'
+      inject (carrier) {
+        carrier.test = 'injected'
       }
     }
     http = {

@@ -3,6 +3,7 @@
 !packages/*/lib/**/*
 !packages/*/src/**/*
 !packages/*/index.js
+!packages/datadog-instrumentations/orchestrion.yml
 !scripts/preinstall.js
 !vendor/**/*
 !LICENSE

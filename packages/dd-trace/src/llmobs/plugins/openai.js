@@ -11,6 +11,7 @@ function isIterable (obj) {
 
 class OpenAiLLMObsPlugin extends LLMObsPlugin {
   static get id () { return 'openai' }
+  static get integration () { return 'openai' }
   static get prefix () {
     return 'tracing:apm:openai:request'
   }

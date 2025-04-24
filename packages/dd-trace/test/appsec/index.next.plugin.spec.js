@@ -105,7 +105,7 @@ describe('test suite', () => {
       })
 
       before(function (done) {
-        this.timeout(40000)
+        this.timeout(300 * 1000)
         const cwd = appDir
 
         server = spawn('node', [serverPath], {

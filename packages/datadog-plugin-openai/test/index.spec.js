@@ -527,7 +527,8 @@ describe('Plugin', () => {
           const params = {
             model: 'text-embedding-ada-002',
             input: 'Cat?',
-            user: 'hunter2'
+            user: 'hunter2',
+            encoding_format: 'float'
           }
 
           if (semver.satisfies(realVersion, '>=4.0.0')) {
@@ -601,7 +602,8 @@ describe('Plugin', () => {
             model: 'text-embedding-ada-002',
             input: 'Cat?',
             user: 'hunter2',
-            stream: true
+            stream: true,
+            encoding_format: 'float'
           }
 
           if (semver.satisfies(realVersion, '>=4.0.0')) {
@@ -653,7 +655,8 @@ describe('Plugin', () => {
           const params = {
             model: 'text-embedding-ada-002',
             input: '',
-            user: 'hunter2'
+            user: 'hunter2',
+            encoding_format: 'float'
           }
 
           if (semver.satisfies(realVersion, '>=4.0.0')) {

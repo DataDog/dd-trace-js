@@ -25,7 +25,19 @@ describe('Plugin', () => {
       })
 
       describe('without configuration', () => {
-        before(() => agent.load(['koa', 'http'], [{}, { client: false }]))
+        before(() => agent.load(
+          ['koa', 'http'],
+          [{}, { client: false }],
+          {
+            // this is needed to test the client IP header configuration and must be done before loading the tracer
+            // initially since we can't change the tracer config after it's loaded. Ideally, this clientIpHeader test
+            // would be located within the http plugin tests, but due to the way the tracer is loaded during testing,
+            // we can't do that since the tracer cannot be re-configured after it's loaded. So we added it here as the
+            // first test in this describe block.
+            clientIpEnabled: true,
+            clientIpHeader: 'X-Custom-Client-Ip-Header' // config should be case-insensitive
+          })
+        )
 
         after(() => agent.close({ ritmReset: false }))
 
@@ -213,6 +225,58 @@ describe('Plugin', () => {
             axios
               .get(`http://localhost:${port}/app/user/1`)
               .catch(done)
+          })
+        })
+
+        it('should handle client IP header configuration', done => {
+          const app = new Koa()
+
+          app.use(async (ctx) => {
+            ctx.body = ''
+          })
+
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+                expect(spans[0].meta).to.have.property('http.client_ip', '8.8.8.8')
+              })
+              .then(done)
+              .catch(done)
+
+            axios.get(`http://localhost:${port}/user`, {
+              headers: {
+                'x-custom-client-ip-header': '8.8.8.8'
+              }
+            }).catch(done)
+          })
+        })
+
+        it('should not add client IP tag when header is missing or a different header is used', done => {
+          const app = new Koa()
+
+          app.use(async (ctx) => {
+            ctx.body = ''
+          })
+
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+                expect(spans[0].meta).to.not.have.property('http.client_ip')
+              })
+              .then(done)
+              .catch(done)
+
+            axios.get(`http://localhost:${port}/user`, {
+              headers: {
+                'x-other-custom-client-ip-header': '8.8.8.8'
+              }
+            }).catch(done)
           })
         })
 
