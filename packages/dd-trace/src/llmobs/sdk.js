@@ -381,7 +381,7 @@ class LLMObs extends NoopLLMObs {
       timestamp_ms: timestampMs,
       tags: Object.entries(evaluationTags).map(([key, value]) => `${key}:${value}`)
     }
-
+    telemetry.recordSubmitEvaluation(options, '')
     evalMetricAppendCh.publish(payload)
   }
 

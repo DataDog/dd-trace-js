@@ -7,7 +7,6 @@ const { storage } = require('./storage')
 const telemetry = require('./telemetry')
 const LLMObsSpanProcessor = require('./span_processor')
 
-const telemetry = require('./telemetry')
 const { channel } = require('dc-polyfill')
 const spanProcessCh = channel('dd-trace:span:process')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')

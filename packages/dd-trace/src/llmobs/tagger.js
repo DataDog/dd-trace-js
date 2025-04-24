@@ -207,6 +207,7 @@ class LLMObsTagger {
         let validDocument = true
 
         if (typeof text !== 'string') {
+          err = 'invalid_embedding_io'
           this._handleFailure('Document text must be a string.')
           validDocument = false
         }
