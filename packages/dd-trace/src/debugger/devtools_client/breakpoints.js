@@ -3,7 +3,7 @@
 const { getGeneratedPosition } = require('./source-maps')
 const lock = require('./lock')()
 const session = require('./session')
-const compileCondition = require('./condition')
+const { compile: compileCondition, compileSegments, templateRequiresEvaluation } = require('./condition')
 const { MAX_SNAPSHOTS_PER_SECOND_PER_PROBE, MAX_NON_SNAPSHOTS_PER_SECOND_PER_PROBE } = require('./defaults')
 const { findScriptFromPartialPath, locationToBreakpoint, breakpointToProbes, probeToLocation } = require('./state')
 const log = require('../../log')
@@ -27,6 +27,13 @@ async function addBreakpoint (probe) {
   delete probe.where
 
   // Optimize for fast calculations when probe is hit
+  probe.templateRequiresEvaluation = templateRequiresEvaluation(probe.segments)
+  if (probe.templateRequiresEvaluation) {
+    probe.template = compileSegments(probe.segments)
+  }
+  delete probe.segments
+
+  // Optimize for fast calculations when probe is hit
   const snapshotsPerSecond = probe.sampling?.snapshotsPerSecond ?? (probe.captureSnapshot
     ? MAX_SNAPSHOTS_PER_SECOND_PER_PROBE
     : MAX_NON_SNAPSHOTS_PER_SECOND_PER_PROBE)
@@ -41,6 +48,10 @@ async function addBreakpoint (probe) {
   const { url, scriptId, sourceMapURL, source } = script
 
   if (sourceMapURL) {
+    log.debug(
+      '[debugger:devtools_client] Translating location using source map for %s:%d:%d (probe: %s, version: %d)',
+      file, lineNumber, columnNumber, probe.id, probe.version
+    );
     ({ line: lineNumber, column: columnNumber } = await getGeneratedPosition(url, source, lineNumber, sourceMapURL))
   }
 
@@ -156,6 +167,8 @@ function stop () {
 
 // Only if all probes have a condition can we use a compound condition.
 // Otherwise, we need to evaluate each probe individually once the breakpoint is hit.
+// TODO: Handle errors - if there's 2 conditons, and one fails but the other returns true, we should still pause the
+// breakpoint
 function compileCompoundCondition (probes) {
   return probes.every(p => p.condition)
     ? probes.map(p => p.condition).filter(Boolean).join(' || ')

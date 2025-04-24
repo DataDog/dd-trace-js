@@ -8,7 +8,7 @@ const os = require('os')
 const path = require('path')
 const { capture, fatal, run } = require('./terminal')
 
-const { HOME, LOCALAPPDATA, XDG_CONFIG_HOME, USERPROFILE } = process.env
+const { CI, HOME, LOCALAPPDATA, XDG_CONFIG_HOME, USERPROFILE } = process.env
 
 // Check that the `git` CLI is installed.
 function checkGit () {
@@ -81,6 +81,8 @@ function checkGitHub () {
 }
 
 function checkGitHubScopes (token, requiredScopes, source) {
+  if (CI) return
+
   const url = 'https://api.github.com'
   const headers = [
     'Accept: application/vnd.github.v3+json',

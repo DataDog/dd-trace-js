@@ -70,7 +70,9 @@ function ensureChannelsActivated () {
 class NativeWallProfiler {
   constructor (options = {}) {
     this.type = 'wall'
-    this._asyncIdEnabled = !!options.asyncIdEnabled
+    // Currently there's a crash sometimes on worker threads trying to collect async IDs so for the
+    // time being we'll constrain it to only the main thread.
+    this._asyncIdEnabled = !!options.asyncIdEnabled && require('worker_threads').isMainThread
     this._codeHotspotsEnabled = !!options.codeHotspotsEnabled
     this._cpuProfilingEnabled = !!options.cpuProfilingEnabled
     this._endpointCollectionEnabled = !!options.endpointCollectionEnabled
@@ -113,8 +115,6 @@ class NativeWallProfiler {
   start ({ mapper } = {}) {
     if (this._started) return
 
-    ensureChannelsActivated()
-
     this._mapper = mapper
     this._pprof = require('@datadog/pprof')
     kSampleCount = this._pprof.time.constants.kSampleCount
@@ -144,6 +144,8 @@ class NativeWallProfiler {
       if (this._captureSpanData) {
         this._profilerState = this._pprof.time.getState()
         this._lastSampleCount = 0
+
+        ensureChannelsActivated()
 
         beforeCh.subscribe(this._enter)
         enterCh.subscribe(this._enter)

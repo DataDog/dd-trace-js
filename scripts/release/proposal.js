@@ -19,6 +19,7 @@ const {
 } = require('./helpers/terminal')
 const { checkBranchDiff, checkGitHub, checkGit } = require('./helpers/requirements')
 
+const tmpdir = process.env.RUNNER_TEMP || os.tmpdir()
 const releaseLine = params[0]
 
 // Validate release line argument.
@@ -26,7 +27,8 @@ if (!releaseLine || releaseLine === 'help' || flags.help) {
   log(
     'Usage: node scripts/release/proposal <release-line>\n',
     'Options:',
-    '  -y         Always accept prompts.',
+    '  -n         Do not push release proposal upstream.',
+    '  -y         Push release proposal upstream.',
     '  --debug    Print raw commands and their outputs.',
     '  --help     Show this help.',
     '  --auto     Automatically detect version increment. (this is default)',
@@ -67,20 +69,21 @@ try {
   start('Determine version increment')
 
   const { DD_MAJOR, DD_MINOR, DD_PATCH } = require('../../version')
-  const lineDiff = capture(`${diffCmd} --markdown=true v${releaseLine}.x master`)
+  const main = 'master'
+  const lineDiff = capture(`${diffCmd} --markdown=true v${releaseLine}.x ${main}`)
   const isMinor = flags.minor || (!flags.patch && lineDiff.includes('SEMVER-MINOR'))
   const newVersion = isMinor
     ? `${releaseLine}.${DD_MINOR + 1}.0`
     : `${releaseLine}.${DD_MINOR}.${DD_PATCH + 1}`
-  const notesDir = path.join(os.tmpdir(), 'release_notes')
-  const notesFile = path.join(notesDir, `${newVersion}.md`)
+  const notesDir = path.join(tmpdir, 'release_notes')
+  const notesFile = path.join(notesDir, `v${newVersion}.md`)
 
   pass(`${isMinor ? 'minor' : 'patch'} (${DD_MAJOR}.${DD_MINOR}.${DD_PATCH} -> ${newVersion})`)
 
   start('Checkout release proposal branch')
 
   // Checkout new or existing branch.
-  run(`git checkout --quiet v${newVersion}-proposal &> /dev/null || git checkout --quiet -b v${newVersion}-proposal`)
+  run(`git checkout --quiet v${newVersion}-proposal || git checkout --quiet -b v${newVersion}-proposal`)
 
   try {
     // Pull latest changes in case the release was started by someone else.
@@ -97,12 +100,12 @@ try {
 
   // Get the hashes of the last version and the commits to add.
   const lastCommit = capture('git log -1 --pretty=%B')
-  const proposalDiff = capture(`${diffCmd} --format=sha --reverse v${newVersion}-proposal master`)
+  const proposalDiff = capture(`${diffCmd} --format=sha --reverse v${newVersion}-proposal ${main}`)
     .replace(/\n/g, ' ').trim()
 
   if (proposalDiff) {
     // Get new changes since last commit of the proposal branch.
-    const newChanges = capture(`${diffCmd} v${newVersion}-proposal master`)
+    const newChanges = capture(`${diffCmd} v${newVersion}-proposal ${main}`)
 
     pass(`\n${newChanges}`)
 
@@ -140,6 +143,7 @@ try {
 
   pass(notesFile)
 
+  if (flags.n) process.exit(0)
   if (!flags.y) {
     // Stop and ask the user if they want to proceed with pushing everything upstream.
     checkpoint('Push the release upstream and create/update PR?')
