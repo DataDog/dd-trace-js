@@ -40,9 +40,6 @@ const DEFAULT_KNOWN_TESTS = ['test-suite1.js.test-name1', 'test-suite2.js.test-n
 const DEFAULT_TEST_MANAGEMENT_TESTS = {}
 const DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS = 200
 
-const DEFAULT_IMPACTED_TESTS = {}
-const DEFAULT_IMPACTED_TESTS_RESPONSE_STATUS = 200
-
 let settings = DEFAULT_SETTINGS
 let suitesToSkip = DEFAULT_SUITES_TO_SKIP
 let gitUploadStatus = DEFAULT_GIT_UPLOAD_STATUS
@@ -53,8 +50,6 @@ let knownTestsStatusCode = DEFAULT_KNOWN_TESTS_RESPONSE_STATUS
 let waitingTime = 0
 let testManagementResponse = DEFAULT_TEST_MANAGEMENT_TESTS
 let testManagementResponseStatusCode = DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS
-let impactedTestsResponse = DEFAULT_IMPACTED_TESTS
-let impactedTestsResponseStatusCode = DEFAULT_IMPACTED_TESTS_RESPONSE_STATUS
 
 class FakeCiVisIntake extends FakeAgent {
   setKnownTestsResponseCode (statusCode) {
@@ -95,14 +90,6 @@ class FakeCiVisIntake extends FakeAgent {
 
   setTestManagementTestsResponseCode (newStatusCode) {
     testManagementResponseStatusCode = newStatusCode
-  }
-
-  setImpactedTests (newImpactedTests) {
-    impactedTestsResponse = newImpactedTests
-  }
-
-  setImpactedTestsResponseCode (newStatusCode) {
-    impactedTestsResponseStatusCode = newStatusCode
   }
 
   async start () {
@@ -272,23 +259,6 @@ class FakeCiVisIntake extends FakeAgent {
       })
     })
 
-    app.post([
-      '/api/v2/ci/tests/diffs',
-      '/evp_proxy/:version/api/v2/ci/tests/diffs'
-    ], (req, res) => {
-      res.setHeader('content-type', 'application/json')
-      const data = JSON.stringify({
-        data: {
-          attributes: impactedTestsResponse
-        }
-      })
-      res.status(impactedTestsResponseStatusCode).send(data)
-      this.emit('message', {
-        headers: req.headers,
-        url: req.url
-      })
-    })
-
     return new Promise((resolve, reject) => {
       const timeoutObj = setTimeout(() => {
         reject(new Error('Intake timed out starting up'))
@@ -311,8 +281,6 @@ class FakeCiVisIntake extends FakeAgent {
     infoResponse = DEFAULT_INFO_RESPONSE
     testManagementResponseStatusCode = DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS
     testManagementResponse = DEFAULT_TEST_MANAGEMENT_TESTS
-    impactedTestsResponseStatusCode = DEFAULT_IMPACTED_TESTS_RESPONSE_STATUS
-    impactedTestsResponse = DEFAULT_IMPACTED_TESTS
     this.removeAllListeners()
     if (this.waitingTimeoutId) {
       clearTimeout(this.waitingTimeoutId)

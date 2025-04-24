@@ -180,7 +180,7 @@ function getTestManagementTests (tracer, testConfiguration) {
   })
 }
 
-function getModifiedTests (tracer, testConfiguration, testEnvironmentMetadata) {
+function getModifiedTests (testEnvironmentMetadata) {
   return new Promise(resolve => {
     const {
       [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseSha,
@@ -195,28 +195,8 @@ function getModifiedTests (tracer, testConfiguration, testEnvironmentMetadata) {
       }
     }
 
-    if (!tracer._tracer._exporter?.getModifiedTests) {
-      return resolve({ err: new Error('Test optimization was not initialized correctly') })
-    }
-    tracer._tracer._exporter.getModifiedTests(testConfiguration, (err, response) => {
-      if (err) {
-        log.error('Modified tests could not be fetched. %s', err.message)
-        this.libraryConfig.isImpactedTestsEnabled = false
-        return resolve({ err, modifiedTests: null })
-      }
-
-      // If we got a baseSha from API, try local diff again
-      if (response?.baseSha && commitHeadSha) {
-        const diff = getPullRequestDiff(response.baseSha, commitHeadSha)
-        const localModifiedTests = getModifiedTestsFromDiff(diff)
-        if (localModifiedTests) {
-          return resolve({ err: null, modifiedTests: localModifiedTests })
-        }
-      }
-
-      // If everything else failed, use modifiedTests from API
-      resolve({ err: null, modifiedTests: { apiTests: response?.modifiedTests } })
-    })
+    // TODO: Add telemetry for this type of error
+    return resolve({ err: new Error('No modified tests could have been retrieved') })
   })
 }
 
@@ -509,11 +489,7 @@ class CypressPlugin {
     }
 
     if (this.isImpactedTestsEnabled) {
-      const impactedTestsResponse = await getModifiedTests(
-        this.tracer,
-        this.testConfiguration,
-        this.testEnvironmentMetadata
-      )
+      const impactedTestsResponse = await getModifiedTests(this.testEnvironmentMetadata)
       if (impactedTestsResponse.err) {
         log.error('Cypress impacted tests response error', impactedTestsResponse.err)
         this.isImpactedTestsEnabled = false

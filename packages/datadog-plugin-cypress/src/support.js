@@ -54,12 +54,6 @@ function retryTest (test, suiteTests, numRetries, tags) {
   }
 }
 
-function getTestEndLine (testFn, startLine) {
-  const source = testFn.toString()
-  const lineCount = source.split('\n').length
-  return startLine + lineCount - 1
-}
-
 function getTestSuitePath (testSuiteAbsolutePath, sourceRoot) {
   if (!testSuiteAbsolutePath) {
     return sourceRoot
@@ -71,19 +65,17 @@ function getTestSuitePath (testSuiteAbsolutePath, sourceRoot) {
   return testSuitePath.replace(path.sep, '/')
 }
 
-function isModifiedTest (testPath, testStartLine, testEndLine, modifiedTests) {
-  if (modifiedTests !== undefined && !modifiedTests.hasOwnProperty('apiTests')) { // If tests come from the local diff
-    const lines = modifiedTests[testPath]
-    if (lines) {
-      return lines.some(line => line >= testStartLine && line <= testEndLine)
-    }
-  } else if (modifiedTests && modifiedTests.apiTests !== undefined) { // If tests come from the API
-    const isModified = modifiedTests.apiTests.some(file => file === testPath)
-    if (isModified) {
-      return true
-    }
+function isModifiedTest (testPath, modifiedTests) {
+  if (modifiedTests === undefined) {
+    return false
   }
-  return false
+
+  const lines = modifiedTests[testPath]
+  if (!lines) {
+    return false
+  }
+
+  return lines.length > 0
 }
 
 
@@ -108,9 +100,7 @@ Cypress.mocha.getRunner().runTests = function (suite, fn) {
     let isModified = false
     if (isImpactedTestsEnabled) {
       const testPath = getTestSuitePath(test.invocationDetails.absoluteFile, repositoryRoot)
-      const testStartLine = test.invocationDetails.line
-      const testEndLine = getTestEndLine(test.fn, testStartLine)
-      isModified = isModifiedTest(testPath, testStartLine, testEndLine, modifiedTests)
+      isModified = isModifiedTest(testPath, modifiedTests)
       if (isModified) {
         test._ddIsModified = true
         if (isEarlyFlakeDetectionEnabled && !isAttemptToFix) {

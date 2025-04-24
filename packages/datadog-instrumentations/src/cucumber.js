@@ -662,7 +662,8 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
           testScenarioPath,
           scenario.location.line,
           scenario.steps[scenario.steps.length - 1].location.line,
-          modifiedTests
+          modifiedTests,
+          'cucumber'
         )
       }
       // We iterate through the stepDefinitions too see if any of them are modified
@@ -680,7 +681,8 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
           stepDefinition.uri,
           testStartLineStep,
           testEndLineStep,
-          modifiedTests
+          modifiedTests,
+          'cucumber'
         )
       }
       modifiedTestsByPickleId.set(pickle.id, isModified)

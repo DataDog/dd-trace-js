@@ -2532,6 +2532,7 @@ versions.forEach(version => {
       let baseCommitSha = null
       let commitHeadSha = null
       let eventPath = null
+      let testConfig = null
 
       function promiseExec (command) {
         return new Promise((resolve) => {
@@ -2543,11 +2544,27 @@ versions.forEach(version => {
       }
 
       beforeEach(() => {
-        receiver.setImpactedTests({
-          files: [
-            'ci-visibility/features-impacted-test/impacted-test.feature'
-          ]
-        })
+        const eventContent = {
+          pull_request: {
+            base: {
+              sha: baseCommitSha,
+              ref: 'master'
+            },
+            head: {
+              sha: commitHeadSha,
+              ref: 'master'
+            }
+          }
+        }
+        eventPath = path.join(cwd, 'event.json')
+        fs.writeFileSync(eventPath, JSON.stringify(eventContent, null, 2))
+
+        testConfig = {
+          GITHUB_ACTIONS: true,
+          GITHUB_BASE_REF: 'master',
+          GITHUB_HEAD_REF: 'feature-branch',
+          GITHUB_EVENT_PATH: eventPath
+        }
       })
 
       // Add git setup before running impacted tests
@@ -2590,7 +2607,7 @@ Feature: Impacted Test
         }
       })
 
-      const getTestAssertions = ({ isImpacting, isLocalDiff, isEfd, isParallel }) =>
+      const getTestAssertions = ({ isImpacting, isEfd, isParallel }) =>
         receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
@@ -2618,34 +2635,51 @@ Feature: Impacted Test
               ])
             }
 
+            const impactedTests = tests.filter(test =>
+              test.meta[TEST_SOURCE_FILE] === 'ci-visibility/features-impacted-test/impacted-test.feature' &&
+              test.meta[TEST_NAME] === 'Say impacted test'
+            )
+
+            if (isEfd) {
+              assert.equal(impactedTests.length, NUM_RETRIES + 1) // Retries + original test
+            } else {
+              assert.equal(impactedTests.length, 1)
+            }
+
             if (isImpacting) {
-              let impactedTests = tests.filter(test =>
-                test.meta[TEST_SOURCE_FILE] === 'ci-visibility/features-impacted-test/impacted-test.feature'
-              )
-              if (isLocalDiff) {
-                impactedTests = impactedTests.filter(test => test[TEST_NAME] === 'Say impacted test')
-              }
               impactedTests.forEach(test => {
                 assert.propertyVal(test.meta, TEST_IS_MODIFIED, 'true')
+              })
+            } else {
+              impactedTests.forEach(test => {
+                assert.notPropertyVal(test.meta, TEST_IS_MODIFIED)
               })
             }
 
             if (isEfd) {
               const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
               assert.equal(retriedTests.length, NUM_RETRIES)
+              let retriedTestNew = 0
+              let retriedTestsWithReason = 0
               retriedTests.forEach(test => {
-                assert.propertyVal(test.meta, TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
-                assert.notProperty(test.meta, TEST_IS_NEW)
+                if (test.meta[TEST_IS_NEW] === 'true') {
+                  retriedTestNew++
+                }
+                if (test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd) {
+                  retriedTestsWithReason++
+                }
               })
+              assert.equal(retriedTestNew, 0)
+              assert.equal(retriedTestsWithReason, NUM_RETRIES)
             }
           })
 
       const runImpactedTest = (
         done,
-        { isImpacting, isLocalDiff = false, isEfd = false, isParallel = false },
+        { isImpacting, isEfd = false, isParallel = false },
         extraEnvVars = {}
       ) => {
-        const testAssertionsPromise = getTestAssertions({ isImpacting, isLocalDiff, isEfd, isParallel })
+        const testAssertionsPromise = getTestAssertions({ isImpacting, isEfd, isParallel })
 
         childProcess = exec(
           isParallel
@@ -2655,6 +2689,7 @@ Feature: Impacted Test
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
+              ...testConfig,
               ...extraEnvVars
             },
             stdio: 'inherit'
@@ -2669,7 +2704,7 @@ Feature: Impacted Test
       it('can impacted tests', (done) => {
         receiver.setSettings({ impacted_tests_enabled: true })
 
-        runImpactedTest(done, { isImpacting: true }, { CIVISIBILITY_IMPACTED_TESTS_BACKEND_REQUEST_ENABLED: '1' })
+        runImpactedTest(done, { isImpacting: true })
       })
 
       it('does not impact tests if disabled', (done) => {
@@ -2681,43 +2716,14 @@ Feature: Impacted Test
       it('does not impact tests DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED is set to false', (done) => {
         receiver.setSettings({ impacted_tests_enabled: false })
 
-        runImpactedTest(done, { isImpacting: false }, { DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0' })
+        runImpactedTest(done,
+          { isImpacting: false },
+          { DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0' }
+        )
       })
 
-      it('can impact tests with git diff', (done) => {
+      it('can not impact tests with git diff with no base sha', (done) => {
         receiver.setSettings({ impacted_tests_enabled: true })
-        const eventContent = {
-          pull_request: {
-            base: {
-              sha: baseCommitSha,
-              ref: 'master'
-            },
-            head: {
-              sha: commitHeadSha,
-              ref: 'master'
-            }
-          }
-        }
-        eventPath = path.join(cwd, 'event.json')
-        fs.writeFileSync(eventPath, JSON.stringify(eventContent, null, 2))
-
-        const testConfig = {
-          GITHUB_ACTIONS: true,
-          GITHUB_BASE_REF: 'master',
-          GITHUB_HEAD_REF: 'feature-branch',
-          GITHUB_EVENT_PATH: eventPath
-        }
-        runImpactedTest(done, { isImpacting: true, isLocalDiff: true }, testConfig)
-      })
-
-      it('can impact tests with git diff with base sha from API', (done) => {
-        receiver.setSettings({ impacted_tests_enabled: true })
-        receiver.setImpactedTests({
-          base_sha: baseCommitSha,
-          files: [
-            'ci-visibility/features-impacted-test/impacted-test.feature'
-          ]
-        })
         const eventContent = {
           pull_request: {
             base: {
@@ -2733,14 +2739,27 @@ Feature: Impacted Test
         eventPath = path.join(cwd, 'event.json')
         fs.writeFileSync(eventPath, JSON.stringify(eventContent, null, 2))
 
-        const testConfig = {
-          CIVISIBILITY_IMPACTED_TESTS_BACKEND_REQUEST_ENABLED: '1',
-          GITHUB_ACTIONS: true,
-          GITHUB_BASE_REF: 'master',
-          GITHUB_HEAD_REF: 'feature-branch',
-          GITHUB_EVENT_PATH: eventPath
+        runImpactedTest(done, { isImpacting: false })
+      })
+
+      it('can not impact tests with git diff with no head sha', (done) => {
+        receiver.setSettings({ impacted_tests_enabled: true })
+        const eventContent = {
+          pull_request: {
+            base: {
+              sha: baseCommitSha,
+              ref: 'master'
+            },
+            head: {
+              sha: '',
+              ref: 'master'
+            }
+          }
         }
-        runImpactedTest(done, { isImpacting: true, isLocalDiff: true }, testConfig)
+        eventPath = path.join(cwd, 'event.json')
+        fs.writeFileSync(eventPath, JSON.stringify(eventContent, null, 2))
+
+        runImpactedTest(done, { isImpacting: false })
       })
 
       if (version !== '7.0.0') {
@@ -2749,8 +2768,7 @@ Feature: Impacted Test
 
           runImpactedTest(
             done,
-            { isImpacting: true, isParallel: true },
-            { CIVISIBILITY_IMPACTED_TESTS_BACKEND_REQUEST_ENABLED: '1' }
+            { isImpacting: true, isParallel: true }
           )
         })
       }
@@ -2766,10 +2784,9 @@ Feature: Impacted Test
           },
           known_tests_enabled: true
         })
-        receiver.setKnownTests(['ci-visibility/features-impacted-test/impacted-test.feature'])
+        receiver.setKnownTests(['ci-visibility/test-impacted-test/test-impacted-1.js'])
         runImpactedTest(done,
-          { isImpacting: true, isEfd: true },
-          { CIVISIBILITY_IMPACTED_TESTS_BACKEND_REQUEST_ENABLED: '1' }
+          { isImpacting: true, isEfd: true }
         )
       })
     })

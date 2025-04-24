@@ -423,57 +423,62 @@ index 1234567..89abcde 100644
 
 describe('isModifiedTest', () => {
   describe('when tests come from local diff', () => {
+    const testFramework = 'jest'
+
     it('should return true when test lines overlap with modified lines', () => {
       const modifiedTests = {
         'test/file.js': [2, 4, 6]
       }
-      expect(isModifiedTest('test/file.js', 1, 3, modifiedTests)).to.be.true // overlaps with line 2
-      expect(isModifiedTest('test/file.js', 3, 5, modifiedTests)).to.be.true // overlaps with line 4
-      expect(isModifiedTest('test/file.js', 5, 7, modifiedTests)).to.be.true // overlaps with line 6
+      expect(isModifiedTest('test/file.js', 1, 3, modifiedTests, testFramework)).to.be.true // overlaps with line 2
+      expect(isModifiedTest('test/file.js', 3, 5, modifiedTests, testFramework)).to.be.true // overlaps with line 4
+      expect(isModifiedTest('test/file.js', 5, 7, modifiedTests, testFramework)).to.be.true // overlaps with line 6
     })
 
     it('should return false when test lines do not overlap with modified lines', () => {
       const modifiedTests = {
         'test/file.js': [2, 4, 6]
       }
-      expect(isModifiedTest('test/file.js', 7, 9, modifiedTests)).to.be.false
-      expect(isModifiedTest('test/file.js', 0, 1, modifiedTests)).to.be.false
+      expect(isModifiedTest('test/file.js', 7, 9, modifiedTests, testFramework)).to.be.false
+      expect(isModifiedTest('test/file.js', 0, 1, modifiedTests, testFramework)).to.be.false
     })
 
     it('should return false when file is not in modified tests', () => {
       const modifiedTests = {
         'test/file.js': [2, 4, 6]
       }
-      expect(isModifiedTest('test/other.js', 1, 3, modifiedTests)).to.be.false
+      expect(isModifiedTest('test/other.js', 1, 3, modifiedTests, testFramework)).to.be.false
     })
 
     it('should handle single line tests', () => {
       const modifiedTests = {
         'test/file.js': [2, 4, 6]
       }
-      expect(isModifiedTest('test/file.js', 2, 2, modifiedTests)).to.be.true
-      expect(isModifiedTest('test/file.js', 3, 3, modifiedTests)).to.be.false
+      expect(isModifiedTest('test/file.js', 2, 2, modifiedTests, testFramework)).to.be.true
+      expect(isModifiedTest('test/file.js', 3, 3, modifiedTests, testFramework)).to.be.false
     })
   })
 
-  describe('when tests come from API', () => {
-    it('should return true when test file is in apiTests', () => {
+  describe('when tests frameworks do not support granular impacted tests', () => {
+    const testFramework = 'playwright'
+
+    it('should return true when test file is in modifiedTests', () => {
       const modifiedTests = {
-        apiTests: ['test/file.js', 'test/other.js']
+        'test/file.js': [2, 4, 6],
+        'test/other.js': [2, 4, 6]
       }
-      expect(isModifiedTest('test/file.js', 1, 10, modifiedTests)).to.be.true
-      expect(isModifiedTest('test/other.js', 1, 10, modifiedTests)).to.be.true
+      expect(isModifiedTest('test/file.js', 1, 10, modifiedTests, testFramework)).to.be.true
+      expect(isModifiedTest('test/other.js', 1, 10, modifiedTests, testFramework)).to.be.true
     })
 
-    it('should return false when test file is not in apiTests', () => {
+    it('should return false when test file is not in modifiedTests', () => {
       const modifiedTests = {
-        apiTests: ['test/file.js']
+        'test/file.js': [2, 4, 6]
       }
-      expect(isModifiedTest('test/other.js', 1, 10, modifiedTests)).to.be.false
+      expect(isModifiedTest('test/other.js', 1, 10, modifiedTests, testFramework)).to.be.false
     })
   })
 
   it('should handle empty modifiedTests object', () => {
-    expect(isModifiedTest('test/file.js', 1, 10, {})).to.be.false
+    expect(isModifiedTest('test/file.js', 1, 10, {}, 'jest')).to.be.false
   })
 })

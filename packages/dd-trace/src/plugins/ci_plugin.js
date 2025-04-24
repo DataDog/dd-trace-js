@@ -213,28 +213,8 @@ module.exports = class CiPlugin extends Plugin {
         }
       }
 
-      if (!this.tracer._exporter?.getModifiedTests) {
-        return onDone({ err: new Error('Test optimization was not initialized correctly') })
-      }
-      this.tracer._exporter.getModifiedTests(this.testConfiguration, (err, response) => {
-        if (err) {
-          log.error('Modified tests could not be fetched. %s', err.message)
-          this.libraryConfig.isImpactedTestsEnabled = false
-          return onDone({ err, modifiedTests: null })
-        }
-
-        // If we got a baseSha from API, try local diff again
-        if (response?.baseSha && commitHeadSha) {
-          const diff = getPullRequestDiff(response.baseSha, commitHeadSha)
-          const localModifiedTests = getModifiedTestsFromDiff(diff)
-          if (localModifiedTests) {
-            return onDone({ err: null, modifiedTests: localModifiedTests })
-          }
-        }
-
-        // If everything else failed, use modifiedTests from API
-        onDone({ err: null, modifiedTests: { apiTests: response?.modifiedTests } })
-      })
+      // TODO: Add telemetry for this type of error
+      return onDone({ err: new Error('No modified tests could have been retrieved') })
     })
   }
 

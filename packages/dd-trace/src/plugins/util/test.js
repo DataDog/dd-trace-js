@@ -114,7 +114,7 @@ const DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX = '_dd.library_capabilities
 const UNSUPPORTED_TIA_FRAMEWORKS = ['playwright', 'vitest']
 const UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE = ['cucumber', 'mocha']
 const UNSUPPORTED_ATTEMPT_TO_FIX_FRAMEWORKS_PARALLEL_MODE = ['mocha']
-const UNSUPPORTED_IMPACTED_TESTS_FRAMEWORKS = ['playwright', 'vitest']
+const NOT_SUPPORTED_GRANULARITY_IMPACTED_TESTS_FRAMEWORKS = ['mocha', 'playwright', 'vitest']
 
 const TEST_LEVEL_EVENT_TYPES = [
   'test',
@@ -794,18 +794,11 @@ function getLibraryCapabilitiesTags (testFramework, isParallel) {
     return true
   }
 
-  function isImpactedTestsSupported (testFramework) {
-    if (UNSUPPORTED_IMPACTED_TESTS_FRAMEWORKS.includes(testFramework)) {
-      return false
-    }
-    return true
-  }
-
   return {
     [DD_CAPABILITIES_TEST_IMPACT_ANALYSIS]: isTiaSupported(testFramework, isParallel) ? '1' : undefined,
     [DD_CAPABILITIES_EARLY_FLAKE_DETECTION]: '1',
     [DD_CAPABILITIES_AUTO_TEST_RETRIES]: '1',
-    [DD_CAPABILITIES_IMPACTED_TESTS]: isImpactedTestsSupported(testFramework) ? '1' : undefined,
+    [DD_CAPABILITIES_IMPACTED_TESTS]: '1',
     [DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE]: '1',
     [DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE]: '1',
     [DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX]: isAttemptToFixSupported(testFramework, isParallel)
@@ -864,17 +857,21 @@ function getModifiedTestsFromDiff (diff) {
   return result
 }
 
-function isModifiedTest (testPath, testStartLine, testEndLine, modifiedTests) {
-  if (modifiedTests !== undefined && !modifiedTests.hasOwnProperty('apiTests')) { // If tests come from the local diff
-    const lines = modifiedTests[testPath]
-    if (lines) {
-      return lines.some(line => line >= testStartLine && line <= testEndLine)
-    }
-  } else if (modifiedTests?.apiTests !== undefined) { // If tests come from the API
-    const isModified = modifiedTests.apiTests.some(file => file === testPath)
-    if (isModified) {
-      return true
-    }
+function isModifiedTest (testPath, testStartLine, testEndLine, modifiedTests, testFramework) {
+  if (modifiedTests === undefined) {
+    return false
   }
-  return false
+
+  const lines = modifiedTests[testPath]
+  if (!lines) {
+    return false
+  }
+
+  // For unsupported frameworks, consider the test modified if any lines were changed
+  if (NOT_SUPPORTED_GRANULARITY_IMPACTED_TESTS_FRAMEWORKS.includes(testFramework)) {
+    return lines.length > 0
+  }
+
+  // For supported frameworks, check if the test's line range overlaps with modified lines
+  return lines.some(line => line >= testStartLine && line <= testEndLine)
 }

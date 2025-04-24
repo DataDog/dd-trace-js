@@ -39,7 +39,6 @@ const {
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_RETRY_REASON_TYPES,
   TEST_IS_MODIFIED,
-  getTestEndLine,
   isModifiedTest
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -193,14 +192,14 @@ class MochaPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:mocha:test:is-modified', ({ modifiedTests, testStartLine, file, test, onDone }) => {
-      const testEndLine = getTestEndLine(test.fn, testStartLine)
+    this.addSub('ci:mocha:test:is-modified', ({ modifiedTests, file, onDone }) => {
       const testPath = getTestSuitePath(file, this.repositoryRoot)
       const isModified = isModifiedTest(
         testPath,
-        testStartLine,
-        testEndLine,
-        modifiedTests
+        null,
+        null,
+        modifiedTests,
+        'mocha'
       )
 
       onDone(isModified)

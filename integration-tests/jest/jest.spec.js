@@ -3526,6 +3526,7 @@ describe('jest CommonJS', () => {
     let baseCommitSha = null
     let commitHeadSha = null
     let eventPath = null
+    let testConfig = null
 
     function promiseExec (command) {
       return new Promise((resolve) => {
@@ -3537,11 +3538,27 @@ describe('jest CommonJS', () => {
     }
 
     beforeEach(() => {
-      receiver.setImpactedTests({
-        files: [
-          'ci-visibility/test-impacted-test/test-impacted-1.js'
-        ]
-      })
+      const eventContent = {
+        pull_request: {
+          base: {
+            sha: baseCommitSha,
+            ref: 'master'
+          },
+          head: {
+            sha: commitHeadSha,
+            ref: 'master'
+          }
+        }
+      }
+      eventPath = path.join(cwd, 'event.json')
+      fs.writeFileSync(eventPath, JSON.stringify(eventContent, null, 2))
+
+      testConfig = {
+        GITHUB_ACTIONS: true,
+        GITHUB_BASE_REF: 'master',
+        GITHUB_HEAD_REF: 'feature-branch',
+        GITHUB_EVENT_PATH: eventPath
+      }
     })
 
     // Add git setup before running impacted tests
@@ -3598,7 +3615,7 @@ describe('impacted tests', () => {
       }
     })
 
-    const getTestAssertions = ({ isImpacting, isLocalDiff, isEfd, isParallel }) =>
+    const getTestAssertions = ({ isImpacting, isEfd, isParallel }) =>
       receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
@@ -3630,34 +3647,50 @@ describe('impacted tests', () => {
             ])
           }
 
+          const impactedTests = tests.filter(test =>
+            test.meta[TEST_SOURCE_FILE] === 'ci-visibility/test-impacted-test/test-impacted-1.js' &&
+            test.meta[TEST_NAME] === 'impacted tests can pass normally')
+
+          if (isEfd) {
+            assert.equal(impactedTests.length, NUM_RETRIES + 1) // Retries + original test
+          } else {
+            assert.equal(impactedTests.length, 1)
+          }
+
           if (isImpacting) {
-            let impactedTests = tests.filter(test =>
-              test.meta[TEST_SOURCE_FILE] === 'ci-visibility/test-impacted-test/test-impacted-1.js'
-            )
-            if (isLocalDiff) {
-              impactedTests = impactedTests.filter(test => test[TEST_NAME] === 'impacted tests can pass normally')
-            }
             impactedTests.forEach(test => {
               assert.propertyVal(test.meta, TEST_IS_MODIFIED, 'true')
+            })
+          } else {
+            impactedTests.forEach(test => {
+              assert.notPropertyVal(test.meta, TEST_IS_MODIFIED)
             })
           }
 
           if (isEfd) {
             const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
             assert.equal(retriedTests.length, NUM_RETRIES * 2)
+            let retriedTestNew = 0
+            let retriedTestsWithReason = 0
             retriedTests.forEach(test => {
-              assert.propertyVal(test.meta, TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
-              assert.notProperty(test.meta, TEST_IS_NEW)
+              if (test.meta[TEST_IS_NEW] === 'true') {
+                retriedTestNew++
+              }
+              if (test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd) {
+                retriedTestsWithReason++
+              }
             })
+            assert.equal(retriedTestNew, NUM_RETRIES)
+            assert.equal(retriedTestsWithReason, NUM_RETRIES * 2)
           }
         })
 
     const runImpactedTest = (
       done,
-      { isImpacting, isLocalDiff = false, isEfd = false, isParallel = false },
+      { isImpacting, isEfd = false, isParallel = false },
       extraEnvVars = {}
     ) => {
-      const testAssertionsPromise = getTestAssertions({ isImpacting, isLocalDiff, isEfd, isParallel })
+      const testAssertionsPromise = getTestAssertions({ isImpacting, isEfd, isParallel })
 
       childProcess = exec(
         runTestsWithCoverageCommand,
@@ -3666,6 +3699,7 @@ describe('impacted tests', () => {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: 'test-impacted-test/test-impacted-1',
+            ...testConfig,
             ...extraEnvVars
           },
           stdio: 'inherit'
@@ -3680,7 +3714,7 @@ describe('impacted tests', () => {
     it('can impacted tests', (done) => {
       receiver.setSettings({ impacted_tests_enabled: true })
 
-      runImpactedTest(done, { isImpacting: true }, { CIVISIBILITY_IMPACTED_TESTS_BACKEND_REQUEST_ENABLED: '1' })
+      runImpactedTest(done, { isImpacting: true })
     })
 
     it('does not impact tests if disabled', (done) => {
@@ -3692,43 +3726,14 @@ describe('impacted tests', () => {
     it('does not impact tests DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED is set to false', (done) => {
       receiver.setSettings({ impacted_tests_enabled: false })
 
-      runImpactedTest(done, { isImpacting: false }, { DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0' })
+      runImpactedTest(done,
+        { isImpacting: false },
+        { DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0' }
+      )
     })
 
-    it('can impact tests with git diff', (done) => {
+    it('can not impact tests with git diff with no base sha', (done) => {
       receiver.setSettings({ impacted_tests_enabled: true })
-      const eventContent = {
-        pull_request: {
-          base: {
-            sha: baseCommitSha,
-            ref: 'master'
-          },
-          head: {
-            sha: commitHeadSha,
-            ref: 'master'
-          }
-        }
-      }
-      eventPath = path.join(cwd, 'event.json')
-      fs.writeFileSync(eventPath, JSON.stringify(eventContent, null, 2))
-
-      const testConfig = {
-        GITHUB_ACTIONS: true,
-        GITHUB_BASE_REF: 'master',
-        GITHUB_HEAD_REF: 'feature-branch',
-        GITHUB_EVENT_PATH: eventPath
-      }
-      runImpactedTest(done, { isImpacting: true, isLocalDiff: true }, testConfig)
-    })
-
-    it('can impact tests with git diff with base sha from API', (done) => {
-      receiver.setSettings({ impacted_tests_enabled: true })
-      receiver.setImpactedTests({
-        base_sha: baseCommitSha,
-        files: [
-          'ci-visibility/test-impacted-test/test-impacted-1.js'
-        ]
-      })
       const eventContent = {
         pull_request: {
           base: {
@@ -3744,14 +3749,27 @@ describe('impacted tests', () => {
       eventPath = path.join(cwd, 'event.json')
       fs.writeFileSync(eventPath, JSON.stringify(eventContent, null, 2))
 
-      const testConfig = {
-        CIVISIBILITY_IMPACTED_TESTS_BACKEND_REQUEST_ENABLED: '1',
-        GITHUB_ACTIONS: true,
-        GITHUB_BASE_REF: 'master',
-        GITHUB_HEAD_REF: 'feature-branch',
-        GITHUB_EVENT_PATH: eventPath
+      runImpactedTest(done, { isImpacting: false })
+    })
+
+    it('can not impact tests with git diff with no head sha', (done) => {
+      receiver.setSettings({ impacted_tests_enabled: true })
+      const eventContent = {
+        pull_request: {
+          base: {
+            sha: baseCommitSha,
+            ref: 'master'
+          },
+          head: {
+            sha: '',
+            ref: 'master'
+          }
+        }
       }
-      runImpactedTest(done, { isImpacting: true, isLocalDiff: true }, testConfig)
+      eventPath = path.join(cwd, 'event.json')
+      fs.writeFileSync(eventPath, JSON.stringify(eventContent, null, 2))
+
+      runImpactedTest(done, { isImpacting: false })
     })
 
     it('can impact tests in parallel mode', (done) => {
@@ -3761,7 +3779,6 @@ describe('impacted tests', () => {
         done,
         { isImpacting: true, isParallel: true },
         {
-          CIVISIBILITY_IMPACTED_TESTS_BACKEND_REQUEST_ENABLED: '1',
           // we need to run more than 1 suite for parallel mode to kick in
           TESTS_TO_RUN: 'test-impacted-test/test-impacted',
           RUN_IN_PARALLEL: true
@@ -3782,8 +3799,7 @@ describe('impacted tests', () => {
       })
       receiver.setKnownTests(['ci-visibility/test-impacted-test/test-impacted-1.js'])
       runImpactedTest(done,
-        { isImpacting: true, isEfd: true },
-        { CIVISIBILITY_IMPACTED_TESTS_BACKEND_REQUEST_ENABLED: '1' }
+        { isImpacting: true, isEfd: true }
       )
     })
   })

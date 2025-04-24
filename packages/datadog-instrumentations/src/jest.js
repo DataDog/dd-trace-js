@@ -365,7 +365,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             this.testSourceFile,
             testStartLine,
             testEndLine,
-            this.modifiedTestsForThisSuite
+            this.modifiedTestsForThisSuite,
+            'jest'
           )
         }
 
@@ -427,7 +428,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             this.testSourceFile,
             testStartLine,
             testEndLine,
-            this.modifiedTestsForThisSuite
+            this.modifiedTestsForThisSuite,
+            'jest'
           )
           if (isModified && !retriedTestsToNumAttempts.has(originalTestName) && this.isEarlyFlakeDetectionEnabled) {
             retriedTestsToNumAttempts.set(originalTestName, 0)

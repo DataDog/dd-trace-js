@@ -456,9 +456,7 @@ function getRunTestsWrapper (runTests, config) {
       suite.tests.forEach((test) => {
         isModifiedCh.publish({
           modifiedTests: config.modifiedTests,
-          testStartLine: testToStartLine.get(test) || 0,
           file: suite.file,
-          test,
           onDone: (isModified) => {
             if (isModified) {
               test._ddIsModified = true
