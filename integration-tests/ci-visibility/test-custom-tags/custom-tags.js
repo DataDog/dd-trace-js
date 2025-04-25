@@ -1,5 +1,5 @@
 const { expect } = require('chai')
-const sum = require('./sum')
+const sum = require('../test/sum')
 const ddTrace = require('dd-trace')
 
 describe('ci visibility', () => {

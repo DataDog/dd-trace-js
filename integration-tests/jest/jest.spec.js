@@ -3536,7 +3536,7 @@ describe('jest CommonJS', () => {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
-            TESTS_TO_RUN: 'ci-visibility/test/custom-tags'
+            TESTS_TO_RUN: 'ci-visibility/test-custom-tags'
           },
           stdio: 'inherit'
         }
