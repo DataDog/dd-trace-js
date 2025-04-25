@@ -3,7 +3,7 @@
 /* eslint-disable no-console */
 
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations.js')
-const hooks = require('../datadog-instrumentations/src/helpers/hooks.js')
+const { hooks } = require('../datadog-instrumentations/src/helpers/hooks.js')
 const extractPackageAndModulePath = require(
   '../datadog-instrumentations/src/helpers/extract-package-and-module-path.js'
 )
