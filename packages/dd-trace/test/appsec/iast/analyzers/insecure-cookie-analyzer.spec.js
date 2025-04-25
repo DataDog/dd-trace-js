@@ -1,12 +1,9 @@
 'use strict'
 
 const { prepareTestServerForIast } = require('../utils')
-const Analyzer = require('../../../../src/appsec/iast/analyzers/vulnerability-analyzer')
 const { INSECURE_COOKIE } = require('../../../../src/appsec/iast/vulnerabilities')
 const insecureCookieAnalyzer = require('../../../../src/appsec/iast/analyzers/insecure-cookie-analyzer')
 const CookieAnalyzer = require('../../../../src/appsec/iast/analyzers/cookie-analyzer')
-
-const analyzer = new Analyzer()
 
 describe('insecure cookie analyzer', () => {
   it('Expected vulnerability identifier', () => {
