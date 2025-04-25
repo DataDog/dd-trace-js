@@ -86,27 +86,23 @@ class LLMObsTagger {
   // TODO: similarly for the following `tag` methods,
   // how can we transition from a span weakmap to core API functionality
   tagLLMIO (span, inputData, outputData) {
-    const errIn = this._tagMessages(span, inputData, INPUT_MESSAGES)
-    const errOut = this._tagMessages(span, outputData, OUTPUT_MESSAGES)
-    return errIn || errOut
+    this._tagMessages(span, inputData, INPUT_MESSAGES)
+    this._tagMessages(span, outputData, OUTPUT_MESSAGES)
   }
 
   tagEmbeddingIO (span, inputData, outputData) {
-    const errIn = this._tagDocuments(span, inputData, INPUT_DOCUMENTS)
-    const errOut = this._tagText(span, outputData, OUTPUT_VALUE)
-    return errIn || errOut
+    this._tagDocuments(span, inputData, INPUT_DOCUMENTS)
+    this._tagText(span, outputData, OUTPUT_VALUE)
   }
 
   tagRetrievalIO (span, inputData, outputData) {
-    const errIn = this._tagText(span, inputData, INPUT_VALUE)
-    const errOut = this._tagDocuments(span, outputData, OUTPUT_DOCUMENTS)
-    return errIn || errOut
+    this._tagText(span, inputData, INPUT_VALUE)
+    this._tagDocuments(span, outputData, OUTPUT_DOCUMENTS)
   }
 
   tagTextIO (span, inputData, outputData) {
-    const errIn = this._tagText(span, inputData, INPUT_VALUE)
-    const errOut = this._tagText(span, outputData, OUTPUT_VALUE)
-    return errIn || errOut
+    this._tagText(span, inputData, INPUT_VALUE)
+    this._tagText(span, outputData, OUTPUT_VALUE)
   }
 
   tagMetadata (span, metadata) {
@@ -119,7 +115,6 @@ class LLMObsTagger {
   }
 
   tagMetrics (span, metrics) {
-    let err = ''
     const filterdMetrics = {}
     for (const [key, value] of Object.entries(metrics)) {
       let processedKey = key
@@ -140,8 +135,7 @@ class LLMObsTagger {
       if (typeof value === 'number') {
         filterdMetrics[processedKey] = value
       } else {
-        err = 'invalid_metrics'
-        this._handleFailure(`Value for metric '${key}' must be a number, instead got ${value}`)
+        this._handleFailure(`Value for metric '${key}' must be a number, instead got ${value}`, 'invalid_metrics')
       }
     }
 
@@ -151,7 +145,6 @@ class LLMObsTagger {
     } else {
       this._setTag(span, METRICS, filterdMetrics)
     }
-    return err
   }
 
   tagSpanTags (span, tags) {
@@ -168,7 +161,6 @@ class LLMObsTagger {
   }
 
   _tagText (span, data, key) {
-    let err = ''
     if (data) {
       if (typeof data === 'string') {
         this._setTag(span, key, data)
@@ -177,16 +169,13 @@ class LLMObsTagger {
           this._setTag(span, key, JSON.stringify(data))
         } catch {
           const type = key === INPUT_VALUE ? 'input' : 'output'
-          err = 'invalid_io_text'
-          this._handleFailure(`Failed to parse ${type} value, must be JSON serializable.`)
+          this._handleFailure(`Failed to parse ${type} value, must be JSON serializable.`, 'invalid_io_text')
         }
       }
     }
-    return err
   }
 
   _tagDocuments (span, data, key) {
-    let err = ''
     if (data) {
       if (!Array.isArray(data)) {
         data = [data]
@@ -198,8 +187,7 @@ class LLMObsTagger {
         }
 
         if (document == null || typeof document !== 'object') {
-          err = 'invalid_embedding_io'
-          this._handleFailure('Documents must be a string, object, or list of objects.')
+          this._handleFailure('Documents must be a string, object, or list of objects.', 'invalid_embedding_io')
           return undefined
         }
 
@@ -207,8 +195,7 @@ class LLMObsTagger {
         let validDocument = true
 
         if (typeof text !== 'string') {
-          err = 'invalid_embedding_io'
-          this._handleFailure('Document text must be a string.')
+          this._handleFailure('Document text must be a string.', 'invalid_embedding_io')
           validDocument = false
         }
 
@@ -225,11 +212,9 @@ class LLMObsTagger {
         this._setTag(span, key, documents)
       }
     }
-    return err
   }
 
   _tagMessages (span, data, key) {
-    let err = ''
     if (data) {
       if (!Array.isArray(data)) {
         data = [data]
@@ -241,8 +226,7 @@ class LLMObsTagger {
         }
 
         if (message == null || typeof message !== 'object') {
-          err = 'invalid_io_messages'
-          this._handleFailure('Messages must be a string, object, or list of objects')
+          this._handleFailure('Messages must be a string, object, or list of objects', 'invalid_io_messages')
           return undefined
         }
 
@@ -253,7 +237,7 @@ class LLMObsTagger {
         const messageObj = { content }
 
         if (typeof content !== 'string') {
-          this._handleFailure('Message content must be a string.')
+          this._handleFailure('Message content must be a string.', 'invalid_io_messages')
           validMessage = false
         }
 
@@ -266,8 +250,7 @@ class LLMObsTagger {
 
           const filteredToolCalls = toolCalls.map(toolCall => {
             if (typeof toolCall !== 'object') {
-              err = 'invalid_io_messages'
-              this._handleFailure('Tool call must be an object.')
+              this._handleFailure('Tool call must be an object.', 'invalid_io_messages')
               return undefined
             }
 
@@ -296,7 +279,6 @@ class LLMObsTagger {
         this._setTag(span, key, messages)
       }
     }
-    return err
   }
 
   _tagConditionalString (data, type, carrier, key) {
@@ -331,11 +313,15 @@ class LLMObsTagger {
 
   // any public-facing LLMObs APIs using this tagger should not soft fail
   // auto-instrumentation should soft fail
-  _handleFailure (msg) {
+  _handleFailure (msg, errorTag) {
     if (this.softFail) {
       log.warn(msg)
     } else {
-      throw new Error(msg)
+      const err = new Error(msg)
+      if (errorTag) {
+        Object.defineProperty(err, 'ddErrorTag', { get () { return errorTag } })
+      }
+      throw err
     }
   }
 

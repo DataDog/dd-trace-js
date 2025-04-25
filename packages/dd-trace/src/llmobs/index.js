@@ -101,9 +101,8 @@ function handleFlush () {
   } catch (e) {
     err = 'writer_flush_error'
     log.warn(`Failed to flush LLMObs spans and evaluation metrics: ${e.message}`)
-  } finally {
-    telemetry.recordUserFlush(err)
   }
+  telemetry.recordUserFlush(err)
 }
 
 function handleSpanProcess (data) {

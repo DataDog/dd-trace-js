@@ -110,12 +110,12 @@ function recordDroppedPayload (numEvents, eventType, error) {
 }
 
 function recordLLMObsAnnotate (span, err, value = 1) {
-  const mlObsTags = LLMObsTagger.tagMap.get(span)
+  const mlObsTags = LLMObsTagger.tagMap.get(span) || {}
   const spanKind = mlObsTags[SPAN_KIND] || 'N/A'
   const isRootSpan = mlObsTags[PARENT_ID_KEY] === ROOT_PARENT_ID
 
   const tags = {
-    error: Number(!err),
+    error: Number(!!err),
     span_kind: spanKind,
     is_root_span: Number(isRootSpan)
   }
@@ -124,18 +124,18 @@ function recordLLMObsAnnotate (span, err, value = 1) {
 }
 
 function recordUserFlush (err, value = 1) {
-  const tags = { error: Number(!err) }
+  const tags = { error: Number(!!err) }
   if (err) tags.error_type = err
   llmobsMetrics.count('user_flushes', tags).inc(value)
 }
 
 function recordExportSpan (span, err, value = 1) {
-  const mlObsTags = LLMObsTagger.tagMap.get(span)
+  const mlObsTags = LLMObsTagger.tagMap.get(span) || {}
   const spanKind = mlObsTags[SPAN_KIND] || 'N/A'
   const isRootSpan = mlObsTags[PARENT_ID_KEY] === ROOT_PARENT_ID
 
   const tags = {
-    error: Number(!err),
+    error: Number(!!err),
     span_kind: spanKind,
     is_root_span: Number(isRootSpan)
   }
@@ -145,7 +145,7 @@ function recordExportSpan (span, err, value = 1) {
 
 function recordSubmitEvaluation (options, err, value = 1) {
   const tags = {
-    error: Number(!err),
+    error: Number(!!err),
     custom_joining_key: 0
   }
   const metricType = options?.metricType?.toLowerCase()

@@ -244,27 +244,30 @@ class LLMObs extends NoopLLMObs {
 
       if (inputData || outputData) {
         if (spanKind === 'llm') {
-          err = this._tagger.tagLLMIO(span, inputData, outputData)
+          this._tagger.tagLLMIO(span, inputData, outputData)
         } else if (spanKind === 'embedding') {
-          err = this._tagger.tagEmbeddingIO(span, inputData, outputData)
+          this._tagger.tagEmbeddingIO(span, inputData, outputData)
         } else if (spanKind === 'retrieval') {
-          err = this._tagger.tagRetrievalIO(span, inputData, outputData)
+          this._tagger.tagRetrievalIO(span, inputData, outputData)
         } else {
-          err = this._tagger.tagTextIO(span, inputData, outputData)
+          this._tagger.tagTextIO(span, inputData, outputData)
         }
       }
 
       if (metadata) {
         this._tagger.tagMetadata(span, metadata)
       }
-
       if (metrics) {
-        err = this._tagger.tagMetrics(span, metrics)
+        this._tagger.tagMetrics(span, metrics)
       }
-
       if (tags) {
         this._tagger.tagSpanTags(span, tags)
       }
+    } catch (e) {
+      if (e.ddErrorTag) {
+        err = e.ddErrorTag
+      }
+      throw e
     } finally {
       telemetry.recordLLMObsAnnotate(span, err)
     }
@@ -272,23 +275,24 @@ class LLMObs extends NoopLLMObs {
 
   exportSpan (span) {
     span = span || this._active()
-
-    if (!span) {
-      telemetry.recordExportSpan(span, 'no_active_span')
-      throw new Error('No span provided and no active LLMObs-generated span found')
-    }
-
-    if (!(span instanceof Span)) {
-      telemetry.recordExportSpan(span, 'invalid_span')
-      throw new Error('Span must be a valid Span object.')
-    }
-
-    if (!LLMObsTagger.tagMap.has(span)) {
-      telemetry.recordExportSpan(span, 'invalid_span')
-      throw new Error('Span must be an LLMObs-generated span')
-    }
-
     let err = ''
+    try {
+      if (!span) {
+        err = 'no_active_span'
+        throw new Error('No span provided and no active LLMObs-generated span found')
+      }
+      if (!(span instanceof Span)) {
+        err = 'invalid_span'
+        throw new Error('Span must be a valid Span object.')
+      }
+      if (!LLMObsTagger.tagMap.has(span)) {
+        err = 'invalid_span'
+        throw new Error('Span must be an LLMObs-generated span')
+      }
+    } catch (e) {
+      telemetry.recordExportSpan(span, err)
+      throw e
+    }
     try {
       return {
         traceId: span.context().toTraceId(true),
@@ -296,93 +300,95 @@ class LLMObs extends NoopLLMObs {
       }
     } catch {
       err = 'invalid_span'
-      logger.warn('Faild to export span. Span must be a valid Span object.')
-    } finally {
-      telemetry.recordExportSpan(span, err)
+      logger.warn('Failed to export span. Span must be a valid Span object.')
     }
+    telemetry.recordExportSpan(span, err)
   }
 
   submitEvaluation (llmobsSpanContext, options = {}) {
     if (!this.enabled) return
 
+    let err = ''
     const { traceId, spanId } = llmobsSpanContext
-    if (!traceId || !spanId) {
-      telemetry.recordSubmitEvaluation(options, 'invalid_span')
-      throw new Error(
-        'spanId and traceId must both be specified for the given evaluation metric to be submitted.'
-      )
-    }
+    try {
+      if (!traceId || !spanId) {
+        err = 'invalid_span'
+        throw new Error(
+          'spanId and traceId must both be specified for the given evaluation metric to be submitted.'
+        )
+      }
+      const mlApp = options.mlApp || this._config.llmobs.mlApp
+      if (!mlApp) {
+        err = 'missing_ml_app'
+        throw new Error(
+          'ML App name is required for sending evaluation metrics. Evaluation metric data will not be sent.'
+        )
+      }
 
-    const mlApp = options.mlApp || this._config.llmobs.mlApp
-    if (!mlApp) {
-      telemetry.recordSubmitEvaluation(options, 'missing_ml_app')
-      throw new Error(
-        'ML App name is required for sending evaluation metrics. Evaluation metric data will not be sent.'
-      )
-    }
+      const timestampMs = options.timestampMs || Date.now()
+      if (typeof timestampMs !== 'number' || timestampMs < 0) {
+        err = 'invalid_timestamp'
+        throw new Error('timestampMs must be a non-negative integer. Evaluation metric data will not be sent')
+      }
 
-    const timestampMs = options.timestampMs || Date.now()
-    if (typeof timestampMs !== 'number' || timestampMs < 0) {
-      telemetry.recordSubmitEvaluation(options, 'invalid_timestamp')
-      throw new Error('timestampMs must be a non-negative integer. Evaluation metric data will not be sent')
-    }
+      const { label, value, tags } = options
+      const metricType = options.metricType?.toLowerCase()
+      if (!label) {
+        err = 'invalid_metric_label'
+        throw new Error('label must be the specified name of the evaluation metric')
+      }
+      if (!metricType || !['categorical', 'score'].includes(metricType)) {
+        err = 'invalid_metric_type'
+        throw new Error('metricType must be one of "categorical" or "score"')
+      }
+      if (metricType === 'categorical' && typeof value !== 'string') {
+        err ='invalid_metric_value'
+        throw new Error('value must be a string for a categorical metric.')
+      }
+      if (metricType === 'score' && typeof value !== 'number') {
+        err = 'invalid_metric_value'
+        throw new Error('value must be a number for a score metric.')
+      }
 
-    const { label, value, tags } = options
-    const metricType = options.metricType?.toLowerCase()
-    if (!label) {
-      telemetry.recordSubmitEvaluation(options, 'invalid_metric_label')
-      throw new Error('label must be the specified name of the evaluation metric')
-    }
-    if (!metricType || !['categorical', 'score'].includes(metricType)) {
-      telemetry.recordSubmitEvaluation(options, 'invalid_metric_type')
-      throw new Error('metricType must be one of "categorical" or "score"')
-    }
+      const evaluationTags = {
+        'ddtrace.version': tracerVersion,
+        ml_app: mlApp
+      }
 
-    if (metricType === 'categorical' && typeof value !== 'string') {
-      telemetry.recordSubmitEvaluation(options, 'invalid_metric_value')
-      throw new Error('value must be a string for a categorical metric.')
-    }
-    if (metricType === 'score' && typeof value !== 'number') {
-      telemetry.recordSubmitEvaluation(options, 'invalid_metric_value')
-      throw new Error('value must be a number for a score metric.')
-    }
-
-    const evaluationTags = {
-      'ddtrace.version': tracerVersion,
-      ml_app: mlApp
-    }
-
-    if (tags) {
-      for (const key in tags) {
-        const tag = tags[key]
-        if (typeof tag === 'string') {
-          evaluationTags[key] = tag
-        } else if (typeof tag.toString === 'function') {
-          evaluationTags[key] = tag.toString()
-        } else if (tag == null) {
-          evaluationTags[key] = Object.prototype.toString.call(tag)
-        } else {
-          // should be a rare case
-          // every object in JS has a toString, otherwise every primitive has its own toString
-          // null and undefined are handled above
-          telemetry.recordSubmitEvaluation(options, 'invalid_tags')
-          throw new Error('Failed to parse tags. Tags for evaluation metrics must be strings')
+      if (tags) {
+        for (const key in tags) {
+          const tag = tags[key]
+          if (typeof tag === 'string') {
+            evaluationTags[key] = tag
+          } else if (typeof tag.toString === 'function') {
+            evaluationTags[key] = tag.toString()
+          } else if (tag == null) {
+            evaluationTags[key] = Object.prototype.toString.call(tag)
+          } else {
+            // should be a rare case
+            // every object in JS has a toString, otherwise every primitive has its own toString
+            // null and undefined are handled above
+            err = 'invalid_tags'
+            throw new Error('Failed to parse tags. Tags for evaluation metrics must be strings')
+          }
         }
       }
-    }
 
-    const payload = {
-      span_id: spanId,
-      trace_id: traceId,
-      label,
-      metric_type: metricType,
-      ml_app: mlApp,
-      [`${metricType}_value`]: value,
-      timestamp_ms: timestampMs,
-      tags: Object.entries(evaluationTags).map(([key, value]) => `${key}:${value}`)
+      const payload = {
+        span_id: spanId,
+        trace_id: traceId,
+        label,
+        metric_type: metricType,
+        ml_app: mlApp,
+        [`${metricType}_value`]: value,
+        timestamp_ms: timestampMs,
+        tags: Object.entries(evaluationTags).map(([key, value]) => `${key}:${value}`)
+      }
+      evalMetricAppendCh.publish(payload)
     }
-    telemetry.recordSubmitEvaluation(options, '')
-    evalMetricAppendCh.publish(payload)
+    finally {
+      telemetry.recordSubmitEvaluation(options, err)
+    }
   }
 
   flush () {
