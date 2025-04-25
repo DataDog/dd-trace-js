@@ -29,7 +29,6 @@ describe('insecure cookie analyzer', () => {
         res.setHeader('set-cookie', 'key=value')
       }, INSECURE_COOKIE, 1, function (vulnerabilities) {
         expect(vulnerabilities[0].evidence.value).to.be.equals('key')
-        // expect(vulnerabilities[0].hash).to.be.equals(analyzer._createHash('INSECURE_COOKIE:key'))
       })
 
       testThatRequestHasVulnerability((req, res) => {
