@@ -2676,7 +2676,7 @@ Feature: Impacted Test
 
       const runImpactedTest = (
         done,
-        { isImpacting, isEfd = false, isParallel = false },
+        { isImpacting, isEfd = false, isParallel = false, headShaExists = true },
         extraEnvVars = {}
       ) => {
         const testAssertionsPromise = getTestAssertions({ isImpacting, isEfd, isParallel })
@@ -2696,8 +2696,24 @@ Feature: Impacted Test
           }
         )
 
-        childProcess.on('exit', () => {
-          testAssertionsPromise.then(done).catch(done)
+        const isCI = process.env.CI === 'true'
+        let stderr = ''
+        if (isCI) {
+          childProcess.stderr.on('data', (data) => {
+            stderr += data.toString()
+          })
+        }
+
+        childProcess.on('exit', (code) => {
+          // If we are running in CI, Cucumber will exit with code 1 and print the error to stderr
+          // if there is no head sha
+          if (isCI && !headShaExists) {
+            assert.equal(code, 1)
+            assert.include(stderr, 'Could not find .pull_request.head.sha')
+            done()
+          } else {
+            testAssertionsPromise.then(done).catch(done)
+          }
         })
       }
 
@@ -2759,7 +2775,8 @@ Feature: Impacted Test
         eventPath = path.join(cwd, 'event.json')
         fs.writeFileSync(eventPath, JSON.stringify(eventContent, null, 2))
 
-        runImpactedTest(done, { isImpacting: false })
+        const headShaExists = version !== 'latest'
+        runImpactedTest(done, { isImpacting: false, headShaExists })
       })
 
       if (version !== '7.0.0') {
