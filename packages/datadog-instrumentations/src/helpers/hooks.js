@@ -4,7 +4,6 @@ const DISABLED_BY_DEFAULT_INTEGRATIONS = {
   // format of:
   //     plugin name: hook key
   //    'confluentinc-kafka-javascript': '@confluentinc/kafka-javascript'
-  'confluentinc-kafka-javascript': '@confluentinc/kafka-javascript'
 }
 
 module.exports = {
@@ -78,7 +77,6 @@ module.exports = {
     knex: () => require('../knex'),
     koa: () => require('../koa'),
     'koa-router': () => require('../koa'),
-    '@confluentinc/kafka-javascript': () => require('../confluentinc-kafka-javascript'),
     kafkajs: () => require('../kafkajs'),
     langchain: () => require('../langchain'),
     ldapjs: () => require('../ldapjs'),
