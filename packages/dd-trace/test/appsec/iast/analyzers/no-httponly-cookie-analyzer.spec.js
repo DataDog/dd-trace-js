@@ -32,7 +32,6 @@ describe('no HttpOnly cookie analyzer', () => {
         res.setHeader('set-cookie', 'key=value')
       }, NO_HTTPONLY_COOKIE, 1, function (vulnerabilities) {
         expect(vulnerabilities[0].evidence.value).to.be.equals('key')
-        expect(vulnerabilities[0].hash).to.be.equals(analyzer._createHash('NO_HTTPONLY_COOKIE:key'))
       })
 
       testThatRequestHasVulnerability((req, res) => {
@@ -41,11 +40,11 @@ describe('no HttpOnly cookie analyzer', () => {
 
       testThatRequestHasVulnerability((req, res) => {
         res.setHeader('set-cookie', ['key=value', 'key2=value2'])
-      }, NO_HTTPONLY_COOKIE, 2)
+      }, NO_HTTPONLY_COOKIE, 1)
 
       testThatRequestHasVulnerability((req, res) => {
         res.setHeader('set-cookie', ['key=value', 'key2=value2; Secure'])
-      }, NO_HTTPONLY_COOKIE, 2)
+      }, NO_HTTPONLY_COOKIE, 1)
 
       testThatRequestHasVulnerability((req, res) => {
         res.setHeader('set-cookie', ['key=value', 'key2=value2; HttpOnly'])

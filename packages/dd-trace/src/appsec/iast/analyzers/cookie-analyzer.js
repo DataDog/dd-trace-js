@@ -35,14 +35,6 @@ class CookieAnalyzer extends Analyzer {
     return { value: cookieName }
   }
 
-  _createHashSource (type, evidence, location) {
-    if (typeof evidence.value === 'string' && evidence.value.match(this.cookieFilterRegExp)) {
-      return 'FILTERED_' + this._type
-    }
-
-    return `${type}:${evidence.value}`
-  }
-
   _getExcludedPaths () {
     return EXCLUDED_PATHS
   }
