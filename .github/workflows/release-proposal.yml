@@ -34,6 +34,6 @@ jobs:
           echo "{\"token\":\"${{ secrets.GITHUB_TOKEN }}\",\"user\":\"${{ github.actor }}\"}" > ~/.config/changelog-maker/config.json
           git config user.name ${{ github.actor }}
           git config user.email ${{ github.actor }}@users.noreply.github.com
-      - run: node scripts/release/proposal ${{ matrix.release-line }} -f -y
+      - run: node scripts/release/proposal ${{ matrix.release-line }} -y ${{ github.event_name == 'workflow_dispatch' && '-f' || '' }}
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
