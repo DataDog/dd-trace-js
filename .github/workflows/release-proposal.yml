@@ -2,6 +2,8 @@ name: '[Release Proposal]'
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: 0 5 * * *
 
 concurrency:
   group: ${{ github.workflow }}
