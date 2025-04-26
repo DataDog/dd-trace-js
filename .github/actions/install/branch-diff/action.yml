@@ -1,0 +1,15 @@
+name: Install branch-diff
+runs:
+  using: composite
+  steps:
+    - uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # v4.2.2
+      with:
+        path: ~/.npm
+        key: ${{ github.workflow }}-branch-diff-3.1.1
+    - run: npm i -g branch-diff@3.1.1
+    - run: |
+        mkdir -p ~/.config/changelog-maker
+        echo "{\"token\":\"${{ secrets.GITHUB_TOKEN }}\",\"user\":\"${{ github.actor }}\"}" > ~/.config/changelog-maker/config.json
+        git config user.name ${{ github.actor }}
+        git config user.email ${{ github.actor }}@users.noreply.github.com
+      shell: bash
