@@ -95,7 +95,7 @@ function start (title) {
 
 // Show a spinner for the current operation.
 function spin (index) {
-  if (flags.debug) return
+  if (flags.debug || process.env.CI) return
 
   print(`\r${CYAN}${frames[index]}${RESET} ${BOLD}${current}${RESET}`)
 
