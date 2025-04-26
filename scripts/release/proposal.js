@@ -164,10 +164,12 @@ try {
     }
   }
 
-  try {
-    previousPullRequest = JSON.parse(capture(`gh pr view ${newPatch} --json isDraft,url`))
-  } catch (e) {
-    // No existing PR for patch release proposal.
+  if (!previousPullRequest) {
+    try {
+      previousPullRequest = JSON.parse(capture(`gh pr view ${newPatch} --json isDraft,url`))
+    } catch (e) {
+      // No existing PR for patch release proposal.
+    }
   }
 
   if (previousPullRequest) {
