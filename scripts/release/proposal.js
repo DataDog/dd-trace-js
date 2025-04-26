@@ -215,7 +215,7 @@ try {
   pass(pullRequest.url)
 
   if (process.env.CI) {
-    log(`\n\n::notice::${pullRequest.url}`)
+    log(`\n\n::notice::${newVersion}: ${pullRequest.url}`)
   }
 
   run(`git checkout ${currentBranch}`)
