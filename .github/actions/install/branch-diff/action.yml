@@ -7,6 +7,7 @@ runs:
         path: ~/.npm
         key: ${{ github.workflow }}-branch-diff-3.1.1
     - run: npm i -g branch-diff@3.1.1
+      shell: bash
     - run: |
         mkdir -p ~/.config/changelog-maker
         echo "{\"token\":\"${{ secrets.GITHUB_TOKEN }}\",\"user\":\"${{ github.actor }}\"}" > ~/.config/changelog-maker/config.json
