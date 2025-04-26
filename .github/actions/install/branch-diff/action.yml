@@ -1,4 +1,8 @@
 name: Install branch-diff
+inputs:
+  token:
+    description: "The GitHub token to use for diff operations."
+    required: true
 runs:
   using: composite
   steps:
@@ -10,7 +14,7 @@ runs:
       shell: bash
     - run: |
         mkdir -p ~/.config/changelog-maker
-        echo "{\"token\":\"${{ secrets.GITHUB_TOKEN }}\",\"user\":\"${{ github.actor }}\"}" > ~/.config/changelog-maker/config.json
+        echo "{\"token\":\"${{ inputs.token }}\",\"user\":\"${{ github.actor }}\"}" > ~/.config/changelog-maker/config.json
         git config user.name ${{ github.actor }}
         git config user.email ${{ github.actor }}@users.noreply.github.com
       shell: bash

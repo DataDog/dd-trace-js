@@ -33,6 +33,8 @@ jobs:
         with:
           version: ''
       - uses: ./.github/actions/install/branch-diff
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
       - run: node scripts/release/proposal ${{ matrix.release-line }} -y ${{ github.event_name == 'workflow_dispatch' && '-f' || '' }}
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
