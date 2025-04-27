@@ -3,7 +3,7 @@
 require('dd-trace/init')
 const Fastify = require('fastify')
 
-const fastify = Fastify()
+const fastify = Fastify({ logger: { level: 'error' } })
 
 fastify.get('/', function () {
   /* eslint-disable no-unused-vars */
