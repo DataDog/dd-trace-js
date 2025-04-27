@@ -55,20 +55,17 @@ function wrap (target, name, wrapper) {
 
   if (typeof original === 'function') copyProperties(original, wrapped)
 
-  const descriptor = Object.getOwnPropertyDescriptor(target, name)
+  let descriptor = Object.getOwnPropertyDescriptor(target, name)
 
   // No descriptor means original was on the prototype
   if (descriptor === undefined) {
-    Object.defineProperty(target, name, {
+    descriptor = {
       value: wrapped,
       writable: true,
       configurable: true,
       enumerable: false
-    })
-    return target
-  }
-
-  if (descriptor.writable) {
+    }
+  } else if (descriptor.writable) {
     if (descriptor.configurable && descriptor.enumerable) {
       // If the descriptor is configurable and writable, we can just set the value
       // to the wrapped function.
@@ -84,7 +81,7 @@ function wrap (target, name, wrapper) {
     descriptor.value = wrapped
   }
 
-  if (descriptor.configurable === false && descriptor.writable === false) {
+  if (descriptor.configurable === false) { // && descriptor.writable === false) {
     // TODO(BridgeAR): Bail out instead (throw). It is unclear if the newly
     // created object is actually used. If it's not used, the wrapping would
     // have had no effect without noticing. It is also unclear what would happen
