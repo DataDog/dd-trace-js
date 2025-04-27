@@ -72,13 +72,15 @@ function wrap (target, name, wrapper) {
       return target
     }
     descriptor.value = wrapped
-  } else if (descriptor.get || descriptor.set) {
-    // TODO(BridgeAR): What happens in case there is a setter? This seems wrong?
-    // What happens in case the user does indeed set this to a different value?
-    // In that case the getter would potentially return the wrong value?
-    descriptor.get = () => wrapped
   } else {
-    descriptor.value = wrapped
+    if (descriptor.get || descriptor.set) {
+      // TODO(BridgeAR): What happens in case there is a setter? This seems wrong?
+      // What happens in case the user does indeed set this to a different value?
+      // In that case the getter would potentially return the wrong value?
+      descriptor.get = () => wrapped
+    } else {
+      descriptor.value = wrapped
+    }
 
     if (descriptor.configurable === false) {
       // TODO(BridgeAR): Bail out instead (throw). It is unclear if the newly
