@@ -109,8 +109,8 @@ function setup ({ env, testApp, testAppSource } = {}) {
   })
 
   afterEach(async function () {
-    t.proc.kill()
-    await t.agent.stop()
+    t.proc?.kill()
+    await t.agent?.stop()
   })
 
   return t
