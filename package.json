@@ -142,7 +142,7 @@
     "eslint-plugin-promise": "^7.2.1",
     "eslint-plugin-unicorn": "^57.0.0",
     "express": "^4.21.2",
-    "get-port": "^3.2.0",
+    "get-port": "^5.1.1",
     "glob": "^7.1.6",
     "globals": "^15.10.0",
     "graphql": "0.13.2",
