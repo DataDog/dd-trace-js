@@ -182,15 +182,35 @@ describe('shimmer', () => {
       const count = Object.getOwnPropertyDescriptor(obj, 'count')
 
       expect(count).to.have.property('enumerable', false)
+      expect(count).to.have.property('writable', false)
     })
 
-    it('should skip non-configurable string keyed methods', () => {
+    it('should handle writable non-configurable properties well', () => {
+      const obj = {}
+
+      Object.defineProperty(obj, 'count', {
+        value: () => {},
+        writable: true,
+        configurable: false
+      })
+
+      shimmer.wrap(obj, 'count', () => () => {})
+
+      const count = Object.getOwnPropertyDescriptor(obj, 'count')
+
+      expect(count).to.have.property('enumerable', false)
+      expect(count).to.have.property('writable', true)
+      expect(count).to.have.property('configurable', false)
+    })
+
+    it('should skip non-configurable/writable string keyed methods', () => {
       const obj = {
         configurable () {}
       }
       Object.defineProperty(obj, 'count', {
         value: () => {},
-        configurable: false // Explicit, even if it's the default
+        configurable: false, // Explicit, even if it's the default
+        writable: false
       })
 
       const countDescriptorBefore = Object.getOwnPropertyDescriptor(obj, 'count')
@@ -209,7 +229,7 @@ describe('shimmer', () => {
       assert.deepStrictEqual(configurableDescriptorBefore, configurableDescriptorAfter)
     })
 
-    it('should skip non-configurable symbol keyed methods', () => {
+    it('should skip non-configurable/writable symbol keyed methods', () => {
       const configurable = Symbol('configurable')
       const obj = {
         [configurable] () {}
@@ -217,7 +237,8 @@ describe('shimmer', () => {
       const symbol = Symbol('count')
       Object.defineProperty(obj, symbol, {
         value: () => {},
-        configurable: false // Explicit, even if it's the default
+        configurable: false, // Explicit, even if it's the default
+        writable: false
       })
 
       const descriptorBefore = Object.getOwnPropertyDescriptor(obj, symbol)

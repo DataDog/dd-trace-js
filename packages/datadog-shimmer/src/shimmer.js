@@ -44,12 +44,10 @@ function wrapFunction (original, wrapper) {
   return wrapped
 }
 
-function wrap (target, name, wrapper, noAssert) {
-  if (!noAssert) {
-    assertMethod(target, name)
-    if (typeof wrapper !== 'function') {
-      throw new Error(wrapper ? 'Target is not a function' : 'No function provided')
-    }
+function wrap (target, name, wrapper) {
+  assertMethod(target, name)
+  if (typeof wrapper !== 'function') {
+    throw new Error(wrapper ? 'Target is not a function' : 'No function provided')
   }
 
   const original = target[name]
@@ -59,25 +57,43 @@ function wrap (target, name, wrapper, noAssert) {
 
   const descriptor = Object.getOwnPropertyDescriptor(target, name)
 
-  if (descriptor) {
-    if (descriptor.get || descriptor.set) {
-      // TODO(BridgeAR): What happens in case there is a setter? This seems wrong?
-      // What happens in case the user does indeed set this to a different value?
-      // In that case the getter would potentially return the wrong value?
-      descriptor.get = () => wrapped
-    } else {
-      descriptor.value = wrapped
-    }
-
-    // TODO: create a single object for multiple wrapped methods
-    if (descriptor.configurable === false) {
-      return Object.create(target, {
-        [name]: descriptor
-      })
-    }
-  } else { // no descriptor means original was on the prototype
-    target[name] = wrapped
+  // No descriptor means original was on the prototype
+  if (descriptor === undefined) {
+    Object.defineProperty(target, name, {
+      value: wrapped,
+      writable: true,
+      configurable: true,
+      enumerable: false
+    })
     return target
+  }
+
+  if (descriptor.writable) {
+    if (descriptor.configurable && descriptor.enumerable) {
+      // If the descriptor is configurable and writable, we can just set the value
+      // to the wrapped function.
+      target[name] = wrapped
+      return target
+    }
+  } else if (descriptor.get || descriptor.set) {
+    // TODO(BridgeAR): What happens in case there is a setter? This seems wrong?
+    // What happens in case the user does indeed set this to a different value?
+    // In that case the getter would potentially return the wrong value?
+    descriptor.get = () => wrapped
+  } else {
+    descriptor.value = wrapped
+  }
+
+  if (descriptor.configurable === false && descriptor.writable === false) {
+    // TODO(BridgeAR): Bail out instead (throw). It is unclear if the newly
+    // created object is actually used. If it's not used, the wrapping would
+    // have had no effect without noticing. It is also unclear what would happen
+    // in case user code would check for properties to be own properties. That
+    // would fail with this code. A function being replaced with an object is
+    // also not possible.
+    return Object.create(target, {
+      [name]: descriptor
+    })
   }
 
   Object.defineProperty(target, name, descriptor)
