@@ -66,12 +66,12 @@ function wrap (target, name, wrapper) {
       enumerable: false
     }
   } else if (descriptor.writable) {
+    // Fast path for assigned properties.
     if (descriptor.configurable && descriptor.enumerable) {
-      // If the descriptor is configurable and writable, we can just set the value
-      // to the wrapped function.
       target[name] = wrapped
       return target
     }
+    descriptor.value = wrapped
   } else if (descriptor.get || descriptor.set) {
     // TODO(BridgeAR): What happens in case there is a setter? This seems wrong?
     // What happens in case the user does indeed set this to a different value?
@@ -79,18 +79,18 @@ function wrap (target, name, wrapper) {
     descriptor.get = () => wrapped
   } else {
     descriptor.value = wrapped
-  }
 
-  if (descriptor.configurable === false) { // && descriptor.writable === false) {
-    // TODO(BridgeAR): Bail out instead (throw). It is unclear if the newly
-    // created object is actually used. If it's not used, the wrapping would
-    // have had no effect without noticing. It is also unclear what would happen
-    // in case user code would check for properties to be own properties. That
-    // would fail with this code. A function being replaced with an object is
-    // also not possible.
-    return Object.create(target, {
-      [name]: descriptor
-    })
+    if (descriptor.configurable === false) {
+      // TODO(BridgeAR): Bail out instead (throw). It is unclear if the newly
+      // created object is actually used. If it's not used, the wrapping would
+      // have had no effect without noticing. It is also unclear what would happen
+      // in case user code would check for properties to be own properties. That
+      // would fail with this code. A function being replaced with an object is
+      // also not possible.
+      return Object.create(target, {
+        [name]: descriptor
+      })
+    }
   }
 
   Object.defineProperty(target, name, descriptor)
