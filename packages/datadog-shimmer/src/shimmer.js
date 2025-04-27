@@ -24,7 +24,9 @@ function copyProperties (original, wrapped) {
     for (const key of ownKeys) {
       if (skipMethods.has(key)) continue
       const descriptor = Object.getOwnPropertyDescriptor(original, key)
-      if (descriptor.writable || descriptor.configurable || !Object.hasOwn(wrapped, key)) {
+      if (descriptor.writable && descriptor.enumerable && descriptor.configurable) {
+        wrapped[key] = original[key]
+      } else if (descriptor.writable || descriptor.configurable || !Object.hasOwn(wrapped, key)) {
         Object.defineProperty(wrapped, key, descriptor)
       }
     }
