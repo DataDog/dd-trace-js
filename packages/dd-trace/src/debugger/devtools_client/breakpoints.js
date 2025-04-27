@@ -64,13 +64,13 @@ async function addBreakpoint (probe) {
   const release = await lock()
 
   try {
-    log.debug(
-      '[debugger:devtools_client] Adding breakpoint at %s:%d:%d (probe: %s, version: %d)',
-      url, lineNumber, columnNumber, probe.id, probe.version
-    )
-
     const locationKey = generateLocationKey(scriptId, lineNumber, columnNumber)
     const breakpoint = locationToBreakpoint.get(locationKey)
+
+    log.debug(
+      '[debugger:devtools_client] %s breakpoint at %s:%d:%d (probe: %s, version: %d)',
+      breakpoint ? 'Updating' : 'Adding', url, lineNumber, columnNumber, probe.id, probe.version
+    )
 
     if (breakpoint) {
       // A breakpoint already exists at this location, so we need to add the probe to the existing breakpoint
@@ -82,10 +82,15 @@ async function addBreakpoint (probe) {
         lineNumber: lineNumber - 1, // Beware! lineNumber is zero-indexed
         columnNumber
       }
-      const result = await session.post('Debugger.setBreakpoint', {
-        location,
-        condition: probe.condition
-      })
+      let result
+      try {
+        result = await session.post('Debugger.setBreakpoint', {
+          location,
+          condition: probe.condition
+        })
+      } catch (err) {
+        throw new Error(`Error setting breakpoint for probe ${probe.id}`, { cause: err })
+      }
       probeToLocation.set(probe.id, locationKey)
       locationToBreakpoint.set(locationKey, { id: result.breakpointId, location, locationKey })
       breakpointToProbes.set(result.breakpointId, new Map([[probe.id, probe]]))
@@ -120,7 +125,11 @@ async function removeBreakpoint ({ id }) {
       if (breakpointToProbes.size === 0) {
         await stop() // TODO: Will this actually delete the breakpoint?
       } else {
-        await session.post('Debugger.removeBreakpoint', { breakpointId: breakpoint.id })
+        try {
+          await session.post('Debugger.removeBreakpoint', { breakpointId: breakpoint.id })
+        } catch (err) {
+          throw new Error(`Error removing breakpoint for probe ${id}`, { cause: err })
+        }
       }
     } else {
       await updateBreakpoint(breakpoint)
@@ -144,12 +153,21 @@ async function updateBreakpoint (breakpoint, probe) {
   const condition = compileCompoundCondition(Array.from(probesAtLocation.values()))
 
   if (condition || conditionBeforeNewProbe !== condition) {
-    await session.post('Debugger.removeBreakpoint', { breakpointId: breakpoint.id })
+    try {
+      await session.post('Debugger.removeBreakpoint', { breakpointId: breakpoint.id })
+    } catch (err) {
+      throw new Error(`Error removing breakpoint for probe ${probe.id}`, { cause: err })
+    }
     breakpointToProbes.delete(breakpoint.id)
-    const result = await session.post('Debugger.setBreakpoint', {
-      location: breakpoint.location,
-      condition
-    })
+    let result
+    try {
+      result = await session.post('Debugger.setBreakpoint', {
+        location: breakpoint.location,
+        condition
+      })
+    } catch (err) {
+      throw new Error(`Error setting breakpoint for probe ${probe.id}`, { cause: err })
+    }
     breakpoint.id = result.breakpointId
     breakpointToProbes.set(result.breakpointId, probesAtLocation)
   }
