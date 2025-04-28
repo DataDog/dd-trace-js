@@ -35,6 +35,13 @@ const redisConfig = {
   }
 }
 
+const valkeyConfig = {
+  opName: () => 'valkey.command',
+  serviceName: ({ tracerService, pluginConfig, system, connectionName }) => {
+    return getRedisService(pluginConfig, connectionName) || fromSystem(tracerService, system)
+  }
+}
+
 const storage = {
   client: {
     aerospike: {
@@ -57,7 +64,7 @@ const storage = {
         pluginConfig.service || `${tracerService}-elasticsearch`
     },
     ioredis: redisConfig,
-    iovalkey: redisConfig,
+    iovalkey: valkeyConfig,
     mariadb: {
       opName: () => 'mariadb.query',
       serviceName: mysqlServiceName
