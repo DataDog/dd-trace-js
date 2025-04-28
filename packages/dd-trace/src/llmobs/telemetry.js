@@ -126,7 +126,7 @@ function recordLLMObsAnnotate (span, err, value = 1) {
 function recordUserFlush (err, value = 1) {
   const tags = { error: Number(!!err) }
   if (err) tags.error_type = err
-  llmobsMetrics.count('user_flushes', tags).inc(value)
+  llmobsMetrics.count('user_flush', tags).inc(value)
 }
 
 function recordExportSpan (span, err, value = 1) {
