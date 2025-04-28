@@ -15,7 +15,6 @@ describe('Plugin', () => {
 
   describe('koa', () => {
     withVersions('koa', 'koa', (version, _, realVersion) => {
-      console.log('realVersion', realVersion)
       beforeEach(() => {
         tracer = require('../../dd-trace')
         Koa = require(`../../../versions/koa@${version}`).get()
