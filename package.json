@@ -106,6 +106,7 @@
     "lodash.sortby": "^4.7.0",
     "lru-cache": "^7.14.0",
     "module-details-from-path": "^1.0.3",
+    "mutexify": "^1.4.0",
     "opentracing": ">=0.12.1",
     "path-to-regexp": "^0.1.12",
     "pprof-format": "^2.1.0",
