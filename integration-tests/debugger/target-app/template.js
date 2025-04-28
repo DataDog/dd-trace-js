@@ -4,7 +4,7 @@ require('dd-trace/init')
 const { inspect } = require('util')
 const Fastify = require('fastify')
 
-const fastify = Fastify()
+const fastify = Fastify({ logger: { level: 'error' } })
 
 const weakObj = {}
 
