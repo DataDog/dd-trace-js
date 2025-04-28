@@ -1,4 +1,5 @@
 name: Install branch-diff
+description: Install branch-diff
 inputs:
   token:
     description: "The GitHub token to use for diff operations."
