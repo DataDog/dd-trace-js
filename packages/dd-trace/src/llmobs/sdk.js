@@ -342,7 +342,7 @@ class LLMObs extends NoopLLMObs {
         throw new Error('metricType must be one of "categorical" or "score"')
       }
       if (metricType === 'categorical' && typeof value !== 'string') {
-        err ='invalid_metric_value'
+        err = 'invalid_metric_value'
         throw new Error('value must be a string for a categorical metric.')
       }
       if (metricType === 'score' && typeof value !== 'number') {
@@ -385,8 +385,7 @@ class LLMObs extends NoopLLMObs {
         tags: Object.entries(evaluationTags).map(([key, value]) => `${key}:${value}`)
       }
       evalMetricAppendCh.publish(payload)
-    }
-    finally {
+    } finally {
       telemetry.recordSubmitEvaluation(options, err)
     }
   }
