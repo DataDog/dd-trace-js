@@ -52,6 +52,13 @@ try {
 
   const currentBranch = capture('git rev-parse --abbrev-ref HEAD')
 
+  // Restore current branch on success.
+  process.once('exit', code => {
+    if (code !== 0) return
+
+    run(`git checkout ${currentBranch}`)
+  })
+
   // Make sure the release branch is up to date to prepare for new proposal.
   // The main branch is not automatically pulled to avoid inconsistencies between
   // release lines if new commits are added to it during a release.
@@ -72,6 +79,12 @@ try {
 
   const { DD_MAJOR, DD_MINOR, DD_PATCH } = require('../../version')
   const lineDiff = capture(`${diffCmd} --markdown=true v${releaseLine}.x ${main}`)
+
+  if (!lineDiff) {
+    pass('none (already up to date)')
+    process.exit(0)
+  }
+
   const isMinor = lineDiff.includes('SEMVER-MINOR')
   const newPatch = `${releaseLine}.${DD_MINOR}.${DD_PATCH + 1}`
   const newMinor = `${releaseLine}.${DD_MINOR + 1}.0`
@@ -217,8 +230,6 @@ try {
   if (process.env.CI) {
     log(`\n\n::notice::${newVersion}: ${pullRequest.url}`)
   }
-
-  run(`git checkout ${currentBranch}`)
 } catch (e) {
   fail(e)
 }
