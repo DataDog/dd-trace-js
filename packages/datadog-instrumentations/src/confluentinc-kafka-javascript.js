@@ -49,7 +49,7 @@ function instrumentBaseModule (module) {
         const producer = new Original(...arguments)
 
         // Hook the produce method
-        if (producer && typeof producer.produce === 'function') {
+        if (producer && typeof producer?.produce === 'function') {
           shimmer.wrap(producer, 'produce', function wrapProduce (produce) {
             return function wrappedProduce (topic, partition, message, key, timestamp, opaque) {
               if (!channels.producerStart.hasSubscribers) {
@@ -95,7 +95,7 @@ function instrumentBaseModule (module) {
         const groupId = this.groupId || (arguments[0] && arguments[0]['group.id'])
 
         // Wrap the consume method
-        if (consumer && typeof consumer.consume === 'function') {
+        if (consumer && typeof consumer?.consume === 'function') {
           shimmer.wrap(consumer, 'consume', function wrapConsume (consume) {
             return function wrappedConsume (numMessages, callback) {
               if (!channels.consumerStart.hasSubscribers) {
@@ -112,12 +112,12 @@ function instrumentBaseModule (module) {
                   if (messages && messages.length > 0) {
                     messages.forEach(message => {
                       channels.consumerStart.publish({
-                        topic: message.topic,
-                        partition: message.partition,
+                        topic: message?.topic,
+                        partition: message?.partition,
                         message,
                         groupId
                       })
-                      updateLatestOffset(message.topic, message.partition, message.offset, groupId)
+                      updateLatestOffset(message?.topic, message?.partition, message?.offset, groupId)
                     })
                   }
 
@@ -172,18 +172,18 @@ function instrumentBaseModule (module) {
 
 function instrumentKafkaJS (kafkaJS) {
   // Hook the Kafka class if it exists
-  if (typeof kafkaJS.Kafka === 'function') {
+  if (typeof kafkaJS?.Kafka === 'function') {
     shimmer.wrap(kafkaJS, 'Kafka', function wrapKafka (OriginalKafka) {
       return function KafkaWrapper (options) {
         const kafka = new OriginalKafka(options)
-        const kafkaJSOptions = options.kafkaJS || options
+        const kafkaJSOptions = options?.kafkaJS || options
         const brokers = kafkaJSOptions.brokers ? kafkaJSOptions.brokers.join(',') : ''
 
         // Store brokers for later use
         kafka._ddBrokers = brokers
 
         // Wrap the producer method if it exists
-        if (typeof kafka.producer === 'function') {
+        if (typeof kafka?.producer === 'function') {
           shimmer.wrap(kafka, 'producer', function wrapProducerMethod (producerMethod) {
             return function wrappedProducerMethod () {
               const producer = producerMethod.apply(this, arguments)
@@ -200,8 +200,8 @@ function instrumentKafkaJS (kafkaJS) {
                     return asyncResource.runInAsyncScope(() => {
                       try {
                         channels.producerStart.publish({
-                          topic: payload.topic,
-                          messages: payload.messages || [],
+                          topic: payload?.topic,
+                          messages: payload?.messages || [],
                           bootstrapServers: kafka._ddBrokers
                         })
 
@@ -237,11 +237,11 @@ function instrumentKafkaJS (kafkaJS) {
         }
 
         // Wrap the consumer method if it exists
-        if (typeof kafka.consumer === 'function') {
+        if (typeof kafka?.consumer === 'function') {
           shimmer.wrap(kafka, 'consumer', function wrapConsumerMethod (consumerMethod) {
             return function wrappedConsumerMethod (config) {
               const consumer = consumerMethod.apply(this, arguments)
-              const groupId = config && ((config.kafkaJS && config.kafkaJS.groupId) || config.groupId)
+              const groupId = config && ((config?.kafkaJS && config?.kafkaJS?.groupId) || config?.groupId)
 
               // Wrap the run method for handling message consumption
               if (consumer && typeof consumer.run === 'function') {
@@ -251,8 +251,8 @@ function instrumentKafkaJS (kafkaJS) {
                       return run.apply(this, arguments)
                     }
 
-                    const eachMessage = options.eachMessage
-                    const eachBatch = options.eachBatch
+                    const eachMessage = options?.eachMessage
+                    const eachBatch = options?.eachBatch
                     if (eachMessage) {
                       options.eachMessage = wrapKafkaCallback(
                         eachMessage,
@@ -264,10 +264,10 @@ function instrumentKafkaJS (kafkaJS) {
                         },
                         (payload) => {
                           return {
-                            topic: payload.topic,
-                            partition: payload.partition,
-                            offset: payload.message.offset,
-                            message: payload.message,
+                            topic: payload?.topic,
+                            partition: payload?.partition,
+                            offset: payload?.message?.offset,
+                            message: payload?.message,
                             groupId
                           }
                         })
@@ -283,10 +283,10 @@ function instrumentKafkaJS (kafkaJS) {
                         (payload) => {
                           const { batch } = payload
                           return {
-                            topic: batch.topic,
-                            partition: batch.partition,
-                            offset: batch.messages[batch.messages.length - 1].offset,
-                            messages: batch.messages,
+                            topic: batch?.topic,
+                            partition: batch?.partition,
+                            offset: batch?.messages[batch?.messages?.length - 1]?.offset,
+                            messages: batch?.messages,
                             groupId
                           }
                         }
@@ -335,7 +335,7 @@ function wrapKafkaCallback (callback, { startCh, commitCh, finishCh, errorCh }, 
     return asyncResource.runInAsyncScope(() => {
       startCh.publish(commitPayload)
 
-      updateLatestOffset(commitPayload.topic, commitPayload.partition, commitPayload.offset, commitPayload.groupId)
+      updateLatestOffset(commitPayload?.topic, commitPayload?.partition, commitPayload?.offset, commitPayload?.groupId)
 
       try {
         const result = callback.apply(this, arguments)
