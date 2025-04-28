@@ -201,7 +201,7 @@ class LLMObs extends NoopLLMObs {
     return this._tracer.wrap(name, spanOptions, wrapped)
   }
 
-  annotate (span, options, autoinstrumented = false) {
+  annotate (span, options) {
     if (!this.enabled) return
 
     if (!span) {
@@ -269,9 +269,7 @@ class LLMObs extends NoopLLMObs {
       }
       throw e
     } finally {
-      if (autoinstrumented === false) {
-        telemetry.recordLLMObsAnnotate(span, err)
-      }
+      telemetry.recordLLMObsAnnotate(span, err)
     }
   }
 
@@ -303,9 +301,8 @@ class LLMObs extends NoopLLMObs {
     } catch {
       err = 'invalid_span'
       logger.warn('Failed to export span. Span must be a valid Span object.')
-    } finally {
-      telemetry.recordExportSpan(span, err)
     }
+    telemetry.recordExportSpan(span, err)
   }
 
   submitEvaluation (llmobsSpanContext, options = {}) {
@@ -409,7 +406,7 @@ class LLMObs extends NoopLLMObs {
       annotations.outputData = output
     }
 
-    this.annotate(span, annotations, true)
+    this.annotate(span, annotations)
   }
 
   _active () {
