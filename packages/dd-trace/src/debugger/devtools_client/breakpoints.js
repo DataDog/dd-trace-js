@@ -1,7 +1,7 @@
 'use strict'
 
+const lock = require('mutexify/promise')()
 const { getGeneratedPosition } = require('./source-maps')
-const lock = require('./lock')()
 const session = require('./session')
 const { compile: compileCondition, compileSegments, templateRequiresEvaluation } = require('./condition')
 const { MAX_SNAPSHOTS_PER_SECOND_PER_PROBE, MAX_NON_SNAPSHOTS_PER_SECOND_PER_PROBE } = require('./defaults')
