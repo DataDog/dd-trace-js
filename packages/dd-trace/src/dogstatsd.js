@@ -227,7 +227,7 @@ class MetricsAggregationClient {
   histogram (name, value, tags) {
     const node = this._ensureTree(this._histograms, name, tags, null)
 
-    if (!node.value) {
+    if (!node.value && node.touched) {
       node.value = new Histogram()
     }
 
@@ -308,12 +308,16 @@ class MetricsAggregationClient {
     }
 
     for (const [tag, next] of node.nodes) {
-      this._captureNode(next, name, tags.concat(tag), fn)
+      tags.push(tag)
+      this._captureNode(next, name, tags, fn)
+      tags.pop()
     }
   }
 
-  _ensureTree (tree, name, tags, value) {
-    tags = tags ? [].concat(tags) : []
+  _ensureTree (tree, name, tags = [], value) {
+    if (!Array.isArray(tags)) {
+      tags = [tags]
+    }
 
     let node = this._ensureNode(tree, name, value)
 
@@ -331,7 +335,10 @@ class MetricsAggregationClient {
 
     if (!node) {
       node = { nodes: new Map(), touched: false, value }
-      container.set(key, node)
+
+      if (typeof key === 'string') {
+        container.set(key, node)
+      }
     }
 
     return node
