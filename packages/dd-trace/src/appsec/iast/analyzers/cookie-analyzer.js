@@ -12,14 +12,7 @@ class CookieAnalyzer extends Analyzer {
     this.propertyToBeSafe = propertyToBeSafe.toLowerCase()
   }
 
-  onConfigure (config) {
-    try {
-      this.cookieFilterRegExp = new RegExp(config.iast.cookieFilterPattern)
-    } catch {
-      log.error('[ASM] Invalid regex in cookieFilterPattern')
-      this.cookieFilterRegExp = /.{32,}/
-    }
-
+  onConfigure () {
     this.addSub(
       { channelName: 'datadog:iast:set-cookie', moduleName: 'http' },
       (cookieInfo) => this.analyze(cookieInfo)

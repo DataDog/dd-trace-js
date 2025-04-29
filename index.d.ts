@@ -2251,6 +2251,7 @@ declare namespace tracer {
     /**
      * Defines the pattern to ignore cookie names in the vulnerability hash calculation
      * @default ".{32,}"
+     * @deprecated Has no effect
      */
     cookieFilterPattern?: string,
 
