@@ -69,21 +69,11 @@ Changes associated with each individual release are documented on the [GitHub Re
 Please read the [CONTRIBUTING.md](https://github.com/DataDog/dd-trace-js/blob/master/CONTRIBUTING.md) document before contributing to this open source project.
 
 
-## EcmaScript Modules (ESM) Support
+## ECMAScript Modules (ESM) Support
 
-ESM support requires an additional command-line argument. Use the following to enable experimental ESM support with your application:
+ESM support requires an _additional_ command line argument when starting the Node.js process.
+For more information, see the [section on ESM support](https://docs.datadoghq.com/tracing/trace_collection/automatic_instrumentation/dd_libraries/nodejs/#esm-applications-only-import-the-loader) in the Node.js tracer documentation.
 
-Node.js < v20.6
-
-```sh
-node --loader dd-trace/loader-hook.mjs entrypoint.js
-```
-
-Node.js >= v20.6
-
-```sh
-node --import dd-trace/register.js entrypoint.js
-```
 
 ## Serverless / Lambda
 
