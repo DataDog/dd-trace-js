@@ -2,7 +2,6 @@
 
 const Analyzer = require('./vulnerability-analyzer')
 const { getNodeModulesPaths } = require('../path-line')
-const log = require('../../../log')
 
 const EXCLUDED_PATHS = getNodeModulesPaths('express/lib/response.js')
 
