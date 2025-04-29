@@ -48,8 +48,7 @@ describe('Plugin', () => {
         })
 
         before(done => {
-          // TODO: Remove `<3.798.0` limit once our tests support newer versions
-          const requireVersion = version === '3.0.0' ? '3.422.0' : '>=3.422.0 <3.798.0'
+          const requireVersion = version === '3.0.0' ? '3.422.0' : '>=3.422.0'
           AWS = require(`../../../../../../versions/${bedrockRuntimeClientName}@${requireVersion}`).get()
           bedrockRuntimeClient = new AWS.BedrockRuntimeClient(
             { endpoint: 'http://127.0.0.1:4566', region: 'us-east-1', ServiceId: serviceName }
