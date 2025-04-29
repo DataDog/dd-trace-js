@@ -177,7 +177,7 @@ function instrumentKafkaJS (kafkaJS) {
       return function KafkaWrapper (options) {
         const kafka = new OriginalKafka(options)
         const kafkaJSOptions = options?.kafkaJS || options
-        const brokers = kafkaJSOptions.brokers ? kafkaJSOptions.brokers.join(',') : ''
+        const brokers = kafkaJSOptions?.brokers ? kafkaJSOptions.brokers.join(',') : ''
 
         // Store brokers for later use
         kafka._ddBrokers = brokers
@@ -187,6 +187,10 @@ function instrumentKafkaJS (kafkaJS) {
           shimmer.wrap(kafka, 'producer', function wrapProducerMethod (producerMethod) {
             return function wrappedProducerMethod () {
               const producer = producerMethod.apply(this, arguments)
+
+              if (!brokers && arguments?.[0]?.['bootstrap.servers']) {
+                kafka._ddBrokers = arguments[0]['bootstrap.servers']
+              }
 
               // Wrap the send method of the producer
               if (producer && typeof producer.send === 'function') {
@@ -241,7 +245,7 @@ function instrumentKafkaJS (kafkaJS) {
           shimmer.wrap(kafka, 'consumer', function wrapConsumerMethod (consumerMethod) {
             return function wrappedConsumerMethod (config) {
               const consumer = consumerMethod.apply(this, arguments)
-              const groupId = config && ((config?.kafkaJS && config?.kafkaJS?.groupId) || config?.groupId)
+              const groupId = getGroupId(config)
 
               // Wrap the run method for handling message consumption
               if (consumer && typeof consumer.run === 'function') {
@@ -362,6 +366,14 @@ function wrapKafkaCallback (callback, { startCh, commitCh, finishCh, errorCh }, 
       }
     })
   }
+}
+
+function getGroupId (config) {
+  if (!config) return ''
+  if (config.kafkaJS?.groupId) return config.kafkaJS.groupId
+  if (config?.groupId) return config.groupId
+  if (config['group.id']) return config['group.id']
+  return ''
 }
 
 function updateLatestOffset (topic, partition, offset, groupId) {
