@@ -1,7 +1,7 @@
 'use strict'
 
 const { workerData: { rcPort } } = require('node:worker_threads')
-const lock = require('./lock')()
+const lock = require('mutexify/promise')()
 const { addBreakpoint, removeBreakpoint } = require('./breakpoints')
 const { ackReceived, ackInstalled, ackError } = require('./status')
 const log = require('../../log')
