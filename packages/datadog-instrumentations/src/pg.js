@@ -42,19 +42,13 @@ function wrapQuery (query) {
       : { text: arguments[0] }
 
     const textPropObj = pgQuery.cursor ?? pgQuery
-    const textProp = Object.getOwnPropertyDescriptor(textPropObj, 'text')
     const stream = typeof textPropObj.read === 'function'
 
-    // Only alter `text` property if safe to do so.
-    if (!textProp || textProp.configurable) {
-      const originalText = textPropObj.text
-
-      Object.defineProperty(textPropObj, 'text', {
-        get () {
-          return this?.__ddInjectableQuery || originalText
-        }
-      })
-    }
+    shimmer.wrap(textPropObj, 'text', (originalGetter) => {
+      return () => {
+        return this?.__ddInjectableQuery || originalGetter.call(this)
+      }
+    })
 
     return asyncResource.runInAsyncScope(() => {
       const abortController = new AbortController()

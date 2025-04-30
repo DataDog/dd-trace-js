@@ -7,6 +7,8 @@ const skipMethods = new Set([
   'length'
 ])
 
+const nonConfigurableModuleExports = new WeakMap()
+
 function copyProperties (original, wrapped) {
   if (original.constructor !== wrapped.constructor) {
     const proto = Object.getPrototypeOf(original)
@@ -44,18 +46,19 @@ function wrapFunction (original, wrapper) {
   return wrapped
 }
 
-function wrap (target, name, wrapper) {
-  assertMethod(target, name)
+function wrap (target, name, wrapper, replaceGetter) {
   if (typeof wrapper !== 'function') {
     throw new Error(wrapper ? 'Target is not a function' : 'No function provided')
   }
 
-  const original = target[name]
+  let descriptor = Object.getOwnPropertyDescriptor(target, name)
+  const original = descriptor?.get && (!replaceGetter || descriptor.set) ? descriptor.get : target[name]
+
+  assertMethod(target, name, original)
+
   const wrapped = wrapper(original)
 
-  if (typeof original === 'function') copyProperties(original, wrapped)
-
-  let descriptor = Object.getOwnPropertyDescriptor(target, name)
+  copyProperties(original, wrapped)
 
   // No descriptor means original was on the prototype
   if (descriptor === undefined) {
@@ -73,11 +76,18 @@ function wrap (target, name, wrapper) {
     }
     descriptor.value = wrapped
   } else {
-    if (descriptor.get || descriptor.set) {
-      // TODO(BridgeAR): What happens in case there is a setter? This seems wrong?
-      // What happens in case the user does indeed set this to a different value?
-      // In that case the getter would potentially return the wrong value?
-      descriptor.get = () => wrapped
+    if (descriptor.get) {
+      // replaceGetter may only be used when the getter has no side effect.
+      if (replaceGetter) {
+        if (descriptor.set) {
+          throw new Error('Cannot replace getter due to potential side effects with the setter')
+        }
+        descriptor.get = () => wrapped
+      } else {
+        descriptor.get = wrapped
+      }
+    } else if (descriptor.set) {
+      throw new Error('Cannot replace setter due to potential side effects with the getter')
     } else {
       descriptor.value = wrapped
     }
@@ -115,15 +125,15 @@ function toArray (maybeArray) {
   return Array.isArray(maybeArray) ? maybeArray : [maybeArray]
 }
 
-function assertMethod (target, name) {
-  if (typeof target?.[name] !== 'function') {
+function assertMethod (target, name, method) {
+  if (typeof method !== 'function') {
     let message = 'No target object provided'
 
     if (target) {
       if (typeof target !== 'object' && typeof target !== 'function') {
         message = 'Invalid target'
       } else {
-        message = target[name] ? `Original method ${name} is not a function` : `No original method ${name}`
+        message = method ? `Original method ${name} is not a function` : `No original method ${name}`
       }
     }
 
