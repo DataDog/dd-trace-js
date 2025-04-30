@@ -2,24 +2,8 @@ name: '[Release Proposal]'
 
 on:
   workflow_dispatch:
-    inputs:
-      release-line:
-        description: 'Release line'
-        required: true
-        default: all
-        type: choice
-        options:
-          - 'all'
-          - '5'
-      increment:
-        description: 'Version increment'
-        required: true
-        default: auto
-        type: choice
-        options:
-          - 'auto'
-          - 'minor'
-          - 'patch'
+  schedule:
+    - cron: 0 5 * * *
 
 concurrency:
   group: ${{ github.workflow }}
@@ -31,8 +15,6 @@ jobs:
       fail-fast: false
       matrix:
         release-line: ['5']
-        exclude:
-          - release-line: ${{ inputs.release-line != 'all' && inputs.release-line != '5' && '5' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -47,14 +29,12 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
-      - run: git fetch origin master:master || exit 0
       - uses: ./.github/actions/node
-      - run: npm i -g branch-diff
-      - run: |
-          mkdir -p ~/.config/changelog-maker
-          echo "{\"token\":\"${{ secrets.GITHUB_TOKEN }}\",\"user\":\"${{ github.actor }}\"}" > ~/.config/changelog-maker/config.json
-          git config user.name ${{ github.actor }}
-          git config user.email ${{ github.actor }}@users.noreply.github.com
-      - run: node scripts/release/proposal ${{ matrix.release-line }} -y --{{ inputs.increment }}
+        with:
+          version: ''
+      - uses: ./.github/actions/install/branch-diff
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - run: node scripts/release/proposal ${{ matrix.release-line }} -y ${{ github.event_name == 'workflow_dispatch' && '-f' || '' }}
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
