@@ -91,7 +91,7 @@ function wrap (target, name, wrapper, replaceGetter) {
   } else {
     if (descriptor.get) {
       // replaceGetter may only be used when the getter has no side effect.
-      if (replaceGetter) {
+      if (replaceGetter === 'REPLACE_GETTER') {
         if (descriptor.set) {
           throw new Error('Cannot replace getter due to potential side effects with the setter')
         }
