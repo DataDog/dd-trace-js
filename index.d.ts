@@ -717,7 +717,18 @@ declare namespace tracer {
          */
         maxDepth?: number,
       }
-    };
+    }
+
+    /**
+     * Configuration for Code Origin for Spans. Can be a boolean as an alias to `codeOriginForSpans.enabled`.
+     */
+    codeOriginForSpans?: boolean | {
+      /**
+       * Whether to enable Code Origin for Spans.
+       * @default false
+       */
+      enabled?: boolean
+    }
 
     /**
      * Configuration of the IAST. Can be a boolean as an alias to `iast.enabled`.
