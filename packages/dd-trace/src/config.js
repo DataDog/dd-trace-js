@@ -297,8 +297,6 @@ class Config {
       options.appsec = {
         enabled: options.appsec
       }
-    } else if (options.appsec == null) {
-      options.appsec = {}
     }
 
     const DD_INSTRUMENTATION_INSTALL_ID = coalesce(
@@ -1008,27 +1006,27 @@ class Config {
       options.apmTracingEnabled,
       options.experimental?.appsec?.standalone && !options.experimental.appsec.standalone.enabled
     ))
-    this._setBoolean(opts, 'appsec.apiSecurity.enabled', options.appsec.apiSecurity?.enabled)
-    this._setValue(opts, 'appsec.blockedTemplateGraphql', maybeFile(options.appsec.blockedTemplateGraphql))
-    this._setValue(opts, 'appsec.blockedTemplateHtml', maybeFile(options.appsec.blockedTemplateHtml))
-    this._optsUnprocessed['appsec.blockedTemplateHtml'] = options.appsec.blockedTemplateHtml
-    this._setValue(opts, 'appsec.blockedTemplateJson', maybeFile(options.appsec.blockedTemplateJson))
-    this._optsUnprocessed['appsec.blockedTemplateJson'] = options.appsec.blockedTemplateJson
-    this._setBoolean(opts, 'appsec.enabled', options.appsec.enabled)
-    this._setString(opts, 'appsec.eventTracking.mode', options.appsec.eventTracking?.mode)
-    this._setString(opts, 'appsec.obfuscatorKeyRegex', options.appsec.obfuscatorKeyRegex)
-    this._setString(opts, 'appsec.obfuscatorValueRegex', options.appsec.obfuscatorValueRegex)
-    this._setBoolean(opts, 'appsec.rasp.enabled', options.appsec.rasp?.enabled)
-    this._setValue(opts, 'appsec.rateLimit', maybeInt(options.appsec.rateLimit))
-    this._optsUnprocessed['appsec.rateLimit'] = options.appsec.rateLimit
-    this._setString(opts, 'appsec.rules', options.appsec.rules)
-    this._setBoolean(opts, 'appsec.stackTrace.enabled', options.appsec.stackTrace?.enabled)
-    this._setValue(opts, 'appsec.stackTrace.maxDepth', maybeInt(options.appsec.stackTrace?.maxDepth))
-    this._optsUnprocessed['appsec.stackTrace.maxDepth'] = options.appsec.stackTrace?.maxDepth
-    this._setValue(opts, 'appsec.stackTrace.maxStackTraces', maybeInt(options.appsec.stackTrace?.maxStackTraces))
-    this._optsUnprocessed['appsec.stackTrace.maxStackTraces'] = options.appsec.stackTrace?.maxStackTraces
-    this._setValue(opts, 'appsec.wafTimeout', maybeInt(options.appsec.wafTimeout))
-    this._optsUnprocessed['appsec.wafTimeout'] = options.appsec.wafTimeout
+    this._setBoolean(opts, 'appsec.apiSecurity.enabled', options.appsec?.apiSecurity?.enabled)
+    this._setValue(opts, 'appsec.blockedTemplateGraphql', maybeFile(options.appsec?.blockedTemplateGraphql))
+    this._setValue(opts, 'appsec.blockedTemplateHtml', maybeFile(options.appsec?.blockedTemplateHtml))
+    this._optsUnprocessed['appsec.blockedTemplateHtml'] = options.appsec?.blockedTemplateHtml
+    this._setValue(opts, 'appsec.blockedTemplateJson', maybeFile(options.appsec?.blockedTemplateJson))
+    this._optsUnprocessed['appsec.blockedTemplateJson'] = options.appsec?.blockedTemplateJson
+    this._setBoolean(opts, 'appsec.enabled', options.appsec?.enabled)
+    this._setString(opts, 'appsec.eventTracking.mode', options.appsec?.eventTracking?.mode)
+    this._setString(opts, 'appsec.obfuscatorKeyRegex', options.appsec?.obfuscatorKeyRegex)
+    this._setString(opts, 'appsec.obfuscatorValueRegex', options.appsec?.obfuscatorValueRegex)
+    this._setBoolean(opts, 'appsec.rasp.enabled', options.appsec?.rasp?.enabled)
+    this._setValue(opts, 'appsec.rateLimit', maybeInt(options.appsec?.rateLimit))
+    this._optsUnprocessed['appsec.rateLimit'] = options.appsec?.rateLimit
+    this._setString(opts, 'appsec.rules', options.appsec?.rules)
+    this._setBoolean(opts, 'appsec.stackTrace.enabled', options.appsec?.stackTrace?.enabled)
+    this._setValue(opts, 'appsec.stackTrace.maxDepth', maybeInt(options.appsec?.stackTrace?.maxDepth))
+    this._optsUnprocessed['appsec.stackTrace.maxDepth'] = options.appsec?.stackTrace?.maxDepth
+    this._setValue(opts, 'appsec.stackTrace.maxStackTraces', maybeInt(options.appsec?.stackTrace?.maxStackTraces))
+    this._optsUnprocessed['appsec.stackTrace.maxStackTraces'] = options.appsec?.stackTrace?.maxStackTraces
+    this._setValue(opts, 'appsec.wafTimeout', maybeInt(options.appsec?.wafTimeout))
+    this._optsUnprocessed['appsec.wafTimeout'] = options.appsec?.wafTimeout
     this._setBoolean(opts, 'clientIpEnabled', options.clientIpEnabled)
     this._setString(opts, 'clientIpHeader', options.clientIpHeader?.toLowerCase())
     this._setValue(opts, 'baggageMaxBytes', options.baggageMaxBytes)
