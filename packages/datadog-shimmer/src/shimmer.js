@@ -59,13 +59,13 @@ function wrapFunction (original, wrapper) {
   return wrapped
 }
 
-function wrap (target, name, wrapper, replaceGetter) {
+function wrap (target, name, wrapper, options) {
   if (typeof wrapper !== 'function') {
     throw new Error(wrapper ? 'Target is not a function' : 'No function provided')
   }
 
   let descriptor = Object.getOwnPropertyDescriptor(target, name)
-  const original = descriptor?.get && (!replaceGetter || descriptor.set) ? descriptor.get : target[name]
+  const original = descriptor?.get && (!options?.replaceGetter || descriptor.set) ? descriptor.get : target[name]
 
   assertMethod(target, name, original)
 
@@ -91,16 +91,22 @@ function wrap (target, name, wrapper, replaceGetter) {
   } else {
     if (descriptor.get) {
       // replaceGetter may only be used when the getter has no side effect.
-      if (replaceGetter === 'REPLACE_GETTER') {
+      if (options?.replaceGetter) {
         if (descriptor.set) {
-          throw new Error('Cannot replace getter due to potential side effects with the setter')
+          // This case is possible by replacing the setter with a wrapper that
+          // either undos the original get replacement (that should be safe to
+          // do, we just loose the instrumentation afterwards) or that
+          // reinstruments the passed through value after calling get. The
+          // latter might however have side effects due to maybe not replacing
+          // the value that the getter instrumented.
+          throw new Error('Replacing getter with sets is not supported. Implement if required.')
         }
         descriptor.get = () => wrapped
       } else {
         descriptor.get = wrapped
       }
     } else if (descriptor.set) {
-      throw new Error('Cannot replace setter due to potential side effects with the getter')
+      throw new Error('Replacing setters is not supported. Implement if required.')
     } else {
       descriptor.value = wrapped
     }
