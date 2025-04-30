@@ -26,11 +26,41 @@ describe('shimmer', () => {
       assert.strictEqual(called, true)
     })
 
+    it('should replace getter method when using replaceGetter option', () => {
+      let index = 0
+      let called = 0
+      const returned = () => { assert.strictEqual(called, 0) }
+
+      const obj = {
+        get method () {
+          index++
+          return returned
+        }
+      }
+
+      shimmer.wrap(obj, 'method', method => () => {
+        called++
+        return method
+      }, { replaceGetter: true })
+
+      assert.strictEqual(index, 1)
+      assert.strictEqual(called, 0)
+      const fn = obj.method
+      assert.strictEqual(fn.name, returned.name)
+      assert.strictEqual(index, 1)
+      assert.strictEqual(called, 0)
+      fn()
+      assert.strictEqual(index, 1)
+      assert.strictEqual(called, 1)
+    })
+
     it('should not wrap setter only method', () => {
       // eslint-disable-next-line accessor-pairs
       const obj = { set setter (_method_) {} }
 
-      assert.throws(() => shimmer.wrap(obj, 'setter', getter => () => {}))
+      assert.throws(() => shimmer.wrap(obj, 'setter', setter => () => {}), {
+        message: 'Replacing setters is not supported. Implement if required.'
+      })
     })
 
     it('should wrap the method', () => {

@@ -211,13 +211,13 @@ addHook({
   name: 'next',
   versions: ['>=11.1'],
   file: 'dist/server/serve-static.js'
-}, serveStatic => shimmer.wrap(serveStatic, 'serveStatic', wrapServeStatic, true))
+}, serveStatic => shimmer.wrap(serveStatic, 'serveStatic', wrapServeStatic, { replaceGetter: true }))
 
 addHook({
   name: 'next',
   versions: ['>=10.2 <11.1'],
   file: 'dist/next-server/server/serve-static.js'
-}, serveStatic => shimmer.wrap(serveStatic, 'serveStatic', wrapServeStatic, true))
+}, serveStatic => shimmer.wrap(serveStatic, 'serveStatic', wrapServeStatic, { replaceGetter: true }))
 
 addHook({ name: 'next', versions: ['>=11.1'], file: 'dist/server/next-server.js' }, nextServer => {
   const Server = nextServer.default

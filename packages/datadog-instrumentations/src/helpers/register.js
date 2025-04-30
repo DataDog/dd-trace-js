@@ -95,9 +95,7 @@ for (const packageName of names) {
       // TODO(BridgeAR): Instead of using a WeakSet here, why not just use aliases for the hook in register?
       // That way it would also not be duplicated. The actual name being used has to be identified else wise.
       // Maybe it is also not important to know what name was actually used?
-      if (!hook[HOOK_SYMBOL]) {
-        hook[HOOK_SYMBOL] = new WeakSet()
-      }
+      hook[HOOK_SYMBOL] ??= new WeakSet()
       let matchesFile = false
 
       matchesFile = moduleName === fullFilename
@@ -148,10 +146,7 @@ for (const packageName of names) {
             // picked up due to the unification. Check what modules actually use the name.
             // TODO(BridgeAR): Only replace moduleExports if the hook returns a new value.
             // This allows to reduce the instrumentation code (no return needed).
-            const newModuleExports = hook(moduleExports, version, name)
-            if (newModuleExports) {
-              moduleExports = newModuleExports
-            }
+            moduleExports = hook(moduleExports, version, name) ?? moduleExports
             // Set the moduleExports in the hooks WeakSet
             hook[HOOK_SYMBOL].add(moduleExports)
           } catch (e) {

@@ -1,5 +1,8 @@
 'use strict'
 
+/**
+ * @type {Set<string | symbol>}
+ */
 const skipMethods = new Set([
   'caller',
   'arguments',
@@ -9,6 +12,12 @@ const skipMethods = new Set([
 
 const nonConfigurableModuleExports = new WeakMap()
 
+/**
+ * Copies properties from the original function to the wrapped function.
+ *
+ * @param {Function} original - The original function.
+ * @param {Function} wrapped - The wrapped function.
+ */
 function copyProperties (original, wrapped) {
   if (original.constructor !== wrapped.constructor) {
     const proto = Object.getPrototypeOf(original)
@@ -25,7 +34,7 @@ function copyProperties (original, wrapped) {
   if (ownKeys.length !== 2) {
     for (const key of ownKeys) {
       if (skipMethods.has(key)) continue
-      const descriptor = Object.getOwnPropertyDescriptor(original, key)
+      const descriptor = Object.getOwnPropertyDescriptor(original, key) ?? {}
       if (descriptor.writable && descriptor.enumerable && descriptor.configurable) {
         wrapped[key] = original[key]
       } else if (descriptor.writable || descriptor.configurable || !Object.hasOwn(wrapped, key)) {
@@ -35,11 +44,18 @@ function copyProperties (original, wrapped) {
   }
 }
 
+/**
+ * Copies properties from the original object to the wrapped object, skipping a specific key.
+ *
+ * @param {Record<string | symbol, unknown>} original - The original object.
+ * @param {Record<string | symbol, unknown>} wrapped - The wrapped object.
+ * @param {string | symbol} skipKey - The key to skip during copying.
+ */
 function copyObjectProperties (original, wrapped, skipKey) {
   const ownKeys = Reflect.ownKeys(original)
   for (const key of ownKeys) {
     if (key === skipKey) continue
-    const descriptor = Object.getOwnPropertyDescriptor(original, key)
+    const descriptor = Object.getOwnPropertyDescriptor(original, key) ?? {}
     if (descriptor.writable && descriptor.enumerable && descriptor.configurable) {
       wrapped[key] = original[key]
     } else if (descriptor.writable || descriptor.configurable || !Object.hasOwn(wrapped, key)) {
@@ -48,6 +64,13 @@ function copyObjectProperties (original, wrapped, skipKey) {
   }
 }
 
+/**
+ * Wraps a function with a wrapper function.
+ *
+ * @param {Function} original - The original function to wrap.
+ * @param {(original: Function) => Function} wrapper - The wrapper function.
+ * @returns {Function} The wrapped function.
+ */
 function wrapFunction (original, wrapper) {
   const wrapped = wrapper(original)
 
@@ -59,13 +82,47 @@ function wrapFunction (original, wrapper) {
   return wrapped
 }
 
-function wrap (target, name, wrapper, replaceGetter) {
+/**
+ * Wraps a method of an object with a wrapper function.
+ *
+ * @param {Record<string | symbol, unknown> | Function} target - The target
+ * object.
+ * @param {string | symbol} name - The property key of the method to wrap.
+ * @param {(original: Function) => (...args) => any} wrapper - The wrapper function.
+ * @param {{ replaceGetter?: boolean }} [options] - If `replaceGetter` is set to
+ * true, the getter is accessed and the getter is replaced with one that just
+ * returns the earlier retrieved value. Use with care! This may only be done in
+ * case the getter absolutely has no side effect and no setter is defined for the
+ * property.
+ * @returns {Record<string | symbol, unknown> | Function} The target object with
+ * the wrapped method.
+ */
+function wrap (target, name, wrapper, options) {
   if (typeof wrapper !== 'function') {
     throw new Error(wrapper ? 'Target is not a function' : 'No function provided')
   }
 
-  let descriptor = Object.getOwnPropertyDescriptor(target, name)
-  const original = descriptor?.get && (!replaceGetter || descriptor.set) ? descriptor.get : target[name]
+  // No descriptor means original was on the prototype. This is not totally
+  // safe, since we define the property on the target. That could have an impact
+  // in case e.g., the own keys are checks.
+  const descriptor = Object.getOwnPropertyDescriptor(target, name) ?? {
+    value: target[name],
+    writable: true,
+    configurable: true,
+    enumerable: false
+  }
+
+  if (descriptor.set) {
+    // It is possible to support these cases by instrumenting both the getter
+    // and setter (or only the setter, in case that is a use case).
+    // For now, this is not supported due to the complexity and the fact that
+    // this is not a common use case.
+    throw new Error(options?.replaceGetter
+      ? 'Replacing a getter/setter pair is not supported. Implement if required.'
+      : 'Replacing setters is not supported. Implement if required.')
+  }
+
+  const original = descriptor.value ?? options?.replaceGetter ? target[name] : descriptor.get
 
   assertMethod(target, name, original)
 
@@ -73,15 +130,7 @@ function wrap (target, name, wrapper, replaceGetter) {
 
   copyProperties(original, wrapped)
 
-  // No descriptor means original was on the prototype
-  if (descriptor === undefined) {
-    descriptor = {
-      value: wrapped,
-      writable: true,
-      configurable: true,
-      enumerable: false
-    }
-  } else if (descriptor.writable) {
+  if (descriptor.writable) {
     // Fast path for assigned properties.
     if (descriptor.configurable && descriptor.enumerable) {
       target[name] = wrapped
@@ -90,17 +139,12 @@ function wrap (target, name, wrapper, replaceGetter) {
     descriptor.value = wrapped
   } else {
     if (descriptor.get) {
-      // replaceGetter may only be used when the getter has no side effect.
-      if (replaceGetter) {
-        if (descriptor.set) {
-          throw new Error('Cannot replace getter due to potential side effects with the setter')
-        }
+      // `replaceGetter` may only be used when the getter has no side effect.
+      if (options?.replaceGetter) {
         descriptor.get = () => wrapped
       } else {
         descriptor.get = wrapped
       }
-    } else if (descriptor.set) {
-      throw new Error('Cannot replace setter due to potential side effects with the getter')
     } else {
       descriptor.value = wrapped
     }
@@ -152,6 +196,16 @@ function wrap (target, name, wrapper, replaceGetter) {
   return target
 }
 
+/**
+ * Wraps multiple methods and or multiple objects with a wrapper function.
+ * May also receive a single method or object or a single method name.
+ *
+ * @param {Array<Record<string | symbol, unknown> | Function> |
+ *         Record<string | symbol, unknown> |
+ *         Function} targets - The target objects.
+ * @param {Array<string | symbol> | string | symbol} names - The property keys of the methods to wrap.
+ * @param {(original: Function) => (...args) => any} wrapper - The wrapper function.
+ */
 function massWrap (targets, names, wrapper) {
   targets = toArray(targets)
   names = toArray(names)
@@ -163,10 +217,25 @@ function massWrap (targets, names, wrapper) {
   }
 }
 
+/**
+ * Converts a value to an array if it is not already an array.
+ *
+ * @template T
+ * @param {T | T[]} maybeArray - The value to convert.
+ * @returns {T[]} The value as an array.
+ */
 function toArray (maybeArray) {
   return Array.isArray(maybeArray) ? maybeArray : [maybeArray]
 }
 
+/**
+ * Asserts that a method is a function.
+ *
+ * @param {Record<string | symbol, unknown> | Function} target - The target object.
+ * @param {string | symbol} name - The property key of the method.
+ * @param {unknown} method - The method to assert.
+ * @throws {Error} If the method is not a function.
+ */
 function assertMethod (target, name, method) {
   if (typeof method !== 'function') {
     let message = 'No target object provided'
@@ -175,6 +244,7 @@ function assertMethod (target, name, method) {
       if (typeof target !== 'object' && typeof target !== 'function') {
         message = 'Invalid target'
       } else {
+        name = String(name)
         message = method ? `Original method ${name} is not a function` : `No original method ${name}`
       }
     }
@@ -183,6 +253,12 @@ function assertMethod (target, name, method) {
   }
 }
 
+/**
+ * Asserts that a target is not a class constructor.
+ *
+ * @param {Function} target - The target function.
+ * @throws {Error} If the target is a class constructor.
+ */
 function assertNotClass (target) {
   if (Function.prototype.toString.call(target).startsWith('class')) {
     throw new Error('Target is a native class constructor and cannot be wrapped.')
