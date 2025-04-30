@@ -36,7 +36,7 @@ addHook({ name: names }, function (url) {
 
         return context.result
       }
-    }, 'REPLACE_GETTER')
+    })
   })
 
   shimmer.wrap(url, 'URL', (URL) => {
