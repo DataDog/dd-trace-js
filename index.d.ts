@@ -731,6 +731,27 @@ declare namespace tracer {
     }
 
     /**
+     * Configuration for Dynamic Instrumentation. Can be a boolean as an alias to `dynamicInstrumentation.enabled`.
+     */
+    dynamicInstrumentation?: boolean | {
+      /**
+       * Whether to enable Dynamic Instrumentation.
+       * @default false
+       */
+      enabled?: boolean,
+
+      /**
+       * List of identifiers to whos content will be redacted before being collected as part of a Dynamic Instrumentation probe.
+       */
+      redactedIdentifiers?: string[],
+
+      /**
+       * List of identifiers, which are redacted by default, but shouldn't be.
+       */
+      redactionExcludedIdentifiers?: string[],
+    }
+
+    /**
      * Configuration of the IAST. Can be a boolean as an alias to `iast.enabled`.
      */
     iast?: boolean | IastOptions

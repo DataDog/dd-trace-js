@@ -307,6 +307,12 @@ class Config {
       }
     }
 
+    if (typeof options.dynamicInstrumentation === 'boolean') {
+      options.dynamicInstrumentation = {
+        enabled: options.dynamicInstrumentation
+      }
+    }
+
     const DD_INSTRUMENTATION_INSTALL_ID = coalesce(
       process.env.DD_INSTRUMENTATION_INSTALL_ID,
       null
