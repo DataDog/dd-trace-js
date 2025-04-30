@@ -70,7 +70,7 @@ function wrapRenderToHTML (renderToHTML) {
 
 function wrapRenderErrorToHTML (renderErrorToHTML) {
   return function (err, req, res, pathname, query) {
-    return instrument(req, res, err, () => renderErrorToHTML.apply(this, arguments))
+    return instrument(req, res, () => renderErrorToHTML.apply(this, arguments), err)
   }
 }
 
@@ -82,7 +82,7 @@ function wrapRenderToResponse (renderToResponse) {
 
 function wrapRenderErrorToResponse (renderErrorToResponse) {
   return function (ctx, err) {
-    return instrument(ctx.req, ctx.res, err, () => renderErrorToResponse.apply(this, arguments))
+    return instrument(ctx.req, ctx.res, () => renderErrorToResponse.apply(this, arguments), err)
   }
 }
 
@@ -121,12 +121,7 @@ function getRequestMeta (req, key) {
   return typeof key === 'string' ? meta[key] : meta
 }
 
-function instrument (req, res, error, handler) {
-  if (typeof error === 'function') {
-    handler = error
-    error = null
-  }
-
+function instrument (req, res, handler, error) {
   req = req.originalRequest || req
   res = res.originalResponse || res
 
@@ -216,13 +211,13 @@ addHook({
   name: 'next',
   versions: ['>=11.1'],
   file: 'dist/server/serve-static.js'
-}, serveStatic => shimmer.wrap(serveStatic, 'serveStatic', wrapServeStatic))
+}, serveStatic => shimmer.wrap(serveStatic, 'serveStatic', wrapServeStatic, true))
 
 addHook({
   name: 'next',
   versions: ['>=10.2 <11.1'],
   file: 'dist/next-server/server/serve-static.js'
-}, serveStatic => shimmer.wrap(serveStatic, 'serveStatic', wrapServeStatic))
+}, serveStatic => shimmer.wrap(serveStatic, 'serveStatic', wrapServeStatic, true))
 
 addHook({ name: 'next', versions: ['>=11.1'], file: 'dist/server/next-server.js' }, nextServer => {
   const Server = nextServer.default

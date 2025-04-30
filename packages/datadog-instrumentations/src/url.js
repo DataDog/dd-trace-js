@@ -77,6 +77,4 @@ addHook({ name: names }, function (url) {
       }
     })
   }
-
-  return url
 })
