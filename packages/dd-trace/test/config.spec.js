@@ -1699,6 +1699,14 @@ describe('Config', () => {
     expect(config).to.have.nested.property('codeOriginForSpans.enabled', true)
   })
 
+  it('should support dynamicInstrumentation as a boolean', () => {
+    const config = new Config({
+      dynamicInstrumentation: true
+    })
+
+    expect(config).to.have.nested.property('dynamicInstrumentation.enabled', true)
+  })
+
   it('should not set DD_INSTRUMENTATION_TELEMETRY_ENABLED if AWS_LAMBDA_FUNCTION_NAME is present', () => {
     process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-great-lambda-function'
 
