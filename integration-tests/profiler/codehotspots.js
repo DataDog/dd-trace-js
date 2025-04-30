@@ -11,19 +11,13 @@ const busyCycleTime = BigInt(process.env.BUSY_CYCLE_TIME)
 
 function busyLoop () {
   const start = process.hrtime.bigint()
-  let x = 0
   for (;;) {
     const now = process.hrtime.bigint()
     // Busy cycle
     if (now - start > busyCycleTime) {
       break
     }
-    // Do something in addition to invoking hrtime
-    for (let i = 0; i < 1000; i++) {
-      x += Math.sqrt(Math.random() * 2 - 1)
-    }
   }
-  return x
 }
 
 let counter = 0

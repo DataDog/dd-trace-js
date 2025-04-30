@@ -70,14 +70,12 @@ function ensureChannelsActivated () {
 class NativeWallProfiler {
   constructor (options = {}) {
     this.type = 'wall'
-    this._asyncIdEnabled = !!options.asyncIdEnabled
-    this._codeHotspotsEnabled = !!options.codeHotspotsEnabled
-    this._cpuProfilingEnabled = !!options.cpuProfilingEnabled
-    this._endpointCollectionEnabled = !!options.endpointCollectionEnabled
-    this._flushIntervalMillis = options.flushInterval || 60 * 1e3 // 60 seconds
     this._samplingIntervalMicros = options.samplingInterval || 1e6 / 99 // 99hz
+    this._flushIntervalMillis = options.flushInterval || 60 * 1e3 // 60 seconds
+    this._codeHotspotsEnabled = !!options.codeHotspotsEnabled
+    this._endpointCollectionEnabled = !!options.endpointCollectionEnabled
     this._timelineEnabled = !!options.timelineEnabled
-    this._v8ProfilerBugWorkaroundEnabled = !!options.v8ProfilerBugWorkaroundEnabled
+    this._cpuProfilingEnabled = !!options.cpuProfilingEnabled
     // We need to capture span data into the sample context for either code hotspots
     // or endpoint collection.
     this._captureSpanData = this._codeHotspotsEnabled || this._endpointCollectionEnabled
@@ -86,6 +84,7 @@ class NativeWallProfiler {
     // timestamps require the sample contexts feature in the pprof wall profiler), or
     // cpu profiling is enabled.
     this._withContexts = this._captureSpanData || this._timelineEnabled || this._cpuProfilingEnabled
+    this._v8ProfilerBugWorkaroundEnabled = !!options.v8ProfilerBugWorkaroundEnabled
     this._mapper = undefined
     this._pprof = undefined
 
@@ -126,14 +125,13 @@ class NativeWallProfiler {
     }
 
     this._pprof.time.start({
-      collectAsyncId: this._asyncIdEnabled,
-      collectCpuTime: this._cpuProfilingEnabled,
-      durationMillis: this._flushIntervalMillis,
       intervalMicros: this._samplingIntervalMicros,
-      lineNumbers: false,
+      durationMillis: this._flushIntervalMillis,
       sourceMapper: this._mapper,
       withContexts: this._withContexts,
-      workaroundV8Bug: this._v8ProfilerBugWorkaroundEnabled
+      lineNumbers: false,
+      workaroundV8Bug: this._v8ProfilerBugWorkaroundEnabled,
+      collectCpuTime: this._cpuProfilingEnabled
     })
 
     if (this._withContexts) {
