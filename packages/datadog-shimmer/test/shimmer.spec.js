@@ -6,6 +6,33 @@ const shimmer = require('../src/shimmer')
 
 describe('shimmer', () => {
   describe('with a method', () => {
+    it('should wrap getter method', () => {
+      let index = 0
+      let called = false
+      const obj = { get increment () { return () => index++ } }
+
+      shimmer.wrap(obj, 'increment', getter => () => {
+        called = true
+        return getter()
+      })
+
+      assert.strictEqual(index, 0)
+      assert.strictEqual(called, false)
+      const method = obj.increment
+      assert.strictEqual(index, 0)
+      assert.strictEqual(called, true)
+      method()
+      assert.strictEqual(index, 1)
+      assert.strictEqual(called, true)
+    })
+
+    it('should not wrap setter only method', () => {
+      // eslint-disable-next-line accessor-pairs
+      const obj = { set setter (_method_) {} }
+
+      assert.throws(() => shimmer.wrap(obj, 'setter', getter => () => {}))
+    })
+
     it('should wrap the method', () => {
       const count = inc => inc
       const obj = { count }

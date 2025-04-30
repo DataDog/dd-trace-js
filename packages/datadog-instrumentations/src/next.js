@@ -282,8 +282,7 @@ addHook({
   versions: ['>=13'],
   file: 'dist/server/web/spec-extension/request.js'
 }, request => {
-  const nextUrlDescriptor = Object.getOwnPropertyDescriptor(request.NextRequest.prototype, 'nextUrl')
-  shimmer.wrap(nextUrlDescriptor, 'get', function (originalGet) {
+  shimmer.wrap(request.NextRequest.prototype, 'nextUrl', function (originalGet) {
     return function wrappedGet () {
       const nextUrl = originalGet.apply(this, arguments)
       if (queryParsedChannel.hasSubscribers) {
@@ -299,8 +298,6 @@ addHook({
       return nextUrl
     }
   })
-
-  Object.defineProperty(request.NextRequest.prototype, 'nextUrl', nextUrlDescriptor)
 
   shimmer.massWrap(request.NextRequest.prototype, ['text', 'json'], function (originalMethod) {
     return async function wrappedJson () {
