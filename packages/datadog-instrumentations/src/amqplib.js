@@ -19,9 +19,12 @@ let methods = {}
 
 addHook({ name: 'amqplib', file: 'lib/defs.js', versions: [MIN_VERSION] }, defs => {
   methods = Object.keys(defs)
-    .filter(key => Number.isInteger(defs[key]))
-    .filter(key => isCamelCase(key))
-    .reduce((acc, key) => Object.assign(acc, { [defs[key]]: kebabCase(key).replace('-', '.') }), {})
+    .reduce((acc, key) => {
+      if (Number.isInteger(defs[key]) && isCamelCase(key)) {
+        Object.assign(acc, { [defs[key]]: kebabCase(key).replace('-', '.') })
+      }
+      return acc
+    }, {})
   return defs
 })
 
