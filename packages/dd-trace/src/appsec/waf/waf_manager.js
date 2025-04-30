@@ -7,10 +7,6 @@ const WAFContextWrapper = require('./waf_context_wrapper')
 const contexts = new WeakMap()
 
 const DEFAULT_WAF_CONFIG_PATH = 'datadog/00/ASM_DD/default/config'
-const DIAGNOSTICS_KEYS_TO_KEEP_APPLY_ERROR = [
-  "error", "errors",
-  "exclusions", "rules", "processors", "rules_override", "rules_data", "custom_rules", "actions", "scanners"
-]
 
 class WAFManager {
   constructor (rules, config) {
@@ -21,10 +17,6 @@ class WAFManager {
     this.defaultRules = rules
 
     Reporter.reportWafInit(this.ddwafVersion, this.rulesVersion, this.ddwaf.diagnostics.rules, true)
-  }
-
-  static computeUpdateWafError (diagnostics) {
-    return JSON.stringify(diagnostics, DIAGNOSTICS_KEYS_TO_KEEP_APPLY_ERROR)
   }
 
   _loadDDWAF (rules) {
@@ -69,10 +61,10 @@ class WAFManager {
       }
 
       const success = this.ddwaf.createOrUpdateConfig(rules, path)
-      const updateDiagnostics = this.ddwaf.diagnostics
+      const diagnostics = this.ddwaf.diagnostics
 
-      if (updateDiagnostics.ruleset_version) {
-        this.rulesVersion = this.ddwaf.diagnostics.ruleset_version
+      if (diagnostics.ruleset_version) {
+        this.rulesVersion = diagnostics.ruleset_version
       }
 
       Reporter.reportWafUpdate(this.ddwafVersion, this.rulesVersion, success)
@@ -81,7 +73,7 @@ class WAFManager {
         this.ddwaf.createOrUpdateConfig(this.defaultRules, DEFAULT_WAF_CONFIG_PATH)
       }
 
-      return { success, error: !success ? WAFManager.computeUpdateWafError(updateDiagnostics) : undefined }
+      return { success, diagnostics }
     } catch (error) {
       Reporter.reportWafUpdate(this.ddwafVersion, 'unknown', false)
 

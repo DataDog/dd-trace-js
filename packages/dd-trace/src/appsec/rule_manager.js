@@ -3,8 +3,14 @@
 const fs = require('fs')
 const waf = require('./waf')
 const { ACKNOWLEDGED, ERROR } = require('../remote_config/apply_states')
+const Reporter = require('./reporter')
 
 const blocking = require('./blocking')
+
+const DIAGNOSTICS_KEYS_TO_KEEP_APPLY_ERROR = [
+  "error", "errors",
+  "exclusions", "rules", "processors", "rules_override", "rules_data", "custom_rules", "actions", "scanners"
+]
 
 let appliedActions = new Map()
 
@@ -38,7 +44,12 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
     try {
       const updateResult = waf.wafManager.update(item.product, item.file, item.path)
       item.apply_state = updateResult.success ? ACKNOWLEDGED : ERROR
-      item.apply_error = updateResult.error
+
+      if (updateResult.success) {
+        Reporter.reportSuccessfulWafUpdate(item.product, item.id, updateResult.diagnostics)
+      } else {
+        item.apply_error = JSON.stringify(updateResult.diagnostics, DIAGNOSTICS_KEYS_TO_KEEP_APPLY_ERROR)
+      }
 
       // check asm actions
       if (updateResult.success && item.product === 'ASM') {
