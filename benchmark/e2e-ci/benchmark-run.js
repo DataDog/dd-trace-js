@@ -20,7 +20,7 @@ function getBranchUnderTest () {
 const getCommonHeaders = () => {
   return {
     'Content-Type': 'application/json',
-    authorization: `Bearer ${process.env.ROBOT_CI_GITHUB_PERSONAL_ACCESS_TOKEN}`,
+    authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
     Accept: 'application/vnd.github.v3+json',
     'user-agent': 'dd-trace benchmark tests'
   }
