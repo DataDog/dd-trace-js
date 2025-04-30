@@ -181,8 +181,7 @@ function validateNamingVersion (versionString) {
  * If a blank path is provided a null is returned to signal that the feature is disabled.
  * An empty array means the feature is enabled but that no rules need to be applied.
  *
- * @param {string} input
- * @returns {[string]|null}
+ * @param {string | string[]} input
  */
 function splitJSONPathRules (input) {
   if (!input) return null
@@ -289,8 +288,7 @@ class Config {
     }
     const PROPAGATION_STYLE_INJECT = propagationStyle(
       'inject',
-      options.tracePropagationStyle,
-      this._getDefaultPropagationStyle(options)
+      options.tracePropagationStyle
     )
 
     validateOtelPropagators(PROPAGATION_STYLE_INJECT)
