@@ -35,6 +35,19 @@ function copyProperties (original, wrapped) {
   }
 }
 
+function copyObjectProperties (original, wrapped, skipKey) {
+  const ownKeys = Reflect.ownKeys(original)
+  for (const key of ownKeys) {
+    if (key === skipKey) continue
+    const descriptor = Object.getOwnPropertyDescriptor(original, key)
+    if (descriptor.writable && descriptor.enumerable && descriptor.configurable) {
+      wrapped[key] = original[key]
+    } else if (descriptor.writable || descriptor.configurable || !Object.hasOwn(wrapped, key)) {
+      Object.defineProperty(wrapped, key, descriptor)
+    }
+  }
+}
+
 function wrapFunction (original, wrapper) {
   const wrapped = wrapper(original)
 
@@ -93,15 +106,44 @@ function wrap (target, name, wrapper, replaceGetter) {
     }
 
     if (descriptor.configurable === false) {
-      // TODO(BridgeAR): Bail out instead (throw). It is unclear if the newly
-      // created object is actually used. If it's not used, the wrapping would
-      // have had no effect without noticing. It is also unclear what would happen
-      // in case user code would check for properties to be own properties. That
-      // would fail with this code. A function being replaced with an object is
-      // also not possible.
-      return Object.create(target, {
-        [name]: descriptor
-      })
+      // TODO(BridgeAR): This currently only works on the most outer part. The
+      // moduleExports object.
+      //
+      // It would be possible to also implement it for non moduleExports objects
+      // by passing through the moduleExports object and the property names that
+      // are accessed. That way it would be possible to redefine the complete
+      // property chain. Example:
+      //
+      // shimmer.wrap(hapi.Server.prototype, 'start', wrapStart)
+      // shimmer.wrap(hapi.Server.prototype, 'ext', wrapExt)
+      //
+      // shimmer.wrap(hapi, 'Server', 'prototype', 'start', wrapStart)
+      // shimmer.wrap(hapi, 'Server', 'prototype', 'ext', wrapExt)
+      //
+      // That would however still not resolve the issue about the user replacing
+      // the return value so that the hook picks up the new hapi moduleExports
+      // object. To safely fix that, we would have to couple the register helper
+      // with this code. That way it would be possible to directly pass through
+      // the entries.
+
+      // In case more than a single property is not configurable and writable,
+      // Just reuse the already created object.
+      let moduleExports = nonConfigurableModuleExports.get(target)
+      if (!moduleExports) {
+        if (typeof target === 'function') {
+          const original = target
+          moduleExports = function (...args) { return original.apply(original, args) }
+          // This is a rare case. Accept the slight performance hit.
+          skipMethods.add(name)
+          copyProperties(target, moduleExports)
+          skipMethods.delete(name)
+        } else {
+          moduleExports = Object.create(target)
+          copyObjectProperties(target, moduleExports, name)
+        }
+        nonConfigurableModuleExports.set(target, moduleExports)
+      }
+      target = moduleExports
     }
   }
 

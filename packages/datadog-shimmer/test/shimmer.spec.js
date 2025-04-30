@@ -45,13 +45,36 @@ describe('shimmer', () => {
     it('should wrap the method on a frozen object', () => {
       const count = inc => inc
 
-      let obj = { count }
+      let obj = { count, foo: 42 }
 
       Object.freeze(obj)
 
       obj = shimmer.wrap(obj, 'count', count => inc => count(inc) + 1)
 
       expect(obj.count(1)).to.equal(2)
+      expect(obj.foo).to.equal(42)
+      expect(Object.hasOwn(obj, 'foo')).to.equal(true)
+    })
+
+    it('should wrap the method on a frozen object', () => {
+      const count = inc => inc
+
+      function abc () { return this.answer }
+
+      let method = abc
+      method.count = count
+      method.foo = 'bar'
+      method.answer = 42
+
+      Object.freeze(method)
+
+      method = shimmer.wrap(method, 'count', count => inc => count(inc) + 1)
+
+      expect(method.count(1)).to.equal(2)
+      expect(method.foo).to.equal('bar')
+      expect(method.name).to.equal('abc')
+      expect(method).to.not.equal(abc)
+      expect(method()).to.equal(42)
     })
 
     it('should mass wrap targets', () => {
