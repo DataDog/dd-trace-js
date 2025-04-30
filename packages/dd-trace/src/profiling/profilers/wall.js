@@ -70,9 +70,7 @@ function ensureChannelsActivated () {
 class NativeWallProfiler {
   constructor (options = {}) {
     this.type = 'wall'
-    // Currently there's a crash sometimes on worker threads trying to collect async IDs so for the
-    // time being we'll constrain it to only the main thread.
-    this._asyncIdEnabled = !!options.asyncIdEnabled && require('worker_threads').isMainThread
+    this._asyncIdEnabled = !!options.asyncIdEnabled
     this._codeHotspotsEnabled = !!options.codeHotspotsEnabled
     this._cpuProfilingEnabled = !!options.cpuProfilingEnabled
     this._endpointCollectionEnabled = !!options.endpointCollectionEnabled
