@@ -372,8 +372,8 @@ describe('Plugin', function () {
         })
 
         describe('for static files', () => {
-          it('should do automatic instrumentation for assets', done => {
-            agent
+          it('should do automatic instrumentation for assets', () => {
+            const promise = agent
               .use(traces => {
                 const spans = traces[0]
 
@@ -386,19 +386,15 @@ describe('Plugin', function () {
                 expect(spans[1].meta).to.have.property('http.status_code', '200')
                 expect(spans[1].meta).to.have.property('component', 'next')
               })
-              .then(done)
-              .catch(done)
 
-            axios
-              .get(`http://127.0.0.1:${port}/test.txt`)
-              .catch(done)
+            return Promise.all([axios.get(`http://127.0.0.1:${port}/test.txt`), promise])
           })
 
-          it('should do automatic instrumentation for static chunks', done => {
-            // get first static chunk file programatically
+          it('should do automatic instrumentation for static chunks', () => {
+            // Get first static chunk file programmatically
             const file = readdirSync(path.join(__dirname, '.next/static/chunks'))[0]
 
-            agent
+            const promise = agent
               .use(traces => {
                 const spans = traces[0]
 
@@ -408,28 +404,20 @@ describe('Plugin', function () {
                 expect(spans[1].meta).to.have.property('http.status_code', '200')
                 expect(spans[1].meta).to.have.property('component', 'next')
               })
-              .then(done)
-              .catch(done)
 
-            axios
-              .get(`http://127.0.0.1:${port}/_next/static/chunks/${file}`)
-              .catch(done)
+            return Promise.all([axios.get(`http://127.0.0.1:${port}/_next/static/chunks/${file}`), promise])
           })
 
-          it('should pass resource path to parent span', done => {
-            agent
+          it('should pass resource path to parent span', () => {
+            const promise = agent
               .use(traces => {
                 const spans = traces[0]
 
                 expect(spans[0]).to.have.property('name', 'web.request')
                 expect(spans[0]).to.have.property('resource', 'GET /public/*')
               })
-              .then(done)
-              .catch(done)
 
-            axios
-              .get(`http://127.0.0.1:${port}/test.txt`)
-              .catch(done)
+            return Promise.all([axios.get(`http://127.0.0.1:${port}/test.txt`), promise])
           })
         })
 
@@ -556,8 +544,8 @@ describe('Plugin', function () {
           ]
 
           standaloneTests.forEach(([test, resource, expectedResource]) => {
-            it(`should do automatic instrumentation for ${test}`, done => {
-              agent
+            it(`should do automatic instrumentation for ${test}`, () => {
+              const promise = agent
                 .use(traces => {
                   const spans = traces[0]
 
@@ -570,12 +558,8 @@ describe('Plugin', function () {
                   expect(spans[1].meta).to.have.property('http.status_code', '200')
                   expect(spans[1].meta).to.have.property('component', 'next')
                 })
-                .then(done)
-                .catch(done)
 
-              axios
-                .get(`http://127.0.0.1:${port}${resource}`)
-                .catch(done)
+              return Promise.all([axios.get(`http://127.0.0.1:${port}${resource}`), promise])
             }).timeout(5000)
             // increase timeout for longer test in CI
             // locally, do not see any slowdowns
