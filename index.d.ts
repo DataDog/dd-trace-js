@@ -725,7 +725,7 @@ declare namespace tracer {
     codeOriginForSpans?: {
       /**
        * Whether to enable Code Origin for Spans.
-       * @default false
+       * @default true
        */
       enabled?: boolean
     }

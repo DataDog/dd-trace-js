@@ -481,7 +481,7 @@ class Config {
     this._setValue(defaults, 'clientIpEnabled', false)
     this._setValue(defaults, 'clientIpHeader', null)
     this._setValue(defaults, 'crashtracking.enabled', true)
-    this._setValue(defaults, 'codeOriginForSpans.enabled', false)
+    this._setValue(defaults, 'codeOriginForSpans.enabled', true)
     this._setValue(defaults, 'dbmPropagationMode', 'disabled')
     this._setValue(defaults, 'dogstatsd.hostname', '127.0.0.1')
     this._setValue(defaults, 'dogstatsd.port', '8125')
