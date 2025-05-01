@@ -10,28 +10,25 @@
 const { supportedConfigurations, aliases } = require('./supported-configurations')
 
 const configs = {}
-for (let name of Object.keys(process.env)) {
-  // if (aliases[name]) {
-  //   const identical = process.env[name] === process.env[aliases[name]]
-  //   if (identical) {
-  //     console.log(`Skipping ${name} because it is identical to its alias ${aliases[name]}`)
-  //   } else {
-  //     throw new Error(
-  //       `Warning: ${name}: ${process.env[name]} is not identical to its alias ${aliases[name]}: ${process.env[aliases[name]]}`
-  //     )
-  //   }
-  // }
-  name = aliases[name] ?? name
+// Round 1: assign all valid configs
+for (const name of Object.keys(process.env)) {
   if (!name.startsWith('DD_') || supportedConfigurations[name]) {
     configs[name] = process.env[name]
   }
 }
 
+// // Round 2: Delete any values that are aliases
+// for (const name of Object.keys(aliases)) {
+//   if (aliases[name] in configs) {
+//     delete configs[name]
+//   }
+// }
+
 module.exports = {
   getConfigurations () {
     return configs
   },
-  getConfiguration (name) {
+  getConfiguration (name) { //what happens if name is not in config? Is that possible?
     return configs[name]
   }
 }

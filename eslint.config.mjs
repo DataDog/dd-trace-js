@@ -9,6 +9,8 @@ import eslintPluginN from 'eslint-plugin-n'
 import eslintPluginUnicorn from 'eslint-plugin-unicorn'
 import globals from 'globals'
 
+import eslintProcessEnv from './eslint-rules/eslint-process-env.mjs'
+
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const compat = new FlatCompat({ baseDirectory: __dirname })
@@ -94,7 +96,15 @@ export default [
   {
     name: 'dd-trace/src/all',
     files: SRC_FILES,
+    plugins: {
+      'eslint-rules': {
+        rules: {
+          'eslint-process-env': eslintProcessEnv
+        }
+      }
+    },
     rules: {
+      'eslint-rules/eslint-process-env': 'error',
       'n/no-restricted-require': ['error', [
         {
           name: 'diagnostics_channel',
