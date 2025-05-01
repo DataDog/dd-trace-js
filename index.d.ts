@@ -720,9 +720,9 @@ declare namespace tracer {
     }
 
     /**
-     * Configuration for Code Origin for Spans. Can be a boolean as an alias to `codeOriginForSpans.enabled`.
+     * Configuration for Code Origin for Spans.
      */
-    codeOriginForSpans?: boolean | {
+    codeOriginForSpans?: {
       /**
        * Whether to enable Code Origin for Spans.
        * @default false

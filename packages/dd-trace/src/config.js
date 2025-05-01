@@ -299,12 +299,6 @@ class Config {
       }
     }
 
-    if (typeof options.codeOriginForSpans === 'boolean') {
-      options.codeOriginForSpans = {
-        enabled: options.codeOriginForSpans
-      }
-    }
-
     const DD_INSTRUMENTATION_INSTALL_ID = coalesce(
       process.env.DD_INSTRUMENTATION_INSTALL_ID,
       null
