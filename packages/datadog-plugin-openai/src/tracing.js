@@ -13,6 +13,8 @@ const makeUtilities = require('../../dd-trace/src/plugins/util/llm')
 
 let normalize
 
+const { DD_MAJOR } = require('../../../version')
+
 function safeRequire (path) {
   try {
     return require(path)
@@ -59,17 +61,19 @@ class OpenAiTracingPlugin extends TracingPlugin {
   bindStart (ctx) {
     const { methodName, args, basePath, apiKey } = ctx
     const payload = normalizeRequestPayload(methodName, args)
-    const resource = normalizeMethodName(methodName)
+    const normalizedMethodName = normalizeMethodName(methodName)
 
     const store = storage('legacy').getStore() || {}
 
-    // we need to hold onto the original function name for lookupOperationEndpoint later
-    // we need to be able to differentiate for fine-tune endpoints
+    // hold onto these to make response extraction matching efficient
+    // the original method name corresponds to the SDK method name (e.g. createChatCompletion, chat.completions.create)
+    // the normalized method name corresponds to the resource name (e.g. createChatCompletion, createCompletion)
     store.originalMethodName = methodName
+    store.normalizedMethodName = normalizedMethodName
 
     const span = this.startSpan('openai.request', {
       service: this.config.service,
-      resource,
+      resource: DD_MAJOR >= 6 ? normalizedMethodName : methodName,
       type: 'openai',
       kind: 'client',
       meta: {
@@ -135,7 +139,7 @@ class OpenAiTracingPlugin extends TracingPlugin {
       tags['openai.request.stream'] = payload.stream
     }
 
-    switch (resource) {
+    switch (normalizedMethodName) {
       case 'createFineTune':
         createFineTuneRequestExtraction(tags, payload)
         break
@@ -203,9 +207,11 @@ class OpenAiTracingPlugin extends TracingPlugin {
     if (!error && headers?.constructor.name === 'Headers') {
       headers = Object.fromEntries(headers)
     }
-    const methodName = span._spanContext._tags['resource.name']
 
-    body = coerceResponseBody(body, methodName)
+    const resource = span._spanContext._tags['resource.name']
+    const normalizedMethodName = store.normalizedMethodName
+
+    body = coerceResponseBody(body, normalizedMethodName)
 
     const openaiStore = store.openai
 
@@ -216,7 +222,7 @@ class OpenAiTracingPlugin extends TracingPlugin {
     }
 
     const originalMethodName = store.originalMethodName
-    const endpoint = lookupOperationEndpoint(methodName, originalMethodName, path)
+    const endpoint = lookupOperationEndpoint(normalizedMethodName, originalMethodName, path)
 
     const tags = error
       ? {}
@@ -237,11 +243,11 @@ class OpenAiTracingPlugin extends TracingPlugin {
           'openai.response.created_at': body.created_at
         }
 
-    responseDataExtractionByMethod(methodName, tags, body, openaiStore)
+    responseDataExtractionByMethod(normalizedMethodName, tags, body, openaiStore)
     span.addTags(tags)
 
     span.finish()
-    this.sendLog(methodName, span, tags, openaiStore, error)
+    this.sendLog(resource, span, tags, openaiStore, error)
     this.sendMetrics(headers, body, endpoint, span._duration, error, tags)
   }
 
