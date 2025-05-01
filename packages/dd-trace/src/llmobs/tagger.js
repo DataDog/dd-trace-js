@@ -135,7 +135,7 @@ class LLMObsTagger {
       if (typeof value === 'number') {
         filterdMetrics[processedKey] = value
       } else {
-        this._handleFailure(`Value for metric '${key}' must be a number, instead got ${value}`, 'invalid_metrics')
+        this._handleFailure(`Value for metric '${key}' must be a number, instead got ${value}`)
       }
     }
 
@@ -169,7 +169,7 @@ class LLMObsTagger {
           this._setTag(span, key, JSON.stringify(data))
         } catch {
           const type = key === INPUT_VALUE ? 'input' : 'output'
-          this._handleFailure(`Failed to parse ${type} value, must be JSON serializable.`, 'invalid_io_text')
+          this._handleFailure(`Failed to parse ${type} value, must be JSON serializable.`)
         }
       }
     }
@@ -187,7 +187,7 @@ class LLMObsTagger {
         }
 
         if (document == null || typeof document !== 'object') {
-          this._handleFailure('Documents must be a string, object, or list of objects.', 'invalid_embedding_io')
+          this._handleFailure('Documents must be a string, object, or list of objects.')
           return undefined
         }
 
@@ -195,7 +195,7 @@ class LLMObsTagger {
         let validDocument = true
 
         if (typeof text !== 'string') {
-          this._handleFailure('Document text must be a string.', 'invalid_embedding_io')
+          this._handleFailure('Document text must be a string.')
           validDocument = false
         }
 
@@ -226,7 +226,7 @@ class LLMObsTagger {
         }
 
         if (message == null || typeof message !== 'object') {
-          this._handleFailure('Messages must be a string, object, or list of objects', 'invalid_io_messages')
+          this._handleFailure('Messages must be a string, object, or list of objects')
           return undefined
         }
 
@@ -237,7 +237,7 @@ class LLMObsTagger {
         const messageObj = { content }
 
         if (typeof content !== 'string') {
-          this._handleFailure('Message content must be a string.', 'invalid_io_messages')
+          this._handleFailure('Message content must be a string.')
           validMessage = false
         }
 
@@ -250,7 +250,7 @@ class LLMObsTagger {
 
           const filteredToolCalls = toolCalls.map(toolCall => {
             if (typeof toolCall !== 'object') {
-              this._handleFailure('Tool call must be an object.', 'invalid_io_messages')
+              this._handleFailure('Tool call must be an object.')
               return undefined
             }
 
@@ -313,15 +313,11 @@ class LLMObsTagger {
 
   // any public-facing LLMObs APIs using this tagger should not soft fail
   // auto-instrumentation should soft fail
-  _handleFailure (msg, errorTag) {
+  _handleFailure (msg) {
     if (this.softFail) {
       log.warn(msg)
     } else {
-      const err = new Error(msg)
-      if (errorTag) {
-        Object.defineProperty(err, 'ddErrorTag', { get () { return errorTag } })
-      }
-      throw err
+      throw new Error(msg)
     }
   }
 
