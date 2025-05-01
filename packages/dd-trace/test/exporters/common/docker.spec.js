@@ -144,6 +144,22 @@ describe('docker', () => {
     expect(carrier['Datadog-Entity-ID']).to.equal(`in-${ino}`)
   })
 
+  it('should support inode when the ID is not available (any line)', () => {
+    const ino = 1234
+    const cgroup = [
+      '1:name=systemd:/',
+      '0::/'
+    ].join('\n')
+
+    fs.readFileSync.withArgs('/proc/self/cgroup').returns(Buffer.from(cgroup))
+    fs.statSync.withArgs('/sys/fs/cgroup/').returns({ ino })
+    docker = proxyquire('../src/exporters/common/docker', { fs })
+    docker.inject(carrier)
+
+    expect(carrier['Datadog-Container-Id']).to.be.undefined
+    expect(carrier['Datadog-Entity-ID']).to.equal(`in-${ino}`)
+  })
+
   it('should support external env', () => {
     process.env.DD_EXTERNAL_ENV = 'test'
 
