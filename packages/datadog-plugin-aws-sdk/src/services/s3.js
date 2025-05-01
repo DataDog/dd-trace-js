@@ -17,9 +17,16 @@ class S3 extends BaseAwsSdkPlugin {
 
     return Object.assign(tags, {
       'resource.name': `${operation} ${params.Bucket}`,
-      'aws.s3.bucket_name': params.Bucket,
-      bucketname: params.Bucket
+      'aws.s3.bucket_name': params.Bucket
     })
+  }
+
+  requestInject (span, request) {
+    const { params } = request
+    if (params && params.Bucket) {
+      span.setTag('bucketname', params.Bucket)
+    }
+    // No context injection needed for S3
   }
 
   addSpanPointers (span, response) {

@@ -66,8 +66,7 @@ class Kinesis extends BaseAwsSdkPlugin {
 
     return {
       'resource.name': `${operation} ${params.StreamName}`,
-      'aws.kinesis.stream_name': params.StreamName,
-      streamname: params.StreamName
+      'aws.kinesis.stream_name': params.StreamName
     }
   }
 
@@ -143,13 +142,22 @@ class Kinesis extends BaseAwsSdkPlugin {
     if (!params) return
 
     let stream
+    let streamName
     switch (operation) {
       case 'putRecord':
         stream = params.StreamArn ? params.StreamArn : (params.StreamName ? params.StreamName : '')
+        streamName = params.StreamName
+        if (streamName) {
+          span.setTag('streamname', streamName)
+        }
         this.injectToMessage(span, params, stream, true)
         break
       case 'putRecords':
         stream = params.StreamArn ? params.StreamArn : (params.StreamName ? params.StreamName : '')
+        streamName = params.StreamName
+        if (streamName) {
+          span.setTag('streamname', streamName)
+        }
         for (let i = 0; i < params.Records.length; i++) {
           this.injectToMessage(
             span,

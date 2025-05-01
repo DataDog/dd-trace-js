@@ -18,7 +18,7 @@ const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 class HttpClientPlugin extends ClientPlugin {
   static get id () { return 'http' }
   static get prefix () { return 'apm:http:client:request' }
-  static get peerServicePrecursors () { return ['queuename'] }
+  static get peerServicePrecursors () { return ['queuename', 'topicname', 'streamname', 'bucketname', 'tablename'] }
 
   bindStart (message) {
     const { args, http = {} } = message
@@ -76,7 +76,21 @@ class HttpClientPlugin extends ClientPlugin {
     message.currentStore = { ...store, span }
 
     if (parentSpan) {
-      span.setTag('queuename', parentSpan._spanContext._tags['queuename'])
+      if (parentSpan._spanContext._tags['queuename']) {
+        span.setTag('queuename', parentSpan._spanContext._tags['queuename'])
+      }
+      if (parentSpan._spanContext._tags['topicname']) {
+        span.setTag('topicname', parentSpan._spanContext._tags['topicname'])
+      }
+      if (parentSpan._spanContext._tags['streamname']) {
+        span.setTag('streamname', parentSpan._spanContext._tags['streamname'])
+      }
+      if (parentSpan._spanContext._tags['bucketname']) {
+        span.setTag('bucketname', parentSpan._spanContext._tags['bucketname'])
+      }
+      if (parentSpan._spanContext._tags['tablename']) {
+        span.setTag('tablename', parentSpan._spanContext._tags['tablename'])
+      }
     }
 
     return message.currentStore
