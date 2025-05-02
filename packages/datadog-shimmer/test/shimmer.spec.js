@@ -6,6 +6,33 @@ const shimmer = require('../src/shimmer')
 
 describe('shimmer', () => {
   describe('with a method', () => {
+    it('should wrap getter method', () => {
+      let index = 0
+      let called = false
+      const obj = { get increment () { return () => index++ } }
+
+      shimmer.wrap(obj, 'increment', getter => () => {
+        called = true
+        return getter()
+      })
+
+      assert.strictEqual(index, 0)
+      assert.strictEqual(called, false)
+      const method = obj.increment
+      assert.strictEqual(index, 0)
+      assert.strictEqual(called, true)
+      method()
+      assert.strictEqual(index, 1)
+      assert.strictEqual(called, true)
+    })
+
+    it('should not wrap setter only method', () => {
+      // eslint-disable-next-line accessor-pairs
+      const obj = { set setter (_method_) {} }
+
+      assert.throws(() => shimmer.wrap(obj, 'setter', getter => () => {}))
+    })
+
     it('should wrap the method', () => {
       const count = inc => inc
       const obj = { count }
@@ -18,13 +45,36 @@ describe('shimmer', () => {
     it('should wrap the method on a frozen object', () => {
       const count = inc => inc
 
-      let obj = { count }
+      let obj = { count, foo: 42 }
 
       Object.freeze(obj)
 
       obj = shimmer.wrap(obj, 'count', count => inc => count(inc) + 1)
 
       expect(obj.count(1)).to.equal(2)
+      expect(obj.foo).to.equal(42)
+      expect(Object.hasOwn(obj, 'foo')).to.equal(true)
+    })
+
+    it('should wrap the method on a frozen object', () => {
+      const count = inc => inc
+
+      function abc () { return this.answer }
+
+      let method = abc
+      method.count = count
+      method.foo = 'bar'
+      method.answer = 42
+
+      Object.freeze(method)
+
+      method = shimmer.wrap(method, 'count', count => inc => count(inc) + 1)
+
+      expect(method.count(1)).to.equal(2)
+      expect(method.foo).to.equal('bar')
+      expect(method.name).to.equal('abc')
+      expect(method).to.not.equal(abc)
+      expect(method()).to.equal(42)
     })
 
     it('should mass wrap targets', () => {

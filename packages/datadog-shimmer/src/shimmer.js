@@ -7,6 +7,8 @@ const skipMethods = new Set([
   'length'
 ])
 
+const nonConfigurableModuleExports = new WeakMap()
+
 function copyProperties (original, wrapped) {
   if (original.constructor !== wrapped.constructor) {
     const proto = Object.getPrototypeOf(original)
@@ -33,6 +35,19 @@ function copyProperties (original, wrapped) {
   }
 }
 
+function copyObjectProperties (original, wrapped, skipKey) {
+  const ownKeys = Reflect.ownKeys(original)
+  for (const key of ownKeys) {
+    if (key === skipKey) continue
+    const descriptor = Object.getOwnPropertyDescriptor(original, key)
+    if (descriptor.writable && descriptor.enumerable && descriptor.configurable) {
+      wrapped[key] = original[key]
+    } else if (descriptor.writable || descriptor.configurable || !Object.hasOwn(wrapped, key)) {
+      Object.defineProperty(wrapped, key, descriptor)
+    }
+  }
+}
+
 function wrapFunction (original, wrapper) {
   const wrapped = wrapper(original)
 
@@ -44,18 +59,19 @@ function wrapFunction (original, wrapper) {
   return wrapped
 }
 
-function wrap (target, name, wrapper) {
-  assertMethod(target, name)
+function wrap (target, name, wrapper, options) {
   if (typeof wrapper !== 'function') {
     throw new Error(wrapper ? 'Target is not a function' : 'No function provided')
   }
 
-  const original = target[name]
+  let descriptor = Object.getOwnPropertyDescriptor(target, name)
+  const original = descriptor?.get && (!options?.replaceGetter || descriptor.set) ? descriptor.get : target[name]
+
+  assertMethod(target, name, original)
+
   const wrapped = wrapper(original)
 
-  if (typeof original === 'function') copyProperties(original, wrapped)
-
-  let descriptor = Object.getOwnPropertyDescriptor(target, name)
+  copyProperties(original, wrapped)
 
   // No descriptor means original was on the prototype
   if (descriptor === undefined) {
@@ -73,25 +89,67 @@ function wrap (target, name, wrapper) {
     }
     descriptor.value = wrapped
   } else {
-    if (descriptor.get || descriptor.set) {
-      // TODO(BridgeAR): What happens in case there is a setter? This seems wrong?
-      // What happens in case the user does indeed set this to a different value?
-      // In that case the getter would potentially return the wrong value?
-      descriptor.get = () => wrapped
+    if (descriptor.get) {
+      // replaceGetter may only be used when the getter has no side effect.
+      if (options?.replaceGetter) {
+        if (descriptor.set) {
+          // This case is possible by replacing the setter with a wrapper that
+          // either undos the original get replacement (that should be safe to
+          // do, we just loose the instrumentation afterwards) or that
+          // reinstruments the passed through value after calling get. The
+          // latter might however have side effects due to maybe not replacing
+          // the value that the getter instrumented.
+          throw new Error('Replacing getter with sets is not supported. Implement if required.')
+        }
+        descriptor.get = () => wrapped
+      } else {
+        descriptor.get = wrapped
+      }
+    } else if (descriptor.set) {
+      throw new Error('Replacing setters is not supported. Implement if required.')
     } else {
       descriptor.value = wrapped
     }
 
     if (descriptor.configurable === false) {
-      // TODO(BridgeAR): Bail out instead (throw). It is unclear if the newly
-      // created object is actually used. If it's not used, the wrapping would
-      // have had no effect without noticing. It is also unclear what would happen
-      // in case user code would check for properties to be own properties. That
-      // would fail with this code. A function being replaced with an object is
-      // also not possible.
-      return Object.create(target, {
-        [name]: descriptor
-      })
+      // TODO(BridgeAR): This currently only works on the most outer part. The
+      // moduleExports object.
+      //
+      // It would be possible to also implement it for non moduleExports objects
+      // by passing through the moduleExports object and the property names that
+      // are accessed. That way it would be possible to redefine the complete
+      // property chain. Example:
+      //
+      // shimmer.wrap(hapi.Server.prototype, 'start', wrapStart)
+      // shimmer.wrap(hapi.Server.prototype, 'ext', wrapExt)
+      //
+      // shimmer.wrap(hapi, 'Server', 'prototype', 'start', wrapStart)
+      // shimmer.wrap(hapi, 'Server', 'prototype', 'ext', wrapExt)
+      //
+      // That would however still not resolve the issue about the user replacing
+      // the return value so that the hook picks up the new hapi moduleExports
+      // object. To safely fix that, we would have to couple the register helper
+      // with this code. That way it would be possible to directly pass through
+      // the entries.
+
+      // In case more than a single property is not configurable and writable,
+      // Just reuse the already created object.
+      let moduleExports = nonConfigurableModuleExports.get(target)
+      if (!moduleExports) {
+        if (typeof target === 'function') {
+          const original = target
+          moduleExports = function (...args) { return original.apply(original, args) }
+          // This is a rare case. Accept the slight performance hit.
+          skipMethods.add(name)
+          copyProperties(target, moduleExports)
+          skipMethods.delete(name)
+        } else {
+          moduleExports = Object.create(target)
+          copyObjectProperties(target, moduleExports, name)
+        }
+        nonConfigurableModuleExports.set(target, moduleExports)
+      }
+      target = moduleExports
     }
   }
 
@@ -115,15 +173,15 @@ function toArray (maybeArray) {
   return Array.isArray(maybeArray) ? maybeArray : [maybeArray]
 }
 
-function assertMethod (target, name) {
-  if (typeof target?.[name] !== 'function') {
+function assertMethod (target, name, method) {
+  if (typeof method !== 'function') {
     let message = 'No target object provided'
 
     if (target) {
       if (typeof target !== 'object' && typeof target !== 'function') {
         message = 'Invalid target'
       } else {
-        message = target[name] ? `Original method ${name} is not a function` : `No original method ${name}`
+        message = method ? `Original method ${name} is not a function` : `No original method ${name}`
       }
     }
 
