@@ -17,7 +17,7 @@ const {
   start,
   run
 } = require('./helpers/terminal')
-const { checkBranchDiff, checkGitHub, checkGit } = require('./helpers/requirements')
+const { checkAll } = require('./helpers/requirements')
 
 const tmpdir = process.env.RUNNER_TEMP || os.tmpdir()
 const main = 'master'
@@ -42,9 +42,7 @@ if (!releaseLine || releaseLine === 'help' || flags.help) {
 try {
   start('Check for requirements')
 
-  checkGit()
-  checkBranchDiff()
-  checkGitHub()
+  checkAll()
 
   pass()
 
