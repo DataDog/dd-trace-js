@@ -10,7 +10,7 @@ const {
   curlAndAssertMessage,
   curl
 } = require('./helpers')
-const { USER_KEEP, AUTO_REJECT, AUTO_KEEP } = require('../ext/priority')
+const { USER_KEEP, AUTO_REJECT } = require('../ext/priority')
 
 describe('Standalone ASM', () => {
   let sandbox, cwd, startupTestFile, agent, proc, env
@@ -31,7 +31,8 @@ describe('Standalone ASM', () => {
 
       env = {
         AGENT_PORT: agent.port,
-        DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED: 'true'
+        DD_APM_TRACING_ENABLED: 'false',
+        DD_APPSEC_ENABLED: 'true'
       }
 
       const execArgv = []
@@ -44,20 +45,18 @@ describe('Standalone ASM', () => {
       await agent.stop()
     })
 
-    function assertKeep (payload) {
-      const { meta, metrics } = payload
-
+    function assertKeep ({ meta, metrics }) {
       assert.propertyVal(meta, '_dd.p.ts', '02')
 
       assert.propertyVal(metrics, '_sampling_priority_v1', USER_KEEP)
       assert.propertyVal(metrics, '_dd.apm.enabled', 0)
     }
 
-    function assertDrop (payload) {
-      const { metrics } = payload
+    function assertDrop ({ meta, metrics }) {
+      assert.notProperty(meta, '_dd.p.ts')
+
       assert.propertyVal(metrics, '_sampling_priority_v1', AUTO_REJECT)
       assert.propertyVal(metrics, '_dd.apm.enabled', 0)
-      assert.notProperty(metrics, '_dd.p.ts')
     }
 
     async function doWarmupRequests (procOrUrl, number = 3) {
@@ -98,11 +97,7 @@ describe('Standalone ASM', () => {
           assert.strictEqual(fifthReq.length, 5)
 
           const { meta, metrics } = fifthReq[0]
-          assert.notProperty(meta, 'manual.keep')
-          assert.notProperty(meta, '_dd.p.ts')
-
-          assert.propertyVal(metrics, '_sampling_priority_v1', AUTO_KEEP)
-          assert.propertyVal(metrics, '_dd.apm.enabled', 0)
+          assertKeep({ meta, metrics })
         }
       }, 70000, 2)
 
