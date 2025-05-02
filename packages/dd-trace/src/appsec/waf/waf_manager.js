@@ -16,7 +16,7 @@ class WAFManager {
     this.rulesVersion = this.ddwaf.diagnostics.ruleset_version
     this.defaultRules = rules
 
-    Reporter.reportWafInit(this.ddwafVersion, this.rulesVersion, this.ddwaf.diagnostics.rules, true)
+    Reporter.reportWafInit(this.ddwafVersion, this.rulesVersion, true)
   }
 
   _loadDDWAF (rules) {
