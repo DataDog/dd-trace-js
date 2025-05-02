@@ -27,14 +27,18 @@ function loadRules (config) {
 function updateWafFromRC ({ toUnapply, toApply, toModify }) {
   const newActions = new SpyMap(appliedActions)
 
+  let wafUpdated = false
+
   for (const item of toUnapply) {
     if (!['ASM_DD', 'ASM_DATA', 'ASM'].includes(item.product)) continue
 
     try {
       waf.wafManager.remove(item.path)
+      wafUpdated = true
     } catch (e) {
       item.apply_state = ERROR
       item.apply_error = e.toString()
+      Reporter.reportWafConfigError(waf.wafManager.ddwafVersion, waf.wafManager.rulesVersion)
     }
   }
 
@@ -46,9 +50,11 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
       item.apply_state = updateResult.success ? ACKNOWLEDGED : ERROR
 
       if (updateResult.success) {
+        wafUpdated = true
         Reporter.reportSuccessfulWafUpdate(item.product, item.id, updateResult.diagnostics)
       } else {
         item.apply_error = JSON.stringify(updateResult.diagnostics, DIAGNOSTICS_KEYS_TO_KEEP_APPLY_ERROR)
+        Reporter.reportWafConfigError(waf.wafManager.ddwafVersion, waf.wafManager.rulesVersion)
       }
 
       // check asm actions
@@ -61,7 +67,12 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
     } catch (e) {
       item.apply_state = ERROR
       item.apply_error = e.toString()
+      Reporter.reportWafConfigError(waf.wafManager.ddwafVersion, waf.wafManager.rulesVersion)
     }
+  }
+
+  if (wafUpdated) {
+    Reporter.reportWafUpdate(waf.wafManager.ddwafVersion, waf.wafManager.rulesVersion)
   }
 
   // Manage blocking actions
