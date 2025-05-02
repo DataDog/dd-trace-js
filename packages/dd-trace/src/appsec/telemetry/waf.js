@@ -102,7 +102,7 @@ function incrementWafInit (wafVersion, rulesVersion, success) {
   }
 }
 
-function incrementWafUpdates (wafVersion, rulesVersion) {
+function incrementWafUpdates (wafVersion, rulesVersion, success) {
   const versionsTags = getVersionsTags(wafVersion, rulesVersion)
   appsecMetrics.count('waf.updates', { ...versionsTags, success }).inc()
 }
