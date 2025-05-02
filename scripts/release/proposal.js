@@ -66,14 +66,18 @@ try {
 
   pass(`v${releaseLine}.x`)
 
-  const diffCmd = [
-    'branch-diff',
-    '--user DataDog',
-    '--repo dd-trace-js',
-    `--exclude-label=semver-major,dont-land-on-v${releaseLine}.x`
-  ].join(' ')
+  const diffCmd = 'branch-diff --user DataDog --repo dd-trace-js --exclude-label=semver-major'
 
   start('Determine version increment')
+
+  const legacyDiff = capture(`${diffCmd} --require-label=dont-land-on-v${releaseLine}.x v${releaseLine}.x ${main}`)
+
+  if (legacyDiff) {
+    fatal(
+      `The "dont-land-on-v${releaseLine}.x" label is no longer supported.`,
+      'Please remove the label from any offending PR to continue.'
+    )
+  }
 
   const { DD_MAJOR, DD_MINOR, DD_PATCH } = require('../../version')
   const lineDiff = capture(`${diffCmd} --markdown=true v${releaseLine}.x ${main}`)
