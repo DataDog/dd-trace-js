@@ -7,7 +7,6 @@ const waf = {
   wafManager: null,
   init,
   destroy,
-  update,
   run: noop,
   disposeContext: noop
 }
@@ -34,8 +33,8 @@ function destroy () {
   waf.disposeContext = noop
 }
 
+/*
 function update (newRules) {
-  console.log('call update with'/*, newRules*/)
   // TODO: check race conditions between Appsec enable/disable and WAF updates, the whole RC state management in general
   if (!waf.wafManager) throw new Error('Cannot update disabled WAF')
 
@@ -46,6 +45,7 @@ function update (newRules) {
     throw err
   }
 }
+*/
 
 function run (data, req, raspRule) {
   if (!req) {

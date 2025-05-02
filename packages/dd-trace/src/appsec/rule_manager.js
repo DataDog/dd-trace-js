@@ -28,6 +28,7 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
   const newActions = new SpyMap(appliedActions)
 
   let wafUpdated = false
+  let wafUpdatedSuccess = true
 
   for (const item of toUnapply) {
     if (!['ASM_DD', 'ASM_DATA', 'ASM'].includes(item.product)) continue
@@ -36,6 +37,7 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
       waf.wafManager.remove(item.path)
       wafUpdated = true
     } catch (e) {
+      wafUpdatedSuccess = false
       item.apply_state = ERROR
       item.apply_error = e.toString()
       Reporter.reportWafConfigError(waf.wafManager.ddwafVersion, waf.wafManager.rulesVersion)
@@ -53,6 +55,7 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
         wafUpdated = true
         Reporter.reportSuccessfulWafUpdate(item.product, item.id, updateResult.diagnostics)
       } else {
+        wafUpdatedSuccess = false
         item.apply_error = JSON.stringify(updateResult.diagnostics, DIAGNOSTICS_KEYS_TO_KEEP_APPLY_ERROR)
         Reporter.reportWafConfigError(waf.wafManager.ddwafVersion, waf.wafManager.rulesVersion)
       }
@@ -65,6 +68,7 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
       }
 
     } catch (e) {
+      wafUpdatedSuccess = false
       item.apply_state = ERROR
       item.apply_error = e.toString()
       Reporter.reportWafConfigError(waf.wafManager.ddwafVersion, waf.wafManager.rulesVersion)
@@ -72,7 +76,7 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
   }
 
   if (wafUpdated) {
-    Reporter.reportWafUpdate(waf.wafManager.ddwafVersion, waf.wafManager.rulesVersion)
+    Reporter.reportWafUpdate(waf.wafManager.ddwafVersion, waf.wafManager.rulesVersion, wafUpdatedSuccess)
   }
 
   // Manage blocking actions
