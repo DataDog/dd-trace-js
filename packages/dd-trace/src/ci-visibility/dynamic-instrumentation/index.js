@@ -9,7 +9,8 @@ const probeIdToResolveBreakpointSet = new Map()
 const probeIdToResolveBreakpointRemove = new Map()
 
 class TestVisDynamicInstrumentation {
-  constructor () {
+  constructor (config) {
+    this._config = config
     this.worker = null
     this._readyPromise = new Promise(resolve => {
       this._onReady = resolve
@@ -32,6 +33,9 @@ class TestVisDynamicInstrumentation {
   // 1. Probe ID
   // 2. Promise that's resolved when the breakpoint is set
   addLineProbe ({ file, line }, onHitBreakpoint) {
+    if (!this.worker) { // not init yet
+      this.start()
+    }
     const probeId = randomUUID()
 
     this.breakpointSetChannel.port2.postMessage(
@@ -52,7 +56,7 @@ class TestVisDynamicInstrumentation {
     return this._readyPromise
   }
 
-  start (config) {
+  start () {
     if (this.worker) return
 
     log.debug('Starting Test Visibility - Dynamic Instrumentation client...')
@@ -69,11 +73,15 @@ class TestVisDynamicInstrumentation {
         // To avoid infinite initialization loops, we're disabling DI and tracing in the worker.
         env: {
           ...process.env,
+          DD_CIVISIBILITY_ENABLED: 0,
           DD_TRACE_ENABLED: 0,
-          DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 0
+          DD_TEST_FAILED_TEST_REPLAY_ENABLED: 0,
+          DD_CIVISIBILITY_MANUAL_API_ENABLED: 0,
+          DD_TRACING_ENABLED: 0,
+          DD_TRACE_TELEMETRY_ENABLED: 0
         },
         workerData: {
-          config: config.serialize(),
+          config: this._config.serialize(),
           parentThreadId,
           rcPort: rcChannel.port1,
           configPort: configChannel.port1,
@@ -134,4 +142,12 @@ class TestVisDynamicInstrumentation {
   }
 }
 
-module.exports = new TestVisDynamicInstrumentation()
+let dynamicInstrumentation
+
+module.exports = (config) => {
+  if (dynamicInstrumentation) {
+    return dynamicInstrumentation
+  }
+  dynamicInstrumentation = new TestVisDynamicInstrumentation(config)
+  return dynamicInstrumentation
+}

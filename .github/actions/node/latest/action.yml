@@ -1,8 +1,8 @@
-name: Node Latest
-description: Install the latest Node.js version
+name: Node.js Latest
+description: Install the latest version of Node.js
 runs:
   using: composite
   steps:
-    - uses: actions/setup-node@v4
+    - uses: ./.github/actions/node
       with:
-        node-version: '22' # Update this line to the latest Node.js version
+        version: latest

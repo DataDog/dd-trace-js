@@ -22,7 +22,9 @@ const {
   ROOT_PARENT_ID,
   INPUT_TOKENS_METRIC_KEY,
   OUTPUT_TOKENS_METRIC_KEY,
-  TOTAL_TOKENS_METRIC_KEY
+  TOTAL_TOKENS_METRIC_KEY,
+  INTEGRATION,
+  DECORATOR
 } = require('./constants/tags')
 
 // global registry of LLMObs spans
@@ -51,7 +53,9 @@ class LLMObsTagger {
     mlApp,
     parent,
     kind,
-    name
+    name,
+    integration,
+    _decorator
   } = {}) {
     if (!this._config.llmobs.enabled) return
     if (!kind) return // do not register it in the map if it doesn't have an llmobs span kind
@@ -66,6 +70,8 @@ class LLMObsTagger {
 
     sessionId = sessionId || registry.get(parent)?.[SESSION_ID]
     if (sessionId) this._setTag(span, SESSION_ID, sessionId)
+    if (integration) this._setTag(span, INTEGRATION, integration)
+    if (_decorator) this._setTag(span, DECORATOR, _decorator)
 
     if (!mlApp) mlApp = registry.get(parent)?.[ML_APP] || this._config.llmobs.mlApp
     this._setTag(span, ML_APP, mlApp)
@@ -100,7 +106,12 @@ class LLMObsTagger {
   }
 
   tagMetadata (span, metadata) {
-    this._setTag(span, METADATA, metadata)
+    const existingMetadata = registry.get(span)?.[METADATA]
+    if (existingMetadata) {
+      Object.assign(existingMetadata, metadata)
+    } else {
+      this._setTag(span, METADATA, metadata)
+    }
   }
 
   tagMetrics (span, metrics) {
@@ -124,11 +135,16 @@ class LLMObsTagger {
       if (typeof value === 'number') {
         filterdMetrics[processedKey] = value
       } else {
-        this._handleFailure(`Value for metric '${key}' must be a number, instead got ${value}`)
+        this._handleFailure(`Value for metric '${key}' must be a number, instead got ${value}`, 'invalid_metrics')
       }
     }
 
-    this._setTag(span, METRICS, filterdMetrics)
+    const existingMetrics = registry.get(span)?.[METRICS]
+    if (existingMetrics) {
+      Object.assign(existingMetrics, filterdMetrics)
+    } else {
+      this._setTag(span, METRICS, filterdMetrics)
+    }
   }
 
   tagSpanTags (span, tags) {
@@ -153,7 +169,7 @@ class LLMObsTagger {
           this._setTag(span, key, JSON.stringify(data))
         } catch {
           const type = key === INPUT_VALUE ? 'input' : 'output'
-          this._handleFailure(`Failed to parse ${type} value, must be JSON serializable.`)
+          this._handleFailure(`Failed to parse ${type} value, must be JSON serializable.`, 'invalid_io_text')
         }
       }
     }
@@ -171,7 +187,7 @@ class LLMObsTagger {
         }
 
         if (document == null || typeof document !== 'object') {
-          this._handleFailure('Documents must be a string, object, or list of objects.')
+          this._handleFailure('Documents must be a string, object, or list of objects.', 'invalid_embedding_io')
           return undefined
         }
 
@@ -179,7 +195,7 @@ class LLMObsTagger {
         let validDocument = true
 
         if (typeof text !== 'string') {
-          this._handleFailure('Document text must be a string.')
+          this._handleFailure('Document text must be a string.', 'invalid_embedding_io')
           validDocument = false
         }
 
@@ -210,7 +226,7 @@ class LLMObsTagger {
         }
 
         if (message == null || typeof message !== 'object') {
-          this._handleFailure('Messages must be a string, object, or list of objects')
+          this._handleFailure('Messages must be a string, object, or list of objects', 'invalid_io_messages')
           return undefined
         }
 
@@ -221,7 +237,7 @@ class LLMObsTagger {
         const messageObj = { content }
 
         if (typeof content !== 'string') {
-          this._handleFailure('Message content must be a string.')
+          this._handleFailure('Message content must be a string.', 'invalid_io_messages')
           validMessage = false
         }
 
@@ -234,7 +250,7 @@ class LLMObsTagger {
 
           const filteredToolCalls = toolCalls.map(toolCall => {
             if (typeof toolCall !== 'object') {
-              this._handleFailure('Tool call must be an object.')
+              this._handleFailure('Tool call must be an object.', 'invalid_io_messages')
               return undefined
             }
 
@@ -297,11 +313,15 @@ class LLMObsTagger {
 
   // any public-facing LLMObs APIs using this tagger should not soft fail
   // auto-instrumentation should soft fail
-  _handleFailure (msg) {
+  _handleFailure (msg, errorTag) {
     if (this.softFail) {
       log.warn(msg)
     } else {
-      throw new Error(msg)
+      const err = new Error(msg)
+      if (errorTag) {
+        Object.defineProperty(err, 'ddErrorTag', { get () { return errorTag } })
+      }
+      throw err
     }
   }
 

@@ -1,6 +1,8 @@
 'use strict'
 
+const { isTrue } = require('../../dd-trace/src/util')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
+const coalesce = require('koalas')
 
 class MongodbCorePlugin extends DatabasePlugin {
   static get id () { return 'mongodb-core' }
@@ -8,11 +10,29 @@ class MongodbCorePlugin extends DatabasePlugin {
   // avoid using db.name for peer.service since it includes the collection name
   // should be removed if one day this will be fixed
   static get peerServicePrecursors () { return [] }
+
+  configure (config) {
+    super.configure(config)
+
+    const heartbeatFromEnv = process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED
+
+    this.config.heartbeatEnabled = coalesce(
+      config.heartbeatEnabled,
+      heartbeatFromEnv && isTrue(heartbeatFromEnv),
+      true
+    )
+  }
+
   start ({ ns, ops, options = {}, name }) {
+    // heartbeat commands can be disabled if this.config.heartbeatEnabled is false
+    if (!this.config.heartbeatEnabled && isHeartbeat(ops, this.config)) {
+      return
+    }
     const query = getQuery(ops)
     const resource = truncate(getResource(this, ns, query, name))
-    this.startSpan(this.operationName(), {
-      service: this.serviceName({ pluginConfig: this.config }),
+    const service = this.serviceName({ pluginConfig: this.config })
+    const span = this.startSpan(this.operationName(), {
+      service,
       resource,
       type: 'mongodb',
       kind: 'client',
@@ -24,6 +44,10 @@ class MongodbCorePlugin extends DatabasePlugin {
         'out.port': options.port
       }
     })
+    const comment = this.injectDbmComment(span, ops.comment, service)
+    if (comment) {
+      ops.comment = comment
+    }
   }
 
   getPeerService (tags) {
@@ -33,6 +57,27 @@ class MongodbCorePlugin extends DatabasePlugin {
       tags['peer.service'] = ns.split('.', 1)[0]
     }
     return super.getPeerService(tags)
+  }
+
+  injectDbmComment (span, comment, serviceName) {
+    const dbmTraceComment = this.createDbmComment(span, serviceName)
+
+    if (!dbmTraceComment) {
+      return comment
+    }
+
+    if (comment) {
+      // if the command already has a comment, append the dbm trace comment
+      if (typeof comment === 'string') {
+        comment += `,${dbmTraceComment}`
+      } else if (Array.isArray(comment)) {
+        comment.push(dbmTraceComment)
+      } // do nothing if the comment is not a string or an array
+    } else {
+      comment = dbmTraceComment
+    }
+
+    return comment
   }
 }
 
@@ -44,6 +89,7 @@ function getQuery (cmd) {
   if (!cmd || typeof cmd !== 'object' || Array.isArray(cmd)) return
   if (cmd.query) return sanitizeBigInt(limitDepth(cmd.query))
   if (cmd.filter) return sanitizeBigInt(limitDepth(cmd.filter))
+  if (cmd.pipeline) return sanitizeBigInt(limitDepth(cmd.pipeline))
 }
 
 function getResource (plugin, ns, query, operationName) {
@@ -124,6 +170,11 @@ function isBSON (val) {
 
 function isBinary (val) {
   return val && val._bsontype === 'Binary'
+}
+
+function isHeartbeat (ops, config) {
+  // Check if it's a heartbeat command hello: 1 or helloOk: 1
+  return ops && typeof ops === 'object' && (ops.hello === 1 || ops.helloOk === true)
 }
 
 module.exports = MongodbCorePlugin

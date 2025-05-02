@@ -27,7 +27,8 @@ const {
   DI_DEBUG_ERROR_PREFIX,
   DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
   DI_DEBUG_ERROR_FILE_SUFFIX,
-  DI_DEBUG_ERROR_LINE_SUFFIX
+  DI_DEBUG_ERROR_LINE_SUFFIX,
+  getLibraryCapabilitiesTags
 } = require('./util/test')
 const Plugin = require('./plugin')
 const { COMPONENT } = require('../constants')
@@ -38,8 +39,16 @@ const {
   TELEMETRY_EVENT_CREATED,
   TELEMETRY_ITR_SKIPPED
 } = require('../ci-visibility/telemetry')
-const { CI_PROVIDER_NAME, GIT_REPOSITORY_URL, GIT_COMMIT_SHA, GIT_BRANCH, CI_WORKSPACE_PATH } = require('./util/tags')
+const {
+  CI_PROVIDER_NAME,
+  GIT_REPOSITORY_URL,
+  GIT_COMMIT_SHA,
+  GIT_BRANCH,
+  CI_WORKSPACE_PATH,
+  GIT_COMMIT_MESSAGE
+} = require('./util/tags')
 const { OS_VERSION, OS_PLATFORM, OS_ARCHITECTURE, RUNTIME_NAME, RUNTIME_VERSION } = require('./util/env')
+const getDiClient = require('../ci-visibility/dynamic-instrumentation')
 
 module.exports = class CiPlugin extends Plugin {
   constructor (...args) {
@@ -48,9 +57,9 @@ module.exports = class CiPlugin extends Plugin {
     this.fileLineToProbeId = new Map()
     this.rootDir = process.cwd() // fallback in case :session:start events are not emitted
 
-    this.addSub(`ci:${this.constructor.id}:library-configuration`, ({ onDone }) => {
+    this.addSub(`ci:${this.constructor.id}:library-configuration`, ({ onDone, isParallel }) => {
       if (!this.tracer._exporter || !this.tracer._exporter.getLibraryConfiguration) {
-        return onDone({ err: new Error('CI Visibility was not initialized correctly') })
+        return onDone({ err: new Error('Test optimization was not initialized correctly') })
       }
       this.tracer._exporter.getLibraryConfiguration(this.testConfiguration, (err, libraryConfig) => {
         if (err) {
@@ -58,13 +67,21 @@ module.exports = class CiPlugin extends Plugin {
         } else {
           this.libraryConfig = libraryConfig
         }
+
+        const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id, isParallel)
+        const metadataTags = {
+          test: {
+            ...libraryCapabilitiesTags
+          }
+        }
+        this.tracer._exporter.addMetadataTags(metadataTags)
         onDone({ err, libraryConfig })
       })
     })
 
     this.addSub(`ci:${this.constructor.id}:test-suite:skippable`, ({ onDone }) => {
       if (!this.tracer._exporter?.getSkippableSuites) {
-        return onDone({ err: new Error('CI Visibility was not initialized correctly') })
+        return onDone({ err: new Error('Test optimization was not initialized correctly') })
       }
       this.tracer._exporter.getSkippableSuites(this.testConfiguration, (err, skippableSuites, itrCorrelationId) => {
         if (err) {
@@ -95,8 +112,8 @@ module.exports = class CiPlugin extends Plugin {
         }
       }
       // tracer might not be initialized correctly
-      if (this.tracer._exporter.setMetadataTags) {
-        this.tracer._exporter.setMetadataTags(metadataTags)
+      if (this.tracer._exporter.addMetadataTags) {
+        this.tracer._exporter.addMetadataTags(metadataTags)
       }
 
       this.testSessionSpan = this.tracer.startSpan(`${this.constructor.id}.test_session`, {
@@ -153,7 +170,7 @@ module.exports = class CiPlugin extends Plugin {
 
     this.addSub(`ci:${this.constructor.id}:known-tests`, ({ onDone }) => {
       if (!this.tracer._exporter?.getKnownTests) {
-        return onDone({ err: new Error('CI Visibility was not initialized correctly') })
+        return onDone({ err: new Error('Test optimization was not initialized correctly') })
       }
       this.tracer._exporter.getKnownTests(this.testConfiguration, (err, knownTests) => {
         if (err) {
@@ -162,6 +179,19 @@ module.exports = class CiPlugin extends Plugin {
           this.libraryConfig.isKnownTestsEnabled = false
         }
         onDone({ err, knownTests })
+      })
+    })
+
+    this.addSub(`ci:${this.constructor.id}:test-management-tests`, ({ onDone }) => {
+      if (!this.tracer._exporter?.getTestManagementTests) {
+        return onDone({ err: new Error('Test optimization was not initialized correctly') })
+      }
+      this.tracer._exporter.getTestManagementTests(this.testConfiguration, (err, testManagementTests) => {
+        if (err) {
+          log.error('Test management tests could not be fetched. %s', err.message)
+          this.libraryConfig.isTestManagementEnabled = false
+        }
+        onDone({ err, testManagementTests })
       })
     })
   }
@@ -189,13 +219,12 @@ module.exports = class CiPlugin extends Plugin {
   configure (config, shouldGetEnvironmentData = true) {
     super.configure(config)
 
-    if (config.isTestDynamicInstrumentationEnabled && !this.di) {
-      const testVisibilityDynamicInstrumentation = require('../ci-visibility/dynamic-instrumentation')
-      this.di = testVisibilityDynamicInstrumentation
-    }
-
     if (!shouldGetEnvironmentData) {
       return
+    }
+
+    if (config.isTestDynamicInstrumentationEnabled && !this.di) {
+      this.di = getDiClient()
     }
 
     this.testEnvironmentMetadata = getTestEnvironmentMetadata(this.constructor.id, this.config)
@@ -210,7 +239,8 @@ module.exports = class CiPlugin extends Plugin {
       [RUNTIME_VERSION]: runtimeVersion,
       [GIT_BRANCH]: branch,
       [CI_PROVIDER_NAME]: ciProviderName,
-      [CI_WORKSPACE_PATH]: repositoryRoot
+      [CI_WORKSPACE_PATH]: repositoryRoot,
+      [GIT_COMMIT_MESSAGE]: commitMessage
     } = this.testEnvironmentMetadata
 
     this.repositoryRoot = repositoryRoot || process.cwd()
@@ -228,7 +258,8 @@ module.exports = class CiPlugin extends Plugin {
       runtimeName,
       runtimeVersion,
       branch,
-      testLevel: 'suite'
+      testLevel: 'suite',
+      commitMessage
     }
   }
 

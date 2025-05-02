@@ -64,7 +64,6 @@ describe('Plugin', () => {
           const app = express()
 
           app.use(() => { throw new Error('boom') })
-          // eslint-disable-next-line n/handle-callback-err
           app.use((err, req, res, next) => {
             res.status(200).send()
           })
@@ -334,7 +333,6 @@ describe('Plugin', () => {
             next = _next
           })
           app.use(() => { throw error })
-          // eslint-disable-next-line n/handle-callback-err
           app.use((err, req, res, next) => next())
           app.get('/user/:id', (req, res) => {
             res.status(200).send()
@@ -1155,7 +1153,6 @@ describe('Plugin', () => {
           const error = new Error('boom')
 
           app.use((req, res, next) => next(error))
-          // eslint-disable-next-line n/handle-callback-err
           app.use((error, req, res, next) => res.status(500).send())
 
           appListener = app.listen(0, 'localhost', () => {
@@ -1193,7 +1190,6 @@ describe('Plugin', () => {
           const error = new Error('boom')
 
           app.use((req, res) => { throw error })
-          // eslint-disable-next-line n/handle-callback-err
           app.use((error, req, res, next) => res.status(500).send())
 
           appListener = app.listen(0, 'localhost', () => {
@@ -1354,9 +1350,7 @@ describe('Plugin', () => {
               expect(spans[0].meta).to.have.property('http.status_code', '404')
               expect(spans[0].meta).to.have.property('component', 'express')
               expect(spans[0].meta).to.not.have.property('http.route')
-
-              done()
-            })
+            }).then(done).catch(done)
 
             axios
               .get(`http://localhost:${port}/does-not-exist`, {
@@ -1711,7 +1705,6 @@ describe('Plugin', () => {
           const error = new Error('boom')
 
           app.use((req, res) => { throw error })
-          // eslint-disable-next-line n/handle-callback-err
           app.use((error, req, res, next) => res.status(500).send())
 
           appListener = app.listen(0, 'localhost', () => {

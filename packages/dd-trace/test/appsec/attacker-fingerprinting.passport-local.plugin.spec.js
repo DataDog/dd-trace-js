@@ -10,7 +10,7 @@ const Config = require('../../src/config')
 function assertFingerprintInTraces (traces) {
   const span = traces[0][0]
   assert.property(span.meta, '_dd.appsec.fp.http.header')
-  assert.equal(span.meta['_dd.appsec.fp.http.header'], 'hdr-0110000110-6431a3e6-4-c348f529')
+  assert.equal(span.meta['_dd.appsec.fp.http.header'], 'hdr-0110000110-74c2908f-4-c348f529')
   assert.property(span.meta, '_dd.appsec.fp.http.network')
   assert.equal(span.meta['_dd.appsec.fp.http.network'], 'net-0-0000000000')
   assert.property(span.meta, '_dd.appsec.fp.http.endpoint')
@@ -61,7 +61,10 @@ withVersions('passport-local', 'passport-local', version => {
       server = app.listen(port, () => {
         port = server.address().port
         axios = Axios.create({
-          baseURL: `http://localhost:${port}`
+          baseURL: `http://localhost:${port}`,
+          headers: {
+            'User-Agent': 'test-user-agent'
+          }
         })
         done()
       })

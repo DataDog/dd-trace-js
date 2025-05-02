@@ -23,7 +23,6 @@ function checkUserAndSetUser (tracer, user) {
   if (rootSpan) {
     if (!rootSpan.context()._tags['usr.id']) {
       setUserTags(user, rootSpan)
-      rootSpan.setTag('_dd.appsec.user.collection_mode', 'sdk')
     }
   } else {
     log.warn('[ASM] Root span not available in isUserBlocked')
@@ -52,9 +51,7 @@ function blockRequest (tracer, req, res) {
     return false
   }
 
-  block(req, res, rootSpan)
-
-  return true
+  return block(req, res, rootSpan)
 }
 
 module.exports = {

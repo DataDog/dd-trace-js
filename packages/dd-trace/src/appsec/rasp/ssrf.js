@@ -25,16 +25,16 @@ function analyzeSsrf (ctx) {
 
   if (!req || !outgoingUrl) return
 
-  const persistent = {
+  const ephemeral = {
     [addresses.HTTP_OUTGOING_URL]: outgoingUrl
   }
 
   const raspRule = { type: RULE_TYPES.SSRF }
 
-  const result = waf.run({ persistent }, req, raspRule)
+  const result = waf.run({ ephemeral }, req, raspRule)
 
   const res = store?.res
-  handleResult(result, req, res, ctx.abortController, config)
+  handleResult(result, req, res, ctx.abortController, config, raspRule)
 }
 
 module.exports = { enable, disable }

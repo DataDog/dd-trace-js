@@ -1,18 +1,20 @@
 'use strict'
 
 const path = require('path')
-const tvDynamicInstrumentation = require('../../../../src/ci-visibility/dynamic-instrumentation')
+const getDiClient = require('../../../../src/ci-visibility/dynamic-instrumentation')
 const sum = require('./di-dependency')
 const Config = require('../../../../src/config')
 
 // keep process alive
 const intervalId = setInterval(() => {}, 5000)
 
-tvDynamicInstrumentation.start(new Config())
+const diClient = getDiClient(new Config())
 
-tvDynamicInstrumentation.isReady().then(() => {
+diClient.start()
+
+diClient.isReady().then(() => {
   const file = path.join(__dirname, 'di-dependency.js')
-  const [probeId, breakpointSetPromise] = tvDynamicInstrumentation.addLineProbe(
+  const [probeId, breakpointSetPromise] = diClient.addLineProbe(
     { file, line: 9 },
     ({ snapshot }) => {
       // once the breakpoint is hit, we can grab the snapshot and send it to the parent process

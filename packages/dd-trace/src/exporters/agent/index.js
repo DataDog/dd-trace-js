@@ -7,7 +7,7 @@ const Writer = require('./writer')
 class AgentExporter {
   constructor (config, prioritySampler) {
     this._config = config
-    const { url, hostname, port, lookup, protocolVersion, stats = {}, appsec } = config
+    const { url, hostname, port, lookup, protocolVersion, stats = {}, apmTracingEnabled } = config
     this._url = url || new URL(format({
       protocol: 'http:',
       hostname: hostname || 'localhost',
@@ -15,7 +15,7 @@ class AgentExporter {
     }))
 
     const headers = {}
-    if (stats.enabled || appsec?.standalone?.enabled) {
+    if (stats.enabled || apmTracingEnabled === false) {
       headers['Datadog-Client-Computed-Stats'] = 'yes'
     }
 
@@ -24,7 +24,8 @@ class AgentExporter {
       prioritySampler,
       lookup,
       protocolVersion,
-      headers
+      headers,
+      config
     })
 
     this._timer = undefined

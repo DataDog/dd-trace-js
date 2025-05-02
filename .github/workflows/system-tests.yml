@@ -31,7 +31,7 @@ jobs:
     uses: DataDog/system-tests/.github/workflows/compute-workflow-parameters.yml@main
     with:
       library: nodejs
-      scenarios_groups: essentials,appsec_rasp
+      scenarios_groups: essentials,appsec_rasp,debugger
 
   system-tests:
     runs-on: ${{ contains(fromJSON('["CROSSED_TRACING_LIBRARIES", "INTEGRATIONS"]'), matrix.scenario) && 'ubuntu-latest-16-cores' || 'ubuntu-latest' }}
@@ -46,8 +46,6 @@ jobs:
       TEST_LIBRARY: nodejs
       WEBLOG_VARIANT: ${{ matrix.weblog-variant }}
       DD_API_KEY: ${{ secrets.DD_API_KEY }}
-      SYSTEM_TESTS_AWS_ACCESS_KEY_ID: ${{ secrets.IDM_AWS_ACCESS_KEY_ID }}
-      SYSTEM_TESTS_AWS_SECRET_ACCESS_KEY: ${{ secrets.IDM_AWS_SECRET_ACCESS_KEY }}
 
     steps:
       - name: Checkout system tests

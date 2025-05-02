@@ -214,7 +214,6 @@ describe('Plugin', () => {
                 index: 'tags_idx',
                 datatype: aerospike.indexDataType.STRING
               }
-              // eslint-disable-next-line n/handle-callback-err
               client.createIndex(index, (error, job) => {
                 job.waitUntilDone((waitError) => {
                   const query = client.query(ns, 'demo')

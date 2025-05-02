@@ -277,4 +277,40 @@ describe('agentless-ci-visibility-encode', () => {
     expect(spanEvent.type).to.equal('span')
     expect(spanEvent.version).to.equal(1)
   })
+
+  describe('addMetadataTags', () => {
+    afterEach(() => {
+      encoder.metadataTags = {}
+    })
+
+    it('should add simple metadata tags', () => {
+      const tags = {
+        test: { tag: 'value1' },
+        test_session_end: { tag: 'value2' }
+      }
+      encoder.addMetadataTags(tags)
+      expect(encoder.metadataTags).to.eql(tags)
+    })
+
+    it('should merge dictionaries if there are values already', () => {
+      encoder.metadataTags = {
+        test: { tag: 'value1' }
+      }
+      const tags = {
+        test: { other: 'value2' },
+        test_session_end: { tag: 'value3' }
+      }
+      encoder.addMetadataTags(tags)
+      expect(encoder.metadataTags).to.eql({
+        test: { tag: 'value1', other: 'value2' },
+        test_session_end: { tag: 'value3' }
+      })
+    })
+
+    it('should handle empty tags', () => {
+      encoder.metadataTags = { test: { tag: 'value1' } }
+      encoder.addMetadataTags({})
+      expect(encoder.metadataTags).to.eql({ test: { tag: 'value1' } })
+    })
+  })
 })

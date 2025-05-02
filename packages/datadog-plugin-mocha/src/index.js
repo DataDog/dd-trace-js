@@ -17,7 +17,6 @@ const {
   TEST_CODE_OWNERS,
   ITR_CORRELATION_ID,
   TEST_SOURCE_FILE,
-  removeEfdStringFromTestName,
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
@@ -31,7 +30,14 @@ const {
   MOCHA_IS_PARALLEL,
   TEST_IS_RUM_ACTIVE,
   TEST_BROWSER_DRIVER,
-  TEST_RETRY_REASON
+  TEST_RETRY_REASON,
+  TEST_MANAGEMENT_ENABLED,
+  TEST_MANAGEMENT_IS_QUARANTINED,
+  TEST_MANAGEMENT_IS_DISABLED,
+  TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
+  TEST_HAS_FAILED_ALL_RETRIES,
+  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
+  TEST_RETRY_REASON_TYPES
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -47,6 +53,8 @@ const {
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 const id = require('../../dd-trace/src/id')
 const log = require('../../dd-trace/src/log')
+
+const BREAKPOINT_SET_GRACE_PERIOD_MS = 200
 
 function getTestSuiteLevelVisibilityTags (testSuiteSpan) {
   const testSuiteSpanContext = testSuiteSpan.context()
@@ -194,7 +202,15 @@ class MochaPlugin extends CiPlugin {
       this.tracer._exporter.flush()
     })
 
-    this.addSub('ci:mocha:test:finish', ({ status, hasBeenRetried, isLastRetry }) => {
+    this.addSub('ci:mocha:test:finish', ({
+      status,
+      hasBeenRetried,
+      isLastRetry,
+      hasFailedAllRetries,
+      attemptToFixPassed,
+      isAttemptToFixRetry,
+      isAtrRetry
+    }) => {
       const store = storage('legacy').getStore()
       const span = store?.span
 
@@ -202,6 +218,21 @@ class MochaPlugin extends CiPlugin {
         span.setTag(TEST_STATUS, status)
         if (hasBeenRetried) {
           span.setTag(TEST_IS_RETRY, 'true')
+          if (isAtrRetry) {
+            span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atr)
+          } else {
+            span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.ext)
+          }
+        }
+        if (hasFailedAllRetries) {
+          span.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
+        }
+        if (attemptToFixPassed) {
+          span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
+        }
+        if (isAttemptToFixRetry) {
+          span.setTag(TEST_IS_RETRY, 'true')
+          span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atf)
         }
 
         const spanTags = span.context()._tags
@@ -249,13 +280,18 @@ class MochaPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:mocha:test:retry', ({ isFirstAttempt, willBeRetried, err, test }) => {
+    this.addSub('ci:mocha:test:retry', ({ isFirstAttempt, willBeRetried, err, test, isAtrRetry }) => {
       const store = storage('legacy').getStore()
       const span = store?.span
       if (span) {
         span.setTag(TEST_STATUS, 'fail')
         if (!isFirstAttempt) {
           span.setTag(TEST_IS_RETRY, 'true')
+          if (isAtrRetry) {
+            span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atr)
+          } else {
+            span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.ext)
+          }
         }
         if (err) {
           span.setTag('error', err)
@@ -279,7 +315,12 @@ class MochaPlugin extends CiPlugin {
             this.runningTestProbe = { file, line }
             this.testErrorStackIndex = stackIndex
             test._ddShouldWaitForHitProbe = true
-            // TODO: we're not waiting for setProbePromise to be resolved, so there might be race conditions
+            const waitUntil = Date.now() + BREAKPOINT_SET_GRACE_PERIOD_MS
+            while (Date.now() < waitUntil) {
+              // TODO: To avoid a race condition, we should wait until `probeInformation.setProbePromise` has resolved.
+              // However, Mocha doesn't have a mechanism for waiting asyncrounously here, so for now, we'll have to
+              // fall back to a fixed syncronous delay.
+            }
           }
         }
 
@@ -302,6 +343,7 @@ class MochaPlugin extends CiPlugin {
       error,
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
+      isTestManagementEnabled,
       isParallel
     }) => {
       if (this.testSessionSpan) {
@@ -316,6 +358,10 @@ class MochaPlugin extends CiPlugin {
 
         if (isParallel) {
           this.testSessionSpan.setTag(MOCHA_IS_PARALLEL, 'true')
+        }
+
+        if (isTestManagementEnabled) {
+          this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
         }
 
         addIntelligentTestRunnerSpanTags(
@@ -345,7 +391,10 @@ class MochaPlugin extends CiPlugin {
         this.testSessionSpan.finish()
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
         finishAllTraceSpans(this.testSessionSpan)
-        this.telemetry.count(TELEMETRY_TEST_SESSION, { provider: this.ciProviderName })
+        this.telemetry.count(TELEMETRY_TEST_SESSION, {
+          provider: this.ciProviderName,
+          autoInjected: !!process.env.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER
+        })
       }
       this.libraryConfig = null
       this.tracer._exporter.flush()
@@ -385,15 +434,17 @@ class MochaPlugin extends CiPlugin {
 
   startTestSpan (testInfo) {
     const {
+      testName,
       testSuiteAbsolutePath,
       title,
       isNew,
       isEfdRetry,
       testStartLine,
-      isParallel
+      isParallel,
+      isAttemptToFix,
+      isDisabled,
+      isQuarantined
     } = testInfo
-
-    const testName = removeEfdStringFromTestName(testInfo.testName)
 
     const extraTags = {}
     const testParametersString = getTestParametersString(this._testTitleToParams, title)
@@ -409,6 +460,18 @@ class MochaPlugin extends CiPlugin {
       extraTags[MOCHA_IS_PARALLEL] = 'true'
     }
 
+    if (isAttemptToFix) {
+      extraTags[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] = 'true'
+    }
+
+    if (isDisabled) {
+      extraTags[TEST_MANAGEMENT_IS_DISABLED] = 'true'
+    }
+
+    if (isQuarantined) {
+      extraTags[TEST_MANAGEMENT_IS_QUARANTINED] = 'true'
+    }
+
     const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.sourceRoot)
     const testSuiteSpan = this._testSuites.get(testSuite)
 
@@ -422,7 +485,7 @@ class MochaPlugin extends CiPlugin {
       extraTags[TEST_IS_NEW] = 'true'
       if (isEfdRetry) {
         extraTags[TEST_IS_RETRY] = 'true'
-        extraTags[TEST_RETRY_REASON] = 'efd'
+        extraTags[TEST_RETRY_REASON] = 'early_flake_detection'
       }
     }
 

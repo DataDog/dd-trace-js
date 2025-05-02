@@ -11,7 +11,7 @@ describe('Dynamic Instrumentation', function () {
       beforeEach(t.triggerBreakpoint)
 
       it('should capture a snapshot', function (done) {
-        t.agent.on('debugger-input', ({ payload: [{ 'debugger.snapshot': { captures } }] }) => {
+        t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { captures } } }] }) => {
           assert.deepEqual(Object.keys(captures), ['lines'])
           assert.deepEqual(Object.keys(captures.lines), [String(t.breakpoint.line)])
 
@@ -114,7 +114,7 @@ describe('Dynamic Instrumentation', function () {
       })
 
       it('should respect maxReferenceDepth', function (done) {
-        t.agent.on('debugger-input', ({ payload: [{ 'debugger.snapshot': { captures } }] }) => {
+        t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { captures } } }] }) => {
           const { locals } = captures.lines[t.breakpoint.line]
           delete locals.request
           delete locals.fastify
@@ -150,7 +150,7 @@ describe('Dynamic Instrumentation', function () {
       })
 
       it('should respect maxLength', function (done) {
-        t.agent.on('debugger-input', ({ payload: [{ 'debugger.snapshot': { captures } }] }) => {
+        t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { captures } } }] }) => {
           const { locals } = captures.lines[t.breakpoint.line]
 
           assert.deepEqual(locals.lstr, {
@@ -167,7 +167,7 @@ describe('Dynamic Instrumentation', function () {
       })
 
       it('should respect maxCollectionSize', function (done) {
-        t.agent.on('debugger-input', ({ payload: [{ 'debugger.snapshot': { captures } }] }) => {
+        t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { captures } } }] }) => {
           const { locals } = captures.lines[t.breakpoint.line]
 
           assert.deepEqual(locals.arr, {
@@ -205,14 +205,14 @@ describe('Dynamic Instrumentation', function () {
           }
         }
 
-        t.agent.on('debugger-input', ({ payload: [{ 'debugger.snapshot': { captures } }] }) => {
+        t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { captures } } }] }) => {
           const { locals } = captures.lines[t.breakpoint.line]
 
-          assert.deepEqual(Object.keys(locals), [
-            // Up to 3 properties from the local scope
-            'request', 'nil', 'undef',
+          assert.deepStrictEqual(Object.keys(locals), [
             // Up to 3 properties from the closure scope
-            'fastify', 'getUndefined'
+            'fastify', 'getUndefined',
+            // Up to 3 properties from the local scope
+            'request', 'nil', 'undef'
           ])
 
           assert.strictEqual(locals.request.type, 'Request')

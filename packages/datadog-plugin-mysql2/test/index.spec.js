@@ -57,7 +57,6 @@ describe('Plugin', () => {
           tracer.scope().activate(span, () => {
             const span = tracer.scope().active()
 
-            // eslint-disable-next-line n/handle-callback-err
             connection.query('SELECT 1 + 1 AS solution', (err, results, fields) => {
               try {
                 expect(results).to.not.be.null
@@ -448,7 +447,7 @@ describe('Plugin', () => {
         it('query text should contain traceparent', done => {
           let queryText = ''
           agent.use(traces => {
-            const expectedTimePrefix = Math.floor(clock.now / 1000).toString(16).padStart(8, '0').padEnd(16, '0')
+            const expectedTimePrefix = traces[0][0].meta['_dd.p.tid'].toString(16).padStart(16, '0')
             const traceId = expectedTimePrefix + traces[0][0].trace_id.toString(16).padStart(16, '0')
             const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
 
@@ -456,9 +455,7 @@ describe('Plugin', () => {
               `/*dddb='db',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}',` +
             `traceparent='00-${traceId}-${spanId}-00'*/ SELECT 1 + 1 AS solution`)
           }).then(done, done)
-          const clock = sinon.useFakeTimers(new Date())
           const connect = connection.query('SELECT 1 + 1 AS solution', () => {
-            clock.restore()
             queryText = connect.sql
           })
         })
@@ -530,7 +527,7 @@ describe('Plugin', () => {
         it('query text should contain traceparent', done => {
           let queryText = ''
           agent.use(traces => {
-            const expectedTimePrefix = Math.floor(clock.now / 1000).toString(16).padStart(8, '0').padEnd(16, '0')
+            const expectedTimePrefix = traces[0][0].meta['_dd.p.tid'].toString(16).padStart(16, '0')
             const traceId = expectedTimePrefix + traces[0][0].trace_id.toString(16).padStart(16, '0')
             const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
 
@@ -538,9 +535,7 @@ describe('Plugin', () => {
               `/*dddb='db',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}',` +
             `traceparent='00-${traceId}-${spanId}-00'*/ SELECT 1 + 1 AS solution`)
           }).then(done, done)
-          const clock = sinon.useFakeTimers(new Date())
           const queryPool = pool.query('SELECT 1 + 1 AS solution', () => {
-            clock.restore()
             queryText = queryPool.sql
           })
         })

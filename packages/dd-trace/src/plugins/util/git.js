@@ -35,7 +35,8 @@ function sanitizedExec (
   flags,
   operationMetric,
   durationMetric,
-  errorMetric
+  errorMetric,
+  shouldTrim = true
 ) {
   const store = storage('legacy').getStore()
   storage('legacy').enterWith({ noop: true })
@@ -48,7 +49,10 @@ function sanitizedExec (
     startTime = Date.now()
   }
   try {
-    const result = cp.execFileSync(cmd, flags, { stdio: 'pipe' }).toString().replace(/(\r\n|\n|\r)/gm, '')
+    let result = cp.execFileSync(cmd, flags, { stdio: 'pipe' }).toString()
+    if (shouldTrim) {
+      result = result.replace(/(\r\n|\n|\r)/gm, '')
+    }
     if (durationMetric) {
       distributionMetric(durationMetric.name, durationMetric.tags, Date.now() - startTime)
     }
@@ -328,22 +332,34 @@ function getGitMetadata (ciMetadata) {
     committerDate
   ] = sanitizedExec('git', ['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI']).split(',')
 
-  return {
-    [GIT_REPOSITORY_URL]:
-      filterSensitiveInfoFromRepository(repositoryUrl || sanitizedExec('git', ['ls-remote', '--get-url'])),
+  const tags = {
     [GIT_COMMIT_MESSAGE]:
-      commitMessage || sanitizedExec('git', ['show', '-s', '--format=%s']),
-    [GIT_COMMIT_AUTHOR_DATE]: authorDate,
-    [GIT_COMMIT_AUTHOR_NAME]: ciAuthorName || authorName,
-    [GIT_COMMIT_AUTHOR_EMAIL]: ciAuthorEmail || authorEmail,
-    [GIT_COMMIT_COMMITTER_DATE]: committerDate,
-    [GIT_COMMIT_COMMITTER_NAME]: committerName,
-    [GIT_COMMIT_COMMITTER_EMAIL]: committerEmail,
+      commitMessage || sanitizedExec('git', ['show', '-s', '--format=%B'], null, null, null, false),
     [GIT_BRANCH]: branch || sanitizedExec('git', ['rev-parse', '--abbrev-ref', 'HEAD']),
     [GIT_COMMIT_SHA]: commitSHA || sanitizedExec('git', ['rev-parse', 'HEAD']),
-    [GIT_TAG]: tag,
     [CI_WORKSPACE_PATH]: ciWorkspacePath || sanitizedExec('git', ['rev-parse', '--show-toplevel'])
   }
+
+  const entries = [
+    GIT_REPOSITORY_URL,
+    filterSensitiveInfoFromRepository(repositoryUrl || sanitizedExec('git', ['ls-remote', '--get-url'])),
+    GIT_COMMIT_AUTHOR_DATE, authorDate,
+    GIT_COMMIT_AUTHOR_NAME, ciAuthorName || authorName,
+    GIT_COMMIT_AUTHOR_EMAIL, ciAuthorEmail || authorEmail,
+    GIT_COMMIT_COMMITTER_DATE, committerDate,
+    GIT_COMMIT_COMMITTER_NAME, committerName,
+    GIT_COMMIT_COMMITTER_EMAIL, committerEmail,
+    GIT_TAG, tag
+  ]
+
+  for (let i = 0; i < entries.length; i += 2) {
+    const value = entries[i + 1]
+    if (value) {
+      tags[entries[i]] = value
+    }
+  }
+
+  return tags
 }
 
 module.exports = {

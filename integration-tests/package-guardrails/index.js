@@ -1,7 +1,6 @@
 'use strict'
 
 /* eslint-disable no-console */
-/* eslint-disable import/no-extraneous-dependencies */
 
 try {
   const P = require('bluebird')
@@ -12,5 +11,5 @@ try {
 } catch (e) {
   const fastify = require('fastify')
 
-  console.log(fastify.toString().startsWith('function shim'))
+  console.log(fastify.toString().startsWith('function fastifyWithTrace'))
 }

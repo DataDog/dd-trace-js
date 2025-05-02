@@ -22,6 +22,9 @@ describe('Plugin', () => {
 
       tracer = require('../../dd-trace')
 
+      // TODO: Use the real module when it's released.
+      dc.channel('dd-trace:instrumentation:load').publish({ name: 'dd-trace-api' })
+
       sinon.spy(tracer)
       sinon.spy(tracer.appsec)
       sinon.spy(tracer.dogstatsd)
@@ -268,16 +271,13 @@ describe('Plugin', () => {
       })
     }
 
-    function testChannel ({ name, fn, self = dummyTracer, ret = undefined, args = [] }) {
+    function testChannel ({ name, fn, self = dummyTracer, ret, args = [], proxy }) {
       testedChannels.add('datadog-api:v1:' + name)
       const ch = dc.channel('datadog-api:v1:' + name)
-      const payload = {
-        self,
-        args,
-        ret: {},
-        proxy: ret && typeof ret === 'object' ? () => ret : undefined,
-        revProxy: []
+      if (proxy === undefined) {
+        proxy = ret && typeof ret === 'object' ? () => ret : undefined
       }
+      const payload = { self, args, ret: {}, proxy, revProxy: [] }
       ch.publish(payload)
       if (payload.ret.error) {
         throw payload.ret.error

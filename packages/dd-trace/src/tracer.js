@@ -6,11 +6,8 @@ const Scope = require('./scope')
 const { isError } = require('./util')
 const { setStartupLogConfig } = require('./startup-log')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const { DataStreamsProcessor } = require('./datastreams/processor')
-const { DsmPathwayCodec } = require('./datastreams/pathway')
-const DataStreamsContext = require('./data_streams_context')
-const { DataStreamsCheckpointer } = require('./data_streams')
-const { flushStartupLogs } = require('../../datadog-instrumentations/src/check_require_cache')
+const { DataStreamsCheckpointer, DataStreamsManager, DataStreamsProcessor } = require('./datastreams')
+const { flushStartupLogs } = require('../../datadog-instrumentations/src/helpers/check-require-cache')
 const log = require('./log/writer')
 
 const SPAN_TYPE = tags.SPAN_TYPE
@@ -22,31 +19,26 @@ class DatadogTracer extends Tracer {
   constructor (config, prioritySampler) {
     super(config, prioritySampler)
     this._dataStreamsProcessor = new DataStreamsProcessor(config)
+    this._dataStreamsManager = new DataStreamsManager(this._dataStreamsProcessor)
     this.dataStreamsCheckpointer = new DataStreamsCheckpointer(this)
     this._scope = new Scope()
     setStartupLogConfig(config)
     flushStartupLogs(log)
   }
 
-  configure ({ env, sampler }) {
-    this._prioritySampler.configure(env, sampler)
+  configure (config) {
+    const { env, sampler } = config
+    this._prioritySampler.configure(env, sampler, config)
   }
 
   // todo[piochelepiotr] These two methods are not related to the tracer, but to data streams monitoring.
   // They should be moved outside of the tracer in the future.
   setCheckpoint (edgeTags, span, payloadSize = 0) {
-    const ctx = this._dataStreamsProcessor.setCheckpoint(
-      edgeTags, span, DataStreamsContext.getDataStreamsContext(), payloadSize
-    )
-    DataStreamsContext.setDataStreamsContext(ctx)
-    return ctx
+    return this._dataStreamsManager.setCheckpoint(edgeTags, span, payloadSize)
   }
 
   decodeDataStreamsContext (carrier) {
-    const ctx = DsmPathwayCodec.decode(carrier)
-    // we erase the previous context everytime we decode a new one
-    DataStreamsContext.setDataStreamsContext(ctx)
-    return ctx
+    return this._dataStreamsManager.decodeDataStreamsContext(carrier)
   }
 
   setOffset (offsetData) {

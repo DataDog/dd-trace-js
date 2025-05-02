@@ -112,8 +112,6 @@ class NativeWallProfiler {
   start ({ mapper } = {}) {
     if (this._started) return
 
-    ensureChannelsActivated()
-
     this._mapper = mapper
     this._pprof = require('@datadog/pprof')
     kSampleCount = this._pprof.time.constants.kSampleCount
@@ -142,6 +140,8 @@ class NativeWallProfiler {
       if (this._captureSpanData) {
         this._profilerState = this._pprof.time.getState()
         this._lastSampleCount = 0
+
+        ensureChannelsActivated()
 
         beforeCh.subscribe(this._enter)
         enterCh.subscribe(this._enter)
@@ -286,13 +286,24 @@ class NativeWallProfiler {
 
     const labels = { ...getThreadLabels() }
 
-    const { context: { ref }, timestamp } = context
-    const { spanId, rootSpanId, webTags, endpoint } = ref ?? {}
-
     if (this._timelineEnabled) {
       // Incoming timestamps are in microseconds, we emit nanos.
-      labels[END_TIMESTAMP_LABEL] = timestamp * 1000n
+      labels[END_TIMESTAMP_LABEL] = context.timestamp * 1000n
     }
+
+    const asyncId = context.asyncId
+    if (asyncId !== undefined && asyncId !== -1) {
+      labels['async id'] = asyncId
+    }
+
+    // Native profiler doesn't set context.context for some samples, such as idle samples or when
+    // the context was otherwise unavailable when the sample was taken.
+    const ref = context.context?.ref
+    if (typeof ref !== 'object') {
+      return labels
+    }
+
+    const { spanId, rootSpanId, webTags, endpoint } = ref
 
     if (spanId !== undefined) {
       labels[SPAN_ID_LABEL] = spanId

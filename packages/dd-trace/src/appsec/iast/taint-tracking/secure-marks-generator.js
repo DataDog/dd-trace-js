@@ -3,7 +3,7 @@
 let next = 0
 
 function getNextSecureMark () {
-  return 1 << next++
+  return (1 << next++) >>> 0
 }
 
 function reset () {

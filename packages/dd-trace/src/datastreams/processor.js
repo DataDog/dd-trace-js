@@ -5,7 +5,7 @@ const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')
 const { DsmPathwayCodec } = require('./pathway')
 const { DataStreamsWriter } = require('./writer')
 const { computePathwayHash } = require('./pathway')
-const { types } = require('util')
+const { getAmqpMessageSize, getHeadersSize, getMessageSize, getSizeOrZero } = require('./size')
 const { PATHWAY_HASH } = require('../../../../ext/tags')
 const { SchemaBuilder } = require('./schemas/schema_builder')
 const { SchemaSampler } = require('./schemas/schema_sampler')
@@ -13,16 +13,14 @@ const log = require('../log')
 
 const ENTRY_PARENT_HASH = Buffer.from('0000000000000000', 'hex')
 
-const HIGH_ACCURACY_DISTRIBUTION = 0.0075
-
 class StatsPoint {
   constructor (hash, parentHash, edgeTags) {
     this.hash = hash.readBigUInt64BE()
     this.parentHash = parentHash.readBigUInt64BE()
     this.edgeTags = edgeTags
-    this.edgeLatency = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
-    this.pathwayLatency = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
-    this.payloadSize = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
+    this.edgeLatency = new LogCollapsingLowestDenseDDSketch()
+    this.pathwayLatency = new LogCollapsingLowestDenseDDSketch()
+    this.payloadSize = new LogCollapsingLowestDenseDDSketch()
   }
 
   addLatencies (checkpoint) {
@@ -113,49 +111,6 @@ class StatsBucket {
     this._backlogs.set(backlog.hash, backlog)
     return backlog
   }
-}
-
-function getSizeOrZero (obj) {
-  if (typeof obj === 'string') {
-    return Buffer.from(obj, 'utf-8').length
-  }
-  if (types.isArrayBuffer(obj)) {
-    return obj.byteLength
-  }
-  if (Buffer.isBuffer(obj)) {
-    return obj.length
-  }
-  if (Array.isArray(obj) && obj.length > 0) {
-    if (typeof obj[0] === 'number') return Buffer.from(obj).length
-    let payloadSize = 0
-    obj.forEach(item => {
-      payloadSize += getSizeOrZero(item)
-    })
-    return payloadSize
-  }
-  if (obj !== null && typeof obj === 'object') {
-    try {
-      return getHeadersSize(obj)
-    } catch {
-      // pass
-    }
-  }
-  return 0
-}
-
-function getHeadersSize (headers) {
-  if (headers === undefined) return 0
-  return Object.entries(headers).reduce((prev, [key, val]) => getSizeOrZero(key) + getSizeOrZero(val) + prev, 0)
-}
-
-function getMessageSize (message) {
-  const { key, value, headers } = message
-  return getSizeOrZero(key) + getSizeOrZero(value) + getHeadersSize(headers)
-}
-
-function getAmqpMessageSize (message) {
-  const { headers, content } = message
-  return getSizeOrZero(content) + getHeadersSize(headers)
 }
 
 class TimeBuckets extends Map {

@@ -52,7 +52,7 @@
     },
     {
       "name": "@aws-sdk/client-bedrock-runtime",
-      "versions": [">=3.422.0"]
+      "versions": [">=3.422.0 <3.798.0"]
     }
   ],
   "body-parser": [
@@ -113,7 +113,17 @@
       "versions": ["1.20.1"]
     }
   ],
+  "express-session": [
+    {
+      "name": "express",
+      "versions": [">=4.0.0"]
+    }
+  ],
   "mquery": [
+    {
+      "name": "express",
+      "versions": [">=4", ">=4.0.0 <4.3.0", ">=4.0.0 <5.0.0", ">=4.3.0 <5.0.0"]
+    },
     {
       "name": "mquery",
       "versions": [">=5.0.0"]
@@ -285,6 +295,14 @@
       "versions": [">=0.1"]
     },
     {
+      "name": "@langchain/google-genai",
+      "versions": [">=0.1"]
+    },
+    {
+      "name": "@langchain/openai",
+      "versions": [">=0.1"]
+    },
+    {
       "name": "@langchain/cohere",
       "versions": [">=0.1"]
     }
@@ -308,7 +326,7 @@
   "mariadb": [
     {
       "name": "mariadb",
-      "versions": ["2.5.6", "3.0.0"]
+      "versions": ["2.5.6", "3.0.0", "3.4.0"]
     }
   ],
   "mocha": [
