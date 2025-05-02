@@ -55,51 +55,33 @@ class WAFManager {
   }
 
   update (product, rules, path) {
-    try {
-      if (product === 'ASM_DD' && this.ddwaf.configPaths.includes(DEFAULT_WAF_CONFIG_PATH)) {
-        this.ddwaf.removeConfig(DEFAULT_WAF_CONFIG_PATH)
-      }
-
-      const success = this.ddwaf.createOrUpdateConfig(rules, path)
-      const diagnostics = this.ddwaf.diagnostics
-
-      if (diagnostics.ruleset_version) {
-        this.rulesVersion = diagnostics.ruleset_version
-      }
-
-      Reporter.reportWafUpdate(this.ddwafVersion, this.rulesVersion, success)
-
-      if (product === 'ASM_DD' && !success && !this.ddwaf.configPaths.some(cp => cp.includes('ASM_DD'))) {
-        this.ddwaf.createOrUpdateConfig(this.defaultRules, DEFAULT_WAF_CONFIG_PATH)
-      }
-
-      return { success, diagnostics }
-    } catch (error) {
-      Reporter.reportWafUpdate(this.ddwafVersion, 'unknown', false)
-
-      throw error
+    if (product === 'ASM_DD' && this.ddwaf.configPaths.includes(DEFAULT_WAF_CONFIG_PATH)) {
+      this.ddwaf.removeConfig(DEFAULT_WAF_CONFIG_PATH)
     }
 
+    const success = this.ddwaf.createOrUpdateConfig(rules, path)
+    const diagnostics = this.ddwaf.diagnostics
+
+    if (diagnostics.ruleset_version) {
+      this.rulesVersion = diagnostics.ruleset_version
+    }
+
+    if (product === 'ASM_DD' && !success && !this.ddwaf.configPaths.some(cp => cp.includes('ASM_DD'))) {
+      this.ddwaf.createOrUpdateConfig(this.defaultRules, DEFAULT_WAF_CONFIG_PATH)
+    }
+
+    return { success, diagnostics }
   }
 
   remove (path) {
-    try {
-      this.ddwaf.removeConfig(path)
+    this.ddwaf.removeConfig(path)
 
-      if (!this.ddwaf.configPaths.some(cp => cp.includes('ASM_DD'))) {
-        console.log('Reverting default rules')
-        this.ddwaf.createOrUpdateConfig(this.defaultRules, DEFAULT_WAF_CONFIG_PATH)
-      }
+    if (!this.ddwaf.configPaths.some(cp => cp.includes('ASM_DD'))) {
+      this.ddwaf.createOrUpdateConfig(this.defaultRules, DEFAULT_WAF_CONFIG_PATH)
+    }
 
-      if (this.ddwaf.diagnostics.ruleset_version) {
-        this.rulesVersion = this.ddwaf.diagnostics.ruleset_version
-      }
-
-      Reporter.reportWafUpdate(this.ddwafVersion, this.rulesVersion, true)
-    } catch (error) {
-      Reporter.reportWafUpdate(this.ddwafVersion, 'unknown', false)
-
-      throw error
+    if (this.ddwaf.diagnostics.ruleset_version) {
+      this.rulesVersion = this.ddwaf.diagnostics.ruleset_version
     }
   }
 
