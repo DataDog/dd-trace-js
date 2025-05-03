@@ -102,7 +102,7 @@ class Sqs extends BaseAwsSdkPlugin {
     Object.assign(tags, {
       'resource.name': `${operation} ${params.QueueName || params.QueueUrl}`,
       'aws.sqs.queue_name': params.QueueName || params.QueueUrl,
-      'queuename': queueName,
+      //'queuename': queueName,
       'hostname': new URL(params.QueueUrl).hostname
     })
 
