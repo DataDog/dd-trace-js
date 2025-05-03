@@ -24,6 +24,7 @@ class Sns extends BaseAwsSdkPlugin {
     return {
       'resource.name': `${operation} ${params.TopicArn || response.data.TopicArn}`,
       'aws.sns.topic_arn': TopicArn,
+      'hostname': 'sns.us-east-1.amazonaws.com',
       //topicname: topicName
     }
 
