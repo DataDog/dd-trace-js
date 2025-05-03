@@ -19,7 +19,7 @@ class S3 extends BaseAwsSdkPlugin {
       'resource.name': `${operation} ${params.Bucket}`,
       //'aws.s3.bucket_name': params.Bucket,
       //bucketname: params.Bucket,
-      //'hostname': `${params.Bucket}.s3.${this.activeSpan._spanContext._tags['region']}.amazonaws.com`
+      'hostname': `${params.Bucket}.s3.${this.activeSpan._spanContext._tags['region']}.amazonaws.com`
     })
   }
 

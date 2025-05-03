@@ -7,7 +7,9 @@ class EventBridge extends BaseAwsSdkPlugin {
   static get isPayloadReporter () { return true }
 
   generateTags (params, operation, response) {
-    if (!params || !params.source) return {}
+    if (!params || !params.source) return {
+      'hostname': `events.${this.activeSpan._spanContext._tags['region']}.amazonaws.com`
+    }
     const rulename = params.Name ? params.Name : ''
     return {
       'resource.name': operation ? `${operation} ${params.source}` : params.source,

@@ -68,7 +68,7 @@ class Kinesis extends BaseAwsSdkPlugin {
       'resource.name': `${operation} ${params.StreamName}`,
       'aws.kinesis.stream_name': params.StreamName,
       //streamname: params.StreamName,
-      //'hostname': `kinesis.${this.activeSpan._spanContext._tags['region']}.amazonaws.com`,
+      'hostname': `kinesis.${this.activeSpan._spanContext._tags['region']}.amazonaws.com`,
     }
   }
 
