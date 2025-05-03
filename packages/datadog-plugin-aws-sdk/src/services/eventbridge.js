@@ -13,7 +13,7 @@ class EventBridge extends BaseAwsSdkPlugin {
       'resource.name': operation ? `${operation} ${params.source}` : params.source,
       'aws.eventbridge.source': `${params.source}`,
       //rulename: `${rulename}`,
-      'hostname': `events.${this.activeSpan._spanContext._tags['region']}.amazonaws.com`,
+      //'hostname': `events.${this.activeSpan._spanContext._tags['region']}.amazonaws.com`,
     }
   }
 

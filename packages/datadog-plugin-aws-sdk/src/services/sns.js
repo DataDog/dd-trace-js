@@ -25,7 +25,7 @@ class Sns extends BaseAwsSdkPlugin {
       'resource.name': `${operation} ${params.TopicArn || response.data.TopicArn}`,
       'aws.sns.topic_arn': TopicArn,
       //topicname: topicName,
-      'hostname': `sns.${this.activeSpan._spanContext._tags['region']}.amazonaws.com`,
+      //'hostname': `sns.${this.activeSpan._spanContext._tags['region']}.amazonaws.com`,
     }
 
     // TODO: should arn be sanitized or quantized in some way here,
