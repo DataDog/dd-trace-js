@@ -73,10 +73,11 @@ try {
   const legacyDiff = capture(`${diffCmd} --require-label=dont-land-on-v${releaseLine}.x v${releaseLine}.x ${main}`)
 
   if (legacyDiff) {
-    fatal(
-      `The "dont-land-on-v${releaseLine}.x" label is no longer supported.`,
-      'Please remove the label from any offending PR to continue.'
-    )
+    // TODO: Re-enable this when the offending PR commits have landed properly.
+    // fatal(
+    //   `The "dont-land-on-v${releaseLine}.x" label is no longer supported.`,
+    //   'Please remove the label from any offending PR to continue.'
+    // )
   }
 
   const { DD_MAJOR, DD_MINOR, DD_PATCH } = require('../../version')
