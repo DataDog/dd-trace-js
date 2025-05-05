@@ -16,6 +16,7 @@ const { tagger } = require('./tagger')
 const { isFalse, isTrue } = require('../util')
 const { getAzureTagsFromMetadata, getAzureAppMetadata } = require('../azure_metadata')
 const { getEnvironmentVariables } = require('../config-helper')
+const satisfies = require('semifies')
 
 class Config {
   constructor (options = {}) {
@@ -41,6 +42,7 @@ class Config {
       DD_PROFILING_TIMELINE_ENABLED,
       DD_PROFILING_UPLOAD_PERIOD,
       DD_PROFILING_UPLOAD_TIMEOUT,
+      DD_PROFILING_USE_ASYNC_CONTEXT_FRAME,
       DD_PROFILING_V8_PROFILER_BUG_WORKAROUND,
       DD_PROFILING_WALLTIME_ENABLED,
       DD_SERVICE,
@@ -208,6 +210,29 @@ class Config {
     }
 
     this.uploadCompression = { method: uploadCompression, level }
+
+    const that = this
+    function turnOffAsyncContextFrame (msg) {
+      that.logger.warn(
+        `DD_PROFILING_USE_ASYNC_CONTEXT_FRAME was set ${msg}, it will have no effect.`)
+      that.useAsyncContextFrame = false
+    }
+
+    this.useAsyncContextFrame = isTrue(coalesce(options.useAsyncContextFrame,
+      DD_PROFILING_USE_ASYNC_CONTEXT_FRAME, false))
+    if (this.useAsyncContextFrame) {
+      if (satisfies(process.versions.node, '>=24.0.0')) {
+        if (process.execArgv.includes('--no-async-context-frame')) {
+          turnOffAsyncContextFrame('with --no-async-context-frame')
+        }
+      } else if (satisfies(process.versions.node, '>=23.0.0')) {
+        if (!process.execArgv.includes('--experimental-async-context-frame')) {
+          turnOffAsyncContextFrame('without --experimental-async-context-frame')
+        }
+      } else {
+        turnOffAsyncContextFrame('but it requires at least Node 23')
+      }
+    }
 
     this.profilers = ensureProfilers(profilers, this)
   }
