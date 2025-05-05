@@ -1,3 +1,6 @@
+'use strict'
+
+const util = require('node:util')
 const shimmer = require('../../datadog-shimmer')
 const { addHook } = require('./helpers/instrument')
 
@@ -87,17 +90,13 @@ function wrapReflection (protobuf) {
   })
 }
 
-function isPromise (obj) {
-  return !!obj && (typeof obj === 'object' || typeof obj === 'function') && typeof obj.then === 'function'
-}
-
 addHook({
   name: 'protobufjs',
   versions: ['>=6.8.0']
 }, protobuf => {
   shimmer.wrap(protobuf.Root.prototype, 'load', original => function () {
     const result = original.apply(this, arguments)
-    if (isPromise(result)) {
+    if (util.types.isPromise(result)) {
       return result.then(root => {
         wrapProtobufClasses(root)
         return root

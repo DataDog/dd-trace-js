@@ -54,10 +54,6 @@ class Scope {
   _spanOrActive (span) {
     return span !== undefined ? span : this.active()
   }
-
-  _isPromise (promise) {
-    return promise && typeof promise.then === 'function'
-  }
 }
 
 module.exports = Scope

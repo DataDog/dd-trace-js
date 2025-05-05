@@ -1,5 +1,6 @@
 'use strict'
 
+const util = require('node:util')
 const {
   channel,
   addHook,
@@ -96,7 +97,7 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
         })
       }
 
-      if (!isPromise(kafkaClusterIdPromise)) {
+      if (!util.types.isPromise(kafkaClusterIdPromise)) {
         // promise is already resolved
         return wrappedSend(kafkaClusterIdPromise)
       } else {
@@ -157,7 +158,7 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
         })
       }
 
-      if (!isPromise(kafkaClusterIdPromise)) {
+      if (!util.types.isPromise(kafkaClusterIdPromise)) {
         // promise is already resolved
         return wrapConsume(kafkaClusterIdPromise)
       } else {
@@ -234,8 +235,4 @@ const getKafkaClusterId = (kafka) => {
     .catch((error) => {
       throw error
     })
-}
-
-function isPromise (obj) {
-  return !!obj && (typeof obj === 'object' || typeof obj === 'function') && typeof obj.then === 'function'
 }
