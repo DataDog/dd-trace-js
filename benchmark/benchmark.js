@@ -6,7 +6,7 @@ const Benchmark = require('benchmark')
 const nock = require('nock')
 
 Benchmark.options.maxTime = 0
-Benchmark.options.minSamples = 5
+Benchmark.options.minSamples = 100
 
 nock.disableNetConnect()
 

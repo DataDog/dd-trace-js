@@ -31,7 +31,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: llmobs-${{ github.job }}-${{ matrix.version }}
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d # v5.4.2
 
   openai:
     runs-on: ubuntu-latest
@@ -47,7 +47,7 @@ jobs:
       - uses: ./.github/actions/node/active-lts
       - run: yarn test:llmobs:plugins:ci
         shell: bash
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d # v5.4.2
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -67,7 +67,7 @@ jobs:
       - uses: ./.github/actions/node/active-lts
       - run: yarn test:llmobs:plugins:ci
         shell: bash
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d # v5.4.2
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -87,7 +87,7 @@ jobs:
       - uses: ./.github/actions/node/active-lts
       - run: yarn test:llmobs:plugins:ci
         shell: bash
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d # v5.4.2
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -107,7 +107,7 @@ jobs:
       - uses: ./.github/actions/node/active-lts
       - run: yarn test:llmobs:plugins:ci
         shell: bash
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d # v5.4.2
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
