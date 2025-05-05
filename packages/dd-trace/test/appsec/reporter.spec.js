@@ -138,26 +138,19 @@ describe('reporter', () => {
     }
 
     it('should add some entries to metricsQueue', () => {
-      Reporter.reportWafInit(wafVersion, rulesVersion, diagnosticsRules, true)
+      Reporter.reportWafInit(wafVersion, rulesVersion, true)
 
       expect(Reporter.metricsQueue.get('_dd.appsec.waf.version')).to.be.eq(wafVersion)
-      expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.loaded')).to.be.eq(3)
-      expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.error_count')).to.be.eq(1)
-      expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.errors'))
-        .to.be.eq(JSON.stringify(diagnosticsRules.errors))
     })
 
     it('should not add entries to metricsQueue with success false', () => {
-      Reporter.reportWafInit(wafVersion, rulesVersion, diagnosticsRules, false)
+      Reporter.reportWafInit(wafVersion, rulesVersion, false)
 
       expect(Reporter.metricsQueue.get('_dd.appsec.waf.version')).to.be.undefined
-      expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.loaded')).to.be.undefined
-      expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.error_count')).to.be.undefined
-      expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.errors')).to.be.undefined
     })
 
     it('should call incrementWafInitMetric', () => {
-      Reporter.reportWafInit(wafVersion, rulesVersion, diagnosticsRules, true)
+      Reporter.reportWafInit(wafVersion, rulesVersion, true)
 
       expect(telemetry.incrementWafInitMetric).to.have.been.calledOnceWithExactly(wafVersion, rulesVersion, true)
     })
@@ -167,10 +160,7 @@ describe('reporter', () => {
       const rulesVersion = undefined
       const diagnosticsRules = undefined
 
-      Reporter.reportWafInit(wafVersion, rulesVersion, diagnosticsRules, true)
-
-      expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.loaded')).to.be.eq(0)
-      expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.error_count')).to.be.eq(0)
+      Reporter.reportWafInit(wafVersion, rulesVersion, true)
 
       expect(telemetry.incrementWafInitMetric).to.have.been.calledOnceWithExactly(wafVersion, rulesVersion, true)
     })
