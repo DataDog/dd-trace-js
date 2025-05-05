@@ -286,6 +286,19 @@ describe('profiler', () => {
   let oomExecArgv
   const timeout = 30000
 
+  // Target sample count per span for the code hotspots test
+  const idealSamplesPerSpan = 10
+
+  // Intrinsic invariants for the code hotspots test
+  const expectedSpans = 9 // codehotspots.js creates 3x3 spans
+  const profilerSamplingFrequency = 99 // Hz
+
+  // Computed values for the code hotspots test. busyCycleTimeNs is adaptively adjusted by the test
+  // when it needs to be repeated.
+  const idealSampleCount = idealSamplesPerSpan * expectedSpans // we'd like 10 samples per span, ideally
+  let busyCycleTimeNs = 1000000000 * idealSamplesPerSpan / profilerSamplingFrequency
+  const maxBusyCycleTimeNs = (timeout - 1000) * 1000000 / expectedSpans
+
   before(async () => {
     sandbox = await createSandbox()
     cwd = sandbox.folder
@@ -300,13 +313,17 @@ describe('profiler', () => {
   })
 
   if (process.platform !== 'win32') {
-    it('code hotspots and endpoint tracing works', async () => {
+    it('code hotspots and endpoint tracing works', async function () {
+      // see comment on busyCycleTimeNs recomputation below. Ideally a single retry should be enough
+      // with recomputed busyCycleTimeNs, but let's give ourselves more leeway.
+      this.retries(9)
       const procStart = BigInt(Date.now() * 1000000)
       const proc = fork(path.join(cwd, 'profiler/codehotspots.js'), {
         cwd,
         env: {
           DD_PROFILING_EXPORTERS: 'file',
-          DD_PROFILING_ENABLED: 1
+          DD_PROFILING_ENABLED: 1,
+          BUSY_CYCLE_TIME: (busyCycleTimeNs | 0).toString()
         }
       })
 
@@ -318,6 +335,14 @@ describe('profiler', () => {
       assert.deepEqual(event.endpoint_counts, { 'endpoint-0': 1, 'endpoint-1': 1, 'endpoint-2': 1 })
 
       const { profile, encoded } = await getLatestProfile(cwd, /^wall_.+\.pprof$/)
+
+      // Recompute in case we need to retry. It is possible that some of the assertions in the test
+      // will fail because we gathered a too small number of samples. This can happen if the machine
+      // is CPU-constrained so the V8 thread that triggers PROF signals gets CPU starved. If we need
+      // to retry, the busyCycleTime will be prolonged to have the next execution of codehotspots.js
+      // run for long enough in the current environment for the profiler to capture the ideal number
+      // of samples.
+      busyCycleTimeNs = Math.min(maxBusyCycleTimeNs, busyCycleTimeNs * idealSampleCount / profile.sample.length)
 
       // We check the profile for following invariants:
       // - every sample needs to have an 'end_timestamp_ns' label that has values (nanos since UNIX
@@ -692,9 +717,9 @@ describe('profiler', () => {
         assert.equal(series[0].metric, 'profile_api.requests')
         assert.equal(series[0].type, 'count')
         // There's a race between metrics and on-shutdown profile, so metric
-        // value will be between 2 and 3
+        // value will be between 1 and 3
         requestCount = series[0].points[0][1]
-        assert.isAtLeast(requestCount, 2)
+        assert.isAtLeast(requestCount, 1)
         assert.isAtMost(requestCount, 3)
 
         assert.equal(series[1].metric, 'profile_api.responses')

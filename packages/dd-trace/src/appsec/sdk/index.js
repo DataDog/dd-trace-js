@@ -1,9 +1,29 @@
 'use strict'
 
-const { trackUserLoginSuccessEvent, trackUserLoginFailureEvent, trackCustomEvent } = require('./track_event')
+const {
+  trackUserLoginSuccessEvent,
+  trackUserLoginFailureEvent,
+  trackCustomEvent,
+  trackUserLoginSuccessV2,
+  trackUserLoginFailureV2
+} = require('./track_event')
 const { checkUserAndSetUser, blockRequest } = require('./user_blocking')
 const { setTemplates } = require('../blocking')
 const { setUser } = require('./set_user')
+
+class EventTrackingV2 {
+  constructor (tracer) {
+    this._tracer = tracer
+  }
+
+  trackUserLoginSuccess (login, user, metadata) {
+    trackUserLoginSuccessV2(this._tracer, login, user, metadata)
+  }
+
+  trackUserLoginFailure (login, exists, metadata) {
+    trackUserLoginFailureV2(this._tracer, login, exists, metadata)
+  }
+}
 
 class AppsecSdk {
   constructor (tracer, config) {
@@ -11,6 +31,8 @@ class AppsecSdk {
     if (config) {
       setTemplates(config)
     }
+
+    this.eventTrackingV2 = new EventTrackingV2(tracer)
   }
 
   trackUserLoginSuccessEvent (user, metadata) {

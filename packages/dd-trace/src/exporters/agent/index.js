@@ -24,7 +24,8 @@ class AgentExporter {
       prioritySampler,
       lookup,
       protocolVersion,
-      headers
+      headers,
+      config
     })
 
     this._timer = undefined

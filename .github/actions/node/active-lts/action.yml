@@ -3,7 +3,6 @@ description: Install the current Active LTS version of Node.js
 runs:
   using: composite
   steps:
-    - uses: actions/setup-node@v4
+    - uses: ./.github/actions/node
       with:
-        cache: yarn
-        node-version: '22'
+        version: active

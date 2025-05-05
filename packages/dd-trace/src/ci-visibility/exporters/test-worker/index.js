@@ -6,7 +6,8 @@ const {
   JEST_WORKER_TRACE_PAYLOAD_CODE,
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
-  JEST_WORKER_LOGS_PAYLOAD_CODE
+  JEST_WORKER_LOGS_PAYLOAD_CODE,
+  PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE
 } = require('../../../plugins/util/test')
 
 function getInterprocessTraceCode () {
@@ -18,6 +19,9 @@ function getInterprocessTraceCode () {
   }
   if (process.env.MOCHA_WORKER_ID) {
     return MOCHA_WORKER_TRACE_PAYLOAD_CODE
+  }
+  if (process.env.DD_PLAYWRIGHT_WORKER) {
+    return PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE
   }
   return null
 }
@@ -65,8 +69,9 @@ class TestWorkerCiVisibilityExporter {
     this._logsWriter.append({ testConfiguration, logMessage })
   }
 
-  flush () {
-    this._writer.flush()
+  // TODO: add to other writers
+  flush (onDone) {
+    this._writer.flush(onDone)
     this._coverageWriter.flush()
     this._logsWriter.flush()
   }

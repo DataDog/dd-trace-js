@@ -1,5 +1,3 @@
-import 'dd-trace/init.js'
-
 import { OpenAI } from '@langchain/openai'
 import { StringOutputParser } from '@langchain/core/output_parsers'
 import nock from 'nock'

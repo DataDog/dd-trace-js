@@ -63,6 +63,8 @@ const otelDdEnvMapping = {
 
 const VALID_PROPAGATION_STYLES = new Set(['datadog', 'tracecontext', 'b3', 'b3 single header', 'none'])
 
+const VALID_PROPAGATION_BEHAVIOR_EXTRACT = new Set(['continue', 'restart', 'ignore'])
+
 const VALID_LOG_LEVELS = new Set(['debug', 'info', 'warn', 'error'])
 
 function getFromOtelSamplerMap (otelTracesSampler, otelTracesSamplerArg) {
@@ -179,8 +181,7 @@ function validateNamingVersion (versionString) {
  * If a blank path is provided a null is returned to signal that the feature is disabled.
  * An empty array means the feature is enabled but that no rules need to be applied.
  *
- * @param {string} input
- * @returns {[string]|null}
+ * @param {string | string[]} input
  */
 function splitJSONPathRules (input) {
   if (!input) return null
@@ -287,8 +288,7 @@ class Config {
     }
     const PROPAGATION_STYLE_INJECT = propagationStyle(
       'inject',
-      options.tracePropagationStyle,
-      this._getDefaultPropagationStyle(options)
+      options.tracePropagationStyle
     )
 
     validateOtelPropagators(PROPAGATION_STYLE_INJECT)
@@ -297,8 +297,6 @@ class Config {
       options.appsec = {
         enabled: options.appsec
       }
-    } else if (options.appsec == null) {
-      options.appsec = {}
     }
 
     const DD_INSTRUMENTATION_INSTALL_ID = coalesce(
@@ -503,7 +501,6 @@ class Config {
     this._setValue(defaults, 'grpc.server.error.statuses', GRPC_SERVER_ERROR_STATUSES)
     this._setValue(defaults, 'headerTags', [])
     this._setValue(defaults, 'hostname', '127.0.0.1')
-    this._setValue(defaults, 'iast.cookieFilterPattern', '.{32,}')
     this._setValue(defaults, 'iast.dbRowsToTaint', 1)
     this._setValue(defaults, 'iast.deduplicationEnabled', true)
     this._setValue(defaults, 'iast.enabled', false)
@@ -528,7 +525,7 @@ class Config {
     this._setValue(defaults, 'isManualApiEnabled', false)
     this._setValue(defaults, 'langchain.spanCharLimit', 128)
     this._setValue(defaults, 'langchain.spanPromptCompletionSampleRate', 1.0)
-    this._setValue(defaults, 'llmobs.agentlessEnabled', false)
+    this._setValue(defaults, 'llmobs.agentlessEnabled', undefined)
     this._setValue(defaults, 'llmobs.enabled', false)
     this._setValue(defaults, 'llmobs.mlApp', undefined)
     this._setValue(defaults, 'ciVisibilityTestSessionName', '')
@@ -584,6 +581,7 @@ class Config {
     this._setValue(defaults, 'traceId128BitGenerationEnabled', true)
     this._setValue(defaults, 'traceId128BitLoggingEnabled', true)
     this._setValue(defaults, 'tracePropagationExtractFirst', false)
+    this._setValue(defaults, 'tracePropagationBehaviorExtract', 'continue')
     this._setValue(defaults, 'tracePropagationStyle.inject', ['datadog', 'tracecontext', 'baggage'])
     this._setValue(defaults, 'tracePropagationStyle.extract', ['datadog', 'tracecontext', 'baggage'])
     this._setValue(defaults, 'tracePropagationStyle.otelPropagators', false)
@@ -591,10 +589,11 @@ class Config {
     this._setValue(defaults, 'url', undefined)
     this._setValue(defaults, 'version', pkg.version)
     this._setValue(defaults, 'instrumentation_config_id', undefined)
-    this._setValue(defaults, 'aws.dynamoDb.tablePrimaryKeys', undefined)
     this._setValue(defaults, 'vertexai.spanCharLimit', 128)
     this._setValue(defaults, 'vertexai.spanPromptCompletionSampleRate', 1.0)
     this._setValue(defaults, 'trace.aws.addSpanPointers', true)
+    this._setValue(defaults, 'trace.dynamoDb.tablePrimaryKeys', undefined)
+    this._setValue(defaults, 'trace.nativeSpanEvents', false)
   }
 
   _applyLocalStableConfig () {
@@ -676,7 +675,6 @@ class Config {
       DD_GRPC_CLIENT_ERROR_STATUSES,
       DD_GRPC_SERVER_ERROR_STATUSES,
       JEST_WORKER_ID,
-      DD_IAST_COOKIE_FILTER_PATTERN,
       DD_IAST_DB_ROWS_TO_TAINT,
       DD_IAST_DEDUPLICATION_ENABLED,
       DD_IAST_ENABLED,
@@ -745,6 +743,7 @@ class Config {
       DD_TRACE_PARTIAL_FLUSH_MIN_SPANS,
       DD_TRACE_PEER_SERVICE_MAPPING,
       DD_TRACE_PROPAGATION_EXTRACT_FIRST,
+      DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT,
       DD_TRACE_PROPAGATION_STYLE,
       DD_TRACE_PROPAGATION_STYLE_INJECT,
       DD_TRACE_PROPAGATION_STYLE_EXTRACT,
@@ -765,6 +764,7 @@ class Config {
       DD_VERTEXAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE,
       DD_VERTEXAI_SPAN_CHAR_LIMIT,
       DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED,
+      DD_TRACE_NATIVE_SPAN_EVENTS,
       OTEL_METRICS_EXPORTER,
       OTEL_PROPAGATORS,
       OTEL_RESOURCE_ATTRIBUTES,
@@ -819,7 +819,7 @@ class Config {
     this._setValue(env, 'baggageMaxBytes', DD_TRACE_BAGGAGE_MAX_BYTES)
     this._setValue(env, 'baggageMaxItems', DD_TRACE_BAGGAGE_MAX_ITEMS)
     this._setBoolean(env, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
-    this._setString(env, 'clientIpHeader', DD_TRACE_CLIENT_IP_HEADER)
+    this._setString(env, 'clientIpHeader', DD_TRACE_CLIENT_IP_HEADER?.toLowerCase())
     this._setBoolean(env, 'crashtracking.enabled', coalesce(
       DD_CRASHTRACKING_ENABLED,
       !this._isInServerlessEnvironment()
@@ -849,7 +849,6 @@ class Config {
     this._setIntegerRangeSet(env, 'grpc.server.error.statuses', DD_GRPC_SERVER_ERROR_STATUSES)
     this._setArray(env, 'headerTags', DD_TRACE_HEADER_TAGS)
     this._setString(env, 'hostname', coalesce(DD_AGENT_HOST, DD_TRACE_AGENT_HOSTNAME))
-    this._setString(env, 'iast.cookieFilterPattern', DD_IAST_COOKIE_FILTER_PATTERN)
     this._setValue(env, 'iast.dbRowsToTaint', maybeInt(DD_IAST_DB_ROWS_TO_TAINT))
     this._setBoolean(env, 'iast.deduplicationEnabled', DD_IAST_DEDUPLICATION_ENABLED)
     this._setBoolean(env, 'iast.enabled', DD_IAST_ENABLED)
@@ -965,6 +964,11 @@ class Config {
     this._setBoolean(env, 'traceId128BitGenerationEnabled', DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED)
     this._setBoolean(env, 'traceId128BitLoggingEnabled', DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
     this._setBoolean(env, 'tracePropagationExtractFirst', DD_TRACE_PROPAGATION_EXTRACT_FIRST)
+    const stringPropagationBehaviorExtract = String(DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT)
+    this._setValue(env, 'tracePropagationBehaviorExtract',
+      VALID_PROPAGATION_BEHAVIOR_EXTRACT.has(stringPropagationBehaviorExtract)
+        ? stringPropagationBehaviorExtract
+        : 'continue')
     this._setBoolean(env, 'tracePropagationStyle.otelPropagators',
       DD_TRACE_PROPAGATION_STYLE ||
       DD_TRACE_PROPAGATION_STYLE_INJECT ||
@@ -977,6 +981,7 @@ class Config {
     this._setBoolean(env, 'trace.aws.addSpanPointers', DD_TRACE_AWS_ADD_SPAN_POINTERS)
     this._setString(env, 'trace.dynamoDb.tablePrimaryKeys', DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS)
     this._setArray(env, 'graphqlErrorExtensions', DD_TRACE_GRAPHQL_ERROR_EXTENSIONS)
+    this._setBoolean(env, 'trace.nativeSpanEvents', DD_TRACE_NATIVE_SPAN_EVENTS)
     this._setValue(
       env,
       'vertexai.spanPromptCompletionSampleRate',
@@ -998,29 +1003,29 @@ class Config {
       options.apmTracingEnabled,
       options.experimental?.appsec?.standalone && !options.experimental.appsec.standalone.enabled
     ))
-    this._setBoolean(opts, 'appsec.apiSecurity.enabled', options.appsec.apiSecurity?.enabled)
-    this._setValue(opts, 'appsec.blockedTemplateGraphql', maybeFile(options.appsec.blockedTemplateGraphql))
-    this._setValue(opts, 'appsec.blockedTemplateHtml', maybeFile(options.appsec.blockedTemplateHtml))
-    this._optsUnprocessed['appsec.blockedTemplateHtml'] = options.appsec.blockedTemplateHtml
-    this._setValue(opts, 'appsec.blockedTemplateJson', maybeFile(options.appsec.blockedTemplateJson))
-    this._optsUnprocessed['appsec.blockedTemplateJson'] = options.appsec.blockedTemplateJson
-    this._setBoolean(opts, 'appsec.enabled', options.appsec.enabled)
-    this._setString(opts, 'appsec.eventTracking.mode', options.appsec.eventTracking?.mode)
-    this._setString(opts, 'appsec.obfuscatorKeyRegex', options.appsec.obfuscatorKeyRegex)
-    this._setString(opts, 'appsec.obfuscatorValueRegex', options.appsec.obfuscatorValueRegex)
-    this._setBoolean(opts, 'appsec.rasp.enabled', options.appsec.rasp?.enabled)
-    this._setValue(opts, 'appsec.rateLimit', maybeInt(options.appsec.rateLimit))
-    this._optsUnprocessed['appsec.rateLimit'] = options.appsec.rateLimit
-    this._setString(opts, 'appsec.rules', options.appsec.rules)
-    this._setBoolean(opts, 'appsec.stackTrace.enabled', options.appsec.stackTrace?.enabled)
-    this._setValue(opts, 'appsec.stackTrace.maxDepth', maybeInt(options.appsec.stackTrace?.maxDepth))
-    this._optsUnprocessed['appsec.stackTrace.maxDepth'] = options.appsec.stackTrace?.maxDepth
-    this._setValue(opts, 'appsec.stackTrace.maxStackTraces', maybeInt(options.appsec.stackTrace?.maxStackTraces))
-    this._optsUnprocessed['appsec.stackTrace.maxStackTraces'] = options.appsec.stackTrace?.maxStackTraces
-    this._setValue(opts, 'appsec.wafTimeout', maybeInt(options.appsec.wafTimeout))
-    this._optsUnprocessed['appsec.wafTimeout'] = options.appsec.wafTimeout
+    this._setBoolean(opts, 'appsec.apiSecurity.enabled', options.appsec?.apiSecurity?.enabled)
+    this._setValue(opts, 'appsec.blockedTemplateGraphql', maybeFile(options.appsec?.blockedTemplateGraphql))
+    this._setValue(opts, 'appsec.blockedTemplateHtml', maybeFile(options.appsec?.blockedTemplateHtml))
+    this._optsUnprocessed['appsec.blockedTemplateHtml'] = options.appsec?.blockedTemplateHtml
+    this._setValue(opts, 'appsec.blockedTemplateJson', maybeFile(options.appsec?.blockedTemplateJson))
+    this._optsUnprocessed['appsec.blockedTemplateJson'] = options.appsec?.blockedTemplateJson
+    this._setBoolean(opts, 'appsec.enabled', options.appsec?.enabled)
+    this._setString(opts, 'appsec.eventTracking.mode', options.appsec?.eventTracking?.mode)
+    this._setString(opts, 'appsec.obfuscatorKeyRegex', options.appsec?.obfuscatorKeyRegex)
+    this._setString(opts, 'appsec.obfuscatorValueRegex', options.appsec?.obfuscatorValueRegex)
+    this._setBoolean(opts, 'appsec.rasp.enabled', options.appsec?.rasp?.enabled)
+    this._setValue(opts, 'appsec.rateLimit', maybeInt(options.appsec?.rateLimit))
+    this._optsUnprocessed['appsec.rateLimit'] = options.appsec?.rateLimit
+    this._setString(opts, 'appsec.rules', options.appsec?.rules)
+    this._setBoolean(opts, 'appsec.stackTrace.enabled', options.appsec?.stackTrace?.enabled)
+    this._setValue(opts, 'appsec.stackTrace.maxDepth', maybeInt(options.appsec?.stackTrace?.maxDepth))
+    this._optsUnprocessed['appsec.stackTrace.maxDepth'] = options.appsec?.stackTrace?.maxDepth
+    this._setValue(opts, 'appsec.stackTrace.maxStackTraces', maybeInt(options.appsec?.stackTrace?.maxStackTraces))
+    this._optsUnprocessed['appsec.stackTrace.maxStackTraces'] = options.appsec?.stackTrace?.maxStackTraces
+    this._setValue(opts, 'appsec.wafTimeout', maybeInt(options.appsec?.wafTimeout))
+    this._optsUnprocessed['appsec.wafTimeout'] = options.appsec?.wafTimeout
     this._setBoolean(opts, 'clientIpEnabled', options.clientIpEnabled)
-    this._setString(opts, 'clientIpHeader', options.clientIpHeader)
+    this._setString(opts, 'clientIpHeader', options.clientIpHeader?.toLowerCase())
     this._setValue(opts, 'baggageMaxBytes', options.baggageMaxBytes)
     this._setValue(opts, 'baggageMaxItems', options.baggageMaxItems)
     this._setBoolean(opts, 'codeOriginForSpans.enabled', options.codeOriginForSpans?.enabled)
@@ -1051,7 +1056,6 @@ class Config {
     this._optsUnprocessed.flushMinSpans = options.flushMinSpans
     this._setArray(opts, 'headerTags', options.headerTags)
     this._setString(opts, 'hostname', options.hostname)
-    this._setString(opts, 'iast.cookieFilterPattern', options.iast?.cookieFilterPattern)
     this._setValue(opts, 'iast.dbRowsToTaint', maybeInt(options.iast?.dbRowsToTaint))
     this._setBoolean(opts, 'iast.deduplicationEnabled', options.iast && options.iast.deduplicationEnabled)
     this._setBoolean(opts, 'iast.enabled',
@@ -1114,6 +1118,7 @@ class Config {
     this._setString(opts, 'version', options.version || tags.version)
     this._setBoolean(opts, 'inferredProxyServicesEnabled', options.inferredProxyServicesEnabled)
     this._setBoolean(opts, 'graphqlErrorExtensions', options.graphqlErrorExtensions)
+    this._setBoolean(opts, 'trace.nativeSpanEvents', options.trace?.nativeSpanEvents)
 
     // For LLMObs, we want the environment variable to take precedence over the options.
     // This is reliant on environment config being set before options.

@@ -54,7 +54,7 @@ describe('Plugin', () => {
 
     spy = sinon.spy()
 
-    class Transport extends winston.Transport {}
+    class Transport extends winston.Transport { }
 
     if (semver.intersects(version, '>=3')) {
       log = sinon.spy((meta) => spy(meta.dd))
@@ -308,6 +308,58 @@ describe('Plugin', () => {
             expect(await logServer.logPromise).to.include(meta.dd)
           })
         })
+        // Only run this test with Winston v3.17.0+ since it uses newer format functions
+        if (semver.intersects(version, '>=3.17.0')) {
+          describe('with error formatting matching temp.js example', () => {
+            let logger
+
+            beforeEach(() => {
+              return agent.load('winston', { logInjection: true })
+            })
+
+            beforeEach(() => {
+              logger = winston.createLogger({
+                level: 'info',
+                transports: [new winston.transports.Console()],
+                format: winston.format.combine(
+                  winston.format.errors({ stack: true }),
+                  winston.format.prettyPrint()
+                )
+              })
+              spy = sinon.spy(logger.transports[0], 'log')
+            })
+
+            afterEach(() => {
+              if (spy && spy.restore) {
+                spy.restore()
+              }
+            })
+
+            it('should preserve stack trace when logging Error objects with logInjection enabled', () => {
+              const error = new Error('test error with stack')
+
+              tracer.scope().activate(span, () => {
+                logger.error(error)
+
+                expect(spy).to.have.been.called
+
+                const loggedInfo = spy.firstCall.args[0]
+                expect(loggedInfo).to.have.property('message')
+
+                expect(loggedInfo).to.have.property('stack')
+                expect(loggedInfo.stack).to.be.a('string')
+                expect(loggedInfo.stack).to.include('test error with stack')
+                expect(loggedInfo.stack).to.include('Error:')
+
+                expect(loggedInfo.message).to.equal('test error with stack')
+
+                expect(loggedInfo).to.have.property('dd')
+                expect(loggedInfo.dd).to.have.property('trace_id', span.context().toTraceId(true))
+                expect(loggedInfo.dd).to.have.property('span_id', span.context().toSpanId())
+              })
+            })
+          })
+        }
       })
     })
   })

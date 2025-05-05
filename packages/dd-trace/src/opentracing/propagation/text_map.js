@@ -302,6 +302,7 @@ class TextMapPropagator {
 
   _extractSpanContext (carrier) {
     let context = null
+    let style = ''
     for (const extractor of this._config.tracePropagationStyle.extract) {
       let extractedContext = null
       switch (extractor) {
@@ -335,9 +336,9 @@ class TextMapPropagator {
 
       if (context === null) {
         context = extractedContext
+        style = extractor
         if (this._config.tracePropagationExtractFirst) {
-          this._extractBaggageItems(carrier, context)
-          return context
+          break
         }
       } else {
         // If extractor is tracecontext, add tracecontext specific information to the context
@@ -346,7 +347,7 @@ class TextMapPropagator {
             this._extractTraceparentContext(carrier), context, carrier)
         }
         if (extractedContext._traceId && extractedContext._spanId &&
-           extractedContext.toTraceId(true) !== context.toTraceId(true)) {
+          extractedContext.toTraceId(true) !== context.toTraceId(true)) {
           const link = {
             context: extractedContext,
             attributes: { reason: 'terminated_context', context_headers: extractor }
@@ -357,6 +358,19 @@ class TextMapPropagator {
     }
 
     this._extractBaggageItems(carrier, context)
+
+    if (this._config.tracePropagationBehaviorExtract === 'ignore') {
+      context._links = []
+    } else if (this._config.tracePropagationBehaviorExtract === 'restart') {
+      context._links = []
+      context._links.push({
+        context,
+        attributes:
+        {
+          reason: 'propagation_behavior_extract', context_headers: style
+        }
+      })
+    }
 
     return context || this._extractSqsdContext(carrier)
   }

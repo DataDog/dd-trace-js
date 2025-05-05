@@ -82,7 +82,8 @@ class Tracer extends NoopProxy {
     this._modules = {
       appsec: new LazyModule(() => require('./appsec')),
       iast: new LazyModule(() => require('./appsec/iast')),
-      llmobs: new LazyModule(() => require('./llmobs'))
+      llmobs: new LazyModule(() => require('./llmobs')),
+      rewriter: new LazyModule(() => require('./appsec/iast/taint-tracking/rewriter'))
     }
   }
 
@@ -190,6 +191,8 @@ class Tracer extends NoopProxy {
 
       this._enableOrDisableTracing(config)
 
+      this._modules.rewriter.enable(config)
+
       if (config.tracing) {
         if (config.isManualApiEnabled) {
           const TestApiManualPlugin = require('./ci-visibility/test-api-manual/test-api-manual-plugin')
@@ -259,6 +262,7 @@ class Tracer extends NoopProxy {
       if (config.iast.enabled) {
         this._modules.iast.enable(config, this._tracer)
       }
+      // This needs to be after the IAST module is enabled
     } else if (this._tracingInitialized) {
       this._modules.appsec.disable()
       this._modules.iast.disable()
