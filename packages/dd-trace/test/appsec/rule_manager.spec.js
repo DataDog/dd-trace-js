@@ -1,13 +1,15 @@
 'use strict'
 
-const path = require('path')
+const { assert } = require('chai')
 const fs = require('fs')
-const { loadRules, clearAllRules, updateWafFromRC } = require('../../src/appsec/rule_manager')
+const path = require('path')
+const { loadRules, clearAllRules } = require('../../src/appsec/rule_manager')
 const Config = require('../../src/config')
-const { ACKNOWLEDGED } = require('../../src/remote_config/apply_states')
+const { ACKNOWLEDGED, UNACKNOWLEDGED, ERROR } = require('../../src/remote_config/apply_states')
 
 const rules = require('../../src/appsec/recommended.json')
 const waf = require('../../src/appsec/waf')
+const WAFManager = require('../../src/appsec/waf/waf_manager')
 const blocking = require('../../src/appsec/blocking')
 
 describe('AppSec Rule Manager', () => {
@@ -19,7 +21,6 @@ describe('AppSec Rule Manager', () => {
 
     sinon.stub(waf, 'init')
     sinon.stub(waf, 'destroy')
-    sinon.stub(waf, 'update')
 
     sinon.stub(blocking, 'setDefaultBlockingActionParameters')
   })
@@ -72,437 +73,265 @@ describe('AppSec Rule Manager', () => {
   })
 
   describe('updateWafFromRC', () => {
-    describe('ASM_DATA', () => {
-      it('should call update with modified rules', () => {
-        const rulesData = {
-          rules_data: [{
-            data: [
-              { value: '1.2.3.4' }
-            ],
-            id: 'blocked_ips',
-            type: 'data_with_expiration'
-          }]
-        }
-
-        const toModify = [{
+    function getRcConfigs () {
+      return {
+        toUnapply: [{
+          id: 'test.toUnapply',
+          product: 'ASM_DD',
+          path: 'test/rule_manager/updateWafFromRC/ASM_DD/01',
+          file: {},
+          apply_state: UNACKNOWLEDGED
+        }],
+        toModify: [{
+          id: 'test.toModify',
           product: 'ASM_DATA',
-          id: '1',
-          file: rulesData
+          path: 'test/rule_manager/updateWafFromRC/ASM_DATA/01',
+          file: {
+            rules_data: [{
+              data: [
+                { value: '1.2.3.4' }
+              ],
+              id: 'blocked_ips',
+              type: 'data_with_expiration'
+            }]
+          },
+          apply_state: UNACKNOWLEDGED
+        }],
+        toApply: [{
+          id: 'test.toApply',
+          product: 'ASM',
+          path: 'test/rule_manager/updateWafFromRC/ASM/01',
+          file: {
+            exclusions: [{
+              ekey: 'eValue'
+            }],
+            rules_override: [{
+              roKey: 'roValue'
+            }],
+            custom_rules: [{
+              piKey: 'piValue'
+            }]
+          },
+          apply_state: UNACKNOWLEDGED
         }]
+      }
+    }
 
-        updateWafFromRC({ toUnapply: [], toApply: [], toModify })
-        expect(waf.update).to.have.been.calledOnceWithExactly(rulesData)
+    let RuleManager
+    let reportWafConfigError, reportSuccessfulWafUpdate, reportWafUpdate
+    let setDefaultBlockingActionParameters
+
+    beforeEach(() => {
+      reportWafUpdate = sinon.stub()
+      reportSuccessfulWafUpdate = sinon.stub()
+      reportWafConfigError = sinon.stub()
+      setDefaultBlockingActionParameters = sinon.stub()
+
+      RuleManager = proxyquire.noCallThru()('../src/appsec/rule_manager', {
+        './reporter': {
+          reportWafUpdate,
+          reportSuccessfulWafUpdate,
+          reportWafConfigError
+        },
+        './blocking': {
+          setDefaultBlockingActionParameters
+        }
       })
 
-      it('should apply/modify the last rule with same id', () => {
-        const rulesDataFirst = {
-          rules_data: [{
-            data: [
-              { value: '1.2.3.4' }
-            ],
-            id: 'blocked_ips',
-            type: 'data_with_expiration'
-          }]
-        }
+      waf.init.callThrough()
 
-        const rulesDataSecond = {
-          rules_data: [{
-            data: [
-              { value: '4.3.2.1' }
-            ],
-            id: 'blocked_ips',
-            type: 'data_with_expiration'
-          }]
-        }
+      WAFManager.prototype.update = sinon.stub()
+      WAFManager.prototype.remove = sinon.stub()
 
-        const toModify = [
-          {
-            product: 'ASM_DATA',
-            id: '1',
-            file: rulesDataFirst
-          },
-          {
-            product: 'ASM_DATA',
-            id: '1',
-            file: rulesDataSecond
-          }
-        ]
+      RuleManager.clearAllRules()
+      config = new Config()
+      RuleManager.loadRules(config.appsec)
+      sinon.resetHistory()
+    })
 
-        const expectedPayload = {
-          rules_data: [
-            { data: [{ value: '4.3.2.1' }], id: 'blocked_ips', type: 'data_with_expiration' }
-          ]
-        }
+    it('should not apply configs from non ASM products', () => {
+      const rcConfigsForNonAsmProducts = {
+        toUnapply: [{
+          id: 'test.toUnapply',
+          product: 'NON_ASM_PRODUCT',
+          path: 'test/rule_manager/updateWafFromRC/NON_ASM_PRODUCT/01',
+          file: {},
+          apply_state: UNACKNOWLEDGED
+        }],
+        toModify: [{
+          id: 'test.toModify',
+          product: 'NON_ASM_PRODUCT',
+          path: 'test/rule_manager/updateWafFromRC/NON_ASM_PRODUCT/02',
+          file: {},
+          apply_state: UNACKNOWLEDGED
+        }],
+        toApply: [{
+          id: 'test.toApply',
+          product: 'NON_ASM_PRODUCT',
+          path: 'test/rule_manager/updateWafFromRC/NON_ASM_PRODUCT/03',
+          file: {},
+          apply_state: UNACKNOWLEDGED
+        }]
+      }
 
-        updateWafFromRC({ toUnapply: [], toApply: [], toModify })
-        expect(waf.update).to.have.been.calledOnce
-        expect(waf.update).calledWithExactly(expectedPayload)
+      assert.doesNotThrow(() => {
+        RuleManager.updateWafFromRC(rcConfigsForNonAsmProducts)
       })
 
-      it('should merge all apply/modify rules', () => {
-        const toModify = [
-          {
-            product: 'ASM_DATA',
-            id: '1',
-            file: {
-              rules_data: [{
-                data: [
-                  { value: '1.2.3.4' }
-                ],
-                id: 'blocked_ips',
-                type: 'data_with_expiration'
-              }]
-            }
+      sinon.assert.notCalled(waf.wafManager.update)
+      sinon.assert.notCalled(waf.wafManager.remove)
+      assert.strictEqual(rcConfigsForNonAsmProducts.toUnapply[0].apply_state, UNACKNOWLEDGED)
+      assert.notProperty(rcConfigsForNonAsmProducts.toUnapply[0], 'apply_error')
+      assert.strictEqual(rcConfigsForNonAsmProducts.toModify[0].apply_state, UNACKNOWLEDGED)
+      assert.notProperty(rcConfigsForNonAsmProducts.toModify[0], 'apply_error')
+      assert.strictEqual(rcConfigsForNonAsmProducts.toApply[0].apply_state, UNACKNOWLEDGED)
+      assert.notProperty(rcConfigsForNonAsmProducts.toApply[0], 'apply_error')
+    })
+
+    it('should apply configs from ASM products', () => {
+      const rcConfigs = getRcConfigs()
+
+      RuleManager.updateWafFromRC(rcConfigs)
+
+      sinon.assert.calledOnceWithExactly(waf.wafManager.remove, rcConfigs.toUnapply[0].path)
+      sinon.assert.calledTwice(waf.wafManager.update)
+      sinon.assert.calledWith(
+        waf.wafManager.update.getCall(0),
+        rcConfigs.toApply[0].product,
+        rcConfigs.toApply[0].file,
+        rcConfigs.toApply[0].path
+      )
+      sinon.assert.calledWith(
+        waf.wafManager.update.getCall(1),
+        rcConfigs.toModify[0].product,
+        rcConfigs.toModify[0].file,
+        rcConfigs.toModify[0].path
+      )
+    })
+
+    it('should update apply_state and apply_error on successful apply', () => {
+      WAFManager.prototype.update.returns({ success: true })
+
+      const rcConfigs = getRcConfigs()
+
+      RuleManager.updateWafFromRC(rcConfigs)
+
+      assert.strictEqual(rcConfigs.toUnapply[0].apply_state, ACKNOWLEDGED)
+      assert.notProperty(rcConfigs.toUnapply[0], 'apply_error')
+      assert.strictEqual(rcConfigs.toModify[0].apply_state, ACKNOWLEDGED)
+      assert.notProperty(rcConfigs.toModify[0], 'apply_error')
+      assert.strictEqual(rcConfigs.toApply[0].apply_state, ACKNOWLEDGED)
+      assert.notProperty(rcConfigs.toApply[0], 'apply_error')
+    })
+
+    it('should update apply_state and apply_error on failed config remove', () => {
+      const removeConfigError = new Error('Error remove config')
+      WAFManager.prototype.remove.throws(removeConfigError)
+
+      const { toUnapply } = getRcConfigs()
+
+      RuleManager.updateWafFromRC({ toUnapply, toApply: [], toModify: [] })
+
+      assert.strictEqual(toUnapply[0].apply_state, ERROR)
+      assert.strictEqual(toUnapply[0].apply_error, removeConfigError.toString())
+    })
+
+    it('should update apply_state and apply_error on failed config update', () => {
+      const diagnostics = {
+        rules: {
+          loaded: [],
+          failed: ['blk-001-001'],
+          skipped: [],
+          errors: {
+            'missing key operator': [
+              'blk-001-001'
+            ]
           },
-          {
-            product: 'ASM_DATA',
-            id: '2',
-            file: {
-              rules_data: [{
-                data: [
-                  { value: '4.3.2.1' }
-                ],
-                id: 'blocked_ips',
-                type: 'data_with_expiration'
-              }]
-            }
+          warnings: {
+            'invalid tag': [
+              'blk-001-001'
+            ]
           }
-        ]
-
-        const expectedPayload = {
-          rules_data: [
-            { data: [{ value: '1.2.3.4' }, { value: '4.3.2.1' }], id: 'blocked_ips', type: 'data_with_expiration' }
-          ]
+        },
+        processors: {
+          loaded: ['http-endpoint-fingerprint'],
+          failed: [],
+          skipped: [],
+          warnings: {
+            'no mappings defined': [
+              'http-endpoint-fingerprint'
+            ]
+          }
         }
+      }
+      WAFManager.prototype.update.returns({ success: false, diagnostics })
 
-        updateWafFromRC({ toUnapply: [], toApply: [], toModify })
-        expect(waf.update).to.have.been.calledOnce
-        expect(waf.update).calledWithExactly(expectedPayload)
-      })
+      const { toModify, toApply } = getRcConfigs()
 
-      it('should merge all apply/modify and unapply rules', () => {
-        const toModify = [
-          {
-            product: 'ASM_DATA',
-            id: '1',
-            file: {
-              rules_data: [{
-                data: [
-                  { value: '4.3.2.1' }
-                ],
-                id: 'blocked_ips',
-                type: 'data_with_expiration'
-              }]
-            }
-          },
-          {
-            product: 'ASM_DATA',
-            id: '2',
-            file: {
-              rules_data: [{
-                data: [
-                  { value: '4.3.2.1' }
-                ],
-                id: 'blocked_ips',
-                type: 'data_with_expiration'
-              }]
-            }
-          }
-        ]
+      RuleManager.updateWafFromRC({ toUnapply: [], toApply, toModify })
 
-        const toUnapply = [
-          {
-            product: 'ASM_DATA',
-            id: '2',
-            file: {
-              rules_data: [{
-                data: [
-                  { value: '1.2.3.4' }
-                ],
-                id: 'blocked_ips',
-                type: 'data_with_expiration'
-              }]
-            }
-          }
-        ]
+      assert.strictEqual(toApply[0].apply_state, ERROR)
+      assert.strictEqual(toApply[0].apply_error, JSON.stringify({ rules: { errors: diagnostics.rules.errors } }))
+      assert.strictEqual(toModify[0].apply_state, ERROR)
+      assert.strictEqual(toModify[0].apply_error, JSON.stringify({ rules: { errors: diagnostics.rules.errors } }))
+    })
 
-        const expectedPayload = {
-          rules_data: [
-            { data: [{ value: '4.3.2.1' }], id: 'blocked_ips', type: 'data_with_expiration' }
-          ]
-        }
+    it('should report successful waf update', () => {
+      WAFManager.prototype.update.returns({ success: true, diagnostics: {} })
 
-        updateWafFromRC({ toUnapply, toApply: [], toModify })
-        expect(waf.update).to.have.been.calledOnce
-        expect(waf.update).calledWithExactly(expectedPayload)
-      })
+      const rcConfigs = getRcConfigs()
 
-      it('should merge all apply/modify rules with different expiration', () => {
-        // TODO: use case from previous tests, not sure if this can happen.
-        const toApply = [
-          {
-            product: 'ASM_DATA',
-            id: '1',
-            file: {
-              rules_data: [{
-                data: [
-                  { value: '1.2.3.4', expiration: 200 }
-                ],
-                id: 'blocked_ips',
-                type: 'data_with_expiration'
-              }]
-            }
-          },
-          {
-            product: 'ASM_DATA',
-            id: '2',
-            file: {
-              rules_data: [{
-                data: [
-                  { value: '1.2.3.4', expiration: 100 }
-                ],
-                id: 'blocked_ips',
-                type: 'data_with_expiration'
-              }]
-            }
-          }
-        ]
+      RuleManager.updateWafFromRC(rcConfigs)
 
-        const expectedPayload = {
-          rules_data: [
-            { data: [{ value: '1.2.3.4', expiration: 200 }], id: 'blocked_ips', type: 'data_with_expiration' }
-          ]
-        }
+      sinon.assert.calledOnceWithExactly(
+        reportWafUpdate,
+        waf.wafManager.ddwafVersion,
+        waf.wafManager.rulesVersion,
+        true
+      )
+      sinon.assert.calledTwice(reportSuccessfulWafUpdate)
+      sinon.assert.calledWith(reportSuccessfulWafUpdate, rcConfigs.toModify[0].product, rcConfigs.toModify[0].id, {})
+      sinon.assert.calledWith(reportSuccessfulWafUpdate, rcConfigs.toApply[0].product, rcConfigs.toApply[0].id, {})
+    })
 
-        updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
-        expect(waf.update).to.have.been.calledOnce
-        expect(waf.update).calledWithExactly(expectedPayload)
+    it('should report waf config error', () => {
+      WAFManager.prototype.remove.throws(new Error('Error removing config'))
+      WAFManager.prototype.update.returns({ success: false, diagnostics: {} })
+
+      const rcConfigs = getRcConfigs()
+
+      RuleManager.updateWafFromRC(rcConfigs)
+      sinon.assert.notCalled(reportWafUpdate)
+      sinon.assert.calledThrice(reportWafConfigError)
+      reportWafConfigError.getCalls().forEach((spyCall) => {
+        sinon.assert.calledWithExactly(
+          spyCall,
+          waf.wafManager.ddwafVersion,
+          waf.wafManager.rulesVersion
+        )
       })
     })
 
-    describe('ASM_DD', () => {
-      beforeEach(() => {
-        loadRules(config.appsec)
-      })
+    it('should report waf update', () => {
+      WAFManager.prototype.update.onFirstCall().returns({ success: false, diagnostics: {} })
+      WAFManager.prototype.update.onSecondCall().returns({ success: true, diagnostics: {} })
 
-      it('should apply new rules', () => {
-        const testRules = {
-          version: '2.2',
-          metadata: { rules_version: '1.5.0' },
-          rules: [{
-            id: 'test-id',
-            name: 'test-name',
-            tags: {
-              type: 'security_scanner',
-              category: 'attack_attempt',
-              confidence: '1'
-            },
-            conditions: []
-          }],
-          processors: [{
-            id: 'test-processor-id',
-            generator: 'test-generator',
-            evaluate: false,
-            output: true
-          }],
-          scanners: [{
-            id: 'test-scanner-id',
-            name: 'Test name',
-            key: {
-              operator: 'match_regex',
-              parameters: {
-                regex: 'test-regex'
-              }
-            },
-            value: {
-              operator: 'match_regex',
-              parameters: {
-                regex: 'test-regex-2'
-              }
-            },
-            tags: {
-              type: 'card',
-              card_type: 'test',
-              category: 'payment'
-            }
-          }]
-        }
+      const rcConfigs = getRcConfigs()
 
-        const toApply = [
-          {
-            product: 'ASM_DD',
-            id: '1',
-            file: testRules
-          }
-        ]
+      RuleManager.updateWafFromRC(rcConfigs)
 
-        updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
-        expect(waf.update).to.have.been.calledOnceWithExactly(testRules)
-      })
-
-      it('should maintain previously added exclusions and rules_overrides', () => {
-        const asm = {
-          exclusions: [{
-            ekey: 'eValue'
-          }]
-        }
-        const testRules = {
-          version: '2.2',
-          metadata: { rules_version: '1.5.0' },
-          rules: [{
-            id: 'test-id',
-            name: 'test-name',
-            tags: {
-              type: 'security_scanner',
-              category: 'attack_attempt',
-              confidence: '1'
-            },
-            conditions: []
-          }],
-          processors: [{
-            id: 'test-processor-id',
-            generator: 'test-generator',
-            evaluate: false,
-            output: true
-          }],
-          scanners: [{
-            id: 'test-scanner-id',
-            name: 'Test name',
-            key: {
-              operator: 'match_regex',
-              parameters: {
-                regex: 'test-regex'
-              }
-            },
-            value: {
-              operator: 'match_regex',
-              parameters: {
-                regex: 'test-regex-2'
-              }
-            },
-            tags: {
-              type: 'card',
-              card_type: 'test',
-              category: 'payment'
-            }
-          }]
-        }
-
-        const toApply = [
-          {
-            product: 'ASM',
-            id: '1',
-            file: asm
-          },
-          {
-            product: 'ASM_DD',
-            id: '2',
-            file: testRules
-          }
-        ]
-
-        updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
-        expect(waf.update).to.have.been.calledWithExactly({ ...testRules, ...asm })
-      })
-
-      it('should support hotswapping ruleset in same batch', () => {
-        const rules1 = {
-          product: 'ASM_DD',
-          id: 'rules1',
-          file: {
-            version: '2.2',
-            metadata: { rules_version: '1.5.0' },
-            rules: [{
-              id: 'test-id',
-              name: 'test-name',
-              tags: {
-                type: 'security_scanner',
-                category: 'attack_attempt',
-                confidence: '1'
-              },
-              conditions: [
-                {
-                  parameters: {
-                    inputs: [
-                      { address: 'http.test' }
-                    ],
-                    data: 'blocked_ips'
-                  },
-                  operator: 'ip_match'
-                }
-              ]
-            }]
-          }
-        }
-
-        const rules2 = {
-          product: 'ASM_DD',
-          id: 'rules2',
-          file: {
-            version: '2.2',
-            metadata: { rules_version: '1.5.0' },
-            rules: [{
-              id: 'test-id',
-              name: 'test-name',
-              tags: {
-                type: 'security_scanner',
-                category: 'attack_attempt',
-                confidence: '1'
-              },
-              conditions: [
-                {
-                  parameters: {
-                    inputs: [
-                      { address: 'http.test' }
-                    ],
-                    data: 'blocked_ips'
-                  },
-                  operator: 'ip_match'
-                }
-              ]
-            }]
-          }
-        }
-
-        updateWafFromRC({ toUnapply: [], toApply: [rules1], toModify: [] })
-
-        updateWafFromRC({ toUnapply: [rules1], toApply: [rules2], toModify: [] })
-
-        expect(rules1.apply_state).to.equal(ACKNOWLEDGED)
-        expect(rules1.apply_error).to.equal(undefined)
-        expect(rules2.apply_state).to.equal(ACKNOWLEDGED)
-        expect(rules2.apply_error).to.equal(undefined)
-      })
+      sinon.assert.calledOnceWithExactly(
+        reportWafUpdate,
+        waf.wafManager.ddwafVersion,
+        waf.wafManager.rulesVersion,
+        false
+      )
     })
 
     describe('ASM', () => {
-      it('should apply both rules_override and exclusions', () => {
-        const asm = {
-          exclusions: [{
-            ekey: 'eValue'
-          }],
-          rules_override: [{
-            roKey: 'roValue'
-          }],
-          custom_rules: [{
-            piKey: 'piValue'
-          }]
-        }
-
-        const toApply = [
-          {
-            product: 'ASM',
-            id: '1',
-            file: asm
-          }
-        ]
-
-        updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
-
-        expect(waf.update).to.have.been.calledOnceWithExactly(asm)
-      })
-
       it('should apply blocking actions', () => {
+        WAFManager.prototype.update.returns({ success: true })
+
         const toApply = [
           {
             product: 'ASM',
@@ -536,32 +365,31 @@ describe('AppSec Rule Manager', () => {
           }
         ]
 
-        updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
+        RuleManager.updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
 
-        const expectedPayload = {
-          actions: [
-            {
-              id: 'notblock',
-              parameters: {
-                location: '/notfound',
-                status_code: 404
-              }
-            },
-            {
-              id: 'block',
-              parameters: {
-                location: '/redirected',
-                status_code: 302
-              }
+        const expectedActions = [
+          {
+            id: 'notblock',
+            parameters: {
+              location: '/notfound',
+              status_code: 404
             }
-          ]
-        }
+          },
+          {
+            id: 'block',
+            parameters: {
+              location: '/redirected',
+              status_code: 302
+            }
+          }
+        ]
 
-        expect(waf.update).to.have.been.calledOnceWithExactly(expectedPayload)
-        expect(blocking.setDefaultBlockingActionParameters).to.have.been.calledOnceWithExactly(expectedPayload.actions)
+        sinon.assert.calledOnceWithExactly(setDefaultBlockingActionParameters, expectedActions)
       })
 
       it('should unapply blocking actions', () => {
+        WAFManager.prototype.update.returns({ success: true })
+
         const asm = {
           actions: [
             {
@@ -581,11 +409,10 @@ describe('AppSec Rule Manager', () => {
             file: asm
           }
         ]
-        updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
 
-        expect(waf.update).to.have.been.calledOnceWithExactly(asm)
-        expect(blocking.setDefaultBlockingActionParameters).to.have.been.calledOnceWithExactly(asm.actions)
+        RuleManager.updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
 
+        sinon.assert.calledOnceWithExactly(setDefaultBlockingActionParameters, asm.actions)
         sinon.resetHistory()
 
         const toUnapply = [
@@ -595,39 +422,9 @@ describe('AppSec Rule Manager', () => {
           }
         ]
 
-        updateWafFromRC({ toUnapply, toApply: [], toModify: [] })
+        RuleManager.updateWafFromRC({ toUnapply, toApply: [], toModify: [] })
 
-        expect(waf.update).to.have.been.calledOnceWithExactly({ actions: [] })
-        expect(blocking.setDefaultBlockingActionParameters).to.have.been.calledOnceWithExactly([])
-      })
-
-      it('should ignore other properties', () => {
-        const asm = {
-          exclusions: [{
-            ekey: 'eValue'
-          }],
-          rules_override: [{
-            roKey: 'roValue'
-          }],
-          not_supported: [{
-            nsKey: 'nsValue'
-          }]
-        }
-
-        const toApply = [
-          {
-            product: 'ASM',
-            id: '1',
-            file: asm
-          }
-        ]
-
-        updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
-
-        expect(waf.update).to.have.been.calledOnceWithExactly({
-          exclusions: asm.exclusions,
-          rules_override: asm.rules_override
-        })
+        sinon.assert.calledOnceWithExactly(setDefaultBlockingActionParameters, [])
       })
     })
   })
