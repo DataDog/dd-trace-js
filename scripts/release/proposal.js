@@ -66,7 +66,8 @@ try {
 
   pass(`v${releaseLine}.x`)
 
-  const diffCmd = 'branch-diff --user DataDog --repo dd-trace-js --exclude-label=semver-major'
+  const diffCmd =
+    `branch-diff --user DataDog --repo dd-trace-js --exclude-label=semver-major,dont-land-on-v${releaseLine}.x`
 
   start('Determine version increment')
 
