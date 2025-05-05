@@ -7,11 +7,6 @@ const Reporter = require('./reporter')
 
 const blocking = require('./blocking')
 
-const DIAGNOSTICS_KEYS_TO_KEEP_APPLY_ERROR = [
-  "error", "errors",
-  "exclusions", "rules", "processors", "rules_override", "rules_data", "custom_rules", "actions", "scanners"
-]
-
 let appliedActions = new Map()
 
 function loadRules (config) {
@@ -35,7 +30,12 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
 
     try {
       waf.wafManager.remove(item.path)
+      item.apply_state = ACKNOWLEDGED
       wafUpdated = true
+
+      if (item.product === 'ASM') {
+        newActions.delete(item.id)
+      }
     } catch (e) {
       wafUpdatedSuccess = false
       item.apply_state = ERROR
@@ -56,7 +56,7 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
         Reporter.reportSuccessfulWafUpdate(item.product, item.id, updateResult.diagnostics)
       } else {
         wafUpdatedSuccess = false
-        item.apply_error = JSON.stringify(updateResult.diagnostics, DIAGNOSTICS_KEYS_TO_KEEP_APPLY_ERROR)
+        item.apply_error = JSON.stringify(extractErrors(updateResult.diagnostics))
         Reporter.reportWafConfigError(waf.wafManager.ddwafVersion, waf.wafManager.rulesVersion)
       }
 
@@ -66,7 +66,6 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
           newActions.set(item.id, item.file.actions)
         }
       }
-
     } catch (e) {
       wafUpdatedSuccess = false
       item.apply_state = ERROR
@@ -112,6 +111,25 @@ class SpyMap extends Map {
 
 function concatArrays (files) {
   return [...files.values()].flat()
+}
+
+function extractErrors (obj) {
+  if (typeof obj !== 'object' || obj === null) return null
+
+  const result = {}
+
+  for (const [key, value] of Object.entries(obj)) {
+    if (key === 'error' || key === 'errors') {
+      result[key] = value
+    } else if (typeof value === 'object' && value !== null) {
+      const child = extractErrors(value)
+      if (child && Object.keys(child).length > 0) {
+        result[key] = child
+      }
+    }
+  }
+
+  return Object.keys(result).length > 0 ? result : null
 }
 
 function clearAllRules () {
