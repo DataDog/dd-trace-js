@@ -52,7 +52,7 @@
     },
     {
       "name": "@aws-sdk/client-bedrock-runtime",
-      "versions": [">=3.422.0"]
+      "versions": [">=3.422.0 <3.798.0"]
     }
   ],
   "body-parser": [
