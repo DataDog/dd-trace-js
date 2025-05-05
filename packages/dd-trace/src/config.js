@@ -181,8 +181,7 @@ function validateNamingVersion (versionString) {
  * If a blank path is provided a null is returned to signal that the feature is disabled.
  * An empty array means the feature is enabled but that no rules need to be applied.
  *
- * @param {string} input
- * @returns {[string]|null}
+ * @param {string | string[]} input
  */
 function splitJSONPathRules (input) {
   if (!input) return null
@@ -289,8 +288,7 @@ class Config {
     }
     const PROPAGATION_STYLE_INJECT = propagationStyle(
       'inject',
-      options.tracePropagationStyle,
-      this._getDefaultPropagationStyle(options)
+      options.tracePropagationStyle
     )
 
     validateOtelPropagators(PROPAGATION_STYLE_INJECT)
@@ -299,8 +297,6 @@ class Config {
       options.appsec = {
         enabled: options.appsec
       }
-    } else if (options.appsec == null) {
-      options.appsec = {}
     }
 
     const DD_INSTRUMENTATION_INSTALL_ID = coalesce(
@@ -505,7 +501,6 @@ class Config {
     this._setValue(defaults, 'grpc.server.error.statuses', GRPC_SERVER_ERROR_STATUSES)
     this._setValue(defaults, 'headerTags', [])
     this._setValue(defaults, 'hostname', '127.0.0.1')
-    this._setValue(defaults, 'iast.cookieFilterPattern', '.{32,}')
     this._setValue(defaults, 'iast.dbRowsToTaint', 1)
     this._setValue(defaults, 'iast.deduplicationEnabled', true)
     this._setValue(defaults, 'iast.enabled', false)
@@ -680,7 +675,6 @@ class Config {
       DD_GRPC_CLIENT_ERROR_STATUSES,
       DD_GRPC_SERVER_ERROR_STATUSES,
       JEST_WORKER_ID,
-      DD_IAST_COOKIE_FILTER_PATTERN,
       DD_IAST_DB_ROWS_TO_TAINT,
       DD_IAST_DEDUPLICATION_ENABLED,
       DD_IAST_ENABLED,
@@ -855,7 +849,6 @@ class Config {
     this._setIntegerRangeSet(env, 'grpc.server.error.statuses', DD_GRPC_SERVER_ERROR_STATUSES)
     this._setArray(env, 'headerTags', DD_TRACE_HEADER_TAGS)
     this._setString(env, 'hostname', coalesce(DD_AGENT_HOST, DD_TRACE_AGENT_HOSTNAME))
-    this._setString(env, 'iast.cookieFilterPattern', DD_IAST_COOKIE_FILTER_PATTERN)
     this._setValue(env, 'iast.dbRowsToTaint', maybeInt(DD_IAST_DB_ROWS_TO_TAINT))
     this._setBoolean(env, 'iast.deduplicationEnabled', DD_IAST_DEDUPLICATION_ENABLED)
     this._setBoolean(env, 'iast.enabled', DD_IAST_ENABLED)
@@ -1010,27 +1003,27 @@ class Config {
       options.apmTracingEnabled,
       options.experimental?.appsec?.standalone && !options.experimental.appsec.standalone.enabled
     ))
-    this._setBoolean(opts, 'appsec.apiSecurity.enabled', options.appsec.apiSecurity?.enabled)
-    this._setValue(opts, 'appsec.blockedTemplateGraphql', maybeFile(options.appsec.blockedTemplateGraphql))
-    this._setValue(opts, 'appsec.blockedTemplateHtml', maybeFile(options.appsec.blockedTemplateHtml))
-    this._optsUnprocessed['appsec.blockedTemplateHtml'] = options.appsec.blockedTemplateHtml
-    this._setValue(opts, 'appsec.blockedTemplateJson', maybeFile(options.appsec.blockedTemplateJson))
-    this._optsUnprocessed['appsec.blockedTemplateJson'] = options.appsec.blockedTemplateJson
-    this._setBoolean(opts, 'appsec.enabled', options.appsec.enabled)
-    this._setString(opts, 'appsec.eventTracking.mode', options.appsec.eventTracking?.mode)
-    this._setString(opts, 'appsec.obfuscatorKeyRegex', options.appsec.obfuscatorKeyRegex)
-    this._setString(opts, 'appsec.obfuscatorValueRegex', options.appsec.obfuscatorValueRegex)
-    this._setBoolean(opts, 'appsec.rasp.enabled', options.appsec.rasp?.enabled)
-    this._setValue(opts, 'appsec.rateLimit', maybeInt(options.appsec.rateLimit))
-    this._optsUnprocessed['appsec.rateLimit'] = options.appsec.rateLimit
-    this._setString(opts, 'appsec.rules', options.appsec.rules)
-    this._setBoolean(opts, 'appsec.stackTrace.enabled', options.appsec.stackTrace?.enabled)
-    this._setValue(opts, 'appsec.stackTrace.maxDepth', maybeInt(options.appsec.stackTrace?.maxDepth))
-    this._optsUnprocessed['appsec.stackTrace.maxDepth'] = options.appsec.stackTrace?.maxDepth
-    this._setValue(opts, 'appsec.stackTrace.maxStackTraces', maybeInt(options.appsec.stackTrace?.maxStackTraces))
-    this._optsUnprocessed['appsec.stackTrace.maxStackTraces'] = options.appsec.stackTrace?.maxStackTraces
-    this._setValue(opts, 'appsec.wafTimeout', maybeInt(options.appsec.wafTimeout))
-    this._optsUnprocessed['appsec.wafTimeout'] = options.appsec.wafTimeout
+    this._setBoolean(opts, 'appsec.apiSecurity.enabled', options.appsec?.apiSecurity?.enabled)
+    this._setValue(opts, 'appsec.blockedTemplateGraphql', maybeFile(options.appsec?.blockedTemplateGraphql))
+    this._setValue(opts, 'appsec.blockedTemplateHtml', maybeFile(options.appsec?.blockedTemplateHtml))
+    this._optsUnprocessed['appsec.blockedTemplateHtml'] = options.appsec?.blockedTemplateHtml
+    this._setValue(opts, 'appsec.blockedTemplateJson', maybeFile(options.appsec?.blockedTemplateJson))
+    this._optsUnprocessed['appsec.blockedTemplateJson'] = options.appsec?.blockedTemplateJson
+    this._setBoolean(opts, 'appsec.enabled', options.appsec?.enabled)
+    this._setString(opts, 'appsec.eventTracking.mode', options.appsec?.eventTracking?.mode)
+    this._setString(opts, 'appsec.obfuscatorKeyRegex', options.appsec?.obfuscatorKeyRegex)
+    this._setString(opts, 'appsec.obfuscatorValueRegex', options.appsec?.obfuscatorValueRegex)
+    this._setBoolean(opts, 'appsec.rasp.enabled', options.appsec?.rasp?.enabled)
+    this._setValue(opts, 'appsec.rateLimit', maybeInt(options.appsec?.rateLimit))
+    this._optsUnprocessed['appsec.rateLimit'] = options.appsec?.rateLimit
+    this._setString(opts, 'appsec.rules', options.appsec?.rules)
+    this._setBoolean(opts, 'appsec.stackTrace.enabled', options.appsec?.stackTrace?.enabled)
+    this._setValue(opts, 'appsec.stackTrace.maxDepth', maybeInt(options.appsec?.stackTrace?.maxDepth))
+    this._optsUnprocessed['appsec.stackTrace.maxDepth'] = options.appsec?.stackTrace?.maxDepth
+    this._setValue(opts, 'appsec.stackTrace.maxStackTraces', maybeInt(options.appsec?.stackTrace?.maxStackTraces))
+    this._optsUnprocessed['appsec.stackTrace.maxStackTraces'] = options.appsec?.stackTrace?.maxStackTraces
+    this._setValue(opts, 'appsec.wafTimeout', maybeInt(options.appsec?.wafTimeout))
+    this._optsUnprocessed['appsec.wafTimeout'] = options.appsec?.wafTimeout
     this._setBoolean(opts, 'clientIpEnabled', options.clientIpEnabled)
     this._setString(opts, 'clientIpHeader', options.clientIpHeader?.toLowerCase())
     this._setValue(opts, 'baggageMaxBytes', options.baggageMaxBytes)
@@ -1063,7 +1056,6 @@ class Config {
     this._optsUnprocessed.flushMinSpans = options.flushMinSpans
     this._setArray(opts, 'headerTags', options.headerTags)
     this._setString(opts, 'hostname', options.hostname)
-    this._setString(opts, 'iast.cookieFilterPattern', options.iast?.cookieFilterPattern)
     this._setValue(opts, 'iast.dbRowsToTaint', maybeInt(options.iast?.dbRowsToTaint))
     this._setBoolean(opts, 'iast.deduplicationEnabled', options.iast && options.iast.deduplicationEnabled)
     this._setBoolean(opts, 'iast.enabled',

@@ -155,7 +155,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           const hasKnownTests = !!knownTests?.jest
           earlyFlakeDetectionNumRetries = this.testEnvironmentOptions._ddEarlyFlakeDetectionNumRetries
           this.knownTestsForThisSuite = hasKnownTests
-            ? (knownTests?.jest[this.testSuite] || [])
+            ? (knownTests?.jest?.[this.testSuite] || [])
             : this.getKnownTestsForSuite(this.testEnvironmentOptions._ddKnownTests)
         } catch (e) {
           // If there has been an error parsing the tests, we'll disable Early Flake Deteciton
@@ -173,10 +173,10 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
       if (this.isTestManagementTestsEnabled) {
         try {
-          const hasTestManagementTests = !!testManagementTests.jest
+          const hasTestManagementTests = !!testManagementTests?.jest
           testManagementAttemptToFixRetries = this.testEnvironmentOptions._ddTestManagementAttemptToFixRetries
           this.testManagementTestsForThisSuite = hasTestManagementTests
-            ? this.getTestManagementTestsForSuite(testManagementTests.jest.suites?.[this.testSuite]?.tests)
+            ? this.getTestManagementTestsForSuite(testManagementTests?.jest?.suites?.[this.testSuite]?.tests)
             : this.getTestManagementTestsForSuite(this.testEnvironmentOptions._ddTestManagementTests)
         } catch (e) {
           log.error('Error parsing test management tests', e)
@@ -1196,7 +1196,7 @@ addHook({
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, globalConfig.rootDir || process.cwd())
       const suiteKnownTests = knownTests?.jest?.[testSuite] || []
 
-      const suiteTestManagementTests = testManagementTests.jest?.suites?.[testSuite]?.tests || {}
+      const suiteTestManagementTests = testManagementTests?.jest?.suites?.[testSuite]?.tests || {}
 
       args[0].config = {
         ...config,
