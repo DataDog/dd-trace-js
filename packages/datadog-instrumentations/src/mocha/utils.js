@@ -17,7 +17,7 @@ const testFinishCh = channel('ci:mocha:test:finish')
 const testRetryCh = channel('ci:mocha:test:retry')
 const errorCh = channel('ci:mocha:test:error')
 const skipCh = channel('ci:mocha:test:skip')
-
+const isModifiedCh = channel('ci:mocha:test:is-modified')
 // suite channels
 const testSuiteErrorCh = channel('ci:mocha:test-suite:error')
 
@@ -207,7 +207,8 @@ function getOnTestHandler (isMain) {
       _ddIsEfdRetry: isEfdRetry,
       _ddIsAttemptToFix: isAttemptToFix,
       _ddIsDisabled: isDisabled,
-      _ddIsQuarantined: isQuarantined
+      _ddIsQuarantined: isQuarantined,
+      _ddIsModified: isModified
     } = test
 
     const testName = removeEfdStringFromTestName(removeAttemptToFixStringFromTestName(test.fullTitle()))
@@ -228,6 +229,7 @@ function getOnTestHandler (isMain) {
     testInfo.isAttemptToFix = isAttemptToFix
     testInfo.isDisabled = isDisabled
     testInfo.isQuarantined = isQuarantined
+    testInfo.isModified = isModified
     // We want to store the result of the new tests
     if (isNew) {
       const testFullName = getTestFullName(test)
@@ -450,12 +452,34 @@ function getRunTestsWrapper (runTests, config) {
       })
     }
 
+    if (config.isImpactedTestsEnabled) {
+      suite.tests.forEach((test) => {
+        isModifiedCh.publish({
+          modifiedTests: config.modifiedTests,
+          file: suite.file,
+          onDone: (isModified) => {
+            if (isModified) {
+              test._ddIsModified = true
+              if (!test.isPending() && !test._ddIsAttemptToFix && config.isEarlyFlakeDetectionEnabled) {
+                retryTest(
+                  test,
+                  config.earlyFlakeDetectionNumRetries,
+                  addEfdStringToTestName,
+                  ['_ddIsModified', '_ddIsEfdRetry']
+                )
+              }
+            }
+          }
+        })
+      })
+    }
+
     if (config.isKnownTestsEnabled) {
       // by the time we reach `this.on('test')`, it is too late. We need to add retries here
       suite.tests.forEach(test => {
-        if (!test.isPending() && isNewTest(test, config.knownTests)) {
+        if (!test.isPending() && isNewTest(test, config.knownTests) && !test._ddIsModified) {
           test._ddIsNew = true
-          if (config.isEarlyFlakeDetectionEnabled) {
+          if (config.isEarlyFlakeDetectionEnabled && !test._ddIsAttemptToFix) {
             retryTest(
               test,
               config.earlyFlakeDetectionNumRetries,

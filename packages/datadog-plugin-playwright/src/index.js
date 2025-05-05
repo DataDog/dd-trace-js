@@ -34,7 +34,9 @@ const {
   TEST_NAME,
   TEST_IS_RUM_ACTIVE,
   TEST_BROWSER_VERSION,
-  TEST_RETRY_REASON_TYPES
+  TEST_RETRY_REASON_TYPES,
+  TEST_IS_MODIFIED,
+  isModifiedTest
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -55,6 +57,16 @@ class PlaywrightPlugin extends CiPlugin {
     this._testSuites = new Map()
     this.numFailedTests = 0
     this.numFailedSuites = 0
+
+    this.addSub('ci:playwright:test:is-modified', ({
+      filePath,
+      modifiedTests,
+      onDone
+    }) => {
+      const testSuite = getTestSuitePath(filePath, this.repositoryRoot)
+      const isModified = isModifiedTest(testSuite, 0, 0, modifiedTests, this.constructor.id)
+      onDone({ isModified })
+    })
 
     this.addSub('ci:playwright:session:finish', ({
       status,
@@ -268,6 +280,7 @@ class PlaywrightPlugin extends CiPlugin {
       hasFailedAllRetries,
       hasPassedAttemptToFixRetries,
       isAtrRetry,
+      isModified,
       onDone
     }) => {
       const store = storage('legacy').getStore()
@@ -317,6 +330,13 @@ class PlaywrightPlugin extends CiPlugin {
       }
       if (isQuarantined) {
         span.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+      }
+      if (isModified) {
+        span.setTag(TEST_IS_MODIFIED, 'true')
+        if (isEfdRetry) {
+          span.setTag(TEST_IS_RETRY, 'true')
+          span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
+        }
       }
       steps.forEach(step => {
         const stepStartTime = step.startTime.getTime()

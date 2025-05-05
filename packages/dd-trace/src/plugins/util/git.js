@@ -209,6 +209,22 @@ function getLatestCommits () {
   }
 }
 
+function getGitDiff (baseCommit, targetCommit) {
+  try {
+    return sanitizedExec(
+      'git',
+      ['diff', '-U0', '--word-diff=porcelain', baseCommit, targetCommit],
+      { name: TELEMETRY_GIT_COMMAND, tags: { command: 'diff' } },
+      { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'diff' } },
+      { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'diff' } },
+      false
+    )
+  } catch (err) {
+    log.error('Git plugin error executing git diff command: %s', err.message)
+    return ''
+  }
+}
+
 function getCommitsRevList (commitsToExclude, commitsToInclude) {
   let result = null
 
@@ -371,5 +387,6 @@ module.exports = {
   GIT_REV_LIST_MAX_BUFFER,
   isShallowRepository,
   unshallowRepository,
-  isGitAvailable
+  isGitAvailable,
+  getGitDiff
 }
