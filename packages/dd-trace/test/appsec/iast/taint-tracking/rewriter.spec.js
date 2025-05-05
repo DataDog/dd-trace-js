@@ -71,7 +71,7 @@ describe('IAST Rewriter', () => {
         return res
       }
 
-      rewriter = proxyquire('../../../../src/appsec/iast/taint-tracking/rewriter', {
+      rewriter = proxyquire('../../../../src/rewriter/rewriter', {
         '@datadog/wasm-js-rewriter': {
           Rewriter,
           getPrepareStackTrace: function (fn) {
@@ -94,10 +94,10 @@ describe('IAST Rewriter', () => {
         '@datadog/wasm-js-rewriter/js/source-map': {
           cacheRewrittenSourceMap
         },
-        '../../../../../datadog-shimmer': shimmer,
-        '../../telemetry': iastTelemetry,
+        '../../../datadog-shimmer': shimmer,
+        '../appsec/iast/telemetry': iastTelemetry,
         module: Module,
-        '../../../log': log,
+        '../log': log,
         './rewriter-telemetry': rewriterTelemetry,
         worker_threads: workerThreads
       })
@@ -342,7 +342,7 @@ describe('IAST Rewriter', () => {
 
     beforeEach(() => {
       getOriginalPathAndLineFromSourceMap = sinon.spy()
-      rewriter = proxyquire('../../../../src/appsec/iast/taint-tracking/rewriter', {
+      rewriter = proxyquire('../../../../src/rewriter/rewriter', {
         '@datadog/wasm-js-rewriter': {
           getOriginalPathAndLineFromSourceMap
         }

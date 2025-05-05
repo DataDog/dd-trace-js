@@ -8,7 +8,7 @@ const msgpack = require('@msgpack/msgpack')
 
 const agent = require('../../plugins/agent')
 const axios = require('axios')
-const rewriter = require('../../../src/appsec/iast/taint-tracking/rewriter')
+const rewriter = require('../../../src/rewriter/rewriter')
 const iast = require('../../../src/appsec/iast')
 const Config = require('../../../src/config')
 const vulnerabilityReporter = require('../../../src/appsec/iast/vulnerability-reporter')

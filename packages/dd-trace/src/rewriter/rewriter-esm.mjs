@@ -2,9 +2,9 @@
 
 import path from 'path'
 import { URL } from 'url'
-import { getName } from '../telemetry/verbosity.js'
-import { isDdTrace, isPrivateModule } from './filter.js'
-import constants from './constants.js'
+import { getName } from '../appsec/iast/telemetry/verbosity.js'
+import { isDdTrace, isPrivateModule } from '../appsec/iast/taint-tracking/filter.js'
+import constants from '../appsec/iast/taint-tracking/constants.js'
 
 const currentUrl = new URL(import.meta.url)
 const ddTraceDir = path.join(currentUrl.pathname, '..', '..', '..', '..', '..', '..')

@@ -13,8 +13,8 @@ describe('rewriter telemetry', () => {
     iastTelemetry = {
       add: sinon.spy()
     }
-    const rewriterTelemetry = proxyquire('../../../../src/appsec/iast/taint-tracking/rewriter-telemetry', {
-      '../telemetry': iastTelemetry
+    const rewriterTelemetry = proxyquire('../../../../src/rewriter/rewriter-telemetry', {
+      '../appsec/iast/telemetry': iastTelemetry
     })
     incrementTelemetryIfNeeded = rewriterTelemetry.incrementTelemetryIfNeeded
     instrumentedPropagationInc = sinon.stub(INSTRUMENTED_PROPAGATION, 'inc')

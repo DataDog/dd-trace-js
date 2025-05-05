@@ -130,7 +130,7 @@ describe('Hardcoded Password Analyzer', () => {
           }
         })
         iast.enable(config, tracer)
-        rewriter = require('../../../../src/appsec/iast/taint-tracking/rewriter')
+        rewriter = require('../../../../src/rewriter/rewriter')
         rewriter.enable(config)
       })
 
