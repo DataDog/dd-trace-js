@@ -19,6 +19,7 @@ const telemetryMetrics = require('./telemetry/metrics')
 const { isInServerlessEnvironment, getIsGCPFunction, getIsAzureFunction } = require('./serverless')
 const { ORIGIN_KEY, GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('./constants')
 const { appendRules } = require('./payload-tagging/config')
+const configHelper = require('./config-helper')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -80,10 +81,10 @@ function getFromOtelSamplerMap (otelTracesSampler, otelTracesSamplerArg) {
 }
 
 function validateOtelPropagators (propagators) {
-  if (!process.env.PROPAGATION_STYLE_EXTRACT &&
-    !process.env.PROPAGATION_STYLE_INJECT &&
-    !process.env.DD_TRACE_PROPAGATION_STYLE &&
-    process.env.OTEL_PROPAGATORS) {
+  if (!configHelper.getConfiguration('PROPAGATION_STYLE_EXTRACT') &&
+    !configHelper.getConfiguration('PROPAGATION_STYLE_INJECT') &&
+    !configHelper.getConfiguration('DD_TRACE_PROPAGATION_STYLE') &&
+    configHelper.getConfiguration('OTEL_PROPAGATORS')) {
     for (const style in propagators) {
       if (!VALID_PROPAGATION_STYLES.has(style)) {
         log.warn('unexpected value for OTEL_PROPAGATORS environment variable')
@@ -94,7 +95,7 @@ function validateOtelPropagators (propagators) {
 }
 
 function validateEnvVarType (envVar) {
-  const value = process.env[envVar]
+  const value = configHelper.getConfiguration(envVar)
   switch (envVar) {
     case 'OTEL_LOG_LEVEL':
       return VALID_LOG_LEVELS.has(value)
@@ -103,7 +104,7 @@ function validateEnvVarType (envVar) {
     case 'OTEL_SERVICE_NAME':
       return typeof value === 'string'
     case 'OTEL_TRACES_SAMPLER':
-      return getFromOtelSamplerMap(value, process.env.OTEL_TRACES_SAMPLER_ARG) !== undefined
+      return getFromOtelSamplerMap(value, configHelper.getConfiguration('OTEL_TRACES_SAMPLER_ARG')) !== undefined
     case 'OTEL_TRACES_SAMPLER_ARG':
       return !isNaN(parseFloat(value))
     case 'OTEL_SDK_DISABLED':
@@ -119,12 +120,12 @@ function validateEnvVarType (envVar) {
 
 function checkIfBothOtelAndDdEnvVarSet () {
   for (const [otelEnvVar, ddEnvVar] of Object.entries(otelDdEnvMapping)) {
-    if (ddEnvVar && process.env[ddEnvVar] && process.env[otelEnvVar]) {
+    if (ddEnvVar && configHelper.getConfiguration(ddEnvVar) && configHelper.getConfiguration(otelEnvVar)) {
       log.warn(`both ${ddEnvVar} and ${otelEnvVar} environment variables are set`)
       getCounter('otel.env.hiding', ddEnvVar, otelEnvVar).inc()
     }
 
-    if (process.env[otelEnvVar] && !validateEnvVarType(otelEnvVar)) {
+    if (configHelper.getConfiguration(otelEnvVar) && !validateEnvVarType(otelEnvVar)) {
       log.warn(`unexpected value for ${otelEnvVar} environment variable`)
       getCounter('otel.env.invalid', ddEnvVar, otelEnvVar).inc()
     }
@@ -217,7 +218,8 @@ function propagationStyle (key, option) {
   // Otherwise, fallback to env var parsing
   const envKey = `DD_TRACE_PROPAGATION_STYLE_${key.toUpperCase()}`
 
-  const envVar = coalesce(process.env[envKey], process.env.DD_TRACE_PROPAGATION_STYLE, process.env.OTEL_PROPAGATORS)
+  const envVar = coalesce(configHelper.getConfiguration(envKey),
+    configHelper.getConfiguration('DD_TRACE_PROPAGATION_STYLE'), configHelper.getConfiguration('OTEL_PROPAGATORS'))
   if (envVar !== undefined) {
     return envVar.split(',')
       .filter(v => v !== '')
@@ -272,13 +274,13 @@ class Config {
     checkIfBothOtelAndDdEnvVarSet()
 
     const DD_API_KEY = coalesce(
-      process.env.DATADOG_API_KEY,
-      process.env.DD_API_KEY
+      configHelper.getConfiguration('DATADOG_API_KEY'),
+      configHelper.getConfiguration('DD_API_KEY')
     )
 
-    if (process.env.DD_TRACE_PROPAGATION_STYLE && (
-      process.env.DD_TRACE_PROPAGATION_STYLE_INJECT ||
-      process.env.DD_TRACE_PROPAGATION_STYLE_EXTRACT
+    if (configHelper.getConfiguration('DD_TRACE_PROPAGATION_STYLE') && (
+      configHelper.getConfiguration('DD_TRACE_PROPAGATION_STYLE_INJECT') ||
+      configHelper.getConfiguration('DD_TRACE_PROPAGATION_STYLE_EXTRACT')
     )) {
       log.warn(
         'Use either the DD_TRACE_PROPAGATION_STYLE environment variable or separate ' +
@@ -300,34 +302,34 @@ class Config {
     }
 
     const DD_INSTRUMENTATION_INSTALL_ID = coalesce(
-      process.env.DD_INSTRUMENTATION_INSTALL_ID,
+      configHelper.getConfiguration('DD_INSTRUMENTATION_INSTALL_ID'),
       null
     )
     const DD_INSTRUMENTATION_INSTALL_TIME = coalesce(
-      process.env.DD_INSTRUMENTATION_INSTALL_TIME,
+      configHelper.getConfiguration('DD_INSTRUMENTATION_INSTALL_TIME'),
       null
     )
     const DD_INSTRUMENTATION_INSTALL_TYPE = coalesce(
-      process.env.DD_INSTRUMENTATION_INSTALL_TYPE,
+      configHelper.getConfiguration('DD_INSTRUMENTATION_INSTALL_TYPE'),
       null
     )
 
     const DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING = splitJSONPathRules(
       coalesce(
-        process.env.DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING,
+        configHelper.getConfiguration('DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING'),
         options.cloudPayloadTagging?.request,
         ''
       ))
 
     const DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING = splitJSONPathRules(
       coalesce(
-        process.env.DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING,
+        configHelper.getConfiguration('DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING'),
         options.cloudPayloadTagging?.response,
         ''
       ))
 
     const DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH = coalesce(
-      process.env.DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH,
+      configHelper.getConfiguration('DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH'),
       options.cloudPayloadTagging?.maxDepth,
       10
     )
@@ -376,17 +378,17 @@ class Config {
     if (this.gitMetadataEnabled) {
       this.repositoryUrl = removeUserSensitiveInfo(
         coalesce(
-          process.env.DD_GIT_REPOSITORY_URL,
+          configHelper.getConfiguration('DD_GIT_REPOSITORY_URL'),
           this.tags[GIT_REPOSITORY_URL]
         )
       )
       this.commitSHA = coalesce(
-        process.env.DD_GIT_COMMIT_SHA,
+        configHelper.getConfiguration('DD_GIT_COMMIT_SHA'),
         this.tags[GIT_COMMIT_SHA]
       )
       if (!this.repositoryUrl || !this.commitSHA) {
         const DD_GIT_PROPERTIES_FILE = coalesce(
-          process.env.DD_GIT_PROPERTIES_FILE,
+          configHelper.getConfiguration('DD_GIT_PROPERTIES_FILE'),
           `${process.cwd()}/git.properties`
         )
         let gitPropertiesString
@@ -394,7 +396,7 @@ class Config {
           gitPropertiesString = fs.readFileSync(DD_GIT_PROPERTIES_FILE, 'utf8')
         } catch (e) {
           // Only log error if the user has set a git.properties path
-          if (process.env.DD_GIT_PROPERTIES_FILE) {
+          if (configHelper.getConfiguration('DD_GIT_PROPERTIES_FILE')) {
             log.error('Error reading DD_GIT_PROPERTIES_FILE: %s', DD_GIT_PROPERTIES_FILE, e)
           }
         }
@@ -424,7 +426,7 @@ class Config {
     // TODO: Remove the experimental env vars as a major?
     const DD_TRACE_B3_ENABLED = coalesce(
       options.experimental && options.experimental.b3,
-      process.env.DD_TRACE_EXPERIMENTAL_B3_ENABLED,
+      configHelper.getConfiguration('DD_TRACE_EXPERIMENTAL_B3_ENABLED'),
       false
     )
     const defaultPropagationStyle = ['datadog', 'tracecontext']
@@ -446,7 +448,7 @@ class Config {
       FUNCTION_NAME,
       K_SERVICE,
       WEBSITE_SITE_NAME
-    } = process.env
+    } = configHelper.getConfigurations()
 
     const service = AWS_LAMBDA_FUNCTION_NAME ||
       FUNCTION_NAME || // Google Cloud Function Name set by deprecated runtimes
@@ -771,7 +773,7 @@ class Config {
       OTEL_SERVICE_NAME,
       OTEL_TRACES_SAMPLER,
       OTEL_TRACES_SAMPLER_ARG
-    } = process.env
+    } = configHelper.getConfigurations()
 
     const tags = {}
     const env = setHiddenProperty(this, '_env', {})
@@ -935,7 +937,7 @@ class Config {
     this._setString(env, 'service', DD_SERVICE || DD_SERVICE_NAME || tags.service || OTEL_SERVICE_NAME)
     if (DD_SERVICE_MAPPING) {
       this._setValue(env, 'serviceMapping', fromEntries(
-        process.env.DD_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
+        configHelper.getConfiguration('DD_SERVICE_MAPPING').split(',').map(x => x.trim().split(':'))
       ))
     }
     this._setString(env, 'site', DD_SITE)
@@ -1139,20 +1141,20 @@ class Config {
 
   _isCiVisibilityItrEnabled () {
     return coalesce(
-      process.env.DD_CIVISIBILITY_ITR_ENABLED,
+      configHelper.getConfiguration('DD_CIVISIBILITY_ITR_ENABLED'),
       true
     )
   }
 
   _getHostname () {
-    const DD_CIVISIBILITY_AGENTLESS_URL = process.env.DD_CIVISIBILITY_AGENTLESS_URL
+    const DD_CIVISIBILITY_AGENTLESS_URL = configHelper.getConfiguration('DD_CIVISIBILITY_AGENTLESS_URL')
     const url = DD_CIVISIBILITY_AGENTLESS_URL
       ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
       : getAgentUrl(this._getTraceAgentUrl(), this._optionsArg)
     const DD_AGENT_HOST = coalesce(
       this._optionsArg.hostname,
-      process.env.DD_AGENT_HOST,
-      process.env.DD_TRACE_AGENT_HOSTNAME,
+      configHelper.getConfiguration('DD_AGENT_HOST'),
+      configHelper.getConfiguration('DD_TRACE_AGENT_HOSTNAME'),
       '127.0.0.1'
     )
     return DD_AGENT_HOST || (url && url.hostname)
@@ -1162,17 +1164,17 @@ class Config {
     const DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = validateNamingVersion(
       coalesce(
         this._optionsArg.spanAttributeSchema,
-        process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
+        configHelper.getConfiguration('DD_TRACE_SPAN_ATTRIBUTE_SCHEMA')
       )
     )
 
     const peerServiceSet = (
       this._optionsArg.hasOwnProperty('spanComputePeerService') ||
-      process.env.hasOwnProperty('DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED')
+      configHelper.getConfigurations().hasOwnProperty('DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED')
     )
     const peerServiceValue = coalesce(
       this._optionsArg.spanComputePeerService,
-      process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
+      configHelper.getConfiguration('DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED')
     )
 
     const spanComputePeerService = (
@@ -1188,14 +1190,14 @@ class Config {
 
   _isCiVisibilityGitUploadEnabled () {
     return coalesce(
-      process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED,
+      configHelper.getConfiguration('DD_CIVISIBILITY_GIT_UPLOAD_ENABLED'),
       true
     )
   }
 
   _isCiVisibilityManualApiEnabled () {
     return coalesce(
-      process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED,
+      configHelper.getConfiguration('DD_CIVISIBILITY_MANUAL_API_ENABLED'),
       true
     )
   }
@@ -1206,7 +1208,7 @@ class Config {
 
     return apmTracingEnabled && coalesce(
       this._optionsArg.stats,
-      process.env.DD_TRACE_STATS_COMPUTATION_ENABLED,
+      configHelper.getConfiguration('DD_TRACE_STATS_COMPUTATION_ENABLED'),
       getIsGCPFunction() || getIsAzureFunction()
     )
   }
@@ -1214,8 +1216,8 @@ class Config {
   _getTraceAgentUrl () {
     return coalesce(
       this._optionsArg.url,
-      process.env.DD_TRACE_AGENT_URL,
-      process.env.DD_TRACE_URL,
+      configHelper.getConfiguration('DD_TRACE_AGENT_URL'),
+      configHelper.getConfiguration('DD_TRACE_URL'),
       null
     )
   }
@@ -1234,7 +1236,7 @@ class Config {
       DD_TEST_FAILED_TEST_REPLAY_ENABLED,
       DD_TEST_MANAGEMENT_ENABLED,
       DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES
-    } = process.env
+    } = configHelper.getConfigurations()
 
     if (DD_CIVISIBILITY_AGENTLESS_URL) {
       this._setValue(calc, 'url', new URL(DD_CIVISIBILITY_AGENTLESS_URL))
@@ -1521,9 +1523,9 @@ function getAgentUrl (url, options) {
   if (
     !options.hostname &&
     !options.port &&
-    !process.env.DD_AGENT_HOST &&
-    !process.env.DD_TRACE_AGENT_HOSTNAME &&
-    !process.env.DD_TRACE_AGENT_PORT &&
+    !configHelper.getConfiguration('DD_AGENT_HOST') &&
+    !configHelper.getConfiguration('DD_TRACE_AGENT_HOSTNAME') &&
+    !configHelper.getConfiguration('DD_TRACE_AGENT_PORT') &&
     fs.existsSync('/var/run/datadog/apm.socket')
   ) {
     return new URL('unix:///var/run/datadog/apm.socket')
