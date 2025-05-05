@@ -77,10 +77,6 @@ function trackRaspRuleMatch (store, raspRule, blockTriggered, blocked) {
   }
 
   appsecMetrics.count('rasp.rule.match', tags).inc(1)
-
-  // this is needed to not count it twice for the same match
-  // but it also means it can only be called once per waf call even if there are multiple rasp match
-  telemetryMetrics.ruleTriggered = null
 }
 
 function trackRaspRuleSkipped (raspRule, reason) {

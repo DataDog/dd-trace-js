@@ -4,9 +4,9 @@ const log = require('../log')
 const { PROPAGATED_PARENT_ID_KEY } = require('./constants/tags')
 const { storage } = require('./storage')
 
+const telemetry = require('./telemetry')
 const LLMObsSpanProcessor = require('./span_processor')
 
-const telemetry = require('./telemetry')
 const { channel } = require('dc-polyfill')
 const spanProcessCh = channel('dd-trace:span:process')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
@@ -94,12 +94,15 @@ function handleLLMObsParentIdInjection ({ carrier }) {
 }
 
 function handleFlush () {
+  let err = ''
   try {
     spanWriter.flush()
     evalWriter.flush()
   } catch (e) {
+    err = 'writer_flush_error'
     log.warn(`Failed to flush LLMObs spans and evaluation metrics: ${e.message}`)
   }
+  telemetry.recordUserFlush(err)
 }
 
 function handleSpanProcess (data) {
