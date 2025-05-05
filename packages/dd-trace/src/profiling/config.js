@@ -15,6 +15,7 @@ const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
 const { tagger } = require('./tagger')
 const { isFalse, isTrue } = require('../util')
 const { getAzureTagsFromMetadata, getAzureAppMetadata } = require('../azure_metadata')
+const satisfies = require('semifies')
 
 class Config {
   constructor (options = {}) {
@@ -41,6 +42,7 @@ class Config {
       DD_PROFILING_TIMELINE_ENABLED,
       DD_PROFILING_UPLOAD_PERIOD,
       DD_PROFILING_UPLOAD_TIMEOUT,
+      DD_PROFILING_USE_ASYNC_CONTEXT_FRAME,
       DD_PROFILING_V8_PROFILER_BUG_WORKAROUND,
       DD_PROFILING_WALLTIME_ENABLED,
       DD_SERVICE,
@@ -191,6 +193,15 @@ class Config {
     logExperimentalVarDeprecation('CPU_ENABLED')
     checkOptionWithSamplingContextAllowed(this.cpuProfilingEnabled, 'CPU profiling')
 
+    this.useAsyncContextFrame = isTrue(coalesce(options.useAsyncContextFrame,
+      DD_PROFILING_USE_ASYNC_CONTEXT_FRAME, false))
+    if (this.useAsyncContextFrame &&
+      !(satisfies(process.versions.node, '>=24.0.0') ||
+      process.execArgv.includes('--experimental-async-context-frame'))) {
+      logger.warn(
+        'DD_PROFILING_USE_ASYNC_CONTEXT_FRAME needs either Node 24 or later, or --experimental-async-context-frame.')
+      this.useAsyncContextFrame = false
+    }
     this.profilers = ensureProfilers(profilers, this)
   }
 }
