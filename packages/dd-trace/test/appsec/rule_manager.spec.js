@@ -303,13 +303,11 @@ describe('AppSec Rule Manager', () => {
       RuleManager.updateWafFromRC(rcConfigs)
       sinon.assert.notCalled(reportWafUpdate)
       sinon.assert.calledThrice(reportWafConfigError)
-      reportWafConfigError.getCalls().forEach((spyCall) => {
-        sinon.assert.calledWithExactly(
-          spyCall,
-          waf.wafManager.ddwafVersion,
-          waf.wafManager.rulesVersion
-        )
-      })
+      sinon.assert.alwaysCalledWithExactly(
+        reportWafConfigError,
+        waf.wafManager.ddwafVersion,
+        waf.wafManager.rulesVersion
+      )
     })
 
     it('should report waf update', () => {
