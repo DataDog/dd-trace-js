@@ -13,7 +13,11 @@ describe('Plugin', () => {
       })
 
       beforeEach(async () => {
-        return agent.load('http', { server: false }, { codeOriginForSpans: { enabled: true } })
+        return agent.load(
+          'http',
+          { server: false },
+          { codeOriginForSpans: { experimental: { exit_spans: { enabled: true } } } }
+        )
       })
 
       afterEach(() => {

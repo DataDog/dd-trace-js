@@ -28,7 +28,10 @@ class OutboundPlugin extends TracingPlugin {
 
   startSpan (...args) {
     const span = super.startSpan(...args)
-    if (this._tracerConfig.codeOriginForSpans.enabled) {
+    if (
+      this._tracerConfig.codeOriginForSpans.enabled &&
+      this._tracerConfig.codeOriginForSpans.experimental.exit_spans.enabled
+    ) {
       span.addTags(exitTags(this.startSpan))
     }
     return span
