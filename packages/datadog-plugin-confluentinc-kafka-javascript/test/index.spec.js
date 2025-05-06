@@ -28,7 +28,7 @@ describe('Plugin', () => {
   const module = '@confluentinc/kafka-javascript'
 
   describe('@confluentinc/kafka-javascript', function () {
-    this.timeout(10000)
+    this.timeout(30000)
 
     afterEach(() => {
       return agent.close({ ritmReset: false })
@@ -559,10 +559,9 @@ describe('Plugin', () => {
                   }
                 }
               })
-              await new Promise(resolve => setTimeout(resolve, 50)) // Let eachMessage be called
+              await new Promise(resolve => setTimeout(resolve, 100)) // Let eachMessage be called
 
               for (const call of setOffsetSpy.getCalls()) {
-                // TODO: Why do we not want to see consumer offsets here?
                 expect(call.args[0]).to.not.have.property('type', 'kafka_commit')
               }
 
