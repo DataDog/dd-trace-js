@@ -6,7 +6,6 @@ const RemoteConfigManager = require('./manager')
 const RemoteConfigCapabilities = require('./capabilities')
 const { setCollectionMode } = require('../appsec/user_tracking')
 const log = require('../log')
-const RuleManager = require("../appsec/rule_manager");
 
 let rc
 
@@ -136,9 +135,9 @@ function disableWafUpdate () {
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SHI, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_CMDI, false)
 
-    //rc.removeProductHandler('ASM_DATA')
-    //rc.removeProductHandler('ASM_DD')
-    //rc.removeProductHandler('ASM')
+    rc.removeProductHandler('ASM_DATA')
+    rc.removeProductHandler('ASM_DD')
+    rc.removeProductHandler('ASM')
 
     rc.off(RemoteConfigManager.kPreUpdate, RuleManager.updateWafFromRC)
   }
