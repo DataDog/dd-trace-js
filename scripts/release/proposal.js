@@ -66,17 +66,19 @@ try {
 
   pass(`v${releaseLine}.x`)
 
-  const diffCmd = 'branch-diff --user DataDog --repo dd-trace-js --exclude-label=semver-major'
+  const diffCmd =
+    `branch-diff --user DataDog --repo dd-trace-js --exclude-label=semver-major,dont-land-on-v${releaseLine}.x`
 
   start('Determine version increment')
 
   const legacyDiff = capture(`${diffCmd} --require-label=dont-land-on-v${releaseLine}.x v${releaseLine}.x ${main}`)
 
   if (legacyDiff) {
-    fatal(
-      `The "dont-land-on-v${releaseLine}.x" label is no longer supported.`,
-      'Please remove the label from any offending PR to continue.'
-    )
+    // TODO: Re-enable this when the offending PR commits have landed properly.
+    // fatal(
+    //   `The "dont-land-on-v${releaseLine}.x" label is no longer supported.`,
+    //   'Please remove the label from any offending PR to continue.'
+    // )
   }
 
   const { DD_MAJOR, DD_MINOR, DD_PATCH } = require('../../version')
@@ -221,7 +223,7 @@ try {
   // Close PR and delete branch for any patch proposal if new proposal is minor.
   if (isMinor) {
     try {
-      run(`gh pr close v${newPatch} --delete-branch --comment "Superseded by #${pullRequest.number}."`)
+      run(`gh pr close v${newPatch}-proposal --delete-branch --comment "Superseded by #${pullRequest.number}."`)
     } catch (e) {
       // PR didn't exist so nothing to close.
     }
