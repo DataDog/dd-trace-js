@@ -246,7 +246,11 @@ function reportSuccessfulWafUpdate (product, rcConfigId, diagnostics) {
       telemetryLogCh.publish({
         message: diagnostics[configKey].error,
         level: 'ERROR',
-        tags: `log_type:rc::${product}::diagnostic, appsec_config_key:${configKey}, rc_config_id:${rcConfigId}`
+        tags: {
+          log_type: `rc::${product.toLowerCase()}::diagnostic`,
+          appsec_config_key: configKey,
+          rc_config_id: rcConfigId
+        }
       })
       continue
     }
@@ -256,7 +260,11 @@ function reportSuccessfulWafUpdate (product, rcConfigId, diagnostics) {
         telemetryLogCh.publish({
           message: `"${errorMessage}": ${JSON.stringify(errorIds)}`,
           level: 'ERROR',
-          tags: `log_type:rc::${product}::diagnostic, appsec_config_key:${configKey}, rc_config_id:${rcConfigId}`
+          tags: {
+            log_type: `rc::${product.toLowerCase()}::diagnostic`,
+            appsec_config_key: configKey,
+            rc_config_id: rcConfigId
+          }
         })
       }
     }
@@ -265,8 +273,12 @@ function reportSuccessfulWafUpdate (product, rcConfigId, diagnostics) {
       for (const [warningMessage, warningIds] of Object.entries(diagnostics[configKey].warnings)) {
         telemetryLogCh.publish({
           message: `"${warningMessage}": ${JSON.stringify(warningIds)}`,
-          level: 'ERROR',
-          tags: `log_type:rc::${product}::diagnostic, appsec_config_key:${configKey}, rc_config_id:${rcConfigId}`
+          level: 'WARN',
+          tags: {
+            log_type: `rc::${product.toLowerCase()}::diagnostic`,
+            appsec_config_key: configKey,
+            rc_config_id: rcConfigId
+          }
         })
       }
     }
