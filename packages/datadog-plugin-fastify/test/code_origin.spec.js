@@ -41,7 +41,7 @@ describe('Plugin', () => {
                 reply.send()
               })
 
-              await app.listen()
+              await app.listen(getListenOptions())
 
               await Promise.all([
                 agent.use(traces => {
@@ -80,7 +80,7 @@ describe('Plugin', () => {
                 const callWrapperLine = String(getNextLineNumber())
                 wrapperFunction()
 
-                await app.listen()
+                await app.listen(getListenOptions())
 
                 await Promise.all([
                   agent.use(traces => {
@@ -118,7 +118,7 @@ describe('Plugin', () => {
                   done()
                 }, { prefix: '/v1' })
 
-                await app.listen()
+                await app.listen(getListenOptions())
 
                 await Promise.all([
                   agent.use(traces => {
@@ -149,7 +149,7 @@ describe('Plugin', () => {
                   reply.send()
                 })
 
-                await app.listen()
+                await app.listen(getListenOptions())
 
                 await Promise.all([
                   agent.use(traces => {
@@ -183,7 +183,7 @@ describe('Plugin', () => {
                   reply.send()
                 })
 
-                await app.listen()
+                await app.listen(getListenOptions())
 
                 await Promise.all([
                   agent.use(traces => {
@@ -210,3 +210,8 @@ describe('Plugin', () => {
     })
   })
 })
+
+// Required by Fastify 1.0.0
+function getListenOptions () {
+  return { host: 'localhost', port: 0 }
+}
