@@ -53,8 +53,9 @@ class TracingPlugin extends Plugin {
 
   start () {} // implemented by individual plugins
 
-  finish () {
-    this.activeSpan?.finish()
+  finish (ctx) {
+    const span = ctx?.currentStore?.span || this.activeSpan
+    span?.finish()
   }
 
   error (ctxOrError) {
