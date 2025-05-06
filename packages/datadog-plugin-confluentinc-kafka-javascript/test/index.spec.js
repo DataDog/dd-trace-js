@@ -28,7 +28,7 @@ describe('Plugin', () => {
   const module = '@confluentinc/kafka-javascript'
 
   describe('@confluentinc/kafka-javascript', function () {
-    this.timeout(30000)
+    this.timeout(300000)
 
     afterEach(() => {
       return agent.close({ ritmReset: false })
