@@ -548,8 +548,13 @@ describe('Plugin', () => {
             it('Should add backlog on consumer explicit commit', async () => {
               // Send a message, consume it, and record the last consumed offset
               let commitMeta
-              await sendMessages(kafka, testTopic, messages)
-              await consumer.run({
+
+              let messageProcessedResolve
+              const messageProcessedPromise = new Promise(resolve => {
+                messageProcessedResolve = resolve
+              })
+
+              const consumerRunPromise = consumer.run({
                 eachMessage: async payload => {
                   const { topic, partition, message } = payload
                   commitMeta = {
@@ -557,18 +562,22 @@ describe('Plugin', () => {
                     partition,
                     offset: Number(message.offset)
                   }
+                  // Signal that we've processed a message
+                  messageProcessedResolve()
                 }
               })
-              await new Promise(resolve => setTimeout(resolve, 100)) // Let eachMessage be called
+
+              consumerRunPromise.catch(() => {})
+
+              // wait for the message to be processed before continuing
+              await sendMessages(kafka, testTopic, messages).then(
+                async () => await messageProcessedPromise
+              )
 
               for (const call of setOffsetSpy.getCalls()) {
                 expect(call.args[0]).to.not.have.property('type', 'kafka_commit')
               }
 
-              /**
-               * No choice but to reinitialize everything, because the only way to flush eachMessage
-               * calls is to disconnect.
-               */
               const newConsumer = kafka.consumer({
                 kafkaJS: { groupId: 'test-group', autoCommit: false }
               })
