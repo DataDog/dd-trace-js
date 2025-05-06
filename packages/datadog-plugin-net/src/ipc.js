@@ -1,6 +1,5 @@
 'use strict'
 
-const { storage } = require('../../datadog-core')
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
 
 class NetIPCPlugin extends ClientPlugin {
@@ -8,21 +7,14 @@ class NetIPCPlugin extends ClientPlugin {
   static get operation () { return 'ipc' }
 
   bindStart (ctx) {
-    const store = storage('legacy').getStore()
-    const childOf = store ? store.span : null
-
-    const span = this.startSpan('ipc.connect', {
-      childOf,
+    this.startSpan('ipc.connect', {
       service: this.config.service,
       resource: ctx.options.path,
       kind: 'client',
       meta: {
         'ipc.path': ctx.options.path
       }
-    }, false)
-
-    ctx.parentStore = store
-    ctx.currentStore = { ...store, span }
+    }, ctx)
 
     return ctx.currentStore
   }

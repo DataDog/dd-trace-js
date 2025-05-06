@@ -1,6 +1,5 @@
 'use strict'
 
-const { storage } = require('../../datadog-core')
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
 
@@ -29,11 +28,8 @@ class NetTCPPlugin extends ClientPlugin {
     const host = ctx.options.host || 'localhost'
     const port = ctx.options.port || 0
     const family = ctx.options.family || 4
-    const store = storage('legacy').getStore()
-    const childOf = store ? store.span : null
 
-    const span = this.startSpan('tcp.connect', {
-      childOf,
+    this.startSpan('tcp.connect', {
       service: this.config.service,
       resource: [host, port].filter(val => val).join(':'),
       kind: 'client',
@@ -48,10 +44,7 @@ class NetTCPPlugin extends ClientPlugin {
         'tcp.local.port': 0,
         [CLIENT_PORT_KEY]: port
       }
-    }, false)
-
-    ctx.parentStore = store
-    ctx.currentStore = { ...store, span }
+    }, ctx)
 
     return ctx.currentStore
   }
