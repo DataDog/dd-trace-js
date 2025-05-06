@@ -27,11 +27,6 @@ describe('WAF Manager', () => {
     DDWAF.version = sinon.stub().returns('1.2.3')
     DDWAF.prototype.dispose = sinon.stub()
     DDWAF.prototype.createContext = sinon.stub()
-    DDWAF.prototype.update = sinon.stub().callsFake(function (newRules) {
-      if (newRules?.metadata?.rules_version) {
-        this.diagnostics.ruleset_version = newRules?.metadata?.rules_version
-      }
-    })
     DDWAF.prototype.diagnostics = {
       ruleset_version: '1.0.0',
       rules: {
@@ -51,7 +46,6 @@ describe('WAF Manager', () => {
     sinon.stub(Reporter.metricsQueue, 'set')
     sinon.stub(Reporter, 'reportMetrics')
     sinon.stub(Reporter, 'reportAttack')
-    sinon.stub(Reporter, 'reportWafUpdate')
     sinon.stub(Reporter, 'reportDerivatives')
     sinon.spy(Reporter, 'reportWafInit')
 
@@ -74,7 +68,6 @@ describe('WAF Manager', () => {
       expect(Reporter.reportWafInit).to.have.been.calledWithExactly(
         '1.2.3',
         '1.0.0',
-        { loaded: ['rule_1'], failed: [] },
         true
       )
     })
@@ -97,31 +90,6 @@ describe('WAF Manager', () => {
       waf.init(rules, config.appsec)
 
       expect(Reporter.metricsQueue.set).to.have.been.calledWithExactly('_dd.appsec.waf.version', '1.2.3')
-      expect(Reporter.metricsQueue.set).to.have.been.calledWithExactly('_dd.appsec.event_rules.loaded', 1)
-      expect(Reporter.metricsQueue.set).to.have.been.calledWithExactly('_dd.appsec.event_rules.error_count', 0)
-      expect(Reporter.metricsQueue.set).not.to.have.been.calledWith('_dd.appsec.event_rules.errors')
-    })
-
-    it('should set init metrics with errors', () => {
-      DDWAF.version.returns('2.3.4')
-      DDWAF.prototype.diagnostics = {
-        rules: {
-          loaded: ['rule_1'],
-          failed: ['rule_2', 'rule_3'],
-          errors: {
-            error_1: ['invalid_1'],
-            error_2: ['invalid_2', 'invalid_3']
-          }
-        }
-      }
-
-      waf.init(rules, config.appsec)
-
-      expect(Reporter.metricsQueue.set).to.have.been.calledWithExactly('_dd.appsec.waf.version', '2.3.4')
-      expect(Reporter.metricsQueue.set).to.have.been.calledWithExactly('_dd.appsec.event_rules.loaded', 1)
-      expect(Reporter.metricsQueue.set).to.have.been.calledWithExactly('_dd.appsec.event_rules.error_count', 2)
-      expect(Reporter.metricsQueue.set).to.have.been.calledWithExactly('_dd.appsec.event_rules.errors',
-        '{"error_1":["invalid_1"],"error_2":["invalid_2","invalid_3"]}')
     })
   })
 
@@ -167,81 +135,6 @@ describe('WAF Manager', () => {
       const req = {}
       const context = waf.wafManager.getWAFContext(req)
       expect(context.wafVersion).to.be.eq('4.5.6')
-    })
-  })
-
-  describe('wafManager.update', () => {
-    const wafVersion = '2.3.4'
-
-    beforeEach(() => {
-      DDWAF.version.returns(wafVersion)
-
-      waf.init(rules, config.appsec)
-    })
-
-    it('should call ddwaf.update', () => {
-      const rules = {
-        rules_data: [
-          {
-            id: 'blocked_users',
-            type: 'data_with_expiration',
-            data: [
-              {
-                expiration: 9999999999,
-                value: 'user1'
-              }
-            ]
-          }
-        ]
-      }
-
-      waf.update(rules)
-
-      expect(DDWAF.prototype.update).to.be.calledOnceWithExactly(rules)
-      expect(Reporter.reportWafUpdate).to.be.calledOnceWithExactly(wafVersion, '1.0.0', true)
-    })
-
-    it('should call Reporter.reportWafUpdate on successful update', () => {
-      const rules = {
-        metadata: {
-          rules_version: '4.2.0'
-        },
-        rules_data: [
-          {
-            id: 'blocked_users',
-            type: 'data_with_expiration',
-            data: [
-              {
-                expiration: 9999999999,
-                value: 'user1'
-              }
-            ]
-          }
-        ]
-      }
-
-      waf.update(rules)
-
-      expect(Reporter.reportWafUpdate).to.be.calledOnceWithExactly(wafVersion, '4.2.0', true)
-    })
-
-    it('should call Reporter.reportWafUpdate on failed update', () => {
-      const rules = {
-        metadata: {
-          rules_version: '4.2.0'
-        }
-      }
-      const error = new Error('Failed to update rules')
-
-      DDWAF.prototype.update = sinon.stub().throws(error)
-
-      try {
-        waf.update(rules)
-        expect.fail('waf.update should have thrown an error')
-      } catch (err) {
-        expect(err).to.equal(error)
-        expect(Reporter.reportWafUpdate).to.be.calledOnceWithExactly(wafVersion, 'unknown', false)
-      }
     })
   })
 
