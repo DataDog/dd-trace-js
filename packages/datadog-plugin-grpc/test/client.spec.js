@@ -9,7 +9,6 @@ const getService = require('./service')
 const loader = require('../../../versions/@grpc/proto-loader').get()
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK, GRPC_CLIENT_ERROR_STATUSES } = require('../../dd-trace/src/constants')
 
-const { DD_MAJOR } = require('../../../version')
 const nodeMajor = parseInt(process.versions.node.split('.')[0])
 const pkgs = nodeMajor > 14 ? ['@grpc/grpc-js'] : ['grpc', '@grpc/grpc-js']
 
@@ -118,7 +117,7 @@ describe('Plugin', () => {
               },
               {
                 v0: {
-                  opName: DD_MAJOR <= 2 ? 'grpc.request' : 'grpc.client',
+                  opName: 'grpc.client',
                   serviceName: 'test'
                 },
                 v1: {
@@ -157,7 +156,7 @@ describe('Plugin', () => {
               return agent
                 .use(traces => {
                   expect(traces[0][0]).to.deep.include({
-                    name: DD_MAJOR <= 2 ? 'grpc.request' : 'grpc.client',
+                    name: 'grpc.client',
                     service: 'test',
                     resource: '/test.TestService/getUnary',
                     type: 'http'
@@ -194,7 +193,7 @@ describe('Plugin', () => {
               return agent
                 .use(traces => {
                   expect(traces[0][0]).to.deep.include({
-                    name: DD_MAJOR <= 2 ? 'grpc.request' : 'grpc.client',
+                    name: 'grpc.client',
                     service: 'test',
                     resource: '/test.TestService/getServerStream',
                     type: 'http'
@@ -229,7 +228,7 @@ describe('Plugin', () => {
               return agent
                 .use(traces => {
                   expect(traces[0][0]).to.deep.include({
-                    name: DD_MAJOR <= 2 ? 'grpc.request' : 'grpc.client',
+                    name: 'grpc.client',
                     service: 'test',
                     resource: '/test.TestService/getClientStream',
                     type: 'http'
@@ -264,7 +263,7 @@ describe('Plugin', () => {
               return agent
                 .use(traces => {
                   expect(traces[0][0]).to.deep.include({
-                    name: DD_MAJOR <= 2 ? 'grpc.request' : 'grpc.client',
+                    name: 'grpc.client',
                     service: 'test',
                     resource: '/test.TestService/getBidi',
                     type: 'http'
@@ -417,7 +416,7 @@ describe('Plugin', () => {
               return agent
                 .use(traces => {
                   expect(traces[0][0]).to.deep.include({
-                    name: DD_MAJOR <= 2 ? 'grpc.request' : 'grpc.client',
+                    name: 'grpc.client',
                     service: 'test',
                     resource: '/test.TestService/getUnary'
                   })
@@ -449,7 +448,7 @@ describe('Plugin', () => {
               return agent
                 .use(traces => {
                   expect(traces[0][0]).to.deep.include({
-                    name: DD_MAJOR <= 2 ? 'grpc.request' : 'grpc.client',
+                    name: 'grpc.client',
                     service: 'test',
                     resource: '/test.TestService/getUnary'
                   })

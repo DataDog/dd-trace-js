@@ -191,7 +191,6 @@ interface Plugins {
   "openai": tracer.plugins.openai;
   "opensearch": tracer.plugins.opensearch;
   "oracledb": tracer.plugins.oracledb;
-  "paperplane": tracer.plugins.paperplane;
   "playwright": tracer.plugins.playwright;
   "pg": tracer.plugins.pg;
   "pino": tracer.plugins.pino;
@@ -1793,12 +1792,6 @@ declare namespace tracer {
        */
       service?: string | ((params: any) => string);
     }
-
-    /**
-     * This plugin automatically instruments the
-     * [paperplane](https://github.com/articulate/paperplane) module.
-     */
-    interface paperplane extends HttpServer {}
 
     /**
     * This plugin automatically instruments the

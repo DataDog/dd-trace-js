@@ -103,7 +103,6 @@ module.exports = {
   nyc: () => require('../nyc'),
   oracledb: () => require('../oracledb'),
   openai: { esmFirst: true, fn: () => require('../openai') },
-  paperplane: () => require('../paperplane'),
   passport: () => require('../passport'),
   'passport-http': () => require('../passport-http'),
   'passport-local': () => require('../passport-local'),

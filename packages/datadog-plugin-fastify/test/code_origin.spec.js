@@ -4,7 +4,6 @@ const axios = require('axios')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { getNextLineNumber } = require('../../dd-trace/test/plugins/helpers')
-const { NODE_MAJOR } = require('../../../version')
 
 const host = 'localhost'
 
@@ -14,8 +13,6 @@ describe('Plugin', () => {
 
   describe('fastify', () => {
     withVersions('fastify', 'fastify', (version, _, specificVersion) => {
-      if (NODE_MAJOR <= 18 && semver.satisfies(specificVersion, '>=5')) return
-
       afterEach(() => {
         app.close()
       })

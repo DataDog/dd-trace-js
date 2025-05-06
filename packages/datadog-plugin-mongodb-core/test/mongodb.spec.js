@@ -9,9 +9,7 @@ const MongodbCorePlugin = require('../../datadog-plugin-mongodb-core/src/index')
 const ddpv = require('mocha/package.json').version
 
 const withTopologies = fn => {
-  const isOldNode = semver.satisfies(process.version, '<=14')
-  const range = isOldNode ? '>=2 <6' : '>=2' // TODO: remove when 3.x support is removed.
-  withVersions('mongodb-core', 'mongodb', range, (version, moduleName) => {
+  withVersions('mongodb-core', 'mongodb', '>=2', (version, moduleName) => {
     describe('using the default topology', () => {
       fn(async () => {
         const { MongoClient } = require(`../../../versions/${moduleName}@${version}`).get()

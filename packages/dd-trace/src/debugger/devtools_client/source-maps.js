@@ -4,7 +4,6 @@ const { join, dirname } = require('path')
 const { readFileSync } = require('fs')
 const { readFile } = require('fs/promises')
 const { SourceMapConsumer } = require('source-map')
-const { NODE_MAJOR } = require('../../../../../version')
 
 const cache = new Map()
 let cacheTimer = null
@@ -35,14 +34,7 @@ const self = module.exports = {
   }
 }
 
-// The version check inside this function is to guard against a bug Node.js version 18, in which calls to `setTimeout`
-// might throw an uncatchable error from within `AsyncLocalStorage._propagate` with the following error message:
-//
-//     TypeError: Cannot read properties of undefined (reading 'Symbol(kResourceStore)')
-//
-// Source: https://github.com/nodejs/node/blob/v18.20.6/lib/async_hooks.js#L312
 function cacheIt (key, value) {
-  if (NODE_MAJOR < 20) return value
   cacheTime = Date.now()
   setCacheTTL()
   cache.set(key, value)
