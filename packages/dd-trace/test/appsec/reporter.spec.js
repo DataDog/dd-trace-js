@@ -1,8 +1,10 @@
 'use strict'
 
+const dc = require('dc-polyfill')
 const proxyquire = require('proxyquire')
-const { storage } = require('../../../datadog-core')
 const zlib = require('zlib')
+
+const { storage } = require('../../../datadog-core')
 const { ASM } = require('../../src/standalone/product')
 const { USER_KEEP } = require('../../../../ext/priority')
 
@@ -131,11 +133,6 @@ describe('reporter', () => {
   describe('reportWafInit', () => {
     const wafVersion = '0.0.1'
     const rulesVersion = '0.0.2'
-    const diagnosticsRules = {
-      loaded: ['1', '3', '4'],
-      failed: ['2'],
-      errors: { error: 'error parsing rule 2' }
-    }
 
     it('should add some entries to metricsQueue', () => {
       Reporter.reportWafInit(wafVersion, rulesVersion, true)
@@ -158,7 +155,6 @@ describe('reporter', () => {
     it('should not fail with undefined arguments', () => {
       const wafVersion = undefined
       const rulesVersion = undefined
-      const diagnosticsRules = undefined
 
       Reporter.reportWafInit(wafVersion, rulesVersion, true)
 
@@ -286,6 +282,76 @@ describe('reporter', () => {
 
       expect(telemetry.updateRaspRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, store.req, raspRule)
       expect(telemetry.updateWafRequestsMetricTags).to.not.have.been.called
+    })
+  })
+
+  describe('reportSuccessfulWafUpdate', () => {
+    it('should send diagnostics using telemetry logs', () => {
+      const telemetryLogHandlerAssert = sinon.stub()
+
+      const telemetryLogCh = dc.channel('datadog:telemetry:log')
+      telemetryLogCh.subscribe(telemetryLogHandlerAssert)
+
+      const product = 'ASM_DD'
+      const rcConfigId = '1'
+      const diagnostics = {
+        rules: {
+          loaded: [],
+          failed: ['blk-001-001'],
+          skipped: [],
+          errors: {
+            'missing key operator': [
+              'blk-001-001'
+            ]
+          },
+          warnings: {
+            'invalid tag': [
+              'blk-001-001'
+            ]
+          }
+        },
+        processors: {
+          loaded: ['http-endpoint-fingerprint'],
+          failed: [],
+          skipped: [],
+          warnings: {
+            'no mappings defined': [
+              'http-endpoint-fingerprint'
+            ]
+          }
+        }
+      }
+
+      Reporter.reportSuccessfulWafUpdate(product, rcConfigId, diagnostics)
+
+      expect(telemetryLogHandlerAssert).to.have.been.calledThrice
+      expect(telemetryLogHandlerAssert.getCall(0)).to.have.been.calledWithExactly({
+        message: '"missing key operator": ["blk-001-001"]',
+        level: 'ERROR',
+        tags: {
+          log_type: 'rc::asm_dd::diagnostic',
+          appsec_config_key: 'rules',
+          rc_config_id: '1'
+        }
+      }, 'datadog:telemetry:log')
+      expect(telemetryLogHandlerAssert.getCall(1)).to.have.been.calledWithExactly({
+        message: '"invalid tag": ["blk-001-001"]',
+        level: 'WARN',
+        tags: {
+          log_type: 'rc::asm_dd::diagnostic',
+          appsec_config_key: 'rules',
+          rc_config_id: '1'
+        }
+      }, 'datadog:telemetry:log')
+      expect(telemetryLogHandlerAssert.getCall(2)).to.have.been.calledWithExactly({
+        message: '"no mappings defined": ["http-endpoint-fingerprint"]',
+        level: 'WARN',
+        tags: {
+          log_type: 'rc::asm_dd::diagnostic',
+          appsec_config_key: 'processors',
+          rc_config_id: '1'
+        }
+      }, 'datadog:telemetry:log')
     })
   })
 
