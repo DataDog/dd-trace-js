@@ -51,14 +51,14 @@ function setGetOriginalPathAndLineFromSourceMapFunction (chainSourceMap, { getOr
 function getRewriter (telemetryVerbosity) {
   if (!rewriter) {
     try {
-      const iastRewriter = require('@datadog/wasm-js-rewriter')
-      const Rewriter = iastRewriter.Rewriter
-      getPrepareStackTrace = iastRewriter.getPrepareStackTrace
-      kSymbolPrepareStackTrace = iastRewriter.kSymbolPrepareStackTrace
-      cacheRewrittenSourceMap = iastRewriter.cacheRewrittenSourceMap
+      const wasmRewriter = require('@datadog/wasm-js-rewriter')
+      const Rewriter = wasmRewriter.Rewriter
+      getPrepareStackTrace = wasmRewriter.getPrepareStackTrace
+      kSymbolPrepareStackTrace = wasmRewriter.kSymbolPrepareStackTrace
+      cacheRewrittenSourceMap = wasmRewriter.cacheRewrittenSourceMap
 
       const chainSourceMap = isFlagPresent('--enable-source-maps')
-      setGetOriginalPathAndLineFromSourceMapFunction(chainSourceMap, iastRewriter)
+      setGetOriginalPathAndLineFromSourceMapFunction(chainSourceMap, wasmRewriter)
 
       rewriter = new Rewriter({
         csiMethods,
@@ -98,12 +98,12 @@ function getCompileMethodFn (compileMethod) {
       if (isDdTrace(filename)) {
         return compileMethod.apply(this, [content, filename])
       }
-      if (!isPrivateModule(filename) || !config.iast?.enabled) {
-        return compileMethod.apply(this, [content, filename])
-      }
+      // if (!isPrivateModule(filename) || !config.iast?.enabled) {
+      //   return compileMethod.apply(this, [content, filename])
+      // }
       // TODO when we have CJS support for orchestrion and taint-tracking, add
       // them here as appropriate
-      const rewritten = rewriter.rewrite(content, filename, ['iast'])
+      const rewritten = rewriter.rewrite(content, filename, ['error_tracking'])
 
       incrementTelemetryIfNeeded(rewritten.metrics)
 
@@ -163,7 +163,8 @@ function shimPrepareStackTrace () {
 
 function enableRewriter (telemetryVerbosity) {
   try {
-    if (config.iast?.enabled) {
+    let error_tracking_enabled = false
+    if (config.iast?.enabled || error_tracking_enabled) {
       const rewriter = getRewriter(telemetryVerbosity)
       if (rewriter) {
         shimPrepareStackTrace()
@@ -178,7 +179,7 @@ function enableRewriter (telemetryVerbosity) {
 }
 
 function isEsmConfigured () {
-  const hasLoaderArg = isFlagPresent('--loader') || isFlagPresent('--experimental-loader')
+  const hasLoaderArg = isFlagPresent('--loader') || isFlagPresent('--experimental-loader') || isFlagPresent("--import")
   if (hasLoaderArg) return true
 
   const initializeLoaded = Object.keys(require.cache).find(file => file.includes('import-in-the-middle/hook.js'))

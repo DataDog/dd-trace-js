@@ -18,9 +18,9 @@ export async function initialize (data) {
   port = data.port
   iastEnabled = data.iastEnabled
 
-  const iastRewriter = await import('@datadog/wasm-js-rewriter')
+  const wasmRewriter = await import('@datadog/wasm-js-rewriter')
 
-  const { NonCacheRewriter } = iastRewriter.default
+  const { NonCacheRewriter } = wasmRewriter.default
 
   rewriter = new NonCacheRewriter({
     csiMethods,
@@ -49,7 +49,7 @@ export async function load (url, context, nextLoad) {
         passes.push('iast')
       }
     } else {
-      passes = ['orchestrion']
+      passes = ['error_tracking','orchestrion']
     }
     const rewritten = rewriter.rewrite(result.source.toString(), url, passes)
 
