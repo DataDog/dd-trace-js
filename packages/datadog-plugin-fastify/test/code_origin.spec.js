@@ -6,8 +6,6 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { getNextLineNumber } = require('../../dd-trace/test/plugins/helpers')
 const { NODE_MAJOR } = require('../../../version')
 
-const host = 'localhost'
-
 describe('Plugin', () => {
   let fastify
   let app
@@ -38,27 +36,21 @@ describe('Plugin', () => {
 
             after(() => agent.close({ ritmReset: false, wipe: true }))
 
-            it('should not add code_origin tag on entry spans', done => {
+            it('should not add code_origin tag on entry spans', async () => {
               app.get('/user', function (request, reply) {
                 reply.send()
               })
 
-              app.listen({ host, port: 0 }, () => {
-                const port = app.server.address().port
+              await app.listen()
 
-                agent
-                  .use(traces => {
-                    const spans = traces[0]
-                    const tagNames = Object.keys(spans[0].meta)
-                    expect(tagNames).to.all.not.match(/code_origin/)
-                  })
-                  .then(done)
-                  .catch(done)
-
-                axios
-                  .get(`http://localhost:${port}/user`)
-                  .catch(done)
-              })
+              await Promise.all([
+                agent.use(traces => {
+                  const spans = traces[0]
+                  const tagNames = Object.keys(spans[0].meta)
+                  expect(tagNames).to.all.not.match(/code_origin/)
+                }),
+                axios.get(`http://localhost:${app.server.address().port}/user`)
+              ])
             })
           })
         })
@@ -74,7 +66,7 @@ describe('Plugin', () => {
 
               after(() => agent.close({ ritmReset: false, wipe: true }))
 
-              it('should add code_origin tag on entry spans when feature is enabled', done => {
+              it('should add code_origin tag on entry spans when feature is enabled', async () => {
                 let routeRegisterLine
 
                 // Wrap in a named function to have at least one frame with a function name
@@ -88,40 +80,34 @@ describe('Plugin', () => {
                 const callWrapperLine = String(getNextLineNumber())
                 wrapperFunction()
 
-                app.listen(() => {
-                  const port = app.server.address().port
+                await app.listen()
 
-                  agent
-                    .use(traces => {
-                      const spans = traces[0]
-                      const tags = spans[0].meta
+                await Promise.all([
+                  agent.use(traces => {
+                    const spans = traces[0]
+                    const tags = spans[0].meta
 
-                      expect(tags).to.have.property('_dd.code_origin.type', 'entry')
+                    expect(tags).to.have.property('_dd.code_origin.type', 'entry')
 
-                      expect(tags).to.have.property('_dd.code_origin.frames.0.file', __filename)
-                      expect(tags).to.have.property('_dd.code_origin.frames.0.line', routeRegisterLine)
-                      expect(tags).to.have.property('_dd.code_origin.frames.0.column').to.match(/^\d+$/)
-                      expect(tags).to.have.property('_dd.code_origin.frames.0.method', 'wrapperFunction')
-                      expect(tags).to.not.have.property('_dd.code_origin.frames.0.type')
+                    expect(tags).to.have.property('_dd.code_origin.frames.0.file', __filename)
+                    expect(tags).to.have.property('_dd.code_origin.frames.0.line', routeRegisterLine)
+                    expect(tags).to.have.property('_dd.code_origin.frames.0.column').to.match(/^\d+$/)
+                    expect(tags).to.have.property('_dd.code_origin.frames.0.method', 'wrapperFunction')
+                    expect(tags).to.not.have.property('_dd.code_origin.frames.0.type')
 
-                      expect(tags).to.have.property('_dd.code_origin.frames.1.file', __filename)
-                      expect(tags).to.have.property('_dd.code_origin.frames.1.line', callWrapperLine)
-                      expect(tags).to.have.property('_dd.code_origin.frames.1.column').to.match(/^\d+$/)
-                      expect(tags).to.not.have.property('_dd.code_origin.frames.1.method')
-                      expect(tags).to.have.property('_dd.code_origin.frames.1.type', 'Context')
+                    expect(tags).to.have.property('_dd.code_origin.frames.1.file', __filename)
+                    expect(tags).to.have.property('_dd.code_origin.frames.1.line', callWrapperLine)
+                    expect(tags).to.have.property('_dd.code_origin.frames.1.column').to.match(/^\d+$/)
+                    expect(tags).to.not.have.property('_dd.code_origin.frames.1.method')
+                    expect(tags).to.have.property('_dd.code_origin.frames.1.type', 'Context')
 
-                      expect(tags).to.not.have.property('_dd.code_origin.frames.2.file')
-                    })
-                    .then(done)
-                    .catch(done)
-
-                  axios
-                    .get(`http://localhost:${port}/user`)
-                    .catch(done)
-                })
+                    expect(tags).to.not.have.property('_dd.code_origin.frames.2.file')
+                  }),
+                  axios.get(`http://localhost:${app.server.address().port}/user`)
+                ])
               })
 
-              it('should point to where actual route handler is configured, not the prefix', done => {
+              it('should point to where actual route handler is configured, not the prefix', async () => {
                 let routeRegisterLine
 
                 app.register(function v1Handler (app, opts, done) {
@@ -132,34 +118,28 @@ describe('Plugin', () => {
                   done()
                 }, { prefix: '/v1' })
 
-                app.listen(() => {
-                  const port = app.server.address().port
+                await app.listen()
 
-                  agent
-                    .use(traces => {
-                      const spans = traces[0]
-                      const tags = spans[0].meta
+                await Promise.all([
+                  agent.use(traces => {
+                    const spans = traces[0]
+                    const tags = spans[0].meta
 
-                      expect(tags).to.have.property('_dd.code_origin.type', 'entry')
+                    expect(tags).to.have.property('_dd.code_origin.type', 'entry')
 
-                      expect(tags).to.have.property('_dd.code_origin.frames.0.file', __filename)
-                      expect(tags).to.have.property('_dd.code_origin.frames.0.line', routeRegisterLine)
-                      expect(tags).to.have.property('_dd.code_origin.frames.0.column').to.match(/^\d+$/)
-                      expect(tags).to.have.property('_dd.code_origin.frames.0.method', 'v1Handler')
-                      expect(tags).to.not.have.property('_dd.code_origin.frames.0.type')
+                    expect(tags).to.have.property('_dd.code_origin.frames.0.file', __filename)
+                    expect(tags).to.have.property('_dd.code_origin.frames.0.line', routeRegisterLine)
+                    expect(tags).to.have.property('_dd.code_origin.frames.0.column').to.match(/^\d+$/)
+                    expect(tags).to.have.property('_dd.code_origin.frames.0.method', 'v1Handler')
+                    expect(tags).to.not.have.property('_dd.code_origin.frames.0.type')
 
-                      expect(tags).to.not.have.property('_dd.code_origin.frames.1.file')
-                    })
-                    .then(done)
-                    .catch(done)
-
-                  axios
-                    .get(`http://localhost:${port}/v1/user`)
-                    .catch(done)
-                })
+                    expect(tags).to.not.have.property('_dd.code_origin.frames.1.file')
+                  }),
+                  axios.get(`http://localhost:${app.server.address().port}/v1/user`)
+                ])
               })
 
-              it('should point to route handler even if passed through a middleware', function testCase (done) {
+              it('should point to route handler even if passed through a middleware', async function testCase () {
                 app.use(function middleware (req, res, next) {
                   next()
                 })
@@ -169,37 +149,31 @@ describe('Plugin', () => {
                   reply.send()
                 })
 
-                app.listen({ host, port: 0 }, () => {
-                  const port = app.server.address().port
+                await app.listen()
 
-                  agent
-                    .use(traces => {
-                      const spans = traces[0]
-                      const tags = spans[0].meta
+                await Promise.all([
+                  agent.use(traces => {
+                    const spans = traces[0]
+                    const tags = spans[0].meta
 
-                      expect(tags).to.have.property('_dd.code_origin.type', 'entry')
+                    expect(tags).to.have.property('_dd.code_origin.type', 'entry')
 
-                      expect(tags).to.have.property('_dd.code_origin.frames.0.file', __filename)
-                      expect(tags).to.have.property('_dd.code_origin.frames.0.line', routeRegisterLine)
-                      expect(tags).to.have.property('_dd.code_origin.frames.0.column').to.match(/^\d+$/)
-                      expect(tags).to.have.property('_dd.code_origin.frames.0.method', 'testCase')
-                      expect(tags).to.have.property('_dd.code_origin.frames.0.type', 'Context')
+                    expect(tags).to.have.property('_dd.code_origin.frames.0.file', __filename)
+                    expect(tags).to.have.property('_dd.code_origin.frames.0.line', routeRegisterLine)
+                    expect(tags).to.have.property('_dd.code_origin.frames.0.column').to.match(/^\d+$/)
+                    expect(tags).to.have.property('_dd.code_origin.frames.0.method', 'testCase')
+                    expect(tags).to.have.property('_dd.code_origin.frames.0.type', 'Context')
 
-                      expect(tags).to.not.have.property('_dd.code_origin.frames.1.file')
-                    })
-                    .then(done)
-                    .catch(done)
-
-                  axios
-                    .get(`http://localhost:${port}/user`)
-                    .catch(done)
-                })
+                    expect(tags).to.not.have.property('_dd.code_origin.frames.1.file')
+                  }),
+                  axios.get(`http://localhost:${app.server.address().port}/user`)
+                ])
               })
 
               // TODO: In Fastify, the route is resolved before the middleware is called, so we actually can get the
               // line number of where the route handler is defined. However, this might not be the right choice and it
               // might be better to point to the middleware.
-              it.skip('should point to middleware if middleware responds early', function testCase (done) {
+              it.skip('should point to middleware if middleware responds early', async function testCase () {
                 const middlewareRegisterLine = String(getNextLineNumber())
                 app.use(function middleware (req, res, next) {
                   res.end()
@@ -209,31 +183,25 @@ describe('Plugin', () => {
                   reply.send()
                 })
 
-                app.listen({ host, port: 0 }, () => {
-                  const port = app.server.address().port
+                await app.listen()
 
-                  agent
-                    .use(traces => {
-                      const spans = traces[0]
-                      const tags = spans[0].meta
+                await Promise.all([
+                  agent.use(traces => {
+                    const spans = traces[0]
+                    const tags = spans[0].meta
 
-                      expect(tags).to.have.property('_dd.code_origin.type', 'entry')
+                    expect(tags).to.have.property('_dd.code_origin.type', 'entry')
 
-                      expect(tags).to.have.property('_dd.code_origin.frames.0.file', __filename)
-                      expect(tags).to.have.property('_dd.code_origin.frames.0.line', middlewareRegisterLine)
-                      expect(tags).to.have.property('_dd.code_origin.frames.0.column').to.match(/^\d+$/)
-                      expect(tags).to.have.property('_dd.code_origin.frames.0.method', 'testCase')
-                      expect(tags).to.have.property('_dd.code_origin.frames.0.type', 'Context')
+                    expect(tags).to.have.property('_dd.code_origin.frames.0.file', __filename)
+                    expect(tags).to.have.property('_dd.code_origin.frames.0.line', middlewareRegisterLine)
+                    expect(tags).to.have.property('_dd.code_origin.frames.0.column').to.match(/^\d+$/)
+                    expect(tags).to.have.property('_dd.code_origin.frames.0.method', 'testCase')
+                    expect(tags).to.have.property('_dd.code_origin.frames.0.type', 'Context')
 
-                      expect(tags).to.not.have.property('_dd.code_origin.frames.1.file')
-                    })
-                    .then(done)
-                    .catch(done)
-
-                  axios
-                    .get(`http://localhost:${port}/user`)
-                    .catch(done)
-                })
+                    expect(tags).to.not.have.property('_dd.code_origin.frames.1.file')
+                  }),
+                  axios.get(`http://localhost:${app.server.address().port}/user`)
+                ])
               })
             })
           }
