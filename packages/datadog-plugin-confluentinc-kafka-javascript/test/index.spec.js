@@ -28,7 +28,7 @@ describe('Plugin', () => {
   const module = '@confluentinc/kafka-javascript'
 
   describe('@confluentinc/kafka-javascript', function () {
-    this.timeout(300000)
+    this.timeout(30000)
 
     afterEach(() => {
       return agent.close({ ritmReset: false })
@@ -149,18 +149,22 @@ describe('Plugin', () => {
                 type: 'worker'
               })
 
-              await consumer.run({
-                eachMessage: async () => {
-                  await consumer.disconnect()
-                }
+              const consumerReceiveMessagePromise = new Promise(resolve => {
+                consumer.run({
+                  eachMessage: async () => {
+                    resolve()
+                  }
+                })
               })
-              await sendMessages(kafka, testTopic, messages)
+              await sendMessages(kafka, testTopic, messages).then(
+                async () => await consumerReceiveMessagePromise
+              )
               return expectedSpanPromise
             })
 
             it('should run the consumer in the context of the consumer span', done => {
               const firstSpan = tracer.scope().active()
-
+              let consumerReceiveMessagePromise
               let eachMessage = async ({ topic, partition, message }) => {
                 const currentSpan = tracer.scope().active()
 
@@ -168,7 +172,6 @@ describe('Plugin', () => {
                   expect(currentSpan).to.not.equal(firstSpan)
                   expect(currentSpan.context()._name).to.equal(expectedSchema.receive.opName)
                   done()
-                  await consumer.disconnect()
                 } catch (e) {
                   done(e)
                 } finally {
@@ -178,6 +181,7 @@ describe('Plugin', () => {
 
               consumer.run({ eachMessage: (...args) => eachMessage(...args) })
                 .then(() => sendMessages(kafka, testTopic, messages))
+                .then(() => consumerReceiveMessagePromise)
                 .catch(done)
             })
 
@@ -194,13 +198,16 @@ describe('Plugin', () => {
                 expect(parseInt(span.parent_id.toString())).to.be.gt(0)
               }, { timeoutMs: 10000 })
 
+              let consumerReceiveMessagePromise
               await consumer.run({
                 eachMessage: async () => {
-                  await consumer.disconnect()
+                  consumerReceiveMessagePromise = Promise.resolve()
                 }
               })
-              await sendMessages(kafka, testTopic, messages)
-              await expectedSpanPromise
+              await sendMessages(kafka, testTopic, messages).then(
+                async () => await consumerReceiveMessagePromise
+              )
+              return expectedSpanPromise
             })
 
             it('should be instrumented w/ error', async () => {
@@ -221,13 +228,16 @@ describe('Plugin', () => {
                 type: 'worker'
               })
 
+              let consumerReceiveMessagePromise
               const eachMessage = async ({ topic, partition, message }) => {
-                await consumer.disconnect()
+                consumerReceiveMessagePromise = Promise.resolve()
                 throw fakeError
               }
 
               await consumer.run({ eachMessage })
-              await sendMessages(kafka, testTopic, messages)
+              await sendMessages(kafka, testTopic, messages).then(
+                async () => await consumerReceiveMessagePromise
+              )
 
               return expectedSpanPromise
             })
@@ -467,8 +477,9 @@ describe('Plugin', () => {
               setDataStreamsContextSpy = sinon.spy(DataStreamsContext, 'setDataStreamsContext')
             })
 
-            afterEach(() => {
+            afterEach(async () => {
               setDataStreamsContextSpy.restore()
+              await consumer.disconnect()
             })
 
             it('Should set a checkpoint on produce', async () => {
@@ -479,14 +490,17 @@ describe('Plugin', () => {
 
             it('Should set a checkpoint on consume (eachMessage)', async () => {
               const runArgs = []
+              let consumerReceiveMessagePromise
               await consumer.run({
                 eachMessage: async () => {
                   runArgs.push(setDataStreamsContextSpy.lastCall.args[0])
-                  await consumer.disconnect()
+                  consumerReceiveMessagePromise = Promise.resolve()
                 }
               })
-              await sendMessages(kafka, testTopic, messages)
-              await consumer.disconnect()
+              await sendMessages(kafka, testTopic, messages).then(
+                async () => await consumerReceiveMessagePromise
+              )
+
               for (const runArg of runArgs) {
                 expect(runArg.hash).to.equal(expectedConsumerHash)
               }
@@ -494,13 +508,16 @@ describe('Plugin', () => {
 
             it('Should set a checkpoint on consume (eachBatch)', async () => {
               const runArgs = []
+              let consumerReceiveMessagePromise
               await consumer.run({
                 eachBatch: async () => {
                   runArgs.push(setDataStreamsContextSpy.lastCall.args[0])
-                  await consumer.disconnect()
+                  consumerReceiveMessagePromise = Promise.resolve()
                 }
               })
-              await sendMessages(kafka, testTopic, messages)
+              await sendMessages(kafka, testTopic, messages).then(
+                async () => await consumerReceiveMessagePromise
+              )
               for (const runArg of runArgs) {
                 expect(runArg.hash).to.equal(expectedConsumerHash)
               }
@@ -523,14 +540,17 @@ describe('Plugin', () => {
                 DataStreamsProcessor.prototype.recordCheckpoint.restore()
               }
               const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
+              let consumerReceiveMessagePromise
               await consumer.run({
                 eachMessage: async () => {
                   expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
                   recordCheckpointSpy.restore()
-                  await consumer.disconnect()
+                  consumerReceiveMessagePromise = Promise.resolve()
                 }
               })
-              await sendMessages(kafka, testTopic, messages)
+              await sendMessages(kafka, testTopic, messages).then(
+                async () => await consumerReceiveMessagePromise
+              )
             })
           })
 
