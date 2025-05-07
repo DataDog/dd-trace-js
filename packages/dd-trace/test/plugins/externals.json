@@ -431,6 +431,14 @@
     {
       "name": "express",
       "versions": [">=4"]
+    },
+    {
+      "name": "pg-query-stream",
+      "versions": [">=4"]
+    },
+    {
+      "name": "pg-cursor",
+      "versions": [">=2"]
     }
   ],
   "pino": [

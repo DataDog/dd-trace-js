@@ -39,13 +39,28 @@ function wrapQuery (query) {
       ? arguments[0]
       : { text: arguments[0] }
 
-    const textProp = Object.getOwnPropertyDescriptor(pgQuery, 'text')
+    let textProp
+    let textPropObj
+    let stream = false
+
+    if (pgQuery.cursor) {
+      textPropObj = pgQuery.cursor
+      textProp = Object.getOwnPropertyDescriptor(pgQuery.cursor, 'text')
+    } else {
+      textPropObj = pgQuery
+      textProp = Object.getOwnPropertyDescriptor(pgQuery, 'text')
+    }
+
+    if (textPropObj.read) {
+      // if the main query object has a read method, it's a stream
+      stream = true
+    }
 
     // Only alter `text` property if safe to do so.
     if (!textProp || textProp.configurable) {
-      const originalText = pgQuery.text
+      const originalText = textPropObj.text
 
-      Object.defineProperty(pgQuery, 'text', {
+      Object.defineProperty(textPropObj, 'text', {
         get () {
           return this?.__ddInjectableQuery || originalText
         }
@@ -57,9 +72,10 @@ function wrapQuery (query) {
 
       startCh.publish({
         params: this.connectionParameters,
-        query: pgQuery,
+        query: textPropObj,
         processId,
-        abortController
+        abortController,
+        stream
       })
 
       const finish = asyncResource.bind(function (error, res) {
