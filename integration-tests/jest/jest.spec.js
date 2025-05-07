@@ -3051,9 +3051,10 @@ describe('jest CommonJS', () => {
                   assert.propertyVal(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
                 } else if (shouldFailSometimes) {
                   assert.notProperty(test.meta, TEST_HAS_FAILED_ALL_RETRIES)
-                  assert.notProperty(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED)
+                  assert.propertyVal(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
                 } else {
                   assert.propertyVal(test.meta, TEST_HAS_FAILED_ALL_RETRIES, 'true')
+                  assert.propertyVal(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
                 }
               }
             }
@@ -3491,7 +3492,7 @@ describe('jest CommonJS', () => {
             assert.equal(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
             assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
             assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
-            assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '2')
+            assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '3')
             // capabilities logic does not overwrite test session name
             assert.equal(metadata.test[TEST_SESSION_NAME], 'my-test-session-name')
           })
