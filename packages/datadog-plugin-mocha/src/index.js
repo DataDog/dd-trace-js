@@ -208,6 +208,7 @@ class MochaPlugin extends CiPlugin {
       isLastRetry,
       hasFailedAllRetries,
       attemptToFixPassed,
+      attemptToFixFailed,
       isAttemptToFixRetry,
       isAtrRetry
     }) => {
@@ -229,6 +230,8 @@ class MochaPlugin extends CiPlugin {
         }
         if (attemptToFixPassed) {
           span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
+        } else if (attemptToFixFailed) {
+          span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
         }
         if (isAttemptToFixRetry) {
           span.setTag(TEST_IS_RETRY, 'true')
