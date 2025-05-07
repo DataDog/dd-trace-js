@@ -28,7 +28,7 @@ class PGPlugin extends DatabasePlugin {
     })
 
     if (stream) {
-      span.setTag('db.stream', true)
+      span.setTag('db.stream', 1)
     }
 
     query.__ddInjectableQuery = this.injectDbmQuery(span, query.text, service, !!query.name)

@@ -227,8 +227,8 @@ describe('Plugin', () => {
                   Cursor = require(`../../../versions/pg-cursor@${pgCursorVersion}`).get()
                 })
 
-                it('should instrument cursor-based streaming with pg-cursor', done => {
-                  agent.use(traces => {
+                it('should instrument cursor-based streaming with pg-cursor', async () => {
+                  const tracingPromise = agent.use(traces => {
                     expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
                     expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
                     expect(traces[0][0]).to.have.property('resource', 'SELECT * FROM generate_series(0, 1) num')
@@ -239,15 +239,14 @@ describe('Plugin', () => {
                     expect(traces[0][0].meta).to.have.property('component', 'pg')
                     expect(traces[0][0].metrics).to.have.property('db.stream', 1)
                     expect(traces[0][0].metrics).to.have.property('network.destination.port', 5432)
-                  }).then(done).catch(done)
+                  })
 
                   const cursor = client.query(new Cursor('SELECT * FROM generate_series(0, 1) num'))
-                  cursor.read(1, (err, rows) => {
-                    if (err) return done(err)
-                    cursor.close(closeErr => {
-                      if (closeErr) return done(closeErr)
-                    })
+
+                  cursor.read(1, () => {
+                    cursor.close()
                   })
+                  await tracingPromise
                 })
               })
 
@@ -270,7 +269,7 @@ describe('Plugin', () => {
                     expect(traces[0][0].meta).to.have.property('component', 'pg')
                     expect(traces[0][0].metrics).to.have.property('db.stream', 1)
                     expect(traces[0][0].metrics).to.have.property('network.destination.port', 5432)
-                  }).then().catch()
+                  })
 
                   const query = new QueryStream('SELECT * FROM generate_series(0, 1) num', [])
                   const stream = client.query(query)
