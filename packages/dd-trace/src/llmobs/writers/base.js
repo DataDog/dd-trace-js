@@ -99,12 +99,12 @@ class BaseLLMObsWriter {
 
   setAgentless (agentless) {
     this._agentless = agentless
-    const { url, path } = this._getUrlAndPath()
+    const { url, endpoint } = this._getUrlAndPath()
 
     this._baseUrl = url
-    this._endpoint = path
+    this._endpoint = endpoint
 
-    logger.debug(`Configuring ${this.constructor.name} to ${this.url}`) // TODO: fix this log
+    logger.debug(`Configuring ${this.constructor.name} to ${this.url}`)
   }
 
   _getUrlAndPath () {
@@ -114,7 +114,7 @@ class BaseLLMObsWriter {
           protocol: 'https:',
           hostname: `${this._intake}.${this._config.site}`
         })),
-        path: this._endpoint
+        endpoint: this._endpoint
       }
     }
 
@@ -127,7 +127,7 @@ class BaseLLMObsWriter {
 
     return {
       url: base,
-      path: path.join(EVP_PROXY_AGENT_BASE_PATH, this._endpoint)
+      endpoint: path.join(EVP_PROXY_AGENT_BASE_PATH, this._endpoint)
     }
   }
 
