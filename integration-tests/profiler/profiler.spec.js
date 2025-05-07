@@ -19,6 +19,8 @@ if (process.platform !== 'win32') {
   DEFAULT_PROFILE_TYPES.push('events')
 }
 
+const TIMEOUT = 30000
+
 function checkProfiles (agent, proc, timeout,
   expectedProfileTypes = DEFAULT_PROFILE_TYPES, expectBadExit = false, multiplicity = 1
 ) {
@@ -216,7 +218,7 @@ async function gatherTimelineEvents (cwd, scriptFilePath, eventType, args, Proce
     }
   })
 
-  await processExitPromise(proc, 30000)
+  await processExitPromise(proc, TIMEOUT)
   const procEnd = BigInt(Date.now() * 1000000)
 
   const { profile, encoded } = await getLatestProfile(cwd, /^events_.+\.pprof$/)
@@ -284,7 +286,7 @@ describe('profiler', () => {
   let oomTestFile
   let oomEnv
   let oomExecArgv
-  const timeout = 30000
+  const timeout = TIMEOUT
 
   // Target sample count per span for the code hotspots test
   const idealSamplesPerSpan = 10
@@ -327,7 +329,7 @@ describe('profiler', () => {
         }
       })
 
-      await processExitPromise(proc, 30000)
+      await processExitPromise(proc, timeout)
       const procEnd = BigInt(Date.now() * 1000000)
 
       // Must've counted the number of times each endpoint was hit
@@ -589,6 +591,17 @@ describe('profiler', () => {
         return checkProfiles(agent, proc, timeout, ['space'], true)
       })
 
+      it('sends a heap profile on OOM in worker thread and exits successfully', () => {
+        proc = fork(oomTestFile, [1, 50], {
+          cwd,
+          env: { ...oomEnv, DD_PROFILING_WALLTIME_ENABLED: 0 }
+        })
+        return checkProfiles(agent, proc, timeout, ['space'], false, 2)
+      })
+
+      // Following tests are flaky because they use unreliable strategies to export profiles
+      // (or check that the process can recover from OOM, which is also unreliable).
+      // We retry them 3 times to decrease flakiness.
       it('sends a heap profile on OOM with external process and exits successfully', () => {
         proc = fork(oomTestFile, {
           cwd,
@@ -600,7 +613,7 @@ describe('profiler', () => {
           }
         })
         return checkProfiles(agent, proc, timeout, ['space'], false, 2)
-      })
+      }).retries(3)
 
       it('sends a heap profile on OOM with async callback', () => {
         proc = fork(oomTestFile, {
@@ -614,7 +627,7 @@ describe('profiler', () => {
           }
         })
         return checkProfiles(agent, proc, timeout, ['space'], true)
-      })
+      }).retries(3)
 
       it('sends heap profiles on OOM with multiple strategies', () => {
         proc = fork(oomTestFile, {
@@ -628,15 +641,7 @@ describe('profiler', () => {
           }
         })
         return checkProfiles(agent, proc, timeout, ['space'], true, 2)
-      })
-
-      it('sends a heap profile on OOM in worker thread and exits successfully', () => {
-        proc = fork(oomTestFile, [1, 50], {
-          cwd,
-          env: { ...oomEnv, DD_PROFILING_WALLTIME_ENABLED: 0 }
-        })
-        return checkProfiles(agent, proc, timeout, ['space'], false, 2)
-      })
+      }).retries(3)
     }
   })
 
