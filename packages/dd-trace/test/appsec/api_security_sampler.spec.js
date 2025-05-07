@@ -224,13 +224,15 @@ describe('API Security Sampler', () => {
     })
 
     it('should keep trace with ASM product when in standalone mode', () => {
-      assert.isTrue(apiSecuritySampler.sampleRequest(req, res))
+      assert.isTrue(apiSecuritySampler.sampleRequest(req, res, true))
+      assert.isFalse(apiSecuritySampler.sampleRequest(req, res, true))
       assert.isTrue(keepTraceStub.calledOnceWith(span, 'asm'))
     })
 
     it('should not check priority sampling in standalone mode', () => {
       span.context.returns({ _sampling: { priority: AUTO_REJECT } })
-      assert.isTrue(apiSecuritySampler.sampleRequest(req, res))
+      assert.isTrue(apiSecuritySampler.sampleRequest(req, res, true))
+      assert.isFalse(apiSecuritySampler.sampleRequest(req, res, true))
       assert.isTrue(keepTraceStub.calledOnceWith(span, 'asm'))
     })
   })
