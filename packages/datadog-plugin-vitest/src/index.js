@@ -155,7 +155,7 @@ class VitestPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:vitest:test:finish-time', ({ status, task, attemptToFixPassed }) => {
+    this.addSub('ci:vitest:test:finish-time', ({ status, task, attemptToFixPassed, attemptToFixFailed }) => {
       const store = storage('legacy').getStore()
       const span = store?.span
 
@@ -166,6 +166,8 @@ class VitestPlugin extends CiPlugin {
 
         if (attemptToFixPassed) {
           span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
+        } else if (attemptToFixFailed) {
+          span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
         }
 
         this.taskToFinishTime.set(task, span._getTime())
@@ -186,7 +188,14 @@ class VitestPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:vitest:test:error', ({ duration, error, shouldSetProbe, promises, hasFailedAllRetries }) => {
+    this.addSub('ci:vitest:test:error', ({
+      duration,
+      error,
+      shouldSetProbe,
+      promises,
+      hasFailedAllRetries,
+      attemptToFixFailed
+    }) => {
       const store = storage('legacy').getStore()
       const span = store?.span
 
@@ -210,6 +219,9 @@ class VitestPlugin extends CiPlugin {
         }
         if (hasFailedAllRetries) {
           span.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
+        }
+        if (attemptToFixFailed) {
+          span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
         }
         if (duration) {
           span.finish(span._startTime + duration - MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION) // milliseconds
