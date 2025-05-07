@@ -10,19 +10,19 @@
 const { supportedConfigurations, aliases } = require('./supported-configurations')
 
 const configs = {}
-// Round 1: assign all valid configs
-for (const name of Object.keys(process.env)) {
-  if (!name.startsWith('DD_') || supportedConfigurations[name]) {
+// Round 1: assign all valid configs and backup to aliases if needed
+for (const name of Object.keys(supportedConfigurations)) {
+  if (name in process.env) {
     configs[name] = process.env[name]
+  } else {
+    for (const alias in aliases[name]) {
+      if (alias in process.env) {
+        configs[name] = process.env[alias]
+        break
+      }
+    }
   }
 }
-
-// // Round 2: Delete any values that are aliases
-// for (const name of Object.keys(aliases)) {
-//   if (aliases[name] in configs) {
-//     delete configs[name]
-//   }
-// }
 
 module.exports = {
   getConfigurations () {
