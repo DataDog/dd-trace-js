@@ -31,7 +31,7 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
       - uses: ./.github/actions/node
         with:
-          version: default
+          version: ''
       - uses: ./.github/actions/install/branch-diff
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
