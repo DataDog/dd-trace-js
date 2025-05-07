@@ -16,6 +16,7 @@ const {
 const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('../webspan-utils')
 
 let beforeCh
+let lastInstance
 const enterCh = dc.channel('dd-trace:storage:enter')
 const spanFinishCh = dc.channel('dd-trace:span:finish')
 const profilerTelemetryMetrics = telemetryMetrics.manager.namespace('profilers')
@@ -124,6 +125,7 @@ class NativeWallProfiler {
 
     this._logger = options.logger
     this._started = false
+    lastInstance = this
   }
 
   codeHotspotsEnabled () {
@@ -253,6 +255,11 @@ class NativeWallProfiler {
       span[ProfilingContext] = profilingContext
     }
     return profilingContext
+  }
+
+  _getSampleContext () {
+    const context = this._pprof.time.getContext()
+    return this._useAsyncContextFrame ? context : context.ref
   }
 
   _setNewContext () {
@@ -391,4 +398,21 @@ class NativeWallProfiler {
   }
 }
 
+NativeWallProfiler.prototype.getActiveSpan = function () {
+  const span = getActiveSpan()
+  if (span === undefined) {
+    return {}
+  }
+  const spanData = lastInstance._getProfilingContext(span)
+  updateContext(spanData)
+  return { spanId: spanData.spanId, rootSpanId: spanData.rootSpanId }
+}
+NativeWallProfiler.prototype.getSampleContext = function () {
+  const ctx = lastInstance._getSampleContext()
+  if (ctx === undefined) {
+    return {}
+  }
+  updateContext(ctx)
+  return { spanId: ctx.spanId, rootSpanId: ctx.rootSpanId }
+}
 module.exports = NativeWallProfiler

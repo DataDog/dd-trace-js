@@ -2,6 +2,8 @@
 
 const DDTrace = require('dd-trace')
 const tracer = DDTrace.init()
+const NativeWallProfiler = require('dd-trace/packages/dd-trace/src/profiling/profilers/wall')
+
 
 // Busy cycle duration is communicated in nanoseconds through the environment
 // variable by the test. On first execution, it'll be 10 * the sampling period
@@ -30,11 +32,15 @@ let counter = 0
 
 function runBusySpans () {
   tracer.trace('x' + counter, { type: 'web', resource: `endpoint-${counter}` }, (_, done) => {
-    setImmediate(() => {
+    logData('x')
+    setTimeout(() => {
+      logData('x-timeout')
       for (let i = 0; i < 3; ++i) {
         const z = i
-        tracer.trace('y' + i, (_, done2) => {
+        tracer.trace('y' + i, (span2, done2) => {
+          logData('y')
           setTimeout(() => {
+            logData('y-timeout')
             busyLoop()
             done2()
             if (z === 2) {
@@ -43,11 +49,15 @@ function runBusySpans () {
               }
               done()
             }
-          }, 0)
+          }, 10)
         })
       }
-    })
+    }, 10)
   })
+}
+
+function logData (codeContext) {
+  console.log(codeContext, 'activeSpan:', NativeWallProfiler.prototype.getActiveSpan(), ', sampleContext:', NativeWallProfiler.prototype.getSampleContext());
 }
 
 tracer.profilerStarted().then(runBusySpans)

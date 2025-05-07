@@ -344,6 +344,7 @@ describe('profiler', () => {
           execArgv = ['--experimental-async-context-frame']
         }
       }
+      console.log({path: path.join(cwd, 'profiler/codehotspots.js'), env, execArgv })
       const proc = fork(path.join(cwd, 'profiler/codehotspots.js'), { cwd, env, execArgv })
 
       await processExitPromise(proc, 30000)
