@@ -310,7 +310,9 @@ class NativeWallProfiler {
       }
     } else {
       if (this._captureSpanData) {
-        beforeCh.unsubscribe(this._enter)
+        if (!this._useAsyncContextFrame) {
+          beforeCh.unsubscribe(this._enter)
+        }
         enterCh.unsubscribe(this._enter)
         spanFinishCh.unsubscribe(this._spanFinished)
         this._profilerState = undefined
