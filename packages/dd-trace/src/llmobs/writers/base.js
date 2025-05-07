@@ -41,6 +41,18 @@ class BaseLLMObsWriter {
     this._destroyed = false
   }
 
+  get url () {
+    if (this._agentless == null) return null
+
+    const baseUrl = this._baseUrl.href
+    const endpoint = this._endpoint
+
+    // Split on protocol separator to preserve it
+    // path.join will remove some slashes unnecessarily
+    const [protocol, rest] = baseUrl.split('://')
+    return protocol + '://' + path.join(rest, endpoint)
+  }
+
   append (event, byteLength) {
     if (this._buffer.length >= this._bufferLimit) {
       logger.warn(`${this.constructor.name} event buffer full (limit is ${this._bufferLimit}), dropping event`)
@@ -69,7 +81,7 @@ class BaseLLMObsWriter {
     const options = this._getOptions()
 
     request(payload, options, (err, resp, code) => {
-      parseResponseAndLog(err, code, events.length, options.url.href, this._eventType)
+      parseResponseAndLog(err, code, events.length, this.url, this._eventType)
     })
   }
 
@@ -87,17 +99,23 @@ class BaseLLMObsWriter {
 
   setAgentless (agentless) {
     this._agentless = agentless
-    this._url = this._getUrl()
-    logger.debug(`Configuring ${this.constructor.name} to ${this._url.href}`)
+    const { url, path } = this._getUrlAndPath()
+
+    this._baseUrl = url
+    this._endpoint = path
+
+    logger.debug(`Configuring ${this.constructor.name} to ${this.url}`) // TODO: fix this log
   }
 
-  _getUrl () {
+  _getUrlAndPath () {
     if (this._agentless) {
-      return new URL(format({
-        protocol: 'https:',
-        hostname: `${this._intake}.${this._config.site}`,
-        pathname: this._endpoint
-      }))
+      return {
+        url: new URL(format({
+          protocol: 'https:',
+          hostname: `${this._intake}.${this._config.site}`
+        })),
+        path: this._endpoint
+      }
     }
 
     const { hostname, port } = this._config
@@ -107,8 +125,10 @@ class BaseLLMObsWriter {
       port
     }))
 
-    const proxyPath = path.join(EVP_PROXY_AGENT_BASE_PATH, this._endpoint)
-    return new URL(proxyPath, base)
+    return {
+      url: base,
+      path: path.join(EVP_PROXY_AGENT_BASE_PATH, this._endpoint)
+    }
   }
 
   _getOptions () {
@@ -118,7 +138,8 @@ class BaseLLMObsWriter {
       },
       method: 'POST',
       timeout: this._timeout,
-      url: this._url
+      url: this._baseUrl,
+      path: this._endpoint
     }
 
     if (this._agentless) {
