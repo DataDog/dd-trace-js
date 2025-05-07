@@ -373,7 +373,7 @@ describe('Plugin', function () {
 
         describe('for static files', () => {
           it('should do automatic instrumentation for assets', () => {
-            const promise = agent
+            const tracingPromise = agent
               .use(traces => {
                 const spans = traces[0]
 
@@ -387,14 +387,14 @@ describe('Plugin', function () {
                 expect(spans[1].meta).to.have.property('component', 'next')
               })
 
-            return Promise.all([axios.get(`http://127.0.0.1:${port}/test.txt`), promise])
+            return Promise.all([axios.get(`http://127.0.0.1:${port}/test.txt`), tracingPromise])
           })
 
           it('should do automatic instrumentation for static chunks', () => {
             // Get first static chunk file programmatically
             const file = readdirSync(path.join(__dirname, '.next/static/chunks'))[0]
 
-            const promise = agent
+            const tracingPromise = agent
               .use(traces => {
                 const spans = traces[0]
 
@@ -405,11 +405,11 @@ describe('Plugin', function () {
                 expect(spans[1].meta).to.have.property('component', 'next')
               })
 
-            return Promise.all([axios.get(`http://127.0.0.1:${port}/_next/static/chunks/${file}`), promise])
+            return Promise.all([axios.get(`http://127.0.0.1:${port}/_next/static/chunks/${file}`), tracingPromise])
           })
 
           it('should pass resource path to parent span', () => {
-            const promise = agent
+            const tracingPromise = agent
               .use(traces => {
                 const spans = traces[0]
 
@@ -417,7 +417,7 @@ describe('Plugin', function () {
                 expect(spans[0]).to.have.property('resource', 'GET /public/*')
               })
 
-            return Promise.all([axios.get(`http://127.0.0.1:${port}/test.txt`), promise])
+            return Promise.all([axios.get(`http://127.0.0.1:${port}/test.txt`), tracingPromise])
           })
         })
 

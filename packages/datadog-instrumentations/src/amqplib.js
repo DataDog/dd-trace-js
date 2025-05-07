@@ -15,16 +15,16 @@ const startCh = channel('apm:amqplib:command:start')
 const finishCh = channel('apm:amqplib:command:finish')
 const errorCh = channel('apm:amqplib:command:error')
 
-let methods = {}
+const methods = {}
 
 addHook({ name: 'amqplib', file: 'lib/defs.js', versions: [MIN_VERSION] }, defs => {
-  methods = Object.keys(defs)
-    .reduce((acc, key) => {
-      if (Number.isInteger(defs[key]) && isCamelCase(key)) {
-        Object.assign(acc, { [defs[key]]: kebabCase(key).replace('-', '.') })
-      }
-      return acc
-    }, {})
+  for (const [key, value] of Object.entries(defs)) {
+    if (Number.isInteger(value) && isCamelCase(key)) {
+      // TODO(BridgeAR): It should replace all `-` with `.`, so it has to be replaceAll or use a regex.
+      // Example method that is not renamed properly: BasicGetEmpty = 3932232
+      methods[value] = kebabCase(key).replace('-', '.')
+    }
+  }
   return defs
 })
 
