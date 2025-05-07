@@ -47,17 +47,16 @@ function sampleRequest (req, res, force = false) {
 
   if (asmStandaloneEnabled) {
     keepTrace(rootSpan, ASM)
-    return true
-  }
+  } else {
+    let priority = getSpanPriority(rootSpan)
+    if (!priority) {
+      rootSpan._prioritySampler?.sample(rootSpan)
+      priority = getSpanPriority(rootSpan)
+    }
 
-  let priority = getSpanPriority(rootSpan)
-  if (!priority) {
-    rootSpan._prioritySampler?.sample(rootSpan)
-    priority = getSpanPriority(rootSpan)
-  }
-
-  if (priority === AUTO_REJECT || priority === USER_REJECT) {
-    return false
+    if (priority === AUTO_REJECT || priority === USER_REJECT) {
+      return false
+    }
   }
 
   if (force) {
