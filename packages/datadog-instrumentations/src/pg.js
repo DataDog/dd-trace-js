@@ -146,6 +146,17 @@ function wrapQuery (query) {
         newQuery.then((res) => finish(null, res), finish)
       }
 
+      if (textPropObj.read) {
+        // newQuery.on('data', (chunk) => {
+        //   console.log(chunk)
+        // })
+        newQuery.on('end', () => {
+          // we don't do anything with the result so just return an empty array, if we need the result we can
+          // use on.data event shown above
+          finish(null, [])
+        })
+      }
+
       try {
         return retval
       } catch (err) {
