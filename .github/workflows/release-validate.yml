@@ -27,7 +27,7 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/node
         with:
-          version: default
+          version: ''
       - uses: ./.github/actions/install/branch-diff
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
