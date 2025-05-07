@@ -135,7 +135,7 @@ function wrapQuery (query) {
         newQuery.then((res) => finish(null, res), finish)
       }
 
-      if (textPropObj.read) {
+      if (stream) {
         newQuery.on('end', () => {
           finish(null, [])
         })

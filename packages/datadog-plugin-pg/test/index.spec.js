@@ -276,7 +276,6 @@ describe('Plugin', () => {
 
                   for await (const row of stream) {
                     expect(row).to.have.property('num')
-                    continue
                   }
 
                   await agentPromise
