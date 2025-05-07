@@ -17,8 +17,7 @@ class DynamoDb extends BaseAwsSdkPlugin {
       if (params.TableName) {
         Object.assign(tags, {
           'resource.name': `${operation} ${params.TableName}`,
-          'aws.dynamodb.table_name': params.TableName,
-          tablename: params.TableName
+          'aws.dynamodb.table_name': params.TableName
         })
       }
 
@@ -33,8 +32,7 @@ class DynamoDb extends BaseAwsSdkPlugin {
             // also add span type to match serverless convention
             Object.assign(tags, {
               'resource.name': `${operation} ${tableName}`,
-              'aws.dynamodb.table_name': tableName,
-              tablename: tableName
+              'aws.dynamodb.table_name': tableName
             })
           }
         }
@@ -51,6 +49,31 @@ class DynamoDb extends BaseAwsSdkPlugin {
     })
 
     return tags
+  }
+
+  requestInject (span, request) {
+    const { operation, params } = request
+    let tableName
+
+    if (params) {
+      if (params.TableName) {
+        tableName = params.TableName
+      } else if (params.RequestItems && typeof params.RequestItems === 'object') {
+        // Batch operations
+        const tableNames = Object.keys(params.RequestItems)
+        if (tableNames.length === 1) {
+          tableName = tableNames[0]
+        }
+        // TODO: Handle batches with multiple tables? For peer.service, using one might be sufficient.
+        // If multiple tables, peer.service might become ambiguous.
+        // Current generateTags only sets it if there's exactly one table.
+      }
+    }
+
+    if (tableName) {
+      span.setTag('tablename', tableName)
+    }
+    // No context injection needed for DynamoDB
   }
 
   addSpanPointers (span, response) {

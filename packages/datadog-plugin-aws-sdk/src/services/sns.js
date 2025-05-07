@@ -23,8 +23,7 @@ class Sns extends BaseAwsSdkPlugin {
 
     return {
       'resource.name': `${operation} ${params.TopicArn || response.data.TopicArn}`,
-      'aws.sns.topic_arn': TopicArn,
-      topicname: topicName
+      'aws.sns.topic_arn': TopicArn
     }
 
     // TODO: should arn be sanitized or quantized in some way here,
@@ -53,6 +52,15 @@ class Sns extends BaseAwsSdkPlugin {
     const { operation, params } = request
 
     if (!params) return
+
+    // Set topicname tag for peer.service
+    if (params.TopicArn) {
+      const arnParts = params.TopicArn.split(':')
+      const topicName = arnParts[arnParts.length - 1]
+      if (topicName) {
+        span.setTag('topicname', topicName)
+      }
+    }
 
     switch (operation) {
       case 'publish':
