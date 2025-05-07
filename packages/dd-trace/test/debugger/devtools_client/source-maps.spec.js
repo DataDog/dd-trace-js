@@ -1,7 +1,6 @@
 'use strict'
 
 require('../../setup/mocha')
-const { NODE_MAJOR } = require('../../../../../version')
 
 const parsedSourceMap = {
   version: 3,
@@ -115,10 +114,6 @@ describe('source map utils', function () {
     function teardown () {
       clock.restore()
     }
-
-    before(function () {
-      if (NODE_MAJOR < 20) this.skip()
-    })
 
     describe('loadSourceMap', function () {
       before(setup)
