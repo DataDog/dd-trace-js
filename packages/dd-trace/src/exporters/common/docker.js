@@ -13,40 +13,22 @@ const taskSource = '[0-9a-f]{32}-\\d+'
 const lineReg = /^(\d+):([^:]*):(.+)$/m
 const entityReg = new RegExp(`.*(${uuidSource}|${containerSource}|${taskSource})(?:\\.scope)?$`, 'm')
 
-const cgroup = readControlGroup()
-const entityId = getEntityId()
-const inode = getInode()
+let inode = 0
+let cgroup = ''
+let entityId
 
-function getEntityId () {
-  const match = cgroup.match(entityReg) || []
+try {
+  cgroup = fs.readFileSync('/proc/self/cgroup', 'utf8').trim()
+  entityId = cgroup.match(entityReg)?.[1]
+} catch { /* Ignore error */ }
 
-  return match[1]
-}
-
-function getInode () {
-  const match = cgroup.match(lineReg) || []
-
-  return readInode(match[3])
-}
-
-function readControlGroup () {
-  try {
-    return fs.readFileSync('/proc/self/cgroup').toString().trim()
-  } catch (err) {
-    return ''
-  }
-}
-
-function readInode (path) {
-  if (!path) return 0
-
-  const strippedPath = path.replace(/^\//, '').replace(/\/$/, '')
+const inodePath = cgroup.match(lineReg)?.[3]
+if (inodePath) {
+  const strippedPath = inodePath.replace(/^\/|\/$/g, '')
 
   try {
-    return fs.statSync(`/sys/fs/cgroup/${strippedPath}`).ino
-  } catch (err) {
-    return 0
-  }
+    inode = fs.statSync(`/sys/fs/cgroup/${strippedPath}`).ino
+  } catch { /* Ignore error */ }
 }
 
 module.exports = {
