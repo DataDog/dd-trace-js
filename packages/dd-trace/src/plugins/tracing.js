@@ -101,7 +101,7 @@ class TracingPlugin extends Plugin {
     }
   }
 
-  startSpan (name, { childOf, kind, meta, metrics, service, resource, type } = {}, enter = true) {
+  startSpan (name, { childOf, kind, meta, metrics, service, resource, type, startTime } = {}, enter = true) {
     const store = storage('legacy').getStore()
     if (store && childOf === undefined) {
       childOf = store.span
@@ -109,6 +109,7 @@ class TracingPlugin extends Plugin {
 
     const span = this.tracer.startSpan(name, {
       childOf,
+      startTime, // allow custom start time
       tags: {
         [COMPONENT]: this.component,
         'service.name': service || this.tracer._service,
