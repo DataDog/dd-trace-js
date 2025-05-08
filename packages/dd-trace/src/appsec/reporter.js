@@ -18,8 +18,13 @@ const zlib = require('zlib')
 const { keepTrace } = require('../priority_sampler')
 const { ASM } = require('../standalone/product')
 
+const REQUEST_HEADER_TAG_PREFIX = 'http.request.headers.'
+const RESPONSE_HEADER_TAG_PREFIX = 'http.response.headers.'
+
 // default limiter, configurable with setRateLimit()
 let limiter = new Limiter(100)
+
+let extendedCollection = null
 
 const metricsQueue = new Map()
 
@@ -40,7 +45,7 @@ const EVENT_HEADERS_MAP = mapHeaderAndTags([
   'host',
   'accept-encoding',
   'accept-language'
-], 'http.request.headers.')
+], REQUEST_HEADER_TAG_PREFIX)
 
 const identificationHeaders = [
   'x-amzn-trace-id',
@@ -59,12 +64,24 @@ const REQUEST_HEADERS_MAP = mapHeaderAndTags([
   'user-agent',
   'accept',
   ...identificationHeaders
-], 'http.request.headers.')
+], REQUEST_HEADER_TAG_PREFIX)
 
-const RESPONSE_HEADERS_MAP = mapHeaderAndTags(contentHeaderList, 'http.response.headers.')
+const RESPONSE_HEADERS_MAP = mapHeaderAndTags(contentHeaderList, RESPONSE_HEADER_TAG_PREFIX)
+
+function formatHeaderName (name) {
+  return name
+    .trim()
+    .slice(0, 200)
+    .replace(/[^a-zA-Z0-9_\-:/]/g, '_')
+    .toLowerCase()
+}
+
+function getHeaderTag (tagPrefix, headerName) {
+  return `${tagPrefix}${formatHeaderName(headerName)}`
+}
 
 function mapHeaderAndTags (headerList, tagPrefix) {
-  return new Map(headerList.map(headerName => [headerName, `${tagPrefix}${formatHeaderName(headerName)}`]))
+  return new Map(headerList.map(headerName => [headerName, getHeaderTag(tagPrefix, headerName)]))
 }
 
 function filterHeaders (headers, map) {
@@ -82,12 +99,85 @@ function filterHeaders (headers, map) {
   return result
 }
 
-function formatHeaderName (name) {
-  return name
-    .trim()
-    .slice(0, 200)
-    .replace(/[^a-zA-Z0-9_\-:/]/g, '_')
-    .toLowerCase()
+function filterExtendedHeaders (headers, excludedHeaderNames, tagPrefix, limit = 0) {
+  const result = {}
+
+  if (!headers) return result
+
+  let counter = 0
+  for (const [headerName, headerValue] of headers) {
+    if (counter >= limit) break;
+    if (!excludedHeaderNames.includes(headerName)) {
+      result[getHeaderTag(tagPrefix, headerName)] = headerValue
+    }
+  }
+
+  return result
+}
+
+function getCollectedHeaders (req, res, shouldCollectEventHeaders) {
+  // Mandatory
+  const mandatoryCollectedHeaders = filterHeaders(req.headers, REQUEST_HEADERS_MAP)
+
+  // Basic collection
+  if (!shouldCollectEventHeaders) return mandatoryCollectedHeaders
+
+  const requestEventCollectedHeaders = filterHeaders(req.headers, EVENT_HEADERS_MAP)
+  const responseEventCollectedHeaders = filterHeaders(res.getHeaders(), RESPONSE_HEADERS_MAP)
+
+  // Extended collection
+  if (!extendedCollection?.enabled) {
+    return Object.assign(
+      mandatoryCollectedHeaders,
+      requestEventCollectedHeaders,
+      responseEventCollectedHeaders
+    )
+  }
+
+  const requestExtendedHeadersAvailableCount =
+    extendedCollection.maxHeaders -
+    Object.keys(mandatoryCollectedHeaders).length -
+    Object.keys(requestEventCollectedHeaders).length
+
+  const requestEventExtendedCollectedHeaders =
+    filterExtendedHeaders(
+      req.headers,
+      REQUEST_HEADERS_MAP.keys().concat(EVENT_HEADERS_MAP.keys()),
+      REQUEST_HEADER_TAG_PREFIX,
+      requestExtendedHeadersAvailableCount
+    )
+
+  const responseExtendedHeadersAvailableCount =
+    extendedCollection.maxHeaders -
+    Object.keys(responseEventCollectedHeaders).length
+
+  const responseEventExtendedCollectedHeaders =
+    filterExtendedHeaders(
+      res.getHeaders(),
+      RESPONSE_HEADERS_MAP.keys(),
+      RESPONSE_HEADER_TAG_PREFIX,
+      responseExtendedHeadersAvailableCount
+    )
+
+  const headersTags = Object.assign(
+    mandatoryCollectedHeaders,
+    requestEventCollectedHeaders,
+    requestEventExtendedCollectedHeaders,
+    responseEventCollectedHeaders,
+    responseEventExtendedCollectedHeaders
+  )
+
+  // Check discarded headers
+  if (req.headers?.length > extendedCollection.maxHeaders) {
+    headersTags['_dd.appsec.request.header_collection.discarded'] = req.headers.length - extendedCollection.maxHeaders
+  }
+
+  if (req.getHeaders().length > extendedCollection.maxHeaders) {
+    headersTags['_dd.appsec.response.header_collection.discarded'] =
+      req.getHeaders().length - extendedCollection.maxHeaders
+  }
+
+  return headersTags
 }
 
 function reportWafInit (wafVersion, rulesVersion, diagnosticsRules = {}, success = false) {
@@ -252,15 +342,9 @@ function finishRequest (req, res) {
 
   incrementWafRequestsMetric(req)
 
-  // collect some headers even when no attack is detected
-  const mandatoryTags = filterHeaders(req.headers, REQUEST_HEADERS_MAP)
-  rootSpan.addTags(mandatoryTags)
-
   const tags = rootSpan.context()._tags
-  if (!shouldCollectEventHeaders(tags)) return
 
-  const newTags = filterHeaders(res.getHeaders(), RESPONSE_HEADERS_MAP)
-  Object.assign(newTags, filterHeaders(req.headers, EVENT_HEADERS_MAP))
+  const newTags = getCollectedHeaders(req, res, shouldCollectEventHeaders(tags))
 
   if (tags['appsec.event'] === 'true' && typeof req.route?.path === 'string') {
     newTags['http.endpoint'] = req.route.path
@@ -287,6 +371,10 @@ function setRateLimit (rateLimit) {
   limiter = new Limiter(rateLimit)
 }
 
+function setExtendedCollection (extendedCollectionConfig) {
+  extendedCollection = extendedCollectionConfig
+}
+
 module.exports = {
   metricsQueue,
   filterHeaders,
@@ -299,5 +387,6 @@ module.exports = {
   reportDerivatives,
   finishRequest,
   setRateLimit,
-  mapHeaderAndTags
+  mapHeaderAndTags,
+  setExtendedCollection
 }

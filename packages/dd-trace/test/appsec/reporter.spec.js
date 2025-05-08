@@ -581,15 +581,13 @@ describe('reporter', () => {
       Reporter.finishRequest(req, res)
       expect(web.root).to.have.been.calledOnceWith(req)
 
-      expect(span.addTags).to.have.been.calledTwice
-      expect(span.addTags.firstCall).to.have.been.calledWithExactly({
-        'http.request.headers.x-cloud-trace-context': 'd'
-      })
-      expect(span.addTags.secondCall).to.have.been.calledWithExactly({
+      expect(span.addTags).to.have.been.calledOnce
+      const expectedTags = {
+        'http.request.headers.x-cloud-trace-context': 'd',
         'http.response.headers.content-type': 'application/json',
         'http.response.headers.content-length': '42',
         'http.endpoint': '/path/:param'
-      })
+      }
     })
 
     it('should add http response data inside request span without endpoint', () => {
@@ -630,11 +628,14 @@ describe('reporter', () => {
 
       Reporter.finishRequest(req, res)
 
-      expect(span.addTags).to.have.been.calledWithExactly({
-        'http.request.headers.user-agent': 'arachni'
-      })
+      const expectedTags = Object.assign(
+        expectedRequestTagsToTrackOnEvent,
+        {
+          'http.request.headers.user-agent': 'arachni'
+        }
+      )
 
-      expect(span.addTags).to.have.been.calledWithExactly(expectedRequestTagsToTrackOnEvent)
+      expect(span.addTags).to.have.been.calledWithExactly(expectedTags)
     })
 
     it('should add http request data inside request span when user login success is tracked', () => {
@@ -655,11 +656,14 @@ describe('reporter', () => {
 
       Reporter.finishRequest(req, res)
 
-      expect(span.addTags).to.have.been.calledWithExactly({
-        'http.request.headers.user-agent': 'arachni'
-      })
+      const expectedTags = Object.assign(
+        expectedRequestTagsToTrackOnEvent,
+        {
+          'http.request.headers.user-agent': 'arachni'
+        }
+      )
 
-      expect(span.addTags).to.have.been.calledWithExactly(expectedRequestTagsToTrackOnEvent)
+      expect(span.addTags).to.have.been.calledWithExactly(expectedTags)
     })
 
     it('should add http request data inside request span when user login failure is tracked', () => {
@@ -680,11 +684,14 @@ describe('reporter', () => {
 
       Reporter.finishRequest(req, res)
 
-      expect(span.addTags).to.have.been.calledWithExactly({
-        'http.request.headers.user-agent': 'arachni'
-      })
+      const expectedTags = Object.assign(
+        expectedRequestTagsToTrackOnEvent,
+        {
+          'http.request.headers.user-agent': 'arachni'
+        }
+      )
 
-      expect(span.addTags).to.have.been.calledWithExactly(expectedRequestTagsToTrackOnEvent)
+      expect(span.addTags).to.have.been.calledWithExactly(expectedTags)
     })
 
     it('should add http request data inside request span when user custom event is tracked', () => {
@@ -705,11 +712,14 @@ describe('reporter', () => {
 
       Reporter.finishRequest(req, res)
 
-      expect(span.addTags).to.have.been.calledWithExactly({
-        'http.request.headers.user-agent': 'arachni'
-      })
+      const expectedTags = Object.assign(
+        expectedRequestTagsToTrackOnEvent,
+        {
+          'http.request.headers.user-agent': 'arachni'
+        }
+      )
 
-      expect(span.addTags).to.have.been.calledWithExactly(expectedRequestTagsToTrackOnEvent)
+      expect(span.addTags).to.have.been.calledWithExactly(expectedTags)
     })
 
     it('should call incrementWafRequestsMetric', () => {
