@@ -274,6 +274,8 @@ describe('Plugin', () => {
                   const query = new QueryStream('SELECT * FROM generate_series(0, 1) num', [])
                   const stream = client.query(query)
 
+                  expect(stream.listenerCount('error')).to.equal(0)
+
                   for await (const row of stream) {
                     expect(row).to.have.property('num')
                   }

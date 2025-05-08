@@ -69,7 +69,8 @@ describe('Plugin', () => {
         }).then(done).catch(done)
 
         tracer.scope().activate(parent, () => {
-          net.connect('/tmp/dd-trace.sock')
+          const socket = net.connect('/tmp/dd-trace.sock')
+          expect(socket.listenerCount('error')).to.equal(0)
         })
       })
 
@@ -84,6 +85,7 @@ describe('Plugin', () => {
               resource: 'localhost'
             }, 2000).then(done).catch(done)
           })
+          expect(socket.listenerCount('error')).to.equal(0)
         })
       })
 
@@ -123,6 +125,7 @@ describe('Plugin', () => {
               parent_id: BigInt(parent.context()._spanId.toString(10))
             }, 2000).then(done).catch(done)
           })
+          expect(socket.listenerCount('error')).to.equal(0)
         })
       })
 

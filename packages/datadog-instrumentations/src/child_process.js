@@ -1,5 +1,6 @@
 'use strict'
 
+const { errorMonitor } = require('node:events')
 const util = require('util')
 
 const {
@@ -227,7 +228,7 @@ function wrapChildProcessAsyncMethod (ChildProcess, shell = false) {
         if (childProcess) {
           let errorExecuted = false
 
-          childProcess.on('error', (e) => {
+          childProcess.on(errorMonitor, (e) => {
             errorExecuted = true
             childProcessChannel.error.publish(e)
           })
