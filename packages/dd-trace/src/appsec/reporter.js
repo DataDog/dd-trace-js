@@ -106,10 +106,11 @@ function filterExtendedHeaders (headers, excludedHeaderNames, tagPrefix, limit =
   if (!headers) return result
 
   let counter = 0
-  for (const [headerName, headerValue] of headers) {
+  for (const [headerName, headerValue] of Object.entries(headers)) {
     if (counter >= limit) break;
     if (!excludedHeaderNames.includes(headerName)) {
-      result[getHeaderTag(tagPrefix, headerName)] = headerValue
+      result[getHeaderTag(tagPrefix, headerName)] = '' + headerValue
+      counter++
     }
   }
 
@@ -143,7 +144,7 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders) {
   const requestEventExtendedCollectedHeaders =
     filterExtendedHeaders(
       req.headers,
-      REQUEST_HEADERS_MAP.keys().concat(EVENT_HEADERS_MAP.keys()),
+      [...REQUEST_HEADERS_MAP.keys()].concat([...EVENT_HEADERS_MAP.keys()]),
       REQUEST_HEADER_TAG_PREFIX,
       requestExtendedHeadersAvailableCount
     )
@@ -155,7 +156,7 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders) {
   const responseEventExtendedCollectedHeaders =
     filterExtendedHeaders(
       res.getHeaders(),
-      RESPONSE_HEADERS_MAP.keys(),
+      [...RESPONSE_HEADERS_MAP.keys()],
       RESPONSE_HEADER_TAG_PREFIX,
       responseExtendedHeadersAvailableCount
     )
@@ -169,13 +170,16 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders) {
   )
 
   // Check discarded headers
-  if (req.headers?.length > extendedCollection.maxHeaders) {
-    headersTags['_dd.appsec.request.header_collection.discarded'] = req.headers.length - extendedCollection.maxHeaders
+  const requestHeadersCount = Object.keys(req.headers).length
+  if (requestHeadersCount > extendedCollection.maxHeaders) {
+    headersTags['_dd.appsec.request.header_collection.discarded'] =
+      requestHeadersCount - extendedCollection.maxHeaders
   }
 
-  if (req.getHeaders().length > extendedCollection.maxHeaders) {
+  const responseHeadersCount = Object.keys(res.getHeaders()).length
+  if (responseHeadersCount > extendedCollection.maxHeaders) {
     headersTags['_dd.appsec.response.header_collection.discarded'] =
-      req.getHeaders().length - extendedCollection.maxHeaders
+      responseHeadersCount - extendedCollection.maxHeaders
   }
 
   return headersTags
@@ -401,6 +405,7 @@ function setExtendedCollection (extendedCollectionConfig) {
 module.exports = {
   metricsQueue,
   filterHeaders,
+  filterExtendedHeaders,
   formatHeaderName,
   reportWafInit,
   reportMetrics,
