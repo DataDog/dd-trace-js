@@ -45,13 +45,17 @@ describe('Dynamic Instrumentation', function () {
         assert.strictEqual(messages.shift(), '[ [Object], 2, 3, ... 2 more items ]')
         assert.strictEqual(messages.shift(), '{}')
         const obj = messages.shift()
+        let inspectKey = 'Symbol(nodejs.util.inspect.custom)'
+        if (NODE_MAJOR < 24) {
+          inspectKey = `[${inspectKey}]`
+        }
         assert.strictEqual(
           obj,
           '{ ' +
             'foo: [Object], ' +
             'bar: true, ' +
             'baz: [Getter], ' +
-            '[Symbol(nodejs.util.inspect.custom)]: [Function: [nodejs.util.inspect.custom]] ' +
+            inspectKey + ': [Function: [nodejs.util.inspect.custom]] ' +
           '}'
         )
         assert.strictEqual(messages.shift(), obj) // a proxy should just be stringified to the wrapped object
@@ -61,14 +65,19 @@ describe('Dynamic Instrumentation', function () {
         // `util.inspect`, but it has not been considered a big side-effects issue, as anyone implementing this
         // function is doing so with the explicit intent of modifying the string representation of instances.
         assert.strictEqual(messages.shift(), 'CustomClass [foo] { b: 2, c: 3 }')
-        // Full promise example string (line breaks added for readability):
-        // Promise {
-        //   42,
-        //   [Symbol(async_id_symbol)]: 205,
-        //   [Symbol(trigger_async_id_symbol)]: 204,
-        //   [Symbol(kResourceStore)]: {}
-        // }
-        assert.ok(messages.shift().startsWith('Promise { 42, '))
+        if (NODE_MAJOR < 24) {
+          // Full promise example string (line breaks added for readability):
+          // Promise {
+          //   42,
+          //   [Symbol(async_id_symbol)]: 205,
+          //   [Symbol(trigger_async_id_symbol)]: 204,
+          //   [Symbol(kResourceStore)]: {}
+          // }
+          assert.ok(messages.shift().startsWith('Promise { 42, '))
+        } else {
+          // In Node.js 24+ AsyncContextFrame is used, so the additional properties are not present.
+          assert.strictEqual(messages.shift(), 'Promise { 42 }')
+        }
         assert.strictEqual(messages.shift(), '[Function: arrowFn]')
         assert.strictEqual(messages.shift(), '[Function: fn]')
         assert.strictEqual(
