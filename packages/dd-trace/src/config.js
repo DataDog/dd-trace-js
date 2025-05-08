@@ -465,6 +465,9 @@ class Config {
     this._setValue(defaults, 'appsec.blockedTemplateJson', undefined)
     this._setValue(defaults, 'appsec.enabled', undefined)
     this._setValue(defaults, 'appsec.eventTracking.mode', 'identification')
+    this._setValue(defaults, 'appsec.extendedHeadersCollection.enabled', false)
+    this._setValue(defaults, 'appsec.extendedHeadersCollection.redaction', true)
+    this._setValue(defaults, 'appsec.extendedHeadersCollection.maxHeaders', 50)
     this._setValue(defaults, 'appsec.obfuscatorKeyRegex', defaultWafObfuscatorKeyRegex)
     this._setValue(defaults, 'appsec.obfuscatorValueRegex', defaultWafObfuscatorValueRegex)
     this._setValue(defaults, 'appsec.rasp.enabled', true)
@@ -645,10 +648,13 @@ class Config {
       DD_APM_TRACING_ENABLED,
       DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE,
       DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING,
+      DD_APPSEC_COLLECT_ALL_HEADERS,
       DD_APPSEC_ENABLED,
       DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON,
+      DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED,
       DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML,
       DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON,
+      DD_APPSEC_MAX_COLLECTED_HEADERS,
       DD_APPSEC_MAX_STACK_TRACES,
       DD_APPSEC_MAX_STACK_TRACE_DEPTH,
       DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP,
@@ -803,6 +809,13 @@ class Config {
       DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE,
       DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING // TODO: remove in next major
     ))
+    this._setBoolean(env,'appsec.extendedHeadersCollection.enabled', DD_APPSEC_COLLECT_ALL_HEADERS)
+    this._setBoolean(
+      env,
+      'appsec.extendedHeadersCollection.redaction',
+      DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED
+    )
+    this._setValue(env, 'appsec.extendedHeadersCollection.maxHeaders', DD_APPSEC_MAX_COLLECTED_HEADERS)
     this._setString(env, 'appsec.obfuscatorKeyRegex', DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP)
     this._setString(env, 'appsec.obfuscatorValueRegex', DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP)
     this._setBoolean(env, 'appsec.rasp.enabled', DD_APPSEC_RASP_ENABLED)
@@ -1018,6 +1031,20 @@ class Config {
     this._optsUnprocessed['appsec.blockedTemplateJson'] = options.appsec?.blockedTemplateJson
     this._setBoolean(opts, 'appsec.enabled', options.appsec?.enabled)
     this._setString(opts, 'appsec.eventTracking.mode', options.appsec?.eventTracking?.mode)
+    this._setBoolean(
+      opts,
+      'appsec.extendedHeadersCollection.enabled',
+      options.appsec?.extendedHeadersCollection?.enabled
+    )
+    this._setBoolean(
+      opts,
+      'appsec.extendedHeadersCollection.redaction',
+      options.appsec?.extendedHeadersCollection?.redaction
+    )
+    this._setValue(opts,
+      'appsec.extendedHeadersCollection.maxHeaders',
+      options.appsec?.extendedHeadersCollection?.maxHeaders
+    )
     this._setString(opts, 'appsec.obfuscatorKeyRegex', options.appsec?.obfuscatorKeyRegex)
     this._setString(opts, 'appsec.obfuscatorValueRegex', options.appsec?.obfuscatorValueRegex)
     this._setBoolean(opts, 'appsec.rasp.enabled', options.appsec?.rasp?.enabled)
