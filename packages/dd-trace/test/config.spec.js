@@ -508,6 +508,9 @@ describe('Config', () => {
     process.env.DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_GRAPHQL_PATH
     process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = 'extended'
     process.env.DD_APPSEC_SCA_ENABLED = true
+    process.env.DD_APPSEC_COLLECT_ALL_HEADERS = true
+    process.env.DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED = false
+    process.env.DD_APPSEC_MAX_COLLECTED_HEADERS = 42
     process.env.DD_REMOTE_CONFIGURATION_ENABLED = 'false'
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = '42'
     process.env.DD_IAST_ENABLED = 'true'
@@ -625,6 +628,9 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.blockedTemplateJson', BLOCKED_TEMPLATE_JSON)
     expect(config).to.have.nested.property('appsec.blockedTemplateGraphql', BLOCKED_TEMPLATE_GRAPHQL)
     expect(config).to.have.nested.property('appsec.eventTracking.mode', 'extended')
+    expect(config).to.have.nested.property('appsec.extendedHeadersCollection.enabled', true)
+    expect(config).to.have.nested.property('appsec.extendedHeadersCollection.redaction', false)
+    expect(config).to.have.nested.property('appsec.extendedHeadersCollection.maxHeaders', 42)
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
     expect(config).to.have.nested.property('appsec.apiSecurity.sampleDelay', 25)
     expect(config).to.have.nested.property('appsec.sca.enabled', true)
@@ -659,6 +665,9 @@ describe('Config', () => {
       { name: 'appsec.blockedTemplateJson', value: BLOCKED_TEMPLATE_JSON_PATH, origin: 'env_var' },
       { name: 'appsec.enabled', value: true, origin: 'env_var' },
       { name: 'appsec.eventTracking.mode', value: 'extended', origin: 'env_var' },
+      { name: 'appsec.extendedHeadersCollection.enabled', value: true, origin: 'env_var' },
+      { name: 'appsec.extendedHeadersCollection.redaction', value: false, origin: 'env_var' },
+      { name: 'appsec.extendedHeadersCollection.maxHeaders', value: 42, origin: 'env_var' },
       { name: 'appsec.obfuscatorKeyRegex', value: '.*', origin: 'env_var' },
       { name: 'appsec.obfuscatorValueRegex', value: '.*', origin: 'env_var' },
       { name: 'appsec.rateLimit', value: '42', origin: 'env_var' },
@@ -1309,6 +1318,9 @@ describe('Config', () => {
     process.env.DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_JSON_PATH // json and html here
     process.env.DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE = 'disabled'
     process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = 'disabled'
+    process.env.DD_APPSEC_COLLECT_ALL_HEADERS = 'false'
+    process.env.DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED = 'false'
+    process.env.DD_APPSEC_MAX_COLLECTED_HEADERS = 11
     process.env.DD_API_SECURITY_ENABLED = 'false'
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = 11
     process.env.DD_IAST_ENABLED = 'false'
@@ -1392,6 +1404,11 @@ describe('Config', () => {
           enabled: false,
           maxDepth: 42,
           maxStackTraces: 5
+        },
+        extendedHeadersCollection: {
+          enabled: true,
+          redaction: true,
+          maxHeaders: 42,
         }
       },
       iast: {
@@ -1474,6 +1491,9 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.blockedTemplateGraphql', BLOCKED_TEMPLATE_GRAPHQL)
     expect(config).to.have.nested.property('appsec.eventTracking.mode', 'anonymous')
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
+    expect(config).to.have.nested.property('appsec.extendedHeadersCollection.enabled', true)
+    expect(config).to.have.nested.property('appsec.extendedHeadersCollection.redaction', true)
+    expect(config).to.have.nested.property('appsec.extendedHeadersCollection.maxHeaders', 42)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
     expect(config).to.have.nested.property('iast.requestSampling', 30)

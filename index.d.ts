@@ -734,6 +734,25 @@ declare namespace tracer {
          * @default 32
          */
         maxDepth?: number,
+      },
+      /**
+       * Configuration for extended headers collection tied to security events
+       */
+      extendedHeadersCollection?: {
+        /** Whether to enable extended headers collection
+         * @default false
+         */
+        enabled: boolean,
+
+        /** Whether to redact collected headers
+         * @default true
+         */
+        redaction: boolean,
+
+        /** Specifies the maximum number of headers collected.
+         * @default 50
+         */
+        maxHeaders: number,
       }
     }
 
