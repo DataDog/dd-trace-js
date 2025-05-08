@@ -265,6 +265,7 @@ function getOnTestEndHandler (config) {
 
     let hasFailedAllRetries = false
     let attemptToFixPassed = false
+    let attemptToFixFailed = false
 
     const testName = getTestFullName(test)
 
@@ -278,6 +279,9 @@ function getOnTestEndHandler (config) {
     const isLastAttempt = testStatuses.length === config.testManagementAttemptToFixRetries + 1
 
     if (test._ddIsAttemptToFix && isLastAttempt) {
+      if (testStatuses.some(status => status === 'fail')) {
+        attemptToFixFailed = true
+      }
       if (testStatuses.every(status => status === 'fail')) {
         hasFailedAllRetries = true
       } else if (testStatuses.every(status => status === 'pass')) {
@@ -286,6 +290,9 @@ function getOnTestEndHandler (config) {
     }
 
     const isAttemptToFixRetry = test._ddIsAttemptToFix && testStatuses.length > 1
+    const isAtrRetry = config.isFlakyTestRetriesEnabled &&
+      !test._ddIsAttemptToFix &&
+      !test._ddIsEfdRetry
 
     // if there are afterEach to be run, we don't finish the test yet
     if (asyncResource && !getAfterEachHooks(test).length) {
@@ -296,7 +303,9 @@ function getOnTestEndHandler (config) {
           isLastRetry: getIsLastRetry(test),
           hasFailedAllRetries,
           attemptToFixPassed,
-          isAttemptToFixRetry
+          attemptToFixFailed,
+          isAttemptToFixRetry,
+          isAtrRetry
         })
       })
     }
@@ -364,14 +373,18 @@ function getOnFailHandler (isMain) {
   }
 }
 
-function getOnTestRetryHandler () {
+function getOnTestRetryHandler (config) {
   return function (test, err) {
     const asyncResource = getTestAsyncResource(test)
     if (asyncResource) {
       const isFirstAttempt = test._currentRetry === 0
       const willBeRetried = test._currentRetry < test._retries
+      const isAtrRetry = !isFirstAttempt &&
+        config.isFlakyTestRetriesEnabled &&
+        !test._ddIsAttemptToFix &&
+        !test._ddIsEfdRetry
       asyncResource.runInAsyncScope(() => {
-        testRetryCh.publish({ isFirstAttempt, err, willBeRetried, test })
+        testRetryCh.publish({ isFirstAttempt, err, willBeRetried, test, isAtrRetry })
       })
     }
     const key = getTestToArKey(test)

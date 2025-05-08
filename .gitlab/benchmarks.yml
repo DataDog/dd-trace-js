@@ -65,20 +65,26 @@ benchmark:
         GROUP: 2
       - MAJOR_VERSION: 18
         GROUP: 3
+      - MAJOR_VERSION: 18
+        GROUP: 4
       - MAJOR_VERSION: 20
         GROUP: 1
       - MAJOR_VERSION: 20
         GROUP: 2
       - MAJOR_VERSION: 20
         GROUP: 3
+      - MAJOR_VERSION: 20
+        GROUP: 4
       - MAJOR_VERSION: 22
         GROUP: 1
       - MAJOR_VERSION: 22
         GROUP: 2
       - MAJOR_VERSION: 22
         GROUP: 3
+      - MAJOR_VERSION: 22
+        GROUP: 4
   variables:
-    SPLITS: 3
+    SPLITS: 4
 
 benchmark-serverless:
   stage: benchmarks

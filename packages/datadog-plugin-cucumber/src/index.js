@@ -33,7 +33,8 @@ const {
   TEST_MANAGEMENT_IS_DISABLED,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_HAS_FAILED_ALL_RETRIES,
-  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED
+  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
+  TEST_RETRY_REASON_TYPES
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
@@ -252,11 +253,16 @@ class CucumberPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:cucumber:test:retry', ({ isFirstAttempt, error }) => {
+    this.addSub('ci:cucumber:test:retry', ({ isFirstAttempt, error, isAtrRetry }) => {
       const store = storage('legacy').getStore()
       const span = store.span
       if (!isFirstAttempt) {
         span.setTag(TEST_IS_RETRY, 'true')
+        if (isAtrRetry) {
+          span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atr)
+        } else {
+          span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.ext)
+        }
       }
       span.setTag('error', error)
       if (isFirstAttempt && this.di && error && this.libraryConfig?.isDiEnabled) {
@@ -335,6 +341,7 @@ class CucumberPlugin extends CiPlugin {
       isAttemptToFixRetry,
       hasFailedAllRetries,
       hasPassedAllRetries,
+      hasFailedAttemptToFix,
       isDisabled,
       isQuarantined
     }) => {
@@ -347,7 +354,7 @@ class CucumberPlugin extends CiPlugin {
         span.setTag(TEST_IS_NEW, 'true')
         if (isEfdRetry) {
           span.setTag(TEST_IS_RETRY, 'true')
-          span.setTag(TEST_RETRY_REASON, 'efd')
+          span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
         }
       }
 
@@ -363,6 +370,7 @@ class CucumberPlugin extends CiPlugin {
 
       if (isFlakyRetry > 0) {
         span.setTag(TEST_IS_RETRY, 'true')
+        span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atr)
       }
 
       if (hasFailedAllRetries) {
@@ -375,9 +383,11 @@ class CucumberPlugin extends CiPlugin {
 
       if (isAttemptToFixRetry) {
         span.setTag(TEST_IS_RETRY, 'true')
-        span.setTag(TEST_RETRY_REASON, 'attempt_to_fix')
+        span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atf)
         if (hasPassedAllRetries) {
           span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
+        } else if (hasFailedAttemptToFix) {
+          span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
         }
       }
 

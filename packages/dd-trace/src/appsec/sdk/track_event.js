@@ -9,6 +9,9 @@ const addresses = require('../addresses')
 const { ASM } = require('../../standalone/product')
 const { incrementSdkEventMetric } = require('../telemetry')
 
+/**
+ * @deprecated in favor of trackUserLoginSuccessV2
+ */
 function trackUserLoginSuccessEvent (tracer, user, metadata) {
   // TODO: better user check here and in _setUser() ?
   if (!user || !user.id) {
@@ -16,7 +19,7 @@ function trackUserLoginSuccessEvent (tracer, user, metadata) {
     return
   }
 
-  incrementSdkEventMetric('login_success')
+  incrementSdkEventMetric('login_success', 'v1')
 
   const rootSpan = getRootSpan(tracer)
   if (!rootSpan) {
@@ -35,6 +38,9 @@ function trackUserLoginSuccessEvent (tracer, user, metadata) {
   runWaf('users.login.success', { id: user.id, login })
 }
 
+/**
+ * @deprecated in favor of trackUserLoginFailureV2
+ */
 function trackUserLoginFailureEvent (tracer, userId, exists, metadata) {
   if (!userId || typeof userId !== 'string') {
     log.warn('[ASM] Invalid userId provided to trackUserLoginFailureEvent')
@@ -52,7 +58,7 @@ function trackUserLoginFailureEvent (tracer, userId, exists, metadata) {
 
   runWaf('users.login.failure', { login: userId })
 
-  incrementSdkEventMetric('login_failure')
+  incrementSdkEventMetric('login_failure', 'v1')
 }
 
 function trackCustomEvent (tracer, eventName, metadata) {
@@ -63,7 +69,112 @@ function trackCustomEvent (tracer, eventName, metadata) {
 
   trackEvent(eventName, metadata, 'trackCustomEvent', getRootSpan(tracer))
 
-  incrementSdkEventMetric('custom')
+  incrementSdkEventMetric('custom', 'v1')
+
+  if (eventName === 'users.login.success' || eventName === 'users.login.failure') {
+    runWaf(eventName)
+  }
+}
+
+function trackUserLoginSuccessV2 (tracer, login, user, metadata) {
+  if (!login || typeof login !== 'string') {
+    log.warn('[ASM] Invalid login provided to eventTrackingV2.trackUserLoginSuccess')
+    return
+  }
+
+  incrementSdkEventMetric('login_success', 'v2')
+
+  const rootSpan = getRootSpan(tracer)
+  if (!rootSpan) {
+    log.warn('[ASM] Root span not available in eventTrackingV2.trackUserLoginSuccess')
+    return
+  }
+
+  const wafData = { login }
+
+  metadata = {
+    'usr.login': login,
+    ...metadata
+  }
+
+  if (user) {
+    if (typeof user !== 'object') {
+      user = { id: user }
+    }
+
+    if (user.id) {
+      wafData.id = user.id
+      setUserTags(user, rootSpan)
+      metadata.usr = user
+    }
+  }
+
+  trackEvent('users.login.success', metadata, 'eventTrackingV2.trackUserLoginSuccess', rootSpan)
+
+  runWaf('users.login.success', wafData)
+}
+
+function trackUserLoginFailureV2 (tracer, login, exists, metadata) {
+  if (!login || typeof login !== 'string') {
+    log.warn('[ASM] Invalid login provided to eventTrackingV2.trackUserLoginFailure')
+    return
+  }
+
+  incrementSdkEventMetric('login_failure', 'v2')
+
+  const rootSpan = getRootSpan(tracer)
+  if (!rootSpan) {
+    log.warn('[ASM] Root span not available in eventTrackingV2.trackUserLoginFailure')
+    return
+  }
+
+  const wafData = { login }
+
+  if (typeof exists === 'object' && metadata === undefined) {
+    metadata = exists
+    exists = false
+  }
+
+  metadata = {
+    'usr.login': login,
+    'usr.exists': exists ? 'true' : 'false',
+    ...metadata
+  }
+
+  trackEvent('users.login.failure', metadata, 'eventTrackingV2.trackUserLoginFailure', rootSpan)
+
+  runWaf('users.login.failure', wafData)
+}
+
+function flattenFields (fields, depth = 0) {
+  if (depth > 4) {
+    return {
+      truncated: true
+    }
+  }
+
+  const result = {}
+  let truncated = false
+  for (const key of Object.keys(fields)) {
+    const value = fields[key]
+
+    if (value && typeof value === 'object') {
+      const { result: flatValue, truncated: inheritTruncated } = flattenFields(value, depth + 1)
+      truncated = truncated || inheritTruncated
+
+      if (flatValue) {
+        for (const flatKey of Object.keys(flatValue)) {
+          result[`${key}.${flatKey}`] = flatValue[flatKey]
+        }
+      }
+    } else {
+      if (value !== undefined) {
+        result[key] = value
+      }
+    }
+  }
+
+  return { result, truncated }
 }
 
 function trackEvent (eventName, fields, sdkMethodName, rootSpan) {
@@ -78,8 +189,14 @@ function trackEvent (eventName, fields, sdkMethodName, rootSpan) {
   }
 
   if (fields) {
-    for (const metadataKey of Object.keys(fields)) {
-      tags[`appsec.events.${eventName}.${metadataKey}`] = '' + fields[metadataKey]
+    const { result: flatFields, truncated } = flattenFields(fields)
+
+    if (truncated) {
+      log.warn('[ASM] Too deep object provided in the SDK method %s, object truncated', sdkMethodName)
+    }
+
+    for (const metadataKey of Object.keys(flatFields)) {
+      tags[`appsec.events.${eventName}.${metadataKey}`] = '' + flatFields[metadataKey]
     }
   }
 
@@ -93,11 +210,11 @@ function runWaf (eventName, user) {
     [`server.business_logic.${eventName}`]: null
   }
 
-  if (user.id) {
+  if (user?.id) {
     persistent[addresses.USER_ID] = '' + user.id
   }
 
-  if (user.login) {
+  if (user?.login) {
     persistent[addresses.USER_LOGIN] = '' + user.login
   }
 
@@ -107,5 +224,9 @@ function runWaf (eventName, user) {
 module.exports = {
   trackUserLoginSuccessEvent,
   trackUserLoginFailureEvent,
-  trackCustomEvent
+  trackCustomEvent,
+  trackUserLoginSuccessV2,
+  trackUserLoginFailureV2,
+  trackEvent,
+  runWaf
 }

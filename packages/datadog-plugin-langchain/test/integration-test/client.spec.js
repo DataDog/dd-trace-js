@@ -46,7 +46,7 @@ describe('esm', () => {
       })
 
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, null, {
-        NODE_OPTIONS: '--import dd-trace/register.js'
+        NODE_OPTIONS: '--import dd-trace/initialize.mjs'
       })
 
       await res

@@ -30,7 +30,8 @@ const {
   TEST_MANAGEMENT_IS_DISABLED,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
-  TEST_HAS_FAILED_ALL_RETRIES
+  TEST_HAS_FAILED_ALL_RETRIES,
+  TEST_RETRY_REASON_TYPES
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -344,7 +345,9 @@ class JestPlugin extends CiPlugin {
       status,
       testStartLine,
       attemptToFixPassed,
-      failedAllTests
+      failedAllTests,
+      attemptToFixFailed,
+      isAtrRetry
     }) => {
       const span = storage('legacy').getStore().span
       span.setTag(TEST_STATUS, status)
@@ -353,9 +356,15 @@ class JestPlugin extends CiPlugin {
       }
       if (attemptToFixPassed) {
         span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
+      } else if (attemptToFixFailed) {
+        span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
       }
       if (failedAllTests) {
         span.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
+      }
+      if (isAtrRetry) {
+        span.setTag(TEST_IS_RETRY, 'true')
+        span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atr)
       }
 
       const spanTags = span.context()._tags
@@ -447,7 +456,7 @@ class JestPlugin extends CiPlugin {
 
     if (isAttemptToFixRetry) {
       extraTags[TEST_IS_RETRY] = 'true'
-      extraTags[TEST_RETRY_REASON] = 'attempt_to_fix'
+      extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.atf
     }
 
     if (isDisabled) {
@@ -462,12 +471,13 @@ class JestPlugin extends CiPlugin {
       extraTags[TEST_IS_NEW] = 'true'
       if (isEfdRetry) {
         extraTags[TEST_IS_RETRY] = 'true'
-        extraTags[TEST_RETRY_REASON] = 'efd'
+        extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.efd
       }
     }
 
     if (isJestRetry) {
       extraTags[TEST_IS_RETRY] = 'true'
+      extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.ext
     }
 
     return super.startTestSpan(name, suite, this.testSuiteSpan, extraTags)

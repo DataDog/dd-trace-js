@@ -23,6 +23,7 @@ const testSuiteStartCh = channel('ci:playwright:test-suite:start')
 const testSuiteFinishCh = channel('ci:playwright:test-suite:finish')
 
 const workerReportCh = channel('ci:playwright:worker:report')
+const testPageGotoCh = channel('ci:playwright:test:page-goto')
 
 const testToAr = new WeakMap()
 const testSuiteToAr = new Map()
@@ -336,6 +337,9 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout, isMain
   }
 
   if (testStatuses.length === testManagementAttemptToFixRetries + 1) {
+    if (testStatuses.some(status => status === 'fail')) {
+      test._ddHasFailedAttemptToFixRetries = true
+    }
     if (testStatuses.every(status => status === 'fail')) {
       test._ddHasFailedAllRetries = true
     } else if (testStatuses.every(status => status === 'pass')) {
@@ -347,6 +351,10 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout, isMain
   if (isMainProcess) {
     const testResult = results[results.length - 1]
     const testAsyncResource = testToAr.get(test)
+    const isAtrRetry = testResult?.retry > 0 &&
+      isFlakyTestRetriesEnabled &&
+      !test._ddIsAttemptToFix &&
+      !test._ddIsEfdRetry
     testAsyncResource.runInAsyncScope(() => {
       testFinishCh.publish({
         testStatus,
@@ -360,7 +368,9 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout, isMain
         isQuarantined: test._ddIsQuarantined,
         isEfdRetry: test._ddIsEfdRetry,
         hasFailedAllRetries: test._ddHasFailedAllRetries,
-        hasPassedAttemptToFixRetries: test._ddHasPassedAttemptToFixRetries
+        hasPassedAttemptToFixRetries: test._ddHasPassedAttemptToFixRetries,
+        hasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
+        isAtrRetry
       })
     })
   }
@@ -468,6 +478,11 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
 
       const isTimeout = status === 'timedOut'
       testEndHandler(test, annotations, STATUS_TO_TEST_STATUS[status], errors && errors[0], isTimeout, false)
+      const testResult = test.results[test.results.length - 1]
+      const isAtrRetry = testResult?.retry > 0 &&
+        isFlakyTestRetriesEnabled &&
+        !test._ddIsAttemptToFix &&
+        !test._ddIsEfdRetry
       // We want to send the ddProperties to the worker
       worker.process.send({
         type: 'ddProperties',
@@ -480,7 +495,9 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
           _ddIsNew: test._ddIsNew,
           _ddIsEfdRetry: test._ddIsEfdRetry,
           _ddHasFailedAllRetries: test._ddHasFailedAllRetries,
-          _ddHasPassedAttemptToFixRetries: test._ddHasPassedAttemptToFixRetries
+          _ddHasPassedAttemptToFixRetries: test._ddHasPassedAttemptToFixRetries,
+          _ddHasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
+          _ddIsAtrRetry: isAtrRetry
         }
       })
     })
@@ -749,9 +766,17 @@ addHook({
     return rootSuite
   }
 
-  loadUtilsPackage.createRootSuite = newCreateRootSuite
+  // We need to proxy the createRootSuite function because the function is not configurable
+  const proxy = new Proxy(loadUtilsPackage, {
+    get (target, prop) {
+      if (prop === 'createRootSuite') {
+        return newCreateRootSuite
+      }
+      return target[prop]
+    }
+  })
 
-  return loadUtilsPackage
+  return proxy
 })
 
 // main process hook
@@ -781,6 +806,43 @@ addHook({
   })
 
   return processHostPackage
+})
+
+addHook({
+  name: 'playwright-core',
+  file: 'lib/client/page.js',
+  versions: ['>=1.38.0']
+}, (pagePackage) => {
+  shimmer.wrap(pagePackage.Page.prototype, 'goto', goto => async function (url, options) {
+    const response = await goto.apply(this, arguments)
+
+    const page = this
+
+    try {
+      if (page) {
+        const isRumActive = await page.evaluate(() => {
+          if (window.DD_RUM && window.DD_RUM.getInternalContext) {
+            return !!window.DD_RUM.getInternalContext()
+          } else {
+            return false
+          }
+        })
+
+        if (isRumActive) {
+          testPageGotoCh.publish({
+            isRumActive,
+            page
+          })
+        }
+      }
+    } catch (e) {
+      // ignore errors such as redirects, context destroyed, etc
+    }
+
+    return response
+  })
+
+  return pagePackage
 })
 
 // Only in worker
@@ -821,6 +883,55 @@ addHook({
         testSourceLine,
         browserName
       })
+
+      let existAfterEachHook = false
+
+      // We try to find an existing afterEach hook with _ddHook to avoid adding a new one
+      for (const hook of test.parent._hooks) {
+        if (hook.type === 'afterEach' && hook._ddHook) {
+          existAfterEachHook = true
+          break
+        }
+      }
+
+      // In cases where there is no afterEach hook with _ddHook, we need to add one
+      if (!existAfterEachHook) {
+        test.parent._hooks.push({
+          type: 'afterEach',
+          fn: async function ({ page }) {
+            try {
+              if (page) {
+                const isRumActive = await page.evaluate(() => {
+                  if (window.DD_RUM && window.DD_RUM.stopSession) {
+                    window.DD_RUM.stopSession()
+                    return true
+                  } else {
+                    return false
+                  }
+                })
+
+                if (isRumActive) {
+                  const url = page.url()
+                  if (url) {
+                    const domain = new URL(url).hostname
+                    await page.context().addCookies([{
+                      name: 'datadog-ci-visibility-test-execution-id',
+                      value: '',
+                      domain,
+                      expires: 0,
+                      path: '/'
+                    }])
+                  }
+                }
+              }
+            } catch (e) {
+              // ignore errors
+            }
+          },
+          title: 'afterEach hook',
+          _ddHook: true
+        })
+      }
 
       res = _runTest.apply(this, arguments)
 
@@ -880,6 +991,8 @@ addHook({
         isAttemptToFixRetry: test._ddIsAttemptToFixRetry,
         hasFailedAllRetries: test._ddHasFailedAllRetries,
         hasPassedAttemptToFixRetries: test._ddHasPassedAttemptToFixRetries,
+        hasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
+        isAtrRetry: test._ddIsAtrRetry,
         onDone
       })
     })

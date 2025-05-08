@@ -12,6 +12,7 @@ const { version } = require('../../../../../package.json')
 
 module.exports = send
 
+const MAX_MESSAGE_LENGTH = 8 * 1024 // 8KB
 const MAX_LOG_PAYLOAD_SIZE = 1024 * 1024 // 1MB
 
 const ddsource = 'dd_debugger'
@@ -25,7 +26,7 @@ const ddtags = [
   ['host_name', hostname],
   [GIT_COMMIT_SHA, config.commitSHA],
   [GIT_REPOSITORY_URL, config.repositoryUrl]
-].map((pair) => pair.join(':')).join(',')
+].filter(([, value]) => value !== undefined).map((pair) => pair.join(':')).join(',')
 
 const path = `/debugger/v1/input?${stringify({ ddtags })}`
 
@@ -36,10 +37,12 @@ function send (message, logger, dd, snapshot) {
     ddsource,
     hostname,
     service,
-    message,
+    message: message?.length > MAX_MESSAGE_LENGTH
+      ? message.slice(0, MAX_MESSAGE_LENGTH) + '…'
+      : message,
     logger,
     dd,
-    'debugger.snapshot': snapshot
+    debugger: { snapshot }
   }
 
   let json = JSON.stringify(payload)
@@ -47,7 +50,7 @@ function send (message, logger, dd, snapshot) {
 
   if (size > MAX_LOG_PAYLOAD_SIZE) {
     // TODO: This is a very crude way to handle large payloads. Proper pruning will be implemented later (DEBUG-2624)
-    const line = Object.values(payload['debugger.snapshot'].captures.lines)[0]
+    const line = Object.values(payload.debugger.snapshot.captures.lines)[0]
     line.locals = {
       notCapturedReason: 'Snapshot was too large',
       size: Object.keys(line.locals).length

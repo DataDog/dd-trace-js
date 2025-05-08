@@ -13,7 +13,7 @@ describe('Dynamic Instrumentation', function () {
       it('should prune snapshot if payload is too large', function (done) {
         t.agent.on('debugger-input', ({ payload: [payload] }) => {
           assert.isBelow(Buffer.byteLength(JSON.stringify(payload)), 1024 * 1024) // 1MB
-          assert.deepEqual(payload['debugger.snapshot'].captures, {
+          assert.deepEqual(payload.debugger.snapshot.captures, {
             lines: {
               [t.breakpoint.line]: {
                 locals: {

@@ -36,7 +36,8 @@ const {
   TEST_MANAGEMENT_IS_DISABLED,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_HAS_FAILED_ALL_RETRIES,
-  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED
+  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
+  TEST_RETRY_REASON_TYPES
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -207,7 +208,9 @@ class MochaPlugin extends CiPlugin {
       isLastRetry,
       hasFailedAllRetries,
       attemptToFixPassed,
-      isAttemptToFixRetry
+      attemptToFixFailed,
+      isAttemptToFixRetry,
+      isAtrRetry
     }) => {
       const store = storage('legacy').getStore()
       const span = store?.span
@@ -216,16 +219,23 @@ class MochaPlugin extends CiPlugin {
         span.setTag(TEST_STATUS, status)
         if (hasBeenRetried) {
           span.setTag(TEST_IS_RETRY, 'true')
+          if (isAtrRetry) {
+            span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atr)
+          } else {
+            span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.ext)
+          }
         }
         if (hasFailedAllRetries) {
           span.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
         }
         if (attemptToFixPassed) {
           span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
+        } else if (attemptToFixFailed) {
+          span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
         }
         if (isAttemptToFixRetry) {
           span.setTag(TEST_IS_RETRY, 'true')
-          span.setTag(TEST_RETRY_REASON, 'attempt_to_fix')
+          span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atf)
         }
 
         const spanTags = span.context()._tags
@@ -273,13 +283,18 @@ class MochaPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:mocha:test:retry', ({ isFirstAttempt, willBeRetried, err, test }) => {
+    this.addSub('ci:mocha:test:retry', ({ isFirstAttempt, willBeRetried, err, test, isAtrRetry }) => {
       const store = storage('legacy').getStore()
       const span = store?.span
       if (span) {
         span.setTag(TEST_STATUS, 'fail')
         if (!isFirstAttempt) {
           span.setTag(TEST_IS_RETRY, 'true')
+          if (isAtrRetry) {
+            span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atr)
+          } else {
+            span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.ext)
+          }
         }
         if (err) {
           span.setTag('error', err)
@@ -473,7 +488,7 @@ class MochaPlugin extends CiPlugin {
       extraTags[TEST_IS_NEW] = 'true'
       if (isEfdRetry) {
         extraTags[TEST_IS_RETRY] = 'true'
-        extraTags[TEST_RETRY_REASON] = 'efd'
+        extraTags[TEST_RETRY_REASON] = 'early_flake_detection'
       }
     }
 

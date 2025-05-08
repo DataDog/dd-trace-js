@@ -52,7 +52,8 @@ const {
   DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_HAS_FAILED_ALL_RETRIES,
-  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED
+  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
+  TEST_RETRY_REASON_TYPES
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -531,7 +532,7 @@ describe('jest CommonJS', () => {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
-          const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr)
 
           assert.equal(retriedTests.length, 2)
           const retriedTest = retriedTests.find(test => test.meta[TEST_SUITE].includes('test-hit-breakpoint.js'))
@@ -1666,7 +1667,7 @@ describe('jest CommonJS', () => {
           )
           assert.equal(retriedTests.length, NUM_RETRIES_EFD)
           retriedTests.forEach(test => {
-            assert.propertyVal(test.meta, TEST_RETRY_REASON, 'efd')
+            assert.propertyVal(test.meta, TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
           })
           // Test name does not change
           newTests.forEach(test => {
@@ -2406,6 +2407,9 @@ describe('jest CommonJS', () => {
           assert.equal(eventuallyPassingTest.filter(test => test.meta[TEST_STATUS] === 'fail').length, 2)
           assert.equal(eventuallyPassingTest.filter(test => test.meta[TEST_STATUS] === 'pass').length, 1)
           assert.equal(eventuallyPassingTest.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 2)
+          assert.equal(eventuallyPassingTest.filter(test =>
+            test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+          ).length, 2)
 
           const neverPassingTest = tests.filter(
             test => test.resource ===
@@ -2415,6 +2419,9 @@ describe('jest CommonJS', () => {
           assert.equal(neverPassingTest.filter(test => test.meta[TEST_STATUS] === 'fail').length, 6)
           assert.equal(neverPassingTest.filter(test => test.meta[TEST_STATUS] === 'pass').length, 0)
           assert.equal(neverPassingTest.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 5)
+          assert.equal(neverPassingTest.filter(
+            test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+          ).length, 5)
 
           const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
 
@@ -2473,7 +2480,7 @@ describe('jest CommonJS', () => {
             'ci-visibility/jest-flaky/flaky-fails.js.test-flaky-test-retries can retry failed tests'
           ])
 
-          const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr)
 
           assert.equal(retriedTests.length, 0)
         })
@@ -2514,6 +2521,8 @@ describe('jest CommonJS', () => {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          assert.equal(tests.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 2)
+          assert.equal(tests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr).length, 2)
 
           assert.equal(tests.length, 5)
           // only one retry
@@ -2556,7 +2565,7 @@ describe('jest CommonJS', () => {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
-          const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr)
 
           assert.equal(retriedTests.length, 1)
           const [retriedTest] = retriedTests
@@ -2605,7 +2614,7 @@ describe('jest CommonJS', () => {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
-          const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr)
 
           assert.equal(retriedTests.length, 1)
           const [retriedTest] = retriedTests
@@ -2654,7 +2663,7 @@ describe('jest CommonJS', () => {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
-          const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr)
 
           assert.equal(retriedTests.length, 1)
           const [retriedTest] = retriedTests
@@ -2738,7 +2747,7 @@ describe('jest CommonJS', () => {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
-          const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr)
 
           assert.equal(retriedTests.length, 1)
           const [retriedTest] = retriedTests
@@ -2786,7 +2795,7 @@ describe('jest CommonJS', () => {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
-          const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr)
 
           assert.equal(retriedTests.length, 1)
           const [retriedTest] = retriedTests
@@ -3034,7 +3043,7 @@ describe('jest CommonJS', () => {
                 assert.notProperty(test.meta, TEST_RETRY_REASON)
               } else {
                 assert.propertyVal(test.meta, TEST_IS_RETRY, 'true')
-                assert.propertyVal(test.meta, TEST_RETRY_REASON, 'attempt_to_fix')
+                assert.propertyVal(test.meta, TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atf)
               }
 
               if (isLastAttempt) {
@@ -3042,9 +3051,10 @@ describe('jest CommonJS', () => {
                   assert.propertyVal(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
                 } else if (shouldFailSometimes) {
                   assert.notProperty(test.meta, TEST_HAS_FAILED_ALL_RETRIES)
-                  assert.notProperty(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED)
+                  assert.propertyVal(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
                 } else {
                   assert.propertyVal(test.meta, TEST_HAS_FAILED_ALL_RETRIES, 'true')
+                  assert.propertyVal(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
                 }
               }
             }
@@ -3482,7 +3492,7 @@ describe('jest CommonJS', () => {
             assert.equal(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
             assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
             assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
-            assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '2')
+            assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '3')
             // capabilities logic does not overwrite test session name
             assert.equal(metadata.test[TEST_SESSION_NAME], 'my-test-session-name')
           })
@@ -3495,6 +3505,39 @@ describe('jest CommonJS', () => {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             DD_TEST_SESSION_NAME: 'my-test-session-name'
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
+  })
+
+  context('custom tagging', () => {
+    it('does detect custom tags in the tests', (done) => {
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const test = events.find(event => event.type === 'test').content
+
+          assert.isNotEmpty(test.meta)
+          assert.equal(test.meta['custom_tag.beforeEach'], 'true')
+          assert.equal(test.meta['custom_tag.it'], 'true')
+          assert.equal(test.meta['custom_tag.afterEach'], 'true')
+        })
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'ci-visibility/test-custom-tags'
           },
           stdio: 'inherit'
         }

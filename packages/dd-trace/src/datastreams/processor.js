@@ -13,16 +13,14 @@ const log = require('../log')
 
 const ENTRY_PARENT_HASH = Buffer.from('0000000000000000', 'hex')
 
-const HIGH_ACCURACY_DISTRIBUTION = 0.0075
-
 class StatsPoint {
   constructor (hash, parentHash, edgeTags) {
     this.hash = hash.readBigUInt64BE()
     this.parentHash = parentHash.readBigUInt64BE()
     this.edgeTags = edgeTags
-    this.edgeLatency = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
-    this.pathwayLatency = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
-    this.payloadSize = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
+    this.edgeLatency = new LogCollapsingLowestDenseDDSketch()
+    this.pathwayLatency = new LogCollapsingLowestDenseDDSketch()
+    this.payloadSize = new LogCollapsingLowestDenseDDSketch()
   }
 
   addLatencies (checkpoint) {

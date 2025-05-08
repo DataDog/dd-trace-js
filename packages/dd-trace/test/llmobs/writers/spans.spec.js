@@ -5,7 +5,7 @@ const proxyquire = require('proxyquire')
 describe('LLMObsSpanWriter', () => {
   let LLMObsSpanWriter
   let writer
-  let options
+  let config
   let logger
 
   beforeEach(() => {
@@ -13,12 +13,13 @@ describe('LLMObsSpanWriter', () => {
       warn: sinon.stub(),
       debug: sinon.stub()
     }
-    LLMObsSpanWriter = proxyquire('../../../../src/llmobs/writers/spans/base', {
-      '../../../log': logger
+    LLMObsSpanWriter = proxyquire('../../../src/llmobs/writers/spans', {
+      '../../log': logger
     })
-    options = {
-      endpoint: '/api/v2/llmobs',
-      intake: 'llmobs-intake.datadoghq.com'
+    config = {
+      port: 8126,
+      hostname: 'localhost',
+      site: 'datadoghq.com'
     }
   })
 
@@ -27,13 +28,28 @@ describe('LLMObsSpanWriter', () => {
   })
 
   it('is initialized correctly', () => {
-    writer = new LLMObsSpanWriter(options)
+    writer = new LLMObsSpanWriter(config)
 
     expect(writer._eventType).to.equal('span')
   })
 
+  it('creates an agentless writer', () => {
+    writer = new LLMObsSpanWriter(config)
+    writer.setAgentless(true)
+    expect(writer._agentless).to.equal(true)
+    expect(writer.url).to.equal('https://llmobs-intake.datadoghq.com/api/v2/llmobs')
+  })
+
+  it('creates an agent proxy writer', () => {
+    writer = new LLMObsSpanWriter(config)
+    writer.setAgentless(false)
+
+    expect(writer._agentless).to.equal(false)
+    expect(writer.url).to.equal('http://localhost:8126/evp_proxy/v2/api/v2/llmobs')
+  })
+
   it('computes the number of bytes of the appended event', () => {
-    writer = new LLMObsSpanWriter(options)
+    writer = new LLMObsSpanWriter(config)
 
     const event = { name: 'test', value: 1 }
     const eventSizeBytes = Buffer.from(JSON.stringify(event)).byteLength
@@ -44,7 +60,7 @@ describe('LLMObsSpanWriter', () => {
   })
 
   it('truncates the event if it exceeds the size limit', () => {
-    writer = new LLMObsSpanWriter(options)
+    writer = new LLMObsSpanWriter(config)
 
     const event = {
       name: 'test',
@@ -68,7 +84,7 @@ describe('LLMObsSpanWriter', () => {
   })
 
   it('flushes the queue if the next event will exceed the payload limit', () => {
-    writer = new LLMObsSpanWriter(options)
+    writer = new LLMObsSpanWriter(config)
     writer.flush = sinon.stub()
 
     writer._bufferSize = (5 << 20) - 1
@@ -79,12 +95,12 @@ describe('LLMObsSpanWriter', () => {
 
     expect(writer.flush).to.have.been.calledOnce
     expect(logger.debug).to.have.been.calledWith(
-      'Flusing queue because queing next event will exceed EvP payload limit'
+      'Flushing queue because queuing next event will exceed EvP payload limit'
     )
   })
 
   it('creates the payload correctly', () => {
-    writer = new LLMObsSpanWriter(options)
+    writer = new LLMObsSpanWriter(config)
 
     const events = [
       { name: 'test', value: 1 }
@@ -92,8 +108,8 @@ describe('LLMObsSpanWriter', () => {
 
     const payload = writer.makePayload(events)
 
-    expect(payload['_dd.stage']).to.equal('raw')
-    expect(payload.event_type).to.equal('span')
-    expect(payload.spans).to.deep.equal(events)
+    expect(payload[0]['_dd.stage']).to.equal('raw')
+    expect(payload[0].event_type).to.equal('span')
+    expect(payload[0].spans).to.deep.equal(events)
   })
 })

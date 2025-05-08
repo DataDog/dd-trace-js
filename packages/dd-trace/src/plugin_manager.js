@@ -130,9 +130,11 @@ module.exports = class PluginManager {
       site,
       url,
       headerTags,
+      codeOriginForSpans,
       dbmPropagationMode,
       dsmEnabled,
       clientIpEnabled,
+      clientIpHeader,
       memcachedCommandEnabled,
       ciVisibilityTestSessionName,
       ciVisAgentlessLogSubmissionEnabled,
@@ -142,12 +144,14 @@ module.exports = class PluginManager {
     } = this._tracerConfig
 
     const sharedConfig = {
+      codeOriginForSpans,
       dbmPropagationMode,
       dsmEnabled,
       memcachedCommandEnabled,
       site,
       url,
       headers: headerTags || [],
+      clientIpHeader,
       ciVisibilityTestSessionName,
       ciVisAgentlessLogSubmissionEnabled,
       isTestDynamicInstrumentationEnabled,

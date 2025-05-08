@@ -15,6 +15,9 @@ const id = require('../../packages/dd-trace/src/id')
 
 const hookFile = 'dd-trace/loader-hook.mjs'
 
+// This is set by the setShouldKill function
+let shouldKill
+
 async function runAndCheckOutput (filename, cwd, expectedOut) {
   const proc = spawn('node', [filename], { cwd, stdio: 'pipe' })
   const pid = proc.pid
@@ -26,9 +29,11 @@ async function runAndCheckOutput (filename, cwd, expectedOut) {
     })
     proc.stderr.pipe(process.stdout)
     proc.on('exit', () => resolve(out.toString('utf8')))
-    setTimeout(() => {
-      if (proc.exitCode === null) proc.kill()
-    }, 1000) // TODO this introduces flakiness. find a better way to end the process.
+    if (shouldKill) {
+      setTimeout(() => {
+        if (proc.exitCode === null) proc.kill()
+      }, 1000) // TODO this introduces flakiness. find a better way to end the process.
+    }
   })
   if (typeof expectedOut === 'function') {
     expectedOut(out)
@@ -339,6 +344,15 @@ function sandboxCwd () {
   return sandbox.folder
 }
 
+function setShouldKill (value) {
+  before(() => {
+    shouldKill = value
+  })
+  after(() => {
+    shouldKill = true
+  })
+}
+
 function assertObjectContains (actual, expected) {
   for (const [key, val] of Object.entries(expected)) {
     if (val !== null && typeof val === 'object') {
@@ -372,5 +386,6 @@ module.exports = {
   spawnPluginIntegrationTestProc,
   useEnv,
   useSandbox,
-  sandboxCwd
+  sandboxCwd,
+  setShouldKill
 }

@@ -1,8 +1,10 @@
 'use strict'
 
-const LLMObsAgentProxySpanWriter = require('../../../../src/llmobs/writers/spans/agentProxy')
+const LLMObsSpanWriter = require('../../../../src/llmobs/writers/spans')
 const { useEnv } = require('../../../../../../integration-tests/helpers')
 const agent = require('../../../../../dd-trace/test/plugins/agent')
+const iastFilter = require('../../../../src/appsec/iast/taint-tracking/filter')
+
 const {
   expectedLLMObsLLMSpanEvent,
   expectedLLMObsNonLLMSpanEvent,
@@ -11,6 +13,8 @@ const {
   MOCK_STRING
 } = require('../../util')
 const chai = require('chai')
+
+const semver = require('semver')
 
 chai.Assertion.addMethod('deepEqualWithMockValues', deepEqualWithMockValues)
 
@@ -27,6 +31,8 @@ const openAiBaseCompletionInfo = { base: 'https://api.openai.com', path: '/v1/co
 const openAiBaseChatInfo = { base: 'https://api.openai.com', path: '/v1/chat/completions' }
 const openAiBaseEmbeddingInfo = { base: 'https://api.openai.com', path: '/v1/embeddings' }
 
+const isDdTrace = iastFilter.isDdTrace
+
 describe('integrations', () => {
   let langchainOpenai
   let langchainAnthropic
@@ -36,6 +42,15 @@ describe('integrations', () => {
   let langchainOutputParsers
   let langchainPrompts
   let langchainRunnables
+
+  /**
+   * In OpenAI 4.91.0, the default response format for embeddings was changed from `float` to `base64`.
+   * We do not have control in @langchain/openai embeddings to change this for an individual call,
+   * so we need to check the version and stub the response accordingly. If the OpenAI version installed with
+   * @langchain/openai is less than 4.91.0, we stub the response to be a float array of zeros.
+   * If it is 4.91.0 or greater, we stub with a pre-recorded fixture of a 1536 base64 encoded embedding.
+   */
+  let langchainOpenaiOpenAiVersion
 
   let llmobs
 
@@ -48,16 +63,24 @@ describe('integrations', () => {
 
   describe('langchain', () => {
     before(async () => {
-      sinon.stub(LLMObsAgentProxySpanWriter.prototype, 'append')
+      sinon.stub(LLMObsSpanWriter.prototype, 'append')
+
+      iastFilter.isDdTrace = file => {
+        if (file.includes('dd-trace-js/versions/')) {
+          return false
+        }
+        return isDdTrace(file)
+      }
 
       // reduce errors related to too many listeners
       process.removeAllListeners('beforeExit')
 
-      LLMObsAgentProxySpanWriter.prototype.append.reset()
+      LLMObsSpanWriter.prototype.append.reset()
 
       await agent.load('langchain', {}, {
         llmobs: {
-          mlApp: 'test'
+          mlApp: 'test',
+          agentlessEnabled: false
         }
       })
 
@@ -66,10 +89,11 @@ describe('integrations', () => {
 
     afterEach(() => {
       nock.cleanAll()
-      LLMObsAgentProxySpanWriter.prototype.append.reset()
+      LLMObsSpanWriter.prototype.append.reset()
     })
 
     after(() => {
+      iastFilter.isDdTrace = isDdTrace
       require('../../../../../dd-trace').llmobs.disable() // unsubscribe from all events
       sinon.restore()
       return agent.close({ ritmReset: false, wipe: true })
@@ -91,6 +115,11 @@ describe('integrations', () => {
             .get('@langchain/core/prompts')
           langchainRunnables = require(`../../../../../../versions/@langchain/core@${version}`)
             .get('@langchain/core/runnables')
+
+          langchainOpenaiOpenAiVersion =
+            require(`../../../../../../versions/@langchain/openai@${version}`)
+              .get('openai/version')
+              .VERSION
         })
 
         describe('llm', () => {
@@ -111,7 +140,7 @@ describe('integrations', () => {
 
             const checkTraces = agent.use(traces => {
               const span = traces[0][0]
-              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
@@ -139,7 +168,7 @@ describe('integrations', () => {
 
             const checkTraces = agent.use(traces => {
               const span = traces[0][0]
-              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
@@ -197,7 +226,7 @@ describe('integrations', () => {
             const checkTraces = agent.use(traces => {
               const span = traces[0][0]
 
-              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
@@ -243,7 +272,7 @@ describe('integrations', () => {
 
             const checkTraces = agent.use(traces => {
               const span = traces[0][0]
-              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
@@ -271,7 +300,7 @@ describe('integrations', () => {
 
             const checkTraces = agent.use(traces => {
               const span = traces[0][0]
-              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
@@ -322,7 +351,7 @@ describe('integrations', () => {
 
             const checkTraces = agent.use(traces => {
               const span = traces[0][0]
-              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
@@ -375,7 +404,7 @@ describe('integrations', () => {
 
             const checkTraces = agent.use(traces => {
               const span = traces[0][0]
-              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
@@ -428,23 +457,31 @@ describe('integrations', () => {
         })
 
         describe('embedding', () => {
-          it.skip('submits an embedding span for an `embedQuery` call', async () => {
-            stubCall({
-              ...openAiBaseEmbeddingInfo,
-              response: {
-                object: 'list',
-                data: [{
-                  object: 'embedding',
-                  index: 0,
-                  embedding: [-0.0034387498, -0.026400521]
-                }]
-              }
-            })
+          it('submits an embedding span for an `embedQuery` call', async () => {
+            if (semver.satisfies(langchainOpenaiOpenAiVersion, '>=4.91.0')) {
+              stubCall({
+                ...openAiBaseEmbeddingInfo,
+                response: require('../../../../../datadog-plugin-langchain/test/fixtures/single-embedding.json')
+              })
+            } else {
+              stubCall({
+                ...openAiBaseEmbeddingInfo,
+                response: {
+                  object: 'list',
+                  data: [{
+                    object: 'embedding',
+                    index: 0,
+                    embedding: Array(1536).fill(0)
+                  }]
+                }
+              })
+            }
+
             const embeddings = new langchainOpenai.OpenAIEmbeddings()
 
             const checkTraces = agent.use(traces => {
               const span = traces[0][0]
-              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
@@ -453,7 +490,7 @@ describe('integrations', () => {
                 modelProvider: 'openai',
                 name: 'langchain.embeddings.openai.OpenAIEmbeddings',
                 inputDocuments: [{ text: 'Hello!' }],
-                outputValue: '[1 embedding(s) returned with size 2]',
+                outputValue: '[1 embedding(s) returned with size 1536]',
                 metadata: MOCK_ANY,
                 tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
@@ -471,7 +508,7 @@ describe('integrations', () => {
 
             const checkTraces = agent.use(traces => {
               const span = traces[0][0]
-              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
@@ -501,28 +538,35 @@ describe('integrations', () => {
             await checkTraces
           })
 
-          it.skip('submits an embedding span for an `embedDocuments` call', async () => {
-            stubCall({
-              ...openAiBaseEmbeddingInfo,
-              response: {
-                object: 'list',
-                data: [{
-                  object: 'embedding',
-                  index: 0,
-                  embedding: [-0.0034387498, -0.026400521]
-                }, {
-                  object: 'embedding',
-                  index: 1,
-                  embedding: [-0.026400521, -0.0034387498]
-                }]
-              }
-            })
+          it('submits an embedding span for an `embedDocuments` call', async () => {
+            if (semver.satisfies(langchainOpenaiOpenAiVersion, '>=4.91.0')) {
+              stubCall({
+                ...openAiBaseEmbeddingInfo,
+                response: require('../../../../../datadog-plugin-langchain/test/fixtures/double-embedding.json')
+              })
+            } else {
+              stubCall({
+                ...openAiBaseEmbeddingInfo,
+                response: {
+                  object: 'list',
+                  data: [{
+                    object: 'embedding',
+                    index: 0,
+                    embedding: Array(1536).fill(0)
+                  }, {
+                    object: 'embedding',
+                    index: 1,
+                    embedding: Array(1536).fill(0)
+                  }]
+                }
+              })
+            }
 
             const embeddings = new langchainOpenai.OpenAIEmbeddings()
 
             const checkTraces = agent.use(traces => {
               const span = traces[0][0]
-              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
@@ -531,7 +575,7 @@ describe('integrations', () => {
                 modelProvider: 'openai',
                 name: 'langchain.embeddings.openai.OpenAIEmbeddings',
                 inputDocuments: [{ text: 'Hello!' }, { text: 'World!' }],
-                outputValue: '[2 embedding(s) returned with size 2]',
+                outputValue: '[2 embedding(s) returned with size 1536]',
                 metadata: MOCK_ANY,
                 tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
@@ -573,8 +617,8 @@ describe('integrations', () => {
               const workflowSpan = spans[0]
               const llmSpan = spans[1]
 
-              const workflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
-              const llmSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(1).args[0]
+              const workflowSpanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
+              const llmSpanEvent = LLMObsSpanWriter.prototype.append.getCall(1).args[0]
 
               const expectedWorkflow = expectedLLMObsNonLLMSpanEvent({
                 span: workflowSpan,
@@ -622,7 +666,7 @@ describe('integrations', () => {
 
               const workflowSpan = spans[0]
 
-              const workflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const workflowSpanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
               const expectedWorkflow = expectedLLMObsNonLLMSpanEvent({
                 span: workflowSpan,
@@ -709,11 +753,11 @@ describe('integrations', () => {
               const secondSubWorkflow = spans[3]
               const secondLLM = spans[4]
 
-              const topLevelWorkflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
-              const firstSubWorkflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(1).args[0]
-              const firstLLMSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(2).args[0]
-              const secondSubWorkflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(3).args[0]
-              const secondLLMSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(4).args[0]
+              const topLevelWorkflowSpanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
+              const firstSubWorkflowSpanEvent = LLMObsSpanWriter.prototype.append.getCall(1).args[0]
+              const firstLLMSpanEvent = LLMObsSpanWriter.prototype.append.getCall(2).args[0]
+              const secondSubWorkflowSpanEvent = LLMObsSpanWriter.prototype.append.getCall(3).args[0]
+              const secondLLMSpanEvent = LLMObsSpanWriter.prototype.append.getCall(4).args[0]
 
               const expectedTopLevelWorkflow = expectedLLMObsNonLLMSpanEvent({
                 span: topLevelWorkflow,
@@ -846,9 +890,9 @@ describe('integrations', () => {
               const firstLLMSpan = spans[1]
               const secondLLMSpan = spans[2]
 
-              const workflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
-              const firstLLMSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(1).args[0]
-              const secondLLMSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(2).args[0]
+              const workflowSpanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
+              const firstLLMSpanEvent = LLMObsSpanWriter.prototype.append.getCall(1).args[0]
+              const secondLLMSpanEvent = LLMObsSpanWriter.prototype.append.getCall(2).args[0]
 
               const expectedWorkflow = expectedLLMObsNonLLMSpanEvent({
                 span: workflowSpan,
@@ -937,8 +981,8 @@ describe('integrations', () => {
               const workflowSpan = spans[0]
               const llmSpan = spans[1]
 
-              const workflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
-              const llmSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(1).args[0]
+              const workflowSpanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
+              const llmSpanEvent = LLMObsSpanWriter.prototype.append.getCall(1).args[0]
 
               const expectedWorkflow = expectedLLMObsNonLLMSpanEvent({
                 span: workflowSpan,
@@ -1054,9 +1098,9 @@ describe('integrations', () => {
               const taskSpan = spans[1]
               const llmSpan = spans[2]
 
-              const workflowSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
-              const taskSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(1).args[0]
-              const llmSpanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(2).args[0]
+              const workflowSpanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
+              const taskSpanEvent = LLMObsSpanWriter.prototype.append.getCall(1).args[0]
+              const llmSpanEvent = LLMObsSpanWriter.prototype.append.getCall(2).args[0]
 
               const expectedWorkflow = expectedLLMObsNonLLMSpanEvent({
                 span: workflowSpan,

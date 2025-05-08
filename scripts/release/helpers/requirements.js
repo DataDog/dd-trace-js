@@ -4,8 +4,17 @@
 
 const { join } = require('path')
 const { existsSync, readFileSync } = require('fs')
-const getApplicationConfigPath = require('application-config-path')
+const os = require('os')
+const path = require('path')
 const { capture, fatal, run } = require('./terminal')
+
+const { CI, HOME, LOCALAPPDATA, XDG_CONFIG_HOME, USERPROFILE } = process.env
+
+function checkAll () {
+  checkGit()
+  checkBranchDiff()
+  checkGitHub()
+}
 
 // Check that the `git` CLI is installed.
 function checkGit () {
@@ -78,6 +87,8 @@ function checkGitHub () {
 }
 
 function checkGitHubScopes (token, requiredScopes, source) {
+  if (CI) return
+
   const url = 'https://api.github.com'
   const headers = [
     'Accept: application/vnd.github.v3+json',
@@ -102,4 +113,19 @@ function checkGitHubScopes (token, requiredScopes, source) {
   }
 }
 
-module.exports = { checkBranchDiff, checkGitHub, checkGit }
+function getApplicationConfigPath (name) {
+  switch (os.platform()) {
+    case 'darwin':
+      return path.join(HOME, 'Library', 'Application Support', name)
+    case 'freebsd':
+    case 'openbsd':
+    case 'linux':
+      return path.join(XDG_CONFIG_HOME || path.join(HOME, '.config'), name)
+    case 'win32':
+      return path.join(LOCALAPPDATA || path.join(USERPROFILE, 'Local Settings', 'Application Data'), name)
+    default:
+      throw new Error('Platform not supported')
+  }
+}
+
+module.exports = { checkAll, checkBranchDiff, checkGitHub, checkGit }

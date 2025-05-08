@@ -43,9 +43,11 @@ const {
   DD_CAPABILITIES_AUTO_TEST_RETRIES,
   DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
   DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
-  DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX
+  DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
+  TEST_RETRY_REASON_TYPES
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
+const { once } = require('node:events')
 
 const NUM_RETRIES_EFD = 3
 
@@ -243,6 +245,9 @@ versions.forEach((version) => {
           assert.equal(eventuallyPassingTest.filter(test => test.content.meta[TEST_STATUS] === 'fail').length, 3)
           assert.equal(eventuallyPassingTest.filter(test => test.content.meta[TEST_STATUS] === 'pass').length, 1)
           assert.equal(eventuallyPassingTest.filter(test => test.content.meta[TEST_IS_RETRY] === 'true').length, 3)
+          assert.equal(eventuallyPassingTest.filter(test =>
+            test.content.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+          ).length, 3)
 
           const neverPassingTest = testEvents.filter(
             test => test.content.resource ===
@@ -252,6 +257,9 @@ versions.forEach((version) => {
           assert.equal(neverPassingTest.filter(test => test.content.meta[TEST_STATUS] === 'fail').length, 6)
           assert.equal(neverPassingTest.filter(test => test.content.meta[TEST_STATUS] === 'pass').length, 0)
           assert.equal(neverPassingTest.filter(test => test.content.meta[TEST_IS_RETRY] === 'true').length, 5)
+          assert.equal(neverPassingTest.filter(test =>
+            test.content.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+          ).length, 5)
         }).then(() => done()).catch(done)
 
         childProcess = exec(
@@ -289,7 +297,9 @@ versions.forEach((version) => {
             'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
             'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries does not retry if unnecessary'
           ])
-          assert.equal(testEvents.filter(test => test.content.meta[TEST_IS_RETRY] === 'true').length, 0)
+          assert.equal(testEvents.filter(
+            test => test.content.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+          ).length, 0)
         }).then(() => done()).catch(done)
 
         childProcess = exec(
@@ -330,7 +340,9 @@ versions.forEach((version) => {
             'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
             'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries does not retry if unnecessary'
           ])
-          assert.equal(testEvents.filter(test => test.content.meta[TEST_IS_RETRY] === 'true').length, 2)
+          assert.equal(testEvents.filter(
+            test => test.content.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+          ).length, 2)
         }).then(() => done()).catch(done)
 
         childProcess = exec(
@@ -385,7 +397,7 @@ versions.forEach((version) => {
       const coverageProviders = ['v8', 'istanbul']
 
       coverageProviders.forEach((coverageProvider) => {
-        it(`reports code coverage for ${coverageProvider} provider`, (done) => {
+        it(`reports code coverage for ${coverageProvider} provider`, async () => {
           let codeCoverageExtracted
           const eventsPromise = receiver
             .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -404,7 +416,7 @@ versions.forEach((version) => {
                 ...getCiVisAgentlessConfig(receiver.port),
                 NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
                 COVERAGE_PROVIDER: coverageProvider,
-                TEST_DIR: 'ci-visibility/vitest-tests/coverage-test*'
+                TEST_DIR: 'ci-visibility/vitest-tests/coverage-test.mjs'
               },
               stdio: 'inherit'
             }
@@ -417,20 +429,72 @@ versions.forEach((version) => {
             testOutput += chunk.toString()
           })
 
-          childProcess.on('exit', () => {
-            eventsPromise.then(() => {
-              const linePctMatch = testOutput.match(linePctMatchRegex)
-              const linesPctFromNyc = linePctMatch ? Number(linePctMatch[1]) : null
+          await Promise.all([
+            once(childProcess, 'exit'),
+            eventsPromise
+          ])
 
-              assert.equal(
-                linesPctFromNyc,
-                codeCoverageExtracted,
-                'coverage reported by vitest does not match extracted coverage'
-              )
-              done()
-            }).catch(done)
-          })
+          const linePctMatch = testOutput.match(linePctMatchRegex)
+          const linesPctFromNyc = Number(linePctMatch[1])
+
+          assert.strictEqual(
+            linesPctFromNyc,
+            codeCoverageExtracted,
+            'coverage reported by vitest does not match extracted coverage'
+          )
         })
+      })
+
+      it('reports zero code coverage for instanbul provider', async () => {
+        let codeCoverageExtracted
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+
+            const testSession = events.find(event => event.type === 'test_session_end').content
+
+            codeCoverageExtracted = testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT]
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run --coverage',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              COVERAGE_PROVIDER: 'istanbul',
+              TEST_DIR: 'ci-visibility/vitest-tests/coverage-test-zero.mjs'
+            },
+            stdio: 'inherit'
+          }
+        )
+
+        childProcess.stdout.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise
+        ])
+
+        const linePctMatch = testOutput.match(linePctMatchRegex)
+        const linesPctFromNyc = Number(linePctMatch[1])
+
+        assert.strictEqual(
+          linesPctFromNyc,
+          codeCoverageExtracted,
+          'coverage reported by vitest does not match extracted coverage'
+        )
+        assert.strictEqual(
+          linesPctFromNyc,
+          0,
+          'zero coverage should be reported'
+        )
       })
     }
     // maybe only latest version?
@@ -490,7 +554,7 @@ versions.forEach((version) => {
             assert.equal(retriedTests.length, 9) // 3 retries of the 3 new tests
 
             retriedTests.forEach(test => {
-              assert.equal(test.meta[TEST_RETRY_REASON], 'efd')
+              assert.equal(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
             })
 
             // exit code should be 0 and test session should be reported as passed,
@@ -1415,15 +1479,16 @@ versions.forEach((version) => {
                       continue
                     }
                     assert.propertyVal(test.meta, TEST_IS_RETRY, 'true')
-                    assert.propertyVal(test.meta, TEST_RETRY_REASON, 'attempt_to_fix')
+                    assert.propertyVal(test.meta, TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atf)
                     if (isLastAttempt) {
                       if (shouldAlwaysPass) {
                         assert.propertyVal(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
                       } else if (shouldFailSometimes) {
-                        assert.notProperty(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED)
+                        assert.propertyVal(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
                         assert.notProperty(test.meta, TEST_HAS_FAILED_ALL_RETRIES)
                       } else {
                         assert.propertyVal(test.meta, TEST_HAS_FAILED_ALL_RETRIES, 'true')
+                        assert.propertyVal(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
                       }
                     }
                   } else {
@@ -1796,7 +1861,7 @@ versions.forEach((version) => {
               assert.equal(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
               assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
               assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
-              assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '2')
+              assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '3')
               // capabilities logic does not overwrite test session name
               assert.equal(metadata.test[TEST_SESSION_NAME], 'my-test-session-name')
             })

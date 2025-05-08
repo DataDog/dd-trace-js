@@ -267,6 +267,7 @@ function wrapRun (pl, isLatestVersion) {
 
             const failedAttemptAsyncResource = numAttemptToAsyncResource.get(numAttempt)
             const isFirstAttempt = numAttempt++ === 0
+            const isAtrRetry = !isFirstAttempt && isFlakyTestRetriesEnabled
 
             if (promises.hitBreakpointPromise) {
               await promises.hitBreakpointPromise
@@ -274,7 +275,7 @@ function wrapRun (pl, isLatestVersion) {
 
             failedAttemptAsyncResource.runInAsyncScope(() => {
               // the current span will be finished and a new one will be created
-              testRetryCh.publish({ isFirstAttempt, error })
+              testRetryCh.publish({ isFirstAttempt, error, isAtrRetry })
             })
 
             const newAsyncResource = new AsyncResource('bound-anonymous-fn')
@@ -308,6 +309,7 @@ function wrapRun (pl, isLatestVersion) {
         let isAttemptToFixRetry = false
         let hasFailedAllRetries = false
         let hasPassedAllRetries = false
+        let hasFailedAttemptToFix = false
         let isDisabled = false
         let isQuarantined = false
 
@@ -329,6 +331,7 @@ function wrapRun (pl, isLatestVersion) {
               }, { pass: 0, fail: 0 })
               hasFailedAllRetries = fail === testManagementAttemptToFixRetries + 1
               hasPassedAllRetries = pass === testManagementAttemptToFixRetries + 1
+              hasFailedAttemptToFix = fail > 0
             }
           }
         }
@@ -359,6 +362,7 @@ function wrapRun (pl, isLatestVersion) {
             isAttemptToFixRetry,
             hasFailedAllRetries,
             hasPassedAllRetries,
+            hasFailedAttemptToFix,
             isDisabled,
             isQuarantined
           })

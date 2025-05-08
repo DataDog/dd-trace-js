@@ -25,7 +25,8 @@ const {
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_HAS_FAILED_ALL_RETRIES,
-  getLibraryCapabilitiesTags
+  getLibraryCapabilitiesTags,
+  TEST_RETRY_REASON_TYPES
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -104,7 +105,8 @@ class VitestPlugin extends CiPlugin {
       isDisabled,
       mightHitProbe,
       isRetryReasonEfd,
-      isRetryReasonAttemptToFix
+      isRetryReasonAttemptToFix,
+      isRetryReasonAtr
     }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
       const store = storage('legacy').getStore()
@@ -114,18 +116,21 @@ class VitestPlugin extends CiPlugin {
       }
       if (isRetry) {
         extraTags[TEST_IS_RETRY] = 'true'
+        if (isRetryReasonAttemptToFix) {
+          extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.atf
+        } else if (isRetryReasonEfd) {
+          extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.efd
+        } else if (isRetryReasonAtr) {
+          extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.atr
+        } else {
+          extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.ext
+        }
       }
       if (isNew) {
         extraTags[TEST_IS_NEW] = 'true'
       }
-      if (isRetryReasonEfd) {
-        extraTags[TEST_RETRY_REASON] = 'efd'
-      }
       if (isAttemptToFix) {
         extraTags[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] = 'true'
-      }
-      if (isRetryReasonAttemptToFix) {
-        extraTags[TEST_RETRY_REASON] = 'attempt_to_fix'
       }
       if (isQuarantined) {
         extraTags[TEST_MANAGEMENT_IS_QUARANTINED] = 'true'
@@ -150,7 +155,7 @@ class VitestPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:vitest:test:finish-time', ({ status, task, attemptToFixPassed }) => {
+    this.addSub('ci:vitest:test:finish-time', ({ status, task, attemptToFixPassed, attemptToFixFailed }) => {
       const store = storage('legacy').getStore()
       const span = store?.span
 
@@ -161,6 +166,8 @@ class VitestPlugin extends CiPlugin {
 
         if (attemptToFixPassed) {
           span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
+        } else if (attemptToFixFailed) {
+          span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
         }
 
         this.taskToFinishTime.set(task, span._getTime())
@@ -181,7 +188,14 @@ class VitestPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:vitest:test:error', ({ duration, error, shouldSetProbe, promises, hasFailedAllRetries }) => {
+    this.addSub('ci:vitest:test:error', ({
+      duration,
+      error,
+      shouldSetProbe,
+      promises,
+      hasFailedAllRetries,
+      attemptToFixFailed
+    }) => {
       const store = storage('legacy').getStore()
       const span = store?.span
 
@@ -205,6 +219,9 @@ class VitestPlugin extends CiPlugin {
         }
         if (hasFailedAllRetries) {
           span.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
+        }
+        if (attemptToFixFailed) {
+          span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
         }
         if (duration) {
           span.finish(span._startTime + duration - MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION) // milliseconds
@@ -332,7 +349,7 @@ class VitestPlugin extends CiPlugin {
         this.testModuleSpan.setTag('error', error)
         this.testSessionSpan.setTag('error', error)
       }
-      if (testCodeCoverageLinesTotal) {
+      if (testCodeCoverageLinesTotal !== undefined) {
         this.testModuleSpan.setTag(TEST_CODE_COVERAGE_LINES_PCT, testCodeCoverageLinesTotal)
         this.testSessionSpan.setTag(TEST_CODE_COVERAGE_LINES_PCT, testCodeCoverageLinesTotal)
       }
