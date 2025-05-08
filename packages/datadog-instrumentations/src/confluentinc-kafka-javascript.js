@@ -92,10 +92,10 @@ function instrumentBaseModule (module) {
     return shimmer.wrap(module, className, function wrapConsumer (Original) {
       return function wrappedConsumer () {
         const consumer = new Original(...arguments)
-        const groupId = this.groupId || (arguments[0] && arguments[0]['group.id'])
+        const groupId = this.groupId || (arguments[0]?.['group.id'])
 
         // Wrap the consume method
-        if (consumer && typeof consumer?.consume === 'function') {
+        if (typeof consumer?.consume === 'function') {
           shimmer.wrap(consumer, 'consume', function wrapConsume (consume) {
             return function wrappedConsume (numMessages, callback) {
               if (!channels.consumerStart.hasSubscribers) {
@@ -248,7 +248,7 @@ function instrumentKafkaJS (kafkaJS) {
               const groupId = getGroupId(config)
 
               // Wrap the run method for handling message consumption
-              if (consumer && typeof consumer.run === 'function') {
+              if (typeof consumer?.run === 'function') {
                 shimmer.wrap(consumer, 'run', function wrapRun (run) {
                   return function wrappedRun (options) {
                     if (!channels.consumerStart.hasSubscribers) {
@@ -303,7 +303,7 @@ function instrumentKafkaJS (kafkaJS) {
               }
 
               // Wrap the commit method for handling offset commits
-              if (consumer && typeof consumer.commitOffsets === 'function') {
+              if (typeof consumer?.commitOffsets === 'function') {
                 shimmer.wrap(consumer, 'commitOffsets', wrapCommit)
               }
 
