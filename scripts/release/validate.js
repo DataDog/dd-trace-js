@@ -37,7 +37,8 @@ try {
 
   start('Pull release branch')
 
-  const proposalBranch = params[0] || capture('git rev-parse --abbrev-ref HEAD')
+  const currentBranch = capture('git rev-parse --abbrev-ref HEAD')
+  const proposalBranch = params[0] || currentBranch
   const tempBranch = randomUUID()
   const newVersion = proposalBranch.match(/^v([0-9]+\.[0-9]+\.[0-9]+).+/)[1]
   const releaseLine = newVersion.match(/^([0-9]+).+/)[1]
@@ -45,7 +46,7 @@ try {
   // Restore current branch on success.
   process.once('exit', code => {
     if (code === 0) {
-      run(`git checkout ${proposalBranch}`)
+      run(`git checkout ${currentBranch}`)
     }
 
     run(`git branch -D ${tempBranch}`)
@@ -57,12 +58,7 @@ try {
 
   pass()
 
-  const diffCmd = [
-    'branch-diff',
-    '--user DataDog',
-    '--repo dd-trace-js',
-    `--exclude-label=semver-major,dont-land-on-v${releaseLine}.x`
-  ].join(' ')
+  const diffCmd = 'branch-diff --user DataDog --repo dd-trace-js --exclude-label=semver-major'
 
   start('Validate differences between proposal and main branch.')
 
