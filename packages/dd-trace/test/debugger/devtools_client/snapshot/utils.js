@@ -2,7 +2,7 @@
 
 const { join, basename } = require('path')
 
-const inspector = require('../../../../src/debugger/devtools_client/inspector_promises_polyfill')
+const inspector = require('node:inspector/promises')
 const session = new inspector.Session()
 session.connect()
 
