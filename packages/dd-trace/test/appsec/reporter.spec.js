@@ -287,7 +287,7 @@ describe('reporter', () => {
     it('should add tags to request span when socket is not there', () => {
       delete req.socket
 
-      const result = Reporter.reportAttack('[{"rule":{},"rule_matches":[{}]}]')
+      const result = Reporter.reportAttack([{"rule":{},"rule_matches":[{}]}])
 
       expect(result).to.not.be.false
       expect(web.root).to.have.been.calledOnceWith(req)
@@ -302,7 +302,7 @@ describe('reporter', () => {
     })
 
     it('should add tags to request span', () => {
-      const result = Reporter.reportAttack('[{"rule":{},"rule_matches":[{}]}]')
+      const result = Reporter.reportAttack([{"rule":{},"rule_matches":[{}]}])
       expect(result).to.not.be.false
       expect(web.root).to.have.been.calledOnceWith(req)
 
@@ -319,27 +319,27 @@ describe('reporter', () => {
     it('should not add manual.keep when rate limit is reached', (done) => {
       const addTags = span.addTags
 
-      expect(Reporter.reportAttack('')).to.not.be.false
-      expect(Reporter.reportAttack('')).to.not.be.false
-      expect(Reporter.reportAttack('')).to.not.be.false
+      expect(Reporter.reportAttack([])).to.not.be.false
+      expect(Reporter.reportAttack([])).to.not.be.false
+      expect(Reporter.reportAttack([])).to.not.be.false
 
       expect(prioritySampler.setPriority).to.have.callCount(3)
       expect(telemetry.updateRateLimitedMetric).to.not.have.been.called
 
       Reporter.setRateLimit(1)
 
-      expect(Reporter.reportAttack('')).to.not.be.false
+      expect(Reporter.reportAttack([])).to.not.be.false
       expect(addTags.getCall(3).firstArg).to.have.property('appsec.event').that.equals('true')
       expect(prioritySampler.setPriority).to.have.callCount(4)
       expect(telemetry.updateRateLimitedMetric).to.not.have.been.called
 
-      expect(Reporter.reportAttack('')).to.not.be.false
+      expect(Reporter.reportAttack([])).to.not.be.false
       expect(addTags.getCall(4).firstArg).to.have.property('appsec.event').that.equals('true')
       expect(prioritySampler.setPriority).to.have.callCount(4)
       expect(telemetry.updateRateLimitedMetric).to.be.calledOnceWithExactly(req)
 
       setTimeout(() => {
-        expect(Reporter.reportAttack('')).to.not.be.false
+        expect(Reporter.reportAttack([])).to.not.be.false
         expect(prioritySampler.setPriority).to.have.callCount(5)
         expect(telemetry.updateRateLimitedMetric).to.be.calledOnceWithExactly(req)
         done()
@@ -349,7 +349,7 @@ describe('reporter', () => {
     it('should not overwrite origin tag', () => {
       span.context()._tags = { '_dd.origin': 'tracer' }
 
-      const result = Reporter.reportAttack('[]')
+      const result = Reporter.reportAttack([])
       expect(result).to.not.be.false
       expect(web.root).to.have.been.calledOnceWith(req)
 
@@ -365,7 +365,7 @@ describe('reporter', () => {
     it('should merge attacks json', () => {
       span.context()._tags = { '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}' }
 
-      const result = Reporter.reportAttack('[{"rule":{}},{"rule":{},"rule_matches":[{}]}]')
+      const result = Reporter.reportAttack([{"rule":{}},{"rule":{},"rule_matches":[{}]}])
       expect(result).to.not.be.false
       expect(web.root).to.have.been.calledOnceWith(req)
 
@@ -382,7 +382,7 @@ describe('reporter', () => {
     it('should call standalone sample', () => {
       span.context()._tags = { '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}' }
 
-      const result = Reporter.reportAttack('[{"rule":{}},{"rule":{},"rule_matches":[{}]}]')
+      const result = Reporter.reportAttack([{"rule":{}},{"rule":{},"rule_matches":[{}]}])
       expect(result).to.not.be.false
       expect(web.root).to.have.been.calledOnceWith(req)
 

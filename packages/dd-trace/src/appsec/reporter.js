@@ -17,6 +17,7 @@ const {
 const zlib = require('zlib')
 const { keepTrace } = require('../priority_sampler')
 const { ASM } = require('../standalone/product')
+const { HTTP_INCOMING_BODY } = require('./addresses')
 
 const REQUEST_HEADER_TAG_PREFIX = 'http.request.headers.'
 const RESPONSE_HEADER_TAG_PREFIX = 'http.response.headers.'
@@ -253,10 +254,11 @@ function reportAttack (attackData) {
   const currentJson = currentTags['_dd.appsec.json']
 
   // merge JSON arrays without parsing them
+  const attackDataStr = JSON.stringify(attackData)
   if (currentJson) {
-    newTags['_dd.appsec.json'] = currentJson.slice(0, -2) + ',' + attackData.slice(1) + '}'
+    newTags['_dd.appsec.json'] = currentJson.slice(0, -2) + ',' + attackDataStr.slice(1) + '}'
   } else {
-    newTags['_dd.appsec.json'] = '{"triggers":' + attackData + '}'
+    newTags['_dd.appsec.json'] = '{"triggers":' + attackDataStr + '}'
   }
 
   if (req.socket) {
@@ -264,6 +266,27 @@ function reportAttack (attackData) {
   }
 
   rootSpan.addTags(newTags)
+
+  if (isRaspAttack(attackData)) {
+    reportRequestBody(rootSpan, req.body)
+  }
+}
+
+function reportRequestBody (rootSpan, requestBody) {
+  if (!requestBody) return
+
+  if (!rootSpan.meta_struct) {
+    rootSpan.meta_struct = {}
+  }
+
+  if (!rootSpan.meta_struct['http.request.body']) {
+    // TODO truncate requestBody
+    rootSpan.meta_struct['http.request.body'] = requestBody
+  }
+}
+
+function isRaspAttack(events) {
+  return events.some(e => e.rule?.tags?.module === 'rasp')
 }
 
 function isFingerprintDerivative (derivative) {
