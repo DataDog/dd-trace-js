@@ -10,6 +10,6 @@ runs:
   steps:
     - uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e # v4.3.0
       with:
-        node-version: ${{ inputs.version == 'eol' && '16' || inputs.version == 'oldest' && '18' || inputs.version == 'maintenance' && '20' || inputs.version == 'active' && '22' || inputs.version == 'latest' && '23' || inputs.version }}
+        node-version: ${{ inputs.version == 'eol' && '16' || inputs.version == 'oldest' && '18' || inputs.version == 'maintenance' && '20' || inputs.version == 'active' && '22' || inputs.version == 'latest' && '23' || inputs.version == 'nightly' && '25-nightly' || inputs.version }}
         check-latest: true
         registry-url: ${{ inputs.registry-url || 'https://registry.npmjs.org' }}

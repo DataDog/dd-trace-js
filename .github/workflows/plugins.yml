@@ -124,7 +124,7 @@ jobs:
   aws-sdk:
     strategy:
       matrix:
-        node-version: [oldest, 'latest']
+        node-version: [oldest, latest, nightly]
     runs-on: ubuntu-latest
     services:
       localstack:
@@ -242,6 +242,8 @@ jobs:
       - uses: ./.github/actions/node/active-lts
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
+      - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/nightly
       - run: yarn test:plugins:ci
       - uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d # v5.4.2
 
