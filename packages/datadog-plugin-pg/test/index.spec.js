@@ -216,6 +216,73 @@ describe('Plugin', () => {
               .catch(done),
             rawExpectedSchema.outbound
           )
+
+          if (implementation !== 'pg.native') {
+            // pg-cursor is not supported on pg.native, pg-query-stream uses pg-cursor so it is also unsupported
+            describe('streaming capabilities', () => {
+              withVersions('pg', 'pg-cursor', pgCursorVersion => {
+                let Cursor
+
+                beforeEach(() => {
+                  Cursor = require(`../../../versions/pg-cursor@${pgCursorVersion}`).get()
+                })
+
+                it('should instrument cursor-based streaming with pg-cursor', async () => {
+                  const tracingPromise = agent.use(traces => {
+                    expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+                    expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
+                    expect(traces[0][0]).to.have.property('resource', 'SELECT * FROM generate_series(0, 1) num')
+                    expect(traces[0][0]).to.have.property('type', 'sql')
+                    expect(traces[0][0].meta).to.have.property('span.kind', 'client')
+                    expect(traces[0][0].meta).to.have.property('db.name', 'postgres')
+                    expect(traces[0][0].meta).to.have.property('db.type', 'postgres')
+                    expect(traces[0][0].meta).to.have.property('component', 'pg')
+                    expect(traces[0][0].metrics).to.have.property('db.stream', 1)
+                    expect(traces[0][0].metrics).to.have.property('network.destination.port', 5432)
+                  })
+
+                  const cursor = client.query(new Cursor('SELECT * FROM generate_series(0, 1) num'))
+
+                  cursor.read(1, () => {
+                    cursor.close()
+                  })
+                  await tracingPromise
+                })
+              })
+
+              withVersions('pg', 'pg-query-stream', pgQueryStreamVersion => {
+                let QueryStream
+
+                beforeEach(() => {
+                  QueryStream = require(`../../../versions/pg-query-stream@${pgQueryStreamVersion}`).get()
+                })
+
+                it('should instrument stream-based queries with pg-query-stream', async () => {
+                  const agentPromise = agent.use(traces => {
+                    expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+                    expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
+                    expect(traces[0][0]).to.have.property('resource', 'SELECT * FROM generate_series(0, 1) num')
+                    expect(traces[0][0]).to.have.property('type', 'sql')
+                    expect(traces[0][0].meta).to.have.property('span.kind', 'client')
+                    expect(traces[0][0].meta).to.have.property('db.name', 'postgres')
+                    expect(traces[0][0].meta).to.have.property('db.type', 'postgres')
+                    expect(traces[0][0].meta).to.have.property('component', 'pg')
+                    expect(traces[0][0].metrics).to.have.property('db.stream', 1)
+                    expect(traces[0][0].metrics).to.have.property('network.destination.port', 5432)
+                  })
+
+                  const query = new QueryStream('SELECT * FROM generate_series(0, 1) num', [])
+                  const stream = client.query(query)
+
+                  for await (const row of stream) {
+                    expect(row).to.have.property('num')
+                  }
+
+                  await agentPromise
+                })
+              })
+            })
+          }
         })
       })
 
