@@ -696,7 +696,12 @@ declare namespace tracer {
         /** Whether to enable RASP.
          * @default false
          */
-        enabled?: boolean
+        enabled?: boolean,
+
+        /** Whether to enable request body collection on RASP event
+         * @default false
+         */
+        bodyCollection?: boolean
       },
       /**
        * Configuration for stack trace reporting
