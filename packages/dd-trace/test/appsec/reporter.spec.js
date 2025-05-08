@@ -81,6 +81,29 @@ describe('reporter', () => {
         'prefix.x-forwarded-for': '10'
       })
     })
+
+    it('should filter out passlist headers and format the rest within a limit', () => {
+      const result = Reporter.filterExtendedHeaders({
+        'content-digest': 'foo',
+        'content-length': 42,
+        'content-security-policy': 'script-src self',
+        host: 'localhost',
+        'user-agent': 42,
+        secret: 'password',
+        'x-forwarded-for': '10'
+      }, [
+        'host',
+        'user-agent',
+        'x-forwarded-for',
+        'x-client-ip'
+      ], 'prefix.', 3)
+
+      expect(result).to.deep.equal({
+        'prefix.content-digest': 'foo',
+        'prefix.content-length': '42',
+        'prefix.content-security-policy': 'script-src self'
+      })
+    })
   })
 
   describe('formatHeaderName', () => {
@@ -581,13 +604,12 @@ describe('reporter', () => {
       Reporter.finishRequest(req, res)
       expect(web.root).to.have.been.calledOnceWith(req)
 
-      expect(span.addTags).to.have.been.calledOnce
-      const expectedTags = {
+      expect(span.addTags).to.have.been.calledOnceWithExactly({
         'http.request.headers.x-cloud-trace-context': 'd',
         'http.response.headers.content-type': 'application/json',
         'http.response.headers.content-length': '42',
         'http.endpoint': '/path/:param'
-      }
+      })
     })
 
     it('should add http response data inside request span without endpoint', () => {
@@ -628,12 +650,10 @@ describe('reporter', () => {
 
       Reporter.finishRequest(req, res)
 
-      const expectedTags = Object.assign(
-        expectedRequestTagsToTrackOnEvent,
-        {
-          'http.request.headers.user-agent': 'arachni'
-        }
-      )
+      const expectedTags = {
+        'http.request.headers.user-agent': 'arachni',
+        ...expectedRequestTagsToTrackOnEvent
+      }
 
       expect(span.addTags).to.have.been.calledWithExactly(expectedTags)
     })
@@ -656,12 +676,10 @@ describe('reporter', () => {
 
       Reporter.finishRequest(req, res)
 
-      const expectedTags = Object.assign(
-        expectedRequestTagsToTrackOnEvent,
-        {
-          'http.request.headers.user-agent': 'arachni'
-        }
-      )
+      const expectedTags = {
+        'http.request.headers.user-agent': 'arachni',
+        ...expectedRequestTagsToTrackOnEvent
+      }
 
       expect(span.addTags).to.have.been.calledWithExactly(expectedTags)
     })
@@ -684,12 +702,10 @@ describe('reporter', () => {
 
       Reporter.finishRequest(req, res)
 
-      const expectedTags = Object.assign(
-        expectedRequestTagsToTrackOnEvent,
-        {
-          'http.request.headers.user-agent': 'arachni'
-        }
-      )
+      const expectedTags = {
+        'http.request.headers.user-agent': 'arachni',
+        ...expectedRequestTagsToTrackOnEvent
+      }
 
       expect(span.addTags).to.have.been.calledWithExactly(expectedTags)
     })
@@ -712,12 +728,10 @@ describe('reporter', () => {
 
       Reporter.finishRequest(req, res)
 
-      const expectedTags = Object.assign(
-        expectedRequestTagsToTrackOnEvent,
-        {
-          'http.request.headers.user-agent': 'arachni'
-        }
-      )
+      const expectedTags = {
+        'http.request.headers.user-agent': 'arachni',
+        ...expectedRequestTagsToTrackOnEvent
+      }
 
       expect(span.addTags).to.have.been.calledWithExactly(expectedTags)
     })
@@ -795,6 +809,137 @@ describe('reporter', () => {
       Reporter.finishRequest(req, wafContext, {})
 
       expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, ASM)
+    })
+
+    describe('extended collection', () => {
+      const extendedRequestHeaders =
+        Array.from({ length: 25 }, (_, i) => [`x-datadog-req-${i}`, `ext-req-${i}`])
+      const extendedRequestHeadersAndValues = Object.fromEntries(extendedRequestHeaders)
+      const extendedRequestHeadersTags = Object.fromEntries(extendedRequestHeaders.map((reqHeader) => {
+        return [`http.request.headers.${reqHeader[0]}`, reqHeader[1]]
+      }))
+
+      const extendedResponseHeaders =
+        Array.from({ length: 25 }, (_, i) => [`x-datadog-res-${i}`, `ext-res-${i}`])
+      const extendedResponseHeadersAndValues = Object.fromEntries(extendedResponseHeaders)
+      const extendedResponseHeadersTags =
+        Object.fromEntries(extendedResponseHeaders.map((resHeader) => {
+          return [`http.response.headers.${resHeader[0]}`, resHeader[1]]
+        }))
+
+      after(() => {
+        Reporter.setExtendedCollection({
+          enabled: false,
+          redaction: false,
+          maxHeaders: 0
+        })
+      })
+
+      it('should collect extended headers on appsec event', () => {
+        const req = {
+          headers: {
+            'user-agent': 'arachni',
+            ...requestHeadersAndValuesToTrackOnEvent,
+            ...extendedRequestHeadersAndValues
+          }
+        }
+        const res = {
+          getHeaders: () => {
+            return extendedResponseHeadersAndValues
+          }
+        }
+        span.context()._tags['appsec.event'] = 'true'
+
+        Reporter.setExtendedCollection({
+          enabled: true,
+          redaction: false,
+          maxHeaders: 50
+        })
+        Reporter.finishRequest(req, res)
+
+        const expectedTags = {
+          'http.request.headers.user-agent': 'arachni',
+          ...expectedRequestTagsToTrackOnEvent,
+          ...extendedRequestHeadersTags,
+          ...extendedResponseHeadersTags
+        }
+
+        expect(span.addTags).to.have.been.calledWith(expectedTags)
+      })
+
+      it('should truncate collected extended headers and set discarded count tags on appsec event', () => {
+        const req = {
+          headers: {
+            'user-agent': 'arachni',
+            ...requestHeadersAndValuesToTrackOnEvent,
+            ...extendedRequestHeadersAndValues
+          }
+        }
+        const res = {
+          getHeaders: () => {
+            return extendedResponseHeadersAndValues
+          }
+        }
+        span.context()._tags['appsec.event'] = 'true'
+
+        const maxHeaders =  20
+        const reportedExtReqHeadersCount = maxHeaders - (requestHeadersToTrackOnEvent.length + 1)
+        const discardedReqHeadersCount = extendedRequestHeaders.length - reportedExtReqHeadersCount
+        const discardedResHeadersCount = extendedResponseHeaders.length - maxHeaders
+
+        Reporter.setExtendedCollection({
+          enabled: true,
+          redaction: false,
+          maxHeaders
+        })
+        Reporter.finishRequest(req, res)
+
+        const expectedTags = {
+          'http.request.headers.user-agent': 'arachni',
+          ...expectedRequestTagsToTrackOnEvent,
+          ...Object.fromEntries(
+            Object.entries(extendedRequestHeadersTags).slice(0, -discardedReqHeadersCount)
+          ),
+          ...Object.fromEntries(
+            Object.entries(extendedResponseHeadersTags).slice(0, -discardedResHeadersCount)
+          ),
+          '_dd.appsec.request.header_collection.discarded': discardedReqHeadersCount,
+          '_dd.appsec.response.header_collection.discarded': discardedResHeadersCount,
+        }
+
+        expect(span.addTags).to.have.been.calledWith(expectedTags)
+      })
+
+      it('should not collect extended headers on appsec event when redaction is enablded', () => {
+        const req = {
+          headers: {
+            'user-agent': 'arachni',
+            ...requestHeadersAndValuesToTrackOnEvent,
+            ...extendedRequestHeadersAndValues
+          }
+        }
+        const res = {
+          getHeaders: () => {
+            return extendedResponseHeadersAndValues
+          }
+        }
+        span.context()._tags['appsec.event'] = 'true'
+
+        Reporter.setExtendedCollection({
+          enabled: true,
+          redaction: true,
+          maxHeaders: 50
+        })
+        Reporter.finishRequest(req, res)
+
+        const expectedTags = {
+          'http.request.headers.user-agent': 'arachni',
+          ...expectedRequestTagsToTrackOnEvent
+        }
+
+        expect(span.addTags).to.have.been.calledWith(expectedTags)
+      })
+
     })
   })
 })
