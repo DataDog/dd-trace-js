@@ -340,6 +340,9 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout, isMain
   }
 
   if (testStatuses.length === testManagementAttemptToFixRetries + 1) {
+    if (testStatuses.some(status => status === 'fail')) {
+      test._ddHasFailedAttemptToFixRetries = true
+    }
     if (testStatuses.every(status => status === 'fail')) {
       test._ddHasFailedAllRetries = true
     } else if (testStatuses.every(status => status === 'pass')) {
@@ -369,6 +372,7 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout, isMain
         isEfdRetry: test._ddIsEfdRetry,
         hasFailedAllRetries: test._ddHasFailedAllRetries,
         hasPassedAttemptToFixRetries: test._ddHasPassedAttemptToFixRetries,
+        hasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
         isAtrRetry
       })
     })
@@ -501,6 +505,7 @@ function dispatcherHookNew (dispatcherExport, runWrapper, playwrightVersion) {
           _ddIsEfdRetry: test._ddIsEfdRetry,
           _ddHasFailedAllRetries: test._ddHasFailedAllRetries,
           _ddHasPassedAttemptToFixRetries: test._ddHasPassedAttemptToFixRetries,
+          _ddHasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
           _ddIsAtrRetry: isAtrRetry
         }
       })
@@ -998,6 +1003,7 @@ addHook({
         isAttemptToFixRetry: test._ddIsAttemptToFixRetry,
         hasFailedAllRetries: test._ddHasFailedAllRetries,
         hasPassedAttemptToFixRetries: test._ddHasPassedAttemptToFixRetries,
+        hasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
         isAtrRetry: test._ddIsAtrRetry,
         onDone
       })
