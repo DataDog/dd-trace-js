@@ -15,7 +15,6 @@ const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
 const { tagger } = require('./tagger')
 const { isFalse, isTrue } = require('../util')
 const { getAzureTagsFromMetadata, getAzureAppMetadata } = require('../azure_metadata')
-const satisfies = require('semifies')
 
 class Config {
   constructor (options = {}) {
@@ -23,7 +22,6 @@ class Config {
       DD_AGENT_HOST,
       DD_ENV,
       DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED, // used for testing
-      DD_PROFILING_ASYNC_ID_ENABLED,
       DD_PROFILING_CODEHOTSPOTS_ENABLED,
       DD_PROFILING_CPU_ENABLED,
       DD_PROFILING_DEBUG_SOURCE_MAPS,
@@ -180,10 +178,6 @@ class Config {
     checkOptionWithSamplingContextAllowed(this.timelineEnabled, 'Timeline view')
     this.timelineSamplingEnabled = isTrue(coalesce(options.timelineSamplingEnabled,
       DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED, true))
-
-    // Async ID gathering only works reliably on Node >= 22.10.0
-    this.asyncIdEnabled = isTrue(coalesce(options.asyncIdEnabled,
-      DD_PROFILING_ASYNC_ID_ENABLED, this.timelineEnabled && satisfies(process.versions.node, '>=22.10.0')))
 
     this.codeHotspotsEnabled = isTrue(coalesce(options.codeHotspotsEnabled,
       DD_PROFILING_CODEHOTSPOTS_ENABLED,

@@ -265,6 +265,7 @@ function getOnTestEndHandler (config) {
 
     let hasFailedAllRetries = false
     let attemptToFixPassed = false
+    let attemptToFixFailed = false
 
     const testName = getTestFullName(test)
 
@@ -278,6 +279,9 @@ function getOnTestEndHandler (config) {
     const isLastAttempt = testStatuses.length === config.testManagementAttemptToFixRetries + 1
 
     if (test._ddIsAttemptToFix && isLastAttempt) {
+      if (testStatuses.some(status => status === 'fail')) {
+        attemptToFixFailed = true
+      }
       if (testStatuses.every(status => status === 'fail')) {
         hasFailedAllRetries = true
       } else if (testStatuses.every(status => status === 'pass')) {
@@ -299,6 +303,7 @@ function getOnTestEndHandler (config) {
           isLastRetry: getIsLastRetry(test),
           hasFailedAllRetries,
           attemptToFixPassed,
+          attemptToFixFailed,
           isAttemptToFixRetry,
           isAtrRetry
         })

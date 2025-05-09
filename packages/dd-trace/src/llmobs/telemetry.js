@@ -109,11 +109,60 @@ function recordDroppedPayload (numEvents, eventType, error) {
   llmobsMetrics.count(metricName, tags).inc(numEvents)
 }
 
+function recordLLMObsAnnotate (span, err, value = 1) {
+  const mlObsTags = LLMObsTagger.tagMap.get(span) || {}
+  const spanKind = mlObsTags[SPAN_KIND] || 'N/A'
+  const isRootSpan = mlObsTags[PARENT_ID_KEY] === ROOT_PARENT_ID
+
+  const tags = {
+    error: Number(!!err),
+    span_kind: spanKind,
+    is_root_span: Number(isRootSpan)
+  }
+  if (err) tags.error_type = err
+  llmobsMetrics.count('annotations', tags).inc(value)
+}
+
+function recordUserFlush (err, value = 1) {
+  const tags = { error: Number(!!err) }
+  if (err) tags.error_type = err
+  llmobsMetrics.count('user_flush', tags).inc(value)
+}
+
+function recordExportSpan (span, err, value = 1) {
+  const mlObsTags = LLMObsTagger.tagMap.get(span) || {}
+  const spanKind = mlObsTags[SPAN_KIND] || 'N/A'
+  const isRootSpan = mlObsTags[PARENT_ID_KEY] === ROOT_PARENT_ID
+
+  const tags = {
+    error: Number(!!err),
+    span_kind: spanKind,
+    is_root_span: Number(isRootSpan)
+  }
+  if (err) tags.error_type = err
+  llmobsMetrics.count('spans_exported', tags).inc(value)
+}
+
+function recordSubmitEvaluation (options, err, value = 1) {
+  const tags = {
+    error: Number(!!err),
+    custom_joining_key: 0
+  }
+  const metricType = options?.metricType?.toLowerCase()
+  if (metricType !== 'categorical' && metricType !== 'score') tags.metric_type = 'other'
+  if (err) tags.error_type = err
+  llmobsMetrics.count('evals_submitted', tags).inc(value)
+}
+
 module.exports = {
   recordLLMObsEnabled,
   incrementLLMObsSpanStartCount,
   incrementLLMObsSpanFinishedCount,
   recordLLMObsRawSpanSize,
   recordLLMObsSpanSize,
-  recordDroppedPayload
+  recordDroppedPayload,
+  recordLLMObsAnnotate,
+  recordUserFlush,
+  recordExportSpan,
+  recordSubmitEvaluation
 }

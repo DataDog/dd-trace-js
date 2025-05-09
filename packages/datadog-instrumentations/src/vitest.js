@@ -614,17 +614,22 @@ addHook({
       }
 
       let attemptToFixPassed = false
+      let attemptToFixFailed = false
       if (attemptToFixTasks.has(task)) {
         const statuses = taskToStatuses.get(task)
-        if (statuses.length === testManagementAttemptToFixRetries && statuses.every(status => status === 'pass')) {
-          attemptToFixPassed = true
+        if (statuses.length === testManagementAttemptToFixRetries) {
+          if (statuses.every(status => status === 'pass')) {
+            attemptToFixPassed = true
+          } else if (statuses.some(status => status === 'fail')) {
+            attemptToFixFailed = true
+          }
         }
       }
 
       if (asyncResource) {
         // We don't finish here because the test might fail in a later hook (afterEach)
         asyncResource.runInAsyncScope(() => {
-          testFinishTimeCh.publish({ status, task, attemptToFixPassed })
+          testFinishTimeCh.publish({ status, task, attemptToFixPassed, attemptToFixFailed })
         })
       }
 
@@ -776,8 +781,12 @@ addHook({
           }
 
           let hasFailedAllRetries = false
+          let attemptToFixFailed = false
           if (attemptToFixTasks.has(task)) {
             const statuses = taskToStatuses.get(task)
+            if (statuses.some(status => status === 'fail')) {
+              attemptToFixFailed = true
+            }
             if (statuses.every(status => status === 'fail')) {
               hasFailedAllRetries = true
             }
@@ -787,7 +796,12 @@ addHook({
             const isRetry = task.result?.retryCount > 0
             // `duration` is the duration of all the retries, so it can't be used if there are retries
             testAsyncResource.runInAsyncScope(() => {
-              testErrorCh.publish({ duration: !isRetry ? duration : undefined, error: testError, hasFailedAllRetries })
+              testErrorCh.publish({
+                duration: !isRetry ? duration : undefined,
+                error: testError,
+                hasFailedAllRetries,
+                attemptToFixFailed
+              })
             })
           }
           if (errors?.length) {

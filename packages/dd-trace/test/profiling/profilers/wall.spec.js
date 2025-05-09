@@ -58,8 +58,7 @@ describe('profilers/native/wall', () => {
         withContexts: false,
         lineNumbers: false,
         workaroundV8Bug: false,
-        collectCpuTime: false,
-        collectAsyncId: false
+        collectCpuTime: false
       })
   })
 
@@ -78,8 +77,7 @@ describe('profilers/native/wall', () => {
         withContexts: false,
         lineNumbers: false,
         workaroundV8Bug: false,
-        collectCpuTime: false,
-        collectAsyncId: false
+        collectCpuTime: false
       })
   })
 
@@ -175,8 +173,7 @@ describe('profilers/native/wall', () => {
         withContexts: false,
         lineNumbers: false,
         workaroundV8Bug: false,
-        collectCpuTime: false,
-        collectAsyncId: false
+        collectCpuTime: false
       })
   })
 

@@ -150,8 +150,8 @@ class NetworkEventProcessor extends TimelineEventProcessor {
   }
 }
 
-async function gatherNetworkTimelineEvents (cwd, scriptFilePath, eventType, args) {
-  return gatherTimelineEvents(cwd, scriptFilePath, eventType, args, NetworkEventProcessor)
+async function gatherNetworkTimelineEvents (cwd, scriptFilePath, agentPort, eventType, args) {
+  return gatherTimelineEvents(cwd, scriptFilePath, agentPort, eventType, args, NetworkEventProcessor)
 }
 
 class FilesystemEventProcessor extends TimelineEventProcessor {
@@ -201,18 +201,19 @@ class FilesystemEventProcessor extends TimelineEventProcessor {
   }
 }
 
-async function gatherFilesystemTimelineEvents (cwd, scriptFilePath) {
-  return gatherTimelineEvents(cwd, scriptFilePath, 'fs', [], FilesystemEventProcessor)
+async function gatherFilesystemTimelineEvents (cwd, scriptFilePath, agentPort) {
+  return gatherTimelineEvents(cwd, scriptFilePath, agentPort, 'fs', [], FilesystemEventProcessor)
 }
 
-async function gatherTimelineEvents (cwd, scriptFilePath, eventType, args, Processor) {
+async function gatherTimelineEvents (cwd, scriptFilePath, agentPort, eventType, args, Processor) {
   const procStart = BigInt(Date.now() * 1000000)
   const proc = fork(path.join(cwd, scriptFilePath), args, {
     cwd,
     env: {
       DD_PROFILING_EXPORTERS: 'file',
       DD_PROFILING_ENABLED: 1,
-      DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED: 0 // capture all events
+      DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED: 0, // capture all events
+      DD_TRACE_AGENT_PORT: agentPort
     }
   })
 
@@ -312,6 +313,14 @@ describe('profiler', () => {
     await sandbox.remove()
   })
 
+  beforeEach(async () => {
+    agent = await new FakeAgent().start()
+  })
+
+  afterEach(async () => {
+    await agent.stop()
+  })
+
   if (process.platform !== 'win32') {
     it('code hotspots and endpoint tracing works', async function () {
       // see comment on busyCycleTimeNs recomputation below. Ideally a single retry should be enough
@@ -323,7 +332,8 @@ describe('profiler', () => {
         env: {
           DD_PROFILING_EXPORTERS: 'file',
           DD_PROFILING_ENABLED: 1,
-          BUSY_CYCLE_TIME: (busyCycleTimeNs | 0).toString()
+          BUSY_CYCLE_TIME: (busyCycleTimeNs | 0).toString(),
+          DD_TRACE_AGENT_PORT: agent.port
         }
       })
 
@@ -351,10 +361,9 @@ describe('profiler', () => {
       //   'local root span id's
       // - samples with spans also must have a 'trace endpoint' label with values 'endpoint-0',
       //   'endpoint-1', or 'endpoint-2'
-      // - every occurrence of a span must have the same root span, endpoint, and asyncId
+      // - every occurrence of a span must have the same root span and endpoint
       const rootSpans = new Set()
       const endpoints = new Set()
-      const asyncIds = new Set()
       const spans = new Map()
       const strings = profile.stringTable
       const tsKey = strings.dedup('end_timestamp_ns')
@@ -364,13 +373,11 @@ describe('profiler', () => {
       const threadNameKey = strings.dedup('thread name')
       const threadIdKey = strings.dedup('thread id')
       const osThreadIdKey = strings.dedup('os thread id')
-      const asyncIdKey = strings.dedup('async id')
       const threadNameValue = strings.dedup('Main Event Loop')
       const nonJSThreadNameValue = strings.dedup('Non-JS threads')
 
-      const asyncIdWorks = require('semifies')(process.versions.node, '>=22.10.0')
       for (const sample of profile.sample) {
-        let ts, spanId, rootSpanId, endpoint, threadName, threadId, osThreadId, asyncId
+        let ts, spanId, rootSpanId, endpoint, threadName, threadId, osThreadId
         for (const label of sample.label) {
           switch (label.key) {
             case tsKey: ts = label.num; break
@@ -380,12 +387,6 @@ describe('profiler', () => {
             case threadNameKey: threadName = label.str; break
             case threadIdKey: threadId = label.str; break
             case osThreadIdKey: osThreadId = label.str; break
-            case asyncIdKey:
-              asyncId = label.num
-              if (asyncId === 0) {
-                asyncId = undefined
-              }
-              break
             default: assert.fail(`Unexpected label key ${strings.dedup(label.key)} ${encoded}`)
           }
         }
@@ -419,27 +420,11 @@ describe('profiler', () => {
             // 3 of them.
             continue
           }
-          const spanData = { rootSpanId, endpoint, asyncId }
-          // Record async ID so we can verify we encountered 9 different values.
-          // Async ID can be sporadically missing if sampling hits an intrinsified
-          // function.
-          if (asyncId !== undefined) {
-            asyncIds.add(asyncId)
-          }
+          const spanData = { rootSpanId, endpoint }
           const existingSpanData = spans.get(spanId)
           if (existingSpanData) {
-            // Span's root span, endpoint, and async ID must be consistent
-            // across samples.
-            assert.equal(existingSpanData.rootSpanId, rootSpanId, encoded)
-            assert.equal(existingSpanData.endpoint, endpoint, encoded)
-            if (asyncIdWorks) {
-              // Account for asyncID sporadically missing
-              if (existingSpanData.asyncId === undefined) {
-                existingSpanData.asyncId = asyncId
-              } else if (asyncId !== undefined) {
-                assert.equal(existingSpanData.asyncId, asyncId, encoded)
-              }
-            }
+            // Span's root span and endpoint must be consistent across samples
+            assert.deepEqual(spanData, existingSpanData, encoded)
           } else {
             // New span id, store span data
             spans.set(spanId, spanData)
@@ -457,16 +442,15 @@ describe('profiler', () => {
           }
         }
       }
-      // Need to have a total of 9 different spans, with 9 different async IDs,
-      // 3 different root spans, and 3 different endpoints.
+      // Need to have a total of 9 different spans, with 3 different root spans
+      // and 3 different endpoints.
       assert.equal(spans.size, 9, encoded)
-      assert.equal(asyncIds.size, asyncIdWorks ? 9 : 0, encoded)
       assert.equal(rootSpans.size, 3, encoded)
       assert.equal(endpoints.size, 3, encoded)
     })
 
     it('fs timeline events work', async () => {
-      const fsEvents = await gatherFilesystemTimelineEvents(cwd, 'profiler/fstest.js')
+      const fsEvents = await gatherFilesystemTimelineEvents(cwd, 'profiler/fstest.js', agent.port)
       assert.equal(fsEvents.length, 6)
       const path = fsEvents[0].path
       const fd = fsEvents[1].fd
@@ -482,7 +466,7 @@ describe('profiler', () => {
     })
 
     it('dns timeline events work', async () => {
-      const dnsEvents = await gatherNetworkTimelineEvents(cwd, 'profiler/dnstest.js', 'dns')
+      const dnsEvents = await gatherNetworkTimelineEvents(cwd, 'profiler/dnstest.js', agent.port, 'dns')
       assert.sameDeepMembers(dnsEvents, [
         { operation: 'lookup', host: 'example.org' },
         { operation: 'lookup', host: 'example.com' },
@@ -520,7 +504,7 @@ describe('profiler', () => {
           const args = [String(port1), String(port2), msg]
           // Invoke the profiled program, passing it the ports of the servers and
           // the expected message.
-          const events = await gatherNetworkTimelineEvents(cwd, 'profiler/nettest.js', 'net', args)
+          const events = await gatherNetworkTimelineEvents(cwd, 'profiler/nettest.js', agent.port, 'net', args)
           // The profiled program should have two TCP connection events to the two
           // servers.
           assert.sameDeepMembers(events, [
@@ -537,8 +521,7 @@ describe('profiler', () => {
   }
 
   context('shutdown', () => {
-    beforeEach(async () => {
-      agent = await new FakeAgent().start()
+    beforeEach(() => {
       oomEnv = {
         DD_TRACE_AGENT_PORT: agent.port,
         DD_PROFILING_ENABLED: 1,
@@ -547,9 +530,8 @@ describe('profiler', () => {
       }
     })
 
-    afterEach(async () => {
+    afterEach(() => {
       proc.kill()
-      await agent.stop()
     })
 
     it('records profile on process exit', () => {
@@ -667,13 +649,8 @@ describe('profiler', () => {
   })
 
   context('SSI heuristics', () => {
-    beforeEach(async () => {
-      agent = await new FakeAgent().start()
-    })
-
-    afterEach(async () => {
+    afterEach(() => {
       proc.kill()
-      await agent.stop()
     })
 
     describe('does not trigger for', () => {

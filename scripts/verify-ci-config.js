@@ -166,6 +166,7 @@ const IGNORED_WORKFLOWS = {
     'release-dev.yml',
     'release-latest.yml',
     'release-proposal.yml',
+    'release-validate.yml',
     'codeql-analysis.yml',
     'pr-labels.yml'
   ],

@@ -7,7 +7,7 @@ class DNSReversePlugin extends DNSPlugin {
 
   extendEvent (event, startEvent) {
     event.name = 'getHostByAddr'
-    event.detail = { host: startEvent[0] }
+    event.detail = { host: startEvent.args[0] }
 
     return event
   }

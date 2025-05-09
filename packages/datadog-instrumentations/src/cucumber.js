@@ -309,6 +309,7 @@ function wrapRun (pl, isLatestVersion) {
         let isAttemptToFixRetry = false
         let hasFailedAllRetries = false
         let hasPassedAllRetries = false
+        let hasFailedAttemptToFix = false
         let isDisabled = false
         let isQuarantined = false
 
@@ -330,6 +331,7 @@ function wrapRun (pl, isLatestVersion) {
               }, { pass: 0, fail: 0 })
               hasFailedAllRetries = fail === testManagementAttemptToFixRetries + 1
               hasPassedAllRetries = pass === testManagementAttemptToFixRetries + 1
+              hasFailedAttemptToFix = fail > 0
             }
           }
         }
@@ -360,6 +362,7 @@ function wrapRun (pl, isLatestVersion) {
             isAttemptToFixRetry,
             hasFailedAllRetries,
             hasPassedAllRetries,
+            hasFailedAttemptToFix,
             isDisabled,
             isQuarantined
           })

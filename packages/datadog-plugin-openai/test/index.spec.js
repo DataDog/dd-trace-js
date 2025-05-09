@@ -16,6 +16,8 @@ const Sampler = require('../../dd-trace/src/sampler')
 
 const tracerRequirePath = '../../dd-trace'
 
+const { DD_MAJOR } = require('../../../version')
+
 describe('Plugin', () => {
   let openai
   let clock
@@ -324,7 +326,7 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.0.0')) {
+              if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'completions.create')
               } else {
                 expect(traces[0][0]).to.have.property('resource', 'createCompletion')
@@ -411,7 +413,7 @@ describe('Plugin', () => {
 
           expect(externalLoggerStub).to.have.been.calledWith({
             status: 'info',
-            message: semver.satisfies(realVersion, '>=4.0.0')
+            message: semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6
               ? 'sampled completions.create'
               : 'sampled createCompletion',
             prompt: 'Hello, \n\nFriend\t\tHi',
@@ -504,7 +506,7 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.0.0')) {
+              if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'embeddings.create')
               } else {
                 expect(traces[0][0]).to.have.property('resource', 'createEmbedding')
@@ -543,7 +545,9 @@ describe('Plugin', () => {
 
           expect(externalLoggerStub).to.have.been.calledWith({
             status: 'info',
-            message: semver.satisfies(realVersion, '>=4.0.0') ? 'sampled embeddings.create' : 'sampled createEmbedding',
+            message: semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6
+              ? 'sampled embeddings.create'
+              : 'sampled createEmbedding',
             input: 'Cat?'
           })
         })
@@ -578,7 +582,7 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.0.0')) {
+              if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'embeddings.create')
               } else {
                 expect(traces[0][0]).to.have.property('resource', 'createEmbedding')
@@ -618,7 +622,9 @@ describe('Plugin', () => {
 
           expect(externalLoggerStub).to.have.been.calledWith({
             status: 'info',
-            message: semver.satisfies(realVersion, '>=4.0.0') ? 'sampled embeddings.create' : 'sampled createEmbedding',
+            message: semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6
+              ? 'sampled embeddings.create'
+              : 'sampled createEmbedding',
             input: 'Cat?'
           })
         })
@@ -750,7 +756,7 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.0.0')) {
+              if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'models.list')
               } else {
                 expect(traces[0][0]).to.have.property('resource', 'listModels')
@@ -824,7 +830,7 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.0.0')) {
+              if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'models.retrieve')
               } else {
                 expect(traces[0][0]).to.have.property('resource', 'retrieveModel')
@@ -962,7 +968,9 @@ describe('Plugin', () => {
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: semver.satisfies(realVersion, '>=4.0.0') ? 'sampled edits.create' : 'sampled createEdit',
+              message: semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6
+                ? 'sampled edits.create'
+                : 'sampled createEdit',
               input: 'What day of the wek is it?',
               instruction: 'Fix the spelling mistakes',
               choices: [{
@@ -1022,7 +1030,7 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.0.0')) {
+              if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'files.list')
               } else {
                 expect(traces[0][0]).to.have.property('resource', 'listFiles')
@@ -1087,7 +1095,7 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.0.0')) {
+              if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'files.create')
               } else {
                 expect(traces[0][0]).to.have.property('resource', 'createFile')
@@ -1156,7 +1164,7 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.0.0')) {
+              if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'files.del')
               } else {
                 expect(traces[0][0]).to.have.property('resource', 'deleteFile')
@@ -1221,7 +1229,7 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.0.0')) {
+              if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'files.retrieve')
               } else {
                 expect(traces[0][0]).to.have.property('resource', 'retrieveFile')
@@ -1284,9 +1292,9 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.0.0 <4.17.1')) {
+              if (semver.satisfies(realVersion, '>=4.0.0 <4.17.1') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'files.retrieveContent')
-              } else if (semver.satisfies(realVersion, '>=4.17.1')) {
+              } else if (semver.satisfies(realVersion, '>=4.17.1') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'files.content')
               } else {
                 expect(traces[0][0]).to.have.property('resource', 'downloadFile')
@@ -1402,9 +1410,9 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.1.0')) {
+              if (semver.satisfies(realVersion, '>=4.1.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'fine_tuning.jobs.create')
-              } else if (semver.satisfies(realVersion, '>=4.0.0')) {
+              } else if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'fine-tune.create')
               } else {
                 expect(traces[0][0]).to.have.property('resource', 'createFineTune')
@@ -1667,9 +1675,9 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.1.0')) {
+              if (semver.satisfies(realVersion, '>=4.1.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'fine_tuning.jobs.retrieve')
-              } else if (semver.satisfies(realVersion, '>=4.0.0')) {
+              } else if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'fine-tune.retrieve')
               } else {
                 expect(traces[0][0]).to.have.property('resource', 'retrieveFineTune')
@@ -1813,9 +1821,9 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.1.0')) {
+              if (semver.satisfies(realVersion, '>=4.1.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'fine_tuning.jobs.list')
-              } else if (semver.satisfies(realVersion, '>=4.0.0')) {
+              } else if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'fine-tune.list')
               } else {
                 expect(traces[0][0]).to.have.property('resource', 'listFineTunes')
@@ -1948,9 +1956,9 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.1.0')) {
+              if (semver.satisfies(realVersion, '>=4.1.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'fine_tuning.jobs.listEvents')
-              } else if (semver.satisfies(realVersion, '>=4.0.0')) {
+              } else if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'fine-tune.listEvents')
               } else {
                 expect(traces[0][0]).to.have.property('resource', 'listFineTuneEvents')
@@ -2016,7 +2024,7 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.0.0')) {
+              if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'models.del')
               } else {
                 expect(traces[0][0]).to.have.property('resource', 'deleteModel')
@@ -2131,9 +2139,9 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.1.0')) {
+              if (semver.satisfies(realVersion, '>=4.1.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'fine_tuning.jobs.cancel')
-              } else if (semver.satisfies(realVersion, '>=4.0.0')) {
+              } else if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'fine-tune.cancel')
               } else {
                 expect(traces[0][0]).to.have.property('resource', 'cancelFineTune')
@@ -2243,7 +2251,7 @@ describe('Plugin', () => {
               .use(traces => {
                 expect(traces[0][0]).to.have.property('name', 'openai.request')
                 expect(traces[0][0]).to.have.property('type', 'openai')
-                if (semver.satisfies(realVersion, '>=4.0.0')) {
+                if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                   expect(traces[0][0]).to.have.property('resource', 'moderations.create')
                 } else {
                   expect(traces[0][0]).to.have.property('resource', 'createModeration')
@@ -2299,7 +2307,7 @@ describe('Plugin', () => {
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: semver.satisfies(realVersion, '>=4.0.0')
+              message: semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6
                 ? 'sampled moderations.create'
                 : 'sampled createModeration',
               input: 'I want to harm the robots'
@@ -2342,7 +2350,7 @@ describe('Plugin', () => {
               .use(traces => {
                 expect(traces[0][0]).to.have.property('name', 'openai.request')
                 expect(traces[0][0]).to.have.property('type', 'openai')
-                if (semver.satisfies(realVersion, '>=4.0.0')) {
+                if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                   expect(traces[0][0]).to.have.property('resource', 'images.generate')
                 } else {
                   expect(traces[0][0]).to.have.property('resource', 'createImage')
@@ -2390,7 +2398,7 @@ describe('Plugin', () => {
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: semver.satisfies(realVersion, '>=4.0.0')
+              message: semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6
                 ? 'sampled images.generate'
                 : 'sampled createImage',
               prompt: 'A datadog wearing headphones'
@@ -2429,7 +2437,7 @@ describe('Plugin', () => {
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: semver.satisfies(realVersion, '>=4.0.0')
+              message: semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6
                 ? 'sampled images.generate'
                 : 'sampled createImage',
               prompt: [999, 888, 777, 666, 555]
@@ -2469,7 +2477,7 @@ describe('Plugin', () => {
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: semver.satisfies(realVersion, '>=4.0.0')
+              message: semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6
                 ? 'sampled images.generate'
                 : 'sampled createImage',
               prompt: ['foo', 'bar']
@@ -2512,7 +2520,7 @@ describe('Plugin', () => {
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: semver.satisfies(realVersion, '>=4.0.0')
+              message: semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6
                 ? 'sampled images.generate'
                 : 'sampled createImage',
               prompt: [[111, 222, 333], [444, 555, 666]]
@@ -2553,7 +2561,7 @@ describe('Plugin', () => {
               .use(traces => {
                 expect(traces[0][0]).to.have.property('name', 'openai.request')
                 expect(traces[0][0]).to.have.property('type', 'openai')
-                if (semver.satisfies(realVersion, '>=4.0.0')) {
+                if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                   expect(traces[0][0]).to.have.property('resource', 'images.edit')
                 } else {
                   expect(traces[0][0]).to.have.property('resource', 'createImageEdit')
@@ -2607,7 +2615,7 @@ describe('Plugin', () => {
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: semver.satisfies(realVersion, '>=4.0.0')
+              message: semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6
                 ? 'sampled images.edit'
                 : 'sampled createImageEdit',
               prompt: 'Change all red to blue',
@@ -2650,7 +2658,7 @@ describe('Plugin', () => {
               .use(traces => {
                 expect(traces[0][0]).to.have.property('name', 'openai.request')
                 expect(traces[0][0]).to.have.property('type', 'openai')
-                if (semver.satisfies(realVersion, '>=4.0.0')) {
+                if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                   expect(traces[0][0]).to.have.property('resource', 'images.createVariation')
                 } else {
                   expect(traces[0][0]).to.have.property('resource', 'createImageVariation')
@@ -2693,7 +2701,7 @@ describe('Plugin', () => {
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: semver.satisfies(realVersion, '>=4.0.0')
+              message: semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6
                 ? 'sampled images.createVariation'
                 : 'sampled createImageVariation',
               file: 'ntsc.png'
@@ -2750,7 +2758,7 @@ describe('Plugin', () => {
               .use(traces => {
                 expect(traces[0][0]).to.have.property('name', 'openai.request')
                 expect(traces[0][0]).to.have.property('type', 'openai')
-                if (semver.satisfies(realVersion, '>=4.0.0')) {
+                if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                   expect(traces[0][0]).to.have.property('resource', 'chat.completions.create')
                 } else {
                   expect(traces[0][0]).to.have.property('resource', 'createChatCompletion')
@@ -2849,7 +2857,7 @@ describe('Plugin', () => {
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
               message:
-                  semver.satisfies(realVersion, '>=4.0.0')
+                  semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6
                     ? 'sampled chat.completions.create'
                     : 'sampled createChatCompletion',
               messages: [
@@ -3059,7 +3067,7 @@ describe('Plugin', () => {
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
               message:
-                  semver.satisfies(realVersion, '>=4.0.0')
+                  semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6
                     ? 'sampled chat.completions.create'
                     : 'sampled createChatCompletion',
               messages: [
@@ -3138,7 +3146,7 @@ describe('Plugin', () => {
               .use(traces => {
                 expect(traces[0][0]).to.have.property('name', 'openai.request')
                 expect(traces[0][0]).to.have.property('type', 'openai')
-                if (semver.satisfies(realVersion, '>=4.0.0')) {
+                if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                   expect(traces[0][0]).to.have.property('resource', 'audio.transcriptions.create')
                 } else {
                   expect(traces[0][0]).to.have.property('resource', 'createTranscription')
@@ -3190,7 +3198,7 @@ describe('Plugin', () => {
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: semver.satisfies(realVersion, '>=4.0.0')
+              message: semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6
                 ? 'sampled audio.transcriptions.create'
                 : 'sampled createTranscription',
               prompt: 'what does this say',
@@ -3244,7 +3252,7 @@ describe('Plugin', () => {
               .use(traces => {
                 expect(traces[0][0]).to.have.property('name', 'openai.request')
                 expect(traces[0][0]).to.have.property('type', 'openai')
-                if (semver.satisfies(realVersion, '>=4.0.0')) {
+                if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                   expect(traces[0][0]).to.have.property('resource', 'audio.translations.create')
                 } else {
                   expect(traces[0][0]).to.have.property('resource', 'createTranslation')
@@ -3292,7 +3300,7 @@ describe('Plugin', () => {
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: semver.satisfies(realVersion, '>=4.0.0')
+              message: semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6
                 ? 'sampled audio.translations.create'
                 : 'sampled createTranslation',
               prompt: 'greeting',

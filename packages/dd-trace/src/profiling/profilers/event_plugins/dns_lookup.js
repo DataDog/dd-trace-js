@@ -7,7 +7,7 @@ class DNSLookupPlugin extends DNSPlugin {
 
   extendEvent (event, startEvent) {
     event.name = 'lookup'
-    event.detail = { hostname: startEvent[0] }
+    event.detail = { hostname: startEvent.args[0] }
 
     return event
   }

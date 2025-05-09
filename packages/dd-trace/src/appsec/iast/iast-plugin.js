@@ -114,7 +114,7 @@ class IastPlugin extends Plugin {
       config = { enabled: config }
     }
     if (config.enabled && !this.configured) {
-      this.onConfigure(config.tracerConfig)
+      this.onConfigure()
       this.configured = true
     }
 

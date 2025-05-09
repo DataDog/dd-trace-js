@@ -95,7 +95,7 @@ function start (title) {
 
 // Show a spinner for the current operation.
 function spin (index) {
-  if (flags.debug) return
+  if (flags.debug || process.env.CI) return
 
   print(`\r${CYAN}${frames[index]}${RESET} ${BOLD}${current}${RESET}`)
 
@@ -115,7 +115,9 @@ function pass (result) {
       print(`: ${BOLD}${CYAN}${result}${RESET}`)
     }
 
-    print('\n')
+    if (!process.env.CI) {
+      print('\n')
+    }
   }
 
   current = undefined
@@ -128,7 +130,11 @@ function fail (err) {
   clearTimeout(timer)
 
   if (!flags.debug) {
-    print(`\r${RED}✘${RESET} ${BOLD}${current}${RESET}\n`)
+    print(`\r${RED}✘${RESET} ${BOLD}${current}${RESET}`)
+
+    if (!process.env.CI) {
+      print('\n')
+    }
   }
 
   current = undefined

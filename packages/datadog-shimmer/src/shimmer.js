@@ -1,83 +1,103 @@
 'use strict'
 
+const skipMethods = new Set([
+  'caller',
+  'arguments',
+  'name',
+  'length'
+])
+
 function copyProperties (original, wrapped) {
-  // TODO getPrototypeOf is not fast. Should we instead do this in specific
-  // instrumentations where needed?
-  const proto = Object.getPrototypeOf(original)
-  if (proto !== Function.prototype) {
+  if (original.constructor !== wrapped.constructor) {
+    const proto = Object.getPrototypeOf(original)
     Object.setPrototypeOf(wrapped, proto)
   }
-  const props = Object.getOwnPropertyDescriptors(original)
-  const keys = Reflect.ownKeys(props)
 
-  for (const key of keys) {
-    try {
-      Object.defineProperty(wrapped, key, props[key])
-    } catch (e) {
-      // TODO: figure out how to handle this without a try/catch
+  const ownKeys = Reflect.ownKeys(original)
+  if (original.length !== wrapped.length) {
+    Object.defineProperty(wrapped, 'length', { value: original.length, configurable: true })
+  }
+  if (original.name !== wrapped.name) {
+    Object.defineProperty(wrapped, 'name', { value: original.name, configurable: true })
+  }
+  if (ownKeys.length !== 2) {
+    for (const key of ownKeys) {
+      if (skipMethods.has(key)) continue
+      const descriptor = Object.getOwnPropertyDescriptor(original, key)
+      if (descriptor.writable && descriptor.enumerable && descriptor.configurable) {
+        wrapped[key] = original[key]
+      } else if (descriptor.writable || descriptor.configurable || !Object.hasOwn(wrapped, key)) {
+        Object.defineProperty(wrapped, key, descriptor)
+      }
     }
   }
 }
 
 function wrapFunction (original, wrapper) {
-  if (typeof original === 'function') assertNotClass(original)
-
   const wrapped = wrapper(original)
 
-  if (typeof original === 'function') copyProperties(original, wrapped)
+  if (typeof original === 'function') {
+    assertNotClass(original)
+    copyProperties(original, wrapped)
+  }
 
   return wrapped
 }
 
-const wrapFn = function (original, delegate) {
-  throw new Error('calling `wrap()` with 2 args is deprecated. Use wrapFunction instead.')
-}
-
-function wrapMethod (target, name, wrapper, noAssert) {
-  if (!noAssert) {
-    assertMethod(target, name)
-    assertFunction(wrapper)
+function wrap (target, name, wrapper) {
+  assertMethod(target, name)
+  if (typeof wrapper !== 'function') {
+    throw new Error(wrapper ? 'Target is not a function' : 'No function provided')
   }
 
   const original = target[name]
   const wrapped = wrapper(original)
 
-  const descriptor = Object.getOwnPropertyDescriptor(target, name)
-
-  const attributes = {
-    configurable: true,
-    ...descriptor
-  }
-
   if (typeof original === 'function') copyProperties(original, wrapped)
 
-  if (descriptor) {
+  let descriptor = Object.getOwnPropertyDescriptor(target, name)
+
+  // No descriptor means original was on the prototype
+  if (descriptor === undefined) {
+    descriptor = {
+      value: wrapped,
+      writable: true,
+      configurable: true,
+      enumerable: false
+    }
+  } else if (descriptor.writable) {
+    // Fast path for assigned properties.
+    if (descriptor.configurable && descriptor.enumerable) {
+      target[name] = wrapped
+      return target
+    }
+    descriptor.value = wrapped
+  } else {
     if (descriptor.get || descriptor.set) {
-      attributes.get = () => wrapped
+      // TODO(BridgeAR): What happens in case there is a setter? This seems wrong?
+      // What happens in case the user does indeed set this to a different value?
+      // In that case the getter would potentially return the wrong value?
+      descriptor.get = () => wrapped
     } else {
-      attributes.value = wrapped
+      descriptor.value = wrapped
     }
 
-    // TODO: create a single object for multiple wrapped methods
     if (descriptor.configurable === false) {
+      // TODO(BridgeAR): Bail out instead (throw). It is unclear if the newly
+      // created object is actually used. If it's not used, the wrapping would
+      // have had no effect without noticing. It is also unclear what would happen
+      // in case user code would check for properties to be own properties. That
+      // would fail with this code. A function being replaced with an object is
+      // also not possible.
       return Object.create(target, {
-        [name]: attributes
+        [name]: descriptor
       })
     }
-  } else { // no descriptor means original was on the prototype
-    attributes.value = wrapped
-    attributes.writable = true
   }
 
-  Object.defineProperty(target, name, attributes)
+  Object.defineProperty(target, name, descriptor)
 
   return target
-}
-
-function wrap (target, name, wrapper) {
-  return typeof name === 'function'
-    ? wrapFn(target, name)
-    : wrapMethod(target, name, wrapper)
 }
 
 function massWrap (targets, names, wrapper) {
@@ -96,30 +116,18 @@ function toArray (maybeArray) {
 }
 
 function assertMethod (target, name) {
-  if (!target) {
-    throw new Error('No target object provided.')
-  }
+  if (typeof target?.[name] !== 'function') {
+    let message = 'No target object provided'
 
-  if (typeof target !== 'object' && typeof target !== 'function') {
-    throw new Error('Invalid target.')
-  }
+    if (target) {
+      if (typeof target !== 'object' && typeof target !== 'function') {
+        message = 'Invalid target'
+      } else {
+        message = target[name] ? `Original method ${name} is not a function` : `No original method ${name}`
+      }
+    }
 
-  if (!target[name]) {
-    throw new Error(`No original method ${name}.`)
-  }
-
-  if (typeof target[name] !== 'function') {
-    throw new Error(`Original method ${name} is not a function.`)
-  }
-}
-
-function assertFunction (target) {
-  if (!target) {
-    throw new Error('No function provided.')
-  }
-
-  if (typeof target !== 'function') {
-    throw new Error('Target is not a function.')
+    throw new Error(message)
   }
 }
 
