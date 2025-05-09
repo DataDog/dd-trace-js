@@ -1,6 +1,7 @@
 'use strict'
 
 const { expect } = require('chai')
+const assert = require('node:assert/strict')
 const shimmer = require('../src/shimmer')
 
 describe('shimmer', () => {
@@ -151,6 +152,23 @@ describe('shimmer', () => {
       expect(Object.getOwnPropertyNames(obj.count)).to.not.include('test')
     })
 
+    it('should inherit from the original prototype', () => {
+      // class A extends Function {}
+      class ExtendedAsyncFunction extends Function {
+        foo = 42
+      }
+
+      const obj = { count: new ExtendedAsyncFunction() }
+
+      Object.getPrototypeOf(obj.count).test = 'test'
+
+      shimmer.wrap(obj, 'count', () => () => {})
+
+      expect(obj.count).to.have.property('test', 'test')
+      expect(obj.count).to.have.property('foo', 42)
+      expect(Object.getOwnPropertyNames(obj.count)).to.not.include('test')
+    })
+
     it('should preserve the property descriptor of the original', () => {
       const obj = {}
 
@@ -164,6 +182,79 @@ describe('shimmer', () => {
       const count = Object.getOwnPropertyDescriptor(obj, 'count')
 
       expect(count).to.have.property('enumerable', false)
+      expect(count).to.have.property('writable', false)
+    })
+
+    it('should handle writable non-configurable properties well', () => {
+      const obj = {}
+
+      Object.defineProperty(obj, 'count', {
+        value: () => {},
+        writable: true,
+        configurable: false
+      })
+
+      shimmer.wrap(obj, 'count', () => () => {})
+
+      const count = Object.getOwnPropertyDescriptor(obj, 'count')
+
+      expect(count).to.have.property('enumerable', false)
+      expect(count).to.have.property('writable', true)
+      expect(count).to.have.property('configurable', false)
+    })
+
+    it('should skip non-configurable/writable string keyed methods', () => {
+      const obj = {
+        configurable () {}
+      }
+      Object.defineProperty(obj, 'count', {
+        value: () => {},
+        configurable: false, // Explicit, even if it's the default
+        writable: false
+      })
+
+      const countDescriptorBefore = Object.getOwnPropertyDescriptor(obj, 'count')
+      shimmer.wrap(obj, 'count', () => () => {})
+      const countDescriptorAfter = Object.getOwnPropertyDescriptor(obj, 'count')
+
+      assert.deepStrictEqual(countDescriptorBefore, countDescriptorAfter)
+
+      const configurableDescriptorBefore = Object.getOwnPropertyDescriptor(obj, 'configurable')
+      shimmer.wrap(obj, 'configurable', () => () => {})
+      const configurableDescriptorAfter = Object.getOwnPropertyDescriptor(obj, 'configurable')
+
+      assert.notDeepStrictEqual(configurableDescriptorBefore.value, configurableDescriptorAfter.value)
+      configurableDescriptorAfter.value = configurableDescriptorBefore.value
+
+      assert.deepStrictEqual(configurableDescriptorBefore, configurableDescriptorAfter)
+    })
+
+    it('should skip non-configurable/writable symbol keyed methods', () => {
+      const configurable = Symbol('configurable')
+      const obj = {
+        [configurable] () {}
+      }
+      const symbol = Symbol('count')
+      Object.defineProperty(obj, symbol, {
+        value: () => {},
+        configurable: false, // Explicit, even if it's the default
+        writable: false
+      })
+
+      const descriptorBefore = Object.getOwnPropertyDescriptor(obj, symbol)
+      shimmer.wrap(obj, symbol, () => () => {})
+      const descriptorAfter = Object.getOwnPropertyDescriptor(obj, symbol)
+
+      assert.deepStrictEqual(descriptorBefore, descriptorAfter)
+
+      const configurableDescriptorBefore = Object.getOwnPropertyDescriptor(obj, configurable)
+      shimmer.wrap(obj, configurable, () => () => {})
+      const configurableDescriptorAfter = Object.getOwnPropertyDescriptor(obj, configurable)
+
+      assert.notDeepStrictEqual(configurableDescriptorBefore.value, configurableDescriptorAfter.value)
+      configurableDescriptorAfter.value = configurableDescriptorBefore.value
+
+      assert.deepStrictEqual(configurableDescriptorBefore, configurableDescriptorAfter)
     })
 
     it('should validate that there is a target object', () => {

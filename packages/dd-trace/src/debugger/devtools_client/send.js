@@ -26,7 +26,7 @@ const ddtags = [
   ['host_name', hostname],
   [GIT_COMMIT_SHA, config.commitSHA],
   [GIT_REPOSITORY_URL, config.repositoryUrl]
-].map((pair) => pair.join(':')).join(',')
+].filter(([, value]) => value !== undefined).map((pair) => pair.join(':')).join(',')
 
 const path = `/debugger/v1/input?${stringify({ ddtags })}`
 

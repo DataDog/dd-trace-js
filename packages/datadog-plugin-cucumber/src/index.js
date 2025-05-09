@@ -341,6 +341,7 @@ class CucumberPlugin extends CiPlugin {
       isAttemptToFixRetry,
       hasFailedAllRetries,
       hasPassedAllRetries,
+      hasFailedAttemptToFix,
       isDisabled,
       isQuarantined
     }) => {
@@ -385,6 +386,8 @@ class CucumberPlugin extends CiPlugin {
         span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atf)
         if (hasPassedAllRetries) {
           span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
+        } else if (hasFailedAttemptToFix) {
+          span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
         }
       }
 

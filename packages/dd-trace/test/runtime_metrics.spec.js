@@ -113,8 +113,22 @@ suiteDescribe('runtimeMetrics', () => {
   let Client
 
   beforeEach(() => {
+    // This is needed because sinon spies keep references to arguments which
+    // breaks tests because the tags parameter is now mutated right after the
+    // call.
+    const wrapSpy = (client, spy) => {
+      return function (stat, value, tags) {
+        return spy.call(client, stat, value, [].concat(tags))
+      }
+    }
+
     Client = sinon.spy(function () {
-      return client
+      return {
+        gauge: wrapSpy(client, client.gauge),
+        increment: wrapSpy(client, client.increment),
+        histogram: wrapSpy(client, client.histogram),
+        flush: client.flush.bind(client)
+      }
     })
 
     Client.generateClientConfig = DogStatsDClient.generateClientConfig
