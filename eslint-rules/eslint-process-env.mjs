@@ -10,6 +10,8 @@ export default {
     const allowedFile = /[/\\]packages[/\\]dd-trace[/\\]src[/\\]config-helper\.js$/
 
     return {
+      // TODO: Add support for other types like
+      // const { FOO_BAR } = process.env and Object.keys(process.env)
       MemberExpression (node) {
         const isProcessEnv =
           node.object?.type === 'MemberExpression' &&

@@ -1,4 +1,5 @@
 'use strict'
+/* eslint-disable no-console */
 
 // 0. Add jira ticket for this
 // 1. Adding a linter to verify that process.env is not used throughout the code (tests are fine)
