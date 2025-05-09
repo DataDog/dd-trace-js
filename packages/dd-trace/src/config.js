@@ -934,7 +934,7 @@ class Config {
     this._setString(env, 'service', DD_SERVICE || tags.service || OTEL_SERVICE_NAME)
     if (DD_SERVICE_MAPPING) {
       this._setValue(env, 'serviceMapping', fromEntries(
-        configHelper.getConfiguration('DD_SERVICE_MAPPING').split(',').map(x => x.trim().split(':'))
+        DD_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
       ))
     }
     this._setString(env, 'site', DD_SITE)
@@ -1218,7 +1218,6 @@ class Config {
     return coalesce(
       this._optionsArg.url,
       configHelper.getConfiguration('DD_TRACE_AGENT_URL'),
-      configHelper.getConfiguration('DD_TRACE_URL'),
       null
     )
   }
