@@ -670,7 +670,7 @@ class Config {
       DD_ENV,
       DD_EXPERIMENTAL_API_SECURITY_ENABLED,
       DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED,
-      DD_EXPERIMENTAL_PROFILING_ENABLED,
+      DD_PROFILING_ENABLED,
       DD_GRPC_CLIENT_ERROR_STATUSES,
       DD_GRPC_SERVER_ERROR_STATUSES,
       JEST_WORKER_ID,
@@ -697,7 +697,6 @@ class Config {
       DD_LLMOBS_ML_APP,
       DD_OPENAI_LOGS_ENABLED,
       DD_OPENAI_SPAN_CHAR_LIMIT,
-      DD_PROFILING_ENABLED,
       DD_PROFILING_EXPORTERS,
       DD_PROFILING_SOURCE_MAP,
       DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD,
@@ -893,7 +892,6 @@ class Config {
     this._setString(env, 'port', DD_TRACE_AGENT_PORT)
     const profilingEnabled = normalizeProfilingEnabledValue(
       coalesce(
-        DD_EXPERIMENTAL_PROFILING_ENABLED,
         DD_PROFILING_ENABLED,
         this._isInServerlessEnvironment() ? 'false' : undefined
       )
