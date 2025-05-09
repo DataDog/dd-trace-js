@@ -11,6 +11,8 @@ const { debuglog } = require('util')
 const { supportedConfigurations, aliases } = require('./supported-configurations')
 const hasOwn = Object.hasOwn || ((obj, prop) => Object.prototype.hasOwnProperty.call(obj, prop))
 
+const aliasString = JSON.stringify(aliases, null, 0)
+
 const debug = debuglog('dd:debug')
 
 const configs = {}
@@ -63,7 +65,10 @@ module.exports = {
   },
   getConfiguration (name) {
     const config = configs[name]
-    if (config === undefined && !hasOwn(supportedConfigurations, name) && name.startsWith('DD_')) {
+    if (config === undefined &&
+        name.startsWith('DD_') &&
+        !hasOwn(supportedConfigurations, name) &&
+        !aliasString.includes(`"${name}"`)) {
       debug(`Missing ${name} configuration in supported-configurations file. The environment variable is ignored.`)
       console.error(`Missing ${name}`)
     }
