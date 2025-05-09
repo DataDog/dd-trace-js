@@ -9,15 +9,22 @@
 
 const log = require('./log')
 const { supportedConfigurations, aliases } = require('./supported-configurations')
+const hasOwn = Object.hasOwn || ((obj, prop) => Object.prototype.hasOwnProperty.call(obj, prop))
 
 const configs = {}
 // Round 1: assign all valid configs and backup to aliases if needed
+for (const [name, value] of Object.entries(process.env)) {
+  if (!name.startsWith('DD_')) {
+    configs[name] = value
+  }
+}
+
 for (const name of Object.keys(supportedConfigurations)) {
-  if (Object.hasOwn(process.env, name) || !name.startsWith('DD_')) {
+  if (process.env[name]) {
     configs[name] = process.env[name]
   } else {
-    for (const alias in aliases[name]) {
-      if (Object.hasOwn(process.env, alias)) {
+    for (const alias of aliases[name]) {
+      if (process.env[alias]) {
         configs[name] = process.env[alias]
         break
       }
@@ -31,8 +38,8 @@ module.exports = {
   },
   getConfiguration (name) {
     const config = configs[name]
-    if (config == null) {
-      log.warn(`Config ${name} was not set in process.env`)
+    if (config === undefined && !hasOwn(supportedConfigurations, name)) {
+      log.debug(`Missing ${name} configuration in supported-configurations fi le. The environment variable is ignored.`)
     }
     return config
   }

@@ -16,6 +16,7 @@ const { tagger } = require('./tagger')
 const { isFalse, isTrue } = require('../util')
 const { getAzureTagsFromMetadata, getAzureAppMetadata } = require('../azure_metadata')
 const satisfies = require('semifies')
+const { getConfiguration } = require('../config-helper')
 
 class Config {
   constructor (options = {}) {
@@ -56,7 +57,7 @@ class Config {
     const service = options.service || DD_SERVICE || 'node'
     const host = os.hostname()
     const version = coalesce(options.version, DD_VERSION)
-    const functionname = process.env.AWS_LAMBDA_FUNCTION_NAME
+    const functionname = getConfiguration('AWS_LAMBDA_FUNCTION_NAME')
     // Must be longer than one minute so pad with five seconds
     const flushInterval = coalesce(options.interval, Number(DD_PROFILING_UPLOAD_PERIOD) * 1000, 65 * 1000)
     const uploadTimeout = coalesce(options.uploadTimeout,
@@ -89,7 +90,7 @@ class Config {
     const logger = this.logger
     function logExperimentalVarDeprecation (shortVarName) {
       const deprecatedEnvVarName = `DD_PROFILING_EXPERIMENTAL_${shortVarName}`
-      const v = process.env[deprecatedEnvVarName]
+      const v = getConfiguration(deprecatedEnvVarName)
       // not null, undefined, or NaN -- same logic as koalas.hasValue
       // eslint-disable-next-line no-self-compare
       if (v != null && v === v) {

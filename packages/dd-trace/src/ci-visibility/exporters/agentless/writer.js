@@ -2,6 +2,7 @@
 const request = require('../../../exporters/common/request')
 const { safeJSONStringify } = require('../../../exporters/common/util')
 const log = require('../../../log')
+const { getConfiguration } = require('../../../config-helper')
 
 const { AgentlessCiVisibilityEncoder } = require('../../../encode/agentless-ci-visibility')
 const BaseWriter = require('../../../exporters/common/writer')
@@ -29,7 +30,7 @@ class Writer extends BaseWriter {
       path: '/api/v2/citestcycle',
       method: 'POST',
       headers: {
-        'dd-api-key': process.env.DATADOG_API_KEY || process.env.DD_API_KEY,
+        'dd-api-key': getConfiguration('DATADOG_API_KEY') || getConfiguration('DD_API_KEY'),
         'Content-Type': 'application/msgpack'
       },
       timeout: 15000,

@@ -2,6 +2,7 @@
 const request = require('../../../exporters/common/request')
 const log = require('../../../log')
 const { safeJSONStringify } = require('../../../exporters/common/util')
+const { getConfiguration } = require('../../../config-helper')
 
 const { CoverageCIVisibilityEncoder } = require('../../../encode/coverage-ci-visibility')
 const BaseWriter = require('../../../exporters/common/writer')
@@ -28,7 +29,7 @@ class Writer extends BaseWriter {
       path: '/api/v2/citestcov',
       method: 'POST',
       headers: {
-        'dd-api-key': process.env.DATADOG_API_KEY || process.env.DD_API_KEY,
+        'dd-api-key': getConfiguration('DATADOG_API_KEY') || getConfiguration('DD_API_KEY'),
         ...form.getHeaders()
       },
       timeout: 15000,

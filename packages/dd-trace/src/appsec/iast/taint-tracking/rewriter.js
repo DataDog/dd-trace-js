@@ -14,6 +14,7 @@ const log = require('../../../log')
 const { isMainThread } = require('worker_threads')
 const { LOG_MESSAGE, REWRITTEN_MESSAGE } = require('./constants')
 const orchestrionConfig = require('../../../../../datadog-instrumentations/src/orchestrion-config')
+const { getConfiguration } = require('../../../config-helper')
 
 let config
 const hardcodedSecretCh = dc.channel('datadog:secrets:result')
@@ -24,7 +25,7 @@ let kSymbolPrepareStackTrace
 let esmRewriterEnabled = false
 
 function isFlagPresent (flag) {
-  return process.env.NODE_OPTIONS?.includes(flag) ||
+  return getConfiguration('NODE_OPTIONS')?.includes(flag) ||
     process.execArgv?.some(arg => arg.includes(flag))
 }
 

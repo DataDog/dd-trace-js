@@ -5,6 +5,7 @@ const { addHook, channel, AsyncResource } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 const { isMarkedAsUnskippable } = require('../../../datadog-plugin-jest/src/util')
 const log = require('../../../dd-trace/src/log')
+const configHelper = require('../../dd-trace/src/config-helper')
 const {
   getTestSuitePath,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
@@ -312,7 +313,7 @@ addHook({
 }, (Mocha) => {
   shimmer.wrap(Mocha.prototype, 'run', run => function () {
     // Workers do not need to request any data, just run the tests
-    if (!testStartCh.hasSubscribers || process.env.MOCHA_WORKER_ID || this.options.parallel) {
+    if (!testStartCh.hasSubscribers || configHelper.getConfiguration('MOCHA_WORKER_ID') || this.options.parallel) {
       return run.apply(this, arguments)
     }
 

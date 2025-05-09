@@ -14,6 +14,7 @@ const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
 const { channel } = require('dc-polyfill')
 const util = require('util')
+const { getConfiguration } = require('../config-helper')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -25,7 +26,7 @@ const {
 const unfinishedRegistry = createRegistry('unfinished')
 const finishedRegistry = createRegistry('finished')
 
-const OTEL_ENABLED = !!process.env.DD_TRACE_OTEL_ENABLED
+const OTEL_ENABLED = !!getConfiguration('DD_TRACE_OTEL_ENABLED')
 const ALLOWED = ['string', 'number', 'boolean']
 
 const integrationCounters = {

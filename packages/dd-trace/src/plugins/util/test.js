@@ -2,6 +2,7 @@ const path = require('path')
 const fs = require('fs')
 const { URL } = require('url')
 const log = require('../../log')
+const { getConfiguration } = require('../../config-helper')
 
 const istanbul = require('istanbul-lib-coverage')
 const ignore = require('ignore')
@@ -254,7 +255,7 @@ module.exports = {
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
 function getPkgManager () {
   try {
-    return process.env.npm_config_user_agent.split(' ')[0].replace('/', '-')
+    return getConfiguration('npm_config_user_agent').split(' ')[0].replace('/', '-')
   } catch (e) {
     return ''
   }

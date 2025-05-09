@@ -4,9 +4,10 @@
 /* eslint-disable no-console */
 
 var isTrue = require('./util').isTrue
+const { getConfiguration } = require('../config-helper')
 
-var DD_TRACE_DEBUG = process.env.DD_TRACE_DEBUG
-var DD_TRACE_LOG_LEVEL = process.env.DD_TRACE_LOG_LEVEL
+var DD_TRACE_DEBUG = getConfiguration('DD_TRACE_DEBUG')
+var DD_TRACE_LOG_LEVEL = getConfiguration('DD_TRACE_LOG_LEVEL')
 
 var logLevels = {
   trace: 20,

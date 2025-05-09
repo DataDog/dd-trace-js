@@ -3,6 +3,7 @@ const path = require('path')
 
 const FormData = require('../../../exporters/common/form-data')
 const request = require('../../../exporters/common/request')
+const { getConfiguration } = require('../../../config-helper')
 
 const log = require('../../../log')
 const { isFalse } = require('../../../util')
@@ -48,7 +49,7 @@ function getCommonRequestOptions (url) {
   return {
     method: 'POST',
     headers: {
-      'dd-api-key': process.env.DATADOG_API_KEY || process.env.DD_API_KEY
+      'dd-api-key': getConfiguration('DATADOG_API_KEY') || getConfiguration('DD_API_KEY')
     },
     timeout: 15000,
     url
@@ -285,7 +286,7 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
     }
     // Otherwise we unshallow and get commits to upload again
     log.debug('It is shallow clone, unshallowing...')
-    if (!isFalse(process.env.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED)) {
+    if (!isFalse(getConfiguration('DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED'))) {
       unshallowRepository()
     }
 

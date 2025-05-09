@@ -1,6 +1,7 @@
 'use strict'
 
 const log = require('./log')
+const { getConfiguration } = require('./config-helper')
 
 function maybeStartServerlessMiniAgent (config) {
   if (process.platform !== 'win32' && process.platform !== 'linux') {
@@ -28,8 +29,8 @@ function maybeStartServerlessMiniAgent (config) {
 }
 
 function getRustBinaryPath (config) {
-  if (process.env.DD_MINI_AGENT_PATH !== undefined) {
-    return process.env.DD_MINI_AGENT_PATH
+  if (getConfiguration('DD_MINI_AGENT_PATH') !== undefined) {
+    return getConfiguration('DD_MINI_AGENT_PATH')
   }
 
   const rustBinaryPathRoot = config.isGCPFunction ? '/workspace' : '/home/site/wwwroot'
@@ -47,21 +48,26 @@ datadog-serverless-trace-mini-agent${rustBinaryExtension}`
 }
 
 function getIsGCPFunction () {
-  const isDeprecatedGCPFunction = process.env.FUNCTION_NAME !== undefined && process.env.GCP_PROJECT !== undefined
-  const isNewerGCPFunction = process.env.K_SERVICE !== undefined && process.env.FUNCTION_TARGET !== undefined
+  const isDeprecatedGCPFunction =
+    getConfiguration('FUNCTION_NAME') !== undefined &&
+    getConfiguration('GCP_PROJECT') !== undefined
+  const isNewerGCPFunction =
+    getConfiguration('K_SERVICE') !== undefined &&
+    getConfiguration('FUNCTION_TARGET') !== undefined
 
   return isDeprecatedGCPFunction || isNewerGCPFunction
 }
 
 function getIsAzureFunction () {
   const isAzureFunction =
-    process.env.FUNCTIONS_EXTENSION_VERSION !== undefined && process.env.FUNCTIONS_WORKER_RUNTIME !== undefined
+    getConfiguration('FUNCTIONS_EXTENSION_VERSION') !== undefined &&
+    getConfiguration('FUNCTIONS_WORKER_RUNTIME') !== undefined
 
   return isAzureFunction
 }
 
 function isInServerlessEnvironment () {
-  const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
+  const inAWSLambda = getConfiguration('AWS_LAMBDA_FUNCTION_NAME') !== undefined
   const isGCPFunction = getIsGCPFunction()
   const isAzureFunction = getIsAzureFunction()
 

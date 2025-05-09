@@ -7,18 +7,19 @@ var fs = require('fs')
 var spawn = require('child_process').spawn
 var tracerVersion = require('../../../../package.json').version
 var log = require('./log')
+const { getConfiguration } = require('../config-helper')
 
 module.exports = sendTelemetry
 
-if (!process.env.DD_INJECTION_ENABLED) {
+if (!getConfiguration('DD_INJECTION_ENABLED')) {
   module.exports = function () {}
 }
 
-if (!process.env.DD_TELEMETRY_FORWARDER_PATH) {
+if (!getConfiguration('DD_TELEMETRY_FORWARDER_PATH')) {
   module.exports = function () {}
 }
 
-if (!fs.existsSync(process.env.DD_TELEMETRY_FORWARDER_PATH)) {
+if (!fs.existsSync(getConfiguration('DD_TELEMETRY_FORWARDER_PATH'))) {
   module.exports = function () {}
 }
 
@@ -50,7 +51,7 @@ function sendTelemetry (name, tags) {
   if (typeof name === 'string') {
     points = [{ name: name, tags: tags || [] }]
   }
-  if (['1', 'true', 'True'].indexOf(process.env.DD_INJECT_FORCE) !== -1) {
+  if (['1', 'true', 'True'].indexOf(getConfiguration('DD_INJECT_FORCE')) !== -1) {
     points = points.filter(function (p) { return ['error', 'complete'].includes(p.name) })
   }
   points = points.filter(function (p) { return !hasSeen(p) })
@@ -60,7 +61,7 @@ function sendTelemetry (name, tags) {
   if (points.length === 0) {
     return
   }
-  var proc = spawn(process.env.DD_TELEMETRY_FORWARDER_PATH, ['library_entrypoint'], {
+  var proc = spawn(getConfiguration('DD_TELEMETRY_FORWARDER_PATH'), ['library_entrypoint'], {
     stdio: 'pipe'
   })
   proc.on('error', function () {
