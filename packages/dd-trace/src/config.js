@@ -273,10 +273,7 @@ class Config {
 
     checkIfBothOtelAndDdEnvVarSet()
 
-    const DD_API_KEY = coalesce(
-      configHelper.getConfiguration('DATADOG_API_KEY'),
-      configHelper.getConfiguration('DD_API_KEY')
-    )
+    const DD_API_KEY = configHelper.getConfiguration('DD_API_KEY')
 
     if (configHelper.getConfiguration('DD_TRACE_PROPAGATION_STYLE') && (
       configHelper.getConfiguration('DD_TRACE_PROPAGATION_STYLE_INJECT') ||
@@ -646,7 +643,6 @@ class Config {
       DD_API_SECURITY_SAMPLE_DELAY,
       DD_APM_TRACING_ENABLED,
       DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE,
-      DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING,
       DD_APPSEC_ENABLED,
       DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON,
       DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML,
@@ -666,7 +662,6 @@ class Config {
       DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED,
       DD_DATA_STREAMS_ENABLED,
       DD_DBM_PROPAGATION_MODE,
-      DD_DOGSTATSD_HOSTNAME,
       DD_DOGSTATSD_HOST,
       DD_DOGSTATSD_PORT,
       DD_DYNAMIC_INSTRUMENTATION_ENABLED,
@@ -711,7 +706,6 @@ class Config {
       DD_RUNTIME_METRICS_ENABLED,
       DD_SERVICE,
       DD_SERVICE_MAPPING,
-      DD_SERVICE_NAME,
       DD_SITE,
       DD_SPAN_SAMPLING_RULES,
       DD_SPAN_SAMPLING_RULES_FILE,
@@ -723,7 +717,6 @@ class Config {
       DD_TELEMETRY_METRICS_ENABLED,
       DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED,
       DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED,
-      DD_TRACE_AGENT_HOSTNAME,
       DD_TRACE_AGENT_PORT,
       DD_TRACE_AGENT_PROTOCOL_VERSION,
       DD_TRACE_AWS_ADD_SPAN_POINTERS,
@@ -801,10 +794,7 @@ class Config {
     this._setValue(env, 'appsec.blockedTemplateJson', maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON))
     this._envUnprocessed['appsec.blockedTemplateJson'] = DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON
     this._setBoolean(env, 'appsec.enabled', DD_APPSEC_ENABLED)
-    this._setString(env, 'appsec.eventTracking.mode', coalesce(
-      DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE,
-      DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING // TODO: remove in next major
-    ))
+    this._setString(env, 'appsec.eventTracking.mode', DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE)
     this._setString(env, 'appsec.obfuscatorKeyRegex', DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP)
     this._setString(env, 'appsec.obfuscatorValueRegex', DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP)
     this._setBoolean(env, 'appsec.rasp.enabled', DD_APPSEC_RASP_ENABLED)
@@ -835,7 +825,7 @@ class Config {
       DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED
     )
     this._setString(env, 'dbmPropagationMode', DD_DBM_PROPAGATION_MODE)
-    this._setString(env, 'dogstatsd.hostname', DD_DOGSTATSD_HOST || DD_DOGSTATSD_HOSTNAME)
+    this._setString(env, 'dogstatsd.hostname', DD_DOGSTATSD_HOST)
     this._setString(env, 'dogstatsd.port', DD_DOGSTATSD_PORT)
     this._setBoolean(env, 'dsmEnabled', DD_DATA_STREAMS_ENABLED)
     this._setBoolean(env, 'dynamicInstrumentation.enabled', DD_DYNAMIC_INSTRUMENTATION_ENABLED)
@@ -857,7 +847,7 @@ class Config {
     this._setIntegerRangeSet(env, 'grpc.client.error.statuses', DD_GRPC_CLIENT_ERROR_STATUSES)
     this._setIntegerRangeSet(env, 'grpc.server.error.statuses', DD_GRPC_SERVER_ERROR_STATUSES)
     this._setArray(env, 'headerTags', DD_TRACE_HEADER_TAGS)
-    this._setString(env, 'hostname', coalesce(DD_AGENT_HOST, DD_TRACE_AGENT_HOSTNAME))
+    this._setString(env, 'hostname', DD_AGENT_HOST)
     this._setValue(env, 'iast.dbRowsToTaint', maybeInt(DD_IAST_DB_ROWS_TO_TAINT))
     this._setBoolean(env, 'iast.deduplicationEnabled', DD_IAST_DEDUPLICATION_ENABLED)
     this._setBoolean(env, 'iast.enabled', DD_IAST_ENABLED)
@@ -941,7 +931,7 @@ class Config {
     this._setSamplingRule(env, 'sampler.rules', safeJsonParse(DD_TRACE_SAMPLING_RULES))
     this._envUnprocessed['sampler.rules'] = DD_TRACE_SAMPLING_RULES
     this._setString(env, 'scope', DD_TRACE_SCOPE)
-    this._setString(env, 'service', DD_SERVICE || DD_SERVICE_NAME || tags.service || OTEL_SERVICE_NAME)
+    this._setString(env, 'service', DD_SERVICE || tags.service || OTEL_SERVICE_NAME)
     if (DD_SERVICE_MAPPING) {
       this._setValue(env, 'serviceMapping', fromEntries(
         configHelper.getConfiguration('DD_SERVICE_MAPPING').split(',').map(x => x.trim().split(':'))
@@ -1166,7 +1156,6 @@ class Config {
     const DD_AGENT_HOST = coalesce(
       this._optionsArg.hostname,
       configHelper.getConfiguration('DD_AGENT_HOST'),
-      configHelper.getConfiguration('DD_TRACE_AGENT_HOSTNAME'),
       '127.0.0.1'
     )
     return DD_AGENT_HOST || (url && url.hostname)
@@ -1536,7 +1525,6 @@ function getAgentUrl (url, options) {
     !options.hostname &&
     !options.port &&
     !configHelper.getConfiguration('DD_AGENT_HOST') &&
-    !configHelper.getConfiguration('DD_TRACE_AGENT_HOSTNAME') &&
     !configHelper.getConfiguration('DD_TRACE_AGENT_PORT') &&
     fs.existsSync('/var/run/datadog/apm.socket')
   ) {

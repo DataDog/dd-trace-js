@@ -24,7 +24,7 @@ class DynamicInstrumentationLogsWriter extends BaseWriter {
       path: '/api/v2/logs',
       method: 'POST',
       headers: {
-        'dd-api-key': getConfiguration('DATADOG_API_KEY') || getConfiguration('DD_API_KEY'),
+        'dd-api-key': getConfiguration('DD_API_KEY'),
         'Content-Type': 'application/json'
       },
       // TODO: what's a good value for timeout for the logs intake?

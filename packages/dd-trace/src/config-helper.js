@@ -1,4 +1,5 @@
 'use strict'
+/* eslint-disable no-console */
 
 // 0. Add jira ticket for this
 // 1. Adding a linter to verify that process.env is not used throughout the code (tests are fine)
@@ -11,12 +12,14 @@ const { debuglog } = require('util')
 const { supportedConfigurations, aliases } = require('./supported-configurations')
 const hasOwn = Object.hasOwn || ((obj, prop) => Object.prototype.hasOwnProperty.call(obj, prop))
 
+const aliasString = JSON.stringify(aliases, null, 0)
+
 const debug = debuglog('dd:debug')
 
 const configs = {}
 // Round 1: assign all valid configs and backup to aliases if needed
 for (const [name, value] of Object.entries(process.env)) {
-  if (!name.startsWith('DD_')) {
+  if (!name.startsWith('DD_') && !name.startsWith('OTEL_')) {
     configs[name] = value
   }
 }
@@ -41,11 +44,16 @@ process.env = new Proxy(process.env, {
   set (target, prop, value) {
     // @ts-ignore
     target[prop] = value
-    if (typeof prop === 'string' && prop.startsWith('DD_')) {
+    if (typeof prop === 'string' && (prop.startsWith('DD_') || prop.startsWith('OTEL_'))) {
       if (supportedConfigurations[prop]) {
         configs[prop] = value
-      } else if (aliases[prop]) {
-        configs[aliases[prop]] = value
+      } else if (aliasString.includes(`"${prop}"`)) {
+        for (const alias of Object.keys(aliases)) {
+          if (aliases[alias].includes(prop)) {
+            configs[alias] = value
+            break
+          }
+        }
       } else {
         debug(`Missing configuration ${prop} in supported-configurations file. The environment variable is ignored.`)
         console.error(`Missing ${prop}`)
@@ -63,7 +71,10 @@ module.exports = {
   },
   getConfiguration (name) {
     const config = configs[name]
-    if (config === undefined && !hasOwn(supportedConfigurations, name) && name.startsWith('DD_')) {
+    if (config === undefined &&
+        (name.startsWith('DD_') || name.startsWith('OTEL_')) &&
+        !hasOwn(supportedConfigurations, name) &&
+        !aliasString.includes(`"${name}"`)) {
       debug(`Missing ${name} configuration in supported-configurations file. The environment variable is ignored.`)
       console.error(`Missing ${name}`)
     }

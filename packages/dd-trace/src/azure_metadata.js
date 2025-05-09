@@ -5,7 +5,7 @@
 
 const os = require('os')
 const { getIsAzureFunction } = require('./serverless')
-const { getConfiguration } = require('../../dd-trace/src/config-helper')
+const { getConfiguration, getConfigurations } = require('../../dd-trace/src/config-helper')
 
 function extractSubscriptionID (ownerName) {
   if (ownerName !== undefined) {
@@ -48,7 +48,7 @@ function buildMetadata () {
     WEBSITE_OS,
     WEBSITE_RESOURCE_GROUP,
     WEBSITE_SITE_NAME
-  } = process.env
+  } = getConfigurations()
 
   const subscriptionID = extractSubscriptionID(WEBSITE_OWNER_NAME)
 

@@ -9,11 +9,12 @@ const log = require('../../../dd-trace/src/log')
 const checkRequireCache = require('./check-require-cache')
 const telemetry = require('../../../dd-trace/src/guardrails/telemetry')
 const { isInServerlessEnvironment } = require('../../../dd-trace/src/serverless')
+const { getConfigurations } = require('../../../dd-trace/src/config-helper')
 
 const {
   DD_TRACE_DISABLED_INSTRUMENTATIONS = '',
   DD_TRACE_DEBUG = ''
-} = process.env
+} = getConfigurations()
 
 const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
@@ -24,7 +25,7 @@ const disabledInstrumentations = new Set(
 )
 
 // Check for DD_TRACE_<INTEGRATION>_ENABLED environment variables
-for (const [key, value] of Object.entries(process.env)) {
+for (const [key, value] of Object.entries(getConfigurations())) {
   const match = key.match(/^DD_TRACE_(.+)_ENABLED$/)
   if (match && (value.toLowerCase() === 'false' || value === '0')) {
     const integration = match[1].toLowerCase()

@@ -29,7 +29,7 @@ class Writer extends BaseWriter {
       path: '/api/v2/citestcov',
       method: 'POST',
       headers: {
-        'dd-api-key': getConfiguration('DATADOG_API_KEY') || getConfiguration('DD_API_KEY'),
+        'dd-api-key': getConfiguration('DD_API_KEY'),
         ...form.getHeaders()
       },
       timeout: 15000,

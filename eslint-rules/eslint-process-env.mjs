@@ -7,9 +7,11 @@ export default {
     schema: []
   },
   create (context) {
-    const allowedFile = /[/\\]packages[/\\]dd-trace[/\\]src[/\\]config-helper\.js$/
+    const allowedFile = /[/\\]packages[/\\]dd-trace[/\\]src[/\\](config-helper|guardrails[/\\]index)\.js$/
 
     return {
+      // TODO: Add support for other types like
+      // const { FOO_BAR } = process.env and Object.keys(process.env)
       MemberExpression (node) {
         const isProcessEnv =
           node.object?.type === 'MemberExpression' &&

@@ -15,7 +15,7 @@ if (getConfiguration('AWS_LAMBDA_FUNCTION_NAME') !== undefined) {
   require('./lambda')
 }
 
-const { DD_TRACE_DISABLED_PLUGINS } = process.env
+const DD_TRACE_DISABLED_PLUGINS = getConfiguration('DD_TRACE_DISABLED_PLUGINS')
 
 const disabledPlugins = new Set(
   DD_TRACE_DISABLED_PLUGINS && DD_TRACE_DISABLED_PLUGINS.split(',').map(plugin => plugin.trim())
