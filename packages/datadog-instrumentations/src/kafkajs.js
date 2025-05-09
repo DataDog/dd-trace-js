@@ -21,8 +21,6 @@ const batchConsumerStartCh = channel('apm:kafkajs:consume-batch:start')
 const batchConsumerFinishCh = channel('apm:kafkajs:consume-batch:finish')
 const batchConsumerErrorCh = channel('apm:kafkajs:consume-batch:error')
 
-let disableHeaderInjection = false
-
 function commitsFromEvent (event) {
   const { payload: { groupId, topics } } = event
   const commitList = []
@@ -56,6 +54,8 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
 
     const kafkaClusterIdPromise = getKafkaClusterId(this)
 
+    producer._ddDisableHeaderInjection = false
+
     producer.send = function () {
       const wrappedSend = (clusterId) => {
         const innerAsyncResource = new AsyncResource('bound-anonymous-fn')
@@ -67,7 +67,9 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
 
           try {
             const { topic, messages = [] } = arguments[0]
-            producerStartCh.publish({ topic, messages, bootstrapServers, clusterId, disableHeaderInjection })
+            producerStartCh.publish(
+              { topic, messages, bootstrapServers, clusterId, disableHeaderInjection: this._ddDisableHeaderInjection }
+            )
 
             const result = send.apply(this, arguments)
 
@@ -80,7 +82,7 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
                 if (err) {
                   // disable header injection for this error (unfortunately the error name / type is not more specific)
                   if (err.name === 'KafkaJSProtocolError' && err.type === 'UNKNOWN') {
-                    disableHeaderInjection = true
+                    this._ddDisableHeaderInjection = true
                   }
                   producerErrorCh.publish(err)
                 }
