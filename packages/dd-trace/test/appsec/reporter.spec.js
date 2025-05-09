@@ -5,6 +5,7 @@ const { storage } = require('../../../datadog-core')
 const zlib = require('zlib')
 const { ASM } = require('../../src/standalone/product')
 const { USER_KEEP } = require('../../../../ext/priority')
+const {assert} = require("chai");
 
 describe('reporter', () => {
   let Reporter
@@ -418,6 +419,58 @@ describe('reporter', () => {
 
       expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, ASM)
       expect(telemetry.updateRateLimitedMetric).to.not.have.been.called
+    })
+
+    describe('extended collection', () => {
+      const expectedBody = {
+        foo: 42,
+        bar: 'baz'
+      }
+
+      beforeEach(() => {
+        req.body = expectedBody
+      })
+
+      after(() => {
+        Reporter.setExtendedCollection({})
+      })
+
+      it('should report request body in meta struct on rasp event when enabled', () => {
+        Reporter.setExtendedCollection({
+          raspBodyCollection: true
+        })
+        Reporter.reportAttack([
+          {
+            rule: {
+              tags: {
+                module: 'rasp'
+              }
+            },
+            rule_matches: [{}]
+          }
+        ])
+
+        assert.deepEqual(span.meta_struct['http.request.body'], expectedBody)
+      })
+
+      it('should not report request body in meta struct on rasp event when disabled', () => {
+        Reporter.setExtendedCollection({
+          raspBodyCollection: false
+        })
+
+        Reporter.reportAttack([
+          {
+            rule: {
+              tags: {
+                module: 'rasp'
+              }
+            },
+            rule_matches: [{}]
+          }
+        ])
+
+        assert.strictEqual(span.meta_struct?.['http.request.body'], undefined)
+      })
     })
   })
 
