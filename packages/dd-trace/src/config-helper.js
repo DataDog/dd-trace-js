@@ -63,7 +63,7 @@ module.exports = {
   },
   getConfiguration (name) {
     const config = configs[name]
-    if (config === undefined && !hasOwn(supportedConfigurations, name)) {
+    if (config === undefined && !hasOwn(supportedConfigurations, name) && name.startsWith('DD_')) {
       debug(`Missing ${name} configuration in supported-configurations file. The environment variable is ignored.`)
       console.error(`Missing ${name}`)
     }
