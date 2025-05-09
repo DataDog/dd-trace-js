@@ -34,6 +34,28 @@ for (const name of Object.keys(supportedConfigurations)) {
   }
 }
 
+// This does not work in case someone destructures process.env during loading before this file
+// and the proxy is created. We need to make sure this file is loaded first.
+process.env = new Proxy(process.env, {
+  // TODO: defineProperty should also be handled.
+  set (target, prop, value) {
+    // @ts-ignore
+    target[prop] = value
+    if (typeof prop === 'string' && prop.startsWith('DD_')) {
+      if (supportedConfigurations[prop]) {
+        configs[prop] = value
+      } else if (aliases[prop]) {
+        configs[aliases[prop]] = value
+      } else {
+        debug(`Missing configuration ${prop} in supported-configurations file. The environment variable is ignored.`)
+      }
+    } else {
+      configs[prop] = value
+    }
+    return true
+  }
+})
+
 module.exports = {
   getConfigurations () {
     return configs
@@ -41,7 +63,7 @@ module.exports = {
   getConfiguration (name) {
     const config = configs[name]
     if (config === undefined && !hasOwn(supportedConfigurations, name)) {
-      debug(`Missing ${name} configuration in supported-configurations fi le. The environment variable is ignored.`)
+      debug(`Missing ${name} configuration in supported-configurations file. The environment variable is ignored.`)
     }
     return config
   }
