@@ -22,7 +22,7 @@ for (const [name, value] of Object.entries(process.env)) {
 for (const name of Object.keys(supportedConfigurations)) {
   if (process.env[name]) {
     configs[name] = process.env[name]
-  } else {
+  } else if (aliases[name]) {
     for (const alias of aliases[name]) {
       if (process.env[alias]) {
         configs[name] = process.env[alias]
