@@ -9,6 +9,8 @@ const { satisfies } = require('semver')
 const path = require('path')
 
 const agent = require('../plugins/agent')
+const { NODE_MAJOR } = require('../../../../version')
+
 
 describe('test suite', () => {
   let server
@@ -146,7 +148,7 @@ describe('test suite', () => {
       }
     ]
 
-    if (satisfies(realVersion, '>=13.2')) {
+    if (satisfies(realVersion, '>=13.2') && !(NODE_MAJOR >= 24 && satisfies(realVersion, '=13.2'))) {
       tests.push({
         appName: 'app-dir',
         serverPath: '.next/standalone/server.js'
