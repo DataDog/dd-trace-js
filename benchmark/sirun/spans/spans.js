@@ -1,3 +1,4 @@
+const { benchOps } = require('../helpers')
 const tracer = require('../../..').init()
 
 tracer._tracer._processor.process = function process (span) {
@@ -9,7 +10,10 @@ const { FINISH } = process.env
 
 const spans = []
 
-for (let i = 0; i < 100000; i++) {
+const ITERATIONS = 100000
+
+const bench = benchOps.start('spans', ITERATIONS)
+for (let i = 0; i < ITERATIONS; i++) {
   const span = tracer.startSpan('some.span.name', {})
   if (FINISH === 'now') {
     span.finish()
@@ -19,7 +23,8 @@ for (let i = 0; i < 100000; i++) {
 }
 
 if (FINISH !== 'now') {
-  for (let i = 0; i < 100000; i++) {
+  for (let i = 0; i < ITERATIONS; i++) {
     spans[i].finish()
   }
 }
+bench.end()
