@@ -51,7 +51,6 @@ declare -a plugins=(
   "opensearch"
   "openai"
   "oracledb"
-  "paperplane"
   "pino"
   "pg"
   "promise"

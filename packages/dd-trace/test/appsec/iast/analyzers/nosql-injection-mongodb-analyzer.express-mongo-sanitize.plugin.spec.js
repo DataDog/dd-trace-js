@@ -4,7 +4,6 @@ const axios = require('axios')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
-const semver = require('semver')
 const { prepareTestServerForIastInExpress } = require('../utils')
 const agent = require('../../../plugins/agent')
 
@@ -13,15 +12,6 @@ describe('nosql injection detection in mongodb - whole feature', () => {
   withVersions('express-mongo-sanitize', 'express', '>4.18.0 <5.0.0', expressVersion => {
     withVersions('express-mongo-sanitize', 'mongodb', mongodbVersion => {
       const mongodb = require(`../../../../../../versions/mongodb@${mongodbVersion}`)
-
-      const satisfiesNodeVersionForMongo3and4 =
-        (semver.satisfies(process.version, '<14.20.1') && semver.satisfies(mongodb.version(), '>=3.3 <5'))
-      const satisfiesNodeVersionForMongo5 =
-        (semver.satisfies(process.version, '>=14.20.1 <16.20.1') && semver.satisfies(mongodb.version(), '5'))
-      const satisfiesNodeVersionForMongo6 =
-        (semver.satisfies(process.version, '>=16.20.1') && semver.satisfies(mongodb.version(), '>=6'))
-
-      if (!satisfiesNodeVersionForMongo3and4 && !satisfiesNodeVersionForMongo5 && !satisfiesNodeVersionForMongo6) return
 
       const vulnerableMethodFilename = 'mongodb-vulnerable-method.js'
       let collection, tmpFilePath

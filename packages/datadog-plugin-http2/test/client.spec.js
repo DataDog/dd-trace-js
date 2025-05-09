@@ -7,12 +7,11 @@ const tags = require('../../../ext/tags')
 const key = fs.readFileSync(path.join(__dirname, './ssl/test.key'))
 const cert = fs.readFileSync(path.join(__dirname, './ssl/test.crt'))
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const { DD_MAJOR } = require('../../../version')
 const { rawExpectedSchema } = require('./naming')
 
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
-const SERVICE_NAME = DD_MAJOR < 3 ? 'test-http-client' : 'test'
+const SERVICE_NAME = 'test'
 
 describe('Plugin', () => {
   let http2

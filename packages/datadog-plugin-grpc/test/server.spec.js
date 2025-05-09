@@ -10,8 +10,6 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK, GRPC_SERVER_ERROR_STATUSES } = r
 const nodeMajor = parseInt(process.versions.node.split('.')[0])
 const pkgs = nodeMajor > 14 ? ['@grpc/grpc-js'] : ['grpc', '@grpc/grpc-js']
 
-const { DD_MAJOR } = require('../../../version')
-
 describe('Plugin', () => {
   let grpc
   let port
@@ -89,7 +87,7 @@ describe('Plugin', () => {
           },
           {
             v0: {
-              opName: DD_MAJOR <= 2 ? 'grpc.request' : 'grpc.server',
+              opName: 'grpc.server',
               serviceName: 'test'
             },
             v1: {
