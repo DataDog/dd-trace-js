@@ -238,7 +238,6 @@ module.exports = {
     DD_TRACE_TELEMETRY_ENABLED: ['TKNH'],
     // TODO: This seems to be defined as test value and not as regular configuration?
     DD_TRACE_TWO_ENABLED: ['52OO'],
-    DD_TRACE_URL: ['6YWJ'],
     DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH: ['AB3U'],
     DD_TRACING_ENABLED: ['52OO'],
     DD_VERSION: ['ZR0L'],
@@ -253,14 +252,16 @@ module.exports = {
     OTEL_SERVICE_NAME: ['52OO'],
     OTEL_TRACES_EXPORTER: ['52OO'],
     OTEL_TRACES_SAMPLER_ARG: ['52OO'],
-    OTEL_TRACES_SAMPLER: ['52OO']
+    OTEL_TRACES_SAMPLER: ['52OO'],
+    DD_AGENTLESS_LOG_SUBMISSION_URL: ['52OO']
   },
   aliases: {
     // TODO: Add a lint rule to prevent the usage of the aliases in src
     DD_AGENT_HOST: ['DD_TRACE_AGENT_HOSTNAME'],
+    DD_API_KEY: ['DATADOG_API_KEY'],
     DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE: ['DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING'],
     DD_DOGSTATSD_HOST: ['DD_DOGSTATSD_HOSTNAME'],
     DD_SERVICE: ['DD_SERVICE_NAME'],
-    DD_API_KEY: ['DATADOG_API_KEY']
+    DD_TRACE_AGENT_URL: ['DD_TRACE_URL']
   }
 }

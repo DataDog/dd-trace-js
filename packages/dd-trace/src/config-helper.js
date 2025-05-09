@@ -25,11 +25,11 @@ for (const [name, value] of Object.entries(process.env)) {
 }
 
 for (const name of Object.keys(supportedConfigurations)) {
-  if (process.env[name]) {
+  if (Object.hasOwn(process.env, name)) {
     configs[name] = process.env[name]
   } else if (aliases[name]) {
     for (const alias of aliases[name]) {
-      if (process.env[alias]) {
+      if (Object.hasOwn(process.env, alias)) {
         configs[name] = process.env[alias]
         break
       }
@@ -57,7 +57,7 @@ function setProcessEnv (envs) {
           }
         } else {
           debug(`Missing configuration ${prop} in supported-configurations file. The environment variable is ignored.`)
-          console.error(`Missing ${prop}`)
+          throw new Error(`Missing ${prop}`)
         }
       } else {
         configs[prop] = value
@@ -91,7 +91,7 @@ module.exports = {
         !hasOwn(supportedConfigurations, name) &&
         !aliasString.includes(`"${name}"`)) {
       debug(`Missing ${name} configuration in supported-configurations file. The environment variable is ignored.`)
-      console.error(`Missing ${name}`)
+      throw new Error(`Missing ${name}`)
     }
     return config
   }
