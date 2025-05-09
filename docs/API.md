@@ -30,6 +30,7 @@ tracer.use('pg', {
 <h5 id="aws-sdk-config"></h5>
 <h5 id="azure-functions"></h5>
 <h5 id="bunyan"></h5>
+<h5 id="confluentinc-kafka-javascript"></h5>
 <h5 id="couchbase"></h5>
 <h5 id="cucumber"></h5>
 <h5 id="dns"></h5>
@@ -111,6 +112,7 @@ tracer.use('pg', {
 * [couchbase](./interfaces/export_.plugins.couchbase.html)
 * [cucumber](./interfaces/export_.plugins.cucumber.html)
 * [bunyan](./interfaces/export_.plugins.bunyan.html)
+* [confluentinc-kafka-javascript](./interfaces/export_.plugins.confluentinc_kafka_javascript.html)
 * [cassandra-driver](./interfaces/export_.plugins.cassandra_driver.html)
 * [connect](./interfaces/export_.plugins.connect.html)
 * [dns](./interfaces/export_.plugins.dns.html)

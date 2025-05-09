@@ -13,7 +13,7 @@ class KafkajsProducerPlugin extends ProducerPlugin {
 
   constructor () {
     super(...arguments)
-    this.addSub('apm:kafkajs:produce:commit', message => this.commit(message))
+    this.addSub(`apm:${this.constructor.id}:produce:commit`, message => this.commit(message))
   }
 
   /**
@@ -54,6 +54,7 @@ class KafkajsProducerPlugin extends ProducerPlugin {
    */
   commit (commitList) {
     if (!this.config.dsmEnabled) return
+    if (!commitList || !Array.isArray(commitList)) return
     const keys = [
       'type',
       'partition',
@@ -70,7 +71,7 @@ class KafkajsProducerPlugin extends ProducerPlugin {
     const span = this.startSpan({
       resource: topic,
       meta: {
-        component: 'kafkajs',
+        component: this.constructor.id,
         'kafka.topic': topic,
         'kafka.cluster_id': clusterId,
         [MESSAGING_DESTINATION_KEY]: topic

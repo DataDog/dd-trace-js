@@ -296,6 +296,7 @@ tracer.use('bunyan');
 tracer.use('couchbase');
 tracer.use('cassandra-driver');
 tracer.use('child_process');
+tracer.use('confluentinc-kafka-javascript');
 tracer.use('connect');
 tracer.use('connect', httpServerOptions);
 tracer.use('cypress');
