@@ -311,7 +311,12 @@ describe('reporter', () => {
     it('should add tags to request span when socket is not there', () => {
       delete req.socket
 
-      const result = Reporter.reportAttack([{"rule":{},"rule_matches":[{}]}])
+      const result = Reporter.reportAttack([
+        {
+          rule: {},
+          rule_matches: [{}]
+        }
+      ])
 
       expect(result).to.not.be.false
       expect(web.root).to.have.been.calledOnceWith(req)
@@ -326,7 +331,12 @@ describe('reporter', () => {
     })
 
     it('should add tags to request span', () => {
-      const result = Reporter.reportAttack([{"rule":{},"rule_matches":[{}]}])
+      const result = Reporter.reportAttack([
+        {
+          rule: {},
+          rule_matches: [{}]
+        }
+      ])
       expect(result).to.not.be.false
       expect(web.root).to.have.been.calledOnceWith(req)
 
@@ -389,7 +399,15 @@ describe('reporter', () => {
     it('should merge attacks json', () => {
       span.context()._tags = { '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}' }
 
-      const result = Reporter.reportAttack([{"rule":{}},{"rule":{},"rule_matches":[{}]}])
+      const result = Reporter.reportAttack([
+        {
+          rule: {}
+        },
+        {
+          rule: {},
+          rule_matches: [{}]
+        }
+      ])
       expect(result).to.not.be.false
       expect(web.root).to.have.been.calledOnceWith(req)
 
@@ -406,7 +424,15 @@ describe('reporter', () => {
     it('should call standalone sample', () => {
       span.context()._tags = { '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}' }
 
-      const result = Reporter.reportAttack([{"rule":{}},{"rule":{},"rule_matches":[{}]}])
+      const result = Reporter.reportAttack([
+        {
+          rule: {}
+        },
+        {
+          rule: {},
+          rule_matches: [{}]
+        }
+      ])
       expect(result).to.not.be.false
       expect(web.root).to.have.been.calledOnceWith(req)
 
