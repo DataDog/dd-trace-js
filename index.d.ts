@@ -154,6 +154,7 @@ interface Plugins {
   "bunyan": tracer.plugins.bunyan;
   "cassandra-driver": tracer.plugins.cassandra_driver;
   "child_process": tracer.plugins.child_process;
+  "confluentinc-kafka-javascript": tracer.plugins.confluentinc_kafka_javascript;
   "connect": tracer.plugins.connect;
   "couchbase": tracer.plugins.couchbase;
   "cucumber": tracer.plugins.cucumber;
@@ -717,7 +718,18 @@ declare namespace tracer {
          */
         maxDepth?: number,
       }
-    };
+    }
+
+    /**
+     * Configuration for Code Origin for Spans.
+     */
+    codeOriginForSpans?: {
+      /**
+       * Whether to enable Code Origin for Spans.
+       * @default true
+       */
+      enabled?: boolean
+    }
 
     /**
      * Configuration of the IAST. Can be a boolean as an alias to `iast.enabled`.
@@ -1333,6 +1345,12 @@ declare namespace tracer {
      * [child_process](https://nodejs.org/api/child_process.html) module.
      */
     interface child_process extends Instrumentation {}
+  
+    /**
+     * This plugin automatically instruments the
+     * [confluentinc-kafka-javascript](https://github.com/confluentinc/confluent-kafka-js) module.
+     */
+    interface confluentinc_kafka_javascript extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the
@@ -2251,6 +2269,7 @@ declare namespace tracer {
     /**
      * Defines the pattern to ignore cookie names in the vulnerability hash calculation
      * @default ".{32,}"
+     * @deprecated This property has no effect because hash calculation algorithm has been updated for cookie vulnerabilities
      */
     cookieFilterPattern?: string,
 

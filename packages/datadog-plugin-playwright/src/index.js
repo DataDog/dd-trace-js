@@ -268,6 +268,7 @@ class PlaywrightPlugin extends CiPlugin {
       isAttemptToFixRetry,
       hasFailedAllRetries,
       hasPassedAttemptToFixRetries,
+      hasFailedAttemptToFixRetries,
       isAtrRetry,
       onDone
     }) => {
@@ -312,6 +313,8 @@ class PlaywrightPlugin extends CiPlugin {
       }
       if (hasPassedAttemptToFixRetries) {
         span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
+      } else if (hasFailedAttemptToFixRetries) {
+        span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
       }
       if (isDisabled) {
         span.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')

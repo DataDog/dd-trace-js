@@ -15,11 +15,8 @@ if (!getConfiguration('DD_INJECTION_ENABLED')) {
   module.exports = function () {}
 }
 
-if (!getConfiguration('DD_TELEMETRY_FORWARDER_PATH')) {
-  module.exports = function () {}
-}
-
-if (!fs.existsSync(getConfiguration('DD_TELEMETRY_FORWARDER_PATH'))) {
+var telemetryForwarderPath = getConfiguration('DD_TELEMETRY_FORWARDER_PATH')
+if (typeof telemetryForwarderPath !== 'string' || !fs.existsSync(telemetryForwarderPath)) {
   module.exports = function () {}
 }
 

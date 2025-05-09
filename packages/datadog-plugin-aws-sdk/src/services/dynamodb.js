@@ -164,7 +164,6 @@ class DynamoDb extends BaseAwsSdkPlugin {
       return
     }
     if (!primaryKeyConfig) {
-      log.warn('Missing DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS env variable')
       return
     }
     const primaryKeySet = primaryKeyConfig[tableName]
