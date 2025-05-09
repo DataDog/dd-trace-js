@@ -9,29 +9,29 @@ module.exports = {
   exitTags
 }
 
-function entryTags (topOfStackFunc) {
-  return tag('entry', topOfStackFunc)
+function entryTags (topOfStackFunc, stackOffset = 0) {
+  return tag('entry', topOfStackFunc, stackOffset)
 }
 
 function exitTags (topOfStackFunc) {
   return tag('exit', topOfStackFunc)
 }
 
-function tag (type, topOfStackFunc) {
+function tag (type, topOfStackFunc, stackOffset = 0) {
   const frames = getUserLandFrames(topOfStackFunc, limit)
   const tags = {
     '_dd.code_origin.type': type
   }
-  for (let i = 0; i < frames.length; i++) {
+  for (let i = stackOffset; i < frames.length; i++) {
     const frame = frames[i]
-    tags[`_dd.code_origin.frames.${i}.file`] = frame.file
-    tags[`_dd.code_origin.frames.${i}.line`] = String(frame.line)
-    tags[`_dd.code_origin.frames.${i}.column`] = String(frame.column)
+    tags[`_dd.code_origin.frames.${i - stackOffset}.file`] = frame.file
+    tags[`_dd.code_origin.frames.${i - stackOffset}.line`] = String(frame.line)
+    tags[`_dd.code_origin.frames.${i - stackOffset}.column`] = String(frame.column)
     if (frame.method) {
-      tags[`_dd.code_origin.frames.${i}.method`] = frame.method
+      tags[`_dd.code_origin.frames.${i - stackOffset}.method`] = frame.method
     }
     if (frame.type) {
-      tags[`_dd.code_origin.frames.${i}.type`] = frame.type
+      tags[`_dd.code_origin.frames.${i - stackOffset}.type`] = frame.type
     }
   }
   return tags
