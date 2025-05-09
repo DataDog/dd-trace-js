@@ -142,7 +142,7 @@ interface Tracer extends opentracing.Tracer {
   /**
    * Baggage
    */
-  setBaggageItem (key: string, value: string): {[key: string]: string};
+  setBaggageItem (key: string, value: string): Record<string, string>;
   getBaggageItem (key: string): string | undefined;
   getAllBaggageItems (): Record<string, string>;
   removeBaggageItem (key: string): Record<string, string>;
