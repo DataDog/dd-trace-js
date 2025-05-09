@@ -144,9 +144,9 @@ interface Tracer extends opentracing.Tracer {
    */
   setBaggageItem (key: string, value: string): {[key: string]: string};
   getBaggageItem (key: string): string | undefined;
-  getAllBaggageItems (): {[key: string]: string};
-  removeBaggageItem (key: string): {[key: string]: string};
-  removeAllBaggageItems (): {[key: string]: string};
+  getAllBaggageItems (): Record<string, string>;
+  removeBaggageItem (key: string): Record<string, string>;
+  removeAllBaggageItems (): Record<string, string>;
 }
 
 // left out of the namespace, so it
