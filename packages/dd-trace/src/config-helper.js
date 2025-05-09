@@ -7,9 +7,11 @@
 // 4. Simplify config.js
 // 5. Make sure config.js is loaded first, right after calling init. The order matters
 
-const log = require('./log')
+const { debuglog } = require('util')
 const { supportedConfigurations, aliases } = require('./supported-configurations')
 const hasOwn = Object.hasOwn || ((obj, prop) => Object.prototype.hasOwnProperty.call(obj, prop))
+
+const debug = debuglog('dd:debug')
 
 const configs = {}
 // Round 1: assign all valid configs and backup to aliases if needed
@@ -39,7 +41,7 @@ module.exports = {
   getConfiguration (name) {
     const config = configs[name]
     if (config === undefined && !hasOwn(supportedConfigurations, name)) {
-      log.debug(`Missing ${name} configuration in supported-configurations fi le. The environment variable is ignored.`)
+      debug(`Missing ${name} configuration in supported-configurations fi le. The environment variable is ignored.`)
     }
     return config
   }
