@@ -7,7 +7,12 @@ const { traceChannel, debugChannel, infoChannel, warnChannel, errorChannel } = r
 const logWriter = require('./writer')
 const { Log } = require('./log')
 const { memoize } = require('./utils')
-const { getConfiguration } = require('../config-helper')
+
+let getConfiguration = (key) => {
+  const { getConfiguration: actual } = require('../config-helper')
+  getConfiguration = actual
+  return actual(key)
+}
 
 const config = {
   enabled: false,
