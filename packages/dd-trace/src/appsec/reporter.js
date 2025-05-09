@@ -271,7 +271,7 @@ function reportAttack (attackData) {
 
   rootSpan.addTags(newTags)
 
-  if (isRaspAttack(attackData)) {
+  if (extendedCollection?.raspBodyCollection && isRaspAttack(attackData)) {
     reportRequestBody(rootSpan, req.body)
   }
 }

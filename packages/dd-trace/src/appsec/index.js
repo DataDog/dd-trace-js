@@ -59,7 +59,10 @@ function enable (_config) {
     remoteConfig.enableWafUpdate(_config.appsec)
 
     Reporter.setRateLimit(_config.appsec.rateLimit)
-    Reporter.setExtendedCollection(_config.appsec.extendedHeadersCollection)
+    Reporter.setExtendedCollection({
+      ..._config.appsec.extendedHeadersCollection,
+      raspBodyCollection: _config.appsec.rasp?.bodyCollection
+    })
 
     apiSecuritySampler.configure(_config)
 

@@ -78,7 +78,8 @@ describe('AppSec Index', function () {
           sampleDelay: 10
         },
         rasp: {
-          enabled: true
+          enabled: true,
+          bodyCollection: true
         },
         extendedHeadersCollection: {
           enabled: true,
@@ -180,7 +181,8 @@ describe('AppSec Index', function () {
       expect(Reporter.setExtendedCollection).to.have.been.calledOnceWithExactly({
         enabled: true,
         redaction: false,
-        maxHeaders: 42
+        maxHeaders: 42,
+        raspBodyCollection: true
       })
       expect(UserTracking.setCollectionMode).to.have.been.calledOnceWithExactly('anon', false)
       expect(incomingHttpRequestStart.subscribe)
