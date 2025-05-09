@@ -7,12 +7,7 @@ const { traceChannel, debugChannel, infoChannel, warnChannel, errorChannel } = r
 const logWriter = require('./writer')
 const { Log } = require('./log')
 const { memoize } = require('./utils')
-
-let getConfiguration = (key) => {
-  const { getConfiguration: actual } = require('../config-helper')
-  getConfiguration = actual
-  return actual(key)
-}
+const { getConfiguration } = require('../config-helper')
 
 const config = {
   enabled: false,
@@ -127,10 +122,10 @@ const log = {
   }
 }
 
-module.exports = log
-
 logWriter.setStackTraceLimitFunction(log.error)
 
 log.reset()
 
 log.toggle(log.isEnabled(), log.getLogLevel())
+
+module.exports = log
