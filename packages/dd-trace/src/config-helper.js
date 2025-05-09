@@ -48,6 +48,7 @@ process.env = new Proxy(process.env, {
         configs[aliases[prop]] = value
       } else {
         debug(`Missing configuration ${prop} in supported-configurations file. The environment variable is ignored.`)
+        console.error(`Missing ${prop}`)
       }
     } else {
       configs[prop] = value
@@ -64,6 +65,7 @@ module.exports = {
     const config = configs[name]
     if (config === undefined && !hasOwn(supportedConfigurations, name)) {
       debug(`Missing ${name} configuration in supported-configurations file. The environment variable is ignored.`)
+      console.error(`Missing ${name}`)
     }
     return config
   }
