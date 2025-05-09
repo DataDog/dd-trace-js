@@ -28,7 +28,7 @@ function getTestManagementTests ({
     options.path = `${evpProxyPrefix}/api/v2/test/libraries/test-management/tests`
     options.headers['X-Datadog-EVP-Subdomain'] = 'api'
   } else {
-    const apiKey = getConfiguration('DATADOG_API_KEY') || getConfiguration('DD_API_KEY')
+    const apiKey = getConfiguration('DD_API_KEY')
     if (!apiKey) {
       return done(new Error('Test management tests were not fetched because Datadog API key is not defined.'))
     }

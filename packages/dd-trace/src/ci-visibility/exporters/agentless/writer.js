@@ -30,7 +30,7 @@ class Writer extends BaseWriter {
       path: '/api/v2/citestcycle',
       method: 'POST',
       headers: {
-        'dd-api-key': getConfiguration('DATADOG_API_KEY') || getConfiguration('DD_API_KEY'),
+        'dd-api-key': getConfiguration('DD_API_KEY'),
         'Content-Type': 'application/msgpack'
       },
       timeout: 15000,

@@ -19,7 +19,7 @@ const debug = debuglog('dd:debug')
 const configs = {}
 // Round 1: assign all valid configs and backup to aliases if needed
 for (const [name, value] of Object.entries(process.env)) {
-  if (!name.startsWith('DD_')) {
+  if (!name.startsWith('DD_') && !name.startsWith('OTEL_')) {
     configs[name] = value
   }
 }
@@ -44,7 +44,7 @@ process.env = new Proxy(process.env, {
   set (target, prop, value) {
     // @ts-ignore
     target[prop] = value
-    if (typeof prop === 'string' && prop.startsWith('DD_')) {
+    if (typeof prop === 'string' && (prop.startsWith('DD_') || prop.startsWith('OTEL_'))) {
       if (supportedConfigurations[prop]) {
         configs[prop] = value
       } else if (aliasString.includes(`"${prop}"`)) {
@@ -72,7 +72,7 @@ module.exports = {
   getConfiguration (name) {
     const config = configs[name]
     if (config === undefined &&
-        name.startsWith('DD_') &&
+        (name.startsWith('DD_') || name.startsWith('OTEL_')) &&
         !hasOwn(supportedConfigurations, name) &&
         !aliasString.includes(`"${name}"`)) {
       debug(`Missing ${name} configuration in supported-configurations file. The environment variable is ignored.`)

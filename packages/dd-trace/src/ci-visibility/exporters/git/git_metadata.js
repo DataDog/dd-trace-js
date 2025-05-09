@@ -49,7 +49,7 @@ function getCommonRequestOptions (url) {
   return {
     method: 'POST',
     headers: {
-      'dd-api-key': getConfiguration('DATADOG_API_KEY') || getConfiguration('DD_API_KEY')
+      'dd-api-key': getConfiguration('DD_API_KEY')
     },
     timeout: 15000,
     url

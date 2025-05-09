@@ -7,7 +7,7 @@ export default {
     schema: []
   },
   create (context) {
-    const allowedFile = /[/\\]packages[/\\]dd-trace[/\\]src[/\\]config-helper\.js$/
+    const allowedFile = /[/\\]packages[/\\]dd-trace[/\\]src[/\\](config-helper|guardrails[/\\]index)\.js$/
 
     return {
       // TODO: Add support for other types like

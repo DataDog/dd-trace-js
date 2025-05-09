@@ -8,19 +8,18 @@ var isTrue = require('./util').isTrue
 var log = require('./log')
 var telemetry = require('./telemetry')
 var nodeVersion = require('../../../../version')
-const { getConfiguration } = require('../config-helper')
 
 var NODE_MAJOR = nodeVersion.NODE_MAJOR
 
 function guard (fn) {
   var initBailout = false
   var clobberBailout = false
-  var forced = isTrue(getConfiguration('DD_INJECT_FORCE'))
+  var forced = isTrue(process.env.DD_INJECT_FORCE)
   var engines = require('../../../../package.json').engines
   var minMajor = parseInt(engines.node.replace(/[^0-9]/g, ''))
   var version = process.versions.node
 
-  if (getConfiguration('DD_INJECTION_ENABLED')) {
+  if (process.env.DD_INJECTION_ENABLED) {
     // If we're running via single-step install, and we're in the app's
     // node_modules, then we should not initialize the tracer. This prevents
     // single-step-installed tracer from clobbering the manually-installed tracer.
