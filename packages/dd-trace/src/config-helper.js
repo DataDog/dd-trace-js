@@ -39,29 +39,44 @@ for (const name of Object.keys(supportedConfigurations)) {
 
 // This does not work in case someone destructures process.env during loading before this file
 // and the proxy is created. We need to make sure this file is loaded first.
-process.env = new Proxy(process.env, {
-  // TODO: defineProperty should also be handled.
-  set (target, prop, value) {
-    // @ts-ignore
-    target[prop] = value
-    if (typeof prop === 'string' && (prop.startsWith('DD_') || prop.startsWith('OTEL_'))) {
-      if (supportedConfigurations[prop]) {
-        configs[prop] = value
-      } else if (aliasString.includes(`"${prop}"`)) {
-        for (const alias of Object.keys(aliases)) {
-          if (aliases[alias].includes(prop)) {
-            configs[alias] = value
-            break
+function setProcessEnv (envs) {
+  return new Proxy(envs, {
+    // TODO: defineProperty should also be handled.
+    set (target, prop, value) {
+      // @ts-ignore
+      target[prop] = value
+      if (typeof prop === 'string' && (prop.startsWith('DD_') || prop.startsWith('OTEL_'))) {
+        if (supportedConfigurations[prop]) {
+          configs[prop] = value
+        } else if (aliasString.includes(`"${prop}"`)) {
+          for (const alias of Object.keys(aliases)) {
+            if (aliases[alias].includes(prop)) {
+              configs[alias] = value
+              break
+            }
           }
+        } else {
+          debug(`Missing configuration ${prop} in supported-configurations file. The environment variable is ignored.`)
+          console.error(`Missing ${prop}`)
         }
       } else {
-        debug(`Missing configuration ${prop} in supported-configurations file. The environment variable is ignored.`)
-        console.error(`Missing ${prop}`)
+        configs[prop] = value
       }
-    } else {
-      configs[prop] = value
+      return true
     }
-    return true
+  })
+}
+
+let envs = setProcessEnv(process.env)
+
+// This won't be sufficient in case the user would just call Object.defineProperty
+// TODO: Use shimmer instead of the manual getter/setter replacement.
+Object.defineProperty(process, 'env', {
+  get () {
+    return envs
+  },
+  set (value) {
+    envs = setProcessEnv(value)
   }
 })
 

@@ -1,4 +1,3 @@
-// This file is auto-generated. Do not edit manually.
 module.exports = {
   supportedConfigurations: {
     DD_AAS_DOTNET_EXTENSION_VERSION: ['52OO'],
@@ -7,6 +6,7 @@ module.exports = {
     DD_API_KEY: ['HVVH'],
     DD_API_SECURITY_ENABLED: ['4WBS'],
     DD_API_SECURITY_SAMPLE_DELAY: ['I8CV'],
+    DD_APM_FLUSH_DEADLINE_MILLISECONDS: ['52OO'],
     DD_APM_TRACING_ENABLED: ['VMN5'],
     DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE: ['5ZRR'],
     DD_APPSEC_ENABLED: ['W01P'],
