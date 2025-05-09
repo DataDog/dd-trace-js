@@ -3,7 +3,7 @@
 const { hasOwn } = require('../util')
 const PrioritySampler = require('../priority_sampler')
 const { MANUAL_KEEP } = require('../../../../ext/tags')
-const { USER_KEEP, AUTO_KEEP, USER_REJECT } = require('../../../../ext/priority')
+const { USER_KEEP, AUTO_KEEP, AUTO_REJECT } = require('../../../../ext/priority')
 const { SAMPLING_MECHANISM_DEFAULT } = require('../constants')
 const { addTraceSourceTag, hasTraceSourcePropagationTag } = require('./tracesource')
 const { getProductRateLimiter } = require('./product')
@@ -33,7 +33,7 @@ class TraceSourcePrioritySampler extends PrioritySampler {
       return USER_KEEP
     }
 
-    return this._isSampledByRateLimit(context) ? AUTO_KEEP : USER_REJECT
+    return this._isSampledByRateLimit(context) ? AUTO_KEEP : AUTO_REJECT
   }
 
   setPriority (span, samplingPriority, product) {
