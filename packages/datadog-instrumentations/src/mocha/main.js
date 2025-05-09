@@ -5,7 +5,7 @@ const { addHook, channel, AsyncResource } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 const { isMarkedAsUnskippable } = require('../../../datadog-plugin-jest/src/util')
 const log = require('../../../dd-trace/src/log')
-const configHelper = require('../../dd-trace/src/config-helper')
+const configHelper = require('../../../dd-trace/src/config-helper')
 const {
   getTestSuitePath,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
