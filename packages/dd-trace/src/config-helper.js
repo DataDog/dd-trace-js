@@ -46,8 +46,13 @@ process.env = new Proxy(process.env, {
     if (typeof prop === 'string' && prop.startsWith('DD_')) {
       if (supportedConfigurations[prop]) {
         configs[prop] = value
-      } else if (aliases[prop]) {
-        configs[aliases[prop]] = value
+      } else if (aliasString.includes(`"${prop}"`)) {
+        for (const alias of Object.keys(aliases)) {
+          if (aliases[alias].includes(prop)) {
+            configs[alias] = value
+            break
+          }
+        }
       } else {
         debug(`Missing configuration ${prop} in supported-configurations file. The environment variable is ignored.`)
         console.error(`Missing ${prop}`)
