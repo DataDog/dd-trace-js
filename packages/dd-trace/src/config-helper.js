@@ -29,16 +29,21 @@ function setProcessEnv (envs) {
       if (typeof prop === 'string' && (prop.startsWith('DD_') || prop.startsWith('OTEL_'))) {
         if (supportedConfigurations[prop]) {
           configs[prop] = value
-        } else if (aliasString.includes(`"${prop}"`)) {
-          for (const alias of Object.keys(aliases)) {
-            if (aliases[alias].includes(prop)) {
-              configs[alias] = value
-              break
+          // The alias should only be used if the actual configuration is not set
+        } else if (envs[prop] === undefined) {
+          if (aliasString.includes(`"${prop}"`)) {
+            for (const alias of Object.keys(aliases)) {
+              if (aliases[alias].includes(prop)) {
+                configs[alias] = value
+                break
+              }
             }
+          } else {
+            debug(
+              `Missing configuration ${prop} in supported-configurations file. The environment variable is ignored.`
+            )
+            throw new Error(`Missing ${prop}`)
           }
-        } else {
-          debug(`Missing configuration ${prop} in supported-configurations file. The environment variable is ignored.`)
-          throw new Error(`Missing ${prop}`)
         }
       } else {
         configs[prop] = value
