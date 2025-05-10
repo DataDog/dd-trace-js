@@ -1,5 +1,4 @@
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
-const { storage } = require('../../datadog-core')
 
 const {
   TEST_STATUS,
@@ -334,11 +333,10 @@ class JestPlugin extends CiPlugin {
     })
 
     this.addSub('ci:jest:test:start', (test) => {
-      const store = storage('legacy').getStore()
       const span = this.startTestSpan(test)
 
-      this.enter(span, store)
       this.activeTestSpan = span
+      test.onDone(span)
     })
 
     this.addSub('ci:jest:test:finish', ({
@@ -347,9 +345,9 @@ class JestPlugin extends CiPlugin {
       attemptToFixPassed,
       failedAllTests,
       attemptToFixFailed,
-      isAtrRetry
+      isAtrRetry,
+      span
     }) => {
-      const span = storage('legacy').getStore().span
       span.setTag(TEST_STATUS, status)
       if (testStartLine) {
         span.setTag(TEST_SOURCE_START, testStartLine)
@@ -384,11 +382,9 @@ class JestPlugin extends CiPlugin {
       this.activeTestSpan = null
     })
 
-    this.addSub('ci:jest:test:err', ({ error, shouldSetProbe, promises }) => {
+    this.addSub('ci:jest:test:err', ({ error, shouldSetProbe, promises, span }) => {
       if (error) {
-        const store = storage('legacy').getStore()
-        if (store && store.span) {
-          const span = store.span
+        if (span) {
           span.setTag(TEST_STATUS, 'fail')
           span.setTag('error', getFormattedError(error, this.repositoryRoot))
           if (shouldSetProbe) {

@@ -80,6 +80,7 @@ let testManagementAttemptToFixRetries = 0
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
 const asyncResources = new WeakMap()
+const spanContexts = new WeakMap()
 const originalTestFns = new WeakMap()
 const originalHookFns = new WeakMap()
 const retriedTestsToNumAttempts = new Map()
@@ -335,6 +336,10 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           }
         }
 
+        const onDone = (span) => {
+          spanContexts.set(event.test, span)
+        }
+
         const isJestRetry = event.test?.invocations > 1
         asyncResource.runInAsyncScope(() => {
           testStartCh.publish({
@@ -350,7 +355,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             isAttemptToFixRetry: numOfAttemptsToFixRetries > 0,
             isJestRetry,
             isDisabled,
-            isQuarantined
+            isQuarantined,
+            onDone
           })
           for (const hook of event.test.parent.hooks) {
             let hookFn = hook.fn
@@ -461,6 +467,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         const mightHitBreakpoint = this.isDiEnabled && numTestExecutions >= 2
 
         const asyncResource = asyncResources.get(event.test)
+        const span = spanContexts.get(event.test)
 
         if (status === 'fail') {
           const shouldSetProbe = this.isDiEnabled && willBeRetried && numTestExecutions === 1
@@ -468,7 +475,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             testErrCh.publish({
               error: formatJestError(event.test.errors[0]),
               shouldSetProbe,
-              promises
+              promises,
+              span
             })
           })
         }
@@ -495,7 +503,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             attemptToFixPassed,
             failedAllTests,
             attemptToFixFailed,
-            isAtrRetry
+            isAtrRetry,
+            span
           })
         })
 
