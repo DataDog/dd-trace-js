@@ -10,7 +10,7 @@ const fs = require('fs')
 const { fileURLToPath } = require('url')
 
 const logger = new ConsoleLogger()
-const timeoutMs = 10 * 1000
+const timeoutMs = 15 * 1000
 
 function exporterFromURL (url) {
   if (url.protocol === 'file:') {
