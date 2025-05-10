@@ -3,14 +3,12 @@
 const { SAMPLING_MECHANISM_APPSEC } = require('../constants')
 const RateLimiter = require('../rate_limiter')
 
-const dropAll = new RateLimiter(0)
-const onePerMinute = new RateLimiter(1, 'minute')
-
 function getProductRateLimiter (config) {
   if (config?.appsec?.enabled || config?.iast?.enabled) {
-    return onePerMinute
+    return new RateLimiter(1, 'minute') // onePerMinute
   }
-  return dropAll
+
+  return new RateLimiter(0) // dropAll
 }
 
 const PRODUCTS = {

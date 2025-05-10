@@ -346,6 +346,7 @@ class JestPlugin extends CiPlugin {
       testStartLine,
       attemptToFixPassed,
       failedAllTests,
+      attemptToFixFailed,
       isAtrRetry
     }) => {
       const span = storage('legacy').getStore().span
@@ -355,6 +356,8 @@ class JestPlugin extends CiPlugin {
       }
       if (attemptToFixPassed) {
         span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
+      } else if (attemptToFixFailed) {
+        span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
       }
       if (failedAllTests) {
         span.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')

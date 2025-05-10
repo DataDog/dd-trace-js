@@ -8,7 +8,7 @@ class PGPlugin extends DatabasePlugin {
   static get operation () { return 'query' }
   static get system () { return 'postgres' }
 
-  start ({ params = {}, query, processId }) {
+  start ({ params = {}, query, processId, stream }) {
     const service = this.serviceName({ pluginConfig: this.config, params })
     const originalStatement = this.maybeTruncate(query.text)
 
@@ -26,6 +26,10 @@ class PGPlugin extends DatabasePlugin {
         [CLIENT_PORT_KEY]: params.port
       }
     })
+
+    if (stream) {
+      span.setTag('db.stream', 1)
+    }
 
     query.__ddInjectableQuery = this.injectDbmQuery(span, query.text, service, !!query.name)
   }

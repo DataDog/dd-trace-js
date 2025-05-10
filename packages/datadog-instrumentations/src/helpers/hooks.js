@@ -70,6 +70,7 @@ module.exports = {
   knex: () => require('../knex'),
   koa: () => require('../koa'),
   'koa-router': () => require('../koa'),
+  '@confluentinc/kafka-javascript': () => require('../confluentinc-kafka-javascript'),
   kafkajs: () => require('../kafkajs'),
   langchain: () => require('../langchain'),
   ldapjs: () => require('../ldapjs'),

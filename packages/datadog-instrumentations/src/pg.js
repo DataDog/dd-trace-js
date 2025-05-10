@@ -14,6 +14,8 @@ const errorCh = channel('apm:pg:query:error')
 const startPoolQueryCh = channel('datadog:pg:pool:query:start')
 const finishPoolQueryCh = channel('datadog:pg:pool:query:finish')
 
+const { errorMonitor } = require('node:events')
+
 addHook({ name: 'pg', versions: ['>=8.0.3'] }, pg => {
   shimmer.wrap(pg.Client.prototype, 'query', query => wrapQuery(query))
   shimmer.wrap(pg.Pool.prototype, 'query', query => wrapPoolQuery(query))
@@ -39,13 +41,15 @@ function wrapQuery (query) {
       ? arguments[0]
       : { text: arguments[0] }
 
-    const textProp = Object.getOwnPropertyDescriptor(pgQuery, 'text')
+    const textPropObj = pgQuery.cursor ?? pgQuery
+    const textProp = Object.getOwnPropertyDescriptor(textPropObj, 'text')
+    const stream = typeof textPropObj.read === 'function'
 
     // Only alter `text` property if safe to do so.
     if (!textProp || textProp.configurable) {
-      const originalText = pgQuery.text
+      const originalText = textPropObj.text
 
-      Object.defineProperty(pgQuery, 'text', {
+      Object.defineProperty(textPropObj, 'text', {
         get () {
           return this?.__ddInjectableQuery || originalText
         }
@@ -57,9 +61,10 @@ function wrapQuery (query) {
 
       startCh.publish({
         params: this.connectionParameters,
-        query: pgQuery,
+        query: textPropObj,
         processId,
-        abortController
+        abortController,
+        stream
       })
 
       const finish = asyncResource.bind(function (error, res) {
@@ -128,6 +133,15 @@ function wrapQuery (query) {
           .once('end', (res) => finish(null, res))
       } else {
         newQuery.then((res) => finish(null, res), finish)
+      }
+
+      if (stream) {
+        newQuery.on('end', () => {
+          finish(null, [])
+        })
+        newQuery.on(errorMonitor, (err) => {
+          finish(err)
+        })
       }
 
       try {

@@ -59,7 +59,7 @@ function enable (_config) {
 
     Reporter.setRateLimit(_config.appsec.rateLimit)
 
-    apiSecuritySampler.configure(_config.appsec)
+    apiSecuritySampler.configure(_config)
 
     UserTracking.setCollectionMode(_config.appsec.eventTracking.mode, false)
 

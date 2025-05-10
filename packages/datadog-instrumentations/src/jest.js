@@ -408,6 +408,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         event.test.fn = originalTestFns.get(event.test)
 
         let attemptToFixPassed = false
+        let attemptToFixFailed = false
         let failedAllTests = false
         let isAttemptToFix = false
         if (this.isTestManagementTestsEnabled) {
@@ -425,6 +426,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             // If it is, we'll set the failedAllTests flag to true if all the tests failed
             // If all tests passed, we'll set the attemptToFixPassed flag to true
             if (testStatuses.length === testManagementAttemptToFixRetries + 1) {
+              if (testStatuses.some(status => status === 'fail')) {
+                attemptToFixFailed = true
+              }
               if (testStatuses.every(status => status === 'fail')) {
                 failedAllTests = true
               } else if (testStatuses.every(status => status === 'pass')) {
@@ -490,6 +494,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             testStartLine: getTestLineStart(event.test.asyncError, this.testSuite),
             attemptToFixPassed,
             failedAllTests,
+            attemptToFixFailed,
             isAtrRetry
           })
         })

@@ -130,6 +130,7 @@ module.exports = class PluginManager {
       site,
       url,
       headerTags,
+      codeOriginForSpans,
       dbmPropagationMode,
       dsmEnabled,
       clientIpEnabled,
@@ -143,6 +144,7 @@ module.exports = class PluginManager {
     } = this._tracerConfig
 
     const sharedConfig = {
+      codeOriginForSpans,
       dbmPropagationMode,
       dsmEnabled,
       memcachedCommandEnabled,

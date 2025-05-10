@@ -21,6 +21,7 @@ declare -a plugins=(
   "cucumber"
   "bunyan"
   "cassandra_driver"
+  "confluentinc_kafka_javascript"
   "connect"
   "dns"
   "elasticsearch"

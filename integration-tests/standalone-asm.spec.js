@@ -25,13 +25,35 @@ describe('Standalone ASM', () => {
     await sandbox.remove()
   })
 
+  function assertKeep ({ meta, metrics }) {
+    assert.propertyVal(meta, '_dd.p.ts', '02')
+
+    assert.propertyVal(metrics, '_sampling_priority_v1', USER_KEEP)
+    assert.propertyVal(metrics, '_dd.apm.enabled', 0)
+  }
+
+  function assertDrop ({ meta, metrics }) {
+    assert.notProperty(meta, '_dd.p.ts')
+
+    assert.propertyVal(metrics, '_sampling_priority_v1', AUTO_REJECT)
+    assert.propertyVal(metrics, '_dd.apm.enabled', 0)
+  }
+
+  async function doWarmupRequests (procOrUrl, number = 3) {
+    for (let i = number; i > 0; i--) {
+      await curl(procOrUrl)
+    }
+  }
+
   describe('enabled', () => {
     beforeEach(async () => {
       agent = await new FakeAgent().start()
 
       env = {
         AGENT_PORT: agent.port,
-        DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED: 'true'
+        DD_APM_TRACING_ENABLED: 'false',
+        DD_APPSEC_ENABLED: 'true',
+        DD_API_SECURITY_ENABLED: 'false'
       }
 
       const execArgv = []
@@ -43,28 +65,6 @@ describe('Standalone ASM', () => {
       proc.kill()
       await agent.stop()
     })
-
-    function assertKeep (payload) {
-      const { meta, metrics } = payload
-
-      assert.propertyVal(meta, '_dd.p.ts', '02')
-
-      assert.propertyVal(metrics, '_sampling_priority_v1', USER_KEEP)
-      assert.propertyVal(metrics, '_dd.apm.enabled', 0)
-    }
-
-    function assertDrop (payload) {
-      const { metrics } = payload
-      assert.propertyVal(metrics, '_sampling_priority_v1', AUTO_REJECT)
-      assert.propertyVal(metrics, '_dd.apm.enabled', 0)
-      assert.notProperty(metrics, '_dd.p.ts')
-    }
-
-    async function doWarmupRequests (procOrUrl, number = 3) {
-      for (let i = number; i > 0; i--) {
-        await curl(procOrUrl)
-      }
-    }
 
     // first req initializes the waf and reports the first appsec event adding manual.keep tag
     it('should send correct headers and tags on first req', async () => {
@@ -252,6 +252,58 @@ describe('Standalone ASM', () => {
         }, undefined, undefined, true)
       })
     })
+  })
+
+  describe('With API Security enabled', () => {
+    beforeEach(async () => {
+      agent = await new FakeAgent().start()
+
+      env = {
+        AGENT_PORT: agent.port,
+        DD_APM_TRACING_ENABLED: 'false',
+        DD_APPSEC_ENABLED: 'true'
+      }
+
+      const execArgv = []
+
+      proc = await spawnProc(startupTestFile, { cwd, env, execArgv })
+    })
+
+    afterEach(async () => {
+      proc.kill()
+      await agent.stop()
+    })
+
+    it('should keep fifth req because of api security sampler', async () => {
+      const promise = curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
+        assert.propertyVal(headers, 'datadog-client-computed-stats', 'yes')
+        assert.isArray(payload)
+        if (payload.length === 4) {
+          assertKeep(payload[0][0])
+          assertDrop(payload[1][0])
+          assertDrop(payload[2][0])
+          assertDrop(payload[3][0])
+
+          // req after 30s
+        } else {
+          const fifthReq = payload[0]
+          assert.isArray(fifthReq)
+          assert.strictEqual(fifthReq.length, 5)
+          assertKeep(fifthReq[0])
+        }
+      }, 40000, 2)
+
+      // 1st req kept because waf init
+      // next in the 30s are dropped
+      // 5nd req manual kept because of api security sampler
+      await doWarmupRequests(proc)
+
+      await new Promise(resolve => setTimeout(resolve, 30000))
+
+      await curl(proc)
+
+      return promise
+    }).timeout(40000)
   })
 
   describe('disabled', () => {

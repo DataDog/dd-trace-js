@@ -223,7 +223,7 @@ try {
   // Close PR and delete branch for any patch proposal if new proposal is minor.
   if (isMinor) {
     try {
-      run(`gh pr close v${newPatch} --delete-branch --comment "Superseded by #${pullRequest.number}."`)
+      run(`gh pr close v${newPatch}-proposal --delete-branch --comment "Superseded by #${pullRequest.number}."`)
     } catch (e) {
       // PR didn't exist so nothing to close.
     }

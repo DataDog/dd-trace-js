@@ -1000,17 +1000,24 @@ versions.forEach((version) => {
                   test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED] === 'true'
                 ).length
 
+                const testsMarkedAsFailed = attemptedToFixTests.filter(test =>
+                  test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED] === 'false'
+                ).length
+
                 if (isAttemptingToFix) {
                   assert.equal(countAttemptToFixTests, attemptedToFixTests.length)
                   assert.equal(countRetriedAttemptToFixTests, attemptedToFixTests.length - 1)
                   if (shouldAlwaysPass) {
                     assert.equal(testsMarkedAsFailedAllRetries, 0)
+                    assert.equal(testsMarkedAsFailed, 0)
                     assert.equal(testsMarkedAsPassedAllRetries, 1)
                   } else if (shouldFailSometimes) {
                     assert.equal(testsMarkedAsFailedAllRetries, 0)
+                    assert.equal(testsMarkedAsFailed, 1)
                     assert.equal(testsMarkedAsPassedAllRetries, 0)
                   } else { // always fail
                     assert.equal(testsMarkedAsFailedAllRetries, 1)
+                    assert.equal(testsMarkedAsFailed, 1)
                     assert.equal(testsMarkedAsPassedAllRetries, 0)
                   }
                 } else {
@@ -1337,7 +1344,7 @@ versions.forEach((version) => {
               assert.equal(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
               assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
               assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
-              assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '2')
+              assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '3')
               // capabilities logic does not overwrite test session name
               assert.equal(metadata.test[TEST_SESSION_NAME], 'my-test-session-name')
             })

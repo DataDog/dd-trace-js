@@ -223,7 +223,8 @@ describe('Config', () => {
     expect(config).to.have.property('reportHostname', false)
     expect(config).to.have.property('scope', undefined)
     expect(config).to.have.property('logLevel', 'debug')
-    expect(config).to.have.nested.property('codeOriginForSpans.enabled', false)
+    expect(config).to.have.nested.property('codeOriginForSpans.enabled', true)
+    expect(config).to.have.nested.property('codeOriginForSpans.experimental.exit_spans.enabled', false)
     expect(config).to.have.nested.property('dynamicInstrumentation.enabled', false)
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactedIdentifiers', [])
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactionExcludedIdentifiers', [])
@@ -305,7 +306,8 @@ describe('Config', () => {
       { name: 'appsec.wafTimeout', value: 5e3, origin: 'default' },
       { name: 'clientIpEnabled', value: false, origin: 'default' },
       { name: 'clientIpHeader', value: null, origin: 'default' },
-      { name: 'codeOriginForSpans.enabled', value: false, origin: 'default' },
+      { name: 'codeOriginForSpans.enabled', value: true, origin: 'default' },
+      { name: 'codeOriginForSpans.experimental.exit_spans.enabled', value: false, origin: 'default' },
       { name: 'dbmPropagationMode', value: 'disabled', origin: 'default' },
       { name: 'dogstatsd.hostname', value: '127.0.0.1', origin: 'calculated' },
       { name: 'dogstatsd.port', value: '8125', origin: 'default' },
@@ -440,7 +442,8 @@ describe('Config', () => {
   })
 
   it('should initialize from environment variables', () => {
-    process.env.DD_CODE_ORIGIN_FOR_SPANS_ENABLED = 'true'
+    process.env.DD_CODE_ORIGIN_FOR_SPANS_ENABLED = 'false'
+    process.env.DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED = 'true'
     process.env.DD_TRACE_AGENT_HOSTNAME = 'agent'
     process.env.DD_TRACE_AGENT_PORT = '6218'
     process.env.DD_DOGSTATSD_HOSTNAME = 'dsd-agent'
@@ -561,7 +564,8 @@ describe('Config', () => {
     expect(config).to.have.property('middlewareTracingEnabled', false)
     expect(config).to.have.property('runtimeMetrics', true)
     expect(config).to.have.property('reportHostname', true)
-    expect(config).to.have.nested.property('codeOriginForSpans.enabled', true)
+    expect(config).to.have.nested.property('codeOriginForSpans.enabled', false)
+    expect(config).to.have.nested.property('codeOriginForSpans.experimental.exit_spans.enabled', true)
     expect(config).to.have.nested.property('dynamicInstrumentation.enabled', true)
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactedIdentifiers', ['foo', 'bar'])
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactionExcludedIdentifiers', ['a', 'b', 'c'])
@@ -668,7 +672,8 @@ describe('Config', () => {
       { name: 'clientIpEnabled', value: true, origin: 'env_var' },
       { name: 'clientIpHeader', value: 'x-true-client-ip', origin: 'env_var' },
       { name: 'crashtracking.enabled', value: false, origin: 'env_var' },
-      { name: 'codeOriginForSpans.enabled', value: true, origin: 'env_var' },
+      { name: 'codeOriginForSpans.enabled', value: false, origin: 'env_var' },
+      { name: 'codeOriginForSpans.experimental.exit_spans.enabled', value: true, origin: 'env_var' },
       { name: 'dogstatsd.hostname', value: 'dsd-agent', origin: 'env_var' },
       { name: 'dogstatsd.port', value: '5218', origin: 'env_var' },
       { name: 'dynamicInstrumentation.enabled', value: true, origin: 'env_var' },
@@ -886,7 +891,12 @@ describe('Config', () => {
       clientIpEnabled: true,
       clientIpHeader: 'x-true-client-ip',
       codeOriginForSpans: {
-        enabled: false
+        enabled: false,
+        experimental: {
+          exit_spans: {
+            enabled: true
+          }
+        }
       },
       sampleRate: 0.5,
       rateLimit: 1000,
@@ -989,6 +999,7 @@ describe('Config', () => {
     expect(config).to.have.property('plugins', false)
     expect(config).to.have.property('logLevel', logLevel)
     expect(config).to.have.nested.property('codeOriginForSpans.enabled', false)
+    expect(config).to.have.nested.property('codeOriginForSpans.experimental.exit_spans.enabled', true)
     expect(config).to.have.property('traceId128BitGenerationEnabled', true)
     expect(config).to.have.property('traceId128BitLoggingEnabled', true)
     expect(config).to.have.property('spanRemoveIntegrationFromService', true)
@@ -1048,6 +1059,7 @@ describe('Config', () => {
       { name: 'clientIpEnabled', value: true, origin: 'code' },
       { name: 'clientIpHeader', value: 'x-true-client-ip', origin: 'code' },
       { name: 'codeOriginForSpans.enabled', value: false, origin: 'code' },
+      { name: 'codeOriginForSpans.experimental.exit_spans.enabled', value: true, origin: 'code' },
       { name: 'dogstatsd.hostname', value: 'agent-dsd', origin: 'code' },
       { name: 'dogstatsd.port', value: '5218', origin: 'code' },
       { name: 'dynamicInstrumentation.enabled', value: true, origin: 'code' },
@@ -1259,6 +1271,8 @@ describe('Config', () => {
     process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
     process.env.DD_TRACE_REPORT_HOSTNAME = 'true'
     process.env.DD_ENV = 'test'
+    process.env.DD_CODE_ORIGIN_FOR_SPANS_ENABLED = 'false'
+    process.env.DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED = 'true'
     process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS = 'foo,bar'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS = 'a,b,c'
@@ -1394,7 +1408,12 @@ describe('Config', () => {
         pollInterval: 42
       },
       codeOriginForSpans: {
-        enabled: false
+        enabled: true,
+        experimental: {
+          exit_spans: {
+            enabled: false
+          }
+        }
       },
       traceId128BitGenerationEnabled: false,
       traceId128BitLoggingEnabled: false,
@@ -1417,7 +1436,8 @@ describe('Config', () => {
     expect(config).to.have.property('flushMinSpans', 500)
     expect(config).to.have.property('service', 'test')
     expect(config).to.have.property('version', '1.0.0')
-    expect(config).to.have.nested.property('codeOriginForSpans.enabled', false)
+    expect(config).to.have.nested.property('codeOriginForSpans.enabled', true)
+    expect(config).to.have.nested.property('codeOriginForSpans.experimental.exit_spans.enabled', false)
     expect(config).to.have.nested.property('dynamicInstrumentation.enabled', false)
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactedIdentifiers', ['foo2', 'bar2'])
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactionExcludedIdentifiers', ['a2', 'b2'])

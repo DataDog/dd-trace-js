@@ -1,10 +1,6 @@
 'use strict'
 
-const {
-  channel,
-  addHook,
-  AsyncResource
-} = require('./helpers/instrument')
+const { channel, addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
 const startChannel = channel('apm:fs:operation:start')
@@ -191,25 +187,23 @@ function wrapCreateStream (original) {
   return function (path, options) {
     if (!startChannel.hasSubscribers) return original.apply(this, arguments)
 
-    const innerResource = new AsyncResource('bound-anonymous-fn')
-    const message = getMessage(name, ['path', 'options'], arguments)
+    const ctx = getMessage(name, ['path', 'options'], arguments)
 
-    return innerResource.runInAsyncScope(() => {
-      startChannel.publish(message)
-
+    return startChannel.runStores(ctx, () => {
       try {
         const stream = original.apply(this, arguments)
-        const onError = innerResource.bind(error => {
-          errorChannel.publish(error)
+        const onError = error => {
+          ctx.error = error
+          errorChannel.publish(ctx)
           onFinish()
-        })
-        const onFinish = innerResource.bind(() => {
-          finishChannel.publish()
+        }
+        const onFinish = () => {
+          finishChannel.runStores(ctx, () => {})
           stream.off('close', onFinish)
           stream.off('end', onFinish)
           stream.off('finish', onFinish)
           stream.off('error', onError)
-        })
+        }
 
         stream.once('close', onFinish)
         stream.once('end', onFinish)
@@ -218,8 +212,9 @@ function wrapCreateStream (original) {
 
         return stream
       } catch (error) {
-        errorChannel.publish(error)
-        finishChannel.publish()
+        ctx.error = error
+        errorChannel.publish(ctx)
+        finishChannel.runStores(ctx, () => {})
       }
     })
   }
@@ -239,17 +234,16 @@ function createWatchWrapFunction (override = '') {
     const operation = name
     return function () {
       if (!startChannel.hasSubscribers) return original.apply(this, arguments)
-      const message = getMessage(method, watchMethods[operation], arguments, this)
-      const innerResource = new AsyncResource('bound-anonymous-fn')
-      return innerResource.runInAsyncScope(() => {
-        startChannel.publish(message)
+      const ctx = getMessage(method, watchMethods[operation], arguments, this)
+      return startChannel.runStores(ctx, () => {
         try {
           const result = original.apply(this, arguments)
-          finishChannel.publish()
+          finishChannel.runStores(ctx, () => {})
           return result
         } catch (error) {
-          errorChannel.publish(error)
-          finishChannel.publish()
+          ctx.error = error
+          errorChannel.publish(ctx)
+          finishChannel.runStores(ctx, () => {})
           throw error
         }
       })
@@ -268,30 +262,25 @@ function createWrapFunction (prefix = '', override = '') {
 
       const lastIndex = arguments.length - 1
       const cb = typeof arguments[lastIndex] === 'function' && arguments[lastIndex]
-      const innerResource = new AsyncResource('bound-anonymous-fn')
       const params = getMethodParamsRelationByPrefix(prefix)[operation]
       const abortController = new AbortController()
-      const message = { ...getMessage(method, params, arguments, this), abortController }
+      const ctx = { ...getMessage(method, params, arguments, this), abortController }
 
-      const finish = innerResource.bind(function (error) {
+      const finish = function (error, cb = () => {}) {
         if (error !== null && typeof error === 'object') { // fs.exists receives a boolean
-          errorChannel.publish(error)
+          ctx.error = error
+          errorChannel.publish(ctx)
         }
-        finishChannel.publish()
-      })
-
-      if (cb) {
-        const outerResource = new AsyncResource('bound-anonymous-fn')
-
-        arguments[lastIndex] = shimmer.wrapFunction(cb, cb => innerResource.bind(function (e) {
-          finish(e)
-          return outerResource.runInAsyncScope(() => cb.apply(this, arguments))
-        }))
+        return finishChannel.runStores(ctx, cb)
       }
 
-      return innerResource.runInAsyncScope(() => {
-        startChannel.publish(message)
+      if (cb) {
+        arguments[lastIndex] = shimmer.wrapFunction(cb, cb => function (e) {
+          return finish(e, () => cb.apply(this, arguments))
+        })
+      }
 
+      return startChannel.runStores(ctx, () => {
         if (abortController.signal.aborted) {
           const error = abortController.signal.reason || new Error('Aborted')
 
@@ -318,23 +307,25 @@ function createWrapFunction (prefix = '', override = '') {
                 if (isFirstMethodReturningFileHandle(original)) {
                   wrapFileHandle(value)
                 }
-                finishChannel.publish()
+                finishChannel.runStores(ctx, () => {})
                 return value
               },
               error => {
-                errorChannel.publish(error)
-                finishChannel.publish()
+                ctx.error = error
+                errorChannel.publish(ctx)
+                finishChannel.runStores(ctx, () => {})
                 throw error
               }
             )
           }
 
-          finishChannel.publish()
+          finishChannel.runStores(ctx, () => {})
 
           return result
         } catch (error) {
-          errorChannel.publish(error)
-          finishChannel.publish()
+          ctx.error = error
+          errorChannel.publish(ctx)
+          finishChannel.runStores(ctx, () => {})
           throw error
         }
       })

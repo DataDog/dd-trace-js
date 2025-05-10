@@ -67,6 +67,12 @@
       "versions": ["^4"]
     }
   ],
+  "confluentinc-kafka-javascript": [
+    {
+      "name": "kafkajs",
+      "versions": [">=1.4.0"]
+    }
+  ],
   "cypress": [
     {
       "name": "cypress",
@@ -431,6 +437,14 @@
     {
       "name": "express",
       "versions": [">=4"]
+    },
+    {
+      "name": "pg-query-stream",
+      "versions": [">=4"]
+    },
+    {
+      "name": "pg-cursor",
+      "versions": [">=2"]
     }
   ],
   "pino": [
