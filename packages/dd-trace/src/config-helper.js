@@ -1,5 +1,4 @@
 'use strict'
-/* eslint-disable no-console */
 
 // 0. Add jira ticket for this
 // 1. Adding a linter to verify that process.env is not used throughout the code (tests are fine)
@@ -9,36 +8,18 @@
 // 5. Make sure config.js is loaded first, right after calling init. The order matters
 
 const { debuglog } = require('util')
-const { supportedConfigurations, aliases } = require('./supported-configurations')
+const { supportedConfigurations, aliases, deprecations } = require('./supported-configurations')
 const hasOwn = Object.hasOwn || ((obj, prop) => Object.prototype.hasOwnProperty.call(obj, prop))
 
 const aliasString = JSON.stringify(aliases, null, 0)
 
 const debug = debuglog('dd:debug')
 
-const configs = {}
-// Round 1: assign all valid configs and backup to aliases if needed
-for (const [name, value] of Object.entries(process.env)) {
-  if (!name.startsWith('DD_') && !name.startsWith('OTEL_')) {
-    configs[name] = value
-  }
-}
-
-for (const name of Object.keys(supportedConfigurations)) {
-  if (Object.hasOwn(process.env, name)) {
-    configs[name] = process.env[name]
-  } else if (aliases[name]) {
-    for (const alias of aliases[name]) {
-      if (Object.hasOwn(process.env, alias)) {
-        configs[name] = process.env[alias]
-        break
-      }
-    }
-  }
-}
+let configs
 
 // This does not work in case someone destructures process.env during loading before this file
 // and the proxy is created. We need to make sure this file is loaded first.
+// TODO: Guard against non-extensible/frozen process.env
 function setProcessEnv (envs) {
   return new Proxy(envs, {
     // TODO: defineProperty should also be handled.
@@ -63,11 +44,54 @@ function setProcessEnv (envs) {
         configs[prop] = value
       }
       return true
+    },
+    deleteProperty (target, prop) {
+      // TODO: Improve the check
+      if (aliasString.includes(`"${prop}"`) && !aliasString.includes(`"${prop}":`)) {
+        for (const alias of aliases[prop]) {
+          if (hasOwn(target, alias)) {
+            delete target[alias]
+            break
+          }
+        }
+      } else {
+        delete configs[prop]
+      }
+      return delete target[prop]
     }
   })
 }
 
 let envs = setProcessEnv(process.env)
+
+function setConfigs () {
+  configs = {}
+  for (const [name, value] of Object.entries(envs)) {
+    if (!name.startsWith('DD_') && !name.startsWith('OTEL_')) {
+      configs[name] = value
+    }
+  }
+
+  for (const name of Object.keys(supportedConfigurations)) {
+    if (hasOwn(envs, name)) {
+      configs[name] = envs[name]
+    } else if (aliases[name]) {
+      for (const alias of aliases[name]) {
+        if (hasOwn(envs, alias)) {
+          configs[name] = envs[alias]
+          // TODO: Handle deprecations differently. Discuss about unifying the deprecations and logging
+          if (deprecations[name]) {
+            // eslint-disable-next-line no-console
+            console.warn(`The configuration ${alias} is deprecated. Use ${name} instead.`)
+          }
+          break
+        }
+      }
+    }
+  }
+}
+
+setConfigs()
 
 // This won't be sufficient in case the user would just call Object.defineProperty
 // TODO: Use shimmer instead of the manual getter/setter replacement.
@@ -77,6 +101,7 @@ Object.defineProperty(process, 'env', {
   },
   set (value) {
     envs = setProcessEnv(value)
+    setConfigs()
   }
 })
 

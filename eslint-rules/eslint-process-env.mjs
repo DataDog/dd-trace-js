@@ -7,7 +7,8 @@ export default {
     schema: []
   },
   create (context) {
-    const allowedFile = /[/\\]packages[/\\]dd-trace[/\\]src[/\\](config-helper|guardrails[/\\](index|log))\.js$/
+    // eslint-disable-next-line @stylistic/js/max-len
+    const allowedFile = /[/\\]packages[/\\]dd-trace[/\\]src[/\\](config-helper|guardrails[/\\](index|log|telemetry))\.js$/
 
     return {
       // TODO: Add support for other types like

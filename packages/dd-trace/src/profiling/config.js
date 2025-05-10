@@ -27,14 +27,10 @@ class Config {
       DD_PROFILING_CPU_ENABLED,
       DD_PROFILING_DEBUG_SOURCE_MAPS,
       DD_PROFILING_ENDPOINT_COLLECTION_ENABLED,
-      DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED,
-      DD_PROFILING_EXPERIMENTAL_CPU_ENABLED,
-      DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED,
       DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES,
       DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE,
       DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT,
       DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED,
-      DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED,
       DD_PROFILING_HEAP_ENABLED,
       DD_PROFILING_PPROF_PREFIX,
       DD_PROFILING_PROFILERS,
@@ -85,16 +81,6 @@ class Config {
     }
 
     this.logger = ensureLogger(options.logger)
-    const logger = this.logger
-    function logExperimentalVarDeprecation (shortVarName) {
-      const deprecatedEnvVarName = `DD_PROFILING_EXPERIMENTAL_${shortVarName}`
-      const v = getConfiguration(deprecatedEnvVarName)
-      // not null, undefined, or NaN -- same logic as koalas.hasValue
-      // eslint-disable-next-line no-self-compare
-      if (v != null && v === v) {
-        logger.warn(`${deprecatedEnvVarName} is deprecated. Use DD_PROFILING_${shortVarName} instead.`)
-      }
-    }
     // Profiler sampling contexts are not available on Windows, so features
     // depending on those (code hotspots and endpoint collection) need to default
     // to false on Windows.
@@ -118,9 +104,7 @@ class Config {
     this.sourceMap = sourceMap
     this.debugSourceMaps = isTrue(coalesce(options.debugSourceMaps, DD_PROFILING_DEBUG_SOURCE_MAPS, false))
     this.endpointCollectionEnabled = isTrue(coalesce(options.endpointCollection,
-      DD_PROFILING_ENDPOINT_COLLECTION_ENABLED,
-      DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED, samplingContextsAvailable))
-    logExperimentalVarDeprecation('ENDPOINT_COLLECTION_ENABLED')
+      DD_PROFILING_ENDPOINT_COLLECTION_ENABLED, samplingContextsAvailable))
     checkOptionWithSamplingContextAllowed(this.endpointCollectionEnabled, 'Endpoint collection')
 
     this.pprofPrefix = pprofPrefix
@@ -173,23 +157,18 @@ class Config {
       })
 
     this.timelineEnabled = isTrue(coalesce(options.timelineEnabled,
-      DD_PROFILING_TIMELINE_ENABLED,
-      DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED, samplingContextsAvailable))
-    logExperimentalVarDeprecation('TIMELINE_ENABLED')
+      DD_PROFILING_TIMELINE_ENABLED, samplingContextsAvailable))
     checkOptionWithSamplingContextAllowed(this.timelineEnabled, 'Timeline view')
     this.timelineSamplingEnabled = isTrue(coalesce(options.timelineSamplingEnabled,
       DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED, true))
 
     this.codeHotspotsEnabled = isTrue(coalesce(options.codeHotspotsEnabled,
-      DD_PROFILING_CODEHOTSPOTS_ENABLED,
-      DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED, samplingContextsAvailable))
-    logExperimentalVarDeprecation('CODEHOTSPOTS_ENABLED')
+      DD_PROFILING_CODEHOTSPOTS_ENABLED, samplingContextsAvailable))
     checkOptionWithSamplingContextAllowed(this.codeHotspotsEnabled, 'Code hotspots')
 
     this.cpuProfilingEnabled = isTrue(coalesce(options.cpuProfilingEnabled,
       DD_PROFILING_CPU_ENABLED,
-      DD_PROFILING_EXPERIMENTAL_CPU_ENABLED, samplingContextsAvailable))
-    logExperimentalVarDeprecation('CPU_ENABLED')
+      samplingContextsAvailable))
     checkOptionWithSamplingContextAllowed(this.cpuProfilingEnabled, 'CPU profiling')
 
     this.profilers = ensureProfilers(profilers, this)
