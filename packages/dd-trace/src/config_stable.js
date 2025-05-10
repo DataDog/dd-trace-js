@@ -1,6 +1,6 @@
 const os = require('os')
 const fs = require('fs')
-const { getConfiguration, getConfigurations } = require('../../dd-trace/src/config-helper')
+const { getConfiguration } = require('../../dd-trace/src/config-helper')
 
 class StableConfig {
   constructor () {
@@ -41,7 +41,7 @@ class StableConfig {
 
     try {
       const configurator = new libconfig.JsConfigurator()
-      configurator.set_envp(Object.entries(getConfigurations()).map(([key, value]) => `${key}=${value}`))
+      configurator.set_envp(Object.entries(process.env).map(([key, value]) => `${key}=${value}`))
       configurator.set_args(process.argv)
       configurator.get_configuration(localConfig.toString(), fleetConfig.toString()).forEach((entry) => {
         if (entry.source === 'local_stable_config') {

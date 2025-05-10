@@ -31,11 +31,9 @@ function setProcessEnv (envs) {
           configs[prop] = value
         } else if (aliasString.includes(`"${prop}"`)) {
           for (const alias of Object.keys(aliases)) {
-            if (aliases[alias].includes(prop)) {
-              // The alias should only be used if the actual configuration is not set
-              if (configs[alias] === undefined) {
-                configs[alias] = value
-              }
+            // The alias should only be used if the actual configuration is not set
+            if (configs[alias] === undefined && aliases[alias].includes(prop)) {
+              configs[alias] = value
               break
             }
           }
@@ -116,7 +114,7 @@ module.exports = {
   },
   getConfiguration (name) {
     const config = configs[name]
-    if (config === undefined &&
+    if (config !== envs[name] &&
         (name.startsWith('DD_') || name.startsWith('OTEL_')) &&
         !hasOwn(supportedConfigurations, name) &&
         !aliasString.includes(`"${name}"`)) {
