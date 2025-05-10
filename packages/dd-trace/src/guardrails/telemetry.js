@@ -7,15 +7,14 @@ var fs = require('fs')
 var spawn = require('child_process').spawn
 var tracerVersion = require('../../../../package.json').version
 var log = require('./log')
-const { getConfiguration } = require('../config-helper')
 
 module.exports = sendTelemetry
 
-if (!getConfiguration('DD_INJECTION_ENABLED')) {
+if (!process.env.DD_INJECTION_ENABLED) {
   module.exports = function () {}
 }
 
-var telemetryForwarderPath = getConfiguration('DD_TELEMETRY_FORWARDER_PATH')
+var telemetryForwarderPath = process.env.DD_TELEMETRY_FORWARDER_PATH
 if (typeof telemetryForwarderPath !== 'string' || !fs.existsSync(telemetryForwarderPath)) {
   module.exports = function () {}
 }
