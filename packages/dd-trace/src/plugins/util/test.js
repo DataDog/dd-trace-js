@@ -786,7 +786,7 @@ function getLibraryCapabilitiesTags (testFramework, isParallel) {
     [DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE]: '1',
     [DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE]: '1',
     [DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX]: isAttemptToFixSupported(testFramework, isParallel)
-      ? '3'
+      ? '4'
       : undefined
   }
 }

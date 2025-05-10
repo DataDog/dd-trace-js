@@ -2498,7 +2498,7 @@ versions.forEach(version => {
                 assert.equal(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
                 assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
                 assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
-                assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '3')
+                assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '4')
                 // capabilities logic does not overwrite test session name
                 assert.equal(metadata.test[TEST_SESSION_NAME], 'my-test-session-name')
               })
