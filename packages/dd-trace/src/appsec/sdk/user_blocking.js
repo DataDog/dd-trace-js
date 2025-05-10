@@ -9,8 +9,8 @@ const { setUserTags } = require('./set_user')
 const log = require('../../log')
 
 function isUserBlocked (user) {
-  const actions = waf.run({ persistent: { [USER_ID]: user.id } })
-  return !!getBlockingAction(actions)
+  const results = waf.run({ persistent: { [USER_ID]: user.id } })
+  return !!getBlockingAction(results?.actions)
 }
 
 function checkUserAndSetUser (tracer, user) {

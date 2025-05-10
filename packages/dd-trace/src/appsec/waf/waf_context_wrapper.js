@@ -19,7 +19,7 @@ class WAFContextWrapper {
     this.rulesVersion = rulesVersion
     this.knownAddresses = knownAddresses
     this.addressesToSkip = new Set()
-    this.cachedUserIdActions = new Map()
+    this.cachedUserIdResults = new Map()
   }
 
   run ({ persistent, ephemeral }, raspRule) {
@@ -36,9 +36,9 @@ class WAFContextWrapper {
     // TODO: make this universal
     const userId = persistent?.[addresses.USER_ID] || ephemeral?.[addresses.USER_ID]
     if (userId) {
-      const cachedAction = this.cachedUserIdActions.get(userId)
-      if (cachedAction) {
-        return cachedAction
+      const cachedResults = this.cachedUserIdResults.get(userId)
+      if (cachedResults) {
+        return cachedResults
       }
     }
 
@@ -142,7 +142,7 @@ class WAFContextWrapper {
 
       Reporter.reportDerivatives(result.derivatives)
 
-      return result.actions
+      return result
     } catch (err) {
       log.error('[ASM] Error while running the AppSec WAF', err)
 
@@ -168,7 +168,7 @@ class WAFContextWrapper {
           const parameter = match.parameters[k]
 
           if (parameter?.address === addresses.USER_ID) {
-            this.cachedUserIdActions.set(userId, result.actions)
+            this.cachedUserIdResults.set(userId, result)
             return
           }
         }
