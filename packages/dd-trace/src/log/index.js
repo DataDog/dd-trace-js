@@ -7,6 +7,7 @@ const { traceChannel, debugChannel, infoChannel, warnChannel, errorChannel } = r
 const logWriter = require('./writer')
 const { Log } = require('./log')
 const { memoize } = require('./utils')
+const { getConfiguration } = require('../config-helper')
 
 const config = {
   enabled: false,
@@ -98,8 +99,8 @@ const log = {
   isEnabled (fleetStableConfigValue = undefined, localStableConfigValue = undefined) {
     return isTrue(coalesce(
       fleetStableConfigValue,
-      process.env?.DD_TRACE_DEBUG,
-      process.env?.OTEL_LOG_LEVEL === 'debug' || undefined,
+      getConfiguration('DD_TRACE_DEBUG'),
+      getConfiguration('OTEL_LOG_LEVEL') === 'debug' || undefined,
       localStableConfigValue,
       config.enabled
     ))
@@ -113,8 +114,8 @@ const log = {
     return coalesce(
       optionsValue,
       fleetStableConfigValue,
-      process.env?.DD_TRACE_LOG_LEVEL,
-      process.env?.OTEL_LOG_LEVEL,
+      getConfiguration('DD_TRACE_LOG_LEVEL'),
+      getConfiguration('OTEL_LOG_LEVEL'),
       localStableConfigValue,
       config.logLevel
     )
