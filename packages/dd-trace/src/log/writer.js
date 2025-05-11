@@ -18,7 +18,7 @@ let stackTraceLimitFunction = onError
 function withNoop (fn) {
   const store = storage('legacy').getStore()
 
-  storage('legacy').enterWith({ noop: true })
+  storage('noop').enterWith(true)
   fn()
   storage('legacy').enterWith(store)
 }
