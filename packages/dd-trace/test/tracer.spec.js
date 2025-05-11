@@ -421,4 +421,24 @@ describe('Tracer', () => {
       })
     })
   })
+
+  describe('flush', () => {
+    it('should flush the exporter', () => {
+      sinon.spy(tracer._exporter._writer, 'flush')
+
+      tracer.flush()
+
+      expect(tracer._exporter._writer.flush).to.have.been.calledOnce
+    })
+
+    it('should flush the exporter and fire callback', () => {
+      const cb = sinon.spy()
+      sinon.spy(tracer._exporter._writer, 'flush')
+
+      tracer.flush(cb)
+
+      expect(tracer._exporter._writer.flush).to.have.been.calledOnce
+      expect(cb).to.have.been.calledOnce
+    })
+  })
 })
