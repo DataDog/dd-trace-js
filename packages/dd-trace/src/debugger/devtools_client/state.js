@@ -9,6 +9,8 @@ const WINDOWS_DRIVE_LETTER_REGEX = /[a-zA-Z]/
 
 const loadedScripts = []
 const scriptUrls = new Map()
+let reEvaluateProbesTimer = null
+const SCRIPT_LOADING_STABILIZED_DELAY = Number(process.env.DD_INTERNAL_DEBUGGER_SCRIPT_LOADING_STABILIZED_DELAY || 1000)
 
 module.exports = {
   locationToBreakpoint: new Map(),
@@ -142,5 +144,10 @@ session.on('Debugger.scriptParsed', ({ params }) => {
     } else {
       loadedScripts.push(params)
     }
+
+    clearTimeout(reEvaluateProbesTimer)
+    reEvaluateProbesTimer = setTimeout(() => {
+      session.emit('scriptLoadingStabilized')
+    }, SCRIPT_LOADING_STABILIZED_DELAY)
   }
 })

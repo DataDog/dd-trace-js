@@ -100,6 +100,7 @@ function setup ({ env, testApp, testAppSource } = {}) {
         DD_TRACE_AGENT_PORT: t.agent.port,
         DD_TRACE_DEBUG: process.env.DD_TRACE_DEBUG, // inherit to make debugging the sandbox easier
         DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: pollInterval,
+        DD_INTERNAL_DEBUGGER_SCRIPT_LOADING_STABILIZED_DELAY: 0, // avoid having to set a higher poll interval
         ...env
       }
     })

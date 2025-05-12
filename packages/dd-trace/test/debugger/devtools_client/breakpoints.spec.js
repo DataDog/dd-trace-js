@@ -17,6 +17,9 @@ describe('breakpoints', function () {
         }
         return Promise.resolve({})
       }),
+      on (event, callback) {
+        if (event === 'scriptLoadingStabilized') callback()
+      },
       '@noCallThru': true
     }
 
