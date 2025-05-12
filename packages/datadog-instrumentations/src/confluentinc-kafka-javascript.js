@@ -192,7 +192,6 @@ function instrumentKafkaJS (kafkaJS) {
                 kafka._ddBrokers = arguments[0]['bootstrap.servers']
               }
 
-              // Add disable header injection flag
               producer._ddDisableHeaderInjection = false
 
               // Wrap the send method of the producer
@@ -222,7 +221,6 @@ function instrumentKafkaJS (kafkaJS) {
                           }),
                           asyncResource.bind(err => {
                             if (err) {
-                              // Disable header injection for UNKNOWN_SERVER_ERROR
                               if (err.name === 'KafkaJSProtocolError' && err.type === 'UNKNOWN') {
                                 this._ddDisableHeaderInjection = true
                                 console.error('Kafka Broker responded with UNKNOWN_SERVER_ERROR (-1). Please look at broker logs for more information. Tracer message header injection for Kafka is disabled.')
