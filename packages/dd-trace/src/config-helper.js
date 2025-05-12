@@ -11,7 +11,15 @@ const { debuglog } = require('util')
 const { supportedConfigurations, aliases, deprecations } = require('./supported-configurations')
 const hasOwn = Object.hasOwn || ((obj, prop) => Object.prototype.hasOwnProperty.call(obj, prop))
 
-const aliasString = JSON.stringify(aliases, null, 0)
+const aliasObject = {}
+for (const alias of Object.keys(aliases)) {
+  for (const aliasValue of aliases[alias]) {
+    if (aliasObject[aliasValue]) {
+      throw new Error(`The alias ${aliasValue} is already used for ${aliasObject[aliasValue]}.`)
+    }
+    aliasObject[aliasValue] = alias
+  }
+}
 
 const debug = debuglog('dd:debug')
 
@@ -24,24 +32,19 @@ function setProcessEnv (envs) {
   return new Proxy(envs, {
     // TODO: defineProperty should also be handled.
     set (target, prop, value) {
-      // @ts-ignore
       target[prop] = value
       if (typeof prop === 'string' && (prop.startsWith('DD_') || prop.startsWith('OTEL_'))) {
         if (supportedConfigurations[prop]) {
           configs[prop] = value
-        } else if (aliasString.includes(`"${prop}"`)) {
-          for (const alias of Object.keys(aliases)) {
-            // The alias should only be used if the actual configuration is not set
-            if (configs[alias] === undefined && aliases[alias].includes(prop)) {
-              configs[alias] = value
-              break
-            }
+        } else if (aliasObject[prop]) {
+          // The alias should only be used if the actual configuration is not set
+          if (configs[aliasObject[prop]] === undefined) {
+            configs[aliasObject[prop]] = value
           }
         } else {
           debug(
             `Missing configuration ${prop} in supported-configurations file. The environment variable is ignored.`
           )
-          throw new Error(`Missing ${prop}`)
         }
       } else {
         configs[prop] = value
@@ -49,17 +52,7 @@ function setProcessEnv (envs) {
       return true
     },
     deleteProperty (target, prop) {
-      // TODO: Improve the check
-      if (aliasString.includes(`"${prop}"`) && !aliasString.includes(`"${prop}":`)) {
-        for (const alias of aliases[prop]) {
-          if (hasOwn(target, alias)) {
-            delete target[alias]
-            break
-          }
-        }
-      } else {
-        delete configs[prop]
-      }
+      delete configs[aliasObject[prop] ?? prop]
       return delete target[prop]
     }
   })
@@ -109,15 +102,26 @@ Object.defineProperty(process, 'env', {
 })
 
 module.exports = {
+  // TODO: Rewrite this to do the filtering during the get call. Otherwise,
+  // there are ways that the user might set the envs dynamically in ways that
+  // are difficult to track. To prevent overhead, only use `getConfigurations()`
+  // in the config.js file. Other spots should use `getConfiguration()`.
   getConfigurations () {
     return configs
   },
   getConfiguration (name) {
+    // const config = process.env[name]
+    // if ((name.startsWith('DD_') || name.startsWith('OTEL_')) &&
+    //     !supportedConfigurations[name] &&
+    //     !aliasObject[name]) {
+    //   debug(`Missing ${name} configuration in supported-configurations file. The environment variable is ignored.`)
+    //   throw new Error(`Missing ${name}`)
+    // }
     const config = configs[name]
     if (config !== envs[name] &&
         (name.startsWith('DD_') || name.startsWith('OTEL_')) &&
-        !hasOwn(supportedConfigurations, name) &&
-        !aliasString.includes(`"${name}"`)) {
+        !supportedConfigurations[name] &&
+        !aliasObject[name]) {
       debug(`Missing ${name} configuration in supported-configurations file. The environment variable is ignored.`)
       throw new Error(`Missing ${name}`)
     }
