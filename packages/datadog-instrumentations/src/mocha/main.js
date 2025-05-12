@@ -53,7 +53,7 @@ const originalCoverageMap = createCoverageMap()
 let untestedCoverage
 
 // test channels
-const testStartCh = channel('ci:mocha:test:start')
+const testFinishCh = channel('ci:mocha:test:finish')
 
 // test suite channels
 const testSuiteStartCh = channel('ci:mocha:test-suite:start')
@@ -312,7 +312,7 @@ addHook({
 }, (Mocha) => {
   shimmer.wrap(Mocha.prototype, 'run', run => function () {
     // Workers do not need to request any data, just run the tests
-    if (!testStartCh.hasSubscribers || process.env.MOCHA_WORKER_ID || this.options.parallel) {
+    if (!testFinishCh.hasSubscribers || process.env.MOCHA_WORKER_ID || this.options.parallel) {
       return run.apply(this, arguments)
     }
 
@@ -367,7 +367,7 @@ addHook({
 }, (run) => {
   // `runMocha` is an async function
   shimmer.wrap(run, 'runMocha', runMocha => function () {
-    if (!testStartCh.hasSubscribers) {
+    if (!testFinishCh.hasSubscribers) {
       return runMocha.apply(this, arguments)
     }
     const mocha = arguments[0]
@@ -403,7 +403,7 @@ addHook({
   shimmer.wrap(Runner.prototype, 'runTests', runTests => getRunTestsWrapper(runTests, config))
 
   shimmer.wrap(Runner.prototype, 'run', run => function () {
-    if (!testStartCh.hasSubscribers) {
+    if (!testFinishCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
 
@@ -516,7 +516,7 @@ addHook({
   file: 'src/WorkerHandler.js'
 }, (workerHandlerPackage) => {
   shimmer.wrap(workerHandlerPackage.prototype, 'exec', exec => function (_, path) {
-    if (!testStartCh.hasSubscribers) {
+    if (!testFinishCh.hasSubscribers) {
       return exec.apply(this, arguments)
     }
     if (!path?.length) {
@@ -575,7 +575,7 @@ addHook({
   file: 'lib/nodejs/parallel-buffered-runner.js'
 }, (ParallelBufferedRunner, frameworkVersion) => {
   shimmer.wrap(ParallelBufferedRunner.prototype, 'run', run => function (cb, { files }) {
-    if (!testStartCh.hasSubscribers) {
+    if (!testFinishCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
 
@@ -616,7 +616,7 @@ addHook({
   const { BufferedWorkerPool } = BufferedWorkerPoolPackage
 
   shimmer.wrap(BufferedWorkerPool.prototype, 'run', run => async function (testSuiteAbsolutePath, workerArgs) {
-    if (!testStartCh.hasSubscribers || (!config.isKnownTestsEnabled && !config.isTestManagementTestsEnabled)) {
+    if (!testFinishCh.hasSubscribers || (!config.isKnownTestsEnabled && !config.isTestManagementTestsEnabled)) {
       return run.apply(this, arguments)
     }
 
