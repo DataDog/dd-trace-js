@@ -54,6 +54,7 @@ class Sqs extends BaseAwsSdkPlugin {
     })
 
     this.addSub('apm:aws:response:finish:sqs', ctx => {
+      if (!ctx.needsFinish) return
       this.finish(ctx)
     })
   }

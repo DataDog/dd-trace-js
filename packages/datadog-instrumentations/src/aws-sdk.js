@@ -99,9 +99,7 @@ function wrapSmithySend (send) {
             responseStartChannel.runStores(responseCtx, () => {
               cb.apply(this, arguments)
 
-              if (responseCtx.needsFinish) {
-                responseFinishChannel.publish(responseCtx)
-              }
+              responseFinishChannel.publish(responseCtx)
             })
           })
         })
@@ -132,10 +130,6 @@ function wrapCb (cb, serviceName, ctx) {
     return channel(`apm:aws:request:complete:${serviceName}`).runStores(ctx, () => {
       ctx = { request: ctx.request, response }
       return channel(`apm:aws:response:start:${serviceName}`).runStores(ctx, () => {
-        // TODO(bengl) make this work without needing a needsFinish property added to the object
-        if (!ctx.needsFinish) {
-          return cb.apply(this, arguments)
-        }
         const finishChannel = channel(`apm:aws:response:finish:${serviceName}`)
         try {
           let result = cb.apply(this, arguments)
