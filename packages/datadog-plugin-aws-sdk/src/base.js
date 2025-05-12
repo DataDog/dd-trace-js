@@ -42,7 +42,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         awsService
       } = ctx
 
-      const childOf = this.tracer.scope().active()
+      const childOf = ctx.parentStore = this.tracer.scope().active()
 
       if (!this.isEnabled(request)) {
         return childOf
