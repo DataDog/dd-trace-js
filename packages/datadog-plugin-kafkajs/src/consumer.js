@@ -65,7 +65,7 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
   }
 
   bindStart (ctx) {
-    const { topic, partition, message, groupId, clusterId } = ctx.extractedArgs
+    const { topic, partition, message, groupId, clusterId } = ctx.extractedArgs || ctx
 
     let childOf
     const headers = convertToTextMap(message?.headers)

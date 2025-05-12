@@ -66,7 +66,7 @@ function instrumentBaseModule (module) {
                 try {
                   const result = produce.apply(this, arguments)
 
-                  channels.producerCommit.publish(undefined)
+                  channels.producerCommit.publish(result)
                   channels.producerFinish.runStores(ctx, () => {})
                   return result
                 } catch (error) {
@@ -211,8 +211,7 @@ function instrumentKafkaJS (kafkaJS) {
                         const result = send.apply(this, arguments)
 
                         result.then((res) => {
-                          ctx.res = res
-                          channels.producerCommit.publish(ctx)
+                          channels.producerCommit.publish(res)
                           channels.producerFinish.publish(undefined)
                         }, (err) => {
                           if (err) {
@@ -335,7 +334,7 @@ function wrapKafkaCallback (callback, { startCh, commitCh, finishCh, errorCh }, 
     const commitPayload = getPayload(payload)
 
     const ctx = {}
-    ctx.commitPayload = commitPayload
+    ctx.extractedArgs = commitPayload
 
     return startCh.runStores(ctx, () => {
       updateLatestOffset(commitPayload?.topic, commitPayload?.partition, commitPayload?.offset, commitPayload?.groupId)
