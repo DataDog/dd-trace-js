@@ -26,7 +26,7 @@ const {
   getOnHookEndHandler,
   getOnFailHandler,
   getOnPendingHandler,
-  testFileToSuiteAr,
+  testFileToSuiteCtx,
   newTests,
   testsQuarantined,
   getTestFullName,
@@ -166,7 +166,7 @@ function getOnEndHandler (isParallel) {
       error = new Error(`Failed tests: ${this.failures}.`)
     }
 
-    testFileToSuiteAr.clear()
+    testFileToSuiteCtx.clear()
 
     let testCodeCoverageLinesTotal
     if (global.__coverage__) {
@@ -430,20 +430,18 @@ addHook({
       if (suite.root || !suite.tests.length) {
         return
       }
-      let asyncResource = testFileToSuiteAr.get(suite.file)
-      if (!asyncResource) {
-        asyncResource = new AsyncResource('bound-anonymous-fn')
-        testFileToSuiteAr.set(suite.file, asyncResource)
+      let ctx = testFileToSuiteCtx.get(suite.file)
+      if (!ctx) {
         const isUnskippable = unskippableSuites.includes(suite.file)
         isForcedToRun = isUnskippable && suitesToSkip.includes(getTestSuitePath(suite.file, process.cwd()))
-        asyncResource.runInAsyncScope(() => {
-          testSuiteStartCh.publish({
-            testSuiteAbsolutePath: suite.file,
-            isUnskippable,
-            isForcedToRun,
-            itrCorrelationId
-          })
-        })
+        ctx = {
+          testSuiteAbsolutePath: suite.file,
+          isUnskippable,
+          isForcedToRun,
+          itrCorrelationId
+        }
+        testFileToSuiteCtx.set(suite.file, ctx)
+        testSuiteStartCh.runStores(ctx, () => { })
       }
     })
 
@@ -485,11 +483,9 @@ addHook({
         resetCoverage(global.__coverage__)
       }
 
-      const asyncResource = testFileToSuiteAr.get(suite.file)
-      if (asyncResource) {
-        asyncResource.runInAsyncScope(() => {
-          testSuiteFinishCh.publish(status)
-        })
+      const ctx = testFileToSuiteCtx.get(suite.file)
+      if (ctx) {
+        testSuiteFinishCh.publish({ status, ...ctx.currentStore }, () => { })
       } else {
         log.warn(() => `No AsyncResource found for suite ${suite.file}`)
       }
@@ -527,51 +523,42 @@ addHook({
       return exec.apply(this, arguments)
     }
     const [testSuiteAbsolutePath] = path
-    const testSuiteAsyncResource = new AsyncResource('bound-anonymous-fn')
+    const testSuiteContext = { }
 
     function onMessage (message) {
       if (Array.isArray(message)) {
         const [messageCode, payload] = message
         if (messageCode === MOCHA_WORKER_TRACE_PAYLOAD_CODE) {
-          testSuiteAsyncResource.runInAsyncScope(() => {
-            workerReportTraceCh.publish(payload)
-          })
+          workerReportTraceCh.publish(payload)
         }
       }
     }
 
     this.worker.on('message', onMessage)
 
-    testSuiteAsyncResource.runInAsyncScope(() => {
-      testSuiteStartCh.publish({
-        testSuiteAbsolutePath
-      })
-    })
+    testSuiteContext.testSuiteAbsolutePath = testSuiteAbsolutePath
+    testSuiteStartCh.runStores(testSuiteContext, () => { })
 
     try {
       const promise = exec.apply(this, arguments)
       promise.then(
         (result) => {
           const status = result.failureCount === 0 ? 'pass' : 'fail'
-          testSuiteAsyncResource.runInAsyncScope(() => {
-            testSuiteFinishCh.publish(status)
-          })
+          testSuiteFinishCh.publish({ status, ...testSuiteContext.currentStore }, () => { })
           this.worker.off('message', onMessage)
         },
         (err) => {
-          testSuiteAsyncResource.runInAsyncScope(() => {
-            testSuiteErrorCh.publish(err)
-            testSuiteFinishCh.publish('fail')
-          })
+          testSuiteContext.error = err
+          testSuiteErrorCh.runStores(testSuiteContext, () => { })
+          testSuiteFinishCh.publish({ status: 'fail', ...testSuiteContext.currentStore }, () => { })
           this.worker.off('message', onMessage)
         }
       )
       return promise
     } catch (err) {
-      testSuiteAsyncResource.runInAsyncScope(() => {
-        testSuiteErrorCh.publish(err)
-        testSuiteFinishCh.publish('fail')
-      })
+      testSuiteContext.error = err
+      testSuiteErrorCh.runStores(testSuiteContext, () => { })
+      testSuiteFinishCh.publish({ status: 'fail', ...testSuiteContext.currentStore }, () => { })
       this.worker.off('message', onMessage)
       throw err
     }
