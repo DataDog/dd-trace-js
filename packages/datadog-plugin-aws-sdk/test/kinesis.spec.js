@@ -46,10 +46,6 @@ describe.only('Kinesis', function () {
       })
     }
 
-    before(() => {
-      process.env.DD_DATA_STREAMS_ENABLED = 'true'
-    })
-
     describe('no configuration', () => {
       before(() => {
         return agent.load('aws-sdk', { kinesis: { dsmEnabled: false, batchPropagationEnabled: true } }, { dsmEnabled: true })
