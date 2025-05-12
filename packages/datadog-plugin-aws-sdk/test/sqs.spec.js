@@ -39,7 +39,6 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         before(() => {
-          process.env.DD_DATA_STREAMS_ENABLED = 'true'
           tracer = require('../../dd-trace')
           tracer.use('aws-sdk', { sqs: { batchPropagationEnabled: true } })
 
@@ -389,7 +388,6 @@ describe('Plugin', () => {
         let nowStub
 
         before(() => {
-          process.env.DD_DATA_STREAMS_ENABLED = 'true'
           tracer = require('../../dd-trace')
           tracer.use('aws-sdk', { sqs: { dsmEnabled: true } })
         })
