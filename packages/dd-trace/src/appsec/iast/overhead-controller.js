@@ -1,5 +1,8 @@
 'use strict'
 
+const web = require('../../plugins/util/web')
+const LRUCache = require('lru-cache')
+const vulnerabilities = require('./vulnerabilities')
 const OVERHEAD_CONTROLLER_CONTEXT_KEY = 'oce'
 const REPORT_VULNERABILITY = 'REPORT_VULNERABILITY'
 const INTERVAL_RESET_GLOBAL_CONTEXT = 60 * 1000
@@ -9,11 +12,59 @@ const GLOBAL_OCE_CONTEXT = {}
 let resetGlobalContextInterval
 let config = {}
 let availableRequest = 0
+
+const globalRouteMap = new LRUCache({ max: 4096 })
+let vulnerabilitiesSize = 0
+const vulnerabilityIndexes = Object.values(vulnerabilities).reduce((obj, item, index) => {
+  obj[item] = index
+  vulnerabilitiesSize = index + 1
+  return obj
+}, {})
+
+function newCountersArray () {
+  return Array(vulnerabilitiesSize).fill(0)
+}
+function copyFromGlobalMap (route) {
+  const vulnerabilityCounters = globalRouteMap.get(route)
+  return vulnerabilityCounters ? [...vulnerabilityCounters] : newCountersArray()
+}
+
 const OPERATIONS = {
   REPORT_VULNERABILITY: {
-    hasQuota: (context) => {
-      const reserved = context && context.tokens && context.tokens[REPORT_VULNERABILITY] > 0
+    // TODO this should receive also vuln type
+    hasQuota: (context, vulnerabilityType) => {
+      // TODO The most of the RFC should be applied here
+      const reserved = context?.tokens?.[REPORT_VULNERABILITY] > 0
       if (reserved) {
+        // has quota
+        console.log('context.localMaps', context.localMaps)
+        context.copyMaps ??= {}
+        context.copyMaps[context.route] ??= copyFromGlobalMap(context.route)
+        context.localMaps ??= {}
+        context.localMaps[context.route] ??= newCountersArray()
+
+        const copyMap = context.copyMaps[context.route]
+        const localMap = context.localMaps[context.route]
+        const vulnerabilityIndex = vulnerabilityIndexes[vulnerabilityType]
+        const counter = localMap[vulnerabilityIndex]++
+        const storedCounter = copyMap[vulnerabilityIndex]
+
+        if (counter < storedCounter) {
+          return false
+        }
+        // TODO counter = requestMap.get(vulnerabilityType) || 0
+        //  requestMap.set(vulnerabilityType, counter + 1)
+        //  storedCounter = copyMap.get(vulnerabilityType)
+        //  if counter < storedCounter
+        //    * do not reduce tokens
+        //    * return false
+        //  else
+        //    * reduce tokens
+        //    * return true
+        console.log('report', vulnerabilityType)
+        console.log('context.localMaps', context.localMaps)
+
+        // not reduce the quota yet
         context.tokens[REPORT_VULNERABILITY]--
       }
       return reserved
@@ -42,9 +93,47 @@ function _getNewContext () {
 
 function _getContext (iastContext) {
   if (iastContext && iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY]) {
+    const oceContext = iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY]
+    if (!oceContext.webContext) {
+      oceContext.webContext = web.getContext(iastContext.req)
+      oceContext.method = iastContext.req.method
+    }
+
+    const currentPaths = oceContext.webContext.paths
+    if (currentPaths !== oceContext.paths) {
+      oceContext.paths = currentPaths
+      oceContext.route = oceContext.method + '-' + currentPaths?.join('') || ''
+      console.log('oceContext.route', oceContext.route)
+    }
+
     return iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY]
   }
   return GLOBAL_OCE_CONTEXT
+}
+
+function consolidateVulnerabilities (iastContext) {
+  const context = _getContext(iastContext)
+  const reserved = context?.tokens?.[REPORT_VULNERABILITY] > 0
+  if (reserved) { // still a bit of budget available
+    Object.keys(context.localMaps).forEach(route => {
+      globalRouteMap.set(route, newCountersArray())
+    })
+  } else {
+    Object.keys(context.localMaps).forEach(route => {
+      const localMap = context.localMaps[route]
+      const globalMap = globalRouteMap.get(route)
+      if (!globalMap) {
+        globalRouteMap.set(route, localMap)
+        return
+      }
+
+      for (let i = 0; i < vulnerabilitiesSize; i++) {
+        if (localMap[i] > globalMap[i]) {
+          globalMap[i] = localMap[i]
+        }
+      }
+    })
+  }
 }
 
 function _resetGlobalContext () {
@@ -70,9 +159,9 @@ function releaseRequest () {
   }
 }
 
-function hasQuota (operation, iastContext) {
+function hasQuota (operation, iastContext, vulnerabilityType) {
   const oceContext = _getContext(iastContext)
-  return operation.hasQuota(oceContext)
+  return operation.hasQuota(oceContext, vulnerabilityType)
 }
 
 function initializeRequestContext (iastContext) {
@@ -110,5 +199,6 @@ module.exports = {
   hasQuota,
   acquireRequest,
   releaseRequest,
-  configure
+  configure,
+  consolidateVulnerabilities
 }
