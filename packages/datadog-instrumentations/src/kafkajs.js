@@ -2,8 +2,7 @@
 
 const {
   channel,
-  addHook,
-  AsyncResource
+  addHook
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
@@ -56,41 +55,42 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
 
     producer.send = function () {
       const wrappedSend = (clusterId) => {
-        const innerAsyncResource = new AsyncResource('bound-anonymous-fn')
+        const ctx = {}
+        ctx.bootstrapServers = bootstrapServers
+        ctx.clusterId = clusterId
 
-        return innerAsyncResource.runInAsyncScope(() => {
-          if (!producerStartCh.hasSubscribers) {
-            return send.apply(this, arguments)
+        const { topic, messages = [] } = arguments[0]
+        for (const message of messages) {
+          if (message !== null && typeof message === 'object') {
+            message.headers = message.headers || {}
           }
+        }
+        ctx.topic = topic
+        ctx.messages = messages
 
+        return producerStartCh.runStores(ctx, () => {
           try {
-            const { topic, messages = [] } = arguments[0]
-            for (const message of messages) {
-              if (message !== null && typeof message === 'object') {
-                message.headers = message.headers || {}
-              }
-            }
-            producerStartCh.publish({ topic, messages, bootstrapServers, clusterId })
-
             const result = send.apply(this, arguments)
 
             result.then(
-              innerAsyncResource.bind(res => {
-                producerFinishCh.publish(undefined)
-                producerCommitCh.publish(res)
-              }),
-              innerAsyncResource.bind(err => {
+              (res) => {
+                ctx.res = res
+                producerFinishCh.runStores(ctx, () => {})
+                producerCommitCh.publish(ctx)
+              },
+              (err) => {
+                ctx.err = err
                 if (err) {
-                  producerErrorCh.publish(err)
+                  producerErrorCh.publish(ctx)
                 }
-                producerFinishCh.publish(undefined)
+                producerFinishCh.runStores(ctx, () => {})
               })
-            )
 
             return result
           } catch (e) {
-            producerErrorCh.publish(e)
-            producerFinishCh.publish(undefined)
+            ctx.err = e
+            producerErrorCh.publish(ctx)
+            producerFinishCh.runStores(ctx, () => {})
             throw e
           }
         })
@@ -175,29 +175,33 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
 const wrappedCallback = (fn, startCh, finishCh, errorCh, extractArgs, clusterId) => {
   return typeof fn === 'function'
     ? function (...args) {
-      const innerAsyncResource = new AsyncResource('bound-anonymous-fn')
-      return innerAsyncResource.runInAsyncScope(() => {
-        const extractedArgs = extractArgs(args, clusterId)
+      const ctx = {}
+      const extractedArgs = extractArgs(args, clusterId)
+      ctx.extractedArgs = extractedArgs
 
-        startCh.publish(extractedArgs)
+      return startCh.runStores(ctx, () => {
         try {
           const result = fn.apply(this, args)
           if (result && typeof result.then === 'function') {
             result.then(
-              innerAsyncResource.bind(() => finishCh.publish(undefined)),
-              innerAsyncResource.bind(err => {
+              (res) => {
+                ctx.res = res
+                finishCh.runStores(ctx, () => {})
+              },
+              (err) => {
+                ctx.err = err
                 if (err) {
-                  errorCh.publish(err)
+                  errorCh.publish(ctx)
                 }
-                finishCh.publish(undefined)
+                finishCh.runStores(ctx, () => {})
               })
-            )
           } else {
-            finishCh.publish(undefined)
+            finishCh.runStores(ctx, () => {})
           }
           return result
         } catch (e) {
-          errorCh.publish(e)
+          ctx.err = e
+          errorCh.publish(ctx)
           finishCh.publish(undefined)
           throw e
         }

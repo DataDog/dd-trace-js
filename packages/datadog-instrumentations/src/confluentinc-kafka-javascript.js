@@ -2,8 +2,7 @@
 
 const {
   addHook,
-  channel,
-  AsyncResource
+  channel
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
@@ -58,23 +57,22 @@ function instrumentBaseModule (module) {
 
               const brokers = this.globalConfig?.['bootstrap.servers']
 
-              const asyncResource = new AsyncResource('bound-anonymous-fn')
-              return asyncResource.runInAsyncScope(() => {
-                try {
-                  channels.producerStart.publish({
-                    topic,
-                    messages: [{ key, value: message }],
-                    bootstrapServers: brokers
-                  })
+              const ctx = {}
+              ctx.topic = topic
+              ctx.messages = [{ key, value: message }]
+              ctx.bootstrapServers = brokers
 
+              return channels.producerStart.runStores(ctx, () => {
+                try {
                   const result = produce.apply(this, arguments)
 
                   channels.producerCommit.publish(undefined)
-                  channels.producerFinish.publish(undefined)
+                  channels.producerFinish.runStores(ctx, () => {})
                   return result
                 } catch (error) {
-                  channels.producerError.publish(error)
-                  channels.producerFinish.publish(undefined)
+                  ctx.err = error
+                  channels.producerError.publish(ctx)
+                  channels.producerFinish.runStores(ctx, () => {})
                   throw error
                 }
               })
@@ -106,32 +104,35 @@ function instrumentBaseModule (module) {
                 callback = numMessages
               }
 
+              const ctx = {}
               // Handle callback-based consumption
               if (typeof callback === 'function') {
                 return consume.call(this, numMessages, function wrappedCallback (err, messages) {
                   if (messages && messages.length > 0) {
                     messages.forEach(message => {
-                      channels.consumerStart.publish({
-                        topic: message?.topic,
-                        partition: message?.partition,
-                        message,
-                        groupId
-                      })
+                      ctx.topic = message?.topic
+                      ctx.partition = message?.partition
+                      ctx.message = message
+                      ctx.groupId = groupId
+
+                      channels.consumerStart.runStores(ctx, () => {})
                       updateLatestOffset(message?.topic, message?.partition, message?.offset, groupId)
                     })
                   }
 
                   if (err) {
-                    channels.consumerError.publish(err)
+                    ctx.err = err
+                    channels.consumerError.publish(ctx)
                   }
 
                   try {
                     const result = callback.apply(this, arguments)
-                    channels.consumerFinish.publish(undefined)
+                    channels.consumerFinish.runStores(ctx, () => {})
                     return result
                   } catch (error) {
-                    channels.consumerError.publish(error)
-                    channels.consumerFinish.publish(undefined)
+                    ctx.err = error
+                    channels.consumerError.publish(ctx)
+                    channels.consumerFinish.runStores(ctx, () => {})
                     throw error
                   }
                 })
@@ -200,33 +201,31 @@ function instrumentKafkaJS (kafkaJS) {
                       return send.apply(this, arguments)
                     }
 
-                    const asyncResource = new AsyncResource('bound-anonymous-fn')
-                    return asyncResource.runInAsyncScope(() => {
-                      try {
-                        channels.producerStart.publish({
-                          topic: payload?.topic,
-                          messages: payload?.messages || [],
-                          bootstrapServers: kafka._ddBrokers
-                        })
+                    const ctx = {}
+                    ctx.topic = payload?.topic
+                    ctx.messages = payload?.messages || []
+                    ctx.bootstrapServers = kafka._ddBrokers
 
+                    return channels.producerStart.runStores(ctx, () => {
+                      try {
                         const result = send.apply(this, arguments)
 
-                        result.then(
-                          asyncResource.bind(res => {
-                            channels.producerCommit.publish(res)
-                            channels.producerFinish.publish(undefined)
-                          }),
-                          asyncResource.bind(err => {
-                            if (err) {
-                              channels.producerError.publish(err)
-                            }
-                            channels.producerFinish.publish(undefined)
-                          })
-                        )
+                        result.then((res) => {
+                          ctx.res = res
+                          channels.producerCommit.publish(ctx)
+                          channels.producerFinish.publish(undefined)
+                        }, (err) => {
+                          if (err) {
+                            ctx.err = err
+                            channels.producerError.publish(ctx)
+                          }
+                          channels.producerFinish.publish(undefined)
+                        })
 
                         return result
                       } catch (e) {
-                        channels.producerError.publish(e)
+                        ctx.err = e
+                        channels.producerError.publish(ctx)
                         channels.producerFinish.publish(undefined)
                         throw e
                       }
@@ -335,10 +334,10 @@ function wrapKafkaCallback (callback, { startCh, commitCh, finishCh, errorCh }, 
   return function wrappedKafkaCallback (payload) {
     const commitPayload = getPayload(payload)
 
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-    return asyncResource.runInAsyncScope(() => {
-      startCh.publish(commitPayload)
+    const ctx = {}
+    ctx.commitPayload = commitPayload
 
+    return startCh.runStores(ctx, () => {
       updateLatestOffset(commitPayload?.topic, commitPayload?.partition, commitPayload?.offset, commitPayload?.groupId)
 
       try {
@@ -346,22 +345,25 @@ function wrapKafkaCallback (callback, { startCh, commitCh, finishCh, errorCh }, 
 
         if (result && typeof result.then === 'function') {
           return result
-            .then(asyncResource.bind(res => {
-              finishCh.publish(undefined)
+            .then((res) => {
+              ctx.res = res
+              finishCh.runStores(ctx, () => {})
               return res
-            }))
-            .catch(asyncResource.bind(err => {
-              errorCh.publish(err)
-              finishCh.publish(undefined)
+            })
+            .catch((err) => {
+              ctx.err = err
+              errorCh.publish(ctx)
+              finishCh.runStores(ctx, () => {})
               throw err
-            }))
+            })
         } else {
-          finishCh.publish(undefined)
+          finishCh.runStores(ctx, () => {})
           return result
         }
       } catch (error) {
-        errorCh.publish(error)
-        finishCh.publish(undefined)
+        ctx.err = error
+        errorCh.publish(ctx)
+        finishCh.runStores(ctx, () => {})
         throw error
       }
     })

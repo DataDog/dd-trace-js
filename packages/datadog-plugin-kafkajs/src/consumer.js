@@ -64,7 +64,9 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
     }
   }
 
-  start ({ topic, partition, message, groupId, clusterId }) {
+  bindStart (ctx) {
+    const { topic, partition, message, groupId, clusterId } = ctx.extractedArgs
+
     let childOf
     const headers = convertToTextMap(message?.headers)
     if (headers) {
@@ -83,7 +85,7 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
       metrics: {
         'kafka.partition': partition
       }
-    })
+    }, ctx)
     if (message?.offset) span.setTag('kafka.message.offset', message?.offset)
 
     if (this.config.dsmEnabled && headers) {
@@ -99,14 +101,18 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
     if (afterStartCh.hasSubscribers) {
       afterStartCh.publish({ topic, partition, message, groupId })
     }
+
+    return ctx.currentStore
   }
 
-  finish () {
+  bindFinish (ctx) {
     if (beforeFinishCh.hasSubscribers) {
       beforeFinishCh.publish()
     }
 
     super.finish()
+
+    return ctx.parentStore
   }
 }
 

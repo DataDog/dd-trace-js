@@ -67,7 +67,8 @@ class KafkajsProducerPlugin extends ProducerPlugin {
     }
   }
 
-  start ({ topic, messages, bootstrapServers, clusterId }) {
+  bindStart (ctx) {
+    const { topic, messages, bootstrapServers, clusterId } = ctx
     const span = this.startSpan({
       resource: topic,
       meta: {
@@ -79,7 +80,7 @@ class KafkajsProducerPlugin extends ProducerPlugin {
       metrics: {
         'kafka.batch_size': messages.length
       }
-    })
+    }, ctx)
     if (bootstrapServers) {
       span.setTag(BOOTSTRAP_SERVERS_KEY, bootstrapServers)
     }
@@ -102,6 +103,8 @@ class KafkajsProducerPlugin extends ProducerPlugin {
         }
       }
     }
+
+    return ctx.currentStore
   }
 }
 
