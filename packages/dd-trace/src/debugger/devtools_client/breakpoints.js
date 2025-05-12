@@ -175,11 +175,13 @@ async function updateBreakpoint (breakpoint, probe) {
 
 function start () {
   sessionStarted = true
+  log.debug('[debugger:devtools_client] Starting debugger')
   return session.post('Debugger.enable')
 }
 
 function stop () {
   sessionStarted = false
+  log.debug('[debugger:devtools_client] Stopping debugger')
   return session.post('Debugger.disable')
 }
 
