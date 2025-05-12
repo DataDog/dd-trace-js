@@ -88,7 +88,7 @@ module.exports = {
       }
     }
 
-    return maxMatchLength > -1 ? bestMatch : null
+    return maxMatchLength !== -1 ? bestMatch : null
   },
 
   getStackFromCallFrames (callFrames) {
