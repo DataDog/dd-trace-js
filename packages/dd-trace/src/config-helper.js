@@ -7,9 +7,8 @@
 // 4. Simplify config.js
 // 5. Make sure config.js is loaded first, right after calling init. The order matters
 
-const { debuglog } = require('util')
+const { debuglog, deprecate } = require('util')
 const { supportedConfigurations, aliases, deprecations } = require('./supported-configurations')
-const hasOwn = Object.hasOwn || ((obj, prop) => Object.prototype.hasOwnProperty.call(obj, prop))
 
 const aliasObject = {}
 for (const alias of Object.keys(aliases)) {
@@ -21,109 +20,61 @@ for (const alias of Object.keys(aliases)) {
   }
 }
 
+const deprecationMethods = {}
+for (const deprecation of Object.keys(deprecations)) {
+  deprecationMethods[deprecation] = deprecate(
+    () => {},
+    `The environment variable ${deprecation} is deprecated. Please use ${aliasObject[deprecation]} instead.`,
+    `DATADOG_${deprecation}`
+  )
+}
+
 const debug = debuglog('dd:debug')
 
-let configs
-
-// This does not work in case someone destructures process.env during loading before this file
-// and the proxy is created. We need to make sure this file is loaded first.
-// TODO: Guard against non-extensible/frozen process.env
-function setProcessEnv (envs) {
-  return new Proxy(envs, {
-    // TODO: defineProperty should also be handled.
-    set (target, prop, value) {
-      target[prop] = value
-      if (typeof prop === 'string' && (prop.startsWith('DD_') || prop.startsWith('OTEL_'))) {
-        if (supportedConfigurations[prop]) {
-          configs[prop] = value
-        } else if (aliasObject[prop]) {
+module.exports = {
+  getConfigurations () {
+    const configs = {}
+    for (const [env, value] of Object.entries(process.env)) {
+      if (typeof env === 'string' && (env.startsWith('DD_') || env.startsWith('OTEL_'))) {
+        if (supportedConfigurations[env]) {
+          configs[env] = value
+        } else if (aliasObject[env]) {
           // The alias should only be used if the actual configuration is not set
-          if (configs[aliasObject[prop]] === undefined) {
-            configs[aliasObject[prop]] = value
+          if (configs[aliasObject[env]] === undefined) {
+            // In case that more than a single alias exist, use the one defined first in our own order
+            for (const alias of aliases[aliasObject[env]]) {
+              if (process.env[alias] !== undefined) {
+                configs[aliasObject[env]] = value
+                break
+              }
+            }
           }
+          // TODO(BridgeAR): Verify that this is alright with the guild
+          deprecationMethods[env]?.()
         } else {
           debug(
-            `Missing configuration ${prop} in supported-configurations file. The environment variable is ignored.`
+            `Missing configuration ${env} in supported-configurations file. The environment variable is ignored.`
           )
         }
       } else {
-        configs[prop] = value
-      }
-      return true
-    },
-    deleteProperty (target, prop) {
-      delete configs[aliasObject[prop] ?? prop]
-      return delete target[prop]
-    }
-  })
-}
-
-let envs = setProcessEnv(process.env)
-
-function setConfigs () {
-  configs = {}
-  for (const [name, value] of Object.entries(envs)) {
-    if (!name.startsWith('DD_') && !name.startsWith('OTEL_')) {
-      configs[name] = value
-    }
-  }
-
-  for (const name of Object.keys(supportedConfigurations)) {
-    if (hasOwn(envs, name)) {
-      configs[name] = envs[name]
-    } else if (aliases[name]) {
-      for (const alias of aliases[name]) {
-        if (hasOwn(envs, alias)) {
-          configs[name] = envs[alias]
-          // TODO: Handle deprecations differently. Discuss about unifying the deprecations and logging
-          if (deprecations[name]) {
-            // eslint-disable-next-line no-console
-            console.warn(`The configuration ${alias} is deprecated. Use ${name} instead.`)
-          }
-          break
-        }
+        configs[env] = value
       }
     }
-  }
-}
-
-setConfigs()
-
-// This won't be sufficient in case the user would just call Object.defineProperty
-// TODO: Use shimmer instead of the manual getter/setter replacement.
-Object.defineProperty(process, 'env', {
-  get () {
-    return envs
-  },
-  set (value) {
-    envs = setProcessEnv(value)
-    setConfigs()
-  }
-})
-
-module.exports = {
-  // TODO: Rewrite this to do the filtering during the get call. Otherwise,
-  // there are ways that the user might set the envs dynamically in ways that
-  // are difficult to track. To prevent overhead, only use `getConfigurations()`
-  // in the config.js file. Other spots should use `getConfiguration()`.
-  getConfigurations () {
     return configs
   },
   getConfiguration (name) {
-    // const config = process.env[name]
-    // if ((name.startsWith('DD_') || name.startsWith('OTEL_')) &&
-    //     !supportedConfigurations[name] &&
-    //     !aliasObject[name]) {
-    //   debug(`Missing ${name} configuration in supported-configurations file. The environment variable is ignored.`)
-    //   throw new Error(`Missing ${name}`)
-    // }
-    const config = configs[name]
-    if (config !== envs[name] &&
-        (name.startsWith('DD_') || name.startsWith('OTEL_')) &&
+    const config = process.env[name]
+    if ((name.startsWith('DD_') || name.startsWith('OTEL_')) &&
         !supportedConfigurations[name] &&
         !aliasObject[name]) {
-      debug(`Missing ${name} configuration in supported-configurations file. The environment variable is ignored.`)
-      throw new Error(`Missing ${name}`)
+      throw new Error(`Missing ${name} configuration in supported-configurations file.`)
+    }
+    if (config === undefined && aliases[name]) {
+      for (const alias of aliases[name]) {
+        if (process.env[alias] !== undefined) {
+          return process.env[alias]
+        }
+      }
     }
     return config
   }
