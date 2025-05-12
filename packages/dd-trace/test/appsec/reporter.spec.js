@@ -5,7 +5,6 @@ const { storage } = require('../../../datadog-core')
 const zlib = require('zlib')
 const { ASM } = require('../../src/standalone/product')
 const { USER_KEEP } = require('../../../../ext/priority')
-const {assert} = require("chai");
 
 describe('reporter', () => {
   let Reporter
@@ -476,7 +475,7 @@ describe('reporter', () => {
           }
         ])
 
-        assert.deepEqual(span.meta_struct['http.request.body'], expectedBody)
+        expect(span.meta_struct['http.request.body']).to.be.deep.equal(expectedBody)
       })
 
       it('should not report request body in meta struct on rasp event when disabled', () => {
@@ -495,7 +494,7 @@ describe('reporter', () => {
           }
         ])
 
-        assert.strictEqual(span.meta_struct?.['http.request.body'], undefined)
+        expect(span.meta_struct?.['http.request.body']).to.be.undefined
       })
     })
   })
@@ -961,7 +960,7 @@ describe('reporter', () => {
         }
         span.context()._tags['appsec.event'] = 'true'
 
-        const maxHeaders =  20
+        const maxHeaders = 20
         const reportedExtReqHeadersCount = maxHeaders - (requestHeadersToTrackOnEvent.length + 1)
         const discardedReqHeadersCount = extendedRequestHeaders.length - reportedExtReqHeadersCount
         const discardedResHeadersCount = extendedResponseHeaders.length - maxHeaders
@@ -983,7 +982,7 @@ describe('reporter', () => {
             Object.entries(extendedResponseHeadersTags).slice(0, -discardedResHeadersCount)
           ),
           '_dd.appsec.request.header_collection.discarded': discardedReqHeadersCount,
-          '_dd.appsec.response.header_collection.discarded': discardedResHeadersCount,
+          '_dd.appsec.response.header_collection.discarded': discardedResHeadersCount
         }
 
         expect(span.addTags).to.have.been.calledWith(expectedTags)
@@ -1018,7 +1017,6 @@ describe('reporter', () => {
 
         expect(span.addTags).to.have.been.calledWith(expectedTags)
       })
-
     })
   })
 })

@@ -1415,7 +1415,7 @@ describe('Config', () => {
         extendedHeadersCollection: {
           enabled: true,
           redaction: true,
-          maxHeaders: 42,
+          maxHeaders: 42
         }
       },
       iast: {

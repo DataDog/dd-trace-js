@@ -17,7 +17,6 @@ const {
 const zlib = require('zlib')
 const { keepTrace } = require('../priority_sampler')
 const { ASM } = require('../standalone/product')
-const { HTTP_INCOMING_BODY } = require('./addresses')
 
 const REQUEST_HEADER_TAG_PREFIX = 'http.request.headers.'
 const RESPONSE_HEADER_TAG_PREFIX = 'http.response.headers.'
@@ -107,7 +106,7 @@ function filterExtendedHeaders (headers, excludedHeaderNames, tagPrefix, limit =
 
   let counter = 0
   for (const [headerName, headerValue] of Object.entries(headers)) {
-    if (counter >= limit) break;
+    if (counter >= limit) break
     if (!excludedHeaderNames.includes(headerName)) {
       result[getHeaderTag(tagPrefix, headerName)] = '' + headerValue
       counter++
@@ -289,7 +288,7 @@ function reportRequestBody (rootSpan, requestBody) {
   }
 }
 
-function isRaspAttack(events) {
+function isRaspAttack (events) {
   return events.some(e => e.rule?.tags?.module === 'rasp')
 }
 
