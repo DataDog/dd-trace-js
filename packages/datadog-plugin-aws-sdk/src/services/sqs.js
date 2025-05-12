@@ -2,8 +2,8 @@
 
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
-const { storage } = require('../../../datadog-core')
 const { DsmPathwayCodec, getHeadersSize } = require('../../../dd-trace/src/datastreams')
+const { storage } = require('../../../datadog-core')
 
 class Sqs extends BaseAwsSdkPlugin {
   static get id () { return 'sqs' }
@@ -17,37 +17,44 @@ class Sqs extends BaseAwsSdkPlugin {
     // in the base class
     this.requestTags = new WeakMap()
 
-    this.addSub('apm:aws:response:start:sqs', obj => {
-      const { request, response } = obj
-      const store = storage('legacy').getStore()
+    this.addBind('apm:aws:response:start:sqs', ctx => {
+      const { request, response } = ctx
       const plugin = this
       const contextExtraction = this.responseExtract(request.params, request.operation, response)
+
+      let store = storage('legacy').getStore()
       let span
       let parsedMessageAttributes = null
       if (contextExtraction && contextExtraction.datadogContext) {
-        obj.needsFinish = true
+        ctx.needsFinish = true
         const options = {
           childOf: contextExtraction.datadogContext,
-          tags: Object.assign(
+          meta: Object.assign(
             {},
             this.requestTags.get(request) || {},
             { 'span.kind': 'server' }
           )
         }
         parsedMessageAttributes = contextExtraction.parsedAttributes
-        span = plugin.tracer.startSpan('aws.response', options)
-        this.enter(span, store)
+        span = plugin.startSpan('aws.response', options, ctx)
+        store = ctx.currentStore
       }
-      // extract DSM context after as we might not have a parent-child but may have a DSM context
 
-      this.responseExtractDSMContext(
-        request.operation, request.params, response, span || null, { parsedAttributes: parsedMessageAttributes }
-      )
+      storage('legacy').run(store, () => {
+        if (!store) return
+
+        // extract DSM context after as we might not have a parent-child but may have a DSM context
+
+        this.responseExtractDSMContext(
+          request.operation, request.params, response, span || null, { parsedAttributes: parsedMessageAttributes }
+        )
+      })
+
+      return store
     })
 
-    this.addSub('apm:aws:response:finish:sqs', err => {
-      const { span } = storage('legacy').getStore()
-      this.finish(span, null, err)
+    this.addSub('apm:aws:response:finish:sqs', ctx => {
+      this.finish(ctx)
     })
   }
 

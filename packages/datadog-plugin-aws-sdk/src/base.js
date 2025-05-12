@@ -33,17 +33,21 @@ class BaseAwsSdkPlugin extends ClientPlugin {
   constructor (...args) {
     super(...args)
 
-    this.addSub(`apm:aws:request:start:${this.serviceIdentifier}`, ({
-      request,
-      operation,
-      awsRegion,
-      awsService
-    }) => {
-      if (!this.isEnabled(request)) {
-        return
-      }
+    this.addBind(`apm:aws:request:start:${this.serviceIdentifier}`, (ctx) => {
+      const {
+        request,
+        operation,
+        awsRegion,
+        awsService
+      } = ctx
+
       const childOf = this.tracer.scope().active()
-      const tags = {
+
+      if (!this.isEnabled(request)) {
+        return childOf
+      }
+
+      const meta = {
         'span.kind': 'client',
         'service.name': this.serviceName(),
         'aws.operation': operation,
@@ -53,13 +57,15 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         'aws.service': awsService,
         component: 'aws-sdk'
       }
-      if (this.requestTags) this.requestTags.set(request, tags)
+      if (this.requestTags) this.requestTags.set(request, meta)
 
-      const span = this.tracer.startSpan(this.operationFromRequest(request), { childOf, tags })
+      const span = this.startSpan(this.operationFromRequest(request), { childOf, meta }, ctx)
 
       analyticsSampler.sample(span, this.config.measured)
 
-      this.requestInject(span, request)
+      storage('legacy').run(ctx.currentStore, () => {
+        this.requestInject(span, request)
+      })
 
       if (this.constructor.isPayloadReporter && this.cloudTaggingConfig.requestsEnabled) {
         const maxDepth = this.cloudTaggingConfig.maxDepth
@@ -67,12 +73,10 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         span.addTags(requestTags)
       }
 
-      const store = storage('legacy').getStore()
-
-      this.enter(span, store)
+      return ctx.currentStore
     })
 
-    this.addSub(`apm:aws:request:region:${this.serviceIdentifier}`, region => {
+    this.addSub(`apm:aws:request:region:${this.serviceIdentifier}`, ({ region }) => {
       const store = storage('legacy').getStore()
       if (!store) return
       const { span } = store
@@ -81,24 +85,29 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       span.setTag('region', region)
     })
 
-    this.addSub(`apm:aws:request:complete:${this.serviceIdentifier}`, ({ response, cbExists = false }) => {
-      const store = storage('legacy').getStore()
-      if (!store) return
-      const { span } = store
+    this.addBind(`apm:aws:request:complete:${this.serviceIdentifier}`, ctx => ctx.parentStore)
+
+    this.addSub(`apm:aws:request:complete:${this.serviceIdentifier}`, ctx => {
+      const { response, cbExists = false, currentStore } = ctx
+      if (!currentStore) return
+      const { span } = currentStore
       if (!span) return
-      // try to extract DSM context from response if no callback exists as extraction normally happens in CB
-      if (!cbExists && this.serviceIdentifier === 'sqs') {
-        const params = response.request.params
-        const operation = response.request.operation
-        this.responseExtractDSMContext(operation, params, response.data ?? response, span)
-      }
-      this.addResponseTags(span, response)
 
-      if (this._tracerConfig?.trace?.aws?.addSpanPointers) {
-        this.addSpanPointers(span, response)
-      }
+      storage('legacy').run(currentStore, () => {
+        // try to extract DSM context from response if no callback exists as extraction normally happens in CB
+        if (!cbExists && this.serviceIdentifier === 'sqs') {
+          const params = response.request.params
+          const operation = response.request.operation
+          this.responseExtractDSMContext(operation, params, response.data ?? response, span)
+        }
+        this.addResponseTags(span, response)
 
-      this.finish(span, response, response.error)
+        if (this._tracerConfig?.trace?.aws?.addSpanPointers) {
+          this.addSpanPointers(span, response)
+        }
+      })
+
+      this.finish(ctx)
     })
   }
 
@@ -171,11 +180,15 @@ class BaseAwsSdkPlugin extends ClientPlugin {
     // implemented by subclasses, or not
   }
 
-  finish (span, response, err) {
-    if (err) {
-      span.setTag('error', err)
+  finish (ctx) {
+    const { currentStore, response } = ctx
+    const { span } = currentStore
+    const error = response?.error || ctx.error
 
-      const requestId = err.RequestId || err.requestId
+    if (error) {
+      span.setTag('error', error)
+
+      const requestId = error.RequestId || error.requestId
       if (requestId) {
         span.addTags({ 'aws.response.request_id': requestId })
       }
@@ -185,7 +198,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       this.config.hooks.request(span, response)
     }
 
-    super.finish()
+    super.finish(ctx)
   }
 
   configure (config) {

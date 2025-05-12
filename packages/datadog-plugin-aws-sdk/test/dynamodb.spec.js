@@ -19,7 +19,7 @@ async function resetLocalStackDynamo () {
   }
 }
 
-describe('Plugin', () => {
+describe.only('Plugin', () => {
   describe('aws-sdk (dynamodb)', function () {
     setup()
 
