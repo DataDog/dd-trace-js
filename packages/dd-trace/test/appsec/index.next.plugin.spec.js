@@ -9,8 +9,7 @@ const { satisfies } = require('semver')
 const path = require('path')
 
 const agent = require('../plugins/agent')
-const { NODE_MAJOR } = require('../../../../version')
-
+const { NODE_MAJOR, NODE_MINOR, NODE_PATCH } = require('../../../../version')
 
 describe('test suite', () => {
   let server
@@ -19,6 +18,11 @@ describe('test suite', () => {
   const satisfiesStandalone = version => satisfies(version, '>=12.0.0')
 
   withVersions('next', 'next', '>=11.1', version => {
+    if (version === '>=11.0.0 <13' && NODE_MAJOR === 24 &&
+      NODE_MINOR === 0 && NODE_PATCH === 0) {
+      return // node 24.0.0 fails, but 24.0.1 works
+    }
+
     const realVersion = require(`../../../../versions/next@${version}`).version()
 
     function initApp (appName) {
