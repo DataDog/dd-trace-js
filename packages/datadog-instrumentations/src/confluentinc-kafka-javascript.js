@@ -7,6 +7,8 @@ const {
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
+const log = require('../../../dd-trace/src/log')
+
 // Create channels for Confluent Kafka JavaScript
 const channels = {
   producerStart: channel('apm:@confluentinc/kafka-javascript:produce:start'),
@@ -223,7 +225,8 @@ function instrumentKafkaJS (kafkaJS) {
                             if (err) {
                               if (err.name === 'KafkaJSProtocolError' && err.type === 'UNKNOWN') {
                                 this._ddDisableHeaderInjection = true
-                                console.error('Kafka Broker responded with UNKNOWN_SERVER_ERROR (-1). Please look at broker logs for more information. Tracer message header injection for Kafka is disabled.')
+                                log.error('Kafka Broker responded with UNKNOWN_SERVER_ERROR (-1). Please look at broker logs for '
+                                  + 'more information. Tracer message header injection for Kafka is disabled.')
                               }
                               channels.producerError.publish(err)
                             }

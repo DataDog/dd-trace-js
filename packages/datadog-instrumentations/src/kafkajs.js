@@ -7,6 +7,8 @@ const {
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
+const log = require('../../../dd-trace/src/log')
+
 const producerStartCh = channel('apm:kafkajs:produce:start')
 const producerCommitCh = channel('apm:kafkajs:produce:commit')
 const producerFinishCh = channel('apm:kafkajs:produce:finish')
@@ -83,7 +85,8 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
                   // disable header injection for this error (unfortunately the error name / type is not more specific)
                   if (err.name === 'KafkaJSProtocolError' && err.type === 'UNKNOWN') {
                     this._ddDisableHeaderInjection = true
-                    console.error('Kafka Broker responded with UNKNOWN_SERVER_ERROR (-1). Please look at broker logs for more information. Tracer message header injection for Kafka is disabled.')
+                    log.error('Kafka Broker responded with UNKNOWN_SERVER_ERROR (-1). Please look at broker logs for '
+                      + 'more information. Tracer message header injection for Kafka is disabled.')
                   }
                   producerErrorCh.publish(err)
                 }
