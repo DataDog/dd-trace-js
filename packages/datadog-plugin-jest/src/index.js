@@ -1,4 +1,5 @@
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
+const { storage } = require('../../datadog-core')
 
 const {
   TEST_STATUS,
@@ -332,21 +333,30 @@ class JestPlugin extends CiPlugin {
       this.telemetry.distribution(TELEMETRY_CODE_COVERAGE_NUM_FILES, {}, files.length)
     })
 
-    this.addSub('ci:jest:test:start', (test) => {
-      const span = this.startTestSpan(test)
+    this.addBind('ci:jest:test:start', (ctx) => {
+      const store = storage('legacy').getStore()
+      const span = this.startTestSpan(ctx)
+
+      ctx.parentStore = store
+      ctx.currentStore = { ...store, span }
 
       this.activeTestSpan = span
-      test.onDone(span)
+
+      return ctx.currentStore
+    })
+
+    this.addBind('ci:jest:test:fn', (ctx) => {
+      return ctx.currentStore
     })
 
     this.addSub('ci:jest:test:finish', ({
+      span,
       status,
       testStartLine,
       attemptToFixPassed,
       failedAllTests,
       attemptToFixFailed,
-      isAtrRetry,
-      span
+      isAtrRetry
     }) => {
       span.setTag(TEST_STATUS, status)
       if (testStartLine) {
@@ -382,7 +392,7 @@ class JestPlugin extends CiPlugin {
       this.activeTestSpan = null
     })
 
-    this.addSub('ci:jest:test:err', ({ error, shouldSetProbe, promises, span }) => {
+    this.addSub('ci:jest:test:err', ({ span, error, shouldSetProbe, promises }) => {
       if (error) {
         if (span) {
           span.setTag(TEST_STATUS, 'fail')
