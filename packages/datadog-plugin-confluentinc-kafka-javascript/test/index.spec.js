@@ -370,21 +370,11 @@ describe('Plugin', () => {
               let consumePromise
               nativeConsumer.on('ready', () => {
                 // Consume messages
-                consumePromise = new Promise((resolve) => {
-                  const produce = () => {
-                    nativeProducer.produce(testTopic, null, message, key)
-                  }
-                  const attemptConsume = () => {
-                    nativeConsumer.consume(1, (err, messages) => {
-                      if (err || !messages || messages.length === 0) {
-                        setTimeout(attemptConsume, 100)
-                        return
-                      }
-                      resolve(messages)
-                    })
-                    produce()
-                  }
-                  attemptConsume()
+                consumePromise = new Promise(resolve => {
+                  nativeConsumer.consume(1, (err, messages) => {
+                    resolve()
+                  })
+                  nativeProducer.produce(testTopic, null, message, key)
                 })
               })
 
@@ -404,7 +394,7 @@ describe('Plugin', () => {
                 })
 
                 expect(parseInt(span.parent_id.toString())).to.be.gt(0)
-              }, { timeoutMs: 30000 })
+              }, { timeoutMs: 10000 })
 
               // Send a test message using the producer
               const message = Buffer.from('test message for native consumer')
@@ -413,27 +403,11 @@ describe('Plugin', () => {
               let consumePromise
               nativeConsumer.on('ready', () => {
                 // Consume messages
-                consumePromise = new Promise((resolve) => {
-                  const produce = () => {
-                    nativeProducer.produce(testTopic, null, message, key)
-                  }
-                  const attemptConsume = () => {
-                    nativeConsumer.consume(1, (err, messages) => {
-                      if (err || !messages || messages.length === 0) {
-                        setTimeout(attemptConsume, 100)
-                        return
-                      }
-                      // for some reason, messages occassionally don't arrive with headers
-                      // despite header injection occurring during produce, so retry this case
-                      if (messages && !messages[0].headers) {
-                        setTimeout(produce, 100)
-                        return
-                      }
-                      resolve(messages)
-                    })
-                  }
-                  attemptConsume()
-                  produce()
+                consumePromise = new Promise(resolve => {
+                  nativeConsumer.consume(1, (err, messages) => {
+                    resolve()
+                  })
+                  nativeProducer.produce(testTopic, null, message, key)
                 })
               })
 
