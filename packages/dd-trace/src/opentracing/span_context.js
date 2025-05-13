@@ -43,6 +43,12 @@ class DatadogSpanContext {
     }
   }
 
+  // toTraceIdBigInt returns the traceId as a BigInt
+  // in case of a 128 bit traceId, it returns the lower 64 bits
+  toTraceIdBigInt () {
+    return this._traceId.toBigInt()
+  }
+
   toTraceId (get128bitId = false) {
     if (get128bitId) {
       return this._traceId.toBuffer().length <= 8 && this._trace.tags[TRACE_ID_128]

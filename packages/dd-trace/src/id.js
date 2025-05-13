@@ -26,6 +26,14 @@ class Identifier {
       : toNumberString(this._buffer, radix)
   }
 
+  toBigInt () {
+    let result = BigInt(0)
+    for (let i = 0; i < this._buffer.length; i++) {
+      result = (result << BigInt(8)) | BigInt(this._buffer[i])
+    }
+    return result
+  }
+
   toBuffer () {
     return this._buffer
   }
