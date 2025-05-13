@@ -36,7 +36,6 @@ const getDDTagsExpression = `(() => {
 const threadId = parentThreadId === 0 ? `pid:${process.pid}` : `pid:${process.pid};tid:${parentThreadId}`
 const threadName = parentThreadId === 0 ? 'MainThread' : `WorkerThread:${parentThreadId}`
 
-const SUPPORT_ITERATOR_METHODS = NODE_MAJOR >= 22
 const SUPPORT_ARRAY_BUFFER_RESIZE = NODE_MAJOR >= 20
 const oneSecondNs = 1_000_000_000n
 let globalSnapshotSamplingRateWindowStart = 0n
@@ -77,14 +76,6 @@ session.on('Debugger.paused', async ({ params }) => {
       }
     }
 
-    // If all the probes have a condition, we know that it triggered. If at least one probe doesn't have a condition, we
-    // need to verify which conditions are met.
-    const shouldVerifyConditions = (
-      SUPPORT_ITERATOR_METHODS
-        ? probesAtLocation.values()
-        : Array.from(probesAtLocation.values())
-    ).some((probe) => probe.condition === undefined)
-
     for (const probe of probesAtLocation.values()) {
       if (start - probe.lastCaptureNs < probe.nsBetweenSampling) {
         continue
@@ -109,7 +100,7 @@ session.on('Debugger.paused', async ({ params }) => {
         maxLength = highestOrUndefined(probe.capture.maxLength, maxLength)
       }
 
-      if (shouldVerifyConditions && probe.condition !== undefined) {
+      if (probe.condition !== undefined) {
         // TODO: Bundle all conditions and evaluate them in a single call
         // TODO: Handle errors
         const { result } = await session.post('Debugger.evaluateOnCallFrame', {
