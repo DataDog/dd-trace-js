@@ -10,7 +10,7 @@ function strategiesToCallbackMode (strategies, callbackMode) {
 class NativeSpaceProfiler {
   constructor (options = {}) {
     this.type = 'space'
-    this._samplingInterval = options.samplingInterval || 512 * 1024
+    this._samplingInterval = options.heapSamplingInterval || 512 * 1024
     this._stackDepth = options.stackDepth || 64
     this._pprof = undefined
     this._oomMonitoring = options.oomMonitoring || {}
