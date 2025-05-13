@@ -7,6 +7,7 @@ const id = require('../../../src/id')
 const SpanContext = require('../../../src/opentracing/span_context')
 const TraceState = require('../../../src/opentracing/propagation/tracestate')
 const { channel } = require('dc-polyfill')
+const { setBaggageItem, getBaggageItem, getAllBaggageItems, removeAllBaggageItems } = require('../../../src/baggage')
 
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
 const { SAMPLING_MECHANISM_MANUAL } = require('../../../src/constants')
@@ -140,6 +141,16 @@ describe('TextMapPropagator', () => {
 
       propagator.inject(spanContext, carrier)
       expect(carrier.baggage).to.equal('raccoon=chunky')
+    })
+
+    it('should inject baggage items when spanContext is null', () => {
+      const carrier = {}
+      const spanContext = null
+      removeAllBaggageItems()
+      setBaggageItem('spring', 'blossom')
+
+      propagator.inject(spanContext, carrier)
+      expect(carrier.baggage).to.equal('spring=blossom')
     })
 
     it('should inject an existing sampling priority', () => {
@@ -492,8 +503,8 @@ describe('TextMapPropagator', () => {
       expect(spanContext._trace.tags).to.not.have.property('_dd.p.tid')
     })
 
-    // temporary test. On the contrary, it SHOULD extract baggage
-    it('should not extract baggage when it is the only propagation style', () => {
+    it('should extract baggage when it is the only propagation style', () => {
+      removeAllBaggageItems()
       config = new Config({
         tracePropagationStyle: {
           extract: ['baggage']
@@ -505,6 +516,8 @@ describe('TextMapPropagator', () => {
       }
       const spanContext = propagator.extract(carrier)
       expect(spanContext).to.be.null
+      expect(getBaggageItem('foo')).to.equal('bar')
+      expect(getAllBaggageItems()).to.deep.equal({ foo: 'bar' })
     })
 
     it('should convert signed IDs to unsigned', () => {
