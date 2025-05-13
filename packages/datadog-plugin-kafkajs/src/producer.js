@@ -87,7 +87,7 @@ class KafkajsProducerPlugin extends ProducerPlugin {
       if (message !== null && typeof message === 'object') {
         // message headers are not supported for kafka broker versions <0.11
         if (!disableHeaderInjection) {
-          message.headers = message.headers || {}
+          message.headers ??= {}
           this.tracer.inject(span, 'text_map', message.headers)
         }
         if (this.config.dsmEnabled) {
