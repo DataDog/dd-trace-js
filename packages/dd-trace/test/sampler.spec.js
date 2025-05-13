@@ -23,6 +23,25 @@ describe('Sampler', () => {
     })
   })
 
+  describe('threshold', () => {
+    it('should calculate the correct threshold for a given rate', () => {
+      const rates = [
+        [0.2, 3689348814741910528n],
+        [0.25, 4611686018427387904n],
+        [0.3333, 6148299799767393280n],
+        [0.5, 9223372036854775808n],
+        [0.75, 13835058055282163712n],
+        [0.9, 16602069666338596864n],
+        [0.95, 17524406870024073216n]
+      ]
+
+      rates.forEach(([rate, expected]) => {
+        sampler = new Sampler(rate)
+        expect(sampler._threshold).to.equal(expected)
+      })
+    })
+  })
+
   describe('isSampled', () => {
     it('should always sample when rate is 1', () => {
       sampler = new Sampler(1)
