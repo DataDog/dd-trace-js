@@ -370,10 +370,17 @@ describe('Plugin', () => {
               let consumePromise
               nativeConsumer.on('ready', () => {
                 // Consume messages
-                consumePromise = new Promise(resolve => {
-                  nativeConsumer.consume(1, (err, messages) => {
-                    resolve()
-                  })
+                consumePromise = new Promise((resolve) => {
+                  const attemptConsume = () => {
+                    nativeConsumer.consume(1, (err, messages) => {
+                      if (err || !messages || messages.length === 0) {
+                        setTimeout(attemptConsume, 100)
+                        return
+                      }
+                      resolve(messages)
+                    })
+                  }
+                  attemptConsume()
                   nativeProducer.produce(testTopic, null, message, key)
                 })
               })
