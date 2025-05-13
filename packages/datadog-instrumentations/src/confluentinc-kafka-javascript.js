@@ -27,9 +27,7 @@ const channels = {
 // we need to store the offset per partition per topic for the consumer to track offsets for DSM
 const latestConsumerOffsets = new Map()
 
-// We could probably support >1.0.0, but 1.0.0 seems to be quite buggy and our tests frequently fail
-// due to undelivered messages
-addHook({ name: '@confluentinc/kafka-javascript', versions: ['>=1.3.0'] }, (module) => {
+addHook({ name: '@confluentinc/kafka-javascript', versions: ['>=1.0.0'] }, (module) => {
   // Hook native module classes first
   instrumentBaseModule(module)
 
@@ -51,7 +49,7 @@ function instrumentBaseModule (module) {
         // Hook the produce method
         if (typeof producer?.produce === 'function') {
           shimmer.wrap(producer, 'produce', function wrapProduce (produce) {
-            return function wrappedProduce (topic, partition, message, key, timestamp, opaque) {
+            return function wrappedProduce (topic, partition, message, key, timestamp, opaque, headers) {
               if (!channels.producerStart.hasSubscribers) {
                 return produce.apply(this, arguments)
               }
@@ -65,7 +63,8 @@ function instrumentBaseModule (module) {
 
               return channels.producerStart.runStores(ctx, () => {
                 try {
-                  const result = produce.apply(this, arguments)
+                  headers = convertHeaders(ctx.messages[0].headers)
+                  const result = produce.apply(this, [topic, partition, message, key, timestamp, opaque, headers])
 
                   channels.producerCommit.publish(result)
                   channels.producerFinish.runStores(ctx, () => {})
@@ -128,7 +127,9 @@ function instrumentBaseModule (module) {
 
                   try {
                     const result = callback.apply(this, arguments)
-                    channels.consumerFinish.runStores(ctx, () => {})
+                    if (messages && messages.length > 0) {
+                      channels.consumerFinish.runStores(ctx, () => {})
+                    }
                     return result
                   } catch (error) {
                     ctx.err = error
@@ -390,4 +391,9 @@ function updateLatestOffset (topic, partition, offset, groupId) {
 
 function getLatestOffsets () {
   return Array.from(latestConsumerOffsets.values())
+}
+
+function convertHeaders (headers) {
+  // convert headers from object to array of objects with 1 key and value per array entry
+  return Object.entries(headers).map(([key, value]) => ({ [key.toString()]: value.toString() }))
 }
