@@ -382,9 +382,9 @@ describe('Plugin', () => {
                       }
                       resolve(messages)
                     })
+                    produce()
                   }
                   attemptConsume()
-                  produce()
                 })
               })
 
