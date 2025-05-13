@@ -73,7 +73,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
 
         for (const key in query) {
           const currentValue = query[key]
-          if (!currentValue) return
+          if (!currentValue) continue
 
           const cachedValue = iastContext.queryCache.get(key)
 
@@ -82,7 +82,9 @@ class TaintTrackingPlugin extends SourceIastPlugin {
             query[key] = cachedValue
           } else {
             // Taint new value and cache it
-            const taintedValue = taintObject(iastContext, currentValue, HTTP_REQUEST_PARAMETER)
+            const taintedValue = typeof currentValue === 'string'
+              ? newTaintedString(iastContext, currentValue, key, HTTP_REQUEST_PARAMETER)
+              : taintObject(iastContext, currentValue, HTTP_REQUEST_PARAMETER, key)
             query[key] = taintedValue
             iastContext.queryCache.set(key, taintedValue)
           }
