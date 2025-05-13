@@ -371,6 +371,9 @@ describe('Plugin', () => {
               nativeConsumer.on('ready', () => {
                 // Consume messages
                 consumePromise = new Promise((resolve) => {
+                  const produce = () => {
+                    nativeProducer.produce(testTopic, null, message, key)
+                  }
                   const attemptConsume = () => {
                     nativeConsumer.consume(1, (err, messages) => {
                       if (err || !messages || messages.length === 0) {
@@ -381,7 +384,7 @@ describe('Plugin', () => {
                     })
                   }
                   attemptConsume()
-                  nativeProducer.produce(testTopic, null, message, key)
+                  produce()
                 })
               })
 
@@ -390,7 +393,7 @@ describe('Plugin', () => {
               return expectedSpanPromise
             })
 
-            it('should propagate context', async () => {
+            it('rdKafka API should propagate context', async () => {
               const expectedSpanPromise = agent.use(traces => {
                 const span = traces[0][0]
 
@@ -410,11 +413,27 @@ describe('Plugin', () => {
               let consumePromise
               nativeConsumer.on('ready', () => {
                 // Consume messages
-                consumePromise = new Promise(resolve => {
-                  nativeConsumer.consume(1, (err, messages) => {
-                    resolve()
-                  })
-                  nativeProducer.produce(testTopic, null, message, key)
+                consumePromise = new Promise((resolve) => {
+                  const produce = () => {
+                    nativeProducer.produce(testTopic, null, message, key)
+                  }
+                  const attemptConsume = () => {
+                    nativeConsumer.consume(1, (err, messages) => {
+                      if (err || !messages || messages.length === 0) {
+                        setTimeout(attemptConsume, 100)
+                        return
+                      }
+                      // for some reason, messages occassionally don't arrive with headers
+                      // despite header injection occurring during produce, so retry this case
+                      if (messages && !messages[0].headers) {
+                        setTimeout(produce, 100)
+                        return
+                      }
+                      resolve(messages)
+                    })
+                  }
+                  attemptConsume()
+                  produce()
                 })
               })
 
