@@ -21,6 +21,10 @@ const { ASM } = require('../standalone/product')
 const REQUEST_HEADER_TAG_PREFIX = 'http.request.headers.'
 const RESPONSE_HEADER_TAG_PREFIX = 'http.response.headers.'
 
+const COLLECTED_REQUEST_BODY_MAX_STRING_LENGTH = 4096
+const COLLECTED_REQUEST_BODY_MAX_DEPTH = 20
+const COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE = 256
+
 // default limiter, configurable with setRateLimit()
 let limiter = new Limiter(100)
 
@@ -275,6 +279,33 @@ function reportAttack (attackData) {
   }
 }
 
+function truncateRequestBody (target, depth = 0) {
+  switch(typeof target) {
+    case 'string':
+      return target.slice(0, COLLECTED_REQUEST_BODY_MAX_STRING_LENGTH)
+    case 'object':
+      if (target === null) {
+        return target
+      }
+
+      if (depth < COLLECTED_REQUEST_BODY_MAX_DEPTH) {
+        if (Array.isArray(target)) {
+          return target.slice(0, COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE)
+            .map(v => truncateRequestBody(v, depth + 1))
+        }
+
+        const result = {}
+        for (const key of Object.keys(target).slice(0, COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE)) {
+          result[key] = truncateRequestBody(target[key], depth + 1)
+        }
+        return result
+      }
+      break
+    default:
+      return target
+  }
+}
+
 function reportRequestBody (rootSpan, requestBody) {
   if (!requestBody) return
 
@@ -284,7 +315,7 @@ function reportRequestBody (rootSpan, requestBody) {
 
   if (!rootSpan.meta_struct['http.request.body']) {
     // TODO truncate requestBody
-    rootSpan.meta_struct['http.request.body'] = requestBody
+    rootSpan.meta_struct['http.request.body'] = truncateRequestBody(requestBody)
   }
 }
 
@@ -415,5 +446,6 @@ module.exports = {
   finishRequest,
   setRateLimit,
   mapHeaderAndTags,
-  setExtendedCollection
+  setExtendedCollection,
+  truncateRequestBody
 }
