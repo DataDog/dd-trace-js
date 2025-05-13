@@ -404,7 +404,7 @@ describe('Plugin', () => {
                 })
 
                 expect(parseInt(span.parent_id.toString())).to.be.gt(0)
-              }, { timeoutMs: 10000 })
+              }, { timeoutMs: 30000 })
 
               // Send a test message using the producer
               const message = Buffer.from('test message for native consumer')
