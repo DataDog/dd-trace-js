@@ -124,7 +124,11 @@ jobs:
   aws-sdk:
     strategy:
       matrix:
-        node-version: [oldest, 'latest']
+        include:
+          - node-version: latest
+            node-opts: --no-async-context-frame
+          - node-version: oldest
+            node-opts: ''
     runs-on: ubuntu-latest
     services:
       localstack:
@@ -168,6 +172,8 @@ jobs:
           version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
+        env:
+          NODE_OPTIONS: ${{ matrix.node-opts }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
