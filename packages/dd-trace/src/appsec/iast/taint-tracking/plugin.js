@@ -63,7 +63,31 @@ class TaintTrackingPlugin extends SourceIastPlugin {
 
     this.addSub(
       { channelName: 'datadog:express:query:finish', tag: HTTP_REQUEST_PARAMETER },
-      ({ query }) => this._taintTrackingHandler(HTTP_REQUEST_PARAMETER, query)
+      ({ query }) => {
+        const iastContext = getIastContext(storage('legacy').getStore())
+        if (!iastContext || !query) return
+
+        if (!iastContext.queryCache) {
+          iastContext.queryCache = new Map()
+        }
+
+        for (const key in query) {
+          const currentValue = query[key]
+          if (!currentValue) return
+
+          const cachedValue = iastContext.queryCache.get(key)
+
+          if (cachedValue === currentValue) {
+            // Reuse cached tainted value
+            query[key] = cachedValue
+          } else {
+            // Taint new value and cache it
+            const taintedValue = taintObject(iastContext, currentValue, HTTP_REQUEST_PARAMETER)
+            query[key] = taintedValue
+            iastContext.queryCache.set(key, taintedValue)
+          }
+        }
+      }
     )
 
     this.addSub(
