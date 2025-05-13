@@ -162,31 +162,31 @@ class MochaPlugin extends CiPlugin {
       }
       const store = storage('legacy').getStore()
       ctx.parentStore = store
-      ctx.currentStore = { ...store, span: testSuiteSpan }
+      ctx.currentStore = { ...store, testSuiteSpan }
       this._testSuites.set(testSuite, testSuiteSpan)
     })
 
-    this.addSub('ci:mocha:test-suite:finish', ({ span, status }) => {
-      if (span) {
+    this.addSub('ci:mocha:test-suite:finish', ({ testSuiteSpan, status }) => {
+      if (testSuiteSpan) {
         // the test status of the suite may have been set in ci:mocha:test-suite:error already
-        if (!span.context()._tags[TEST_STATUS]) {
-          span.setTag(TEST_STATUS, status)
+        if (!testSuiteSpan.context()._tags[TEST_STATUS]) {
+          testSuiteSpan.setTag(TEST_STATUS, status)
         }
-        span.finish()
+        testSuiteSpan.finish()
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
       }
     })
 
     this.addBind('ci:mocha:test-suite:error', (ctx) => {
       const { error } = ctx
-      const span = ctx.currentStore?.span
+      const testSuiteSpan = ctx.currentStore?.testSuiteSpan
 
-      if (span) {
-        span.setTag('error', error)
-        span.setTag(TEST_STATUS, 'fail')
+      if (testSuiteSpan) {
+        testSuiteSpan.setTag('error', error)
+        testSuiteSpan.setTag(TEST_STATUS, 'fail')
 
         ctx.parentStore = ctx.currentStore
-        ctx.currentStore = { ...ctx.currentStore, span }
+        ctx.currentStore = { ...ctx.currentStore, testSuiteSpan }
       }
 
       return ctx.currentStore
@@ -277,6 +277,8 @@ class MochaPlugin extends CiPlugin {
 
         ctx.parentStore = store
         ctx.currentStore = { ...store, span }
+
+        this.activeTestSpan = span
       }
 
       return ctx.currentStore
@@ -296,6 +298,8 @@ class MochaPlugin extends CiPlugin {
 
         ctx.parentStore = ctx.currentStore
         ctx.currentStore = { ...ctx.currentStore, span }
+
+        this.activeTestSpan = span
       }
 
       return ctx.currentStore

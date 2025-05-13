@@ -144,7 +144,7 @@ function getTestContext (test) {
 
 function runnableWrapper (RunnablePackage, libraryConfig) {
   shimmer.wrap(RunnablePackage.prototype, 'run', run => function () {
-    if (!testStartCh.hasSubscribers) {
+    if (!testFinishCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
     // Flaky test retries does not work in parallel mode
