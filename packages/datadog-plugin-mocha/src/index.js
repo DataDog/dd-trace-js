@@ -178,10 +178,11 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addBind('ci:mocha:test-suite:error', (ctx) => {
-      const { span, testSuiteError } = ctx
+      const { error } = ctx
+      const span = ctx.currentStore?.span
 
       if (span) {
-        span.setTag('error', testSuiteError)
+        span.setTag('error', error)
         span.setTag(TEST_STATUS, 'fail')
 
         ctx.parentStore = ctx.currentStore
@@ -282,7 +283,8 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addBind('ci:mocha:test:error', (ctx) => {
-      const { err, span } = ctx
+      const { err } = ctx
+      const span = ctx.currentStore?.span
 
       if (err && span) {
         if (err.constructor.name === 'Pending' && !this.forbidPending) {

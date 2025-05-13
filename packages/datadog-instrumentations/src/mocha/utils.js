@@ -355,6 +355,7 @@ function getOnFailHandler (isMain) {
         // if it's a hook and it has failed, 'test end' will not be called
         testFinishCh.publish({ status: 'fail', hasBeenRetried: isMochaRetry(test), ...testContext.currentStore })
       } else {
+        testContext.err = err
         errorCh.runStores(testContext, () => { })
       }
     }
@@ -368,7 +369,7 @@ function getOnFailHandler (isMain) {
           `"${testOrHook.parent.fullTitle()}" failed with message "${err.message}"`
         )
         testSuiteError.stack = err.stack
-        testSuiteContext.testSuiteError = testSuiteError
+        testSuiteContext.error = testSuiteError
         testSuiteErrorCh.runStores(testSuiteContext, () => { })
       }
     }
