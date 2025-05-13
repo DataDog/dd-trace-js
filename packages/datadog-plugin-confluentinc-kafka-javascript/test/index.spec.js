@@ -252,8 +252,11 @@ describe('Plugin', () => {
           let Consumer
 
           beforeEach(async () => {
-            tracer = require('../../dd-trace')
             await agent.load('@confluentinc/kafka-javascript')
+          })
+
+          beforeEach((done) => {
+            tracer = require('../../dd-trace')
             const lib = require(`../../../versions/${module}@${version}`).get()
             nativeApi = lib
 
@@ -266,18 +269,16 @@ describe('Plugin', () => {
               dr_cb: true
             })
 
-            nativeProducer.connect()
-
-            await new Promise(resolve => {
-              nativeProducer.on('ready', resolve)
+            nativeProducer.connect({}, (err) => {
+              done()
             })
           })
 
-          afterEach(async () => {
-            await new Promise(resolve => {
-              nativeProducer.disconnect(resolve)
-            })
-          })
+          // afterEach((done) => {
+          //   nativeProducer.disconnect(() => {
+          //     done()
+          //   })
+          // })
 
           describe('producer', () => {
             it('should be instrumented', async () => {
@@ -335,8 +336,7 @@ describe('Plugin', () => {
             beforeEach((done) => {
               nativeConsumer = new Consumer({
                 'bootstrap.servers': '127.0.0.1:9092',
-                'group.id': 'test-group-native',
-                'auto.offset.reset': 'latest'
+                'group.id': 'test-group-native'
               })
 
               nativeConsumer.connect({}, (err, d) => {
@@ -344,9 +344,11 @@ describe('Plugin', () => {
               })
             })
 
-            afterEach(() => {
+            afterEach((done) => {
               nativeConsumer.unsubscribe()
-              nativeConsumer.disconnect()
+              nativeConsumer.disconnect(() => {
+                done()
+              })
             })
 
             function consume (consumer, producer, topic, message) {
@@ -459,7 +461,7 @@ describe('Plugin', () => {
             tracer.use('@confluentinc/kafka-javascript', { dsmEnabled: true })
             messages = [{ key: 'key1', value: 'test2' }]
             consumer = kafka.consumer({
-              kafkaJS: { groupId: 'test-group', autoCommit: false }
+              kafkaJS: { groupId: 'test-group' }
             })
             await consumer.connect()
             await consumer.subscribe({ topic: testTopic })
@@ -483,7 +485,6 @@ describe('Plugin', () => {
 
             afterEach(async () => {
               setDataStreamsContextSpy.restore()
-              await consumer.disconnect()
             })
 
             it('Should set a checkpoint on produce', async () => {
