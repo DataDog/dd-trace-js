@@ -27,8 +27,9 @@ const channels = {
 // we need to store the offset per partition per topic for the consumer to track offsets for DSM
 const latestConsumerOffsets = new Map()
 
-// Customize the instrumentation for Confluent Kafka JavaScript
-addHook({ name: '@confluentinc/kafka-javascript', versions: ['>=1.0.0'] }, (module) => {
+// We could probably support >1.0.0, but 1.0.0 seems to be quite buggy and our tests frequently fail
+// due to undelivered messages
+addHook({ name: '@confluentinc/kafka-javascript', versions: ['>=1.3.0'] }, (module) => {
   // Hook native module classes first
   instrumentBaseModule(module)
 
