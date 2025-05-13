@@ -452,6 +452,9 @@ describe('reporter', () => {
         bar: 'baz'
       }
 
+      const objectDepth = (o) =>
+        Object(o) === o ? 1 + Math.max(-1, ...Object.values(o).map(objectDepth)) : 0
+
       beforeEach(() => {
         req.body = expectedBody
       })
@@ -495,6 +498,38 @@ describe('reporter', () => {
         ])
 
         expect(span.meta_struct?.['http.request.body']).to.be.undefined
+      })
+
+      it('should truncate collected request body', () => {
+        const requestBody = {
+          str: 'a'.repeat(5000),
+          nestedObj: [...Array(42).keys()].reduce((prev, current) => (
+            {[current]: {...prev}}
+          ), {}),
+          objectWithLotsOfNodes: Object.fromEntries([...Array(300).keys()].map(i => [i, i])),
+          arr: Array(300).fill(null),
+          specialValues: {
+            nullValue: null,
+            undefinedValue: undefined,
+            emptyObject: {},
+            emptyArray: []
+          }
+        }
+
+        requestBody.circularRef = requestBody
+
+        const truncatedRequestBody = Reporter.truncateRequestBody(requestBody)
+
+        expect(truncatedRequestBody).to.have.property('str')
+        expect(truncatedRequestBody.str).to.have.length(4096)
+        expect(objectDepth(truncatedRequestBody.nestedObj)).to.be.equal(19)
+        expect(Object.keys(truncatedRequestBody.objectWithLotsOfNodes)).to.have.length(256)
+        expect(truncatedRequestBody.arr).to.have.length(256)
+        expect(truncatedRequestBody.specialValues.nullValue).to.be.null
+        expect(truncatedRequestBody.specialValues.undefinedValue).to.be.undefined
+        expect(truncatedRequestBody.specialValues.emptyObject).to.be.deep.equal({})
+        expect(truncatedRequestBody.specialValues.emptyArray).to.be.deep.equal([])
+        expect(objectDepth(truncatedRequestBody.circularRef)).to.be.equal(19)
       })
     })
   })
