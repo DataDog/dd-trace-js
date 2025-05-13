@@ -393,7 +393,7 @@ describe('Plugin', () => {
               return expectedSpanPromise
             })
 
-            it('rdKafka API should propagate context', async () => {
+            it('should propagate context', async () => {
               const expectedSpanPromise = agent.use(traces => {
                 const span = traces[0][0]
 
