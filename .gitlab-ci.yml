@@ -6,7 +6,9 @@ stages:
   - macrobenchmarks
 
 include:
-  - remote: https://gitlab-templates.ddbuild.io/libdatadog/include/one-pipeline.yml
+  - project: DataDog/apm-reliability/libdatadog-build
+    ref: 0f677257308e1c379af490b754febfb40fa2c06d
+    file: templates/one-pipeline.yml
   - local: ".gitlab/benchmarks.yml"
   - local: ".gitlab/macrobenchmarks.yml"
 
