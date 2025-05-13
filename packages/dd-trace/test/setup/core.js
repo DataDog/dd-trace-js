@@ -55,29 +55,23 @@ if (NODE_MAJOR >= 24 && !process.env.OPTIONS_OVERRIDE) {
   const childProcess = require('child_process')
   const { exec, fork } = childProcess
 
-  childProcess.exec = function (...args) {
+  function addAsyncContextFrame (fn, thisArg, args) {
     const opts = args[1]
     if (opts) {
-      if (opts?.env?.NODE_OPTIONS && !opts.env.NODE_OPTIONS.includes('--no-async-context-frame')) {
-        opts.env.NODE_OPTIONS += ' --no-async-context-frame'
-      } else {
-        opts.env ||= {}
-        opts.env.NODE_OPTIONS = '--no-async-context-frame'
+      const env = opts.env ||= {}
+      env.NODE_OPTIONS ||= ''
+      if (!env.NODE_OPTIONS.includes('--no-async-context-frame')) {
+        env.NODE_OPTIONS += ' --no-async-context-frame'
       }
     }
-    return exec.apply(this, args)
+    return fn.apply(thisArg, args)
   }
 
-  childProcess.fork = function (...args) {
-    const opts = args[1]
-    if (opts) {
-      if (opts?.env?.NODE_OPTIONS && !opts.env.NODE_OPTIONS.includes('--no-async-context-frame')) {
-        opts.env.NODE_OPTIONS += ' --no-async-context-frame'
-      } else {
-        opts.env ||= {}
-        opts.env.NODE_OPTIONS = '--no-async-context-frame'
-      }
-    }
-    return fork.apply(this, args)
+  childProcess.exec = function () {
+    return addAsyncContextFrame(exec, this, arguments)
+  }
+
+  childProcess.fork = function () {
+    return addAsyncContextFrame(fork, this, arguments)
   }
 }
