@@ -187,7 +187,7 @@ function stop () {
 
 // Only if all probes have a condition can we use a compound condition.
 // Otherwise, we need to evaluate each probe individually once the breakpoint is hit.
-// TODO: Handle errors - if there's 2 conditons, and one fails but the other returns true, we should still pause the
+// TODO: Handle errors - if there's 2 conditions, and one fails but the other returns true, we should still pause the
 // breakpoint
 function compileCompoundCondition (probes) {
   return probes.every(p => p.condition)
