@@ -16,6 +16,11 @@ class NoopProxy {
     this.appsec = noopAppsec
     this.dogstatsd = noopDogStatsDClient
     this.llmobs = noopLLMObs
+    this.setBaggageItem = () => {}
+    this.getBaggageItem = () => {}
+    this.getAllBaggageItems = () => {}
+    this.removeBaggageItem = () => {}
+    this.removeAllBaggageItems = () => {}
   }
 
   init () {

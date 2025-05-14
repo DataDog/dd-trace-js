@@ -11,6 +11,13 @@ const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
 const { getConfiguration } = require('../../dd-trace/src/config-helper')
+const {
+  setBaggageItem,
+  getBaggageItem,
+  getAllBaggageItems,
+  removeBaggageItem,
+  removeAllBaggageItems
+} = require('./baggage')
 
 class LazyModule {
   constructor (provider) {
@@ -66,6 +73,11 @@ class Tracer extends NoopProxy {
     this.dogstatsd = new NoopDogStatsDClient()
     this._tracingInitialized = false
     this._flare = new LazyModule(() => require('./flare'))
+    this.setBaggageItem = setBaggageItem
+    this.getBaggageItem = getBaggageItem
+    this.getAllBaggageItems = getAllBaggageItems
+    this.removeBaggageItem = removeBaggageItem
+    this.removeAllBaggageItems = removeAllBaggageItems
 
     // these requires must work with esm bundler
     this._modules = {

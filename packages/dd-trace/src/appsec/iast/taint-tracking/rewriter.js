@@ -20,9 +20,11 @@ let config
 const hardcodedSecretCh = dc.channel('datadog:secrets:result')
 let rewriter
 let unwrapCompile = () => {}
-let getPrepareStackTrace, cacheRewrittenSourceMap
+let getPrepareStackTrace
+let cacheRewrittenSourceMap
 let kSymbolPrepareStackTrace
-let esmRewriterEnabled = false
+
+function noop () {}
 
 function isFlagPresent (flag) {
   return getConfiguration('NODE_OPTIONS')?.includes(flag) ||
@@ -156,7 +158,7 @@ function shimPrepareStackTrace () {
     return
   }
   const pstDescriptor = Object.getOwnPropertyDescriptor(global.Error, 'prepareStackTrace')
-  if (!pstDescriptor || pstDescriptor.configurable) {
+  if (pstDescriptor?.configurable || pstDescriptor?.writable) {
     Object.defineProperty(global.Error, 'prepareStackTrace', getPrepareStackTraceAccessor())
   }
   shimmedPrepareStackTrace = true
@@ -182,15 +184,16 @@ function isEsmConfigured () {
   const hasLoaderArg = isFlagPresent('--loader') || isFlagPresent('--experimental-loader')
   if (hasLoaderArg) return true
 
-  const initializeLoaded = Object.keys(require.cache).find(file => file.includes('import-in-the-middle/hook.js'))
-  return !!initializeLoaded
+  // Fast path for common case when enabled
+  if (require.cache[`${process.cwd()}/node_modules/import-in-the-middle/hook.js`]) {
+    return true
+  }
+  return Object.keys(require.cache).some(file => file.endsWith('import-in-the-middle/hook.js'))
 }
 
-function enableEsmRewriter (telemetryVerbosity) {
-  if (isMainThread && Module.register && !esmRewriterEnabled && isEsmConfigured()) {
+let enableEsmRewriter = function (telemetryVerbosity) {
+  if (isMainThread && Module.register && isEsmConfigured()) {
     shimPrepareStackTrace()
-
-    esmRewriterEnabled = true
 
     const { port1, port2 } = new MessageChannel()
 
@@ -230,6 +233,8 @@ function enableEsmRewriter (telemetryVerbosity) {
     }
 
     cacheRewrittenSourceMap = require('@datadog/wasm-js-rewriter/js/source-map').cacheRewrittenSourceMap
+
+    enableEsmRewriter = noop
   }
 }
 
