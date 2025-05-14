@@ -11,6 +11,7 @@ const log = require('../../dd-trace/src/log')
 
 const testStartCh = channel('ci:playwright:test:start')
 const testFinishCh = channel('ci:playwright:test:finish')
+const testFnCh = channel('ci:playwright:test:fn')
 
 const testSessionStartCh = channel('ci:playwright:session:start')
 const testSessionFinishCh = channel('ci:playwright:session:finish')
@@ -25,8 +26,8 @@ const testSuiteFinishCh = channel('ci:playwright:test-suite:finish')
 const workerReportCh = channel('ci:playwright:worker:report')
 const testPageGotoCh = channel('ci:playwright:test:page-goto')
 
-const testToAr = new WeakMap()
-const testSuiteToAr = new Map()
+const testToCtx = new WeakMap()
+const testSuiteToCtx = new Map()
 const testSuiteToTestStatuses = new Map()
 const testSuiteToErrors = new Map()
 const testsToTestStatuses = new Map()
@@ -279,11 +280,9 @@ function testBeginHandler (test, browserName, isMainProcess) {
 
   if (isNewTestSuite) {
     startedSuites.push(testSuiteAbsolutePath)
-    const testSuiteAsyncResource = new AsyncResource('bound-anonymous-fn')
-    testSuiteToAr.set(testSuiteAbsolutePath, testSuiteAsyncResource)
-    testSuiteAsyncResource.runInAsyncScope(() => {
-      testSuiteStartCh.publish(testSuiteAbsolutePath)
-    })
+    const testSuiteCtx = { testSuiteAbsolutePath }
+    testSuiteToCtx.set(testSuiteAbsolutePath, testSuiteCtx)
+    testSuiteStartCh.runStores(testSuiteCtx, () => { })
   }
 
   // We disable retries by default if attemptToFix is true
@@ -293,19 +292,17 @@ function testBeginHandler (test, browserName, isMainProcess) {
 
   // this handles tests that do not go through the worker process (because they're skipped)
   if (isMainProcess) {
-    const testAsyncResource = new AsyncResource('bound-anonymous-fn')
-    testToAr.set(test, testAsyncResource)
     const testName = getTestFullname(test)
+    const testCtx = {
+      testName,
+      testSuiteAbsolutePath,
+      testSourceLine,
+      browserName,
+      isDisabled: test._ddIsDisabled
+    }
+    testToCtx.set(test, testCtx)
 
-    testAsyncResource.runInAsyncScope(() => {
-      testStartCh.publish({
-        testName,
-        testSuiteAbsolutePath,
-        testSourceLine,
-        browserName,
-        isDisabled: test._ddIsDisabled
-      })
-    })
+    testStartCh.runStores(testCtx, () => { })
   }
 }
 
@@ -350,28 +347,27 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout, isMain
   // this handles tests that do not go through the worker process (because they're skipped)
   if (isMainProcess) {
     const testResult = results[results.length - 1]
-    const testAsyncResource = testToAr.get(test)
+    const testCtx = testToCtx.get(test)
     const isAtrRetry = testResult?.retry > 0 &&
       isFlakyTestRetriesEnabled &&
       !test._ddIsAttemptToFix &&
       !test._ddIsEfdRetry
-    testAsyncResource.runInAsyncScope(() => {
-      testFinishCh.publish({
-        testStatus,
-        steps: testResult?.steps || [],
-        isRetry: testResult?.retry > 0,
-        error,
-        extraTags: annotationTags,
-        isNew: test._ddIsNew,
-        isAttemptToFix: test._ddIsAttemptToFix,
-        isAttemptToFixRetry: test._ddIsAttemptToFixRetry,
-        isQuarantined: test._ddIsQuarantined,
-        isEfdRetry: test._ddIsEfdRetry,
-        hasFailedAllRetries: test._ddHasFailedAllRetries,
-        hasPassedAttemptToFixRetries: test._ddHasPassedAttemptToFixRetries,
-        hasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
-        isAtrRetry
-      })
+    testFinishCh.publish({
+      testStatus,
+      steps: testResult?.steps || [],
+      isRetry: testResult?.retry > 0,
+      error,
+      extraTags: annotationTags,
+      isNew: test._ddIsNew,
+      isAttemptToFix: test._ddIsAttemptToFix,
+      isAttemptToFixRetry: test._ddIsAttemptToFixRetry,
+      isQuarantined: test._ddIsQuarantined,
+      isEfdRetry: test._ddIsEfdRetry,
+      hasFailedAllRetries: test._ddHasFailedAllRetries,
+      hasPassedAttemptToFixRetries: test._ddHasPassedAttemptToFixRetries,
+      hasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
+      isAtrRetry,
+      ...testCtx.currentStore
     })
   }
 
@@ -401,10 +397,8 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout, isMain
     }
 
     const suiteError = getTestSuiteError(testSuiteAbsolutePath)
-    const testSuiteAsyncResource = testSuiteToAr.get(testSuiteAbsolutePath)
-    testSuiteAsyncResource.runInAsyncScope(() => {
-      testSuiteFinishCh.publish({ status: testSuiteStatus, error: suiteError })
-    })
+    const testSuiteCtx = testSuiteToCtx.get(testSuiteAbsolutePath)
+    testSuiteFinishCh.publish({ status: testSuiteStatus, error: suiteError, ...testSuiteCtx.currentStore })
   }
 }
 
@@ -873,17 +867,16 @@ addHook({
     // If test events are created in the worker process I need to stop creating it in the main process
     // Probably yet another test worker exporter is needed in addition to the ones for mocha, jest and cucumber
     // it's probably hard to tell that's a playwright worker though, as I don't think there is a specific env variable
-    const testAsyncResource = new AsyncResource('bound-anonymous-fn')
+    const testCtx = {
+      testName,
+      testSuiteAbsolutePath,
+      testSourceLine,
+      browserName
+    }
+    testToCtx.set(test, testCtx)
     // TODO - In the future we may need to implement a mechanism to send test properties
     // to the worker process before _runTest is called
-    testAsyncResource.runInAsyncScope(() => {
-      testStartCh.publish({
-        testName,
-        testSuiteAbsolutePath,
-        testSourceLine,
-        browserName
-      })
-
+    testStartCh.runStores(testCtx, () => {
       let existAfterEachHook = false
 
       // We try to find an existing afterEach hook with _ddHook to avoid adding a new one
@@ -933,7 +926,9 @@ addHook({
         })
       }
 
-      res = _runTest.apply(this, arguments)
+      testFnCh.runStores(testCtx, () => {
+        res = _runTest.apply(this, arguments)
+      })
 
       testInfo = this._currentTest
     })
@@ -976,25 +971,24 @@ addHook({
     // Wait for the properties to be received
     await ddPropertiesPromise
 
-    testAsyncResource.runInAsyncScope(() => {
-      testFinishCh.publish({
-        testStatus: STATUS_TO_TEST_STATUS[status],
-        steps: steps.filter(step => step.testId === testId),
-        error,
-        extraTags: annotationTags,
-        isNew: test._ddIsNew,
-        isRetry: retry > 0,
-        isEfdRetry: test._ddIsEfdRetry,
-        isAttemptToFix: test._ddIsAttemptToFix,
-        isDisabled: test._ddIsDisabled,
-        isQuarantined: test._ddIsQuarantined,
-        isAttemptToFixRetry: test._ddIsAttemptToFixRetry,
-        hasFailedAllRetries: test._ddHasFailedAllRetries,
-        hasPassedAttemptToFixRetries: test._ddHasPassedAttemptToFixRetries,
-        hasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
-        isAtrRetry: test._ddIsAtrRetry,
-        onDone
-      })
+    testFinishCh.publish({
+      testStatus: STATUS_TO_TEST_STATUS[status],
+      steps: steps.filter(step => step.testId === testId),
+      error,
+      extraTags: annotationTags,
+      isNew: test._ddIsNew,
+      isRetry: retry > 0,
+      isEfdRetry: test._ddIsEfdRetry,
+      isAttemptToFix: test._ddIsAttemptToFix,
+      isDisabled: test._ddIsDisabled,
+      isQuarantined: test._ddIsQuarantined,
+      isAttemptToFixRetry: test._ddIsAttemptToFixRetry,
+      hasFailedAllRetries: test._ddHasFailedAllRetries,
+      hasPassedAttemptToFixRetries: test._ddHasPassedAttemptToFixRetries,
+      hasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
+      isAtrRetry: test._ddIsAtrRetry,
+      onDone,
+      ...testCtx.currentStore
     })
 
     await flushPromise
