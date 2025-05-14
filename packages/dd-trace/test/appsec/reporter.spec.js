@@ -504,7 +504,7 @@ describe('reporter', () => {
         const requestBody = {
           str: 'a'.repeat(5000),
           nestedObj: [...Array(42).keys()].reduce((prev, current) => (
-            {[current]: {...prev}}
+            { [current]: { ...prev } }
           ), {}),
           objectWithLotsOfNodes: Object.fromEntries([...Array(300).keys()].map(i => [i, i])),
           arr: Array(300).fill(null),
