@@ -1489,7 +1489,7 @@ versions.forEach((version) => {
         })
       })
 
-      context.only('run session status', () => {
+      context('run session status', () => {
         it('session status is not changed if it fails before running any test', (done) => {
           const receiverPromise = receiver
             .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
@@ -1498,8 +1498,10 @@ versions.forEach((version) => {
               assert.equal(testSession.meta[TEST_STATUS], 'fail')
             })
 
+          receiver.setSettings({ test_management: { enabled: true } })
+
           childProcess = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js exit-code.js',
+            './node_modules/.bin/playwright test -c playwright.config.js exit-code-test.js',
             {
               cwd,
               env: {
@@ -1511,12 +1513,8 @@ versions.forEach((version) => {
             }
           )
 
-          childProcess.stdout.pipe(process.stdout)
-          childProcess.stderr.pipe(process.stderr)
-
           childProcess.on('exit', (exitCode) => {
             assert.equal(exitCode, 1)
-            console.log('exitCode', exitCode)
             receiverPromise.then(() => done()).catch(done)
           })
         })
