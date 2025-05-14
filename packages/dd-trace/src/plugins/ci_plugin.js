@@ -50,6 +50,14 @@ const {
 const { OS_VERSION, OS_PLATFORM, OS_ARCHITECTURE, RUNTIME_NAME, RUNTIME_VERSION } = require('./util/env')
 const getDiClient = require('../ci-visibility/dynamic-instrumentation')
 
+const FRAMEWORK_TO_TRIMMED_COMMAND = {
+  vitest: 'vitest run',
+  mocha: 'mocha',
+  cucumber: 'cucumber-js',
+  playwright: 'playwright test',
+  jest: 'jest'
+}
+
 module.exports = class CiPlugin extends Plugin {
   constructor (...args) {
     super(...args)
@@ -103,7 +111,11 @@ module.exports = class CiPlugin extends Plugin {
       // only for playwright
       this.rootDir = rootDir
 
-      const testSessionName = getTestSessionName(this.config, this.command, this.testEnvironmentMetadata)
+      const testSessionName = getTestSessionName(
+        this.config,
+        FRAMEWORK_TO_TRIMMED_COMMAND[this.constructor.id],
+        this.testEnvironmentMetadata
+      )
 
       const metadataTags = {}
       for (const testLevel of TEST_LEVEL_EVENT_TYPES) {

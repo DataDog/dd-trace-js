@@ -474,7 +474,7 @@ class CypressPlugin {
       testSessionSpanMetadata[TEST_EARLY_FLAKE_ENABLED] = 'true'
     }
 
-    const testSessionName = getTestSessionName(this.tracer._tracer._config, this.command, this.testEnvironmentMetadata)
+    const testSessionName = getTestSessionName(this.tracer._tracer._config, 'cypress run', this.testEnvironmentMetadata)
 
     if (this.tracer._tracer._exporter?.addMetadataTags) {
       const metadataTags = {}
