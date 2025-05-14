@@ -10,6 +10,7 @@ import eslintPluginUnicorn from 'eslint-plugin-unicorn'
 import globals from 'globals'
 
 import eslintProcessEnv from './eslint-rules/eslint-process-env.mjs'
+import eslintEnvAliases from './eslint-rules/eslint-env-aliases.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -99,12 +100,14 @@ export default [
     plugins: {
       'eslint-rules': {
         rules: {
-          'eslint-process-env': eslintProcessEnv
+          'eslint-process-env': eslintProcessEnv,
+          'eslint-env-aliases': eslintEnvAliases
         }
       }
     },
     rules: {
       'eslint-rules/eslint-process-env': 'error',
+      'eslint-rules/eslint-env-aliases': 'error',
       'n/no-restricted-require': ['error', [
         {
           name: 'diagnostics_channel',

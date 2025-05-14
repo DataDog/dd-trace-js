@@ -1,30 +1,27 @@
 'use strict'
 
-// 0. Add jira ticket for this
-// 1. Adding a linter to verify that process.env is not used throughout the code (tests are fine)
-// 2. Replace process.env usage with this helper
-// 3. Add a file that defines the supported configurations and their aliases
-// 4. Simplify config.js
-// 5. Make sure config.js is loaded first, right after calling init. The order matters
+// TODO: Add jira tickets
 
 const { debuglog, deprecate } = require('util')
-const { supportedConfigurations, aliases, deprecations } = require('./supported-configurations')
+// TODO: Remove unused / outdated configurations from the supported-configurations.json file
+const { supportedConfigurations, aliases, deprecations } = require('./supported-configurations.json')
 
-const aliasObject = {}
-for (const alias of Object.keys(aliases)) {
-  for (const aliasValue of aliases[alias]) {
-    if (aliasObject[aliasValue]) {
-      throw new Error(`The alias ${aliasValue} is already used for ${aliasObject[aliasValue]}.`)
+const aliasToCanonical = {}
+for (const canonical of Object.keys(aliases)) {
+  for (const alias of aliases[canonical]) {
+    if (aliasToCanonical[alias]) {
+      throw new Error(`The alias ${alias} is already used for ${aliasToCanonical[alias]}.`)
     }
-    aliasObject[aliasValue] = alias
+    aliasToCanonical[alias] = canonical
   }
 }
 
+// TODO: Consider to join deprecations with aliases by just making those entries an object.
 const deprecationMethods = {}
 for (const deprecation of Object.keys(deprecations)) {
   deprecationMethods[deprecation] = deprecate(
     () => {},
-    `The environment variable ${deprecation} is deprecated. Please use ${aliasObject[deprecation]} instead.`,
+    `The environment variable ${deprecation} is deprecated. Please use ${aliasToCanonical[deprecation]} instead.`,
     `DATADOG_${deprecation}`
   )
 }
@@ -38,18 +35,17 @@ module.exports = {
       if (typeof env === 'string' && (env.startsWith('DD_') || env.startsWith('OTEL_'))) {
         if (supportedConfigurations[env]) {
           configs[env] = value
-        } else if (aliasObject[env]) {
+        } else if (aliasToCanonical[env]) {
           // The alias should only be used if the actual configuration is not set
-          if (configs[aliasObject[env]] === undefined) {
+          if (configs[aliasToCanonical[env]] === undefined) {
             // In case that more than a single alias exist, use the one defined first in our own order
-            for (const alias of aliases[aliasObject[env]]) {
+            for (const alias of aliases[aliasToCanonical[env]]) {
               if (process.env[alias] !== undefined) {
-                configs[aliasObject[env]] = value
+                configs[aliasToCanonical[env]] = value
                 break
               }
             }
           }
-          // TODO(BridgeAR): Verify that this is alright with the guild
           deprecationMethods[env]?.()
         } else {
           debug(
@@ -66,7 +62,7 @@ module.exports = {
     const config = process.env[name]
     if ((name.startsWith('DD_') || name.startsWith('OTEL_')) &&
         !supportedConfigurations[name] &&
-        !aliasObject[name]) {
+        !aliasToCanonical[name]) {
       throw new Error(`Missing ${name} configuration in supported-configurations file.`)
     }
     if (config === undefined && aliases[name]) {

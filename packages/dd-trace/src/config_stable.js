@@ -41,6 +41,8 @@ class StableConfig {
 
     try {
       const configurator = new libconfig.JsConfigurator()
+      // Intentionally pass through the raw environment variables for reporting.
+      // eslint-disable-next-line eslint-rules/eslint-process-env
       configurator.set_envp(Object.entries(process.env).map(([key, value]) => `${key}=${value}`))
       configurator.set_args(process.argv)
       configurator.get_configuration(localConfig.toString(), fleetConfig.toString()).forEach((entry) => {

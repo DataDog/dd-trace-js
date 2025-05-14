@@ -15,11 +15,12 @@ const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
 const { tagger } = require('./tagger')
 const { isFalse, isTrue } = require('../util')
 const { getAzureTagsFromMetadata, getAzureAppMetadata } = require('../azure_metadata')
-const { getConfiguration } = require('../config-helper')
+const { getConfiguration, getConfigurations } = require('../config-helper')
 
 class Config {
   constructor (options = {}) {
     const {
+      AWS_LAMBDA_FUNCTION_NAME: functionname,
       DD_AGENT_HOST,
       DD_ENV,
       DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED, // used for testing
@@ -45,13 +46,12 @@ class Config {
       DD_TRACE_AGENT_PORT,
       DD_TRACE_AGENT_URL,
       DD_VERSION
-    } = process.env
+    } = getConfigurations()
 
     const env = coalesce(options.env, DD_ENV)
     const service = options.service || DD_SERVICE || 'node'
     const host = os.hostname()
     const version = coalesce(options.version, DD_VERSION)
-    const functionname = getConfiguration('AWS_LAMBDA_FUNCTION_NAME')
     // Must be longer than one minute so pad with five seconds
     const flushInterval = coalesce(options.interval, Number(DD_PROFILING_UPLOAD_PERIOD) * 1000, 65 * 1000)
     const uploadTimeout = coalesce(options.uploadTimeout,
