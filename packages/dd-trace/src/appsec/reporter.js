@@ -280,7 +280,7 @@ function reportAttack (attackData) {
 }
 
 function truncateRequestBody (target, depth = 0) {
-  switch(typeof target) {
+  switch (typeof target) {
     case 'string':
       return target.slice(0, COLLECTED_REQUEST_BODY_MAX_STRING_LENGTH)
     case 'object':
