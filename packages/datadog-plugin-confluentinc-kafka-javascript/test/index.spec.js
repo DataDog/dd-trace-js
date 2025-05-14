@@ -274,6 +274,16 @@ describe('Plugin', () => {
             })
           })
 
+          afterEach((done) => {
+            try {
+              nativeProducer.disconnect(() => {
+                done()
+              })
+            } catch (err) {
+              done(err)
+            }
+          })
+
           describe('producer', () => {
             it('should be instrumented', async () => {
               const expectedSpanPromise = expectSpanWithDefaults({
@@ -346,26 +356,31 @@ describe('Plugin', () => {
             })
 
             function consume (consumer, producer, topic, message) {
-              consumer.consume(1, function (err, messages) {
-                if (err && err.code === -185) {
-                  setTimeout(() => consume(consumer, producer, topic, message), 100)
-                  return
-                } else if (!messages || messages.length === 0 || (err && err.code === -191)) {
-                  producer.produce(topic, null, message, null)
-                  setTimeout(() => consume(consumer, producer, topic, message), 100)
-                  return
+              return new Promise((resolve, reject) => {
+                function doConsume () {
+                  consumer.consume(1, function (err, messages) {
+                    if (err && err.code === -185) {
+                      setTimeout(() => doConsume(), 20)
+                      return
+                    } else if (!messages || messages.length === 0 || (err && err.code === -191)) {
+                      setTimeout(() => doConsume(), 20)
+                      return
+                    }
+
+                    const consumedMessage = messages[0]
+
+                    if (consumedMessage.value.toString() !== message.toString()) {
+                      setTimeout(() => doConsume(), 20)
+                      return
+                    }
+
+                    consumer.unsubscribe()
+                    resolve()
+                  })
                 }
-
-                const consumedMessage = messages[0]
-
-                if (consumedMessage.value.toString() !== message.toString()) {
-                  setTimeout(() => consume(consumer, producer, topic, message), 100)
-                  return
-                }
-
-                consumer.unsubscribe()
+                doConsume()
+                producer.produce(topic, null, message, 'native-consumer-key')
               })
-              producer.produce(topic, null, message, null)
             }
 
             it('should be instrumented', async () => {
@@ -382,13 +397,13 @@ describe('Plugin', () => {
                 type: 'worker'
               })
 
-              nativeConsumer.setDefaultConsumeTimeout(100)
+              nativeConsumer.setDefaultConsumeTimeout(10)
               nativeConsumer.subscribe([testTopic])
 
               // Send a test message using the producer
               const message = Buffer.from('test message for native consumer')
 
-              consume(nativeConsumer, nativeProducer, testTopic, message)
+              await consume(nativeConsumer, nativeProducer, testTopic, message)
 
               return expectedSpanPromise
             })
@@ -405,13 +420,13 @@ describe('Plugin', () => {
 
                 expect(parseInt(span.parent_id.toString())).to.be.gt(0)
               }, { timeoutMs: 10000 })
-              nativeConsumer.setDefaultConsumeTimeout(100)
+              nativeConsumer.setDefaultConsumeTimeout(10)
               nativeConsumer.subscribe([testTopic])
 
               // Send a test message using the producer
               const message = Buffer.from('test message propagation for native consumer 1')
 
-              consume(nativeConsumer, nativeProducer, testTopic, message)
+              await consume(nativeConsumer, nativeProducer, testTopic, message)
 
               return expectedSpanPromise
             })
