@@ -48,7 +48,7 @@ module.exports = {
           }
           deprecationMethods[env]?.()
         } else {
-          debug(
+          throw new Error(
             `Missing configuration ${env} in supported-configurations file. The environment variable is ignored.`
           )
         }
