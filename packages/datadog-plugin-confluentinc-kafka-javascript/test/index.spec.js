@@ -336,7 +336,7 @@ describe('Plugin', () => {
             beforeEach((done) => {
               nativeConsumer = new Consumer({
                 'bootstrap.servers': '127.0.0.1:9092',
-                'group.id': 'test-group-native'
+                'group.id': 'test-group'
               })
 
               nativeConsumer.connect({}, (err, d) => {
@@ -354,11 +354,11 @@ describe('Plugin', () => {
             function consume (consumer, producer, topic, message) {
               consumer.consume(1, function (err, messages) {
                 if (err && err.code === -185) {
-                  setTimeout(() => consume(consumer, producer, topic, message), 10)
+                  setTimeout(() => consume(consumer, producer, topic, message), 100)
                   return
                 } else if (!messages || messages.length === 0 || (err && err.code === -191)) {
                   producer.produce(topic, null, message, null)
-                  setTimeout(() => consume(consumer, producer, topic, message), 10)
+                  setTimeout(() => consume(consumer, producer, topic, message), 100)
                   return
                 }
 
@@ -461,7 +461,7 @@ describe('Plugin', () => {
             tracer.use('@confluentinc/kafka-javascript', { dsmEnabled: true })
             messages = [{ key: 'key1', value: 'test2' }]
             consumer = kafka.consumer({
-              kafkaJS: { groupId: 'test-group' }
+              kafkaJS: { groupId: 'test-group', fromBeginning: false }
             })
             await consumer.connect()
             await consumer.subscribe({ topic: testTopic })
