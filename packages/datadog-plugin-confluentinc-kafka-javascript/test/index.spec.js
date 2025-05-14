@@ -252,8 +252,11 @@ describe('Plugin', () => {
           let Consumer
 
           beforeEach(async () => {
-            tracer = require('../../dd-trace')
             await agent.load('@confluentinc/kafka-javascript')
+          })
+
+          beforeEach((done) => {
+            tracer = require('../../dd-trace')
             const lib = require(`../../../versions/${module}@${version}`).get()
             nativeApi = lib
 
@@ -266,16 +269,8 @@ describe('Plugin', () => {
               dr_cb: true
             })
 
-            nativeProducer.connect()
-
-            await new Promise(resolve => {
-              nativeProducer.on('ready', resolve)
-            })
-          })
-
-          afterEach(async () => {
-            await new Promise(resolve => {
-              nativeProducer.disconnect(resolve)
+            nativeProducer.connect({}, (err) => {
+              done()
             })
           })
 
@@ -332,22 +327,46 @@ describe('Plugin', () => {
           })
 
           describe('consumer', () => {
-            beforeEach(() => {
+            beforeEach((done) => {
               nativeConsumer = new Consumer({
                 'bootstrap.servers': '127.0.0.1:9092',
-                'group.id': 'test-group-native'
+                'group.id': 'test-group'
               })
 
-              nativeConsumer.on('ready', () => {
-                nativeConsumer.subscribe([testTopic])
+              nativeConsumer.connect({}, (err, d) => {
+                done()
               })
-
-              nativeConsumer.connect()
             })
 
-            afterEach(() => {
-              nativeConsumer.disconnect()
+            afterEach((done) => {
+              nativeConsumer.unsubscribe()
+              nativeConsumer.disconnect(() => {
+                done()
+              })
             })
+
+            function consume (consumer, producer, topic, message) {
+              consumer.consume(1, function (err, messages) {
+                if (err && err.code === -185) {
+                  setTimeout(() => consume(consumer, producer, topic, message), 100)
+                  return
+                } else if (!messages || messages.length === 0 || (err && err.code === -191)) {
+                  producer.produce(topic, null, message, null)
+                  setTimeout(() => consume(consumer, producer, topic, message), 100)
+                  return
+                }
+
+                const consumedMessage = messages[0]
+
+                if (consumedMessage.value.toString() !== message.toString()) {
+                  setTimeout(() => consume(consumer, producer, topic, message), 100)
+                  return
+                }
+
+                consumer.unsubscribe()
+              })
+              producer.produce(topic, null, message, null)
+            }
 
             it('should be instrumented', async () => {
               const expectedSpanPromise = expectSpanWithDefaults({
@@ -363,22 +382,13 @@ describe('Plugin', () => {
                 type: 'worker'
               })
 
+              nativeConsumer.setDefaultConsumeTimeout(100)
+              nativeConsumer.subscribe([testTopic])
+
               // Send a test message using the producer
               const message = Buffer.from('test message for native consumer')
-              const key = 'native-consumer-key'
 
-              let consumePromise
-              nativeConsumer.on('ready', () => {
-                // Consume messages
-                consumePromise = new Promise(resolve => {
-                  nativeConsumer.consume(1, (err, messages) => {
-                    resolve()
-                  })
-                  nativeProducer.produce(testTopic, null, message, key)
-                })
-              })
-
-              await consumePromise
+              consume(nativeConsumer, nativeProducer, testTopic, message)
 
               return expectedSpanPromise
             })
@@ -395,23 +405,13 @@ describe('Plugin', () => {
 
                 expect(parseInt(span.parent_id.toString())).to.be.gt(0)
               }, { timeoutMs: 10000 })
+              nativeConsumer.setDefaultConsumeTimeout(100)
+              nativeConsumer.subscribe([testTopic])
 
               // Send a test message using the producer
-              const message = Buffer.from('test message for native consumer')
-              const key = 'native-consumer-key'
+              const message = Buffer.from('test message propagation for native consumer 1')
 
-              let consumePromise
-              nativeConsumer.on('ready', () => {
-                // Consume messages
-                consumePromise = new Promise(resolve => {
-                  nativeConsumer.consume(1, (err, messages) => {
-                    resolve()
-                  })
-                  nativeProducer.produce(testTopic, null, message, key)
-                })
-              })
-
-              await consumePromise
+              consume(nativeConsumer, nativeProducer, testTopic, message)
 
               return expectedSpanPromise
             })
