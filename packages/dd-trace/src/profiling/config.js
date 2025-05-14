@@ -15,7 +15,7 @@ const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
 const { tagger } = require('./tagger')
 const { isFalse, isTrue } = require('../util')
 const { getAzureTagsFromMetadata, getAzureAppMetadata } = require('../azure_metadata')
-const { getConfiguration, getConfigurations } = require('../config-helper')
+const { getConfigurations } = require('../config-helper')
 
 class Config {
   constructor (options = {}) {
