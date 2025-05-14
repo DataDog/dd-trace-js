@@ -1540,6 +1540,11 @@ describe('Config', () => {
         rasp: {
           enabled: false,
           bodyCollection: true
+        },
+        extendedHeadersCollection: {
+          enabled: true,
+          redaction: true,
+          maxHeaders: 42
         }
       },
       iast: {
@@ -1577,6 +1582,11 @@ describe('Config', () => {
           rasp: {
             enabled: true,
             bodyCollection: false
+          },
+          extendedHeadersCollection: {
+            enabled: false,
+            redaction: false,
+            maxHeaders: 0
           }
         },
         iast: {
@@ -1625,6 +1635,11 @@ describe('Config', () => {
         enabled: true,
         maxStackTraces: 2,
         maxDepth: 32
+      },
+      extendedHeadersCollection: {
+        enabled: true,
+        redaction: true,
+        maxHeaders: 42
       }
     })
 
