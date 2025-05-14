@@ -25,13 +25,12 @@ class PrismaCLientPlugin extends DatabasePlugin {
 }
 
 function formatResourceName (resource, attributes) {
-  if (attributes && attributes.name) {
-    return `${attributes.name || ''}`.trim()
+  if (attributes?.name) {
+    return `${attributes.name}`.trim()
   }
-  if (attributes && attributes.model && attributes.method) {
-    return `${attributes.model || ''}.${attributes.method || ''}`.trim()
+  if (attributes?.model && attributes.method) {
+    return `${attributes.model}.${attributes.method}`.trim()
   }
-
   return resource
 }
 

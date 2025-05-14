@@ -1958,9 +1958,7 @@ declare namespace tracer {
      * This plugin automatically patches the [protobufjs](https://protobufjs.github.io/protobuf.js/)
      * to collect protobuf message schemas when Datastreams Monitoring is enabled.
      */
-    interface protobufjs extends Integration {
-
-    }
+    interface protobufjs extends Integration {}
 
     /**
      * This plugin automatically instruments the

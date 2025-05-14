@@ -30,9 +30,10 @@ class TracingHelper {
   }
 
   dispatchEngineSpans (spans) {
-    const roots = spans.filter((span) => span.parentId === null)
-    for (const root of roots) {
-      prismaEngineStart.publish({ engineSpan: root, allEngineSpans: spans, dbConfig: this.dbConfig })
+    for (const span of spans) {
+      if (span.parentId === null) {
+        prismaEngineStart.publish({ engineSpan: span, allEngineSpans: spans, dbConfig: this.dbConfig })
+      }
     }
   }
 
