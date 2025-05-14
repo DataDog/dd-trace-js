@@ -29,17 +29,13 @@ class PrismaEngine extends DatabasePlugin {
 
   start (ctx) {
     const { engineSpan, allEngineSpans, childOf, dbConfig } = ctx
-
     const service = this.serviceName({ pluginConfig: this.config, system: this.system })
-
-    const unixStartTime = hrTimeToUnixTimeMs(engineSpan.startTime)
-
     const spanName = engineSpan.name.slice(14) // remove 'prisma:engine:' prefix
     const options = {
       childOf,
       service,
       kind: engineSpan.kind,
-      startTime: unixStartTime,
+      startTime: hrTimeToUnixTimeMs(engineSpan.startTime),
       meta: {
         prisma: {
           name: spanName,
@@ -54,8 +50,7 @@ class PrismaEngine extends DatabasePlugin {
         const originalStatement = this.maybeTruncate(query)
         const type = databaseDriverMapper[engineSpan.attributes['db.system']]?.type
         const dbType = databaseDriverMapper[engineSpan.attributes['db.system']]?.['db.type']
-        // Start time format is defined here
-        //  https://github.com/open-telemetry/opentelemetry-js/blob/cbc912d/api/src/common/Time.ts#L19-L30.
+
         options.resource = originalStatement
         options.type = type || engineSpan.attributes['db.system']
         options.meta['db.type'] = dbType || engineSpan.attributes['db.system']
@@ -84,6 +79,8 @@ class PrismaEngine extends DatabasePlugin {
   }
 }
 
+// Opentelmetry time format is defined here
+// https://github.com/open-telemetry/opentelemetry-js/blob/cbc912d/api/src/common/Time.ts#L19-L30.
 function hrTimeToUnixTimeMs ([seconds, nanoseconds]) {
   return seconds * 1000 + nanoseconds / 1e6
 }
