@@ -49,6 +49,16 @@ function send (message, logger, dd, snapshot) {
   let size = Buffer.byteLength(json)
 
   if (size > MAX_LOG_PAYLOAD_SIZE) {
+    if (payload.debugger.snapshot.captures == null) {
+      // This should never happen as there should never be a situation where the payload is too large, but doesn't
+      // contain a snapshot, but just in case, it's better to abort than to fail.
+      log.error(
+        // eslint-disable-next-line @stylistic/js/max-len
+        '[debugger:devtools_client] Snapshot was too large, but no snapshot found that could be pruned! Dropping payload.'
+      )
+      return
+    }
+
     // TODO: This is a very crude way to handle large payloads. Proper pruning will be implemented later (DEBUG-2624)
     const line = Object.values(payload.debugger.snapshot.captures.lines)[0]
     line.locals = {

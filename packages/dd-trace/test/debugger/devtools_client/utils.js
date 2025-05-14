@@ -1,11 +1,12 @@
 'use strict'
 
-const { randomUUID } = require('node:crypto')
+const { randomUUID, randomBytes } = require('node:crypto')
 
 module.exports = {
   expectWithin,
   generateProbeConfig,
-  getRequestOptions
+  getRequestOptions,
+  generateObjectWithJSONSizeLargerThan
 }
 
 function expectWithin (timeout, fn, start = Date.now(), backoff = 1) {
@@ -40,4 +41,20 @@ function generateProbeConfig (breakpoint, overrides = {}) {
 
 function getRequestOptions (request) {
   return request.lastCall.args[1]
+}
+
+function generateObjectWithJSONSizeLargerThan (targetSize) {
+  const obj = {}
+  let i = 0
+  const largeString = randomBytes(1024).toString('hex')
+
+  while (++i) {
+    if (i % 100 === 0) {
+      const size = JSON.stringify(obj).length
+      if (size > targetSize) break
+    }
+    obj[i] = largeString
+  }
+
+  return obj
 }

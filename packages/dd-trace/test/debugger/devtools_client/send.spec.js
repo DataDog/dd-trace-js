@@ -3,7 +3,7 @@
 require('../../setup/mocha')
 
 const { hostname: getHostname } = require('os')
-const { expectWithin, getRequestOptions } = require('./utils')
+const { expectWithin, getRequestOptions, generateObjectWithJSONSizeLargerThan } = require('./utils')
 const JSONBuffer = require('../../../src/debugger/devtools_client/json-buffer')
 const { version } = require('../../../../../package.json')
 
@@ -81,6 +81,14 @@ describe('input message http requests', function () {
 
       done()
     })
+  })
+
+  it('should not throw if payload is too large, but there is no snapshot', function () {
+    const unrealisticlyLargeSnapshotWithoutACapturesProperty = generateObjectWithJSONSizeLargerThan(1024 * 1024) // 1MB
+
+    expect(() => {
+      send(message, logger, dd, unrealisticlyLargeSnapshotWithoutACapturesProperty)
+    }).to.not.throw()
   })
 })
 

@@ -1,10 +1,17 @@
 'use strict'
 
 const { assert } = require('chai')
+const { join } = require('path')
 const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
-  const t = setup()
+  const t = setup({
+    env: {
+      PATH_TO_UTILS: join(
+        __dirname, '..', '..', 'packages', 'dd-trace', 'test', 'debugger', 'devtools_client', 'utils.js'
+      )
+    }
+  })
 
   describe('input messages', function () {
     describe('with snapshot', function () {
@@ -18,7 +25,7 @@ describe('Dynamic Instrumentation', function () {
               [t.breakpoint.line]: {
                 locals: {
                   notCapturedReason: 'Snapshot was too large',
-                  size: 6
+                  size: 5
                 }
               }
             }
