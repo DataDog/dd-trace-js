@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test')
+// eslint-disable-next-line no-unused-vars
 const dummy = require('dummy') // This should not exist, so should throw an error
 
 test.beforeEach(async ({ page }) => {
