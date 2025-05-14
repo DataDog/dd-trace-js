@@ -174,20 +174,25 @@ describe('Dynamic Instrumentation', function () {
         }
       })
 
-      const unsupporedOrInvalidProbes = [[
+      it(
         'should send expected error diagnostics messages if probe doesn\'t conform to expected schema',
-        'bad config!!!',
-        { status: 'ERROR' }
-      ], [
-        'should send expected error diagnostics messages if probe type isn\'t supported',
-        t.generateProbeConfig({ type: 'INVALID_PROBE' })
-      ], [
-        'should send expected error diagnostics messages if it isn\'t a line-probe',
-        t.generateProbeConfig({ where: { foo: 'bar' } }) // TODO: Use valid schema for method probe instead
-      ]]
+        unsupporedOrInvalidProbesTest('bad config!!!', { status: 'ERROR' })
+      )
 
-      for (const [title, config, customErrorDiagnosticsObj] of unsupporedOrInvalidProbes) {
-        it(title, function (done) {
+      it(
+        'should send expected error diagnostics messages if probe type isn\'t supported',
+        unsupporedOrInvalidProbesTest(t.generateProbeConfig({ type: 'INVALID_PROBE' }))
+      )
+
+      it(
+        'should send expected error diagnostics messages if it isn\'t a line-probe',
+        unsupporedOrInvalidProbesTest(
+          t.generateProbeConfig({ where: { typeName: 'index.js', methodName: 'handlerA' } })
+        )
+      )
+
+      function unsupporedOrInvalidProbesTest (config, customErrorDiagnosticsObj) {
+        return function (done) {
           let receivedAckUpdate = false
 
           t.agent.on('remote-config-ack-update', (id, version, state, error) => {
@@ -238,7 +243,7 @@ describe('Dynamic Instrumentation', function () {
           function endIfDone () {
             if (receivedAckUpdate && expectedPayloads.length === 0) done()
           }
-        })
+        }
       }
 
       describe('multiple probes at the same location', function () {
