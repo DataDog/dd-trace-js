@@ -29,6 +29,11 @@ for (const deprecation of Object.keys(deprecations)) {
 const debug = debuglog('dd:debug')
 
 module.exports = {
+  /**
+   * Returns the environment variables that are supported by the tracer.
+   *
+   * @returns {Partial<process.env>} The environment variables
+   */
   getConfigurations () {
     const configs = {}
     for (const [env, value] of Object.entries(process.env)) {
@@ -48,7 +53,7 @@ module.exports = {
           }
           deprecationMethods[env]?.()
         } else {
-          throw new Error(
+          console.error(
             `Missing configuration ${env} in supported-configurations file. The environment variable is ignored.`
           )
         }
@@ -58,6 +63,15 @@ module.exports = {
     }
     return configs
   },
+
+  /**
+   * Returns the environment variable, if it's supported or a non Datadog
+   * configuration. Otherwise, it throws an error.
+   *
+   * @param {string} name Environment variable name
+   * @returns {string|undefined}
+   * @throws {Error} if the configuration is not supported
+   */
   getConfiguration (name) {
     const config = process.env[name]
     if ((name.startsWith('DD_') || name.startsWith('OTEL_')) &&
