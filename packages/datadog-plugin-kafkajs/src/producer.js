@@ -52,7 +52,9 @@ class KafkajsProducerPlugin extends ProducerPlugin {
    * @param {ProducerResponseItem[]} commitList
    * @returns {void}
    */
-  commit (commitList) {
+  commit (ctx) {
+    const commitList = ctx.res
+
     if (!this.config.dsmEnabled) return
     if (!commitList || !Array.isArray(commitList)) return
     const keys = [
