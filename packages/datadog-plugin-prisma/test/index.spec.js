@@ -15,12 +15,10 @@ const os = require('os')
 */
 async function createTempProject (version) {
   const tempDir = await fs.mkdtemp((path.join(os.tmpdir(), `prisma-test-@${version}-`)))
-
   await fs.writeFile(
     path.join(tempDir, 'package.json'),
     JSON.stringify({}, null, 2)
   )
-
   return tempDir
 }
 
@@ -56,22 +54,22 @@ async function generatePrismaClient (version) {
   const prismaBin = path.join(__dirname, '/../../../versions/prisma/node_modules/.bin/prisma')
 
   const schema = `
-  generator client {
-    provider = "prisma-client-js"
-    output   = "${generatedClientPath}"
-  }
-  
-  datasource db {
-    provider = "postgresql"
-    url      = "postgres://postgres:postgres@localhost:5432/postgres"
-  }
+      generator client {
+        provider = "prisma-client-js"
+        output   = "${generatedClientPath}"
+      }
+      
+      datasource db {
+        provider = "postgresql"
+        url      = "postgres://postgres:postgres@localhost:5432/postgres"
+      }
 
-  model User {
-  id    Int     @id @default(autoincrement())
-  email String  @unique
-  name  String?
-}
-    `
+      model User {
+      id    Int     @id @default(autoincrement())
+      email String  @unique
+      name  String?
+    }
+  `
   await fs.writeFile(generatedSchemaPath, schema) /
   execSync(`${prismaBin} generate --schema="${generatedSchemaPath}"`, {
     cwd: tempDir, // Ensure the current working directory is where the schema is located
@@ -121,8 +119,8 @@ describe('Plugin', () => {
 
         after(() => { return agent.close({ ritmReset: false }) })
 
-        it('should do automatic instrumentation', done => {
-          agent.use(traces => {
+        it('should do automatic instrumentation', async () => {
+          const tracingPromise = agent.use(traces => {
             expect(traces[0][0].resource).to.equal('queryRaw')
             expect(traces[0][0].meta).to.have.property('prisma.type', 'client')
             expect(traces[0][0].meta).to.have.property('prisma.method', 'queryRaw')
@@ -136,33 +134,37 @@ describe('Plugin', () => {
             expect(engineDBSpan.meta).to.have.property('span.kind', 'client')
             expect(engineDBSpan).to.have.property('name', expectedSchema.engine.opName)
             expect(engineDBSpan).to.have.property('service', expectedSchema.engine.serviceName)
-          }).then(done).catch(done)
+          })
 
-          prismaClient.$queryRaw`SELECT 1`.catch(done)
+          await Promise.all([
+            prismaClient.$queryRaw`SELECT 1`,
+            tracingPromise
+          ])
         })
 
-        it('should handle errors', (done) => {
+        it('should handle errors', async () => {
           let error
-          agent.use(traces => {
+          const tracingPromise = agent.use(traces => {
             expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
             expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
             expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
-          }).then(done)
-            .catch(done)
-
-          prismaClient.$queryRaw`INVALID`.catch(e => {
-            error = e
           })
+          await Promise.all([
+            prismaClient.$queryRaw`INVALID`.catch(e => {
+              error = e
+            }),
+            tracingPromise
+          ])
         })
 
-        it('should create client spans from callback', (done) => {
-          agent.use(traces => {
+        it('should create client spans from callback', async () => {
+          const tracingPromise = agent.use(traces => {
             expect(traces[0][0].name).to.equal('prisma.client')
             expect(traces[0][0].resource).to.equal('users.findMany')
             expect(traces[0][0].meta).to.have.property('prisma.type', 'client')
             expect(traces[0][0].meta).to.have.property('prisma.method', 'findMany')
             expect(traces[0][0].meta).to.have.property('prisma.model', 'users')
-          }).then(done).catch(done)
+          })
 
           tracingHelper.runInChildSpan(
             {
@@ -173,10 +175,14 @@ describe('Plugin', () => {
               return 'Test Function'
             }
           )
+
+          await Promise.all([
+            tracingPromise
+          ])
         })
 
-        it('should generate engine span from array of spans', (done) => {
-          agent.use(traces => {
+        it('should generate engine span from array of spans', async () => {
+          const tracingPromise = agent.use(traces => {
             expect(traces[0].length).to.equal(2)
             expect(traces[0][0].span_id).to.equal(traces[0][1].parent_id)
             expect(traces[0][0].name).to.equal('prisma.engine')
@@ -189,7 +195,7 @@ describe('Plugin', () => {
             expect(traces[0][1].meta).to.have.property('prisma.type', 'engine')
             expect(traces[0][1].meta).to.have.property('prisma.name', 'db_query')
             expect(traces[0][1].meta).to.have.property('db.type', 'postgres')
-          }).then(done).catch(done)
+          })
 
           const engineSpans = [
             {
@@ -213,8 +219,10 @@ describe('Plugin', () => {
               }
             }
           ]
-
           tracingHelper.dispatchEngineSpans(engineSpans)
+          await Promise.all([
+            tracingPromise
+          ])
         })
       })
 
@@ -234,12 +242,15 @@ describe('Plugin', () => {
             prismaClient = new prisma.PrismaClient()
           })
 
-          it('should be configured with the correct values', (done) => {
-            agent.use(traces => {
+          it('should be configured with the correct values', async () => {
+            const tracingPromise = agent.use(traces => {
               expect(traces[0][0].service).to.equal('custom')
-            }).then(done).catch(done)
+            })
 
-            prismaClient.$queryRaw`SELECT 1`.catch(done)
+            await Promise.all([
+              prismaClient.$queryRaw`SELECT 1`,
+              tracingPromise
+            ])
           })
         })
 
@@ -258,13 +269,16 @@ describe('Plugin', () => {
             prismaClient = new prisma.PrismaClient()
           })
 
-          it('should disable prisma client', (done) => {
-            agent.use(traces => {
+          it('should disable prisma client', async () => {
+            const tracingPromise = agent.use(traces => {
               const clientSpans = traces[0].find(span => span.meta['prisma.type'] === 'client')
               expect(clientSpans).not.to.exist
-            }).then(done).catch(done)
+            })
 
-            prismaClient.$queryRaw`SELECT 1`.catch(done)
+            await Promise.all([
+              prismaClient.$queryRaw`SELECT 1`,
+              tracingPromise
+            ])
           })
 
           withNamingSchema(
@@ -289,13 +303,16 @@ describe('Plugin', () => {
             prismaClient = new prisma.PrismaClient()
           })
 
-          it('should disable prisma engine', (done) => {
-            agent.use(traces => {
+          it('should disable prisma engine', async () => {
+            const tracingPromise = agent.use(traces => {
               const engineSpans = traces[0].find(span => span.meta['prisma.type'] === 'engine')
               expect(engineSpans).not.to.exist
-            }).then(done).catch(done)
+            })
 
-            prismaClient.$queryRaw`SELECT 1`.catch(done)
+            await Promise.all([
+              prismaClient.$queryRaw`SELECT 1`,
+              tracingPromise
+            ])
           })
 
           withNamingSchema(
