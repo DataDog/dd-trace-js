@@ -66,7 +66,8 @@ function instrumentBaseModule (module) {
                   headers = convertHeaders(ctx.messages[0].headers)
                   const result = produce.apply(this, [topic, partition, message, key, timestamp, opaque, headers])
 
-                  channels.producerCommit.publish(result)
+                  ctx.res = result
+                  channels.producerCommit.publish(ctx)
                   channels.producerFinish.runStores(ctx, () => {})
                   return result
                 } catch (error) {
@@ -213,7 +214,8 @@ function instrumentKafkaJS (kafkaJS) {
                         const result = send.apply(this, arguments)
 
                         result.then((res) => {
-                          channels.producerCommit.publish(res)
+                          ctx.res = res
+                          channels.producerCommit.publish(ctx)
                           channels.producerFinish.publish(undefined)
                         }, (err) => {
                           if (err) {
