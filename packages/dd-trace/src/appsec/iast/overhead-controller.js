@@ -37,7 +37,6 @@ const OPERATIONS = {
       const reserved = context?.tokens?.[REPORT_VULNERABILITY] > 0
       if (reserved) {
         // has quota
-        console.log('context.localMaps', context.localMaps)
         context.copyMaps ??= {}
         context.copyMaps[context.route] ??= copyFromGlobalMap(context.route)
         context.localMaps ??= {}
@@ -61,8 +60,6 @@ const OPERATIONS = {
         //  else
         //    * reduce tokens
         //    * return true
-        console.log('report', vulnerabilityType)
-        console.log('context.localMaps', context.localMaps)
 
         // not reduce the quota yet
         context.tokens[REPORT_VULNERABILITY]--
@@ -103,7 +100,6 @@ function _getContext (iastContext) {
     if (currentPaths !== oceContext.paths) {
       oceContext.paths = currentPaths
       oceContext.route = oceContext.method + '-' + currentPaths?.join('') || ''
-      console.log('oceContext.route', oceContext.route)
     }
 
     return iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY]
