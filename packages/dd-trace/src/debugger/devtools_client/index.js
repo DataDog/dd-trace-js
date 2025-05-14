@@ -6,7 +6,7 @@ const session = require('./session')
 const { getLocalStateForCallFrame } = require('./snapshot')
 const send = require('./send')
 const { getStackFromCallFrames } = require('./state')
-const { ackEmitting, ackError } = require('./status')
+const { ackEmitting } = require('./status')
 const { parentThreadId } = require('./config')
 const { MAX_SNAPSHOTS_PER_SECOND_GLOBALLY } = require('./defaults')
 const log = require('../../log')
@@ -144,20 +144,11 @@ session.on('Debugger.paused', async ({ params }) => {
     evalResults = result?.value ?? []
   }
 
-  let processLocalState
-  if (numberOfProbesWithSnapshots !== 0) {
-    try {
-      // TODO: Create unique states for each affected probe based on that probes unique `capture` settings (DEBUG-2863)
-      processLocalState = await getLocalStateForCallFrame(
-        params.callFrames[0],
-        { maxReferenceDepth, maxCollectionSize, maxFieldCount, maxLength }
-      )
-    } catch (err) {
-      for (let i = 0; i < numberOfProbesWithSnapshots; i++) {
-        ackError(err, probes[snapshotProbeIndex[i]]) // TODO: Ok to continue after sending ackError?
-      }
-    }
-  }
+  // TODO: Create unique states for each affected probe based on that probes unique `capture` settings (DEBUG-2863)
+  const processLocalState = numberOfProbesWithSnapshots !== 0 && await getLocalStateForCallFrame(
+    params.callFrames[0],
+    { maxReferenceDepth, maxCollectionSize, maxFieldCount, maxLength }
+  )
 
   await session.post('Debugger.resume')
   const diff = process.hrtime.bigint() - start // TODO: Recored as telemetry (DEBUG-2858)
@@ -197,7 +188,9 @@ session.on('Debugger.paused', async ({ params }) => {
 
     if (probe.captureSnapshot) {
       const state = processLocalState()
-      if (state) {
+      if (state instanceof Error) {
+        snapshot.captureError = state.message
+      } else if (state) {
         snapshot.captures = {
           lines: { [probe.location.lines[0]]: { locals: state } }
         }
