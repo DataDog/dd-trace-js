@@ -2,8 +2,7 @@
 
 const {
   channel,
-  addHook,
-  AsyncResource
+  addHook
 } = require('./helpers/instrument')
 const kebabCase = require('../../datadog-core/src/utils/src/kebabcase')
 const shimmer = require('../../datadog-shimmer')
@@ -31,9 +30,11 @@ addHook({ name: 'amqplib', file: 'lib/channel_model.js', versions: [MIN_VERSION]
       if (message === null) {
         return message
       }
-      startCh.publish({ method: 'basic.get', message, fields: message.fields, queue })
-      // finish right away
-      finishCh.publish()
+      const ctx = { method: 'basic.get', message, fields: message.fields, queue }
+      startCh.runStores(ctx, () => {
+        // finish right away
+        finishCh.publish(ctx)
+      })
       return message
     })
   })
@@ -45,10 +46,13 @@ addHook({ name: 'amqplib', file: 'lib/channel_model.js', versions: [MIN_VERSION]
       if (message === null) {
         return callback(message, ...args)
       }
-      startCh.publish({ method: 'basic.deliver', message, fields: message.fields, queue })
-      const result = callback(message, ...args)
-      finishCh.publish()
-      return result
+      const ctx = { method: 'basic.deliver', message, fields: message.fields, queue }
+      return startCh.runStores(ctx, () => {
+        // finish right away
+        const result = callback(message, ...args)
+        finishCh.publish(ctx)
+        return result
+      })
     }
     return consume.apply(this, arguments)
   })
@@ -64,10 +68,12 @@ addHook({ name: 'amqplib', file: 'lib/callback_model.js', versions: [MIN_VERSION
       if (error !== null || message === null) {
         return callback(error, message, ...args)
       }
-      startCh.publish({ method: 'basic.get', message, fields: message.fields, queue })
-      const result = callback(error, message, ...args)
-      finishCh.publish()
-      return result
+      const ctx = { method: 'basic.get', message, fields: message.fields, queue }
+      return startCh.runStores(ctx, () => {
+        const result = callback(error, message, ...args)
+        finishCh.publish(ctx)
+        return result
+      })
     }
     return getMessage.apply(this, arguments)
   })
@@ -79,10 +85,12 @@ addHook({ name: 'amqplib', file: 'lib/callback_model.js', versions: [MIN_VERSION
       if (message === null) {
         return callback(message, ...args)
       }
-      startCh.publish({ method: 'basic.deliver', message, fields: message.fields, queue })
-      const result = callback(message, ...args)
-      finishCh.publish()
-      return result
+      const ctx = { method: 'basic.deliver', message, fields: message.fields, queue }
+      return startCh.runStores(ctx, () => {
+        const result = callback(message, ...args)
+        finishCh.publish(ctx)
+        return result
+      })
     }
     return consume.apply(this, arguments)
   })
@@ -105,18 +113,17 @@ function instrument (send, channel, args, method, fields, message) {
     return send.apply(channel, args)
   }
 
-  const asyncResource = new AsyncResource('bound-anonymous-fn')
-  return asyncResource.runInAsyncScope(() => {
-    startCh.publish({ channel, method, fields, message })
-
+  const ctx = { channel, method, fields, message }
+  return startCh.runStores(ctx, () => {
     try {
       return send.apply(channel, args)
     } catch (err) {
-      errorCh.publish(err)
+      ctx.error = err
+      errorCh.publish(ctx)
 
       throw err
     } finally {
-      finishCh.publish()
+      finishCh.publish(ctx)
     }
   })
 }

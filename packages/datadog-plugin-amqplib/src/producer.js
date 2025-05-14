@@ -10,7 +10,9 @@ class AmqplibProducerPlugin extends ProducerPlugin {
   static get id () { return 'amqplib' }
   static get operation () { return 'command' }
 
-  start ({ channel = {}, method, fields, message }) {
+  bindStart (ctx) {
+    const { channel = {}, method, fields, message } = ctx
+
     if (method !== 'basic.publish') return
 
     const stream = (channel.connection && channel.connection.stream) || {}
@@ -26,7 +28,7 @@ class AmqplibProducerPlugin extends ProducerPlugin {
         'amqp.source': fields.source,
         'amqp.destination': fields.destination
       }
-    })
+    }, ctx)
 
     fields.headers = fields.headers || {}
 
@@ -49,6 +51,8 @@ class AmqplibProducerPlugin extends ProducerPlugin {
           , span, payloadSize)
       DsmPathwayCodec.encode(dataStreamsContext, fields.headers)
     }
+
+    return ctx.currentStore
   }
 }
 
