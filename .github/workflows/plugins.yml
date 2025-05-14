@@ -124,7 +124,11 @@ jobs:
   aws-sdk:
     strategy:
       matrix:
-        node-version: [oldest, 'latest']
+        include:
+          - node-version: latest
+            node-opts: --no-async-context-frame
+          - node-version: oldest
+            node-opts: ''
     runs-on: ubuntu-latest
     services:
       localstack:
@@ -168,6 +172,8 @@ jobs:
           version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
+        env:
+          NODE_OPTIONS: ${{ matrix.node-opts }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -243,6 +249,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+        env:
+          OPTIONS_OVERRIDE: 1
       - uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d # v5.4.2
 
   confluentinc-kafka-javascript:

@@ -138,6 +138,22 @@ interface Tracer extends opentracing.Tracer {
    * LLM Observability SDK
    */
   llmobs: tracer.llmobs.LLMObs;
+
+  /**
+   * @experimental
+   * Provide same functionality as OpenTelemetry Baggage:
+   * https://opentelemetry.io/docs/concepts/signals/baggage/
+   *
+   * Since the equivalent of OTel Context is implicit in dd-trace-js,
+   * these APIs act on the currently active baggage
+   *
+   * Work with storage('baggage'), therefore do not follow the same continuity as other APIs
+   */
+  setBaggageItem (key: string, value: string): Record<string, string>;
+  getBaggageItem (key: string): string | undefined;
+  getAllBaggageItems (): Record<string, string>;
+  removeBaggageItem (key: string): Record<string, string>;
+  removeAllBaggageItems (): Record<string, string>;
 }
 
 // left out of the namespace, so it
