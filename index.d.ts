@@ -138,6 +138,22 @@ interface Tracer extends opentracing.Tracer {
    * LLM Observability SDK
    */
   llmobs: tracer.llmobs.LLMObs;
+
+  /**
+   * @experimental
+   * Provide same functionality as OpenTelemetry Baggage:
+   * https://opentelemetry.io/docs/concepts/signals/baggage/
+   *
+   * Since the equivalent of OTel Context is implicit in dd-trace-js,
+   * these APIs act on the currently active baggage
+   *
+   * Work with storage('baggage'), therefore do not follow the same continuity as other APIs
+   */
+  setBaggageItem (key: string, value: string): Record<string, string>;
+  getBaggageItem (key: string): string | undefined;
+  getAllBaggageItems (): Record<string, string>;
+  removeBaggageItem (key: string): Record<string, string>;
+  removeAllBaggageItems (): Record<string, string>;
 }
 
 // left out of the namespace, so it
@@ -154,6 +170,7 @@ interface Plugins {
   "bunyan": tracer.plugins.bunyan;
   "cassandra-driver": tracer.plugins.cassandra_driver;
   "child_process": tracer.plugins.child_process;
+  "confluentinc-kafka-javascript": tracer.plugins.confluentinc_kafka_javascript;
   "connect": tracer.plugins.connect;
   "couchbase": tracer.plugins.couchbase;
   "cucumber": tracer.plugins.cucumber;
@@ -1344,6 +1361,12 @@ declare namespace tracer {
      * [child_process](https://nodejs.org/api/child_process.html) module.
      */
     interface child_process extends Instrumentation {}
+  
+    /**
+     * This plugin automatically instruments the
+     * [confluentinc-kafka-javascript](https://github.com/confluentinc/confluent-kafka-js) module.
+     */
+    interface confluentinc_kafka_javascript extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the
