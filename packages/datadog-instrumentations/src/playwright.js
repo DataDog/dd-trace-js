@@ -604,7 +604,9 @@ function runnerHook (runnerExport, playwrightVersion) {
         totalAttemptToFixFailedTestCount += testStatuses.filter(status => status === 'fail').length
       }
 
-      if (totalFailedTestCount === totalAttemptToFixFailedTestCount) {
+      if (totalFailedTestCount > 0 &&
+          totalAttemptToFixFailedTestCount > 0 &&
+          totalFailedTestCount === totalAttemptToFixFailedTestCount) {
         runAllTestsReturn = 'passed'
       }
     }
