@@ -6,7 +6,7 @@ const session = require('./session')
 const { getLocalStateForCallFrame } = require('./snapshot')
 const send = require('./send')
 const { getStackFromCallFrames } = require('./state')
-const { ackEmitting, ackError } = require('./status')
+const { ackEmitting } = require('./status')
 const { parentThreadId } = require('./config')
 const { MAX_SNAPSHOTS_PER_SECOND_GLOBALLY } = require('./defaults')
 const log = require('../../log')
@@ -36,7 +36,6 @@ const getDDTagsExpression = `(() => {
 const threadId = parentThreadId === 0 ? `pid:${process.pid}` : `pid:${process.pid};tid:${parentThreadId}`
 const threadName = parentThreadId === 0 ? 'MainThread' : `WorkerThread:${parentThreadId}`
 
-const SUPPORT_ITERATOR_METHODS = NODE_MAJOR >= 22
 const SUPPORT_ARRAY_BUFFER_RESIZE = NODE_MAJOR >= 20
 const oneSecondNs = 1_000_000_000n
 let globalSnapshotSamplingRateWindowStart = 0n
@@ -77,14 +76,6 @@ session.on('Debugger.paused', async ({ params }) => {
       }
     }
 
-    // If all the probes have a condition, we know that it triggered. If at least one probe doesn't have a condition, we
-    // need to verify which conditions are met.
-    const shouldVerifyConditions = (
-      SUPPORT_ITERATOR_METHODS
-        ? probesAtLocation.values()
-        : Array.from(probesAtLocation.values())
-    ).some((probe) => probe.condition === undefined)
-
     for (const probe of probesAtLocation.values()) {
       if (start - probe.lastCaptureNs < probe.nsBetweenSampling) {
         continue
@@ -109,7 +100,7 @@ session.on('Debugger.paused', async ({ params }) => {
         maxLength = highestOrUndefined(probe.capture.maxLength, maxLength)
       }
 
-      if (shouldVerifyConditions && probe.condition !== undefined) {
+      if (probe.condition !== undefined) {
         // TODO: Bundle all conditions and evaluate them in a single call
         // TODO: Handle errors
         const { result } = await session.post('Debugger.evaluateOnCallFrame', {
@@ -153,20 +144,11 @@ session.on('Debugger.paused', async ({ params }) => {
     evalResults = result?.value ?? []
   }
 
-  let processLocalState
-  if (numberOfProbesWithSnapshots !== 0) {
-    try {
-      // TODO: Create unique states for each affected probe based on that probes unique `capture` settings (DEBUG-2863)
-      processLocalState = await getLocalStateForCallFrame(
-        params.callFrames[0],
-        { maxReferenceDepth, maxCollectionSize, maxFieldCount, maxLength }
-      )
-    } catch (err) {
-      for (let i = 0; i < numberOfProbesWithSnapshots; i++) {
-        ackError(err, probes[snapshotProbeIndex[i]]) // TODO: Ok to continue after sending ackError?
-      }
-    }
-  }
+  // TODO: Create unique states for each affected probe based on that probes unique `capture` settings (DEBUG-2863)
+  const processLocalState = numberOfProbesWithSnapshots !== 0 && await getLocalStateForCallFrame(
+    params.callFrames[0],
+    { maxReferenceDepth, maxCollectionSize, maxFieldCount, maxLength }
+  )
 
   await session.post('Debugger.resume')
   const diff = process.hrtime.bigint() - start // TODO: Recored as telemetry (DEBUG-2858)
@@ -206,7 +188,9 @@ session.on('Debugger.paused', async ({ params }) => {
 
     if (probe.captureSnapshot) {
       const state = processLocalState()
-      if (state) {
+      if (state instanceof Error) {
+        snapshot.captureError = state.message
+      } else if (state) {
         snapshot.captures = {
           lines: { [probe.location.lines[0]]: { locals: state } }
         }

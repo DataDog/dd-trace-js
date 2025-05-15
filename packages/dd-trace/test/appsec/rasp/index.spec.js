@@ -93,7 +93,7 @@ describe('RASP', () => {
 
     it('should block DatadogRaspAbortError first time and update metrics', () => {
       rasp.blockOnDatadogRaspAbortError({
-        error: new DatadogRaspAbortError(req, res, blockingAction, raspRule)
+        error: new DatadogRaspAbortError(req, res, blockingAction, raspRule, true)
       })
 
       sinon.assert.calledOnce(block)
@@ -102,16 +102,16 @@ describe('RASP', () => {
 
     it('should skip calling block if blocked before', () => {
       rasp.blockOnDatadogRaspAbortError({
-        error: new DatadogRaspAbortError(req, res, blockingAction, raspRule)
+        error: new DatadogRaspAbortError(req, res, blockingAction, raspRule, true)
       })
 
       blocked = true
 
       rasp.blockOnDatadogRaspAbortError({
-        error: new DatadogRaspAbortError(req, res, blockingAction, raspRule)
+        error: new DatadogRaspAbortError(req, res, blockingAction, raspRule, true)
       })
       rasp.blockOnDatadogRaspAbortError({
-        error: new DatadogRaspAbortError(req, res, blockingAction, raspRule)
+        error: new DatadogRaspAbortError(req, res, blockingAction, raspRule, true)
       })
 
       sinon.assert.calledOnce(block)
