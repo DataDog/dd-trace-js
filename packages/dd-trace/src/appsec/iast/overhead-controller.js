@@ -37,13 +37,21 @@ const OPERATIONS = {
       const reserved = context?.tokens?.[REPORT_VULNERABILITY] > 0
       if (reserved) {
         // has quota
-        context.copyMaps ??= {}
-        context.copyMaps[context.route] ??= copyFromGlobalMap(context.route)
-        context.localMaps ??= {}
-        context.localMaps[context.route] ??= newCountersArray()
+        let copyMap = context.copyMap
+        let localMap = context.localMap
 
-        const copyMap = context.copyMaps[context.route]
-        const localMap = context.localMaps[context.route]
+        if (context.loadedRoute !== context.route) {
+          context.copyMaps ??= {}
+          context.copyMaps[context.route] ??= copyFromGlobalMap(context.route)
+          context.localMaps ??= {}
+          context.localMaps[context.route] ??= newCountersArray()
+          context.loadedRoute = context.route
+          copyMap = context.copyMaps[context.route]
+          localMap = context.localMaps[context.route]
+          context.copyMap = copyMap
+          context.localMap = localMap
+        }
+
         const vulnerabilityIndex = vulnerabilityIndexes[vulnerabilityType]
         const counter = localMap[vulnerabilityIndex]++
         const storedCounter = copyMap[vulnerabilityIndex]
@@ -51,17 +59,7 @@ const OPERATIONS = {
         if (counter < storedCounter) {
           return false
         }
-        // TODO counter = requestMap.get(vulnerabilityType) || 0
-        //  requestMap.set(vulnerabilityType, counter + 1)
-        //  storedCounter = copyMap.get(vulnerabilityType)
-        //  if counter < storedCounter
-        //    * do not reduce tokens
-        //    * return false
-        //  else
-        //    * reduce tokens
-        //    * return true
 
-        // not reduce the quota yet
         context.tokens[REPORT_VULNERABILITY]--
       }
       return reserved
@@ -99,7 +97,7 @@ function _getContext (iastContext) {
     const currentPaths = oceContext.webContext.paths
     if (currentPaths !== oceContext.paths) {
       oceContext.paths = currentPaths
-      oceContext.route = oceContext.method + '-' + currentPaths?.join('') || ''
+      oceContext.route = '#' + oceContext.method + '#' + currentPaths?.join('') || ''
     }
 
     return iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY]
