@@ -206,10 +206,9 @@
     "@babel/helper-string-parser" "^7.27.1"
     "@babel/helper-validator-identifier" "^7.27.1"
 
-"@datadog/libdatadog@^0.6.0":
-  version "0.6.0"
-  resolved "https://registry.yarnpkg.com/@datadog/libdatadog/-/libdatadog-0.6.0.tgz#299a717ca18d1ea643ecf5880095ed864ffa32a8"
-  integrity sha512-Ldu+U59LUnejtd7ceXMKJCAFZeYpNdTEEXr8PISY9HFXMa4DOwepcWMaJAAqCPU7LINJeivVwvSD1Pm14VZy7w==
+"@datadog/libdatadog@git+https://github.com/DataDog/libdatadog-nodejs.git#a7b36c913f4fa48c19d46a488a4e46c153f5d4b4":
+  version "0.1.0-pre"
+  resolved "git+https://github.com/DataDog/libdatadog-nodejs.git#a7b36c913f4fa48c19d46a488a4e46c153f5d4b4"
 
 "@datadog/native-appsec@8.5.2":
   version "8.5.2"

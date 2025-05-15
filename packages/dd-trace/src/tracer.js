@@ -9,6 +9,7 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/c
 const { DataStreamsCheckpointer, DataStreamsManager, DataStreamsProcessor } = require('./datastreams')
 const { flushStartupLogs } = require('../../datadog-instrumentations/src/helpers/check-require-cache')
 const log = require('./log/writer')
+const storeConfig = require('./tracer_metadata')
 
 const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
@@ -24,6 +25,12 @@ class DatadogTracer extends Tracer {
     this._scope = new Scope()
     setStartupLogConfig(config)
     flushStartupLogs(log)
+
+    try {
+      this._inmem_cfg = storeConfig(config)
+    } catch (error) {
+      log.warn(`Warning: Could not store tracer configuration for service discovery (Reason: ${error})`)
+    }
   }
 
   configure (config) {

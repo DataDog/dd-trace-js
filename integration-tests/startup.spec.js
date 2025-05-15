@@ -9,6 +9,7 @@ const {
 const path = require('path')
 const { assert } = require('chai')
 const semver = require('semver')
+const fs = require('fs')
 
 const execArgvs = [
   {
@@ -70,6 +71,35 @@ execArgvs.forEach(({ execArgv, skip }) => {
           assert.strictEqual(payload[0].length, 1)
           assert.propertyVal(payload[0][0], 'name', 'web.request')
         })
+      })
+
+      it('saves tracer configuration on disk', async () => {
+        proc = await spawnProc(startupTestFile, {
+          cwd,
+          execArgv,
+          env: {
+            AGENT_PORT: agent.port
+          }
+        })
+
+        const containsDatadogMemfd = (fds) => {
+          for (const fd in fds) {
+            try {
+              const fdName = fs.readlinkSync(`/proc/${process.pid}/fd/${fd}`)
+              if (fdName.indexOf('datadog-tracer-info-') !== -1) {
+                return true
+              }
+            } catch {
+              continue
+            }
+          }
+          return false
+        }
+
+        if (process.platform === 'linux') {
+          const fds = fs.readdirSync(`/proc/${proc.pid}/fd`)
+          assert(containsDatadogMemfd(fds))
+        }
       })
 
       it('works for options.url', async () => {
