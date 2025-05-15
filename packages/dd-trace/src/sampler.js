@@ -5,12 +5,14 @@
 // as it is cast into a float64 when computing the threshold
 const MAX_TRACE_ID = 2 ** 64 - 1
 
+const UINT64_MODULO = 2n ** 64n
+
 // Knuth's factor for the sampling algorithm
 const SAMPLING_KNUTH_FACTOR = 1111111111111111111n
 
 class Sampler {
   /**
-   * @param rate {number}
+   * @param {number} rate
    */
   constructor (rate) {
     this._rate = rate
@@ -25,9 +27,10 @@ class Sampler {
   }
 
   /**
+   * @param {SpanContext} context
    * @returns {boolean}
    */
-  isSampled () {
+  isSampled (context) {
     if (this._rate === 1) {
       return true
     }
@@ -36,7 +39,7 @@ class Sampler {
       return false
     }
 
-    return Math.random() < this._rate
+    return (context.toTraceIdBigInt() * SAMPLING_KNUTH_FACTOR) % UINT64_MODULO <= this._threshold
   }
 }
 

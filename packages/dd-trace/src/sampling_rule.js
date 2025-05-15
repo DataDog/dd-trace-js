@@ -123,8 +123,9 @@ class SamplingRule {
     return true
   }
 
-  sample () {
-    if (!this._sampler.isSampled()) {
+  // TODO check all implications of this change
+  sample (context) {
+    if (!this._sampler.isSampled(context)) {
       return false
     }
 
