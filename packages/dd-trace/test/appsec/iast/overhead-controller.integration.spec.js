@@ -70,7 +70,7 @@ describe('IAST - overhead-controller - integration', () => {
         })
 
         assert.strictEqual(Object.keys(vulnerabilities).length, Object.keys(vulnerabilitiesAndCount).length)
-
+        console.log('vulnerabilitiesTrace.vulnerabilities', vulnerabilitiesTrace.vulnerabilities)
         Object.keys(vulnerabilitiesAndCount).forEach((vType) => {
           assert.strictEqual(vulnerabilities[vType], vulnerabilitiesAndCount[vType], `route: ${path} - type: ${vType}`)
         })
@@ -87,42 +87,42 @@ describe('IAST - overhead-controller - integration', () => {
     }
 
     it('should report vulnerability only in the first request', async () => {
-      await checkVulnerabilitiesInEndpoint('/one-vulnerability', { WEAK_HASH: 1 })
-      await checkNoVulnerabilitiesInEndpoint('/one-vulnerability')
+      await checkVulnerabilitiesInEndpoint('/one-vulnerability?1', { WEAK_HASH: 1 })
+      await checkNoVulnerabilitiesInEndpoint('/one-vulnerability?2')
     })
 
     it('should report vulnerabilities in different request when they are different', async () => {
-      await checkVulnerabilitiesInEndpoint('/five-vulnerabilities', { WEAK_HASH: 2 })
-      await checkVulnerabilitiesInEndpoint('/five-vulnerabilities', { WEAK_HASH: 2 })
-      await checkVulnerabilitiesInEndpoint('/five-vulnerabilities', { WEAK_HASH: 1 })
+      await checkVulnerabilitiesInEndpoint('/five-vulnerabilities?1', { WEAK_HASH: 2 })
+      await checkVulnerabilitiesInEndpoint('/five-vulnerabilities?2', { WEAK_HASH: 2 })
+      await checkVulnerabilitiesInEndpoint('/five-vulnerabilities?3', { WEAK_HASH: 1 })
 
       await checkNoVulnerabilitiesInEndpoint('/five-vulnerabilities')
     })
 
     it('should differentiate different routes in the same request', async () => {
-      await checkVulnerabilitiesInEndpoint('/route1/sub1', { WEAK_RANDOMNESS: 2 })
-      await checkVulnerabilitiesInEndpoint('/route1/sub2', { WEAK_HASH: 2 })
-      await checkVulnerabilitiesInEndpoint('/route1/sub1', { WEAK_HASH: 2 })
+      await checkVulnerabilitiesInEndpoint('/route1/sub1?1', { WEAK_RANDOMNESS: 2 })
+      await checkVulnerabilitiesInEndpoint('/route1/sub2?2', { WEAK_HASH: 2 })
+      await checkVulnerabilitiesInEndpoint('/route1/sub1?3', { WEAK_HASH: 2 })
 
       await checkNoVulnerabilitiesInEndpoint('/route1/sub2')
       await checkNoVulnerabilitiesInEndpoint('/route1/sub1')
     })
 
     it('should differentiate different methods in the same route', async () => {
-      await checkVulnerabilitiesInEndpoint('/five-vulnerabilities', { WEAK_HASH: 2 }, 'GET')
-      await checkVulnerabilitiesInEndpoint('/five-vulnerabilities', { WEAK_HASH: 2 }, 'POST')
-      await checkVulnerabilitiesInEndpoint('/five-vulnerabilities', { WEAK_HASH: 2 }, 'GET')
-      await checkVulnerabilitiesInEndpoint('/five-vulnerabilities', { WEAK_HASH: 2 }, 'POST')
-      await checkVulnerabilitiesInEndpoint('/five-vulnerabilities', { WEAK_HASH: 1 }, 'GET')
-      await checkVulnerabilitiesInEndpoint('/five-vulnerabilities', { WEAK_HASH: 1 }, 'POST')
+      await checkVulnerabilitiesInEndpoint('/five-vulnerabilities?1', { WEAK_HASH: 2 }, 'GET')
+      await checkVulnerabilitiesInEndpoint('/five-vulnerabilities?2', { WEAK_HASH: 2 }, 'POST')
+      await checkVulnerabilitiesInEndpoint('/five-vulnerabilities?3', { WEAK_HASH: 2 }, 'GET')
+      await checkVulnerabilitiesInEndpoint('/five-vulnerabilities?4', { WEAK_HASH: 2 }, 'POST')
+      await checkVulnerabilitiesInEndpoint('/five-vulnerabilities?5', { WEAK_HASH: 1 }, 'GET')
+      await checkVulnerabilitiesInEndpoint('/five-vulnerabilities?6', { WEAK_HASH: 1 }, 'POST')
 
       await checkNoVulnerabilitiesInEndpoint('/five-vulnerabilities')
       await checkNoVulnerabilitiesInEndpoint('/five-vulnerabilities')
     })
 
     it('should not differentiate between different route params', async () => {
-      await checkVulnerabilitiesInEndpoint('/route2/one', { WEAK_HASH: 2 })
-      await checkVulnerabilitiesInEndpoint('/route2/two', { WEAK_HASH: 1 })
+      await checkVulnerabilitiesInEndpoint('/route2/one?1', { WEAK_HASH: 2 })
+      await checkVulnerabilitiesInEndpoint('/route2/two?2', { WEAK_HASH: 1 })
 
       await checkNoVulnerabilitiesInEndpoint('/route2/three')
     })

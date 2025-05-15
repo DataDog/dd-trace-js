@@ -29,14 +29,15 @@ function copyFromGlobalMap (route) {
   return vulnerabilityCounters ? [...vulnerabilityCounters] : newCountersArray()
 }
 
+function clearGlobalRouteMap () {
+  globalRouteMap.clear()
+}
+
 const OPERATIONS = {
   REPORT_VULNERABILITY: {
-    // TODO this should receive also vuln type
     hasQuota: (context, vulnerabilityType) => {
-      // TODO The most of the RFC should be applied here
       const reserved = context?.tokens?.[REPORT_VULNERABILITY] > 0
-      if (reserved) {
-        // has quota
+      if (reserved && context.route != null ) {
         let copyMap = context.copyMap
         let localMap = context.localMap
 
@@ -108,6 +109,9 @@ function _getContext (iastContext) {
 function consolidateVulnerabilities (iastContext) {
   const context = _getContext(iastContext)
   const reserved = context?.tokens?.[REPORT_VULNERABILITY] > 0
+
+  if (!context.localMaps) return
+
   if (reserved) { // still a bit of budget available
     Object.keys(context.localMaps).forEach(route => {
       globalRouteMap.set(route, newCountersArray())
@@ -194,5 +198,6 @@ module.exports = {
   acquireRequest,
   releaseRequest,
   configure,
-  consolidateVulnerabilities
+  consolidateVulnerabilities,
+  clearGlobalRouteMap
 }
