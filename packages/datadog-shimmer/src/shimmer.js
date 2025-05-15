@@ -34,7 +34,7 @@ function copyProperties (original, wrapped) {
 }
 
 function wrapFunction (original, wrapper) {
-  if (original == null) {
+  if (original != null) {
     if (typeof original !== 'function') {
       throw new Error(`Target is not a function (${typeof original})`)
     }
