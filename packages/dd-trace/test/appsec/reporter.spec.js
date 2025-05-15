@@ -13,6 +13,18 @@ describe('reporter', () => {
   let telemetry
   let prioritySampler
 
+  const defaultReporterConfig = {
+    rateLimit: 100,
+    extendedHeadersCollection: {
+      enabled: false,
+      redaction: true,
+      maxHeaders: 50
+    },
+    rasp: {
+      bodyCollection: false
+    }
+  }
+
   beforeEach(() => {
     prioritySampler = {
       setPriority: sinon.stub()
@@ -51,7 +63,7 @@ describe('reporter', () => {
 
   afterEach(() => {
     sinon.restore()
-    Reporter.setRateLimit(100)
+    Reporter.init(defaultReporterConfig)
     Reporter.metricsQueue.clear()
   })
 
@@ -359,7 +371,9 @@ describe('reporter', () => {
       expect(prioritySampler.setPriority).to.have.callCount(3)
       expect(telemetry.updateRateLimitedMetric).to.not.have.been.called
 
-      Reporter.setRateLimit(1)
+      const reporterConfigWithRateLimit1 = Object.assign({}, defaultReporterConfig)
+      reporterConfigWithRateLimit1.rateLimit = 1
+      Reporter.init(reporterConfigWithRateLimit1)
 
       expect(Reporter.reportAttack([])).to.not.be.false
       expect(addTags.getCall(3).firstArg).to.have.property('appsec.event').that.equals('true')
@@ -460,13 +474,24 @@ describe('reporter', () => {
       })
 
       after(() => {
-        Reporter.setExtendedCollection({})
+        Reporter.init(defaultReporterConfig)
       })
 
       it('should report request body in meta struct on rasp event when enabled', () => {
-        Reporter.setExtendedCollection({
-          raspBodyCollection: true
-        })
+        Reporter.init(
+          {
+            rateLimit: 100,
+            extendedHeadersCollection: {
+              enabled: false,
+              redaction: true,
+              maxHeaders: 50
+            },
+            rasp: {
+              bodyCollection: true
+            }
+          }
+        )
+
         Reporter.reportAttack([
           {
             rule: {
@@ -482,9 +507,19 @@ describe('reporter', () => {
       })
 
       it('should not report request body in meta struct on rasp event when disabled', () => {
-        Reporter.setExtendedCollection({
-          raspBodyCollection: false
-        })
+        Reporter.init(
+          {
+            rateLimit: 100,
+            extendedHeadersCollection: {
+              enabled: false,
+              redaction: true,
+              maxHeaders: 50
+            },
+            rasp: {
+              bodyCollection: false
+            }
+          }
+        )
 
         Reporter.reportAttack([
           {
@@ -941,11 +976,7 @@ describe('reporter', () => {
         }))
 
       after(() => {
-        Reporter.setExtendedCollection({
-          enabled: false,
-          redaction: false,
-          maxHeaders: 0
-        })
+        Reporter.init(defaultReporterConfig)
       })
 
       it('should collect extended headers on appsec event', () => {
@@ -963,10 +994,16 @@ describe('reporter', () => {
         }
         span.context()._tags['appsec.event'] = 'true'
 
-        Reporter.setExtendedCollection({
-          enabled: true,
-          redaction: false,
-          maxHeaders: 50
+        Reporter.init({
+          rateLimit: 100,
+          extendedHeadersCollection: {
+            enabled: true,
+            redaction: false,
+            maxHeaders: 50
+          },
+          rasp: {
+            bodyCollection: false
+          }
         })
         Reporter.finishRequest(req, res)
 
@@ -1000,11 +1037,19 @@ describe('reporter', () => {
         const discardedReqHeadersCount = extendedRequestHeaders.length - reportedExtReqHeadersCount
         const discardedResHeadersCount = extendedResponseHeaders.length - maxHeaders
 
-        Reporter.setExtendedCollection({
-          enabled: true,
-          redaction: false,
-          maxHeaders
-        })
+        Reporter.init(
+          {
+            rateLimit: 100,
+            extendedHeadersCollection: {
+              enabled: true,
+              redaction: false,
+              maxHeaders: maxHeaders
+            },
+            rasp: {
+              bodyCollection: false
+            }
+          }
+        )
         Reporter.finishRequest(req, res)
 
         const expectedTags = {
@@ -1023,7 +1068,7 @@ describe('reporter', () => {
         expect(span.addTags).to.have.been.calledWith(expectedTags)
       })
 
-      it('should not collect extended headers on appsec event when redaction is enablded', () => {
+      it('should not collect extended headers on appsec event when redaction is enabled', () => {
         const req = {
           headers: {
             'user-agent': 'arachni',
@@ -1038,10 +1083,16 @@ describe('reporter', () => {
         }
         span.context()._tags['appsec.event'] = 'true'
 
-        Reporter.setExtendedCollection({
-          enabled: true,
-          redaction: true,
-          maxHeaders: 50
+        Reporter.init({
+          rateLimit: 100,
+          extendedHeadersCollection: {
+            enabled: true,
+            redaction: true,
+            maxHeaders: 50
+          },
+          rasp: {
+            bodyCollection: false
+          }
         })
         Reporter.finishRequest(req, res)
 
