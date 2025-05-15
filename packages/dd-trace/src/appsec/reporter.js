@@ -330,7 +330,6 @@ function reportRequestBody (rootSpan, requestBody) {
   }
 
   if (!rootSpan.meta_struct['http.request.body']) {
-    // TODO truncate requestBody
     rootSpan.meta_struct['http.request.body'] = truncateRequestBody(requestBody)
   }
 }
