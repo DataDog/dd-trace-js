@@ -72,6 +72,20 @@ execArgvs.forEach(({ execArgv, skip }) => {
         })
       })
 
+      it('saves tracer configuration on disk', async () => {
+        proc = await spawnProc(startupTestFile, {
+          cwd,
+          execArgv,
+          env: {
+            AGENT_PORT: agent.port
+          }
+        })
+
+        const fds = fs.readdirSync(`/proc/${proc.pid}/fd`)
+
+        assert.ok(fds.some((fd) => fd.startsWith("datadog-tracer-info-")))
+      })
+
       it('works for options.url', async () => {
         proc = await spawnProc(startupTestFile, {
           cwd,
