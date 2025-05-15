@@ -123,7 +123,12 @@ class SamplingRule {
     return true
   }
 
-  // TODO check all implications of this change
+  /**
+   * Determines whether a span should be sampled based on the configured sampling rule.
+   *
+   * @param {SpanContext} context - The span context to evaluate.
+   * @returns {boolean} `true` if the span should be sampled, otherwise `false`.
+   */
   sample (context) {
     if (!this._sampler.isSampled(context)) {
       return false
