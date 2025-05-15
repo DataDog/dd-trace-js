@@ -8,9 +8,7 @@ const {
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
 
-// there is currently an issue with langchain + esm loader hooks from IITM
-// https://github.com/nodejs/import-in-the-middle/issues/163
-describe.skip('esm', () => {
+describe('esm', () => {
   let agent
   let proc
   let sandbox
@@ -47,7 +45,9 @@ describe.skip('esm', () => {
         assert.strictEqual(checkSpansForServiceName(payload, 'langchain.request'), true)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, null, {
+        NODE_OPTIONS: '--import dd-trace/initialize.mjs'
+      })
 
       await res
     }).timeout(20000)

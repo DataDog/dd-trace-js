@@ -9,6 +9,9 @@ const testPassCh = channel('ci:vitest:test:pass')
 const testErrorCh = channel('ci:vitest:test:error')
 const testSkipCh = channel('ci:vitest:test:skip')
 const isNewTestCh = channel('ci:vitest:test:is-new')
+const isAttemptToFixCh = channel('ci:vitest:test:is-attempt-to-fix')
+const isDisabledCh = channel('ci:vitest:test:is-disabled')
+const isQuarantinedCh = channel('ci:vitest:test:is-quarantined')
 
 // test suite hooks
 const testSuiteStartCh = channel('ci:vitest:test-suite:start')
@@ -21,11 +24,16 @@ const testSessionFinishCh = channel('ci:vitest:session:finish')
 const libraryConfigurationCh = channel('ci:vitest:library-configuration')
 const knownTestsCh = channel('ci:vitest:known-tests')
 const isEarlyFlakeDetectionFaultyCh = channel('ci:vitest:is-early-flake-detection-faulty')
+const testManagementTestsCh = channel('ci:vitest:test-management-tests')
 
-const taskToAsync = new WeakMap()
+const taskToCtx = new WeakMap()
 const taskToStatuses = new WeakMap()
 const newTasks = new WeakSet()
+const disabledTasks = new WeakSet()
+const quarantinedTasks = new WeakSet()
+const attemptToFixTasks = new WeakSet()
 let isRetryReasonEfd = false
+let isRetryReasonAttemptToFix = false
 const switchedStatuses = new WeakSet()
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
@@ -46,7 +54,11 @@ function getProvidedContext () {
       _ddIsDiEnabled,
       _ddKnownTests: knownTests,
       _ddEarlyFlakeDetectionNumRetries: numRepeats,
-      _ddIsKnownTestsEnabled: isKnownTestsEnabled
+      _ddIsKnownTestsEnabled: isKnownTestsEnabled,
+      _ddIsTestManagementTestsEnabled: isTestManagementTestsEnabled,
+      _ddTestManagementAttemptToFixRetries: testManagementAttemptToFixRetries,
+      _ddTestManagementTests: testManagementTests,
+      _ddIsFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled
     } = globalThis.__vitest_worker__.providedContext
 
     return {
@@ -54,7 +66,11 @@ function getProvidedContext () {
       isEarlyFlakeDetectionEnabled: _ddIsEarlyFlakeDetectionEnabled,
       knownTests,
       numRepeats,
-      isKnownTestsEnabled
+      isKnownTestsEnabled,
+      isTestManagementTestsEnabled,
+      testManagementAttemptToFixRetries,
+      testManagementTests,
+      isFlakyTestRetriesEnabled
     }
   } catch (e) {
     log.error('Vitest workers could not parse provided context, so some features will not work.')
@@ -63,7 +79,11 @@ function getProvidedContext () {
       isEarlyFlakeDetectionEnabled: false,
       knownTests: {},
       numRepeats: 0,
-      isKnownTestsEnabled: false
+      isKnownTestsEnabled: false,
+      isTestManagementTestsEnabled: false,
+      testManagementAttemptToFixRetries: 0,
+      testManagementTests: {},
+      isFlakyTestRetriesEnabled: false
     }
   }
 }
@@ -79,6 +99,10 @@ function isReporterPackageNew (vitestPackage) {
 
 function isReporterPackageNewest (vitestPackage) {
   return vitestPackage.h?.name === 'BaseSequencer'
+}
+
+function isBaseSequencer (vitestPackage) {
+  return vitestPackage.b?.name === 'BaseSequencer'
 }
 
 function getChannelPromise (channelToPublishTo) {
@@ -158,8 +182,11 @@ function getSortWrapper (sort) {
     let earlyFlakeDetectionNumRetries = 0
     let isEarlyFlakeDetectionFaulty = false
     let isKnownTestsEnabled = false
+    let isTestManagementTestsEnabled = false
+    let testManagementAttemptToFixRetries = 0
     let isDiEnabled = false
     let knownTests = {}
+    let testManagementTests = {}
 
     try {
       const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh)
@@ -170,6 +197,8 @@ function getSortWrapper (sort) {
         earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
         isDiEnabled = libraryConfig.isDiEnabled
         isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
+        isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
+        testManagementAttemptToFixRetries = libraryConfig.testManagementAttemptToFixRetries
       }
     } catch (e) {
       isFlakyTestRetriesEnabled = false
@@ -180,6 +209,12 @@ function getSortWrapper (sort) {
 
     if (isFlakyTestRetriesEnabled && !this.ctx.config.retry && flakyTestRetriesCount > 0) {
       this.ctx.config.retry = flakyTestRetriesCount
+      try {
+        const workspaceProject = this.ctx.getCoreWorkspaceProject()
+        workspaceProject._provided._ddIsFlakyTestRetriesEnabled = isFlakyTestRetriesEnabled
+      } catch (e) {
+        log.warn('Could not send library configuration to workers.')
+      }
     }
 
     if (isKnownTestsEnabled) {
@@ -229,6 +264,24 @@ function getSortWrapper (sort) {
       }
     }
 
+    if (isTestManagementTestsEnabled) {
+      const { err, testManagementTests: receivedTestManagementTests } = await getChannelPromise(testManagementTestsCh)
+      if (!err) {
+        testManagementTests = receivedTestManagementTests
+        try {
+          const workspaceProject = this.ctx.getCoreWorkspaceProject()
+          workspaceProject._provided._ddIsTestManagementTestsEnabled = isTestManagementTestsEnabled
+          workspaceProject._provided._ddTestManagementAttemptToFixRetries = testManagementAttemptToFixRetries
+          workspaceProject._provided._ddTestManagementTests = testManagementTests
+        } catch (e) {
+          log.warn('Could not send test management tests to workers so Test Management will not work.')
+        }
+      } else {
+        isTestManagementTestsEnabled = false
+        log.error('Could not get test management tests.')
+      }
+    }
+
     let testCodeCoverageLinesTotal
 
     if (this.ctx.coverageProvider?.generateCoverage) {
@@ -263,6 +316,7 @@ function getSortWrapper (sort) {
           error,
           isEarlyFlakeDetectionEnabled,
           isEarlyFlakeDetectionFaulty,
+          isTestManagementTestsEnabled,
           onFinish
         })
       })
@@ -299,15 +353,49 @@ addHook({
   const { VitestTestRunner } = vitestPackage
 
   // `onBeforeRunTask` is run before any repetition or attempt is run
-  shimmer.wrap(VitestTestRunner.prototype, 'onBeforeRunTask', onBeforeRunTask => async function (task) {
+  // `onBeforeRunTask` is an async function
+  shimmer.wrap(VitestTestRunner.prototype, 'onBeforeRunTask', onBeforeRunTask => function (task) {
     const testName = getTestName(task)
 
     const {
       knownTests,
       isEarlyFlakeDetectionEnabled,
       isKnownTestsEnabled,
-      numRepeats
+      numRepeats,
+      isTestManagementTestsEnabled,
+      testManagementAttemptToFixRetries,
+      testManagementTests
     } = getProvidedContext()
+
+    if (isTestManagementTestsEnabled) {
+      isAttemptToFixCh.publish({
+        testManagementTests,
+        testSuiteAbsolutePath: task.file.filepath,
+        testName,
+        onDone: (isAttemptToFix) => {
+          if (isAttemptToFix) {
+            isRetryReasonAttemptToFix = task.repeats !== testManagementAttemptToFixRetries
+            task.repeats = testManagementAttemptToFixRetries
+            attemptToFixTasks.add(task)
+            taskToStatuses.set(task, [])
+          }
+        }
+      })
+      isDisabledCh.publish({
+        testManagementTests,
+        testSuiteAbsolutePath: task.file.filepath,
+        testName,
+        onDone: (isTestDisabled) => {
+          if (isTestDisabled) {
+            disabledTasks.add(task)
+            if (!attemptToFixTasks.has(task)) {
+              // we only actually skip if the test is not being attempted to be fixed
+              task.mode = 'skip'
+            }
+          }
+        }
+      })
+    }
 
     if (isKnownTestsEnabled) {
       isNewTestCh.publish({
@@ -315,7 +403,7 @@ addHook({
         testSuiteAbsolutePath: task.file.filepath,
         testName,
         onDone: (isNew) => {
-          if (isNew) {
+          if (isNew && !attemptToFixTasks.has(task)) {
             if (isEarlyFlakeDetectionEnabled) {
               isRetryReasonEfd = task.repeats !== numRepeats
               task.repeats = numRepeats
@@ -331,10 +419,26 @@ addHook({
   })
 
   // `onAfterRunTask` is run after all repetitions or attempts are run
-  shimmer.wrap(VitestTestRunner.prototype, 'onAfterRunTask', onAfterRunTask => async function (task) {
-    const { isEarlyFlakeDetectionEnabled } = getProvidedContext()
+  // `onAfterRunTask` is an async function
+  shimmer.wrap(VitestTestRunner.prototype, 'onAfterRunTask', onAfterRunTask => function (task) {
+    const { isEarlyFlakeDetectionEnabled, isTestManagementTestsEnabled } = getProvidedContext()
 
-    if (isEarlyFlakeDetectionEnabled && taskToStatuses.has(task)) {
+    if (isTestManagementTestsEnabled) {
+      const isAttemptingToFix = attemptToFixTasks.has(task)
+      const isDisabled = disabledTasks.has(task)
+      const isQuarantined = quarantinedTasks.has(task)
+
+      if (isAttemptingToFix && (isDisabled || isQuarantined)) {
+        if (task.result.state === 'fail') {
+          switchedStatuses.add(task)
+        }
+        task.result.state = 'pass'
+      } else if (isQuarantined) {
+        task.result.state = 'pass'
+      }
+    }
+
+    if (isEarlyFlakeDetectionEnabled && taskToStatuses.has(task) && !attemptToFixTasks.has(task)) {
       const statuses = taskToStatuses.get(task)
       // If the test has passed at least once, we consider it passed
       if (statuses.includes('pass')) {
@@ -351,20 +455,38 @@ addHook({
   // test start (only tests that are not marked as skip or todo)
   // `onBeforeTryTask` is run for every repetition and attempt of the test
   shimmer.wrap(VitestTestRunner.prototype, 'onBeforeTryTask', onBeforeTryTask => async function (task, retryInfo) {
-    if (!testStartCh.hasSubscribers) {
+    if (!testPassCh.hasSubscribers && !testErrorCh.hasSubscribers && !testSkipCh.hasSubscribers) {
       return onBeforeTryTask.apply(this, arguments)
     }
     const testName = getTestName(task)
     let isNew = false
+    let isQuarantined = false
 
     const {
       isKnownTestsEnabled,
       isEarlyFlakeDetectionEnabled,
-      isDiEnabled
+      isDiEnabled,
+      isTestManagementTestsEnabled,
+      testManagementTests,
+      isFlakyTestRetriesEnabled
     } = getProvidedContext()
 
     if (isKnownTestsEnabled) {
       isNew = newTasks.has(task)
+    }
+
+    if (isTestManagementTestsEnabled) {
+      isQuarantinedCh.publish({
+        testManagementTests,
+        testSuiteAbsolutePath: task.file.filepath,
+        testName,
+        onDone: (isTestQuarantined) => {
+          isQuarantined = isTestQuarantined
+          if (isTestQuarantined) {
+            quarantinedTasks.add(task)
+          }
+        }
+      })
     }
 
     const { retry: numAttempt, repeats: numRepetition } = retryInfo
@@ -378,15 +500,14 @@ addHook({
 
       const promises = {}
       const shouldSetProbe = isDiEnabled && numAttempt === 1
-      const asyncResource = taskToAsync.get(task)
+      const ctx = taskToCtx.get(task)
       const testError = task.result?.errors?.[0]
-      if (asyncResource) {
-        asyncResource.runInAsyncScope(() => {
-          testErrorCh.publish({
-            error: testError,
-            shouldSetProbe,
-            promises
-          })
+      if (ctx) {
+        testErrorCh.publish({
+          error: testError,
+          shouldSetProbe,
+          promises,
+          ...ctx.currentStore
         })
         // We wait for the probe to be set
         if (promises.setProbePromise) {
@@ -396,6 +517,8 @@ addHook({
     }
 
     const lastExecutionStatus = task.result.state
+    const shouldFlipStatus = isEarlyFlakeDetectionEnabled || attemptToFixTasks.has(task)
+    const statuses = taskToStatuses.get(task)
 
     // These clauses handle task.repeats, whether EFD is enabled or not
     // The only thing that EFD does is to forcefully pass the test if it has passed at least once
@@ -404,66 +527,74 @@ addHook({
       // as long as it's not the _last_ iteration (which will be finished normally)
 
       // TODO: check test duration (not to repeat if it's too slow)
-      const asyncResource = taskToAsync.get(task)
-      if (asyncResource) {
+      const ctx = taskToCtx.get(task)
+      if (ctx) {
         if (lastExecutionStatus === 'fail') {
           const testError = task.result?.errors?.[0]
-          asyncResource.runInAsyncScope(() => {
-            testErrorCh.publish({ error: testError })
-          })
+          testErrorCh.publish({ error: testError, ...ctx.currentStore })
         } else {
-          asyncResource.runInAsyncScope(() => {
-            testPassCh.publish({ task })
-          })
+          testPassCh.publish({ task, ...ctx.currentStore })
         }
-        if (isEarlyFlakeDetectionEnabled) {
-          const statuses = taskToStatuses.get(task)
+        if (shouldFlipStatus) {
           statuses.push(lastExecutionStatus)
           // If we don't "reset" the result.state to "pass", once a repetition fails,
           // vitest will always consider the test as failed, so we can't read the actual status
+          // This means that we change vitest's behavior:
+          // if the last attempt passes, vitest would consider the test as failed
+          // but after this change, it will consider the test as passed
           task.result.state = 'pass'
         }
       }
     } else if (numRepetition === task.repeats) {
-      const asyncResource = taskToAsync.get(task)
+      if (shouldFlipStatus) {
+        statuses.push(lastExecutionStatus)
+      }
+
+      const ctx = taskToCtx.get(task)
       if (lastExecutionStatus === 'fail') {
         const testError = task.result?.errors?.[0]
-        asyncResource.runInAsyncScope(() => {
-          testErrorCh.publish({ error: testError })
-        })
+        testErrorCh.publish({ error: testError, ...ctx.currentStore })
       } else {
-        asyncResource.runInAsyncScope(() => {
-          testPassCh.publish({ task })
-        })
+        testPassCh.publish({ task, ...ctx.currentStore })
       }
     }
 
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-    taskToAsync.set(task, asyncResource)
+    const isRetryReasonAtr = numAttempt > 0 &&
+      isFlakyTestRetriesEnabled &&
+      !isRetryReasonAttemptToFix &&
+      !isRetryReasonEfd
 
-    asyncResource.runInAsyncScope(() => {
-      testStartCh.publish({
-        testName,
-        testSuiteAbsolutePath: task.file.filepath,
-        isRetry: numAttempt > 0 || numRepetition > 0,
-        isRetryReasonEfd,
-        isNew,
-        mightHitProbe: isDiEnabled && numAttempt > 0
-      })
-    })
+    const ctx = {
+      testName,
+      testSuiteAbsolutePath: task.file.filepath,
+      isRetry: numAttempt > 0 || numRepetition > 0,
+      isRetryReasonEfd,
+      isRetryReasonAttemptToFix: isRetryReasonAttemptToFix && numRepetition > 0,
+      isNew,
+      mightHitProbe: isDiEnabled && numAttempt > 0,
+      isAttemptToFix: attemptToFixTasks.has(task),
+      isDisabled: disabledTasks.has(task),
+      isQuarantined,
+      isRetryReasonAtr
+    }
+    taskToCtx.set(task, ctx)
+
+    testStartCh.runStores(ctx, () => { })
     return onBeforeTryTask.apply(this, arguments)
   })
 
   // test finish (only passed tests)
   shimmer.wrap(VitestTestRunner.prototype, 'onAfterTryTask', onAfterTryTask =>
     async function (task, { retry: retryCount }) {
-      if (!testFinishTimeCh.hasSubscribers) {
+      if (!testPassCh.hasSubscribers && !testErrorCh.hasSubscribers && !testSkipCh.hasSubscribers) {
         return onAfterTryTask.apply(this, arguments)
       }
       const result = await onAfterTryTask.apply(this, arguments)
 
+      const { testManagementAttemptToFixRetries } = getProvidedContext()
+
       const status = getVitestTestStatus(task, retryCount)
-      const asyncResource = taskToAsync.get(task)
+      const ctx = taskToCtx.get(task)
 
       const { isDiEnabled } = getProvidedContext()
 
@@ -471,11 +602,26 @@ addHook({
         await waitForHitProbe()
       }
 
-      if (asyncResource) {
+      let attemptToFixPassed = false
+      let attemptToFixFailed = false
+      if (attemptToFixTasks.has(task)) {
+        const statuses = taskToStatuses.get(task)
+        if (statuses.length === testManagementAttemptToFixRetries) {
+          if (statuses.every(status => status === 'pass')) {
+            attemptToFixPassed = true
+          } else if (statuses.some(status => status === 'fail')) {
+            attemptToFixFailed = true
+          }
+        }
+      }
+
+      if (ctx) {
         // We don't finish here because the test might fail in a later hook (afterEach)
-        asyncResource.runInAsyncScope(() => {
-          testFinishTimeCh.publish({ status, task })
-        })
+        ctx.status = status
+        ctx.task = task
+        ctx.attemptToFixPassed = attemptToFixPassed
+        ctx.attemptToFixFailed = attemptToFixFailed
+        testFinishTimeCh.runStores(ctx, () => { })
       }
 
       return result
@@ -533,11 +679,22 @@ addHook({
 
 addHook({
   name: 'vitest',
-  versions: ['>=3.0.0'],
+  versions: ['>=3.0.9'],
+  filePattern: 'dist/chunks/coverage.*'
+}, (coveragePackage) => {
+  if (isBaseSequencer(coveragePackage)) {
+    shimmer.wrap(coveragePackage.b.prototype, 'sort', getSortWrapper)
+  }
+  return coveragePackage
+})
+
+addHook({
+  name: 'vitest',
+  versions: ['>=3.0.0 <3.0.9'],
   filePattern: 'dist/chunks/resolveConfig.*'
-}, (randomSequencerPackage) => {
-  shimmer.wrap(randomSequencerPackage.B.prototype, 'sort', getSortWrapper)
-  return randomSequencerPackage
+}, (resolveConfigPackage) => {
+  shimmer.wrap(resolveConfigPackage.B.prototype, 'sort', getSortWrapper)
+  return resolveConfigPackage
 })
 
 // Can't specify file because compiled vitest includes hashes in their files
@@ -562,16 +719,14 @@ addHook({
 }, (vitestPackage, frameworkVersion) => {
   shimmer.wrap(vitestPackage, 'startTests', startTests => async function (testPaths) {
     let testSuiteError = null
-    if (!testSuiteStartCh.hasSubscribers) {
+    if (!testSuiteFinishCh.hasSubscribers) {
       return startTests.apply(this, arguments)
     }
     // From >=3.0.1, the first arguments changes from a string to an object containing the filepath
     const testSuiteAbsolutePath = testPaths[0]?.filepath || testPaths[0]
 
-    const testSuiteAsyncResource = new AsyncResource('bound-anonymous-fn')
-    testSuiteAsyncResource.runInAsyncScope(() => {
-      testSuiteStartCh.publish({ testSuiteAbsolutePath, frameworkVersion })
-    })
+    const testSuiteCtx = { testSuiteAbsolutePath, frameworkVersion }
+    testSuiteStartCh.runStores(testSuiteCtx, () => { })
     const startTestsResponse = await startTests.apply(this, arguments)
 
     let onFinish = null
@@ -583,7 +738,7 @@ addHook({
 
     // Only one test task per test, even if there are retries
     testTasks.forEach(task => {
-      const testAsyncResource = taskToAsync.get(task)
+      const testCtx = taskToCtx.get(task)
       const { result } = task
       // We have to trick vitest into thinking that the test has passed
       // but we want to report it as failed if it did fail
@@ -595,13 +750,12 @@ addHook({
           testSkipCh.publish({
             testName: getTestName(task),
             testSuiteAbsolutePath: task.file.filepath,
-            isNew: newTasks.has(task)
+            isNew: newTasks.has(task),
+            isDisabled: disabledTasks.has(task)
           })
         } else if (state === 'pass' && !isSwitchedStatus) {
-          if (testAsyncResource) {
-            testAsyncResource.runInAsyncScope(() => {
-              testPassCh.publish({ task })
-            })
+          if (testCtx) {
+            testPassCh.publish({ task, ...testCtx.currentStore })
           }
         } else if (state === 'fail' || isSwitchedStatus) {
           let testError
@@ -610,11 +764,27 @@ addHook({
             testError = errors[0]
           }
 
-          if (testAsyncResource) {
+          let hasFailedAllRetries = false
+          let attemptToFixFailed = false
+          if (attemptToFixTasks.has(task)) {
+            const statuses = taskToStatuses.get(task)
+            if (statuses.some(status => status === 'fail')) {
+              attemptToFixFailed = true
+            }
+            if (statuses.every(status => status === 'fail')) {
+              hasFailedAllRetries = true
+            }
+          }
+
+          if (testCtx) {
             const isRetry = task.result?.retryCount > 0
             // `duration` is the duration of all the retries, so it can't be used if there are retries
-            testAsyncResource.runInAsyncScope(() => {
-              testErrorCh.publish({ duration: !isRetry ? duration : undefined, error: testError })
+            testErrorCh.publish({
+              duration: !isRetry ? duration : undefined,
+              error: testError,
+              hasFailedAllRetries,
+              attemptToFixFailed,
+              ...testCtx.currentStore
             })
           }
           if (errors?.length) {
@@ -625,7 +795,8 @@ addHook({
         testSkipCh.publish({
           testName: getTestName(task),
           testSuiteAbsolutePath: task.file.filepath,
-          isNew: newTasks.has(task)
+          isNew: newTasks.has(task),
+          isDisabled: disabledTasks.has(task)
         })
       }
     })
@@ -643,14 +814,11 @@ addHook({
     }
 
     if (testSuiteError) {
-      testSuiteAsyncResource.runInAsyncScope(() => {
-        testSuiteErrorCh.publish({ error: testSuiteError })
-      })
+      testSuiteCtx.error = testSuiteError
+      testSuiteErrorCh.runStores(testSuiteCtx, () => { })
     }
 
-    testSuiteAsyncResource.runInAsyncScope(() => {
-      testSuiteFinishCh.publish({ status: testSuiteResult.state, onFinish })
-    })
+    testSuiteFinishCh.publish({ status: testSuiteResult.state, onFinish, ...testSuiteCtx.currentStore })
 
     // TODO: fix too frequent flushes
     await onFinishPromise

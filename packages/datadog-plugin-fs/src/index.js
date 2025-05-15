@@ -10,9 +10,10 @@ class FsPlugin extends TracingPlugin {
     return super.configure(...args)
   }
 
-  start ({ operation, ...params }) {
+  bindStart (ctx) {
     if (!this.activeSpan) return this.skip()
 
+    const { operation, ...params } = ctx
     const lowerOp = operation.toLowerCase()
     const flag = params.flag || params.flags || (params.options && (params.options.flag || params.options.flags))
     const defaultFlag = ((lowerOp.includes('open') || lowerOp.includes('read')) && 'r') ||
@@ -38,7 +39,13 @@ class FsPlugin extends TracingPlugin {
         'file.src': params.src || params.oldPath || params.existingPath || params.target,
         'file.uid': uid || ''
       }
-    })
+    }, ctx)
+
+    return ctx.currentStore
+  }
+
+  bindFinish (ctx) {
+    return ctx.parentStore
   }
 }
 

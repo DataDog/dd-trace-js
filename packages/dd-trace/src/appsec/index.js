@@ -2,7 +2,7 @@
 
 const log = require('../log')
 const RuleManager = require('./rule_manager')
-const remoteConfig = require('./remote_config')
+const remoteConfig = require('../remote_config')
 const {
   bodyParser,
   cookieParser,
@@ -11,6 +11,7 @@ const {
   incomingHttpRequestEnd,
   passportVerify,
   passportUser,
+  expressSession,
   queryParser,
   nextBodyParsed,
   nextQueryParsed,
@@ -58,7 +59,7 @@ function enable (_config) {
 
     Reporter.setRateLimit(_config.appsec.rateLimit)
 
-    apiSecuritySampler.configure(_config.appsec)
+    apiSecuritySampler.configure(_config)
 
     UserTracking.setCollectionMode(_config.appsec.eventTracking.mode, false)
 
@@ -69,6 +70,7 @@ function enable (_config) {
     incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
     passportVerify.subscribe(onPassportVerify) // possible optimization: only subscribe if collection mode is enabled
     passportUser.subscribe(onPassportDeserializeUser)
+    expressSession.subscribe(onExpressSession)
     queryParser.subscribe(onRequestQueryParsed)
     nextBodyParsed.subscribe(onRequestBodyParsed)
     nextQueryParsed.subscribe(onRequestQueryParsed)
@@ -104,7 +106,7 @@ function onRequestBodyParsed ({ req, res, body, abortController }) {
     }
   }, req)
 
-  handleResults(results, req, res, rootSpan, abortController)
+  handleResults(results?.actions, req, res, rootSpan, abortController)
 }
 
 function onRequestCookieParser ({ req, res, abortController, cookies }) {
@@ -119,7 +121,7 @@ function onRequestCookieParser ({ req, res, abortController, cookies }) {
     }
   }, req)
 
-  handleResults(results, req, res, rootSpan, abortController)
+  handleResults(results?.actions, req, res, rootSpan, abortController)
 }
 
 function incomingHttpStartTranslator ({ req, res, abortController }) {
@@ -147,9 +149,9 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
     persistent[addresses.HTTP_CLIENT_IP] = clientIp
   }
 
-  const actions = waf.run({ persistent }, req)
+  const results = waf.run({ persistent }, req)
 
-  handleResults(actions, req, res, rootSpan, abortController)
+  handleResults(results?.actions, req, res, rootSpan, abortController)
 }
 
 function incomingHttpEndTranslator ({ req, res }) {
@@ -196,7 +198,7 @@ function onPassportVerify ({ framework, login, user, success, abortController })
 
   const results = UserTracking.trackLogin(framework, login, user, success, rootSpan)
 
-  handleResults(results, store.req, store.req.res, rootSpan, abortController)
+  handleResults(results?.actions, store.req, store.req.res, rootSpan, abortController)
 }
 
 function onPassportDeserializeUser ({ user, abortController }) {
@@ -210,7 +212,26 @@ function onPassportDeserializeUser ({ user, abortController }) {
 
   const results = UserTracking.trackUser(user, rootSpan)
 
-  handleResults(results, store.req, store.req.res, rootSpan, abortController)
+  handleResults(results?.actions, store.req, store.req.res, rootSpan, abortController)
+}
+
+function onExpressSession ({ req, res, sessionId, abortController }) {
+  const rootSpan = web.root(req)
+  if (!rootSpan) {
+    log.warn('[ASM] No rootSpan found in onExpressSession')
+    return
+  }
+
+  const isSdkCalled = rootSpan.context()._tags['usr.session_id']
+  if (isSdkCalled) return
+
+  const results = waf.run({
+    persistent: {
+      [addresses.USER_SESSION_ID]: sessionId
+    }
+  }, req)
+
+  handleResults(results?.actions, req, res, rootSpan, abortController)
 }
 
 function onRequestQueryParsed ({ req, res, query, abortController }) {
@@ -230,7 +251,7 @@ function onRequestQueryParsed ({ req, res, query, abortController }) {
     }
   }, req)
 
-  handleResults(results, req, res, rootSpan, abortController)
+  handleResults(results?.actions, req, res, rootSpan, abortController)
 }
 
 function onRequestProcessParams ({ req, res, abortController, params }) {
@@ -245,7 +266,7 @@ function onRequestProcessParams ({ req, res, abortController, params }) {
     }
   }, req)
 
-  handleResults(results, req, res, rootSpan, abortController)
+  handleResults(results?.actions, req, res, rootSpan, abortController)
 }
 
 function onResponseBody ({ req, res, body }) {
@@ -287,7 +308,7 @@ function onResponseWriteHead ({ req, res, abortController, statusCode, responseH
 
   responseAnalyzedSet.add(res)
 
-  handleResults(results, req, res, rootSpan, abortController)
+  handleResults(results?.actions, req, res, rootSpan, abortController)
 }
 
 function onResponseSetHeader ({ res, abortController }) {
@@ -327,6 +348,7 @@ function disable () {
   if (incomingHttpRequestEnd.hasSubscribers) incomingHttpRequestEnd.unsubscribe(incomingHttpEndTranslator)
   if (passportVerify.hasSubscribers) passportVerify.unsubscribe(onPassportVerify)
   if (passportUser.hasSubscribers) passportUser.unsubscribe(onPassportDeserializeUser)
+  if (expressSession.hasSubscribers) expressSession.unsubscribe(onExpressSession)
   if (queryParser.hasSubscribers) queryParser.unsubscribe(onRequestQueryParsed)
   if (nextBodyParsed.hasSubscribers) nextBodyParsed.unsubscribe(onRequestBodyParsed)
   if (nextQueryParsed.hasSubscribers) nextQueryParsed.unsubscribe(onRequestQueryParsed)

@@ -28,12 +28,6 @@ loadChannel.subscribe(({ name }) => {
   maybeEnable(plugins[name])
 })
 
-// Globals
-maybeEnable(require('../../datadog-plugin-fetch/src'))
-
-// Always enabled
-maybeEnable(require('../../datadog-plugin-dd-trace-api/src'))
-
 function maybeEnable (Plugin) {
   if (!Plugin || typeof Plugin !== 'function') return
   if (!pluginClasses[Plugin.id]) {
@@ -136,9 +130,11 @@ module.exports = class PluginManager {
       site,
       url,
       headerTags,
+      codeOriginForSpans,
       dbmPropagationMode,
       dsmEnabled,
       clientIpEnabled,
+      clientIpHeader,
       memcachedCommandEnabled,
       ciVisibilityTestSessionName,
       ciVisAgentlessLogSubmissionEnabled,
@@ -148,12 +144,14 @@ module.exports = class PluginManager {
     } = this._tracerConfig
 
     const sharedConfig = {
+      codeOriginForSpans,
       dbmPropagationMode,
       dsmEnabled,
       memcachedCommandEnabled,
       site,
       url,
       headers: headerTags || [],
+      clientIpHeader,
       ciVisibilityTestSessionName,
       ciVisAgentlessLogSubmissionEnabled,
       isTestDynamicInstrumentationEnabled,

@@ -9,6 +9,7 @@ module.exports = {
   get '@elastic/elasticsearch' () { return require('../../../datadog-plugin-elasticsearch/src') },
   get '@elastic/transport' () { return require('../../../datadog-plugin-elasticsearch/src') },
   get '@google-cloud/pubsub' () { return require('../../../datadog-plugin-google-cloud-pubsub/src') },
+  get '@google-cloud/vertexai' () { return require('../../../datadog-plugin-google-cloud-vertexai/src') },
   get '@grpc/grpc-js' () { return require('../../../datadog-plugin-grpc/src') },
   get '@hapi/hapi' () { return require('../../../datadog-plugin-hapi/src') },
   get '@jest/core' () { return require('../../../datadog-plugin-jest/src') },
@@ -39,6 +40,7 @@ module.exports = {
   get express () { return require('../../../datadog-plugin-express/src') },
   get fastify () { return require('../../../datadog-plugin-fastify/src') },
   get 'find-my-way' () { return require('../../../datadog-plugin-find-my-way/src') },
+  get 'global:fetch' () { return require('../../../datadog-plugin-fetch/src') },
   get graphql () { return require('../../../datadog-plugin-graphql/src') },
   get grpc () { return require('../../../datadog-plugin-grpc/src') },
   get hapi () { return require('../../../datadog-plugin-hapi/src') },
@@ -55,6 +57,9 @@ module.exports = {
   get koa () { return require('../../../datadog-plugin-koa/src') },
   get 'koa-router' () { return require('../../../datadog-plugin-koa/src') },
   get kafkajs () { return require('../../../datadog-plugin-kafkajs/src') },
+  get '@confluentinc/kafka-javascript' () {
+    return require('../../../datadog-plugin-confluentinc-kafka-javascript/src')
+  },
   get langchain () { return require('../../../datadog-plugin-langchain/src') },
   get mariadb () { return require('../../../datadog-plugin-mariadb/src') },
   get memcached () { return require('../../../datadog-plugin-memcached/src') },

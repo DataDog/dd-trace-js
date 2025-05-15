@@ -94,7 +94,7 @@ const Human = new graphql.GraphQLObjectType({
       async resolve (obj, args) {
         const promises = []
 
-        for (let i = 0; i < 100; i++) {
+        for (let i = 0; i < 20; i++) {
           promises.push(await Promise.resolve({}))
         }
 
@@ -115,7 +115,7 @@ const schema = new graphql.GraphQLSchema({
         async resolve (obj, args) {
           const promises = []
 
-          for (let i = 0; i < 100; i++) {
+          for (let i = 0; i < 20; i++) {
             promises.push(await Promise.resolve({}))
           }
 

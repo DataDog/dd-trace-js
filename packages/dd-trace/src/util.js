@@ -13,19 +13,15 @@ function isFalse (str) {
 }
 
 function isError (value) {
-  if (value instanceof Error) {
-    return true
-  }
-  if (value && value.message) {
-    return true
-  }
-  return false
+  return Boolean(value?.message || value instanceof Error)
 }
 
 // Matches a glob pattern to a given subject string
 function globMatch (pattern, subject) {
   if (typeof pattern === 'string') pattern = pattern.toLowerCase()
   if (typeof subject === 'string') subject = subject.toLowerCase()
+  if (typeof subject === 'number' && Number.isInteger(subject)) subject = String(subject)
+
   let px = 0 // [p]attern inde[x]
   let sx = 0 // [s]ubject inde[x]
   let nextPx = 0
@@ -77,11 +73,20 @@ function hasOwn (object, prop) {
   return Object.prototype.hasOwnProperty.call(object, prop)
 }
 
+function normalizeProfilingEnabledValue (configValue) {
+  return isTrue(configValue)
+    ? 'true'
+    : isFalse(configValue)
+      ? 'false'
+      : configValue === 'auto' ? 'auto' : undefined
+}
+
 module.exports = {
   isTrue,
   isFalse,
   isError,
   globMatch,
   calculateDDBasePath,
-  hasOwn
+  hasOwn,
+  normalizeProfilingEnabledValue
 }

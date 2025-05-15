@@ -60,9 +60,18 @@ function getIsAzureFunction () {
   return isAzureFunction
 }
 
+function isInServerlessEnvironment () {
+  const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
+  const isGCPFunction = getIsGCPFunction()
+  const isAzureFunction = getIsAzureFunction()
+
+  return inAWSLambda || isGCPFunction || isAzureFunction
+}
+
 module.exports = {
   maybeStartServerlessMiniAgent,
   getIsGCPFunction,
   getIsAzureFunction,
-  getRustBinaryPath
+  getRustBinaryPath,
+  isInServerlessEnvironment
 }

@@ -9,8 +9,8 @@ const { setUserTags } = require('./set_user')
 const log = require('../../log')
 
 function isUserBlocked (user) {
-  const actions = waf.run({ persistent: { [USER_ID]: user.id } })
-  return !!getBlockingAction(actions)
+  const results = waf.run({ persistent: { [USER_ID]: user.id } })
+  return !!getBlockingAction(results?.actions)
 }
 
 function checkUserAndSetUser (tracer, user) {
@@ -23,7 +23,6 @@ function checkUserAndSetUser (tracer, user) {
   if (rootSpan) {
     if (!rootSpan.context()._tags['usr.id']) {
       setUserTags(user, rootSpan)
-      rootSpan.setTag('_dd.appsec.user.collection_mode', 'sdk')
     }
   } else {
     log.warn('[ASM] Root span not available in isUserBlocked')
@@ -52,9 +51,7 @@ function blockRequest (tracer, req, res) {
     return false
   }
 
-  block(req, res, rootSpan)
-
-  return true
+  return block(req, res, rootSpan)
 }
 
 module.exports = {

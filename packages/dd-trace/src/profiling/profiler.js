@@ -18,9 +18,9 @@ function maybeSourceMap (sourceMap, SourceMapper, debug) {
   ], debug)
 }
 
-function logError (logger, err) {
+function logError (logger, ...args) {
   if (logger) {
-    logger.error(err)
+    logger.error(...args)
   }
 }
 
@@ -52,7 +52,8 @@ class Profiler extends EventEmitter {
 
   start (options) {
     return this._start(options).catch((err) => {
-      logError(options.logger, err)
+      logError(options.logger, 'Error starting profiler. For troubleshooting tips, see ' +
+        '<https://dtdg.co/nodejs-profiler-troubleshooting>', err)
       return false
     })
   }
@@ -126,7 +127,7 @@ class Profiler extends EventEmitter {
     this._timeoutInterval = this._config.flushInterval
   }
 
-  async stop () {
+  stop () {
     if (!this._enabled) return
 
     // collect and export current profiles

@@ -223,12 +223,13 @@ describe('Config', () => {
     expect(config).to.have.property('reportHostname', false)
     expect(config).to.have.property('scope', undefined)
     expect(config).to.have.property('logLevel', 'debug')
-    expect(config).to.have.nested.property('codeOriginForSpans.enabled', false)
+    expect(config).to.have.nested.property('codeOriginForSpans.enabled', true)
+    expect(config).to.have.nested.property('codeOriginForSpans.experimental.exit_spans.enabled', false)
     expect(config).to.have.nested.property('dynamicInstrumentation.enabled', false)
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactedIdentifiers', [])
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactionExcludedIdentifiers', [])
     expect(config).to.have.property('traceId128BitGenerationEnabled', true)
-    expect(config).to.have.property('traceId128BitLoggingEnabled', false)
+    expect(config).to.have.property('traceId128BitLoggingEnabled', true)
     expect(config).to.have.property('spanAttributeSchema', 'v0')
     expect(config.grpc.client.error.statuses).to.deep.equal(GRPC_CLIENT_ERROR_STATUSES)
     expect(config.grpc.server.error.statuses).to.deep.equal(GRPC_SERVER_ERROR_STATUSES)
@@ -238,9 +239,11 @@ describe('Config', () => {
     expect(config).to.have.deep.property('serviceMapping', {})
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['datadog', 'tracecontext', 'baggage'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['datadog', 'tracecontext', 'baggage'])
+    expect(config).to.have.nested.property('tracePropagationBehaviorExtract', 'continue')
     expect(config).to.have.nested.property('experimental.runtimeId', false)
     expect(config).to.have.nested.property('experimental.exporter', undefined)
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
+    expect(config).to.have.nested.property('apmTracingEnabled', true)
     expect(config).to.have.nested.property('appsec.enabled', undefined)
     expect(config).to.have.nested.property('appsec.rules', undefined)
     expect(config).to.have.nested.property('appsec.rasp.enabled', true)
@@ -258,7 +261,6 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
     expect(config).to.have.nested.property('appsec.apiSecurity.sampleDelay', 30)
     expect(config).to.have.nested.property('appsec.sca.enabled', null)
-    expect(config).to.have.nested.property('appsec.standalone.enabled', undefined)
     expect(config).to.have.nested.property('remoteConfig.enabled', true)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 5)
     expect(config).to.have.nested.property('iast.enabled', false)
@@ -271,12 +273,13 @@ describe('Config', () => {
     expect(config).to.have.nested.property('installSignature.time', null)
     expect(config).to.have.nested.property('installSignature.type', null)
     expect(config).to.have.nested.property('llmobs.mlApp', undefined)
-    expect(config).to.have.nested.property('llmobs.agentlessEnabled', false)
+    expect(config).to.have.nested.property('llmobs.agentlessEnabled', undefined)
     expect(config).to.have.nested.property('llmobs.enabled', false)
 
     expect(updateConfig).to.be.calledOnce
 
     expect(updateConfig.getCall(0).args[0]).to.deep.include.members([
+      { name: 'apmTracingEnabled', value: true, origin: 'default' },
       { name: 'appsec.blockedTemplateHtml', value: undefined, origin: 'default' },
       { name: 'appsec.blockedTemplateJson', value: undefined, origin: 'default' },
       { name: 'appsec.enabled', value: undefined, origin: 'default' },
@@ -297,14 +300,14 @@ describe('Config', () => {
       { name: 'appsec.rateLimit', value: 100, origin: 'default' },
       { name: 'appsec.rules', value: undefined, origin: 'default' },
       { name: 'appsec.sca.enabled', value: null, origin: 'default' },
-      { name: 'appsec.standalone.enabled', value: undefined, origin: 'default' },
       { name: 'appsec.stackTrace.enabled', value: true, origin: 'default' },
       { name: 'appsec.stackTrace.maxDepth', value: 32, origin: 'default' },
       { name: 'appsec.stackTrace.maxStackTraces', value: 2, origin: 'default' },
       { name: 'appsec.wafTimeout', value: 5e3, origin: 'default' },
       { name: 'clientIpEnabled', value: false, origin: 'default' },
       { name: 'clientIpHeader', value: null, origin: 'default' },
-      { name: 'codeOriginForSpans.enabled', value: false, origin: 'default' },
+      { name: 'codeOriginForSpans.enabled', value: true, origin: 'default' },
+      { name: 'codeOriginForSpans.experimental.exit_spans.enabled', value: false, origin: 'default' },
       { name: 'dbmPropagationMode', value: 'disabled', origin: 'default' },
       { name: 'dogstatsd.hostname', value: '127.0.0.1', origin: 'calculated' },
       { name: 'dogstatsd.port', value: '8125', origin: 'default' },
@@ -321,7 +324,6 @@ describe('Config', () => {
       { name: 'gitMetadataEnabled', value: true, origin: 'default' },
       { name: 'headerTags', value: [], origin: 'default' },
       { name: 'hostname', value: '127.0.0.1', origin: 'default' },
-      { name: 'iast.cookieFilterPattern', value: '.{32,}', origin: 'default' },
       { name: 'iast.dbRowsToTaint', value: 1, origin: 'default' },
       { name: 'iast.deduplicationEnabled', value: true, origin: 'default' },
       { name: 'iast.enabled', value: false, origin: 'default' },
@@ -345,7 +347,7 @@ describe('Config', () => {
       { name: 'isManualApiEnabled', value: false, origin: 'default' },
       { name: 'langchain.spanCharLimit', value: 128, origin: 'default' },
       { name: 'langchain.spanPromptCompletionSampleRate', value: 1.0, origin: 'default' },
-      { name: 'llmobs.agentlessEnabled', value: false, origin: 'default' },
+      { name: 'llmobs.agentlessEnabled', value: undefined, origin: 'default' },
       { name: 'llmobs.mlApp', value: undefined, origin: 'default' },
       { name: 'ciVisibilityTestSessionName', value: '', origin: 'default' },
       { name: 'ciVisAgentlessLogSubmissionEnabled', value: false, origin: 'default' },
@@ -393,10 +395,12 @@ describe('Config', () => {
       { name: 'telemetry.logCollection', value: true, origin: 'default' },
       { name: 'telemetry.metrics', value: true, origin: 'default' },
       { name: 'traceId128BitGenerationEnabled', value: true, origin: 'default' },
-      { name: 'traceId128BitLoggingEnabled', value: false, origin: 'default' },
+      { name: 'traceId128BitLoggingEnabled', value: true, origin: 'default' },
       { name: 'tracing', value: true, origin: 'default' },
       { name: 'url', value: undefined, origin: 'default' },
-      { name: 'version', value: '', origin: 'default' }
+      { name: 'version', value: '', origin: 'default' },
+      { name: 'vertexai.spanCharLimit', value: 128, origin: 'default' },
+      { name: 'vertexai.spanPromptCompletionSampleRate', value: 1.0, origin: 'default' }
     ])
   })
 
@@ -438,7 +442,8 @@ describe('Config', () => {
   })
 
   it('should initialize from environment variables', () => {
-    process.env.DD_CODE_ORIGIN_FOR_SPANS_ENABLED = 'true'
+    process.env.DD_CODE_ORIGIN_FOR_SPANS_ENABLED = 'false'
+    process.env.DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED = 'true'
     process.env.DD_TRACE_AGENT_HOSTNAME = 'agent'
     process.env.DD_TRACE_AGENT_PORT = '6218'
     process.env.DD_DOGSTATSD_HOSTNAME = 'dsd-agent'
@@ -477,6 +482,7 @@ describe('Config', () => {
     ]`
     process.env.DD_TRACE_PROPAGATION_STYLE_INJECT = 'b3,tracecontext'
     process.env.DD_TRACE_PROPAGATION_STYLE_EXTRACT = 'b3,tracecontext'
+    process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'restart'
     process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_EXPORTER = 'log'
     process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = 'true'
@@ -486,6 +492,7 @@ describe('Config', () => {
     process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'true'
     process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED = 'true'
     process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED = true
+    process.env.DD_APM_TRACING_ENABLED = 'false'
     process.env.DD_APPSEC_ENABLED = 'true'
     process.env.DD_APPSEC_MAX_STACK_TRACES = '5'
     process.env.DD_APPSEC_MAX_STACK_TRACE_DEPTH = '42'
@@ -501,7 +508,6 @@ describe('Config', () => {
     process.env.DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_GRAPHQL_PATH
     process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = 'extended'
     process.env.DD_APPSEC_SCA_ENABLED = true
-    process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = 'true'
     process.env.DD_REMOTE_CONFIGURATION_ENABLED = 'false'
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = '42'
     process.env.DD_IAST_ENABLED = 'true'
@@ -509,7 +515,6 @@ describe('Config', () => {
     process.env.DD_IAST_SECURITY_CONTROLS_CONFIGURATION = 'SANITIZER:CODE_INJECTION:sanitizer.js:method'
     process.env.DD_IAST_MAX_CONCURRENT_REQUESTS = '3'
     process.env.DD_IAST_MAX_CONTEXT_OPERATIONS = '4'
-    process.env.DD_IAST_COOKIE_FILTER_PATTERN = '.*'
     process.env.DD_IAST_DB_ROWS_TO_TAINT = 2
     process.env.DD_IAST_DEDUPLICATION_ENABLED = false
     process.env.DD_IAST_REDACTION_ENABLED = false
@@ -534,6 +539,8 @@ describe('Config', () => {
     process.env.DD_TRACE_ENABLED = 'true'
     process.env.DD_GRPC_CLIENT_ERROR_STATUSES = '3,13,400-403'
     process.env.DD_GRPC_SERVER_ERROR_STATUSES = '3,13,400-403'
+    process.env.DD_VERTEXAI_SPAN_CHAR_LIMIT = 50
+    process.env.DD_VERTEXAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE = 0.5
 
     // required if we want to check updates to config.debug and config.logLevel which is fetched from logger
     reloadLoggerAndConfig()
@@ -557,7 +564,8 @@ describe('Config', () => {
     expect(config).to.have.property('middlewareTracingEnabled', false)
     expect(config).to.have.property('runtimeMetrics', true)
     expect(config).to.have.property('reportHostname', true)
-    expect(config).to.have.nested.property('codeOriginForSpans.enabled', true)
+    expect(config).to.have.nested.property('codeOriginForSpans.enabled', false)
+    expect(config).to.have.nested.property('codeOriginForSpans.experimental.exit_spans.enabled', true)
     expect(config).to.have.nested.property('dynamicInstrumentation.enabled', true)
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactedIdentifiers', ['foo', 'bar'])
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactionExcludedIdentifiers', ['a', 'b', 'c'])
@@ -598,9 +606,11 @@ describe('Config', () => {
     })
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['b3', 'tracecontext'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['b3', 'tracecontext'])
+    expect(config).to.have.nested.property('tracePropagationBehaviorExtract', 'restart')
     expect(config).to.have.nested.property('experimental.runtimeId', true)
     expect(config).to.have.nested.property('experimental.exporter', 'log')
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
+    expect(config).to.have.nested.property('apmTracingEnabled', false)
     expect(config).to.have.nested.property('appsec.enabled', true)
     expect(config).to.have.nested.property('appsec.rasp.enabled', false)
     expect(config).to.have.nested.property('appsec.rules', RULES_JSON_PATH)
@@ -618,14 +628,12 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
     expect(config).to.have.nested.property('appsec.apiSecurity.sampleDelay', 25)
     expect(config).to.have.nested.property('appsec.sca.enabled', true)
-    expect(config).to.have.nested.property('appsec.standalone.enabled', true)
     expect(config).to.have.nested.property('remoteConfig.enabled', false)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
     expect(config).to.have.nested.property('iast.requestSampling', 40)
     expect(config).to.have.nested.property('iast.maxConcurrentRequests', 3)
     expect(config).to.have.nested.property('iast.maxContextOperations', 4)
-    expect(config).to.have.nested.property('iast.cookieFilterPattern', '.*')
     expect(config).to.have.nested.property('iast.dbRowsToTaint', 2)
     expect(config).to.have.nested.property('iast.deduplicationEnabled', false)
     expect(config).to.have.nested.property('iast.redactionEnabled', false)
@@ -646,6 +654,7 @@ describe('Config', () => {
     expect(updateConfig).to.be.calledOnce
 
     expect(updateConfig.getCall(0).args[0]).to.deep.include.members([
+      { name: 'apmTracingEnabled', value: false, origin: 'env_var' },
       { name: 'appsec.blockedTemplateHtml', value: BLOCKED_TEMPLATE_HTML_PATH, origin: 'env_var' },
       { name: 'appsec.blockedTemplateJson', value: BLOCKED_TEMPLATE_JSON_PATH, origin: 'env_var' },
       { name: 'appsec.enabled', value: true, origin: 'env_var' },
@@ -659,12 +668,12 @@ describe('Config', () => {
       { name: 'appsec.stackTrace.maxDepth', value: '42', origin: 'env_var' },
       { name: 'appsec.stackTrace.maxStackTraces', value: '5', origin: 'env_var' },
       { name: 'appsec.sca.enabled', value: true, origin: 'env_var' },
-      { name: 'appsec.standalone.enabled', value: true, origin: 'env_var' },
       { name: 'appsec.wafTimeout', value: '42', origin: 'env_var' },
       { name: 'clientIpEnabled', value: true, origin: 'env_var' },
       { name: 'clientIpHeader', value: 'x-true-client-ip', origin: 'env_var' },
       { name: 'crashtracking.enabled', value: false, origin: 'env_var' },
-      { name: 'codeOriginForSpans.enabled', value: true, origin: 'env_var' },
+      { name: 'codeOriginForSpans.enabled', value: false, origin: 'env_var' },
+      { name: 'codeOriginForSpans.experimental.exit_spans.enabled', value: true, origin: 'env_var' },
       { name: 'dogstatsd.hostname', value: 'dsd-agent', origin: 'env_var' },
       { name: 'dogstatsd.port', value: '5218', origin: 'env_var' },
       { name: 'dynamicInstrumentation.enabled', value: true, origin: 'env_var' },
@@ -675,7 +684,6 @@ describe('Config', () => {
       { name: 'experimental.exporter', value: 'log', origin: 'env_var' },
       { name: 'experimental.runtimeId', value: true, origin: 'env_var' },
       { name: 'hostname', value: 'agent', origin: 'env_var' },
-      { name: 'iast.cookieFilterPattern', value: '.*', origin: 'env_var' },
       { name: 'iast.dbRowsToTaint', value: 2, origin: 'env_var' },
       { name: 'iast.deduplicationEnabled', value: false, origin: 'env_var' },
       { name: 'iast.enabled', value: true, origin: 'env_var' },
@@ -723,18 +731,65 @@ describe('Config', () => {
       { name: 'llmobs.mlApp', value: 'myMlApp', origin: 'env_var' },
       { name: 'llmobs.agentlessEnabled', value: true, origin: 'env_var' },
       { name: 'langchain.spanCharLimit', value: 50, origin: 'env_var' },
-      { name: 'langchain.spanPromptCompletionSampleRate', value: 0.5, origin: 'env_var' }
+      { name: 'langchain.spanPromptCompletionSampleRate', value: 0.5, origin: 'env_var' },
+      { name: 'vertexai.spanCharLimit', value: 50, origin: 'env_var' },
+      { name: 'vertexai.spanPromptCompletionSampleRate', value: 0.5, origin: 'env_var' }
     ])
   })
 
   it('should ignore empty strings', () => {
     process.env.DD_TAGS = 'service:,env:,version:'
 
-    const config = new Config()
+    let config = new Config()
 
     expect(config).to.have.property('service', 'node')
     expect(config).to.have.property('env', undefined)
     expect(config).to.have.property('version', '')
+
+    process.env.DD_TAGS = 'service: env: version:'
+
+    config = new Config()
+
+    expect(config).to.have.property('service', 'node')
+    expect(config).to.have.property('env', undefined)
+    expect(config).to.have.property('version', '')
+  })
+
+  it('should support space separated tags when experimental mode enabled', () => {
+    process.env.DD_TAGS = 'key1:value1 key2:value2'
+
+    let config = new Config()
+
+    expect(config.tags).to.include({ key1: 'value1', key2: 'value2' })
+
+    process.env.DD_TAGS = 'env:test aKey:aVal bKey:bVal cKey:'
+
+    config = new Config()
+
+    expect(config.tags).to.have.property('env', 'test')
+    expect(config.tags).to.have.property('aKey', 'aVal')
+    expect(config.tags).to.have.property('bKey', 'bVal')
+    expect(config.tags).to.have.property('cKey', '')
+
+    process.env.DD_TAGS = 'env:test,aKey:aVal bKey:bVal cKey:'
+
+    config = new Config()
+
+    expect(config.tags).to.have.property('env', 'test')
+    expect(config.tags).to.have.property('aKey', 'aVal bKey:bVal cKey:')
+
+    process.env.DD_TAGS = 'a:b:c:d'
+
+    config = new Config()
+
+    expect(config.tags).to.have.property('a', 'b:c:d')
+
+    process.env.DD_TAGS = 'a,1'
+
+    config = new Config()
+
+    expect(config.tags).to.have.property('a', '')
+    expect(config.tags).to.have.property('1', '')
   })
 
   it('should read case-insensitive booleans from environment variables', () => {
@@ -836,7 +891,12 @@ describe('Config', () => {
       clientIpEnabled: true,
       clientIpHeader: 'x-true-client-ip',
       codeOriginForSpans: {
-        enabled: false
+        enabled: false,
+        experimental: {
+          exit_spans: {
+            enabled: true
+          }
+        }
       },
       sampleRate: 0.5,
       rateLimit: 1000,
@@ -886,7 +946,6 @@ describe('Config', () => {
           requestSampling: 50,
           maxConcurrentRequests: 4,
           maxContextOperations: 5,
-          cookieFilterPattern: '.*',
           dbRowsToTaint: 2,
           deduplicationEnabled: false,
           redactionEnabled: false,
@@ -896,11 +955,6 @@ describe('Config', () => {
           telemetryVerbosity: 'DEBUG',
           stackTrace: {
             enabled: false
-          }
-        },
-        appsec: {
-          standalone: {
-            enabled: true
           }
         }
       },
@@ -945,6 +999,7 @@ describe('Config', () => {
     expect(config).to.have.property('plugins', false)
     expect(config).to.have.property('logLevel', logLevel)
     expect(config).to.have.nested.property('codeOriginForSpans.enabled', false)
+    expect(config).to.have.nested.property('codeOriginForSpans.experimental.exit_spans.enabled', true)
     expect(config).to.have.property('traceId128BitGenerationEnabled', true)
     expect(config).to.have.property('traceId128BitLoggingEnabled', true)
     expect(config).to.have.property('spanRemoveIntegrationFromService', true)
@@ -960,13 +1015,11 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.exporter', 'log')
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
     expect(config).to.have.nested.property('appsec.enabled', false)
-    expect(config).to.have.nested.property('appsec.standalone.enabled', true)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
     expect(config).to.have.nested.property('iast.requestSampling', 50)
     expect(config).to.have.nested.property('iast.maxConcurrentRequests', 4)
     expect(config).to.have.nested.property('iast.maxContextOperations', 5)
-    expect(config).to.have.nested.property('iast.cookieFilterPattern', '.*')
     expect(config).to.have.nested.property('iast.dbRowsToTaint', 2)
     expect(config).to.have.nested.property('iast.deduplicationEnabled', false)
     expect(config).to.have.nested.property('iast.redactionEnabled', false)
@@ -1003,10 +1056,10 @@ describe('Config', () => {
 
     expect(updateConfig.getCall(0).args[0]).to.deep.include.members([
       { name: 'appsec.enabled', value: false, origin: 'code' },
-      { name: 'appsec.standalone.enabled', value: true, origin: 'code' },
       { name: 'clientIpEnabled', value: true, origin: 'code' },
       { name: 'clientIpHeader', value: 'x-true-client-ip', origin: 'code' },
       { name: 'codeOriginForSpans.enabled', value: false, origin: 'code' },
+      { name: 'codeOriginForSpans.experimental.exit_spans.enabled', value: true, origin: 'code' },
       { name: 'dogstatsd.hostname', value: 'agent-dsd', origin: 'code' },
       { name: 'dogstatsd.port', value: '5218', origin: 'code' },
       { name: 'dynamicInstrumentation.enabled', value: true, origin: 'code' },
@@ -1019,7 +1072,6 @@ describe('Config', () => {
       { name: 'flushInterval', value: 5000, origin: 'code' },
       { name: 'flushMinSpans', value: 500, origin: 'code' },
       { name: 'hostname', value: 'agent', origin: 'code' },
-      { name: 'iast.cookieFilterPattern', value: '.*', origin: 'code' },
       { name: 'iast.dbRowsToTaint', value: 2, origin: 'code' },
       { name: 'iast.deduplicationEnabled', value: false, origin: 'code' },
       { name: 'iast.enabled', value: true, origin: 'code' },
@@ -1219,6 +1271,8 @@ describe('Config', () => {
     process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
     process.env.DD_TRACE_REPORT_HOSTNAME = 'true'
     process.env.DD_ENV = 'test'
+    process.env.DD_CODE_ORIGIN_FOR_SPANS_ENABLED = 'false'
+    process.env.DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED = 'true'
     process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS = 'foo,bar'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS = 'a,b,c'
@@ -1233,11 +1287,13 @@ describe('Config', () => {
     process.env.DD_TRACE_EXPERIMENTAL_TRACEPARENT_ENABLED = 'true'
     process.env.DD_TRACE_PROPAGATION_STYLE_INJECT = 'datadog'
     process.env.DD_TRACE_PROPAGATION_STYLE_EXTRACT = 'datadog'
+    process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'restart'
     process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_EXPORTER = 'log'
     process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_INTERNAL_ERRORS_ENABLED = 'true'
     process.env.DD_TRACE_MIDDLEWARE_TRACING_ENABLED = 'false'
+    process.env.DD_APM_TRACING_ENABLED = 'false'
     process.env.DD_APPSEC_ENABLED = 'false'
     process.env.DD_APPSEC_MAX_STACK_TRACES = '11'
     process.env.DD_APPSEC_MAX_STACK_TRACE_DEPTH = '11'
@@ -1257,7 +1313,6 @@ describe('Config', () => {
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = 11
     process.env.DD_IAST_ENABLED = 'false'
     process.env.DD_IAST_DB_ROWS_TO_TAINT = '2'
-    process.env.DD_IAST_COOKIE_FILTER_PATTERN = '.*'
     process.env.DD_IAST_REDACTION_NAME_PATTERN = 'name_pattern_to_be_overriden_by_options'
     process.env.DD_IAST_REDACTION_VALUE_PATTERN = 'value_pattern_to_be_overriden_by_options'
     process.env.DD_IAST_STACK_TRACE_ENABLED = 'true'
@@ -1313,6 +1368,7 @@ describe('Config', () => {
         exporter: 'agent',
         enableGetRumData: false
       },
+      apmTracingEnabled: true,
       appsec: {
         enabled: true,
         rules: RULES_JSON_PATH,
@@ -1340,7 +1396,6 @@ describe('Config', () => {
       },
       iast: {
         enabled: true,
-        cookieFilterPattern: '.{10,}',
         dbRowsToTaint: 3,
         redactionNamePattern: 'REDACTION_NAME_PATTERN',
         redactionValuePattern: 'REDACTION_VALUE_PATTERN',
@@ -1353,7 +1408,12 @@ describe('Config', () => {
         pollInterval: 42
       },
       codeOriginForSpans: {
-        enabled: false
+        enabled: true,
+        experimental: {
+          exit_spans: {
+            enabled: false
+          }
+        }
       },
       traceId128BitGenerationEnabled: false,
       traceId128BitLoggingEnabled: false,
@@ -1376,7 +1436,8 @@ describe('Config', () => {
     expect(config).to.have.property('flushMinSpans', 500)
     expect(config).to.have.property('service', 'test')
     expect(config).to.have.property('version', '1.0.0')
-    expect(config).to.have.nested.property('codeOriginForSpans.enabled', false)
+    expect(config).to.have.nested.property('codeOriginForSpans.enabled', true)
+    expect(config).to.have.nested.property('codeOriginForSpans.experimental.exit_spans.enabled', false)
     expect(config).to.have.nested.property('dynamicInstrumentation.enabled', false)
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactedIdentifiers', ['foo2', 'bar2'])
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactionExcludedIdentifiers', ['a2', 'b2'])
@@ -1397,6 +1458,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.runtimeId', false)
     expect(config).to.have.nested.property('experimental.exporter', 'agent')
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
+    expect(config).to.have.nested.property('apmTracingEnabled', true)
     expect(config).to.have.nested.property('appsec.enabled', true)
     expect(config).to.have.nested.property('appsec.rasp.enabled', false)
     expect(config).to.have.nested.property('appsec.rules', RULES_JSON_PATH)
@@ -1419,7 +1481,6 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.maxContextOperations', 2)
     expect(config).to.have.nested.property('iast.dbRowsToTaint', 3)
     expect(config).to.have.nested.property('iast.deduplicationEnabled', true)
-    expect(config).to.have.nested.property('iast.cookieFilterPattern', '.{10,}')
     expect(config).to.have.nested.property('iast.redactionEnabled', true)
     expect(config).to.have.nested.property('iast.redactionNamePattern', 'REDACTION_NAME_PATTERN')
     expect(config).to.have.nested.property('iast.redactionValuePattern', 'REDACTION_VALUE_PATTERN')
@@ -1457,7 +1518,6 @@ describe('Config', () => {
         requestSampling: 15,
         maxConcurrentRequests: 3,
         maxContextOperations: 4,
-        cookieFilterPattern: '.*',
         dbRowsToTaint: 3,
         deduplicationEnabled: false,
         redactionEnabled: false,
@@ -1494,7 +1554,6 @@ describe('Config', () => {
           requestSampling: 25,
           maxConcurrentRequests: 6,
           maxContextOperations: 7,
-          cookieFilterPattern: '.{10,}',
           dbRowsToTaint: 2,
           deduplicationEnabled: true,
           redactionEnabled: true,
@@ -1531,9 +1590,6 @@ describe('Config', () => {
       rasp: {
         enabled: false
       },
-      standalone: {
-        enabled: undefined
-      },
       stackTrace: {
         enabled: true,
         maxStackTraces: 2,
@@ -1546,7 +1602,6 @@ describe('Config', () => {
       requestSampling: 15,
       maxConcurrentRequests: 3,
       maxContextOperations: 4,
-      cookieFilterPattern: '.*',
       dbRowsToTaint: 3,
       deduplicationEnabled: false,
       redactionEnabled: false,
@@ -2039,7 +2094,7 @@ describe('Config', () => {
       delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT
       delete process.env.DD_TEST_SESSION_NAME
       delete process.env.JEST_WORKER_ID
-      delete process.env.DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED
+      delete process.env.DD_TEST_FAILED_TEST_REPLAY_ENABLED
       delete process.env.DD_AGENTLESS_LOG_SUBMISSION_ENABLED
       options = {}
     })
@@ -2138,15 +2193,16 @@ describe('Config', () => {
         const config = new Config(options)
         expect(config).to.have.property('ciVisAgentlessLogSubmissionEnabled', true)
       })
-      it('should not set isTestDynamicInstrumentationEnabled by default', () => {
-        const config = new Config(options)
-        expect(config).to.have.property('isTestDynamicInstrumentationEnabled', false)
-      })
-      it('should set isTestDynamicInstrumentationEnabled if DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED is passed', () => {
-        process.env.DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
+      it('should set isTestDynamicInstrumentationEnabled by default', () => {
         const config = new Config(options)
         expect(config).to.have.property('isTestDynamicInstrumentationEnabled', true)
       })
+      it('should set isTestDynamicInstrumentationEnabled to false if DD_TEST_FAILED_TEST_REPLAY_ENABLED is false',
+        () => {
+          process.env.DD_TEST_FAILED_TEST_REPLAY_ENABLED = 'false'
+          const config = new Config(options)
+          expect(config).to.have.property('isTestDynamicInstrumentationEnabled', false)
+        })
     })
     context('ci visibility mode is not enabled', () => {
       it('should not activate intelligent test runner or git metadata upload', () => {
@@ -2369,6 +2425,237 @@ describe('Config', () => {
       expect(taggingConfig).to.have.property('requestsEnabled', true)
       expect(taggingConfig).to.have.property('responsesEnabled', true)
       expect(taggingConfig).to.have.property('maxDepth', 7)
+    })
+  })
+
+  context('standalone', () => {
+    it('should disable apm tracing with legacy DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED', () => {
+      process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = '1'
+
+      const config = new Config()
+      expect(config).to.have.property('apmTracingEnabled', false)
+    })
+
+    it('should win DD_APM_TRACING_ENABLED', () => {
+      process.env.DD_APM_TRACING_ENABLED = '1'
+      process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = 'true'
+
+      const config = new Config()
+      expect(config).to.have.property('apmTracingEnabled', true)
+    })
+
+    it('should disable apm tracing with legacy experimental.appsec.standalone.enabled option', () => {
+      process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = '0'
+
+      const config = new Config({ experimental: { appsec: { standalone: { enabled: true } } } })
+      expect(config).to.have.property('apmTracingEnabled', false)
+    })
+
+    it('should win apmTracingEnabled option', () => {
+      process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = 'true'
+
+      const config = new Config({
+        apmTracingEnabled: false,
+        experimental: { appsec: { standalone: { enabled: true } } }
+      })
+      expect(config).to.have.property('apmTracingEnabled', false)
+    })
+
+    it('should not affect stats', () => {
+      process.env.DD_TRACE_STATS_COMPUTATION_ENABLED = 'true'
+
+      const config = new Config()
+      expect(config).to.have.property('apmTracingEnabled', true)
+      expect(config).to.have.nested.property('stats.enabled', true)
+
+      expect(updateConfig.getCall(0).args[0]).to.deep.include.members([
+        { name: 'stats.enabled', value: true, origin: 'calculated' }
+      ])
+    })
+
+    it('should disable stats', () => {
+      process.env.DD_APM_TRACING_ENABLED = 'false'
+      process.env.DD_TRACE_STATS_COMPUTATION_ENABLED = 'true'
+
+      const config = new Config()
+      expect(config).to.have.property('apmTracingEnabled', false)
+      expect(config).to.have.nested.property('stats.enabled', false)
+
+      expect(updateConfig.getCall(0).args[0]).to.deep.include.members([
+        { name: 'stats.enabled', value: false, origin: 'calculated' }
+      ])
+    })
+
+    it('should disable stats if config property is used', () => {
+      const config = new Config({
+        apmTracingEnabled: false
+      })
+      expect(config).to.have.property('apmTracingEnabled', false)
+      expect(config).to.have.nested.property('stats.enabled', false)
+    })
+  })
+
+  context('library config', () => {
+    const StableConfig = require('../src/config_stable')
+    const path = require('path')
+    // os.tmpdir returns undefined on Windows somehow
+    const baseTempDir = os.platform() !== 'win32' ? os.tmpdir() : 'C:\\Windows\\Temp'
+    let env
+    let tempDir
+    beforeEach(() => {
+      env = process.env
+      tempDir = fs.mkdtempSync(path.join(baseTempDir, 'config-test-'))
+      process.env.DD_TEST_LOCAL_CONFIG_PATH = path.join(tempDir, 'local.yaml')
+      process.env.DD_TEST_FLEET_CONFIG_PATH = path.join(tempDir, 'fleet.yaml')
+    })
+
+    afterEach(() => {
+      process.env = env
+      fs.rmdirSync(tempDir, { recursive: true })
+    })
+
+    it('should apply host wide config', () => {
+      fs.writeFileSync(
+        process.env.DD_TEST_LOCAL_CONFIG_PATH,
+        `
+apm_configuration_default:
+  DD_RUNTIME_METRICS_ENABLED: true
+`)
+      const config = new Config()
+      expect(config).to.have.property('runtimeMetrics', true)
+    })
+
+    it('should apply service specific config', () => {
+      fs.writeFileSync(
+        process.env.DD_TEST_LOCAL_CONFIG_PATH,
+        `
+rules:
+  - selectors:
+    - origin: language
+      matches:
+        - nodejs
+      operator: equals
+    configuration:
+      DD_SERVICE: my-service
+`)
+      const config = new Config()
+      expect(config).to.have.property('service', 'my-service')
+    })
+
+    it('should respect the priority sources', () => {
+      // 1. Default
+      const config1 = new Config()
+      expect(config1).to.have.property('service', 'node')
+
+      // 2. Local stable > Default
+      fs.writeFileSync(
+        process.env.DD_TEST_LOCAL_CONFIG_PATH,
+        `
+rules:
+  - selectors:
+    - origin: language
+      matches:
+        - nodejs
+      operator: equals
+    configuration:
+      DD_SERVICE: service_local_stable
+`)
+      const config2 = new Config()
+      expect(config2).to.have.property(
+        'service',
+        'service_local_stable',
+        'default < local stable config'
+      )
+
+      // 3. Env > Local stable > Default
+      process.env.DD_SERVICE = 'service_env'
+      const config3 = new Config()
+      expect(config3).to.have.property(
+        'service',
+        'service_env',
+        'default < local stable config < env var'
+      )
+
+      // 4. Fleet Stable > Env > Local stable > Default
+      fs.writeFileSync(
+        process.env.DD_TEST_FLEET_CONFIG_PATH,
+        `
+rules:
+  - selectors:
+    - origin: language
+      matches:
+        - nodejs
+      operator: equals
+    configuration:
+      DD_SERVICE: service_fleet_stable
+`)
+      const config4 = new Config()
+      expect(config4).to.have.property(
+        'service',
+        'service_fleet_stable',
+        'default < local stable config < env var < fleet stable config'
+      )
+
+      // 5. Code > Fleet Stable > Env > Local stable > Default
+      const config5 = new Config({ service: 'service_code' })
+      expect(config5).to.have.property(
+        'service',
+        'service_code',
+        'default < local stable config < env var < fleet config < code'
+      )
+    })
+
+    it('should ignore unknown keys', () => {
+      fs.writeFileSync(
+        process.env.DD_TEST_LOCAL_CONFIG_PATH,
+        `
+apm_configuration_default:
+  DD_RUNTIME_METRICS_ENABLED: true
+  DD_FOOBAR_ENABLED: baz
+`)
+      const stableConfig = new StableConfig()
+      expect(stableConfig.warnings).to.have.lengthOf(0)
+
+      const config = new Config()
+      expect(config).to.have.property('runtimeMetrics', true)
+    })
+
+    it('should log a warning if the YAML files are malformed', () => {
+      fs.writeFileSync(
+        process.env.DD_TEST_LOCAL_CONFIG_PATH,
+        `
+    apm_configuration_default:
+DD_RUNTIME_METRICS_ENABLED true
+`)
+      const stableConfig = new StableConfig()
+      expect(stableConfig.warnings).to.have.lengthOf(1)
+    })
+
+    it('should only load the WASM module if the stable config files exist', () => {
+      const stableConfig1 = new StableConfig()
+      expect(stableConfig1).to.have.property('wasm_loaded', false)
+
+      fs.writeFileSync(
+        process.env.DD_TEST_LOCAL_CONFIG_PATH,
+        `
+apm_configuration_default:
+  DD_RUNTIME_METRICS_ENABLED: true
+`)
+      const stableConfig2 = new StableConfig()
+      expect(stableConfig2).to.have.property('wasm_loaded', true)
+    })
+
+    it('should not load the WASM module in a serverless environment', () => {
+      fs.writeFileSync(
+        process.env.DD_TEST_LOCAL_CONFIG_PATH,
+        `
+apm_configuration_default:
+  DD_RUNTIME_METRICS_ENABLED: true
+`)
+
+      process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-great-lambda-function'
+      const stableConfig = new Config()
+      expect(stableConfig).to.not.have.property('stableConfig')
     })
   })
 })

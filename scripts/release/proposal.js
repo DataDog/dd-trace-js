@@ -17,8 +17,10 @@ const {
   start,
   run
 } = require('./helpers/terminal')
-const { checkBranchDiff, checkGitHub, checkGit } = require('./helpers/requirements')
+const { checkAll } = require('./helpers/requirements')
 
+const tmpdir = process.env.RUNNER_TEMP || os.tmpdir()
+const main = 'master'
 const releaseLine = params[0]
 
 // Validate release line argument.
@@ -26,10 +28,11 @@ if (!releaseLine || releaseLine === 'help' || flags.help) {
   log(
     'Usage: node scripts/release/proposal <release-line>\n',
     'Options:',
+    '  -f         Push new changes even if a non-draft PR already exists.',
+    '  -n         Do not push release proposal upstream.',
+    '  -y         Push release proposal upstream.',
     '  --debug    Print raw commands and their outputs.',
-    '  --help     Show this help.',
-    '  --minor    Force a minor release.',
-    '  --patch    Force a patch release.'
+    '  --help     Show this help.'
   )
   process.exit(0)
 } else if (!releaseLine?.match(/^\d+$/)) {
@@ -39,47 +42,55 @@ if (!releaseLine || releaseLine === 'help' || flags.help) {
 try {
   start('Check for requirements')
 
-  checkGit()
-  checkBranchDiff()
-  checkGitHub()
+  checkAll()
 
   pass()
 
   start('Pull release branch')
 
+  const currentBranch = capture('git rev-parse --abbrev-ref HEAD')
+
+  // Restore current branch on success.
+  process.once('exit', code => {
+    if (code !== 0) return
+
+    run(`git checkout ${currentBranch}`)
+  })
+
   // Make sure the release branch is up to date to prepare for new proposal.
   // The main branch is not automatically pulled to avoid inconsistencies between
   // release lines if new commits are added to it during a release.
-  run(`git checkout v${releaseLine}.x`)
-  run('git pull --ff-only')
+  run(`git checkout ${main}`)
+  run(`git checkout --quiet v${releaseLine}.x`)
+  run('git pull --quiet --ff-only')
 
   pass(`v${releaseLine}.x`)
 
-  const diffCmd = [
-    'branch-diff',
-    '--user DataDog',
-    '--repo dd-trace-js',
-  `--exclude-label=semver-major,dont-land-on-v${releaseLine}.x`
-  ].join(' ')
+  const diffCmd = 'branch-diff --user DataDog --repo dd-trace-js --exclude-label=semver-major'
 
   start('Determine version increment')
 
-  const lastVersion = require('../../package.json').version
-  const [, lastMinor, lastPatch] = lastVersion.split('.').map(Number)
-  const lineDiff = capture(`${diffCmd} --markdown=true v${releaseLine}.x master`)
-  const isMinor = flags.minor || (!flags.patch && lineDiff.includes('SEMVER-MINOR'))
-  const newVersion = isMinor
-    ? `${releaseLine}.${lastMinor + 1}.0`
-    : `${releaseLine}.${lastMinor}.${lastPatch + 1}`
-  const notesDir = path.join(os.tmpdir(), 'release_notes')
-  const notesFile = path.join(notesDir, `${newVersion}.md`)
+  const { DD_MAJOR, DD_MINOR, DD_PATCH } = require('../../version')
+  const lineDiff = capture(`${diffCmd} --markdown=true v${releaseLine}.x ${main}`)
 
-  pass(`${isMinor ? 'minor' : 'patch'} (${lastVersion} -> ${newVersion})`)
+  if (!lineDiff) {
+    pass('none (already up to date)')
+    process.exit(0)
+  }
+
+  const isMinor = lineDiff.includes('SEMVER-MINOR')
+  const newPatch = `${releaseLine}.${DD_MINOR}.${DD_PATCH + 1}`
+  const newMinor = `${releaseLine}.${DD_MINOR + 1}.0`
+  const newVersion = isMinor ? newMinor : newPatch
+  const notesDir = path.join(tmpdir, 'release_notes')
+  const notesFile = path.join(notesDir, `v${newVersion}.md`)
+
+  pass(`${isMinor ? 'minor' : 'patch'} (${DD_MAJOR}.${DD_MINOR}.${DD_PATCH} -> ${newVersion})`)
 
   start('Checkout release proposal branch')
 
   // Checkout new or existing branch.
-  run(`git checkout v${newVersion}-proposal || git checkout -b v${newVersion}-proposal`)
+  run(`git checkout --quiet v${newVersion}-proposal || git checkout --quiet -b v${newVersion}-proposal`)
 
   try {
     // Pull latest changes in case the release was started by someone else.
@@ -95,13 +106,13 @@ try {
   start('Check for new changes')
 
   // Get the hashes of the last version and the commits to add.
-  const lastCommit = capture('git log -1 --pretty=%B').trim()
-  const proposalDiff = capture(`${diffCmd} --format=sha --reverse v${newVersion}-proposal master`)
+  const lastCommit = capture('git log -1 --pretty=%B')
+  const proposalDiff = capture(`${diffCmd} --format=sha --reverse v${newVersion}-proposal ${main}`)
     .replace(/\n/g, ' ').trim()
 
   if (proposalDiff) {
     // Get new changes since last commit of the proposal branch.
-    const newChanges = capture(`${diffCmd} v${newVersion}-proposal master`)
+    const newChanges = capture(`${diffCmd} v${newVersion}-proposal ${main}`)
 
     pass(`\n${newChanges}`)
 
@@ -114,13 +125,15 @@ try {
 
     // Cherry pick all new commits to the proposal branch.
     try {
-      run(`echo "${proposalDiff}" | xargs git cherry-pick`)
+      run(`git cherry-pick ${proposalDiff}`)
 
       pass()
     } catch (err) {
+      run('git cherry-pick --abort')
+
       fatal(
-        'Cherry-pick failed. Resolve the conflicts and run `git cherry-pick --continue` to continue.',
-        'When all conflicts have been resolved, run this script again.'
+        'Cherry-pick failed. This means that the release branch has deviated from the main branch.',
+        'Please make sure the release branch contains all changes from the main branch.'
       )
     }
   } else {
@@ -139,8 +152,47 @@ try {
 
   pass(notesFile)
 
-  // Stop and ask the user if they want to proceed with pushing everything upstream.
-  checkpoint('Push the release upstream and create/update PR?')
+  if (flags.n) process.exit(0)
+  if (!flags.y) {
+    // Stop and ask the user if they want to proceed with pushing everything upstream.
+    checkpoint('Push the release upstream and create/update PR?')
+  }
+
+  start('Checking that no ready to merge PR exists')
+
+  let previousPullRequest
+
+  if (isMinor) {
+    try {
+      previousPullRequest = JSON.parse(capture(`gh pr view ${newMinor} --json isDraft,url`))
+    } catch (e) {
+      // No existing PR for minor release proposal.
+    }
+  }
+
+  if (!previousPullRequest) {
+    try {
+      previousPullRequest = JSON.parse(capture(`gh pr view ${newPatch} --json isDraft,url`))
+    } catch (e) {
+      // No existing PR for patch release proposal.
+    }
+  }
+
+  if (previousPullRequest) {
+    if (!previousPullRequest.isDraft && !flags.f) {
+      if (flags.f) {
+        pass(`ready: ${previousPullRequest.url} (ignoring because of -f flag)`)
+      } else {
+        pass(`ready: ${previousPullRequest.url} (use -f to ignore and force update)`)
+
+        process.exit(0)
+      }
+    }
+
+    pass(`draft: ${previousPullRequest.url}`)
+  } else {
+    pass('none')
+  }
 
   start('Push proposal upstream')
 
@@ -155,9 +207,22 @@ try {
     run(`gh pr edit -F "${notesFile}"`)
   }
 
-  const pullRequestUrl = capture('gh pr view --json url --jq=".url"')
+  const pullRequest = JSON.parse(capture('gh pr view --json number,url'))
 
-  pass(pullRequestUrl)
+  // Close PR and delete branch for any patch proposal if new proposal is minor.
+  if (isMinor) {
+    try {
+      run(`gh pr close v${newPatch}-proposal --delete-branch --comment "Superseded by #${pullRequest.number}."`)
+    } catch (e) {
+      // PR didn't exist so nothing to close.
+    }
+  }
+
+  pass(pullRequest.url)
+
+  if (process.env.CI) {
+    log(`\n\n::notice::${newVersion}: ${pullRequest.url}`)
+  }
 } catch (e) {
   fail(e)
 }

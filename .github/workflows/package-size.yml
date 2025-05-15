@@ -18,11 +18,8 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - name: Setup Node.js
-        uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4.2.0
-        with:
-          node-version: '20'
-      - run: yarn
+      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/install
       - name: Compute module size tree and report
         uses: qard/heaviest-objects-in-the-universe@e2af4ff3a88e5fe507bd2de1943b015ba2ddda66 # v1.0.0
         with:

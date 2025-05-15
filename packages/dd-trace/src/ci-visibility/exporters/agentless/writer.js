@@ -73,8 +73,8 @@ class Writer extends BaseWriter {
     })
   }
 
-  setMetadataTags (tags) {
-    this._encoder.setMetadataTags(tags)
+  addMetadataTags (tags) {
+    this._encoder.addMetadataTags(tags)
   }
 }
 
