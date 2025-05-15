@@ -10,6 +10,11 @@ const UINT64_MODULO = 2n ** 64n
 // Knuth's factor for the sampling algorithm
 const SAMPLING_KNUTH_FACTOR = 1111111111111111111n
 
+/**
+ * `Sampler` determines whether or not to sample a trace/span based on the trace ID.
+ *
+ * This class uses a deterministic sampling algorithm that is consistent across all languages.
+ */
 class Sampler {
   /**
    * @param {number} rate
@@ -27,8 +32,10 @@ class Sampler {
   }
 
   /**
-   * @param {SpanContext} context
-   * @returns {boolean}
+   * Determines whether a trace/span should be sampled based on the configured sampling rate.
+   *
+   * @param {SpanContext} context - The span context to evaluate.
+   * @returns {boolean} `true` if the trace/span should be sampled, otherwise `false`.
    */
   isSampled (context) {
     if (this._rate === 1) {
