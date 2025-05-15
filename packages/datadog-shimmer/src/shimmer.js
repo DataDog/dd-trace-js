@@ -34,11 +34,13 @@ function copyProperties (original, wrapped) {
 }
 
 function wrapFunction (original, wrapper) {
-  if (typeof original !== 'function') {
-    throw new Error(`Target is not a function (${typeof original})`)
+  if (original == null) {
+    if (typeof original !== 'function') {
+      throw new Error(`Target is not a function (${typeof original})`)
+    }
+    assertNotClass(original)
+    copyProperties(original, wrapper)
   }
-  assertNotClass(original)
-  copyProperties(original, wrapper)
 
   return wrapper
 }
