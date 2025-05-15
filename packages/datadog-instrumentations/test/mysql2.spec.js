@@ -440,14 +440,13 @@ describe('mysql2 instrumentation', () => {
               startCh.subscribe(noop)
               const query = pool.query(sql)
 
-              let error
-              query.on('error', err => { error = err })
-              expect(query.listenerCount('error')).to.equal(1)
+              expect(query.listenerCount('error')).to.equal(0)
 
               await once(query, 'end')
-              expect(query.listenerCount('error')).to.equal(1)
+
+              expect(query.listenerCount('error')).to.equal(0)
+
               sinon.assert.called(apmQueryStart)
-              expect(error).to.be.undefined
             })
 
             it('should work without subscriptions', (done) => {
