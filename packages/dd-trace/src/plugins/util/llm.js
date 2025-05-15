@@ -18,8 +18,9 @@ function normalize (text, limit = 128) {
   return text
 }
 
-function isPromptCompletionSampled (sampler) {
-  return sampler.isSampled()
+// TODO check all implications of this change
+function isPromptCompletionSampled (sampler, context) {
+  return sampler.isSampled(context)
 }
 
 module.exports = function (integrationName, tracerConfig) {
@@ -30,6 +31,6 @@ module.exports = function (integrationName, tracerConfig) {
 
   return {
     normalize: str => normalize(str, spanCharLimit),
-    isPromptCompletionSampled: () => isPromptCompletionSampled(sampler)
+    isPromptCompletionSampled: (context) => isPromptCompletionSampled(sampler, context)
   }
 }
