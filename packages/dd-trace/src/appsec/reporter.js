@@ -143,11 +143,11 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders) {
   const requestEventCollectedHeaders = filterHeaders(req.headers, EVENT_HEADERS_MAP)
   const responseEventCollectedHeaders = filterHeaders(res.getHeaders(), RESPONSE_HEADERS_MAP)
 
-  // Extended collection
   if (
     !(extendedDataCollectionConfiguration.headersExtendedCollectionEnabled
       && !extendedDataCollectionConfiguration.headersRedaction)
   ) {
+    // Standard collection
     return Object.assign(
       mandatoryCollectedHeaders,
       requestEventCollectedHeaders,
@@ -155,6 +155,7 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders) {
     )
   }
 
+  // Extended collection
   const requestExtendedHeadersAvailableCount =
     extendedDataCollectionConfiguration.maxHeadersCollected -
     Object.keys(mandatoryCollectedHeaders).length -
