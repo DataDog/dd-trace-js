@@ -9,6 +9,7 @@ const configHelper = require('../../dd-trace/src/config-helper')
 const testStartCh = channel('ci:cucumber:test:start')
 const testRetryCh = channel('ci:cucumber:test:retry')
 const testFinishCh = channel('ci:cucumber:test:finish') // used for test steps too
+const testFnCh = channel('ci:cucumber:test:fn')
 
 const testStepStartCh = channel('ci:cucumber:test-step:start')
 
@@ -53,7 +54,7 @@ const patched = new WeakSet()
 
 const lastStatusByPickleId = new Map()
 const numRetriesByPickleId = new Map()
-const numAttemptToAsyncResource = new Map()
+const numAttemptToCtx = new Map()
 const newTestsByTestFullname = new Map()
 
 let eventDataCollector = null
@@ -228,15 +229,11 @@ function wrapRun (pl, isLatestVersion) {
   patched.add(pl)
 
   shimmer.wrap(pl.prototype, 'run', run => function () {
-    if (!testStartCh.hasSubscribers) {
+    if (!testFinishCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
 
     let numAttempt = 0
-
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-
-    numAttemptToAsyncResource.set(numAttempt, asyncResource)
 
     const testFileAbsolutePath = this.pickle.uri
 
@@ -248,9 +245,9 @@ function wrapRun (pl, isLatestVersion) {
       testSourceLine,
       isParallel: !!configHelper.getConfiguration('CUCUMBER_WORKER_ID')
     }
-    asyncResource.runInAsyncScope(() => {
-      testStartCh.publish(testStartPayload)
-    })
+    const ctx = testStartPayload
+    numAttemptToCtx.set(numAttempt, ctx)
+    testStartCh.runStores(ctx, () => { })
     const promises = {}
     try {
       this.eventBroadcaster.on('envelope', shimmer.wrapFunction(null, () => async (testCase) => {
@@ -266,7 +263,7 @@ function wrapRun (pl, isLatestVersion) {
               // ignore error
             }
 
-            const failedAttemptAsyncResource = numAttemptToAsyncResource.get(numAttempt)
+            const failedAttemptCtx = numAttemptToCtx.get(numAttempt)
             const isFirstAttempt = numAttempt++ === 0
             const isAtrRetry = !isFirstAttempt && isFlakyTestRetriesEnabled
 
@@ -274,23 +271,19 @@ function wrapRun (pl, isLatestVersion) {
               await promises.hitBreakpointPromise
             }
 
-            failedAttemptAsyncResource.runInAsyncScope(() => {
-              // the current span will be finished and a new one will be created
-              testRetryCh.publish({ isFirstAttempt, error, isAtrRetry })
-            })
+            // the current span will be finished and a new one will be created
+            testRetryCh.publish({ isFirstAttempt, error, isAtrRetry, ...failedAttemptCtx.currentStore })
 
-            const newAsyncResource = new AsyncResource('bound-anonymous-fn')
-            numAttemptToAsyncResource.set(numAttempt, newAsyncResource)
+            const newCtx = { ...testStartPayload, promises }
+            numAttemptToCtx.set(numAttempt, newCtx)
 
-            newAsyncResource.runInAsyncScope(() => {
-              testStartCh.publish({ ...testStartPayload, promises }) // a new span will be created
-            })
+            testStartCh.runStores(newCtx, () => { })
           }
         }
       }))
       let promise
 
-      asyncResource.runInAsyncScope(() => {
+      testFnCh.runStores(ctx, () => {
         promise = run.apply(this, arguments)
       })
       promise.finally(async () => {
@@ -344,39 +337,40 @@ function wrapRun (pl, isLatestVersion) {
           isEfdRetry = numRetries > 0
         }
 
-        const attemptAsyncResource = numAttemptToAsyncResource.get(numAttempt)
+        const attemptCtx = numAttemptToCtx.get(numAttempt)
 
         const error = getErrorFromCucumberResult(result)
 
         if (promises.hitBreakpointPromise) {
           await promises.hitBreakpointPromise
         }
-        attemptAsyncResource.runInAsyncScope(() => {
-          testFinishCh.publish({
-            status,
-            skipReason,
-            error,
-            isNew,
-            isEfdRetry,
-            isFlakyRetry: numAttempt > 0,
-            isAttemptToFix,
-            isAttemptToFixRetry,
-            hasFailedAllRetries,
-            hasPassedAllRetries,
-            hasFailedAttemptToFix,
-            isDisabled,
-            isQuarantined
-          })
+        testFinishCh.publish({
+          status,
+          skipReason,
+          error,
+          isNew,
+          isEfdRetry,
+          isFlakyRetry: numAttempt > 0,
+          isAttemptToFix,
+          isAttemptToFixRetry,
+          hasFailedAllRetries,
+          hasPassedAllRetries,
+          hasFailedAttemptToFix,
+          isDisabled,
+          isQuarantined,
+          ...attemptCtx.currentStore
         })
       })
       return promise
     } catch (err) {
-      errorCh.publish(err)
-      throw err
+      ctx.err = err
+      errorCh.runStores(ctx, () => {
+        throw err
+      })
     }
   })
   shimmer.wrap(pl.prototype, 'runStep', runStep => function () {
-    if (!testStepStartCh.hasSubscribers) {
+    if (!testFinishCh.hasSubscribers) {
       return runStep.apply(this, arguments)
     }
     const testStep = arguments[0]
@@ -388,9 +382,8 @@ function wrapRun (pl, isLatestVersion) {
       resource = testStep.isHook ? 'hook' : testStep.pickleStep.text
     }
 
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-    return asyncResource.runInAsyncScope(() => {
-      testStepStartCh.publish({ resource })
+    const ctx = { resource }
+    return testStepStartCh.runStores(ctx, () => {
       try {
         const promise = runStep.apply(this, arguments)
 
@@ -399,12 +392,14 @@ function wrapRun (pl, isLatestVersion) {
             ? getStatusFromResultLatest(result)
             : getStatusFromResult(result)
 
-          testFinishCh.publish({ isStep: true, status, skipReason, errorMessage })
+          testFinishCh.publish({ isStep: true, status, skipReason, errorMessage, ...ctx.currentStore })
         })
         return promise
       } catch (err) {
-        errorCh.publish(err)
-        throw err
+        ctx.err = err
+        errorCh.runStores(ctx, () => {
+          throw err
+        })
       }
     })
   })

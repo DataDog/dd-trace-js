@@ -14,7 +14,8 @@ const { getConfiguration } = require('../../config-helper')
 module.exports = send
 
 const MAX_MESSAGE_LENGTH = 8 * 1024 // 8KB
-const MAX_LOG_PAYLOAD_SIZE = 1024 * 1024 // 1MB
+const MAX_LOG_PAYLOAD_SIZE_MB = 1
+const MAX_LOG_PAYLOAD_SIZE_BYTES = MAX_LOG_PAYLOAD_SIZE_MB * 1024 * 1024
 
 const ddsource = 'dd_debugger'
 const hostname = getHostname()
@@ -49,13 +50,13 @@ function send (message, logger, dd, snapshot) {
   let json = JSON.stringify(payload)
   let size = Buffer.byteLength(json)
 
-  if (size > MAX_LOG_PAYLOAD_SIZE) {
+  if (size > MAX_LOG_PAYLOAD_SIZE_BYTES) {
     // TODO: This is a very crude way to handle large payloads. Proper pruning will be implemented later (DEBUG-2624)
-    const line = Object.values(payload.debugger.snapshot.captures.lines)[0]
-    line.locals = {
-      notCapturedReason: 'Snapshot was too large',
-      size: Object.keys(line.locals).length
-    }
+    delete payload.debugger.snapshot.captures
+    payload.debugger.snapshot.captureError =
+      `Snapshot was too large (max allowed size is ${MAX_LOG_PAYLOAD_SIZE_MB} MiB). ` +
+      'Consider reducing the capture depth or turn off "Capture Variables" completely, ' +
+      'and instead include the variables of interest directly in the message template.'
     json = JSON.stringify(payload)
     size = Buffer.byteLength(json)
   }

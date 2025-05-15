@@ -96,19 +96,21 @@ class VitestPlugin extends CiPlugin {
       onDone(isFaulty)
     })
 
-    this.addSub('ci:vitest:test:start', ({
-      testName,
-      testSuiteAbsolutePath,
-      isRetry,
-      isNew,
-      isAttemptToFix,
-      isQuarantined,
-      isDisabled,
-      mightHitProbe,
-      isRetryReasonEfd,
-      isRetryReasonAttemptToFix,
-      isRetryReasonAtr
-    }) => {
+    this.addBind('ci:vitest:test:start', (ctx) => {
+      const {
+        testName,
+        testSuiteAbsolutePath,
+        isRetry,
+        isNew,
+        isAttemptToFix,
+        isQuarantined,
+        isDisabled,
+        mightHitProbe,
+        isRetryReasonEfd,
+        isRetryReasonAttemptToFix,
+        isRetryReasonAtr
+      } = ctx
+
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
       const store = storage('legacy').getStore()
 
@@ -147,18 +149,21 @@ class VitestPlugin extends CiPlugin {
         extraTags
       )
 
-      this.enter(span, store)
+      ctx.parentStore = store
+      ctx.currentStore = { ...store, span }
 
       // TODO: there might be multiple tests for which mightHitProbe is true, so activeTestSpan
       // might be wrongly overwritten.
       if (mightHitProbe) {
         this.activeTestSpan = span
       }
+
+      return ctx.currentStore
     })
 
-    this.addSub('ci:vitest:test:finish-time', ({ status, task, attemptToFixPassed, attemptToFixFailed }) => {
-      const store = storage('legacy').getStore()
-      const span = store?.span
+    this.addBind('ci:vitest:test:finish-time', (ctx) => {
+      const { status, task, attemptToFixPassed, attemptToFixFailed } = ctx
+      const span = ctx.currentStore?.span
 
       // we store the finish time to finish at a later hook
       // this is because the test might fail at a `afterEach` hook
@@ -172,13 +177,15 @@ class VitestPlugin extends CiPlugin {
         }
 
         this.taskToFinishTime.set(task, span._getTime())
+
+        ctx.parentStore = ctx.currentStore
+        ctx.currentStore = { ...ctx.currentStore, span }
       }
+
+      return ctx.currentStore
     })
 
-    this.addSub('ci:vitest:test:pass', ({ task }) => {
-      const store = storage('legacy').getStore()
-      const span = store?.span
-
+    this.addSub('ci:vitest:test:pass', ({ span, task }) => {
       if (span) {
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
           hasCodeowners: !!span.context()._tags[TEST_CODE_OWNERS]
@@ -190,6 +197,7 @@ class VitestPlugin extends CiPlugin {
     })
 
     this.addSub('ci:vitest:test:error', ({
+      span,
       duration,
       error,
       shouldSetProbe,
@@ -197,9 +205,6 @@ class VitestPlugin extends CiPlugin {
       hasFailedAllRetries,
       attemptToFixFailed
     }) => {
-      const store = storage('legacy').getStore()
-      const span = store?.span
-
       if (span) {
         if (shouldSetProbe && this.di) {
           const probeInformation = this.addDiProbe(error)
@@ -253,10 +258,9 @@ class VitestPlugin extends CiPlugin {
       testSpan.finish()
     })
 
-    this.addSub('ci:vitest:test-suite:start', ({
-      testSuiteAbsolutePath,
-      frameworkVersion
-    }) => {
+    this.addBind('ci:vitest:test-suite:start', (ctx) => {
+      const { testSuiteAbsolutePath, frameworkVersion } = ctx
+
       this.command = getConfiguration('DD_CIVISIBILITY_TEST_COMMAND')
       this.frameworkVersion = frameworkVersion
       const testSessionSpanContext = this.tracer.extract('text_map', {
@@ -306,17 +310,18 @@ class VitestPlugin extends CiPlugin {
       })
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
       const store = storage('legacy').getStore()
-      this.enter(testSuiteSpan, store)
+      ctx.parentStore = store
+      ctx.currentStore = { ...store, testSuiteSpan }
       this.testSuiteSpan = testSuiteSpan
+
+      return ctx.currentStore
     })
 
-    this.addSub('ci:vitest:test-suite:finish', ({ status, onFinish }) => {
-      const store = storage('legacy').getStore()
-      const span = store?.span
-      if (span) {
-        span.setTag(TEST_STATUS, status)
-        span.finish()
-        finishAllTraceSpans(span)
+    this.addSub('ci:vitest:test-suite:finish', ({ testSuiteSpan, status, onFinish }) => {
+      if (testSuiteSpan) {
+        testSuiteSpan.setTag(TEST_STATUS, status)
+        testSuiteSpan.finish()
+        finishAllTraceSpans(testSuiteSpan)
       }
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
       // TODO: too frequent flush - find for method in worker to decrease frequency
@@ -326,13 +331,19 @@ class VitestPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:vitest:test-suite:error', ({ error }) => {
-      const store = storage('legacy').getStore()
-      const span = store?.span
-      if (span && error) {
-        span.setTag('error', error)
-        span.setTag(TEST_STATUS, 'fail')
+    this.addBind('ci:vitest:test-suite:error', (ctx) => {
+      const { error } = ctx
+      const testSuiteSpan = ctx.currentStore?.testSuiteSpan
+
+      if (testSuiteSpan && error) {
+        testSuiteSpan.setTag('error', error)
+        testSuiteSpan.setTag(TEST_STATUS, 'fail')
+
+        ctx.parentStore = ctx.currentStore
+        ctx.currentStore = { ...ctx.currentStore, testSuiteSpan }
       }
+
+      return ctx.currentStore
     })
 
     this.addSub('ci:vitest:session:finish', ({
