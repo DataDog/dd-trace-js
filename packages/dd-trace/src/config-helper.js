@@ -3,7 +3,6 @@
 // TODO: Add jira tickets
 
 const { debuglog, deprecate } = require('util')
-// TODO: Remove unused / outdated configurations from the supported-configurations.json file
 const { supportedConfigurations, aliases, deprecations } = require('./supported-configurations.json')
 
 const aliasToCanonical = {}
@@ -53,7 +52,7 @@ module.exports = {
           }
           deprecationMethods[env]?.()
         } else {
-          console.error(
+          debug(
             `Missing configuration ${env} in supported-configurations file. The environment variable is ignored.`
           )
         }
