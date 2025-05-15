@@ -33,7 +33,8 @@ const {
   TEST_SUITE_ID,
   TEST_NAME,
   TEST_IS_RUM_ACTIVE,
-  TEST_BROWSER_VERSION
+  TEST_BROWSER_VERSION,
+  TEST_RETRY_REASON_TYPES
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -96,7 +97,9 @@ class PlaywrightPlugin extends CiPlugin {
       this.numFailedTests = 0
     })
 
-    this.addSub('ci:playwright:test-suite:start', (testSuiteAbsolutePath) => {
+    this.addBind('ci:playwright:test-suite:start', (ctx) => {
+      const { testSuiteAbsolutePath } = ctx
+
       const store = storage('legacy').getStore()
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.rootDir)
       const testSourceFile = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
@@ -125,27 +128,28 @@ class PlaywrightPlugin extends CiPlugin {
         }
       })
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
-      this.enter(testSuiteSpan, store)
+      ctx.parentStore = store
+      ctx.currentStore = { ...store, testSuiteSpan }
 
       this._testSuites.set(testSuiteAbsolutePath, testSuiteSpan)
+
+      return ctx.currentStore
     })
 
-    this.addSub('ci:playwright:test-suite:finish', ({ status, error }) => {
-      const store = storage('legacy').getStore()
-      const span = store && store.span
-      if (!span) return
+    this.addSub('ci:playwright:test-suite:finish', ({ testSuiteSpan, status, error }) => {
+      if (!testSuiteSpan) return
       if (error) {
-        span.setTag('error', error)
-        span.setTag(TEST_STATUS, 'fail')
+        testSuiteSpan.setTag('error', error)
+        testSuiteSpan.setTag(TEST_STATUS, 'fail')
       } else {
-        span.setTag(TEST_STATUS, status)
+        testSuiteSpan.setTag(TEST_STATUS, status)
       }
 
       if (status === 'fail' || error) {
         this.numFailedSuites++
       }
 
-      span.finish()
+      testSuiteSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
     })
 
@@ -179,13 +183,14 @@ class PlaywrightPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:playwright:test:start', ({
-      testName,
-      testSuiteAbsolutePath,
-      testSourceLine,
-      browserName,
-      isDisabled
-    }) => {
+    this.addSub('ci:playwright:test:start', (ctx) => {
+      const {
+        testName,
+        testSuiteAbsolutePath,
+        testSourceLine,
+        browserName,
+        isDisabled
+      } = ctx
       const store = storage('legacy').getStore()
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.rootDir)
       const testSourceFile = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
@@ -202,7 +207,10 @@ class PlaywrightPlugin extends CiPlugin {
         span.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
       }
 
-      this.enter(span, store)
+      ctx.parentStore = store
+      ctx.currentStore = { ...store, span }
+
+      return ctx.currentStore
     })
 
     this.addSub('ci:playwright:worker:report', (serializedTraces) => {
@@ -253,6 +261,7 @@ class PlaywrightPlugin extends CiPlugin {
     })
 
     this.addSub('ci:playwright:test:finish', ({
+      span,
       testStatus,
       steps,
       error,
@@ -266,10 +275,10 @@ class PlaywrightPlugin extends CiPlugin {
       isAttemptToFixRetry,
       hasFailedAllRetries,
       hasPassedAttemptToFixRetries,
+      hasFailedAttemptToFixRetries,
+      isAtrRetry,
       onDone
     }) => {
-      const store = storage('legacy').getStore()
-      const span = store && store.span
       if (!span) return
 
       const isRUMActive = span.context()._tags[TEST_IS_RUM_ACTIVE]
@@ -286,11 +295,16 @@ class PlaywrightPlugin extends CiPlugin {
         span.setTag(TEST_IS_NEW, 'true')
         if (isEfdRetry) {
           span.setTag(TEST_IS_RETRY, 'true')
-          span.setTag(TEST_RETRY_REASON, 'efd')
+          span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
         }
       }
       if (isRetry) {
         span.setTag(TEST_IS_RETRY, 'true')
+        if (isAtrRetry) {
+          span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atr)
+        } else {
+          span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.ext)
+        }
       }
       if (hasFailedAllRetries) {
         span.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
@@ -300,10 +314,12 @@ class PlaywrightPlugin extends CiPlugin {
       }
       if (isAttemptToFixRetry) {
         span.setTag(TEST_IS_RETRY, 'true')
-        span.setTag(TEST_RETRY_REASON, 'attempt_to_fix')
+        span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atf)
       }
       if (hasPassedAttemptToFixRetries) {
         span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
+      } else if (hasFailedAttemptToFixRetries) {
+        span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
       }
       if (isDisabled) {
         span.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
@@ -351,6 +367,10 @@ class PlaywrightPlugin extends CiPlugin {
       if (process.env.DD_PLAYWRIGHT_WORKER) {
         this.tracer._exporter.flush(onDone)
       }
+    })
+
+    this.addBind('ci:playwright:test:fn', (ctx) => {
+      return ctx.currentStore
     })
   }
 

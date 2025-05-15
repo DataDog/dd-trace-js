@@ -52,7 +52,7 @@
     },
     {
       "name": "@aws-sdk/client-bedrock-runtime",
-      "versions": [">=3.422.0"]
+      "versions": [">=3.422.0 <3.798.0"]
     }
   ],
   "body-parser": [
@@ -65,6 +65,12 @@
     {
       "name": "express",
       "versions": ["^4"]
+    }
+  ],
+  "confluentinc-kafka-javascript": [
+    {
+      "name": "kafkajs",
+      "versions": [">=1.4.0"]
     }
   ],
   "cypress": [
@@ -431,6 +437,14 @@
     {
       "name": "express",
       "versions": [">=4"]
+    },
+    {
+      "name": "pg-query-stream",
+      "versions": [">=4"]
+    },
+    {
+      "name": "pg-cursor",
+      "versions": [">=2"]
     }
   ],
   "pino": [

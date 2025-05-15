@@ -49,23 +49,7 @@ function trackRaspMetrics (store, metrics, raspRule) {
     telemetryMetrics.rulesVersion = metrics.rulesVersion
   }
 
-  if (metrics.ruleTriggered) {
-    telemetryMetrics.ruleTriggered = true
-  }
-
   appsecMetrics.count('rasp.rule.eval', tags).inc(1)
-
-  if (metrics.duration) {
-    appsecMetrics.distribution('rasp.rule.duration', tags).track(metrics.duration)
-
-    const raspDuration = telemetryMetrics.raspDuration
-    appsecMetrics.distribution('rasp.duration', versionsTags).track(raspDuration)
-  }
-
-  if (metrics.durationExt) {
-    const raspDurationExt = telemetryMetrics.raspDurationExt
-    appsecMetrics.distribution('rasp.duration_ext', versionsTags).track(raspDurationExt)
-  }
 
   if (metrics.errorCode) {
     const errorTags = { ...tags, waf_error: metrics.errorCode }
@@ -80,7 +64,6 @@ function trackRaspMetrics (store, metrics, raspRule) {
 
 function trackRaspRuleMatch (store, raspRule, blockTriggered, blocked) {
   const telemetryMetrics = store[DD_TELEMETRY_REQUEST_METRICS]
-  if (!telemetryMetrics.ruleTriggered) return
 
   const tags = {
     waf_version: telemetryMetrics.wafVersion,
@@ -94,10 +77,6 @@ function trackRaspRuleMatch (store, raspRule, blockTriggered, blocked) {
   }
 
   appsecMetrics.count('rasp.rule.match', tags).inc(1)
-
-  // this is needed to not count it twice for the same match
-  // but it also means it can only be called once per waf call even if there are multiple rasp match
-  telemetryMetrics.ruleTriggered = null
 }
 
 function trackRaspRuleSkipped (raspRule, reason) {

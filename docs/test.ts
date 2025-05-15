@@ -296,6 +296,7 @@ tracer.use('bunyan');
 tracer.use('couchbase');
 tracer.use('cassandra-driver');
 tracer.use('child_process');
+tracer.use('confluentinc-kafka-javascript');
 tracer.use('connect');
 tracer.use('connect', httpServerOptions);
 tracer.use('cypress');
@@ -473,6 +474,19 @@ tracer.appsec.trackUserLoginFailureEvent('user_id', false, meta)
 tracer.appsec.trackCustomEvent('event_name')
 tracer.appsec.trackCustomEvent('event_name', meta)
 
+tracer.appsec.eventTrackingV2.trackUserLoginSuccess('login')
+tracer.appsec.eventTrackingV2.trackUserLoginSuccess('login', user)
+tracer.appsec.eventTrackingV2.trackUserLoginSuccess('login', user, meta)
+tracer.appsec.eventTrackingV2.trackUserLoginSuccess('login', null, meta)
+
+tracer.appsec.eventTrackingV2.trackUserLoginSuccess('login', '123')
+tracer.appsec.eventTrackingV2.trackUserLoginSuccess('login', '123', meta)
+
+tracer.appsec.eventTrackingV2.trackUserLoginFailure('login')
+tracer.appsec.eventTrackingV2.trackUserLoginFailure('login', true)
+tracer.appsec.eventTrackingV2.trackUserLoginFailure('login', meta)
+tracer.appsec.eventTrackingV2.trackUserLoginFailure('login', false, meta)
+
 tracer.setUser(user)
 
 const resUserBlock: boolean = tracer.appsec.isUserBlocked(user)
@@ -561,7 +575,7 @@ const enabled = llmobs.enabled
 // manually enable
 llmobs.enable({
   mlApp: 'mlApp',
-  agentlessEnabled: true
+  agentlessEnabled: false
 })
 
 // manually disable
@@ -581,7 +595,7 @@ llmobs.wrap({ kind: 'llm' }, function myLLM () {})()
 llmobs.wrap({ kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, function myFunction () {})()
 
 // export a span
-llmobs.enable({ mlApp: 'myApp' })
+llmobs.enable({ mlApp: 'myApp', agentlessEnabled: false })
 llmobs.trace({ kind: 'llm', name: 'myLLM' }, (span) => {
   const llmobsSpanCtx = llmobs.exportSpan(span)
   llmobsSpanCtx.traceId;

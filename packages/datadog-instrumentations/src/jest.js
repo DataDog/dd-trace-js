@@ -41,6 +41,7 @@ const testStartCh = channel('ci:jest:test:start')
 const testSkippedCh = channel('ci:jest:test:skip')
 const testFinishCh = channel('ci:jest:test:finish')
 const testErrCh = channel('ci:jest:test:err')
+const testFnCh = channel('ci:jest:test:fn')
 
 const skippableSuitesCh = channel('ci:jest:test-suite:skippable')
 const libraryConfigurationCh = channel('ci:jest:library-configuration')
@@ -79,8 +80,9 @@ let testManagementAttemptToFixRetries = 0
 
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
-const asyncResources = new WeakMap()
+const testContexts = new WeakMap()
 const originalTestFns = new WeakMap()
+const originalHookFns = new WeakMap()
 const retriedTestsToNumAttempts = new Map()
 const newTestsTestStatuses = new Map()
 const attemptToFixRetriedTestsStatuses = new Map()
@@ -154,7 +156,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           const hasKnownTests = !!knownTests?.jest
           earlyFlakeDetectionNumRetries = this.testEnvironmentOptions._ddEarlyFlakeDetectionNumRetries
           this.knownTestsForThisSuite = hasKnownTests
-            ? (knownTests?.jest[this.testSuite] || [])
+            ? (knownTests?.jest?.[this.testSuite] || [])
             : this.getKnownTestsForSuite(this.testEnvironmentOptions._ddKnownTests)
         } catch (e) {
           // If there has been an error parsing the tests, we'll disable Early Flake Deteciton
@@ -172,10 +174,10 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
       if (this.isTestManagementTestsEnabled) {
         try {
-          const hasTestManagementTests = !!testManagementTests.jest
+          const hasTestManagementTests = !!testManagementTests?.jest
           testManagementAttemptToFixRetries = this.testEnvironmentOptions._ddTestManagementAttemptToFixRetries
           this.testManagementTestsForThisSuite = hasTestManagementTests
-            ? this.getTestManagementTestsForSuite(testManagementTests.jest.suites?.[this.testSuite]?.tests)
+            ? this.getTestManagementTestsForSuite(testManagementTests?.jest?.suites?.[this.testSuite]?.tests)
             : this.getTestManagementTestsForSuite(this.testEnvironmentOptions._ddTestManagementTests)
         } catch (e) {
           log.error('Error parsing test management tests', e)
@@ -306,8 +308,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         const testParameters = getTestParametersString(this.nameToParams, event.test.name)
         // Async resource for this test is created here
         // It is used later on by the test_done handler
-        const asyncResource = new AsyncResource('bound-anonymous-fn')
-        asyncResources.set(event.test, asyncResource)
         const testName = getJestTestName(event.test)
         const originalTestName = removeEfdStringFromTestName(removeAttemptToFixStringFromTestName(testName))
 
@@ -335,24 +335,46 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
 
         const isJestRetry = event.test?.invocations > 1
-        asyncResource.runInAsyncScope(() => {
-          testStartCh.publish({
-            name: originalTestName,
-            suite: this.testSuite,
-            testSourceFile: this.testSourceFile,
-            displayName: this.displayName,
-            testParameters,
-            frameworkVersion: jestVersion,
-            isNew: isNewTest,
-            isEfdRetry: numEfdRetry > 0,
-            isAttemptToFix,
-            isAttemptToFixRetry: numOfAttemptsToFixRetries > 0,
-            isJestRetry,
-            isDisabled,
-            isQuarantined
-          })
-          originalTestFns.set(event.test, event.test.fn)
-          event.test.fn = asyncResource.bind(event.test.fn)
+        const ctx = {
+          name: originalTestName,
+          suite: this.testSuite,
+          testSourceFile: this.testSourceFile,
+          displayName: this.displayName,
+          testParameters,
+          frameworkVersion: jestVersion,
+          isNew: isNewTest,
+          isEfdRetry: numEfdRetry > 0,
+          isAttemptToFix,
+          isAttemptToFixRetry: numOfAttemptsToFixRetries > 0,
+          isJestRetry,
+          isDisabled,
+          isQuarantined
+        }
+        testContexts.set(event.test, ctx)
+
+        testStartCh.runStores(ctx, () => {
+          for (const hook of event.test.parent.hooks) {
+            let hookFn = hook.fn
+            if (!originalHookFns.has(hook)) {
+              originalHookFns.set(hook, hookFn)
+            } else {
+              hookFn = originalHookFns.get(hook)
+            }
+            const wrapperHook = function () {
+              return testFnCh.runStores(ctx, () => hookFn.apply(this, arguments))
+            }
+            // If we don't do this, the timeout will be not be triggered
+            Object.defineProperty(wrapperHook, 'length', { value: hookFn.length })
+            hook.fn = wrapperHook
+          }
+          const originalFn = event.test.fn
+          originalTestFns.set(event.test, originalFn)
+          const wrapper = function () {
+            return testFnCh.runStores(ctx, () => originalFn.apply(this, arguments))
+          }
+          // If we don't do this, the timeout will be not be triggered
+          Object.defineProperty(wrapper, 'length', { value: originalFn.length })
+          event.test.fn = wrapper
         })
       }
 
@@ -398,11 +420,13 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         event.test.fn = originalTestFns.get(event.test)
 
         let attemptToFixPassed = false
+        let attemptToFixFailed = false
         let failedAllTests = false
+        let isAttemptToFix = false
         if (this.isTestManagementTestsEnabled) {
           const testName = getJestTestName(event.test)
           const originalTestName = removeAttemptToFixStringFromTestName(testName)
-          const isAttemptToFix = this.testManagementTestsForThisSuite?.attemptToFix?.includes(originalTestName)
+          isAttemptToFix = this.testManagementTestsForThisSuite?.attemptToFix?.includes(originalTestName)
           if (isAttemptToFix) {
             if (attemptToFixRetriedTestsStatuses.has(originalTestName)) {
               attemptToFixRetriedTestsStatuses.get(originalTestName).push(status)
@@ -414,6 +438,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             // If it is, we'll set the failedAllTests flag to true if all the tests failed
             // If all tests passed, we'll set the attemptToFixPassed flag to true
             if (testStatuses.length === testManagementAttemptToFixRetries + 1) {
+              if (testStatuses.some(status => status === 'fail')) {
+                attemptToFixFailed = true
+              }
               if (testStatuses.every(status => status === 'fail')) {
                 failedAllTests = true
               } else if (testStatuses.every(status => status === 'pass')) {
@@ -423,6 +450,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           }
         }
 
+        let isEfdRetry = false
         // We'll store the test statuses of the retries
         if (this.isKnownTestsEnabled) {
           const testName = getJestTestName(event.test)
@@ -431,6 +459,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           if (isNewTest) {
             if (newTestsTestStatuses.has(originalTestName)) {
               newTestsTestStatuses.get(originalTestName).push(status)
+              isEfdRetry = true
             } else {
               newTestsTestStatuses.set(originalTestName, [status])
             }
@@ -443,16 +472,15 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         const willBeRetried = numRetries > 0 && numTestExecutions - 1 < numRetries
         const mightHitBreakpoint = this.isDiEnabled && numTestExecutions >= 2
 
-        const asyncResource = asyncResources.get(event.test)
+        const ctx = testContexts.get(event.test)
 
         if (status === 'fail') {
           const shouldSetProbe = this.isDiEnabled && willBeRetried && numTestExecutions === 1
-          asyncResource.runInAsyncScope(() => {
-            testErrCh.publish({
-              error: formatJestError(event.test.errors[0]),
-              shouldSetProbe,
-              promises
-            })
+          testErrCh.publish({
+            ...ctx.currentStore,
+            error: formatJestError(event.test.errors[0]),
+            shouldSetProbe,
+            promises
           })
         }
 
@@ -466,13 +494,19 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           })
         }
 
-        asyncResource.runInAsyncScope(() => {
-          testFinishCh.publish({
-            status,
-            testStartLine: getTestLineStart(event.test.asyncError, this.testSuite),
-            attemptToFixPassed,
-            failedAllTests
-          })
+        let isAtrRetry = false
+        if (this.isFlakyTestRetriesEnabled && event.test?.invocations > 1 && !isAttemptToFix && !isEfdRetry) {
+          isAtrRetry = true
+        }
+
+        testFinishCh.publish({
+          ...ctx.currentStore,
+          status,
+          testStartLine: getTestLineStart(event.test.asyncError, this.testSuite),
+          attemptToFixPassed,
+          failedAllTests,
+          attemptToFixFailed,
+          isAtrRetry
         })
 
         if (promises.isProbeReady) {
@@ -1177,7 +1211,7 @@ addHook({
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, globalConfig.rootDir || process.cwd())
       const suiteKnownTests = knownTests?.jest?.[testSuite] || []
 
-      const suiteTestManagementTests = testManagementTests.jest?.suites?.[testSuite]?.tests || {}
+      const suiteTestManagementTests = testManagementTests?.jest?.suites?.[testSuite]?.tests || {}
 
       args[0].config = {
         ...config,

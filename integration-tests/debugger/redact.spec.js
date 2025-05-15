@@ -16,7 +16,7 @@ describe('Dynamic Instrumentation snapshot PII redaction', function () {
 
       t.agent.addRemoteConfig(t.generateRemoteConfig({ captureSnapshot: true }))
 
-      const [{ payload: [{ 'debugger.snapshot': { captures } }] }] = await promise
+      const [{ payload: [{ debugger: { snapshot: { captures } } }] }] = await promise
       const { locals } = captures.lines[t.breakpoint.line]
 
       assert.deepPropertyVal(locals, 'foo', { type: 'string', notCapturedReason: 'redactedIdent' })
@@ -38,7 +38,7 @@ describe('Dynamic Instrumentation snapshot PII redaction', function () {
 
       t.agent.addRemoteConfig(t.generateRemoteConfig({ captureSnapshot: true }))
 
-      const [{ payload: [{ 'debugger.snapshot': { captures } }] }] = await promise
+      const [{ payload: [{ debugger: { snapshot: { captures } } }] }] = await promise
       const { locals } = captures.lines[t.breakpoint.line]
 
       assert.deepPropertyVal(locals, 'secret', { type: 'string', value: 'shh!' })

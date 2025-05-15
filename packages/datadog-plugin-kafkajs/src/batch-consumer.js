@@ -1,5 +1,6 @@
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const { getMessageSize } = require('../../dd-trace/src/datastreams')
+const { convertToTextMap } = require('./utils')
 
 class KafkajsBatchConsumerPlugin extends ConsumerPlugin {
   static get id () { return 'kafkajs' }
@@ -10,7 +11,7 @@ class KafkajsBatchConsumerPlugin extends ConsumerPlugin {
     for (const message of messages) {
       if (!message || !message.headers) continue
       const payloadSize = getMessageSize(message)
-      this.tracer.decodeDataStreamsContext(message.headers)
+      this.tracer.decodeDataStreamsContext(convertToTextMap(message.headers))
       const edgeTags = ['direction:in', `group:${groupId}`, `topic:${topic}`, 'type:kafka']
       if (clusterId) {
         edgeTags.push(`kafka_cluster_id:${clusterId}`)

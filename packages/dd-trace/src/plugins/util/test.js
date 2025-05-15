@@ -120,6 +120,12 @@ const TEST_LEVEL_EVENT_TYPES = [
   'test_module_end',
   'test_session_end'
 ]
+const TEST_RETRY_REASON_TYPES = {
+  efd: 'early_flake_detection',
+  atr: 'auto_test_retry',
+  atf: 'attempt_to_fix',
+  ext: 'external'
+}
 
 const DD_TEST_IS_USER_PROVIDED_SERVICE = '_dd.test.is_user_provided_service'
 
@@ -227,6 +233,7 @@ module.exports = {
   DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
   DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
   TEST_LEVEL_EVENT_TYPES,
+  TEST_RETRY_REASON_TYPES,
   getNumFromKnownTests,
   getFileAndLineNumberFromError,
   DI_ERROR_DEBUG_INFO_CAPTURED,
@@ -779,7 +786,7 @@ function getLibraryCapabilitiesTags (testFramework, isParallel) {
     [DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE]: '1',
     [DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE]: '1',
     [DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX]: isAttemptToFixSupported(testFramework, isParallel)
-      ? '2'
+      ? '4'
       : undefined
   }
 }

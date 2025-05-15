@@ -36,7 +36,8 @@ const {
   TEST_MANAGEMENT_IS_DISABLED,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_HAS_FAILED_ALL_RETRIES,
-  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED
+  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
+  TEST_RETRY_REASON_TYPES
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -108,12 +109,9 @@ class MochaPlugin extends CiPlugin {
       this.telemetry.distribution(TELEMETRY_CODE_COVERAGE_NUM_FILES, {}, relativeCoverageFiles.length)
     })
 
-    this.addSub('ci:mocha:test-suite:start', ({
-      testSuiteAbsolutePath,
-      isUnskippable,
-      isForcedToRun,
-      itrCorrelationId
-    }) => {
+    this.addBind('ci:mocha:test-suite:start', (ctx) => {
+      const { testSuiteAbsolutePath, isUnskippable, isForcedToRun, itrCorrelationId } = ctx
+
       // If the test module span is undefined, the plugin has not been initialized correctly and we bail out
       if (!this.testModuleSpan) {
         return
@@ -163,38 +161,51 @@ class MochaPlugin extends CiPlugin {
         testSuiteSpan.setTag(ITR_CORRELATION_ID, itrCorrelationId)
       }
       const store = storage('legacy').getStore()
-      this.enter(testSuiteSpan, store)
+      ctx.parentStore = store
+      ctx.currentStore = { ...store, testSuiteSpan }
       this._testSuites.set(testSuite, testSuiteSpan)
     })
 
-    this.addSub('ci:mocha:test-suite:finish', (status) => {
-      const store = storage('legacy').getStore()
-      if (store && store.span) {
-        const span = store.span
+    this.addSub('ci:mocha:test-suite:finish', ({ testSuiteSpan, status }) => {
+      if (testSuiteSpan) {
         // the test status of the suite may have been set in ci:mocha:test-suite:error already
-        if (!span.context()._tags[TEST_STATUS]) {
-          span.setTag(TEST_STATUS, status)
+        if (!testSuiteSpan.context()._tags[TEST_STATUS]) {
+          testSuiteSpan.setTag(TEST_STATUS, status)
         }
-        span.finish()
+        testSuiteSpan.finish()
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
       }
     })
 
-    this.addSub('ci:mocha:test-suite:error', (err) => {
-      const store = storage('legacy').getStore()
-      if (store && store.span) {
-        const span = store.span
-        span.setTag('error', err)
-        span.setTag(TEST_STATUS, 'fail')
+    this.addBind('ci:mocha:test-suite:error', (ctx) => {
+      const { error } = ctx
+      const testSuiteSpan = ctx.currentStore?.testSuiteSpan
+
+      if (testSuiteSpan) {
+        testSuiteSpan.setTag('error', error)
+        testSuiteSpan.setTag(TEST_STATUS, 'fail')
+
+        ctx.parentStore = ctx.currentStore
+        ctx.currentStore = { ...ctx.currentStore, testSuiteSpan }
       }
+
+      return ctx.currentStore
     })
 
-    this.addSub('ci:mocha:test:start', (testInfo) => {
-      const store = storage('legacy').getStore()
-      const span = this.startTestSpan(testInfo)
+    this.addBind('ci:mocha:test:fn', (ctx) => {
+      return ctx.currentStore
+    })
 
-      this.enter(span, store)
+    this.addBind('ci:mocha:test:start', (ctx) => {
+      const store = storage('legacy').getStore()
+      const span = this.startTestSpan(ctx)
+
+      ctx.parentStore = store
+      ctx.currentStore = { ...store, span }
+
       this.activeTestSpan = span
+
+      return ctx.currentStore
     })
 
     this.addSub('ci:mocha:worker:finish', () => {
@@ -202,30 +213,37 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addSub('ci:mocha:test:finish', ({
+      span,
       status,
       hasBeenRetried,
       isLastRetry,
       hasFailedAllRetries,
       attemptToFixPassed,
-      isAttemptToFixRetry
+      attemptToFixFailed,
+      isAttemptToFixRetry,
+      isAtrRetry
     }) => {
-      const store = storage('legacy').getStore()
-      const span = store?.span
-
       if (span) {
         span.setTag(TEST_STATUS, status)
         if (hasBeenRetried) {
           span.setTag(TEST_IS_RETRY, 'true')
+          if (isAtrRetry) {
+            span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atr)
+          } else {
+            span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.ext)
+          }
         }
         if (hasFailedAllRetries) {
           span.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
         }
         if (attemptToFixPassed) {
           span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
+        } else if (attemptToFixFailed) {
+          span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
         }
         if (isAttemptToFixRetry) {
           span.setTag(TEST_IS_RETRY, 'true')
-          span.setTag(TEST_RETRY_REASON, 'attempt_to_fix')
+          span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atf)
         }
 
         const spanTags = span.context()._tags
@@ -250,19 +268,26 @@ class MochaPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:mocha:test:skip', (testInfo) => {
+    this.addBind('ci:mocha:test:skip', (ctx) => {
       const store = storage('legacy').getStore()
       // skipped through it.skip, so the span is not created yet
       // for this test
       if (!store) {
-        const testSpan = this.startTestSpan(testInfo)
-        this.enter(testSpan, store)
+        const span = this.startTestSpan(ctx)
+
+        ctx.parentStore = store
+        ctx.currentStore = { ...store, span }
+
+        this.activeTestSpan = span
       }
+
+      return ctx.currentStore
     })
 
-    this.addSub('ci:mocha:test:error', (err) => {
-      const store = storage('legacy').getStore()
-      const span = store?.span
+    this.addBind('ci:mocha:test:error', (ctx) => {
+      const { err } = ctx
+      const span = ctx.currentStore?.span
+
       if (err && span) {
         if (err.constructor.name === 'Pending' && !this.forbidPending) {
           span.setTag(TEST_STATUS, 'skip')
@@ -270,16 +295,26 @@ class MochaPlugin extends CiPlugin {
           span.setTag(TEST_STATUS, 'fail')
           span.setTag('error', err)
         }
+
+        ctx.parentStore = ctx.currentStore
+        ctx.currentStore = { ...ctx.currentStore, span }
+
+        this.activeTestSpan = span
       }
+
+      return ctx.currentStore
     })
 
-    this.addSub('ci:mocha:test:retry', ({ isFirstAttempt, willBeRetried, err, test }) => {
-      const store = storage('legacy').getStore()
-      const span = store?.span
+    this.addSub('ci:mocha:test:retry', ({ span, isFirstAttempt, willBeRetried, err, test, isAtrRetry }) => {
       if (span) {
         span.setTag(TEST_STATUS, 'fail')
         if (!isFirstAttempt) {
           span.setTag(TEST_IS_RETRY, 'true')
+          if (isAtrRetry) {
+            span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atr)
+          } else {
+            span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.ext)
+          }
         }
         if (err) {
           span.setTag('error', err)
@@ -473,7 +508,7 @@ class MochaPlugin extends CiPlugin {
       extraTags[TEST_IS_NEW] = 'true'
       if (isEfdRetry) {
         extraTags[TEST_IS_RETRY] = 'true'
-        extraTags[TEST_RETRY_REASON] = 'efd'
+        extraTags[TEST_RETRY_REASON] = 'early_flake_detection'
       }
     }
 

@@ -41,8 +41,7 @@ function newStore () {
       wafErrorCode: null,
       raspErrorCode: null,
       wafVersion: null,
-      rulesVersion: null,
-      ruleTriggered: null
+      rulesVersion: null
     }
   }
 }
@@ -143,10 +142,10 @@ function incrementMissingUserIdMetric (framework, eventType) {
   incrementMissingUserId(framework, eventType)
 }
 
-function incrementSdkEventMetric (framework, eventType) {
+function incrementSdkEventMetric (eventType, sdkVersion) {
   if (!enabled) return
 
-  incrementSdkEvent(framework, eventType)
+  incrementSdkEvent(eventType, sdkVersion)
 }
 
 function getRequestMetrics (req) {

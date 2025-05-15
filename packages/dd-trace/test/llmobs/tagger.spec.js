@@ -249,12 +249,12 @@ describe('tagger', () => {
         })
       })
 
-      it('merges tags so they do not overwrite', () => {
+      it('merges tags so they update', () => {
         Tagger.tagMap.set(span, { '_ml_obs.tags': { a: 1 } })
         const tags = { a: 2, b: 1 }
         tagger.tagSpanTags(span, tags)
         expect(Tagger.tagMap.get(span)).to.deep.equal({
-          '_ml_obs.tags': { a: 1, b: 1 }
+          '_ml_obs.tags': { a: 2, b: 1 }
         })
       })
     })
