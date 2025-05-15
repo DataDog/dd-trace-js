@@ -33,8 +33,5 @@ module.exports = {
   OUTPUT_TOKENS_METRIC_KEY: 'output_tokens',
   TOTAL_TOKENS_METRIC_KEY: 'total_tokens',
 
-  DROPPED_IO_COLLECTION_ERROR: 'dropped_io',
-
-  ML_PROXY_TAG: 'ml-proxy',
-  CUSTOM_ML_PROXY_VALUE: 'custom'
+  DROPPED_IO_COLLECTION_ERROR: 'dropped_io'
 }

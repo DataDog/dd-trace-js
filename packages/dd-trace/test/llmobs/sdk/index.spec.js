@@ -1249,7 +1249,6 @@ describe('sdk', () => {
       })
 
       expect(carrier['x-datadog-tags']).to.equal(`,_dd.p.llmobs_parent_id=${parentId},_dd.p.llmobs_ml_app=mlApp`)
-      expect(LLMObsTagger.tagMap.get(span)['_ml_obs.tags']).to.deep.equal({ 'ml-proxy': 'custom' })
     })
   })
 })
