@@ -28,7 +28,12 @@ const COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE = 256
 // default limiter, configurable with setRateLimit()
 let limiter = new Limiter(100)
 
-let extendedCollection = null
+const extendedDataCollectionConfiguration = {
+  headersExtendedCollectionEnabled: false,
+  maxHeadersCollected: 0,
+  headersRedaction: false,
+  raspBodyCollection: false
+}
 
 const metricsQueue = new Map()
 
@@ -71,6 +76,14 @@ const REQUEST_HEADERS_MAP = mapHeaderAndTags([
 ], REQUEST_HEADER_TAG_PREFIX)
 
 const RESPONSE_HEADERS_MAP = mapHeaderAndTags(contentHeaderList, RESPONSE_HEADER_TAG_PREFIX)
+
+function init (config) {
+  limiter = new Limiter(config.rateLimit)
+  extendedDataCollectionConfiguration.headersExtendedCollectionEnabled = config.extendedHeadersCollection.enabled
+  extendedDataCollectionConfiguration.maxHeadersCollected = config.extendedHeadersCollection.maxHeaders
+  extendedDataCollectionConfiguration.headersRedaction = config.extendedHeadersCollection.redaction
+  extendedDataCollectionConfiguration.raspBodyCollection = config.rasp.bodyCollection
+}
 
 function formatHeaderName (name) {
   return name
@@ -131,7 +144,10 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders) {
   const responseEventCollectedHeaders = filterHeaders(res.getHeaders(), RESPONSE_HEADERS_MAP)
 
   // Extended collection
-  if (!(extendedCollection?.enabled && !extendedCollection?.redaction)) {
+  if (
+    !(extendedDataCollectionConfiguration.headersExtendedCollectionEnabled
+      && !extendedDataCollectionConfiguration.headersRedaction)
+  ) {
     return Object.assign(
       mandatoryCollectedHeaders,
       requestEventCollectedHeaders,
@@ -140,7 +156,7 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders) {
   }
 
   const requestExtendedHeadersAvailableCount =
-    extendedCollection.maxHeaders -
+    extendedDataCollectionConfiguration.maxHeadersCollected -
     Object.keys(mandatoryCollectedHeaders).length -
     Object.keys(requestEventCollectedHeaders).length
 
@@ -153,7 +169,7 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders) {
     )
 
   const responseExtendedHeadersAvailableCount =
-    extendedCollection.maxHeaders -
+    extendedDataCollectionConfiguration.maxHeadersCollected -
     Object.keys(responseEventCollectedHeaders).length
 
   const responseEventExtendedCollectedHeaders =
@@ -174,15 +190,15 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders) {
 
   // Check discarded headers
   const requestHeadersCount = Object.keys(req.headers).length
-  if (requestHeadersCount > extendedCollection.maxHeaders) {
+  if (requestHeadersCount > extendedDataCollectionConfiguration.maxHeadersCollected) {
     headersTags['_dd.appsec.request.header_collection.discarded'] =
-      requestHeadersCount - extendedCollection.maxHeaders
+      requestHeadersCount - extendedDataCollectionConfiguration.maxHeadersCollected
   }
 
   const responseHeadersCount = Object.keys(res.getHeaders()).length
-  if (responseHeadersCount > extendedCollection.maxHeaders) {
+  if (responseHeadersCount > extendedDataCollectionConfiguration.maxHeadersCollected) {
     headersTags['_dd.appsec.response.header_collection.discarded'] =
-      responseHeadersCount - extendedCollection.maxHeaders
+      responseHeadersCount - extendedDataCollectionConfiguration.maxHeadersCollected
   }
 
   return headersTags
@@ -274,7 +290,7 @@ function reportAttack (attackData) {
 
   rootSpan.addTags(newTags)
 
-  if (extendedCollection?.raspBodyCollection && isRaspAttack(attackData)) {
+  if (extendedDataCollectionConfiguration.raspBodyCollection && isRaspAttack(attackData)) {
     reportRequestBody(rootSpan, req.body)
   }
 }
@@ -424,16 +440,9 @@ function shouldCollectEventHeaders (tags = {}) {
   return false
 }
 
-function setRateLimit (rateLimit) {
-  limiter = new Limiter(rateLimit)
-}
-
-function setExtendedCollection (extendedCollectionConfig) {
-  extendedCollection = extendedCollectionConfig
-}
-
 module.exports = {
   metricsQueue,
+  init,
   filterHeaders,
   filterExtendedHeaders,
   formatHeaderName,
@@ -444,8 +453,6 @@ module.exports = {
   reportRaspRuleSkipped: updateRaspRuleSkippedMetricTags,
   reportDerivatives,
   finishRequest,
-  setRateLimit,
   mapHeaderAndTags,
-  setExtendedCollection,
   truncateRequestBody
 }
