@@ -19,7 +19,7 @@ function createWrapRouterMethod (name) {
   function wrapLayerHandle (layer, original) {
     original._name = original._name || layer.name
 
-    return shimmer.wrapFunction(original, original => function () {
+    return shimmer.wrapFunction(original, function () {
       if (!enterChannel.hasSubscribers) return original.apply(this, arguments)
 
       const matchers = layerMatchers.get(layer)
@@ -84,7 +84,7 @@ function createWrapRouterMethod (name) {
   }
 
   function wrapNext (req, next) {
-    return shimmer.wrapFunction(next, next => function (error) {
+    return shimmer.wrapFunction(next, function (error) {
       if (error && error !== 'route' && error !== 'router') {
         errorChannel.publish({ req, error })
       }
@@ -145,7 +145,7 @@ function createWrapRouterMethod (name) {
   }
 
   function wrapMethod (original) {
-    return shimmer.wrapFunction(original, original => function methodWithTrace (fn) {
+    return shimmer.wrapFunction(original, function methodWithTrace (fn) {
       const offset = this.stack ? [].concat(this.stack).length : 0
       const router = original.apply(this, arguments)
 
@@ -174,26 +174,24 @@ addHook({ name: 'router', versions: ['>=1 <2'] }, Router => {
 const queryParserReadCh = channel('datadog:query:read:finish')
 
 addHook({ name: 'router', versions: ['>=2'] }, Router => {
-  const WrappedRouter = shimmer.wrapFunction(Router, function (originalRouter) {
-    return function wrappedMethod () {
-      const router = originalRouter.apply(this, arguments)
+  const WrappedRouter = shimmer.wrapFunction(Router, function wrappedMethod () {
+    const router = Router.apply(this, arguments)
 
-      shimmer.wrap(router, 'handle', function wrapHandle (originalHandle) {
-        return function wrappedHandle (req, res, next) {
-          const abortController = new AbortController()
+    shimmer.wrap(router, 'handle', function wrapHandle (originalHandle) {
+      return function wrappedHandle (req, res, next) {
+        const abortController = new AbortController()
 
-          if (queryParserReadCh.hasSubscribers && req) {
-            queryParserReadCh.publish({ req, res, query: req.query, abortController })
+        if (queryParserReadCh.hasSubscribers && req) {
+          queryParserReadCh.publish({ req, res, query: req.query, abortController })
 
-            if (abortController.signal.aborted) return
-          }
-
-          return originalHandle.apply(this, arguments)
+          if (abortController.signal.aborted) return
         }
-      })
 
-      return router
-    }
+        return originalHandle.apply(this, arguments)
+      }
+    })
+
+    return router
   })
 
   shimmer.wrap(WrappedRouter.prototype, 'use', wrapRouterMethod)
@@ -235,25 +233,24 @@ addHook({
 
 function wrapParam (original) {
   return function wrappedProcessParams () {
-    arguments[1] = shimmer.wrapFunction(arguments[1], (originalFn) => {
-      return function wrappedFn (req, res) {
-        if (routerParamStartCh.hasSubscribers && Object.keys(req.params).length && !visitedParams.has(req.params)) {
-          visitedParams.add(req.params)
+    const originalFn = arguments[1]
+    arguments[1] = shimmer.wrapFunction(originalFn, function wrappedFn (req, res) {
+      if (routerParamStartCh.hasSubscribers && Object.keys(req.params).length && !visitedParams.has(req.params)) {
+        visitedParams.add(req.params)
 
-          const abortController = new AbortController()
+        const abortController = new AbortController()
 
-          routerParamStartCh.publish({
-            req,
-            res,
-            params: req?.params,
-            abortController
-          })
+        routerParamStartCh.publish({
+          req,
+          res,
+          params: req?.params,
+          abortController
+        })
 
-          if (abortController.signal.aborted) return
-        }
-
-        return originalFn.apply(this, arguments)
+        if (abortController.signal.aborted) return
       }
+
+      return originalFn.apply(this, arguments)
     })
 
     return original.apply(this, arguments)

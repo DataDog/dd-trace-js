@@ -15,7 +15,7 @@ addHook({
 
   patched.add(mochaEach)
 
-  return shimmer.wrapFunction(mochaEach, mochaEach => function () {
+  return shimmer.wrapFunction(mochaEach, function () {
     const [params] = arguments
     const { it, ...rest } = mochaEach.apply(this, arguments)
     return {

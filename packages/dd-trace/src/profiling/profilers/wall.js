@@ -49,10 +49,10 @@ function ensureChannelsActivated () {
 
   shimmer.wrap(AsyncLocalStorage.prototype, 'run', function (original) {
     return function (store, callback, ...args) {
-      const wrappedCb = shimmer.wrapFunction(callback, cb => function (...args) {
+      const wrappedCb = shimmer.wrapFunction(callback, function (...args) {
         inRun = false
         enterCh.publish()
-        const retVal = cb.apply(this, args)
+        const retVal = callback.apply(this, args)
         inRun = true
         return retVal
       })

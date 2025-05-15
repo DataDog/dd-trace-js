@@ -84,7 +84,7 @@ addHook({ name: 'express', versions: ['>=5.0.0'] }, express => {
 const queryParserReadCh = channel('datadog:query:read:finish')
 
 function publishQueryParsedAndNext (req, res, next) {
-  return shimmer.wrapFunction(next, next => function () {
+  return shimmer.wrapFunction(next, function () {
     if (queryParserReadCh.hasSubscribers && req) {
       const abortController = new AbortController()
       const query = req.query
@@ -103,10 +103,10 @@ addHook({
   versions: ['4'],
   file: 'lib/middleware/query.js'
 }, query => {
-  return shimmer.wrapFunction(query, query => function () {
+  return shimmer.wrapFunction(query, function () {
     const queryMiddleware = query.apply(this, arguments)
 
-    return shimmer.wrapFunction(queryMiddleware, queryMiddleware => function (req, res, next) {
+    return shimmer.wrapFunction(queryMiddleware, function (req, res, next) {
       arguments[2] = publishQueryParsedAndNext(req, res, next)
       return queryMiddleware.apply(this, arguments)
     })

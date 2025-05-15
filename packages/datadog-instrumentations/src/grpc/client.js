@@ -88,7 +88,7 @@ function wrapMethod (method, path, type, hasPeer) {
     return method
   }
 
-  const wrapped = shimmer.wrapFunction(method, method => function () {
+  const wrapped = shimmer.wrapFunction(method, function () {
     const args = ensureMetadata(this, arguments, 1)
     return callMethod(this, method, args, path, args[1], type, hasPeer)
   })
@@ -99,7 +99,7 @@ function wrapMethod (method, path, type, hasPeer) {
 }
 
 function wrapCallback (ctx, callback = () => { }) {
-  return shimmer.wrapFunction(callback, callback => function (err) {
+  return shimmer.wrapFunction(callback, function (err) {
     if (err) {
       ctx.error = err
       errorChannel.publish(ctx)

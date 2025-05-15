@@ -13,6 +13,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
 
   get serviceIdentifier () {
     const id = this.constructor.id.toLowerCase()
+    console.log('id', id)
     Object.defineProperty(this, 'serviceIdentifier', {
       configurable: true,
       writable: true,

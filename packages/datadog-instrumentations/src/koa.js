@@ -71,7 +71,7 @@ function wrapStack (layer) {
 
     middleware = original || middleware
 
-    const handler = shimmer.wrapFunction(middleware, middleware => wrapMiddleware(middleware, layer))
+    const handler = shimmer.wrapFunction(middleware, wrapMiddleware(middleware, layer))
 
     originals.set(handler, middleware)
 
@@ -84,7 +84,7 @@ function wrapMiddleware (fn, layer) {
 
   const name = fn.name
 
-  return shimmer.wrapFunction(fn, fn => function (ctx, next) {
+  return shimmer.wrapFunction(fn, function (ctx, next) {
     if (!ctx || !enterChannel.hasSubscribers) return fn.apply(this, arguments)
 
     const req = ctx.req
@@ -142,7 +142,7 @@ function fulfill (ctx, error) {
 }
 
 function wrapNext (req, next) {
-  return shimmer.wrapFunction(next, next => function () {
+  return shimmer.wrapFunction(next, function () {
     nextChannel.publish({ req })
 
     return next.apply(this, arguments)

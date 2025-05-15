@@ -249,7 +249,7 @@ function wrapRun (pl, isLatestVersion) {
     testStartCh.runStores(ctx, () => { })
     const promises = {}
     try {
-      this.eventBroadcaster.on('envelope', shimmer.wrapFunction(null, () => async (testCase) => {
+      this.eventBroadcaster.on('envelope', async (testCase) => {
         // Only supported from >=8.0.0
         if (testCase?.testCaseFinished) {
           const { testCaseFinished: { willBeRetried } } = testCase
@@ -279,7 +279,7 @@ function wrapRun (pl, isLatestVersion) {
             testStartCh.runStores(newCtx, () => { })
           }
         }
-      }))
+      })
       let promise
 
       testFnCh.runStores(ctx, () => {

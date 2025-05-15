@@ -25,17 +25,13 @@ function wrapSessionMiddleware (sessionMiddleware) {
   }
 }
 
-function wrapSession (session) {
-  return function wrappedSession () {
-    const sessionMiddleware = session.apply(this, arguments)
-
-    return shimmer.wrapFunction(sessionMiddleware, wrapSessionMiddleware)
-  }
-}
-
 addHook({
   name: 'express-session',
   versions: ['>=1.5.0']
 }, session => {
-  return shimmer.wrapFunction(session, wrapSession)
+  return shimmer.wrapFunction(session, function wrappedSession () {
+    const sessionMiddleware = session.apply(this, arguments)
+
+    return shimmer.wrapFunction(sessionMiddleware, wrapSessionMiddleware(sessionMiddleware))
+  })
 })

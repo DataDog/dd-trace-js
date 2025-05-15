@@ -40,7 +40,7 @@ function wrapMiddleware (middleware) {
 function wrapFn (fn) {
   if (Array.isArray(fn)) return wrapMiddleware(fn)
 
-  return shimmer.wrapFunction(fn, fn => function (req, res, next) {
+  return shimmer.wrapFunction(fn, function (req, res, next) {
     if (typeof next === 'function') {
       arguments[2] = wrapNext(req, next)
     }
@@ -76,7 +76,7 @@ function wrapFn (fn) {
 }
 
 function wrapNext (req, next) {
-  return shimmer.wrapFunction(next, next => function () {
+  return shimmer.wrapFunction(next, function () {
     nextChannel.publish({ req })
     finishChannel.publish({ req })
 

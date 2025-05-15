@@ -52,7 +52,7 @@ addHook({ name: names }, (net, version, name) => {
       setupListeners(this, protocol, ctx, finishCh, errorCh)
 
       const emit = this.emit
-      this.emit = shimmer.wrapFunction(emit, emit => function (eventName) {
+      this.emit = shimmer.wrapFunction(emit, function (eventName) {
         switch (eventName) {
           case 'ready':
           case 'connect':

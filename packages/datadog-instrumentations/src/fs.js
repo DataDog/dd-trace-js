@@ -275,7 +275,7 @@ function createWrapFunction (prefix = '', override = '') {
       }
 
       if (cb) {
-        arguments[lastIndex] = shimmer.wrapFunction(cb, cb => function (e) {
+        arguments[lastIndex] = shimmer.wrapFunction(cb, function (e) {
           return finish(e, () => cb.apply(this, arguments))
         })
       }

@@ -43,5 +43,5 @@ addHook({
   versions: ['4', '5', '6']
 },
 commandFactory => {
-  return shimmer.wrapFunction(commandFactory, f => wrapCreateCommand(f))
+  return shimmer.wrapFunction(commandFactory, wrapCreateCommand(commandFactory))
 })

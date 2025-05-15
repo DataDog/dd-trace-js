@@ -118,8 +118,8 @@ function resolve (path, obj, separator = '.') {
 }
 
 function wrapSanitizer (target, secureMarks) {
-  return shimmer.wrapFunction(target, orig => function () {
-    const result = orig.apply(this, arguments)
+  return shimmer.wrapFunction(target, function () {
+    const result = target.apply(this, arguments)
 
     try {
       return addSecureMarks(result, secureMarks)
@@ -134,7 +134,7 @@ function wrapSanitizer (target, secureMarks) {
 function wrapInputValidator (target, parameters, secureMarks) {
   const allParameters = !parameters?.length
 
-  return shimmer.wrapFunction(target, orig => function () {
+  return shimmer.wrapFunction(target, function () {
     try {
       [...arguments].forEach((arg, index) => {
         if (allParameters || parameters.includes(index)) {
@@ -145,7 +145,7 @@ function wrapInputValidator (target, parameters, secureMarks) {
       log.error('[ASM] Error adding Secure mark for input validator', e)
     }
 
-    return orig.apply(this, arguments)
+    return target.apply(this, arguments)
   })
 }
 

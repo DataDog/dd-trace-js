@@ -119,7 +119,7 @@ function wrapStream (call, ctx, onCancel) {
 }
 
 function wrapCallback (callback = () => {}, call, ctx, onCancel) {
-  return shimmer.wrapFunction(callback, callback => function (err, value, trailer, flags) {
+  return shimmer.wrapFunction(callback, function (err, value, trailer, flags) {
     if (err) {
       ctx.error = err
       errorChannel.publish(ctx)

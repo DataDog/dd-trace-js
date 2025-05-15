@@ -71,7 +71,7 @@ function wrap (prefix, fn, expectedArgs, rrtype) {
     const ctx = { args }
 
     return startCh.runStores(ctx, () => {
-      arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => function (error, result, ...args) {
+      arguments[arguments.length - 1] = shimmer.wrapFunction(cb, function (error, result, ...args) {
         if (error) {
           ctx.error = error
           errorCh.publish(ctx)

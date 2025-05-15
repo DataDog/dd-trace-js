@@ -11,7 +11,7 @@ const skipCh = channel('apm:mariadb:pool:skip')
 const unskipCh = channel('apm:mariadb:pool:unskip')
 
 function wrapCommandStart (start, callbackResource) {
-  return shimmer.wrapFunction(start, start => function () {
+  return shimmer.wrapFunction(start, function () {
     if (!startCh.hasSubscribers) return start.apply(this, arguments)
 
     const resolve = callbackResource.bind(this.resolve)
@@ -98,7 +98,7 @@ function createWrapQueryCallback (options) {
         arguments.length = arguments.length + 1
       }
 
-      arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => asyncResource.bind(function (err) {
+      arguments[arguments.length - 1] = shimmer.wrapFunction(cb, asyncResource.bind(function (err) {
         if (err) {
           errorCh.publish(err)
         }
@@ -125,17 +125,6 @@ function wrapConnection (promiseMethod, Connection) {
 
     shimmer.wrap(this, promiseMethod, createWrapQuery(options))
     shimmer.wrap(this, '_queryCallback', createWrapQueryCallback(options))
-  }
-}
-
-function wrapPoolBase (PoolBase) {
-  return function (options, processTask, createConnectionPool, pingPromise) {
-    arguments[1] = wrapPoolMethod(processTask)
-    arguments[2] = wrapPoolMethod(createConnectionPool)
-
-    PoolBase.apply(this, arguments)
-
-    shimmer.wrap(this, 'query', createWrapQuery(options.connOptions))
   }
 }
 
@@ -189,13 +178,20 @@ addHook({ name, file: 'lib/pool.js', versions: ['>=3'] }, (Pool) => {
 })
 
 addHook({ name, file: 'lib/connection.js', versions: ['>=2.5.2 <3'] }, (Connection) => {
-  return shimmer.wrapFunction(Connection, wrapConnection.bind(null, '_queryPromise'))
+  return shimmer.wrapFunction(Connection, wrapConnection(Connection, '_queryPromise'))
 })
 
 addHook({ name, file: 'lib/connection.js', versions: ['>=2.0.4 <=2.5.1'] }, (Connection) => {
-  return shimmer.wrapFunction(Connection, wrapConnection.bind(null, 'query'))
+  return shimmer.wrapFunction(Connection, wrapConnection(Connection, 'query'))
 })
 
 addHook({ name, file: 'lib/pool-base.js', versions: ['>=2.0.4 <3'] }, (PoolBase) => {
-  return shimmer.wrapFunction(PoolBase, wrapPoolBase)
+  return shimmer.wrapFunction(PoolBase, function (options, processTask, createConnectionPool, pingPromise) {
+    arguments[1] = wrapPoolMethod(processTask)
+    arguments[2] = wrapPoolMethod(createConnectionPool)
+
+    PoolBase.apply(this, arguments)
+
+    shimmer.wrap(this, 'query', createWrapQuery(options.connOptions))
+  })
 })

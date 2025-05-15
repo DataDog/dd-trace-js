@@ -153,7 +153,7 @@ function wrapDeliveryUpdate (obj, update) {
   const asyncResource = context.asyncResource
   if (obj && asyncResource) {
     const cb = asyncResource.bind(update)
-    return shimmer.wrapFunction(cb, cb => AsyncResource.bind(function wrappedUpdate (settled, stateData) {
+    return shimmer.wrapFunction(cb, AsyncResource.bind(function wrappedUpdate (settled, stateData) {
       const state = getStateFromData(stateData)
       dispatchReceiveCh.publish({ state })
       return cb.apply(this, arguments)
@@ -178,7 +178,7 @@ function patchCircularBuffer (proto, Session) {
         }
         if (CircularBuffer && !patched.has(CircularBuffer.prototype)) {
           shimmer.wrap(CircularBuffer.prototype, 'pop_if', popIf => function (fn) {
-            arguments[0] = shimmer.wrapFunction(fn, fn => AsyncResource.bind(function (entry) {
+            arguments[0] = shimmer.wrapFunction(fn, AsyncResource.bind(function (entry) {
               const context = contexts.get(entry)
               const asyncResource = context && context.asyncResource
 

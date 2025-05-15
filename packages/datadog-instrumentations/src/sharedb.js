@@ -48,7 +48,7 @@ addHook({ name: 'sharedb', versions: ['>=1'], file: 'lib/agent.js' }, Agent => {
 
       callback = callbackResource.bind(callback)
 
-      arguments[1] = shimmer.wrapFunction(callback, callback => asyncResource.bind(function (error, res) {
+      arguments[1] = shimmer.wrapFunction(callback, asyncResource.bind(function (error, res) {
         if (error) {
           errorCh.publish(error)
         }

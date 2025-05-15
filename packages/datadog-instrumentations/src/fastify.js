@@ -36,12 +36,12 @@ function wrapFastify (fastify, hasParsingEvents) {
 }
 
 function wrapAddHook (addHook) {
-  return shimmer.wrapFunction(addHook, addHook => function addHookWithTrace (name, fn) {
+  return shimmer.wrapFunction(addHook, function addHookWithTrace (name, fn) {
     fn = arguments[arguments.length - 1]
 
     if (typeof fn !== 'function') return addHook.apply(this, arguments)
 
-    arguments[arguments.length - 1] = shimmer.wrapFunction(fn, fn => function (request, reply, done) {
+    arguments[arguments.length - 1] = shimmer.wrapFunction(fn, function (request, reply, done) {
       const req = getReq(request)
 
       try {
@@ -162,7 +162,7 @@ function onRoute (routeOptions) {
 }
 
 addHook({ name: 'fastify', versions: ['>=3'] }, fastify => {
-  const wrapped = shimmer.wrapFunction(fastify, fastify => wrapFastify(fastify, true))
+  const wrapped = shimmer.wrapFunction(fastify, wrapFastify(fastify, true))
 
   wrapped.fastify = wrapped
   wrapped.default = wrapped
@@ -171,9 +171,9 @@ addHook({ name: 'fastify', versions: ['>=3'] }, fastify => {
 })
 
 addHook({ name: 'fastify', versions: ['2'] }, fastify => {
-  return shimmer.wrapFunction(fastify, fastify => wrapFastify(fastify, true))
+  return shimmer.wrapFunction(fastify, wrapFastify(fastify, true))
 })
 
 addHook({ name: 'fastify', versions: ['1'] }, fastify => {
-  return shimmer.wrapFunction(fastify, fastify => wrapFastify(fastify, false))
+  return shimmer.wrapFunction(fastify, wrapFastify(fastify, false))
 })

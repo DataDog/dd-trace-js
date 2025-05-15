@@ -28,7 +28,7 @@ function wrapServer (server) {
 }
 
 function wrapStart (start) {
-  return shimmer.wrapFunction(start, start => function () {
+  return shimmer.wrapFunction(start, function () {
     if (this && typeof this.ext === 'function') {
       this.ext('onPreResponse', onPreResponse)
     }
@@ -38,7 +38,7 @@ function wrapStart (start) {
 }
 
 function wrapExt (ext) {
-  return shimmer.wrapFunction(ext, ext => function (events, method, options) {
+  return shimmer.wrapFunction(ext, function (events, method, options) {
     if (events !== null && typeof events === 'object') {
       arguments[0] = wrapEvents(events)
     } else {
@@ -92,7 +92,7 @@ function wrapEvents (events) {
 function wrapHandler (handler) {
   if (typeof handler !== 'function') return handler
 
-  return shimmer.wrapFunction(handler, handler => function (request, h) {
+  return shimmer.wrapFunction(handler, function (request, h) {
     const req = request && request.raw && request.raw.req
 
     if (!req) return handler.apply(this, arguments)
