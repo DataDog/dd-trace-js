@@ -253,7 +253,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.stackTrace.maxStackTraces', 2)
     expect(config).to.have.nested.property('appsec.wafTimeout', 5e3)
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex').with.length(190)
-    expect(config).to.have.nested.property('appsec.obfuscatorValueRegex').with.length(550)
+    expect(config).to.have.nested.property('appsec.obfuscatorValueRegex').with.length(578)
     expect(config).to.have.nested.property('appsec.blockedTemplateHtml', undefined)
     expect(config).to.have.nested.property('appsec.blockedTemplateJson', undefined)
     expect(config).to.have.nested.property('appsec.blockedTemplateGraphql', undefined)
