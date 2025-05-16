@@ -155,5 +155,8 @@
     "tiktoken": "^1.0.21",
     "yaml": "^2.8.0",
     "yarn-deduplicate": "^6.0.2"
+  },
+  "volta": {
+    "node": "24.0.1"
   }
 }
