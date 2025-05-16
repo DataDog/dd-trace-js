@@ -37,7 +37,7 @@ const OPERATIONS = {
   REPORT_VULNERABILITY: {
     hasQuota: (context, vulnerabilityType) => {
       const reserved = context?.tokens?.[REPORT_VULNERABILITY] > 0
-      if (reserved && context.route != null ) {
+      if (reserved && context.route != null) {
         let copyMap = context.copyMap
         let localMap = context.localMap
 
