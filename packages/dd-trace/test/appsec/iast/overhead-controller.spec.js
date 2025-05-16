@@ -253,6 +253,26 @@ describe('Overhead controller', () => {
           })
 
           it('should detect the first vulnerability of the type ' +
+            'when in the previous request the budget has been finished with the same vulnerability type' +
+            'and there is no route', () => {
+            webContext.paths = undefined
+            // the previous request first request filling the cache and detecting SSRF
+            iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 1
+            expect(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF)).to.be.true
+            overheadController.consolidateVulnerabilities(iastContext)
+            expect(iastContext[oceContextKey]).to.have.nested.property(`tokens.${OPERATION.name}`, 0)
+
+            // Ignoring the first SSRF in the next request
+            iastContext = { req }
+            overheadController.initializeRequestContext(iastContext)
+            iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 1
+            expect(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF)).to.be.false
+
+            // and finding the second
+            expect(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF)).to.be.true
+          })
+
+          it('should detect the first vulnerability of the type ' +
             'when in the previous request the budget has been finished with different vulnerability types', () => {
             // the previous request first request filling the cache and detecting SSRF
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 1

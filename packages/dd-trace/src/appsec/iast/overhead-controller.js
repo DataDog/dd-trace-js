@@ -17,18 +17,20 @@ const globalRouteMap = new LRUCache({ max: 4096 })
 let vulnerabilitiesSize = 0
 const vulnerabilityIndexes = Object.values(vulnerabilities).reduce((obj, item, index) => {
   obj[item] = index
-  vulnerabilitiesSize = index + 1
+  vulnerabilitiesSize++
   return obj
 }, {})
 
 function newCountersArray () {
   return Array(vulnerabilitiesSize).fill(0)
 }
+
 function copyFromGlobalMap (route) {
   const vulnerabilityCounters = globalRouteMap.get(route)
   return vulnerabilityCounters ? [...vulnerabilityCounters] : newCountersArray()
 }
 
+// for testing purposes
 function clearGlobalRouteMap () {
   globalRouteMap.clear()
 }
@@ -99,9 +101,9 @@ function _getContext (iastContext) {
     }
 
     const currentPaths = oceContext.webContext?.paths
-    if (currentPaths !== oceContext.paths) {
+    if (currentPaths !== oceContext.paths || !oceContext.route) {
       oceContext.paths = currentPaths
-      oceContext.route = '#' + oceContext.method + '#' + currentPaths?.join('') || ''
+      oceContext.route = '#' + oceContext.method + '#' + (currentPaths?.join('') || '')
     }
 
     return iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY]
