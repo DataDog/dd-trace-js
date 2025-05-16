@@ -54,6 +54,8 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
 
     const kafkaClusterIdPromise = getKafkaClusterId(this)
 
+    producer._ddDisableHeaderInjection = false
+
     producer.send = function () {
       const wrappedSend = (clusterId) => {
         const innerAsyncResource = new AsyncResource('bound-anonymous-fn')
@@ -65,12 +67,9 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
 
           try {
             const { topic, messages = [] } = arguments[0]
-            for (const message of messages) {
-              if (message !== null && typeof message === 'object') {
-                message.headers = message.headers || {}
-              }
-            }
-            producerStartCh.publish({ topic, messages, bootstrapServers, clusterId })
+            producerStartCh.publish(
+              { topic, messages, bootstrapServers, clusterId, disableHeaderInjection: this._ddDisableHeaderInjection }
+            )
 
             const result = send.apply(this, arguments)
 
@@ -81,6 +80,10 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
               }),
               innerAsyncResource.bind(err => {
                 if (err) {
+                  // disable header injection for this error (unfortunately the error name / type is not more specific)
+                  if (err.name === 'KafkaJSProtocolError' && err.type === 'UNKNOWN') {
+                    this._ddDisableHeaderInjection = true
+                  }
                   producerErrorCh.publish(err)
                 }
                 producerFinishCh.publish(undefined)
