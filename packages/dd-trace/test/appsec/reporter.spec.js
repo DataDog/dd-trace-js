@@ -1043,7 +1043,7 @@ describe('reporter', () => {
             extendedHeadersCollection: {
               enabled: true,
               redaction: false,
-              maxHeaders: maxHeaders
+              maxHeaders
             },
             rasp: {
               bodyCollection: false
