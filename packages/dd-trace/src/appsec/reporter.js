@@ -144,8 +144,8 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders) {
   const responseEventCollectedHeaders = filterHeaders(res.getHeaders(), RESPONSE_HEADERS_MAP)
 
   if (
-    !(extendedDataCollectionConfiguration.headersExtendedCollectionEnabled
-      && !extendedDataCollectionConfiguration.headersRedaction)
+    !(extendedDataCollectionConfiguration.headersExtendedCollectionEnabled &&
+      !extendedDataCollectionConfiguration.headersRedaction)
   ) {
     // Standard collection
     return Object.assign(
