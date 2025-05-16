@@ -1,5 +1,6 @@
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
+const { getConfiguration } = require('../../dd-trace/src/config-helper')
 
 const {
   TEST_STATUS,
@@ -47,7 +48,7 @@ const {
   TELEMETRY_TEST_SESSION
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 
-const isJestWorker = !!process.env.JEST_WORKER_ID
+const isJestWorker = !!getConfiguration('JEST_WORKER_ID')
 
 // https://github.com/facebook/jest/blob/d6ad15b0f88a05816c2fe034dd6900d28315d570/packages/jest-worker/src/types.ts#L38
 const CHILD_MESSAGE_END = 2
@@ -157,7 +158,7 @@ class JestPlugin extends CiPlugin {
 
       this.telemetry.count(TELEMETRY_TEST_SESSION, {
         provider: this.ciProviderName,
-        autoInjected: !!process.env.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER
+        autoInjected: !!getConfiguration('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER')
       })
 
       this.tracer._exporter.flush(() => {
