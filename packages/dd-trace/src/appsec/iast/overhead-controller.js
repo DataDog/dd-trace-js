@@ -60,9 +60,12 @@ const OPERATIONS = {
         if (counter < storedCounter) {
           return false
         }
+      }
 
+      if (reserved) {
         context.tokens[REPORT_VULNERABILITY]--
       }
+
       return reserved
     },
     name: REPORT_VULNERABILITY,
@@ -92,10 +95,10 @@ function _getContext (iastContext) {
     const oceContext = iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY]
     if (!oceContext.webContext) {
       oceContext.webContext = web.getContext(iastContext.req)
-      oceContext.method = iastContext.req.method
+      oceContext.method = iastContext.req?.method
     }
 
-    const currentPaths = oceContext.webContext.paths
+    const currentPaths = oceContext.webContext?.paths
     if (currentPaths !== oceContext.paths) {
       oceContext.paths = currentPaths
       oceContext.route = '#' + oceContext.method + '#' + currentPaths?.join('') || ''

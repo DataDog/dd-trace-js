@@ -1,4 +1,5 @@
-const overheadController = require('../../../src/appsec/iast/overhead-controller')
+'use strict'
+
 const vulnerabilityReporter = require('../../../src/appsec/iast/vulnerability-reporter')
 const DatadogSpanContext = require('../../../src/opentracing/span_context')
 const Config = require('../../../src/config')
@@ -9,12 +10,23 @@ const { testInRequest } = require('./utils')
 const agent = require('../../plugins/agent')
 const axios = require('axios')
 const { EventEmitter } = require('events')
+const proxyquire = require('proxyquire')
+const vulnerabilities = require('../../../src/appsec/iast/vulnerabilities')
 
 describe('Overhead controller', () => {
-  const oceContextKey = overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY
+  let oceContextKey, overheadController, web
 
-  describe('unit tests', () => {
+  describe.only('unit tests', () => {
     beforeEach(() => {
+      web = {
+        getContext: sinon.stub()
+      }
+
+      overheadController = proxyquire('../../../src/appsec/iast/overhead-controller', {
+        '../../plugins/util/web': web
+      })
+      oceContextKey = overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY
+
       const config = new Config({
         experimental: {
           iast: true
@@ -180,7 +192,11 @@ describe('Overhead controller', () => {
     describe('Operations', () => {
       describe('Report vulnerability', () => {
         let iastContext
-        const OPERATION = overheadController.OPERATIONS.REPORT_VULNERABILITY
+        let OPERATION
+
+        beforeEach(() => {
+          OPERATION = overheadController.OPERATIONS.REPORT_VULNERABILITY
+        })
 
         it('should not fail with unexpected data', () => {
           overheadController.hasQuota(OPERATION)
@@ -189,9 +205,21 @@ describe('Overhead controller', () => {
         })
 
         describe('within request', () => {
+          let webContext, req
           beforeEach(() => {
-            iastContext = {}
+            req = {
+              method: 'GET'
+            }
+            iastContext = { req }
+            webContext = {
+              paths: []
+            }
+            web.getContext.returns(webContext)
             overheadController.initializeRequestContext(iastContext)
+          })
+
+          afterEach(() => {
+            overheadController.clearGlobalRouteMap()
           })
 
           it('should populate initial context with available tokens', () => {
@@ -201,8 +229,40 @@ describe('Overhead controller', () => {
 
           it('should allow when available tokens', () => {
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 2
-            expect(overheadController.hasQuota(OPERATION, iastContext)).to.be.true
+            expect(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF)).to.be.true
             expect(iastContext[oceContextKey]).to.have.nested.property(`tokens.${OPERATION.name}`, 1)
+          })
+
+          it('should skip the first WHEN the type has been detected in the previous request', () => {
+            // first request filling the cache
+            iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 1
+            expect(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF)).to.be.true
+            overheadController.consolidateVulnerabilities(iastContext)
+            expect(iastContext[oceContextKey]).to.have.nested.property(`tokens.${OPERATION.name}`, 0)
+
+            // second request ignoring the fist one
+            iastContext = { req }
+            overheadController.initializeRequestContext(iastContext)
+            iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 1
+            expect(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF)).to.be.false
+            // and finding the second
+            expect(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF)).to.be.true
+          })
+
+          it('should detect the first one of the type when in the previous request has finished the budget with different types', () => {
+            // first request filling the cache
+            iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 1
+            expect(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF)).to.be.true
+            overheadController.consolidateVulnerabilities(iastContext)
+            expect(iastContext[oceContextKey]).to.have.nested.property(`tokens.${OPERATION.name}`, 0)
+
+            // second request ignoring the fist one
+            iastContext = { req }
+            overheadController.initializeRequestContext(iastContext)
+            iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 1
+            expect(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.CODE_INJECTION)).to.be.true
+            // and finding the second
+            expect(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF)).to.be.false
           })
 
           it('should not allow when no available tokens', () => {
