@@ -4,6 +4,7 @@ const getPort = require('get-port')
 const path = require('path')
 const Axios = require('axios')
 const { assert } = require('chai')
+const msgpack = require('@msgpack/msgpack')
 const { createSandbox, FakeAgent, spawnProc } = require('../helpers')
 
 describe('RASP', () => {
@@ -42,7 +43,8 @@ describe('RASP', () => {
           APP_PORT: appPort,
           DD_APPSEC_ENABLED: true,
           DD_APPSEC_RASP_ENABLED: true,
-          DD_APPSEC_RULES: path.join(cwd, 'appsec/rasp/rasp_rules.json')
+          DD_APPSEC_RULES: path.join(cwd, 'appsec/rasp/rasp_rules.json'),
+          DD_APPSEC_RASP_COLLECT_REQUEST_BODY: true
         }
       }, stdOutputHandler, stdOutputHandler)
     })
@@ -57,6 +59,13 @@ describe('RASP', () => {
     await agent.assertMessageReceived(({ headers, payload }) => {
       assert.property(payload[0][0].meta, '_dd.appsec.json')
       assert.include(payload[0][0].meta['_dd.appsec.json'], '"test-rule-id-2"')
+    })
+  }
+
+  async function assertBodyReported (expectedBody) {
+    await agent.assertMessageReceived(({ headers, payload }) => {
+      assert.property(payload[0][0].meta_struct, 'http.request.body')
+      assert.deepStrictEqual(msgpack.decode(payload[0][0].meta_struct['http.request.body']), expectedBody)
     })
   }
 
@@ -337,6 +346,23 @@ describe('RASP', () => {
         assert.notEqual(response.status, 403)
         await assertExploitDetected()
       })
+    })
+  })
+
+  describe('extended data collection', () => {
+    startServer(false)
+
+    it('should report body request', async() => {
+      const requestBody = { host: 'localhost/ifconfig.pro' }
+      try{
+        await axios.post('/ssrf', requestBody)
+      } catch (e) {
+        if (!e.response) {
+          throw e
+        }
+
+        await assertBodyReported(requestBody)
+      }
     })
   })
 })
