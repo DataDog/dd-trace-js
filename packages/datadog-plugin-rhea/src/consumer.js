@@ -16,7 +16,8 @@ class RheaConsumerPlugin extends ConsumerPlugin {
     })
   }
 
-  start ({ msgObj }) {
+  bindStart (ctx) {
+    const { msgObj } = ctx
     const name = getResourceNameFromMessage(msgObj)
     const childOf = extractTextMap(msgObj, this.tracer)
 
@@ -29,7 +30,7 @@ class RheaConsumerPlugin extends ConsumerPlugin {
         'amqp.link.source.address': name,
         'amqp.link.role': 'receiver'
       }
-    })
+    }, ctx)
 
     if (
       this.config.dsmEnabled &&
@@ -42,6 +43,8 @@ class RheaConsumerPlugin extends ConsumerPlugin {
       this.tracer
         .setCheckpoint(['direction:in', `topic:${name}`, 'type:rabbitmq'], span, payloadSize)
     }
+
+    return ctx.currentStore
   }
 }
 
