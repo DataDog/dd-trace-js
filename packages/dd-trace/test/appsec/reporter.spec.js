@@ -535,7 +535,7 @@ describe('reporter', () => {
         expect(span.meta_struct?.['http.request.body']).to.be.undefined
       })
 
-      it('should truncate collected request body', () => {
+      describe('Request body truncation', () => {
         const requestBody = {
           str: 'a'.repeat(5000),
           nestedObj: [...Array(42).keys()].reduce((prev, current) => (
@@ -553,18 +553,52 @@ describe('reporter', () => {
 
         requestBody.circularRef = requestBody
 
-        const truncatedRequestBody = Reporter.truncateRequestBody(requestBody)
+        it('should truncate collected request body', () => {
+          const { truncated, value: truncatedRequestBody } = Reporter.truncateRequestBody(requestBody)
 
-        expect(truncatedRequestBody).to.have.property('str')
-        expect(truncatedRequestBody.str).to.have.length(4096)
-        expect(objectDepth(truncatedRequestBody.nestedObj)).to.be.equal(19)
-        expect(Object.keys(truncatedRequestBody.objectWithLotsOfNodes)).to.have.length(256)
-        expect(truncatedRequestBody.arr).to.have.length(256)
-        expect(truncatedRequestBody.specialValues.nullValue).to.be.null
-        expect(truncatedRequestBody.specialValues.undefinedValue).to.be.undefined
-        expect(truncatedRequestBody.specialValues.emptyObject).to.be.deep.equal({})
-        expect(truncatedRequestBody.specialValues.emptyArray).to.be.deep.equal([])
-        expect(objectDepth(truncatedRequestBody.circularRef)).to.be.equal(19)
+          expect(truncated).to.be.true
+          expect(truncatedRequestBody).to.have.property('str')
+          expect(truncatedRequestBody.str).to.have.length(4096)
+          expect(objectDepth(truncatedRequestBody.nestedObj)).to.be.equal(19)
+          expect(Object.keys(truncatedRequestBody.objectWithLotsOfNodes)).to.have.length(256)
+          expect(truncatedRequestBody.arr).to.have.length(256)
+          expect(truncatedRequestBody.specialValues.nullValue).to.be.null
+          expect(truncatedRequestBody.specialValues.undefinedValue).to.be.undefined
+          expect(truncatedRequestBody.specialValues.emptyObject).to.be.deep.equal({})
+          expect(truncatedRequestBody.specialValues.emptyArray).to.be.deep.equal([])
+          expect(objectDepth(truncatedRequestBody.circularRef)).to.be.equal(19)
+        })
+
+        it('should set request body size exceeded when reporter request body has been truncated', () => {
+          Reporter.init(
+            {
+              rateLimit: 100,
+              extendedHeadersCollection: {
+                enabled: false,
+                redaction: true,
+                maxHeaders: 50
+              },
+              rasp: {
+                bodyCollection: true
+              }
+            }
+          )
+
+          req.body = requestBody
+
+          Reporter.reportAttack([
+            {
+              rule: {
+                tags: {
+                  module: 'rasp'
+                }
+              },
+              rule_matches: [{}]
+            }
+          ])
+
+          expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.rasp.request_body_size.exceeded', true)
+        })
       })
     })
   })

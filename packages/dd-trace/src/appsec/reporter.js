@@ -297,29 +297,49 @@ function reportAttack (attackData) {
 }
 
 function truncateRequestBody (target, depth = 0) {
+  let wasTruncated = false
+
   switch (typeof target) {
     case 'string':
-      return target.slice(0, COLLECTED_REQUEST_BODY_MAX_STRING_LENGTH)
+      if (target.length > COLLECTED_REQUEST_BODY_MAX_STRING_LENGTH) {
+        return { value: target.slice(0, COLLECTED_REQUEST_BODY_MAX_STRING_LENGTH), truncated: true }
+      }
+      return { value: target, truncated: false }
     case 'object':
       if (target === null) {
-        return target
+        return { value: target, truncated: false }
       }
 
       if (depth < COLLECTED_REQUEST_BODY_MAX_DEPTH) {
         if (Array.isArray(target)) {
-          return target.slice(0, COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE)
-            .map(v => truncateRequestBody(v, depth + 1))
+          const sliced = target.slice(0, COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE)
+          wasTruncated = target.length > COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE
+
+          const truncatedArray = []
+          for (const item of sliced) {
+            const { value, truncated } = truncateRequestBody(item, depth + 1)
+            if (truncated) wasTruncated = true
+            truncatedArray.push(value)
+          }
+
+          return { value: truncatedArray, truncated: wasTruncated }
         }
 
-        const result = {}
-        for (const key of Object.keys(target).slice(0, COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE)) {
-          result[key] = truncateRequestBody(target[key], depth + 1)
+        const keys = Object.keys(target)
+        const slicedKeys = keys.slice(0, COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE)
+        wasTruncated = keys.length > COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE
+
+        const truncatedObject = {}
+        for (const key of slicedKeys) {
+          const { value, truncated } = truncateRequestBody(target[key], depth + 1)
+          if (truncated) wasTruncated = true
+          truncatedObject[key] = value
         }
-        return result
+        return { value: truncatedObject, truncated: wasTruncated }
       }
-      break
+      return { truncated: true }
     default:
-      return target
+      return { value: target, truncated: false }
   }
 }
 
@@ -331,7 +351,11 @@ function reportRequestBody (rootSpan, requestBody) {
   }
 
   if (!rootSpan.meta_struct['http.request.body']) {
-    rootSpan.meta_struct['http.request.body'] = truncateRequestBody(requestBody)
+    const { truncated, value } = truncateRequestBody(requestBody)
+    rootSpan.meta_struct['http.request.body'] = value
+    if (truncated) {
+      rootSpan.setTag('_dd.appsec.rasp.request_body_size.exceeded', true)
+    }
   }
 }
 
