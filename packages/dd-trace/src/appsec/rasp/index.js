@@ -85,10 +85,12 @@ function blockOnDatadogRaspAbortError ({ error }) {
   const abortError = findDatadogRaspAbortError(error)
   if (!abortError) return false
 
-  const { req, res, blockingAction, raspRule } = abortError
+  const { req, res, blockingAction, raspRule, ruleTriggered } = abortError
   if (!isBlocked(res)) {
     const blocked = block(req, res, web.root(req), null, blockingAction)
-    updateRaspRuleMatchMetricTags(req, raspRule, true, blocked)
+    if (ruleTriggered) {
+      updateRaspRuleMatchMetricTags(req, raspRule, true, blocked)
+    }
   }
 
   return true

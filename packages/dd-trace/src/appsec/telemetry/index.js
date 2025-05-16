@@ -41,8 +41,7 @@ function newStore () {
       wafErrorCode: null,
       raspErrorCode: null,
       wafVersion: null,
-      rulesVersion: null,
-      ruleTriggered: null
+      rulesVersion: null
     }
   }
 }

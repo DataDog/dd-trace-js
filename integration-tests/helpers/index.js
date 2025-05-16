@@ -145,15 +145,22 @@ function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
 
 async function createSandbox (dependencies = [], isGitRepo = false,
   integrationTestsPaths = ['./integration-tests/*'], followUpCommand) {
-  /* To execute integration tests without a sandbox uncomment the next line
-   * and do `yarn link && yarn link dd-trace` */
-  // return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
+  // We might use NODE_OPTIONS to init the tracer. We don't want this to affect this operations
+  const { NODE_OPTIONS, ...restOfEnv } = process.env
+  const noSandbox = String(process.env.DD_NO_INTEGRATION_TESTS_SANDBOX)
+  if (noSandbox === '1' || noSandbox.toLowerCase() === 'true') {
+    // Execute integration tests without a sandbox. This is useful when you have other components
+    // yarn-linked into dd-trace and want to run the integration tests against them.
+
+    // Link dd-trace to itself, then...
+    await exec('yarn link')
+    await exec('yarn link dd-trace')
+    // ... run the tests in the current directory.
+    return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
+  }
   const folder = path.join(os.tmpdir(), id().toString())
   const out = path.join(folder, 'dd-trace.tgz')
   const allDependencies = [`file:${out}`].concat(dependencies)
-
-  // We might use NODE_OPTIONS to init the tracer. We don't want this to affect this operations
-  const { NODE_OPTIONS, ...restOfEnv } = process.env
 
   fs.mkdirSync(folder)
   const addCommand = `yarn add ${allDependencies.join(' ')} --ignore-engines`

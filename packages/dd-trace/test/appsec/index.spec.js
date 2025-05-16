@@ -32,10 +32,12 @@ const telemetryMetrics = require('../../src/telemetry/metrics')
 const addresses = require('../../src/appsec/addresses')
 
 const resultActions = {
-  block_request: {
-    status_code: '401',
-    type: 'auto',
-    grpc_status_code: '10'
+  actions: {
+    block_request: {
+      status_code: '401',
+      type: 'auto',
+      grpc_status_code: '10'
+    }
   }
 }
 
