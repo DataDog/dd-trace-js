@@ -17,13 +17,14 @@ const {
 const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('../webspan-utils')
 
 let beforeCh
+let lastInstance
 const enterCh = dc.channel('dd-trace:storage:enter')
 const spanFinishCh = dc.channel('dd-trace:span:finish')
 const profilerTelemetryMetrics = telemetryMetrics.manager.namespace('profilers')
 
 const ProfilingContext = Symbol('NativeWallProfiler.ProfilingContext')
 
-let kSampleCount
+let kSampleCount, kCPEDContextCount
 
 function getActiveSpan () {
   const store = storage('legacy').getStore()
@@ -154,6 +155,7 @@ class NativeWallProfiler {
 
     this._logger = options.logger
     this._started = false
+    lastInstance = this
   }
 
   codeHotspotsEnabled () {
@@ -170,6 +172,7 @@ class NativeWallProfiler {
     this._mapper = mapper
     this._pprof = require('@datadog/pprof')
     kSampleCount = this._pprof.time.constants.kSampleCount
+    kCPEDContextCount = this._pprof.time.constants.kCPEDContextCount
 
     // pprof otherwise crashes in worker threads
     if (!process._startProfilerIdleNotifier) {
@@ -283,6 +286,15 @@ class NativeWallProfiler {
       span[ProfilingContext] = profilingContext
     }
     return profilingContext
+  }
+
+  _getSampleContext () {
+    const context = this._pprof.time.getContext()
+    return this._useAsyncContextFrame ? context : context.ref
+  }
+
+  _getCPEDContextCount () {
+    return this._profilerState[kCPEDContextCount]
   }
 
   _setNewContext () {
@@ -421,4 +433,24 @@ class NativeWallProfiler {
   }
 }
 
+NativeWallProfiler.prototype.getActiveSpan = function () {
+  const span = getActiveSpan()
+  if (span === undefined) {
+    return {}
+  }
+  const spanData = lastInstance._getProfilingContext(span)
+  updateContext(spanData)
+  return { spanId: spanData.spanId, rootSpanId: spanData.rootSpanId }
+}
+NativeWallProfiler.prototype.getSampleContext = function () {
+  const ctx = lastInstance._getSampleContext()
+  if (ctx === undefined) {
+    return {}
+  }
+  updateContext(ctx)
+  return { spanId: ctx.spanId, rootSpanId: ctx.rootSpanId }
+}
+NativeWallProfiler.prototype.getCPEDContextCount = function () {
+  return lastInstance._getCPEDContextCount()
+}
 module.exports = NativeWallProfiler

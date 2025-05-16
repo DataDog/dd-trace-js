@@ -340,15 +340,16 @@ describe('profiler', () => {
         DD_TRACE_AGENT_PORT: agent.port
       }
       // With Node 23 or later, test the profiler with async context frame use.
-      let execArgv = []
+      const execArgv = []
       if (satisfies(process.versions.node, '>=23.0.0')) {
         env.DD_PROFILING_USE_ASYNC_CONTEXT_FRAME = 1
         if (!satisfies(process.versions.node, '>=24.0.0')) {
           // For Node 23, use the experimental command line flag for Node to enable
           // async context frame. Node 24 has it enabled by default.
-          execArgv = ['--experimental-async-context-frame']
+          execArgv.push('--experimental-async-context-frame')
         }
       }
+      console.log({path: path.join(cwd, 'profiler/codehotspots.js'), env, execArgv })
       const proc = fork(path.join(cwd, 'profiler/codehotspots.js'), { cwd, env, execArgv })
 
       await processExitPromise(proc, timeout)
