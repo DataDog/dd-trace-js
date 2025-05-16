@@ -1,4 +1,4 @@
-const Sampler = require('../../sampler')
+const RandomSampler = require('../../random_sampler')
 
 const RE_NEWLINE = /\n/g
 const RE_TAB = /\t/g
@@ -26,7 +26,7 @@ module.exports = function (integrationName, tracerConfig) {
   const integrationConfig = tracerConfig[integrationName] || {}
   const { spanCharLimit, spanPromptCompletionSampleRate } = integrationConfig
 
-  const sampler = new Sampler(spanPromptCompletionSampleRate ?? 1.0)
+  const sampler = new RandomSampler(spanPromptCompletionSampleRate ?? 1.0)
 
   return {
     normalize: str => normalize(str, spanCharLimit),
