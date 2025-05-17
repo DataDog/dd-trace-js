@@ -189,6 +189,49 @@ describe('findScriptFromPartialPath', function () {
     it('a Windows drive letter with a backslash', testPathNoMatch('c:\\'))
   })
 
+  describe('state', function () {
+    it('should be cleared when calling clearState', function () {
+      // Create an object that looks like a string to getOwnPropertyDescriptor, but allows us to override the length
+      // property. That can then be used to see how many times it's being called in the internal `loadedScripts` loop.
+      let lengthCalls = 0
+      class MockPath {
+        constructor (str) {
+          this._str = str
+          for (let i = 0; i < str.length; i++) {
+            const char = str[i]
+            this[i] = char
+          }
+        }
+
+        toLowerCase () {
+          return this
+        }
+
+        get length () {
+          lengthCalls++
+          return this._str.length
+        }
+      }
+      const mockPath = new MockPath('server/index.js')
+
+      // First call: length should be accessed at least once
+      state.findScriptFromPartialPath(mockPath)
+      expect(lengthCalls).to.be.above(0)
+
+      // Second call: length should be accessed the same amount of times as in the first call
+      const oldLengthCalls = lengthCalls
+      lengthCalls = 0
+      state.findScriptFromPartialPath(mockPath)
+      expect(lengthCalls).to.equal(oldLengthCalls)
+
+      // Third call: length should not be accessed when state is cleared
+      state.clearState()
+      lengthCalls = 0
+      state.findScriptFromPartialPath(mockPath)
+      expect(lengthCalls).to.equal(0)
+    })
+  })
+
   function testPathNoMatch (path) {
     return function () {
       const result = state.findScriptFromPartialPath(path)
