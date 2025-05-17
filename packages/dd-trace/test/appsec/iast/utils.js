@@ -12,6 +12,7 @@ const rewriter = require('../../../src/appsec/iast/taint-tracking/rewriter')
 const iast = require('../../../src/appsec/iast')
 const Config = require('../../../src/config')
 const vulnerabilityReporter = require('../../../src/appsec/iast/vulnerability-reporter')
+const overheadController = require('../../../src/appsec/iast/overhead-controller')
 const { getWebSpan } = require('../utils')
 
 function testInRequest (app, tests) {
@@ -117,6 +118,7 @@ function beforeEachIastTest (iastConfig) {
   }
 
   beforeEach(() => {
+    overheadController.clearGlobalRouteMap()
     vulnerabilityReporter.clearCache()
     const config = new Config({
       iast: iastConfig
