@@ -675,7 +675,10 @@ describe('Plugin', () => {
               'file.flag': 'r'
             }
           })
-          fs.createReadStream(__filename).on('error', done).resume()
+          const stream = fs.createReadStream(__filename)
+          expect(stream.listenerCount('error')).to.equal(0)
+
+          stream.on('error', done).resume()
         })
 
         it('should be instrumented when closed', (done) => {

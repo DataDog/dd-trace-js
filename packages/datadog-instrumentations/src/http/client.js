@@ -3,6 +3,7 @@
 /* eslint-disable no-fallthrough */
 
 const url = require('url')
+const { errorMonitor } = require('node:events')
 const { channel, addHook } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 
@@ -88,7 +89,7 @@ function patch (http, methodName) {
                 const res = arg
                 ctx.res = res
                 res.on('end', finish)
-                res.on('error', finish)
+                res.on(errorMonitor, finish)
                 break
               }
               case 'connect':

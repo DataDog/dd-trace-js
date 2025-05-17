@@ -102,6 +102,10 @@ describe('child process', () => {
               it('should execute error callback', (done) => {
                 const childEmitter = childProcess[methodName]('invalid_command_test')
 
+                expect(childEmitter.listenerCount('error')).to.equal(methodName.includes('spawn') ? 0 : 1)
+
+                childEmitter.once('error', () => {})
+
                 childEmitter.once('close', () => {
                   expect(start).to.have.been.calledOnceWith({
                     command: 'invalid_command_test',

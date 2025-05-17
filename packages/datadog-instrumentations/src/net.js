@@ -1,5 +1,7 @@
 'use strict'
 
+const { errorMonitor } = require('events')
+
 const { channel, addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
@@ -99,7 +101,7 @@ function getOptions (args) {
 }
 
 function setupListeners (socket, protocol, ctx, finishCh, errorCh) {
-  const events = ['connect', 'error', 'close', 'timeout']
+  const events = ['connect', errorMonitor, 'close', 'timeout']
 
   const wrapListener = function (error) {
     if (error) {

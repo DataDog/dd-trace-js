@@ -129,19 +129,10 @@ function wrapQuery (query) {
         }
       } else if (newQuery.once) {
         newQuery
-          .once('error', finish)
+          .once(errorMonitor, finish)
           .once('end', (res) => finish(null, res))
       } else {
         newQuery.then((res) => finish(null, res), finish)
-      }
-
-      if (stream) {
-        newQuery.on('end', () => {
-          finish(null, [])
-        })
-        newQuery.on(errorMonitor, (err) => {
-          finish(err)
-        })
       }
 
       try {
