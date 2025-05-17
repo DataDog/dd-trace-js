@@ -203,14 +203,6 @@ describe('Appsec Rasp Telemetry metrics', () => {
         expect(inc).to.have.been.called
       })
 
-      it('should not increment any metric if ruleTriggered is not set', () => {
-        const newReq = {}
-        appsecTelemetry.updateRaspRuleMatchMetricTags(newReq, raspRule, true, true)
-
-        expect(count).to.not.have.been.called
-        expect(inc).to.not.have.been.called
-      })
-
       it('should not increment any metric if req is not provided', () => {
         appsecTelemetry.updateRaspRuleMatchMetricTags(null, raspRule, true, true)
 

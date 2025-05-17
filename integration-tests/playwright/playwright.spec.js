@@ -1488,6 +1488,37 @@ versions.forEach((version) => {
           runTest(done, { isRedirecting: true })
         })
       })
+
+      context('run session status', () => {
+        it('session status is not changed if it fails before running any test', (done) => {
+          const receiverPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assert.equal(testSession.meta[TEST_STATUS], 'fail')
+            })
+
+          receiver.setSettings({ test_management: { enabled: true } })
+
+          childProcess = exec(
+            './node_modules/.bin/playwright test -c playwright.config.js exit-code-test.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PW_BASE_URL: `http://localhost:${webAppPort}`,
+                TEST_DIR: './ci-visibility/playwright-tests-exit-code'
+              },
+              stdio: 'pipe'
+            }
+          )
+
+          childProcess.on('exit', (exitCode) => {
+            assert.equal(exitCode, 1)
+            receiverPromise.then(() => done()).catch(done)
+          })
+        })
+      })
     }
   })
 })
