@@ -50,7 +50,8 @@ describe('findScriptFromPartialPath', function () {
               }
             })
           }
-        }
+        },
+        emit () {}
       }
     })
   })
