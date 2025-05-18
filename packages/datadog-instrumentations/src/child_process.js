@@ -1,6 +1,6 @@
 'use strict'
 
-const { errorMonitor } = require('node:events')
+const { errorMonitor } = require('events')
 const util = require('util')
 
 const {

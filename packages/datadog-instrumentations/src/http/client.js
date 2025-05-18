@@ -3,7 +3,7 @@
 /* eslint-disable no-fallthrough */
 
 const url = require('url')
-const { errorMonitor } = require('node:events')
+const { errorMonitor } = require('events')
 const { channel, addHook } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 
