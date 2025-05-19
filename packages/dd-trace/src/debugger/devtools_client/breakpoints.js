@@ -9,6 +9,25 @@ const { findScriptFromPartialPath, locationToBreakpoint, breakpointToProbes, pro
 const log = require('../../log')
 
 let sessionStarted = false
+const probes = new Map()
+let scriptLoadingStabilizedResolve
+const scriptLoadingStabilized = new Promise((resolve) => { scriptLoadingStabilizedResolve = resolve })
+
+// There's a race condition when a probe is first added, where the actual script that the probe is supposed to match
+// hasn't been loaded yet. This will result in either the probe not being added at all, or an incorrect script being
+// matched as the probe target.
+//
+// Therefore, once new scripts has been loaded, all probes are re-evaluated. If the matched `scriptId` has changed, we
+// simply remove the old probe (if it was added to the wrong script) and apply it again.
+session.on('scriptLoadingStabilized', () => {
+  log.debug('[debugger:devtools_client] Re-evaluating probes')
+  scriptLoadingStabilizedResolve()
+  for (const probe of probes.values()) {
+    reEvaluateProbe(probe).catch(err => {
+      log.error('[debugger:devtools_client] Error re-evaluating probe %s', probe.id, err)
+    })
+  }
+})
 
 module.exports = {
   addBreakpoint,
@@ -18,13 +37,14 @@ module.exports = {
 async function addBreakpoint (probe) {
   if (!sessionStarted) await start()
 
+  probes.set(probe.id, probe)
+
   const file = probe.where.sourceFile
   let lineNumber = Number(probe.where.lines[0]) // Tracer doesn't support multiple-line breakpoints
   let columnNumber = 0 // Probes do not contain/support column information
 
   // Optimize for sending data to /debugger/v1/input endpoint
   probe.location = { file, lines: [String(lineNumber)] }
-  delete probe.where
 
   // Optimize for fast calculations when probe is hit
   probe.templateRequiresEvaluation = templateRequiresEvaluation(probe.segments)
@@ -46,6 +66,8 @@ async function addBreakpoint (probe) {
   const script = findScriptFromPartialPath(file)
   if (!script) throw new Error(`No loaded script found for ${file} (probe: ${probe.id}, version: ${probe.version})`)
   const { url, scriptId, sourceMapURL, source } = script
+
+  probe.scriptId = scriptId // Needed for detecting script changes during re-evaluation
 
   if (sourceMapURL) {
     log.debug(
@@ -108,6 +130,8 @@ async function removeBreakpoint ({ id }) {
   if (!probeToLocation.has(id)) {
     throw Error(`Unknown probe id: ${id}`)
   }
+
+  probes.delete(id)
 
   const release = await lock()
 
@@ -173,10 +197,29 @@ async function updateBreakpoint (breakpoint, probe) {
   }
 }
 
-function start () {
+async function reEvaluateProbe (probe) {
+  const script = findScriptFromPartialPath(probe.where.sourceFile)
+  log.debug('[debugger:devtools_client] re-evaluating probe %s: %s => %s', probe.id, probe.scriptId, script?.scriptId)
+
+  if (probe.scriptId !== script?.scriptId) {
+    log.debug('[debugger:devtools_client] Better match found for probe %s, re-evaluating', probe.id)
+    if (probeToLocation.has(probe.id)) {
+      await removeBreakpoint(probe)
+    }
+    await addBreakpoint(probe)
+  }
+}
+
+async function start () {
   sessionStarted = true
   log.debug('[debugger:devtools_client] Starting debugger')
-  return session.post('Debugger.enable')
+  await session.post('Debugger.enable')
+
+  // Wait until there's a pause in script-loading to avoid accidentally adding probes to incorrect scripts. This is not
+  // a guarantee, but best effort.
+  log.debug('[debugger:devtools_client] Waiting for script-loading to stabilize')
+  await scriptLoadingStabilized
+  log.debug('[debugger:devtools_client] Script loading stabilized')
 }
 
 function stop () {
@@ -187,11 +230,13 @@ function stop () {
 
 // Only if all probes have a condition can we use a compound condition.
 // Otherwise, we need to evaluate each probe individually once the breakpoint is hit.
-// TODO: Handle errors - if there's 2 conditons, and one fails but the other returns true, we should still pause the
-// breakpoint
 function compileCompoundCondition (probes) {
+  if (probes.length === 1) return probes[0].condition
+
   return probes.every(p => p.condition)
-    ? probes.map(p => p.condition).filter(Boolean).join(' || ')
+    ? probes
+      .map((p) => `(() => { try { return ${p.condition} } catch { return false } })()`)
+      .join(' || ')
     : undefined
 }
 

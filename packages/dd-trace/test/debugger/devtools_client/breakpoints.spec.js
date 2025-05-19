@@ -17,6 +17,9 @@ describe('breakpoints', function () {
         }
         return Promise.resolve({})
       }),
+      on (event, callback) {
+        if (event === 'scriptLoadingStabilized') callback()
+      },
       '@noCallThru': true
     }
 
@@ -233,7 +236,9 @@ describe('breakpoints', function () {
             lineNumber: 9,
             columnNumber: 0
           },
-          condition: '(foo) === (42) || (foo) === (43)'
+          condition:
+            '(() => { try { return (foo) === (42) } catch { return false } })() || ' +
+            '(() => { try { return (foo) === (43) } catch { return false } })()'
         })
       })
 

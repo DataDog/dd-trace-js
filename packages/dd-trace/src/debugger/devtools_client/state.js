@@ -9,6 +9,7 @@ const WINDOWS_DRIVE_LETTER_REGEX = /[a-zA-Z]/
 
 const loadedScripts = []
 const scriptUrls = new Map()
+let reEvaluateProbesTimer = null
 
 module.exports = {
   locationToBreakpoint: new Map(),
@@ -93,6 +94,10 @@ module.exports = {
 
   getStackFromCallFrames (callFrames) {
     return callFrames.map((frame) => {
+      // TODO: Possible race condition: If the breakpoint is in the process of being removed, and this is the last
+      // breakpoint, it will also stop the debugging session, which in turn will clear the state, which means clearing
+      // the `scriptUrls` map. That might result in this the `scriptUrls.get` call above returning `undefined`, which
+      // will throw when `startsWith` is called on it.
       let fileName = scriptUrls.get(frame.location.scriptId)
       if (fileName.startsWith('file://')) fileName = fileName.substr(7) // TODO: This might not be required
       return {
@@ -142,5 +147,10 @@ session.on('Debugger.scriptParsed', ({ params }) => {
     } else {
       loadedScripts.push(params)
     }
+
+    clearTimeout(reEvaluateProbesTimer)
+    reEvaluateProbesTimer = setTimeout(() => {
+      session.emit('scriptLoadingStabilized')
+    }, 500)
   }
 })
