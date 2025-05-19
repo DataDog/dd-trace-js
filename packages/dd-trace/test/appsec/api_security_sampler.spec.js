@@ -69,7 +69,7 @@ describe('API Security Sampler', () => {
 
   describe('with TTLCache', () => {
     beforeEach(() => {
-      apiSecuritySampler.configure({ apiSecurity: { enabled: true, sampleDelay: 30 } })
+      apiSecuritySampler.configure({ appsec: { apiSecurity: { enabled: true, sampleDelay: 30 } } })
     })
 
     it('should not sample before 30 seconds', () => {
@@ -152,7 +152,7 @@ describe('API Security Sampler', () => {
 
   describe('with NoopTTLCache', () => {
     beforeEach(() => {
-      apiSecuritySampler.configure({ apiSecurity: { enabled: true, sampleDelay: 0 } })
+      apiSecuritySampler.configure({ appsec: { apiSecurity: { enabled: true, sampleDelay: 0 } } })
     })
 
     it('should always return true for sampleRequest', () => {
@@ -195,6 +195,45 @@ describe('API Security Sampler', () => {
 
       webStub.getContext.returns({ paths: ['/test4999'] })
       assert.isTrue(apiSecuritySampler.sampleRequest(req, res, true))
+    })
+  })
+
+  describe('ASM Standalone', () => {
+    let keepTraceStub
+
+    beforeEach(() => {
+      keepTraceStub = sinon.stub()
+      apiSecuritySampler = proxyquire('../../src/appsec/api_security_sampler', {
+        '../plugins/util/web': webStub,
+        '../priority_sampler': {
+          keepTrace: keepTraceStub
+        },
+        '../standalone/product': {
+          ASM: 'asm'
+        }
+      })
+      apiSecuritySampler.configure({
+        appsec: {
+          apiSecurity: {
+            enabled: true,
+            sampleDelay: 30
+          }
+        },
+        apmTracingEnabled: false
+      })
+    })
+
+    it('should keep trace with ASM product when in standalone mode', () => {
+      assert.isTrue(apiSecuritySampler.sampleRequest(req, res, true))
+      assert.isFalse(apiSecuritySampler.sampleRequest(req, res, true))
+      assert.isTrue(keepTraceStub.calledOnceWith(span, 'asm'))
+    })
+
+    it('should not check priority sampling in standalone mode', () => {
+      span.context.returns({ _sampling: { priority: AUTO_REJECT } })
+      assert.isTrue(apiSecuritySampler.sampleRequest(req, res, true))
+      assert.isFalse(apiSecuritySampler.sampleRequest(req, res, true))
+      assert.isTrue(keepTraceStub.calledOnceWith(span, 'asm'))
     })
   })
 })
