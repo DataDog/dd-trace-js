@@ -275,7 +275,7 @@ function testBeginHandler (test, browserName, isMainProcess) {
     startedSuites.push(testSuiteAbsolutePath)
     const testSuiteCtx = { testSuiteAbsolutePath }
     testSuiteToCtx.set(testSuiteAbsolutePath, testSuiteCtx)
-    testSuiteStartCh.runStores(testSuiteCtx, () => { })
+    testSuiteStartCh.runStores(testSuiteCtx, () => {})
   }
 
   // We disable retries by default if attemptToFix is true
@@ -295,7 +295,7 @@ function testBeginHandler (test, browserName, isMainProcess) {
     }
     testToCtx.set(test, testCtx)
 
-    testStartCh.runStores(testCtx, () => { })
+    testStartCh.runStores(testCtx, () => {})
   }
 }
 

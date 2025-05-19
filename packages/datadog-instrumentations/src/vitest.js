@@ -578,7 +578,7 @@ addHook({
     }
     taskToCtx.set(task, ctx)
 
-    testStartCh.runStores(ctx, () => { })
+    testStartCh.runStores(ctx, () => {})
     return onBeforeTryTask.apply(this, arguments)
   })
 
@@ -620,7 +620,7 @@ addHook({
         ctx.task = task
         ctx.attemptToFixPassed = attemptToFixPassed
         ctx.attemptToFixFailed = attemptToFixFailed
-        testFinishTimeCh.runStores(ctx, () => { })
+        testFinishTimeCh.runStores(ctx, () => {})
       }
 
       return result
@@ -725,7 +725,7 @@ addHook({
     const testSuiteAbsolutePath = testPaths[0]?.filepath || testPaths[0]
 
     const testSuiteCtx = { testSuiteAbsolutePath, frameworkVersion }
-    testSuiteStartCh.runStores(testSuiteCtx, () => { })
+    testSuiteStartCh.runStores(testSuiteCtx, () => {})
     const startTestsResponse = await startTests.apply(this, arguments)
 
     let onFinish = null
@@ -814,7 +814,7 @@ addHook({
 
     if (testSuiteError) {
       testSuiteCtx.error = testSuiteError
-      testSuiteErrorCh.runStores(testSuiteCtx, () => { })
+      testSuiteErrorCh.runStores(testSuiteCtx, () => {})
     }
 
     testSuiteFinishCh.publish({ status: testSuiteResult.state, onFinish, ...testSuiteCtx.currentStore })
