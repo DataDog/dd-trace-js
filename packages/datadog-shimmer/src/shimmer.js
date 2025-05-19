@@ -112,7 +112,7 @@ function wrap (target, name, wrapper, options) {
     enumerable: false
   }
 
-  if (descriptor.set) {
+  if (descriptor.set && (!descriptor.get || options?.replaceGetter)) {
     // It is possible to support these cases by instrumenting both the getter
     // and setter (or only the setter, in case that is a use case).
     // For now, this is not supported due to the complexity and the fact that
