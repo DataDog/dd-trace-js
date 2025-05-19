@@ -7,6 +7,8 @@ const {
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
+const log = require('../../dd-trace/src/log')
+
 // Create channels for Confluent Kafka JavaScript
 const channels = {
   producerStart: channel('apm:@confluentinc/kafka-javascript:produce:start'),
@@ -24,6 +26,8 @@ const channels = {
   batchConsumerError: channel('apm:@confluentinc/kafka-javascript:consume-batch:error'),
   batchConsumerCommit: channel('apm:@confluentinc/kafka-javascript:consume-batch:commit')
 }
+
+const disabledHeaderWeakMap = new WeakMap()
 
 // we need to store the offset per partition per topic for the consumer to track offsets for DSM
 const latestConsumerOffsets = new Map()
@@ -192,6 +196,8 @@ function instrumentKafkaJS (kafkaJS) {
                 kafka._ddBrokers = arguments[0]['bootstrap.servers']
               }
 
+              disabledHeaderWeakMap.set(producer, false)
+
               // Wrap the send method of the producer
               if (producer && typeof producer.send === 'function') {
                 shimmer.wrap(producer, 'send', function wrapSend (send) {
@@ -206,7 +212,8 @@ function instrumentKafkaJS (kafkaJS) {
                         channels.producerStart.publish({
                           topic: payload?.topic,
                           messages: payload?.messages || [],
-                          bootstrapServers: kafka._ddBrokers
+                          bootstrapServers: kafka._ddBrokers,
+                          disableHeaderInjection: disabledHeaderWeakMap.get(producer)
                         })
 
                         const result = send.apply(this, arguments)
@@ -218,6 +225,16 @@ function instrumentKafkaJS (kafkaJS) {
                           }),
                           asyncResource.bind(err => {
                             if (err) {
+                              // Fixes bug where we would inject message headers for kafka brokers
+                              // that don't support headers (version <0.11). On the error, we disable
+                              // header injection. Tnfortunately the error name / type is not more specific.
+                              // This approach is implemented by other tracers as well.
+                              if (err.name === 'KafkaJSError' && err.type === 'ERR_UNKNOWN') {
+                                disabledHeaderWeakMap.set(producer, true)
+                                log.error('Kafka Broker responded with UNKNOWN_SERVER_ERROR (-1). ' +
+                                  'Please look at broker logs for more information. ' +
+                                  'Tracer message header injection for Kafka is disabled.')
+                              }
                               channels.producerError.publish(err)
                             }
                             channels.producerFinish.publish(undefined)
