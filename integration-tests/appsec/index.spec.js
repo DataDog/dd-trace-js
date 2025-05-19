@@ -352,9 +352,9 @@ describe('RASP', () => {
   describe('extended data collection', () => {
     startServer(false)
 
-    it('should report body request', async() => {
+    it('should report body request', async () => {
       const requestBody = { host: 'localhost/ifconfig.pro' }
-      try{
+      try {
         await axios.post('/ssrf', requestBody)
       } catch (e) {
         if (!e.response) {
