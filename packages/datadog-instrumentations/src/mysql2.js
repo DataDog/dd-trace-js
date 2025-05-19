@@ -1,5 +1,7 @@
 'use strict'
 
+const { errorMonitor } = require('node:events')
+
 const {
   channel,
   addHook,
@@ -138,7 +140,7 @@ function wrapConnection (Connection, version) {
           onResult.apply(this, arguments)
         }, 'bound-anonymous-fn', this))
       } else {
-        this.on('error', asyncResource.bind(error => errorCh.publish(error)))
+        this.on(errorMonitor, asyncResource.bind(error => errorCh.publish(error)))
         this.on('end', asyncResource.bind(() => finishCh.publish(undefined)))
       }
 
