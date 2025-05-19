@@ -414,6 +414,7 @@ describe('Plugin', () => {
           appListener = server(app, port => {
             const req = http.request(`${protocol}://localhost:${port}/user`, res => {
               setTimeout(() => {
+                expect(res.listenerCount('error')).to.equal(0)
                 res.on('data', () => done())
               })
             })
