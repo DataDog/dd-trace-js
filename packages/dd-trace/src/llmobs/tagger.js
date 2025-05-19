@@ -77,8 +77,8 @@ class LLMObsTagger {
     const spanMlApp =
       mlApp ||
       registry.get(parent)?.[ML_APP] ||
-      this._config.llmobs.mlApp ||
-      span.context()._trace.tags[PROPAGATED_ML_APP_KEY]
+      span.context()._trace.tags[PROPAGATED_ML_APP_KEY] ||
+      this._config.llmobs.mlApp
 
     if (!spanMlApp) {
       throw new Error(
