@@ -6,7 +6,7 @@ const getPort = require('get-port')
 const Axios = require('axios')
 const { assert } = require('chai')
 
-describe.only('ESM Security controls', () => {
+describe('ESM Security controls', () => {
   let axios, sandbox, cwd, appPort, appFile, agent, proc
 
   ['4', '5'].forEach(version => {
