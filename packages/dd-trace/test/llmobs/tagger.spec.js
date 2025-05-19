@@ -159,6 +159,15 @@ describe('tagger', () => {
         expect(Tagger.tagMap.get(span)).to.be.undefined
       })
 
+      it('uses the propagated mlApp over the global mlApp if both are provided', () => {
+        spanContext._trace.tags['_dd.p.llmobs_ml_app'] = 'my-propagated-ml-app'
+
+        tagger.registerLLMObsSpan(span, { kind: 'llm' })
+
+        const tags = Tagger.tagMap.get(span)
+        expect(tags['_ml_obs.meta.ml_app']).to.equal('my-propagated-ml-app')
+      })
+
       describe('with no global mlApp configured', () => {
         beforeEach(() => {
           tagger = new Tagger({ llmobs: { enabled: true } })
