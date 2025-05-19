@@ -8,7 +8,12 @@ const ROLE_MAPPINGS = {
 
 class LangChainLLMObsHandler {
   constructor (tagger) {
+    /** @type {import('../../../tagger')} */
     this._tagger = tagger
+  }
+
+  getName ({ span }) {
+    return span?.context()._tags?.['resource.name']
   }
 
   setMetaTags () {}
@@ -23,13 +28,13 @@ class LangChainLLMObsHandler {
       return formatted
     } else if (Array.isArray(messages)) {
       return messages.map(message => this.formatIO(message))
-    } else { // either a BaseMesage type or a string
+    } else {
       return this.getContentFromMessage(messages)
     }
   }
 
   getContentFromMessage (message) {
-    if (typeof message === 'string') {
+    if (typeof message !== 'object') {
       return message
     } else {
       try {
