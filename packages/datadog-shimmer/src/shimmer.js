@@ -9,6 +9,7 @@ const skipMethods = new Set([
   'name',
   'length'
 ])
+const skipMethodSize = skipMethods.size
 
 const nonConfigurableModuleExports = new WeakMap()
 
@@ -180,7 +181,9 @@ function wrap (target, name, wrapper, options) {
           // This is a rare case. Accept the slight performance hit.
           skipMethods.add(name)
           copyProperties(target, moduleExports)
-          skipMethods.delete(name)
+          if (skipMethods.size === skipMethodSize + 1) {
+            skipMethods.delete(name)
+          }
         } else {
           moduleExports = Object.create(target)
           copyObjectProperties(target, moduleExports, name)
