@@ -392,6 +392,8 @@ class CustomMetrics {
    * These are translated into [ 'tagName:tagValue' ] for internal use
    */
   static tagTranslator (objTags) {
+    if (Array.isArray(objTags)) return objTags
+
     const arrTags = []
 
     if (!objTags) return arrTags
