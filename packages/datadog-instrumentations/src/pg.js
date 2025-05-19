@@ -129,19 +129,13 @@ function wrapQuery (query) {
         }
       } else if (newQuery.once) {
         newQuery
-          .once('error', finish)
+          .once(errorMonitor, finish)
           .once('end', (res) => finish(null, res))
       } else {
+        // TODO: This code is never reached in our tests.
+        // Internally, pg always uses callbacks or streams, even for promise based queries.
+        // Investigate if this code should just be removed.
         newQuery.then((res) => finish(null, res), finish)
-      }
-
-      if (stream) {
-        newQuery.on('end', () => {
-          finish(null, [])
-        })
-        newQuery.on(errorMonitor, (err) => {
-          finish(err)
-        })
       }
 
       try {
