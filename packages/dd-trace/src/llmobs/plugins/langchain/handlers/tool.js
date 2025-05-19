@@ -9,18 +9,9 @@ class LangChainLLMObsToolHandler extends LangChainLLMObsHandler {
   }
 
   setMetaTags ({ span, inputs, results }) {
-    let input, output
-    if (inputs) {
-      input = this.formatIO(inputs)
-    }
+    const input = inputs && this.formatIO(inputs)
+    const output = (results && !spanHasError(span)) && this.formatIO(results)
 
-    if (!results || spanHasError(span)) {
-      output = ''
-    } else {
-      output = this.formatIO(results)
-    }
-
-    // chain spans will always be workflows
     this._tagger.tagTextIO(span, input, output)
   }
 }
