@@ -1,6 +1,7 @@
 'use strict'
 
 const { expect } = require('chai')
+const assert = require('assert')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -263,6 +264,7 @@ describe('Plugin', () => {
                     expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
                     expect(traces[0][0]).to.have.property('resource', 'SELECT * FROM generate_series(0, 1) num')
                     expect(traces[0][0]).to.have.property('type', 'sql')
+                    expect(traces[0][0]).to.have.property('error', 0)
                     expect(traces[0][0].meta).to.have.property('span.kind', 'client')
                     expect(traces[0][0].meta).to.have.property('db.name', 'postgres')
                     expect(traces[0][0].meta).to.have.property('db.type', 'postgres')
@@ -274,11 +276,48 @@ describe('Plugin', () => {
                   const query = new QueryStream('SELECT * FROM generate_series(0, 1) num', [])
                   const stream = client.query(query)
 
-                  for await (const row of stream) {
-                    expect(row).to.have.property('num')
-                  }
+                  expect(stream.listenerCount('error')).to.equal(0)
 
-                  await agentPromise
+                  const readPromise = (async () => {
+                    for await (const row of stream) {
+                      expect(row).to.have.property('num')
+                    }
+                  })()
+
+                  await Promise.all([readPromise, agentPromise])
+                })
+
+                it('should instrument stream-based queries with pg-query-stream and catch errors', async () => {
+                  const agentPromise = agent.use(traces => {
+                    expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+                    expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
+                    expect(traces[0][0]).to.have.property('resource', 'SELECT * FROM generate_series(0, 1) num')
+                    expect(traces[0][0]).to.have.property('type', 'sql')
+                    expect(traces[0][0]).to.have.property('error', 1)
+                    expect(traces[0][0].meta).to.have.property('span.kind', 'client')
+                    expect(traces[0][0].meta).to.have.property('db.name', 'postgres')
+                    expect(traces[0][0].meta).to.have.property('db.type', 'postgres')
+                    expect(traces[0][0].meta).to.have.property('component', 'pg')
+                    expect(traces[0][0].metrics).to.have.property('db.stream', 1)
+                    expect(traces[0][0].metrics).to.have.property('network.destination.port', 5432)
+                  })
+
+                  const query = new QueryStream('SELECT * FROM generate_series(0, 1) num', [])
+                  const stream = client.query(query)
+
+                  expect(stream.listenerCount('error')).to.equal(0)
+
+                  const rejectedRead = assert.rejects(async () => {
+                    // eslint-disable-next-line no-unreachable-loop
+                    for await (const row of stream) {
+                      expect(row).to.have.property('num')
+                      throw new Error('Test error')
+                    }
+                  }, {
+                    message: 'Test error'
+                  })
+
+                  await Promise.all([rejectedRead, agentPromise])
                 })
               })
             })
