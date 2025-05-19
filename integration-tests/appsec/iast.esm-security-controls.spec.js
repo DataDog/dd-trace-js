@@ -6,7 +6,7 @@ const getPort = require('get-port')
 const Axios = require('axios')
 const { assert } = require('chai')
 
-describe('ESM Security controls', () => {
+describe.only('ESM Security controls', () => {
   let axios, sandbox, cwd, appPort, appFile, agent, proc
 
   ['4', '5'].forEach(version => {
@@ -116,6 +116,18 @@ describe('ESM Security controls', () => {
 
       it('test endpoint with iv does not have COMMAND_INJECTION vulnerability', async () => {
         await axios.get('/cmdi-iv-secure?command=ls -la')
+
+        await agent.assertMessageReceived(({ payload }) => {
+          const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
+          spans.forEach(span => {
+            assert.notProperty(span.meta, '_dd.iast.json')
+            assert.property(span.metrics, '_dd.iast.telemetry.suppressed.vulnerabilities.command_injection')
+          })
+        }, null, 1, true)
+      })
+
+      it('test endpoint with iv does not have COMMAND_INJECTION vulnerability with nested query', async () => {
+        await axios.get('/cmdi-iv-secure-nested?command[value]=ls -la')
 
         await agent.assertMessageReceived(({ payload }) => {
           const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))

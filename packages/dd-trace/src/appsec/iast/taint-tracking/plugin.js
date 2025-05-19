@@ -68,26 +68,11 @@ class TaintTrackingPlugin extends SourceIastPlugin {
         if (!iastContext || !query) return
 
         if (!iastContext.queryCache) {
-          iastContext.queryCache = new Map()
+          iastContext.queryCache = taintObject(iastContext, query, HTTP_REQUEST_PARAMETER)
         }
 
         for (const key in query) {
-          const currentValue = query[key]
-          if (!currentValue) continue
-
-          const cachedValue = iastContext.queryCache.get(key)
-
-          if (cachedValue === currentValue) {
-            // Reuse cached tainted value
-            query[key] = cachedValue
-          } else {
-            // Taint new value and cache it
-            const taintedValue = typeof currentValue === 'string'
-              ? newTaintedString(iastContext, currentValue, key, HTTP_REQUEST_PARAMETER)
-              : taintObject(iastContext, currentValue, HTTP_REQUEST_PARAMETER, key)
-            query[key] = taintedValue
-            iastContext.queryCache.set(key, taintedValue)
-          }
+          query[key] = iastContext.queryCache[key]
         }
       }
     )

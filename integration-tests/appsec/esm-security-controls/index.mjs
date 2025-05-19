@@ -7,6 +7,7 @@ import sanitizeDefault from './sanitizer-default.mjs'
 import { validate, validateNotConfigured } from './validator.mjs'
 
 const app = express()
+app.set('query parser', 'extended')
 const port = process.env.APP_PORT || 3000
 
 app.get('/cmdi-s-secure', (req, res) => {
@@ -61,6 +62,13 @@ app.get('/cmdi-iv-secure', (req, res) => {
     childProcess.execSync(req.query.command)
   }
 
+  res.end()
+})
+
+app.get('/cmdi-iv-secure-nested', (req, res) => {
+  if (validate(req.query.command.value)) {
+    childProcess.execSync(req.query.command.value)
+  }
   res.end()
 })
 
