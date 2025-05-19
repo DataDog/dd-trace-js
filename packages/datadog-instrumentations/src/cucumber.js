@@ -276,7 +276,7 @@ function wrapRun (pl, isLatestVersion) {
             const newCtx = { ...testStartPayload, promises }
             numAttemptToCtx.set(numAttempt, newCtx)
 
-            testStartCh.runStores(newCtx, () => { })
+            testStartCh.runStores(newCtx, () => {})
           }
         }
       }))
