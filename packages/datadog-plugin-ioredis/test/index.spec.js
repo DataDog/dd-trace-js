@@ -25,9 +25,9 @@ describe('Plugin', () => {
       })
 
       describe('without configuration', () => {
-        before(() => agent.load(['ioredis']))
+        beforeEach(() => agent.load(['ioredis']))
 
-        after(() => agent.close({ ritmReset: false }))
+        afterEach(() => agent.close({ ritmReset: false }))
 
         it('should do automatic instrumentation when using callbacks', done => {
           agent.use(() => {}) // wait for initial info command

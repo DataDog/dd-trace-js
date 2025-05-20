@@ -25,35 +25,30 @@ describe('Plugin', () => {
       })
 
       describe('without configuration', () => {
-        before(() => agent.load(['iovalkey']))
+        beforeEach(() => agent.load(['iovalkey']))
 
-        after(() => agent.close({ ritmReset: false }))
+        afterEach(() => agent.close({ ritmReset: false }))
 
-        it('should do automatic instrumentation when using callbacks', done => {
+        it('should do automatic instrumentation when using callbacks', async () => {
           agent.use(() => {}) // wait for initial info command
-          const runs = ['info', 'client', 'get']
-          let run = 0
-          agent.use(traces => {
-            const expectedResource = runs[run++]
-            expect(traces[0][0]).to.have.property('resource', expectedResource)
-            if (expectedResource !== 'client') return
-
+          const promise = agent.use(traces => {
             expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
             expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
             expect(traces[0][0]).to.have.property('resource', 'get')
-            expect(traces[0][0]).to.have.property('type', 'redis')
+            expect(traces[0][0]).to.have.property('type', 'valkey')
             expect(traces[0][0].meta).to.have.property('component', 'iovalkey')
             expect(traces[0][0].meta).to.have.property('db.name', '0')
-            expect(traces[0][0].meta).to.have.property('db.type', 'redis')
+            expect(traces[0][0].meta).to.have.property('db.type', 'valkey')
             expect(traces[0][0].meta).to.have.property('span.kind', 'client')
             expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
             expect(traces[0][0].meta).to.have.property('valkey.raw_command', 'GET foo')
             expect(traces[0][0].metrics).to.have.property('network.destination.port', 6379)
           })
-            .then(done)
-            .catch(done)
 
-          valkey.get('foo').catch(done)
+          await Promise.all([
+            valkey.get('foo'),
+            promise
+          ])
         })
 
         it('should run the callback in the parent context', () => {
@@ -90,19 +85,13 @@ describe('Plugin', () => {
 
         it('should work with userland promises', done => {
           agent.use(() => {}) // wait for initial info command
-          const runs = ['info', 'client', 'get']
-          let run = 0
           agent.use(traces => {
-            const expectedResource = runs[run++]
-            expect(traces[0][0]).to.have.property('resource', expectedResource)
-            if (expectedResource !== 'client') return
-
             expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
             expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
             expect(traces[0][0]).to.have.property('resource', 'get')
-            expect(traces[0][0]).to.have.property('type', 'redis')
+            expect(traces[0][0]).to.have.property('type', 'valkey')
             expect(traces[0][0].meta).to.have.property('db.name', '0')
-            expect(traces[0][0].meta).to.have.property('db.type', 'redis')
+            expect(traces[0][0].meta).to.have.property('db.type', 'valkey')
             expect(traces[0][0].meta).to.have.property('span.kind', 'client')
             expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
             expect(traces[0][0].meta).to.have.property('valkey.raw_command', 'GET foo')
