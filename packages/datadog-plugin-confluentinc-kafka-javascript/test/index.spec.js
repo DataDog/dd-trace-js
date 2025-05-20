@@ -252,13 +252,11 @@ describe('Plugin', () => {
           let Consumer
 
           beforeEach(async () => {
-            await agent.load('@confluentinc/kafka-javascript')
-          })
-
-          beforeEach((done) => {
             tracer = require('../../dd-trace')
             const lib = require(`../../../versions/${module}@${version}`).get()
             nativeApi = lib
+
+            await agent.load('@confluentinc/kafka-javascript')
 
             // Get the producer/consumer classes directly from the module
             Producer = nativeApi.Producer
@@ -269,18 +267,14 @@ describe('Plugin', () => {
               dr_cb: true
             })
 
-            nativeProducer.connect({}, (err) => {
-              done()
-            })
+            await nativeProducer.connect({})
           })
 
-          afterEach((done) => {
+          afterEach(async () => {
             try {
-              nativeProducer.disconnect(() => {
-                done()
-              })
+              await nativeProducer.disconnect()
             } catch (err) {
-              done(err)
+              // ignore
             }
           })
 
@@ -337,32 +331,25 @@ describe('Plugin', () => {
           })
 
           describe('consumer', () => {
-            beforeEach((done) => {
+            beforeEach(async () => {
               nativeConsumer = new Consumer({
                 'bootstrap.servers': '127.0.0.1:9092',
                 'group.id': 'test-group'
               })
 
-              nativeConsumer.connect({}, (err, d) => {
-                done()
-              })
+              await nativeConsumer.connect({})
             })
 
-            afterEach((done) => {
-              nativeConsumer.unsubscribe()
-              nativeConsumer.disconnect(() => {
-                done()
-              })
+            afterEach(async () => {
+              await nativeConsumer.unsubscribe()
+              await nativeConsumer.disconnect()
             })
 
             function consume (consumer, producer, topic, message) {
               return new Promise((resolve, reject) => {
                 function doConsume () {
                   consumer.consume(1, function (err, messages) {
-                    if (err && err.code === -185) {
-                      setTimeout(() => doConsume(), 20)
-                      return
-                    } else if (!messages || messages.length === 0 || (err && err.code === -191)) {
+                    if (!messages || messages.length === 0) {
                       setTimeout(() => doConsume(), 20)
                       return
                     }
