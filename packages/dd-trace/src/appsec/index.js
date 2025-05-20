@@ -34,6 +34,7 @@ const UserTracking = require('./user_tracking')
 const { storage } = require('../../../datadog-core')
 const graphql = require('./graphql')
 const rasp = require('./rasp')
+const { isInServerlessEnvironment } = require('../serverless')
 
 const responseAnalyzedSet = new WeakSet()
 
@@ -83,7 +84,9 @@ function enable (_config) {
     isEnabled = true
     config = _config
   } catch (err) {
-    log.error('[ASM] Unable to start AppSec', err)
+    if (!isInServerlessEnvironment()) {
+      log.error('[ASM] Unable to start AppSec', err)
+    }
 
     disable()
   }
