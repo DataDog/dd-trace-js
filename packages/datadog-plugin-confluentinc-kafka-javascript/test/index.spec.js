@@ -267,7 +267,7 @@ describe('Plugin', () => {
               dr_cb: true
             })
 
-            await nativeProducer.connect({})
+            await nativeProducer.connect()
           })
 
           afterEach(async () => {
@@ -350,14 +350,14 @@ describe('Plugin', () => {
                 function doConsume () {
                   consumer.consume(1, function (err, messages) {
                     if (!messages || messages.length === 0) {
-                      setTimeout(() => doConsume(), 20)
+                      setTimeout(doConsume, 20)
                       return
                     }
 
                     const consumedMessage = messages[0]
 
                     if (consumedMessage.value.toString() !== message.toString()) {
-                      setTimeout(() => doConsume(), 20)
+                      setTimeout(doConsume, 20)
                       return
                     }
 
