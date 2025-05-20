@@ -855,7 +855,7 @@ declare namespace tracer {
      * @param value The amount to increment the stat by.
      * @param tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
      */
-    increment(stat: string, value?: number, tags?: Record<string, string|number>): void
+    increment(stat: string, value?: number, tags?: Record<string, string|number> | string[]): void
 
     /**
      * Decrements a metric by the specified value, optionally specifying tags.
@@ -863,7 +863,7 @@ declare namespace tracer {
      * @param value The amount to decrement the stat by.
      * @param tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
      */
-    decrement(stat: string, value?: number, tags?: Record<string, string|number>): void
+    decrement(stat: string, value?: number, tags?: Record<string, string|number> | string[]): void
 
     /**
      * Sets a distribution value, optionally specifying tags.
@@ -871,7 +871,7 @@ declare namespace tracer {
      * @param value The amount to increment the stat by.
      * @param tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
      */
-    distribution(stat: string, value?: number, tags?: Record<string, string|number>): void
+    distribution(stat: string, value?: number, tags?: Record<string, string|number> | string[]): void
 
     /**
      * Sets a gauge value, optionally specifying tags.
@@ -879,7 +879,7 @@ declare namespace tracer {
      * @param value The amount to increment the stat by.
      * @param tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
      */
-    gauge(stat: string, value?: number, tags?: Record<string, string|number>): void
+    gauge(stat: string, value?: number, tags?: Record<string, string|number> | string[]): void
 
     /**
      * Sets a histogram value, optionally specifying tags.
@@ -887,7 +887,7 @@ declare namespace tracer {
      * @param value The amount to increment the stat by.
      * @param tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
      */
-    histogram(stat: string, value?: number, tags?: Record<string, string|number>): void
+    histogram(stat: string, value?: number, tags?: Record<string, string|number> | string[]): void
 
     /**
      * Forces any unsent metrics to be sent
@@ -1361,7 +1361,7 @@ declare namespace tracer {
      * [child_process](https://nodejs.org/api/child_process.html) module.
      */
     interface child_process extends Instrumentation {}
-  
+
     /**
      * This plugin automatically instruments the
      * [confluentinc-kafka-javascript](https://github.com/confluentinc/confluent-kafka-js) module.
