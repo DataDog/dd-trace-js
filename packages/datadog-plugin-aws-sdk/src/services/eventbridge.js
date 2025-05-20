@@ -8,6 +8,7 @@ class EventBridge extends BaseAwsSdkPlugin {
 
   generateTags (params, operation, response) {
     if (!params || !params.source) return {
+      'peer.service': params.source,
       'hostname': `events.${this.activeSpan._spanContext._tags['region']}.amazonaws.com`
     }
     const rulename = params.Name ? params.Name : ''
