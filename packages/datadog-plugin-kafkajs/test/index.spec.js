@@ -170,14 +170,18 @@ describe('Plugin', () => {
                 this.type = 'UNKNOWN'
               }
             }
-            let error
             let sendRequestStub
+            let producer
 
-            beforeEach(() => {
+            const error = new KafkaJSProtocolError()
+            error.message = 'Simulated KafkaJSProtocolError UNKNOWN from Broker.sendRequest stub'
+
+            beforeEach(async () => {
               // simulate a kafka error for the broker version not supporting message headers
-              error = new KafkaJSProtocolError()
-              error.message = 'Simulated KafkaJSProtocolError UNKNOWN from Broker.sendRequest stub'
               sendRequestStub = sinon.stub(Broker.prototype, 'produce').rejects(error)
+
+              producer = kafka.producer({ transactionTimeout: 100 })
+              await producer.connect()
             })
 
             afterEach(() => {
@@ -185,9 +189,6 @@ describe('Plugin', () => {
             })
 
             it('should hit an error for the first send and not inject headers in later sends', async () => {
-              const producer = kafka.producer()
-              await producer.connect()
-
               try {
                 await producer.send({ topic: testTopic, messages })
                 expect(true).to.be.false('First producer.send() should have thrown an error')
