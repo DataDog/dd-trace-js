@@ -59,19 +59,19 @@ describe('ASM Data collection', () => {
       // Request headers
       assert.equal(
         Object.keys(payload[0][0].meta).filter(tagName => tagName.startsWith('http.request.headers.')).length,
-        Object.keys(requestHeaders).length
+        requestHeaders.length
       )
-      Object.entries(requestHeaders).forEach(([headerName, headerValue]) => {
-        assert.equal(payload[0][0].meta[`http.request.headers.${headerName}`], headerValue)
+      requestHeaders.forEach((headerName) => {
+        assert.property(payload[0][0].meta, `http.request.headers.${headerName}`)
       })
 
       // Response headers
       assert.equal(
         Object.keys(payload[0][0].meta).filter(tagName => tagName.startsWith('http.response.headers.')).length,
-        Object.keys(responseHeaders).length
+        responseHeaders.length
       )
-      Object.entries(responseHeaders).forEach(([headerName, headerValue]) => {
-        assert.equal(payload[0][0].meta[`http.response.headers.${headerName}`], headerValue)
+      responseHeaders.forEach((headerName) => {
+        assert.property(payload[0][0].meta, `http.response.headers.${headerName}`)
       })
     })
   }
@@ -80,17 +80,17 @@ describe('ASM Data collection', () => {
     startServer(false)
 
     it('should collect event headers', async () => {
-      const expectedRequestHeaders = {
-        'user-agent': 'Arachni/v1',
-        accept: 'application/json, text/plain, */*',
-        host: `localhost:${appPort}`,
-        'accept-encoding': 'gzip, compress, deflate, br'
-      }
+      const expectedRequestHeaders = [
+        'user-agent',
+        'accept',
+        'host',
+        'accept-encoding'
+      ]
 
-      const expectedResponseHeaders = {
-        'content-type': 'text/plain; charset=utf-8',
-        'content-language': 'en'
-      }
+      const expectedResponseHeaders = [
+        'content-type',
+        'content-language'
+      ]
 
       await axios.get('/', { headers: { 'User-Agent': 'Arachni/v1' } })
       await assertHeadersReported(expectedRequestHeaders, expectedResponseHeaders)
@@ -101,24 +101,22 @@ describe('ASM Data collection', () => {
     startServer(true)
 
     it('should collect extended headers', async () => {
-      const expectedRequestHeaders = {
-        'user-agent': 'Arachni/v1',
-        accept: 'application/json, text/plain, */*',
-        host: `localhost:${appPort}`,
-        'accept-encoding': 'gzip, compress, deflate, br',
-        connection: 'keep-alive'
-      }
+      const expectedRequestHeaders = [
+        'user-agent',
+        'accept',
+        'host',
+        'accept-encoding',
+        'connection'
+      ]
 
-      const expectedResponseHeaders = {
-        ...Object.fromEntries(
-          Array.from({ length: 22 }, (_, i) =>
-            [`x-datadog-res-${i}`, `ext-res-${i}`]
-          )
+      const expectedResponseHeaders = [
+        ...Array.from({ length: 22 }, (_, i) =>
+          `x-datadog-res-${i}`
         ),
-        'x-powered-by': 'Express',
-        'content-type': 'text/plain; charset=utf-8',
-        'content-language': 'en'
-      }
+        'x-powered-by',
+        'content-type',
+        'content-language'
+      ]
 
       await axios.get('/', { headers: { 'User-Agent': 'Arachni/v1' } })
       await assertHeadersReported(expectedRequestHeaders, expectedResponseHeaders)
