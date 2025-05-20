@@ -28,6 +28,7 @@ describe('Plugin', () => {
   let langchainOutputParsers
   let langchainPrompts
   let langchainRunnables
+  let tool
 
   /**
    * In OpenAI 4.91.0, the default response format for embeddings was changed from `float` to `base64`.
@@ -78,6 +79,10 @@ describe('Plugin', () => {
           .get('@langchain/core/output_parsers')
         langchainPrompts = require(`../../../versions/@langchain/core@${version}`).get('@langchain/core/prompts')
         langchainRunnables = require(`../../../versions/@langchain/core@${version}`).get('@langchain/core/runnables')
+
+        tool = require(`../../../versions/@langchain/core@${version}`)
+          .get('@langchain/core/tools')
+          .tool
 
         langchainOpenaiOpenAiVersion =
             require(`../../../versions/@langchain/openai@${version}`)
@@ -1010,6 +1015,61 @@ describe('Plugin', () => {
 
             await checkTraces
           })
+        })
+      })
+
+      describe('tools', () => {
+        it('traces a tool call', async function () {
+          if (!tool) this.skip()
+
+          const myTool = tool(
+            () => 'Hello, world!',
+            {
+              name: 'myTool',
+              description: 'A tool that returns a greeting'
+            }
+          )
+
+          const checkTraces = agent.use(traces => {
+            const span = traces[0][0]
+
+            expect(span).to.have.property('name', 'langchain.request')
+            expect(span.resource).to.match(/^langchain\.tools\.[^.]+\.myTool$/)
+          })
+          const result = await myTool.invoke()
+          expect(result).to.equal('Hello, world!')
+
+          await checkTraces
+        })
+
+        it('traces a tool call with an error', async function () {
+          if (!tool) this.skip()
+
+          const myTool = tool(
+            () => { throw new Error('This is a test error') },
+            {
+              name: 'myTool',
+              description: 'A tool that throws an error'
+            }
+          )
+
+          const checkTraces = agent.use(traces => {
+            const span = traces[0][0]
+
+            expect(span).to.have.property('name', 'langchain.request')
+            expect(span.resource).to.match(/^langchain\.tools\.[^.]+\.myTool$/)
+
+            expect(span.meta).to.have.property('error.message')
+            expect(span.meta).to.have.property('error.type')
+            expect(span.meta).to.have.property('error.stack')
+          })
+
+          try {
+            await myTool.invoke()
+            expect.fail('Expected an error to be thrown')
+          } catch {}
+
+          await checkTraces
         })
       })
     })

@@ -42,6 +42,7 @@ describe('integrations', () => {
   let langchainOutputParsers
   let langchainPrompts
   let langchainRunnables
+  let tool
 
   /**
    * In OpenAI 4.91.0, the default response format for embeddings was changed from `float` to `base64`.
@@ -115,6 +116,10 @@ describe('integrations', () => {
             .get('@langchain/core/prompts')
           langchainRunnables = require(`../../../../../../versions/@langchain/core@${version}`)
             .get('@langchain/core/runnables')
+
+          tool = require(`../../../../../../versions/@langchain/core@${version}`)
+            .get('@langchain/core/tools')
+            .tool
 
           langchainOpenaiOpenAiVersion =
             require(`../../../../../../versions/@langchain/openai@${version}`)
@@ -1141,6 +1146,91 @@ describe('integrations', () => {
             })
 
             await chain.invoke({ foo: 'bar' })
+
+            await checkTraces
+          })
+        })
+
+        describe('tools', () => {
+          it('traces a tool call', async function () {
+            if (!tool) this.skip()
+
+            const add = tool(
+              ({ a, b }) => a + b,
+              {
+                name: 'add',
+                description: 'A tool that adds two numbers',
+                schema: {
+                  a: { type: 'number' },
+                  b: { type: 'number' }
+                }
+              }
+            )
+
+            const checkTraces = agent.use(traces => {
+              const toolSpan = traces[0][0]
+
+              const toolSpanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
+
+              const expectedTool = expectedLLMObsNonLLMSpanEvent({
+                span: toolSpan,
+                spanKind: 'tool',
+                name: 'add',
+                inputValue: JSON.stringify({ a: 1, b: 2 }),
+                outputValue: JSON.stringify(3),
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
+              })
+
+              expect(toolSpanEvent).to.deepEqualWithMockValues(expectedTool)
+            })
+
+            const result = await add.invoke({ a: 1, b: 2 })
+            expect(result).to.equal(3)
+
+            await checkTraces
+          })
+
+          it('traces a tool call with an error', async function () {
+            if (!tool) this.skip()
+
+            const add = tool(
+              ({ a, b }) => {
+                throw new Error('This is a test error')
+              },
+              {
+                name: 'add',
+                description: 'A tool that adds two numbers',
+                schema: {
+                  a: { type: 'number' },
+                  b: { type: 'number' }
+                }
+              }
+            )
+
+            const checkTraces = agent.use(traces => {
+              const toolSpan = traces[0][0]
+
+              const toolSpanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
+
+              const expectedTool = expectedLLMObsNonLLMSpanEvent({
+                span: toolSpan,
+                spanKind: 'tool',
+                name: 'add',
+                inputValue: JSON.stringify({ a: 1, b: 2 }),
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' },
+                error: 1,
+                errorType: 'Error',
+                errorMessage: 'This is a test error',
+                errorStack: MOCK_ANY
+              })
+
+              expect(toolSpanEvent).to.deepEqualWithMockValues(expectedTool)
+            })
+
+            try {
+              await add.invoke({ a: 1, b: 2 })
+              expect.fail('Expected an error to be thrown')
+            } catch {}
 
             await checkTraces
           })
