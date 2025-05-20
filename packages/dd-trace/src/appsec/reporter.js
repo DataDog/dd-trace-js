@@ -354,7 +354,7 @@ function reportRequestBody (rootSpan, requestBody) {
     const { truncated, value } = truncateRequestBody(requestBody)
     rootSpan.meta_struct['http.request.body'] = value
     if (truncated) {
-      rootSpan.setTag('_dd.appsec.rasp.request_body_size.exceeded', true)
+      rootSpan.setTag('_dd.appsec.rasp.request_body_size.exceeded', 'true')
     }
   }
 }

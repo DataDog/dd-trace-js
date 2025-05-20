@@ -597,7 +597,7 @@ describe('reporter', () => {
             }
           ])
 
-          expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.rasp.request_body_size.exceeded', true)
+          expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.rasp.request_body_size.exceeded', 'true')
         })
       })
     })
