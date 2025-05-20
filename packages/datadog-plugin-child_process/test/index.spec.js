@@ -53,7 +53,6 @@ describe('Child process plugin', () => {
           'command_execution',
           {
             childOf: undefined,
-            startTime: undefined,
             tags: {
               component: 'subprocess',
               'service.name': 'test-service',
@@ -77,7 +76,6 @@ describe('Child process plugin', () => {
           'command_execution',
           {
             childOf: undefined,
-            startTime: undefined,
             tags: {
               component: 'subprocess',
               'service.name': 'test-service',
@@ -103,7 +101,6 @@ describe('Child process plugin', () => {
           'command_execution',
           {
             childOf: undefined,
-            startTime: undefined,
             tags: {
               component: 'subprocess',
               'service.name': 'test-service',
@@ -130,7 +127,6 @@ describe('Child process plugin', () => {
           'command_execution',
           {
             childOf: undefined,
-            startTime: undefined,
             tags: {
               component: 'subprocess',
               'service.name': 'test-service',
@@ -158,7 +154,6 @@ describe('Child process plugin', () => {
           'command_execution',
           {
             childOf: undefined,
-            startTime: undefined,
             tags: {
               component: 'subprocess',
               'service.name': 'test-service',
@@ -186,7 +181,6 @@ describe('Child process plugin', () => {
           'command_execution',
           {
             childOf: undefined,
-            startTime: undefined,
             tags: {
               component: 'subprocess',
               'service.name': 'test-service',
