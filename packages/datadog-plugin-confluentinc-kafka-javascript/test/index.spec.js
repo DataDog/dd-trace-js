@@ -278,11 +278,14 @@ describe('Plugin', () => {
           })
 
           afterEach(async () => {
-            try {
-              await nativeProducer.disconnect()
-            } catch (err) {
-              // ignore
-            }
+            await new Promise((resolve, reject) => {
+              nativeProducer.disconnect((err) => {
+                if (err) {
+                  return reject(err)
+                }
+                resolve()
+              })
+            })
           })
 
           describe('producer', () => {
@@ -356,7 +359,14 @@ describe('Plugin', () => {
 
             afterEach(async () => {
               await nativeConsumer.unsubscribe()
-              await nativeConsumer.disconnect()
+              await new Promise((resolve, reject) => {
+                nativeConsumer.disconnect((err) => {
+                  if (err) {
+                    return reject(err)
+                  }
+                  resolve()
+                })
+              })
             })
 
             function consume (consumer, producer, topic, message) {
