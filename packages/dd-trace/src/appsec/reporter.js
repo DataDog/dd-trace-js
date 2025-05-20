@@ -325,6 +325,14 @@ function truncateRequestBody (target, depth = 0) {
           return { value: truncatedArray, truncated: wasTruncated }
         }
 
+        if (typeof target.toJSON === 'function') {
+          try {
+            return truncateRequestBody(target.toJSON(), depth + 1)
+          } catch (e) {
+            return { truncated: false }
+          }
+        }
+
         const keys = Object.keys(target)
         const slicedKeys = keys.slice(0, COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE)
         wasTruncated = keys.length > COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE

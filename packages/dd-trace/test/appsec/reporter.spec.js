@@ -547,6 +547,13 @@ describe('reporter', () => {
             nullValue: null,
             undefinedValue: undefined,
             emptyObject: {},
+            objectWithToJSON: {
+              toJSON: () => Object.fromEntries([...Array(300).keys()].map(i => [i, i])),
+              foo: 'bar'
+            },
+            objectWithToJSONRaisingException: {
+              toJSON: () => { throw new TypeError('Object not serializable') }
+            },
             emptyArray: []
           }
         }
@@ -565,6 +572,9 @@ describe('reporter', () => {
           expect(truncatedRequestBody.specialValues.nullValue).to.be.null
           expect(truncatedRequestBody.specialValues.undefinedValue).to.be.undefined
           expect(truncatedRequestBody.specialValues.emptyObject).to.be.deep.equal({})
+          expect(Object.keys(truncatedRequestBody.specialValues.objectWithToJSON)).to.have.length(256)
+          expect(truncatedRequestBody.specialValues.objectWithToJSON.foo).to.be.undefined
+          expect(truncatedRequestBody.specialValues.objectWithToJSONRaisingException).to.be.undefined
           expect(truncatedRequestBody.specialValues.emptyArray).to.be.deep.equal([])
           expect(objectDepth(truncatedRequestBody.circularRef)).to.be.equal(19)
         })
