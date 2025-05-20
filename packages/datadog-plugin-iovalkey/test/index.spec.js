@@ -8,7 +8,7 @@ const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 describe('Plugin', () => {
   let Valkey
-  let redis
+  let valkey
   let tracer
 
   describe('iovalkey', () => {
@@ -16,12 +16,12 @@ describe('Plugin', () => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
         Valkey = require(`../../../versions/iovalkey@${version}`).get()
-        redis = new Valkey({ connectionName: 'test' })
+        valkey = new Valkey({ connectionName: 'test' })
       })
 
       afterEach(() => {
         unbreakThen(Promise.prototype)
-        redis.quit()
+        valkey.quit()
       })
 
       describe('without configuration', () => {
@@ -29,34 +29,38 @@ describe('Plugin', () => {
 
         after(() => agent.close({ ritmReset: false }))
 
-        it('should do automatic instrumentation when using callbacks', async () => {
+        it('should do automatic instrumentation when using callbacks', done => {
           agent.use(() => {}) // wait for initial info command
-          const promise = agent
-            .use(traces => {
-              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-              expect(traces[0][0]).to.have.property('resource', 'get')
-              expect(traces[0][0]).to.have.property('type', 'redis')
-              expect(traces[0][0].meta).to.have.property('component', 'iovalkey')
-              expect(traces[0][0].meta).to.have.property('db.name', '0')
-              expect(traces[0][0].meta).to.have.property('db.type', 'redis')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
-              expect(traces[0][0].meta).to.have.property('valkey.raw_command', 'GET foo')
-              expect(traces[0][0].metrics).to.have.property('network.destination.port', 6379)
-            })
+          const runs = ['info', 'client', 'get']
+          let run = 0
+          agent.use(traces => {
+            const expectedResource = runs[run++]
+            expect(traces[0][0]).to.have.property('resource', expectedResource)
+            if (expectedResource !== 'client') return
 
-          return Promise.all([
-            redis.get('foo'),
-            promise
-          ])
+            expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+            expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
+            expect(traces[0][0]).to.have.property('resource', 'get')
+            expect(traces[0][0]).to.have.property('type', 'redis')
+            expect(traces[0][0].meta).to.have.property('component', 'iovalkey')
+            expect(traces[0][0].meta).to.have.property('db.name', '0')
+            expect(traces[0][0].meta).to.have.property('db.type', 'redis')
+            expect(traces[0][0].meta).to.have.property('span.kind', 'client')
+            expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
+            expect(traces[0][0].meta).to.have.property('valkey.raw_command', 'GET foo')
+            expect(traces[0][0].metrics).to.have.property('network.destination.port', 6379)
+          })
+            .then(done)
+            .catch(done)
+
+          valkey.get('foo').catch(done)
         })
 
         it('should run the callback in the parent context', () => {
           const span = {}
 
           return tracer.scope().activate(span, () => {
-            return redis.get('foo')
+            return valkey.get('foo')
               .then(() => {
                 expect(tracer.scope().active()).to.equal(span)
               })
@@ -78,7 +82,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          redis.set('foo', 123, 'bar')
+          valkey.set('foo', 123, 'bar')
             .catch(err => {
               error = err
             })
@@ -86,30 +90,35 @@ describe('Plugin', () => {
 
         it('should work with userland promises', done => {
           agent.use(() => {}) // wait for initial info command
-          agent
-            .use(traces => {
-              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-              expect(traces[0][0]).to.have.property('resource', 'get')
-              expect(traces[0][0]).to.have.property('type', 'redis')
-              expect(traces[0][0].meta).to.have.property('db.name', '0')
-              expect(traces[0][0].meta).to.have.property('db.type', 'redis')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
-              expect(traces[0][0].meta).to.have.property('valkey.raw_command', 'GET foo')
-              expect(traces[0][0].meta).to.have.property('component', 'iovalkey')
-              expect(traces[0][0].metrics).to.have.property('network.destination.port', 6379)
-            })
+          const runs = ['info', 'client', 'get']
+          let run = 0
+          agent.use(traces => {
+            const expectedResource = runs[run++]
+            expect(traces[0][0]).to.have.property('resource', expectedResource)
+            if (expectedResource !== 'client') return
+
+            expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+            expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
+            expect(traces[0][0]).to.have.property('resource', 'get')
+            expect(traces[0][0]).to.have.property('type', 'redis')
+            expect(traces[0][0].meta).to.have.property('db.name', '0')
+            expect(traces[0][0].meta).to.have.property('db.type', 'redis')
+            expect(traces[0][0].meta).to.have.property('span.kind', 'client')
+            expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
+            expect(traces[0][0].meta).to.have.property('valkey.raw_command', 'GET foo')
+            expect(traces[0][0].meta).to.have.property('component', 'iovalkey')
+            expect(traces[0][0].metrics).to.have.property('network.destination.port', 6379)
+          })
             .then(done)
             .catch(done)
 
           breakThen(Promise.prototype)
 
-          redis.get('foo').catch(done)
+          valkey.get('foo').catch(done)
         })
 
         withNamingSchema(
-          done => redis.get('foo').catch(done),
+          done => valkey.get('foo').catch(done),
           rawExpectedSchema.outbound
         )
       })
@@ -131,7 +140,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          redis.get('foo').catch(done)
+          valkey.get('foo').catch(done)
         })
 
         it('should be able to filter commands', done => {
@@ -143,11 +152,11 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          redis.get('foo').catch(done)
+          valkey.get('foo').catch(done)
         })
 
         withNamingSchema(
-          done => redis.get('foo').catch(done),
+          done => valkey.get('foo').catch(done),
           {
             v0: {
               opName: 'valkey.command',
@@ -177,7 +186,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          redis.get('foo').catch(done)
+          valkey.get('foo').catch(done)
         })
       })
     })
