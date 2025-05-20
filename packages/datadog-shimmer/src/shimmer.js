@@ -35,7 +35,7 @@ function copyProperties (original, wrapped) {
   if (ownKeys.length !== 2) {
     for (const key of ownKeys) {
       if (skipMethods.has(key)) continue
-      const descriptor = Object.getOwnPropertyDescriptor(original, key) ?? {}
+      const descriptor = /** @type {PropertyDescriptor} */ (Object.getOwnPropertyDescriptor(original, key))
       if (descriptor.writable && descriptor.enumerable && descriptor.configurable) {
         wrapped[key] = original[key]
       } else if (descriptor.writable || descriptor.configurable || !Object.hasOwn(wrapped, key)) {
@@ -56,7 +56,7 @@ function copyObjectProperties (original, wrapped, skipKey) {
   const ownKeys = Reflect.ownKeys(original)
   for (const key of ownKeys) {
     if (key === skipKey) continue
-    const descriptor = Object.getOwnPropertyDescriptor(original, key) ?? {}
+    const descriptor = /** @type {PropertyDescriptor} */ (Object.getOwnPropertyDescriptor(original, key))
     if (descriptor.writable && descriptor.enumerable && descriptor.configurable) {
       wrapped[key] = original[key]
     } else if (descriptor.writable || descriptor.configurable || !Object.hasOwn(wrapped, key)) {
