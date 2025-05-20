@@ -3,7 +3,7 @@
 const { SourceIastPlugin } = require('../iast-plugin')
 const { getIastContext } = require('../iast-context')
 const { storage } = require('../../../../../datadog-core')
-const { taintObject, newTaintedString, getRanges } = require('./operations')
+const { taintObject, newTaintedString, getRanges, taintQueryWithCache } = require('./operations')
 const {
   HTTP_REQUEST_BODY,
   HTTP_REQUEST_COOKIE_VALUE,
@@ -67,13 +67,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
         const iastContext = getIastContext(storage('legacy').getStore())
         if (!iastContext || !query) return
 
-        if (!iastContext.queryCache) {
-          iastContext.queryCache = taintObject(iastContext, query, HTTP_REQUEST_PARAMETER)
-        }
-
-        for (const key in query) {
-          query[key] = iastContext.queryCache[key]
-        }
+        taintQueryWithCache(iastContext, query, HTTP_REQUEST_PARAMETER)
       }
     )
 

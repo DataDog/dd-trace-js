@@ -65,13 +65,6 @@ app.get('/cmdi-iv-secure', (req, res) => {
   res.end()
 })
 
-app.get('/cmdi-iv-secure-nested', (req, res) => {
-  if (validate(req.query.command.value)) {
-    childProcess.execSync(req.query.command.value)
-  }
-  res.end()
-})
-
 app.listen(port, () => {
   process.send({ port })
 })
