@@ -508,6 +508,89 @@ describe('dogstatsd', () => {
       ].join('\n') + '\n')
     })
 
+    it('should support array-based tags for gauge', () => {
+      client = new CustomMetrics({ dogstatsd: {} })
+
+      client.gauge('test.avg', 10, ['foo:bar', 'baz:qux'])
+      client.flush()
+
+      expect(udp4.send).to.have.been.called
+      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.avg:10|g|#foo:bar,baz:qux\n')
+    })
+
+    it('should support array-based tags for increment', () => {
+      client = new CustomMetrics({ dogstatsd: {} })
+
+      client.increment('test.count', 10, ['foo:bar', 'baz:qux'])
+      client.flush()
+
+      expect(udp4.send).to.have.been.called
+      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:10|c|#foo:bar,baz:qux\n')
+    })
+
+    it('should support array-based tags for decrement', () => {
+      client = new CustomMetrics({ dogstatsd: {} })
+
+      client.decrement('test.count', 10, ['foo:bar', 'baz:qux'])
+      client.flush()
+
+      expect(udp4.send).to.have.been.called
+      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:-10|c|#foo:bar,baz:qux\n')
+    })
+
+    it('should support array-based tags for distribution', () => {
+      client = new CustomMetrics({ dogstatsd: {} })
+
+      client.distribution('test.dist', 10, ['foo:bar', 'baz:qux'])
+      client.flush()
+
+      expect(udp4.send).to.have.been.called
+      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.dist:10|d|#foo:bar,baz:qux\n')
+    })
+
+    it('should support array-based tags for histogram', () => {
+      client = new CustomMetrics({ dogstatsd: {} })
+
+      client.histogram('test.histogram', 10, ['foo:bar', 'baz:qux'])
+      client.flush()
+
+      expect(udp4.send).to.have.been.called
+      expect(udp4.send.firstCall.args[0].toString()).to.equal([
+        'test.histogram.min:10|g|#foo:bar,baz:qux',
+        'test.histogram.max:10|g|#foo:bar,baz:qux',
+        'test.histogram.sum:10|c|#foo:bar,baz:qux',
+        'test.histogram.total:10|c|#foo:bar,baz:qux',
+        'test.histogram.avg:10|g|#foo:bar,baz:qux',
+        'test.histogram.count:1|c|#foo:bar,baz:qux',
+        'test.histogram.median:10.074696689511441|g|#foo:bar,baz:qux',
+        'test.histogram.95percentile:10.074696689511441|g|#foo:bar,baz:qux'
+      ].join('\n') + '\n')
+    })
+
+    it('should handle empty array of tags', () => {
+      client = new CustomMetrics({ dogstatsd: {} })
+
+      client.gauge('test.avg', 10, [])
+      client.flush()
+
+      expect(udp4.send).to.have.been.called
+      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.avg:10|g\n')
+    })
+
+    it('should handle mixed tag formats', () => {
+      client = new CustomMetrics({ dogstatsd: {} })
+
+      client.gauge('test.avg', 10, { foo: 'bar' })
+      client.gauge('test.avg', 20, ['baz:qux'])
+      client.flush()
+
+      expect(udp4.send).to.have.been.called
+      expect(udp4.send.firstCall.args[0].toString()).to.equal([
+        'test.avg:10|g|#foo:bar',
+        'test.avg:20|g|#baz:qux'
+      ].join('\n') + '\n')
+    })
+
     it('should flush via interval', () => {
       const clock = sinon.useFakeTimers()
 
