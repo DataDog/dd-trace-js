@@ -53,11 +53,9 @@ describe('Plugin', () => {
         it('should run the callback in the parent context', () => {
           const span = {}
 
-          return tracer.scope().activate(span, () => {
-            return redis.get('foo')
-              .then(() => {
-                expect(tracer.scope().active()).to.equal(span)
-              })
+          return tracer.scope().activate(span, async () => {
+            await redis.get('foo')
+            expect(tracer.scope().active()).to.equal(span)
           })
         })
 

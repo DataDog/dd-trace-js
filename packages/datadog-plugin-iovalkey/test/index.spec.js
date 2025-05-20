@@ -54,11 +54,9 @@ describe('Plugin', () => {
         it('should run the callback in the parent context', () => {
           const span = {}
 
-          return tracer.scope().activate(span, () => {
-            return valkey.get('foo')
-              .then(() => {
-                expect(tracer.scope().active()).to.equal(span)
-              })
+          return tracer.scope().activate(span, async () => {
+            await valkey.get('foo')
+            expect(tracer.scope().active()).to.equal(span)
           })
         })
 
