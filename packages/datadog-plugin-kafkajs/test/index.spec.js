@@ -161,7 +161,10 @@ describe('Plugin', () => {
             })
           }
 
-          describe('when using a kafka broker version that does not support message headers', () => {
+          describe('when using a kafka broker version that does not support message headers', function () {
+            // kafkajs 1.4.0 is very slow when encountering errors
+            this.timeout(30000)
+
             // we should stub the kafka producer send method to throw a KafkaJSProtocolError
             class KafkaJSProtocolError extends Error {
               constructor (message) {
@@ -178,9 +181,17 @@ describe('Plugin', () => {
 
             beforeEach(async () => {
               // simulate a kafka error for the broker version not supporting message headers
+              const otherKafka = new Kafka({
+                clientId: `kafkajs-test-${version}`,
+                brokers: ['127.0.0.1:9092'],
+                retry: {
+                  retries: 0
+                }
+              })
+
               sendRequestStub = sinon.stub(Broker.prototype, 'produce').rejects(error)
 
-              producer = kafka.producer({ transactionTimeout: 100 })
+              producer = otherKafka.producer({ transactionTimeout: 10 })
               await producer.connect()
             })
 
