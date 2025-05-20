@@ -1,6 +1,5 @@
 'use strict'
 
-const { isPromise } = require('util/types')
 const {
   channel,
   addHook,
@@ -18,6 +17,7 @@ const allowedClientSpanOperations = [
   'serialize',
   'transaction'
 ]
+
 class TracingHelper {
   dbConfig = null
   isEnabled () {
@@ -60,7 +60,7 @@ class TracingHelper {
         primsaClientStartCH.publish(ctx)
         try {
           const result = callback.apply(this, ctx)
-          if (isPromise(result)) {
+          if (typeof result?.then === 'function') {
             result.catch((error) => {
               prismaClientErrorCH.publish({ error, ctx })
               throw error
