@@ -267,7 +267,14 @@ describe('Plugin', () => {
               dr_cb: true
             })
 
-            await nativeProducer.connect()
+            await new Promise((resolve, reject) => {
+              nativeProducer.connect({}, (err) => {
+                if (err) {
+                  return reject(err)
+                }
+                resolve()
+              })
+            })
           })
 
           afterEach(async () => {
@@ -337,7 +344,14 @@ describe('Plugin', () => {
                 'group.id': 'test-group'
               })
 
-              await nativeConsumer.connect({})
+              await new Promise((resolve, reject) => {
+                nativeConsumer.connect({}, (err) => {
+                  if (err) {
+                    return reject(err)
+                  }
+                  resolve()
+                })
+              })
             })
 
             afterEach(async () => {
