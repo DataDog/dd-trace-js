@@ -302,7 +302,7 @@ function truncateRequestBody (target, depth = 0) {
         return { value: target.slice(0, COLLECTED_REQUEST_BODY_MAX_STRING_LENGTH), truncated: true }
       }
       return { value: target, truncated: false }
-    case 'object':
+    case 'object': {
       if (target === null) {
         return { value: target, truncated: false }
       }
@@ -344,6 +344,7 @@ function truncateRequestBody (target, depth = 0) {
         truncatedObject[key] = value
       }
       return { value: truncatedObject, truncated: wasTruncated }
+    }
     default:
       return { value: target, truncated: false }
   }
