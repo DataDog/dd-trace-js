@@ -8,7 +8,7 @@ const { getResourceName } = require('./util')
 
 class AmqplibProducerPlugin extends ProducerPlugin {
   static get id () { return 'amqplib' }
-  static get operation () { return 'command' }
+  static get operation () { return 'publish' }
 
   bindStart (ctx) {
     const { channel = {}, method, fields, message } = ctx

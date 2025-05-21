@@ -10,9 +10,17 @@ const shimmer = require('../../datadog-shimmer')
 const { NODE_MAJOR, NODE_MINOR } = require('../../../version')
 const MIN_VERSION = ((NODE_MAJOR > 22) || (NODE_MAJOR === 22 && NODE_MINOR >= 2)) ? '>=0.5.3' : '>=0.5.0'
 
-const startCh = channel('apm:amqplib:command:start')
-const finishCh = channel('apm:amqplib:command:finish')
-const errorCh = channel('apm:amqplib:command:error')
+const commandStartCh = channel('apm:amqplib:command:start')
+const commandFinishCh = channel('apm:amqplib:command:finish')
+const commandErrorCh = channel('apm:amqplib:command:error')
+
+const consumeStartCh = channel('apm:amqplib:consume:start')
+const consumeFinishCh = channel('apm:amqplib:consume:finish')
+// const consumeErrorCh = channel('apm:amqplib:consume:error')
+
+const publishStartCh = channel('apm:amqplib:publish:start')
+const publishFinishCh = channel('apm:amqplib:publish:finish')
+const publishErrorCh = channel('apm:amqplib:publish:error')
 
 let methods = {}
 
@@ -31,15 +39,15 @@ addHook({ name: 'amqplib', file: 'lib/channel_model.js', versions: [MIN_VERSION]
         return message
       }
       const ctx = { method: 'basic.get', message, fields: message.fields, queue }
-      startCh.runStores(ctx, () => {
+      consumeStartCh.runStores(ctx, () => {
         // finish right away
-        finishCh.publish(ctx)
+        consumeFinishCh.publish(ctx)
       })
       return message
     })
   })
   shimmer.wrap(x.Channel.prototype, 'consume', consume => function (queue, callback, options) {
-    if (!startCh.hasSubscribers) {
+    if (!consumeStartCh.hasSubscribers) {
       return consume.apply(this, arguments)
     }
     arguments[1] = (message, ...args) => {
@@ -47,10 +55,10 @@ addHook({ name: 'amqplib', file: 'lib/channel_model.js', versions: [MIN_VERSION]
         return callback(message, ...args)
       }
       const ctx = { method: 'basic.deliver', message, fields: message.fields, queue }
-      return startCh.runStores(ctx, () => {
+      return consumeStartCh.runStores(ctx, () => {
         // finish right away
         const result = callback(message, ...args)
-        finishCh.publish(ctx)
+        consumeFinishCh.publish(ctx)
         return result
       })
     }
@@ -61,7 +69,7 @@ addHook({ name: 'amqplib', file: 'lib/channel_model.js', versions: [MIN_VERSION]
 
 addHook({ name: 'amqplib', file: 'lib/callback_model.js', versions: [MIN_VERSION] }, channel => {
   shimmer.wrap(channel.Channel.prototype, 'get', getMessage => function (queue, options, callback) {
-    if (!startCh.hasSubscribers) {
+    if (!commandStartCh.hasSubscribers) {
       return getMessage.apply(this, arguments)
     }
     arguments[2] = (error, message, ...args) => {
@@ -69,16 +77,16 @@ addHook({ name: 'amqplib', file: 'lib/callback_model.js', versions: [MIN_VERSION
         return callback(error, message, ...args)
       }
       const ctx = { method: 'basic.get', message, fields: message.fields, queue }
-      return startCh.runStores(ctx, () => {
+      return consumeStartCh.runStores(ctx, () => {
         const result = callback(error, message, ...args)
-        finishCh.publish(ctx)
+        consumeFinishCh.publish(ctx)
         return result
       })
     }
     return getMessage.apply(this, arguments)
   })
   shimmer.wrap(channel.Channel.prototype, 'consume', consume => function (queue, callback) {
-    if (!startCh.hasSubscribers) {
+    if (!consumeStartCh.hasSubscribers) {
       return consume.apply(this, arguments)
     }
     arguments[1] = (message, ...args) => {
@@ -86,9 +94,9 @@ addHook({ name: 'amqplib', file: 'lib/callback_model.js', versions: [MIN_VERSION
         return callback(message, ...args)
       }
       const ctx = { method: 'basic.deliver', message, fields: message.fields, queue }
-      return startCh.runStores(ctx, () => {
+      return consumeStartCh.runStores(ctx, () => {
         const result = callback(message, ...args)
-        finishCh.publish(ctx)
+        consumeFinishCh.publish(ctx)
         return result
       })
     }
@@ -99,16 +107,21 @@ addHook({ name: 'amqplib', file: 'lib/callback_model.js', versions: [MIN_VERSION
 
 addHook({ name: 'amqplib', file: 'lib/channel.js', versions: [MIN_VERSION] }, channel => {
   shimmer.wrap(channel.Channel.prototype, 'sendImmediately', sendImmediately => function (method, fields) {
-    return instrument(sendImmediately, this, arguments, methods[method], fields)
+    return instrument(
+      sendImmediately, this, arguments, methods[method], fields, null, commandStartCh, commandFinishCh, commandErrorCh
+    )
   })
 
   shimmer.wrap(channel.Channel.prototype, 'sendMessage', sendMessage => function (fields) {
-    return instrument(sendMessage, this, arguments, 'basic.publish', fields, arguments[2])
+    return instrument(
+      sendMessage, this, arguments, 'basic.publish', fields, arguments[2],
+      publishStartCh, publishFinishCh, publishErrorCh
+    )
   })
   return channel
 })
 
-function instrument (send, channel, args, method, fields, message) {
+function instrument (send, channel, args, method, fields, message, startCh, finishCh, errorCh) {
   if (!startCh.hasSubscribers || method === 'basic.get') {
     return send.apply(channel, args)
   }

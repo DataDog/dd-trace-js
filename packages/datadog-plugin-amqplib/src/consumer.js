@@ -7,7 +7,7 @@ const { getResourceName } = require('./util')
 
 class AmqplibConsumerPlugin extends ConsumerPlugin {
   static get id () { return 'amqplib' }
-  static get operation () { return 'command' }
+  static get operation () { return 'consume' }
 
   bindStart (ctx) {
     const { method, fields, message, queue } = ctx
