@@ -56,7 +56,7 @@ function traverseAndTaint (value, cache, path, type, transactionId) {
 
   if (typeof value === 'string') {
     // If we already have a tainted version of this exact string in the cache
-    if (typeof cache === 'string') {
+    if (value === cache) {
       return cache
     }
 
