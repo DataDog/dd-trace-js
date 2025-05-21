@@ -310,42 +310,43 @@ function truncateRequestBody (target, depth = 0) {
         return { value: target, truncated: false }
       }
 
-      if (depth < COLLECTED_REQUEST_BODY_MAX_DEPTH) {
-        if (Array.isArray(target)) {
-          const sliced = target.slice(0, COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE)
-          wasTruncated = target.length > COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE
-
-          const truncatedArray = []
-          for (const item of sliced) {
-            const { value, truncated } = truncateRequestBody(item, depth + 1)
-            if (truncated) wasTruncated = true
-            truncatedArray.push(value)
-          }
-
-          return { value: truncatedArray, truncated: wasTruncated }
-        }
-
-        if (typeof target.toJSON === 'function') {
-          try {
-            return truncateRequestBody(target.toJSON(), depth + 1)
-          } catch (e) {
-            return { truncated: false }
-          }
-        }
-
-        const keys = Object.keys(target)
-        const slicedKeys = keys.slice(0, COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE)
-        wasTruncated = keys.length > COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE
-
-        const truncatedObject = {}
-        for (const key of slicedKeys) {
-          const { value, truncated } = truncateRequestBody(target[key], depth + 1)
-          if (truncated) wasTruncated = true
-          truncatedObject[key] = value
-        }
-        return { value: truncatedObject, truncated: wasTruncated }
+      if (depth >= COLLECTED_REQUEST_BODY_MAX_DEPTH) {
+        return { truncated: true }
       }
-      return { truncated: true }
+
+      if (Array.isArray(target)) {
+        const sliced = target.slice(0, COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE)
+        wasTruncated = target.length > COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE
+
+        const truncatedArray = []
+        for (const item of sliced) {
+          const { value, truncated } = truncateRequestBody(item, depth + 1)
+          if (truncated) wasTruncated = true
+          truncatedArray.push(value)
+        }
+
+        return { value: truncatedArray, truncated: wasTruncated }
+      }
+
+      if (typeof target.toJSON === 'function') {
+        try {
+          return truncateRequestBody(target.toJSON(), depth + 1)
+        } catch (e) {
+          return { truncated: false }
+        }
+      }
+
+      const keys = Object.keys(target)
+      const slicedKeys = keys.slice(0, COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE)
+      wasTruncated = keys.length > COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE
+
+      const truncatedObject = {}
+      for (const key of slicedKeys) {
+        const { value, truncated } = truncateRequestBody(target[key], depth + 1)
+        if (truncated) wasTruncated = true
+        truncatedObject[key] = value
+      }
+      return { value: truncatedObject, truncated: wasTruncated }
     default:
       return { value: target, truncated: false }
   }
