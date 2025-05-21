@@ -183,7 +183,7 @@ class PlaywrightPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:playwright:test:start', (ctx) => {
+    this.addBind('ci:playwright:test:start', (ctx) => {
       const {
         testName,
         testSuiteAbsolutePath,
@@ -367,10 +367,6 @@ class PlaywrightPlugin extends CiPlugin {
       if (process.env.DD_PLAYWRIGHT_WORKER) {
         this.tracer._exporter.flush(onDone)
       }
-    })
-
-    this.addBind('ci:playwright:test:fn', (ctx) => {
-      return ctx.currentStore
     })
   }
 
