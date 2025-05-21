@@ -1042,7 +1042,7 @@ jobs:
           - 6379:6379
     env:
       PLUGINS: ioredis
-      SERVICES: ioredis
+      SERVICES: redis
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/plugins/test
