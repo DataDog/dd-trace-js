@@ -217,7 +217,9 @@ describe('GraphQL', () => {
       const abortController = context.abortController
 
       sinon.stub(waf, 'run').returns({
-        block_request: blockParameters
+        actions: {
+          block_request: blockParameters
+        }
       })
 
       sinon.stub(web, 'root').returns(rootSpan)
@@ -247,7 +249,9 @@ describe('GraphQL', () => {
       const abortController = context.abortController
 
       sinon.stub(waf, 'run').returns({
-        block_request: blockParameters
+        actions: {
+          block_request: blockParameters
+        }
       })
 
       sinon.stub(web, 'root').returns(rootSpan)
