@@ -112,7 +112,7 @@ describe('Plugin', () => {
 
             let error
 
-            const expectedSpanPromise = agent.use(traces => {
+            const expectedSpanPromise = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
 
               expect(span).to.include({
@@ -145,7 +145,7 @@ describe('Plugin', () => {
           // Dynamic broker list support added in 1.14/2.0 (https://github.com/tulios/kafkajs/commit/62223)
           if (semver.intersects(version, '>=1.14')) {
             it('should not extract bootstrap servers when initialized with a function', async () => {
-              const expectedSpanPromise = agent.use(traces => {
+              const expectedSpanPromise = agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
                 expect(span.meta).to.not.have.any.keys(['messaging.kafka.bootstrap.servers'])
               })
@@ -281,7 +281,7 @@ describe('Plugin', () => {
           })
 
           it('should propagate context', async () => {
-            const expectedSpanPromise = agent.use(traces => {
+            const expectedSpanPromise = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
 
               expect(span).to.include({

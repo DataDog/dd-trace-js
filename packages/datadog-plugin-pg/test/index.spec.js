@@ -68,7 +68,7 @@ describe('Plugin', () => {
           )
 
           it('should do automatic instrumentation when using callbacks', done => {
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', 'SELECT $1::text as message')
@@ -97,7 +97,7 @@ describe('Plugin', () => {
           })
 
           it('should send long queries to agent', done => {
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('resource', `SELECT '${'x'.repeat(5000)}'::text as message`)
 
               done()
@@ -114,7 +114,7 @@ describe('Plugin', () => {
 
           if (semver.intersects(version, '>=5.1')) { // initial promise support
             it('should do automatic instrumentation when using promises', done => {
-              agent.use(traces => {
+              agent.assertSomeTraces(traces => {
                 expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
                 expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
                 expect(traces[0][0]).to.have.property('resource', 'SELECT $1::text as message')
@@ -142,7 +142,7 @@ describe('Plugin', () => {
           it('should handle errors', done => {
             let error
 
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
               expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
               expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
@@ -164,7 +164,7 @@ describe('Plugin', () => {
           it('should handle errors', done => {
             let error
 
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
               expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
 
@@ -229,7 +229,7 @@ describe('Plugin', () => {
                 })
 
                 it('should instrument cursor-based streaming with pg-cursor', async () => {
-                  const tracingPromise = agent.use(traces => {
+                  const tracingPromise = agent.assertSomeTraces(traces => {
                     expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
                     expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
                     expect(traces[0][0]).to.have.property('resource', 'SELECT * FROM generate_series(0, 1) num')
@@ -259,7 +259,7 @@ describe('Plugin', () => {
                 })
 
                 it('should instrument stream-based queries with pg-query-stream', async () => {
-                  const agentPromise = agent.use(traces => {
+                  const agentPromise = agent.assertSomeTraces(traces => {
                     expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
                     expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
                     expect(traces[0][0]).to.have.property('resource', 'SELECT * FROM generate_series(0, 1) num')
@@ -288,7 +288,7 @@ describe('Plugin', () => {
                 })
 
                 it('should instrument stream-based queries with pg-query-stream and catch errors', async () => {
-                  const agentPromise = agent.use(traces => {
+                  const agentPromise = agent.assertSomeTraces(traces => {
                     expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
                     expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
                     expect(traces[0][0]).to.have.property('resource', 'SELECT * FROM generate_series(0, 1) num')
@@ -348,7 +348,7 @@ describe('Plugin', () => {
         })
 
         it('should be configured with the correct values', done => {
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
             expect(traces[0][0]).to.have.property('service', 'custom')
             expect(traces[0][0]).to.have.property('resource', 'SELECT $1...')
@@ -405,7 +405,7 @@ describe('Plugin', () => {
         })
 
         it('should be configured with the correct service', done => {
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
             expect(traces[0][0]).to.have.property('service', '127.0.0.1-postgres')
           })
@@ -488,7 +488,7 @@ describe('Plugin', () => {
         })
 
         it('trace query resource should not be changed when propagation is enabled', done => {
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('resource', 'SELECT $1::text as message')
             done()
           })
@@ -591,7 +591,7 @@ describe('Plugin', () => {
         })
 
         it('query text should contain traceparent', done => {
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             const expectedTimePrefix = traces[0][0].meta['_dd.p.tid'].toString(16).padStart(16, '0')
             const traceId = expectedTimePrefix + traces[0][0].trace_id.toString(16).padStart(16, '0')
             const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
@@ -609,7 +609,7 @@ describe('Plugin', () => {
         })
 
         it('query should inject _dd.dbm_trace_injected into span', done => {
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             expect(traces[0][0].meta).to.have.property('_dd.dbm_trace_injected', 'true')
             done()
           })
@@ -624,7 +624,7 @@ describe('Plugin', () => {
         })
 
         it('service should default to tracer service name', done => {
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
             done()
           })
@@ -671,7 +671,7 @@ describe('Plugin', () => {
             text: 'SELECT $1::text as message'
           }
 
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             const expectedTimePrefix = traces[0][0].meta['_dd.p.tid'].toString(16).padStart(16, '0')
             const traceId = expectedTimePrefix + traces[0][0].trace_id.toString(16).padStart(16, '0')
             const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
@@ -705,7 +705,7 @@ describe('Plugin', () => {
             })
           })
 
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             expect(query).to.have.property(
               'name', 'pgSelectQuery')
           }).then(done, done)
@@ -719,7 +719,7 @@ describe('Plugin', () => {
             text: 'SELECT $1::text as message'
           }
 
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             expect(queryText).to.equal(
               `/*dddb='postgres',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'` +
               '*/ SELECT $1::text as message')
@@ -743,7 +743,7 @@ describe('Plugin', () => {
             get text () { return 'SELECT $1::text as message' }
           }
 
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             expect(queryText).to.equal(
               `/*dddb='postgres',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'` +
               '*/ SELECT $1::text as message')
@@ -777,7 +777,7 @@ describe('Plugin', () => {
 
           const query = new Query('pgSelectQuery', 'SELECT $1::text as greeting')
 
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             expect(queryText).to.equal(
               `/*dddb='postgres',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'` +
               '*/ SELECT $1::text as greeting')

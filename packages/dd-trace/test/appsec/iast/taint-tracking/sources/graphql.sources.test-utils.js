@@ -82,7 +82,7 @@ function graphqlCommonTests (config) {
     })
 
     it('Should detect COMMAND_INJECTION vulnerability with hardcoded query', (done) => {
-      agent.use(payload => {
+      agent.assertSomeTraces(payload => {
         expect(payload[0][0].meta).to.have.property('_dd.iast.json')
 
         const iastJson = JSON.parse(payload[0][0].meta['_dd.iast.json'])
@@ -94,7 +94,7 @@ function graphqlCommonTests (config) {
     })
 
     it('Should detect COMMAND_INJECTION vulnerability with query and variables', (done) => {
-      agent.use(payload => {
+      agent.assertSomeTraces(payload => {
         expect(payload[0][0].meta).to.have.property('_dd.iast.json')
 
         const iastJson = JSON.parse(payload[0][0].meta['_dd.iast.json'])

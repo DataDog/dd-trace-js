@@ -42,7 +42,7 @@ describe('Plugin', () => {
 
         it('should do automatic instrumentation when using callbacks', async () => {
           const promise = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', 'GET')
@@ -69,7 +69,7 @@ describe('Plugin', () => {
         it('should handle errors', async () => {
           let error
 
-          const promise = agent.use(traces => {
+          const promise = agent.assertSomeTraces(traces => {
             expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
             expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
             expect(traces[0][0].meta).to.have.property('component', 'redis')
@@ -87,7 +87,7 @@ describe('Plugin', () => {
 
         it('should work with userland promises', async () => {
           const promise = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', 'GET')
@@ -135,7 +135,7 @@ describe('Plugin', () => {
         })
 
         it('should be configured with the correct values', async () => {
-          const promise = agent.use(traces => {
+          const promise = agent.assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('service', 'custom')
             expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
             expect(traces[0][0].metrics).to.have.property('network.destination.port', 6379)
@@ -152,7 +152,7 @@ describe('Plugin', () => {
           'localhost', 'out.host')
 
         it('should be able to filter commands', async () => {
-          const promise = agent.use(traces => {
+          const promise = agent.assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('resource', 'GET')
           })
 
@@ -201,7 +201,7 @@ describe('Plugin', () => {
         })
 
         it('should be able to filter commands on a case-insensitive basis', async () => {
-          const promise = agent.use(traces => {
+          const promise = agent.assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('resource', 'GET')
           })
 
