@@ -113,9 +113,9 @@ function _getContext (iastContext) {
 
 function consolidateVulnerabilities (iastContext) {
   const context = _getContext(iastContext)
-  const reserved = context?.tokens?.[REPORT_VULNERABILITY] > 0
-
   if (!context.localMaps) return
+
+  const reserved = context.tokens?.[REPORT_VULNERABILITY] > 0
 
   if (reserved) { // still a bit of budget available
     Object.keys(context.localMaps).forEach(route => {
