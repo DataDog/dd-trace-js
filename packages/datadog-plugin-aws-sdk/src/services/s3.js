@@ -13,7 +13,7 @@ class S3 extends BaseAwsSdkPlugin {
   generateTags (params, operation, response) {
     if (!params || !params.Bucket) return {}
 
-    const hostname = `s3.${this.activeSpan._spanContext._tags.region}.amazonaws.com`
+    const hostname = `${params.Bucket}.s3.${this.activeSpan._spanContext._tags.region}.amazonaws.com`
     return {
       'resource.name': operation ? `${operation} ${params.Bucket}` : params.Bucket,
       'aws.s3.bucket_name': params.Bucket,
