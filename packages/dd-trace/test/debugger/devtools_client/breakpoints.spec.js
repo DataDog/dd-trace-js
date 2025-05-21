@@ -17,6 +17,9 @@ describe('breakpoints', function () {
         }
         return Promise.resolve({})
       }),
+      on (event, callback) {
+        if (event === 'scriptLoadingStabilized') callback()
+      },
       '@noCallThru': true
     }
 
@@ -27,6 +30,7 @@ describe('breakpoints', function () {
         sourceMapURL: null,
         source: null
       }),
+      clearState: sinon.stub(),
       locationToBreakpoint: new Map(),
       breakpointToProbes: new Map(),
       probeToLocation: new Map(),
@@ -85,8 +89,7 @@ describe('breakpoints', function () {
         }
       })
 
-      expect(sessionMock.post.callCount).to.equal(1)
-      expect(sessionMock.post.firstCall).to.have.been.calledWith('Debugger.setBreakpoint')
+      expect(sessionMock.post).to.have.been.calledOnceWith('Debugger.setBreakpoint')
     })
 
     describe('add multiple probes to the same location', function () {
@@ -113,7 +116,7 @@ describe('breakpoints', function () {
           }
         })
 
-        expect(sessionMock.post.callCount).to.equal(0)
+        expect(sessionMock.post).to.not.have.been.called
       })
 
       it('mixed: 2nd probe no condition', async function () {
@@ -187,7 +190,7 @@ describe('breakpoints', function () {
           }
         })
 
-        expect(sessionMock.post.callCount).to.equal(0)
+        expect(sessionMock.post).to.not.have.been.called
       })
 
       it('all conditions', async function () {
@@ -233,7 +236,9 @@ describe('breakpoints', function () {
             lineNumber: 9,
             columnNumber: 0
           },
-          condition: '(foo) === (42) || (foo) === (43)'
+          condition:
+            '(() => { try { return (foo) === (42) } catch { return false } })() || ' +
+            '(() => { try { return (foo) === (43) } catch { return false } })()'
         })
       })
 
@@ -311,8 +316,8 @@ describe('breakpoints', function () {
 
       await breakpoints.removeBreakpoint({ id: 'probe-1' })
 
-      expect(sessionMock.post.callCount).to.equal(1)
-      expect(sessionMock.post).to.have.been.calledWith('Debugger.disable')
+      expect(sessionMock.post).to.have.been.calledOnceWith('Debugger.disable')
+      expect(stateMock.clearState).to.have.been.calledOnce
     })
 
     it('should not disable debugger when there are other breakpoints', async function () {
@@ -322,8 +327,11 @@ describe('breakpoints', function () {
 
       await breakpoints.removeBreakpoint({ id: 'probe-1' })
 
-      expect(sessionMock.post.callCount).to.equal(1)
-      expect(sessionMock.post).to.have.been.calledWith('Debugger.removeBreakpoint', { breakpointId: 'bp-script-1:9:0' })
+      expect(sessionMock.post).to.have.been.calledOnceWith(
+        'Debugger.removeBreakpoint',
+        { breakpointId: 'bp-script-1:9:0' }
+      )
+      expect(stateMock.clearState).to.not.have.been.called
     })
 
     describe('update breakpoint when removing one of multiple probes at the same location', function () {
@@ -334,7 +342,7 @@ describe('breakpoints', function () {
 
         await breakpoints.removeBreakpoint({ id: 'probe-1' })
 
-        expect(sessionMock.post.callCount).to.equal(0)
+        expect(sessionMock.post).to.not.have.been.called
       })
 
       it('mixed: removed probe with no condition', async function () {
@@ -376,7 +384,7 @@ describe('breakpoints', function () {
 
         await breakpoints.removeBreakpoint({ id: 'probe-1' })
 
-        expect(sessionMock.post.callCount).to.equal(0)
+        expect(sessionMock.post).to.not.have.been.called
       })
 
       it('all conditions', async function () {

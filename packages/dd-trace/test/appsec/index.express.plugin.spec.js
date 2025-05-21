@@ -318,7 +318,7 @@ withVersions('express', 'express', version => {
 
         const res = await axios.post('/', { key: 'value' })
 
-        await agent.use((traces) => {
+        await agent.assertSomeTraces((traces) => {
           const span = traces[0][0]
           assert.property(span.meta, '_dd.appsec.s.req.body')
           assert.notProperty(span.meta, '_dd.appsec.s.res.body')
@@ -333,7 +333,7 @@ withVersions('express', 'express', version => {
         const expectedResponseBodySchema = formatSchema([{ sendResKey: [8] }])
         const res = await axios.post('/sendjson', { key: 'value' })
 
-        await agent.use((traces) => {
+        await agent.assertSomeTraces((traces) => {
           const span = traces[0][0]
           assert.equal(span.meta['_dd.appsec.s.res.body'], expectedResponseBodySchema)
         })
@@ -346,7 +346,7 @@ withVersions('express', 'express', version => {
         const expectedResponseBodySchema = formatSchema([{ jsonResKey: [8] }])
         const res = await axios.post('/json', { key: 'value' })
 
-        await agent.use((traces) => {
+        await agent.assertSomeTraces((traces) => {
           const span = traces[0][0]
           assert.equal(span.meta['_dd.appsec.s.res.body'], expectedResponseBodySchema)
         })
@@ -359,7 +359,7 @@ withVersions('express', 'express', version => {
         const expectedResponseBodySchema = formatSchema([{ jsonpResKey: [8] }])
         const res = await axios.post('/jsonp', { key: 'value' })
 
-        await agent.use((traces) => {
+        await agent.assertSomeTraces((traces) => {
           const span = traces[0][0]
           assert.equal(span.meta['_dd.appsec.s.res.body'], expectedResponseBodySchema)
         })
@@ -376,7 +376,7 @@ withVersions('express', 'express', version => {
 
       const res = await axios.post('/', { key: 'value' })
 
-      await agent.use((traces) => {
+      await agent.assertSomeTraces((traces) => {
         const span = traces[0][0]
         assert.notProperty(span.meta, '_dd.appsec.s.req.body')
         assert.notProperty(span.meta, '_dd.appsec.s.res.body')

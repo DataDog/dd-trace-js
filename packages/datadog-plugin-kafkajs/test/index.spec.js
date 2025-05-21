@@ -43,6 +43,7 @@ describe('Plugin', () => {
       let kafka
       let tracer
       let Kafka
+      let Broker
       let clusterIdAvailable
       let expectedProducerHash
       let expectedConsumerHash
@@ -55,6 +56,7 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         const messages = [{ key: 'key1', value: 'test2' }]
+        const messages2 = [{ key: 'key2', value: 'test3' }]
 
         beforeEach(async () => {
           process.env.DD_DATA_STREAMS_ENABLED = 'true'
@@ -62,6 +64,7 @@ describe('Plugin', () => {
           await agent.load('kafkajs')
           const lib = require(`../../../versions/kafkajs@${version}`).get()
           Kafka = lib.Kafka
+          Broker = require(`../../../versions/kafkajs@${version}/node_modules/kafkajs/src/broker`)
           kafka = new Kafka({
             clientId: `kafkajs-test-${version}`,
             brokers: ['127.0.0.1:9092'],
@@ -110,7 +113,7 @@ describe('Plugin', () => {
 
             let error
 
-            const expectedSpanPromise = agent.use(traces => {
+            const expectedSpanPromise = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
 
               expect(span).to.include({
@@ -143,7 +146,7 @@ describe('Plugin', () => {
           // Dynamic broker list support added in 1.14/2.0 (https://github.com/tulios/kafkajs/commit/62223)
           if (semver.intersects(version, '>=1.14')) {
             it('should not extract bootstrap servers when initialized with a function', async () => {
-              const expectedSpanPromise = agent.use(traces => {
+              const expectedSpanPromise = agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
                 expect(span.meta).to.not.have.any.keys(['messaging.kafka.bootstrap.servers'])
               })
@@ -158,6 +161,62 @@ describe('Plugin', () => {
               return expectedSpanPromise
             })
           }
+
+          describe('when using a kafka broker version that does not support message headers', function () {
+            // kafkajs 1.4.0 is very slow when encountering errors
+            this.timeout(30000)
+
+            // we should stub the kafka producer send method to throw a KafkaJSProtocolError
+            class KafkaJSProtocolError extends Error {
+              constructor (message) {
+                super(message)
+                this.name = 'KafkaJSProtocolError'
+                this.type = 'UNKNOWN'
+              }
+            }
+            let sendRequestStub
+            let producer
+
+            const error = new KafkaJSProtocolError()
+            error.message = 'Simulated KafkaJSProtocolError UNKNOWN from Broker.sendRequest stub'
+
+            beforeEach(async () => {
+              // simulate a kafka error for the broker version not supporting message headers
+              const otherKafka = new Kafka({
+                clientId: `kafkajs-test-${version}`,
+                brokers: ['127.0.0.1:9092'],
+                retry: {
+                  retries: 0
+                }
+              })
+
+              sendRequestStub = sinon.stub(Broker.prototype, 'produce').rejects(error)
+
+              producer = otherKafka.producer({ transactionTimeout: 10 })
+              await producer.connect()
+            })
+
+            afterEach(() => {
+              sendRequestStub.restore()
+            })
+
+            it('should hit an error for the first send and not inject headers in later sends', async () => {
+              try {
+                await producer.send({ topic: testTopic, messages })
+                expect(true).to.be.false('First producer.send() should have thrown an error')
+              } catch (e) {
+                expect(e).to.equal(error)
+              }
+              expect(messages[0].headers).to.have.property('x-datadog-trace-id')
+
+              // restore the stub to allow the next send to succeed
+              sendRequestStub.restore()
+
+              const result2 = await producer.send({ topic: testTopic, messages: messages2 })
+              expect(messages2[0].headers).to.be.undefined
+              expect(result2[0].errorCode).to.equal(0)
+            })
+          })
 
           withNamingSchema(
             async () => sendMessages(kafka, testTopic, messages),
@@ -223,7 +282,7 @@ describe('Plugin', () => {
           })
 
           it('should propagate context', async () => {
-            const expectedSpanPromise = agent.use(traces => {
+            const expectedSpanPromise = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
 
               expect(span).to.include({

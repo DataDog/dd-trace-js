@@ -1031,12 +1031,40 @@ jobs:
     runs-on: ubuntu-latest
     services:
       redis:
-        image: redis:4.0-alpine
+        image: redis:6.2-alpine
         ports:
           - 6379:6379
     env:
-      PLUGINS: redis|ioredis # TODO: move ioredis to its own job
+      PLUGINS: redis
       SERVICES: redis
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/plugins/test
+
+  ioredis:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:6.2-alpine
+        ports:
+          - 6379:6379
+    env:
+      PLUGINS: ioredis
+      SERVICES: ioredis
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/plugins/test
+
+  valkey:
+    runs-on: ubuntu-latest
+    services:
+      valkey:
+        image: valkey/valkey:8.1-alpine
+        ports:
+          - 6379:6379
+    env:
+      PLUGINS: iovalkey
+      SERVICES: valkey
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/plugins/test

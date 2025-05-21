@@ -92,7 +92,7 @@ describe('Plugin', () => {
             it('should be instrumented w/ error', async () => {
               let error
 
-              const expectedSpanPromise = agent.use(traces => {
+              const expectedSpanPromise = agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
 
                 expect(span).to.include({
@@ -186,7 +186,7 @@ describe('Plugin', () => {
             })
 
             it('should propagate context', async () => {
-              const expectedSpanPromise = agent.use(traces => {
+              const expectedSpanPromise = agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
 
                 expect(span).to.include({
@@ -308,7 +308,7 @@ describe('Plugin', () => {
             })
 
             it('should be instrumented with error', async () => {
-              const expectedSpanPromise = agent.use(traces => {
+              const expectedSpanPromise = agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
 
                 expect(span).to.include({
@@ -409,7 +409,7 @@ describe('Plugin', () => {
             })
 
             it('should propagate context', async () => {
-              const expectedSpanPromise = agent.use(traces => {
+              const expectedSpanPromise = agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
 
                 expect(span).to.include({
@@ -435,7 +435,7 @@ describe('Plugin', () => {
             // it('should be instrumented with error', async () => {
             //   const fakeError = new Error('Oh No!')
 
-            //   const expectedSpanPromise = agent.use(traces => {
+            //   const expectedSpanPromise = agent.assertSomeTraces(traces => {
             //     const errorSpans = traces[0].filter(span => span.error === 1)
             //     expect(errorSpans.length).to.be.at.least(1)
 
@@ -640,6 +640,59 @@ describe('Plugin', () => {
               expect(setOffsetSpy).to.be.calledOnce
               const { topic } = setOffsetSpy.lastCall.args[0]
               expect(topic).to.equal(testTopic)
+            })
+          })
+
+          describe('when using a kafka broker version that does not support message headers', () => {
+            class KafkaJSError extends Error {
+              constructor (message) {
+                super(message)
+                this.name = 'KafkaJSError'
+                this.type = 'ERR_UNKNOWN'
+              }
+            }
+            let error
+            let producer
+            let produceStub
+
+            beforeEach(async () => {
+              // simulate a kafka error for the broker version not supporting message headers
+              error = new KafkaJSError()
+              error.message = 'Simulated KafkaJSError ERR_UNKNOWN from Producer.produce stub'
+              producer = kafka.producer()
+              await producer.connect()
+
+              // Spy on the produce method from the native library before it gets wrapped
+              produceStub = sinon.stub(nativeApi.Producer.prototype, 'produce')
+                .callsFake((topic, partition, message, key) => {
+                  throw error
+                })
+            })
+
+            afterEach(async () => {
+              produceStub.restore()
+              await producer.disconnect()
+            })
+
+            it('should hit an error for the first send and not inject headers in later sends', async () => {
+              const testMessages = [{ key: 'key1', value: 'test1' }]
+              const testMessages2 = [{ key: 'key2', value: 'test2' }]
+
+              try {
+                await producer.send({ topic: testTopic, messages: testMessages })
+                expect.fail('First producer.send() should have thrown an error')
+              } catch (e) {
+                expect(e).to.equal(error)
+              }
+              // Verify headers were injected in the first attempt
+              expect(testMessages[0].headers[0]).to.have.property('x-datadog-trace-id')
+
+              // restore the stub to allow the next send to succeed
+              produceStub.restore()
+
+              const result = await producer.send({ topic: testTopic, messages: testMessages2 })
+              expect(testMessages2[0].headers).to.be.null
+              expect(result).to.not.be.undefined
             })
           })
         })
