@@ -12,7 +12,8 @@ class EventBridge extends BaseAwsSdkPlugin {
     return {
       'resource.name': operation ? `${operation} ${source}` : source,
       'aws.eventbridge.source': source,
-      'peer.service': source, //CANNOT MODIFY IDK WHY
+      //'peer.service': source, //CANNOT MODIFY IDK WHY
+      'peer.service': `events.${this.activeSpan._spanContext._tags['region']}.amazonaws.com`,
       'rulename': `${rulename}`,
       'hostname': `events.${this.activeSpan._spanContext._tags['region']}.amazonaws.com`,
     }

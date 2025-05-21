@@ -102,8 +102,9 @@ class Sqs extends BaseAwsSdkPlugin {
     Object.assign(tags, {
       'resource.name': `${operation} ${params.QueueName || params.QueueUrl}`,
       'aws.sqs.queue_name': params.QueueName || params.QueueUrl,
-      'peer.service': queueName,
-      'hostname': new URL(params.QueueUrl).hostname
+      //'peer.service': queueName,
+      'peer.service': `sqs.${this.activeSpan._spanContext._tags['region']}.amazonaws.com`,
+      'hostname': `sqs.${this.activeSpan._spanContext._tags['region']}.amazonaws.com`,
     })
 
     switch (operation) {

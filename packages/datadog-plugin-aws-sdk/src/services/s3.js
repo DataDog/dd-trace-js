@@ -18,7 +18,8 @@ class S3 extends BaseAwsSdkPlugin {
     return Object.assign(tags, {
       'resource.name': `${operation} ${params.Bucket}`,
       //'aws.s3.bucket_name': params.Bucket,
-      'peer.service': params.Bucket,
+      //'peer.service': params.Bucket,
+      'peer.service': `s3.${this.activeSpan._spanContext._tags['region']}.amazonaws.com`,
       'hostname': `${params.Bucket}.s3.${this.activeSpan._spanContext._tags['region']}.amazonaws.com`
     })
   }

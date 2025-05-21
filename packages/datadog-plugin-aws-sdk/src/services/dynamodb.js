@@ -18,7 +18,8 @@ class DynamoDb extends BaseAwsSdkPlugin {
         Object.assign(tags, {
           'resource.name': `${operation} ${params.TableName}`,
           'aws.dynamodb.table_name': params.TableName,
-          'peer.service': params.TableName,
+          //'peer.service': params.TableName,
+          'peer.service': `dynamodb.${this.activeSpan._spanContext._tags['region']}.amazonaws.com`,
           'hostname': `dynamodb.${this.activeSpan._spanContext._tags['region']}.amazonaws.com`,
         })
       }

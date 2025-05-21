@@ -24,7 +24,8 @@ class Sns extends BaseAwsSdkPlugin {
     return {
       'resource.name': `${operation} ${params.TopicArn || response.data.TopicArn}`,
       'aws.sns.topic_arn': TopicArn,
-      'peer.service': topicName,
+      //'peer.service': topicName,
+      'peer.service': `sns.${this.activeSpan._spanContext._tags['region']}.amazonaws.com`,
       'hostname': `sns.${this.activeSpan._spanContext._tags['region']}.amazonaws.com`,
     }
 
