@@ -26,23 +26,17 @@ addHook({ name: names }, function (url) {
 
   const URLPrototype = url.URL.prototype.constructor.prototype
   instrumentedGetters.forEach(property => {
-    const originalDescriptor = Object.getOwnPropertyDescriptor(URLPrototype, property)
+    shimmer.wrap(URLPrototype, property, function (originalGet) {
+      return function get () {
+        const result = originalGet.call(this)
+        if (!urlGetterChannel.hasSubscribers) return result
 
-    if (originalDescriptor?.get) {
-      const newDescriptor = shimmer.wrap(originalDescriptor, 'get', function (originalGet) {
-        return function get () {
-          const result = originalGet.apply(this, arguments)
-          if (!urlGetterChannel.hasSubscribers) return result
+        const context = { urlObject: this, result, property }
+        urlGetterChannel.publish(context)
 
-          const context = { urlObject: this, result, property }
-          urlGetterChannel.publish(context)
-
-          return context.result
-        }
-      })
-
-      Object.defineProperty(URLPrototype, property, newDescriptor)
-    }
+        return context.result
+      }
+    })
   })
 
   shimmer.wrap(url, 'URL', (URL) => {
@@ -83,6 +77,4 @@ addHook({ name: names }, function (url) {
       }
     })
   }
-
-  return url
 })

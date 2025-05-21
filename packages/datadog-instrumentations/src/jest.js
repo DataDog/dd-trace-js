@@ -635,7 +635,7 @@ addHook({
 })
 
 function cliWrapper (cli, jestVersion) {
-  const wrapped = shimmer.wrap(cli, 'runCLI', runCLI => async function () {
+  shimmer.wrap(cli, 'runCLI', runCLI => async function () {
     let onDone
     const configurationPromise = new Promise((resolve) => {
       onDone = resolve
@@ -873,8 +873,6 @@ function cliWrapper (cli, jestVersion) {
 
     return result
   })
-
-  cli.runCLI = wrapped.runCLI
 
   return cli
 }
