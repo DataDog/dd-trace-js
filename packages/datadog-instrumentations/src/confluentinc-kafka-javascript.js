@@ -211,7 +211,7 @@ function instrumentKafkaJS (kafkaJS) {
                           topic: payload?.topic,
                           messages: payload?.messages || [],
                           bootstrapServers: kafka._ddBrokers,
-                          disableHeaderInjection: disabledHeaderWeakMap.get(producer)
+                          disableHeaderInjection: disabledHeaderWeakSet.has(producer)
                         })
 
                         const result = send.apply(this, arguments)
