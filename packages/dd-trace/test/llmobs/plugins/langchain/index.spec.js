@@ -1167,7 +1167,7 @@ describe('integrations', () => {
               }
             )
 
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               const toolSpan = traces[0][0]
 
               const toolSpanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
@@ -1207,7 +1207,7 @@ describe('integrations', () => {
               }
             )
 
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               const toolSpan = traces[0][0]
 
               const toolSpanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]

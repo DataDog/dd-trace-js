@@ -1055,7 +1055,7 @@ describe('Plugin', () => {
             }
           )
 
-          const checkTraces = agent.use(traces => {
+          const checkTraces = agent.assertSomeTraces(traces => {
             const span = traces[0][0]
 
             expect(span).to.have.property('name', 'langchain.request')
@@ -1078,7 +1078,7 @@ describe('Plugin', () => {
             }
           )
 
-          const checkTraces = agent.use(traces => {
+          const checkTraces = agent.assertSomeTraces(traces => {
             const span = traces[0][0]
 
             expect(span).to.have.property('name', 'langchain.request')
@@ -1120,7 +1120,7 @@ describe('Plugin', () => {
         it('traces a vectorstore similaritySearch call', async () => {
           stubSingleEmbedding(langchainOpenaiOpenAiVersion)
 
-          const checkTraces = agent.use(traces => {
+          const checkTraces = agent.assertSomeTraces(traces => {
             const spans = traces[0]
 
             expect(spans).to.have.length(2)
@@ -1145,7 +1145,7 @@ describe('Plugin', () => {
         it('traces a vectorstore similaritySearchWithScore call', async () => {
           stubSingleEmbedding(langchainOpenaiOpenAiVersion)
 
-          const checkTraces = agent.use(traces => {
+          const checkTraces = agent.assertSomeTraces(traces => {
             const spans = traces[0]
 
             expect(spans).to.have.length(2)
