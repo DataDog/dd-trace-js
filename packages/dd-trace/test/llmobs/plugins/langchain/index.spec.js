@@ -143,7 +143,7 @@ describe('integrations', () => {
 
             const llm = new langchainOpenai.OpenAI({ model: 'gpt-3.5-turbo-instruct' })
 
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
               const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
@@ -171,7 +171,7 @@ describe('integrations', () => {
           it('does not tag output if there is an error', async () => {
             nock('https://api.openai.com').post('/v1/completions').reply(500)
 
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
               const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
@@ -228,7 +228,7 @@ describe('integrations', () => {
               }
             })
 
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
 
               const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
@@ -275,7 +275,7 @@ describe('integrations', () => {
 
             const chat = new langchainOpenai.ChatOpenAI({ model: 'gpt-3.5-turbo' })
 
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
               const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
@@ -303,7 +303,7 @@ describe('integrations', () => {
           it('does not tag output if there is an error', async () => {
             nock('https://api.openai.com').post('/v1/chat/completions').reply(500)
 
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
               const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
@@ -354,7 +354,7 @@ describe('integrations', () => {
               }
             })
 
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
               const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
@@ -407,7 +407,7 @@ describe('integrations', () => {
               }
             })
 
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
               const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
@@ -484,7 +484,7 @@ describe('integrations', () => {
 
             const embeddings = new langchainOpenai.OpenAIEmbeddings()
 
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
               const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
@@ -511,7 +511,7 @@ describe('integrations', () => {
           it('does not tag output if there is an error', async () => {
             nock('https://api.openai.com').post('/v1/embeddings').reply(500)
 
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
               const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
@@ -569,7 +569,7 @@ describe('integrations', () => {
 
             const embeddings = new langchainOpenai.OpenAIEmbeddings()
 
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
               const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
@@ -617,7 +617,7 @@ describe('integrations', () => {
 
             const chain = prompt.pipe(llm)
 
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               const spans = traces[0]
               const workflowSpan = spans[0]
               const llmSpan = spans[1]
@@ -666,7 +666,7 @@ describe('integrations', () => {
           it('does not tag output if there is an error', async () => {
             nock('https://api.openai.com').post('/v1/completions').reply(500)
 
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               const spans = traces[0]
 
               const workflowSpan = spans[0]
@@ -749,7 +749,7 @@ describe('integrations', () => {
               secondChain
             ])
 
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               const spans = traces[0]
 
               const topLevelWorkflow = spans[0]
@@ -888,7 +888,7 @@ describe('integrations', () => {
               parser
             ])
 
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               const spans = traces[0]
 
               const workflowSpan = spans[0]
@@ -980,7 +980,7 @@ describe('integrations', () => {
             const model = new langchainOpenai.ChatOpenAI({ model: 'gpt-3.5-turbo' })
             const chain = prompt.pipe(model)
 
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               const spans = traces[0]
 
               const workflowSpan = spans[0]
@@ -1095,7 +1095,7 @@ describe('integrations', () => {
               .pipe(model)
               .pipe(new langchainOutputParsers.StringOutputParser())
 
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               const spans = traces[0]
               expect(spans.length).to.equal(3)
 
