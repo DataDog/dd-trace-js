@@ -148,7 +148,7 @@ describe('Plugin', () => {
         const testFilePath = path.join(__dirname, 'mocha-test-fail.js')
         const testSuite = testFilePath.replace(`${process.cwd()}/`, '')
         agent
-          .use(traces => {
+          .assertSomeTraces(traces => {
             const testSpan = traces[0][0]
             expect(testSpan.meta).to.contain({
               [COMPONENT]: 'mocha',
@@ -215,7 +215,7 @@ describe('Plugin', () => {
           const testFilePath = path.join(__dirname, test.fileName)
           const testSuite = testFilePath.replace(`${process.cwd()}/`, '')
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const testSpan = traces[0][0]
               expect(testSpan.meta).to.contain({
                 language: 'javascript',
@@ -255,7 +255,7 @@ describe('Plugin', () => {
         const testFilePath = path.join(__dirname, 'mocha-test-parameterized.js')
         const testSuite = testFilePath.replace(`${process.cwd()}/`, '')
         agent
-          .use(traces => {
+          .assertSomeTraces(traces => {
             const testSpan = traces[0][0]
             expect(testSpan.meta).to.contain({
               language: 'javascript',

@@ -53,7 +53,7 @@ describe('Plugin', () => {
         it('should do automatic instrumentation', done => {
           const query = 'SELECT now() FROM local;'
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', query)
@@ -81,7 +81,7 @@ describe('Plugin', () => {
           ]
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('resource', `${queries[0].query}; ${queries[1]}`)
             })
             .then(done)
@@ -98,7 +98,7 @@ describe('Plugin', () => {
           ]
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('resource', `${queries[0].query}; ${queries[1]}`)
             })
             .then(done)
@@ -115,7 +115,7 @@ describe('Plugin', () => {
           let error
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
               expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
               expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
@@ -247,7 +247,7 @@ describe('Plugin', () => {
             const query = 'SELECT now() FROM local;'
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
                 expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
                 expect(traces[0][0]).to.have.property('resource', query)
@@ -275,7 +275,7 @@ describe('Plugin', () => {
             ]
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0]).to.have.property('resource', `${queries[0].query}; ${queries[1]}`)
               })
               .then(done)

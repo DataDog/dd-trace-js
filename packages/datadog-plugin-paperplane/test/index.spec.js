@@ -79,7 +79,7 @@ describe('Plugin', () => {
             const port = server.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('service', 'test')
@@ -116,7 +116,7 @@ describe('Plugin', () => {
             const port = server.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('resource', 'GET /user/:id')
@@ -158,7 +158,7 @@ describe('Plugin', () => {
             const port = server.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('resource', 'GET /user/:id')
@@ -194,7 +194,7 @@ describe('Plugin', () => {
             const port = server.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('resource', 'GET /user/:id')
@@ -223,7 +223,7 @@ describe('Plugin', () => {
             const port = server.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('resource', 'GET /app')
@@ -250,7 +250,7 @@ describe('Plugin', () => {
             const port = server.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('resource', 'GET')
@@ -283,7 +283,7 @@ describe('Plugin', () => {
             const port = server.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('resource', 'GET /app/user/:id')
@@ -408,7 +408,7 @@ describe('Plugin', () => {
             const port = server.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('error', 1)
@@ -480,7 +480,7 @@ describe('Plugin', () => {
             const port = server.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('service', 'custom')
@@ -509,7 +509,7 @@ describe('Plugin', () => {
             const port = server.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('error', 1)
@@ -540,7 +540,7 @@ describe('Plugin', () => {
             const port = server.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0].meta).to.have.property('http.request.headers.user-agent', 'test')

@@ -42,7 +42,7 @@ describe('Plugin', () => {
 
         it('should do automatic instrumentation when using callbacks', async () => {
           const promise = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', 'GET')
@@ -87,7 +87,7 @@ describe('Plugin', () => {
 
         it('should work with userland promises', async () => {
           const promise = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', 'GET')

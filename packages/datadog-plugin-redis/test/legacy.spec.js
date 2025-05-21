@@ -51,7 +51,7 @@ describe('Legacy Plugin', () => {
         it('should do automatic instrumentation when using callbacks', done => {
           client.on('error', done)
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', 'get')
@@ -171,7 +171,7 @@ describe('Legacy Plugin', () => {
 
         it('should be configured with the correct values', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('service', 'custom')
             })
             .then(done)
@@ -184,7 +184,7 @@ describe('Legacy Plugin', () => {
         it('should be able to filter commands', done => {
           agent.assertSomeTraces(() => {}) // wait for initial command
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('resource', 'get')
             })
             .then(done)
@@ -227,7 +227,7 @@ describe('Legacy Plugin', () => {
         it('should be able to filter commands', done => {
           agent.assertSomeTraces(() => {}) // wait for initial command
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('resource', 'get')
             })
             .then(done)

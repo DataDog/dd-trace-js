@@ -98,7 +98,7 @@ describe('Plugin', () => {
 
         it('should do automatic instrumentation', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', 'SELECT 1 + 1 AS solution')
@@ -121,7 +121,7 @@ describe('Plugin', () => {
         if (semver.intersects(version, '>=3')) {
           it('should support prepared statement shorthand', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
                 expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
                 expect(traces[0][0]).to.have.property('resource', 'SELECT ? + ? AS solution')
@@ -143,7 +143,7 @@ describe('Plugin', () => {
 
           it('should support prepared statements', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
                 expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
                 expect(traces[0][0]).to.have.property('resource', 'SELECT ? + ? AS solution')
@@ -174,7 +174,7 @@ describe('Plugin', () => {
           let error
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
               expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
               expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
@@ -190,7 +190,7 @@ describe('Plugin', () => {
 
         it('should work without a callback', done => {
           agent
-            .use(() => {})
+            .assertSomeTraces(() => {})
             .then(done)
             .catch(done)
 
@@ -230,7 +230,7 @@ describe('Plugin', () => {
 
         it('should be configured with the correct values', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('service', 'custom')
             })
             .then(done)
@@ -336,7 +336,7 @@ describe('Plugin', () => {
 
         it('should do automatic instrumentation', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', 'SELECT 1 + 1 AS solution')

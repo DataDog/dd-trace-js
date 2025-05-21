@@ -60,7 +60,7 @@ describe('Plugin', () => {
         it('should send traces to agent', (done) => {
           app = sinon.stub()
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(app).not.to.have.been.called // request should be cancelled before call to app
               expect(traces[0][0]).to.have.property('name', 'web.request')
               expect(traces[0][0]).to.have.property('service', 'test')
@@ -104,7 +104,7 @@ describe('Plugin', () => {
 
         it('should do automatic instrumentation', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', 'web.request')
               expect(traces[0][0]).to.have.property('service', 'test')
               expect(traces[0][0]).to.have.property('type', 'web')
@@ -242,7 +242,7 @@ describe('Plugin', () => {
           const spy = sinon.spy(() => {})
 
           agent
-            .use((traces) => {
+            .assertSomeTraces((traces) => {
               spy()
             })
             .catch(done)

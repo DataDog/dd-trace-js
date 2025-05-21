@@ -43,7 +43,7 @@ describe('Plugin', () => {
 
         it('should sanitize the resource name', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('resource', 'POST /logstash-?.?.?/_search')
             })
             .then(done)
@@ -73,7 +73,7 @@ describe('Plugin', () => {
 
         it('should set the correct tags', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0].meta).to.have.property('component', 'elasticsearch')
@@ -110,7 +110,7 @@ describe('Plugin', () => {
 
         it('should set the correct tags on msearch', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0].meta).to.have.property('component', 'elasticsearch')
@@ -146,7 +146,7 @@ describe('Plugin', () => {
 
         it('should skip tags for unavailable fields', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0].meta).to.not.have.property('elasticsearch.body')
             })
             .then(done)
@@ -163,7 +163,7 @@ describe('Plugin', () => {
           describe('when using a callback', () => {
             it('should do automatic instrumentation', done => {
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
                   expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
                   expect(traces[0][0]).to.have.property('resource', 'HEAD /')
@@ -177,7 +177,7 @@ describe('Plugin', () => {
 
             it('should propagate context', done => {
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   expect(traces[0][0]).to.have.property('parent_id')
                   expect(traces[0][0].parent_id).to.not.be.null
                 })
@@ -202,7 +202,7 @@ describe('Plugin', () => {
               let error
 
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
                   expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
                   expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
@@ -227,7 +227,7 @@ describe('Plugin', () => {
         describe('when using a promise', () => {
           it('should do automatic instrumentation', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
                 expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
                 expect(traces[0][0]).to.have.property('resource', 'HEAD /')
@@ -241,7 +241,7 @@ describe('Plugin', () => {
 
           it('should propagate context', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0]).to.have.property('parent_id')
                 expect(traces[0][0].parent_id).to.not.be.null
               })
@@ -287,7 +287,7 @@ describe('Plugin', () => {
 
           it('should work with userland promises', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0]).to.have.property('service', 'test-elasticsearch')
                 expect(traces[0][0]).to.have.property('resource', 'HEAD /')
                 expect(traces[0][0]).to.have.property('type', 'elasticsearch')
@@ -348,7 +348,7 @@ describe('Plugin', () => {
           }, hasCallbackSupport ? () => {} : undefined)
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', 'custom')
               expect(traces[0][0].meta).to.have.property('component', 'elasticsearch')

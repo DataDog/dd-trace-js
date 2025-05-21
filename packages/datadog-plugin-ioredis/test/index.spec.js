@@ -64,7 +64,7 @@ describe('Plugin', () => {
 
           agent.assertSomeTraces(() => {}) // wait for initial info command
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('error', 1)
               expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
               expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
@@ -83,7 +83,7 @@ describe('Plugin', () => {
         it('should work with userland promises', done => {
           agent.assertSomeTraces(() => {}) // wait for initial info command
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', 'get')
@@ -121,7 +121,7 @@ describe('Plugin', () => {
 
         it('should be configured with the correct values', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('service', 'custom-test')
             })
             .then(done)
@@ -133,7 +133,7 @@ describe('Plugin', () => {
         it('should be able to filter commands', done => {
           agent.assertSomeTraces(() => {}) // wait for initial command
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('resource', 'get')
             })
             .then(done)
@@ -167,7 +167,7 @@ describe('Plugin', () => {
         it('should be able to filter commands', done => {
           agent.assertSomeTraces(() => {}) // wait for initial command
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('resource', 'get')
             })
             .then(done)

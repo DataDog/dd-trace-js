@@ -156,7 +156,7 @@ describe('Plugin', function () {
         describe('for api routes', () => {
           it('should do automatic instrumentation', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = traces[0]
 
                 expect(spans[1]).to.have.property('name', 'next.request')
@@ -184,7 +184,7 @@ describe('Plugin', function () {
           pathTests.forEach(([url, expectedPath]) => {
             it(`should infer the correct resource path (${expectedPath})`, done => {
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const spans = traces[0]
 
                   expect(spans[1]).to.have.property('resource', `GET ${expectedPath}`)
@@ -210,7 +210,7 @@ describe('Plugin', function () {
 
           it('should handle routes not found', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = traces[0]
 
                 expect(spans[1]).to.have.property('name', 'next.request')
@@ -231,7 +231,7 @@ describe('Plugin', function () {
 
           it('should handle invalid catch all parameters', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = traces[0]
 
                 expect(spans[1]).to.have.property('name', 'next.request')
@@ -253,7 +253,7 @@ describe('Plugin', function () {
 
           it('should pass resource path to parent span', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = traces[0]
 
                 expect(spans[0]).to.have.property('name', 'web.request')
@@ -271,7 +271,7 @@ describe('Plugin', function () {
         describe('for pages', () => {
           it('should do automatic instrumentation', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = traces[0]
 
                 expect(spans[1]).to.have.property('name', 'next.request')
@@ -301,7 +301,7 @@ describe('Plugin', function () {
           pathTests.forEach(([url, expectedPath, statusCode]) => {
             it(`should infer the correct resource (${expectedPath})`, done => {
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const spans = traces[0]
 
                   expect(spans[1]).to.have.property('resource', `GET ${expectedPath}`)
@@ -316,7 +316,7 @@ describe('Plugin', function () {
 
           it('should handle pages not found', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = traces[0]
 
                 expect(spans[1]).to.have.property('name', 'next.request')
@@ -337,7 +337,7 @@ describe('Plugin', function () {
 
           it('should pass resource path to parent span', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = traces[0]
 
                 expect(spans[0]).to.have.property('name', 'web.request')
@@ -353,7 +353,7 @@ describe('Plugin', function () {
 
           it('should attach errors by default', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = traces[0]
 
                 expect(spans[1]).to.have.property('name', 'next.request')
@@ -374,7 +374,7 @@ describe('Plugin', function () {
         describe('for static files', () => {
           it('should do automatic instrumentation for assets', () => {
             const tracingPromise = agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = traces[0]
 
                 expect(spans[1]).to.have.property('name', 'next.request')
@@ -395,7 +395,7 @@ describe('Plugin', function () {
             const file = readdirSync(path.join(__dirname, '.next/static/chunks'))[0]
 
             const tracingPromise = agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = traces[0]
 
                 expect(spans[1]).to.have.property('name', 'next.request')
@@ -410,7 +410,7 @@ describe('Plugin', function () {
 
           it('should pass resource path to parent span', () => {
             const tracingPromise = agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = traces[0]
 
                 expect(spans[0]).to.have.property('name', 'web.request')
@@ -424,7 +424,7 @@ describe('Plugin', function () {
         describe('when an error happens', () => {
           it('should not die', done => {
             agent
-              .use(_traces => { })
+              .assertSomeTraces(_traces => { })
               .then(done)
               .catch(done)
 
@@ -443,7 +443,7 @@ describe('Plugin', function () {
 
           it('should infer the correct resource path for appDir routes', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = traces[0]
 
                 expect(spans[1]).to.have.property('resource', 'GET /api/appDir/[name]')
@@ -458,7 +458,7 @@ describe('Plugin', function () {
 
           it('should infer the correct resource path for appDir pages', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = traces[0]
 
                 expect(spans[1]).to.have.property('resource', 'GET /appDir/[name]')
@@ -477,7 +477,7 @@ describe('Plugin', function () {
 
         it('should execute the hook and validate the status only once', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = traces[0]
 
               expect(spans[1]).to.have.property('name', 'next.request')
@@ -506,7 +506,7 @@ describe('Plugin', function () {
         if (satisfies(pkg.version, '>=13.3.0')) {
           it('should attach the error to the span from a NextRequest', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = traces[0]
 
                 expect(spans[1]).to.have.property('name', 'next.request')
@@ -546,7 +546,7 @@ describe('Plugin', function () {
           standaloneTests.forEach(([test, resource, expectedResource]) => {
             it(`should do automatic instrumentation for ${test}`, () => {
               const promise = agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const spans = traces[0]
 
                   expect(spans[1]).to.have.property('name', 'next.request')

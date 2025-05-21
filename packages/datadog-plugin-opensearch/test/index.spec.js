@@ -42,7 +42,7 @@ describe('Plugin', () => {
 
         it('should sanitize the resource name', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('resource', 'POST /logstash-?.?.?/_search')
             })
             .then(done)
@@ -56,7 +56,7 @@ describe('Plugin', () => {
 
         it('should set the correct tags', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0].meta).to.have.property('db.type', 'opensearch')
@@ -87,7 +87,7 @@ describe('Plugin', () => {
 
         it('should set the correct tags on msearch', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0].meta).to.have.property('db.type', 'opensearch')
@@ -125,7 +125,7 @@ describe('Plugin', () => {
 
         it('should skip tags for unavailable fields', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0].meta).to.not.have.property('opensearch.body')
             })
             .then(done)
@@ -136,7 +136,7 @@ describe('Plugin', () => {
 
         it('should do automatic instrumentation', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', 'HEAD /')
@@ -151,7 +151,7 @@ describe('Plugin', () => {
 
         it('should propagate context', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('parent_id')
               expect(traces[0][0].parent_id).to.not.be.null
             })
@@ -197,7 +197,7 @@ describe('Plugin', () => {
 
         it('should work with userland promises', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', 'HEAD /')
@@ -270,7 +270,7 @@ describe('Plugin', () => {
           })
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', 'custom')
               expect(traces[0][0].meta).to.have.property('opensearch.params', 'foo')
