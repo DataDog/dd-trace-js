@@ -58,7 +58,7 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
 
     const kafkaClusterIdPromise = getKafkaClusterId(this)
 
-    disabledHeaderWeakSet.set(producer, false)
+    disabledHeaderWeakSet.add(producer)
 
     producer.send = function () {
       const wrappedSend = (clusterId) => {
@@ -91,7 +91,7 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
                   // Tnfortunately the error name / type is not more specific.
                   // This approach is implemented by other tracers as well.
                   if (err.name === 'KafkaJSProtocolError' && err.type === 'UNKNOWN') {
-                    disabledHeaderWeakSet.set(producer, true)
+                    disabledHeaderWeakSet.add(producer)
                     log.error('Kafka Broker responded with UNKNOWN_SERVER_ERROR (-1). ' +
                       'Please look at broker logs for more information. ' +
                       'Tracer message header injection for Kafka is disabled.')
