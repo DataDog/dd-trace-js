@@ -7,9 +7,6 @@ class EventBridge extends BaseAwsSdkPlugin {
   static get isPayloadReporter () { return true }
 
   generateTags (params, operation, response) {
-    if (!params) return { //NEVER RETURNS TRUE
-      'hostname': `events.${this.activeSpan._spanContext._tags['region']}.amazonaws.com`
-    }
     const rulename = params.Name ? params.Name : ''
     const source = `${params.Entries[0].Source}`.replace(/^event/i, '')
     return {
@@ -17,7 +14,7 @@ class EventBridge extends BaseAwsSdkPlugin {
       'aws.eventbridge.source': source,
       'peer.service': source, //CANNOT MODIFY IDK WHY
       'rulename': `${rulename}`,
-      //'hostname': `events.${this.activeSpan._spanContext._tags['region']}.amazonaws.com`,
+      'hostname': `events.${this.activeSpan._spanContext._tags['region']}.amazonaws.com`,
     }
   }
 
