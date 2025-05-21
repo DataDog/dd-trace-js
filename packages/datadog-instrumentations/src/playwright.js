@@ -24,7 +24,7 @@ const testSuiteStartCh = channel('ci:playwright:test-suite:start')
 const testSuiteFinishCh = channel('ci:playwright:test-suite:finish')
 
 const workerReportCh = channel('ci:playwright:worker:report')
-const testPageGotoCh = channel('ci:playwright:test:page-goto')
+const testSetCookieCh = channel('ci:playwright:test:set-rum-active-cookie')
 
 const testToCtx = new WeakMap()
 const testSuiteToCtx = new Map()
@@ -813,6 +813,13 @@ addHook({
     const response = await goto.apply(this, arguments)
 
     const page = this
+    let cookieValue = null
+
+    const setCookieValue = (traceId) => {
+      if (traceId) {
+        cookieValue = traceId
+      }
+    }
 
     try {
       if (page) {
@@ -825,10 +832,21 @@ addHook({
         })
 
         if (isRumActive) {
-          testPageGotoCh.publish({
-            isRumActive,
-            page
+          testSetCookieCh.publish({
+            setCookieValue,
+            browserVersion: page.context().browser().version()
           })
+
+          if (cookieValue) {
+            const url = page.url()
+            const domain = new URL(url).hostname
+            page.context().addCookies([{
+              name: 'datadog-ci-visibility-test-execution-id',
+              value: cookieValue,
+              domain,
+              path: '/'
+            }])
+          }
         }
       }
     } catch (e) {
