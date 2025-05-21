@@ -58,8 +58,6 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
 
     const kafkaClusterIdPromise = getKafkaClusterId(this)
 
-    disabledHeaderWeakSet.add(producer)
-
     producer.send = function () {
       const wrappedSend = (clusterId) => {
         const innerAsyncResource = new AsyncResource('bound-anonymous-fn')
