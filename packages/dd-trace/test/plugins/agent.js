@@ -399,6 +399,15 @@ module.exports = {
   },
 
   /**
+   * Same as assertSomeTraces() but only provides the traces[0][0] entry as the first argument to the callback.
+   */
+  assertFirstTrace (callback, options) {
+    return runCallback(function (traces) {
+      return callback(traces[0][0])
+    }, options, traceHandlers)
+  },
+
+  /**
    * Register a callback with expectations to be run on every stats payload sent to the agent.
    */
   expectPipelineStats (callback, options) {
