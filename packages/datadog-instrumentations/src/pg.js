@@ -45,7 +45,7 @@ function wrapQuery (query) {
     const textProp = Object.getOwnPropertyDescriptor(textPropObj, 'text')
     const stream = typeof textPropObj.read === 'function'
 
-    // Only alter `text` property if safe to do so.
+    // Only alter `text` property if safe to do so. Initially, it's a property, not a getter.
     if (!textProp || textProp.configurable) {
       const originalText = textPropObj.text
 

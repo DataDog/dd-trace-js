@@ -348,6 +348,9 @@ tracer.use('http2', {
 tracer.use('ioredis');
 tracer.use('ioredis', redisOptions);
 tracer.use('ioredis', { splitByInstance: true });
+tracer.use('iovalkey');
+tracer.use('iovalkey', redisOptions);
+tracer.use('iovalkey', { splitByInstance: true });
 tracer.use('jest');
 tracer.use('jest', { service: 'jest-service' });
 tracer.use('kafkajs');

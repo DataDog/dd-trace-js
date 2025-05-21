@@ -67,7 +67,7 @@ class KafkajsProducerPlugin extends ProducerPlugin {
     }
   }
 
-  start ({ topic, messages, bootstrapServers, clusterId }) {
+  start ({ topic, messages, bootstrapServers, clusterId, disableHeaderInjection }) {
     const span = this.startSpan({
       resource: topic,
       meta: {
@@ -85,10 +85,11 @@ class KafkajsProducerPlugin extends ProducerPlugin {
     }
     for (const message of messages) {
       if (message !== null && typeof message === 'object') {
-        if (!message.headers) {
-          message.headers = {}
+        // message headers are not supported for kafka broker versions <0.11
+        if (!disableHeaderInjection) {
+          message.headers ??= {}
+          this.tracer.inject(span, 'text_map', message.headers)
         }
-        this.tracer.inject(span, 'text_map', message.headers)
         if (this.config.dsmEnabled) {
           const payloadSize = getMessageSize(message)
           const edgeTags = ['direction:out', `topic:${topic}`, 'type:kafka']
@@ -98,7 +99,9 @@ class KafkajsProducerPlugin extends ProducerPlugin {
           }
 
           const dataStreamsContext = this.tracer.setCheckpoint(edgeTags, span, payloadSize)
-          DsmPathwayCodec.encode(dataStreamsContext, message.headers)
+          if (!disableHeaderInjection) {
+            DsmPathwayCodec.encode(dataStreamsContext, message.headers)
+          }
         }
       }
     }

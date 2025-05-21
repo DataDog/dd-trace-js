@@ -5,7 +5,13 @@ const { getGeneratedPosition } = require('./source-maps')
 const session = require('./session')
 const { compile: compileCondition, compileSegments, templateRequiresEvaluation } = require('./condition')
 const { MAX_SNAPSHOTS_PER_SECOND_PER_PROBE, MAX_NON_SNAPSHOTS_PER_SECOND_PER_PROBE } = require('./defaults')
-const { findScriptFromPartialPath, locationToBreakpoint, breakpointToProbes, probeToLocation } = require('./state')
+const {
+  findScriptFromPartialPath,
+  clearState,
+  locationToBreakpoint,
+  breakpointToProbes,
+  probeToLocation
+} = require('./state')
 const log = require('../../log')
 
 let sessionStarted = false
@@ -224,6 +230,7 @@ async function start () {
 
 function stop () {
   sessionStarted = false
+  clearState()
   log.debug('[debugger:devtools_client] Stopping debugger')
   return session.post('Debugger.disable')
 }
