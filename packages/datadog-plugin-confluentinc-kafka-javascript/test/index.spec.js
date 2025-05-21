@@ -369,10 +369,19 @@ describe('Plugin', () => {
               })
             })
 
-            function consume (consumer, producer, topic, message) {
+            function consume (consumer, producer, topic, message, timeoutMs = 9500) {
               return new Promise((resolve, reject) => {
+                const timeoutId = setTimeout(() => {
+                  reject(new Error(`Timeout: Did not consume message on topic "${topic}" within ${timeoutMs}ms`))
+                }, timeoutMs)
+
                 function doConsume () {
                   consumer.consume(1, function (err, messages) {
+                    if (err) {
+                      clearTimeout(timeoutId)
+                      return reject(err)
+                    }
+
                     if (!messages || messages.length === 0) {
                       setTimeout(doConsume, 20)
                       return
@@ -385,6 +394,7 @@ describe('Plugin', () => {
                       return
                     }
 
+                    clearTimeout(timeoutId)
                     consumer.unsubscribe()
                     resolve()
                   })
