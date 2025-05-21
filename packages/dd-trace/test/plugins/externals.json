@@ -297,6 +297,10 @@
   ],
   "langchain": [
     {
+      "name": "langchain",
+      "versions": [">=0.1"]
+    },
+    {
       "name": "@langchain/anthropic",
       "versions": [">=0.1"]
     },
