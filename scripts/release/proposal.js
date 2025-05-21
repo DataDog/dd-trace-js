@@ -70,15 +70,6 @@ try {
 
   start('Determine version increment')
 
-  const legacyDiff = capture(`${diffCmd} --require-label=dont-land-on-v${releaseLine}.x v${releaseLine}.x ${main}`)
-
-  if (legacyDiff) {
-    fatal(
-      `The "dont-land-on-v${releaseLine}.x" label is no longer supported.`,
-      'Please remove the label from any offending PR to continue.'
-    )
-  }
-
   const { DD_MAJOR, DD_MINOR, DD_PATCH } = require('../../version')
   const lineDiff = capture(`${diffCmd} --markdown=true v${releaseLine}.x ${main}`)
 
@@ -221,7 +212,7 @@ try {
   // Close PR and delete branch for any patch proposal if new proposal is minor.
   if (isMinor) {
     try {
-      run(`gh pr close v${newPatch} --delete-branch --comment "Superseded by #${pullRequest.number}."`)
+      run(`gh pr close v${newPatch}-proposal --delete-branch --comment "Superseded by #${pullRequest.number}."`)
     } catch (e) {
       // PR didn't exist so nothing to close.
     }

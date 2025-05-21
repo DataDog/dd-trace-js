@@ -148,12 +148,12 @@ class LLMObsTagger {
   }
 
   tagSpanTags (span, tags) {
-    // new tags will be merged with existing tags
     const currentTags = registry.get(span)?.[TAGS]
     if (currentTags) {
-      Object.assign(tags, currentTags)
+      Object.assign(currentTags, tags)
+    } else {
+      this._setTag(span, TAGS, tags)
     }
-    this._setTag(span, TAGS, tags)
   }
 
   changeKind (span, newKind) {

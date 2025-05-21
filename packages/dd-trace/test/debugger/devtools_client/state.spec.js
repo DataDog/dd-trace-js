@@ -50,7 +50,8 @@ describe('findScriptFromPartialPath', function () {
               }
             })
           }
-        }
+        },
+        emit () {}
       }
     })
   })
@@ -187,6 +188,26 @@ describe('findScriptFromPartialPath', function () {
     it('a Windows drive letter', testPathNoMatch('c:'))
 
     it('a Windows drive letter with a backslash', testPathNoMatch('c:\\'))
+  })
+
+  describe('state', function () {
+    it('should be cleared when calling clearState', function () {
+      const path = 'server/index.js'
+
+      expect(state._loadedScripts.length).to.be.above(0)
+      expect(state._scriptUrls.size).to.be.above(0)
+
+      const result = state.findScriptFromPartialPath(path)
+      expect(result).to.be.an('object')
+
+      state.clearState()
+
+      expect(state._loadedScripts.length).to.equal(0)
+      expect(state._scriptUrls.size).to.equal(0)
+
+      const result2 = state.findScriptFromPartialPath(path)
+      expect(result2).to.be.null
+    })
   })
 
   function testPathNoMatch (path) {

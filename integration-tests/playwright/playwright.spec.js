@@ -1004,17 +1004,24 @@ versions.forEach((version) => {
                   test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED] === 'true'
                 ).length
 
+                const testsMarkedAsFailed = attemptedToFixTests.filter(test =>
+                  test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED] === 'false'
+                ).length
+
                 if (isAttemptingToFix) {
                   assert.equal(countAttemptToFixTests, attemptedToFixTests.length)
                   assert.equal(countRetriedAttemptToFixTests, attemptedToFixTests.length - 1)
                   if (shouldAlwaysPass) {
                     assert.equal(testsMarkedAsFailedAllRetries, 0)
+                    assert.equal(testsMarkedAsFailed, 0)
                     assert.equal(testsMarkedAsPassedAllRetries, 1)
                   } else if (shouldFailSometimes) {
                     assert.equal(testsMarkedAsFailedAllRetries, 0)
+                    assert.equal(testsMarkedAsFailed, 1)
                     assert.equal(testsMarkedAsPassedAllRetries, 0)
                   } else { // always fail
                     assert.equal(testsMarkedAsFailedAllRetries, 1)
+                    assert.equal(testsMarkedAsFailed, 1)
                     assert.equal(testsMarkedAsPassedAllRetries, 0)
                   }
                 } else {
@@ -1342,7 +1349,7 @@ versions.forEach((version) => {
               assert.equal(metadata.test[DD_CAPABILITIES_IMPACTED_TESTS], '1')
               assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
               assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
-              assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '2')
+              assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '4')
               // capabilities logic does not overwrite test session name
               assert.equal(metadata.test[TEST_SESSION_NAME], 'my-test-session-name')
             })
@@ -1484,6 +1491,37 @@ versions.forEach((version) => {
 
         it('do not crash when redirecting and RUM sessions are not active', (done) => {
           runTest(done, { isRedirecting: true })
+        })
+      })
+
+      context('run session status', () => {
+        it('session status is not changed if it fails before running any test', (done) => {
+          const receiverPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assert.equal(testSession.meta[TEST_STATUS], 'fail')
+            })
+
+          receiver.setSettings({ test_management: { enabled: true } })
+
+          childProcess = exec(
+            './node_modules/.bin/playwright test -c playwright.config.js exit-code-test.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PW_BASE_URL: `http://localhost:${webAppPort}`,
+                TEST_DIR: './ci-visibility/playwright-tests-exit-code'
+              },
+              stdio: 'pipe'
+            }
+          )
+
+          childProcess.on('exit', (exitCode) => {
+            assert.equal(exitCode, 1)
+            receiverPromise.then(() => done()).catch(done)
+          })
         })
       })
     }

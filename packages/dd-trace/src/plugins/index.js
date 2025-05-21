@@ -48,6 +48,7 @@ module.exports = {
   get http2 () { return require('../../../datadog-plugin-http2/src') },
   get https () { return require('../../../datadog-plugin-http/src') },
   get ioredis () { return require('../../../datadog-plugin-ioredis/src') },
+  get iovalkey () { return require('../../../datadog-plugin-iovalkey/src') },
   get 'jest-circus' () { return require('../../../datadog-plugin-jest/src') },
   get 'jest-config' () { return require('../../../datadog-plugin-jest/src') },
   get 'jest-environment-node' () { return require('../../../datadog-plugin-jest/src') },
@@ -57,6 +58,9 @@ module.exports = {
   get koa () { return require('../../../datadog-plugin-koa/src') },
   get 'koa-router' () { return require('../../../datadog-plugin-koa/src') },
   get kafkajs () { return require('../../../datadog-plugin-kafkajs/src') },
+  get '@confluentinc/kafka-javascript' () {
+    return require('../../../datadog-plugin-confluentinc-kafka-javascript/src')
+  },
   get langchain () { return require('../../../datadog-plugin-langchain/src') },
   get mariadb () { return require('../../../datadog-plugin-mariadb/src') },
   get memcached () { return require('../../../datadog-plugin-memcached/src') },

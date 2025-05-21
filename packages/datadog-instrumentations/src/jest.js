@@ -43,6 +43,7 @@ const testStartCh = channel('ci:jest:test:start')
 const testSkippedCh = channel('ci:jest:test:skip')
 const testFinishCh = channel('ci:jest:test:finish')
 const testErrCh = channel('ci:jest:test:err')
+const testFnCh = channel('ci:jest:test:fn')
 
 const skippableSuitesCh = channel('ci:jest:test-suite:skippable')
 const libraryConfigurationCh = channel('ci:jest:library-configuration')
@@ -84,8 +85,9 @@ let modifiedTests = {}
 
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
-const asyncResources = new WeakMap()
+const testContexts = new WeakMap()
 const originalTestFns = new WeakMap()
+const originalHookFns = new WeakMap()
 const retriedTestsToNumAttempts = new Map()
 const newTestsTestStatuses = new Map()
 const attemptToFixRetriedTestsStatuses = new Map()
@@ -337,8 +339,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         const testParameters = getTestParametersString(this.nameToParams, event.test.name)
         // Async resource for this test is created here
         // It is used later on by the test_done handler
-        const asyncResource = new AsyncResource('bound-anonymous-fn')
-        asyncResources.set(event.test, asyncResource)
         const testName = getJestTestName(event.test)
         const originalTestName = removeEfdStringFromTestName(removeAttemptToFixStringFromTestName(testName))
 
@@ -382,25 +382,47 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
 
         const isJestRetry = event.test?.invocations > 1
-        asyncResource.runInAsyncScope(() => {
-          testStartCh.publish({
-            name: originalTestName,
-            suite: this.testSuite,
-            testSourceFile: this.testSourceFile,
-            displayName: this.displayName,
-            testParameters,
-            frameworkVersion: jestVersion,
-            isNew: isNewTest,
-            isEfdRetry: numEfdRetry > 0,
-            isAttemptToFix,
-            isAttemptToFixRetry: numOfAttemptsToFixRetries > 0,
-            isJestRetry,
-            isDisabled,
-            isQuarantined,
-            isModified
-          })
-          originalTestFns.set(event.test, event.test.fn)
-          event.test.fn = asyncResource.bind(event.test.fn)
+        const ctx = {
+          name: originalTestName,
+          suite: this.testSuite,
+          testSourceFile: this.testSourceFile,
+          displayName: this.displayName,
+          testParameters,
+          frameworkVersion: jestVersion,
+          isNew: isNewTest,
+          isEfdRetry: numEfdRetry > 0,
+          isAttemptToFix,
+          isAttemptToFixRetry: numOfAttemptsToFixRetries > 0,
+          isJestRetry,
+          isDisabled,
+          isQuarantined,
+          isModified
+        }
+        testContexts.set(event.test, ctx)
+
+        testStartCh.runStores(ctx, () => {
+          for (const hook of event.test.parent.hooks) {
+            let hookFn = hook.fn
+            if (!originalHookFns.has(hook)) {
+              originalHookFns.set(hook, hookFn)
+            } else {
+              hookFn = originalHookFns.get(hook)
+            }
+            const wrapperHook = function () {
+              return testFnCh.runStores(ctx, () => hookFn.apply(this, arguments))
+            }
+            // If we don't do this, the timeout will be not be triggered
+            Object.defineProperty(wrapperHook, 'length', { value: hookFn.length })
+            hook.fn = wrapperHook
+          }
+          const originalFn = event.test.fn
+          originalTestFns.set(event.test, originalFn)
+          const wrapper = function () {
+            return testFnCh.runStores(ctx, () => originalFn.apply(this, arguments))
+          }
+          // If we don't do this, the timeout will be not be triggered
+          Object.defineProperty(wrapper, 'length', { value: originalFn.length })
+          event.test.fn = wrapper
         })
       }
 
@@ -467,6 +489,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         event.test.fn = originalTestFns.get(event.test)
 
         let attemptToFixPassed = false
+        let attemptToFixFailed = false
         let failedAllTests = false
         let isAttemptToFix = false
         if (this.isTestManagementTestsEnabled) {
@@ -484,6 +507,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             // If it is, we'll set the failedAllTests flag to true if all the tests failed
             // If all tests passed, we'll set the attemptToFixPassed flag to true
             if (testStatuses.length === testManagementAttemptToFixRetries + 1) {
+              if (testStatuses.some(status => status === 'fail')) {
+                attemptToFixFailed = true
+              }
               if (testStatuses.every(status => status === 'fail')) {
                 failedAllTests = true
               } else if (testStatuses.every(status => status === 'pass')) {
@@ -515,16 +541,15 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         const willBeRetried = numRetries > 0 && numTestExecutions - 1 < numRetries
         const mightHitBreakpoint = this.isDiEnabled && numTestExecutions >= 2
 
-        const asyncResource = asyncResources.get(event.test)
+        const ctx = testContexts.get(event.test)
 
         if (status === 'fail') {
           const shouldSetProbe = this.isDiEnabled && willBeRetried && numTestExecutions === 1
-          asyncResource.runInAsyncScope(() => {
-            testErrCh.publish({
-              error: formatJestError(event.test.errors[0]),
-              shouldSetProbe,
-              promises
-            })
+          testErrCh.publish({
+            ...ctx.currentStore,
+            error: formatJestError(event.test.errors[0]),
+            shouldSetProbe,
+            promises
           })
         }
 
@@ -543,14 +568,14 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           isAtrRetry = true
         }
 
-        asyncResource.runInAsyncScope(() => {
-          testFinishCh.publish({
-            status,
-            testStartLine: getTestLineStart(event.test.asyncError, this.testSuite),
-            attemptToFixPassed,
-            failedAllTests,
-            isAtrRetry
-          })
+        testFinishCh.publish({
+          ...ctx.currentStore,
+          status,
+          testStartLine: getTestLineStart(event.test.asyncError, this.testSuite),
+          attemptToFixPassed,
+          failedAllTests,
+          attemptToFixFailed,
+          isAtrRetry
         })
 
         if (promises.isProbeReady) {
@@ -679,7 +704,7 @@ addHook({
 })
 
 function cliWrapper (cli, jestVersion) {
-  const wrapped = shimmer.wrap(cli, 'runCLI', runCLI => async function () {
+  shimmer.wrap(cli, 'runCLI', runCLI => async function () {
     let onDone
     const configurationPromise = new Promise((resolve) => {
       onDone = resolve
@@ -937,8 +962,6 @@ function cliWrapper (cli, jestVersion) {
 
     return result
   })
-
-  cli.runCLI = wrapped.runCLI
 
   return cli
 }

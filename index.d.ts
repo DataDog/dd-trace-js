@@ -138,6 +138,22 @@ interface Tracer extends opentracing.Tracer {
    * LLM Observability SDK
    */
   llmobs: tracer.llmobs.LLMObs;
+
+  /**
+   * @experimental
+   * Provide same functionality as OpenTelemetry Baggage:
+   * https://opentelemetry.io/docs/concepts/signals/baggage/
+   *
+   * Since the equivalent of OTel Context is implicit in dd-trace-js,
+   * these APIs act on the currently active baggage
+   *
+   * Work with storage('baggage'), therefore do not follow the same continuity as other APIs
+   */
+  setBaggageItem (key: string, value: string): Record<string, string>;
+  getBaggageItem (key: string): string | undefined;
+  getAllBaggageItems (): Record<string, string>;
+  removeBaggageItem (key: string): Record<string, string>;
+  removeAllBaggageItems (): Record<string, string>;
 }
 
 // left out of the namespace, so it
@@ -154,6 +170,7 @@ interface Plugins {
   "bunyan": tracer.plugins.bunyan;
   "cassandra-driver": tracer.plugins.cassandra_driver;
   "child_process": tracer.plugins.child_process;
+  "confluentinc-kafka-javascript": tracer.plugins.confluentinc_kafka_javascript;
   "connect": tracer.plugins.connect;
   "couchbase": tracer.plugins.couchbase;
   "cucumber": tracer.plugins.cucumber;
@@ -172,6 +189,7 @@ interface Plugins {
   "http": tracer.plugins.http;
   "http2": tracer.plugins.http2;
   "ioredis": tracer.plugins.ioredis;
+  "iovalkey": tracer.plugins.iovalkey;
   "jest": tracer.plugins.jest;
   "kafkajs": tracer.plugins.kafkajs
   "knex": tracer.plugins.knex;
@@ -717,7 +735,18 @@ declare namespace tracer {
          */
         maxDepth?: number,
       }
-    };
+    }
+
+    /**
+     * Configuration for Code Origin for Spans.
+     */
+    codeOriginForSpans?: {
+      /**
+       * Whether to enable Code Origin for Spans.
+       * @default true
+       */
+      enabled?: boolean
+    }
 
     /**
      * Configuration of the IAST. Can be a boolean as an alias to `iast.enabled`.
@@ -827,7 +856,7 @@ declare namespace tracer {
      * @param value The amount to increment the stat by.
      * @param tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
      */
-    increment(stat: string, value?: number, tags?: Record<string, string|number>): void
+    increment(stat: string, value?: number, tags?: Record<string, string|number> | string[]): void
 
     /**
      * Decrements a metric by the specified value, optionally specifying tags.
@@ -835,7 +864,7 @@ declare namespace tracer {
      * @param value The amount to decrement the stat by.
      * @param tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
      */
-    decrement(stat: string, value?: number, tags?: Record<string, string|number>): void
+    decrement(stat: string, value?: number, tags?: Record<string, string|number> | string[]): void
 
     /**
      * Sets a distribution value, optionally specifying tags.
@@ -843,7 +872,7 @@ declare namespace tracer {
      * @param value The amount to increment the stat by.
      * @param tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
      */
-    distribution(stat: string, value?: number, tags?: Record<string, string|number>): void
+    distribution(stat: string, value?: number, tags?: Record<string, string|number> | string[]): void
 
     /**
      * Sets a gauge value, optionally specifying tags.
@@ -851,7 +880,7 @@ declare namespace tracer {
      * @param value The amount to increment the stat by.
      * @param tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
      */
-    gauge(stat: string, value?: number, tags?: Record<string, string|number>): void
+    gauge(stat: string, value?: number, tags?: Record<string, string|number> | string[]): void
 
     /**
      * Sets a histogram value, optionally specifying tags.
@@ -859,7 +888,7 @@ declare namespace tracer {
      * @param value The amount to increment the stat by.
      * @param tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
      */
-    histogram(stat: string, value?: number, tags?: Record<string, string|number>): void
+    histogram(stat: string, value?: number, tags?: Record<string, string|number> | string[]): void
 
     /**
      * Forces any unsent metrics to be sent
@@ -1336,6 +1365,12 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [confluentinc-kafka-javascript](https://github.com/confluentinc/confluent-kafka-js) module.
+     */
+    interface confluentinc_kafka_javascript extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
      * [connect](https://github.com/senchalabs/connect) module.
      */
     interface connect extends HttpServer {}
@@ -1590,6 +1625,53 @@ declare namespace tracer {
      * [ioredis](https://github.com/luin/ioredis) module.
      */
     interface ioredis extends Instrumentation {
+      /**
+       * List of commands that should be instrumented. Commands must be in
+       * lowercase for example 'xread'.
+       *
+       * @default /^.*$/
+       */
+      allowlist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
+
+      /**
+       * Deprecated in favor of `allowlist`.
+       *
+       * @deprecated
+       * @hidden
+       */
+      whitelist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
+
+      /**
+       * List of commands that should not be instrumented. Takes precedence over
+       * allowlist if a command matches an entry in both. Commands must be in
+       * lowercase for example 'xread'.
+       *
+       * @default []
+       */
+      blocklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
+
+      /**
+       * Deprecated in favor of `blocklist`.
+       *
+       * @deprecated
+       * @hidden
+       */
+      blacklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
+
+      /**
+       * Whether to use a different service name for each Redis instance based
+       * on the configured connection name of the client.
+       *
+       * @default false
+       */
+      splitByInstance?: boolean;
+    }
+
+    /**
+     * This plugin automatically instruments the
+     * [iovalkey](https://github.com/valkey-io/iovalkey) module.
+     */
+    interface iovalkey extends Instrumentation {
       /**
        * List of commands that should be instrumented. Commands must be in
        * lowercase for example 'xread'.

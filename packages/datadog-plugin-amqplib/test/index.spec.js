@@ -67,7 +67,7 @@ describe('Plugin', () => {
 
             it('should do automatic instrumentation for immediate commands', done => {
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const span = traces[0][0]
                   expect(span).to.have.property('name', expectedSchema.controlPlane.opName)
                   expect(span).to.have.property('service', expectedSchema.controlPlane.serviceName)
@@ -86,7 +86,7 @@ describe('Plugin', () => {
 
             it('should do automatic instrumentation for queued commands', done => {
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const span = traces[0][0]
 
                   expect(span).to.have.property('name', expectedSchema.controlPlane.opName)
@@ -109,7 +109,7 @@ describe('Plugin', () => {
               let error
 
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const span = traces[0][0]
 
                   expect(span).to.have.property('error', 1)
@@ -145,7 +145,7 @@ describe('Plugin', () => {
 
             it('should do automatic instrumentation', done => {
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const span = traces[0][0]
 
                   expect(span).to.have.property('name', expectedSchema.send.opName)
@@ -169,7 +169,7 @@ describe('Plugin', () => {
               let error
 
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const span = traces[0][0]
 
                   expect(span).to.have.property('error', 1)
@@ -203,7 +203,7 @@ describe('Plugin', () => {
               let queue
 
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const span = traces[0][0]
                   expect(span).to.have.property('name', expectedSchema.receive.opName)
                   expect(span).to.have.property('service', expectedSchema.receive.serviceName)
@@ -479,7 +479,7 @@ describe('Plugin', () => {
               channel.sendToQueue(ok.queue, Buffer.from('dsm test'))
 
               let produceSpanMeta = {}
-              agent.use(traces => {
+              agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
 
                 if (span.resource.startsWith('basic.publish')) {
@@ -502,7 +502,7 @@ describe('Plugin', () => {
                 if (err) return done(err)
 
                 let consumeSpanMeta = {}
-                agent.use(traces => {
+                agent.assertSomeTraces(traces => {
                   const span = traces[0][0]
 
                   if (span.resource.startsWith('basic.deliver')) {
@@ -543,7 +543,7 @@ describe('Plugin', () => {
 
         it('should be configured with the correct values', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('service', 'test-custom-service')
               expect(traces[0][0]).to.have.property('resource', `queue.declare ${queue}`)
             }, 2)

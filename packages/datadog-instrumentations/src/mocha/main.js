@@ -26,7 +26,7 @@ const {
   getOnHookEndHandler,
   getOnFailHandler,
   getOnPendingHandler,
-  testFileToSuiteAr,
+  testFileToSuiteCtx,
   newTests,
   testsQuarantined,
   getTestFullName,
@@ -53,7 +53,7 @@ const originalCoverageMap = createCoverageMap()
 let untestedCoverage
 
 // test channels
-const testStartCh = channel('ci:mocha:test:start')
+const testFinishCh = channel('ci:mocha:test:finish')
 
 // test suite channels
 const testSuiteStartCh = channel('ci:mocha:test-suite:start')
@@ -167,7 +167,7 @@ function getOnEndHandler (isParallel) {
       error = new Error(`Failed tests: ${this.failures}.`)
     }
 
-    testFileToSuiteAr.clear()
+    testFileToSuiteCtx.clear()
 
     let testCodeCoverageLinesTotal
     if (global.__coverage__) {
@@ -342,7 +342,7 @@ addHook({
 }, (Mocha) => {
   shimmer.wrap(Mocha.prototype, 'run', run => function () {
     // Workers do not need to request any data, just run the tests
-    if (!testStartCh.hasSubscribers || process.env.MOCHA_WORKER_ID || this.options.parallel) {
+    if (!testFinishCh.hasSubscribers || process.env.MOCHA_WORKER_ID || this.options.parallel) {
       return run.apply(this, arguments)
     }
 
@@ -397,7 +397,7 @@ addHook({
 }, (run) => {
   // `runMocha` is an async function
   shimmer.wrap(run, 'runMocha', runMocha => function () {
-    if (!testStartCh.hasSubscribers) {
+    if (!testFinishCh.hasSubscribers) {
       return runMocha.apply(this, arguments)
     }
     const mocha = arguments[0]
@@ -433,7 +433,7 @@ addHook({
   shimmer.wrap(Runner.prototype, 'runTests', runTests => getRunTestsWrapper(runTests, config))
 
   shimmer.wrap(Runner.prototype, 'run', run => function () {
-    if (!testStartCh.hasSubscribers) {
+    if (!testFinishCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
 
@@ -460,20 +460,18 @@ addHook({
       if (suite.root || !suite.tests.length) {
         return
       }
-      let asyncResource = testFileToSuiteAr.get(suite.file)
-      if (!asyncResource) {
-        asyncResource = new AsyncResource('bound-anonymous-fn')
-        testFileToSuiteAr.set(suite.file, asyncResource)
+      let ctx = testFileToSuiteCtx.get(suite.file)
+      if (!ctx) {
         const isUnskippable = unskippableSuites.includes(suite.file)
         isForcedToRun = isUnskippable && suitesToSkip.includes(getTestSuitePath(suite.file, process.cwd()))
-        asyncResource.runInAsyncScope(() => {
-          testSuiteStartCh.publish({
-            testSuiteAbsolutePath: suite.file,
-            isUnskippable,
-            isForcedToRun,
-            itrCorrelationId
-          })
-        })
+        ctx = {
+          testSuiteAbsolutePath: suite.file,
+          isUnskippable,
+          isForcedToRun,
+          itrCorrelationId
+        }
+        testFileToSuiteCtx.set(suite.file, ctx)
+        testSuiteStartCh.runStores(ctx, () => { })
       }
     })
 
@@ -515,11 +513,9 @@ addHook({
         resetCoverage(global.__coverage__)
       }
 
-      const asyncResource = testFileToSuiteAr.get(suite.file)
-      if (asyncResource) {
-        asyncResource.runInAsyncScope(() => {
-          testSuiteFinishCh.publish(status)
-        })
+      const ctx = testFileToSuiteCtx.get(suite.file)
+      if (ctx) {
+        testSuiteFinishCh.publish({ status, ...ctx.currentStore }, () => { })
       } else {
         log.warn(() => `No AsyncResource found for suite ${suite.file}`)
       }
@@ -550,58 +546,49 @@ addHook({
   file: 'src/WorkerHandler.js'
 }, (workerHandlerPackage) => {
   shimmer.wrap(workerHandlerPackage.prototype, 'exec', exec => function (_, path) {
-    if (!testStartCh.hasSubscribers) {
+    if (!testFinishCh.hasSubscribers) {
       return exec.apply(this, arguments)
     }
     if (!path?.length) {
       return exec.apply(this, arguments)
     }
     const [testSuiteAbsolutePath] = path
-    const testSuiteAsyncResource = new AsyncResource('bound-anonymous-fn')
+    const testSuiteContext = { }
 
     function onMessage (message) {
       if (Array.isArray(message)) {
         const [messageCode, payload] = message
         if (messageCode === MOCHA_WORKER_TRACE_PAYLOAD_CODE) {
-          testSuiteAsyncResource.runInAsyncScope(() => {
-            workerReportTraceCh.publish(payload)
-          })
+          workerReportTraceCh.publish(payload)
         }
       }
     }
 
     this.worker.on('message', onMessage)
 
-    testSuiteAsyncResource.runInAsyncScope(() => {
-      testSuiteStartCh.publish({
-        testSuiteAbsolutePath
-      })
-    })
+    testSuiteContext.testSuiteAbsolutePath = testSuiteAbsolutePath
+    testSuiteStartCh.runStores(testSuiteContext, () => { })
 
     try {
       const promise = exec.apply(this, arguments)
       promise.then(
         (result) => {
           const status = result.failureCount === 0 ? 'pass' : 'fail'
-          testSuiteAsyncResource.runInAsyncScope(() => {
-            testSuiteFinishCh.publish(status)
-          })
+          testSuiteFinishCh.publish({ status, ...testSuiteContext.currentStore }, () => { })
           this.worker.off('message', onMessage)
         },
         (err) => {
-          testSuiteAsyncResource.runInAsyncScope(() => {
-            testSuiteErrorCh.publish(err)
-            testSuiteFinishCh.publish('fail')
-          })
+          testSuiteContext.error = err
+          testSuiteErrorCh.runStores(testSuiteContext, () => { })
+          testSuiteFinishCh.publish({ status: 'fail', ...testSuiteContext.currentStore }, () => { })
           this.worker.off('message', onMessage)
         }
       )
       return promise
     } catch (err) {
-      testSuiteAsyncResource.runInAsyncScope(() => {
-        testSuiteErrorCh.publish(err)
-        testSuiteFinishCh.publish('fail')
-      })
+      testSuiteContext.error = err
+      testSuiteErrorCh.runStores(testSuiteContext, () => { })
+      testSuiteFinishCh.publish({ status: 'fail', ...testSuiteContext.currentStore }, () => { })
       this.worker.off('message', onMessage)
       throw err
     }
@@ -618,7 +605,7 @@ addHook({
   file: 'lib/nodejs/parallel-buffered-runner.js'
 }, (ParallelBufferedRunner, frameworkVersion) => {
   shimmer.wrap(ParallelBufferedRunner.prototype, 'run', run => function (cb, { files }) {
-    if (!testStartCh.hasSubscribers) {
+    if (!testFinishCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
 
@@ -659,7 +646,7 @@ addHook({
   const { BufferedWorkerPool } = BufferedWorkerPoolPackage
 
   shimmer.wrap(BufferedWorkerPool.prototype, 'run', run => async function (testSuiteAbsolutePath, workerArgs) {
-    if (!testStartCh.hasSubscribers ||
+    if (!testFinishCh.hasSubscribers ||
         (!config.isKnownTestsEnabled &&
          !config.isTestManagementTestsEnabled &&
          !config.isImpactedTestsEnabled)) {

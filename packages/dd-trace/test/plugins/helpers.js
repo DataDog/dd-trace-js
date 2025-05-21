@@ -15,7 +15,7 @@ function resolveNaming (namingSchema) {
 }
 
 function expectSomeSpan (agent, expected, timeout) {
-  return agent.use(traces => {
+  return agent.assertSomeTraces(traces => {
     const scoredErrors = []
     for (const trace of traces) {
       for (const span of trace) {
@@ -36,7 +36,7 @@ function expectSomeSpan (agent, expected, timeout) {
     // output.
     error.message += '\n\nCandidate Traces:\n' + inspect(traces)
     throw error
-  }, timeout)
+  }, { timeoutMs: timeout })
 }
 
 // This is a bit like chai's `expect(expected).to.deep.include(actual)`, except
