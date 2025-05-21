@@ -13,6 +13,8 @@ function createWrapRouterMethod (name) {
   const errorChannel = channel(`apm:${name}:middleware:error`)
   const nextChannel = channel(`apm:${name}:middleware:next`)
 
+  const DD_WRAPPED_SYMBOL = Symbol('_datadog_instrumentation_wrapped')
+
   const layerMatchers = new WeakMap()
   const regexpCache = Object.create(null)
 
@@ -84,10 +86,15 @@ function createWrapRouterMethod (name) {
   }
 
   function wrapNext (req, next) {
+    if (next[DD_WRAPPED_SYMBOL]) {
+      return next
+    }
     return shimmer.wrapFunction(next, next => function (error) {
       if (error && error !== 'route' && error !== 'router') {
         errorChannel.publish({ req, error })
       }
+      // ensure we don't wrap the same next function twice
+      next[DD_WRAPPED_SYMBOL] = true
 
       nextChannel.publish({ req })
       finishChannel.publish({ req })
