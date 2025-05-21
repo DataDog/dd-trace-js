@@ -27,7 +27,7 @@ const channels = {
   batchConsumerCommit: channel('apm:@confluentinc/kafka-javascript:consume-batch:commit')
 }
 
-const disabledHeaderWeakMap = new WeakMap()
+const disabledHeaderWeakSet = new WeakSet()
 
 // we need to store the offset per partition per topic for the consumer to track offsets for DSM
 const latestConsumerOffsets = new Map()
@@ -228,7 +228,7 @@ function instrumentKafkaJS (kafkaJS) {
                               // header injection. Tnfortunately the error name / type is not more specific.
                               // This approach is implemented by other tracers as well.
                               if (err.name === 'KafkaJSError' && err.type === 'ERR_UNKNOWN') {
-                                disabledHeaderWeakMap.set(producer, true)
+                                disabledHeaderWeakSet.set(producer, true)
                                 log.error('Kafka Broker responded with UNKNOWN_SERVER_ERROR (-1). ' +
                                   'Please look at broker logs for more information. ' +
                                   'Tracer message header injection for Kafka is disabled.')
