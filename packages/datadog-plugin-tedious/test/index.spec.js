@@ -133,7 +133,6 @@ describe('Plugin', () => {
       it('should do automatic instrumentation', async () => {
         const query = 'SELECT 1 + 1 AS solution'
 
-        const request = new tds.Request(query)
         const promise = agent.assertSomeTraces(traces => {
           expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
           expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
@@ -147,6 +146,7 @@ describe('Plugin', () => {
           expect(traces[0][0].meta).to.have.property('span.kind', 'client')
           expect(traces[0][0].metrics).to.have.property('network.destination.port', 1433)
         })
+        const request = new tds.Request(query)
 
         connection.execSql(request)
         await promise
@@ -155,12 +155,12 @@ describe('Plugin', () => {
       it('should handle parameterized queries', async () => {
         const query = 'SELECT 1 + @num AS solution'
 
-        const request = new tds.Request(query)
         const promise = agent.assertSomeTraces(traces => {
           expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
           expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
           expect(traces[0][0]).to.have.property('resource', query)
         })
+        const request = new tds.Request(query)
 
         request.addParameter('num', tds.TYPES.Int, 1)
         connection.execSql(request)
@@ -171,12 +171,12 @@ describe('Plugin', () => {
         const query = 'SELECT 1 + 1 AS solution1;\n' +
                       'SELECT 1 + 2 AS solution2'
 
-        const request = new tds.Request(query)
         const promise = agent.assertSomeTraces(traces => {
           expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
           expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
           expect(traces[0][0]).to.have.property('resource', query)
         })
+        const request = new tds.Request(query)
 
         connection.execSqlBatch(request)
         await promise
@@ -185,12 +185,12 @@ describe('Plugin', () => {
       it('should handle prepare requests', async () => {
         const query = 'SELECT 1 + @num AS solution'
 
-        const request = new tds.Request(query)
         const promise = agent.assertSomeTraces(traces => {
           expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
           expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
           expect(traces[0][0]).to.have.property('resource', query)
         })
+        const request = new tds.Request(query)
 
         request.addParameter('num', tds.TYPES.Int, 1)
         connection.prepare(request)
@@ -200,12 +200,12 @@ describe('Plugin', () => {
       it('should handle execute requests', async () => {
         const query = 'SELECT 1 + @num AS solution'
 
-        const request = new tds.Request(query)
         const promise = agent.assertSomeTraces(traces => {
           expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
           expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
           expect(traces[0][0]).to.have.property('resource', query)
         })
+        const request = new tds.Request(query)
 
         request.addParameter('num', tds.TYPES.Int)
         request.on('prepared', () => {
@@ -218,12 +218,12 @@ describe('Plugin', () => {
       it('should handle unprepare requests', async () => {
         const query = 'SELECT 1 + @num AS solution'
 
-        const request = new tds.Request(query)
         const promise = agent.assertSomeTraces(traces => {
           expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
           expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
           expect(traces[0][0]).to.have.property('resource', query)
         })
+        const request = new tds.Request(query)
 
         request.addParameter('num', tds.TYPES.Int, 1)
         request.on('prepared', () => {
@@ -236,12 +236,12 @@ describe('Plugin', () => {
       it('should handle stored procedure calls', async () => {
         const procedure = 'dbo.ddTestProc'
 
-        const request = new tds.Request(procedure)
         const promise = agent.assertSomeTraces(traces => {
           expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
           expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
           expect(traces[0][0]).to.have.property('resource', procedure)
         })
+        const request = new tds.Request(procedure)
 
         request.addParameter('num', tds.TYPES.Int, 1)
         connection.callProcedure(request)
@@ -251,15 +251,15 @@ describe('Plugin', () => {
       it('should handle errors', async () => {
         let error
 
-        const request = new tds.Request('INVALID', (err) => {
-          error = err
-        })
-
         const promise = agent.assertSomeTraces(traces => {
           expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
           expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
           expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
           expect(traces[0][0].meta).to.have.property('component', 'tedious')
+        })
+
+        const request = new tds.Request('INVALID', (err) => {
+          error = err
         })
 
         connection.execSql(request)
@@ -270,16 +270,16 @@ describe('Plugin', () => {
         const query = "SELECT 1 + 1 AS solution;waitfor delay '00:00:01'"
         let error
 
-        const request = new tds.Request(query, (err) => {
-          error = err
-        })
-
         const promise = agent.assertSomeTraces(traces => {
           expect(error.message).to.equal('Canceled.')
           expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
           expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
           expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
           expect(traces[0][0].meta).to.have.property('component', 'tedious')
+        })
+
+        const request = new tds.Request(query, (err) => {
+          error = err
         })
 
         connection.execSql(request)
@@ -429,17 +429,17 @@ describe('Plugin', () => {
       it('should inject the correct DBM comment into query but not into trace', done => {
         const query = 'SELECT 1 + 1 AS solution'
 
-        const request = new tds.Request(query, (err) => {
-          if (err) return done(err)
-          promise.then(done, done)
-        })
-
         const promise = agent
           .assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('resource', 'SELECT 1 + 1 AS solution')
             expect(request.sqlTextOrProcedure).to.equal("/*dddb='master',dddbs='custom',dde='tester'," +
               "ddh='localhost',ddps='test',ddpv='10.8.2'*/ SELECT 1 + 1 AS solution")
           })
+
+        const request = new tds.Request(query, (err) => {
+          if (err) return done(err)
+          promise.then(done, done)
+        })
 
         connection.execSql(request)
       })
