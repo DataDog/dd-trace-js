@@ -21,10 +21,9 @@ describe('Plugin', () => {
     describe('without configuration', () => {
       let config
 
-      beforeEach(() => {
-        return agent.load('tedious').then(() => {
-          tds = require(`../../../versions/tedious@${version}`).get()
-        })
+      beforeEach(async () => {
+        await agent.load('tedious')
+        tds = require(`../../../versions/tedious@${version}`).get()
       })
 
       afterEach(() => {
@@ -55,7 +54,6 @@ describe('Plugin', () => {
         connection = new tds.Connection(config)
           .on('connect', done)
 
-        // see https://github.com/tediousjs/tedious/releases/tag/v10.0.0
         if (semver.intersects(version, '>=10.0.0')) {
           connection.connect()
         }
@@ -132,187 +130,161 @@ describe('Plugin', () => {
         })
       })
 
-      it('should do automatic instrumentation', done => {
+      it('should do automatic instrumentation', async () => {
         const query = 'SELECT 1 + 1 AS solution'
 
-        const promise = agent
-          .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-            expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-            expect(traces[0][0]).to.have.property('resource', query)
-            expect(traces[0][0]).to.have.property('type', 'sql')
-            expect(traces[0][0].meta).to.have.property('component', 'tedious')
-            expect(traces[0][0].meta).to.have.property('db.name', 'master')
-            expect(traces[0][0].meta).to.have.property('db.user', 'sa')
-            expect(traces[0][0].meta).to.have.property('db.type', 'mssql')
-            expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
-            expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-            expect(traces[0][0].metrics).to.have.property('network.destination.port', 1433)
-          })
-
-        const request = new tds.Request(query, (err) => {
-          if (err) return done(err)
-          promise.then(done, done)
+        const request = new tds.Request(query)
+        const promise = agent.assertSomeTraces(traces => {
+          expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+          expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
+          expect(traces[0][0]).to.have.property('resource', query)
+          expect(traces[0][0]).to.have.property('type', 'sql')
+          expect(traces[0][0].meta).to.have.property('component', 'tedious')
+          expect(traces[0][0].meta).to.have.property('db.name', 'master')
+          expect(traces[0][0].meta).to.have.property('db.user', 'sa')
+          expect(traces[0][0].meta).to.have.property('db.type', 'mssql')
+          expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
+          expect(traces[0][0].meta).to.have.property('span.kind', 'client')
+          expect(traces[0][0].metrics).to.have.property('network.destination.port', 1433)
         })
+
         connection.execSql(request)
+        await promise
       })
 
-      it('should handle parameterized queries', done => {
+      it('should handle parameterized queries', async () => {
         const query = 'SELECT 1 + @num AS solution'
 
-        const promise = agent
-          .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-            expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-            expect(traces[0][0]).to.have.property('resource', query)
-          })
-
-        const request = new tds.Request(query, (err) => {
-          if (err) return done(err)
-          promise.then(done, done)
+        const request = new tds.Request(query)
+        const promise = agent.assertSomeTraces(traces => {
+          expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+          expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
+          expect(traces[0][0]).to.have.property('resource', query)
         })
+
         request.addParameter('num', tds.TYPES.Int, 1)
         connection.execSql(request)
+        await promise
       })
 
-      it('should handle batch queries', done => {
+      it('should handle batch queries', async () => {
         const query = 'SELECT 1 + 1 AS solution1;\n' +
                       'SELECT 1 + 2 AS solution2'
 
-        const promise = agent
-          .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-            expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-            expect(traces[0][0]).to.have.property('resource', query)
-          })
-
-        const request = new tds.Request(query, (err) => {
-          if (err) return done(err)
-          promise.then(done, done)
+        const request = new tds.Request(query)
+        const promise = agent.assertSomeTraces(traces => {
+          expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+          expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
+          expect(traces[0][0]).to.have.property('resource', query)
         })
+
         connection.execSqlBatch(request)
+        await promise
       })
 
-      it('should handle prepare requests', done => {
+      it('should handle prepare requests', async () => {
         const query = 'SELECT 1 + @num AS solution'
 
-        agent
-          .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-            expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-            expect(traces[0][0]).to.have.property('resource', query)
-          })
-          .then(done)
-          .catch(done)
-
         const request = new tds.Request(query)
+        const promise = agent.assertSomeTraces(traces => {
+          expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+          expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
+          expect(traces[0][0]).to.have.property('resource', query)
+        })
 
         request.addParameter('num', tds.TYPES.Int, 1)
         connection.prepare(request)
+        await promise
       })
 
-      it('should handle execute requests', done => {
+      it('should handle execute requests', async () => {
         const query = 'SELECT 1 + @num AS solution'
 
-        const promise = agent
-          .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-            expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-            expect(traces[0][0]).to.have.property('resource', query)
-          })
-
-        const request = new tds.Request(query, (err) => {
-          if (err) return done(err)
-          promise.then(done, done)
-        }).on('prepared', () => {
-          connection.execute(request, { num: 5 })
+        const request = new tds.Request(query)
+        const promise = agent.assertSomeTraces(traces => {
+          expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+          expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
+          expect(traces[0][0]).to.have.property('resource', query)
         })
 
         request.addParameter('num', tds.TYPES.Int)
+        request.on('prepared', () => {
+          connection.execute(request, { num: 5 })
+        })
         connection.prepare(request)
+        await promise
       })
 
-      it('should handle unprepare requests', done => {
+      it('should handle unprepare requests', async () => {
         const query = 'SELECT 1 + @num AS solution'
 
-        const promise = agent
-          .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-            expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-            expect(traces[0][0]).to.have.property('resource', query)
-          })
-
-        const request = new tds.Request(query, (err) => {
-          if (err) return done(err)
-          promise.then(done, done)
-        }).on('prepared', () => {
-          connection.unprepare(request)
+        const request = new tds.Request(query)
+        const promise = agent.assertSomeTraces(traces => {
+          expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+          expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
+          expect(traces[0][0]).to.have.property('resource', query)
         })
 
         request.addParameter('num', tds.TYPES.Int, 1)
+        request.on('prepared', () => {
+          connection.unprepare(request)
+        })
         connection.prepare(request)
+        await promise
       })
 
-      it('should handle stored procedure calls', done => {
+      it('should handle stored procedure calls', async () => {
         const procedure = 'dbo.ddTestProc'
 
-        const promise = agent
-          .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-            expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-            expect(traces[0][0]).to.have.property('resource', procedure)
-          })
-
-        const request = new tds.Request(procedure, (err) => {
-          if (err) return done(err)
-          promise.then(done, done)
+        const request = new tds.Request(procedure)
+        const promise = agent.assertSomeTraces(traces => {
+          expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+          expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
+          expect(traces[0][0]).to.have.property('resource', procedure)
         })
 
         request.addParameter('num', tds.TYPES.Int, 1)
         connection.callProcedure(request)
+        await promise
       })
 
-      it('should handle errors', done => {
+      it('should handle errors', async () => {
         let error
-
-        agent
-          .assertSomeTraces(traces => {
-            expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
-            expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
-            expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
-            expect(traces[0][0].meta).to.have.property('component', 'tedious')
-          })
-          .then(done)
-          .catch(done)
 
         const request = new tds.Request('INVALID', (err) => {
           error = err
         })
+
+        const promise = agent.assertSomeTraces(traces => {
+          expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
+          expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
+          expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
+          expect(traces[0][0].meta).to.have.property('component', 'tedious')
+        })
+
         connection.execSql(request)
+        await promise
       })
 
-      it('should handle cancelled requests', done => {
+      it('should handle cancelled requests', async () => {
         const query = "SELECT 1 + 1 AS solution;waitfor delay '00:00:01'"
-
         let error
-
-        agent
-          .assertSomeTraces(traces => {
-            expect(error.message).to.equal('Canceled.')
-            expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
-            expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
-            expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
-            expect(traces[0][0].meta).to.have.property('component', 'tedious')
-          })
-          .then(done)
-          .catch(done)
 
         const request = new tds.Request(query, (err) => {
           error = err
         })
 
+        const promise = agent.assertSomeTraces(traces => {
+          expect(error.message).to.equal('Canceled.')
+          expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
+          expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
+          expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
+          expect(traces[0][0].meta).to.have.property('component', 'tedious')
+        })
+
         connection.execSql(request)
         setTimeout(() => connection.cancel(), 0)
+        await promise
       })
 
       if (semver.intersects(version, '>=1.5.4')) {
@@ -322,7 +294,6 @@ describe('Plugin', () => {
           function buildBulkLoad () {
             let bulkLoad
 
-            // newBulkLoad function definition changed in v2.2.0
             if (semver.intersects(version, '>=2.2.0')) {
               bulkLoad = connection.newBulkLoad(tableName, { keepNulls: true }, () => {})
             } else {
@@ -333,67 +304,78 @@ describe('Plugin', () => {
             return bulkLoad
           }
 
-          beforeEach(done => {
-            const dropTestTable = new tds.Request(`DROP TABLE IF EXISTS ${tableName}`, (err) => {
-              if (err) return done(err)
+          beforeEach(async () => {
+            const dropTestTable = new tds.Request(`DROP TABLE IF EXISTS ${tableName}`)
+            await new Promise((resolve, reject) => {
+              dropTestTable.on('requestCompleted', resolve)
+              dropTestTable.on('error', reject)
+              connection.execSql(dropTestTable)
+            })
 
-              const tableCreationSql = `CREATE TABLE ${tableName} ([num] int NOT NULL)`
-              const createTestTable = new tds.Request(tableCreationSql, done)
+            const createTestTable = new tds.Request(`CREATE TABLE ${tableName} ([num] int NOT NULL)`)
+            await new Promise((resolve, reject) => {
+              createTestTable.on('requestCompleted', resolve)
+              createTestTable.on('error', reject)
               connection.execSql(createTestTable)
             })
-            connection.execSql(dropTestTable)
           })
 
-          it('should handle bulkload requests', done => {
+          it('should handle bulkload requests', async () => {
             const bulkLoad = buildBulkLoad()
 
-            agent
-              .assertSomeTraces(traces => {
-                expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-                expect(traces[0][0]).to.have.property('resource', bulkLoad.getBulkInsertSql())
-              })
-              .then(done)
-              .catch(done)
+            const promise = agent.assertSomeTraces(traces => {
+              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+              expect(traces[0][0]).to.have.property('resource', bulkLoad.getBulkInsertSql())
+            })
 
             connection.execBulkLoad(bulkLoad, [{ num: 5 }])
+            await promise
           })
 
           if (semver.intersects(version, '>=4.2.0') && !semver.intersects(version, '>=14')) {
-            it('should handle streaming BulkLoad requests', done => {
+            it('should handle streaming BulkLoad requests', async () => {
               const bulkLoad = buildBulkLoad()
               const rowStream = bulkLoad.getRowStream()
 
-              const promise = agent
-                .assertSomeTraces(traces => {
-                  expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-                  expect(traces[0][0]).to.have.property('resource', bulkLoad.getBulkInsertSql())
-                })
+              const promise = agent.assertSomeTraces(traces => {
+                expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+                expect(traces[0][0]).to.have.property('resource', bulkLoad.getBulkInsertSql())
+              })
 
               connection.execBulkLoad(bulkLoad)
-              rowStream.write([5], (err) => {
-                if (err) return done(err)
-                rowStream.end()
-                promise.then(done, done)
+              await new Promise((resolve, reject) => {
+                rowStream.write([5], (err) => {
+                  if (err) return reject(err)
+                  rowStream.end()
+                  resolve()
+                })
               })
+              await promise
             })
 
-            it('should run the BulkLoad stream event listeners in the parent context', done => {
+            it('should run the BulkLoad stream event listeners in the parent context', async () => {
               const span = tracer.startSpan('test')
               const bulkLoad = buildBulkLoad()
               const rowStream = bulkLoad.getRowStream()
 
-              tracer.scope().activate(span, () => {
-                rowStream.on('finish', () => {
-                  expect(tracer.scope().active()).to.equal(span)
-                  done()
+              const finishPromise = new Promise(resolve => {
+                tracer.scope().activate(span, () => {
+                  rowStream.on('finish', () => {
+                    expect(tracer.scope().active()).to.equal(span)
+                    resolve()
+                  })
                 })
               })
 
               connection.execBulkLoad(bulkLoad)
-              rowStream.write([5], (err) => {
-                if (err) done(err)
-                rowStream.end()
+              await new Promise((resolve, reject) => {
+                rowStream.write([5], (err) => {
+                  if (err) return reject(err)
+                  rowStream.end()
+                  resolve()
+                })
               })
+              await finishPromise
             })
           }
         })
