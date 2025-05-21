@@ -11,7 +11,6 @@ const log = require('../../dd-trace/src/log')
 
 const testStartCh = channel('ci:playwright:test:start')
 const testFinishCh = channel('ci:playwright:test:finish')
-const testFnCh = channel('ci:playwright:test:fn')
 
 const testSessionStartCh = channel('ci:playwright:session:start')
 const testSessionFinishCh = channel('ci:playwright:session:finish')
@@ -928,9 +927,7 @@ addHook({
         })
       }
 
-      testFnCh.runStores(testCtx, () => {
-        res = _runTest.apply(this, arguments)
-      })
+      res = _runTest.apply(this, arguments)
 
       testInfo = this._currentTest
     })
