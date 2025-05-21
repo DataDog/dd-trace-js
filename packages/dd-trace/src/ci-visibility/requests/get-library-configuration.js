@@ -51,6 +51,8 @@ function getLibraryConfiguration ({
     options.headers['dd-api-key'] = apiKey
   }
 
+  console.log('ERROR IN LIBRARY CONFIGURATION: ', branch)
+
   const data = JSON.stringify({
     data: {
       id: id().toString(10),
@@ -80,6 +82,7 @@ function getLibraryConfiguration ({
   request(data, options, (err, res, statusCode) => {
     distributionMetric(TELEMETRY_GIT_REQUESTS_SETTINGS_MS, {}, Date.now() - startTime)
     if (err) {
+      console.log('ERROR IN LIBRARY CONFIGURATION 1: ', err)
       incrementCountMetric(TELEMETRY_GIT_REQUESTS_SETTINGS_ERRORS, { statusCode })
       done(err)
     } else {
@@ -133,6 +136,7 @@ function getLibraryConfiguration ({
 
         done(null, settings)
       } catch (err) {
+        console.log('ERROR IN LIBRARY CONFIGURATION 2: ', err)
         done(err)
       }
     }
