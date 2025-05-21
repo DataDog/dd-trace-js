@@ -279,8 +279,8 @@ module.exports = {
   async load (pluginName, config, tracerConfig = {}) {
     tracer = require('../..')
     agent = express()
-    agent.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
-    agent.use((req, res, next) => {
+    agent.assertSomeTraces(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
+    agent.assertSomeTraces((req, res, next) => {
       if (req.is('application/msgpack')) {
         if (!req.body.length) return res.status(200).send()
         req.body = msgpack.decode(req.body, { useBigInt64: true })
