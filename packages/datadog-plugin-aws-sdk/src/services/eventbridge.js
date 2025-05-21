@@ -12,9 +12,9 @@ class EventBridge extends BaseAwsSdkPlugin {
     }
     const rulename = params.Name ? params.Name : ''
     return {
-      'resource.name': operation ? `${operation} ${params.source}` : params.source,
-      'aws.eventbridge.source': `${params.source}`,
-      'peer.service': params.Entries[0].Source.replace(/^event\//, ''), // Strip 'event/' prefix if present
+      'resource.name': operation ? `${operation} ${params.Entries[0].Source}` : params.Entries[0].Source,
+      'aws.eventbridge.source': params.Entries[0].Source,
+      'peer.service': params.Entries[0].Source.slice(6),
       //rulename: `${rulename}`,
       //'hostname': `events.${this.activeSpan._spanContext._tags['region']}.amazonaws.com`,
     }
