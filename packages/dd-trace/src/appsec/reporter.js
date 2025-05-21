@@ -28,7 +28,7 @@ const COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE = 256
 // default limiter, configurable with setRateLimit()
 let limiter = new Limiter(100)
 
-const extendedDataCollectionConfiguration = {
+const config = {
   headersExtendedCollectionEnabled: false,
   maxHeadersCollected: 0,
   headersRedaction: false,
@@ -77,12 +77,12 @@ const REQUEST_HEADERS_MAP = mapHeaderAndTags([
 
 const RESPONSE_HEADERS_MAP = mapHeaderAndTags(contentHeaderList, RESPONSE_HEADER_TAG_PREFIX)
 
-function init (config) {
-  limiter = new Limiter(config.rateLimit)
-  extendedDataCollectionConfiguration.headersExtendedCollectionEnabled = config.extendedHeadersCollection.enabled
-  extendedDataCollectionConfiguration.maxHeadersCollected = config.extendedHeadersCollection.maxHeaders
-  extendedDataCollectionConfiguration.headersRedaction = config.extendedHeadersCollection.redaction
-  extendedDataCollectionConfiguration.raspBodyCollection = config.rasp.bodyCollection
+function init (_config) {
+  limiter = new Limiter(_config.rateLimit)
+  config.headersExtendedCollectionEnabled = _config.extendedHeadersCollection.enabled
+  config.maxHeadersCollected = _config.extendedHeadersCollection.maxHeaders
+  config.headersRedaction = _config.extendedHeadersCollection.redaction
+  config.raspBodyCollection = _config.rasp.bodyCollection
 }
 
 function formatHeaderName (name) {
@@ -144,8 +144,8 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders) {
   const responseEventCollectedHeaders = filterHeaders(res.getHeaders(), RESPONSE_HEADERS_MAP)
 
   if (
-    !(extendedDataCollectionConfiguration.headersExtendedCollectionEnabled &&
-      !extendedDataCollectionConfiguration.headersRedaction)
+    !(config.headersExtendedCollectionEnabled &&
+      !config.headersRedaction)
   ) {
     // Standard collection
     return Object.assign(
@@ -157,7 +157,7 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders) {
 
   // Extended collection
   const requestExtendedHeadersAvailableCount =
-    extendedDataCollectionConfiguration.maxHeadersCollected -
+    config.maxHeadersCollected -
     Object.keys(mandatoryCollectedHeaders).length -
     Object.keys(requestEventCollectedHeaders).length
 
@@ -170,7 +170,7 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders) {
     )
 
   const responseExtendedHeadersAvailableCount =
-    extendedDataCollectionConfiguration.maxHeadersCollected -
+    config.maxHeadersCollected -
     Object.keys(responseEventCollectedHeaders).length
 
   const responseEventExtendedCollectedHeaders =
@@ -191,15 +191,15 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders) {
 
   // Check discarded headers
   const requestHeadersCount = Object.keys(req.headers).length
-  if (requestHeadersCount > extendedDataCollectionConfiguration.maxHeadersCollected) {
+  if (requestHeadersCount > config.maxHeadersCollected) {
     headersTags['_dd.appsec.request.header_collection.discarded'] =
-      requestHeadersCount - extendedDataCollectionConfiguration.maxHeadersCollected
+      requestHeadersCount - config.maxHeadersCollected
   }
 
   const responseHeadersCount = Object.keys(res.getHeaders()).length
-  if (responseHeadersCount > extendedDataCollectionConfiguration.maxHeadersCollected) {
+  if (responseHeadersCount > config.maxHeadersCollected) {
     headersTags['_dd.appsec.response.header_collection.discarded'] =
-      responseHeadersCount - extendedDataCollectionConfiguration.maxHeadersCollected
+      responseHeadersCount - config.maxHeadersCollected
   }
 
   return headersTags
@@ -291,7 +291,7 @@ function reportAttack (attackData) {
 
   rootSpan.addTags(newTags)
 
-  if (extendedDataCollectionConfiguration.raspBodyCollection && isRaspAttack(attackData)) {
+  if (config.raspBodyCollection && isRaspAttack(attackData)) {
     reportRequestBody(rootSpan, req.body)
   }
 }
