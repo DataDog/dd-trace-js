@@ -196,8 +196,6 @@ function instrumentKafkaJS (kafkaJS) {
                 kafka._ddBrokers = arguments[0]['bootstrap.servers']
               }
 
-              disabledHeaderWeakMap.set(producer, false)
-
               // Wrap the send method of the producer
               if (producer && typeof producer.send === 'function') {
                 shimmer.wrap(producer, 'send', function wrapSend (send) {
