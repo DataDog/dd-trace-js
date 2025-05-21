@@ -315,14 +315,13 @@ function truncateRequestBody (target, depth = 0) {
       }
 
       if (Array.isArray(target)) {
-        const sliced = target.slice(0, COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE)
+        const maxArrayLength = Math.min(target.length, COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE)
         wasTruncated = target.length > COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE
-
         const truncatedArray = []
-        for (const item of sliced) {
-          const { value, truncated } = truncateRequestBody(item, depth + 1)
+        for (let i = 0; i < maxArrayLength; i++) {
+          const { value, truncated } = truncateRequestBody(target[i], depth + 1)
           if (truncated) wasTruncated = true
-          truncatedArray.push(value)
+          truncatedArray[i] = value
         }
 
         return { value: truncatedArray, truncated: wasTruncated }
@@ -337,11 +336,12 @@ function truncateRequestBody (target, depth = 0) {
       }
 
       const keys = Object.keys(target)
-      const slicedKeys = keys.slice(0, COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE)
+      const maxKeysLength = Math.min(keys.length, COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE)
       wasTruncated = keys.length > COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE
 
       const truncatedObject = {}
-      for (const key of slicedKeys) {
+      for (let i = 0; i < maxKeysLength; i++) {
+        const key = keys[i]
         const { value, truncated } = truncateRequestBody(target[key], depth + 1)
         if (truncated) wasTruncated = true
         truncatedObject[key] = value
