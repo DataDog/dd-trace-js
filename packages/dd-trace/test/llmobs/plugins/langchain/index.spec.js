@@ -1263,7 +1263,7 @@ describe('integrations', () => {
           })
         })
 
-        describe.only('vectorstores', () => {
+        describe('vectorstores', () => {
           let vectorstore
 
           beforeEach(() => {
