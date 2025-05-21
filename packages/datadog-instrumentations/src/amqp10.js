@@ -29,6 +29,7 @@ addHook({ name: 'amqp10', file: 'lib/sender_link.js', versions: ['>=3'] }, Sende
           () => finish(finishCh, errorCh, null, ctx),
           e => finish(finishCh, errorCh, e, ctx)
         )
+        return promise
       } catch (err) {
         finish(finishCh, errorCh, err, ctx)
         throw err
