@@ -52,7 +52,7 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
     return startSendCh.runStores(ctx, () => {
       const delivery = send.apply(this, arguments)
       const context = {
-        ctx,
+        sendCtx: ctx,
         connection: this.connection
       }
       contexts.set(delivery, context)
@@ -80,7 +80,7 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
       return startReceiveCh.runStores(ctx, () => {
         if (msgObj.delivery) {
           const context = {
-            ctx,
+            receiveCtx: ctx,
             connection: this.connection
           }
           contexts.set(msgObj.delivery, context)
@@ -110,12 +110,12 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/connection.js' }, Connecti
       if (this[inFlightDeliveries]) {
         this[inFlightDeliveries].forEach(delivery => {
           const context = contexts.get(delivery)
-          const ctx = context && context.ctx
+          const ctx = context && context.receiveCtx
 
           if (!ctx) return
 
           ctx.error = error
-          errorReceiveCh.publish(error)
+          errorReceiveCh.publish(ctx)
           exports.beforeFinish(delivery, null)
           finishReceiveCh.publish(ctx)
         })
@@ -147,7 +147,7 @@ function getHostAndPort (connection) {
 
 function wrapDeliveryUpdate (obj, update) {
   const context = contexts.get(obj)
-  const ctx = context && context.ctx
+  const ctx = context && context.receiveCtx
   if (obj && ctx) {
     const cb = update
     return shimmer.wrapFunction(cb, cb => function wrappedUpdate (settled, stateData) {
@@ -179,7 +179,7 @@ function patchCircularBuffer (proto, Session) {
           shimmer.wrap(CircularBuffer.prototype, 'pop_if', popIf => function (fn) {
             arguments[0] = shimmer.wrapFunction(fn, fn => function (entry) {
               const context = contexts.get(entry)
-              const ctx = context && context.ctx
+              const ctx = context && context.sendCtx
 
               if (!ctx) return fn(entry)
 
@@ -221,7 +221,7 @@ function addToInFlightDeliveries (connection, delivery) {
 
 function beforeFinish (delivery, state) {
   const context = contexts.get(delivery)
-  const ctx = context && context.ctx
+  const ctx = context && context.receiveCtx
   if (ctx) {
     if (state) {
       ctx.state = state
