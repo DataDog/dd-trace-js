@@ -30,8 +30,8 @@ describe('Plugin', () => {
         afterEach(() => agent.close({ ritmReset: false }))
 
         it('should do automatic instrumentation when using callbacks', async () => {
-          agent.use(() => {}) // wait for initial info command
-          const promise = agent.use(traces => {
+          agent.assertSomeTraces(() => {}) // wait for initial info command
+          const promise = agent.assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
             expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
             expect(traces[0][0]).to.have.property('resource', 'get')
@@ -63,9 +63,9 @@ describe('Plugin', () => {
         it('should handle errors', done => {
           let error
 
-          agent.use(() => {}) // wait for initial info command
+          agent.assertSomeTraces(() => {}) // wait for initial info command
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('error', 1)
               expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
               expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
@@ -82,8 +82,8 @@ describe('Plugin', () => {
         })
 
         it('should work with userland promises', done => {
-          agent.use(() => {}) // wait for initial info command
-          agent.use(traces => {
+          agent.assertSomeTraces(() => {}) // wait for initial info command
+          agent.assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
             expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
             expect(traces[0][0]).to.have.property('resource', 'get')
@@ -121,7 +121,7 @@ describe('Plugin', () => {
 
         it('should be configured with the correct values', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('service', 'custom-test')
             })
             .then(done)
@@ -131,9 +131,9 @@ describe('Plugin', () => {
         })
 
         it('should be able to filter commands', done => {
-          agent.use(() => {}) // wait for initial command
+          agent.assertSomeTraces(() => {}) // wait for initial command
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('resource', 'get')
             })
             .then(done)
@@ -165,9 +165,9 @@ describe('Plugin', () => {
         after(() => agent.close({ ritmReset: false }))
 
         it('should be able to filter commands', done => {
-          agent.use(() => {}) // wait for initial command
+          agent.assertSomeTraces(() => {}) // wait for initial command
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('resource', 'get')
             })
             .then(done)

@@ -54,7 +54,7 @@ describe('Plugin', () => {
 
             const command = new AWS.InvokeModelCommand(request)
 
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               const span = traces[0][0]
               expect(span.meta).to.include({
                 'aws.operation': 'invokeModel',

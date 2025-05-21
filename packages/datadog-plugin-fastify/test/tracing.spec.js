@@ -54,7 +54,7 @@ describe('Plugin', () => {
               const port = app.server.address().port
 
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const spans = traces[0]
 
                   expect(spans[0]).to.have.property('name', 'fastify.request')
@@ -89,7 +89,7 @@ describe('Plugin', () => {
               const port = app.server.address().port
 
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const spans = traces[0]
 
                   expect(spans[0]).to.have.property('name', 'fastify.request')
@@ -123,7 +123,7 @@ describe('Plugin', () => {
                 const port = app.server.address().port
 
                 agent
-                  .use(traces => {
+                  .assertSomeTraces(traces => {
                     const spans = traces[0]
 
                     expect(spans[0]).to.have.property('name', 'fastify.request')
@@ -270,7 +270,7 @@ describe('Plugin', () => {
               const port = app.server.address().port
 
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const spans = traces[0]
 
                   expect(spans[0]).to.have.property('name', 'fastify.request')
@@ -349,7 +349,7 @@ describe('Plugin', () => {
               const port = app.server.address().port
 
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const spans = traces[0]
 
                   expect(spans[0]).to.have.property('name', 'fastify.request')
@@ -382,7 +382,7 @@ describe('Plugin', () => {
                 const port = app.server.address().port
 
                 agent
-                  .use(traces => {
+                  .assertSomeTraces(traces => {
                     const spans = traces[0]
 
                     expect(spans[0]).to.have.property('name', 'fastify.request')
@@ -413,7 +413,7 @@ describe('Plugin', () => {
                 const port = app.server.address().port
 
                 agent
-                  .use(traces => {
+                  .assertSomeTraces(traces => {
                     const spans = traces[0]
 
                     expect(spans[0]).to.have.property('name', 'fastify.request')
@@ -447,7 +447,7 @@ describe('Plugin', () => {
                 const port = app.server.address().port
 
                 agent
-                  .use(traces => {
+                  .assertSomeTraces(traces => {
                     const spans = traces[0]
 
                     expect(spans[0]).to.have.property('name', 'fastify.request')
@@ -480,7 +480,7 @@ describe('Plugin', () => {
                 const port = app.server.address().port
 
                 agent
-                  .use(traces => {
+                  .assertSomeTraces(traces => {
                     const spans = traces[0]
 
                     expect(spans[0]).to.have.property('name', 'fastify.request')
@@ -519,7 +519,7 @@ describe('Plugin', () => {
                 const port = app.server.address().port
 
                 agent
-                  .use(traces => {
+                  .assertSomeTraces(traces => {
                     const spans = traces[0]
 
                     expect(spans[0]).to.have.property('name', 'fastify.request')
