@@ -92,7 +92,7 @@ describe('Plugin', () => {
             it('should be instrumented w/ error', async () => {
               let error
 
-              const expectedSpanPromise = agent.use(traces => {
+              const expectedSpanPromise = agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
 
                 expect(span).to.include({
@@ -186,7 +186,7 @@ describe('Plugin', () => {
             })
 
             it('should propagate context', async () => {
-              const expectedSpanPromise = agent.use(traces => {
+              const expectedSpanPromise = agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
 
                 expect(span).to.include({
@@ -312,7 +312,7 @@ describe('Plugin', () => {
             })
 
             it('should be instrumented with error', async () => {
-              const expectedSpanPromise = agent.use(traces => {
+              const expectedSpanPromise = agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
 
                 expect(span).to.include({
@@ -430,7 +430,7 @@ describe('Plugin', () => {
             })
 
             it('should propagate context', async () => {
-              const expectedSpanPromise = agent.use(traces => {
+              const expectedSpanPromise = agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
 
                 expect(span).to.include({
@@ -456,7 +456,7 @@ describe('Plugin', () => {
             // it('should be instrumented with error', async () => {
             //   const fakeError = new Error('Oh No!')
 
-            //   const expectedSpanPromise = agent.use(traces => {
+            //   const expectedSpanPromise = agent.assertSomeTraces(traces => {
             //     const errorSpans = traces[0].filter(span => span.error === 1)
             //     expect(errorSpans.length).to.be.at.least(1)
 

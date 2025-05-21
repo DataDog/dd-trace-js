@@ -68,7 +68,7 @@ withVersions('express', 'express', expressVersion => {
         }
       )
 
-      await agent.use((traces) => {
+      await agent.assertSomeTraces((traces) => {
         const span = traces[0][0]
         assert.property(span.meta, '_dd.appsec.fp.http.header')
         assert.equal(span.meta['_dd.appsec.fp.http.header'], 'hdr-0110000110-74c2908f-5-55682ec1')
