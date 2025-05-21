@@ -86,7 +86,8 @@ describe('Plugin', () => {
       })
 
       beforeEach(() => {
-        langchainOpenai = require(`../../../versions/@langchain/openai@${version}`).get()
+        langchainOpenai = require(`../../../versions/langchain@${version}`)
+          .get('@langchain/openai')
         langchainAnthropic = require(`../../../versions/@langchain/anthropic@${version}`).get()
         if (version !== '0.1.0') {
           // version mismatching otherwise
@@ -104,14 +105,14 @@ describe('Plugin', () => {
         langchainTools = require(`../../../versions/@langchain/core@${version}`)
           .get('@langchain/core/tools')
 
-        MemoryVectorStore = require(`../../../versions/langchain@${version}`)
+        MemoryVectorStore = require(`../../../versions/@langchain/core@${version}`)
           .get('langchain/vectorstores/memory')
           .MemoryVectorStore
 
         langchainOpenaiOpenAiVersion =
-            require(`../../../versions/@langchain/openai@${version}`)
-              .get('openai/version')
-              .VERSION
+          require(`../../../versions/langchain@${version}`)
+            .get('openai/version')
+            .VERSION
       })
 
       afterEach(() => {
@@ -360,7 +361,7 @@ describe('Plugin', () => {
           await checkTraces
         })
 
-        it.only('instruments a langchain openai chat model call for a JSON message input', async () => {
+        it('instruments a langchain openai chat model call for a JSON message input', async () => {
           stubCall({
             ...openAiBaseChatInfo,
             response: {

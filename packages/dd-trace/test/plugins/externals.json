@@ -297,10 +297,6 @@
   ],
   "langchain": [
     {
-      "name": "langchain",
-      "versions": [">=0.1"]
-    },
-    {
       "name": "@langchain/anthropic",
       "versions": [">=0.1"]
     },
@@ -309,11 +305,11 @@
       "versions": [">=0.1"]
     },
     {
-      "name": "@langchain/openai",
+      "name": "@langchain/cohere",
       "versions": [">=0.1"]
     },
     {
-      "name": "@langchain/cohere",
+      "name": "langchain",
       "versions": [">=0.1"]
     }
   ],
