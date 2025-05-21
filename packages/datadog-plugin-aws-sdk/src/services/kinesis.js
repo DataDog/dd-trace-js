@@ -64,10 +64,13 @@ class Kinesis extends BaseAwsSdkPlugin {
   generateTags (params, operation, response) {
     if (!params || !params.StreamName) return {}
 
+    const hostname = `kinesis.${this.activeSpan._spanContext._tags.region}.amazonaws.com`
     return {
       'resource.name': `${operation} ${params.StreamName}`,
       'aws.kinesis.stream_name': params.StreamName,
-      streamname: params.StreamName
+      streamname: params.StreamName,
+      hostname,
+      'peer.service': hostname
     }
   }
 

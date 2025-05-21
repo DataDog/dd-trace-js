@@ -9,22 +9,15 @@ class Sns extends BaseAwsSdkPlugin {
   static get isPayloadReporter () { return true }
 
   generateTags (params, operation, response) {
-    if (!params) return {}
+    if (!params || !params.TopicArn) return {}
 
-    if (!params.TopicArn && !(response.data && response.data.TopicArn)) return {}
-    const TopicArn = params.TopicArn || response.data.TopicArn
-
-    // Split the ARN into its parts
-    // ex.'arn:aws:sns:us-east-1:123456789012:my-topic'
-    const arnParts = TopicArn.split(':')
-
-    // Get the topic name from the last part of the ARN
-    const topicName = arnParts[arnParts.length - 1]
-
+    const hostname = `sns.${this.activeSpan._spanContext._tags.region}.amazonaws.com`
     return {
-      'resource.name': `${operation} ${params.TopicArn || response.data.TopicArn}`,
-      'aws.sns.topic_arn': TopicArn,
-      topicname: topicName
+      'resource.name': operation ? `${operation} ${params.TopicArn}` : params.TopicArn,
+      'aws.sns.topic_arn': params.TopicArn,
+      topicname: params.TopicArn,
+      hostname,
+      'peer.service': hostname
     }
 
     // TODO: should arn be sanitized or quantized in some way here,

@@ -13,12 +13,15 @@ class DynamoDb extends BaseAwsSdkPlugin {
   generateTags (params, operation, response) {
     const tags = {}
 
+    const hostname = `dynamodb.${this.activeSpan._spanContext._tags.region}.amazonaws.com`
     if (params) {
       if (params.TableName) {
         Object.assign(tags, {
-          'resource.name': `${operation} ${params.TableName}`,
+          'resource.name': operation ? `${operation} ${params.TableName}` : params.TableName,
           'aws.dynamodb.table_name': params.TableName,
-          tablename: params.TableName
+          tablename: params.TableName,
+          hostname,
+          'peer.service': hostname
         })
       }
 
