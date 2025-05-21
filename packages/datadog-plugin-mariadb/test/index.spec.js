@@ -300,7 +300,7 @@ describe('Plugin', () => {
         )
 
         it('should be configured with the correct values', done => {
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('service', 'custom')
             sinon.assert.calledWith(serviceSpy, sinon.match({
               host: 'localhost',
@@ -395,7 +395,7 @@ describe('Plugin', () => {
         })
 
         it('should not instrument connections to avoid leaks from internal queue', done => {
-          agent.use((traces) => {
+          agent.assertSomeTraces((traces) => {
             expect(traces).to.have.length(1)
             expect(traces[0].find(span => span.name === 'tcp.connect')).to.be.undefined
           }).then(done, done)

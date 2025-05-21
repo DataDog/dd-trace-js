@@ -349,7 +349,7 @@ describe('Plugin', () => {
 
             app.get('/user', (req, res) => res.status(200).send())
 
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               expect(traces[0][0].meta).to.have.property('http.status_code', '200')
               expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
             }).then(done, done)

@@ -216,7 +216,7 @@ describe('Plugin', () => {
 
         // see https://github.com/DataDog/dd-trace-js/issues/2453
         it('should not have disabled tracing', (done) => {
-          agent.use(() => {})
+          agent.assertSomeTraces(() => {})
             .then(done)
             .catch(done)
 

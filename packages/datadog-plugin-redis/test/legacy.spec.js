@@ -112,7 +112,7 @@ describe('Legacy Plugin', () => {
         // TODO: This test is flakey. I've seen it affect 2.6.0, 2.5.3, 3.1.2, 0.12.0
         // Increasing the test timeout does not help.
         // Error will be set but span will not.
-        // agent.use is called a dozen times per test in legacy.spec but once per test in client.spec
+        // agent.assertSomeTraces is called a dozen times per test in legacy.spec but once per test in client.spec
         it.skip('should handle errors', done => {
           const assertError = () => {
             if (!error || !span) return
@@ -132,7 +132,7 @@ describe('Legacy Plugin', () => {
           let error
           let span
 
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('resource', 'set')
             span = traces[0][0]
             assertError()
@@ -182,7 +182,7 @@ describe('Legacy Plugin', () => {
         })
 
         it('should be able to filter commands', done => {
-          agent.use(() => {}) // wait for initial command
+          agent.assertSomeTraces(() => {}) // wait for initial command
           agent
             .use(traces => {
               expect(traces[0][0]).to.have.property('resource', 'get')
@@ -225,7 +225,7 @@ describe('Legacy Plugin', () => {
         })
 
         it('should be able to filter commands', done => {
-          agent.use(() => {}) // wait for initial command
+          agent.assertSomeTraces(() => {}) // wait for initial command
           agent
             .use(traces => {
               expect(traces[0][0]).to.have.property('resource', 'get')

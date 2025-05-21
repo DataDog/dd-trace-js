@@ -334,7 +334,7 @@ describe('Plugin', () => {
           appListener = http.createServer(app).listen(0, 'localhost', () => {
             const port = appListener.address().port
 
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans[0].trace_id.toString()).to.equal('1234')

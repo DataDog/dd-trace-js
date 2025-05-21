@@ -310,7 +310,7 @@ describe('Plugin', () => {
           server.listen(0, 'localhost', () => {
             const port = server.address().port
 
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans[0].trace_id.toString()).to.equal('1234')
@@ -345,7 +345,7 @@ describe('Plugin', () => {
           server.listen(0, 'localhost', () => {
             const port = server.address().port
 
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans[0]).to.have.property('error', 1)
@@ -378,7 +378,7 @@ describe('Plugin', () => {
           server.listen(0, 'localhost', () => {
             const port = server.address().port
 
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans[0]).to.have.property('error', 0)

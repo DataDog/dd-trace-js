@@ -49,7 +49,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
             const timer = setTimeout(done, 100)
 
-            agent.use(() => {
+            agent.assertSomeTraces(() => {
               clearTimeout(timer)
               done(new Error('Agent received an unexpected trace.'))
             })
@@ -1029,7 +1029,7 @@ describe('Plugin', () => {
           appListener = app.listen(0, 'localhost', () => {
             const port = appListener.address().port
 
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans[0].trace_id.toString()).to.equal('1234')
@@ -1064,7 +1064,7 @@ describe('Plugin', () => {
           appListener = app.listen(0, 'localhost', () => {
             const port = appListener.address().port
 
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans[0]).to.have.property('error', 1)
@@ -1098,7 +1098,7 @@ describe('Plugin', () => {
           appListener = app.listen(0, 'localhost', () => {
             const port = appListener.address().port
 
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans[0]).to.have.property('error', 0)
@@ -1342,7 +1342,7 @@ describe('Plugin', () => {
           appListener = app.listen(0, 'localhost', () => {
             const port = appListener.address().port
 
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans[0]).to.have.property('error', 0)
@@ -1646,7 +1646,7 @@ describe('Plugin', () => {
           appListener = app.listen(0, 'localhost', () => {
             const port = appListener.address().port
 
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans[0]).to.have.property('error', 1)

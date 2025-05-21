@@ -260,7 +260,7 @@ describe('Plugin', () => {
           it('should handle errors', done => {
             let error
 
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
               expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
               expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)

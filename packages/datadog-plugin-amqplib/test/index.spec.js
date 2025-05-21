@@ -479,7 +479,7 @@ describe('Plugin', () => {
               channel.sendToQueue(ok.queue, Buffer.from('dsm test'))
 
               let produceSpanMeta = {}
-              agent.use(traces => {
+              agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
 
                 if (span.resource.startsWith('basic.publish')) {
@@ -502,7 +502,7 @@ describe('Plugin', () => {
                 if (err) return done(err)
 
                 let consumeSpanMeta = {}
-                agent.use(traces => {
+                agent.assertSomeTraces(traces => {
                   const span = traces[0][0]
 
                   if (span.resource.startsWith('basic.deliver')) {

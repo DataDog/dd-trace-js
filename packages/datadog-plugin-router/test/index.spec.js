@@ -115,7 +115,7 @@ describe('Plugin', () => {
             res.end()
           })
 
-          const agentPromise = agent.use(traces => {
+          const agentPromise = agent.assertSomeTraces(traces => {
             for (const span of traces[0]) {
               expect(span.error).to.equal(0)
             }
@@ -139,7 +139,7 @@ describe('Plugin', () => {
             res.end()
           })
 
-          const agentPromise = agent.use(traces => {
+          const agentPromise = agent.assertSomeTraces(traces => {
             for (const span of traces[0]) {
               expect(span.error).to.equal(0)
             }

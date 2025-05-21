@@ -44,7 +44,7 @@ describe('Plugin', () => {
               await app.listen(getListenOptions())
 
               await Promise.all([
-                agent.use(traces => {
+                agent.assertSomeTraces(traces => {
                   const spans = traces[0]
                   const tagNames = Object.keys(spans[0].meta)
                   expect(tagNames).to.all.not.match(/code_origin/)
@@ -83,7 +83,7 @@ describe('Plugin', () => {
                 await app.listen(getListenOptions())
 
                 await Promise.all([
-                  agent.use(traces => {
+                  agent.assertSomeTraces(traces => {
                     const spans = traces[0]
                     const tags = spans[0].meta
 
@@ -121,7 +121,7 @@ describe('Plugin', () => {
                 await app.listen(getListenOptions())
 
                 await Promise.all([
-                  agent.use(traces => {
+                  agent.assertSomeTraces(traces => {
                     const spans = traces[0]
                     const tags = spans[0].meta
 
@@ -152,7 +152,7 @@ describe('Plugin', () => {
                 await app.listen(getListenOptions())
 
                 await Promise.all([
-                  agent.use(traces => {
+                  agent.assertSomeTraces(traces => {
                     const spans = traces[0]
                     const tags = spans[0].meta
 
@@ -186,7 +186,7 @@ describe('Plugin', () => {
                 await app.listen(getListenOptions())
 
                 await Promise.all([
-                  agent.use(traces => {
+                  agent.assertSomeTraces(traces => {
                     const spans = traces[0]
                     const tags = spans[0].meta
 

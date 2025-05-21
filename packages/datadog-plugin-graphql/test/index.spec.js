@@ -690,7 +690,7 @@ describe('Plugin', () => {
         it('should not instrument schema resolvers multiple times', done => {
           const source = '{ hello(name: "world") }'
 
-          agent.use(() => { // skip first call
+          agent.assertSomeTraces(() => { // skip first call
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -808,15 +808,15 @@ describe('Plugin', () => {
 
           Promise
             .all([
-              agent.use(traces => {
+              agent.assertSomeTraces(traces => {
                 const spans = sort(traces[0])
                 expect(spans[0]).to.have.property('name', 'graphql.parse')
               }),
-              agent.use(traces => {
+              agent.assertSomeTraces(traces => {
                 const spans = sort(traces[0])
                 expect(spans[0]).to.have.property('name', 'graphql.validate')
               }),
-              agent.use(traces => {
+              agent.assertSomeTraces(traces => {
                 const spans = sort(traces[0])
                 expect(spans[0]).to.have.property('name', expectedSchema.server.opName)
                 expect(spans[1]).to.have.property('name', 'graphql.resolve')

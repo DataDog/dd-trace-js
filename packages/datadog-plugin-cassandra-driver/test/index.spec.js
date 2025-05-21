@@ -189,7 +189,7 @@ describe('Plugin', () => {
         })
 
         it('should be configured with the correct values', done => {
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('service', 'custom')
             done()
           })
