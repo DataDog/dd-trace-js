@@ -119,7 +119,7 @@ describe('Plugin', () => {
           let parentId
           let traceId
 
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             const span = traces[0][0]
 
             expect(span.resource.startsWith('sendMessage')).to.equal(true)
@@ -131,7 +131,7 @@ describe('Plugin', () => {
             traceId = span.trace_id.toString()
           })
 
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             const span = traces[0][0]
 
             expect(parentId).to.be.a('string')
@@ -158,7 +158,7 @@ describe('Plugin', () => {
           let parentId
           let traceId
 
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             const span = traces[0][0]
 
             expect(span.resource.startsWith('sendMessageBatch')).to.equal(true)
@@ -171,7 +171,7 @@ describe('Plugin', () => {
           })
 
           let batchChildSpans = 0
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             const span = traces[0][0]
 
             expect(parentId).to.be.a('string')
@@ -335,7 +335,7 @@ describe('Plugin', () => {
         it('should allow disabling a specific span kind of a service', (done) => {
           let total = 0
 
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             const span = traces[0][0]
 
             expect(span).to.include({
@@ -351,7 +351,7 @@ describe('Plugin', () => {
             total++
           }).catch(() => {}, { timeoutMs: 100 })
 
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             const span = traces[0][0]
 
             expect(span).to.include({
@@ -455,7 +455,7 @@ describe('Plugin', () => {
             if (err) return done(err)
 
             let produceSpanMeta = {}
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               const span = traces[0][0]
 
               if (span.resource.startsWith('sendMessage')) {
@@ -483,7 +483,7 @@ describe('Plugin', () => {
               if (err) return done(err)
 
               let consumeSpanMeta = {}
-              agent.use(traces => {
+              agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
 
                 if (span.name === 'aws.response') {
@@ -506,7 +506,7 @@ describe('Plugin', () => {
 
               let consumeSpanMeta = {}
               return new Promise((resolve, reject) => {
-                agent.use(traces => {
+                agent.assertSomeTraces(traces => {
                   const span = traces[0][0]
 
                   if (span.name === 'aws.request' && span.meta['aws.operation'] === 'receiveMessage') {
