@@ -33,6 +33,27 @@ const openAiBaseEmbeddingInfo = { base: 'https://api.openai.com', path: '/v1/emb
 
 const isDdTrace = iastFilter.isDdTrace
 
+function stubSingleEmbedding (langchainOpenaiOpenAiVersion) {
+  if (semver.satisfies(langchainOpenaiOpenAiVersion, '>=4.91.0')) {
+    stubCall({
+      ...openAiBaseEmbeddingInfo,
+      response: require('../../../../../datadog-plugin-langchain/test/fixtures/single-embedding.json')
+    })
+  } else {
+    stubCall({
+      ...openAiBaseEmbeddingInfo,
+      response: {
+        object: 'list',
+        data: [{
+          object: 'embedding',
+          index: 0,
+          embedding: Array(1536).fill(0)
+        }]
+      }
+    })
+  }
+}
+
 describe('integrations', () => {
   let langchainOpenai
   let langchainAnthropic
@@ -43,6 +64,7 @@ describe('integrations', () => {
   let langchainPrompts
   let langchainRunnables
   let tool
+  let MemoryVectorStore
 
   /**
    * In OpenAI 4.91.0, the default response format for embeddings was changed from `float` to `base64`.
@@ -103,7 +125,8 @@ describe('integrations', () => {
     withVersions('langchain', ['@langchain/core'], version => {
       describe('langchain', () => {
         beforeEach(() => {
-          langchainOpenai = require(`../../../../../../versions/@langchain/openai@${version}`).get()
+          langchainOpenai = require(`../../../../../../versions/langchain@${version}`)
+            .get('@langchain/openai')
           langchainAnthropic = require(`../../../../../../versions/@langchain/anthropic@${version}`).get()
           langchainCohere = require(`../../../../../../versions/@langchain/cohere@${version}`).get()
 
@@ -121,8 +144,12 @@ describe('integrations', () => {
             .get('@langchain/core/tools')
             .tool
 
+          MemoryVectorStore = require(`../../../../../../versions/@langchain/core@${version}`)
+            .get('langchain/vectorstores/memory')
+            .MemoryVectorStore
+
           langchainOpenaiOpenAiVersion =
-            require(`../../../../../../versions/@langchain/openai@${version}`)
+            require(`../../../../../../versions/langchain@${version}`)
               .get('openai/version')
               .VERSION
         })
@@ -1152,7 +1179,7 @@ describe('integrations', () => {
         })
 
         describe('tools', () => {
-          it('traces a tool call', async function () {
+          it('submits a tool call span', async function () {
             if (!tool) this.skip()
 
             const add = tool(
@@ -1190,7 +1217,7 @@ describe('integrations', () => {
             await checkTraces
           })
 
-          it('traces a tool call with an error', async function () {
+          it('submits a tool call with an error', async function () {
             if (!tool) this.skip()
 
             const add = tool(
@@ -1233,6 +1260,101 @@ describe('integrations', () => {
             } catch {}
 
             await checkTraces
+          })
+        })
+
+        describe.only('vectorstores', () => {
+          let vectorstore
+
+          beforeEach(() => {
+            stubSingleEmbedding(langchainOpenaiOpenAiVersion)
+
+            const embeddings = new langchainOpenai.OpenAIEmbeddings()
+            vectorstore = new MemoryVectorStore(embeddings)
+
+            const document = {
+              pageContent: 'The powerhouse of the cell is the mitochondria',
+              metadata: { source: 'https://example.com' }
+            }
+
+            return vectorstore.addDocuments([document])
+          })
+
+          it('submits a retrieval span with a child embedding span for similaritySearch', async () => {
+            stubSingleEmbedding(langchainOpenaiOpenAiVersion)
+
+            const checkTraces = agent.assertSomeTraces(traces => {
+              const spans = traces[0] // first trace is the embedding call from the beforeEach
+
+              expect(spans).to.have.length(2)
+
+              const vectorstoreSpan = spans[0]
+
+              // first call was for the embedding span in the beforeEach
+              const retrievalSpanEvent = LLMObsSpanWriter.prototype.append.getCall(1).args[0]
+              const embeddingSpanEvent = LLMObsSpanWriter.prototype.append.getCall(2).args[0]
+
+              expect(embeddingSpanEvent.meta).to.have.property('span.kind', 'embedding')
+              expect(embeddingSpanEvent).to.have.property('parent_id', retrievalSpanEvent.span_id)
+
+              const expectedRetrievalEvent = expectedLLMObsNonLLMSpanEvent({
+                span: vectorstoreSpan,
+                spanKind: 'retrieval',
+                name: 'langchain.vectorstores.memory.MemoryVectorStore',
+                inputValue: 'Biology',
+                outputDocuments: [{
+                  text: 'The powerhouse of the cell is the mitochondria',
+                  name: 'https://example.com'
+                }],
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
+              })
+
+              expect(retrievalSpanEvent).to.deepEqualWithMockValues(expectedRetrievalEvent)
+            }, { spanResourceMatch: /langchain\.vectorstores\.memory\.MemoryVectorStore/ })
+
+            await Promise.all([
+              vectorstore.similaritySearch('Biology'),
+              checkTraces
+            ])
+          })
+
+          it('submits a retrieval span with a child embedding span for similaritySearchWithScore', async () => {
+            stubSingleEmbedding(langchainOpenaiOpenAiVersion)
+
+            const checkTraces = agent.assertSomeTraces(traces => {
+              const spans = traces[0] // first trace is the embedding call from the beforeEach
+
+              expect(spans).to.have.length(2)
+
+              const vectorstoreSpan = spans[0]
+
+              // first call was for the embedding span in the beforeEach
+              const retrievalSpanEvent = LLMObsSpanWriter.prototype.append.getCall(1).args[0]
+              const embeddingSpanEvent = LLMObsSpanWriter.prototype.append.getCall(2).args[0]
+
+              expect(embeddingSpanEvent.meta).to.have.property('span.kind', 'embedding')
+              expect(embeddingSpanEvent).to.have.property('parent_id', retrievalSpanEvent.span_id)
+
+              const expectedRetrievalEvent = expectedLLMObsNonLLMSpanEvent({
+                span: vectorstoreSpan,
+                spanKind: 'retrieval',
+                name: 'langchain.vectorstores.memory.MemoryVectorStore',
+                inputValue: 'Biology',
+                outputDocuments: [{
+                  text: 'The powerhouse of the cell is the mitochondria',
+                  name: 'https://example.com',
+                  score: 1
+                }],
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
+              })
+
+              expect(retrievalSpanEvent).to.deepEqualWithMockValues(expectedRetrievalEvent)
+            }, { spanResourceMatch: /langchain\.vectorstores\.memory\.MemoryVectorStore/ })
+
+            await Promise.all([
+              vectorstore.similaritySearchWithScore('Biology'),
+              checkTraces
+            ])
           })
         })
       })
