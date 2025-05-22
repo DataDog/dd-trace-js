@@ -262,6 +262,9 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
     expect(config).to.have.nested.property('appsec.apiSecurity.sampleDelay', 30)
     expect(config).to.have.nested.property('appsec.sca.enabled', null)
+    expect(config).to.have.nested.property('appsec.extendedHeadersCollection.enabled', false)
+    expect(config).to.have.nested.property('appsec.extendedHeadersCollection.redaction', true)
+    expect(config).to.have.nested.property('appsec.extendedHeadersCollection.maxHeaders', 50)
     expect(config).to.have.nested.property('remoteConfig.enabled', true)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 5)
     expect(config).to.have.nested.property('iast.enabled', false)
@@ -671,7 +674,7 @@ describe('Config', () => {
       { name: 'appsec.eventTracking.mode', value: 'extended', origin: 'env_var' },
       { name: 'appsec.extendedHeadersCollection.enabled', value: true, origin: 'env_var' },
       { name: 'appsec.extendedHeadersCollection.redaction', value: false, origin: 'env_var' },
-      { name: 'appsec.extendedHeadersCollection.maxHeaders', value: 42, origin: 'env_var' },
+      { name: 'appsec.extendedHeadersCollection.maxHeaders', value: '42', origin: 'env_var' },
       { name: 'appsec.obfuscatorKeyRegex', value: '.*', origin: 'env_var' },
       { name: 'appsec.obfuscatorValueRegex', value: '.*', origin: 'env_var' },
       { name: 'appsec.rateLimit', value: '42', origin: 'env_var' },

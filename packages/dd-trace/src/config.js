@@ -817,7 +817,8 @@ class Config {
       'appsec.extendedHeadersCollection.redaction',
       DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED
     )
-    this._setValue(env, 'appsec.extendedHeadersCollection.maxHeaders', DD_APPSEC_MAX_COLLECTED_HEADERS)
+    this._setValue(env, 'appsec.extendedHeadersCollection.maxHeaders', maybeInt(DD_APPSEC_MAX_COLLECTED_HEADERS))
+    this._envUnprocessed['appsec.extendedHeadersCollection.maxHeaders'] = DD_APPSEC_MAX_COLLECTED_HEADERS
     this._setString(env, 'appsec.obfuscatorKeyRegex', DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP)
     this._setString(env, 'appsec.obfuscatorValueRegex', DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP)
     this._setBoolean(env, 'appsec.rasp.enabled', DD_APPSEC_RASP_ENABLED)
