@@ -6,18 +6,42 @@ const shimmer = require('../../datadog-shimmer')
 const dc = require('dc-polyfill')
 const ch = dc.tracingChannel('apm:openai:request')
 
+const ORCHESTRION_V4_PACKAGE_SHIMS = [ // cjs only
+  {
+    file: 'resources/completions.js',
+    targetClass: 'Completions',
+    baseResource: 'completions',
+    methods: ['create'],
+    channelName: 'Completions_create'
+  }
+]
+
+for (const shim of ORCHESTRION_V4_PACKAGE_SHIMS) {
+  addHook({ name: 'openai', file: shim.file, versions: ['>=4'] }, exports => {
+    const targetPrototype = exports[shim.targetClass].prototype
+
+    for (const methodName of shim.methods) {
+      shimmer.wrap(targetPrototype, methodName, methodFn => function () {
+        const fullChannelName = `orchestrion:openai:${shim.channelName}`
+        const channel = dc.tracingChannel(fullChannelName)
+
+        const ctx = {
+          self: this, arguments
+        }
+
+        return channel.traceSync(methodFn, ctx, this, ...arguments)
+      })
+    }
+
+    return exports
+  })
+}
+
 const V4_PACKAGE_SHIMS = [
   {
     file: 'resources/chat/completions',
     targetClass: 'Completions',
     baseResource: 'chat.completions',
-    methods: ['create'],
-    streamedResponse: true
-  },
-  {
-    file: 'resources/completions',
-    targetClass: 'Completions',
-    baseResource: 'completions',
     methods: ['create'],
     streamedResponse: true
   },

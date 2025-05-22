@@ -51,4 +51,14 @@ instrumentations:
       class: Embeddings
     operator: traceSync
     channel_name: "Embeddings_constructor"
+  - module_name: "openai"
+    version_range: ">=4"
+    file_path: resources/completions.mjs
+    function_query:
+      name: create
+      type: method
+      kind: sync
+      class: Completions
+    operator: traceSync
+    channel_name: "Completions_create"
 `
