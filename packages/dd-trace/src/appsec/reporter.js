@@ -147,8 +147,10 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders) {
   // Basic collection
   if (!shouldCollectEventHeaders) return mandatoryCollectedHeaders
 
+  const responseHeaders = res.getHeaders()
+
   const requestEventCollectedHeaders = filterHeaders(req.headers, EVENT_HEADERS_MAP)
-  const responseEventCollectedHeaders = filterHeaders(res.getHeaders(), RESPONSE_HEADERS_MAP)
+  const responseEventCollectedHeaders = filterHeaders(responseHeaders, RESPONSE_HEADERS_MAP)
 
   if (!config.headersExtendedCollectionEnabled || config.headersRedaction) {
     // Standard collection
@@ -179,7 +181,7 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders) {
 
   const responseEventExtendedCollectedHeaders =
     filterExtendedHeaders(
-      res.getHeaders(),
+      responseHeaders,
       NON_EXTENDED_RESPONSE_HEADERS,
       RESPONSE_HEADER_TAG_PREFIX,
       responseExtendedHeadersAvailableCount
@@ -200,7 +202,7 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders) {
       requestHeadersCount - config.maxHeadersCollected
   }
 
-  const responseHeadersCount = Object.keys(res.getHeaders()).length
+  const responseHeadersCount = Object.keys(responseHeaders).length
   if (responseHeadersCount > config.maxHeadersCollected) {
     headersTags['_dd.appsec.response.header_collection.discarded'] =
       responseHeadersCount - config.maxHeadersCollected
