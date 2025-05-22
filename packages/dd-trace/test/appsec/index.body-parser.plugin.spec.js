@@ -90,7 +90,7 @@ withVersions('body-parser', 'body-parser', version => {
         expect(e.response.data).to.be.deep.equal(JSON.parse(json))
         expect(requestBody).not.to.be.called
 
-        await agent.use((traces) => {
+        await agent.assertSomeTraces((traces) => {
           const span = traces[0][0]
           expect(span.metrics['_dd.appsec.truncated.string_length']).to.equal(5000)
           expect(span.metrics['_dd.appsec.truncated.container_size']).to.equal(300)

@@ -116,7 +116,7 @@ describe('Hardcoded Secret Analyzer', () => {
 
       it('should detect vulnerability', (done) => {
         agent
-          .use(traces => {
+          .assertSomeTraces(traces => {
             expect(traces[0][0].meta['_dd.iast.json']).to.include('"HARDCODED_SECRET"')
           })
           .then(done)

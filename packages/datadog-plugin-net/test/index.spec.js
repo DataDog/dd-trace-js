@@ -186,7 +186,7 @@ describe('Plugin', () => {
         let error = null
 
         agent
-          .use(traces => {
+          .assertSomeTraces(traces => {
             expect(traces[0][0]).to.deep.include({
               name: 'tcp.connect',
               service: 'test',
