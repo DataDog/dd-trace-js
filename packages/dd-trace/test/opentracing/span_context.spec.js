@@ -115,24 +115,6 @@ describe('SpanContext', () => {
     })
   })
 
-  describe('toTraceIdBigInt()', () => {
-    it('should return the trace ID as BigInt', () => {
-      const ids = [
-        ['13835058055282163712', 13835058055282163712n],
-        ['10', 10n],
-        ['9007199254740991', 9007199254740991n]
-      ]
-
-      for (const [tid, expected] of ids) {
-        const spanContext = new SpanContext({
-          traceId: id(tid, 10)
-        })
-
-        expect(spanContext.toTraceIdBigInt()).to.equal(expected)
-      }
-    })
-  })
-
   describe('toSpanId()', () => {
     it('should return the span ID as string', () => {
       const spanContext = new SpanContext({
