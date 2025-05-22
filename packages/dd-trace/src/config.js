@@ -595,6 +595,9 @@ class Config {
     this._setValue(defaults, 'trace.aws.addSpanPointers', true)
     this._setValue(defaults, 'trace.dynamoDb.tablePrimaryKeys', undefined)
     this._setValue(defaults, 'trace.nativeSpanEvents', false)
+    this._setValue(defaults, 'instrumentationSource', 'unknown')
+    this._setValue(defaults, 'injectionForce', '')
+    this._setValue(defaults, 'DD_INJECTION_ENABLED', '')
   }
 
   _applyLocalStableConfig () {
@@ -690,6 +693,8 @@ class Config {
       DD_IAST_TELEMETRY_VERBOSITY,
       DD_IAST_STACK_TRACE_ENABLED,
       DD_INJECTION_ENABLED,
+      DD_INSTRUMENTATION_SOURCE,
+      DD_INJECT_FORCE,
       DD_INSTRUMENTATION_TELEMETRY_ENABLED,
       DD_INSTRUMENTATION_CONFIG_ID,
       DD_LOGS_INJECTION,
@@ -875,6 +880,8 @@ class Config {
     this._setString(env, 'iast.telemetryVerbosity', DD_IAST_TELEMETRY_VERBOSITY)
     this._setBoolean(env, 'iast.stackTrace.enabled', DD_IAST_STACK_TRACE_ENABLED)
     this._setArray(env, 'injectionEnabled', DD_INJECTION_ENABLED)
+    this._setString(env, 'instrumentationSource', DD_INSTRUMENTATION_SOURCE)
+    this._setString(defaults, 'injectionForce', DD_INJECT_FORCE)
     this._setBoolean(env, 'isAzureFunction', getIsAzureFunction())
     this._setBoolean(env, 'isGCPFunction', getIsGCPFunction())
     this._setValue(env, 'langchain.spanCharLimit', maybeInt(DD_LANGCHAIN_SPAN_CHAR_LIMIT))
