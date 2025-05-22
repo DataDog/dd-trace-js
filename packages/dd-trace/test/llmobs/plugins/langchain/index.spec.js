@@ -1312,10 +1312,9 @@ describe('integrations', () => {
               expect(retrievalSpanEvent).to.deepEqualWithMockValues(expectedRetrievalEvent)
             }, { spanResourceMatch: /langchain\.vectorstores\.memory\.MemoryVectorStore/ })
 
-            await Promise.all([
-              vectorstore.similaritySearch('Biology'),
-              checkTraces
-            ])
+            await vectorstore.similaritySearch('Biology')
+
+            await checkTraces
           })
 
           it('submits a retrieval span with a child embedding span for similaritySearchWithScore', async () => {
@@ -1351,10 +1350,9 @@ describe('integrations', () => {
               expect(retrievalSpanEvent).to.deepEqualWithMockValues(expectedRetrievalEvent)
             }, { spanResourceMatch: /langchain\.vectorstores\.memory\.MemoryVectorStore/ })
 
-            await Promise.all([
-              vectorstore.similaritySearchWithScore('Biology'),
-              checkTraces
-            ])
+            await vectorstore.similaritySearchWithScore('Biology')
+
+            await checkTraces
           })
         })
       })
