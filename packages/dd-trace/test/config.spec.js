@@ -288,6 +288,9 @@ describe('Config', () => {
       { name: 'appsec.blockedTemplateJson', value: undefined, origin: 'default' },
       { name: 'appsec.enabled', value: undefined, origin: 'default' },
       { name: 'appsec.eventTracking.mode', value: 'identification', origin: 'default' },
+      { name: 'appsec.extendedHeadersCollection.enabled', value: false, origin: 'default' },
+      { name: 'appsec.extendedHeadersCollection.redaction', value: true, origin: 'default' },
+      { name: 'appsec.extendedHeadersCollection.maxHeaders', value: 50, origin: 'default' },
       {
         name: 'appsec.obfuscatorKeyRegex',
         // eslint-disable-next-line @stylistic/js/max-len
