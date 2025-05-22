@@ -1,0 +1,9 @@
+{
+  "video": false,
+  "screenshotOnRunFailure": false,
+  "pluginsFile": "cypress/plugins-old/index.js",
+  "supportFile": "cypress/support/e2e.js",
+  "integrationFolder": "cypress/e2e",
+  "defaultCommandTimeout": 100,
+  "nodeVersion": "system"
+}

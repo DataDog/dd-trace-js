@@ -126,9 +126,11 @@ jobs:
   integration-cypress:
     strategy:
       matrix:
-        version: [eol, latest]
-        # 10.2.0 is the minimum version we support
-        cypress-version: [10.2.0, latest]
+        version: [eol, oldest, latest]
+        # 6.7.0 is the minimum version we support in <=5
+        # 10.2.0 is the minimum version we support in >=6
+        # The logic to decide whether the tests run lives in integration-tests/cypress/cypress.spec.js
+        cypress-version: [6.7.0, 10.2.0, latest]
         module-type: ['commonJS', 'esm']
     runs-on: ubuntu-latest
     env:

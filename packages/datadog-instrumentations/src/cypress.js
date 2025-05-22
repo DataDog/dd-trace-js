@@ -4,5 +4,5 @@ const { addHook } = require('./helpers/instrument')
 // Cypress plugin does not patch any library.
 addHook({
   name: 'cypress',
-  versions: ['>=10.2.0']
+  versions: ['>=6.7.0']
 }, lib => lib)
