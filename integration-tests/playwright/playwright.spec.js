@@ -48,10 +48,11 @@ const {
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
+const { DD_MAJOR } = require('../../version')
 
 const NUM_RETRIES_EFD = 3
 
-const versions = ['1.38.0', 'latest']
+const versions = [DD_MAJOR >= 6 ? '1.38.0' : '1.18.0', 'latest']
 
 versions.forEach((version) => {
   describe(`playwright@${version}`, () => {
