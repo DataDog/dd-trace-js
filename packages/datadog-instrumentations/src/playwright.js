@@ -1,5 +1,3 @@
-const satisfies = require('semifies')
-
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const {
@@ -8,7 +6,7 @@ const {
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE
 } = require('../../dd-trace/src/plugins/util/test')
 const log = require('../../dd-trace/src/log')
-const { version: ddTraceVersion } = require('../../../package.json')
+const { DD_MAJOR } = require('../../../version')
 
 const testStartCh = channel('ci:playwright:test:start')
 const testFinishCh = channel('ci:playwright:test:finish')
@@ -56,9 +54,6 @@ let testManagementAttemptToFixRetries = 0
 let testManagementTests = {}
 const quarantinedOrDisabledTestsAttemptToFix = []
 let rootDir = ''
-// TODO - remove this once we end support for <1.38.0 in version 5 of the tracer
-const MINIMUM_SUPPORTED_VERSION_RANGE_V6 = '>=1.38.0'
-const MAXIMUM_SUPPORTED_VERSION_RANGE_V5 = '<1.38.0'
 
 function getTestProperties (test) {
   const testName = getTestFullname(test)
@@ -423,10 +418,7 @@ function dispatcherRunWrapperNew (run) {
   }
 }
 
-function dispatcherHook (dispatcherExport, playwrightVersion) {
-  if (satisfies(ddTraceVersion, '>=6.0.0') && satisfies(playwrightVersion, MAXIMUM_SUPPORTED_VERSION_RANGE_V5)) {
-    return dispatcherExport
-  }
+function dispatcherHook (dispatcherExport) {
   shimmer.wrap(dispatcherExport.Dispatcher.prototype, 'run', dispatcherRunWrapper)
   shimmer.wrap(dispatcherExport.Dispatcher.prototype, '_createWorker', createWorker => function () {
     const dispatcher = this
@@ -460,10 +452,7 @@ function dispatcherHook (dispatcherExport, playwrightVersion) {
   return dispatcherExport
 }
 
-function dispatcherHookNew (dispatcherExport, runWrapper, playwrightVersion) {
-  if (satisfies(ddTraceVersion, '>=6.0.0') && satisfies(playwrightVersion, MAXIMUM_SUPPORTED_VERSION_RANGE_V5)) {
-    return dispatcherExport
-  }
+function dispatcherHookNew (dispatcherExport, runWrapper) {
   shimmer.wrap(dispatcherExport.Dispatcher.prototype, 'run', runWrapper)
   shimmer.wrap(dispatcherExport.Dispatcher.prototype, '_createWorker', createWorker => function () {
     const dispatcher = this
@@ -510,9 +499,6 @@ function dispatcherHookNew (dispatcherExport, runWrapper, playwrightVersion) {
 }
 
 function runnerHook (runnerExport, playwrightVersion) {
-  if (satisfies(ddTraceVersion, '>=6.0.0') && satisfies(playwrightVersion, MAXIMUM_SUPPORTED_VERSION_RANGE_V5)) {
-    return runnerExport
-  }
   shimmer.wrap(runnerExport.Runner.prototype, 'runAllTests', runAllTests => async function () {
     let onDone
 
@@ -542,7 +528,7 @@ function runnerHook (runnerExport, playwrightVersion) {
       log.error('Playwright session start error', e)
     }
 
-    if (isKnownTestsEnabled && satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_V6)) {
+    if (isKnownTestsEnabled) {
       try {
         const { err, knownTests: receivedKnownTests } = await getChannelPromise(knownTestsCh)
         if (!err) {
@@ -558,7 +544,7 @@ function runnerHook (runnerExport, playwrightVersion) {
       }
     }
 
-    if (isTestManagementTestsEnabled && satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_V6)) {
+    if (isTestManagementTestsEnabled) {
       try {
         const { err, testManagementTests: receivedTestManagementTests } = await getChannelPromise(testManagementTestsCh)
         if (!err) {
@@ -644,37 +630,38 @@ function runnerHook (runnerExport, playwrightVersion) {
   return runnerExport
 }
 
-addHook({
-  name: '@playwright/test',
-  file: 'lib/runner.js',
-  versions: ['>=1.18.0 <=1.30.0']
-}, runnerHook)
+if (DD_MAJOR < 6) { // <1.38.0 is only supported up to version 5
+  addHook({
+    name: '@playwright/test',
+    file: 'lib/runner.js',
+    versions: ['>=1.18.0 <=1.30.0']
+  }, runnerHook)
 
-addHook({
-  name: '@playwright/test',
-  file: 'lib/dispatcher.js',
-  versions: ['>=1.18.0 <1.30.0']
-}, dispatcherHook)
+  addHook({
+    name: '@playwright/test',
+    file: 'lib/dispatcher.js',
+    versions: ['>=1.18.0 <1.30.0']
+  }, dispatcherHook)
 
-addHook({
-  name: '@playwright/test',
-  file: 'lib/dispatcher.js',
-  versions: ['>=1.30.0 <1.31.0']
-}, (dispatcher, version) => dispatcherHookNew(dispatcher, dispatcherRunWrapper, version))
+  addHook({
+    name: '@playwright/test',
+    file: 'lib/dispatcher.js',
+    versions: ['>=1.30.0 <1.31.0']
+  }, (dispatcher) => dispatcherHookNew(dispatcher, dispatcherRunWrapper))
 
-addHook({
-  name: '@playwright/test',
-  file: 'lib/runner/dispatcher.js',
-  versions: ['>=1.31.0 <1.38.0']
-}, (dispatcher, version) => dispatcherHookNew(dispatcher, dispatcherRunWrapperNew, version))
+  addHook({
+    name: '@playwright/test',
+    file: 'lib/runner/dispatcher.js',
+    versions: ['>=1.31.0 <1.38.0']
+  }, (dispatcher) => dispatcherHookNew(dispatcher, dispatcherRunWrapperNew))
 
-addHook({
-  name: '@playwright/test',
-  file: 'lib/runner/runner.js',
-  versions: ['>=1.31.0 <1.38.0']
-}, runnerHook)
+  addHook({
+    name: '@playwright/test',
+    file: 'lib/runner/runner.js',
+    versions: ['>=1.31.0 <1.38.0']
+  }, runnerHook)
+}
 
-// From >=1.38.0
 addHook({
   name: 'playwright',
   file: 'lib/runner/runner.js',
@@ -687,11 +674,10 @@ addHook({
   versions: ['>=1.38.0']
 }, (dispatcher, version) => dispatcherHookNew(dispatcher, dispatcherRunWrapperNew, version))
 
-// Hook used for early flake detection. EFD only works from >=1.38.0
 addHook({
   name: 'playwright',
   file: 'lib/common/suiteUtils.js',
-  versions: [MINIMUM_SUPPORTED_VERSION_RANGE_V6]
+  versions: ['>=1.38.0']
 }, suiteUtilsPackage => {
   // We grab `applyRepeatEachIndex` to use it later
   // `applyRepeatEachIndex` needs to be applied to a cloned suite
@@ -699,11 +685,10 @@ addHook({
   return suiteUtilsPackage
 })
 
-// Hook used for early flake detection. EFD only works from >=1.38.0
 addHook({
   name: 'playwright',
   file: 'lib/runner/loadUtils.js',
-  versions: [MINIMUM_SUPPORTED_VERSION_RANGE_V6]
+  versions: ['>=1.38.0']
 }, (loadUtilsPackage) => {
   const oldCreateRootSuite = loadUtilsPackage.createRootSuite
 
