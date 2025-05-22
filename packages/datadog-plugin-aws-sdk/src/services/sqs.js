@@ -99,10 +99,14 @@ class Sqs extends BaseAwsSdkPlugin {
       queueName = params.QueueUrl.split('/')[params.QueueUrl.split('/').length - 1]
     }
 
+    const hostname = `sqs.${this.activeSpan._spanContext._tags.region}.amazonaws.com`
+
     Object.assign(tags, {
       'resource.name': `${operation} ${params.QueueName || params.QueueUrl}`,
       'aws.sqs.queue_name': params.QueueName || params.QueueUrl,
-      queuename: queueName
+      queuename: queueName,
+      hostname,
+      'peer.service': hostname
     })
 
     switch (operation) {
