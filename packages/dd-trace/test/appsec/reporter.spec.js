@@ -103,12 +103,12 @@ describe('reporter', () => {
         'user-agent': 42,
         secret: 'password',
         'x-forwarded-for': '10'
-      }, [
+      }, new Set([
         'host',
         'user-agent',
         'x-forwarded-for',
         'x-client-ip'
-      ], 'prefix.', 3)
+      ]), 'prefix.', 3)
 
       expect(result).to.deep.equal({
         'prefix.content-digest': 'foo',
@@ -682,12 +682,12 @@ describe('reporter', () => {
       'x-real-ip',
       'true-client-ip',
       'x-client-ip',
-      'x-forwarded',
       'forwarded-for',
       'x-cluster-client-ip',
       'fastly-client-ip',
       'cf-connecting-ip',
       'cf-connecting-ipv6',
+      'x-forwarded',
       'forwarded',
       'via',
       'content-length',

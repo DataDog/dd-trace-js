@@ -45,17 +45,6 @@ const contentHeaderList = [
   'content-language'
 ]
 
-const EVENT_HEADERS_MAP = mapHeaderAndTags([
-  ...ipHeaderList,
-  'x-forwarded',
-  'forwarded',
-  'via',
-  ...contentHeaderList,
-  'host',
-  'accept-encoding',
-  'accept-language'
-], REQUEST_HEADER_TAG_PREFIX)
-
 const identificationHeaders = [
   'x-amzn-trace-id',
   'cloudfront-viewer-ja3-fingerprint',
@@ -67,15 +56,33 @@ const identificationHeaders = [
   'akamai-user-risk'
 ]
 
-// these request headers are always collected - it breaks the expected spec orders
-const REQUEST_HEADERS_MAP = mapHeaderAndTags([
+const eventHeadersList = [
+  ...ipHeaderList,
+  'x-forwarded',
+  'forwarded',
+  'via',
+  ...contentHeaderList,
+  'host',
+  'accept-encoding',
+  'accept-language'
+]
+
+const requestHeadersList = [
   'content-type',
   'user-agent',
   'accept',
   ...identificationHeaders
-], REQUEST_HEADER_TAG_PREFIX)
+]
+
+// these request headers are always collected - it breaks the expected spec orders
+const REQUEST_HEADERS_MAP = mapHeaderAndTags(requestHeadersList, REQUEST_HEADER_TAG_PREFIX)
+
+const EVENT_HEADERS_MAP = mapHeaderAndTags(eventHeadersList, REQUEST_HEADER_TAG_PREFIX)
 
 const RESPONSE_HEADERS_MAP = mapHeaderAndTags(contentHeaderList, RESPONSE_HEADER_TAG_PREFIX)
+
+const NON_EXTENDED_REQUEST_HEADERS = new Set(requestHeadersList.concat(eventHeadersList))
+const NON_EXTENDED_RESPONSE_HEADERS = new Set(contentHeaderList)
 
 function init (_config) {
   limiter = new Limiter(_config.rateLimit)
@@ -121,14 +128,10 @@ function filterExtendedHeaders (headers, excludedHeaderNames, tagPrefix, limit =
 
   if (!headers) return result
 
-  const headerNames = Object.entries(headers)
-  const maxHeaderCount = Math.min(headerNames.length, limit)
-
-  for (let i = 0; i < maxHeaderCount; i++) {
-    const headerName = headerNames[i]
-    const headerValue = headers[headerName]
-
-    if (!EXCLUDED_REQUEST_HEADERS.has(headerName)) {
+  let counter = 0
+  for (const [headerName, headerValue] of Object.entries(headers)) {
+    if (counter >= limit) break
+    if (!excludedHeaderNames.has(headerName)) {
       result[getHeaderTag(tagPrefix, headerName)] = '' + headerValue
       counter++
     }
@@ -165,7 +168,7 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders) {
   const requestEventExtendedCollectedHeaders =
     filterExtendedHeaders(
       req.headers,
-      [...REQUEST_HEADERS_MAP.keys()].concat([...EVENT_HEADERS_MAP.keys()]),
+      NON_EXTENDED_REQUEST_HEADERS,
       REQUEST_HEADER_TAG_PREFIX,
       requestExtendedHeadersAvailableCount
     )
@@ -177,7 +180,7 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders) {
   const responseEventExtendedCollectedHeaders =
     filterExtendedHeaders(
       res.getHeaders(),
-      [...RESPONSE_HEADERS_MAP.keys()],
+      NON_EXTENDED_RESPONSE_HEADERS,
       RESPONSE_HEADER_TAG_PREFIX,
       responseExtendedHeadersAvailableCount
     )
