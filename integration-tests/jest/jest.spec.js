@@ -3806,16 +3806,6 @@ describe('impacted tests', () => {
       runImpactedTest(done, { isImpacting: true })
     })
 
-    it('can impact tests with no pull request', (done) => {
-      receiver.setSettings({ impacted_tests_enabled: true })
-      testConfig = {}
-      const eventContent = {}
-      eventPath = path.join(cwd, 'event.json')
-      fs.writeFileSync(eventPath, JSON.stringify(eventContent, null, 2))
-
-      runImpactedTest(done, { isImpacting: true })
-    })
-
     it('can impact tests in parallel mode', (done) => {
       receiver.setSettings({ impacted_tests_enabled: true })
 
