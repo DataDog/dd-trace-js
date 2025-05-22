@@ -3,10 +3,10 @@
 const LangChainHandler = require('./default')
 
 class LangChainChainHandler extends LangChainHandler {
-  getSpanStartTags (ctx) {
+  getSpanStartTags (ctx, provider, span) {
     const tags = {}
 
-    if (!this.isPromptCompletionSampled()) return tags
+    if (!this.isPromptCompletionSampled(span)) return tags
 
     let inputs = ctx.args?.[0]
     inputs = Array.isArray(inputs) ? inputs : [inputs]
@@ -28,10 +28,10 @@ class LangChainChainHandler extends LangChainHandler {
     return tags
   }
 
-  getSpanEndTags (ctx) {
+  getSpanEndTags (ctx, span) {
     const tags = {}
 
-    if (!this.isPromptCompletionSampled()) return tags
+    if (!this.isPromptCompletionSampled(span)) return tags
 
     let outputs = ctx.result
     outputs = Array.isArray(outputs) ? outputs : [outputs]
