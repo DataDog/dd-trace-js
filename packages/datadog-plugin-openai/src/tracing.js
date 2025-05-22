@@ -326,7 +326,7 @@ class OpenAiTracingPlugin extends TracingPlugin {
   sendLog (methodName, span, tags, openaiStore, error) {
     if (!openaiStore) return
     if (!Object.keys(openaiStore).length) return
-    if (!this.sampler.isSampled(span.context())) return
+    if (!this.sampler.isSampled(span)) return
 
     const log = {
       status: error ? 'error' : 'info',
