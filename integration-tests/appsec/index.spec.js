@@ -62,10 +62,14 @@ describe('RASP', () => {
     })
   }
 
-  async function assertBodyReported (expectedBody) {
+  async function assertBodyReported (expectedBody, truncated) {
     await agent.assertMessageReceived(({ headers, payload }) => {
       assert.property(payload[0][0].meta_struct, 'http.request.body')
       assert.deepStrictEqual(msgpack.decode(payload[0][0].meta_struct['http.request.body']), expectedBody)
+
+      if (truncated) {
+        assert.property(payload[0][0].meta, '_dd.appsec.rasp.request_body_size.exceeded')
+      }
     })
   }
 
@@ -362,6 +366,29 @@ describe('RASP', () => {
         }
 
         await assertBodyReported(requestBody)
+      }
+    })
+
+    it('should report truncated body request', async () => {
+      const requestBody = {
+        host: 'localhost/ifconfig.pro',
+        objectWithLotsOfNodes: Object.fromEntries([...Array(300).keys()].map(i => [i, i])),
+        arr: Array(300).fill('foo')
+      }
+      try {
+        await axios.post('/ssrf', requestBody)
+      } catch (e) {
+        if (!e.response) {
+          throw e
+        }
+
+        const expectedReportedBody = {
+          host: 'localhost/ifconfig.pro',
+          objectWithLotsOfNodes: Object.fromEntries([...Array(256).keys()].map(i => [i, i])),
+          arr: Array(256).fill('foo')
+        }
+
+        await assertBodyReported(expectedReportedBody, true)
       }
     })
   })
