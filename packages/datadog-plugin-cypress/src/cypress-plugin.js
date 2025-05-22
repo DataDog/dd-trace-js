@@ -44,7 +44,8 @@ const {
   TEST_RETRY_REASON_TYPES,
   getPullRequestDiff,
   getModifiedTestsFromDiff,
-  TEST_IS_MODIFIED
+  TEST_IS_MODIFIED,
+  getPullRequestBaseBranch
 } = require('../../dd-trace/src/plugins/util/test')
 const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
@@ -72,7 +73,8 @@ const {
   CI_WORKSPACE_PATH,
   GIT_COMMIT_MESSAGE,
   GIT_PULL_REQUEST_BASE_BRANCH_SHA,
-  GIT_COMMIT_HEAD_SHA
+  GIT_COMMIT_HEAD_SHA,
+  GIT_PULL_REQUEST_BASE_BRANCH
 } = require('../../dd-trace/src/plugins/util/tags')
 const {
   OS_VERSION,
@@ -183,12 +185,15 @@ function getTestManagementTests (tracer, testConfiguration) {
 function getModifiedTests (testEnvironmentMetadata) {
   return new Promise(resolve => {
     const {
-      [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseSha,
+      [GIT_PULL_REQUEST_BASE_BRANCH]: pullRequestBaseBranch,
+      [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseBranchSha,
       [GIT_COMMIT_HEAD_SHA]: commitHeadSha
     } = testEnvironmentMetadata
 
-    if (pullRequestBaseSha && commitHeadSha) {
-      const diff = getPullRequestDiff(pullRequestBaseSha, commitHeadSha)
+    const baseBranchSha = pullRequestBaseBranchSha || getPullRequestBaseBranch(pullRequestBaseBranch)
+
+    if (baseBranchSha) {
+      const diff = getPullRequestDiff(baseBranchSha, commitHeadSha)
       const modifiedTests = getModifiedTestsFromDiff(diff)
       if (modifiedTests) {
         return resolve({ err: null, modifiedTests })

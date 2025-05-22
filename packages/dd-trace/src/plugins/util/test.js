@@ -6,7 +6,16 @@ const log = require('../../log')
 const istanbul = require('istanbul-lib-coverage')
 const ignore = require('ignore')
 
-const { getGitMetadata, getGitDiff } = require('./git')
+const {
+  getGitMetadata,
+  getGitDiff,
+  getGitRemoteName,
+  getSourceBranch,
+  checkAndFetchBranch,
+  getLocalBranches,
+  getMergeBase,
+  getCounts
+} = require('./git')
 const { getUserProviderGitMetadata, validateGitRepositoryUrl, validateGitCommitSha } = require('./user-provided-git')
 const { getCIMetadata } = require('./ci')
 const { getRuntimeAndOSMetadata } = require('./env')
@@ -149,6 +158,10 @@ const TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED = 'test.test_management.attempt_to_f
 const ATTEMPT_TO_FIX_STRING = "Retried by Datadog's Test Management"
 const ATTEMPT_TEST_NAME_REGEX = new RegExp(ATTEMPT_TO_FIX_STRING + ' \\(#\\d+\\): ', 'g')
 
+// Impacted tests
+const POSSIBLE_BASE_BRANCHES = ['main', 'master', 'preprod', 'prod', 'dev', 'development', 'trunk']
+const BASE_LIKE_BRANCH_FILTER = /^(main|master|preprod|prod|dev|development|trunk|release\/.*|hotfix\/.*)$/g
+
 module.exports = {
   TEST_CODE_OWNERS,
   TEST_SESSION_NAME,
@@ -255,6 +268,7 @@ module.exports = {
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   getLibraryCapabilitiesTags,
   getPullRequestDiff,
+  getPullRequestBaseBranch,
   getModifiedTestsFromDiff,
   isModifiedTest
 }
@@ -807,8 +821,77 @@ function getLibraryCapabilitiesTags (testFramework, isParallel) {
   }
 }
 
+function getPullRequestBaseBranch (pullRequestBaseBranch) {
+  const remoteName = getGitRemoteName()
+
+  const sourceBranch = getSourceBranch()
+  const shortBranchName = sourceBranch.replace(new RegExp(`^${remoteName}/`), '')
+  if (BASE_LIKE_BRANCH_FILTER.test(shortBranchName)) {
+    return null
+  }
+  // TODO: We will get the default branch name from the backend in the future.
+  const defaultBranch = 'main'
+
+  const candidatesBranches = []
+  if (pullRequestBaseBranch) {
+    candidatesBranches.push(pullRequestBaseBranch)
+  } else {
+    for (const branch of POSSIBLE_BASE_BRANCHES) {
+      checkAndFetchBranch(branch, remoteName)
+    }
+
+    const localBranches = getLocalBranches(remoteName)
+    for (const branch of localBranches) {
+      if (branch !== sourceBranch && BASE_LIKE_BRANCH_FILTER.test(branch)) {
+        candidatesBranches.push(branch)
+      }
+    }
+  }
+
+  if (candidatesBranches.length === 1) {
+    return getMergeBase(candidatesBranches[0], sourceBranch)
+  }
+
+  const metrics = {}
+  for (const candidate of candidatesBranches) {
+    // Find common ancestor
+    const baseSha = getMergeBase(candidate, sourceBranch)
+    if (!baseSha) {
+      continue
+    }
+    // Count commits ahead/behind
+    const counts = getCounts(candidate, sourceBranch)
+    if (!counts) {
+      continue
+    }
+    const behind = counts.behind
+    const ahead = counts.ahead
+    metrics[candidate] = {
+      behind,
+      ahead,
+      baseSha
+    }
+  }
+
+  if (Object.keys(metrics).length === 0) {
+    return null
+  }
+  // Find branch with smallest "ahead" value, preferring default branch on tie
+  let bestBranch = null
+  let bestScore = [Infinity, 1] // [ahead, is_not_default]
+  for (const branch of Object.keys(metrics)) {
+    const isDefault = branch === defaultBranch || branch === `${remoteName}/${defaultBranch}` ? 0 : 1
+    const score = [metrics[branch].ahead, isDefault]
+    if (score < bestScore) {
+      bestScore = score
+      bestBranch = branch
+    }
+  }
+  return bestBranch ? metrics[bestBranch].baseSha : null
+}
+
 function getPullRequestDiff (baseCommit, targetCommit) {
-  if (!baseCommit || !targetCommit) {
+  if (!baseCommit) {
     return
   }
   return getGitDiff(baseCommit, targetCommit)

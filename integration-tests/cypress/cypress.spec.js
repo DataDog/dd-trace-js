@@ -2401,7 +2401,7 @@ describe('impacted test', () => {
               })
             } else {
               impactedTests.forEach(test => {
-                assert.notPropertyVal(test.meta, TEST_IS_MODIFIED)
+                assert.notProperty(test.meta, TEST_IS_MODIFIED)
               })
             }
 
@@ -2478,7 +2478,7 @@ describe('impacted test', () => {
         )
       })
 
-      it('can not impact tests with git diff with no base sha', (done) => {
+      it('can impact tests with no base sha', (done) => {
         receiver.setSettings({ impacted_tests_enabled: true })
         const eventContent = {
           pull_request: {
@@ -2495,10 +2495,10 @@ describe('impacted test', () => {
         eventPath = path.join(cwd, 'event.json')
         fs.writeFileSync(eventPath, JSON.stringify(eventContent, null, 2))
 
-        runImpactedTest(done, { isImpacting: false })
+        runImpactedTest(done, { isImpacting: true })
       })
 
-      it('can not impact tests with git diff with no head sha', (done) => {
+      it('can impact tests with no head sha', (done) => {
         receiver.setSettings({ impacted_tests_enabled: true })
         const eventContent = {
           pull_request: {
@@ -2515,7 +2515,17 @@ describe('impacted test', () => {
         eventPath = path.join(cwd, 'event.json')
         fs.writeFileSync(eventPath, JSON.stringify(eventContent, null, 2))
 
-        runImpactedTest(done, { isImpacting: false })
+        runImpactedTest(done, { isImpacting: true })
+      })
+
+      it('can impact tests with no pull request', (done) => {
+        receiver.setSettings({ impacted_tests_enabled: true })
+        testConfig = {}
+        const eventContent = {}
+        eventPath = path.join(cwd, 'event.json')
+        fs.writeFileSync(eventPath, JSON.stringify(eventContent, null, 2))
+
+        runImpactedTest(done, { isImpacting: true })
       })
 
       it('can impact tests in and activate EFD if modified (no known tests)', (done) => {

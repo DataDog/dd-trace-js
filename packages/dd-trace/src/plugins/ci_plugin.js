@@ -30,7 +30,8 @@ const {
   DI_DEBUG_ERROR_LINE_SUFFIX,
   getLibraryCapabilitiesTags,
   getPullRequestDiff,
-  getModifiedTestsFromDiff
+  getModifiedTestsFromDiff,
+  getPullRequestBaseBranch
 } = require('./util/test')
 const Plugin = require('./plugin')
 const { COMPONENT } = require('../constants')
@@ -49,7 +50,8 @@ const {
   CI_WORKSPACE_PATH,
   GIT_COMMIT_MESSAGE,
   GIT_PULL_REQUEST_BASE_BRANCH_SHA,
-  GIT_COMMIT_HEAD_SHA
+  GIT_COMMIT_HEAD_SHA,
+  GIT_PULL_REQUEST_BASE_BRANCH
 } = require('./util/tags')
 const { OS_VERSION, OS_PLATFORM, OS_ARCHITECTURE, RUNTIME_NAME, RUNTIME_VERSION } = require('./util/env')
 const getDiClient = require('../ci-visibility/dynamic-instrumentation')
@@ -201,12 +203,15 @@ module.exports = class CiPlugin extends Plugin {
 
     this.addSub(`ci:${this.constructor.id}:modified-tests`, ({ onDone }) => {
       const {
-        [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseSha,
+        [GIT_PULL_REQUEST_BASE_BRANCH]: pullRequestBaseBranch,
+        [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseBranchSha,
         [GIT_COMMIT_HEAD_SHA]: commitHeadSha
       } = this.testEnvironmentMetadata
 
-      if (pullRequestBaseSha && commitHeadSha) {
-        const diff = getPullRequestDiff(pullRequestBaseSha, commitHeadSha)
+      const baseBranchSha = pullRequestBaseBranchSha || getPullRequestBaseBranch(pullRequestBaseBranch)
+
+      if (baseBranchSha) {
+        const diff = getPullRequestDiff(baseBranchSha, commitHeadSha)
         const modifiedTests = getModifiedTestsFromDiff(diff)
         if (modifiedTests) {
           return onDone({ err: null, modifiedTests })
