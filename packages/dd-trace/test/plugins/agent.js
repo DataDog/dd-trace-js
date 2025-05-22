@@ -276,7 +276,14 @@ function runCallbackAgainstTraces (callback, options, handlers) {
 }
 
 module.exports = {
-  // Load the plugin on the tracer with an optional config and start a mock agent.
+  /**
+   * Load the plugin on the tracer with an optional config and start a mock agent.
+   *
+   * @param {String|Array<String>} pluginName - Name or list of names of plugins to load
+   * @param {Object} config
+   * @param {Object} tracerConfig
+   * @returns Promise<void>
+   */
   async load (pluginName, config, tracerConfig = {}) {
     tracer = require('../..')
     agent = express()
@@ -337,7 +344,7 @@ module.exports = {
 
     server.on('connection', socket => sockets.push(socket))
 
-    const promise = new Promise((resolve, reject) => {
+    const promise = new Promise((resolve, _reject) => {
       listener = server.listen(0, () => {
         const port = listener.address().port
 
@@ -382,14 +389,20 @@ module.exports = {
     }
   },
 
-  // Register handler to be executed each agent call, multiple times
+  /**
+   * Register handler to be executed each agent call, multiple times
+   * @param {Function} handler
+   */
   subscribe (handler) {
     traceHandlers.add({ handler }) // TODO: SHOULD BE .add(handler) SO WE CAN DELETE
   },
 
-  // Remove a handler
+  /**
+   * Remove a handler (TODO: THIS DOES NOTHING)
+   * @param {Function} handler
+   */
   unsubscribe (handler) {
-    traceHandlers.delete(handler) // TODO: THIS DOES NOTHING
+    traceHandlers.delete(handler)
   },
 
   /**
@@ -422,9 +435,7 @@ module.exports = {
   /**
    * Same as assertSomeTraces() but only provides the first span (traces[0][0])
    * This callback gets executed once for every payload received by the agent.
-   */
-  /**
-   *
+
    * @param {testAssertionSpanCallback} callback - runs once per agent payload
    * @param {Object} options
    * @returns Promise
@@ -442,13 +453,21 @@ module.exports = {
     return runCallbackAgainstTraces(callback, options, statsHandlers)
   },
 
-  // Unregister any outstanding expectation callbacks.
+  /**
+   * Unregister any outstanding expectation callbacks.
+   */
   reset () {
     traceHandlers.clear()
     statsHandlers.clear()
   },
 
-  // Stop the mock agent, reset all expectations and wipe the require cache.
+  /**
+   * Stop the mock agent, reset all expectations and wipe the require cache.
+   * @param {Object} opts
+   * @param {boolean} opts.ritmReset - If true, resets the Require In The MIddle cache, useful for TODO.
+   * @param {boolean} opts.wipe - If true, wipes the tracer and non-native modules from the require cache.
+   * @returns
+   */
   close (opts = {}) {
     // Allow close to be called idempotent
     if (listener === null) {
