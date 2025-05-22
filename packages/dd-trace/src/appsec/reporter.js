@@ -121,10 +121,14 @@ function filterExtendedHeaders (headers, excludedHeaderNames, tagPrefix, limit =
 
   if (!headers) return result
 
-  let counter = 0
-  for (const [headerName, headerValue] of Object.entries(headers)) {
-    if (counter >= limit) break
-    if (!excludedHeaderNames.includes(headerName)) {
+  const headerNames = Object.entries(headers)
+  const maxHeaderCount = Math.min(headerNames.length, limit)
+
+  for (let i = 0; i < maxHeaderCount; i++) {
+    const headerName = headerNames[i]
+    const headerValue = headers[headerName]
+
+    if (!EXCLUDED_REQUEST_HEADERS.has(headerName)) {
       result[getHeaderTag(tagPrefix, headerName)] = '' + headerValue
       counter++
     }
