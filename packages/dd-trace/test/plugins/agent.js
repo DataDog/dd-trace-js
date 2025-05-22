@@ -234,36 +234,37 @@ let availableEndpoints = DEFAULT_AVAILABLE_ENDPOINTS
  * @param {Set} [handlers] - Set of handlers to add the callback to.
  * @returns {Promise<void>} A promise resolving if expectations are met
  */
-function runCallback (callback, options, handlers) {
-  const deferred = {}
-  const promise = new Promise((resolve, reject) => {
-    deferred.resolve = resolve
-    deferred.reject = reject
+function runCallbackAgainstTraces (callback, options, handlers) {
+  let error
+
+  let resolve
+  let reject
+  const promise = new Promise((res, rej) => {
+    resolve = res
+    reject = rej
   })
 
-  const timeoutMs = options !== null && typeof options === 'object' && options.timeoutMs ? options.timeoutMs : 1000
+  const rejectionTimeout = setTimeout(() => {
+    if (error) reject(error)
+  }, options?.timeoutMs || 1000)
 
-  const timeout = setTimeout(() => {
-    if (error) {
-      deferred.reject(error)
-    }
-  }, timeoutMs)
-
-  let error
-  const handlerPayload = { handler, spanResourceMatch: options && options.spanResourceMatch }
+  const handlerPayload = {
+    handler,
+    spanResourceMatch: options?.spanResourceMatch
+  }
 
   function handler () {
     try {
       const result = callback.apply(null, arguments)
       handlers.delete(handlerPayload)
-      clearTimeout(timeout)
-      deferred.resolve(result)
+      clearTimeout(rejectionTimeout)
+      resolve(result)
     } catch (e) {
-      if (options && options.rejectFirst) {
-        clearTimeout(timeout)
-        deferred.reject(e)
+      if (options?.rejectFirst) {
+        clearTimeout(rejectionTimeout)
+        reject(e)
       } else {
-        error = error || e
+        error = error || e // if no spans match we report exactly the first mismatch error (which is unintuitive)
       }
     }
   }
@@ -383,26 +384,53 @@ module.exports = {
 
   // Register handler to be executed each agent call, multiple times
   subscribe (handler) {
-    traceHandlers.add({ handler })
+    traceHandlers.add({ handler }) // TODO: SHOULD BE .add(handler) SO WE CAN DELETE
   },
 
   // Remove a handler
   unsubscribe (handler) {
-    traceHandlers.delete(handler)
+    traceHandlers.delete(handler) // TODO: THIS DOES NOTHING
   },
 
   /**
-   * Register a callback with expectations to be run on every tracing payload sent to the agent.
+   * Callback for running test assertions against traces.
+   *
+   * @callback testAssertionTracesCallback
+   * @param {Array.<Array.<span>>} traces - For a given payload, an array of traces, each trace is an array of spans.
+   */
+
+  /**
+   * Callback for running test assertions against a span.
+   *
+   * @callback testAssertionSpanCallback
+   * @param {span} span - For a given payload, the first span of the first trace.
+   */
+
+  /**
+   * This callback gets executed once for every payload received by the agent.
+   * It calls the callback with a `traces` argument which is an array of traces.
+   * Each of these traces is an array of spans.
+   *
+   * @param {testAssertionTracesCallback} callback - runs once per agent payload
+   * @param {Object} options
+   * @returns Promise
    */
   assertSomeTraces (callback, options) {
-    return runCallback(callback, options, traceHandlers)
+    return runCallbackAgainstTraces(callback, options, traceHandlers)
   },
 
   /**
-   * Same as assertSomeTraces() but only provides the traces[0][0] entry as the first argument to the callback.
+   * Same as assertSomeTraces() but only provides the first span (traces[0][0])
+   * This callback gets executed once for every payload received by the agent.
    */
-  assertFirstTrace (callback, options) {
-    return runCallback(function (traces) {
+  /**
+   *
+   * @param {testAssertionSpanCallback} callback - runs once per agent payload
+   * @param {Object} options
+   * @returns Promise
+   */
+  assertFirstTraceSpan (callback, options) {
+    return runCallbackAgainstTraces(function (traces) {
       return callback(traces[0][0])
     }, options, traceHandlers)
   },
@@ -411,7 +439,7 @@ module.exports = {
    * Register a callback with expectations to be run on every stats payload sent to the agent.
    */
   expectPipelineStats (callback, options) {
-    return runCallback(callback, options, statsHandlers)
+    return runCallbackAgainstTraces(callback, options, statsHandlers)
   },
 
   // Unregister any outstanding expectation callbacks.
