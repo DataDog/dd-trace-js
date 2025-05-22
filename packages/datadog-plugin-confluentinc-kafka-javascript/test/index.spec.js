@@ -252,13 +252,11 @@ describe('Plugin', () => {
           let Consumer
 
           beforeEach(async () => {
-            await agent.load('@confluentinc/kafka-javascript')
-          })
-
-          beforeEach((done) => {
             tracer = require('../../dd-trace')
             const lib = require(`../../../versions/${module}@${version}`).get()
             nativeApi = lib
+
+            await agent.load('@confluentinc/kafka-javascript')
 
             // Get the producer/consumer classes directly from the module
             Producer = nativeApi.Producer
@@ -269,19 +267,25 @@ describe('Plugin', () => {
               dr_cb: true
             })
 
-            nativeProducer.connect({}, (err) => {
-              done()
+            await new Promise((resolve, reject) => {
+              nativeProducer.connect({}, (err) => {
+                if (err) {
+                  return reject(err)
+                }
+                resolve()
+              })
             })
           })
 
-          afterEach((done) => {
-            try {
-              nativeProducer.disconnect(() => {
-                done()
+          afterEach(async () => {
+            await new Promise((resolve, reject) => {
+              nativeProducer.disconnect((err) => {
+                if (err) {
+                  return reject(err)
+                }
+                resolve()
               })
-            } catch (err) {
-              done(err)
-            }
+            })
           })
 
           describe('producer', () => {
@@ -337,43 +341,60 @@ describe('Plugin', () => {
           })
 
           describe('consumer', () => {
-            beforeEach((done) => {
+            beforeEach(async () => {
               nativeConsumer = new Consumer({
                 'bootstrap.servers': '127.0.0.1:9092',
                 'group.id': 'test-group'
               })
 
-              nativeConsumer.connect({}, (err, d) => {
-                done()
+              await new Promise((resolve, reject) => {
+                nativeConsumer.connect({}, (err) => {
+                  if (err) {
+                    return reject(err)
+                  }
+                  resolve()
+                })
               })
             })
 
-            afterEach((done) => {
-              nativeConsumer.unsubscribe()
-              nativeConsumer.disconnect(() => {
-                done()
+            afterEach(async () => {
+              await nativeConsumer.unsubscribe()
+              await new Promise((resolve, reject) => {
+                nativeConsumer.disconnect((err) => {
+                  if (err) {
+                    return reject(err)
+                  }
+                  resolve()
+                })
               })
             })
 
-            function consume (consumer, producer, topic, message) {
+            function consume (consumer, producer, topic, message, timeoutMs = 9500) {
               return new Promise((resolve, reject) => {
+                const timeoutId = setTimeout(() => {
+                  reject(new Error(`Timeout: Did not consume message on topic "${topic}" within ${timeoutMs}ms`))
+                }, timeoutMs)
+
                 function doConsume () {
                   consumer.consume(1, function (err, messages) {
-                    if (err && err.code === -185) {
-                      setTimeout(() => doConsume(), 20)
-                      return
-                    } else if (!messages || messages.length === 0 || (err && err.code === -191)) {
-                      setTimeout(() => doConsume(), 20)
+                    if (err) {
+                      clearTimeout(timeoutId)
+                      return reject(err)
+                    }
+
+                    if (!messages || messages.length === 0) {
+                      setTimeout(doConsume, 20)
                       return
                     }
 
                     const consumedMessage = messages[0]
 
                     if (consumedMessage.value.toString() !== message.toString()) {
-                      setTimeout(() => doConsume(), 20)
+                      setTimeout(doConsume, 20)
                       return
                     }
 
+                    clearTimeout(timeoutId)
                     consumer.unsubscribe()
                     resolve()
                   })
