@@ -22,7 +22,7 @@ module.exports = (on, config) => {
   const tracer = require('../../dd-trace')
 
   if (satisfies(config.version, '<10.2.0')) {
-    if (DD_MAJOR === 6) {
+    if (DD_MAJOR >= 6) {
       // eslint-disable-next-line no-console
       console.error(
         'ERROR: dd-trace v6 has deleted support for Cypress<10.2.0.'
