@@ -12,7 +12,6 @@ const { version: ddTraceVersion } = require('../../../package.json')
 
 const testStartCh = channel('ci:playwright:test:start')
 const testFinishCh = channel('ci:playwright:test:finish')
-const testFnCh = channel('ci:playwright:test:fn')
 
 const testSessionStartCh = channel('ci:playwright:session:start')
 const testSessionFinishCh = channel('ci:playwright:session:finish')
@@ -616,9 +615,7 @@ function runnerHook (runnerExport, playwrightVersion) {
         totalAttemptToFixFailedTestCount += testStatuses.filter(status => status === 'fail').length
       }
 
-      if (totalFailedTestCount > 0 &&
-          totalAttemptToFixFailedTestCount > 0 &&
-          totalFailedTestCount === totalAttemptToFixFailedTestCount) {
+      if (totalFailedTestCount > 0 && totalFailedTestCount === totalAttemptToFixFailedTestCount) {
         runAllTestsReturn = 'passed'
       }
     }
@@ -940,9 +937,7 @@ addHook({
         })
       }
 
-      testFnCh.runStores(testCtx, () => {
-        res = _runTest.apply(this, arguments)
-      })
+      res = _runTest.apply(this, arguments)
 
       testInfo = this._currentTest
     })

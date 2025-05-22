@@ -37,7 +37,7 @@ describe('Plugin', () => {
       describe('open', () => {
         it('should not be instrumented', (done) => {
           function waitForNextTrace () {
-            agent.use((data) => {
+            agent.assertSomeTraces((data) => {
               if (data) {
                 data.forEach((arr) => {
                   arr.forEach((trace) => {
@@ -95,7 +95,7 @@ describe('Plugin', () => {
     describe('without parent span', () => {
       describe('open', () => {
         it('should not be instrumented', (done) => {
-          agent.use(() => {
+          agent.assertSomeTraces(() => {
             expect.fail('should not have been any traces')
           }).catch(done)
 
