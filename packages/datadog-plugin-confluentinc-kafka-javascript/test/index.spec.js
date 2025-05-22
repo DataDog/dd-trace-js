@@ -253,9 +253,10 @@ describe('Plugin', () => {
 
           beforeEach(async () => {
             tracer = require('../../dd-trace')
-            await agent.load('@confluentinc/kafka-javascript')
             const lib = require(`../../../versions/${module}@${version}`).get()
             nativeApi = lib
+
+            await agent.load('@confluentinc/kafka-javascript')
 
             // Get the producer/consumer classes directly from the module
             Producer = nativeApi.Producer
@@ -266,16 +267,24 @@ describe('Plugin', () => {
               dr_cb: true
             })
 
-            nativeProducer.connect()
-
-            await new Promise(resolve => {
-              nativeProducer.on('ready', resolve)
+            await new Promise((resolve, reject) => {
+              nativeProducer.connect({}, (err) => {
+                if (err) {
+                  return reject(err)
+                }
+                resolve()
+              })
             })
           })
 
           afterEach(async () => {
-            await new Promise(resolve => {
-              nativeProducer.disconnect(resolve)
+            await new Promise((resolve, reject) => {
+              nativeProducer.disconnect((err) => {
+                if (err) {
+                  return reject(err)
+                }
+                resolve()
+              })
             })
           })
 
@@ -332,22 +341,68 @@ describe('Plugin', () => {
           })
 
           describe('consumer', () => {
-            beforeEach(() => {
+            beforeEach(async () => {
               nativeConsumer = new Consumer({
                 'bootstrap.servers': '127.0.0.1:9092',
-                'group.id': 'test-group-native'
+                'group.id': 'test-group'
               })
 
-              nativeConsumer.on('ready', () => {
-                nativeConsumer.subscribe([testTopic])
+              await new Promise((resolve, reject) => {
+                nativeConsumer.connect({}, (err) => {
+                  if (err) {
+                    return reject(err)
+                  }
+                  resolve()
+                })
               })
-
-              nativeConsumer.connect()
             })
 
-            afterEach(() => {
-              nativeConsumer.disconnect()
+            afterEach(async () => {
+              await nativeConsumer.unsubscribe()
+              await new Promise((resolve, reject) => {
+                nativeConsumer.disconnect((err) => {
+                  if (err) {
+                    return reject(err)
+                  }
+                  resolve()
+                })
+              })
             })
+
+            function consume (consumer, producer, topic, message, timeoutMs = 9500) {
+              return new Promise((resolve, reject) => {
+                const timeoutId = setTimeout(() => {
+                  reject(new Error(`Timeout: Did not consume message on topic "${topic}" within ${timeoutMs}ms`))
+                }, timeoutMs)
+
+                function doConsume () {
+                  consumer.consume(1, function (err, messages) {
+                    if (err) {
+                      clearTimeout(timeoutId)
+                      return reject(err)
+                    }
+
+                    if (!messages || messages.length === 0) {
+                      setTimeout(doConsume, 20)
+                      return
+                    }
+
+                    const consumedMessage = messages[0]
+
+                    if (consumedMessage.value.toString() !== message.toString()) {
+                      setTimeout(doConsume, 20)
+                      return
+                    }
+
+                    clearTimeout(timeoutId)
+                    consumer.unsubscribe()
+                    resolve()
+                  })
+                }
+                doConsume()
+                producer.produce(topic, null, message, 'native-consumer-key')
+              })
+            }
 
             it('should be instrumented', async () => {
               const expectedSpanPromise = expectSpanWithDefaults({
@@ -363,22 +418,13 @@ describe('Plugin', () => {
                 type: 'worker'
               })
 
+              nativeConsumer.setDefaultConsumeTimeout(10)
+              nativeConsumer.subscribe([testTopic])
+
               // Send a test message using the producer
               const message = Buffer.from('test message for native consumer')
-              const key = 'native-consumer-key'
 
-              let consumePromise
-              nativeConsumer.on('ready', () => {
-                // Consume messages
-                consumePromise = new Promise(resolve => {
-                  nativeConsumer.consume(1, (err, messages) => {
-                    resolve()
-                  })
-                  nativeProducer.produce(testTopic, null, message, key)
-                })
-              })
-
-              await consumePromise
+              await consume(nativeConsumer, nativeProducer, testTopic, message)
 
               return expectedSpanPromise
             })
@@ -395,23 +441,13 @@ describe('Plugin', () => {
 
                 expect(parseInt(span.parent_id.toString())).to.be.gt(0)
               }, { timeoutMs: 10000 })
+              nativeConsumer.setDefaultConsumeTimeout(10)
+              nativeConsumer.subscribe([testTopic])
 
               // Send a test message using the producer
-              const message = Buffer.from('test message for native consumer')
-              const key = 'native-consumer-key'
+              const message = Buffer.from('test message propagation for native consumer 1')
 
-              let consumePromise
-              nativeConsumer.on('ready', () => {
-                // Consume messages
-                consumePromise = new Promise(resolve => {
-                  nativeConsumer.consume(1, (err, messages) => {
-                    resolve()
-                  })
-                  nativeProducer.produce(testTopic, null, message, key)
-                })
-              })
-
-              await consumePromise
+              await consume(nativeConsumer, nativeProducer, testTopic, message)
 
               return expectedSpanPromise
             })
