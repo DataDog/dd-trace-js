@@ -27,11 +27,7 @@ class Identifier {
   }
 
   toBigInt () {
-    let result = BigInt(0)
-    for (let i = 0; i < this._buffer.length; i++) {
-      result = (result << BigInt(8)) | BigInt(this._buffer[i])
-    }
-    return result
+    return Buffer.from(this._buffer).readBigUInt64BE(0)
   }
 
   toBuffer () {
