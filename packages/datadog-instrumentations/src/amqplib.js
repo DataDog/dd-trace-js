@@ -20,9 +20,7 @@ const methods = {}
 addHook({ name: 'amqplib', file: 'lib/defs.js', versions: [MIN_VERSION] }, defs => {
   for (const [key, value] of Object.entries(defs)) {
     if (Number.isInteger(value) && isCamelCase(key)) {
-      // TODO(BridgeAR): It should replace all `-` with `.`, so it has to be replaceAll or use a regex.
-      // Example method that is not renamed properly: BasicGetEmpty = 3932232
-      methods[value] = kebabCase(key).replace('-', '.')
+      methods[value] = kebabCase(key).replaceAll('-', '.')
     }
   }
   return defs
