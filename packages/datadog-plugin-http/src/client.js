@@ -153,7 +153,7 @@ function addResponseHeaders (res, span, config) {
 }
 
 function addRequestHeaders (req, span, config) {
-  const headers = req.headers && typeof req.headers.entries === 'function'
+  const headers = typeof req.headers?.entries === 'function'
     ? Object.fromEntries(req.headers.entries())
     : req.headers || req.getHeaders()
 

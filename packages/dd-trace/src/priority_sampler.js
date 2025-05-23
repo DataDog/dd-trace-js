@@ -258,7 +258,6 @@ class PrioritySampler {
    *
    * @param context {DatadogSpanContext}
    * @returns {SamplingPriority}
-   * @private
    */
   #getPriorityByAgent (context) {
     const key = `service:${context._tags[SERVICE_NAME]},env:${this._env}`
@@ -274,7 +273,6 @@ class PrioritySampler {
   /**
    *
    * @param span {DatadogSpan}
-   * @private
    * @returns {void}
    */
   #addDecisionMaker (span) {
@@ -299,10 +297,11 @@ class PrioritySampler {
    * @param rateLimit {number}
    * @param provenance {string}
    * @returns {SamplingRule[]}
-   * @private
    */
   #normalizeRules (rules, sampleRate, rateLimit, provenance) {
-    rules = [].concat(rules || [])
+    rules = [rules || []].flat()
+
+    rules.push({ sampleRate, maxPerSecond: rateLimit, provenance })
 
     rules.push({ sampleRate, maxPerSecond: rateLimit, provenance })
 
@@ -316,7 +315,6 @@ class PrioritySampler {
    *
    * @param span {DatadogSpan}
    * @returns {SamplingRule}
-   * @private
    */
   #findRule (span) {
     for (const rule of this._rules) {

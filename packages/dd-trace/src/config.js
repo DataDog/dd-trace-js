@@ -1487,8 +1487,7 @@ class Config {
     const changes = []
 
     for (const name in this._defaults) {
-      for (let i = 0; i < containers.length; i++) {
-        const container = containers[i]
+      for (const [i, container] of containers.entries()) {
         const value = container[name]
 
         if ((value !== null && value !== undefined) || container === this._defaults) {

@@ -337,9 +337,9 @@ function createWrapFunction (prefix = '', override = '') {
 function getMessage (operation, params, args, self) {
   const metadata = {}
   if (params) {
-    for (let i = 0; i < params.length; i++) {
-      if (!params[i] || typeof args[i] === 'function') continue
-      metadata[params[i]] = args[i]
+    for (const [i, param] of params.entries()) {
+      if (!param || typeof args[i] === 'function') continue
+      metadata[param] = args[i]
     }
   }
 

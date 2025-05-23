@@ -115,8 +115,8 @@ class OpenAiTracingPlugin extends TracingPlugin {
         tags['openai.request.prompt'] = normalizeStringOrTokenArray(prompt, true)
       } else if (Array.isArray(prompt)) {
         // This is multiple prompts, either [String] or [[Number]]
-        for (let i = 0; i < prompt.length; i++) {
-          tags[`openai.request.prompt.${i}`] = normalizeStringOrTokenArray(prompt[i], true)
+        for (const [i, element] of prompt.entries()) {
+          tags[`openai.request.prompt.${i}`] = normalizeStringOrTokenArray(element, true)
         }
       }
     }
@@ -786,13 +786,13 @@ function commonCreateResponseExtraction (tags, body, openaiStore, methodName) {
       tags[`openai.response.choices.${choiceIdx}.message.name`] = normalize(message.name)
       if (message.tool_calls) {
         const toolCalls = message.tool_calls
-        for (let toolIdx = 0; toolIdx < toolCalls.length; toolIdx++) {
+        for (const [toolIdx, toolCall] of toolCalls.entries()) {
           tags[`openai.response.choices.${choiceIdx}.message.tool_calls.${toolIdx}.function.name`] =
-            toolCalls[toolIdx].function.name
+            toolCall.function.name
           tags[`openai.response.choices.${choiceIdx}.message.tool_calls.${toolIdx}.function.arguments`] =
-            toolCalls[toolIdx].function.arguments
+            toolCall.function.arguments
           tags[`openai.response.choices.${choiceIdx}.message.tool_calls.${toolIdx}.id`] =
-            toolCalls[toolIdx].id
+            toolCall.id
         }
       }
     }

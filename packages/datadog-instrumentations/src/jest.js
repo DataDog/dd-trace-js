@@ -369,8 +369,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           }
           const originalFn = event.test.fn
           originalTestFns.set(event.test, originalFn)
-          const wrapper = function () {
-            return testFnCh.runStores(ctx, () => originalFn.apply(this, arguments))
+          const wrapper = function (...args) {
+            return testFnCh.runStores(ctx, () => originalFn.apply(this, args))
           }
           // If we don't do this, the timeout will be not be triggered
           Object.defineProperty(wrapper, 'length', { value: originalFn.length })

@@ -76,11 +76,11 @@ function wrapRebuild (rebuild) {
 }
 
 function wrapExtension (method) {
-  return [].concat(method).map(wrapHandler)
+  return [method].flat().map(wrapHandler)
 }
 
 function wrapEvents (events) {
-  return [].concat(events).map(event => {
+  return [events].flat().map(event => {
     if (!event || !event.method) return event
 
     return Object.assign({}, event, {

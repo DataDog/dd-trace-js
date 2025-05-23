@@ -31,6 +31,7 @@ function combineOptions (inputURL, inputOptions) {
     ? Object.assign(inputURL || {}, inputOptions)
     : inputURL
 }
+
 function normalizeHeaders (options) {
   options.headers ??= {}
 }
@@ -43,18 +44,16 @@ function patch (http, methodName) {
   shimmer.wrap(http, methodName, instrumentRequest)
 
   function instrumentRequest (request) {
-    return function () {
+    return function (...args) {
       if (!startChannel.hasSubscribers) {
-        return request.apply(this, arguments)
+        return request.apply(this, args)
       }
 
-      let args
-
       try {
-        args = normalizeArgs.apply(null, arguments)
+        args = normalizeArgs.apply(null, args)
       } catch (e) {
         log.error('Error normalising http req arguments', e)
-        return request.apply(this, arguments)
+        return request.apply(this, args)
       }
 
       const abortController = new AbortController()
@@ -66,9 +65,9 @@ function patch (http, methodName) {
         let callback = args.callback
 
         if (callback) {
-          callback = shimmer.wrapFunction(args.callback, cb => function () {
+          callback = shimmer.wrapFunction(args.callback, cb => function (...innerArgs) {
             return asyncStartChannel.runStores(ctx, () => {
-              return cb.apply(this, arguments)
+              return cb.apply(this, innerArgs)
             })
           })
         }
@@ -91,9 +90,9 @@ function patch (http, methodName) {
 
           // tracked to accurately discern custom request socket timeout
           let customRequestTimeout = false
-          req.setTimeout = function () {
+          req.setTimeout = function (...innerArgs) {
             customRequestTimeout = true
-            return setTimeout.apply(this, arguments)
+            return setTimeout.apply(this, innerArgs)
           }
 
           req.emit = function (eventName, arg) {
@@ -120,7 +119,7 @@ function patch (http, methodName) {
                 finish()
             }
 
-            return emit.apply(this, arguments)
+            return emit.apply(this, args)
           }
 
           if (abortController.signal.aborted) {
