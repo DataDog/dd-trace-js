@@ -49,6 +49,7 @@ const {
 } = require('./util/tags')
 const { OS_VERSION, OS_PLATFORM, OS_ARCHITECTURE, RUNTIME_NAME, RUNTIME_VERSION } = require('./util/env')
 const getDiClient = require('../ci-visibility/dynamic-instrumentation')
+const { DD_MAJOR } = require('../../../../version')
 
 const FRAMEWORK_TO_TRIMMED_COMMAND = {
   vitest: 'vitest run',
@@ -113,7 +114,7 @@ module.exports = class CiPlugin extends Plugin {
 
       const testSessionName = getTestSessionName(
         this.config,
-        FRAMEWORK_TO_TRIMMED_COMMAND[this.constructor.id],
+        DD_MAJOR < 6 ? this.command : FRAMEWORK_TO_TRIMMED_COMMAND[this.constructor.id],
         this.testEnvironmentMetadata
       )
 

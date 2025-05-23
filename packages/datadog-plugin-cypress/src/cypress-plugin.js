@@ -76,6 +76,7 @@ const {
   RUNTIME_NAME,
   RUNTIME_VERSION
 } = require('../../dd-trace/src/plugins/util/env')
+const { DD_MAJOR } = require('../../../version')
 
 const TEST_FRAMEWORK_NAME = 'cypress'
 
@@ -474,7 +475,13 @@ class CypressPlugin {
       testSessionSpanMetadata[TEST_EARLY_FLAKE_ENABLED] = 'true'
     }
 
-    const testSessionName = getTestSessionName(this.tracer._tracer._config, 'cypress run', this.testEnvironmentMetadata)
+    const trimmedCommand = DD_MAJOR < 6 ? this.command : 'cypress run'
+
+    const testSessionName = getTestSessionName(
+      this.tracer._tracer._config,
+      trimmedCommand,
+      this.testEnvironmentMetadata
+    )
 
     if (this.tracer._tracer._exporter?.addMetadataTags) {
       const metadataTags = {}
