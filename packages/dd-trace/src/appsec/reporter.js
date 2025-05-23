@@ -320,6 +320,14 @@ function truncateRequestBody (target, depth = 0) {
         return { truncated: true }
       }
 
+      if (typeof target.toJSON === 'function') {
+        try {
+          return truncateRequestBody(target.toJSON(), depth + 1)
+        } catch (e) {
+          return { truncated: false }
+        }
+      }
+
       if (Array.isArray(target)) {
         const maxArrayLength = Math.min(target.length, COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE)
         wasTruncated = target.length > COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE
@@ -331,14 +339,6 @@ function truncateRequestBody (target, depth = 0) {
         }
 
         return { value: truncatedArray, truncated: wasTruncated }
-      }
-
-      if (typeof target.toJSON === 'function') {
-        try {
-          return truncateRequestBody(target.toJSON(), depth + 1)
-        } catch (e) {
-          return { truncated: false }
-        }
       }
 
       const keys = Object.keys(target)

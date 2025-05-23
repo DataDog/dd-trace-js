@@ -536,6 +536,11 @@ describe('reporter', () => {
       })
 
       describe('Request body truncation', () => {
+        const arrayWithToJSON = ['a', 'b', 'c', 'd', 'e', 'f']
+        arrayWithToJSON.toJSON = () => {
+          return `[${'a, '.repeat(5000)}]`
+        }
+
         const requestBody = {
           str: 'a'.repeat(5000),
           nestedObj: [...Array(42).keys()].reduce((prev, current) => (
@@ -554,7 +559,8 @@ describe('reporter', () => {
             objectWithToJSONRaisingException: {
               toJSON: () => { throw new TypeError('Object not serializable') }
             },
-            emptyArray: []
+            emptyArray: [],
+            arrayWithToJSON
           }
         }
 
@@ -577,6 +583,7 @@ describe('reporter', () => {
           expect(truncatedRequestBody.specialValues.objectWithToJSONRaisingException).to.be.undefined
           expect(truncatedRequestBody.specialValues.emptyArray).to.be.deep.equal([])
           expect(objectDepth(truncatedRequestBody.circularRef)).to.be.equal(19)
+          expect(truncatedRequestBody.specialValues.arrayWithToJSON).to.have.length(4096)
         })
 
         it('should set request body size exceeded when reporter request body has been truncated', () => {
