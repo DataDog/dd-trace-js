@@ -633,6 +633,10 @@ class TextMapPropagator {
     if (!carrier || !carrier.baggage) return
     if (!spanContext) removeAllBaggageItems()
     const baggages = carrier.baggage.split(',')
+    let keysToSpanTag = new Set()
+    if (this._config.baggageToSpanTagKeys !== '*') {
+      keysToSpanTag = new Set(this._config.baggageToSpanTagKeys.split(','))
+    }
     for (const keyValue of baggages) {
       if (!keyValue.includes('=')) {
         if (spanContext) spanContext._baggageItems = {}
@@ -647,8 +651,11 @@ class TextMapPropagator {
       }
       // the current code assumes precedence of ot-baggage- (legacy opentracing baggage) over baggage
       if (spanContext) {
-        if (key in spanContext._baggageItems) return
+        if (key in spanContext._baggageItems) continue
         spanContext._baggageItems[key] = value
+        if (this._config.baggageToSpanTagKeys === '*' || keysToSpanTag.has(key)) {
+          spanContext._trace.tags['baggage.' + key] = value
+        }
       } else {
         setBaggageItem(key, value)
       }

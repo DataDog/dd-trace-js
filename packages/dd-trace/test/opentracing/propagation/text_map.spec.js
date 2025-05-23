@@ -468,6 +468,60 @@ describe('TextMapPropagator', () => {
       expect(spanContextD._baggageItems).to.deep.equal({})
     })
 
+    it('should add baggage items to span tags', () => {
+      // should add baggage with default keys
+      let carrier = {
+        'x-datadog-trace-id': '123',
+        'x-datadog-parent-id': '456',
+        baggage: 'user.id=capybara,session.id=987,account.id=789,nonDefaultKey=shouldBeIgnored'
+      }
+      const spanContextA = propagator.extract(carrier)
+      expect(spanContextA._trace.tags).to.deep.equal({
+        'baggage.user.id': 'capybara',
+        'baggage.session.id': '987',
+        'baggage.account.id': '789'
+      })
+
+      // should not add baggage when key list is empty
+      config = new Config({
+        baggageToSpanTagKeys: ''
+      })
+      propagator = new TextMapPropagator(config)
+      const spanContextB = propagator.extract(carrier)
+      expect(spanContextB._trace.tags).to.deep.equal({})
+
+      // should not add baggage when key list is empty
+      config = new Config({
+        baggageToSpanTagKeys: 'customKey'
+      })
+      propagator = new TextMapPropagator(config)
+      carrier = {
+        'x-datadog-trace-id': '123',
+        'x-datadog-parent-id': '456',
+        baggage: 'customKey=beluga,randomKey=shouldBeIgnored'
+      }
+      const spanContextC = propagator.extract(carrier)
+      expect(spanContextC._trace.tags).to.deep.equal({
+        'baggage.customKey': 'beluga'
+      })
+
+      // should add all baggage to span tags
+      config = new Config({
+        baggageToSpanTagKeys: '*'
+      })
+      propagator = new TextMapPropagator(config)
+      carrier = {
+        'x-datadog-trace-id': '123',
+        'x-datadog-parent-id': '456',
+        baggage: 'customKey=beluga,randomKey=nothingIsIgnored'
+      }
+      const spanContextD = propagator.extract(carrier)
+      expect(spanContextD._trace.tags).to.deep.equal({
+        'baggage.customKey': 'beluga',
+        'baggage.randomKey': 'nothingIsIgnored'
+      })
+    })
+
     it('should discard malformed tids', () => {
       // tid with malformed characters
       let carrier = {
