@@ -93,7 +93,7 @@ function _getNewContext () {
 }
 
 function _getContext (iastContext) {
-  if (iastContext && iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY]) {
+  if (iastContext?.[OVERHEAD_CONTROLLER_CONTEXT_KEY]) {
     const oceContext = iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY]
     if (!oceContext.webContext) {
       oceContext.webContext = web.getContext(iastContext.req)
@@ -182,7 +182,7 @@ function startGlobalContext () {
   resetGlobalContextInterval = setInterval(() => {
     _resetGlobalContext()
   }, INTERVAL_RESET_GLOBAL_CONTEXT)
-  resetGlobalContextInterval.unref && resetGlobalContextInterval.unref()
+  resetGlobalContextInterval.unref?.()
 }
 
 function finishGlobalContext () {
