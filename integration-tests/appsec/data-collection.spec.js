@@ -109,6 +109,8 @@ describe('ASM Data collection', () => {
         'connection'
       ]
 
+      // DD_APPSEC_MAX_COLLECTED_HEADERS is set to 25, so it is expected to collect
+      // 22 x-datadog-res-XX headers + x-powered-by, content-type and content-language, for a total of 25.
       const expectedResponseHeaders = [
         ...Array.from({ length: 22 }, (_, i) =>
           `x-datadog-res-${i}`
