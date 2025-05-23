@@ -7,13 +7,11 @@ const semver = require('semver')
 const os = require('os')
 const path = require('path')
 const fs = require('fs')
-const { NODE_MAJOR } = require('../../../../../../version')
 
 describe('nosql injection detection in mongodb - whole feature', () => {
   withVersions('mongoose', 'express', expressVersion => {
     withVersions('mongoose', 'mongoose', '>4.0.0', mongooseVersion => {
       const specificMongooseVersion = require(`../../../../../../versions/mongoose@${mongooseVersion}`).version()
-      if (NODE_MAJOR === 14 && semver.satisfies(specificMongooseVersion, '>=8')) return
 
       const vulnerableMethodFilename = 'mongoose-vulnerable-method.js'
       let mongoose, Test, tmpFilePath
