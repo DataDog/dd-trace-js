@@ -220,8 +220,6 @@ class Config {
         if (level > maxLevel) {
           logger.warn(`Invalid compression level ${level}. Will use ${maxLevel}.`)
           level = maxLevel
-        } else {
-          level |= 0
         }
       }
     }
