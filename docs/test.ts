@@ -118,12 +118,18 @@ tracer.init({
       enabled: true,
     },
     rasp: {
-      enabled: true
+      enabled: true,
+      bodyCollection: true
     },
     stackTrace: {
       enabled: true,
       maxStackTraces: 5,
       maxDepth: 42
+    },
+    extendedHeadersCollection: {
+      enabled: true,
+      redaction: false,
+      maxHeaders: 42
     }
   },
   iast: {
