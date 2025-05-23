@@ -94,7 +94,7 @@ class Profiler extends EventEmitter {
       switch (config.uploadCompression.method) {
         case 'gzip':
           this._compressionFn = promisify(zlib.gzip)
-          if (clevel) {
+          if (clevel !== undefined) {
             this._compressionOptions = {
               level: clevel
             }
@@ -102,7 +102,7 @@ class Profiler extends EventEmitter {
           break
         case 'zstd':
           this._compressionFn = promisify(zlib.zstdCompress)
-          if (clevel) {
+          if (clevel !== undefined) {
             this._compressionOptions = {
               params: {
                 [zlib.constants.ZSTD_c_compressionLevel]: clevel
