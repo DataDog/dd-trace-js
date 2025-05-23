@@ -4,8 +4,6 @@ const types = require('./types')
 const { channel, addHook } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 
-const nodeMajor = parseInt(process.versions.node.split('.')[0])
-
 const startChannel = channel('apm:grpc:server:request:start')
 const asyncStartChannel = channel('apm:grpc:server:request:asyncStart')
 const errorChannel = channel('apm:grpc:server:request:error')
@@ -150,14 +148,6 @@ function wrapSendStatus (sendStatus, ctx) {
 
 function isEmitter (obj) {
   return typeof obj.emit === 'function' && typeof obj.once === 'function'
-}
-
-if (nodeMajor <= 14) {
-  addHook({ name: 'grpc', versions: ['>=1.24.3'], file: 'src/server.js' }, server => {
-    shimmer.wrap(server.Server.prototype, 'register', wrapRegister)
-
-    return server
-  })
 }
 
 addHook({ name: '@grpc/grpc-js', versions: ['>=1.0.3'], file: 'build/src/server.js' }, server => {
