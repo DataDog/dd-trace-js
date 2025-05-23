@@ -9,14 +9,17 @@ const sinon = require('sinon')
 describe('profilers/native/space', () => {
   let NativeSpaceProfiler
   let pprof
+  let profile0
 
   beforeEach(() => {
+    profile0 = {
+      encodeAsync: sinon.stub().returns(Promise.resolve('encoded'))
+    }
     pprof = {
-      encode: sinon.stub().returns(Promise.resolve()),
       heap: {
         start: sinon.stub(),
         stop: sinon.stub(),
-        profile: sinon.stub()
+        profile: sinon.stub().returns(profile0)
       }
     }
 
@@ -82,14 +85,14 @@ describe('profilers/native/space', () => {
     expect(profile).to.equal('profile')
   })
 
-  it('should encode profiles from the pprof space profiler', () => {
+  it('should encode profiles using their encodeAsync method', () => {
     const profiler = new NativeSpaceProfiler()
 
     profiler.start()
     const profile = profiler.profile(true)
     profiler.encode(profile)
 
-    sinon.assert.calledOnce(pprof.encode)
+    sinon.assert.calledOnce(profile0.encodeAsync)
   })
 
   it('should use mapper if given', () => {

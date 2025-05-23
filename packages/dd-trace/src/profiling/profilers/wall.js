@@ -10,7 +10,8 @@ const {
   SPAN_ID_LABEL,
   LOCAL_ROOT_SPAN_ID_LABEL,
   getNonJSThreadsLabels,
-  getThreadLabels
+  getThreadLabels,
+  encodeProfileAsync
 } = require('./shared')
 
 const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('../webspan-utils')
@@ -326,7 +327,7 @@ class NativeWallProfiler {
   }
 
   encode (profile) {
-    return this._pprof.encode(profile)
+    return encodeProfileAsync(profile)
   }
 
   stop () {
