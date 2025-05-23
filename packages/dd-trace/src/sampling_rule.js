@@ -112,7 +112,10 @@ class SamplingRule {
 
   match (span) {
     for (const matcher of this.matchers) {
-      if (!span.test(matcher)) {
+      // Rule is a special object with a .match() property.
+      // It has nothing to do with a regular expression.
+      // eslint-disable-next-line unicorn/prefer-regexp-test
+      if (!matcher.match(span)) {
         return false
       }
     }

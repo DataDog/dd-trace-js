@@ -1,7 +1,7 @@
 'use strict'
 
-const { workerData: { config: parentConfig, parentThreadId, configPort } } = require('worker_threads')
-const { format } = require('url')
+const { workerData: { config: parentConfig, parentThreadId, configPort } } = require('node:worker_threads')
+const { format } = require('node:url')
 const log = require('../../log')
 
 const config = module.exports = {

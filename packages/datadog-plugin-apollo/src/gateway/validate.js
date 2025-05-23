@@ -14,8 +14,7 @@ class ApolloGatewayValidatePlugin extends ApolloBasePlugin {
 
     if (!span) return
 
-    if (Array.isArray(result) &&
-      result.at(-1) && result.at(-1).stack && result.at(-1).message) {
+    if (Array.isArray(result) && result.at(-1)?.stack && result.at(-1).message) {
       span.setTag('error', result.at(-1))
     }
     span.finish()
