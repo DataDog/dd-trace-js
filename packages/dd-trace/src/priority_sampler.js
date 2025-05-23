@@ -64,7 +64,7 @@ class PrioritySampler {
   configure (env, opts = {}) {
     const { sampleRate, provenance, rateLimit = 100, rules = [] } = opts
     this._env = env
-    this._rules = this.#_normalizeRules(rules, sampleRate, rateLimit, provenance)
+    this._rules = this.#normalizeRules(rules, sampleRate, rateLimit, provenance)
     this._limiter = new RateLimiter(rateLimit)
 
     log.trace(env, opts)
@@ -110,7 +110,7 @@ class PrioritySampler {
       return
     }
 
-    this.#_addDecisionMaker(root)
+    this.#addDecisionMaker(root)
   }
 
   /**
@@ -174,7 +174,7 @@ class PrioritySampler {
 
     log.trace(span, samplingPriority, mechanism)
 
-    this.#_addDecisionMaker(root)
+    this.#addDecisionMaker(root)
   }
 
   /**
@@ -193,11 +193,11 @@ class PrioritySampler {
    */
   _getPriorityFromAuto (span) {
     const context = this._getContext(span)
-    const rule = this.#_findRule(span)
+    const rule = this.#findRule(span)
 
     return rule
-      ? this.#_getPriorityByRule(context, rule)
-      : this.#_getPriorityByAgent(context)
+      ? this.#getPriorityByRule(context, rule)
+      : this.#getPriorityByAgent(context)
   }
 
   /**
@@ -229,7 +229,7 @@ class PrioritySampler {
    * @param rule {SamplingRule}
    * @returns {SamplingPriority}
    */
-  #_getPriorityByRule (context, rule) {
+  #getPriorityByRule (context, rule) {
     context._trace[SAMPLING_RULE_DECISION] = rule.sampleRate
     context._sampling.mechanism = SAMPLING_MECHANISM_RULE
     if (rule.provenance === 'customer') context._sampling.mechanism = SAMPLING_MECHANISM_REMOTE_USER
@@ -260,7 +260,7 @@ class PrioritySampler {
    * @returns {SamplingPriority}
    * @private
    */
-  #_getPriorityByAgent (context) {
+  #getPriorityByAgent (context) {
     const key = `service:${context._tags[SERVICE_NAME]},env:${this._env}`
     const sampler = this._samplers[key] || this._samplers[DEFAULT_KEY]
 
@@ -277,7 +277,7 @@ class PrioritySampler {
    * @private
    * @returns {void}
    */
-  #_addDecisionMaker (span) {
+  #addDecisionMaker (span) {
     const context = span.context()
     const trace = context._trace
     const priority = context._sampling.priority
@@ -301,7 +301,7 @@ class PrioritySampler {
    * @returns {SamplingRule[]}
    * @private
    */
-  #_normalizeRules (rules, sampleRate, rateLimit, provenance) {
+  #normalizeRules (rules, sampleRate, rateLimit, provenance) {
     rules = [].concat(rules || [])
 
     return rules
@@ -317,9 +317,12 @@ class PrioritySampler {
    * @returns {SamplingRule}
    * @private
    */
-  #_findRule (span) {
+  #findRule (span) {
     for (const rule of this._rules) {
-      if (span.test(rule)) return rule
+      // Rule is a special object with a .match() property.
+      // It has nothing to do with a regular expression.
+      // eslint-disable-next-line unicorn/prefer-regexp-test
+      if (rule.match(span)) return rule
     }
   }
 

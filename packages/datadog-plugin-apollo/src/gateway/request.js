@@ -58,8 +58,7 @@ class ApolloGatewayRequestPlugin extends ApolloBasePlugin {
     const errors = ctx?.result?.errors
     // apollo gateway catches certain errors and returns them in the result object
     // we want to capture these errors as spans
-    if (Array.isArray(errors) &&
-      errors.at(-1) && errors.at(-1).stack && errors.at(-1).message) {
+    if (Array.isArray(errors) && errors.at(-1)?.stack && errors.at(-1).message) {
       ctx.currentStore.span.setTag('error', errors.at(-1))
     }
     ctx.currentStore.span.finish()

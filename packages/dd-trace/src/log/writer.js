@@ -42,7 +42,7 @@ function toggle (enable, level) {
 }
 
 function use (newLogger) {
-  if (newLogger && typeof newLogger.debug === 'function' && typeof newLogger.error === 'function') {
+  if (typeof newLogger?.debug === 'function' && typeof newLogger.error === 'function') {
     logger = newLogger
   }
 }
@@ -54,7 +54,7 @@ function reset () {
 }
 
 function getErrorLog (err) {
-  if (err && typeof err.delegate === 'function') {
+  if (typeof err?.delegate === 'function') {
     const result = err.delegate()
     return Array.isArray(result) ? Log.parse(...result) : Log.parse(result)
   } else {

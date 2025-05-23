@@ -24,7 +24,7 @@ addHook({ name: names }, (net, version, name) => {
   if (name === 'net') {
     require('dns')
   } else {
-    require('dns')
+    require('node:dns')
   }
 
   shimmer.wrap(net.Socket.prototype, 'connect', connect => function () {
