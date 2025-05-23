@@ -11,7 +11,7 @@ const {
   getTaintTrackingNoop,
   lodashTaintTrackingHandler
 } = require('./taint-tracking-impl')
-const { taintObject } = require('./operations-taint-object')
+const { taintObject, taintQueryWithCache } = require('./operations-taint-object')
 
 const lodashOperationCh = dc.channel('datadog:lodash:operation')
 
@@ -122,6 +122,7 @@ module.exports = {
   newTaintedString,
   newTaintedObject,
   taintObject,
+  taintQueryWithCache,
   isTainted,
   getRanges,
   enableTaintOperations,
