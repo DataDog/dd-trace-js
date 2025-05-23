@@ -13,7 +13,6 @@ describe('Plugin', () => {
   describe('fastify', () => {
     withVersions('fastify', 'fastify', (version, _, specificVersion) => {
       if (NODE_MAJOR <= 18 && semver.satisfies(specificVersion, '>=5')) return
-
       afterEach(() => {
         app.close()
       })
