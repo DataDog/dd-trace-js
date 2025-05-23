@@ -2,7 +2,7 @@
 
 const { getUserLandFrames } = require('../dd-trace/src/plugins/util/stacktrace')
 
-const limit = Number(process.env._DD_CODE_ORIGIN_MAX_USER_FRAMES) || 8
+const exitSpanLimit = Number(process.env._DD_CODE_ORIGIN_FOR_SPANS_EXIT_SPAN_MAX_USER_FRAMES) || 8
 
 module.exports = {
   entryTags,
@@ -10,14 +10,14 @@ module.exports = {
 }
 
 function entryTags (topOfStackFunc) {
-  return tag('entry', topOfStackFunc)
+  return tag('entry', topOfStackFunc, 1)
 }
 
 function exitTags (topOfStackFunc) {
-  return tag('exit', topOfStackFunc)
+  return tag('exit', topOfStackFunc, exitSpanLimit)
 }
 
-function tag (type, topOfStackFunc) {
+function tag (type, topOfStackFunc, limit) {
   const frames = getUserLandFrames(topOfStackFunc, limit)
   const tags = {
     '_dd.code_origin.type': type
