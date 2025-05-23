@@ -2,5 +2,8 @@
   "name": "subproject",
   "private": true,
   "version": "1.0.0",
-  "description": "app within repo"
+  "description": "app within repo",
+  "dependencies": {
+    "dd-trace": "file:../../.."
+  }
 }
