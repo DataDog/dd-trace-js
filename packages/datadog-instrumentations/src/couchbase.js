@@ -1,5 +1,6 @@
 'use strict'
 
+const { errorMonitor } = require('events')
 const {
   channel,
   addHook,
@@ -186,7 +187,7 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.12'] }, Buc
         finishCh.publish(undefined)
       }))
 
-      emitter.once('error', asyncResource.bind((error) => {
+      emitter.once(errorMonitor, asyncResource.bind((error) => {
         errorCh.publish(error)
         finishCh.publish(undefined)
       }))

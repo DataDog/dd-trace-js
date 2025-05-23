@@ -52,7 +52,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('name', 'koa.request')
@@ -92,7 +92,7 @@ describe('Plugin', () => {
               const port = appListener.address().port
 
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
                   expect(spans[0]).to.have.property('name', 'koa.request')
@@ -241,7 +241,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
                 expect(spans[0].meta).to.have.property('http.client_ip', '8.8.8.8')
               })
@@ -267,7 +267,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
                 expect(spans[0].meta).to.not.have.property('http.client_ip')
               })
@@ -303,7 +303,7 @@ describe('Plugin', () => {
               const port = appListener.address().port
 
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
                   expect(spans[0]).to.have.property('resource', 'GET /user/:id')
@@ -342,7 +342,7 @@ describe('Plugin', () => {
               const port = appListener.address().port
 
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
                   expect(spans[0]).to.have.property('resource', 'GET /user/:id')
                   expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
@@ -378,7 +378,7 @@ describe('Plugin', () => {
               const port = appListener.address().port
 
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
                   expect(spans[0]).to.have.property('resource', 'GET /user/:id')
@@ -409,7 +409,7 @@ describe('Plugin', () => {
               const port = appListener.address().port
 
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
                   expect(spans[0]).to.have.property('resource', 'GET /user/:id')
@@ -439,7 +439,7 @@ describe('Plugin', () => {
               const port = appListener.address().port
 
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
                   expect(spans[0]).to.have.property('resource', 'GET /user/:id')
@@ -471,7 +471,7 @@ describe('Plugin', () => {
               const port = appListener.address().port
 
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
                   expect(spans[0]).to.have.property('resource', 'GET /public/plop')
@@ -505,7 +505,7 @@ describe('Plugin', () => {
               const port = appListener.address().port
 
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
                   expect(spans[0]).to.have.property('resource', 'GET /forums/:fid/discussions/:did/posts/:pid')
@@ -542,7 +542,7 @@ describe('Plugin', () => {
                 const port = appListener.address().port
 
                 agent
-                  .use(traces => {
+                  .assertSomeTraces(traces => {
                     const spans = sort(traces[0])
 
                     expect(spans[0]).to.have.property('resource', 'GET /first/child')
@@ -579,7 +579,7 @@ describe('Plugin', () => {
               const port = appListener.address().port
 
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
                   expect(spans[0]).to.have.property('resource', 'GET /forums/:fid/posts/:pid')
@@ -612,7 +612,7 @@ describe('Plugin', () => {
               const port = appListener.address().port
 
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
                   expect(spans[0]).to.have.property('resource', 'GET /user/:id')
@@ -647,7 +647,7 @@ describe('Plugin', () => {
               const port = appListener.address().port
 
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
                   expect(spans[0]).to.have.property('resource', 'GET /user/:id')
@@ -734,7 +734,7 @@ describe('Plugin', () => {
               const port = appListener.address().port
 
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
                   expect(spans[0]).to.have.property('name', 'koa.request')
@@ -771,7 +771,7 @@ describe('Plugin', () => {
                 const port = appListener.address().port
 
                 agent
-                  .use(traces => {
+                  .assertSomeTraces(traces => {
                     const spans = sort(traces[0])
 
                     expect(spans[0]).to.have.property('name', 'koa.request')
@@ -905,7 +905,7 @@ describe('Plugin', () => {
                 const port = appListener.address().port
 
                 agent
-                  .use(traces => {
+                  .assertSomeTraces(traces => {
                     const spans = sort(traces[0])
 
                     expect(spans[0]).to.have.property('resource', 'GET /user/:id')

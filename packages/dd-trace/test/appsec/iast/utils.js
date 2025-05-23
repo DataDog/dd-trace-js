@@ -89,7 +89,7 @@ function testOutsideRequestHasVulnerability (fnToTest, vulnerability, plugins, t
       this.timeout(timeout)
     }
     agent
-      .use(traces => {
+      .assertSomeTraces(traces => {
         expect(traces[0][0].meta['_dd.iast.json']).to.include(`"${vulnerability}"`)
         expect(traces[0][0].metrics['_dd.iast.enabled']).to.be.equal(1)
       }, { timeoutMs: 10000 })
@@ -144,7 +144,7 @@ function endResponse (res, appResult) {
 
 function checkNoVulnerabilityInRequest (vulnerability, config, done, makeRequest) {
   agent
-    .use(traces => {
+    .assertSomeTraces(traces => {
       if (traces[0][0].type !== 'web') throw new Error('Not a web span')
       // iastJson == undefiend is valid
       const iastJson = traces[0][0].meta['_dd.iast.json'] || ''
@@ -175,7 +175,7 @@ function checkVulnerabilityInRequest (
     occurrences = occurrencesAndLocation.occurrences
   }
   agent
-    .use(traces => {
+    .assertSomeTraces(traces => {
       expect(traces[0][0].metrics['_dd.iast.enabled']).to.be.equal(1)
       expect(traces[0][0].meta).to.have.property('_dd.iast.json')
 

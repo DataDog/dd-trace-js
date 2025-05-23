@@ -37,7 +37,7 @@ describe('Plugin', () => {
           memcached = new Memcached('localhost:11211', { retries: 0 })
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', 'get')
@@ -77,7 +77,7 @@ describe('Plugin', () => {
           let error
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('error', 1)
               expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
               expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
@@ -96,7 +96,7 @@ describe('Plugin', () => {
           memcached = new Memcached(['localhost:11211'], { retries: 0 })
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
               expect(traces[0][0].meta).to.have.property('network.destination.port', '11211')
               expect(traces[0][0].meta).to.have.property('component', 'memcached')
@@ -114,7 +114,7 @@ describe('Plugin', () => {
           }, { retries: 0 })
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
               expect(traces[0][0].meta).to.have.property('network.destination.port', '11211')
               expect(traces[0][0].meta).to.have.property('component', 'memcached')
@@ -138,7 +138,7 @@ describe('Plugin', () => {
             memcached.del('test', err => err && done(err))
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
                 expect(traces[0][0].meta).to.have.property('network.destination.port', '11211')
                 expect(traces[0][0].meta).to.have.property('component', 'memcached')
@@ -166,7 +166,7 @@ describe('Plugin', () => {
 
         it('should be configured with the correct values', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('service', 'custom')
             })
             .then(done)
@@ -192,7 +192,7 @@ describe('Plugin', () => {
 
           it('trace should contain memcached.command', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0].meta).to.have.property('memcached.command', 'version')
               })
               .then(done)
@@ -217,7 +217,7 @@ describe('Plugin', () => {
 
           it('trace should not contain memcached.command', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0].meta).to.not.have.property('memcached.command')
               })
               .then(done)

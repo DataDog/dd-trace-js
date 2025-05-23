@@ -394,7 +394,7 @@ module.exports = {
   /**
    * Register a callback with expectations to be run on every tracing payload sent to the agent.
    */
-  use (callback, options) {
+  assertSomeTraces (callback, options) {
     return runCallback(callback, options, traceHandlers)
   },
 

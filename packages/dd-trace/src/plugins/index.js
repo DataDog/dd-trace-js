@@ -48,6 +48,7 @@ module.exports = {
   get http2 () { return require('../../../datadog-plugin-http2/src') },
   get https () { return require('../../../datadog-plugin-http/src') },
   get ioredis () { return require('../../../datadog-plugin-ioredis/src') },
+  get iovalkey () { return require('../../../datadog-plugin-iovalkey/src') },
   get 'jest-circus' () { return require('../../../datadog-plugin-jest/src') },
   get 'jest-config' () { return require('../../../datadog-plugin-jest/src') },
   get 'jest-environment-node' () { return require('../../../datadog-plugin-jest/src') },

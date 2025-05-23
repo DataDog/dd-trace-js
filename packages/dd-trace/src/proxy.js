@@ -152,10 +152,6 @@ class Tracer extends NoopProxy {
         }
       }
 
-      if (config.isGCPFunction || config.isAzureFunction) {
-        require('./serverless').maybeStartServerlessMiniAgent(config)
-      }
-
       if (config.profiling.enabled !== 'false') {
         const { SSIHeuristics } = require('./profiling/ssi-heuristics')
         const ssiHeuristics = new SSIHeuristics(config)

@@ -67,7 +67,7 @@ describe('Inferred Proxy Spans', function () {
         headers: inferredHeaders
       })
 
-      await agent.use(traces => {
+      await agent.assertSomeTraces(traces => {
         for (const trace of traces) {
           try {
             const spans = trace
@@ -115,7 +115,7 @@ describe('Inferred Proxy Spans', function () {
         }
       })
 
-      await agent.use(traces => {
+      await agent.assertSomeTraces(traces => {
         for (const trace of traces) {
           try {
             const spans = trace
@@ -159,7 +159,7 @@ describe('Inferred Proxy Spans', function () {
         headers: {}
       })
 
-      await agent.use(traces => {
+      await agent.assertSomeTraces(traces => {
         for (const trace of traces) {
           try {
             const spans = trace
@@ -194,7 +194,7 @@ describe('Inferred Proxy Spans', function () {
         headers: newHeaders
       })
 
-      await agent.use(traces => {
+      await agent.assertSomeTraces(traces => {
         for (const trace of traces) {
           try {
             const spans = trace
@@ -228,7 +228,7 @@ describe('Inferred Proxy Spans', function () {
         headers: inferredHeaders
       })
 
-      await agent.use(traces => {
+      await agent.assertSomeTraces(traces => {
         for (const trace of traces) {
           try {
             const spans = trace

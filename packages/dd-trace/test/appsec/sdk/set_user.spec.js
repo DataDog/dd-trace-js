@@ -142,7 +142,7 @@ describe('set_user', () => {
           })
           res.end()
         }
-        agent.use(traces => {
+        agent.assertSomeTraces(traces => {
           expect(traces[0][0].meta).to.have.property('usr.id', 'blockedUser')
           expect(traces[0][0].meta).to.have.property('usr.email', 'a@b.c')
           expect(traces[0][0].meta).to.have.property('usr.custom', 'hello')
@@ -161,7 +161,7 @@ describe('set_user', () => {
           tracer.appsec.setUser({ id: 'blockedUser' })
           res.end()
         }
-        agent.use(traces => {
+        agent.assertSomeTraces(traces => {
           expect(traces[0][0].meta).to.have.property('usr.id', 'blockedUser')
           expect(traces[0][0].meta).to.have.property('_dd.appsec.user.collection_mode', 'sdk')
           expect(traces[0][0].meta).to.have.property('appsec.event', 'true')

@@ -73,7 +73,7 @@ describe('Plugin', () => {
         })
 
         it('should do automatic instrumentation', done => {
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
             expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
             expect(traces[0][0]).to.have.property('resource', 'SELECT 1 + 1 AS solution')
@@ -95,7 +95,7 @@ describe('Plugin', () => {
         it('should handle errors', done => {
           let error
 
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
             expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
             expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
@@ -110,7 +110,7 @@ describe('Plugin', () => {
         })
 
         it('should work without a callback', done => {
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             done()
           })
 
@@ -154,7 +154,7 @@ describe('Plugin', () => {
         )
 
         it('should be configured with the correct values', done => {
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
             expect(traces[0][0]).to.have.property('service', 'custom')
             done()
@@ -201,7 +201,7 @@ describe('Plugin', () => {
         )
 
         it('should be configured with the correct values', done => {
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
             expect(traces[0][0]).to.have.property('service', 'custom')
             sinon.assert.calledWith(serviceSpy, sinon.match({
@@ -244,7 +244,7 @@ describe('Plugin', () => {
           'db', 'db.name')
 
         it('should do automatic instrumentation', done => {
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
             expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
             expect(traces[0][0]).to.have.property('resource', 'SELECT 1 + 1 AS solution')
@@ -390,7 +390,7 @@ describe('Plugin', () => {
         })
 
         it('trace query resource should not be changed when propagation is enabled', done => {
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('resource', 'SELECT 1 + 1 AS solution')
             done()
           })
@@ -459,7 +459,7 @@ describe('Plugin', () => {
 
         it('query text should contain traceparent', done => {
           let queryText = ''
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             const expectedTimePrefix = traces[0][0].meta['_dd.p.tid'].toString(16).padStart(16, '0')
             const traceId = expectedTimePrefix + traces[0][0].trace_id.toString(16).padStart(16, '0')
             const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
@@ -474,7 +474,7 @@ describe('Plugin', () => {
         })
 
         it('query should inject _dd.dbm_trace_injected into span', done => {
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             expect(traces[0][0].meta).to.have.property('_dd.dbm_trace_injected', 'true')
             done()
           })
@@ -539,7 +539,7 @@ describe('Plugin', () => {
 
         it('query text should contain traceparent', done => {
           let queryText = ''
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             const expectedTimePrefix = traces[0][0].meta['_dd.p.tid'].toString(16).padStart(16, '0')
             const traceId = expectedTimePrefix + traces[0][0].trace_id.toString(16).padStart(16, '0')
             const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
@@ -554,7 +554,7 @@ describe('Plugin', () => {
         })
 
         it('query should inject _dd.dbm_trace_injected into span', done => {
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             expect(traces[0][0].meta).to.have.property('_dd.dbm_trace_injected', 'true')
             done()
           })

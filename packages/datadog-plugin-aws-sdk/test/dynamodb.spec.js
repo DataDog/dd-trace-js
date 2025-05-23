@@ -153,7 +153,7 @@ describe('Plugin', () => {
 
         describe('with payload tagging', () => {
           it('adds request and response payloads as flattened tags for putItem', async () => {
-            const agentPromise = agent.use(traces => {
+            const agentPromise = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
 
               expect(span.resource).to.equal(`putItem ${oneKeyTableName}`)
@@ -179,7 +179,7 @@ describe('Plugin', () => {
           })
 
           it('adds request and response payloads as flattened tags for updateItem', async () => {
-            const agentPromise = agent.use(traces => {
+            const agentPromise = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
 
               expect(span.resource).to.equal(`updateItem ${oneKeyTableName}`)
@@ -210,7 +210,7 @@ describe('Plugin', () => {
           })
 
           it('adds request and response payloads as flattened tags for deleteItem', async () => {
-            const agentPromise = agent.use(traces => {
+            const agentPromise = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
 
               expect(span.resource).to.equal(`deleteItem ${oneKeyTableName}`)
@@ -246,7 +246,7 @@ describe('Plugin', () => {
             // Wait a bit to ensure the put completes
             await wait(100)
 
-            const agentPromise = agent.use(traces => {
+            const agentPromise = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
 
               expect(span.resource).to.equal(`getItem ${oneKeyTableName}`)
@@ -292,7 +292,7 @@ describe('Plugin', () => {
             if (expectedHashes) {
               expectedLength = Array.isArray(expectedHashes) ? expectedHashes.length : 1
             }
-            const agentPromise = agent.use(traces => {
+            const agentPromise = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
               const links = JSON.parse(span.meta?.['_dd.span_links'] || '[]')
 

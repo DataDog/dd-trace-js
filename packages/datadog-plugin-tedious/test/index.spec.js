@@ -136,7 +136,7 @@ describe('Plugin', () => {
         const query = 'SELECT 1 + 1 AS solution'
 
         const promise = agent
-          .use(traces => {
+          .assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
             expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
             expect(traces[0][0]).to.have.property('resource', query)
@@ -161,7 +161,7 @@ describe('Plugin', () => {
         const query = 'SELECT 1 + @num AS solution'
 
         const promise = agent
-          .use(traces => {
+          .assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
             expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
             expect(traces[0][0]).to.have.property('resource', query)
@@ -180,7 +180,7 @@ describe('Plugin', () => {
                       'SELECT 1 + 2 AS solution2'
 
         const promise = agent
-          .use(traces => {
+          .assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
             expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
             expect(traces[0][0]).to.have.property('resource', query)
@@ -197,7 +197,7 @@ describe('Plugin', () => {
         const query = 'SELECT 1 + @num AS solution'
 
         agent
-          .use(traces => {
+          .assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
             expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
             expect(traces[0][0]).to.have.property('resource', query)
@@ -215,7 +215,7 @@ describe('Plugin', () => {
         const query = 'SELECT 1 + @num AS solution'
 
         const promise = agent
-          .use(traces => {
+          .assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
             expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
             expect(traces[0][0]).to.have.property('resource', query)
@@ -236,7 +236,7 @@ describe('Plugin', () => {
         const query = 'SELECT 1 + @num AS solution'
 
         const promise = agent
-          .use(traces => {
+          .assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
             expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
             expect(traces[0][0]).to.have.property('resource', query)
@@ -257,7 +257,7 @@ describe('Plugin', () => {
         const procedure = 'dbo.ddTestProc'
 
         const promise = agent
-          .use(traces => {
+          .assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
             expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
             expect(traces[0][0]).to.have.property('resource', procedure)
@@ -276,7 +276,7 @@ describe('Plugin', () => {
         let error
 
         agent
-          .use(traces => {
+          .assertSomeTraces(traces => {
             expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
             expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
             expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
@@ -297,7 +297,7 @@ describe('Plugin', () => {
         let error
 
         agent
-          .use(traces => {
+          .assertSomeTraces(traces => {
             expect(error.message).to.equal('Canceled.')
             expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
             expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
@@ -348,7 +348,7 @@ describe('Plugin', () => {
             const bulkLoad = buildBulkLoad()
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
                 expect(traces[0][0]).to.have.property('resource', bulkLoad.getBulkInsertSql())
               })
@@ -364,7 +364,7 @@ describe('Plugin', () => {
               const rowStream = bulkLoad.getRowStream()
 
               const promise = agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
                   expect(traces[0][0]).to.have.property('resource', bulkLoad.getBulkInsertSql())
                 })
@@ -453,7 +453,7 @@ describe('Plugin', () => {
         })
 
         const promise = agent
-          .use(traces => {
+          .assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('resource', 'SELECT 1 + 1 AS solution')
             expect(request.sqlTextOrProcedure).to.equal("/*dddb='master',dddbs='custom',dde='tester'," +
               "ddh='localhost',ddps='test',ddpv='10.8.2'*/ SELECT 1 + 1 AS solution")

@@ -55,6 +55,7 @@ describe('AppSec Index', function () {
   let apiSecuritySampler
   let rasp
   let standalone
+  let serverless
 
   const RULES = { rules: [{ a: 1 }] }
 
@@ -131,6 +132,11 @@ describe('AppSec Index', function () {
       disable: sinon.stub()
     }
 
+    serverless = {
+      isInServerlessEnvironment: sinon.stub()
+    }
+    serverless.isInServerlessEnvironment.returns(false)
+
     AppSec = proxyquire('../../src/appsec', {
       '../log': log,
       '../plugins/util/web': web,
@@ -140,7 +146,8 @@ describe('AppSec Index', function () {
       './graphql': graphql,
       './api_security_sampler': apiSecuritySampler,
       './rasp': rasp,
-      './standalone': standalone
+      './standalone': standalone,
+      '../serverless': serverless
     })
 
     sinon.stub(fs, 'readFileSync').returns(JSON.stringify(RULES))
@@ -180,6 +187,20 @@ describe('AppSec Index', function () {
       AppSec.enable(config)
 
       expect(log.error).to.have.been.calledOnceWithExactly('[ASM] Unable to start AppSec', err)
+      expect(incomingHttpRequestStart.subscribe).to.not.have.been.called
+      expect(incomingHttpRequestEnd.subscribe).to.not.have.been.called
+    })
+
+    it('should not log when enable fails in serverless', () => {
+      RuleManager.loadRules.restore()
+
+      const err = new Error('Invalid Rules')
+      sinon.stub(RuleManager, 'loadRules').throws(err)
+      serverless.isInServerlessEnvironment.returns(true)
+
+      AppSec.enable(config)
+
+      expect(log.error).to.not.have.been.called
       expect(incomingHttpRequestStart.subscribe).to.not.have.been.called
       expect(incomingHttpRequestEnd.subscribe).to.not.have.been.called
     })

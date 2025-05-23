@@ -25,26 +25,25 @@ describe('Plugin', () => {
       })
 
       describe('without configuration', () => {
-        before(() => agent.load(['ioredis']))
+        beforeEach(() => agent.load(['ioredis']))
 
-        after(() => agent.close({ ritmReset: false }))
+        afterEach(() => agent.close({ ritmReset: false }))
 
         it('should do automatic instrumentation when using callbacks', done => {
-          agent.use(() => {}) // wait for initial info command
-          agent
-            .use(traces => {
-              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-              expect(traces[0][0]).to.have.property('resource', 'get')
-              expect(traces[0][0]).to.have.property('type', 'redis')
-              expect(traces[0][0].meta).to.have.property('component', 'ioredis')
-              expect(traces[0][0].meta).to.have.property('db.name', '0')
-              expect(traces[0][0].meta).to.have.property('db.type', 'redis')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
-              expect(traces[0][0].meta).to.have.property('redis.raw_command', 'GET foo')
-              expect(traces[0][0].metrics).to.have.property('network.destination.port', 6379)
-            })
+          agent.assertSomeTraces(() => {}) // wait for initial info command
+          agent.assertSomeTraces(traces => {
+            expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+            expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
+            expect(traces[0][0]).to.have.property('resource', 'get')
+            expect(traces[0][0]).to.have.property('type', 'redis')
+            expect(traces[0][0].meta).to.have.property('component', 'ioredis')
+            expect(traces[0][0].meta).to.have.property('db.name', '0')
+            expect(traces[0][0].meta).to.have.property('db.type', 'redis')
+            expect(traces[0][0].meta).to.have.property('span.kind', 'client')
+            expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
+            expect(traces[0][0].meta).to.have.property('redis.raw_command', 'GET foo')
+            expect(traces[0][0].metrics).to.have.property('network.destination.port', 6379)
+          })
             .then(done)
             .catch(done)
 
@@ -54,20 +53,18 @@ describe('Plugin', () => {
         it('should run the callback in the parent context', () => {
           const span = {}
 
-          return tracer.scope().activate(span, () => {
-            return redis.get('foo')
-              .then(() => {
-                expect(tracer.scope().active()).to.equal(span)
-              })
+          return tracer.scope().activate(span, async () => {
+            await redis.get('foo')
+            expect(tracer.scope().active()).to.equal(span)
           })
         })
 
         it('should handle errors', done => {
           let error
 
-          agent.use(() => {}) // wait for initial info command
+          agent.assertSomeTraces(() => {}) // wait for initial info command
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('error', 1)
               expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
               expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
@@ -84,9 +81,9 @@ describe('Plugin', () => {
         })
 
         it('should work with userland promises', done => {
-          agent.use(() => {}) // wait for initial info command
+          agent.assertSomeTraces(() => {}) // wait for initial info command
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', 'get')
@@ -124,7 +121,7 @@ describe('Plugin', () => {
 
         it('should be configured with the correct values', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('service', 'custom-test')
             })
             .then(done)
@@ -134,9 +131,9 @@ describe('Plugin', () => {
         })
 
         it('should be able to filter commands', done => {
-          agent.use(() => {}) // wait for initial command
+          agent.assertSomeTraces(() => {}) // wait for initial command
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('resource', 'get')
             })
             .then(done)
@@ -168,9 +165,9 @@ describe('Plugin', () => {
         after(() => agent.close({ ritmReset: false }))
 
         it('should be able to filter commands', done => {
-          agent.use(() => {}) // wait for initial command
+          agent.assertSomeTraces(() => {}) // wait for initial command
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('resource', 'get')
             })
             .then(done)

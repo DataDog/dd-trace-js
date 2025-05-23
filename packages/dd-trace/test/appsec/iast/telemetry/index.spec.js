@@ -189,7 +189,7 @@ describe('Telemetry', () => {
     function tests (config) {
       it('should have header source execution metric', (done) => {
         agent
-          .use(traces => {
+          .assertSomeTraces(traces => {
             expect(traces[0][0].metrics['_dd.iast.telemetry.executed.source.http_request_header']).to.be.equal(1)
           })
           .then(done)
@@ -203,7 +203,7 @@ describe('Telemetry', () => {
 
       it('should have url source execution metric', (done) => {
         agent
-          .use(traces => {
+          .assertSomeTraces(traces => {
             expect(traces[0][0].metrics['_dd.iast.telemetry.executed.source.http_request_uri']).to.be.equal(1)
           })
           .then(done)

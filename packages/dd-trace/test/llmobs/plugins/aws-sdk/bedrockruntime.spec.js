@@ -91,7 +91,7 @@ describe('Plugin', () => {
             const expectedOutput = { content: model.output }
             if (model.outputRole) expectedOutput.role = model.outputRole
 
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               const span = traces[0][0]
               const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
               const expected = expectedLLMObsLLMSpanEvent({

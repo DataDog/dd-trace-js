@@ -80,7 +80,7 @@ describe('Plugin', () => {
 
         function connectionTests (url) {
           it('should be instrumented for promise API', done => {
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', dbQuery)
@@ -106,7 +106,7 @@ describe('Plugin', () => {
           })
 
           it('should be instrumented for callback API', done => {
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', dbQuery)
@@ -140,7 +140,7 @@ describe('Plugin', () => {
           it('should instrument errors', done => {
             let error
 
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', 'invalid')
@@ -209,7 +209,7 @@ describe('Plugin', () => {
 
         function poolTests (url) {
           it('should be instrumented correctly with correct tags', done => {
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', dbQuery)
@@ -234,7 +234,7 @@ describe('Plugin', () => {
           it('should instrument errors', () => {
             let error
 
-            const promise = agent.use(traces => {
+            const promise = agent.assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', 'invalid')
@@ -294,7 +294,7 @@ describe('Plugin', () => {
           )
 
           it('should set the service name', done => {
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', 'custom')
             }).then(done, done)
@@ -335,7 +335,7 @@ describe('Plugin', () => {
           )
 
           it('should set the service name', done => {
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', config.connectString)
             }).then(done, done)

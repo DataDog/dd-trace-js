@@ -37,7 +37,7 @@ describe('Plugin', () => {
       describe('open', () => {
         it('should not be instrumented', (done) => {
           function waitForNextTrace () {
-            agent.use((data) => {
+            agent.assertSomeTraces((data) => {
               if (data) {
                 data.forEach((arr) => {
                   arr.forEach((trace) => {
@@ -95,7 +95,7 @@ describe('Plugin', () => {
     describe('without parent span', () => {
       describe('open', () => {
         it('should not be instrumented', (done) => {
-          agent.use(() => {
+          agent.assertSomeTraces(() => {
             expect.fail('should not have been any traces')
           }).catch(done)
 
@@ -675,7 +675,10 @@ describe('Plugin', () => {
               'file.flag': 'r'
             }
           })
-          fs.createReadStream(__filename).on('error', done).resume()
+          const stream = fs.createReadStream(__filename)
+          expect(stream.listenerCount('error')).to.equal(0)
+
+          stream.on('error', done).resume()
         })
 
         it('should be instrumented when closed', (done) => {

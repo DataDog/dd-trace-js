@@ -74,7 +74,7 @@ describe('Plugin', function () {
     describe('cucumber', () => {
       describe('passing test', () => {
         it('should create a test span', async function () {
-          const checkTraces = agent.use(traces => {
+          const checkTraces = agent.assertSomeTraces(traces => {
             expect(traces.length).to.equal(1)
             const testTrace = traces[0]
             expect(testTrace.length).to.equal(4)
@@ -115,7 +115,7 @@ describe('Plugin', function () {
             { name: 'run', stepStatus: 'pass' },
             { name: 'pass', stepStatus: 'pass' }
           ]
-          const checkTraces = agent.use(traces => {
+          const checkTraces = agent.assertSomeTraces(traces => {
             const testTrace = traces[0]
             const testSpan = testTrace.find(span => span.name === 'cucumber.test')
             // step spans
@@ -140,7 +140,7 @@ describe('Plugin', function () {
 
       describe('failing test', () => {
         it('should create a test span', async function () {
-          const checkTraces = agent.use(traces => {
+          const checkTraces = agent.assertSomeTraces(traces => {
             expect(traces.length).to.equal(1)
             const testTrace = traces[0]
             expect(testTrace.length).to.equal(4)
@@ -177,7 +177,7 @@ describe('Plugin', function () {
             { name: 'fail', stepStatus: 'fail' }
           ]
           const errors = ['AssertionError', undefined, undefined, 'AssertionError']
-          const checkTraces = agent.use(traces => {
+          const checkTraces = agent.assertSomeTraces(traces => {
             const testTrace = traces[0]
             const testSpan = testTrace.find(span => span.name === 'cucumber.test')
             // step spans
@@ -208,7 +208,7 @@ describe('Plugin', function () {
 
       describe('skipped test', () => {
         it('should create a test span', async function () {
-          const checkTraces = agent.use(traces => {
+          const checkTraces = agent.assertSomeTraces(traces => {
             expect(traces.length).to.equal(1)
             const testTrace = traces[0]
             expect(testTrace.length).to.equal(4)
@@ -244,7 +244,7 @@ describe('Plugin', function () {
             { name: 'run', stepStatus: 'pass' },
             { name: 'skip', stepStatus: 'skip' }
           ]
-          const checkTraces = agent.use(traces => {
+          const checkTraces = agent.assertSomeTraces(traces => {
             const testTrace = traces[0]
             const testSpan = testTrace.find(span => span.name === 'cucumber.test')
             // step spans
@@ -269,7 +269,7 @@ describe('Plugin', function () {
 
       describe('skipped test based on tag', () => {
         it('should create a test span', async function () {
-          const checkTraces = agent.use(traces => {
+          const checkTraces = agent.assertSomeTraces(traces => {
             expect(traces.length).to.equal(1)
             const testTrace = traces[0]
             expect(testTrace.length).to.equal(2)
@@ -309,7 +309,7 @@ describe('Plugin', function () {
           const steps = [
             { name: 'datadog', stepStatus: 'skip' }
           ]
-          const checkTraces = agent.use(traces => {
+          const checkTraces = agent.assertSomeTraces(traces => {
             const testTrace = traces[0]
             const testSpan = testTrace.find(span => span.name === 'cucumber.test')
             // step spans
@@ -340,7 +340,7 @@ describe('Plugin', function () {
 
       describe('not implemented step', () => {
         it('should create a test span with a skip reason', async () => {
-          const checkTraces = agent.use(traces => {
+          const checkTraces = agent.assertSomeTraces(traces => {
             expect(traces.length).to.equal(1)
             const testTrace = traces[0]
             expect(testTrace.length).to.equal(4)
@@ -371,7 +371,7 @@ describe('Plugin', function () {
 
       describe('integration test', () => {
         it('should create a test span and a span for the integration', async function () {
-          const checkTraces = agent.use(traces => {
+          const checkTraces = agent.assertSomeTraces(traces => {
             expect(traces.length).to.equal(1)
             const testTrace = traces[0]
             expect(testTrace.length).to.equal(5)
@@ -412,7 +412,7 @@ describe('Plugin', function () {
             { name: 'integration', stepStatus: 'pass' },
             { name: 'pass', stepStatus: 'pass' }
           ]
-          const checkTraces = agent.use(traces => {
+          const checkTraces = agent.assertSomeTraces(traces => {
             const testTrace = traces[0]
             const testSpan = testTrace.find(span => span.name === 'cucumber.test')
             // step spans
@@ -437,7 +437,7 @@ describe('Plugin', function () {
 
       describe('hook fail', () => {
         it('should create a test span', async function () {
-          const checkTraces = agent.use(traces => {
+          const checkTraces = agent.assertSomeTraces(traces => {
             expect(traces.length).to.equal(1)
             const testTrace = traces[0]
             expect(testTrace.length).to.equal(4)
@@ -479,7 +479,7 @@ describe('Plugin', function () {
             { name: 'run', stepStatus: 'skip' },
             { name: 'pass', stepStatus: 'skip' }
           ]
-          const checkTraces = agent.use(traces => {
+          const checkTraces = agent.assertSomeTraces(traces => {
             const testTrace = traces[0]
             const testSpan = testTrace.find(span => span.name === 'cucumber.test')
             // step spans

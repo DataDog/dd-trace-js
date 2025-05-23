@@ -91,7 +91,7 @@ withVersions('passport-http', 'passport-http', version => {
         )
       } catch (e) {}
 
-      await agent.use(assertFingerprintInTraces)
+      await agent.assertSomeTraces(assertFingerprintInTraces)
     })
 
     it('should report http fingerprints on login successful', async () => {
@@ -104,7 +104,7 @@ withVersions('passport-http', 'passport-http', version => {
         }
       )
 
-      await agent.use(assertFingerprintInTraces)
+      await agent.assertSomeTraces(assertFingerprintInTraces)
     })
   })
 })

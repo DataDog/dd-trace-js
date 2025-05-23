@@ -71,7 +71,7 @@ describe('Plugin', () => {
 
           it('should do automatic instrumentation', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
 
                 expect(span).to.have.property('name', expectedSchema.send.opName)
@@ -100,7 +100,7 @@ describe('Plugin', () => {
             let error
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
 
                 expect(span.error).to.equal(1)
@@ -144,7 +144,7 @@ describe('Plugin', () => {
         describe('when consuming messages', () => {
           it('should do automatic instrumentation', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
                 expect(span).to.have.property('name', expectedSchema.receive.opName)
                 expect(span).to.have.property('service', expectedSchema.receive.serviceName)
@@ -210,7 +210,7 @@ describe('Plugin', () => {
 
         it('should be configured with the correct values', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const span = traces[0][0]
 
               expect(span).to.have.property('service', 'test-custom-name')

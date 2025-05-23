@@ -29,7 +29,7 @@ describe('Plugin', () => {
           const http = require('http')
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const span = traces[0][0]
               expect(span.meta).to.have.property('_dd.code_origin.type', 'exit')
 

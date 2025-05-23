@@ -92,7 +92,7 @@ describe('Plugin', () => {
             it('should be instrumented w/ error', async () => {
               let error
 
-              const expectedSpanPromise = agent.use(traces => {
+              const expectedSpanPromise = agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
 
                 expect(span).to.include({
@@ -186,7 +186,7 @@ describe('Plugin', () => {
             })
 
             it('should propagate context', async () => {
-              const expectedSpanPromise = agent.use(traces => {
+              const expectedSpanPromise = agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
 
                 expect(span).to.include({
@@ -253,9 +253,10 @@ describe('Plugin', () => {
 
           beforeEach(async () => {
             tracer = require('../../dd-trace')
-            await agent.load('@confluentinc/kafka-javascript')
             const lib = require(`../../../versions/${module}@${version}`).get()
             nativeApi = lib
+
+            await agent.load('@confluentinc/kafka-javascript')
 
             // Get the producer/consumer classes directly from the module
             Producer = nativeApi.Producer
@@ -266,16 +267,24 @@ describe('Plugin', () => {
               dr_cb: true
             })
 
-            nativeProducer.connect()
-
-            await new Promise(resolve => {
-              nativeProducer.on('ready', resolve)
+            await new Promise((resolve, reject) => {
+              nativeProducer.connect({}, (err) => {
+                if (err) {
+                  return reject(err)
+                }
+                resolve()
+              })
             })
           })
 
           afterEach(async () => {
-            await new Promise(resolve => {
-              nativeProducer.disconnect(resolve)
+            await new Promise((resolve, reject) => {
+              nativeProducer.disconnect((err) => {
+                if (err) {
+                  return reject(err)
+                }
+                resolve()
+              })
             })
           })
 
@@ -303,7 +312,7 @@ describe('Plugin', () => {
             })
 
             it('should be instrumented with error', async () => {
-              const expectedSpanPromise = agent.use(traces => {
+              const expectedSpanPromise = agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
 
                 expect(span).to.include({
@@ -332,22 +341,68 @@ describe('Plugin', () => {
           })
 
           describe('consumer', () => {
-            beforeEach(() => {
+            beforeEach(async () => {
               nativeConsumer = new Consumer({
                 'bootstrap.servers': '127.0.0.1:9092',
-                'group.id': 'test-group-native'
+                'group.id': 'test-group'
               })
 
-              nativeConsumer.on('ready', () => {
-                nativeConsumer.subscribe([testTopic])
+              await new Promise((resolve, reject) => {
+                nativeConsumer.connect({}, (err) => {
+                  if (err) {
+                    return reject(err)
+                  }
+                  resolve()
+                })
               })
-
-              nativeConsumer.connect()
             })
 
-            afterEach(() => {
-              nativeConsumer.disconnect()
+            afterEach(async () => {
+              await nativeConsumer.unsubscribe()
+              await new Promise((resolve, reject) => {
+                nativeConsumer.disconnect((err) => {
+                  if (err) {
+                    return reject(err)
+                  }
+                  resolve()
+                })
+              })
             })
+
+            function consume (consumer, producer, topic, message, timeoutMs = 9500) {
+              return new Promise((resolve, reject) => {
+                const timeoutId = setTimeout(() => {
+                  reject(new Error(`Timeout: Did not consume message on topic "${topic}" within ${timeoutMs}ms`))
+                }, timeoutMs)
+
+                function doConsume () {
+                  consumer.consume(1, function (err, messages) {
+                    if (err) {
+                      clearTimeout(timeoutId)
+                      return reject(err)
+                    }
+
+                    if (!messages || messages.length === 0) {
+                      setTimeout(doConsume, 20)
+                      return
+                    }
+
+                    const consumedMessage = messages[0]
+
+                    if (consumedMessage.value.toString() !== message.toString()) {
+                      setTimeout(doConsume, 20)
+                      return
+                    }
+
+                    clearTimeout(timeoutId)
+                    consumer.unsubscribe()
+                    resolve()
+                  })
+                }
+                doConsume()
+                producer.produce(topic, null, message, 'native-consumer-key')
+              })
+            }
 
             it('should be instrumented', async () => {
               const expectedSpanPromise = expectSpanWithDefaults({
@@ -363,28 +418,19 @@ describe('Plugin', () => {
                 type: 'worker'
               })
 
+              nativeConsumer.setDefaultConsumeTimeout(10)
+              nativeConsumer.subscribe([testTopic])
+
               // Send a test message using the producer
               const message = Buffer.from('test message for native consumer')
-              const key = 'native-consumer-key'
 
-              let consumePromise
-              nativeConsumer.on('ready', () => {
-                // Consume messages
-                consumePromise = new Promise(resolve => {
-                  nativeConsumer.consume(1, (err, messages) => {
-                    resolve()
-                  })
-                  nativeProducer.produce(testTopic, null, message, key)
-                })
-              })
-
-              await consumePromise
+              await consume(nativeConsumer, nativeProducer, testTopic, message)
 
               return expectedSpanPromise
             })
 
             it('should propagate context', async () => {
-              const expectedSpanPromise = agent.use(traces => {
+              const expectedSpanPromise = agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
 
                 expect(span).to.include({
@@ -395,23 +441,13 @@ describe('Plugin', () => {
 
                 expect(parseInt(span.parent_id.toString())).to.be.gt(0)
               }, { timeoutMs: 10000 })
+              nativeConsumer.setDefaultConsumeTimeout(10)
+              nativeConsumer.subscribe([testTopic])
 
               // Send a test message using the producer
-              const message = Buffer.from('test message for native consumer')
-              const key = 'native-consumer-key'
+              const message = Buffer.from('test message propagation for native consumer 1')
 
-              let consumePromise
-              nativeConsumer.on('ready', () => {
-                // Consume messages
-                consumePromise = new Promise(resolve => {
-                  nativeConsumer.consume(1, (err, messages) => {
-                    resolve()
-                  })
-                  nativeProducer.produce(testTopic, null, message, key)
-                })
-              })
-
-              await consumePromise
+              await consume(nativeConsumer, nativeProducer, testTopic, message)
 
               return expectedSpanPromise
             })
@@ -420,7 +456,7 @@ describe('Plugin', () => {
             // it('should be instrumented with error', async () => {
             //   const fakeError = new Error('Oh No!')
 
-            //   const expectedSpanPromise = agent.use(traces => {
+            //   const expectedSpanPromise = agent.assertSomeTraces(traces => {
             //     const errorSpans = traces[0].filter(span => span.error === 1)
             //     expect(errorSpans.length).to.be.at.least(1)
 
@@ -626,6 +662,59 @@ describe('Plugin', () => {
               expect(setOffsetSpy).to.be.calledOnce
               const { topic } = setOffsetSpy.lastCall.args[0]
               expect(topic).to.equal(testTopic)
+            })
+          })
+
+          describe('when using a kafka broker version that does not support message headers', () => {
+            class KafkaJSError extends Error {
+              constructor (message) {
+                super(message)
+                this.name = 'KafkaJSError'
+                this.type = 'ERR_UNKNOWN'
+              }
+            }
+            let error
+            let producer
+            let produceStub
+
+            beforeEach(async () => {
+              // simulate a kafka error for the broker version not supporting message headers
+              error = new KafkaJSError()
+              error.message = 'Simulated KafkaJSError ERR_UNKNOWN from Producer.produce stub'
+              producer = kafka.producer()
+              await producer.connect()
+
+              // Spy on the produce method from the native library before it gets wrapped
+              produceStub = sinon.stub(nativeApi.Producer.prototype, 'produce')
+                .callsFake((topic, partition, message, key) => {
+                  throw error
+                })
+            })
+
+            afterEach(async () => {
+              produceStub.restore()
+              await producer.disconnect()
+            })
+
+            it('should hit an error for the first send and not inject headers in later sends', async () => {
+              const testMessages = [{ key: 'key1', value: 'test1' }]
+              const testMessages2 = [{ key: 'key2', value: 'test2' }]
+
+              try {
+                await producer.send({ topic: testTopic, messages: testMessages })
+                expect.fail('First producer.send() should have thrown an error')
+              } catch (e) {
+                expect(e).to.equal(error)
+              }
+              // Verify headers were injected in the first attempt
+              expect(testMessages[0].headers[0]).to.have.property('x-datadog-trace-id')
+
+              // restore the stub to allow the next send to succeed
+              produceStub.restore()
+
+              const result = await producer.send({ topic: testTopic, messages: testMessages2 })
+              expect(testMessages2[0].headers).to.be.null
+              expect(result).to.not.be.undefined
             })
           })
         })

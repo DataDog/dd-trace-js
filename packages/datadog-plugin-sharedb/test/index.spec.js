@@ -41,7 +41,7 @@ describe('Plugin', () => {
           doc.fetch(function (err) {
             if (err) { throw err }
 
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('service', 'test')
               expect(traces[0][0]).to.have.property('resource', 'fetch some-collection')
               expect(traces[0][0].meta).to.have.property('span.kind', 'server')
@@ -68,7 +68,7 @@ describe('Plugin', () => {
           doc.fetch(function (err) {
             if (err) { throw err }
 
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               expect(receiveSpy).to.have.been.calledWithMatch(sinon.match.object, sinon.match.func)
               expect(replySpy).to.have.been.calledWithMatch(sinon.match.object, sinon.match.func)
               expect(traces[0][0]).to.have.property('service', 'test')
@@ -87,7 +87,7 @@ describe('Plugin', () => {
           }, {}, function (err) {
             if (err) { throw err }
 
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('service', 'test')
               expect(traces[0][0])
                 .to
@@ -190,7 +190,7 @@ describe('Plugin', () => {
           doc.fetch(function (err) {
             if (err) { throw err }
 
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('service', 'test-sharedb')
               expect(receiveHookSpy).to.have.been.calledWithMatch(sinon.match.object, sinon.match.object)
               expect(replyHookSpy).to.have.been.calledWithMatch(
@@ -249,7 +249,7 @@ describe('Plugin', () => {
             expect(err).not.to.be.null
             expect(err.message).to.equal('Snapshot Fetch Failure')
 
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('service', 'test')
               expect(traces[0][0]).to.have.property('resource', 'fetch some-collection')
               expect(traces[0][0].meta).to.have.property('span.kind', 'server')

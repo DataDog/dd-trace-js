@@ -57,7 +57,7 @@ function withNamingSchema (
           this.timeout(10000)
           return new Promise((resolve, reject) => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = selectSpan(traces)
                 const expectedOpName = typeof opName === 'function'
                   ? opName()
@@ -97,7 +97,7 @@ function withNamingSchema (
 
       it('should pass service name through', done => {
         agent
-          .use(traces => {
+          .assertSomeTraces(traces => {
             const span = traces[0][0]
             const expectedServiceName = typeof serviceName === 'function'
               ? serviceName()
@@ -128,7 +128,7 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
 
     it('should compute peer service', done => {
       agent
-        .use(traces => {
+        .assertSomeTraces(traces => {
           const span = traces[0][0]
           expect(span.meta).to.have.property('peer.service', typeof service === 'function' ? service() : service)
           expect(span.meta).to.have.property('_dd.peer.service.source', serviceSource)

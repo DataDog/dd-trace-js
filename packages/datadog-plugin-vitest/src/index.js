@@ -34,6 +34,7 @@ const {
   TELEMETRY_EVENT_FINISHED,
   TELEMETRY_TEST_SESSION
 } = require('../../dd-trace/src/ci-visibility/telemetry')
+const { DD_MAJOR } = require('../../../version')
 
 // Milliseconds that we subtract from the error test duration
 // so that they do not overlap with the following test
@@ -267,8 +268,9 @@ class VitestPlugin extends CiPlugin {
         'x-datadog-parent-id': process.env.DD_CIVISIBILITY_TEST_MODULE_ID
       })
 
+      const trimmedCommand = DD_MAJOR < 6 ? this.command : 'vitest run'
       // test suites run in a different process, so they also need to init the metadata dictionary
-      const testSessionName = getTestSessionName(this.config, this.command, this.testEnvironmentMetadata)
+      const testSessionName = getTestSessionName(this.config, trimmedCommand, this.testEnvironmentMetadata)
       const metadataTags = {}
       for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
         metadataTags[testLevel] = {

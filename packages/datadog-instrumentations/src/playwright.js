@@ -1,5 +1,3 @@
-const satisfies = require('semifies')
-
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const {
@@ -8,10 +6,10 @@ const {
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE
 } = require('../../dd-trace/src/plugins/util/test')
 const log = require('../../dd-trace/src/log')
+const { DD_MAJOR } = require('../../../version')
 
 const testStartCh = channel('ci:playwright:test:start')
 const testFinishCh = channel('ci:playwright:test:finish')
-const testFnCh = channel('ci:playwright:test:fn')
 
 const testSessionStartCh = channel('ci:playwright:session:start')
 const testSessionFinishCh = channel('ci:playwright:session:finish')
@@ -56,7 +54,6 @@ let testManagementAttemptToFixRetries = 0
 let testManagementTests = {}
 const quarantinedOrDisabledTestsAttemptToFix = []
 let rootDir = ''
-const MINIMUM_SUPPORTED_VERSION_RANGE_EFD = '>=1.38.0'
 
 function getTestProperties (test) {
   const testName = getTestFullname(test)
@@ -531,7 +528,7 @@ function runnerHook (runnerExport, playwrightVersion) {
       log.error('Playwright session start error', e)
     }
 
-    if (isKnownTestsEnabled && satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)) {
+    if (isKnownTestsEnabled) {
       try {
         const { err, knownTests: receivedKnownTests } = await getChannelPromise(knownTestsCh)
         if (!err) {
@@ -547,7 +544,7 @@ function runnerHook (runnerExport, playwrightVersion) {
       }
     }
 
-    if (isTestManagementTestsEnabled && satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)) {
+    if (isTestManagementTestsEnabled) {
       try {
         const { err, testManagementTests: receivedTestManagementTests } = await getChannelPromise(testManagementTestsCh)
         if (!err) {
@@ -604,9 +601,7 @@ function runnerHook (runnerExport, playwrightVersion) {
         totalAttemptToFixFailedTestCount += testStatuses.filter(status => status === 'fail').length
       }
 
-      if (totalFailedTestCount > 0 &&
-          totalAttemptToFixFailedTestCount > 0 &&
-          totalFailedTestCount === totalAttemptToFixFailedTestCount) {
+      if (totalFailedTestCount > 0 && totalFailedTestCount === totalAttemptToFixFailedTestCount) {
         runAllTestsReturn = 'passed'
       }
     }
@@ -635,37 +630,38 @@ function runnerHook (runnerExport, playwrightVersion) {
   return runnerExport
 }
 
-addHook({
-  name: '@playwright/test',
-  file: 'lib/runner.js',
-  versions: ['>=1.18.0 <=1.30.0']
-}, runnerHook)
+if (DD_MAJOR < 6) { // <1.38.0 is only supported up to version 5
+  addHook({
+    name: '@playwright/test',
+    file: 'lib/runner.js',
+    versions: ['>=1.18.0 <=1.30.0']
+  }, runnerHook)
 
-addHook({
-  name: '@playwright/test',
-  file: 'lib/dispatcher.js',
-  versions: ['>=1.18.0 <1.30.0']
-}, dispatcherHook)
+  addHook({
+    name: '@playwright/test',
+    file: 'lib/dispatcher.js',
+    versions: ['>=1.18.0 <1.30.0']
+  }, dispatcherHook)
 
-addHook({
-  name: '@playwright/test',
-  file: 'lib/dispatcher.js',
-  versions: ['>=1.30.0 <1.31.0']
-}, (dispatcher) => dispatcherHookNew(dispatcher, dispatcherRunWrapper))
+  addHook({
+    name: '@playwright/test',
+    file: 'lib/dispatcher.js',
+    versions: ['>=1.30.0 <1.31.0']
+  }, (dispatcher) => dispatcherHookNew(dispatcher, dispatcherRunWrapper))
 
-addHook({
-  name: '@playwright/test',
-  file: 'lib/runner/dispatcher.js',
-  versions: ['>=1.31.0 <1.38.0']
-}, (dispatcher) => dispatcherHookNew(dispatcher, dispatcherRunWrapperNew))
+  addHook({
+    name: '@playwright/test',
+    file: 'lib/runner/dispatcher.js',
+    versions: ['>=1.31.0 <1.38.0']
+  }, (dispatcher) => dispatcherHookNew(dispatcher, dispatcherRunWrapperNew))
 
-addHook({
-  name: '@playwright/test',
-  file: 'lib/runner/runner.js',
-  versions: ['>=1.31.0 <1.38.0']
-}, runnerHook)
+  addHook({
+    name: '@playwright/test',
+    file: 'lib/runner/runner.js',
+    versions: ['>=1.31.0 <1.38.0']
+  }, runnerHook)
+}
 
-// From >=1.38.0
 addHook({
   name: 'playwright',
   file: 'lib/runner/runner.js',
@@ -676,13 +672,12 @@ addHook({
   name: 'playwright',
   file: 'lib/runner/dispatcher.js',
   versions: ['>=1.38.0']
-}, (dispatcher) => dispatcherHookNew(dispatcher, dispatcherRunWrapperNew))
+}, (dispatcher, version) => dispatcherHookNew(dispatcher, dispatcherRunWrapperNew, version))
 
-// Hook used for early flake detection. EFD only works from >=1.38.0
 addHook({
   name: 'playwright',
   file: 'lib/common/suiteUtils.js',
-  versions: [MINIMUM_SUPPORTED_VERSION_RANGE_EFD]
+  versions: ['>=1.38.0']
 }, suiteUtilsPackage => {
   // We grab `applyRepeatEachIndex` to use it later
   // `applyRepeatEachIndex` needs to be applied to a cloned suite
@@ -690,11 +685,10 @@ addHook({
   return suiteUtilsPackage
 })
 
-// Hook used for early flake detection. EFD only works from >=1.38.0
 addHook({
   name: 'playwright',
   file: 'lib/runner/loadUtils.js',
-  versions: [MINIMUM_SUPPORTED_VERSION_RANGE_EFD]
+  versions: ['>=1.38.0']
 }, (loadUtilsPackage) => {
   const oldCreateRootSuite = loadUtilsPackage.createRootSuite
 
@@ -928,9 +922,7 @@ addHook({
         })
       }
 
-      testFnCh.runStores(testCtx, () => {
-        res = _runTest.apply(this, arguments)
-      })
+      res = _runTest.apply(this, arguments)
 
       testInfo = this._currentTest
     })

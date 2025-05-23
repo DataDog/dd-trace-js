@@ -136,7 +136,7 @@ describe('Plugin', () => {
 
                 client.getUnary({ first: 'foobar' }, () => {})
                 return agent
-                  .use(traces => {
+                  .assertSomeTraces(traces => {
                     expect(traces[0][0].meta).to.include({
                       'network.destination.ip': '127.0.0.1',
                       'network.destination.port': port.toString(),
@@ -155,7 +155,7 @@ describe('Plugin', () => {
 
               client.getUnary({ first: 'foobar' }, () => {})
               return agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   expect(traces[0][0]).to.deep.include({
                     name: DD_MAJOR <= 2 ? 'grpc.request' : 'grpc.client',
                     service: 'test',
@@ -192,7 +192,7 @@ describe('Plugin', () => {
               call.on('data', () => {})
 
               return agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   expect(traces[0][0]).to.deep.include({
                     name: DD_MAJOR <= 2 ? 'grpc.request' : 'grpc.client',
                     service: 'test',
@@ -227,7 +227,7 @@ describe('Plugin', () => {
               client.getClientStream(() => {})
 
               return agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   expect(traces[0][0]).to.deep.include({
                     name: DD_MAJOR <= 2 ? 'grpc.request' : 'grpc.client',
                     service: 'test',
@@ -262,7 +262,7 @@ describe('Plugin', () => {
               call.on('data', () => {})
 
               return agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   expect(traces[0][0]).to.deep.include({
                     name: DD_MAJOR <= 2 ? 'grpc.request' : 'grpc.client',
                     service: 'test',
@@ -289,7 +289,7 @@ describe('Plugin', () => {
               call = client.getUnary({ first: 'foobar' }, () => {})
 
               return agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   expect(traces[0][0].metrics).to.have.property('grpc.status.code', 1)
                 })
             })
@@ -305,7 +305,7 @@ describe('Plugin', () => {
               call.on('error', () => {})
 
               return agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   expect(traces[0][0].metrics).to.have.property('grpc.status.code', 1)
                 })
             })
@@ -321,7 +321,7 @@ describe('Plugin', () => {
               call.on('error', () => {})
 
               return agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   expect(traces[0][0].metrics).to.have.property('grpc.status.code', 1)
                 })
             })
@@ -334,7 +334,7 @@ describe('Plugin', () => {
               client.getUnary({ first: 'foobar' }, () => {})
 
               return agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   expect(traces[0][0]).to.have.property('error', 1)
                   expect(traces[0][0].meta).to.include({
                     [ERROR_MESSAGE]: '2 UNKNOWN: foobar',
@@ -362,7 +362,7 @@ describe('Plugin', () => {
               client.getUnary({ first: 'foobar' }, () => {})
 
               return agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   expect(traces[0][0]).to.have.property('error', 0)
                   expect(traces[0][0].metrics).to.have.property('grpc.status.code', 2)
                   tracer._tracer._config.grpc.client.error.statuses =
@@ -380,7 +380,7 @@ describe('Plugin', () => {
               client.getUnary({ first: 'foobar' }, () => {})
 
               return agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   expect(traces[0][0]).to.have.property('error', 1)
                   expect(traces[0][0].meta).to.include({
                     [ERROR_TYPE]: 'Error',
@@ -415,7 +415,7 @@ describe('Plugin', () => {
               client.getUnary({ first: 'foobar' })
 
               return agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   expect(traces[0][0]).to.deep.include({
                     name: DD_MAJOR <= 2 ? 'grpc.request' : 'grpc.client',
                     service: 'test',
@@ -447,7 +447,7 @@ describe('Plugin', () => {
               client.getUnary({ first: 'foobar' }, undefined, () => {})
 
               return agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   expect(traces[0][0]).to.deep.include({
                     name: DD_MAJOR <= 2 ? 'grpc.request' : 'grpc.client',
                     service: 'test',
@@ -560,7 +560,7 @@ describe('Plugin', () => {
               client.getUnary({ first: 'foobar' }, () => {})
 
               return agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   expect(traces[0][0]).to.deep.include({
                     service: 'custom'
                   })
@@ -599,7 +599,7 @@ describe('Plugin', () => {
               client.getUnary({ first: 'foobar' }, metadata, () => {})
 
               return agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   expect(traces[0][0].meta).to.have.property('grpc.request.metadata.foo', 'bar')
                 })
             })
@@ -618,7 +618,7 @@ describe('Plugin', () => {
               client.getUnary({ first: 'foobar' }, () => {})
 
               return agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   expect(traces[0][0].meta).to.have.property('grpc.response.metadata.foo', 'bar')
                 })
             })
@@ -656,7 +656,7 @@ describe('Plugin', () => {
               client.getUnary({ first: 'foobar' }, metadata, () => {})
 
               return agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   expect(traces[0][0].meta).to.deep.include({
                     'grpc.method.name': 'getUnary',
                     'grpc.method.service': 'TestService',
@@ -684,7 +684,7 @@ describe('Plugin', () => {
               client.getUnary({ first: 'foobar' }, () => {})
 
               return agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   expect(traces[0][0].meta).to.deep.include({
                     'grpc.method.name': 'getUnary',
                     'grpc.method.service': 'TestService',

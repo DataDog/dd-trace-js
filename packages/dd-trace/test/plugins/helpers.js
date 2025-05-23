@@ -15,7 +15,7 @@ function resolveNaming (namingSchema) {
 }
 
 function expectSomeSpan (agent, expected, timeout) {
-  return agent.use(traces => {
+  return agent.assertSomeTraces(traces => {
     const scoredErrors = []
     for (const trace of traces) {
       for (const span of trace) {
