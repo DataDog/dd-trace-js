@@ -11,6 +11,7 @@ const { NameAndValue, ValueOnly } = require('../../../../src/appsec/iast/analyze
 const hardcodedSecretAnalyzer = require('../../../../src/appsec/iast/analyzers/hardcoded-secret-analyzer')
 const { suite } = require('./resources/hardcoded-secrets-suite.json')
 const iast = require('../../../../src/appsec/iast')
+const vulnerabilityReporter = require('../../../../src/appsec/iast/vulnerability-reporter')
 
 describe('Hardcoded Secret Analyzer', () => {
   describe('unit test', () => {
@@ -73,6 +74,7 @@ describe('Hardcoded Secret Analyzer', () => {
   describe('full feature', () => {
     const filename = 'hardcoded-secret-functions'
     const functionsPath = path.join(os.tmpdir(), filename)
+    let rewriter
 
     before(() => {
       fs.copyFileSync(path.join(__dirname, 'resources', `${filename}.js`), functionsPath)
@@ -89,18 +91,23 @@ describe('Hardcoded Secret Analyzer', () => {
 
       beforeEach(() => {
         const tracer = require('../../../../')
-        iast.enable(new Config({
+        const config = new Config({
           experimental: {
             iast: {
               enabled: true,
               requestSampling: 100
             }
           }
-        }), tracer)
+        })
+        iast.enable(config, tracer)
+        rewriter = require('../../../../src/appsec/iast/taint-tracking/rewriter')
+        rewriter.enable(config)
       })
 
       afterEach(() => {
         iast.disable()
+        rewriter.disable()
+        vulnerabilityReporter.clearCache()
       })
 
       afterEach(() => {
@@ -109,7 +116,7 @@ describe('Hardcoded Secret Analyzer', () => {
 
       it('should detect vulnerability', (done) => {
         agent
-          .use(traces => {
+          .assertSomeTraces(traces => {
             expect(traces[0][0].meta['_dd.iast.json']).to.include('"HARDCODED_SECRET"')
           })
           .then(done)

@@ -1,17 +1,17 @@
 'use strict'
 
-const iastLog = require('../../iast-log')
+const log = require('../../../../log')
 const vulnerabilities = require('../../vulnerabilities')
 
 const { contains, intersects, remove } = require('./range-utils')
 
-const codeInjectionSensitiveAnalyzer = require('./sensitive-analyzers/code-injection-sensitive-analyzer')
 const commandSensitiveAnalyzer = require('./sensitive-analyzers/command-sensitive-analyzer')
 const hardcodedPasswordAnalyzer = require('./sensitive-analyzers/hardcoded-password-analyzer')
 const headerSensitiveAnalyzer = require('./sensitive-analyzers/header-sensitive-analyzer')
 const jsonSensitiveAnalyzer = require('./sensitive-analyzers/json-sensitive-analyzer')
 const ldapSensitiveAnalyzer = require('./sensitive-analyzers/ldap-sensitive-analyzer')
 const sqlSensitiveAnalyzer = require('./sensitive-analyzers/sql-sensitive-analyzer')
+const taintedRangeBasedSensitiveAnalyzer = require('./sensitive-analyzers/tainted-range-based-sensitive-analyzer')
 const urlSensitiveAnalyzer = require('./sensitive-analyzers/url-sensitive-analyzer')
 
 const { DEFAULT_IAST_REDACTION_NAME_PATTERN, DEFAULT_IAST_REDACTION_VALUE_PATTERN } = require('./sensitive-regex')
@@ -24,19 +24,21 @@ class SensitiveHandler {
     this._valuePattern = new RegExp(DEFAULT_IAST_REDACTION_VALUE_PATTERN, 'gmi')
 
     this._sensitiveAnalyzers = new Map()
-    this._sensitiveAnalyzers.set(vulnerabilities.CODE_INJECTION, codeInjectionSensitiveAnalyzer)
+    this._sensitiveAnalyzers.set(vulnerabilities.CODE_INJECTION, taintedRangeBasedSensitiveAnalyzer)
     this._sensitiveAnalyzers.set(vulnerabilities.COMMAND_INJECTION, commandSensitiveAnalyzer)
-    this._sensitiveAnalyzers.set(vulnerabilities.NOSQL_MONGODB_INJECTION, jsonSensitiveAnalyzer)
-    this._sensitiveAnalyzers.set(vulnerabilities.LDAP_INJECTION, ldapSensitiveAnalyzer)
-    this._sensitiveAnalyzers.set(vulnerabilities.SQL_INJECTION, sqlSensitiveAnalyzer)
-    this._sensitiveAnalyzers.set(vulnerabilities.SSRF, urlSensitiveAnalyzer)
-    this._sensitiveAnalyzers.set(vulnerabilities.UNVALIDATED_REDIRECT, urlSensitiveAnalyzer)
-    this._sensitiveAnalyzers.set(vulnerabilities.HEADER_INJECTION, (evidence) => {
-      return headerSensitiveAnalyzer(evidence, this._namePattern, this._valuePattern)
-    })
     this._sensitiveAnalyzers.set(vulnerabilities.HARDCODED_PASSWORD, (evidence) => {
       return hardcodedPasswordAnalyzer(evidence, this._valuePattern)
     })
+    this._sensitiveAnalyzers.set(vulnerabilities.HEADER_INJECTION, (evidence) => {
+      return headerSensitiveAnalyzer(evidence, this._namePattern, this._valuePattern)
+    })
+    this._sensitiveAnalyzers.set(vulnerabilities.LDAP_INJECTION, ldapSensitiveAnalyzer)
+    this._sensitiveAnalyzers.set(vulnerabilities.NOSQL_MONGODB_INJECTION, jsonSensitiveAnalyzer)
+    this._sensitiveAnalyzers.set(vulnerabilities.SQL_INJECTION, sqlSensitiveAnalyzer)
+    this._sensitiveAnalyzers.set(vulnerabilities.SSRF, urlSensitiveAnalyzer)
+    this._sensitiveAnalyzers.set(vulnerabilities.TEMPLATE_INJECTION, taintedRangeBasedSensitiveAnalyzer)
+    this._sensitiveAnalyzers.set(vulnerabilities.UNTRUSTED_DESERIALIZATION, taintedRangeBasedSensitiveAnalyzer)
+    this._sensitiveAnalyzers.set(vulnerabilities.UNVALIDATED_REDIRECT, urlSensitiveAnalyzer)
   }
 
   isSensibleName (name) {
@@ -281,7 +283,7 @@ class SensitiveHandler {
       try {
         this._namePattern = new RegExp(redactionNamePattern, 'gmi')
       } catch (e) {
-        iastLog.warn('Redaction name pattern is not valid')
+        log.warn('[ASM] Redaction name pattern is not valid')
       }
     }
 
@@ -289,7 +291,7 @@ class SensitiveHandler {
       try {
         this._valuePattern = new RegExp(redactionValuePattern, 'gmi')
       } catch (e) {
-        iastLog.warn('Redaction value pattern is not valid')
+        log.warn('[ASM] Redaction value pattern is not valid')
       }
     }
   }

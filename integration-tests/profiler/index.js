@@ -21,4 +21,5 @@ function busyWait (ms) {
   })
 }
 
-setImmediate(async () => busyWait(500))
+const durationMs = Number.parseInt(process.env.TEST_DURATION_MS ?? '500')
+setImmediate(async () => busyWait(durationMs))

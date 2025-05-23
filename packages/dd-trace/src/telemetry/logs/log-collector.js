@@ -3,7 +3,7 @@
 const log = require('../../log')
 const { calculateDDBasePath } = require('../../util')
 
-const logs = new Map()
+const logs = new Map() // hash -> log
 
 // NOTE: Is this a reasonable number?
 let maxEntries = 10000
@@ -47,15 +47,16 @@ function sanitize (logEntry) {
     .filter((line, index) => (isDDCode && index < firstIndex) || line.includes(ddBasePath))
     .map(line => line.replace(ddBasePath, ''))
 
-  logEntry.stack_trace = stackLines.join(EOL)
-  if (logEntry.stack_trace === '') {
-    // If entire stack was removed, we'd just have a message saying "omitted"
-    // in which case we'd rather not log it at all.
-    return null
+  if (!isDDCode && logEntry.errorType && stackLines.length) {
+    stackLines = [`${logEntry.errorType}: redacted`, ...stackLines]
   }
 
-  if (!isDDCode) {
-    logEntry.message = 'omitted'
+  delete logEntry.errorType
+
+  logEntry.stack_trace = stackLines.join(EOL)
+  if (logEntry.stack_trace === '' && (!logEntry.message || logEntry.message === 'Generic Error')) {
+    // If entire stack was removed and there is no message we'd rather not log it at all.
+    return null
   }
 
   return logEntry
@@ -80,9 +81,11 @@ const logCollector = {
       if (!logs.has(hash)) {
         logs.set(hash, logEntry)
         return true
+      } else {
+        logs.get(hash).count++
       }
     } catch (e) {
-      log.error(`Unable to add log to logCollector: ${e.message}`)
+      log.error('Unable to add log to logCollector: %s', e.message)
     }
     return false
   },

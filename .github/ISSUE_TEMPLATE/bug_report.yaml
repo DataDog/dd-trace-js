@@ -1,0 +1,71 @@
+name: "Bug Report (Low Priority)"
+description: "Create a public Bug Report. Note that these may not be addressed as quickly as the helpdesk and that looking up account information will be difficult."
+title: "[BUG]: "
+labels: bug
+body:
+  - type: input
+    attributes:
+      label: Tracer Version(s)
+      description: "Version(s) of the tracer affected by this bug"
+      placeholder: 1.2.3, 4.5.6
+    validations:
+      required: true
+
+  - type: input
+    attributes:
+      label: Node.js Version(s)
+      description: "Version(s) of Node.js (`node --version`) that you've encountered this bug with"
+      placeholder: 20.1.1
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Bug Report
+      description: Please add a clear and concise description of the bug here
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Reproduction Code
+      description: Please add code here to help us reproduce the problem
+    validations:
+      required: false
+
+  - type: textarea
+    attributes:
+      label: Error Logs
+      description: "Please provide any error logs from the tracer (`DD_TRACE_DEBUG=true` can help)"
+    validations:
+      required: false
+
+  - type: textarea
+    attributes:
+      label: Tracer Config
+      description: "Please provide the `tracer.init(config)` object and any applicable tracer environment variables"
+    validations:
+      required: false
+
+  - type: input
+    attributes:
+      label: Operating System
+      description: "Provide your operating system and version (e.g. `uname -a`)"
+      placeholder: Darwin Kernel Version 23.6.0
+    validations:
+      required: false
+
+  - type: dropdown
+    attributes:
+      label: Bundling
+      description: "How is your application being bundled"
+      options:
+        - Unsure
+        - No Bundling
+        - ESBuild
+        - Webpack
+        - Next.js
+        - Vite
+        - Rollup
+    validations:
+      required: true

@@ -2,24 +2,59 @@
 
 const proxyquire = require('proxyquire')
 
-const iastLog = require('../../../../src/appsec/iast/iast-log')
+const log = require('../../../../src/log')
 const dc = require('dc-polyfill')
+const { HTTP_REQUEST_PARAMETER } = require('../../../../src/appsec/iast/taint-tracking/source-types')
+const { SQL_INJECTION_MARK, COMMAND_INJECTION_MARK } =
+ require('../../../../src/appsec/iast/taint-tracking/secure-marks')
 
 describe('sql-injection-analyzer', () => {
   const NOT_TAINTED_QUERY = 'no vulnerable query'
   const TAINTED_QUERY = 'vulnerable query'
+  const TAINTED_SQLI_SECURED = 'sqli secure marked vulnerable query'
+  const TAINTED_CMDI_SECURED = 'cmdi secure marked vulnerable query'
+
+  function getRanges (string, secureMarks) {
+    const range = {
+      start: 0,
+      end: string.length,
+      iinfo: {
+        parameterName: 'param',
+        parameterValue: string,
+        type: HTTP_REQUEST_PARAMETER
+      },
+      secureMarks
+    }
+
+    return [range]
+  }
 
   const TaintTrackingMock = {
-    isTainted: (iastContext, string) => {
-      return string === TAINTED_QUERY
+    getRanges: (iastContext, string) => {
+      switch (string) {
+        case TAINTED_QUERY:
+          return getRanges(string)
+
+        case TAINTED_SQLI_SECURED:
+          return getRanges(string, SQL_INJECTION_MARK)
+
+        case TAINTED_CMDI_SECURED:
+          return getRanges(string, COMMAND_INJECTION_MARK)
+
+        default:
+          return []
+      }
     }
   }
 
   const InjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/injection-analyzer', {
     '../taint-tracking/operations': TaintTrackingMock
   })
-  const sqlInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/sql-injection-analyzer', {
+  const StoredInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/stored-injection-analyzer', {
     './injection-analyzer': InjectionAnalyzer
+  })
+  const sqlInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/sql-injection-analyzer', {
+    './stored-injection-analyzer': StoredInjectionAnalyzer
   })
 
   afterEach(() => {
@@ -58,6 +93,16 @@ describe('sql-injection-analyzer', () => {
     expect(isVulnerable).to.be.true
   })
 
+  it('should not detect vulnerability when vulnerable query with sqli secure mark', () => {
+    const isVulnerable = sqlInjectionAnalyzer._isVulnerable(TAINTED_SQLI_SECURED)
+    expect(isVulnerable).to.be.false
+  })
+
+  it('should detect vulnerability when vulnerable query with cmdi secure mark', () => {
+    const isVulnerable = sqlInjectionAnalyzer._isVulnerable(TAINTED_CMDI_SECURED)
+    expect(isVulnerable).to.be.true
+  })
+
   it('should report "SQL_INJECTION" vulnerability', () => {
     const dialect = 'DIALECT'
     const addVulnerability = sinon.stub()
@@ -85,9 +130,14 @@ describe('sql-injection-analyzer', () => {
       '../taint-tracking/operations': TaintTrackingMock,
       './vulnerability-analyzer': ProxyAnalyzer
     })
+
+    const StoredInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/stored-injection-analyzer', {
+      './injection-analyzer': InjectionAnalyzer
+    })
+
     const proxiedSqlInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/sql-injection-analyzer',
       {
-        './injection-analyzer': InjectionAnalyzer,
+        './stored-injection-analyzer': StoredInjectionAnalyzer,
         '../taint-tracking/operations': TaintTrackingMock,
         '../iast-context': {
           getIastContext: () => iastContext
@@ -103,11 +153,11 @@ describe('sql-injection-analyzer', () => {
   })
 
   it('should not report an error when context is not initialized', () => {
-    sinon.stub(iastLog, 'errorAndPublish')
+    sinon.stub(log, 'error')
     sqlInjectionAnalyzer.configure(true)
     dc.channel('datadog:sequelize:query:finish').publish()
     sqlInjectionAnalyzer.configure(false)
-    expect(iastLog.errorAndPublish).not.to.be.called
+    expect(log.error).not.to.be.called
   })
 
   describe('analyze', () => {
@@ -120,8 +170,16 @@ describe('sql-injection-analyzer', () => {
       const getStore = sinon.stub().returns(store)
       const getIastContext = sinon.stub().returns(iastContext)
 
+      const datadogCore = {
+        storage: () => {
+          return {
+            getStore
+          }
+        }
+      }
+
       const iastPlugin = proxyquire('../../../../src/appsec/iast/iast-plugin', {
-        '../../../../datadog-core': { storage: { getStore } },
+        '../../../../datadog-core': datadogCore,
         './iast-context': { getIastContext }
       })
 

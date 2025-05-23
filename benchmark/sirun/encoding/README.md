@@ -1,4 +1,4 @@
-This test sends a single trace 10000 times to the encoder. Each trace is
+This test sends a single trace many times to the encoder. Each trace is
 pre-formatted (as the encoder requires) and consists of 30 spans with the same
 content in each of them. The IDs are all randomized. A null writer is provided
 to the encoder, so writing operations are not included here.

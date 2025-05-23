@@ -6,16 +6,17 @@ const web = require('../plugins/util/web')
 const { ipHeaderList } = require('../plugins/util/ip_extractor')
 const {
   incrementWafInitMetric,
-  updateWafRequestsMetricTags,
-  updateRaspRequestsMetricTags,
   incrementWafUpdatesMetric,
   incrementWafRequestsMetric,
+  updateWafRequestsMetricTags,
+  updateRaspRequestsMetricTags,
+  updateRaspRuleSkippedMetricTags,
+  updateRateLimitedMetric,
   getRequestMetrics
 } = require('./telemetry')
 const zlib = require('zlib')
-const standalone = require('./standalone')
-const { SAMPLING_MECHANISM_APPSEC } = require('../constants')
 const { keepTrace } = require('../priority_sampler')
+const { ASM } = require('../standalone/product')
 
 // default limiter, configurable with setRateLimit()
 let limiter = new Limiter(100)
@@ -32,6 +33,7 @@ const contentHeaderList = [
 
 const EVENT_HEADERS_MAP = mapHeaderAndTags([
   ...ipHeaderList,
+  'x-forwarded',
   'forwarded',
   'via',
   ...contentHeaderList,
@@ -88,35 +90,55 @@ function formatHeaderName (name) {
     .toLowerCase()
 }
 
-function reportWafInit (wafVersion, rulesVersion, diagnosticsRules = {}) {
-  metricsQueue.set('_dd.appsec.waf.version', wafVersion)
+function reportWafInit (wafVersion, rulesVersion, diagnosticsRules = {}, success = false) {
+  if (success) {
+    metricsQueue.set('_dd.appsec.waf.version', wafVersion)
 
-  metricsQueue.set('_dd.appsec.event_rules.loaded', diagnosticsRules.loaded?.length || 0)
-  metricsQueue.set('_dd.appsec.event_rules.error_count', diagnosticsRules.failed?.length || 0)
-  if (diagnosticsRules.failed?.length) {
-    metricsQueue.set('_dd.appsec.event_rules.errors', JSON.stringify(diagnosticsRules.errors))
+    metricsQueue.set('_dd.appsec.event_rules.loaded', diagnosticsRules.loaded?.length || 0)
+    metricsQueue.set('_dd.appsec.event_rules.error_count', diagnosticsRules.failed?.length || 0)
+    if (diagnosticsRules.failed?.length) {
+      metricsQueue.set('_dd.appsec.event_rules.errors', JSON.stringify(diagnosticsRules.errors))
+    }
   }
 
-  incrementWafInitMetric(wafVersion, rulesVersion)
+  incrementWafInitMetric(wafVersion, rulesVersion, success)
 }
 
-function reportMetrics (metrics, raspRuleType) {
-  const store = storage.getStore()
+function reportMetrics (metrics, raspRule) {
+  const store = storage('legacy').getStore()
   const rootSpan = store?.req && web.root(store.req)
+
   if (!rootSpan) return
 
   if (metrics.rulesVersion) {
     rootSpan.setTag('_dd.appsec.event_rules.version', metrics.rulesVersion)
   }
-  if (raspRuleType) {
-    updateRaspRequestsMetricTags(metrics, store.req, raspRuleType)
+
+  if (raspRule) {
+    updateRaspRequestsMetricTags(metrics, store.req, raspRule)
   } else {
     updateWafRequestsMetricTags(metrics, store.req)
+  }
+
+  reportTruncationMetrics(rootSpan, metrics)
+}
+
+function reportTruncationMetrics (rootSpan, metrics) {
+  if (metrics.maxTruncatedString) {
+    rootSpan.setTag('_dd.appsec.truncated.string_length', metrics.maxTruncatedString)
+  }
+
+  if (metrics.maxTruncatedContainerSize) {
+    rootSpan.setTag('_dd.appsec.truncated.container_size', metrics.maxTruncatedContainerSize)
+  }
+
+  if (metrics.maxTruncatedContainerDepth) {
+    rootSpan.setTag('_dd.appsec.truncated.container_depth', metrics.maxTruncatedContainerDepth)
   }
 }
 
 function reportAttack (attackData) {
-  const store = storage.getStore()
+  const store = storage('legacy').getStore()
   const req = store?.req
   const rootSpan = web.root(req)
   if (!rootSpan) return
@@ -128,9 +150,9 @@ function reportAttack (attackData) {
   }
 
   if (limiter.isAllowed()) {
-    keepTrace(rootSpan, SAMPLING_MECHANISM_APPSEC)
-
-    standalone.sample(rootSpan)
+    keepTrace(rootSpan, ASM)
+  } else {
+    updateRateLimitedMetric(req)
   }
 
   // TODO: maybe add this to format.js later (to take decision as late as possible)
@@ -147,7 +169,9 @@ function reportAttack (attackData) {
     newTags['_dd.appsec.json'] = '{"triggers":' + attackData + '}'
   }
 
-  newTags['network.client.ip'] = req.socket.remoteAddress
+  if (req.socket) {
+    newTags['network.client.ip'] = req.socket.remoteAddress
+  }
 
   rootSpan.addTags(newTags)
 }
@@ -159,7 +183,7 @@ function isFingerprintDerivative (derivative) {
 function reportDerivatives (derivatives) {
   if (!derivatives) return
 
-  const req = storage.getStore()?.req
+  const req = storage('legacy').getStore()?.req
   const rootSpan = web.root(req)
 
   if (!rootSpan) return
@@ -183,14 +207,13 @@ function finishRequest (req, res) {
   if (metricsQueue.size) {
     rootSpan.addTags(Object.fromEntries(metricsQueue))
 
-    keepTrace(rootSpan, SAMPLING_MECHANISM_APPSEC)
-
-    standalone.sample(rootSpan)
+    keepTrace(rootSpan, ASM)
 
     metricsQueue.clear()
   }
 
   const metrics = getRequestMetrics(req)
+
   if (metrics?.duration) {
     rootSpan.setTag('_dd.appsec.waf.duration', metrics.duration)
   }
@@ -199,12 +222,28 @@ function finishRequest (req, res) {
     rootSpan.setTag('_dd.appsec.waf.duration_ext', metrics.durationExt)
   }
 
+  if (metrics?.wafErrorCode) {
+    rootSpan.setTag('_dd.appsec.waf.error', metrics.wafErrorCode)
+  }
+
+  if (metrics?.wafTimeouts) {
+    rootSpan.setTag('_dd.appsec.waf.timeouts', metrics.wafTimeouts)
+  }
+
   if (metrics?.raspDuration) {
     rootSpan.setTag('_dd.appsec.rasp.duration', metrics.raspDuration)
   }
 
   if (metrics?.raspDurationExt) {
     rootSpan.setTag('_dd.appsec.rasp.duration_ext', metrics.raspDurationExt)
+  }
+
+  if (metrics?.raspErrorCode) {
+    rootSpan.setTag('_dd.appsec.rasp.error', metrics.raspErrorCode)
+  }
+
+  if (metrics?.raspTimeouts) {
+    rootSpan.setTag('_dd.appsec.rasp.timeout', metrics.raspTimeouts)
   }
 
   if (metrics?.raspEvalCount) {
@@ -256,6 +295,7 @@ module.exports = {
   reportMetrics,
   reportAttack,
   reportWafUpdate: incrementWafUpdatesMetric,
+  reportRaspRuleSkipped: updateRaspRuleSkippedMetricTags,
   reportDerivatives,
   finishRequest,
   setRateLimit,

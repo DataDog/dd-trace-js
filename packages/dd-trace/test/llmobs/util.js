@@ -120,7 +120,7 @@ function expectedLLMObsBaseEvent ({
   const spanEvent = {
     trace_id: MOCK_STRING,
     span_id: spanId,
-    parent_id: parentId || 'undefined',
+    parent_id: typeof parentId === 'bigint' ? fromBuffer(parentId) : (parentId || 'undefined'),
     name: spanName,
     tags: expectedLLMObsTags({ span, tags, error, errorType, sessionId }),
     start_ns: startNs,
@@ -164,7 +164,7 @@ function expectedLLMObsTags ({
     `service:${service ?? ''}`,
     'source:integration',
     `ml_app:${tags.ml_app}`,
-    `dd-trace.version:${tracerVersion}`
+    `ddtrace.version:${tracerVersion}`
   ]
 
   if (sessionId) spanTags.push(`session_id:${sessionId}`)
@@ -186,8 +186,7 @@ function expectedLLMObsTags ({
 }
 
 function fromBuffer (spanProperty, isNumber = false) {
-  const { buffer, offset } = spanProperty
-  const strVal = buffer.readBigInt64BE(offset).toString()
+  const strVal = spanProperty.toString(10)
   return isNumber ? Number(strVal) : strVal
 }
 

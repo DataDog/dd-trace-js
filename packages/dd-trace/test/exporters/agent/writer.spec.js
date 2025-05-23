@@ -149,6 +149,7 @@ function describeWriter (protocolVersion) {
 
     it('should log request errors', done => {
       const error = new Error('boom')
+      error.status = 42
 
       request.yields(error)
 
@@ -156,7 +157,8 @@ function describeWriter (protocolVersion) {
       writer.flush()
 
       setTimeout(() => {
-        expect(log.error).to.have.been.calledWith(error)
+        expect(log.error)
+          .to.have.been.calledWith('Error sending payload to the agent (status code: %s)', error.status, error)
         done()
       })
     })

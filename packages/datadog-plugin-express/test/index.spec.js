@@ -2,6 +2,7 @@
 
 const { AsyncLocalStorage } = require('async_hooks')
 const axios = require('axios')
+const semver = require('semver')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
@@ -48,7 +49,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
             const timer = setTimeout(done, 100)
 
-            agent.use(() => {
+            agent.assertSomeTraces(() => {
               clearTimeout(timer)
               done(new Error('Agent received an unexpected trace.'))
             })
@@ -63,7 +64,6 @@ describe('Plugin', () => {
           const app = express()
 
           app.use(() => { throw new Error('boom') })
-          // eslint-disable-next-line n/handle-callback-err
           app.use((err, req, res, next) => {
             res.status(200).send()
           })
@@ -103,7 +103,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('service', 'test')
@@ -139,7 +139,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('service', 'test')
@@ -176,7 +176,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('service', 'test')
@@ -212,36 +212,58 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
+                const isExpress4 = semver.intersects(version, '<5.0.0')
+                let index = 0
 
-                expect(spans[0]).to.have.property('resource', 'GET /app/user/:id')
-                expect(spans[0]).to.have.property('name', 'express.request')
-                expect(spans[0].meta).to.have.property('component', 'express')
-                expect(spans[1]).to.have.property('resource', 'query')
-                expect(spans[1]).to.have.property('name', 'express.middleware')
-                expect(spans[1].parent_id.toString()).to.equal(spans[0].span_id.toString())
-                expect(spans[1].meta).to.have.property('component', 'express')
-                expect(spans[2]).to.have.property('resource', 'expressInit')
-                expect(spans[2]).to.have.property('name', 'express.middleware')
-                expect(spans[2].parent_id.toString()).to.equal(spans[0].span_id.toString())
-                expect(spans[2].meta).to.have.property('component', 'express')
-                expect(spans[3]).to.have.property('resource', 'named')
-                expect(spans[3]).to.have.property('name', 'express.middleware')
-                expect(spans[3].parent_id.toString()).to.equal(spans[0].span_id.toString())
-                expect(spans[3].meta).to.have.property('component', 'express')
-                expect(spans[4]).to.have.property('resource', 'router')
-                expect(spans[4]).to.have.property('name', 'express.middleware')
-                expect(spans[4].parent_id.toString()).to.equal(spans[0].span_id.toString())
-                expect(spans[4].meta).to.have.property('component', 'express')
-                expect(spans[5].resource).to.match(/^bound\s.*$/)
-                expect(spans[5]).to.have.property('name', 'express.middleware')
-                expect(spans[5].parent_id.toString()).to.equal(spans[4].span_id.toString())
-                expect(spans[5].meta).to.have.property('component', 'express')
-                expect(spans[6]).to.have.property('resource', '<anonymous>')
-                expect(spans[6]).to.have.property('name', 'express.middleware')
-                expect(spans[6].parent_id.toString()).to.equal(spans[5].span_id.toString())
-                expect(spans[6].meta).to.have.property('component', 'express')
+                const rootSpan = spans[index++]
+                expect(rootSpan).to.have.property('resource', 'GET /app/user/:id')
+                expect(rootSpan).to.have.property('name', 'express.request')
+                expect(rootSpan.meta).to.have.property('component', 'express')
+
+                if (isExpress4) {
+                  expect(spans[index]).to.have.property('resource', 'query')
+                  expect(spans[index]).to.have.property('name', 'express.middleware')
+                  expect(spans[index].parent_id.toString()).to.equal(rootSpan.span_id.toString())
+                  expect(spans[index].meta).to.have.property('component', 'express')
+                  index++
+
+                  expect(spans[index]).to.have.property('resource', 'expressInit')
+                  expect(spans[index]).to.have.property('name', 'express.middleware')
+                  expect(spans[index].parent_id.toString()).to.equal(rootSpan.span_id.toString())
+                  expect(spans[index].meta).to.have.property('component', 'express')
+                  index++
+                }
+
+                expect(spans[index]).to.have.property('resource', 'named')
+                expect(spans[index]).to.have.property('name', 'express.middleware')
+                expect(spans[index].parent_id.toString()).to.equal(rootSpan.span_id.toString())
+                expect(spans[index].meta).to.have.property('component', 'express')
+                index++
+
+                expect(spans[index]).to.have.property('resource', 'router')
+                expect(spans[index]).to.have.property('name', 'express.middleware')
+                expect(spans[index].parent_id.toString()).to.equal(rootSpan.span_id.toString())
+                expect(spans[index].meta).to.have.property('component', 'express')
+                index++
+
+                if (isExpress4) {
+                  expect(spans[index].resource).to.match(/^bound\s.*$/)
+                } else {
+                  expect(spans[index]).to.have.property('resource', 'handle')
+                }
+                expect(spans[index]).to.have.property('name', 'express.middleware')
+                expect(spans[index].parent_id.toString()).to.equal(spans[index - 1].span_id.toString())
+                expect(spans[index].meta).to.have.property('component', 'express')
+                index++
+
+                expect(spans[index]).to.have.property('resource', '<anonymous>')
+                expect(spans[index]).to.have.property('name', 'express.middleware')
+                expect(spans[index].parent_id.toString()).to.equal(spans[index - 1].span_id.toString())
+                expect(spans[index].meta).to.have.property('component', 'express')
+
+                expect(index).to.equal(spans.length - 1)
               })
               .then(done)
               .catch(done)
@@ -274,15 +296,17 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
+
+                const breakingSpanIndex = semver.intersects(version, '<5.0.0') ? 3 : 1
 
                 expect(spans[0]).to.have.property('resource', 'GET /user/:id')
                 expect(spans[0]).to.have.property('name', 'express.request')
                 expect(spans[0].meta).to.have.property('component', 'express')
-                expect(spans[3]).to.have.property('resource', 'breaking')
-                expect(spans[3]).to.have.property('name', 'express.middleware')
-                expect(spans[3].meta).to.have.property('component', 'express')
+                expect(spans[breakingSpanIndex]).to.have.property('resource', 'breaking')
+                expect(spans[breakingSpanIndex]).to.have.property('name', 'express.middleware')
+                expect(spans[breakingSpanIndex].meta).to.have.property('component', 'express')
               })
               .then(done)
               .catch(done)
@@ -309,7 +333,6 @@ describe('Plugin', () => {
             next = _next
           })
           app.use(() => { throw error })
-          // eslint-disable-next-line n/handle-callback-err
           app.use((err, req, res, next) => next())
           app.get('/user/:id', (req, res) => {
             res.status(200).send()
@@ -319,14 +342,15 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
+                const errorSpanIndex = semver.intersects(version, '<5.0.0') ? 4 : 2
 
                 expect(spans[0]).to.have.property('name', 'express.request')
-                expect(spans[4]).to.have.property('name', 'express.middleware')
-                expect(spans[4].meta).to.have.property(ERROR_TYPE, error.name)
+                expect(spans[errorSpanIndex]).to.have.property('name', 'express.middleware')
+                expect(spans[errorSpanIndex].meta).to.have.property(ERROR_TYPE, error.name)
                 expect(spans[0].meta).to.have.property('component', 'express')
-                expect(spans[4].meta).to.have.property('component', 'express')
+                expect(spans[errorSpanIndex].meta).to.have.property('component', 'express')
               })
               .then(done)
               .catch(done)
@@ -351,7 +375,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('resource', 'GET /app(/^\\/user\\/(\\d)$/)')
@@ -379,7 +403,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('resource', 'GET /app/user/:id')
@@ -398,14 +422,14 @@ describe('Plugin', () => {
           const router = express.Router()
 
           router.use('/', (req, res, next) => next())
-          router.use('*', (req, res, next) => next())
+          router.use('/*splat', (req, res, next) => next())
           router.use('/bar', (req, res, next) => next())
           router.use('/bar', (req, res, next) => {
             res.status(200).send()
           })
 
           app.use('/', (req, res, next) => next())
-          app.use('*', (req, res, next) => next())
+          app.use('/*splat', (req, res, next) => next())
           app.use('/foo/bar', (req, res, next) => next())
           app.use('/foo', router)
 
@@ -413,7 +437,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('resource', 'GET /foo/bar')
@@ -441,7 +465,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('resource', 'GET /app/user/:id')
@@ -470,7 +494,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('resource', 'GET /app/user/:id')
@@ -498,7 +522,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans.filter(span => span.name === 'express.request')).to.have.length(1)
@@ -566,7 +590,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('resource', 'GET /app/user/:id')
@@ -598,7 +622,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('resource', 'GET /app/user/:id')
@@ -627,7 +651,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('resource', 'GET /app')
@@ -662,7 +686,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('resource', 'GET /v1/a')
@@ -692,7 +716,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('resource', 'GET /app')
@@ -728,7 +752,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('resource', 'GET /foo/bar')
@@ -764,7 +788,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('resource', 'GET /foo/bar')
@@ -802,7 +826,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('resource', 'GET /foo/bar')
@@ -833,7 +857,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('resource', 'GET /v1/a')
@@ -890,7 +914,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('resource', 'GET')
@@ -982,7 +1006,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('resource', 'GET /app/user/:id')
@@ -1005,7 +1029,7 @@ describe('Plugin', () => {
           appListener = app.listen(0, 'localhost', () => {
             const port = appListener.address().port
 
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans[0].trace_id.toString()).to.equal('1234')
@@ -1040,7 +1064,7 @@ describe('Plugin', () => {
           appListener = app.listen(0, 'localhost', () => {
             const port = appListener.address().port
 
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans[0]).to.have.property('error', 1)
@@ -1074,7 +1098,7 @@ describe('Plugin', () => {
           appListener = app.listen(0, 'localhost', () => {
             const port = appListener.address().port
 
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans[0]).to.have.property('error', 0)
@@ -1103,7 +1127,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('error', 1)
@@ -1129,26 +1153,26 @@ describe('Plugin', () => {
           const error = new Error('boom')
 
           app.use((req, res, next) => next(error))
-          // eslint-disable-next-line n/handle-callback-err
           app.use((error, req, res, next) => res.status(500).send())
 
           appListener = app.listen(0, 'localhost', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
+                const secondErrorIndex = spans.length - 2
 
                 expect(spans[0]).to.have.property('error', 1)
                 expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
                 expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
                 expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
                 expect(spans[0].meta).to.have.property('component', 'express')
-                expect(spans[3]).to.have.property('error', 1)
-                expect(spans[3].meta).to.have.property(ERROR_TYPE, error.name)
-                expect(spans[3].meta).to.have.property(ERROR_MESSAGE, error.message)
-                expect(spans[3].meta).to.have.property(ERROR_STACK, error.stack)
-                expect(spans[3].meta).to.have.property('component', 'express')
+                expect(spans[secondErrorIndex]).to.have.property('error', 1)
+                expect(spans[secondErrorIndex].meta).to.have.property(ERROR_TYPE, error.name)
+                expect(spans[secondErrorIndex].meta).to.have.property(ERROR_MESSAGE, error.message)
+                expect(spans[secondErrorIndex].meta).to.have.property(ERROR_STACK, error.stack)
+                expect(spans[secondErrorIndex].meta).to.have.property('component', 'express')
               })
               .then(done)
               .catch(done)
@@ -1166,25 +1190,25 @@ describe('Plugin', () => {
           const error = new Error('boom')
 
           app.use((req, res) => { throw error })
-          // eslint-disable-next-line n/handle-callback-err
           app.use((error, req, res, next) => res.status(500).send())
 
           appListener = app.listen(0, 'localhost', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
+                const secondErrorIndex = spans.length - 2
 
                 expect(spans[0]).to.have.property('error', 1)
                 expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
                 expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
                 expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
                 expect(spans[0].meta).to.have.property('component', 'express')
-                expect(spans[3]).to.have.property('error', 1)
-                expect(spans[3].meta).to.have.property(ERROR_TYPE, error.name)
-                expect(spans[3].meta).to.have.property(ERROR_MESSAGE, error.message)
-                expect(spans[3].meta).to.have.property(ERROR_STACK, error.stack)
+                expect(spans[secondErrorIndex]).to.have.property('error', 1)
+                expect(spans[secondErrorIndex].meta).to.have.property(ERROR_TYPE, error.name)
+                expect(spans[secondErrorIndex].meta).to.have.property(ERROR_MESSAGE, error.message)
+                expect(spans[secondErrorIndex].meta).to.have.property(ERROR_STACK, error.stack)
                 expect(spans[0].meta).to.have.property('component', 'express')
               })
               .then(done)
@@ -1199,6 +1223,11 @@ describe('Plugin', () => {
         })
 
         it('should support capturing groups in routes', done => {
+          if (semver.intersects(version, '>=5.0.0')) {
+            this.skip && this.skip() // mocha allows dynamic skipping, tap does not
+            return done()
+          }
+
           const app = express()
 
           app.get('/:path(*)', (req, res) => {
@@ -1209,10 +1238,36 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('resource', 'GET /:path(*)')
+                expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
+              })
+              .then(done)
+              .catch(done)
+
+            axios
+              .get(`http://localhost:${port}/user`)
+              .catch(done)
+          })
+        })
+
+        it('should support wildcard path prefix matching in routes', done => {
+          const app = express()
+
+          app.get('/*user', (req, res) => {
+            res.status(200).send()
+          })
+
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
+            agent
+              .assertSomeTraces(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('resource', 'GET /*user')
                 expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
               })
               .then(done)
@@ -1234,7 +1289,12 @@ describe('Plugin', () => {
 
           router.use('/users', childRouter)
 
-          const layer = router.stack.find(layer => layer.regexp.test('/users'))
+          const layer = router.stack.find(layer => {
+            if (semver.intersects(version, '>=5.0.0')) {
+              return layer.matchers.find(matcher => matcher('/users'))
+            }
+            return layer.regexp.test('/users')
+          })
 
           expect(layer.handle).to.have.ownProperty('stack')
         })
@@ -1282,7 +1342,7 @@ describe('Plugin', () => {
           appListener = app.listen(0, 'localhost', () => {
             const port = appListener.address().port
 
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans[0]).to.have.property('error', 0)
@@ -1290,9 +1350,7 @@ describe('Plugin', () => {
               expect(spans[0].meta).to.have.property('http.status_code', '404')
               expect(spans[0].meta).to.have.property('component', 'express')
               expect(spans[0].meta).to.not.have.property('http.route')
-
-              done()
-            })
+            }).then(done).catch(done)
 
             axios
               .get(`http://localhost:${port}/does-not-exist`, {
@@ -1322,7 +1380,7 @@ describe('Plugin', () => {
               const port = appListener.address().port
 
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
                   expect(spans[0]).to.have.property('service', 'test')
@@ -1357,7 +1415,7 @@ describe('Plugin', () => {
               const port = appListener.address().port
 
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
                   expect(spans[4]).to.have.property('name', 'express.middleware')
@@ -1403,7 +1461,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('service', 'custom')
@@ -1428,7 +1486,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('error', 1)
@@ -1455,7 +1513,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0].meta).to.have.property('http.request.headers.user-agent', 'test')
@@ -1483,7 +1541,7 @@ describe('Plugin', () => {
             const spy = sinon.spy()
 
             agent
-              .use(spy)
+              .assertSomeTraces(spy)
               .catch(done)
 
             setTimeout(() => {
@@ -1560,7 +1618,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('resource', 'GET /user')
@@ -1588,7 +1646,7 @@ describe('Plugin', () => {
           appListener = app.listen(0, 'localhost', () => {
             const port = appListener.address().port
 
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans[0]).to.have.property('error', 1)
@@ -1623,7 +1681,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('error', 0)
@@ -1647,14 +1705,13 @@ describe('Plugin', () => {
           const error = new Error('boom')
 
           app.use((req, res) => { throw error })
-          // eslint-disable-next-line n/handle-callback-err
           app.use((error, req, res, next) => res.status(500).send())
 
           appListener = app.listen(0, 'localhost', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('error', 1)
@@ -1684,7 +1741,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('error', 1)

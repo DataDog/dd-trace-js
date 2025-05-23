@@ -71,8 +71,9 @@ describe('Plugin', () => {
           })
 
           router.use('/parent', childRouter)
-          expect(router.stack[0].handle.hello).to.equal('goodbye')
-          expect(router.stack[0].handle.foo).to.equal('bar')
+          const index = router.stack.length - 1
+          expect(router.stack[index].handle.hello).to.equal('goodbye')
+          expect(router.stack[index].handle.foo).to.equal('bar')
         })
 
         it('should add the route to the request span', done => {
@@ -90,7 +91,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('resource', 'GET /parent/child/:id')
@@ -114,7 +115,7 @@ describe('Plugin', () => {
             res.end()
           })
 
-          const agentPromise = agent.use(traces => {
+          const agentPromise = agent.assertSomeTraces(traces => {
             for (const span of traces[0]) {
               expect(span.error).to.equal(0)
             }
@@ -138,13 +139,12 @@ describe('Plugin', () => {
             res.end()
           })
 
-          const agentPromise = agent.use(traces => {
+          const agentPromise = agent.assertSomeTraces(traces => {
             for (const span of traces[0]) {
               expect(span.error).to.equal(0)
             }
           }, { rejectFirst: true })
 
-          // eslint-disable-next-line n/handle-callback-err
           const httpd = server(router, (req, res) => err => res.end()).listen(0, 'localhost')
           await once(httpd, 'listening')
           const port = httpd.address().port

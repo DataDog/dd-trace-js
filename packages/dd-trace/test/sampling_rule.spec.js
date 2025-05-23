@@ -120,6 +120,30 @@ describe('sampling rule', () => {
       expect(rule.match(spans[10])).to.equal(false)
     })
 
+    it('should match with case-insensitive strings', () => {
+      const lowerCaseRule = new SamplingRule({
+        service: 'test',
+        name: 'operation'
+      })
+
+      const mixedCaseRule = new SamplingRule({
+        service: 'teSt',
+        name: 'oPeration'
+      })
+
+      expect(lowerCaseRule.match(spans[0])).to.equal(mixedCaseRule.match(spans[0]))
+      expect(lowerCaseRule.match(spans[1])).to.equal(mixedCaseRule.match(spans[1]))
+      expect(lowerCaseRule.match(spans[2])).to.equal(mixedCaseRule.match(spans[2]))
+      expect(lowerCaseRule.match(spans[3])).to.equal(mixedCaseRule.match(spans[3]))
+      expect(lowerCaseRule.match(spans[4])).to.equal(mixedCaseRule.match(spans[4]))
+      expect(lowerCaseRule.match(spans[5])).to.equal(mixedCaseRule.match(spans[5]))
+      expect(lowerCaseRule.match(spans[6])).to.equal(mixedCaseRule.match(spans[6]))
+      expect(lowerCaseRule.match(spans[7])).to.equal(mixedCaseRule.match(spans[7]))
+      expect(lowerCaseRule.match(spans[8])).to.equal(mixedCaseRule.match(spans[8]))
+      expect(lowerCaseRule.match(spans[9])).to.equal(mixedCaseRule.match(spans[9]))
+      expect(lowerCaseRule.match(spans[10])).to.equal(mixedCaseRule.match(spans[10]))
+    })
+
     it('should match with regexp', () => {
       rule = new SamplingRule({
         service: /test/,

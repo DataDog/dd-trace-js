@@ -8,14 +8,8 @@ const { writeFileSync } = require('fs')
 const { satisfies } = require('semver')
 const path = require('path')
 
-const { DD_MAJOR, NODE_MAJOR } = require('../../../../version')
 const agent = require('../plugins/agent')
-
-const BUILD_COMMAND = NODE_MAJOR < 18
-  ? 'yarn exec next build'
-  : 'NODE_OPTIONS=--openssl-legacy-provider yarn exec next build'
-let VERSIONS_TO_TEST = NODE_MAJOR < 18 ? '>=11.1 <13.2' : '>=11.1'
-VERSIONS_TO_TEST = DD_MAJOR >= 4 ? VERSIONS_TO_TEST : '>=9.5 <11.1'
+const { NODE_MAJOR, NODE_MINOR, NODE_PATCH } = require('../../../../version')
 
 describe('test suite', () => {
   let server
@@ -23,14 +17,19 @@ describe('test suite', () => {
 
   const satisfiesStandalone = version => satisfies(version, '>=12.0.0')
 
-  withVersions('next', 'next', VERSIONS_TO_TEST, version => {
+  withVersions('next', 'next', '>=11.1', version => {
+    if (version === '>=11.0.0 <13' && NODE_MAJOR === 24 &&
+      NODE_MINOR === 0 && NODE_PATCH === 0) {
+      return // node 24.0.0 fails, but 24.0.1 works
+    }
+
     const realVersion = require(`../../../../versions/next@${version}`).version()
 
     function initApp (appName) {
       const appDir = path.join(__dirname, 'next', appName)
 
       before(async function () {
-        this.timeout(120 * 1000) // Webpack is very slow and builds on every test run
+        this.timeout(300 * 1000) // Webpack is very slow and builds on every test run
 
         const cwd = appDir
 
@@ -58,7 +57,7 @@ describe('test suite', () => {
         }
 
         // building in-process makes tests fail for an unknown reason
-        execSync(BUILD_COMMAND, {
+        execSync('NODE_OPTIONS=--openssl-legacy-provider yarn exec next build', {
           cwd,
           env: {
             ...process.env,
@@ -112,7 +111,7 @@ describe('test suite', () => {
       })
 
       before(function (done) {
-        this.timeout(40000)
+        this.timeout(300 * 1000)
         const cwd = appDir
 
         server = spawn('node', [serverPath], {
@@ -153,7 +152,7 @@ describe('test suite', () => {
       }
     ]
 
-    if (satisfies(realVersion, '>=13.2')) {
+    if (satisfies(realVersion, '>=13.2') && (NODE_MAJOR < 24 || satisfies(realVersion, '!=13.2'))) {
       tests.push({
         appName: 'app-dir',
         serverPath: '.next/standalone/server.js'

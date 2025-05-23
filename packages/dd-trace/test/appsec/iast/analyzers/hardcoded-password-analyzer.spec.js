@@ -1,4 +1,4 @@
-/* eslint-disable max-len */
+/* eslint-disable @stylistic/js/max-len */
 'use strict'
 
 const path = require('path')
@@ -10,6 +10,7 @@ const Config = require('../../../../src/config')
 
 const hardcodedPasswordAnalyzer = require('../../../../src/appsec/iast/analyzers/hardcoded-password-analyzer')
 const iast = require('../../../../src/appsec/iast')
+const vulnerabilityReporter = require('../../../../src/appsec/iast/vulnerability-reporter')
 
 const ruleId = 'hardcoded-password'
 const samples = [
@@ -103,6 +104,7 @@ describe('Hardcoded Password Analyzer', () => {
   describe('full feature', () => {
     const filename = 'hardcoded-password-functions'
     const functionsPath = path.join(os.tmpdir(), filename)
+    let rewriter
 
     before(() => {
       fs.copyFileSync(path.join(__dirname, 'resources', `${filename}.js`), functionsPath)
@@ -119,18 +121,23 @@ describe('Hardcoded Password Analyzer', () => {
 
       beforeEach(() => {
         const tracer = require('../../../../')
-        iast.enable(new Config({
+        const config = new Config({
           experimental: {
             iast: {
               enabled: true,
               requestSampling: 100
             }
           }
-        }), tracer)
+        })
+        iast.enable(config, tracer)
+        rewriter = require('../../../../src/appsec/iast/taint-tracking/rewriter')
+        rewriter.enable(config)
       })
 
       afterEach(() => {
         iast.disable()
+        rewriter.disable()
+        vulnerabilityReporter.clearCache()
       })
 
       afterEach(() => {
@@ -139,7 +146,7 @@ describe('Hardcoded Password Analyzer', () => {
 
       it('should detect vulnerability', (done) => {
         agent
-          .use(traces => {
+          .assertSomeTraces(traces => {
             expect(traces[0][0].meta['_dd.iast.json']).to.include('"HARDCODED_PASSWORD"')
             expect(traces[0][0].meta['_dd.iast.json']).to.include('"evidence":{"value":"pswd"}')
           })

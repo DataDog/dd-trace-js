@@ -9,8 +9,9 @@ const semver = require('semver')
 const fs = require('fs')
 
 describe('nosql injection detection with mquery', () => {
-  withVersions('express', 'express', '>4.18.0', expressVersion => {
-    withVersions('mongodb', 'mongodb', mongodbVersion => {
+  // https://github.com/fiznool/express-mongo-sanitize/issues/200
+  withVersions('mquery', 'express', '>4.18.0 <5.0.0', expressVersion => {
+    withVersions('mquery', 'mongodb', mongodbVersion => {
       const mongodb = require(`../../../../../../versions/mongodb@${mongodbVersion}`)
 
       const satisfiesNodeVersionForMongo3and4 =
@@ -316,7 +317,7 @@ describe('nosql injection detection with mquery', () => {
         withVersions('express-mongo-sanitize', 'express-mongo-sanitize', expressMongoSanitizeVersion => {
           prepareTestServerForIastInExpress('Test with sanitization middleware', expressVersion, (expressApp) => {
             const mongoSanitize =
-                require(`../../../../../../versions/express-mongo-sanitize@${expressMongoSanitizeVersion}`).get()
+              require(`../../../../../../versions/express-mongo-sanitize@${expressMongoSanitizeVersion}`).get()
             expressApp.use(mongoSanitize())
           }, (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
             testThatRequestHasNoVulnerability({

@@ -3,10 +3,14 @@
 require('dd-trace/init')
 const Fastify = require('fastify')
 
-const fastify = Fastify()
+const fastify = Fastify({ logger: { level: 'error' } })
 
-fastify.get('/:name', function handler (request) {
-  return { hello: request.params.name } // BREAKPOINT
+fastify.get('/foo/:name', function fooHandler (request) {
+  return { hello: request.params.name } // BREAKPOINT: /foo/bar
+})
+
+fastify.get('/bar/:name', function barHandler (request) {
+  return { hello: request.params.name } // BREAKPOINT: /bar/baz
 })
 
 fastify.listen({ port: process.env.APP_PORT }, (err) => {

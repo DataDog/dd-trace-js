@@ -5,7 +5,7 @@ const Config = require('../../../src/config')
 
 const LLMObsTagger = require('../../../src/llmobs/tagger')
 const LLMObsEvalMetricsWriter = require('../../../src/llmobs/writers/evaluations')
-const LLMObsAgentProxySpanWriter = require('../../../src/llmobs/writers/spans/agentProxy')
+const LLMObsSpanWriter = require('../../../src/llmobs/writers/spans')
 const LLMObsSpanProcessor = require('../../../src/llmobs/span_processor')
 
 const tracerVersion = require('../../../../../package.json').version
@@ -17,13 +17,15 @@ describe('sdk', () => {
   let LLMObsSDK
   let llmobs
   let tracer
+  let clock
 
   before(() => {
     tracer = require('../../../../dd-trace')
     tracer.init({
       service: 'service',
       llmobs: {
-        mlApp: 'mlApp'
+        mlApp: 'mlApp',
+        agentlessEnabled: false
       }
     })
     llmobs = tracer.llmobs
@@ -36,13 +38,15 @@ describe('sdk', () => {
     // stub writer functionality
     sinon.stub(LLMObsEvalMetricsWriter.prototype, 'append')
     sinon.stub(LLMObsEvalMetricsWriter.prototype, 'flush')
-    sinon.stub(LLMObsAgentProxySpanWriter.prototype, 'append')
-    sinon.stub(LLMObsAgentProxySpanWriter.prototype, 'flush')
+    sinon.stub(LLMObsSpanWriter.prototype, 'append')
+    sinon.stub(LLMObsSpanWriter.prototype, 'flush')
 
     LLMObsSDK = require('../../../src/llmobs/sdk')
 
     // remove max listener warnings, we don't care about the writer anyways
     process.removeAllListeners('beforeExit')
+
+    clock = sinon.useFakeTimers()
   })
 
   afterEach(() => {
@@ -53,8 +57,8 @@ describe('sdk', () => {
     LLMObsEvalMetricsWriter.prototype.append.resetHistory()
     LLMObsEvalMetricsWriter.prototype.flush.resetHistory()
 
-    LLMObsAgentProxySpanWriter.prototype.append.resetHistory()
-    LLMObsAgentProxySpanWriter.prototype.flush.resetHistory()
+    LLMObsSpanWriter.prototype.append.resetHistory()
+    LLMObsSpanWriter.prototype.flush.resetHistory()
 
     process.removeAllListeners('beforeExit')
   })
@@ -95,7 +99,7 @@ describe('sdk', () => {
 
       expect(disabledLLMObs.enabled).to.be.true
       expect(disabledLLMObs._config.llmobs.mlApp).to.equal('mlApp')
-      expect(disabledLLMObs._config.llmobs.agentlessEnabled).to.be.false
+      expect(disabledLLMObs._config.llmobs.agentlessEnabled).to.be.undefined
 
       expect(llmobsModule.enable).to.have.been.called
 
@@ -324,6 +328,29 @@ describe('sdk', () => {
           })
         })
       })
+
+      it('passes the options to the tagger correctly', () => {
+        let span
+        llmobs.trace({
+          kind: 'workflow',
+          name: 'test',
+          mlApp: 'override',
+          sessionId: 'sessionId',
+          modelName: 'modelName',
+          modelProvider: 'modelProvider'
+        }, (_span) => {
+          span = _span
+        })
+
+        expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+          '_ml_obs.meta.span.kind': 'workflow',
+          '_ml_obs.meta.ml_app': 'override',
+          '_ml_obs.meta.model_name': 'modelName',
+          '_ml_obs.meta.model_provider': 'modelProvider',
+          '_ml_obs.session_id': 'sessionId',
+          '_ml_obs.llmobs_parent_id': 'undefined'
+        })
+      })
     })
 
     describe('wrap', () => {
@@ -432,6 +459,180 @@ describe('sdk', () => {
             '_ml_obs.meta.ml_app': 'mlApp',
             '_ml_obs.llmobs_parent_id': 'undefined',
             '_ml_obs.meta.input.value': 'input'
+          })
+        })
+
+        it('does not crash for auto-annotation values that are overriden', () => {
+          const circular = {}
+          circular.circular = circular
+
+          let span
+          function myWorkflow (input) {
+            span = llmobs._active()
+            llmobs.annotate({
+              inputData: 'circular',
+              outputData: 'foo'
+            })
+            return ''
+          }
+
+          const wrappedMyWorkflow = llmobs.wrap({ kind: 'workflow' }, myWorkflow)
+          wrappedMyWorkflow(circular)
+
+          expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+            '_ml_obs.meta.span.kind': 'workflow',
+            '_ml_obs.meta.ml_app': 'mlApp',
+            '_ml_obs.llmobs_parent_id': 'undefined',
+            '_ml_obs.meta.input.value': 'circular',
+            '_ml_obs.meta.output.value': 'foo'
+          })
+        })
+
+        it('only auto-annotates input on error', () => {
+          let span
+          function myTask (foo, bar) {
+            span = llmobs._active()
+            throw new Error('error')
+          }
+
+          const wrappedMyTask = llmobs.wrap({ kind: 'task' }, myTask)
+
+          expect(() => wrappedMyTask('foo', 'bar')).to.throw()
+
+          expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+            '_ml_obs.meta.span.kind': 'task',
+            '_ml_obs.meta.ml_app': 'mlApp',
+            '_ml_obs.llmobs_parent_id': 'undefined',
+            '_ml_obs.meta.input.value': JSON.stringify({ foo: 'foo', bar: 'bar' })
+          })
+        })
+
+        it('only auto-annotates input on error for promises', () => {
+          let span
+          function myTask (foo, bar) {
+            span = llmobs._active()
+            return Promise.reject(new Error('error'))
+          }
+
+          const wrappedMyTask = llmobs.wrap({ kind: 'task' }, myTask)
+
+          return wrappedMyTask('foo', 'bar')
+            .catch(() => {
+              expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+                '_ml_obs.meta.span.kind': 'task',
+                '_ml_obs.meta.ml_app': 'mlApp',
+                '_ml_obs.llmobs_parent_id': 'undefined',
+                '_ml_obs.meta.input.value': JSON.stringify({ foo: 'foo', bar: 'bar' })
+              })
+            })
+        })
+
+        it('auto-annotates the inputs of the callback function as the outputs for the span', () => {
+          let span
+          function myWorkflow (input, cb) {
+            span = llmobs._active()
+            setTimeout(() => {
+              cb(null, 'output')
+            }, 1000)
+          }
+
+          const wrappedMyWorkflow = llmobs.wrap({ kind: 'workflow' }, myWorkflow)
+          wrappedMyWorkflow('input', (err, res) => {
+            expect(err).to.not.exist
+            expect(res).to.equal('output')
+          })
+
+          clock.tick(1000)
+
+          expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+            '_ml_obs.meta.span.kind': 'workflow',
+            '_ml_obs.meta.ml_app': 'mlApp',
+            '_ml_obs.llmobs_parent_id': 'undefined',
+            '_ml_obs.meta.input.value': JSON.stringify({ input: 'input' }),
+            '_ml_obs.meta.output.value': 'output'
+          })
+        })
+
+        it('ignores the error portion of the callback for auto-annotation', () => {
+          let span
+          function myWorkflow (input, cb) {
+            span = llmobs._active()
+            setTimeout(() => {
+              cb(new Error('error'), 'output')
+            }, 1000)
+          }
+
+          const wrappedMyWorkflow = llmobs.wrap({ kind: 'workflow' }, myWorkflow)
+          wrappedMyWorkflow('input', (err, res) => {
+            expect(err).to.exist
+            expect(res).to.equal('output')
+          })
+
+          clock.tick(1000)
+
+          expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+            '_ml_obs.meta.span.kind': 'workflow',
+            '_ml_obs.meta.ml_app': 'mlApp',
+            '_ml_obs.llmobs_parent_id': 'undefined',
+            '_ml_obs.meta.input.value': JSON.stringify({ input: 'input' }),
+            '_ml_obs.meta.output.value': 'output'
+          })
+        })
+
+        it('auto-annotates the first argument of the callback as the output if it is not an error', () => {
+          let span
+          function myWorkflow (input, cb) {
+            span = llmobs._active()
+            setTimeout(() => {
+              cb('output', 'ignore') // eslint-disable-line n/no-callback-literal
+            }, 1000)
+          }
+
+          const wrappedMyWorkflow = llmobs.wrap({ kind: 'workflow' }, myWorkflow)
+          wrappedMyWorkflow('input', (res, irrelevant) => {
+            expect(res).to.equal('output')
+            expect(irrelevant).to.equal('ignore')
+          })
+
+          clock.tick(1000)
+
+          expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+            '_ml_obs.meta.span.kind': 'workflow',
+            '_ml_obs.meta.ml_app': 'mlApp',
+            '_ml_obs.llmobs_parent_id': 'undefined',
+            '_ml_obs.meta.input.value': JSON.stringify({ input: 'input' }),
+            '_ml_obs.meta.output.value': 'output'
+          })
+        })
+
+        it('maintains context consistent with the tracer', () => {
+          let llmSpan, workflowSpan, taskSpan
+
+          function myLlm (input, cb) {
+            llmSpan = llmobs._active()
+            setTimeout(() => {
+              cb(null, 'output')
+            }, 1000)
+          }
+          const myWrappedLlm = llmobs.wrap({ kind: 'llm' }, myLlm)
+
+          llmobs.trace({ kind: 'workflow', name: 'myWorkflow' }, _workflow => {
+            workflowSpan = _workflow
+            tracer.trace('apmOperation', () => {
+              myWrappedLlm('input', (err, res) => {
+                expect(err).to.not.exist
+                expect(res).to.equal('output')
+                llmobs.trace({ kind: 'task', name: 'afterLlmTask' }, _task => {
+                  taskSpan = _task
+
+                  const llmParentId = LLMObsTagger.tagMap.get(llmSpan)['_ml_obs.llmobs_parent_id']
+                  expect(llmParentId).to.equal(workflowSpan.context().toSpanId())
+
+                  const taskParentId = LLMObsTagger.tagMap.get(taskSpan)['_ml_obs.llmobs_parent_id']
+                  expect(taskParentId).to.equal(workflowSpan.context().toSpanId())
+                })
+              })
+            })
           })
         })
 
@@ -566,6 +767,32 @@ describe('sdk', () => {
           const wrappedInner2 = llmobs.wrap({ kind: 'task' }, inner2)
 
           wrappedOuter()
+        })
+      })
+
+      it('passes the options to the tagger correctly', () => {
+        let span
+
+        const fn = llmobs.wrap({
+          kind: 'workflow',
+          name: 'test',
+          mlApp: 'override',
+          sessionId: 'sessionId',
+          modelName: 'modelName',
+          modelProvider: 'modelProvider'
+        }, () => {
+          span = llmobs._active()
+        })
+
+        fn()
+
+        expect(LLMObsTagger.tagMap.get(span)).to.deep.equal({
+          '_ml_obs.meta.span.kind': 'workflow',
+          '_ml_obs.meta.ml_app': 'override',
+          '_ml_obs.meta.model_name': 'modelName',
+          '_ml_obs.meta.model_provider': 'modelProvider',
+          '_ml_obs.session_id': 'sessionId',
+          '_ml_obs.llmobs_parent_id': 'undefined'
         })
       })
     })
@@ -846,16 +1073,6 @@ describe('sdk', () => {
       tracer._tracer._config.llmobs.enabled = true
     })
 
-    it('throws for a missing API key', () => {
-      const apiKey = tracer._tracer._config.apiKey
-      delete tracer._tracer._config.apiKey
-
-      expect(() => llmobs.submitEvaluation(spanCtx)).to.throw()
-      expect(LLMObsEvalMetricsWriter.prototype.append).to.not.have.been.called
-
-      tracer._tracer._config.apiKey = apiKey
-    })
-
     it('throws for an invalid span context', () => {
       const invalid = {}
 
@@ -952,7 +1169,7 @@ describe('sdk', () => {
         label: 'test',
         metric_type: 'score',
         score_value: 0.6,
-        tags: [`dd-trace.version:${tracerVersion}`, 'ml_app:test', 'host:localhost']
+        tags: [`ddtrace.version:${tracerVersion}`, 'ml_app:test', 'host:localhost']
       })
     })
 
@@ -991,7 +1208,7 @@ describe('sdk', () => {
       llmobs.flush()
 
       expect(LLMObsEvalMetricsWriter.prototype.flush).to.not.have.been.called
-      expect(LLMObsAgentProxySpanWriter.prototype.flush).to.not.have.been.called
+      expect(LLMObsSpanWriter.prototype.flush).to.not.have.been.called
       tracer._tracer._config.llmobs.enabled = true
     })
 
@@ -999,7 +1216,7 @@ describe('sdk', () => {
       llmobs.flush()
 
       expect(LLMObsEvalMetricsWriter.prototype.flush).to.have.been.called
-      expect(LLMObsAgentProxySpanWriter.prototype.flush).to.have.been.called
+      expect(LLMObsSpanWriter.prototype.flush).to.have.been.called
     })
 
     it('logs if there was an error flushing', () => {

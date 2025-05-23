@@ -2,7 +2,7 @@
 
 const TaintedUtils = require('@datadog/native-iast-taint-tracking')
 const { IAST_TRANSACTION_ID } = require('../iast-context')
-const iastLog = require('../iast-log')
+const log = require('../../../log')
 
 function taintObject (iastContext, object, type) {
   let result = object
@@ -33,7 +33,7 @@ function taintObject (iastContext, object, type) {
           }
         }
       } catch (e) {
-        iastLog.error(`Error visiting property : ${property}`).errorAndPublish(e)
+        log.error('[ASM] Error in taintObject when visiting property : %s', property, e)
       }
     }
   }

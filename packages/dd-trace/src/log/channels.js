@@ -3,7 +3,7 @@
 const { channel } = require('dc-polyfill')
 
 const Level = {
-  trace: 20,
+  trace: 10,
   debug: 20,
   info: 30,
   warn: 40,
@@ -12,6 +12,7 @@ const Level = {
   off: 100
 }
 
+const traceChannel = channel('datadog:log:trace')
 const debugChannel = channel('datadog:log:debug')
 const infoChannel = channel('datadog:log:info')
 const warnChannel = channel('datadog:log:warn')
@@ -31,6 +32,9 @@ class LogChannel {
   }
 
   subscribe (logger) {
+    if (Level.trace >= this._level) {
+      traceChannel.subscribe(logger.trace)
+    }
     if (Level.debug >= this._level) {
       debugChannel.subscribe(logger.debug)
     }
@@ -46,6 +50,9 @@ class LogChannel {
   }
 
   unsubscribe (logger) {
+    if (traceChannel.hasSubscribers) {
+      traceChannel.unsubscribe(logger.trace)
+    }
     if (debugChannel.hasSubscribers) {
       debugChannel.unsubscribe(logger.debug)
     }
@@ -63,7 +70,7 @@ class LogChannel {
 
 module.exports = {
   LogChannel,
-
+  traceChannel,
   debugChannel,
   infoChannel,
   warnChannel,

@@ -63,7 +63,7 @@ class Writer extends BaseWriter {
           TELEMETRY_ENDPOINT_PAYLOAD_DROPPED,
           { endpoint: 'code_coverage' }
         )
-        log.error(err)
+        log.error('Error sending CI coverage payload', err)
         done()
         return
       }

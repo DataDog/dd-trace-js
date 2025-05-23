@@ -62,7 +62,7 @@ describe('Plugin', () => {
 
           it('should instrument put', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
                 expect(span).to.have.property('name', expectedSchema.command.opName)
                 expect(span).to.have.property('service', expectedSchema.command.serviceName)
@@ -88,7 +88,7 @@ describe('Plugin', () => {
 
           it('should instrument connect', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
                 expect(span).to.have.property('name', expectedSchema.command.opName)
                 expect(span).to.have.property('service', expectedSchema.command.serviceName)
@@ -105,7 +105,7 @@ describe('Plugin', () => {
 
           it('should instrument get', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
                 expect(span).to.have.property('name', expectedSchema.command.opName)
                 expect(span).to.have.property('service', expectedSchema.command.serviceName)
@@ -129,7 +129,7 @@ describe('Plugin', () => {
 
           it('should instrument operate', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
                 expect(span).to.have.property('name', expectedSchema.command.opName)
                 expect(span).to.have.property('service', expectedSchema.command.serviceName)
@@ -160,7 +160,7 @@ describe('Plugin', () => {
 
           it('should instrument createIndex', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
                 expect(span).to.have.property('name', expectedSchema.command.opName)
                 expect(span).to.have.property('service', expectedSchema.command.serviceName)
@@ -192,7 +192,7 @@ describe('Plugin', () => {
 
           it('should instrument query', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
                 expect(span).to.have.property('name', expectedSchema.command.opName)
                 expect(span).to.have.property('service', expectedSchema.command.serviceName)
@@ -214,7 +214,6 @@ describe('Plugin', () => {
                 index: 'tags_idx',
                 datatype: aerospike.indexDataType.STRING
               }
-              // eslint-disable-next-line n/handle-callback-err
               client.createIndex(index, (error, job) => {
                 job.waitUntilDone((waitError) => {
                   const query = client.query(ns, 'demo')
@@ -247,7 +246,7 @@ describe('Plugin', () => {
             let error
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
                 expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
                 expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
@@ -294,7 +293,7 @@ describe('Plugin', () => {
 
         it('should be configured with the correct values', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.command.opName)
               expect(traces[0][0]).to.have.property('service', 'custom')
             })

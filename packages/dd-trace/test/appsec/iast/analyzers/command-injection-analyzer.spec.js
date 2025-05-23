@@ -9,7 +9,7 @@ describe('command injection analyzer', () => {
   prepareTestServerForIast('command injection analyzer',
     (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
       testThatRequestHasVulnerability(() => {
-        const store = storage.getStore()
+        const store = storage('legacy').getStore()
         const iastContext = iastContextFunctions.getIastContext(store)
         const command = newTaintedString(iastContext, 'ls -la', 'param', 'Request')
         const childProcess = require('child_process')

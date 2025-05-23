@@ -1,7 +1,6 @@
 'use strict'
 
-// TODO: remove this and use namespaced storage once available
-const { AsyncLocalStorage } = require('async_hooks')
-const storage = new AsyncLocalStorage()
+const { storage: createStorage } = require('../../../datadog-core')
+const storage = createStorage('llmobs')
 
 module.exports = { storage }

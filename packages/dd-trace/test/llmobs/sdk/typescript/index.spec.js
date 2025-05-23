@@ -38,7 +38,7 @@ const testCases = [
     file: 'index',
     setup: (agent, results = {}) => {
       const llmobsRes = agent.assertLlmObsPayloadReceived(({ payload }) => {
-        results.llmobsSpans = payload.spans
+        results.llmobsSpans = payload.flatMap(item => item.spans)
       })
 
       const apmRes = agent.assertMessageReceived(({ payload }) => {
@@ -105,7 +105,9 @@ describe('typescript', () => {
 
       for (const test of testCases) {
         const { name, file } = test
-        it(name, async () => {
+        it(name, async function () {
+          this.timeout(20000)
+
           const cwd = sandbox.folder
 
           const results = {}

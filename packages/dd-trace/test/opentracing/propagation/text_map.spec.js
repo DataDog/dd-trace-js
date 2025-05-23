@@ -7,6 +7,7 @@ const id = require('../../../src/id')
 const SpanContext = require('../../../src/opentracing/span_context')
 const TraceState = require('../../../src/opentracing/propagation/tracestate')
 const { channel } = require('dc-polyfill')
+const { setBaggageItem, getBaggageItem, getAllBaggageItems, removeAllBaggageItems } = require('../../../src/baggage')
 
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
 const { SAMPLING_MECHANISM_MANUAL } = require('../../../src/constants')
@@ -21,6 +22,7 @@ describe('TextMapPropagator', () => {
   let textMap
   let baggageItems
   let config
+  let log
 
   const createContext = (params = {}) => {
     const trace = { started: [], finished: [], tags: {} }
@@ -40,7 +42,12 @@ describe('TextMapPropagator', () => {
   }
 
   beforeEach(() => {
-    TextMapPropagator = require('../../../src/opentracing/propagation/text_map')
+    log = {
+      debug: sinon.spy()
+    }
+    TextMapPropagator = proxyquire('../src/opentracing/propagation/text_map', {
+      '../../log': log
+    })
     config = new Config({ tagsHeaderMaxLength: 512 })
     propagator = new TextMapPropagator(config)
     textMap = {
@@ -108,7 +115,7 @@ describe('TextMapPropagator', () => {
       const spanContext = createContext({ baggageItems })
 
       propagator.inject(spanContext, carrier)
-      // eslint-disable-next-line max-len
+      // eslint-disable-next-line @stylistic/js/max-len
       expect(carrier.baggage).to.be.equal('%22%2C%3B%5C%28%29%2F%3A%3C%3D%3E%3F%40%5B%5D%7B%7D%F0%9F%90%B6%C3%A9%E6%88%91=%22%2C%3B%5C%F0%9F%90%B6%C3%A9%E6%88%91')
     })
 
@@ -134,6 +141,16 @@ describe('TextMapPropagator', () => {
 
       propagator.inject(spanContext, carrier)
       expect(carrier.baggage).to.equal('raccoon=chunky')
+    })
+
+    it('should inject baggage items when spanContext is null', () => {
+      const carrier = {}
+      const spanContext = null
+      removeAllBaggageItems()
+      setBaggageItem('spring', 'blossom')
+
+      propagator.inject(spanContext, carrier)
+      expect(carrier.baggage).to.equal('spring=blossom')
     })
 
     it('should inject an existing sampling priority', () => {
@@ -406,7 +423,6 @@ describe('TextMapPropagator', () => {
     })
 
     it('should extract otel baggage items with special characters', () => {
-      process.env.DD_TRACE_BAGGAGE_ENABLED = true
       config = new Config()
       propagator = new TextMapPropagator(config)
       const carrier = {
@@ -450,6 +466,58 @@ describe('TextMapPropagator', () => {
       }
       const spanContextD = propagator.extract(carrierD)
       expect(spanContextD._baggageItems).to.deep.equal({})
+    })
+
+    it('should discard malformed tids', () => {
+      // tid with malformed characters
+      let carrier = {
+        'x-datadog-trace-id': '1234567890123456789',
+        'x-datadog-parent-id': '987654321',
+        'x-datadog-tags': '_dd.p.tid=1234567890abcdeX'
+      }
+      let spanContext = propagator.extract(carrier)
+      expect(spanContext.toTraceId()).to.equal(carrier['x-datadog-trace-id'])
+      expect(spanContext.toSpanId()).to.equal(carrier['x-datadog-parent-id'])
+      expect(spanContext._trace.tags).to.not.have.property('_dd.p.tid')
+
+      // tid too long
+      carrier = {
+        'x-datadog-trace-id': '234567890123456789',
+        'x-datadog-parent-id': '987654321',
+        'x-datadog-tags': '_dd.p.tid=1234567890abcdef1'
+      }
+      spanContext = propagator.extract(carrier)
+      expect(spanContext.toTraceId()).to.equal(carrier['x-datadog-trace-id'])
+      expect(spanContext.toSpanId()).to.equal(carrier['x-datadog-parent-id'])
+      expect(spanContext._trace.tags).to.not.have.property('_dd.p.tid')
+
+      // tid too short
+      carrier = {
+        'x-datadog-trace-id': '1234567890123456789',
+        'x-datadog-parent-id': '987654321',
+        'x-datadog-tags': '_dd.p.tid=1234567890abcde'
+      }
+      spanContext = propagator.extract(carrier)
+      expect(spanContext.toTraceId()).to.equal(carrier['x-datadog-trace-id'])
+      expect(spanContext.toSpanId()).to.equal(carrier['x-datadog-parent-id'])
+      expect(spanContext._trace.tags).to.not.have.property('_dd.p.tid')
+    })
+
+    it('should extract baggage when it is the only propagation style', () => {
+      removeAllBaggageItems()
+      config = new Config({
+        tracePropagationStyle: {
+          extract: ['baggage']
+        }
+      })
+      propagator = new TextMapPropagator(config)
+      const carrier = {
+        baggage: 'foo=bar'
+      }
+      const spanContext = propagator.extract(carrier)
+      expect(spanContext).to.be.null
+      expect(getBaggageItem('foo')).to.equal('bar')
+      expect(getAllBaggageItems()).to.deep.equal({ foo: 'bar' })
     })
 
     it('should convert signed IDs to unsigned', () => {
@@ -616,6 +684,30 @@ describe('TextMapPropagator', () => {
       expect(spanContext._trace.tags).to.have.property('_dd.parent_id', '2244eeee6666aaaa')
     })
 
+    it('should preserve trace header tid when tracestate contains an inconsistent tid', () => {
+      textMap.traceparent = '00-640cfd8d00000000abcdefab12345678-000000003ade68b1-01'
+      textMap.tracestate = 'dd=t.tid:640cfd8d0000ffff'
+      config.tracePropagationStyle.extract = ['tracecontext']
+
+      const carrier = textMap
+      const spanContext = propagator.extract(carrier)
+
+      expect(spanContext._traceId.toString(16)).to.equal('640cfd8d00000000abcdefab12345678')
+      expect(spanContext._trace.tags).to.have.property('_dd.p.tid', '640cfd8d00000000')
+    })
+
+    it('should preserve trace header tid when tracestate contains a malformed tid', () => {
+      textMap.traceparent = '00-640cfd8d00000000abcdefab12345678-000000003ade68b1-01'
+      textMap.tracestate = 'dd=t.tid:XXXX'
+      config.tracePropagationStyle.extract = ['tracecontext']
+
+      const carrier = textMap
+      const spanContext = propagator.extract(carrier)
+
+      expect(spanContext._traceId.toString(16)).to.equal('640cfd8d00000000abcdefab12345678')
+      expect(spanContext._trace.tags).to.have.property('_dd.p.tid', '640cfd8d00000000')
+    })
+
     it('should set the last datadog parent id to zero when p: is NOT in the tracestate', () => {
       textMap.traceparent = '00-0000000000000000000000000000007B-0000000000000456-01'
       textMap.tracestate = 'other=gg,dd=s:-1;'
@@ -692,6 +784,35 @@ describe('TextMapPropagator', () => {
       }
     })
 
+    it('should create span links when traces have inconsistent traceids', () => {
+      // Add a traceparent header and it will prioritize it
+      const traceId = '1111aaaa2222bbbb3333cccc4444dddd'
+      const spanId = '5555eeee6666ffff'
+      textMap.traceparent = `00-${traceId}-${spanId}-01`
+
+      config.tracePropagationStyle.extract = ['tracecontext', 'datadog']
+
+      const first = propagator.extract(textMap)
+
+      expect(first._links.length).to.equal(1)
+      expect(first._links[0].context.toTraceId()).to.equal(textMap['x-datadog-trace-id'])
+      expect(first._links[0].context.toSpanId()).to.equal(textMap['x-datadog-parent-id'])
+      expect(first._links[0].attributes.reason).to.equal('terminated_context')
+      expect(first._links[0].attributes.context_headers).to.equal('datadog')
+    })
+
+    it('should log extraction', () => {
+      const carrier = textMap
+
+      propagator.extract(carrier)
+
+      expect(log.debug).to.have.been.called
+      expect(log.debug.firstCall.args[0]()).to.equal([
+        'Extract from carrier (datadog, tracecontext, baggage):',
+        '{"x-datadog-trace-id":"123","x-datadog-parent-id":"456"}.'
+      ].join(' '))
+    })
+
     describe('with B3 propagation as multiple headers', () => {
       beforeEach(() => {
         config.tracePropagationStyle.extract = ['b3multi']
@@ -766,6 +887,19 @@ describe('TextMapPropagator', () => {
         const spanContext = propagator.extract(carrier)
 
         expect(spanContext).to.be.null
+      })
+
+      it('should log extraction', () => {
+        textMap['x-b3-traceid'] = '0000000000000123'
+        textMap['x-b3-spanid'] = '0000000000000456'
+
+        propagator.extract(textMap)
+
+        expect(log.debug).to.have.been.called
+        expect(log.debug.firstCall.args[0]()).to.equal([
+          'Extract from carrier (b3multi):',
+          '{"x-b3-traceid":"0000000000000123","x-b3-spanid":"0000000000000456"}.'
+        ].join(' '))
       })
     })
 
@@ -901,6 +1035,17 @@ describe('TextMapPropagator', () => {
           spanId: id('456', 16)
         }))
       })
+
+      it('should log extraction', () => {
+        textMap.b3 = '0000000000000123-0000000000000456'
+
+        propagator.extract(textMap)
+
+        expect(log.debug).to.have.been.called
+        expect(log.debug.firstCall.args[0]()).to.equal(
+          `Extract from carrier (b3 single header): {"b3":"${textMap.b3}"}.`
+        )
+      })
     })
 
     describe('With traceparent propagation as single header', () => {
@@ -1028,6 +1173,70 @@ describe('TextMapPropagator', () => {
 
         expect(carrier['x-datadog-tags']).to.include('_dd.p.dm=-0')
         expect(spanContext._trace.tags['_dd.p.dm']).to.eql('-0')
+      })
+
+      it('should log extraction', () => {
+        const traceparent = textMap.traceparent = '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01'
+        const tracestate = textMap.tracestate = 'other=bleh,dd=t.foo_bar_baz_:abc_!@#$%^&*()_+`-~;s:2;o:foo;t.dm:-4'
+
+        config.tracePropagationStyle.extract = ['tracecontext']
+
+        propagator.extract(textMap)
+
+        expect(log.debug).to.have.been.called
+        expect(log.debug.firstCall.args[0]()).to.equal([
+          'Extract from carrier (tracecontext):',
+          `{"traceparent":"${traceparent}","tracestate":"${tracestate}"}.`
+        ].join(' '))
+      })
+    })
+
+    describe('tracePropagationBehaviorExtract', () => {
+      let traceId
+      let spanId
+
+      beforeEach(() => {
+        traceId = '1111aaaa2222bbbb3333cccc4444dddd'
+        spanId = '5555eeee6666ffff'
+        textMap = {
+          'x-datadog-trace-id': '123',
+          'x-datadog-parent-id': '456',
+          'ot-baggage-foo': 'bar',
+          traceparent: `00-${traceId}-${spanId}-01`,
+          baggage: 'foo=bar'
+        }
+      })
+
+      it('should reset span links when Trace_Propagation_Behavior_Extract is set to ignore', () => {
+        process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'ignore'
+        config = new Config({
+          tracePropagationStyle: {
+            extract: ['tracecontext', 'datadog']
+          }
+        })
+        propagator = new TextMapPropagator(config)
+        const extractedContext = propagator.extract(textMap)
+
+        // No span links should occur when we return from extract
+        expect(extractedContext._links.length).to.equal(0)
+      })
+
+      it('should set span link to extracted trace when Trace_Propagation_Behavior_Extract is set to restart', () => {
+        process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'restart'
+        config = new Config({
+          tracePropagationStyle: {
+            extract: ['tracecontext', 'datadog']
+          }
+        })
+        propagator = new TextMapPropagator(config)
+        const extractedContext = propagator.extract(textMap)
+
+        // Expect to see span links related to the extracted span
+        expect(extractedContext._links.length).to.equal(1)
+        expect(extractedContext._links[0].context.toTraceId(true)).to.equal(traceId)
+        expect(extractedContext._links[0].context.toSpanId(true)).to.equal(spanId)
+        expect(extractedContext._links[0].attributes.reason).to.equal('propagation_behavior_extract')
+        expect(extractedContext._links[0].attributes.context_headers).to.equal('tracecontext')
       })
     })
   })

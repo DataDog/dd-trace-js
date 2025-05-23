@@ -9,11 +9,12 @@ const { timeInputToHrTime } = require('@opentelemetry/core')
 
 const tracer = require('../../')
 const DatadogSpan = require('../opentracing/span')
-const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../constants')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK, IGNORE_OTEL_ERROR } = require('../constants')
 const { SERVICE_NAME, RESOURCE_NAME } = require('../../../../ext/tags')
 const kinds = require('../../../../ext/kinds')
 
 const SpanContext = require('./span_context')
+const id = require('../id')
 
 // The one built into OTel rounds so we lose sub-millisecond precision.
 function hrTimeToMilliseconds (time) {
@@ -217,12 +218,27 @@ class Span {
     return this
   }
 
+  addSpanPointer (ptrKind, ptrDir, ptrHash) {
+    const zeroContext = new SpanContext({
+      traceId: id('0'),
+      spanId: id('0')
+    })
+    const attributes = {
+      'ptr.kind': ptrKind,
+      'ptr.dir': ptrDir,
+      'ptr.hash': ptrHash,
+      'link.kind': 'span-pointer'
+    }
+    return this.addLink(zeroContext, attributes)
+  }
+
   setStatus ({ code, message }) {
     if (!this.ended && !this._hasStatus && code) {
       this._hasStatus = true
       if (code === 2) {
         this._ddSpan.addTags({
-          [ERROR_MESSAGE]: message
+          [ERROR_MESSAGE]: message,
+          [IGNORE_OTEL_ERROR]: false
         })
       }
     }
@@ -263,12 +279,11 @@ class Span {
   }
 
   recordException (exception, timeInput) {
-    // HACK: identifier is added so that trace.error remains unchanged after a call to otel.recordException
     this._ddSpan.addTags({
       [ERROR_TYPE]: exception.name,
       [ERROR_MESSAGE]: exception.message,
       [ERROR_STACK]: exception.stack,
-      doNotSetTraceError: true
+      [IGNORE_OTEL_ERROR]: this._ddSpan.context()._tags[IGNORE_OTEL_ERROR] ?? true
     })
     const attributes = {}
     if (exception.message) attributes['exception.message'] = exception.message

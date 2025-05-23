@@ -8,6 +8,7 @@ const { rawExpectedSchema } = require('./sqs-naming')
 
 const queueName = 'SQS_QUEUE_NAME'
 const queueNameDSM = 'SQS_QUEUE_NAME_DSM'
+const queueNameDSMConsumerOnly = 'SQS_QUEUE_NAME_DSM_CONSUMER_ONLY'
 
 const getQueueParams = (queueName) => {
   return {
@@ -20,6 +21,7 @@ const getQueueParams = (queueName) => {
 
 const queueOptions = getQueueParams(queueName)
 const queueOptionsDsm = getQueueParams(queueNameDSM)
+const queueOptionsDsmConsumerOnly = getQueueParams(queueNameDSMConsumerOnly)
 
 describe('Plugin', () => {
   describe('aws-sdk (sqs)', function () {
@@ -30,6 +32,7 @@ describe('Plugin', () => {
       let sqs
       const QueueUrl = 'http://127.0.0.1:4566/00000000000000000000/SQS_QUEUE_NAME'
       const QueueUrlDsm = 'http://127.0.0.1:4566/00000000000000000000/SQS_QUEUE_NAME_DSM'
+      const QueueUrlDsmConsumerOnly = 'http://127.0.0.1:4566/00000000000000000000/SQS_QUEUE_NAME_DSM_CONSUMER_ONLY'
       let tracer
 
       const sqsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sqs' : 'aws-sdk'
@@ -116,7 +119,7 @@ describe('Plugin', () => {
           let parentId
           let traceId
 
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             const span = traces[0][0]
 
             expect(span.resource.startsWith('sendMessage')).to.equal(true)
@@ -128,7 +131,7 @@ describe('Plugin', () => {
             traceId = span.trace_id.toString()
           })
 
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             const span = traces[0][0]
 
             expect(parentId).to.be.a('string')
@@ -155,7 +158,7 @@ describe('Plugin', () => {
           let parentId
           let traceId
 
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             const span = traces[0][0]
 
             expect(span.resource.startsWith('sendMessageBatch')).to.equal(true)
@@ -168,7 +171,7 @@ describe('Plugin', () => {
           })
 
           let batchChildSpans = 0
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             const span = traces[0][0]
 
             expect(parentId).to.be.a('string')
@@ -332,7 +335,7 @@ describe('Plugin', () => {
         it('should allow disabling a specific span kind of a service', (done) => {
           let total = 0
 
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             const span = traces[0][0]
 
             expect(span).to.include({
@@ -348,7 +351,7 @@ describe('Plugin', () => {
             total++
           }).catch(() => {}, { timeoutMs: 100 })
 
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             const span = traces[0][0]
 
             expect(span).to.include({
@@ -412,8 +415,23 @@ describe('Plugin', () => {
           })
         })
 
+        before(done => {
+          AWS = require(`../../../versions/${sqsClientName}@${version}`).get()
+
+          sqs = new AWS.SQS({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' })
+          sqs.createQueue(queueOptionsDsmConsumerOnly, (err, res) => {
+            if (err) return done(err)
+
+            done()
+          })
+        })
+
         after(done => {
           sqs.deleteQueue({ QueueUrl: QueueUrlDsm }, done)
+        })
+
+        after(done => {
+          sqs.deleteQueue({ QueueUrl: QueueUrlDsmConsumerOnly }, done)
         })
 
         after(() => {
@@ -437,7 +455,7 @@ describe('Plugin', () => {
             if (err) return done(err)
 
             let produceSpanMeta = {}
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               const span = traces[0][0]
 
               if (span.resource.startsWith('sendMessage')) {
@@ -465,7 +483,7 @@ describe('Plugin', () => {
               if (err) return done(err)
 
               let consumeSpanMeta = {}
-              agent.use(traces => {
+              agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
 
                 if (span.name === 'aws.response') {
@@ -488,7 +506,7 @@ describe('Plugin', () => {
 
               let consumeSpanMeta = {}
               return new Promise((resolve, reject) => {
-                agent.use(traces => {
+                agent.assertSomeTraces(traces => {
                   const span = traces[0][0]
 
                   if (span.name === 'aws.request' && span.meta['aws.operation'] === 'receiveMessage') {
@@ -543,6 +561,28 @@ describe('Plugin', () => {
 
           sqs.sendMessage({ MessageBody: 'test DSM', QueueUrl: QueueUrlDsm }, () => {
             sqs.receiveMessage({ QueueUrl: QueueUrlDsm, MessageAttributeNames: ['.*'] }, () => {})
+          })
+        })
+
+        it('Should emit DSM stats when receiving a message when the producer was not instrumented', done => {
+          agent.expectPipelineStats(dsmStats => {
+            let statsPointsReceived = 0
+            // we should have 2 dsm stats points
+            dsmStats.forEach((timeStatsBucket) => {
+              if (timeStatsBucket && timeStatsBucket.Stats) {
+                timeStatsBucket.Stats.forEach((statsBuckets) => {
+                  statsPointsReceived += statsBuckets.Stats.length
+                })
+              }
+            })
+            expect(statsPointsReceived).to.equal(1)
+            expect(agent.dsmStatsExistWithParentHash(agent, '0')).to.equal(true)
+          }).then(done, done)
+
+          agent.reload('aws-sdk', { sqs: { dsmEnabled: false } }, { dsmEnabled: false })
+          sqs.sendMessage({ MessageBody: 'test DSM', QueueUrl: QueueUrlDsmConsumerOnly }, () => {
+            agent.reload('aws-sdk', { sqs: { dsmEnabled: true } }, { dsmEnabled: true })
+            sqs.receiveMessage({ QueueUrl: QueueUrlDsmConsumerOnly, MessageAttributeNames: ['.*'] }, () => {})
           })
         })
 

@@ -85,7 +85,7 @@ describe('span processor', () => {
           'service:',
           'source:integration',
           'ml_app:myApp',
-          'dd-trace.version:x.y.z',
+          'ddtrace.version:x.y.z',
           'error:0',
           'language:javascript'
         ],
@@ -119,7 +119,7 @@ describe('span processor', () => {
     it('removes problematic fields from the metadata', () => {
       // problematic fields are circular references or bigints
       const metadata = {
-        bigint: BigInt(1),
+        bigint: 1n,
         deep: {
           foo: 'bar'
         },

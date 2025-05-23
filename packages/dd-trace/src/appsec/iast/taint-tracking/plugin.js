@@ -12,7 +12,8 @@ const {
   HTTP_REQUEST_HEADER_NAME,
   HTTP_REQUEST_PARAMETER,
   HTTP_REQUEST_PATH_PARAM,
-  HTTP_REQUEST_URI
+  HTTP_REQUEST_URI,
+  SQL_ROW_VALUE
 } = require('./source-types')
 const { EXECUTED_SOURCE } = require('../telemetry/iast-metric')
 
@@ -26,9 +27,19 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     this._taintedURLs = new WeakMap()
   }
 
+  configure (config) {
+    super.configure(config)
+
+    let rowsToTaint = this.iastConfig?.dbRowsToTaint
+    if (typeof rowsToTaint !== 'number') {
+      rowsToTaint = 1
+    }
+    this._rowsToTaint = rowsToTaint
+  }
+
   onConfigure () {
     const onRequestBody = ({ req }) => {
-      const iastContext = getIastContext(storage.getStore())
+      const iastContext = getIastContext(storage('legacy').getStore())
       if (iastContext && iastContext.body !== req.body) {
         this._taintTrackingHandler(HTTP_REQUEST_BODY, req, 'body', iastContext)
         iastContext.body = req.body
@@ -46,15 +57,20 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     )
 
     this.addSub(
-      { channelName: 'datadog:qs:parse:finish', tag: HTTP_REQUEST_PARAMETER },
-      ({ qs }) => this._taintTrackingHandler(HTTP_REQUEST_PARAMETER, qs)
+      { channelName: 'datadog:query:read:finish', tag: HTTP_REQUEST_PARAMETER },
+      ({ query }) => this._taintTrackingHandler(HTTP_REQUEST_PARAMETER, query)
+    )
+
+    this.addSub(
+      { channelName: 'datadog:express:query:finish', tag: HTTP_REQUEST_PARAMETER },
+      ({ query }) => this._taintTrackingHandler(HTTP_REQUEST_PARAMETER, query)
     )
 
     this.addSub(
       { channelName: 'apm:express:middleware:next', tag: HTTP_REQUEST_BODY },
       ({ req }) => {
         if (req && req.body !== null && typeof req.body === 'object') {
-          const iastContext = getIastContext(storage.getStore())
+          const iastContext = getIastContext(storage('legacy').getStore())
           if (iastContext && iastContext.body !== req.body) {
             this._taintTrackingHandler(HTTP_REQUEST_BODY, req, 'body', iastContext)
             iastContext.body = req.body
@@ -69,7 +85,26 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     )
 
     this.addSub(
+      { channelName: 'datadog:sequelize:query:finish', tag: SQL_ROW_VALUE },
+      ({ result }) => this._taintDatabaseResult(result, 'sequelize')
+    )
+
+    this.addSub(
+      { channelName: 'apm:pg:query:finish', tag: SQL_ROW_VALUE },
+      ({ result }) => this._taintDatabaseResult(result, 'pg')
+    )
+
+    this.addSub(
       { channelName: 'datadog:express:process_params:start', tag: HTTP_REQUEST_PATH_PARAM },
+      ({ req }) => {
+        if (req && req.params !== null && typeof req.params === 'object') {
+          this._taintTrackingHandler(HTTP_REQUEST_PATH_PARAM, req, 'params')
+        }
+      }
+    )
+
+    this.addSub(
+      { channelName: 'datadog:router:param:start', tag: HTTP_REQUEST_PATH_PARAM },
       ({ req }) => {
         if (req && req.params !== null && typeof req.params === 'object') {
           this._taintTrackingHandler(HTTP_REQUEST_PATH_PARAM, req, 'params')
@@ -80,7 +115,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     this.addSub(
       { channelName: 'apm:graphql:resolve:start', tag: HTTP_REQUEST_BODY },
       (data) => {
-        const iastContext = getIastContext(storage.getStore())
+        const iastContext = getIastContext(storage('legacy').getStore())
         const source = data.context?.source
         const ranges = source && getRanges(iastContext, source)
         if (ranges?.length) {
@@ -93,7 +128,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     this.addSub(
       { channelName: 'datadog:url:parse:finish' },
       ({ input, base, parsed, isURL }) => {
-        const iastContext = getIastContext(storage.getStore())
+        const iastContext = getIastContext(storage('legacy').getStore())
         let ranges
 
         if (base) {
@@ -122,7 +157,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
         const origRange = this._taintedURLs.get(context.urlObject)
         if (!origRange) return
 
-        const iastContext = getIastContext(storage.getStore())
+        const iastContext = getIastContext(storage('legacy').getStore())
         if (!iastContext) return
 
         context.result =
@@ -133,7 +168,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     this.addInstrumentedSource('http', [HTTP_REQUEST_HEADER_VALUE, HTTP_REQUEST_HEADER_NAME])
   }
 
-  _taintTrackingHandler (type, target, property, iastContext = getIastContext(storage.getStore())) {
+  _taintTrackingHandler (type, target, property, iastContext = getIastContext(storage('legacy').getStore())) {
     if (!property) {
       taintObject(iastContext, target, type)
     } else if (target[property]) {
@@ -142,7 +177,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
   }
 
   _cookiesTaintTrackingHandler (target) {
-    const iastContext = getIastContext(storage.getStore())
+    const iastContext = getIastContext(storage('legacy').getStore())
     // Prevent tainting cookie names since it leads to taint literal string with same value.
     taintObject(iastContext, target, HTTP_REQUEST_COOKIE_VALUE)
   }
@@ -169,6 +204,32 @@ class TaintTrackingPlugin extends SourceIastPlugin {
   taintRequest (req, iastContext) {
     this.taintHeaders(req.headers, iastContext)
     this.taintUrl(req, iastContext)
+  }
+
+  _taintDatabaseResult (result, dbOrigin, iastContext = getIastContext(storage('legacy').getStore()), name) {
+    if (!iastContext) return result
+
+    if (this._rowsToTaint === 0) return result
+
+    if (Array.isArray(result)) {
+      for (let i = 0; i < result.length && i < this._rowsToTaint; i++) {
+        const nextName = name ? `${name}.${i}` : '' + i
+        result[i] = this._taintDatabaseResult(result[i], dbOrigin, iastContext, nextName)
+      }
+    } else if (result && typeof result === 'object') {
+      if (dbOrigin === 'sequelize' && result.dataValues) {
+        result.dataValues = this._taintDatabaseResult(result.dataValues, dbOrigin, iastContext, name)
+      } else {
+        for (const key in result) {
+          const nextName = name ? `${name}.${key}` : key
+          result[key] = this._taintDatabaseResult(result[key], dbOrigin, iastContext, nextName)
+        }
+      }
+    } else if (typeof result === 'string') {
+      result = newTaintedString(iastContext, result, name, SQL_ROW_VALUE)
+    }
+
+    return result
   }
 }
 

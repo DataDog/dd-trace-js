@@ -1,19 +1,21 @@
 'use strict'
 
+const { errorMonitor } = require('node:events')
+
 const {
   channel,
   addHook,
   AsyncResource
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
-const semver = require('semver')
+const satisfies = require('semifies')
 
-addHook({ name: 'mysql2', file: 'lib/connection.js', versions: ['>=1'] }, (Connection, version) => {
+function wrapConnection (Connection, version) {
   const startCh = channel('apm:mysql2:query:start')
   const finishCh = channel('apm:mysql2:query:finish')
   const errorCh = channel('apm:mysql2:query:error')
   const startOuterQueryCh = channel('datadog:mysql2:outerquery:start')
-  const shouldEmitEndAfterQueryAbort = semver.intersects(version, '>=1.3.3')
+  const shouldEmitEndAfterQueryAbort = satisfies(version, '>=1.3.3')
 
   shimmer.wrap(Connection.prototype, 'addCommand', addCommand => function (cmd) {
     if (!startCh.hasSubscribers) return addCommand.apply(this, arguments)
@@ -138,7 +140,7 @@ addHook({ name: 'mysql2', file: 'lib/connection.js', versions: ['>=1'] }, (Conne
           onResult.apply(this, arguments)
         }, 'bound-anonymous-fn', this))
       } else {
-        this.on('error', asyncResource.bind(error => errorCh.publish(error)))
+        this.on(errorMonitor, asyncResource.bind(error => errorCh.publish(error)))
         this.on('end', asyncResource.bind(() => finishCh.publish(undefined)))
       }
 
@@ -151,11 +153,10 @@ addHook({ name: 'mysql2', file: 'lib/connection.js', versions: ['>=1'] }, (Conne
       }
     }, cmd))
   }
-})
-
-addHook({ name: 'mysql2', file: 'lib/pool.js', versions: ['>=1'] }, (Pool, version) => {
+}
+function wrapPool (Pool, version) {
   const startOuterQueryCh = channel('datadog:mysql2:outerquery:start')
-  const shouldEmitEndAfterQueryAbort = semver.intersects(version, '>=1.3.3')
+  const shouldEmitEndAfterQueryAbort = satisfies(version, '>=1.3.3')
 
   shimmer.wrap(Pool.prototype, 'query', query => function (sql, values, cb) {
     if (!startOuterQueryCh.hasSubscribers) return query.apply(this, arguments)
@@ -221,10 +222,9 @@ addHook({ name: 'mysql2', file: 'lib/pool.js', versions: ['>=1'] }, (Pool, versi
   })
 
   return Pool
-})
+}
 
-// PoolNamespace.prototype.query does not exist in mysql2<2.3.0
-addHook({ name: 'mysql2', file: 'lib/pool_cluster.js', versions: ['>=2.3.0'] }, PoolCluster => {
+function wrapPoolCluster (PoolCluster) {
   const startOuterQueryCh = channel('datadog:mysql2:outerquery:start')
   const wrappedPoolNamespaces = new WeakSet()
 
@@ -297,4 +297,11 @@ addHook({ name: 'mysql2', file: 'lib/pool_cluster.js', versions: ['>=2.3.0'] }, 
   })
 
   return PoolCluster
-})
+}
+
+addHook({ name: 'mysql2', file: 'lib/base/connection.js', versions: ['>=3.11.5'] }, wrapConnection)
+addHook({ name: 'mysql2', file: 'lib/connection.js', versions: ['1 - 3.11.4'] }, wrapConnection)
+addHook({ name: 'mysql2', file: 'lib/pool.js', versions: ['1 - 3.11.4'] }, wrapPool)
+
+// PoolNamespace.prototype.query does not exist in mysql2<2.3.0
+addHook({ name: 'mysql2', file: 'lib/pool_cluster.js', versions: ['2.3.0 - 3.11.4'] }, wrapPoolCluster)

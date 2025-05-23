@@ -1,4 +1,4 @@
-/* eslint-disable max-len */
+/* eslint-disable @stylistic/js/max-len */
 'use strict'
 
 const sinon = require('sinon')
@@ -27,7 +27,7 @@ describe('Sns', function () {
 
     let childSpansFound = 0
     const assertPropagation = (done, childSpans = 1) => {
-      agent.use(traces => {
+      agent.assertSomeTraces(traces => {
         const span = traces[0][0]
 
         if (span.resource.startsWith('publish')) {
@@ -112,7 +112,7 @@ describe('Sns', function () {
       })
 
       it('adds request and response payloads as flattened tags', done => {
-        agent.use(traces => {
+        agent.assertSomeTraces(traces => {
           const span = traces[0][0]
 
           expect(span.resource).to.equal(`publish ${TopicArn}`)
@@ -145,7 +145,7 @@ describe('Sns', function () {
       })
 
       it('expands and redacts keys identified as expandable', done => {
-        agent.use(traces => {
+        agent.assertSomeTraces(traces => {
           const span = traces[0][0]
 
           expect(span.resource).to.equal(`publish ${TopicArn}`)
@@ -175,7 +175,7 @@ describe('Sns', function () {
 
       describe('user-defined redaction', () => {
         it('redacts user-defined keys to suppress in request', done => {
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             const span = traces[0][0]
 
             expect(span.resource).to.equal(`publish ${TopicArn}`)
@@ -208,7 +208,7 @@ describe('Sns', function () {
 
         // TODO add response tests
         it('redacts user-defined keys to suppress in response', done => {
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             const span = traces[0][0]
             expect(span.resource).to.equal(`getTopicAttributes ${TopicArn}`)
             expect(span.meta).to.include({
@@ -252,7 +252,7 @@ describe('Sns', function () {
             })
 
             it('redacts phone numbers in request', done => {
-              agent.use(traces => {
+              agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
 
                 expect(span.resource).to.equal('publish')
@@ -271,7 +271,7 @@ describe('Sns', function () {
             })
 
             it('redacts phone numbers in response', done => {
-              agent.use(traces => {
+              agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
 
                 expect(span.resource).to.equal('publish')
@@ -292,7 +292,7 @@ describe('Sns', function () {
 
         describe('subscription confirmation tokens', () => {
           it('redacts tokens in request', done => {
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               const span = traces[0][0]
 
               expect(span.resource).to.equal(`confirmSubscription ${TopicArn}`)
@@ -478,7 +478,7 @@ describe('Sns', function () {
       }
 
       it('generates tags for proper publish calls', done => {
-        agent.use(traces => {
+        agent.assertSomeTraces(traces => {
           const span = traces[0][0]
 
           expect(span.resource).to.equal(`publish ${TopicArn}`)
@@ -542,7 +542,7 @@ describe('Sns', function () {
               if (err) return done(err)
 
               let publishSpanMeta = {}
-              agent.use(traces => {
+              agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
 
                 if (span.resource.startsWith('publish')) {
@@ -573,7 +573,7 @@ describe('Sns', function () {
               if (err) return done(err)
 
               let consumeSpanMeta = {}
-              agent.use(traces => {
+              agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
 
                 if (span.name === 'aws.response') {

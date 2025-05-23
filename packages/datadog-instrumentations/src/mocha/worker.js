@@ -24,13 +24,23 @@ addHook({
   file: 'lib/mocha.js'
 }, (Mocha) => {
   shimmer.wrap(Mocha.prototype, 'run', run => function () {
-    if (this.options._ddKnownTests) {
-      // EFD is enabled if there's a list of known tests
-      config.isEarlyFlakeDetectionEnabled = true
+    if (this.options._ddIsKnownTestsEnabled) {
+      config.isKnownTestsEnabled = true
+      config.isEarlyFlakeDetectionEnabled = this.options._ddIsEfdEnabled
       config.knownTests = this.options._ddKnownTests
       config.earlyFlakeDetectionNumRetries = this.options._ddEfdNumRetries
+      delete this.options._ddIsEfdEnabled
       delete this.options._ddKnownTests
       delete this.options._ddEfdNumRetries
+      delete this.options._ddIsKnownTestsEnabled
+    }
+    if (this.options._ddIsTestManagementTestsEnabled) {
+      config.isTestManagementTestsEnabled = true
+      // TODO: attempt to fix does not work in parallel mode yet
+      // config.testManagementAttemptToFixRetries = this.options._ddTestManagementAttemptToFixRetries
+      config.testManagementTests = this.options._ddTestManagementTests
+      delete this.options._ddIsTestManagementTestsEnabled
+      delete this.options._ddTestManagementTests
     }
     return run.apply(this, arguments)
   })
@@ -56,7 +66,7 @@ addHook({
     })
     this.on('test', getOnTestHandler(false))
 
-    this.on('test end', getOnTestEndHandler())
+    this.on('test end', getOnTestEndHandler(config))
 
     // If the hook passes, 'hook end' will be emitted. Otherwise, 'fail' will be emitted
     this.on('hook end', getOnHookEndHandler())

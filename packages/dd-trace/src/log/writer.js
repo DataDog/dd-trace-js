@@ -2,6 +2,7 @@
 
 const { storage } = require('../../../datadog-core')
 const { LogChannel } = require('./channels')
+const { Log } = require('./log')
 const defaultLogger = {
   debug: msg => console.debug(msg), /* eslint-disable-line no-console */
   info: msg => console.info(msg), /* eslint-disable-line no-console */
@@ -12,17 +13,18 @@ const defaultLogger = {
 let enabled = false
 let logger = defaultLogger
 let logChannel = new LogChannel()
+let stackTraceLimitFunction = onError
 
 function withNoop (fn) {
-  const store = storage.getStore()
+  const store = storage('legacy').getStore()
 
-  storage.enterWith({ noop: true })
+  storage('legacy').enterWith({ noop: true })
   fn()
-  storage.enterWith(store)
+  storage('legacy').enterWith(store)
 }
 
 function unsubscribeAll () {
-  logChannel.unsubscribe({ debug, info, warn, error })
+  logChannel.unsubscribe({ trace: onTrace, debug: onDebug, info: onInfo, warn: onWarn, error: onError })
 }
 
 function toggleSubscription (enable, level) {
@@ -30,7 +32,7 @@ function toggleSubscription (enable, level) {
 
   if (enable) {
     logChannel = new LogChannel(level)
-    logChannel.subscribe({ debug, info, warn, error })
+    logChannel.subscribe({ trace: onTrace, debug: onDebug, info: onInfo, warn: onWarn, error: onError })
   }
 }
 
@@ -51,32 +53,90 @@ function reset () {
   toggleSubscription(false)
 }
 
-function error (err) {
-  if (typeof err !== 'object' || !err) {
-    err = String(err)
-  } else if (!err.stack) {
-    err = String(err.message || err)
+function getErrorLog (err) {
+  if (err && typeof err.delegate === 'function') {
+    const result = err.delegate()
+    return Array.isArray(result) ? Log.parse(...result) : Log.parse(result)
+  } else {
+    return err
   }
+}
 
-  if (typeof err === 'string') {
-    err = new Error(err)
+function setStackTraceLimitFunction (fn) {
+  if (typeof fn !== 'function') {
+    throw new TypeError('stackTraceLimitFunction must be a function')
   }
-
-  withNoop(() => logger.error(err))
+  stackTraceLimitFunction = fn
 }
 
-function warn (message) {
-  if (!logger.warn) return debug(message)
-  withNoop(() => logger.warn(message))
+function onError (err) {
+  const { formatted, cause } = getErrorLog(err)
+
+  // calling twice logger.error() because Error cause is only available in nodejs v16.9.0
+  // TODO: replace it with Error(message, { cause }) when cause has broad support
+  if (formatted) {
+    withNoop(() => {
+      const l = Error.stackTraceLimit
+      Error.stackTraceLimit = 0
+      const e = new Error(formatted)
+      Error.stackTraceLimit = l
+      Error.captureStackTrace(e, stackTraceLimitFunction)
+      logger.error(e)
+    })
+  }
+  if (cause) withNoop(() => logger.error(cause))
 }
 
-function info (message) {
-  if (!logger.info) return debug(message)
-  withNoop(() => logger.info(message))
+function onWarn (log) {
+  const { formatted, cause } = getErrorLog(log)
+  if (formatted) withNoop(() => logger.warn(formatted))
+  if (cause) withNoop(() => logger.warn(cause))
 }
 
-function debug (message) {
-  withNoop(() => logger.debug(message))
+function onInfo (log) {
+  const { formatted, cause } = getErrorLog(log)
+  if (formatted) withNoop(() => logger.info(formatted))
+  if (cause) withNoop(() => logger.info(cause))
 }
 
-module.exports = { use, toggle, reset, error, warn, info, debug }
+function onDebug (log) {
+  const { formatted, cause } = getErrorLog(log)
+  if (formatted) withNoop(() => logger.debug(formatted))
+  if (cause) withNoop(() => logger.debug(cause))
+}
+
+function onTrace (log) {
+  const { formatted, cause } = getErrorLog(log)
+  // Using logger.debug() because not all loggers have trace level,
+  // and console.trace() has a completely different meaning.
+  if (formatted) withNoop(() => logger.debug(formatted))
+  if (cause) withNoop(() => logger.debug(cause))
+}
+
+function error (...args) {
+  onError(Log.parse(...args))
+}
+
+function warn (...args) {
+  const log = Log.parse(...args)
+  if (!logger.warn) return onDebug(log)
+
+  onWarn(log)
+}
+
+function info (...args) {
+  const log = Log.parse(...args)
+  if (!logger.info) return onDebug(log)
+
+  onInfo(log)
+}
+
+function debug (...args) {
+  onDebug(Log.parse(...args))
+}
+
+function trace (...args) {
+  onTrace(Log.parse(...args))
+}
+
+module.exports = { use, toggle, reset, error, warn, info, debug, trace, setStackTraceLimitFunction }

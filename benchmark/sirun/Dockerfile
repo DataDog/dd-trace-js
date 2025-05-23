@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
 	git hwinfo jq procps \
 	software-properties-common build-essential libnss3-dev zlib1g-dev libgdbm-dev libncurses5-dev libssl-dev libffi-dev libreadline-dev libsqlite3-dev libbz2-dev
 
-RUN git clone --depth 1 https://github.com/pyenv/pyenv.git --branch "v2.0.4" --single-branch /pyenv
+RUN git clone --depth 1 https://github.com/pyenv/pyenv.git --branch "v2.4.1" --single-branch /pyenv
 ENV PYENV_ROOT "/pyenv"
 ENV PATH "/pyenv/shims:/pyenv/bin:$PATH"
 RUN eval "$(pyenv init -)"
@@ -30,12 +30,11 @@ RUN wget -O sirun.tar.gz https://github.com/DataDog/sirun/releases/download/v0.1
 RUN mkdir -p /usr/local/nvm \
 	&& wget -q -O - https://raw.githubusercontent.com/nvm-sh/nvm/v0.35.3/install.sh | bash \
 	&& . $NVM_DIR/nvm.sh \
-	&& nvm install --no-progress 14.21.3 \
-	&& nvm install --no-progress 16.20.1 \
 	&& nvm install --no-progress 18.16.1 \
 	&& nvm install --no-progress 20.4.0 \
-	&& nvm alias default 18 \
-	&& nvm use 18
+	&& nvm install --no-progress 22.10.0 \
+	&& nvm alias default 22 \
+	&& nvm use 22
 
 RUN mkdir /opt/insecure-bank-js
 RUN git clone --depth 1 https://github.com/hdiv/insecure-bank-js.git /opt/insecure-bank-js

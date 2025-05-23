@@ -1,4 +1,4 @@
-/* eslint-disable max-len */
+/* eslint-disable @stylistic/js/max-len */
 'use strict'
 
 const sinon = require('sinon')
@@ -143,7 +143,7 @@ describe('Kinesis', function () {
       })
 
       it('generates tags for proper input', done => {
-        agent.use(traces => {
+        agent.assertSomeTraces(traces => {
           const span = traces[0][0]
           expect(span.meta).to.include({
             streamname: streamName,
@@ -219,7 +219,7 @@ describe('Kinesis', function () {
 
       it('injects DSM pathway hash during Kinesis getRecord to the span', done => {
         let getRecordSpanMeta = {}
-        agent.use(traces => {
+        agent.assertSomeTraces(traces => {
           const span = traces[0][0]
 
           if (span.name === 'aws.response') {
@@ -242,7 +242,7 @@ describe('Kinesis', function () {
 
       it('injects DSM pathway hash during Kinesis putRecord to the span', done => {
         let putRecordSpanMeta = {}
-        agent.use(traces => {
+        agent.assertSomeTraces(traces => {
           const span = traces[0][0]
 
           if (span.resource.startsWith('putRecord')) {
@@ -303,6 +303,32 @@ describe('Kinesis', function () {
         })
       })
 
+      it('emits DSM stats to the agent during Kinesis getRecord when the putRecord was done without DSM enabled', done => {
+        agent.expectPipelineStats(dsmStats => {
+          let statsPointsReceived = 0
+          // we should have only have 1 stats point since we only had 1 put operation
+          dsmStats.forEach((timeStatsBucket) => {
+            if (timeStatsBucket && timeStatsBucket.Stats) {
+              timeStatsBucket.Stats.forEach((statsBuckets) => {
+                statsPointsReceived += statsBuckets.Stats.length
+              })
+            }
+          }, { timeoutMs: 10000 })
+          expect(statsPointsReceived).to.equal(1)
+          expect(agent.dsmStatsExistWithParentHash(agent, '0')).to.equal(true)
+        }, { timeoutMs: 10000 }).then(done, done)
+
+        agent.reload('aws-sdk', { kinesis: { dsmEnabled: false } }, { dsmEnabled: false })
+        helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
+          if (err) return done(err)
+
+          agent.reload('aws-sdk', { kinesis: { dsmEnabled: true } }, { dsmEnabled: true })
+          helpers.getTestData(kinesis, streamNameDSM, data, (err) => {
+            if (err) return done(err)
+          })
+        })
+      })
+
       it('emits DSM stats to the agent during Kinesis putRecords', done => {
         // we need to stub Date.now() to ensure a new stats bucket is created for each call
         // otherwise, all stats checkpoints will be combined into a single stats points
@@ -328,9 +354,7 @@ describe('Kinesis', function () {
         }, { timeoutMs: 10000 }).then(done, done)
 
         helpers.putTestRecords(kinesis, streamNameDSM, (err, data) => {
-          if (err) return done(err)
-
-          nowStub.restore()
+          // Swallow the error as it doesn't matter for this test.
         })
       })
     })

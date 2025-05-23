@@ -3,6 +3,7 @@
 /* eslint-disable no-fallthrough */
 
 const url = require('url')
+const { errorMonitor } = require('events')
 const { channel, addHook } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 
@@ -39,7 +40,7 @@ function patch (http, methodName) {
       try {
         args = normalizeArgs.apply(null, arguments)
       } catch (e) {
-        log.error(e)
+        log.error('Error normalising http req arguments', e)
         return request.apply(this, arguments)
       }
 
@@ -88,7 +89,7 @@ function patch (http, methodName) {
                 const res = arg
                 ctx.res = res
                 res.on('end', finish)
-                res.on('error', finish)
+                res.on(errorMonitor, finish)
                 break
               }
               case 'connect':
@@ -117,6 +118,11 @@ function patch (http, methodName) {
         } catch (e) {
           ctx.error = e
           errorChannel.publish(ctx)
+          // if the initial request failed, ctx.req will be unset, we must close the span here
+          // fix for: https://github.com/DataDog/dd-trace-js/issues/5016
+          if (!ctx.req) {
+            finish()
+          }
           throw e
         } finally {
           endChannel.publish(ctx)

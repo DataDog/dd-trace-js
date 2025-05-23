@@ -2,15 +2,7 @@
 
 const { join, basename } = require('path')
 
-const inspector = require('../../../../src/debugger/devtools_client/inspector_promises_polyfill')
-const session = new inspector.Session()
-session.connect()
-
-session['@noCallThru'] = true
-proxyquire('../src/debugger/devtools_client/snapshot/collector', {
-  '../session': session
-})
-
+const session = require('./stub-session')
 const { getLocalStateForCallFrame } = require('../../../../src/debugger/devtools_client/snapshot')
 
 module.exports = {
@@ -75,16 +67,16 @@ async function setAndTriggerBreakpoint (path, line) {
   run()
 }
 
-function assertOnBreakpoint (done, config, callback) {
-  if (typeof config === 'function') {
-    callback = config
-    config = undefined
+function assertOnBreakpoint (done, snapshotConfig, callback) {
+  if (typeof snapshotConfig === 'function') {
+    callback = snapshotConfig
+    snapshotConfig = undefined
   }
 
   session.once('Debugger.paused', ({ params }) => {
     expect(params.hitBreakpoints.length).to.eq(1)
 
-    getLocalStateForCallFrame(params.callFrames[0], config).then((process) => {
+    getLocalStateForCallFrame(params.callFrames[0], snapshotConfig).then((process) => {
       callback(process())
       done()
     }).catch(done)

@@ -1,7 +1,5 @@
 'use strict'
 
-const { AsyncLocalStorage } = require('async_hooks')
-
-const storage = new AsyncLocalStorage()
+const { storage } = require('./src/storage')
 
 module.exports = { storage }

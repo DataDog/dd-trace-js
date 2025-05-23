@@ -3,8 +3,7 @@
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 const { storage } = require('../../../datadog-core')
-const { getHeadersSize } = require('../../../dd-trace/src/datastreams/processor')
-const { DsmPathwayCodec } = require('../../../dd-trace/src/datastreams/pathway')
+const { DsmPathwayCodec, getHeadersSize } = require('../../../dd-trace/src/datastreams')
 
 class Sqs extends BaseAwsSdkPlugin {
   static get id () { return 'sqs' }
@@ -20,7 +19,7 @@ class Sqs extends BaseAwsSdkPlugin {
 
     this.addSub('apm:aws:response:start:sqs', obj => {
       const { request, response } = obj
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const plugin = this
       const contextExtraction = this.responseExtract(request.params, request.operation, response)
       let span
@@ -42,12 +41,12 @@ class Sqs extends BaseAwsSdkPlugin {
       // extract DSM context after as we might not have a parent-child but may have a DSM context
 
       this.responseExtractDSMContext(
-        request.operation, request.params, response, span || null, { parsedMessageAttributes }
+        request.operation, request.params, response, span || null, { parsedAttributes: parsedMessageAttributes }
       )
     })
 
     this.addSub('apm:aws:response:finish:sqs', err => {
-      const { span } = storage.getStore()
+      const { span } = storage('legacy').getStore()
       this.finish(span, null, err)
     })
   }
@@ -163,7 +162,7 @@ class Sqs extends BaseAwsSdkPlugin {
         return JSON.parse(buffer)
       }
     } catch (e) {
-      log.error(e)
+      log.error('Sqs error parsing DD attributes', e)
     }
   }
 
@@ -195,16 +194,16 @@ class Sqs extends BaseAwsSdkPlugin {
           parsedAttributes = this.parseDatadogAttributes(message.MessageAttributes._datadog)
         }
       }
+      const payloadSize = getHeadersSize({
+        Body: message.Body,
+        MessageAttributes: message.MessageAttributes
+      })
+      const queue = params.QueueUrl.split('/').pop()
       if (parsedAttributes) {
-        const payloadSize = getHeadersSize({
-          Body: message.Body,
-          MessageAttributes: message.MessageAttributes
-        })
-        const queue = params.QueueUrl.split('/').pop()
         this.tracer.decodeDataStreamsContext(parsedAttributes)
-        this.tracer
-          .setCheckpoint(['direction:in', `topic:${queue}`, 'type:sqs'], span, payloadSize)
       }
+      this.tracer
+        .setCheckpoint(['direction:in', `topic:${queue}`, 'type:sqs'], span, payloadSize)
     })
   }
 

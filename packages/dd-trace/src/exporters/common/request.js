@@ -15,7 +15,6 @@ const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
 
 const maxActiveRequests = 8
-const containerId = docker.id()
 
 let activeRequests = 0
 
@@ -63,9 +62,7 @@ function request (data, options, callback) {
     options.headers['Content-Length'] = byteLength(dataArray)
   }
 
-  if (containerId) {
-    options.headers['Datadog-Container-ID'] = containerId
-  }
+  docker.inject(options.headers)
 
   options.agent = isSecure ? httpsAgent : httpAgent
 
@@ -86,7 +83,7 @@ function request (data, options, callback) {
         if (isGzip) {
           zlib.gunzip(buffer, (err, result) => {
             if (err) {
-              log.error(`Could not gunzip response: ${err.message}`)
+              log.error('Could not gunzip response: %s', err.message)
               callback(null, '', res.statusCode)
             } else {
               callback(null, result.toString(), res.statusCode)
@@ -126,9 +123,9 @@ function request (data, options, callback) {
 
     activeRequests++
 
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
 
-    storage.enterWith({ noop: true })
+    storage('legacy').enterWith({ noop: true })
 
     const req = client.request(options, onResponse)
 
@@ -146,7 +143,7 @@ function request (data, options, callback) {
       req.end()
     }
 
-    storage.enterWith(store)
+    storage('legacy').enterWith(store)
   }
 
   // TODO: Figure out why setTimeout is needed to avoid losing the async context

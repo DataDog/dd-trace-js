@@ -85,10 +85,6 @@ interface Tracer extends opentracing.Tracer {
    * span will finish when that callback is called.
    * * The function doesn't accept a callback and doesn't return a promise, in
    * which case the span will finish at the end of the function execution.
-   *
-   * If the `orphanable` option is set to false, the function will not be traced
-   * unless there is already an active span or `childOf` option. Note that this
-   * option is deprecated and has been removed in version 4.0.
    */
   trace<T> (name: string, fn: (span: tracer.Span) => T): T;
   trace<T> (name: string, fn: (span: tracer.Span, done: (error?: Error) => void) => T): T;
@@ -142,6 +138,22 @@ interface Tracer extends opentracing.Tracer {
    * LLM Observability SDK
    */
   llmobs: tracer.llmobs.LLMObs;
+
+  /**
+   * @experimental
+   * Provide same functionality as OpenTelemetry Baggage:
+   * https://opentelemetry.io/docs/concepts/signals/baggage/
+   *
+   * Since the equivalent of OTel Context is implicit in dd-trace-js,
+   * these APIs act on the currently active baggage
+   *
+   * Work with storage('baggage'), therefore do not follow the same continuity as other APIs
+   */
+  setBaggageItem (key: string, value: string): Record<string, string>;
+  getBaggageItem (key: string): string | undefined;
+  getAllBaggageItems (): Record<string, string>;
+  removeBaggageItem (key: string): Record<string, string>;
+  removeAllBaggageItems (): Record<string, string>;
 }
 
 // left out of the namespace, so it
@@ -158,6 +170,7 @@ interface Plugins {
   "bunyan": tracer.plugins.bunyan;
   "cassandra-driver": tracer.plugins.cassandra_driver;
   "child_process": tracer.plugins.child_process;
+  "confluentinc-kafka-javascript": tracer.plugins.confluentinc_kafka_javascript;
   "connect": tracer.plugins.connect;
   "couchbase": tracer.plugins.couchbase;
   "cucumber": tracer.plugins.cucumber;
@@ -169,6 +182,7 @@ interface Plugins {
   "fetch": tracer.plugins.fetch;
   "generic-pool": tracer.plugins.generic_pool;
   "google-cloud-pubsub": tracer.plugins.google_cloud_pubsub;
+  "google-cloud-vertexai": tracer.plugins.google_cloud_vertexai;
   "graphql": tracer.plugins.graphql;
   "grpc": tracer.plugins.grpc;
   "hapi": tracer.plugins.hapi;
@@ -176,10 +190,12 @@ interface Plugins {
   "http": tracer.plugins.http;
   "http2": tracer.plugins.http2;
   "ioredis": tracer.plugins.ioredis;
+  "iovalkey": tracer.plugins.iovalkey;
   "jest": tracer.plugins.jest;
   "kafkajs": tracer.plugins.kafkajs
   "knex": tracer.plugins.knex;
   "koa": tracer.plugins.koa;
+  "langchain": tracer.plugins.langchain;
   "mariadb": tracer.plugins.mariadb;
   "memcached": tracer.plugins.memcached;
   "microgateway-core": tracer.plugins.microgateway_core;
@@ -349,6 +365,12 @@ declare namespace tracer {
    * List of options available to the tracer.
    */
   export interface TracerOptions {
+    /**
+     * Used to disable APM Tracing when using standalone products
+     * @default true
+     */
+    apmTracingEnabled?: boolean
+
     /**
      * Whether to enable trace ID injection in log records to be able to correlate
      * traces with logs.
@@ -532,6 +554,9 @@ declare namespace tracer {
       appsec?: {
         /**
          * Configuration of Standalone ASM mode
+         * Deprecated in favor of `apmTracingEnabled`.
+         *
+         * @deprecated
          */
         standalone?: {
           /**
@@ -655,27 +680,33 @@ declare namespace tracer {
        */
       eventTracking?: {
         /**
-         * Controls the automated user event tracking mode. Possible values are disabled, safe and extended.
-         * On safe mode, any detected Personally Identifiable Information (PII) about the user will be redacted from the event.
-         * On extended mode, no redaction will take place.
-         * @default 'safe'
+         * Controls the automated user tracking mode for user IDs and logins collections. Possible values:
+         * *  'anonymous': will hash user IDs and user logins before collecting them
+         * *  'anon': alias for 'anonymous'
+         * *  'safe': deprecated alias for 'anonymous'
+         *
+         * *  'identification': will collect user IDs and logins without redaction
+         * *  'ident': alias for 'identification'
+         * *  'extended': deprecated alias for 'identification'
+         *
+         * *  'disabled': will not collect user IDs and logins
+         *
+         * Unknown values will be considered as 'disabled'
+         * @default 'identification'
          */
-        mode?: 'safe' | 'extended' | 'disabled'
+        mode?:
+          'anonymous' | 'anon' | 'safe' |
+          'identification' | 'ident' | 'extended' |
+          'disabled'
       },
       /**
-       * Configuration for Api Security sampling
+       * Configuration for Api Security
        */
       apiSecurity?: {
         /** Whether to enable Api Security.
-         * @default false
+         * @default true
          */
         enabled?: boolean,
-
-        /** Controls the request sampling rate (between 0 and 1) in which Api Security is triggered.
-         * The value will be coerced back if it's outside of the 0-1 range.
-         * @default 0.1
-         */
-        requestSampling?: number
       },
       /**
        * Configuration for RASP
@@ -705,7 +736,18 @@ declare namespace tracer {
          */
         maxDepth?: number,
       }
-    };
+    }
+
+    /**
+     * Configuration for Code Origin for Spans.
+     */
+    codeOriginForSpans?: {
+      /**
+       * Whether to enable Code Origin for Spans.
+       * @default true
+       */
+      enabled?: boolean
+    }
 
     /**
      * Configuration of the IAST. Can be a boolean as an alias to `iast.enabled`.
@@ -758,7 +800,7 @@ declare namespace tracer {
        */
       maxDepth?: number
     }
-    
+
     /**
      * Configuration enabling LLM Observability. Enablement is superceded by the DD_LLMOBS_ENABLED environment variable.
      */
@@ -811,43 +853,43 @@ declare namespace tracer {
   export interface DogStatsD {
     /**
      * Increments a metric by the specified value, optionally specifying tags.
-     * @param {string} stat The dot-separated metric name.
-     * @param {number} value The amount to increment the stat by.
-     * @param {[tag:string]:string|number} tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
+     * @param stat The dot-separated metric name.
+     * @param value The amount to increment the stat by.
+     * @param tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
      */
-    increment(stat: string, value?: number, tags?: { [tag: string]: string|number }): void
+    increment(stat: string, value?: number, tags?: Record<string, string|number> | string[]): void
 
     /**
      * Decrements a metric by the specified value, optionally specifying tags.
-     * @param {string} stat The dot-separated metric name.
-     * @param {number} value The amount to decrement the stat by.
-     * @param {[tag:string]:string|number} tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
+     * @param stat The dot-separated metric name.
+     * @param value The amount to decrement the stat by.
+     * @param tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
      */
-    decrement(stat: string, value?: number, tags?: { [tag: string]: string|number }): void
+    decrement(stat: string, value?: number, tags?: Record<string, string|number> | string[]): void
 
     /**
      * Sets a distribution value, optionally specifying tags.
-     * @param {string} stat The dot-separated metric name.
-     * @param {number} value The amount to increment the stat by.
-     * @param {[tag:string]:string|number} tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
+     * @param stat The dot-separated metric name.
+     * @param value The amount to increment the stat by.
+     * @param tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
      */
-    distribution(stat: string, value?: number, tags?: { [tag: string]: string|number }): void
+    distribution(stat: string, value?: number, tags?: Record<string, string|number> | string[]): void
 
     /**
      * Sets a gauge value, optionally specifying tags.
-     * @param {string} stat The dot-separated metric name.
-     * @param {number} value The amount to increment the stat by.
-     * @param {[tag:string]:string|number} tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
+     * @param stat The dot-separated metric name.
+     * @param value The amount to increment the stat by.
+     * @param tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
      */
-    gauge(stat: string, value?: number, tags?: { [tag: string]: string|number }): void
+    gauge(stat: string, value?: number, tags?: Record<string, string|number> | string[]): void
 
     /**
      * Sets a histogram value, optionally specifying tags.
-     * @param {string} stat The dot-separated metric name.
-     * @param {number} value The amount to increment the stat by.
-     * @param {[tag:string]:string|number} tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
+     * @param stat The dot-separated metric name.
+     * @param value The amount to increment the stat by.
+     * @param tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
      */
-    histogram(stat: string, value?: number, tags?: { [tag: string]: string|number }): void
+    histogram(stat: string, value?: number, tags?: Record<string, string|number> | string[]): void
 
     /**
      * Forces any unsent metrics to be sent
@@ -857,6 +899,39 @@ declare namespace tracer {
     flush(): void
   }
 
+  export interface EventTrackingV2 {
+    /**
+     * Links a successful login event to the current trace. Will link the passed user to the current trace with Appsec.setUser() internally.
+     * @param {string} login The login key (username, email...) used by the user to authenticate.
+     * @param {User} user Properties of the authenticated user. Accepts custom fields. Can be null.
+     * @param {any} metadata Custom fields to link to the login success event.
+     */
+    trackUserLoginSuccess(login: string, user?: User | null, metadata?: any): void;
+
+    /**
+     * Links a successful login event to the current trace. Will link the passed user to the current trace with Appsec.setUser() internally.
+     * @param {string} login The login key (username, email...) used by the user to authenticate.
+     * @param {string} userId Identifier of the authenticated user.
+     * @param {any} metadata Custom fields to link to the login success event.
+     */
+    trackUserLoginSuccess(login: string, userId: string, metadata?: any): void;
+
+    /**
+     * Links a failed login event to the current trace.
+     * @param {string} login The login key (username, email...) used by the user to authenticate.
+     * @param {boolean} exists If the user exists.
+     * @param {any} metadata Custom fields to link to the login failure event.
+     */
+    trackUserLoginFailure(login: string, exists: boolean, metadata?: any): void;
+
+    /**
+     * Links a failed login event to the current trace.
+     * @param {string} login The login key (username, email...) used by the user to authenticate.
+     * @param {any} metadata Custom fields to link to the login failure event.
+     */
+    trackUserLoginFailure(login: string, metadata?: any): void;
+  }
+
   export interface Appsec {
     /**
      * Links a successful login event to the current trace. Will link the passed user to the current trace with Appsec.setUser() internally.
@@ -864,16 +939,20 @@ declare namespace tracer {
      * @param {[key: string]: string} metadata Custom fields to link to the login success event.
      *
      * @beta This method is in beta and could change in future versions.
+     *
+     * @deprecated In favor of eventTrackingV2.trackUserLoginSuccess
      */
     trackUserLoginSuccessEvent(user: User, metadata?: { [key: string]: string }): void
 
     /**
      * Links a failed login event to the current trace.
-     * @param {string} userId The user id of the attemped login.
+     * @param {string} userId The user id of the attempted login.
      * @param {boolean} exists If the user id exists.
      * @param {[key: string]: string} metadata Custom fields to link to the login failure event.
      *
      * @beta This method is in beta and could change in future versions.
+     *
+     * @deprecated In favor of eventTrackingV2.trackUserLoginFailure
      */
     trackUserLoginFailureEvent(userId: string, exists: boolean, metadata?: { [key: string]: string }): void
 
@@ -914,6 +993,8 @@ declare namespace tracer {
      * @beta This method is in beta and could change in the future
      */
     setUser(user: User): void
+
+    eventTrackingV2: EventTrackingV2
   }
 
   /** @hidden */
@@ -1285,6 +1366,12 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [confluentinc-kafka-javascript](https://github.com/confluentinc/confluent-kafka-js) module.
+     */
+    interface confluentinc_kafka_javascript extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
      * [connect](https://github.com/senchalabs/connect) module.
      */
     interface connect extends HttpServer {}
@@ -1358,6 +1445,12 @@ declare namespace tracer {
      * [@google-cloud/pubsub](https://github.com/googleapis/nodejs-pubsub) module.
      */
     interface google_cloud_pubsub extends Integration {}
+
+    /**
+     * This plugin automatically instruments the
+     * [@google-cloud/vertexai](https://github.com/googleapis/nodejs-vertexai) module.
+     */
+    interface google_cloud_vertexai extends Integration {}
 
     /** @hidden */
     interface ExecutionArgs {
@@ -1583,6 +1676,53 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [iovalkey](https://github.com/valkey-io/iovalkey) module.
+     */
+    interface iovalkey extends Instrumentation {
+      /**
+       * List of commands that should be instrumented. Commands must be in
+       * lowercase for example 'xread'.
+       *
+       * @default /^.*$/
+       */
+      allowlist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
+
+      /**
+       * Deprecated in favor of `allowlist`.
+       *
+       * @deprecated
+       * @hidden
+       */
+      whitelist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
+
+      /**
+       * List of commands that should not be instrumented. Takes precedence over
+       * allowlist if a command matches an entry in both. Commands must be in
+       * lowercase for example 'xread'.
+       *
+       * @default []
+       */
+      blocklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
+
+      /**
+       * Deprecated in favor of `blocklist`.
+       *
+       * @deprecated
+       * @hidden
+       */
+      blacklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
+
+      /**
+       * Whether to use a different service name for each Redis instance based
+       * on the configured connection name of the client.
+       *
+       * @default false
+       */
+      splitByInstance?: boolean;
+    }
+
+    /**
+     * This plugin automatically instruments the
      * [jest](https://github.com/jestjs/jest) module.
      */
     interface jest extends Integration {}
@@ -1604,6 +1744,12 @@ declare namespace tracer {
      * [kafkajs](https://kafka.js.org/) module.
      */
     interface kafkajs extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
+     * [langchain](https://js.langchain.com/) module
+     */
+    interface langchain extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the
@@ -2194,8 +2340,15 @@ declare namespace tracer {
     /**
      * Defines the pattern to ignore cookie names in the vulnerability hash calculation
      * @default ".{32,}"
+     * @deprecated This property has no effect because hash calculation algorithm has been updated for cookie vulnerabilities
      */
     cookieFilterPattern?: string,
+
+    /**
+     * Defines the number of rows to taint in data coming from databases
+     * @default 1
+     */
+    dbRowsToTaint?: number,
 
     /**
      * Whether to enable vulnerability deduplication
@@ -2219,9 +2372,24 @@ declare namespace tracer {
     redactionValuePattern?: string,
 
     /**
+     * Allows to enable security controls.
+     */
+    securityControlsConfiguration?: string,
+
+    /**
      * Specifies the verbosity of the sent telemetry. Default 'INFORMATION'
      */
-    telemetryVerbosity?: string
+    telemetryVerbosity?: string,
+
+    /**
+     * Configuration for stack trace reporting
+     */
+    stackTrace?: {
+      /** Whether to enable stack trace reporting.
+       * @default true
+       */
+      enabled?: boolean,
+    }
   }
 
   export namespace llmobs {
@@ -2241,7 +2409,7 @@ declare namespace tracer {
        * Disable LLM Observability tracing.
        */
       disable (): void,
-      
+
       /**
        * Instruments a function by automatically creating a span activated on its
        * scope.
@@ -2283,10 +2451,10 @@ declare namespace tracer {
       /**
        * Decorate a function in a javascript runtime that supports function decorators.
        * Note that this is **not** supported in the Node.js runtime, but is in TypeScript.
-       * 
+       *
        * In TypeScript, this decorator is only supported in contexts where general TypeScript
        * function decorators are supported.
-       * 
+       *
        * @param options Optional LLM Observability span options.
        */
       decorate (options: llmobs.LLMObsNamelessSpanOptions): any
@@ -2303,12 +2471,12 @@ declare namespace tracer {
       /**
        * Sets inputs, outputs, tags, metadata, and metrics as provided for a given LLM Observability span.
        * Note that with the exception of tags, this method will override any existing values for the provided fields.
-       * 
+       *
        * For example:
        * ```javascript
        * llmobs.trace({ kind: 'llm', name: 'myLLM', modelName: 'gpt-4o', modelProvider: 'openai' }, () => {
        *  llmobs.annotate({
-       *    inputData: [{ content: 'system prompt, role: 'system' }, { content: 'user prompt', role: 'user' }],
+       *    inputData: [{ content: 'system prompt', role: 'system' }, { content: 'user prompt', role: 'user' }],
        *    outputData: { content: 'response', role: 'ai' },
        *    metadata: { temperature: 0.7 },
        *    tags: { host: 'localhost' },
@@ -2316,7 +2484,7 @@ declare namespace tracer {
        *  })
        * })
        * ```
-       * 
+       *
        * @param span The span to annotate (defaults to the current LLM Observability span if not provided)
        * @param options An object containing the inputs, outputs, tags, metadata, and metrics to set on the span.
        */
@@ -2492,14 +2660,14 @@ declare namespace tracer {
        * LLM Observability span kind. One of `agent`, `workflow`, `task`, `tool`, `retrieval`, `embedding`, or `llm`.
        */
       kind: llmobs.spanKind,
-  
+
       /**
        * The ID of the underlying user session. Required for tracking sessions.
        */
       sessionId?: string,
 
       /**
-       * The name of the ML application that the agent is orchestrating. 
+       * The name of the ML application that the agent is orchestrating.
        * If not provided, the default value will be set to mlApp provided during initalization, or `DD_LLMOBS_ML_APP`.
        */
       mlApp?: string,

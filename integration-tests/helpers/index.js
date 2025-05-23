@@ -15,6 +15,9 @@ const id = require('../../packages/dd-trace/src/id')
 
 const hookFile = 'dd-trace/loader-hook.mjs'
 
+// This is set by the setShouldKill function
+let shouldKill
+
 async function runAndCheckOutput (filename, cwd, expectedOut) {
   const proc = spawn('node', [filename], { cwd, stdio: 'pipe' })
   const pid = proc.pid
@@ -26,9 +29,11 @@ async function runAndCheckOutput (filename, cwd, expectedOut) {
     })
     proc.stderr.pipe(process.stdout)
     proc.on('exit', () => resolve(out.toString('utf8')))
-    setTimeout(() => {
-      if (proc.exitCode === null) proc.kill()
-    }, 1000) // TODO this introduces flakiness. find a better way to end the process.
+    if (shouldKill) {
+      setTimeout(() => {
+        if (proc.exitCode === null) proc.kill()
+      }, 1000) // TODO this introduces flakiness. find a better way to end the process.
+    }
   })
   if (typeof expectedOut === 'function') {
     expectedOut(out)
@@ -140,15 +145,22 @@ function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
 
 async function createSandbox (dependencies = [], isGitRepo = false,
   integrationTestsPaths = ['./integration-tests/*'], followUpCommand) {
-  /* To execute integration tests without a sandbox uncomment the next line
-   * and do `yarn link && yarn link dd-trace` */
-  // return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
+  // We might use NODE_OPTIONS to init the tracer. We don't want this to affect this operations
+  const { NODE_OPTIONS, ...restOfEnv } = process.env
+  const noSandbox = String(process.env.DD_NO_INTEGRATION_TESTS_SANDBOX)
+  if (noSandbox === '1' || noSandbox.toLowerCase() === 'true') {
+    // Execute integration tests without a sandbox. This is useful when you have other components
+    // yarn-linked into dd-trace and want to run the integration tests against them.
+
+    // Link dd-trace to itself, then...
+    await exec('yarn link')
+    await exec('yarn link dd-trace')
+    // ... run the tests in the current directory.
+    return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
+  }
   const folder = path.join(os.tmpdir(), id().toString())
   const out = path.join(folder, 'dd-trace.tgz')
   const allDependencies = [`file:${out}`].concat(dependencies)
-
-  // We might use NODE_OPTIONS to init the tracer. We don't want this to affect this operations
-  const { NODE_OPTIONS, ...restOfEnv } = process.env
 
   fs.mkdirSync(folder)
   const addCommand = `yarn add ${allDependencies.join(' ')} --ignore-engines`
@@ -306,7 +318,7 @@ async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdio
     NODE_OPTIONS: `--loader=${hookFile}`,
     DD_TRACE_AGENT_PORT: agentPort
   }
-  env = { ...env, ...additionalEnvArgs }
+  env = { ...process.env, ...env, ...additionalEnvArgs }
   return spawnProc(path.join(cwd, serverFile), {
     cwd,
     env
@@ -337,6 +349,15 @@ function useSandbox (...args) {
 
 function sandboxCwd () {
   return sandbox.folder
+}
+
+function setShouldKill (value) {
+  before(() => {
+    shouldKill = value
+  })
+  after(() => {
+    shouldKill = true
+  })
 }
 
 function assertObjectContains (actual, expected) {
@@ -372,5 +393,6 @@ module.exports = {
   spawnPluginIntegrationTestProc,
   useEnv,
   useSandbox,
-  sandboxCwd
+  sandboxCwd,
+  setShouldKill
 }

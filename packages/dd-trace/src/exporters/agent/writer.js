@@ -10,15 +10,16 @@ const BaseWriter = require('../common/writer')
 const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
 
 class Writer extends BaseWriter {
-  constructor ({ prioritySampler, lookup, protocolVersion, headers }) {
+  constructor ({ prioritySampler, lookup, protocolVersion, headers, config = {} }) {
     super(...arguments)
     const AgentEncoder = getEncoder(protocolVersion)
 
     this._prioritySampler = prioritySampler
     this._lookup = lookup
     this._protocolVersion = protocolVersion
-    this._encoder = new AgentEncoder(this)
     this._headers = headers
+    this._config = config
+    this._encoder = new AgentEncoder(this)
   }
 
   _sendPayload (data, count, done) {
@@ -41,17 +42,17 @@ class Writer extends BaseWriter {
       startupLog({ agentError: err })
 
       if (err) {
-        log.error(err)
+        log.error('Error sending payload to the agent (status code: %s)', err.status, err)
         done()
         return
       }
 
-      log.debug(`Response from the agent: ${res}`)
+      log.debug('Response from the agent: %s', res)
 
       try {
         this._prioritySampler.update(JSON.parse(res).rate_by_service)
       } catch (e) {
-        log.error(e)
+        log.error('Error updating prioritySampler rates', e)
 
         runtimeMetrics.increment(`${METRIC_PREFIX}.errors`, true)
         runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.name`, `name:${e.name}`, true)

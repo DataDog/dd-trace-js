@@ -10,7 +10,7 @@ const tags = {
   language: 'javascript'
 }
 
-const AgentProxyWriter = require('../../../src/llmobs/writers/spans/agentProxy')
+const SpanWriter = require('../../../src/llmobs/writers/spans')
 const EvalMetricsWriter = require('../../../src/llmobs/writers/evaluations')
 
 const tracerVersion = require('../../../../../package.json').version
@@ -24,7 +24,7 @@ describe('end to end sdk integration tests', () => {
     payloadGenerator()
     return {
       spans: tracer._tracer._processor.process.args.map(args => args[0]).reverse(), // spans finish in reverse order
-      llmobsSpans: AgentProxyWriter.prototype.append.args?.map(args => args[0]),
+      llmobsSpans: SpanWriter.prototype.append.args?.map(args => args[0]),
       evaluationMetrics: EvalMetricsWriter.prototype.append.args?.map(args => args[0])
     }
   }
@@ -41,7 +41,8 @@ describe('end to end sdk integration tests', () => {
     tracer = require('../../../../dd-trace')
     tracer.init({
       llmobs: {
-        mlApp: 'test'
+        mlApp: 'test',
+        agentlessEnabled: false
       }
     })
 
@@ -52,20 +53,21 @@ describe('end to end sdk integration tests', () => {
     llmobs = tracer.llmobs
     if (!llmobs.enabled) {
       llmobs.enable({
-        mlApp: 'test'
+        mlApp: 'test',
+        agentlessEnabled: false
       })
     }
 
     tracer._tracer._config.apiKey = 'test'
 
     sinon.spy(tracer._tracer._processor, 'process')
-    sinon.stub(AgentProxyWriter.prototype, 'append')
+    sinon.stub(SpanWriter.prototype, 'append')
     sinon.stub(EvalMetricsWriter.prototype, 'append')
   })
 
   afterEach(() => {
     tracer._tracer._processor.process.resetHistory()
-    AgentProxyWriter.prototype.append.resetHistory()
+    SpanWriter.prototype.append.resetHistory()
     EvalMetricsWriter.prototype.append.resetHistory()
 
     process.removeAllListeners('beforeExit')
@@ -177,45 +179,6 @@ describe('end to end sdk integration tests', () => {
     check(expected, llmobsSpans)
   })
 
-  it('instruments and uninstruments as needed', () => {
-    payloadGenerator = function () {
-      llmobs.disable()
-      llmobs.trace({ kind: 'agent', name: 'llmobsParent' }, () => {
-        llmobs.annotate({ inputData: 'hello', outputData: 'world' })
-        llmobs.enable({ mlApp: 'test1' })
-        llmobs.trace({ kind: 'workflow', name: 'child1' }, () => {
-          llmobs.disable()
-          llmobs.trace({ kind: 'workflow', name: 'child2' }, () => {
-            llmobs.enable({ mlApp: 'test2' })
-            llmobs.trace({ kind: 'workflow', name: 'child3' }, () => {})
-          })
-        })
-      })
-    }
-
-    const { spans, llmobsSpans } = run(payloadGenerator)
-    expect(spans).to.have.lengthOf(4)
-    expect(llmobsSpans).to.have.lengthOf(2)
-
-    const expected = [
-      expectedLLMObsNonLLMSpanEvent({
-        span: spans[1],
-        spanKind: 'workflow',
-        tags: { ...tags, ml_app: 'test1' },
-        name: 'child1'
-      }),
-      expectedLLMObsNonLLMSpanEvent({
-        span: spans[3],
-        spanKind: 'workflow',
-        tags: { ...tags, ml_app: 'test2' },
-        name: 'child3',
-        parentId: spans[1].context().toSpanId()
-      })
-    ]
-
-    check(expected, llmobsSpans)
-  })
-
   it('submits evaluations', () => {
     sinon.stub(Date, 'now').returns(1234567890)
     payloadGenerator = function () {
@@ -245,7 +208,7 @@ describe('end to end sdk integration tests', () => {
         categorical_value: 'bar',
         ml_app: 'test',
         timestamp_ms: 1234567890,
-        tags: [`dd-trace.version:${tracerVersion}`, 'ml_app:test']
+        tags: [`ddtrace.version:${tracerVersion}`, 'ml_app:test']
       }
     ]
 

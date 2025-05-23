@@ -111,14 +111,16 @@ describe('tagger', () => {
         const parentSpan = {
           context () {
             return {
-              _tags: {
-                '_ml_obs.meta.ml_app': 'my-ml-app',
-                '_ml_obs.session_id': 'my-session'
-              },
               toSpanId () { return '5678' }
             }
           }
         }
+
+        Tagger.tagMap.set(parentSpan, {
+          '_ml_obs.meta.ml_app': 'my-ml-app',
+          '_ml_obs.session_id': 'my-session'
+        })
+
         tagger.registerLLMObsSpan(span, { kind: 'llm', parent: parentSpan })
 
         expect(Tagger.tagMap.get(span)).to.deep.equal({
@@ -166,6 +168,14 @@ describe('tagger', () => {
           '_ml_obs.meta.metadata': { a: 'foo', b: 'bar' }
         })
       })
+
+      it('updates instead of overriding', () => {
+        Tagger.tagMap.set(span, { '_ml_obs.meta.metadata': { a: 'foo' } })
+        tagger.tagMetadata(span, { b: 'bar' })
+        expect(Tagger.tagMap.get(span)).to.deep.equal({
+          '_ml_obs.meta.metadata': { a: 'foo', b: 'bar' }
+        })
+      })
     })
 
     describe('tagMetrics', () => {
@@ -200,6 +210,14 @@ describe('tagger', () => {
         tagger._register(span)
         expect(() => tagger.tagMetrics(span, metrics)).to.throw()
       })
+
+      it('updates instead of overriding', () => {
+        Tagger.tagMap.set(span, { '_ml_obs.metrics': { a: 1 } })
+        tagger.tagMetrics(span, { b: 2 })
+        expect(Tagger.tagMap.get(span)).to.deep.equal({
+          '_ml_obs.metrics': { a: 1, b: 2 }
+        })
+      })
     })
 
     describe('tagSpanTags', () => {
@@ -212,12 +230,12 @@ describe('tagger', () => {
         })
       })
 
-      it('merges tags so they do not overwrite', () => {
+      it('merges tags so they update', () => {
         Tagger.tagMap.set(span, { '_ml_obs.tags': { a: 1 } })
         const tags = { a: 2, b: 1 }
         tagger.tagSpanTags(span, tags)
         expect(Tagger.tagMap.get(span)).to.deep.equal({
-          '_ml_obs.tags': { a: 1, b: 1 }
+          '_ml_obs.tags': { a: 2, b: 1 }
         })
       })
     })
@@ -470,6 +488,29 @@ describe('tagger', () => {
       it('throws when the value is not JSON serializable', () => {
         const data = unserializbleObject()
         expect(() => tagger.tagTextIO(span, data, 'output')).to.throw()
+      })
+    })
+
+    describe('changeKind', () => {
+      it('changes the span kind', () => {
+        tagger._register(span)
+        tagger._setTag(span, '_ml_obs.meta.span.kind', 'old-kind')
+        expect(Tagger.tagMap.get(span)).to.deep.equal({
+          '_ml_obs.meta.span.kind': 'old-kind'
+        })
+        tagger.changeKind(span, 'new-kind')
+        expect(Tagger.tagMap.get(span)).to.deep.equal({
+          '_ml_obs.meta.span.kind': 'new-kind'
+        })
+      })
+
+      it('sets the kind if it is not already set', () => {
+        tagger._register(span)
+        expect(Tagger.tagMap.get(span)).to.deep.equal({})
+        tagger.changeKind(span, 'new-kind')
+        expect(Tagger.tagMap.get(span)).to.deep.equal({
+          '_ml_obs.meta.span.kind': 'new-kind'
+        })
       })
     })
   })

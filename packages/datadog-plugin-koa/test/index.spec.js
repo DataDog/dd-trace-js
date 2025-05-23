@@ -14,7 +14,7 @@ describe('Plugin', () => {
   let appListener
 
   describe('koa', () => {
-    withVersions('koa', 'koa', version => {
+    withVersions('koa', 'koa', (version, _, realVersion) => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
         Koa = require(`../../../versions/koa@${version}`).get()
@@ -25,7 +25,19 @@ describe('Plugin', () => {
       })
 
       describe('without configuration', () => {
-        before(() => agent.load(['koa', 'http'], [{}, { client: false }]))
+        before(() => agent.load(
+          ['koa', 'http'],
+          [{}, { client: false }],
+          {
+            // this is needed to test the client IP header configuration and must be done before loading the tracer
+            // initially since we can't change the tracer config after it's loaded. Ideally, this clientIpHeader test
+            // would be located within the http plugin tests, but due to the way the tracer is loaded during testing,
+            // we can't do that since the tracer cannot be re-configured after it's loaded. So we added it here as the
+            // first test in this describe block.
+            clientIpEnabled: true,
+            clientIpHeader: 'X-Custom-Client-Ip-Header' // config should be case-insensitive
+          })
+        )
 
         after(() => agent.close({ ritmReset: false }))
 
@@ -40,7 +52,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('name', 'koa.request')
@@ -67,44 +79,46 @@ describe('Plugin', () => {
           })
         })
 
-        it('should do automatic instrumentation on 1.x middleware', done => {
-          const app = new Koa()
+        if (semver.satisfies(realVersion, '<3')) {
+          it('should do automatic instrumentation on 1.x middleware', done => {
+            const app = new Koa()
 
-          app.use(function * handle (next) {
-            this.body = ''
-            yield next
+            app.use(function * handle (next) {
+              this.body = ''
+              yield next
+            })
+
+            appListener = app.listen(0, 'localhost', () => {
+              const port = appListener.address().port
+
+              agent
+                .assertSomeTraces(traces => {
+                  const spans = sort(traces[0])
+
+                  expect(spans[0]).to.have.property('name', 'koa.request')
+                  expect(spans[0]).to.have.property('service', 'test')
+                  expect(spans[0]).to.have.property('type', 'web')
+                  expect(spans[0]).to.have.property('resource', 'GET')
+                  expect(spans[0].meta).to.have.property('span.kind', 'server')
+                  expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
+                  expect(spans[0].meta).to.have.property('http.method', 'GET')
+                  expect(spans[0].meta).to.have.property('http.status_code', '200')
+                  expect(spans[0].meta).to.have.property('component', 'koa')
+
+                  expect(spans[1]).to.have.property('name', 'koa.middleware')
+                  expect(spans[1]).to.have.property('service', 'test')
+                  expect(spans[1]).to.have.property('resource', 'converted')
+                  expect(spans[1].meta).to.have.property('component', 'koa')
+                })
+                .then(done)
+                .catch(done)
+
+              axios
+                .get(`http://localhost:${port}/user`)
+                .catch(done)
+            })
           })
-
-          appListener = app.listen(0, 'localhost', () => {
-            const port = appListener.address().port
-
-            agent
-              .use(traces => {
-                const spans = sort(traces[0])
-
-                expect(spans[0]).to.have.property('name', 'koa.request')
-                expect(spans[0]).to.have.property('service', 'test')
-                expect(spans[0]).to.have.property('type', 'web')
-                expect(spans[0]).to.have.property('resource', 'GET')
-                expect(spans[0].meta).to.have.property('span.kind', 'server')
-                expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
-                expect(spans[0].meta).to.have.property('http.method', 'GET')
-                expect(spans[0].meta).to.have.property('http.status_code', '200')
-                expect(spans[0].meta).to.have.property('component', 'koa')
-
-                expect(spans[1]).to.have.property('name', 'koa.middleware')
-                expect(spans[1]).to.have.property('service', 'test')
-                expect(spans[1]).to.have.property('resource', 'converted')
-                expect(spans[1].meta).to.have.property('component', 'koa')
-              })
-              .then(done)
-              .catch(done)
-
-            axios
-              .get(`http://localhost:${port}/user`)
-              .catch(done)
-          })
-        })
+        }
 
         it('should run middleware in the request scope', done => {
           const app = new Koa()
@@ -216,6 +230,58 @@ describe('Plugin', () => {
           })
         })
 
+        it('should handle client IP header configuration', done => {
+          const app = new Koa()
+
+          app.use(async (ctx) => {
+            ctx.body = ''
+          })
+
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
+            agent
+              .assertSomeTraces(traces => {
+                const spans = sort(traces[0])
+                expect(spans[0].meta).to.have.property('http.client_ip', '8.8.8.8')
+              })
+              .then(done)
+              .catch(done)
+
+            axios.get(`http://localhost:${port}/user`, {
+              headers: {
+                'x-custom-client-ip-header': '8.8.8.8'
+              }
+            }).catch(done)
+          })
+        })
+
+        it('should not add client IP tag when header is missing or a different header is used', done => {
+          const app = new Koa()
+
+          app.use(async (ctx) => {
+            ctx.body = ''
+          })
+
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
+            agent
+              .assertSomeTraces(traces => {
+                const spans = sort(traces[0])
+                expect(spans[0].meta).to.not.have.property('http.client_ip')
+              })
+              .then(done)
+              .catch(done)
+
+            axios.get(`http://localhost:${port}/user`, {
+              headers: {
+                'x-other-custom-client-ip-header': '8.8.8.8'
+              }
+            }).catch(done)
+          })
+        })
+
         withVersions('koa', 'koa-route', routerVersion => {
           let koaRouter
 
@@ -237,7 +303,7 @@ describe('Plugin', () => {
               const port = appListener.address().port
 
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
                   expect(spans[0]).to.have.property('resource', 'GET /user/:id')
@@ -276,7 +342,7 @@ describe('Plugin', () => {
               const port = appListener.address().port
 
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
                   expect(spans[0]).to.have.property('resource', 'GET /user/:id')
                   expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
@@ -312,7 +378,7 @@ describe('Plugin', () => {
               const port = appListener.address().port
 
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
                   expect(spans[0]).to.have.property('resource', 'GET /user/:id')
@@ -343,7 +409,7 @@ describe('Plugin', () => {
               const port = appListener.address().port
 
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
                   expect(spans[0]).to.have.property('resource', 'GET /user/:id')
@@ -373,7 +439,7 @@ describe('Plugin', () => {
               const port = appListener.address().port
 
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
                   expect(spans[0]).to.have.property('resource', 'GET /user/:id')
@@ -405,7 +471,7 @@ describe('Plugin', () => {
               const port = appListener.address().port
 
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
                   expect(spans[0]).to.have.property('resource', 'GET /public/plop')
@@ -439,7 +505,7 @@ describe('Plugin', () => {
               const port = appListener.address().port
 
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
                   expect(spans[0]).to.have.property('resource', 'GET /forums/:fid/discussions/:did/posts/:pid')
@@ -476,7 +542,7 @@ describe('Plugin', () => {
                 const port = appListener.address().port
 
                 agent
-                  .use(traces => {
+                  .assertSomeTraces(traces => {
                     const spans = sort(traces[0])
 
                     expect(spans[0]).to.have.property('resource', 'GET /first/child')
@@ -513,7 +579,7 @@ describe('Plugin', () => {
               const port = appListener.address().port
 
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
                   expect(spans[0]).to.have.property('resource', 'GET /forums/:fid/posts/:pid')
@@ -546,7 +612,7 @@ describe('Plugin', () => {
               const port = appListener.address().port
 
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
                   expect(spans[0]).to.have.property('resource', 'GET /user/:id')
@@ -581,7 +647,7 @@ describe('Plugin', () => {
               const port = appListener.address().port
 
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
                   expect(spans[0]).to.have.property('resource', 'GET /user/:id')
@@ -668,7 +734,7 @@ describe('Plugin', () => {
               const port = appListener.address().port
 
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
                   expect(spans[0]).to.have.property('name', 'koa.request')
@@ -692,41 +758,43 @@ describe('Plugin', () => {
             })
           })
 
-          it('should not do automatic instrumentation on 1.x middleware', done => {
-            const app = new Koa()
+          if (semver.satisfies(realVersion, '<3')) {
+            it('should not do automatic instrumentation on 1.x middleware', done => {
+              const app = new Koa()
 
-            app.use(function * handle (next) {
-              this.body = ''
-              yield next
+              app.use(function * handle (next) {
+                this.body = ''
+                yield next
+              })
+
+              appListener = app.listen(0, 'localhost', () => {
+                const port = appListener.address().port
+
+                agent
+                  .assertSomeTraces(traces => {
+                    const spans = sort(traces[0])
+
+                    expect(spans[0]).to.have.property('name', 'koa.request')
+                    expect(spans[0]).to.have.property('service', 'test')
+                    expect(spans[0]).to.have.property('type', 'web')
+                    expect(spans[0]).to.have.property('resource', 'GET')
+                    expect(spans[0].meta).to.have.property('span.kind', 'server')
+                    expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
+                    expect(spans[0].meta).to.have.property('http.method', 'GET')
+                    expect(spans[0].meta).to.have.property('http.status_code', '200')
+                    expect(spans[0].meta).to.have.property('component', 'koa')
+
+                    expect(spans).to.have.length(1)
+                  })
+                  .then(done)
+                  .catch(done)
+
+                axios
+                  .get(`http://localhost:${port}/user`)
+                  .catch(done)
+              })
             })
-
-            appListener = app.listen(0, 'localhost', () => {
-              const port = appListener.address().port
-
-              agent
-                .use(traces => {
-                  const spans = sort(traces[0])
-
-                  expect(spans[0]).to.have.property('name', 'koa.request')
-                  expect(spans[0]).to.have.property('service', 'test')
-                  expect(spans[0]).to.have.property('type', 'web')
-                  expect(spans[0]).to.have.property('resource', 'GET')
-                  expect(spans[0].meta).to.have.property('span.kind', 'server')
-                  expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
-                  expect(spans[0].meta).to.have.property('http.method', 'GET')
-                  expect(spans[0].meta).to.have.property('http.status_code', '200')
-                  expect(spans[0].meta).to.have.property('component', 'koa')
-
-                  expect(spans).to.have.length(1)
-                })
-                .then(done)
-                .catch(done)
-
-              axios
-                .get(`http://localhost:${port}/user`)
-                .catch(done)
-            })
-          })
+          }
 
           it('should run middleware in the request scope', done => {
             const app = new Koa()
@@ -837,7 +905,7 @@ describe('Plugin', () => {
                 const port = appListener.address().port
 
                 agent
-                  .use(traces => {
+                  .assertSomeTraces(traces => {
                     const spans = sort(traces[0])
 
                     expect(spans[0]).to.have.property('resource', 'GET /user/:id')

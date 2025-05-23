@@ -194,6 +194,7 @@ describe('plugins/util/web', () => {
 
         config.clientIpEnabled = true
 
+        web.normalizeConfig(config)
         web.instrument(tracer, config, req, res, 'test.request', span => {
           const tags = span.context()._tags
 
@@ -205,11 +206,45 @@ describe('plugins/util/web', () => {
         })
       })
 
+      it('should add custom client ip tag to the span when it is configured', () => {
+        req.headers['X-Forwad-For'] = '8.8.8.8'
+
+        config.clientIpEnabled = true
+        config.clientIpHeader = 'X-Forwad-For'
+
+        web.normalizeConfig(config)
+        web.instrument(tracer, config, req, res, 'test.request', span => {
+          const tags = span.context()._tags
+
+          res.end()
+
+          expect(tags).to.include({
+            [HTTP_CLIENT_IP]: '8.8.8.8'
+          })
+        })
+      })
+
+      it('should not add custom client ip tag to the span when it is not configured', () => {
+        req.headers['X-Forwad-For'] = '8.8.8.8'
+
+        config.clientIpEnabled = true
+
+        web.normalizeConfig(config)
+        web.instrument(tracer, config, req, res, 'test.request', span => {
+          const tags = span.context()._tags
+
+          res.end()
+
+          expect(tags).to.not.have.property(HTTP_CLIENT_IP)
+        })
+      })
+
       it('should not add client ip tag to the span when disabled', () => {
         req.headers['x-forwarded-for'] = '8.8.8.8'
 
         config.clientIpEnabled = false
 
+        web.normalizeConfig(config)
         web.instrument(tracer, config, req, res, 'test.request', span => {
           const tags = span.context()._tags
 

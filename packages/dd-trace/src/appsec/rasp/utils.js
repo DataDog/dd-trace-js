@@ -1,14 +1,15 @@
 'use strict'
 
 const web = require('../../plugins/util/web')
-const { reportStackTrace } = require('../stack_trace')
+const { getCallsiteFrames, reportStackTrace, canReportStackTrace } = require('../stack_trace')
 const { getBlockingAction } = require('../blocking')
 const log = require('../../log')
+const { updateRaspRuleMatchMetricTags } = require('../telemetry')
 
 const abortOnUncaughtException = process.execArgv?.includes('--abort-on-uncaught-exception')
 
 if (abortOnUncaughtException) {
-  log.warn('The --abort-on-uncaught-exception flag is enabled. The RASP module will not block operations.')
+  log.warn('[ASM] The --abort-on-uncaught-exception flag is enabled. The RASP module will not block operations.')
 }
 
 const RULE_TYPES = {
@@ -19,42 +20,55 @@ const RULE_TYPES = {
 }
 
 class DatadogRaspAbortError extends Error {
-  constructor (req, res, blockingAction) {
+  constructor (req, res, blockingAction, raspRule, ruleTriggered) {
     super('DatadogRaspAbortError')
     this.name = 'DatadogRaspAbortError'
     this.req = req
     this.res = res
     this.blockingAction = blockingAction
+    this.raspRule = raspRule
+    this.ruleTriggered = ruleTriggered
   }
 }
 
-function handleResult (actions, req, res, abortController, config) {
-  const generateStackTraceAction = actions?.generate_stack
-  if (generateStackTraceAction && config.appsec.stackTrace.enabled) {
-    const rootSpan = web.root(req)
+function handleResult (result, req, res, abortController, config, raspRule) {
+  const generateStackTraceAction = result?.actions?.generate_stack
+
+  const { enabled, maxDepth, maxStackTraces } = config.appsec.stackTrace
+
+  const rootSpan = web.root(req)
+
+  const ruleTriggered = !!result?.events?.length
+
+  if (generateStackTraceAction && enabled && canReportStackTrace(rootSpan, maxStackTraces)) {
+    const frames = getCallsiteFrames(maxDepth)
+
     reportStackTrace(
       rootSpan,
       generateStackTraceAction.stack_id,
-      config.appsec.stackTrace.maxDepth,
-      config.appsec.stackTrace.maxStackTraces
+      frames
     )
   }
 
-  if (!abortController || abortOnUncaughtException) return
+  if (abortController && !abortOnUncaughtException) {
+    const blockingAction = getBlockingAction(result?.actions)
 
-  const blockingAction = getBlockingAction(actions)
-  if (blockingAction) {
-    const rootSpan = web.root(req)
     // Should block only in express
-    if (rootSpan?.context()._name === 'express.request') {
-      const abortError = new DatadogRaspAbortError(req, res, blockingAction)
+    if (blockingAction && rootSpan?.context()._name === 'express.request') {
+      const abortError = new DatadogRaspAbortError(req, res, blockingAction, raspRule, ruleTriggered)
       abortController.abort(abortError)
 
       // TODO Delete this when support for node 16 is removed
       if (!abortController.signal.reason) {
         abortController.signal.reason = abortError
       }
+
+      return
     }
+  }
+
+  if (ruleTriggered) {
+    updateRaspRuleMatchMetricTags(req, raspRule, false, false)
   }
 }
 

@@ -1,10 +1,68 @@
 'use strict'
 
 const { expect } = require('chai')
+const assert = require('node:assert/strict')
 const shimmer = require('../src/shimmer')
 
 describe('shimmer', () => {
   describe('with a method', () => {
+    it('should wrap getter method', () => {
+      let index = 0
+      let called = false
+      const obj = { get increment () { return () => index++ } }
+
+      shimmer.wrap(obj, 'increment', getter => () => {
+        called = true
+        return getter()
+      })
+
+      assert.strictEqual(index, 0)
+      assert.strictEqual(called, false)
+      const method = obj.increment
+      assert.strictEqual(index, 0)
+      assert.strictEqual(called, true)
+      method()
+      assert.strictEqual(index, 1)
+      assert.strictEqual(called, true)
+    })
+
+    it('should replace getter method when using replaceGetter option', () => {
+      let index = 0
+      let called = 0
+      const returned = () => { assert.strictEqual(called, 0) }
+
+      const obj = {
+        get method () {
+          index++
+          return returned
+        }
+      }
+
+      shimmer.wrap(obj, 'method', method => () => {
+        called++
+        return method
+      }, { replaceGetter: true })
+
+      assert.strictEqual(index, 1)
+      assert.strictEqual(called, 0)
+      const fn = obj.method
+      assert.strictEqual(fn.name, returned.name)
+      assert.strictEqual(index, 1)
+      assert.strictEqual(called, 0)
+      fn()
+      assert.strictEqual(index, 1)
+      assert.strictEqual(called, 1)
+    })
+
+    it('should not wrap setter only method', () => {
+      // eslint-disable-next-line accessor-pairs
+      const obj = { set setter (_method_) {} }
+
+      assert.throws(() => shimmer.wrap(obj, 'setter', setter => () => {}), {
+        message: 'Replacing setters is not supported. Implement if required.'
+      })
+    })
+
     it('should wrap the method', () => {
       const count = inc => inc
       const obj = { count }
@@ -17,13 +75,36 @@ describe('shimmer', () => {
     it('should wrap the method on a frozen object', () => {
       const count = inc => inc
 
-      let obj = { count }
+      let obj = { count, foo: 42 }
 
       Object.freeze(obj)
 
       obj = shimmer.wrap(obj, 'count', count => inc => count(inc) + 1)
 
       expect(obj.count(1)).to.equal(2)
+      expect(obj.foo).to.equal(42)
+      expect(Object.hasOwn(obj, 'foo')).to.equal(true)
+    })
+
+    it('should wrap the method on a frozen object', () => {
+      const count = inc => inc
+
+      function abc () { return this.answer }
+
+      let method = abc
+      method.count = count
+      method.foo = 'bar'
+      method.answer = 42
+
+      Object.freeze(method)
+
+      method = shimmer.wrap(method, 'count', count => inc => count(inc) + 1)
+
+      expect(method.count(1)).to.equal(2)
+      expect(method.foo).to.equal('bar')
+      expect(method.name).to.equal('abc')
+      expect(method).to.not.equal(abc)
+      expect(method()).to.equal(42)
     })
 
     it('should mass wrap targets', () => {
@@ -151,6 +232,23 @@ describe('shimmer', () => {
       expect(Object.getOwnPropertyNames(obj.count)).to.not.include('test')
     })
 
+    it('should inherit from the original prototype', () => {
+      // class A extends Function {}
+      class ExtendedAsyncFunction extends Function {
+        foo = 42
+      }
+
+      const obj = { count: new ExtendedAsyncFunction() }
+
+      Object.getPrototypeOf(obj.count).test = 'test'
+
+      shimmer.wrap(obj, 'count', () => () => {})
+
+      expect(obj.count).to.have.property('test', 'test')
+      expect(obj.count).to.have.property('foo', 42)
+      expect(Object.getOwnPropertyNames(obj.count)).to.not.include('test')
+    })
+
     it('should preserve the property descriptor of the original', () => {
       const obj = {}
 
@@ -164,28 +262,79 @@ describe('shimmer', () => {
       const count = Object.getOwnPropertyDescriptor(obj, 'count')
 
       expect(count).to.have.property('enumerable', false)
+      expect(count).to.have.property('writable', false)
     })
 
-    it('should unwrap a method', () => {
-      const count = inc => inc
-      const obj = { count }
-
-      shimmer.wrap(obj, 'count', count => inc => count(inc) + 1)
-      shimmer.unwrap(obj, 'count')
-
-      expect(obj.count(1)).to.equal(1)
-    })
-
-    it('should unwrap a method from the prototype', () => {
-      const count = inc => inc
+    it('should handle writable non-configurable properties well', () => {
       const obj = {}
 
-      Object.setPrototypeOf(obj, { count })
+      Object.defineProperty(obj, 'count', {
+        value: () => {},
+        writable: true,
+        configurable: false
+      })
 
-      shimmer.wrap(obj, 'count', count => inc => count(inc) + 1)
-      shimmer.unwrap(obj, 'count')
+      shimmer.wrap(obj, 'count', () => () => {})
 
-      expect(obj).to.not.have.ownProperty('count')
+      const count = Object.getOwnPropertyDescriptor(obj, 'count')
+
+      expect(count).to.have.property('enumerable', false)
+      expect(count).to.have.property('writable', true)
+      expect(count).to.have.property('configurable', false)
+    })
+
+    it('should skip non-configurable/writable string keyed methods', () => {
+      const obj = {
+        configurable () {}
+      }
+      Object.defineProperty(obj, 'count', {
+        value: () => {},
+        configurable: false, // Explicit, even if it's the default
+        writable: false
+      })
+
+      const countDescriptorBefore = Object.getOwnPropertyDescriptor(obj, 'count')
+      shimmer.wrap(obj, 'count', () => () => {})
+      const countDescriptorAfter = Object.getOwnPropertyDescriptor(obj, 'count')
+
+      assert.deepStrictEqual(countDescriptorBefore, countDescriptorAfter)
+
+      const configurableDescriptorBefore = Object.getOwnPropertyDescriptor(obj, 'configurable')
+      shimmer.wrap(obj, 'configurable', () => () => {})
+      const configurableDescriptorAfter = Object.getOwnPropertyDescriptor(obj, 'configurable')
+
+      assert.notDeepStrictEqual(configurableDescriptorBefore.value, configurableDescriptorAfter.value)
+      configurableDescriptorAfter.value = configurableDescriptorBefore.value
+
+      assert.deepStrictEqual(configurableDescriptorBefore, configurableDescriptorAfter)
+    })
+
+    it('should skip non-configurable/writable symbol keyed methods', () => {
+      const configurable = Symbol('configurable')
+      const obj = {
+        [configurable] () {}
+      }
+      const symbol = Symbol('count')
+      Object.defineProperty(obj, symbol, {
+        value: () => {},
+        configurable: false, // Explicit, even if it's the default
+        writable: false
+      })
+
+      const descriptorBefore = Object.getOwnPropertyDescriptor(obj, symbol)
+      shimmer.wrap(obj, symbol, () => () => {})
+      const descriptorAfter = Object.getOwnPropertyDescriptor(obj, symbol)
+
+      assert.deepStrictEqual(descriptorBefore, descriptorAfter)
+
+      const configurableDescriptorBefore = Object.getOwnPropertyDescriptor(obj, configurable)
+      shimmer.wrap(obj, configurable, () => () => {})
+      const configurableDescriptorAfter = Object.getOwnPropertyDescriptor(obj, configurable)
+
+      assert.notDeepStrictEqual(configurableDescriptorBefore.value, configurableDescriptorAfter.value)
+      configurableDescriptorAfter.value = configurableDescriptorBefore.value
+
+      assert.deepStrictEqual(configurableDescriptorBefore, configurableDescriptorAfter)
     })
 
     it('should validate that there is a target object', () => {
@@ -210,223 +359,6 @@ describe('shimmer', () => {
 
     it('should validate that the method wrapper is a function', () => {
       expect(() => shimmer.wrap({ a: () => {} }, 'a', 'notafunction')).to.throw()
-    })
-
-    it('should not throw when unwrapping without a target', () => {
-      expect(() => shimmer.unwrap(null, 'a')).to.not.throw()
-    })
-
-    it('should not throw when unwrapping without a method', () => {
-      expect(() => shimmer.unwrap({}, 'a')).to.not.throw()
-    })
-
-    it('should not throw when unwrapping an invalid type', () => {
-      expect(() => shimmer.unwrap({ a: 'b' }, 'a')).to.not.throw()
-    })
-
-    it('should not throw when unwrapping a method that was not wrapped', () => {
-      expect(() => shimmer.unwrap({ a: () => {} }, 'a')).to.not.throw()
-    })
-
-    describe('safe mode', () => {
-      let obj
-
-      before(() => {
-        shimmer.setSafe(true)
-      })
-
-      after(() => {
-        shimmer.setSafe(false)
-      })
-
-      describe('sync', () => {
-        beforeEach(() => {
-          obj = { count: () => 3 }
-        })
-
-        it('should not throw when wrapper code is throwing', () => {
-          shimmer.wrap(obj, 'count', () => {
-            return () => {
-              throw new Error('wrapper error')
-            }
-          })
-
-          expect(obj.count()).to.equal(3)
-        })
-
-        it('should not throw when wrapper code is throwing after return', () => {
-          shimmer.wrap(obj, 'count', (count) => {
-            return () => {
-              count()
-              throw new Error('wrapper error')
-            }
-          })
-
-          expect(obj.count()).to.equal(3)
-        })
-      })
-
-      describe('sync recursive', () => {
-        beforeEach(() => {
-          obj = { count: (x = 1) => x === 3 ? 3 : obj.count(x + 1) }
-        })
-
-        it('should not throw when wrapper code is throwing', () => {
-          shimmer.wrap(obj, 'count', (count) => {
-            return function (x) {
-              if (x === 2) {
-                throw new Error('wrapper error')
-              }
-              return count.apply(this, arguments)
-            }
-          })
-
-          expect(obj.count()).to.equal(3)
-        })
-
-        it('should not throw when wrapper code is throwing mid-recursion', () => {
-          shimmer.wrap(obj, 'count', (count) => {
-            return function (x) {
-              const returnValue = count.apply(this, arguments)
-              if (x === 2) {
-                throw new Error('wrapper error')
-              }
-              return returnValue
-            }
-          })
-
-          expect(obj.count()).to.equal(3)
-        })
-
-        it('should not throw when wrapper code is throwing after return', () => {
-          shimmer.wrap(obj, 'count', (count) => {
-            return function (x) {
-              const returnValue = count.apply(this, arguments)
-              if (x === 3) {
-                throw new Error('wrapper error')
-              }
-              return returnValue
-            }
-          })
-
-          expect(obj.count()).to.equal(3)
-        })
-      })
-
-      describe('async', () => {
-        beforeEach(() => {
-          obj = { count: async () => await Promise.resolve(3) }
-        })
-
-        it('should not throw when wrapper code is throwing', async () => {
-          shimmer.wrap(obj, 'count', (count) => {
-            return async function (x) {
-              if (x === 2) {
-                throw new Error('wrapper error')
-              }
-              return await count.apply(this, arguments)
-            }
-          })
-
-          expect(await obj.count()).to.equal(3)
-        })
-
-        it('should not throw when wrapper code is throwing after return', async () => {
-          shimmer.wrap(obj, 'count', (count) => {
-            return async () => {
-              await count()
-              throw new Error('wrapper error')
-            }
-          })
-
-          expect(await obj.count()).to.equal(3)
-        })
-      })
-
-      describe('async recursion', () => {
-        beforeEach(() => {
-          obj = {
-            async count (x = 1) {
-              if (x === 3) return await Promise.resolve(3)
-              else return await obj.count(x + 1)
-            }
-          }
-        })
-
-        it('should not throw when wrapper code is throwing', async () => {
-          shimmer.wrap(obj, 'count', (count) => {
-            return async function (x) {
-              if (x === 2) {
-                throw new Error('wrapper error')
-              }
-              return await count.apply(this, arguments)
-            }
-          })
-
-          expect(await obj.count()).to.equal(3)
-        })
-
-        it('should not throw when wrapper code is throwing mid-recursion', async () => {
-          shimmer.wrap(obj, 'count', (count) => {
-            return async function (x) {
-              const returnValue = await count.apply(this, arguments)
-              if (x === 2) {
-                throw new Error('wrapper error')
-              }
-              return returnValue
-            }
-          })
-
-          expect(await obj.count()).to.equal(3)
-        })
-
-        it('should not throw when wrapper code is throwing after return', async () => {
-          shimmer.wrap(obj, 'count', (count) => {
-            return async function (x) {
-              const returnValue = await count.apply(this, arguments)
-              if (x === 3) {
-                throw new Error('wrapper error')
-              }
-              return returnValue
-            }
-          })
-
-          expect(await obj.count()).to.equal(3)
-        })
-      })
-      // describe('callback', () => {
-      //   it('should not throw when wrapper code is throwing', (done) => {
-      //     const obj = { count: cb => setImmediate(() => cb(null, 3)) }
-
-      //     shimmer.wrap(obj, 'count', () => {
-      //       return () => {
-      //         throw new Error('wrapper error')
-      //       }
-      //     })
-
-      //     obj.count((err, res) => {
-      //       expect(res).to.equal(3)
-      //       done()
-      //     })
-      //   })
-      //   it('should not throw when wrapper code calls cb with error', async () => {
-      //     const obj = { count: cb => setImmediate(() => cb(null, 3)) }
-
-      //     shimmer.wrap(obj, 'count', (count) => {
-      //       return (cb) => {
-      //         count((err, val) => {
-      //           cb(new Error('wrapper error'))
-      //         })
-      //       }
-      //     })
-
-      //     obj.count((err, res) => {
-      //       expect(err).to.be.undefined
-      //       expect(res).to.equal(3)
-      //       done()
-      //     })
-      //   })
-      // })
     })
   })
 
@@ -539,34 +471,6 @@ describe('shimmer', () => {
       expect(Object.getOwnPropertyNames(wrapped)).to.not.include('test')
     })
 
-    it('should unwrap a function', () => {
-      const count = inc => inc
-
-      const wrapped = shimmer.wrapFunction(count, count => inc => count(inc) + 1)
-
-      shimmer.unwrap(wrapped)
-
-      expect(wrapped(1)).to.equal(1)
-    })
-
-    it('should unwrap a constructor', () => {
-      const Counter = function (start) {
-        this.value = start
-      }
-
-      const WrappedCounter = shimmer.wrapFunction(Counter, Counter => function (...args) {
-        Counter.apply(this, arguments)
-        this.value++
-      })
-
-      shimmer.unwrap(WrappedCounter)
-
-      const counter = new WrappedCounter(1)
-
-      expect(counter.value).to.equal(1)
-      expect(counter).to.be.an.instanceof(Counter)
-    })
-
     it('should mass wrap methods on objects', () => {
       const foo = {
         a: () => 'original',
@@ -586,44 +490,12 @@ describe('shimmer', () => {
       expect(bar.b()).to.equal('wrapped')
     })
 
-    it('should mass wrap methods on objects', () => {
-      const foo = {
-        a: () => 'original',
-        b: () => 'original'
-      }
-
-      const bar = {
-        a: () => 'original',
-        b: () => 'original'
-      }
-
-      shimmer.massWrap([foo, bar], ['a', 'b'], () => () => 'wrapped')
-      shimmer.massUnwrap([foo, bar], ['a', 'b'])
-
-      expect(foo.a()).to.equal('original')
-      expect(foo.b()).to.equal('original')
-      expect(bar.a()).to.equal('original')
-      expect(bar.b()).to.equal('original')
-    })
-
     it('should validate that the function wrapper exists', () => {
       expect(() => shimmer.wrap(() => {})).to.throw()
     })
 
     it('should validate that the function wrapper is a function', () => {
       expect(() => shimmer.wrap(() => {}, 'a')).to.throw()
-    })
-
-    it('should never throw when unwrapping', () => {
-      expect(() => shimmer.unwrap(() => {})).to.not.throw()
-    })
-
-    it('should not throw when unwrapping an invalid type', () => {
-      expect(() => shimmer.unwrap('foo')).to.not.throw()
-    })
-
-    it('should not throw when unwrapping a function that was not wrapped', () => {
-      expect(() => shimmer.unwrap(() => {})).to.not.throw()
     })
   })
 })

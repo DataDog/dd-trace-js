@@ -1,6 +1,5 @@
 'use strict'
 
-const { enableRewriter, disableRewriter } = require('./rewriter')
 const {
   createTransaction,
   removeTransaction,
@@ -16,17 +15,15 @@ const kafkaContextPlugin = require('../context/kafka-ctx-plugin')
 
 module.exports = {
   enableTaintTracking (config, telemetryVerbosity) {
-    enableRewriter(telemetryVerbosity)
     enableTaintOperations(telemetryVerbosity)
-    taintTrackingPlugin.enable()
+    taintTrackingPlugin.enable(config)
 
-    kafkaContextPlugin.enable()
-    kafkaConsumerPlugin.enable()
+    kafkaContextPlugin.enable(config)
+    kafkaConsumerPlugin.enable(config)
 
     setMaxTransactions(config.maxConcurrentRequests)
   },
   disableTaintTracking () {
-    disableRewriter()
     disableTaintOperations()
     taintTrackingPlugin.disable()
 

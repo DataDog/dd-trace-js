@@ -52,13 +52,13 @@ const TEST_MODULE_ID = 'test_module_id'
 const TEST_SUITE_ID = 'test_suite_id'
 const TEST_TOOLCHAIN = 'test.toolchain'
 const TEST_SKIPPED_BY_ITR = 'test.skipped_by_itr'
-// Browser used in browser test. Namespaced by test.configuration because it affects the fingerprint
-const TEST_CONFIGURATION_BROWSER_NAME = 'test.configuration.browser_name'
 // Early flake detection
 const TEST_IS_NEW = 'test.is_new'
 const TEST_IS_RETRY = 'test.is_retry'
 const TEST_EARLY_FLAKE_ENABLED = 'test.early_flake.enabled'
 const TEST_EARLY_FLAKE_ABORT_REASON = 'test.early_flake.abort_reason'
+const TEST_RETRY_REASON = 'test.retry_reason'
+const TEST_HAS_FAILED_ALL_RETRIES = 'test.has_failed_all_retries'
 
 const CI_APP_ORIGIN = 'ciapp-test'
 
@@ -88,6 +88,7 @@ const TEST_BROWSER_VERSION = 'test.browser.version'
 // jest worker variables
 const JEST_WORKER_TRACE_PAYLOAD_CODE = 60
 const JEST_WORKER_COVERAGE_PAYLOAD_CODE = 61
+const JEST_WORKER_LOGS_PAYLOAD_CODE = 62
 
 // cucumber worker variables
 const CUCUMBER_WORKER_TRACE_PAYLOAD_CODE = 70
@@ -95,9 +96,23 @@ const CUCUMBER_WORKER_TRACE_PAYLOAD_CODE = 70
 // mocha worker variables
 const MOCHA_WORKER_TRACE_PAYLOAD_CODE = 80
 
+// playwright worker variables
+const PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE = 90
+
 // Early flake detection util strings
 const EFD_STRING = "Retried by Datadog's Early Flake Detection"
 const EFD_TEST_NAME_REGEX = new RegExp(EFD_STRING + ' \\(#\\d+\\): ', 'g')
+
+// Library Capabilities Tagging
+const DD_CAPABILITIES_TEST_IMPACT_ANALYSIS = '_dd.library_capabilities.test_impact_analysis'
+const DD_CAPABILITIES_EARLY_FLAKE_DETECTION = '_dd.library_capabilities.early_flake_detection'
+const DD_CAPABILITIES_AUTO_TEST_RETRIES = '_dd.library_capabilities.auto_test_retries'
+const DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE = '_dd.library_capabilities.test_management.quarantine'
+const DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE = '_dd.library_capabilities.test_management.disable'
+const DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX = '_dd.library_capabilities.test_management.attempt_to_fix'
+const UNSUPPORTED_TIA_FRAMEWORKS = ['playwright', 'vitest']
+const UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE = ['cucumber', 'mocha']
+const UNSUPPORTED_ATTEMPT_TO_FIX_FRAMEWORKS_PARALLEL_MODE = ['mocha']
 
 const TEST_LEVEL_EVENT_TYPES = [
   'test',
@@ -105,6 +120,32 @@ const TEST_LEVEL_EVENT_TYPES = [
   'test_module_end',
   'test_session_end'
 ]
+const TEST_RETRY_REASON_TYPES = {
+  efd: 'early_flake_detection',
+  atr: 'auto_test_retry',
+  atf: 'attempt_to_fix',
+  ext: 'external'
+}
+
+const DD_TEST_IS_USER_PROVIDED_SERVICE = '_dd.test.is_user_provided_service'
+
+// Dynamic instrumentation - Test optimization integration tags
+const DI_ERROR_DEBUG_INFO_CAPTURED = 'error.debug_info_captured'
+const DI_DEBUG_ERROR_PREFIX = '_dd.debug.error'
+const DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX = 'snapshot_id'
+const DI_DEBUG_ERROR_FILE_SUFFIX = 'file'
+const DI_DEBUG_ERROR_LINE_SUFFIX = 'line'
+
+// Test Management tags
+const TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX = 'test.test_management.is_attempt_to_fix'
+const TEST_MANAGEMENT_IS_DISABLED = 'test.test_management.is_test_disabled'
+const TEST_MANAGEMENT_IS_QUARANTINED = 'test.test_management.is_quarantined'
+const TEST_MANAGEMENT_ENABLED = 'test.test_management.enabled'
+const TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED = 'test.test_management.attempt_to_fix_passed'
+
+// Test Management utils strings
+const ATTEMPT_TO_FIX_STRING = "Retried by Datadog's Test Management"
+const ATTEMPT_TEST_NAME_REGEX = new RegExp(ATTEMPT_TO_FIX_STRING + ' \\(#\\d+\\): ', 'g')
 
 module.exports = {
   TEST_CODE_OWNERS,
@@ -127,15 +168,18 @@ module.exports = {
   LIBRARY_VERSION,
   JEST_WORKER_TRACE_PAYLOAD_CODE,
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
+  JEST_WORKER_LOGS_PAYLOAD_CODE,
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
+  PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
   TEST_SOURCE_START,
   TEST_SKIPPED_BY_ITR,
-  TEST_CONFIGURATION_BROWSER_NAME,
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_EARLY_FLAKE_ABORT_REASON,
+  TEST_RETRY_REASON,
+  TEST_HAS_FAILED_ALL_RETRIES,
   getTestEnvironmentMetadata,
   getTestParametersString,
   finishAllTraceSpans,
@@ -173,15 +217,38 @@ module.exports = {
   EFD_STRING,
   EFD_TEST_NAME_REGEX,
   removeEfdStringFromTestName,
+  removeAttemptToFixStringFromTestName,
   addEfdStringToTestName,
+  addAttemptToFixStringToTestName,
   getIsFaultyEarlyFlakeDetection,
   TEST_BROWSER_DRIVER,
   TEST_BROWSER_DRIVER_VERSION,
   TEST_BROWSER_NAME,
   TEST_BROWSER_VERSION,
   getTestSessionName,
+  DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
+  DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
+  DD_CAPABILITIES_AUTO_TEST_RETRIES,
+  DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
+  DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
+  DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
   TEST_LEVEL_EVENT_TYPES,
-  getNumFromKnownTests
+  TEST_RETRY_REASON_TYPES,
+  getNumFromKnownTests,
+  getFileAndLineNumberFromError,
+  DI_ERROR_DEBUG_INFO_CAPTURED,
+  DI_DEBUG_ERROR_PREFIX,
+  DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
+  DI_DEBUG_ERROR_FILE_SUFFIX,
+  DI_DEBUG_ERROR_LINE_SUFFIX,
+  getFormattedError,
+  DD_TEST_IS_USER_PROVIDED_SERVICE,
+  TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
+  TEST_MANAGEMENT_IS_DISABLED,
+  TEST_MANAGEMENT_IS_QUARANTINED,
+  TEST_MANAGEMENT_ENABLED,
+  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
+  getLibraryCapabilitiesTags
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
@@ -206,13 +273,13 @@ function removeInvalidMetadata (metadata) {
   return Object.keys(metadata).reduce((filteredTags, tag) => {
     if (tag === GIT_REPOSITORY_URL) {
       if (!validateGitRepositoryUrl(metadata[GIT_REPOSITORY_URL])) {
-        log.error(`Repository URL is not a valid repository URL: ${metadata[GIT_REPOSITORY_URL]}.`)
+        log.error('Repository URL is not a valid repository URL: %s.', metadata[GIT_REPOSITORY_URL])
         return filteredTags
       }
     }
     if (tag === GIT_COMMIT_SHA) {
       if (!validateGitCommitSha(metadata[GIT_COMMIT_SHA])) {
-        log.error(`Git commit SHA must be a full-length git SHA: ${metadata[GIT_COMMIT_SHA]}.`)
+        log.error('Git commit SHA must be a full-length git SHA: %s.', metadata[GIT_COMMIT_SHA])
         return filteredTags
       }
     }
@@ -257,6 +324,7 @@ function getTestEnvironmentMetadata (testFramework, config) {
 
   const metadata = {
     [TEST_FRAMEWORK]: testFramework,
+    [DD_TEST_IS_USER_PROVIDED_SERVICE]: (config && config.isServiceUserProvided) ? 'true' : 'false',
     ...gitMetadata,
     ...ciMetadata,
     ...userProvidedGitMetadata,
@@ -588,8 +656,16 @@ function addEfdStringToTestName (testName, numAttempt) {
   return `${EFD_STRING} (#${numAttempt}): ${testName}`
 }
 
+function addAttemptToFixStringToTestName (testName, numAttempt) {
+  return `${ATTEMPT_TO_FIX_STRING} (#${numAttempt}): ${testName}`
+}
+
 function removeEfdStringFromTestName (testName) {
   return testName.replace(EFD_TEST_NAME_REGEX, '')
+}
+
+function removeAttemptToFixStringFromTestName (testName) {
+  return testName.replace(ATTEMPT_TEST_NAME_REGEX, '')
 }
 
 function getIsFaultyEarlyFlakeDetection (projectSuites, testsBySuiteName, faultyThresholdPercentage) {
@@ -610,14 +686,14 @@ function getIsFaultyEarlyFlakeDetection (projectSuites, testsBySuiteName, faulty
   )
 }
 
-function getTestSessionName (config, testCommand, envTags) {
+function getTestSessionName (config, trimmedCommand, envTags) {
   if (config.ciVisibilityTestSessionName) {
     return config.ciVisibilityTestSessionName
   }
   if (envTags[CI_JOB_NAME]) {
-    return `${envTags[CI_JOB_NAME]}-${testCommand}`
+    return `${envTags[CI_JOB_NAME]}-${trimmedCommand}`
   }
-  return testCommand
+  return trimmedCommand
 }
 
 // Calculate the number of a tests from the known tests response, which has a shape like:
@@ -636,4 +712,81 @@ function getNumFromKnownTests (knownTests) {
   }
 
   return totalNumTests
+}
+
+const DEPENDENCY_FOLDERS = [
+  'node_modules',
+  'node:',
+  '.pnpm',
+  '.yarn',
+  '.pnp'
+]
+
+function getFileAndLineNumberFromError (error, repositoryRoot) {
+  // Split the stack trace into individual lines
+  const stackLines = error.stack.split('\n')
+
+  // Remove potential messages on top of the stack that are not frames
+  const frames = stackLines.filter(line => line.includes('at ') && line.includes(repositoryRoot))
+
+  const topRelevantFrameIndex = frames.findIndex(line =>
+    line.includes(repositoryRoot) && !DEPENDENCY_FOLDERS.some(pattern => line.includes(pattern))
+  )
+
+  if (topRelevantFrameIndex === -1) {
+    return []
+  }
+
+  const topFrame = frames[topRelevantFrameIndex]
+  // Regular expression to match the file path, line number, and column number
+  const regex = /\s*at\s+(?:.*\()?(.+):(\d+):(\d+)\)?/
+  const match = topFrame.match(regex)
+
+  if (match) {
+    const filePath = match[1]
+    const lineNumber = Number(match[2])
+
+    return [filePath, lineNumber, topRelevantFrameIndex]
+  }
+  return []
+}
+
+function getFormattedError (error, repositoryRoot) {
+  const newError = new Error(error.message)
+  if (error.stack) {
+    newError.stack = error.stack.split('\n').filter(line => line.includes(repositoryRoot)).join('\n')
+  }
+  newError.name = error.name
+
+  return newError
+}
+
+function getLibraryCapabilitiesTags (testFramework, isParallel) {
+  function isTiaSupported (testFramework, isParallel) {
+    if (UNSUPPORTED_TIA_FRAMEWORKS.includes(testFramework)) {
+      return false
+    }
+    if (isParallel && UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE.includes(testFramework)) {
+      return false
+    }
+    return true
+  }
+
+  function isAttemptToFixSupported (testFramework, isParallel) {
+    if (isParallel && UNSUPPORTED_ATTEMPT_TO_FIX_FRAMEWORKS_PARALLEL_MODE.includes(testFramework)) {
+      return false
+    }
+    return true
+  }
+
+  return {
+    [DD_CAPABILITIES_TEST_IMPACT_ANALYSIS]: isTiaSupported(testFramework, isParallel) ? '1' : undefined,
+    [DD_CAPABILITIES_EARLY_FLAKE_DETECTION]: '1',
+    [DD_CAPABILITIES_AUTO_TEST_RETRIES]: '1',
+    [DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE]: '1',
+    [DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE]: '1',
+    [DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX]: isAttemptToFixSupported(testFramework, isParallel)
+      ? '4'
+      : undefined
+  }
 }

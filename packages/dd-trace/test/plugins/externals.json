@@ -31,6 +31,10 @@
       "versions": [">=3"]
     },
     {
+      "name": "@aws-sdk/client-dynamodb",
+      "versions": [">=3"]
+    },
+    {
       "name": "@aws-sdk/client-sfn",
       "versions": [">=3"]
     },
@@ -45,6 +49,10 @@
     {
       "name": "@aws-sdk/node-http-handler",
       "versions": [">=3"]
+    },
+    {
+      "name": "@aws-sdk/client-bedrock-runtime",
+      "versions": [">=3.422.0 <3.798.0"]
     }
   ],
   "body-parser": [
@@ -59,10 +67,10 @@
       "versions": ["^4"]
     }
   ],
-  "cypress": [
+  "confluentinc-kafka-javascript": [
     {
-      "name": "cypress",
-      "versions": [">=6.7.0"]
+      "name": "kafkajs",
+      "versions": [">=1.4.0"]
     }
   ],
   "express": [
@@ -98,14 +106,24 @@
     },
     {
       "name": "express",
-      "versions": [">=4", ">=4.0.0 <4.3.0", ">=4.3.0"]
+      "versions": [">=4", ">=4.0.0 <4.3.0", ">=4.0.0 <5.0.0", ">=4.3.0 <5.0.0"]
     },
     {
       "name": "body-parser",
       "versions": ["1.20.1"]
     }
   ],
+  "express-session": [
+    {
+      "name": "express",
+      "versions": [">=4.0.0"]
+    }
+  ],
   "mquery": [
+    {
+      "name": "express",
+      "versions": [">=4", ">=4.0.0 <4.3.0", ">=4.0.0 <5.0.0", ">=4.3.0 <5.0.0"]
+    },
     {
       "name": "mquery",
       "versions": [">=5.0.0"]
@@ -277,6 +295,24 @@
       "versions": ["6.1.0"]
     }
   ],
+  "langchain": [
+    {
+      "name": "@langchain/anthropic",
+      "versions": [">=0.1"]
+    },
+    {
+      "name": "@langchain/google-genai",
+      "versions": [">=0.1"]
+    },
+    {
+      "name": "@langchain/openai",
+      "versions": [">=0.1"]
+    },
+    {
+      "name": "@langchain/cohere",
+      "versions": [">=0.1"]
+    }
+  ],
   "ldapjs": [
     {
       "name": "ldapjs",
@@ -296,7 +332,7 @@
   "mariadb": [
     {
       "name": "mariadb",
-      "versions": ["2.5.6", "3.0.0"]
+      "versions": ["2.5.6", "3.0.0", "3.4.0"]
     }
   ],
   "mocha": [
@@ -332,11 +368,17 @@
     },
     {
       "name": "express",
-      "versions": [">=4", ">=4.0.0 <4.3.0", ">=4.3.0"]
+      "versions": [">=4", ">=4.0.0 <4.3.0", ">=4.0.0 <5.0.0", ">=4.3.0 <5.0.0"]
     },
     {
       "name": "body-parser",
       "versions": ["1.20.1"]
+    }
+  ],
+  "multer": [
+    {
+      "name": "express",
+      "versions": ["^4"]
     }
   ],
   "next": [
@@ -347,6 +389,20 @@
     {
       "name": "react-dom",
       "dep": true
+    }
+  ],
+  "passport": [
+    {
+      "name": "express",
+      "versions": [">=4.0.0"]
+    },
+    {
+      "name": "express-session",
+      "versions": [">=1.5.0"]
+    },
+    {
+      "name": "passport-local",
+      "versions": [">=1.0.0"]
     }
   ],
    "passport-http": [
@@ -381,6 +437,14 @@
     {
       "name": "express",
       "versions": [">=4"]
+    },
+    {
+      "name": "pg-query-stream",
+      "versions": [">=4"]
+    },
+    {
+      "name": "pg-cursor",
+      "versions": [">=2"]
     }
   ],
   "pino": [
@@ -416,6 +480,10 @@
     {
       "name": "express",
       "versions": [">=4"]
+    },
+    {
+      "name": "sqlite3",
+      "versions": ["^5.0.8"]
     }
   ]
 }

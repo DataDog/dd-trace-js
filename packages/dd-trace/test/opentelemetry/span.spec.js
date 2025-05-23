@@ -15,9 +15,10 @@ const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 const SpanContext = require('../../src/opentelemetry/span_context')
 const { NoopSpanProcessor } = require('../../src/opentelemetry/span_processor')
 
-const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../src/constants')
+const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE, IGNORE_OTEL_ERROR } = require('../../src/constants')
 const { SERVICE_NAME, RESOURCE_NAME } = require('../../../../ext/tags')
 const kinds = require('../../../../ext/kinds')
+const format = require('../../src/format')
 
 const spanKindNames = {
   [api.SpanKind.INTERNAL]: kinds.INTERNAL,
@@ -325,6 +326,33 @@ describe('OTel Span', () => {
     expect(_links).to.have.lengthOf(2)
   })
 
+  it('should add span pointers', () => {
+    const span = makeSpan('name')
+    const { _links } = span._ddSpan
+
+    span.addSpanPointer('pointer_kind', 'd', 'abc123')
+    expect(_links).to.have.lengthOf(1)
+    expect(_links[0].attributes).to.deep.equal({
+      'ptr.kind': 'pointer_kind',
+      'ptr.dir': 'd',
+      'ptr.hash': 'abc123',
+      'link.kind': 'span-pointer'
+    })
+    expect(_links[0].context.toTraceId()).to.equal('0')
+    expect(_links[0].context.toSpanId()).to.equal('0')
+
+    span.addSpanPointer('another_kind', 'd', '1234567')
+    expect(_links).to.have.lengthOf(2)
+    expect(_links[1].attributes).to.deep.equal({
+      'ptr.kind': 'another_kind',
+      'ptr.dir': 'd',
+      'ptr.hash': '1234567',
+      'link.kind': 'span-pointer'
+    })
+    expect(_links[1].context.toTraceId()).to.equal('0')
+    expect(_links[1].context.toSpanId()).to.equal('0')
+  })
+
   it('should set status', () => {
     const unset = makeSpan('name')
     const unsetCtx = unset._ddSpan.context()
@@ -335,23 +363,21 @@ describe('OTel Span', () => {
     const okCtx = ok._ddSpan.context()
     ok.setStatus({ code: 1, message: 'ok' })
     expect(okCtx._tags).to.not.have.property(ERROR_MESSAGE)
+    expect(okCtx._tags).to.not.have.property(IGNORE_OTEL_ERROR)
 
     const error = makeSpan('name')
     const errorCtx = error._ddSpan.context()
     error.setStatus({ code: 2, message: 'error' })
     expect(errorCtx._tags).to.have.property(ERROR_MESSAGE, 'error')
+    expect(errorCtx._tags).to.have.property(IGNORE_OTEL_ERROR, false)
   })
 
   it('should record exceptions', () => {
     const span = makeSpan('name')
 
-    class TestError extends Error {
-      constructor () {
-        super('test message')
-      }
-    }
+    class TestError extends Error {}
 
-    const error = new TestError()
+    const error = new TestError('test message')
     const datenow = Date.now()
     span.recordException(error, datenow)
 
@@ -359,6 +385,7 @@ describe('OTel Span', () => {
     expect(_tags).to.have.property(ERROR_TYPE, error.name)
     expect(_tags).to.have.property(ERROR_MESSAGE, error.message)
     expect(_tags).to.have.property(ERROR_STACK, error.stack)
+    expect(_tags).to.have.property(IGNORE_OTEL_ERROR, true)
 
     const events = span._ddSpan._events
     expect(events).to.have.lengthOf(1)
@@ -370,6 +397,24 @@ describe('OTel Span', () => {
       },
       startTime: datenow
     }])
+
+    let formatted = format(span._ddSpan)
+    expect(formatted).to.have.property('error', 0)
+    expect(formatted.meta).to.not.have.property('doNotSetTraceError')
+
+    // Set error code
+    span.setStatus({ code: 2, message: 'error' })
+
+    formatted = format(span._ddSpan)
+    expect(formatted).to.have.property('error', 1)
+
+    span.recordException(new Error('foobar'), Date.now())
+
+    // Keep the error set to 1
+    formatted = format(span._ddSpan)
+    expect(formatted).to.have.property('error', 1)
+    expect(formatted).to.have.property('meta')
+    expect(formatted.meta).to.have.property('error.message', 'foobar')
   })
 
   it('should record exception without passing in time', () => {

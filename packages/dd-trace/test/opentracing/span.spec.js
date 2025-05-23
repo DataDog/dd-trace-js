@@ -300,6 +300,37 @@ describe('Span', () => {
     })
   })
 
+  describe('span pointers', () => {
+    it('should add a span pointer with a zero context', () => {
+      // Override id stub for this test to return '0' when called with '0'
+      id.withArgs('0').returns('0')
+
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+
+      span.addSpanPointer('pointer_kind', 'd', 'abc123')
+      expect(span._links).to.have.lengthOf(1)
+      expect(span._links[0].context.toTraceId()).to.equal('0')
+      expect(span._links[0].context.toSpanId()).to.equal('0')
+      expect(span._links[0].attributes).to.deep.equal({
+        'ptr.kind': 'pointer_kind',
+        'ptr.dir': 'd',
+        'ptr.hash': 'abc123',
+        'link.kind': 'span-pointer'
+      })
+    })
+
+    span.addSpanPointer('another_kind', 'd', '1234567')
+    expect(span._links).to.have.lengthOf(2)
+    expect(span._links[1].attributes).to.deep.equal({
+      'ptr.kind': 'another_kind',
+      'ptr.dir': 'd',
+      'ptr.hash': '1234567',
+      'link.kind': 'span-pointer'
+    })
+    expect(span._links[1].context.toTraceId()).to.equal('0')
+    expect(span._links[1].context.toSpanId()).to.equal('0')
+  })
+
   describe('events', () => {
     it('should add span events', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
@@ -438,6 +469,45 @@ describe('Span', () => {
       span.finish()
 
       expect(processor.process).to.have.been.calledOnce
+    })
+
+    describe('tracePropagationBehaviorExtract and Baggage', () => {
+      let parent
+
+      beforeEach(() => {
+        parent = {
+          traceId: '123',
+          spanId: '456',
+          _baggageItems: {
+            foo: 'bar'
+          },
+          _trace: {
+            started: ['span'],
+            finished: ['span']
+          },
+          _isRemote: true
+        }
+      })
+
+      it('should not propagate baggage items when Trace_Propagation_Behavior_Extract is set to ignore', () => {
+        tracer = {
+          _config: {
+            tracePropagationBehaviorExtract: 'ignore'
+          }
+        }
+        span = new Span(tracer, processor, prioritySampler, { operationName: 'operation', parent })
+        expect(span._spanContext._baggageItems).to.deep.equal({})
+      })
+
+      it('should propagate baggage items when Trace_Propagation_Behavior_Extract is set to restart', () => {
+        tracer = {
+          _config: {
+            tracePropagationBehaviorExtract: 'restart'
+          }
+        }
+        span = new Span(tracer, processor, prioritySampler, { operationName: 'operation', parent })
+        expect(span._spanContext._baggageItems).to.deep.equal({ foo: 'bar' })
+      })
     })
   })
 })

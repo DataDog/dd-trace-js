@@ -119,7 +119,7 @@ describe('log', () => {
 
     it('should call the logger in a noop context', () => {
       logger.debug = () => {
-        expect(storage.getStore()).to.have.property('noop', true)
+        expect(storage('legacy').getStore()).to.have.property('noop', true)
       }
 
       log.use(logger).debug('debug')
@@ -136,6 +136,31 @@ describe('log', () => {
         log.debug(() => 'debug')
 
         expect(console.debug).to.have.been.calledWith('debug')
+      })
+    })
+
+    describe('trace', () => {
+      it('should not log to console by default', () => {
+        log.trace('trace')
+
+        expect(console.debug).to.not.have.been.called
+      })
+
+      it('should log to console after setting log level to trace', function foo () {
+        class Foo {
+          constructor () {
+            this.bar = 'baz'
+          }
+        }
+
+        log.toggle(true, 'trace')
+        log.trace('argument', { hello: 'world' }, new Foo())
+
+        expect(console.debug).to.have.been.calledOnce
+        expect(console.debug.firstCall.args[0]).to.match(
+          /^Trace: Test.foo\('argument', { hello: 'world' }, Foo { bar: 'baz' }\)/
+        )
+        expect(console.debug.firstCall.args[0].split('\n').length).to.be.gte(3)
       })
     })
 
@@ -160,6 +185,7 @@ describe('log', () => {
         expect(console.error.firstCall.args[0]).to.have.property('message', 'error')
       })
 
+      // NOTE: There is no usage for this case. should we continue supporting it?
       it('should convert empty values to errors', () => {
         log.error()
 
@@ -190,6 +216,34 @@ describe('log', () => {
         expect(console.error).to.have.been.called
         expect(console.error.firstCall.args[0]).to.be.instanceof(Error)
         expect(console.error.firstCall.args[0]).to.have.property('message', 'error')
+      })
+
+      it('should allow a message + Error', () => {
+        log.error('this is an error', new Error('cause'))
+
+        expect(console.error).to.have.been.called
+        expect(console.error.firstCall.args[0]).to.be.instanceof(Error)
+        expect(console.error.firstCall.args[0]).to.have.property('message', 'this is an error')
+        expect(console.error.secondCall.args[0]).to.be.instanceof(Error)
+        expect(console.error.secondCall.args[0]).to.have.property('message', 'cause')
+      })
+
+      it('should allow a templated message', () => {
+        log.error('this is an error of type: %s code: %i', 'ERR', 42)
+
+        expect(console.error).to.have.been.called
+        expect(console.error.firstCall.args[0]).to.be.instanceof(Error)
+        expect(console.error.firstCall.args[0]).to.have.property('message', 'this is an error of type: ERR code: 42')
+      })
+
+      it('should allow a templated message + Error', () => {
+        log.error('this is an error of type: %s code: %i', 'ERR', 42, new Error('cause'))
+
+        expect(console.error).to.have.been.called
+        expect(console.error.firstCall.args[0]).to.be.instanceof(Error)
+        expect(console.error.firstCall.args[0]).to.have.property('message', 'this is an error of type: ERR code: 42')
+        expect(console.error.secondCall.args[0]).to.be.instanceof(Error)
+        expect(console.error.secondCall.args[0]).to.have.property('message', 'cause')
       })
     })
 

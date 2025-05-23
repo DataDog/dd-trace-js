@@ -79,7 +79,7 @@ describe('git', () => {
     expect(metadata[GIT_REPOSITORY_URL]).not.to.equal('ciRepositoryUrl')
     expect(execFileSyncStub).to.have.been.calledWith('git', ['ls-remote', '--get-url'])
     expect(execFileSyncStub).to.have.been.calledWith('git', ['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI'])
-    expect(execFileSyncStub).not.to.have.been.calledWith('git', ['show', '-s', '--format=%s'])
+    expect(execFileSyncStub).not.to.have.been.calledWith('git', ['show', '-s', '--format=%B'])
     expect(execFileSyncStub).not.to.have.been.calledWith('git', ['rev-parse', 'HEAD'])
     expect(execFileSyncStub).not.to.have.been.calledWith('git', ['rev-parse', '--abbrev-ref', 'HEAD'])
     expect(execFileSyncStub).not.to.have.been.calledWith('git', ['rev-parse', '--show-toplevel'])
@@ -89,39 +89,37 @@ describe('git', () => {
     execFileSyncStub.returns('')
     const ciMetadata = { repositoryUrl: 'https://github.com/datadog/safe-repository.git' }
     const metadata = getGitMetadata(ciMetadata)
+
     expect(metadata).to.eql({
       [GIT_BRANCH]: '',
-      [GIT_TAG]: undefined,
       [GIT_COMMIT_MESSAGE]: '',
       [GIT_COMMIT_SHA]: '',
       [GIT_REPOSITORY_URL]: 'https://github.com/datadog/safe-repository.git',
-      [GIT_COMMIT_COMMITTER_EMAIL]: undefined,
-      [GIT_COMMIT_COMMITTER_DATE]: undefined,
-      [GIT_COMMIT_COMMITTER_NAME]: undefined,
-      [GIT_COMMIT_AUTHOR_EMAIL]: undefined,
-      [GIT_COMMIT_AUTHOR_DATE]: undefined,
-      [GIT_COMMIT_AUTHOR_NAME]: '',
       [CI_WORKSPACE_PATH]: ''
     })
   })
 
   it('returns all git metadata is git is available', () => {
+    const commitMessage = `multi line
+      commit message`
+
     execFileSyncStub
       .onCall(0).returns(
         'git author,git.author@email.com,2022-02-14T16:22:03-05:00,' +
         'git committer,git.committer@email.com,2022-02-14T16:23:03-05:00'
       )
-      .onCall(1).returns('https://github.com/datadog/safe-repository.git')
-      .onCall(2).returns('this is a commit message')
-      .onCall(3).returns('gitBranch')
-      .onCall(4).returns('gitCommitSHA')
-      .onCall(5).returns('ciWorkspacePath')
+      .onCall(1).returns(commitMessage)
+      .onCall(2).returns('gitBranch')
+      .onCall(3).returns('gitCommitSHA')
+      .onCall(4).returns('ciWorkspacePath')
+      .onCall(5).returns('https://github.com/datadog/safe-repository.git')
 
     const metadata = getGitMetadata({ tag: 'ciTag' })
+
     expect(metadata).to.eql({
       [GIT_BRANCH]: 'gitBranch',
       [GIT_TAG]: 'ciTag',
-      [GIT_COMMIT_MESSAGE]: 'this is a commit message',
+      [GIT_COMMIT_MESSAGE]: commitMessage,
       [GIT_COMMIT_SHA]: 'gitCommitSHA',
       [GIT_REPOSITORY_URL]: 'https://github.com/datadog/safe-repository.git',
       [GIT_COMMIT_AUTHOR_EMAIL]: 'git.author@email.com',
@@ -132,12 +130,13 @@ describe('git', () => {
       [GIT_COMMIT_COMMITTER_NAME]: 'git committer',
       [CI_WORKSPACE_PATH]: 'ciWorkspacePath'
     })
-    expect(execFileSyncStub).to.have.been.calledWith('git', ['ls-remote', '--get-url'])
-    expect(execFileSyncStub).to.have.been.calledWith('git', ['show', '-s', '--format=%s'])
+
+    expect(execFileSyncStub).to.have.been.calledWith('git', ['show', '-s', '--format=%B'])
     expect(execFileSyncStub).to.have.been.calledWith('git', ['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI'])
     expect(execFileSyncStub).to.have.been.calledWith('git', ['rev-parse', 'HEAD'])
     expect(execFileSyncStub).to.have.been.calledWith('git', ['rev-parse', '--abbrev-ref', 'HEAD'])
     expect(execFileSyncStub).to.have.been.calledWith('git', ['rev-parse', '--show-toplevel'])
+    expect(execFileSyncStub).to.have.been.calledWith('git', ['ls-remote', '--get-url'])
   })
 })
 
@@ -358,7 +357,7 @@ describe('user credentials', () => {
         'git author,git.author@email.com,2022-02-14T16:22:03-05:00,' +
         'git committer,git.committer@email.com,2022-02-14T16:23:03-05:00'
       )
-      .onCall(1).returns('https://x-oauth-basic:ghp_safe_characters@github.com/datadog/safe-repository.git')
+      .onCall(5).returns('https://x-oauth-basic:ghp_safe_characters@github.com/datadog/safe-repository.git')
 
     const metadata = getGitMetadata({})
     expect(metadata[GIT_REPOSITORY_URL])
@@ -371,7 +370,7 @@ describe('user credentials', () => {
         'git author,git.author@email.com,2022-02-14T16:22:03-05:00,' +
         'git committer,git.committer@email.com,2022-02-14T16:23:03-05:00'
       )
-      .onCall(1).returns('ssh://username@host.xz:port/path/to/repo.git/')
+      .onCall(5).returns('ssh://username@host.xz:port/path/to/repo.git/')
 
     const metadata = getGitMetadata({})
     expect(metadata[GIT_REPOSITORY_URL])

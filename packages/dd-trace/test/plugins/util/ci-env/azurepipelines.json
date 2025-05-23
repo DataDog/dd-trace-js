@@ -683,7 +683,7 @@
     {
       "BUILD_BUILDID": "azure-pipelines-build-id",
       "BUILD_DEFINITIONNAME": "azure-pipelines-name",
-      "BUILD_REPOSITORY_URI": "ssh://host.xz:port/path/to/repo/",
+      "BUILD_REPOSITORY_URI": "ssh://host.xz:54321/path/to/repo/",
       "BUILD_REQUESTEDFOREMAIL": "azure-pipelines-commit-author-email@datadoghq.com",
       "BUILD_REQUESTEDFORID": "azure-pipelines-commit-author",
       "BUILD_SOURCEVERSIONMESSAGE": "azure-pipelines-commit-message",
@@ -705,7 +705,7 @@
       "git.commit.author.email": "azure-pipelines-commit-author-email@datadoghq.com",
       "git.commit.author.name": "azure-pipelines-commit-author",
       "git.commit.message": "azure-pipelines-commit-message",
-      "git.repository_url": "ssh://host.xz:port/path/to/repo/"
+      "git.repository_url": "ssh://host.xz:54321/path/to/repo/"
     }
   ],
   [
@@ -852,7 +852,7 @@
     {
       "BUILD_BUILDID": "azure-pipelines-build-id",
       "BUILD_DEFINITIONNAME": "azure-pipelines-name",
-      "BUILD_REPOSITORY_URI": "ssh://user@host.xz:port/path/to/repo.git/",
+      "BUILD_REPOSITORY_URI": "ssh://user@host.xz:54321/path/to/repo.git/",
       "BUILD_REQUESTEDFOREMAIL": "azure-pipelines-commit-author-email@datadoghq.com",
       "BUILD_REQUESTEDFORID": "azure-pipelines-commit-author",
       "BUILD_SOURCEVERSIONMESSAGE": "azure-pipelines-commit-message",
@@ -873,14 +873,14 @@
       "git.commit.author.email": "azure-pipelines-commit-author-email@datadoghq.com",
       "git.commit.author.name": "azure-pipelines-commit-author",
       "git.commit.message": "azure-pipelines-commit-message",
-      "git.repository_url": "ssh://host.xz:port/path/to/repo.git/"
+      "git.repository_url": "ssh://host.xz:54321/path/to/repo.git/"
     }
   ],
   [
     {
       "BUILD_BUILDID": "azure-pipelines-build-id",
       "BUILD_DEFINITIONNAME": "azure-pipelines-name",
-      "BUILD_REPOSITORY_URI": "ssh://user:password@host.xz:port/path/to/repo.git/",
+      "BUILD_REPOSITORY_URI": "ssh://user:password@host.xz:54321/path/to/repo.git/",
       "BUILD_REQUESTEDFOREMAIL": "azure-pipelines-commit-author-email@datadoghq.com",
       "BUILD_REQUESTEDFORID": "azure-pipelines-commit-author",
       "BUILD_SOURCEVERSIONMESSAGE": "azure-pipelines-commit-message",
@@ -901,14 +901,14 @@
       "git.commit.author.email": "azure-pipelines-commit-author-email@datadoghq.com",
       "git.commit.author.name": "azure-pipelines-commit-author",
       "git.commit.message": "azure-pipelines-commit-message",
-      "git.repository_url": "ssh://host.xz:port/path/to/repo.git/"
+      "git.repository_url": "ssh://host.xz:54321/path/to/repo.git/"
     }
   ],
   [
     {
       "BUILD_BUILDID": "azure-pipelines-build-id",
       "BUILD_DEFINITIONNAME": "azure-pipelines-name",
-      "BUILD_REPOSITORY_URI": "ssh://user:password@1.1.1.1:port/path/to/repo.git/",
+      "BUILD_REPOSITORY_URI": "ssh://user:password@1.1.1.1:54321/path/to/repo.git/",
       "BUILD_REQUESTEDFOREMAIL": "azure-pipelines-commit-author-email@datadoghq.com",
       "BUILD_REQUESTEDFORID": "azure-pipelines-commit-author",
       "BUILD_SOURCEVERSIONMESSAGE": "azure-pipelines-commit-message",
@@ -929,7 +929,7 @@
       "git.commit.author.email": "azure-pipelines-commit-author-email@datadoghq.com",
       "git.commit.author.name": "azure-pipelines-commit-author",
       "git.commit.message": "azure-pipelines-commit-message",
-      "git.repository_url": "ssh://1.1.1.1:port/path/to/repo.git/"
+      "git.repository_url": "ssh://1.1.1.1:54321/path/to/repo.git/"
     }
   ]
 ]

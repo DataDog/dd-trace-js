@@ -19,7 +19,7 @@ withVersions('express', 'express', version => {
     })
 
     before((done) => {
-      const express = require('../../../../versions/express').get()
+      const express = require(`../../../../versions/express@${version}`).get()
 
       const app = express()
 
@@ -44,11 +44,7 @@ withVersions('express', 'express', version => {
 
       paramCallbackSpy = sinon.spy(paramCallback)
 
-      app.param(() => {
-        return paramCallbackSpy
-      })
-
-      app.param('callbackedParameter')
+      app.param('callbackedParameter', paramCallbackSpy)
 
       getPort().then((port) => {
         server = app.listen(port, () => {
@@ -191,7 +187,7 @@ withVersions('express', 'express', version => {
     })
 
     before((done) => {
-      const express = require('../../../../versions/express').get()
+      const express = require(`../../../../versions/express@${version}`).get()
 
       const app = express()
 
@@ -256,7 +252,7 @@ withVersions('express', 'express', version => {
     })
 
     before((done) => {
-      const express = require('../../../../versions/express').get()
+      const express = require(`../../../../versions/express@${version}`).get()
       const bodyParser = require('../../../../versions/body-parser').get()
 
       const app = express()
@@ -275,7 +271,7 @@ withVersions('express', 'express', version => {
       })
 
       app.post('/json', (req, res) => {
-        res.jsonp({ jsonResKey: 'jsonResValue' })
+        res.json({ jsonResKey: 'jsonResValue' })
       })
 
       getPort().then((port) => {
@@ -307,9 +303,9 @@ withVersions('express', 'express', version => {
       appsec.disable()
     })
 
-    describe('with requestSampling 1.0', () => {
+    describe('with sample delay 10', () => {
       beforeEach(() => {
-        config.appsec.apiSecurity.requestSampling = 1.0
+        config.appsec.apiSecurity.sampleDelay = 10
         appsec.enable(config)
       })
 
@@ -322,7 +318,7 @@ withVersions('express', 'express', version => {
 
         const res = await axios.post('/', { key: 'value' })
 
-        await agent.use((traces) => {
+        await agent.assertSomeTraces((traces) => {
           const span = traces[0][0]
           assert.property(span.meta, '_dd.appsec.s.req.body')
           assert.notProperty(span.meta, '_dd.appsec.s.res.body')
@@ -337,7 +333,7 @@ withVersions('express', 'express', version => {
         const expectedResponseBodySchema = formatSchema([{ sendResKey: [8] }])
         const res = await axios.post('/sendjson', { key: 'value' })
 
-        await agent.use((traces) => {
+        await agent.assertSomeTraces((traces) => {
           const span = traces[0][0]
           assert.equal(span.meta['_dd.appsec.s.res.body'], expectedResponseBodySchema)
         })
@@ -350,7 +346,7 @@ withVersions('express', 'express', version => {
         const expectedResponseBodySchema = formatSchema([{ jsonResKey: [8] }])
         const res = await axios.post('/json', { key: 'value' })
 
-        await agent.use((traces) => {
+        await agent.assertSomeTraces((traces) => {
           const span = traces[0][0]
           assert.equal(span.meta['_dd.appsec.s.res.body'], expectedResponseBodySchema)
         })
@@ -363,7 +359,7 @@ withVersions('express', 'express', version => {
         const expectedResponseBodySchema = formatSchema([{ jsonpResKey: [8] }])
         const res = await axios.post('/jsonp', { key: 'value' })
 
-        await agent.use((traces) => {
+        await agent.assertSomeTraces((traces) => {
           const span = traces[0][0]
           assert.equal(span.meta['_dd.appsec.s.res.body'], expectedResponseBodySchema)
         })
@@ -374,12 +370,13 @@ withVersions('express', 'express', version => {
     })
 
     it('should not get the schema', async () => {
-      config.appsec.apiSecurity.requestSampling = 0
+      config.appsec.apiSecurity.enabled = false
+      config.appsec.apiSecurity.sampleDelay = 10
       appsec.enable(config)
 
       const res = await axios.post('/', { key: 'value' })
 
-      await agent.use((traces) => {
+      await agent.assertSomeTraces((traces) => {
         const span = traces[0][0]
         assert.notProperty(span.meta, '_dd.appsec.s.req.body')
         assert.notProperty(span.meta, '_dd.appsec.s.res.body')

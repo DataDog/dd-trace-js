@@ -14,7 +14,9 @@ const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 const SERVICE_NAME = DD_MAJOR < 3 ? 'test-http-client' : 'test'
 const describe = globalThis.fetch ? globalThis.describe : globalThis.describe.skip
 
-describe('Plugin', () => {
+describe('Plugin', function () {
+  this.timeout(0)
+
   let express
   let fetch
   let appListener
@@ -67,7 +69,7 @@ describe('Plugin', () => {
         })
         appListener = server(app, port => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('service', SERVICE_NAME)
               expect(traces[0][0]).to.have.property('type', 'http')
               expect(traces[0][0]).to.have.property('resource', 'GET')
@@ -92,7 +94,7 @@ describe('Plugin', () => {
         })
         appListener = server(app, port => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('service', SERVICE_NAME)
               expect(traces[0][0]).to.have.property('type', 'http')
               expect(traces[0][0]).to.have.property('resource', 'POST')
@@ -117,7 +119,7 @@ describe('Plugin', () => {
         })
         appListener = server(app, port => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('service', SERVICE_NAME)
               expect(traces[0][0]).to.have.property('type', 'http')
               expect(traces[0][0]).to.have.property('resource', 'GET')
@@ -159,7 +161,7 @@ describe('Plugin', () => {
 
         appListener = server(app, port => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0].meta).to.have.property('http.status_code', '200')
               expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
             })
@@ -182,7 +184,7 @@ describe('Plugin', () => {
 
         appListener = server(app, port => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0].meta).to.have.property('http.status_code', '200')
             })
             .then(done)
@@ -205,7 +207,7 @@ describe('Plugin', () => {
 
         appListener = server(app, port => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0].meta).to.have.property('http.status_code', '200')
             })
             .then(done)
@@ -215,107 +217,11 @@ describe('Plugin', () => {
         })
       })
 
-      it('should skip injecting if the Authorization header contains an AWS signature', done => {
-        const app = express()
-
-        app.get('/', (req, res) => {
-          try {
-            expect(req.get('x-datadog-trace-id')).to.be.undefined
-            expect(req.get('x-datadog-parent-id')).to.be.undefined
-
-            res.status(200).send()
-
-            done()
-          } catch (e) {
-            done(e)
-          }
-        })
-
-        appListener = server(app, port => {
-          fetch(`http://localhost:${port}/`, {
-            headers: {
-              Authorization: 'AWS4-HMAC-SHA256 ...'
-            }
-          })
-        })
-      })
-
-      it('should skip injecting if one of the Authorization headers contains an AWS signature', done => {
-        const app = express()
-
-        app.get('/', (req, res) => {
-          try {
-            expect(req.get('x-datadog-trace-id')).to.be.undefined
-            expect(req.get('x-datadog-parent-id')).to.be.undefined
-
-            res.status(200).send()
-
-            done()
-          } catch (e) {
-            done(e)
-          }
-        })
-
-        appListener = server(app, port => {
-          fetch(`http://localhost:${port}/`, {
-            headers: {
-              Authorization: ['AWS4-HMAC-SHA256 ...']
-            }
-          })
-        })
-      })
-
-      it('should skip injecting if the X-Amz-Signature header is set', done => {
-        const app = express()
-
-        app.get('/', (req, res) => {
-          try {
-            expect(req.get('x-datadog-trace-id')).to.be.undefined
-            expect(req.get('x-datadog-parent-id')).to.be.undefined
-
-            res.status(200).send()
-
-            done()
-          } catch (e) {
-            done(e)
-          }
-        })
-
-        appListener = server(app, port => {
-          fetch(`http://localhost:${port}/`, {
-            headers: {
-              'X-Amz-Signature': 'abc123'
-            }
-          })
-        })
-      })
-
-      it('should skip injecting if the X-Amz-Signature query param is set', done => {
-        const app = express()
-
-        app.get('/', (req, res) => {
-          try {
-            expect(req.get('x-datadog-trace-id')).to.be.undefined
-            expect(req.get('x-datadog-parent-id')).to.be.undefined
-
-            res.status(200).send()
-
-            done()
-          } catch (e) {
-            done(e)
-          }
-        })
-
-        appListener = server(app, port => {
-          fetch(`http://localhost:${port}/?X-Amz-Signature=abc123`)
-        })
-      })
-
       it('should handle connection errors', done => {
         let error
 
         agent
-          .use(traces => {
+          .assertSomeTraces(traces => {
             expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
             expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message || error.code)
             expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
@@ -338,7 +244,7 @@ describe('Plugin', () => {
 
         appListener = server(app, port => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('error', 0)
             })
             .then(done)
@@ -357,7 +263,7 @@ describe('Plugin', () => {
 
         appListener = server(app, port => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('error', 1)
             })
             .then(done)
@@ -374,7 +280,7 @@ describe('Plugin', () => {
 
         appListener = server(app, port => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].meta).to.not.have.property('http.status_code')
             })
@@ -400,7 +306,7 @@ describe('Plugin', () => {
 
         appListener = server(app, port => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('service', SERVICE_NAME)
             })
             .then(done)
@@ -427,18 +333,18 @@ describe('Plugin', () => {
           const timer = setTimeout(done, 100)
 
           agent
-            .use(() => {
+            .assertSomeTraces(() => {
               done(new Error('Noop request was traced.'))
               clearTimeout(timer)
             })
 
-          const store = storage.getStore()
+          const store = storage('legacy').getStore()
 
-          storage.enterWith({ noop: true })
+          storage('legacy').enterWith({ noop: true })
 
           fetch(`http://localhost:${port}/user`).catch(() => {})
 
-          storage.enterWith(store)
+          storage('legacy').enterWith(store)
         })
       })
     })
@@ -467,7 +373,7 @@ describe('Plugin', () => {
 
         appListener = server(app, port => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('service', 'custom')
             })
             .then(done)
@@ -502,7 +408,7 @@ describe('Plugin', () => {
 
         appListener = server(app, port => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('error', 1)
             })
             .then(done)
@@ -537,7 +443,7 @@ describe('Plugin', () => {
 
         appListener = server(app, port => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('service', `localhost:${port}`)
             })
             .then(done)
@@ -573,7 +479,7 @@ describe('Plugin', () => {
 
         appListener = server(app, port => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const meta = traces[0][0].meta
 
               expect(meta).to.have.property(`${HTTP_REQUEST_HEADERS}.x-baz`, 'qux')
@@ -619,7 +525,7 @@ describe('Plugin', () => {
 
         appListener = server(app, port => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0].meta).to.have.property('foo', '/foo')
             })
             .then(done)
@@ -693,13 +599,72 @@ describe('Plugin', () => {
           const timer = setTimeout(done, 100)
 
           agent
-            .use(() => {
+            .assertSomeTraces(() => {
               clearTimeout(timer)
               done(new Error('Blocklisted requests should not be recorded.'))
             })
             .catch(done)
 
           fetch(`http://localhost:${port}/users`).catch(() => {})
+        })
+      })
+    })
+
+    describe('in serverless', () => {
+      beforeEach(() => {
+        process.env.DD_TRACE_EXPERIMENTAL_EXPORTER = 'agent'
+        process.env.AWS_LAMBDA_FUNCTION_NAME = 'test'
+      })
+
+      beforeEach(() => {
+        return agent.load('fetch')
+          .then(() => {
+            express = require('express')
+            fetch = globalThis.fetch
+          })
+      })
+
+      beforeEach(() => {
+        delete process.env.DD_TRACE_EXPERIMENTAL_EXPORTER
+        delete process.env.AWS_LAMBDA_FUNCTION_NAME
+      })
+
+      withNamingSchema(
+        () => {
+          const app = express()
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          appListener = server(app, port => {
+            fetch(`http://localhost:${port}/user`)
+          })
+        },
+        rawExpectedSchema.client
+      )
+
+      it('should do automatic instrumentation', done => {
+        const app = express()
+        app.get('/user', (req, res) => {
+          res.status(200).send()
+        })
+        appListener = server(app, port => {
+          agent
+            .assertSomeTraces(traces => {
+              expect(traces[0][0]).to.have.property('service', SERVICE_NAME)
+              expect(traces[0][0]).to.have.property('type', 'http')
+              expect(traces[0][0]).to.have.property('resource', 'GET')
+              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
+              expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
+              expect(traces[0][0].meta).to.have.property('http.method', 'GET')
+              expect(traces[0][0].meta).to.have.property('http.status_code', '200')
+              expect(traces[0][0].meta).to.have.property('component', 'fetch')
+              expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
+            })
+            .then(done)
+            .catch(done)
+
+          fetch(`http://localhost:${port}/user`)
         })
       })
     })

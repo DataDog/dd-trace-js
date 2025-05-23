@@ -40,7 +40,7 @@ class DynamicInstrumentationLogsWriter extends BaseWriter {
 
     request(data, options, (err, res) => {
       if (err) {
-        log.error(err)
+        log.error('Error sending DI logs payload', err)
         done()
         return
       }

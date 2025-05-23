@@ -54,7 +54,7 @@ module.exports = {
     }
 
     if (config.hasOwnProperty(filter)) {
-      log.error(`Expected '${filter}' to be an array or function.`)
+      log.error('Expected \'%s\' to be an array or function.', filter)
     }
 
     return () => ({})

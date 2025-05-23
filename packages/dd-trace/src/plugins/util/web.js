@@ -8,9 +8,10 @@ const tags = require('../../../../../ext/tags')
 const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')
 const urlFilter = require('./urlfilter')
-const { extractIp } = require('./ip_extractor')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../constants')
 const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred_proxy')
+
+let extractIp
 
 const WEB = types.WEB
 const SERVER = kinds.SERVER
@@ -47,6 +48,8 @@ const web = {
     const filter = urlFilter.getFilter(config)
     const middleware = getMiddlewareSetting(config)
     const queryStringObfuscation = getQsObfuscator(config)
+
+    extractIp = config.clientIpEnabled && require('./ip_extractor').extractIp
 
     return {
       ...config,
@@ -267,7 +270,7 @@ const web = {
       }
     }
 
-    const span = tracer.startSpan(name, { childOf })
+    const span = tracer.startSpan(name, { childOf, links: childOf?._links })
 
     return span
   },
@@ -460,7 +463,7 @@ function addRequestTags (context, spanType) {
   })
 
   // if client ip has already been set by appsec, no need to run it again
-  if (config.clientIpEnabled && !span.context()._tags.hasOwnProperty(HTTP_CLIENT_IP)) {
+  if (extractIp && !span.context()._tags.hasOwnProperty(HTTP_CLIENT_IP)) {
     const clientIp = extractIp(config, req)
 
     if (clientIp) {
@@ -475,8 +478,9 @@ function addRequestTags (context, spanType) {
 function addResponseTags (context) {
   const { req, res, paths, span, inferredProxySpan } = context
 
-  if (paths.length > 0) {
-    span.setTag(HTTP_ROUTE, paths.join(''))
+  const route = paths.join('')
+  if (route) {
+    span.setTag(HTTP_ROUTE, route)
   }
 
   span.addTags({
@@ -546,7 +550,7 @@ function getHeadersToRecord (config) {
         .map(h => h.split(':'))
         .map(([key, tag]) => [key.toLowerCase(), tag])
     } catch (err) {
-      log.error(err)
+      log.error('Web plugin error getting headers', err)
     }
   } else if (config.hasOwnProperty('headers')) {
     log.error('Expected `headers` to be an array of strings.')
@@ -595,7 +599,7 @@ function getQsObfuscator (config) {
     try {
       return new RegExp(obfuscator, 'gi')
     } catch (err) {
-      log.error(err)
+      log.error('Web plugin error getting qs obfuscator', err)
     }
   }
 

@@ -4,6 +4,7 @@ const { expect } = require('chai')
 const { channel } = require('dc-polyfill')
 const proxyquire = require('proxyquire')
 const { getExecutedMetric, getInstrumentedMetric, TagKey } = require('../../../src/appsec/iast/telemetry/iast-metric')
+const { IastPlugin } = require('../../../src/appsec/iast/iast-plugin')
 
 const VULNERABILITY_TYPE = TagKey.VULNERABILITY_TYPE
 const SOURCE_TYPE = TagKey.SOURCE_TYPE
@@ -11,7 +12,7 @@ const SOURCE_TYPE = TagKey.SOURCE_TYPE
 describe('IAST Plugin', () => {
   const loadChannel = channel('dd-trace:instrumentation:load')
 
-  let logError, addSubMock, getIastContext, configureMock, datadogCore
+  let logError, addSubMock, getIastContext, configureMock, legacyStorage
 
   const handler = () => {
     throw new Error('handler error')
@@ -43,16 +44,14 @@ describe('IAST Plugin', () => {
         }
       }
 
-      datadogCore = {
-        storage: {
-          getStore: sinon.stub()
-        }
+      legacyStorage = {
+        getStore: () => sinon.stub()
       }
 
       const iastPluginMod = proxyquire('../../../src/appsec/iast/iast-plugin', {
         '../../plugins/plugin': PluginClass,
-        './iast-log': {
-          errorAndPublish: logError
+        '../../log': {
+          error: logError
         },
         './iast-context': {
           getIastContext
@@ -61,7 +60,7 @@ describe('IAST Plugin', () => {
           isEnabled: () => false
         },
         './telemetry/metrics': {},
-        '../../../../datadog-core': datadogCore
+        '../../../../datadog-core': { storage: () => legacyStorage }
       })
       iastPlugin = new iastPluginMod.IastPlugin()
     })
@@ -71,33 +70,23 @@ describe('IAST Plugin', () => {
     })
 
     describe('addSub', () => {
-      it('should call Plugin.addSub with channelName and wrapped handler', () => {
+      it('should call Plugin.addSub with channelName and handler', () => {
         iastPlugin.addSub('test', handler)
 
         expect(addSubMock).to.be.calledOnce
         const args = addSubMock.getCall(0).args
         expect(args[0]).equal('test')
-
-        const wrapped = args[1]
-        expect(wrapped).to.be.a('function')
-        expect(wrapped).to.not.be.equal(handler)
-        expect(wrapped()).to.not.throw
-        expect(logError).to.be.calledOnce
+        expect(args[1]).to.equal(handler)
       })
 
-      it('should call Plugin.addSub with channelName and wrapped handler after registering iastPluginSub', () => {
+      it('should call Plugin.addSub with channelName and handler after registering iastPluginSub', () => {
         const iastPluginSub = { channelName: 'test' }
         iastPlugin.addSub(iastPluginSub, handler)
 
         expect(addSubMock).to.be.calledOnce
         const args = addSubMock.getCall(0).args
         expect(args[0]).equal('test')
-
-        const wrapped = args[1]
-        expect(wrapped).to.be.a('function')
-        expect(wrapped).to.not.be.equal(handler)
-        expect(wrapped()).to.not.throw
-        expect(logError).to.be.calledOnce
+        expect(args[1]).to.equal(handler)
       })
 
       it('should infer moduleName from channelName after registering iastPluginSub', () => {
@@ -117,20 +106,15 @@ describe('IAST Plugin', () => {
       })
 
       it('should not call _getTelemetryHandler', () => {
-        const wrapHandler = sinon.stub()
-        iastPlugin._wrapHandler = wrapHandler
         const getTelemetryHandler = sinon.stub()
         iastPlugin._getTelemetryHandler = getTelemetryHandler
         iastPlugin.addSub({ channelName, tagKey: VULNERABILITY_TYPE }, handler)
 
-        expect(wrapHandler).to.be.calledOnceWith(handler)
         expect(getTelemetryHandler).to.be.not.called
 
-        wrapHandler.reset()
         getTelemetryHandler.reset()
 
         iastPlugin.addSub({ channelName, tagKey: SOURCE_TYPE, tag: 'test-tag' }, handler)
-        expect(wrapHandler).to.be.calledOnceWith(handler)
         expect(getTelemetryHandler).to.be.not.called
       })
     })
@@ -205,8 +189,8 @@ describe('IAST Plugin', () => {
       }
       const IastPlugin = proxyquire('../../../src/appsec/iast/iast-plugin', {
         '../../plugins/plugin': PluginClass,
-        './iast-log': {
-          errorAndPublish: logError
+        '../../log': {
+          error: logError
         },
         './telemetry': iastTelemetry,
         '../../../../datadog-instrumentations/src/helpers/instrumentations': {}
@@ -235,20 +219,15 @@ describe('IAST Plugin', () => {
 
     describe('addSub', () => {
       it('should call _getTelemetryHandler with correct metrics', () => {
-        const wrapHandler = sinon.stub()
-        iastPlugin._wrapHandler = wrapHandler
         const getTelemetryHandler = sinon.stub()
         iastPlugin._getTelemetryHandler = getTelemetryHandler
         iastPlugin.addSub({ channelName, tagKey: VULNERABILITY_TYPE }, handler)
 
-        expect(wrapHandler).to.be.calledOnceWith(handler)
         expect(getTelemetryHandler).to.be.calledOnceWith(iastPlugin.pluginSubs[0])
 
-        wrapHandler.reset()
         getTelemetryHandler.reset()
 
         iastPlugin.addSub({ channelName, tagKey: SOURCE_TYPE, tag: 'test-tag' }, handler)
-        expect(wrapHandler).to.be.calledOnceWith(handler)
         expect(getTelemetryHandler).to.be.calledOnceWith(iastPlugin.pluginSubs[1])
       })
 
@@ -397,6 +376,52 @@ describe('IAST Plugin', () => {
         expect(handler).to.be.calledOnce
         expect(metric.inc).to.be.calledOnceWithExactly(iastContext, tags)
       })
+    })
+  })
+
+  describe('Add sub to iast plugin', () => {
+    class BadPlugin extends IastPlugin {
+      static get id () { return 'badPlugin' }
+
+      constructor () {
+        super()
+        this.addSub('appsec:badPlugin:start', this.start)
+      }
+
+      start () {
+        throw new Error('this is one bad plugin')
+      }
+    }
+    class GoodPlugin extends IastPlugin {
+      static get id () { return 'goodPlugin' }
+
+      constructor () {
+        super()
+        this.addSub('appsec:goodPlugin:start', this.start)
+      }
+
+      start () {}
+    }
+
+    const badPlugin = new BadPlugin()
+    const goodPlugin = new GoodPlugin()
+
+    it('should disable bad plugin', () => {
+      badPlugin.configure({ enabled: true })
+      expect(badPlugin._enabled).to.be.true
+
+      channel('appsec:badPlugin:start').publish({ foo: 'bar' })
+
+      expect(badPlugin._enabled).to.be.false
+    })
+
+    it('should not disable good plugin', () => {
+      goodPlugin.configure({ enabled: true })
+      expect(goodPlugin._enabled).to.be.true
+
+      channel('appsec:goodPlugin:start').publish({ foo: 'bar' })
+
+      expect(goodPlugin._enabled).to.be.true
     })
   })
 })

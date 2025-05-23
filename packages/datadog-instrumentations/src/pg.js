@@ -14,6 +14,8 @@ const errorCh = channel('apm:pg:query:error')
 const startPoolQueryCh = channel('datadog:pg:pool:query:start')
 const finishPoolQueryCh = channel('datadog:pg:pool:query:finish')
 
+const { errorMonitor } = require('node:events')
+
 addHook({ name: 'pg', versions: ['>=8.0.3'] }, pg => {
   shimmer.wrap(pg.Client.prototype, 'query', query => wrapQuery(query))
   shimmer.wrap(pg.Pool.prototype, 'query', query => wrapPoolQuery(query))
@@ -39,13 +41,15 @@ function wrapQuery (query) {
       ? arguments[0]
       : { text: arguments[0] }
 
-    const textProp = Object.getOwnPropertyDescriptor(pgQuery, 'text')
+    const textPropObj = pgQuery.cursor ?? pgQuery
+    const textProp = Object.getOwnPropertyDescriptor(textPropObj, 'text')
+    const stream = typeof textPropObj.read === 'function'
 
-    // Only alter `text` property if safe to do so.
+    // Only alter `text` property if safe to do so. Initially, it's a property, not a getter.
     if (!textProp || textProp.configurable) {
-      const originalText = pgQuery.text
+      const originalText = textPropObj.text
 
-      Object.defineProperty(pgQuery, 'text', {
+      Object.defineProperty(textPropObj, 'text', {
         get () {
           return this?.__ddInjectableQuery || originalText
         }
@@ -57,22 +61,23 @@ function wrapQuery (query) {
 
       startCh.publish({
         params: this.connectionParameters,
-        query: pgQuery,
+        query: textPropObj,
         processId,
-        abortController
+        abortController,
+        stream
       })
 
-      const finish = asyncResource.bind(function (error) {
+      const finish = asyncResource.bind(function (error, res) {
         if (error) {
           errorCh.publish(error)
         }
-        finishCh.publish()
+        finishCh.publish({ result: res?.rows })
       })
 
       if (abortController.signal.aborted) {
         const error = abortController.signal.reason || new Error('Aborted')
 
-        // eslint-disable-next-line max-len
+        // eslint-disable-next-line @stylistic/js/max-len
         // Based on: https://github.com/brianc/node-postgres/blob/54eb0fa216aaccd727765641e7d1cf5da2bc483d/packages/pg/lib/client.js#L510
         const reusingQuery = typeof pgQuery.submit === 'function'
         const callback = arguments[arguments.length - 1]
@@ -119,15 +124,18 @@ function wrapQuery (query) {
       if (newQuery.callback) {
         const originalCallback = callbackResource.bind(newQuery.callback)
         newQuery.callback = function (err, res) {
-          finish(err)
+          finish(err, res)
           return originalCallback.apply(this, arguments)
         }
       } else if (newQuery.once) {
         newQuery
-          .once('error', finish)
-          .once('end', () => finish())
+          .once(errorMonitor, finish)
+          .once('end', (res) => finish(null, res))
       } else {
-        newQuery.then(() => finish(), finish)
+        // TODO: This code is never reached in our tests.
+        // Internally, pg always uses callbacks or streams, even for promise based queries.
+        // Investigate if this code should just be removed.
+        newQuery.then((res) => finish(null, res), finish)
       }
 
       try {

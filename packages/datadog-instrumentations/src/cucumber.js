@@ -8,6 +8,7 @@ const log = require('../../dd-trace/src/log')
 const testStartCh = channel('ci:cucumber:test:start')
 const testRetryCh = channel('ci:cucumber:test:retry')
 const testFinishCh = channel('ci:cucumber:test:finish') // used for test steps too
+const testFnCh = channel('ci:cucumber:test:fn')
 
 const testStepStartCh = channel('ci:cucumber:test-step:start')
 
@@ -22,6 +23,7 @@ const knownTestsCh = channel('ci:cucumber:known-tests')
 const skippableSuitesCh = channel('ci:cucumber:test-suite:skippable')
 const sessionStartCh = channel('ci:cucumber:session:start')
 const sessionFinishCh = channel('ci:cucumber:session:finish')
+const testManagementTestsCh = channel('ci:cucumber:test-management-tests')
 
 const workerReportTraceCh = channel('ci:cucumber:worker-report:trace')
 
@@ -51,7 +53,7 @@ const patched = new WeakSet()
 
 const lastStatusByPickleId = new Map()
 const numRetriesByPickleId = new Map()
-const numAttemptToAsyncResource = new Map()
+const numAttemptToCtx = new Map()
 const newTestsByTestFullname = new Map()
 
 let eventDataCollector = null
@@ -70,6 +72,10 @@ let earlyFlakeDetectionNumRetries = 0
 let earlyFlakeDetectionFaultyThreshold = 0
 let isEarlyFlakeDetectionFaulty = false
 let isFlakyTestRetriesEnabled = false
+let isKnownTestsEnabled = false
+let isTestManagementTestsEnabled = false
+let testManagementAttemptToFixRetries = 0
+let testManagementTests = {}
 let numTestRetries = 0
 let knownTests = []
 let skippedSuites = []
@@ -116,6 +122,13 @@ function isNewTest (testSuite, testName) {
   return !testsForSuite.includes(testName)
 }
 
+function getTestProperties (testSuite, testName) {
+  const { attempt_to_fix: attemptToFix, disabled, quarantined } =
+    testManagementTests?.cucumber?.suites?.[testSuite]?.tests?.[testName]?.properties || {}
+
+  return { attemptToFix, disabled, quarantined }
+}
+
 function getTestStatusFromRetries (testStatuses) {
   if (testStatuses.every(status => status === 'fail')) {
     return 'fail'
@@ -126,10 +139,24 @@ function getTestStatusFromRetries (testStatuses) {
   return 'pass'
 }
 
-function getChannelPromise (channelToPublishTo) {
+function getErrorFromCucumberResult (cucumberResult) {
+  if (!cucumberResult.message) {
+    return
+  }
+
+  const [message] = cucumberResult.message.split('\n')
+  const error = new Error(message)
+  if (cucumberResult.exception) {
+    error.type = cucumberResult.exception.type
+  }
+  error.stack = cucumberResult.message
+  return error
+}
+
+function getChannelPromise (channelToPublishTo, isParallel = false) {
   return new Promise(resolve => {
     sessionAsyncResource.runInAsyncScope(() => {
-      channelToPublishTo.publish({ onDone: resolve })
+      channelToPublishTo.publish({ onDone: resolve, isParallel })
     })
   })
 }
@@ -201,15 +228,11 @@ function wrapRun (pl, isLatestVersion) {
   patched.add(pl)
 
   shimmer.wrap(pl.prototype, 'run', run => function () {
-    if (!testStartCh.hasSubscribers) {
+    if (!testFinishCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
 
     let numAttempt = 0
-
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-
-    numAttemptToAsyncResource.set(numAttempt, asyncResource)
 
     const testFileAbsolutePath = this.pickle.uri
 
@@ -221,37 +244,50 @@ function wrapRun (pl, isLatestVersion) {
       testSourceLine,
       isParallel: !!process.env.CUCUMBER_WORKER_ID
     }
-    asyncResource.runInAsyncScope(() => {
-      testStartCh.publish(testStartPayload)
-    })
+    const ctx = testStartPayload
+    numAttemptToCtx.set(numAttempt, ctx)
+    testStartCh.runStores(ctx, () => { })
+    const promises = {}
     try {
-      this.eventBroadcaster.on('envelope', shimmer.wrapFunction(null, () => (testCase) => {
+      this.eventBroadcaster.on('envelope', shimmer.wrapFunction(null, () => async (testCase) => {
         // Only supported from >=8.0.0
         if (testCase?.testCaseFinished) {
           const { testCaseFinished: { willBeRetried } } = testCase
           if (willBeRetried) { // test case failed and will be retried
-            const failedAttemptAsyncResource = numAttemptToAsyncResource.get(numAttempt)
-            failedAttemptAsyncResource.runInAsyncScope(() => {
-              testRetryCh.publish(numAttempt++ > 0) // the current span will be finished and a new one will be created
-            })
+            let error
+            try {
+              const cucumberResult = this.getWorstStepResult()
+              error = getErrorFromCucumberResult(cucumberResult)
+            } catch (e) {
+              // ignore error
+            }
 
-            const newAsyncResource = new AsyncResource('bound-anonymous-fn')
-            numAttemptToAsyncResource.set(numAttempt, newAsyncResource)
+            const failedAttemptCtx = numAttemptToCtx.get(numAttempt)
+            const isFirstAttempt = numAttempt++ === 0
+            const isAtrRetry = !isFirstAttempt && isFlakyTestRetriesEnabled
 
-            newAsyncResource.runInAsyncScope(() => {
-              testStartCh.publish(testStartPayload) // a new span will be created
-            })
+            if (promises.hitBreakpointPromise) {
+              await promises.hitBreakpointPromise
+            }
+
+            // the current span will be finished and a new one will be created
+            testRetryCh.publish({ isFirstAttempt, error, isAtrRetry, ...failedAttemptCtx.currentStore })
+
+            const newCtx = { ...testStartPayload, promises }
+            numAttemptToCtx.set(numAttempt, newCtx)
+
+            testStartCh.runStores(newCtx, () => { })
           }
         }
       }))
       let promise
 
-      asyncResource.runInAsyncScope(() => {
+      testFnCh.runStores(ctx, () => {
         promise = run.apply(this, arguments)
       })
-      promise.finally(() => {
+      promise.finally(async () => {
         const result = this.getWorstStepResult()
-        const { status, skipReason, errorMessage } = isLatestVersion
+        const { status, skipReason } = isLatestVersion
           ? getStatusFromResultLatest(result)
           : getStatusFromResult(result)
 
@@ -262,26 +298,78 @@ function wrapRun (pl, isLatestVersion) {
         }
         let isNew = false
         let isEfdRetry = false
-        if (isEarlyFlakeDetectionEnabled && status !== 'skip') {
+        let isAttemptToFix = false
+        let isAttemptToFixRetry = false
+        let hasFailedAllRetries = false
+        let hasPassedAllRetries = false
+        let hasFailedAttemptToFix = false
+        let isDisabled = false
+        let isQuarantined = false
+
+        if (isTestManagementTestsEnabled) {
+          const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())
+          const testProperties = getTestProperties(testSuitePath, this.pickle.name)
+          const numRetries = numRetriesByPickleId.get(this.pickle.id)
+          isAttemptToFix = testProperties.attemptToFix
+          isAttemptToFixRetry = isAttemptToFix && numRetries > 0
+          isDisabled = testProperties.disabled
+          isQuarantined = testProperties.quarantined
+
+          if (isAttemptToFixRetry) {
+            const statuses = lastStatusByPickleId.get(this.pickle.id)
+            if (statuses.length === testManagementAttemptToFixRetries + 1) {
+              const { pass, fail } = statuses.reduce((acc, status) => {
+                acc[status]++
+                return acc
+              }, { pass: 0, fail: 0 })
+              hasFailedAllRetries = fail === testManagementAttemptToFixRetries + 1
+              hasPassedAllRetries = pass === testManagementAttemptToFixRetries + 1
+              hasFailedAttemptToFix = fail > 0
+            }
+          }
+        }
+
+        if (isKnownTestsEnabled && status !== 'skip' && !isAttemptToFix) {
           const numRetries = numRetriesByPickleId.get(this.pickle.id)
 
           isNew = numRetries !== undefined
           isEfdRetry = numRetries > 0
         }
-        const attemptAsyncResource = numAttemptToAsyncResource.get(numAttempt)
 
-        attemptAsyncResource.runInAsyncScope(() => {
-          testFinishCh.publish({ status, skipReason, errorMessage, isNew, isEfdRetry, isFlakyRetry: numAttempt > 0 })
+        const attemptCtx = numAttemptToCtx.get(numAttempt)
+
+        const error = getErrorFromCucumberResult(result)
+
+        if (promises.hitBreakpointPromise) {
+          await promises.hitBreakpointPromise
+        }
+        testFinishCh.publish({
+          status,
+          skipReason,
+          error,
+          isNew,
+          isEfdRetry,
+          isFlakyRetry: numAttempt > 0,
+          isAttemptToFix,
+          isAttemptToFixRetry,
+          hasFailedAllRetries,
+          hasPassedAllRetries,
+          hasFailedAttemptToFix,
+          isDisabled,
+          isQuarantined,
+          ...attemptCtx.currentStore
         })
       })
       return promise
     } catch (err) {
-      errorCh.publish(err)
-      throw err
+      ctx.err = err
+      errorCh.runStores(ctx, () => {
+        throw err
+      })
     }
   })
   shimmer.wrap(pl.prototype, 'runStep', runStep => function () {
-    if (!testStepStartCh.hasSubscribers) {
+    if (!testFinishCh.hasSubscribers) {
       return runStep.apply(this, arguments)
     }
     const testStep = arguments[0]
@@ -293,9 +381,8 @@ function wrapRun (pl, isLatestVersion) {
       resource = testStep.isHook ? 'hook' : testStep.pickleStep.text
     }
 
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-    return asyncResource.runInAsyncScope(() => {
-      testStepStartCh.publish({ resource })
+    const ctx = { resource }
+    return testStepStartCh.runStores(ctx, () => {
       try {
         const promise = runStep.apply(this, arguments)
 
@@ -304,12 +391,14 @@ function wrapRun (pl, isLatestVersion) {
             ? getStatusFromResultLatest(result)
             : getStatusFromResult(result)
 
-          testFinishCh.publish({ isStep: true, status, skipReason, errorMessage })
+          testFinishCh.publish({ isStep: true, status, skipReason, errorMessage, ...ctx.currentStore })
         })
         return promise
       } catch (err) {
-        errorCh.publish(err)
-        throw err
+        ctx.err = err
+        errorCh.runStores(ctx, () => {
+          throw err
+        })
       }
     })
   })
@@ -351,7 +440,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     }
     let errorSkippableRequest
 
-    const configurationResponse = await getChannelPromise(libraryConfigurationCh)
+    const configurationResponse = await getChannelPromise(libraryConfigurationCh, isParallel)
 
     isEarlyFlakeDetectionEnabled = configurationResponse.libraryConfig?.isEarlyFlakeDetectionEnabled
     earlyFlakeDetectionNumRetries = configurationResponse.libraryConfig?.earlyFlakeDetectionNumRetries
@@ -359,13 +448,17 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     isSuitesSkippingEnabled = configurationResponse.libraryConfig?.isSuitesSkippingEnabled
     isFlakyTestRetriesEnabled = configurationResponse.libraryConfig?.isFlakyTestRetriesEnabled
     numTestRetries = configurationResponse.libraryConfig?.flakyTestRetriesCount
+    isKnownTestsEnabled = configurationResponse.libraryConfig?.isKnownTestsEnabled
+    isTestManagementTestsEnabled = configurationResponse.libraryConfig?.isTestManagementEnabled
+    testManagementAttemptToFixRetries = configurationResponse.libraryConfig?.testManagementAttemptToFixRetries
 
-    if (isEarlyFlakeDetectionEnabled) {
+    if (isKnownTestsEnabled) {
       const knownTestsResponse = await getChannelPromise(knownTestsCh)
       if (!knownTestsResponse.err) {
         knownTests = knownTestsResponse.knownTests
       } else {
         isEarlyFlakeDetectionEnabled = false
+        isKnownTestsEnabled = false
       }
     }
 
@@ -402,7 +495,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
 
     pickleByFile = isCoordinator ? getPickleByFileNew(this) : getPickleByFile(this)
 
-    if (isEarlyFlakeDetectionEnabled) {
+    if (isKnownTestsEnabled) {
       const isFaulty = getIsFaultyEarlyFlakeDetection(
         Object.keys(pickleByFile),
         knownTests.cucumber || {},
@@ -410,7 +503,17 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       )
       if (isFaulty) {
         isEarlyFlakeDetectionEnabled = false
+        isKnownTestsEnabled = false
         isEarlyFlakeDetectionFaulty = true
+      }
+    }
+
+    if (isTestManagementTestsEnabled) {
+      const testManagementTestsResponse = await getChannelPromise(testManagementTestsCh)
+      if (!testManagementTestsResponse.err) {
+        testManagementTests = testManagementTestsResponse.testManagementTests
+      } else {
+        isTestManagementTestsEnabled = false
       }
     }
 
@@ -461,6 +564,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
         hasForcedToRunSuites: isForcedToRun,
         isEarlyFlakeDetectionEnabled,
         isEarlyFlakeDetectionFaulty,
+        isTestManagementTestsEnabled,
         isParallel
       })
     })
@@ -497,8 +601,22 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     }
 
     let isNew = false
+    let isAttemptToFix = false
+    let isDisabled = false
+    let isQuarantined = false
 
-    if (isEarlyFlakeDetectionEnabled) {
+    if (isTestManagementTestsEnabled) {
+      const testProperties = getTestProperties(testSuitePath, pickle.name)
+      isAttemptToFix = testProperties.attemptToFix
+      isDisabled = testProperties.disabled
+      isQuarantined = testProperties.quarantined
+      // If attempt to fix is enabled, we run even if the test is disabled
+      if (!isAttemptToFix && isDisabled) {
+        this.options.dryRun = true
+      }
+    }
+
+    if (isKnownTestsEnabled && !isAttemptToFix) {
       isNew = isNewTest(testSuitePath, pickle.name)
       if (isNew) {
         numRetriesByPickleId.set(pickle.id, 0)
@@ -509,6 +627,15 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
 
     const testStatuses = lastStatusByPickleId.get(pickle.id)
     const lastTestStatus = testStatuses[testStatuses.length - 1]
+
+    // New tests should not be marked as attempt to fix, so EFD + Attempt to fix should not be enabled at the same time
+    if (isAttemptToFix && lastTestStatus !== 'skip') {
+      for (let retryIndex = 0; retryIndex < testManagementAttemptToFixRetries; retryIndex++) {
+        numRetriesByPickleId.set(pickle.id, retryIndex + 1)
+        runTestCaseResult = await runTestCaseFunction.apply(this, arguments)
+      }
+    }
+
     // If it's a new test and it hasn't been skipped, we run it again
     if (isEarlyFlakeDetectionEnabled && lastTestStatus !== 'skip' && isNew) {
       for (let retryIndex = 0; retryIndex < earlyFlakeDetectionNumRetries; retryIndex++) {
@@ -518,6 +645,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     }
     let testStatus = lastTestStatus
     let shouldBePassedByEFD = false
+    let shouldBePassedByTestManagement = false
     if (isNew && isEarlyFlakeDetectionEnabled) {
       /**
        * If Early Flake Detection (EFD) is enabled the logic is as follows:
@@ -532,6 +660,11 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
         shouldBePassedByEFD = true
         this.success = true
       }
+    }
+
+    if (isTestManagementTestsEnabled && (isDisabled || isQuarantined)) {
+      this.success = true
+      shouldBePassedByTestManagement = true
     }
 
     if (!pickleResultByFile[testFileAbsolutePath]) {
@@ -563,6 +696,10 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
 
     if (isNewerCucumberVersion && isEarlyFlakeDetectionEnabled && isNew) {
       return shouldBePassedByEFD
+    }
+
+    if (isNewerCucumberVersion && isTestManagementTestsEnabled && (isQuarantined || isDisabled)) {
+      return shouldBePassedByTestManagement
     }
 
     return runTestCaseResult
@@ -643,14 +780,14 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
       const { status } = getStatusFromResultLatest(worstTestStepResult)
       let isNew = false
 
-      if (isEarlyFlakeDetectionEnabled) {
+      if (isKnownTestsEnabled) {
         isNew = isNewTest(pickle.uri, pickle.name)
       }
 
       const testFileAbsolutePath = pickle.uri
       const finished = pickleResultByFile[testFileAbsolutePath]
 
-      if (isNew) {
+      if (isEarlyFlakeDetectionEnabled && isNew) {
         const testFullname = `${pickle.uri}:${pickle.name}`
         let testStatuses = newTestsByTestFullname.get(testFullname)
         if (!testStatuses) {
@@ -804,7 +941,8 @@ addHook({
   )
   // EFD in parallel mode only supported in >=11.0.0
   shimmer.wrap(adapterPackage.ChildProcessAdapter.prototype, 'startWorker', startWorker => function () {
-    if (isEarlyFlakeDetectionEnabled) {
+    if (isKnownTestsEnabled) {
+      this.options.worldParameters._ddIsEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
       this.options.worldParameters._ddKnownTests = knownTests
       this.options.worldParameters._ddEarlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
     }
@@ -827,9 +965,12 @@ addHook({
     'initialize',
     initialize => async function () {
       await initialize.apply(this, arguments)
-      isEarlyFlakeDetectionEnabled = !!this.options.worldParameters._ddKnownTests
-      if (isEarlyFlakeDetectionEnabled) {
+      isKnownTestsEnabled = !!this.options.worldParameters._ddKnownTests
+      if (isKnownTestsEnabled) {
         knownTests = this.options.worldParameters._ddKnownTests
+      }
+      isEarlyFlakeDetectionEnabled = !!this.options.worldParameters._ddIsEarlyFlakeDetectionEnabled
+      if (isEarlyFlakeDetectionEnabled) {
         earlyFlakeDetectionNumRetries = this.options.worldParameters._ddEarlyFlakeDetectionNumRetries
       }
     }

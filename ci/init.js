@@ -1,10 +1,23 @@
 /* eslint-disable no-console */
 const tracer = require('../packages/dd-trace')
-const { isTrue } = require('../packages/dd-trace/src/util')
+const { isTrue, isFalse } = require('../packages/dd-trace/src/util')
+const log = require('../packages/dd-trace/src/log')
 
 const isJestWorker = !!process.env.JEST_WORKER_ID
 const isCucumberWorker = !!process.env.CUCUMBER_WORKER_ID
 const isMochaWorker = !!process.env.MOCHA_WORKER_ID
+
+const isPlaywrightWorker = !!process.env.DD_PLAYWRIGHT_WORKER
+
+const packageManagers = [
+  'npm',
+  'yarn',
+  'pnpm'
+]
+
+const isPackageManager = () => {
+  return packageManagers.some(packageManager => process.argv[1]?.includes(`bin/${packageManager}`))
+}
 
 const options = {
   startupLogs: false,
@@ -12,7 +25,12 @@ const options = {
   flushInterval: isJestWorker ? 0 : 5000
 }
 
-let shouldInit = true
+let shouldInit = !isFalse(process.env.DD_CIVISIBILITY_ENABLED)
+
+if (isPackageManager()) {
+  log.debug('dd-trace is not initialized in a package manager.')
+  shouldInit = false
+}
 
 const isAgentlessEnabled = isTrue(process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED)
 
@@ -48,6 +66,12 @@ if (isCucumberWorker) {
 if (isMochaWorker) {
   options.experimental = {
     exporter: 'mocha_worker'
+  }
+}
+
+if (isPlaywrightWorker) {
+  options.experimental = {
+    exporter: 'playwright_worker'
   }
 }
 
