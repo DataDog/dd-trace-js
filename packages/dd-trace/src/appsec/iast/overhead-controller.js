@@ -1,8 +1,9 @@
 'use strict'
 
-const web = require('../../plugins/util/web')
 const LRUCache = require('lru-cache')
+const web = require('../../plugins/util/web')
 const vulnerabilities = require('./vulnerabilities')
+
 const OVERHEAD_CONTROLLER_CONTEXT_KEY = 'oce'
 const REPORT_VULNERABILITY = 'REPORT_VULNERABILITY'
 const INTERVAL_RESET_GLOBAL_CONTEXT = 60 * 1000
