@@ -11,13 +11,13 @@ const {
 } = require('../taint-tracking/source-types')
 
 const EXCLUDED_PATHS = getNodeModulesPaths('express')
-const EXCLUDED_HEADER_NAMES = [
+const EXCLUDED_HEADER_NAMES = new Set([
   'location',
   'sec-websocket-location',
   'sec-websocket-accept',
   'upgrade',
   'connection'
-]
+])
 
 class HeaderInjectionAnalyzer extends InjectionAnalyzer {
   constructor () {
@@ -65,7 +65,7 @@ class HeaderInjectionAnalyzer extends InjectionAnalyzer {
   }
 
   isExcludedHeaderName (name) {
-    return EXCLUDED_HEADER_NAMES.includes(name)
+    return EXCLUDED_HEADER_NAMES.has(name)
   }
 
   isAllRangesFromHeader (ranges, headerName) {

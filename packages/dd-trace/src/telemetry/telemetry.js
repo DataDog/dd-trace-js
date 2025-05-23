@@ -382,7 +382,6 @@ function profilingEnabledToBoolean (profilingEnabled) {
   if (profilingEnabled === 'false') {
     return false
   }
-  return undefined
 }
 
 module.exports = {

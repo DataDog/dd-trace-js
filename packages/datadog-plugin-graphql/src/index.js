@@ -47,7 +47,7 @@ function getDepth (config) {
 function getVariablesFilter (config) {
   if (typeof config.variables === 'function') {
     return config.variables
-  } else if (config.variables instanceof Array) {
+  } else if (Array.isArray(config.variables)) {
     return variables => pick(variables, config.variables)
   } else if (config.hasOwnProperty('variables')) {
     log.error('Expected `variables` to be an array or function.')
@@ -56,7 +56,7 @@ function getVariablesFilter (config) {
 }
 
 function getHooks (config) {
-  const noop = () => { }
+  const noop = () => {}
   const execute = config.hooks?.execute || noop
   const parse = config.hooks?.parse || noop
   const validate = config.hooks?.validate || noop

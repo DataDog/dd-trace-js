@@ -63,7 +63,7 @@ function formatArg (arg) {
 
 function trim (str, maxlen) {
   if (str.length > maxlen) {
-    str = str.substr(0, maxlen - 3) + '...'
+    str = str.slice(0, maxlen - 3) + '...'
   }
 
   return str

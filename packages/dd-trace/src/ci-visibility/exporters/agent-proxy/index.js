@@ -19,14 +19,14 @@ function getLatestEvpProxyVersion (err, agentInfo) {
       if (isNaN(version)) {
         return acc
       }
-      return version > acc ? version : acc
+      return Math.max(version, acc)
     }
     return acc
   }, 0)
 }
 
 function getCanForwardDebuggerLogs (err, agentInfo) {
-  return !err && agentInfo.endpoints.some(endpoint => endpoint === AGENT_DEBUGGER_INPUT)
+  return !err && agentInfo.endpoints.includes(AGENT_DEBUGGER_INPUT)
 }
 
 class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {

@@ -285,7 +285,7 @@ class LLMObs extends NoopLLMObs {
       }
       if (!(span instanceof Span)) {
         err = 'invalid_span'
-        throw new Error('Span must be a valid Span object.')
+        throw new TypeError('Span must be a valid Span object.')
       }
       if (!LLMObsTagger.tagMap.has(span)) {
         err = 'invalid_span'

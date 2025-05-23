@@ -94,7 +94,7 @@ function onModuleLoad (data) {
     if (filename && filename.startsWith(FILE_URI_START)) {
       try {
         filename = fileURLToPath(filename)
-      } catch (e) {
+      } catch {
         // cannot transform url to path
       }
     }
@@ -118,7 +118,7 @@ function onModuleLoad (data) {
 
               waitAndSend(config, application, host)
             }
-          } catch (e) {
+          } catch {
             // can not read the package.json, do nothing
           }
         }

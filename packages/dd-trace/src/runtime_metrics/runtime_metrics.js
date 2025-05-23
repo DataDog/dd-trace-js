@@ -141,7 +141,7 @@ function captureCpuUsage () {
   time = process.hrtime()
   cpuUsage = process.cpuUsage()
 
-  const elapsedMs = elapsedTime[0] * 1000 + elapsedTime[1] / 1000000
+  const elapsedMs = elapsedTime[0] * 1000 + elapsedTime[1] / 1_000_000
   const userPercent = 100 * elapsedUsage.user / 1000 / elapsedMs
   const systemPercent = 100 * elapsedUsage.system / 1000 / elapsedMs
   const totalPercent = userPercent + systemPercent

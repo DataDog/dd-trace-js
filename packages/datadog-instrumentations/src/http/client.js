@@ -144,29 +144,23 @@ function patch (http, methodName) {
   }
 
   function combineOptions (inputURL, inputOptions) {
-    if (inputOptions !== null && typeof inputOptions === 'object') {
-      return Object.assign(inputURL || {}, inputOptions)
-    } else {
-      return inputURL
-    }
+    return inputOptions !== null && typeof inputOptions === 'object'
+      ? Object.assign(inputURL || {}, inputOptions)
+      : inputURL
   }
   function normalizeHeaders (options) {
     options.headers = options.headers || {}
   }
 
   function normalizeCallback (inputOptions, callback, inputURL) {
-    if (typeof inputOptions === 'function') {
-      return [inputOptions, inputURL || {}]
-    } else {
-      return [callback, inputOptions]
-    }
+    return typeof inputOptions === 'function' ? [inputOptions, inputURL || {}] : [callback, inputOptions]
   }
 
   function normalizeOptions (inputURL) {
     if (typeof inputURL === 'string') {
       try {
         return urlToOptions(new url.URL(inputURL))
-      } catch (e) {
+      } catch {
         // eslint-disable-next-line n/no-deprecated-api
         return url.parse(inputURL)
       }

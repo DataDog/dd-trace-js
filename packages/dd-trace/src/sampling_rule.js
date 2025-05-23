@@ -69,7 +69,7 @@ function resourceLocator (span) {
 }
 
 class SamplingRule {
-  constructor ({ name, service, resource, tags, sampleRate = 1.0, provenance = undefined, maxPerSecond } = {}) {
+  constructor ({ name, service, resource, tags, sampleRate = 1, provenance, maxPerSecond } = {}) {
     this.matchers = []
 
     if (name) {
@@ -112,6 +112,9 @@ class SamplingRule {
 
   match (span) {
     for (const matcher of this.matchers) {
+      // Rule is a special object with a .match() property.
+      // It has nothing to do with a regular expression.
+      // eslint-disable-next-line unicorn/prefer-regexp-test
       if (!matcher.match(span)) {
         return false
       }

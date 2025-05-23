@@ -31,7 +31,7 @@ function getIsTestSessionTrace (trace) {
   )
 }
 
-const GIT_UPLOAD_TIMEOUT = 60000 // 60 seconds
+const GIT_UPLOAD_TIMEOUT = 60_000 // 60 seconds
 const CAN_USE_CI_VIS_PROTOCOL_TIMEOUT = GIT_UPLOAD_TIMEOUT
 
 class CiVisibilityExporter extends AgentInfoExporter {
@@ -336,7 +336,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
       this._writer,
       this._coverageWriter,
       this._logsWriter
-    ].filter(writer => writer)
+    ].filter(Boolean)
 
     let remaining = writers.length
 

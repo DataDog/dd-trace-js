@@ -103,10 +103,8 @@ class StatsBucket {
   forBacklog (backlogData) {
     const backlog = new Backlog(backlogData)
     const existingBacklog = this._backlogs.get(backlog.hash)
-    if (existingBacklog !== undefined) {
-      if (existingBacklog.offset > backlog.offset) {
-        return existingBacklog
-      }
+    if (existingBacklog !== undefined && existingBacklog.offset > backlog.offset) {
+      return existingBacklog
     }
     this._backlogs.set(backlog.hash, backlog)
     return backlog
