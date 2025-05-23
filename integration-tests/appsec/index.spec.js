@@ -28,7 +28,7 @@ describe('RASP', () => {
     await sandbox.remove()
   })
 
-  function startServer (abortOnUncaughtException) {
+  function startServer (abortOnUncaughtException, collectRequestBody = false) {
     beforeEach(async () => {
       let execArgv = process.execArgv
       if (abortOnUncaughtException) {
@@ -44,7 +44,7 @@ describe('RASP', () => {
           DD_APPSEC_ENABLED: true,
           DD_APPSEC_RASP_ENABLED: true,
           DD_APPSEC_RULES: path.join(cwd, 'appsec/rasp/rasp_rules.json'),
-          DD_APPSEC_RASP_COLLECT_REQUEST_BODY: true
+          DD_APPSEC_RASP_COLLECT_REQUEST_BODY: collectRequestBody
         }
       }, stdOutputHandler, stdOutputHandler)
     })
@@ -354,42 +354,63 @@ describe('RASP', () => {
   })
 
   describe('extended data collection', () => {
-    startServer(false)
+    describe('with feature enabled', () => {
+      startServer(false, true)
 
-    it('should report body request', async () => {
-      const requestBody = { host: 'localhost/ifconfig.pro' }
-      try {
-        await axios.post('/ssrf', requestBody)
-      } catch (e) {
-        if (!e.response) {
-          throw e
+      it('should report body request', async () => {
+        const requestBody = { host: 'localhost/ifconfig.pro' }
+        try {
+          await axios.post('/ssrf', requestBody)
+        } catch (e) {
+          if (!e.response) {
+            throw e
+          }
+
+          await assertBodyReported(requestBody)
         }
+      })
 
-        await assertBodyReported(requestBody)
-      }
+      it('should report truncated body request', async () => {
+        const requestBody = {
+          host: 'localhost/ifconfig.pro',
+          objectWithLotsOfNodes: Object.fromEntries([...Array(300).keys()].map(i => [i, i])),
+          arr: Array(300).fill('foo')
+        }
+        try {
+          await axios.post('/ssrf', requestBody)
+        } catch (e) {
+          if (!e.response) {
+            throw e
+          }
+
+          const expectedReportedBody = {
+            host: 'localhost/ifconfig.pro',
+            objectWithLotsOfNodes: Object.fromEntries([...Array(256).keys()].map(i => [i, i])),
+            arr: Array(256).fill('foo')
+          }
+
+          await assertBodyReported(expectedReportedBody, true)
+        }
+      })
     })
 
-    it('should report truncated body request', async () => {
-      const requestBody = {
-        host: 'localhost/ifconfig.pro',
-        objectWithLotsOfNodes: Object.fromEntries([...Array(300).keys()].map(i => [i, i])),
-        arr: Array(300).fill('foo')
-      }
-      try {
-        await axios.post('/ssrf', requestBody)
-      } catch (e) {
-        if (!e.response) {
-          throw e
-        }
+    describe('with feature disabled', () => {
+      startServer(false, false)
 
-        const expectedReportedBody = {
-          host: 'localhost/ifconfig.pro',
-          objectWithLotsOfNodes: Object.fromEntries([...Array(256).keys()].map(i => [i, i])),
-          arr: Array(256).fill('foo')
-        }
+      it('should not report body request', async () => {
+        const requestBody = { host: 'localhost/ifconfig.pro' }
+        try {
+          await axios.post('/ssrf', requestBody)
+        } catch (e) {
+          if (!e.response) {
+            throw e
+          }
 
-        await assertBodyReported(expectedReportedBody, true)
-      }
+          await agent.assertMessageReceived(({ headers, payload }) => {
+            assert.notProperty(payload[0][0].meta_struct, 'http.request.body')
+          })
+        }
+      })
     })
   })
 })
