@@ -60,7 +60,7 @@ const {
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
-const { NODE_MAJOR } = require('../../version')
+const { DD_MAJOR, NODE_MAJOR } = require('../../version')
 
 const version = process.env.CYPRESS_VERSION
 const hookFile = 'dd-trace/loader-hook.mjs'
@@ -80,18 +80,37 @@ const moduleTypes = [
   }
 ].filter(moduleType => !process.env.CYPRESS_MODULE_TYPE || process.env.CYPRESS_MODULE_TYPE === moduleType.type)
 
+function shouldTestsRun (type) {
+  if (DD_MAJOR === 5) {
+    if (NODE_MAJOR <= 16) {
+      return version === '6.7.0' && type === 'commonJS'
+    }
+    if (NODE_MAJOR > 16) {
+      return version === 'latest'
+    }
+  }
+  if (DD_MAJOR === 6) {
+    if (NODE_MAJOR <= 16) {
+      return false
+    }
+    if (NODE_MAJOR > 16) {
+      return version === '10.2.0' || version === 'latest'
+    }
+  }
+  return false
+}
+
 moduleTypes.forEach(({
   type,
   testCommand
 }) => {
-  // cypress only supports esm on versions >= 10.0.0
-  if (type === 'esm' && version === '6.7.0') {
-    return
-  }
-  if (version === '6.7.0' && NODE_MAJOR > 16) {
-    return
-  }
   describe(`cypress@${version} ${type}`, function () {
+    if (!shouldTestsRun(type)) {
+      // eslint-disable-next-line no-console
+      console.log(`Skipping tests for cypress@${version} ${type} for dd-trace@${DD_MAJOR} node@${NODE_MAJOR}`)
+      return
+    }
+
     this.retries(2)
     this.timeout(60000)
     let sandbox, cwd, receiver, childProcess, webAppPort, secondWebAppServer
