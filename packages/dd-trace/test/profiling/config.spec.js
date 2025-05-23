@@ -464,9 +464,9 @@ describe('config', () => {
     })
 
     it('should accept supported compression levels in methods that support levels', () => {
-      const levelAcceptingMethods = zstdSupported ? ['gzip', 'zstd'] : ['gzip']
-      levelAcceptingMethods.forEach((method) => {
-        for (let i = 0; i < 10; i++) {
+      const levelAcceptingMethods = zstdSupported ? [['gzip', 9], ['zstd', 22]] : [['gzip', 9]]
+      levelAcceptingMethods.forEach(([method, maxLevel]) => {
+        for (let i = 1; i <= maxLevel; i++) {
           expectConfig(`${method}-${i}`, method, i)
         }
       })
@@ -491,12 +491,14 @@ describe('config', () => {
     })
 
     it('should normalize compression levels', () => {
-      const levelAcceptingMethods = zstdSupported ? ['gzip', 'zstd'] : ['gzip']
-      levelAcceptingMethods.forEach((method) => {
-        expectConfig(`${method}-10`, method, 9,
-          'Invalid compression level 10. Will use 9.')
-        expectConfig(`${method}-3.14`, method, 3)
-      })
+      expectConfig('gzip-0', 'gzip', 1, 'Invalid compression level 0. Will use 1.')
+      expectConfig('gzip-10', 'gzip', 9, 'Invalid compression level 10. Will use 9.')
+      expectConfig('gzip-3.14', 'gzip', 3)
+      if (zstdSupported) {
+        expectConfig('zstd-0', 'zstd', 1, 'Invalid compression level 0. Will use 1.')
+        expectConfig('zstd-23', 'zstd', 22, 'Invalid compression level 23. Will use 22.')
+        expectConfig('zstd-3.14', 'zstd', 3)
+      }
     })
   })
 })

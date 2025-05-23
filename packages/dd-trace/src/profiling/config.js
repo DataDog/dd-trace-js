@@ -212,16 +212,17 @@ class Config {
         logger.warn(
           `Invalid compression level "${level0}". Will use default level.`)
         level = undefined
-      } else if (level < 0) {
-        // Best I can tell this can't happen due to splitting the env var at
-        // minus sign, but let's be exhaustive.
-        logger.warn(`Invalid compression level ${level}. Will use 0.`)
-        level = 0
-      } else if (level > 9) {
-        logger.warn(`Invalid compression level ${level}. Will use 9.`)
-        level = 9
+      } else if (level < 1) {
+        logger.warn(`Invalid compression level ${level}. Will use 1.`)
+        level = 1
       } else {
-        level |= 0
+        const maxLevel = { gzip: 9, zstd: 22 }[uploadCompression]
+        if (level > maxLevel) {
+          logger.warn(`Invalid compression level ${level}. Will use ${maxLevel}.`)
+          level = maxLevel
+        } else {
+          level |= 0
+        }
       }
     }
 
