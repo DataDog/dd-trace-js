@@ -37,7 +37,9 @@ const {
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
-  TEST_RETRY_REASON_TYPES
+  TEST_RETRY_REASON_TYPES,
+  TEST_IS_MODIFIED,
+  isModifiedTest
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -190,6 +192,19 @@ class MochaPlugin extends CiPlugin {
       }
 
       return ctx.currentStore
+    })
+
+    this.addSub('ci:mocha:test:is-modified', ({ modifiedTests, file, onDone }) => {
+      const testPath = getTestSuitePath(file, this.repositoryRoot)
+      const isModified = isModifiedTest(
+        testPath,
+        null,
+        null,
+        modifiedTests,
+        this.constructor.id
+      )
+
+      onDone(isModified)
     })
 
     this.addBind('ci:mocha:test:fn', (ctx) => {
@@ -466,7 +481,8 @@ class MochaPlugin extends CiPlugin {
       isParallel,
       isAttemptToFix,
       isDisabled,
-      isQuarantined
+      isQuarantined,
+      isModified
     } = testInfo
 
     const extraTags = {}
@@ -493,6 +509,14 @@ class MochaPlugin extends CiPlugin {
 
     if (isQuarantined) {
       extraTags[TEST_MANAGEMENT_IS_QUARANTINED] = 'true'
+    }
+
+    if (isModified) {
+      extraTags[TEST_IS_MODIFIED] = 'true'
+      if (isEfdRetry) {
+        extraTags[TEST_IS_RETRY] = 'true'
+        extraTags[TEST_RETRY_REASON] = 'early_flake_detection'
+      }
     }
 
     const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.sourceRoot)

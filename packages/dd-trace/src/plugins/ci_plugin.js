@@ -28,7 +28,10 @@ const {
   DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
   DI_DEBUG_ERROR_FILE_SUFFIX,
   DI_DEBUG_ERROR_LINE_SUFFIX,
-  getLibraryCapabilitiesTags
+  getLibraryCapabilitiesTags,
+  getPullRequestDiff,
+  getModifiedTestsFromDiff,
+  getPullRequestBaseBranch
 } = require('./util/test')
 const Plugin = require('./plugin')
 const { COMPONENT } = require('../constants')
@@ -45,7 +48,10 @@ const {
   GIT_COMMIT_SHA,
   GIT_BRANCH,
   CI_WORKSPACE_PATH,
-  GIT_COMMIT_MESSAGE
+  GIT_COMMIT_MESSAGE,
+  GIT_PULL_REQUEST_BASE_BRANCH_SHA,
+  GIT_COMMIT_HEAD_SHA,
+  GIT_PULL_REQUEST_BASE_BRANCH
 } = require('./util/tags')
 const { OS_VERSION, OS_PLATFORM, OS_ARCHITECTURE, RUNTIME_NAME, RUNTIME_VERSION } = require('./util/env')
 const getDiClient = require('../ci-visibility/dynamic-instrumentation')
@@ -207,6 +213,27 @@ module.exports = class CiPlugin extends Plugin {
         onDone({ err, testManagementTests })
       })
     })
+
+    this.addSub(`ci:${this.constructor.id}:modified-tests`, ({ onDone }) => {
+      const {
+        [GIT_PULL_REQUEST_BASE_BRANCH]: pullRequestBaseBranch,
+        [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseBranchSha,
+        [GIT_COMMIT_HEAD_SHA]: commitHeadSha
+      } = this.testEnvironmentMetadata
+
+      const baseBranchSha = pullRequestBaseBranchSha || getPullRequestBaseBranch(pullRequestBaseBranch)
+
+      if (baseBranchSha) {
+        const diff = getPullRequestDiff(baseBranchSha, commitHeadSha)
+        const modifiedTests = getModifiedTestsFromDiff(diff)
+        if (modifiedTests) {
+          return onDone({ err: null, modifiedTests })
+        }
+      }
+
+      // TODO: Add telemetry for this type of error
+      return onDone({ err: new Error('No modified tests could have been retrieved') })
+    })
   }
 
   get telemetry () {
@@ -253,7 +280,9 @@ module.exports = class CiPlugin extends Plugin {
       [GIT_BRANCH]: branch,
       [CI_PROVIDER_NAME]: ciProviderName,
       [CI_WORKSPACE_PATH]: repositoryRoot,
-      [GIT_COMMIT_MESSAGE]: commitMessage
+      [GIT_COMMIT_MESSAGE]: commitMessage,
+      [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseSha,
+      [GIT_COMMIT_HEAD_SHA]: commitHeadSha
     } = this.testEnvironmentMetadata
 
     this.repositoryRoot = repositoryRoot || process.cwd()
@@ -272,7 +301,9 @@ module.exports = class CiPlugin extends Plugin {
       runtimeVersion,
       branch,
       testLevel: 'suite',
-      commitMessage
+      commitMessage,
+      pullRequestBaseSha,
+      commitHeadSha
     }
   }
 
