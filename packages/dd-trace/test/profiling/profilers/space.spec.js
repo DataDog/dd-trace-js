@@ -34,14 +34,14 @@ describe('profilers/native/space', () => {
   })
 
   it('should use the provided configuration options', () => {
-    const samplingInterval = 1024
+    const heapSamplingInterval = 1024
     const stackDepth = 10
-    const profiler = new NativeSpaceProfiler({ samplingInterval, stackDepth })
+    const profiler = new NativeSpaceProfiler({ heapSamplingInterval, stackDepth })
 
     profiler.start()
 
     sinon.assert.calledOnce(pprof.heap.start)
-    sinon.assert.calledWith(pprof.heap.start, samplingInterval, stackDepth)
+    sinon.assert.calledWith(pprof.heap.start, heapSamplingInterval, stackDepth)
   })
 
   it('should stop the internal space profiler', () => {
