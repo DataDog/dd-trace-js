@@ -86,9 +86,6 @@ tracer.use('pg', {
 <h5 id="next"></h5>
 <h5 id="opensearch"></h5>
 <h5 id="oracledb"></h5>
-<h5 id="paperplane"></h5>
-<h5 id="paperplane-tags"></h5>
-<h5 id="paperplane-config"></h5>
 <h5 id="pino"></h5>
 <h5 id="pg"></h5>
 <h5 id="pg-tags"></h5>
@@ -148,7 +145,6 @@ tracer.use('pg', {
 * [opensearch](./interfaces/export_.plugins.opensearch.html)
 * [openai](./interfaces/export_.plugins.openai.html)
 * [oracledb](./interfaces/export_.plugins.oracledb.html)
-* [paperplane](./interfaces/export_.plugins.paperplane.html)
 * [pino](./interfaces/export_.plugins.pino.html)
 * [pg](./interfaces/export_.plugins.pg.html)
 * [promise](./interfaces/export_.plugins.promise.html)

@@ -5,24 +5,12 @@ const axios = require('axios')
 const agent = require('../../../plugins/agent')
 const os = require('os')
 const path = require('path')
-const semver = require('semver')
 const fs = require('fs')
 
 describe('nosql injection detection with mquery', () => {
   // https://github.com/fiznool/express-mongo-sanitize/issues/200
   withVersions('mquery', 'express', '>4.18.0 <5.0.0', expressVersion => {
     withVersions('mquery', 'mongodb', mongodbVersion => {
-      const mongodb = require(`../../../../../../versions/mongodb@${mongodbVersion}`)
-
-      const satisfiesNodeVersionForMongo3and4 =
-        (semver.satisfies(process.version, '<14.20.1') && semver.satisfies(mongodb.version(), '>=3.3 <5'))
-      const satisfiesNodeVersionForMongo5 =
-        (semver.satisfies(process.version, '>=14.20.1 <16.20.1') && semver.satisfies(mongodb.version(), '5'))
-      const satisfiesNodeVersionForMongo6 =
-        (semver.satisfies(process.version, '>=16.20.1') && semver.satisfies(mongodb.version(), '>=6'))
-
-      if (!satisfiesNodeVersionForMongo3and4 && !satisfiesNodeVersionForMongo5 && !satisfiesNodeVersionForMongo6) return
-
       const vulnerableMethodFilename = 'mquery-vulnerable-method.js'
       let client, testCollection, tmpFilePath, dbName
 

@@ -84,7 +84,6 @@ module.exports = {
   get nyc () { return require('../../../datadog-plugin-nyc/src') },
   get oracledb () { return require('../../../datadog-plugin-oracledb/src') },
   get openai () { return require('../../../datadog-plugin-openai/src') },
-  get paperplane () { return require('../../../datadog-plugin-paperplane/src') },
   get pg () { return require('../../../datadog-plugin-pg/src') },
   get pino () { return require('../../../datadog-plugin-pino/src') },
   get 'pino-pretty' () { return require('../../../datadog-plugin-pino/src') },
