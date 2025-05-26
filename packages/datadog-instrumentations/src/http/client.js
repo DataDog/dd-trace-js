@@ -3,6 +3,7 @@
 /* eslint-disable no-fallthrough */
 
 const url = require('url')
+const { errorMonitor } = require('events')
 const { channel, addHook } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 
@@ -88,7 +89,7 @@ function patch (http, methodName) {
                 const res = arg
                 ctx.res = res
                 res.on('end', finish)
-                res.on('error', finish)
+                res.on(errorMonitor, finish)
                 break
               }
               case 'connect':
@@ -143,29 +144,23 @@ function patch (http, methodName) {
   }
 
   function combineOptions (inputURL, inputOptions) {
-    if (inputOptions !== null && typeof inputOptions === 'object') {
-      return Object.assign(inputURL || {}, inputOptions)
-    } else {
-      return inputURL
-    }
+    return inputOptions !== null && typeof inputOptions === 'object'
+      ? Object.assign(inputURL || {}, inputOptions)
+      : inputURL
   }
   function normalizeHeaders (options) {
     options.headers = options.headers || {}
   }
 
   function normalizeCallback (inputOptions, callback, inputURL) {
-    if (typeof inputOptions === 'function') {
-      return [inputOptions, inputURL || {}]
-    } else {
-      return [callback, inputOptions]
-    }
+    return typeof inputOptions === 'function' ? [inputOptions, inputURL || {}] : [callback, inputOptions]
   }
 
   function normalizeOptions (inputURL) {
     if (typeof inputURL === 'string') {
       try {
         return urlToOptions(new url.URL(inputURL))
-      } catch (e) {
+      } catch {
         // eslint-disable-next-line n/no-deprecated-api
         return url.parse(inputURL)
       }

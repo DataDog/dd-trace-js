@@ -94,13 +94,9 @@ function getRangesFromYaml (job) {
     if (job.strategy.matrix.include) {
       possibilities.push(...job.strategy.matrix.include)
     }
-    return possibilities.map(possibility => {
-      if (possibility.range) {
-        return [possibility.range].flat()
-      } else {
-        return undefined
-      }
-    }).flat()
+    return possibilities.flatMap(possibility => {
+      return [possibility.range]?.flat()
+    })
   }
 
   return null
@@ -166,6 +162,7 @@ const IGNORED_WORKFLOWS = {
     'release-dev.yml',
     'release-latest.yml',
     'release-proposal.yml',
+    'release-validate.yml',
     'codeql-analysis.yml',
     'pr-labels.yml'
   ],

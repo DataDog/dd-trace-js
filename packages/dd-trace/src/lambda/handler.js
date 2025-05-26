@@ -25,7 +25,7 @@ let __lambdaTimeout
 function checkTimeout (context) {
   const remainingTimeInMillis = context.getRemainingTimeInMillis()
 
-  let apmFlushDeadline = parseInt(process.env.DD_APM_FLUSH_DEADLINE_MILLISECONDS) || 100
+  let apmFlushDeadline = Number.parseInt(process.env.DD_APM_FLUSH_DEADLINE_MILLISECONDS) || 100
   apmFlushDeadline = apmFlushDeadline < 0 ? 100 : apmFlushDeadline
 
   __lambdaTimeout = setTimeout(() => {
@@ -70,7 +70,7 @@ function extractContext (args) {
   if (context === undefined || context.getRemainingTimeInMillis === undefined) {
     context = args.length > 2 ? args[2] : undefined
     if (context === undefined || context.getRemainingTimeInMillis === undefined) {
-      throw Error('Could not extract context')
+      throw new Error('Could not extract context')
     }
   }
   return context

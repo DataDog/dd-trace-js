@@ -325,7 +325,7 @@ describe('WAF Manager', () => {
 
         wafContextWrapper.run(params)
 
-        expect(Reporter.reportAttack).to.be.calledOnceWithExactly('["ATTACK DATA"]')
+        expect(Reporter.reportAttack).to.be.calledOnceWithExactly(['ATTACK DATA'])
       })
 
       it('should report if rule is triggered', () => {
@@ -414,9 +414,11 @@ describe('WAF Manager', () => {
         expect(Reporter.reportAttack).not.to.be.called
       })
 
-      it('should return the actions', () => {
-        const actions = ['block']
-        ddwafContext.run.returns({ totalRuntime: 1, durationExt: 1, events: [], actions })
+      it('should return waf result', () => {
+        const result = {
+          totalRuntime: 1, durationExt: 1, events: [], actions: ['block']
+        }
+        ddwafContext.run.returns(result)
 
         const params = {
           persistent: {
@@ -424,9 +426,9 @@ describe('WAF Manager', () => {
           }
         }
 
-        const result = wafContextWrapper.run(params)
+        const wafResult = wafContextWrapper.run(params)
 
-        expect(result).to.be.equals(actions)
+        expect(wafResult).to.be.equals(result)
       })
 
       it('should report schemas when ddwafContext returns schemas in the derivatives', () => {

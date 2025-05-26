@@ -24,7 +24,7 @@ const urlFilter = {
         return filter(uri)
       } else if (filter instanceof RegExp) {
         return filter.test(uri)
-      } else if (filter instanceof Array) {
+      } else if (Array.isArray(filter)) {
         return filter.some(filter => applyFilter(filter, uri))
       }
 

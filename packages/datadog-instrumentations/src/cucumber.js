@@ -8,6 +8,7 @@ const log = require('../../dd-trace/src/log')
 const testStartCh = channel('ci:cucumber:test:start')
 const testRetryCh = channel('ci:cucumber:test:retry')
 const testFinishCh = channel('ci:cucumber:test:finish') // used for test steps too
+const testFnCh = channel('ci:cucumber:test:fn')
 
 const testStepStartCh = channel('ci:cucumber:test-step:start')
 
@@ -41,7 +42,7 @@ const {
 } = require('../../dd-trace/src/plugins/util/test')
 
 const isMarkedAsUnskippable = (pickle) => {
-  return !!pickle.tags.find(tag => tag.name === '@datadog:unskippable')
+  return pickle.tags.some(tag => tag.name === '@datadog:unskippable')
 }
 
 // We'll preserve the original coverage here
@@ -52,7 +53,7 @@ const patched = new WeakSet()
 
 const lastStatusByPickleId = new Map()
 const numRetriesByPickleId = new Map()
-const numAttemptToAsyncResource = new Map()
+const numAttemptToCtx = new Map()
 const newTestsByTestFullname = new Map()
 
 let eventDataCollector = null
@@ -81,7 +82,7 @@ let skippedSuites = []
 let isSuitesSkipped = false
 
 function getSuiteStatusFromTestStatuses (testStatuses) {
-  if (testStatuses.some(status => status === 'fail')) {
+  if (testStatuses.includes('fail')) {
     return 'fail'
   }
   if (testStatuses.every(status => status === 'skip')) {
@@ -132,7 +133,7 @@ function getTestStatusFromRetries (testStatuses) {
   if (testStatuses.every(status => status === 'fail')) {
     return 'fail'
   }
-  if (testStatuses.some(status => status === 'pass')) {
+  if (testStatuses.includes('pass')) {
     return 'pass'
   }
   return 'pass'
@@ -227,15 +228,11 @@ function wrapRun (pl, isLatestVersion) {
   patched.add(pl)
 
   shimmer.wrap(pl.prototype, 'run', run => function () {
-    if (!testStartCh.hasSubscribers) {
+    if (!testFinishCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
 
     let numAttempt = 0
-
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-
-    numAttemptToAsyncResource.set(numAttempt, asyncResource)
 
     const testFileAbsolutePath = this.pickle.uri
 
@@ -247,9 +244,9 @@ function wrapRun (pl, isLatestVersion) {
       testSourceLine,
       isParallel: !!process.env.CUCUMBER_WORKER_ID
     }
-    asyncResource.runInAsyncScope(() => {
-      testStartCh.publish(testStartPayload)
-    })
+    const ctx = testStartPayload
+    numAttemptToCtx.set(numAttempt, ctx)
+    testStartCh.runStores(ctx, () => {})
     const promises = {}
     try {
       this.eventBroadcaster.on('envelope', shimmer.wrapFunction(null, () => async (testCase) => {
@@ -261,11 +258,11 @@ function wrapRun (pl, isLatestVersion) {
             try {
               const cucumberResult = this.getWorstStepResult()
               error = getErrorFromCucumberResult(cucumberResult)
-            } catch (e) {
+            } catch {
               // ignore error
             }
 
-            const failedAttemptAsyncResource = numAttemptToAsyncResource.get(numAttempt)
+            const failedAttemptCtx = numAttemptToCtx.get(numAttempt)
             const isFirstAttempt = numAttempt++ === 0
             const isAtrRetry = !isFirstAttempt && isFlakyTestRetriesEnabled
 
@@ -273,23 +270,19 @@ function wrapRun (pl, isLatestVersion) {
               await promises.hitBreakpointPromise
             }
 
-            failedAttemptAsyncResource.runInAsyncScope(() => {
-              // the current span will be finished and a new one will be created
-              testRetryCh.publish({ isFirstAttempt, error, isAtrRetry })
-            })
+            // the current span will be finished and a new one will be created
+            testRetryCh.publish({ isFirstAttempt, error, isAtrRetry, ...failedAttemptCtx.currentStore })
 
-            const newAsyncResource = new AsyncResource('bound-anonymous-fn')
-            numAttemptToAsyncResource.set(numAttempt, newAsyncResource)
+            const newCtx = { ...testStartPayload, promises }
+            numAttemptToCtx.set(numAttempt, newCtx)
 
-            newAsyncResource.runInAsyncScope(() => {
-              testStartCh.publish({ ...testStartPayload, promises }) // a new span will be created
-            })
+            testStartCh.runStores(newCtx, () => {})
           }
         }
       }))
       let promise
 
-      asyncResource.runInAsyncScope(() => {
+      testFnCh.runStores(ctx, () => {
         promise = run.apply(this, arguments)
       })
       promise.finally(async () => {
@@ -309,6 +302,7 @@ function wrapRun (pl, isLatestVersion) {
         let isAttemptToFixRetry = false
         let hasFailedAllRetries = false
         let hasPassedAllRetries = false
+        let hasFailedAttemptToFix = false
         let isDisabled = false
         let isQuarantined = false
 
@@ -330,6 +324,7 @@ function wrapRun (pl, isLatestVersion) {
               }, { pass: 0, fail: 0 })
               hasFailedAllRetries = fail === testManagementAttemptToFixRetries + 1
               hasPassedAllRetries = pass === testManagementAttemptToFixRetries + 1
+              hasFailedAttemptToFix = fail > 0
             }
           }
         }
@@ -341,38 +336,40 @@ function wrapRun (pl, isLatestVersion) {
           isEfdRetry = numRetries > 0
         }
 
-        const attemptAsyncResource = numAttemptToAsyncResource.get(numAttempt)
+        const attemptCtx = numAttemptToCtx.get(numAttempt)
 
         const error = getErrorFromCucumberResult(result)
 
         if (promises.hitBreakpointPromise) {
           await promises.hitBreakpointPromise
         }
-        attemptAsyncResource.runInAsyncScope(() => {
-          testFinishCh.publish({
-            status,
-            skipReason,
-            error,
-            isNew,
-            isEfdRetry,
-            isFlakyRetry: numAttempt > 0,
-            isAttemptToFix,
-            isAttemptToFixRetry,
-            hasFailedAllRetries,
-            hasPassedAllRetries,
-            isDisabled,
-            isQuarantined
-          })
+        testFinishCh.publish({
+          status,
+          skipReason,
+          error,
+          isNew,
+          isEfdRetry,
+          isFlakyRetry: numAttempt > 0,
+          isAttemptToFix,
+          isAttemptToFixRetry,
+          hasFailedAllRetries,
+          hasPassedAllRetries,
+          hasFailedAttemptToFix,
+          isDisabled,
+          isQuarantined,
+          ...attemptCtx.currentStore
         })
       })
       return promise
     } catch (err) {
-      errorCh.publish(err)
-      throw err
+      ctx.err = err
+      errorCh.runStores(ctx, () => {
+        throw err
+      })
     }
   })
   shimmer.wrap(pl.prototype, 'runStep', runStep => function () {
-    if (!testStepStartCh.hasSubscribers) {
+    if (!testFinishCh.hasSubscribers) {
       return runStep.apply(this, arguments)
     }
     const testStep = arguments[0]
@@ -384,9 +381,8 @@ function wrapRun (pl, isLatestVersion) {
       resource = testStep.isHook ? 'hook' : testStep.pickleStep.text
     }
 
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-    return asyncResource.runInAsyncScope(() => {
-      testStepStartCh.publish({ resource })
+    const ctx = { resource }
+    return testStepStartCh.runStores(ctx, () => {
       try {
         const promise = runStep.apply(this, arguments)
 
@@ -395,12 +391,14 @@ function wrapRun (pl, isLatestVersion) {
             ? getStatusFromResultLatest(result)
             : getStatusFromResult(result)
 
-          testFinishCh.publish({ isStep: true, status, skipReason, errorMessage })
+          testFinishCh.publish({ isStep: true, status, skipReason, errorMessage, ...ctx.currentStore })
         })
         return promise
       } catch (err) {
-        errorCh.publish(err)
-        throw err
+        ctx.err = err
+        errorCh.runStores(ctx, () => {
+          throw err
+        })
       }
     })
   })
@@ -549,7 +547,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
           originalCoverageMap.merge(fromCoverageMapToCoverage(untestedCoverage))
         }
         testCodeCoverageLinesTotal = originalCoverageMap.getCoverageSummary().lines.pct
-      } catch (e) {
+      } catch {
         // ignore errors
       }
       // restore the original coverage
@@ -579,12 +577,9 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
 // Handles EFD in both the main process and the worker process.
 function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = false, isWorker = false) {
   return async function () {
-    let pickle
-    if (isNewerCucumberVersion) {
-      pickle = arguments[0].pickle
-    } else {
-      pickle = this.eventDataCollector.getPickle(arguments[0])
-    }
+    const pickle = isNewerCucumberVersion
+      ? arguments[0].pickle
+      : this.eventDataCollector.getPickle(arguments[0])
 
     const testFileAbsolutePath = pickle.uri
     const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())
@@ -628,7 +623,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     let runTestCaseResult = await runTestCaseFunction.apply(this, arguments)
 
     const testStatuses = lastStatusByPickleId.get(pickle.id)
-    const lastTestStatus = testStatuses[testStatuses.length - 1]
+    const lastTestStatus = testStatuses.at(-1)
 
     // New tests should not be marked as attempt to fix, so EFD + Attempt to fix should not be enabled at the same time
     if (isAttemptToFix && lastTestStatus !== 'skip') {
@@ -723,13 +718,7 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
       }
     }
 
-    let envelope
-
-    if (isNewVersion) {
-      envelope = message.envelope
-    } else {
-      envelope = message.jsonEnvelope
-    }
+    const envelope = isNewVersion ? message.envelope : message.jsonEnvelope
 
     if (!envelope) {
       return parseWorkerMessageFunction.apply(this, arguments)
@@ -739,7 +728,7 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
     if (typeof parsed === 'string') {
       try {
         parsed = JSON.parse(envelope)
-      } catch (e) {
+      } catch {
         // ignore errors and continue
         return parseWorkerMessageFunction.apply(this, arguments)
       }

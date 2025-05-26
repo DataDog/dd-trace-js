@@ -48,10 +48,11 @@ const {
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
+const { DD_MAJOR } = require('../../version')
 
 const NUM_RETRIES_EFD = 3
 
-const versions = ['1.18.0', 'latest']
+const versions = [DD_MAJOR >= 6 ? '1.38.0' : '1.18.0', 'latest']
 
 versions.forEach((version) => {
   describe(`playwright@${version}`, () => {
@@ -281,339 +282,337 @@ versions.forEach((version) => {
       )
     })
 
-    if (version === 'latest') {
-      context('early flake detection', () => {
-        it('retries new tests', (done) => {
-          receiver.setSettings({
-            early_flake_detection: {
-              enabled: true,
-              slow_test_retries: {
-                '5s': NUM_RETRIES_EFD
-              }
-            },
-            known_tests_enabled: true
-          })
-
-          receiver.setKnownTests(
-            {
-              playwright: {
-                'landing-page-test.js': [
-                  // it will be considered new
-                  // 'highest-level-describe  leading and trailing spaces    should work with passing tests',
-                  'highest-level-describe  leading and trailing spaces    should work with skipped tests',
-                  'highest-level-describe  leading and trailing spaces    should work with fixme',
-                  'highest-level-describe  leading and trailing spaces    should work with annotated tests'
-                ],
-                'skipped-suite-test.js': [
-                  'should work with fixme root'
-                ],
-                'todo-list-page-test.js': [
-                  'playwright should work with failing tests',
-                  'should work with fixme root'
-                ]
-              }
+    context('early flake detection', () => {
+      it('retries new tests', (done) => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD
             }
-          )
-
-          const receiverPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-
-              const testSession = events.find(event => event.type === 'test_session_end').content
-              assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
-
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
-              const newTests = tests.filter(test =>
-                test.resource.endsWith('should work with passing tests')
-              )
-              newTests.forEach(test => {
-                assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
-              })
-
-              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-
-              assert.equal(retriedTests.length, NUM_RETRIES_EFD)
-
-              retriedTests.forEach(test => {
-                assert.propertyVal(test.meta, TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
-              })
-
-              // all but one has been retried
-              assert.equal(retriedTests.length, newTests.length - 1)
-            })
-
-          childProcess = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                PW_BASE_URL: `http://localhost:${webAppPort}`
-              },
-              stdio: 'pipe'
-            }
-          )
-
-          childProcess.on('exit', () => {
-            receiverPromise.then(() => done()).catch(done)
-          })
+          },
+          known_tests_enabled: true
         })
 
-        it('is disabled if DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED is false', (done) => {
-          receiver.setSettings({
-            early_flake_detection: {
-              enabled: true,
-              slow_test_retries: {
-                '5s': NUM_RETRIES_EFD
-              }
-            },
-            known_tests_enabled: true
-          })
-
-          receiver.setKnownTests(
-            {
-              playwright: {
-                'landing-page-test.js': [
-                  // it will be considered new
-                  // 'highest-level-describe  leading and trailing spaces    should work with passing tests',
-                  'highest-level-describe  leading and trailing spaces    should work with skipped tests',
-                  'highest-level-describe  leading and trailing spaces    should work with fixme',
-                  'highest-level-describe  leading and trailing spaces    should work with annotated tests'
-                ],
-                'skipped-suite-test.js': [
-                  'should work with fixme root'
-                ],
-                'todo-list-page-test.js': [
-                  'playwright should work with failing tests',
-                  'should work with fixme root'
-                ]
-              }
+        receiver.setKnownTests(
+          {
+            playwright: {
+              'landing-page-test.js': [
+                // it will be considered new
+                // 'highest-level-describe  leading and trailing spaces    should work with passing tests',
+                'highest-level-describe  leading and trailing spaces    should work with skipped tests',
+                'highest-level-describe  leading and trailing spaces    should work with fixme',
+                'highest-level-describe  leading and trailing spaces    should work with annotated tests'
+              ],
+              'skipped-suite-test.js': [
+                'should work with fixme root'
+              ],
+              'todo-list-page-test.js': [
+                'playwright should work with failing tests',
+                'should work with fixme root'
+              ]
             }
-          )
+          }
+        )
 
-          const receiverPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
 
-              const newTests = tests.filter(test =>
-                test.resource.endsWith('should work with passing tests')
-              )
-              // new tests are detected but not retried
-              newTests.forEach(test => {
-                assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
-              })
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
 
-              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-              assert.equal(retriedTests.length, 0)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const newTests = tests.filter(test =>
+              test.resource.endsWith('should work with passing tests')
+            )
+            newTests.forEach(test => {
+              assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
             })
 
-          childProcess = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                PW_BASE_URL: `http://localhost:${webAppPort}`,
-                DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false'
-              },
-              stdio: 'pipe'
-            }
-          )
+            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
 
-          childProcess.on('exit', () => {
-            receiverPromise.then(() => done()).catch(done)
-          })
-        })
+            assert.equal(retriedTests.length, NUM_RETRIES_EFD)
 
-        it('does not retry tests that are skipped', (done) => {
-          receiver.setSettings({
-            early_flake_detection: {
-              enabled: true,
-              slow_test_retries: {
-                '5s': NUM_RETRIES_EFD
-              }
-            },
-            known_tests_enabled: true
-          })
-
-          receiver.setKnownTests(
-            {
-              playwright: {
-                'landing-page-test.js': [
-                  'highest-level-describe  leading and trailing spaces    should work with passing tests',
-                  // new but not retried because it's skipped
-                  // 'highest-level-describe  leading and trailing spaces    should work with skipped tests',
-                  // new but not retried because it's skipped
-                  // 'highest-level-describe  leading and trailing spaces    should work with fixme',
-                  'highest-level-describe  leading and trailing spaces    should work with annotated tests'
-                ],
-                'skipped-suite-test.js': [
-                  'should work with fixme root'
-                ],
-                'todo-list-page-test.js': [
-                  'playwright should work with failing tests',
-                  'should work with fixme root'
-                ]
-              }
-            }
-          )
-
-          const receiverPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-              const newTests = tests.filter(test =>
-                test.resource.endsWith('should work with skipped tests') ||
-                test.resource.endsWith('should work with fixme')
-              )
-              // no retries
-              assert.equal(newTests.length, 2)
-              newTests.forEach(test => {
-                assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
-              })
-
-              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-
-              assert.equal(retriedTests.length, 0)
+            retriedTests.forEach(test => {
+              assert.propertyVal(test.meta, TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
             })
 
-          childProcess = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                PW_BASE_URL: `http://localhost:${webAppPort}`
-              },
-              stdio: 'pipe'
-            }
-          )
-
-          childProcess.on('exit', () => {
-            receiverPromise.then(() => done()).catch(done)
+            // all but one has been retried
+            assert.equal(retriedTests.length, newTests.length - 1)
           })
-        })
 
-        it('does not run EFD if the known tests request fails', (done) => {
-          receiver.setSettings({
-            early_flake_detection: {
-              enabled: true,
-              slow_test_retries: {
-                '5s': NUM_RETRIES_EFD
-              }
+        childProcess = exec(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`
             },
-            known_tests_enabled: true
-          })
+            stdio: 'pipe'
+          }
+        )
 
-          receiver.setKnownTestsResponseCode(500)
-          receiver.setKnownTests({})
-
-          const receiverPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-              assert.equal(tests.length, 7)
-              const testSession = events.find(event => event.type === 'test_session_end').content
-              assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
-
-              const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
-              assert.equal(newTests.length, 0)
-
-              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-              assert.equal(retriedTests.length, 0)
-            })
-
-          childProcess = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                PW_BASE_URL: `http://localhost:${webAppPort}`
-              },
-              stdio: 'pipe'
-            }
-          )
-
-          childProcess.on('exit', () => {
-            receiverPromise
-              .then(() => done())
-              .catch(done)
-          })
-        })
-
-        it('disables early flake detection if known tests should not be requested', (done) => {
-          receiver.setSettings({
-            early_flake_detection: {
-              enabled: true,
-              slow_test_retries: {
-                '5s': NUM_RETRIES_EFD
-              }
-            },
-            known_tests_enabled: false
-          })
-
-          receiver.setKnownTests(
-            {
-              playwright: {
-                'landing-page-test.js': [
-                  // it will be considered new
-                  // 'highest-level-describe  leading and trailing spaces    should work with passing tests',
-                  'highest-level-describe  leading and trailing spaces    should work with skipped tests',
-                  'highest-level-describe  leading and trailing spaces    should work with fixme',
-                  'highest-level-describe  leading and trailing spaces    should work with annotated tests'
-                ],
-                'skipped-suite-test.js': [
-                  'should work with fixme root'
-                ],
-                'todo-list-page-test.js': [
-                  'playwright should work with failing tests',
-                  'should work with fixme root'
-                ]
-              }
-            }
-          )
-
-          const receiverPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-
-              const testSession = events.find(event => event.type === 'test_session_end').content
-              assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
-
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
-              const newTests = tests.filter(test =>
-                test.resource.endsWith('should work with passing tests')
-              )
-              newTests.forEach(test => {
-                assert.notProperty(test.meta, TEST_IS_NEW)
-              })
-
-              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-              assert.equal(retriedTests.length, 0)
-            })
-
-          childProcess = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                PW_BASE_URL: `http://localhost:${webAppPort}`
-              },
-              stdio: 'pipe'
-            }
-          )
-
-          childProcess.on('exit', () => {
-            receiverPromise.then(() => done()).catch(done)
-          })
+        childProcess.on('exit', () => {
+          receiverPromise.then(() => done()).catch(done)
         })
       })
-    }
+
+      it('is disabled if DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED is false', (done) => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD
+            }
+          },
+          known_tests_enabled: true
+        })
+
+        receiver.setKnownTests(
+          {
+            playwright: {
+              'landing-page-test.js': [
+                // it will be considered new
+                // 'highest-level-describe  leading and trailing spaces    should work with passing tests',
+                'highest-level-describe  leading and trailing spaces    should work with skipped tests',
+                'highest-level-describe  leading and trailing spaces    should work with fixme',
+                'highest-level-describe  leading and trailing spaces    should work with annotated tests'
+              ],
+              'skipped-suite-test.js': [
+                'should work with fixme root'
+              ],
+              'todo-list-page-test.js': [
+                'playwright should work with failing tests',
+                'should work with fixme root'
+              ]
+            }
+          }
+        )
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            const newTests = tests.filter(test =>
+              test.resource.endsWith('should work with passing tests')
+            )
+            // new tests are detected but not retried
+            newTests.forEach(test => {
+              assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
+            })
+
+            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.equal(retriedTests.length, 0)
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false'
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          receiverPromise.then(() => done()).catch(done)
+        })
+      })
+
+      it('does not retry tests that are skipped', (done) => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD
+            }
+          },
+          known_tests_enabled: true
+        })
+
+        receiver.setKnownTests(
+          {
+            playwright: {
+              'landing-page-test.js': [
+                'highest-level-describe  leading and trailing spaces    should work with passing tests',
+                // new but not retried because it's skipped
+                // 'highest-level-describe  leading and trailing spaces    should work with skipped tests',
+                // new but not retried because it's skipped
+                // 'highest-level-describe  leading and trailing spaces    should work with fixme',
+                'highest-level-describe  leading and trailing spaces    should work with annotated tests'
+              ],
+              'skipped-suite-test.js': [
+                'should work with fixme root'
+              ],
+              'todo-list-page-test.js': [
+                'playwright should work with failing tests',
+                'should work with fixme root'
+              ]
+            }
+          }
+        )
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            const newTests = tests.filter(test =>
+              test.resource.endsWith('should work with skipped tests') ||
+              test.resource.endsWith('should work with fixme')
+            )
+            // no retries
+            assert.equal(newTests.length, 2)
+            newTests.forEach(test => {
+              assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
+            })
+
+            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+
+            assert.equal(retriedTests.length, 0)
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          receiverPromise.then(() => done()).catch(done)
+        })
+      })
+
+      it('does not run EFD if the known tests request fails', (done) => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD
+            }
+          },
+          known_tests_enabled: true
+        })
+
+        receiver.setKnownTestsResponseCode(500)
+        receiver.setKnownTests({})
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            assert.equal(tests.length, 7)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
+
+            const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+            assert.equal(newTests.length, 0)
+
+            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.equal(retriedTests.length, 0)
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          receiverPromise
+            .then(() => done())
+            .catch(done)
+        })
+      })
+
+      it('disables early flake detection if known tests should not be requested', (done) => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD
+            }
+          },
+          known_tests_enabled: false
+        })
+
+        receiver.setKnownTests(
+          {
+            playwright: {
+              'landing-page-test.js': [
+                // it will be considered new
+                // 'highest-level-describe  leading and trailing spaces    should work with passing tests',
+                'highest-level-describe  leading and trailing spaces    should work with skipped tests',
+                'highest-level-describe  leading and trailing spaces    should work with fixme',
+                'highest-level-describe  leading and trailing spaces    should work with annotated tests'
+              ],
+              'skipped-suite-test.js': [
+                'should work with fixme root'
+              ],
+              'todo-list-page-test.js': [
+                'playwright should work with failing tests',
+                'should work with fixme root'
+              ]
+            }
+          }
+        )
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
+
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const newTests = tests.filter(test =>
+              test.resource.endsWith('should work with passing tests')
+            )
+            newTests.forEach(test => {
+              assert.notProperty(test.meta, TEST_IS_NEW)
+            })
+
+            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.equal(retriedTests.length, 0)
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          receiverPromise.then(() => done()).catch(done)
+        })
+      })
+    })
 
     it('does not crash when maxFailures=1 and there is an error', (done) => {
       receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('citestcycle'), payloads => {
@@ -821,72 +820,70 @@ versions.forEach((version) => {
       })
     })
 
-    if (version === 'latest') {
-      context('known tests without early flake detection', () => {
-        it('detects new tests without retrying them', (done) => {
-          receiver.setSettings({
-            known_tests_enabled: true
-          })
+    context('known tests without early flake detection', () => {
+      it('detects new tests without retrying them', (done) => {
+        receiver.setSettings({
+          known_tests_enabled: true
+        })
 
-          receiver.setKnownTests(
-            {
-              playwright: {
-                'landing-page-test.js': [
-                  // it will be considered new
-                  // 'highest-level-describe  leading and trailing spaces    should work with passing tests',
-                  'highest-level-describe  leading and trailing spaces    should work with skipped tests',
-                  'highest-level-describe  leading and trailing spaces    should work with fixme',
-                  'highest-level-describe  leading and trailing spaces    should work with annotated tests'
-                ],
-                'skipped-suite-test.js': [
-                  'should work with fixme root'
-                ],
-                'todo-list-page-test.js': [
-                  'playwright should work with failing tests',
-                  'should work with fixme root'
-                ]
-              }
+        receiver.setKnownTests(
+          {
+            playwright: {
+              'landing-page-test.js': [
+                // it will be considered new
+                // 'highest-level-describe  leading and trailing spaces    should work with passing tests',
+                'highest-level-describe  leading and trailing spaces    should work with skipped tests',
+                'highest-level-describe  leading and trailing spaces    should work with fixme',
+                'highest-level-describe  leading and trailing spaces    should work with annotated tests'
+              ],
+              'skipped-suite-test.js': [
+                'should work with fixme root'
+              ],
+              'todo-list-page-test.js': [
+                'playwright should work with failing tests',
+                'should work with fixme root'
+              ]
             }
-          )
+          }
+        )
 
-          const receiverPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
 
-              const testSession = events.find(event => event.type === 'test_session_end').content
-              assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
 
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
-              const newTests = tests.filter(test =>
-                test.resource.endsWith('should work with passing tests')
-              )
-              // new tests detected but no retries
-              newTests.forEach(test => {
-                assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
-              })
-
-              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-              assert.equal(retriedTests.length, 0)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const newTests = tests.filter(test =>
+              test.resource.endsWith('should work with passing tests')
+            )
+            // new tests detected but no retries
+            newTests.forEach(test => {
+              assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
             })
 
-          childProcess = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                PW_BASE_URL: `http://localhost:${webAppPort}`
-              },
-              stdio: 'pipe'
-            }
-          )
-
-          childProcess.on('exit', () => {
-            receiverPromise.then(() => done()).catch(done)
+            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.equal(retriedTests.length, 0)
           })
+
+        childProcess = exec(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          receiverPromise.then(() => done()).catch(done)
         })
       })
-    }
+    })
 
     it('sets _dd.test.is_user_provided_service to true if DD_SERVICE is used', (done) => {
       const receiverPromise = receiver
@@ -917,412 +914,417 @@ versions.forEach((version) => {
       })
     })
 
-    if (version === 'latest') {
-      context('test management', () => {
-        context('attempt to fix', () => {
-          beforeEach(() => {
-            receiver.setTestManagementTests({
-              playwright: {
-                suites: {
-                  'attempt-to-fix-test.js': {
-                    tests: {
-                      'attempt to fix should attempt to fix failed test': {
-                        properties: {
-                          attempt_to_fix: true
-                        }
+    context('test management', () => {
+      context('attempt to fix', () => {
+        beforeEach(() => {
+          receiver.setTestManagementTests({
+            playwright: {
+              suites: {
+                'attempt-to-fix-test.js': {
+                  tests: {
+                    'attempt to fix should attempt to fix failed test': {
+                      properties: {
+                        attempt_to_fix: true
                       }
                     }
                   }
                 }
               }
-            })
+            }
           })
+        })
 
-          const getTestAssertions = ({
+        const getTestAssertions = ({
+          isAttemptingToFix,
+          shouldAlwaysPass,
+          shouldFailSometimes,
+          isDisabled,
+          isQuarantined
+        }) =>
+          receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+
+              if (isAttemptingToFix) {
+                assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
+              } else {
+                assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+              }
+
+              const attemptedToFixTests = tests.filter(
+                test => test.meta[TEST_NAME] === 'attempt to fix should attempt to fix failed test'
+              )
+
+              if (isAttemptingToFix) {
+                assert.equal(attemptedToFixTests.length, 4)
+              } else {
+                assert.equal(attemptedToFixTests.length, 1)
+              }
+
+              if (isDisabled) {
+                const numDisabledTests = attemptedToFixTests.filter(test =>
+                  test.meta[TEST_MANAGEMENT_IS_DISABLED] === 'true'
+                ).length
+                assert.equal(numDisabledTests, attemptedToFixTests.length)
+              }
+
+              if (isQuarantined) {
+                const numQuarantinedTests = attemptedToFixTests.filter(test =>
+                  test.meta[TEST_MANAGEMENT_IS_QUARANTINED] === 'true'
+                ).length
+                assert.equal(numQuarantinedTests, attemptedToFixTests.length)
+              }
+
+              // Retried tests are in randomly order, so we just count number of tests
+              const countAttemptToFixTests = attemptedToFixTests.filter(test =>
+                test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true'
+              ).length
+
+              const countRetriedAttemptToFixTests = attemptedToFixTests.filter(test =>
+                test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true' &&
+                test.meta[TEST_IS_RETRY] === 'true' &&
+                test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atf
+              ).length
+
+              const testsMarkedAsFailedAllRetries = attemptedToFixTests.filter(test =>
+                test.meta[TEST_HAS_FAILED_ALL_RETRIES] === 'true'
+              ).length
+
+              const testsMarkedAsPassedAllRetries = attemptedToFixTests.filter(test =>
+                test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED] === 'true'
+              ).length
+
+              const testsMarkedAsFailed = attemptedToFixTests.filter(test =>
+                test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED] === 'false'
+              ).length
+
+              if (isAttemptingToFix) {
+                assert.equal(countAttemptToFixTests, attemptedToFixTests.length)
+                assert.equal(countRetriedAttemptToFixTests, attemptedToFixTests.length - 1)
+                if (shouldAlwaysPass) {
+                  assert.equal(testsMarkedAsFailedAllRetries, 0)
+                  assert.equal(testsMarkedAsFailed, 0)
+                  assert.equal(testsMarkedAsPassedAllRetries, 1)
+                } else if (shouldFailSometimes) {
+                  assert.equal(testsMarkedAsFailedAllRetries, 0)
+                  assert.equal(testsMarkedAsFailed, 1)
+                  assert.equal(testsMarkedAsPassedAllRetries, 0)
+                } else { // always fail
+                  assert.equal(testsMarkedAsFailedAllRetries, 1)
+                  assert.equal(testsMarkedAsFailed, 1)
+                  assert.equal(testsMarkedAsPassedAllRetries, 0)
+                }
+              } else {
+                assert.equal(countAttemptToFixTests, 0)
+                assert.equal(countRetriedAttemptToFixTests, 0)
+                assert.equal(testsMarkedAsFailedAllRetries, 0)
+                assert.equal(testsMarkedAsPassedAllRetries, 0)
+              }
+            })
+
+        const runAttemptToFixTest = (done, {
+          isAttemptingToFix,
+          isQuarantined,
+          extraEnvVars,
+          shouldAlwaysPass,
+          shouldFailSometimes,
+          isDisabled
+        } = {}) => {
+          const testAssertionsPromise = getTestAssertions({
             isAttemptingToFix,
             shouldAlwaysPass,
             shouldFailSometimes,
             isDisabled,
             isQuarantined
-          }) =>
-            receiver
-              .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-                const events = payloads.flatMap(({ payload }) => payload.events)
-                const tests = events.filter(event => event.type === 'test').map(event => event.content)
-                const testSession = events.find(event => event.type === 'test_session_end').content
+          })
 
-                if (isAttemptingToFix) {
-                  assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
-                } else {
-                  assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
-                }
+          childProcess = exec(
+            './node_modules/.bin/playwright test -c playwright.config.js attempt-to-fix-test.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PW_BASE_URL: `http://localhost:${webAppPort}`,
+                TEST_DIR: './ci-visibility/playwright-tests-test-management',
+                ...(shouldAlwaysPass ? { SHOULD_ALWAYS_PASS: '1' } : {}),
+                ...(shouldFailSometimes ? { SHOULD_FAIL_SOMETIMES: '1' } : {}),
+                ...extraEnvVars
+              },
+              stdio: 'pipe'
+            }
+          )
 
-                const attemptedToFixTests = tests.filter(
-                  test => test.meta[TEST_NAME] === 'attempt to fix should attempt to fix failed test'
-                )
-
-                if (isAttemptingToFix) {
-                  assert.equal(attemptedToFixTests.length, 4)
-                } else {
-                  assert.equal(attemptedToFixTests.length, 1)
-                }
-
-                if (isDisabled) {
-                  const numDisabledTests = attemptedToFixTests.filter(test =>
-                    test.meta[TEST_MANAGEMENT_IS_DISABLED] === 'true'
-                  ).length
-                  assert.equal(numDisabledTests, attemptedToFixTests.length)
-                }
-
-                if (isQuarantined) {
-                  const numQuarantinedTests = attemptedToFixTests.filter(test =>
-                    test.meta[TEST_MANAGEMENT_IS_QUARANTINED] === 'true'
-                  ).length
-                  assert.equal(numQuarantinedTests, attemptedToFixTests.length)
-                }
-
-                // Retried tests are in randomly order, so we just count number of tests
-                const countAttemptToFixTests = attemptedToFixTests.filter(test =>
-                  test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true'
-                ).length
-
-                const countRetriedAttemptToFixTests = attemptedToFixTests.filter(test =>
-                  test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true' &&
-                  test.meta[TEST_IS_RETRY] === 'true' &&
-                  test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atf
-                ).length
-
-                const testsMarkedAsFailedAllRetries = attemptedToFixTests.filter(test =>
-                  test.meta[TEST_HAS_FAILED_ALL_RETRIES] === 'true'
-                ).length
-
-                const testsMarkedAsPassedAllRetries = attemptedToFixTests.filter(test =>
-                  test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED] === 'true'
-                ).length
-
-                if (isAttemptingToFix) {
-                  assert.equal(countAttemptToFixTests, attemptedToFixTests.length)
-                  assert.equal(countRetriedAttemptToFixTests, attemptedToFixTests.length - 1)
-                  if (shouldAlwaysPass) {
-                    assert.equal(testsMarkedAsFailedAllRetries, 0)
-                    assert.equal(testsMarkedAsPassedAllRetries, 1)
-                  } else if (shouldFailSometimes) {
-                    assert.equal(testsMarkedAsFailedAllRetries, 0)
-                    assert.equal(testsMarkedAsPassedAllRetries, 0)
-                  } else { // always fail
-                    assert.equal(testsMarkedAsFailedAllRetries, 1)
-                    assert.equal(testsMarkedAsPassedAllRetries, 0)
-                  }
-                } else {
-                  assert.equal(countAttemptToFixTests, 0)
-                  assert.equal(countRetriedAttemptToFixTests, 0)
-                  assert.equal(testsMarkedAsFailedAllRetries, 0)
-                  assert.equal(testsMarkedAsPassedAllRetries, 0)
-                }
-              })
-
-          const runAttemptToFixTest = (done, {
-            isAttemptingToFix,
-            isQuarantined,
-            extraEnvVars,
-            shouldAlwaysPass,
-            shouldFailSometimes,
-            isDisabled
-          } = {}) => {
-            const testAssertionsPromise = getTestAssertions({
-              isAttemptingToFix,
-              shouldAlwaysPass,
-              shouldFailSometimes,
-              isDisabled,
-              isQuarantined
-            })
-
-            childProcess = exec(
-              './node_modules/.bin/playwright test -c playwright.config.js attempt-to-fix-test.js',
-              {
-                cwd,
-                env: {
-                  ...getCiVisAgentlessConfig(receiver.port),
-                  PW_BASE_URL: `http://localhost:${webAppPort}`,
-                  TEST_DIR: './ci-visibility/playwright-tests-test-management',
-                  ...(shouldAlwaysPass ? { SHOULD_ALWAYS_PASS: '1' } : {}),
-                  ...(shouldFailSometimes ? { SHOULD_FAIL_SOMETIMES: '1' } : {}),
-                  ...extraEnvVars
-                },
-                stdio: 'pipe'
+          childProcess.on('exit', (exitCode) => {
+            testAssertionsPromise.then(() => {
+              if (isQuarantined || isDisabled || shouldAlwaysPass) {
+                // even though a test fails, the exit code is 0 because the test is quarantined
+                assert.equal(exitCode, 0)
+              } else {
+                assert.equal(exitCode, 1)
               }
-            )
-
-            childProcess.on('exit', (exitCode) => {
-              testAssertionsPromise.then(() => {
-                if (isQuarantined || isDisabled || shouldAlwaysPass) {
-                  // even though a test fails, the exit code is 0 because the test is quarantined
-                  assert.equal(exitCode, 0)
-                } else {
-                  assert.equal(exitCode, 1)
-                }
-                done()
-              }).catch(done)
-            })
-          }
-
-          it('can attempt to fix and mark last attempt as failed if every attempt fails', (done) => {
-            receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
-
-            runAttemptToFixTest(done, { isAttemptingToFix: true })
+              done()
+            }).catch(done)
           })
+        }
 
-          it('can attempt to fix and mark last attempt as passed if every attempt passes', (done) => {
-            receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+        it('can attempt to fix and mark last attempt as failed if every attempt fails', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
-            runAttemptToFixTest(done, { isAttemptingToFix: true, shouldAlwaysPass: true })
-          })
-
-          it('can attempt to fix and not mark last attempt if attempts both pass and fail', (done) => {
-            receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
-
-            runAttemptToFixTest(done, { isAttemptingToFix: true, shouldFailSometimes: true })
-          })
-
-          it('does not attempt to fix tests if test management is not enabled', (done) => {
-            receiver.setSettings({ test_management: { enabled: false, attempt_to_fix_retries: 3 } })
-
-            runAttemptToFixTest(done)
-          })
-
-          it('does not enable attempt to fix tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
-            receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
-
-            runAttemptToFixTest(done, { extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' } })
-          })
-
-          it('does not fail retry if a test is quarantined', (done) => {
-            receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
-            receiver.setTestManagementTests({
-              playwright: {
-                suites: {
-                  'attempt-to-fix-test.js': {
-                    tests: {
-                      'attempt to fix should attempt to fix failed test': {
-                        properties: {
-                          attempt_to_fix: true,
-                          quarantined: true
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            })
-
-            runAttemptToFixTest(done, { isAttemptingToFix: true, isQuarantined: true })
-          })
-
-          it('does not fail retry if a test is disabled', (done) => {
-            receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
-            receiver.setTestManagementTests({
-              playwright: {
-                suites: {
-                  'attempt-to-fix-test.js': {
-                    tests: {
-                      'attempt to fix should attempt to fix failed test': {
-                        properties: {
-                          attempt_to_fix: true,
-                          disabled: true
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            })
-
-            runAttemptToFixTest(done, { isAttemptingToFix: true, isDisabled: true })
-          })
+          runAttemptToFixTest(done, { isAttemptingToFix: true })
         })
 
-        context('disabled', () => {
-          beforeEach(() => {
-            receiver.setTestManagementTests({
-              playwright: {
-                suites: {
-                  'disabled-test.js': {
-                    tests: {
-                      'disable should disable test': {
-                        properties: {
-                          disabled: true
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            })
-          })
+        it('can attempt to fix and mark last attempt as passed if every attempt passes', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
-          const getTestAssertions = (isDisabling) =>
-            receiver
-              .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-                const events = payloads.flatMap(({ payload }) => payload.events)
-
-                const testSession = events.find(event => event.type === 'test_session_end').content
-                if (isDisabling) {
-                  assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
-                } else {
-                  assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
-                }
-
-                const skippedTest = events.find(event => event.type === 'test').content
-
-                if (isDisabling) {
-                  assert.equal(skippedTest.meta[TEST_STATUS], 'skip')
-                  assert.propertyVal(skippedTest.meta, TEST_MANAGEMENT_IS_DISABLED, 'true')
-                } else {
-                  assert.equal(skippedTest.meta[TEST_STATUS], 'fail')
-                  assert.notProperty(skippedTest.meta, TEST_MANAGEMENT_IS_DISABLED)
-                }
-              })
-
-          const runDisableTest = (done, isDisabling, extraEnvVars) => {
-            const testAssertionsPromise = getTestAssertions(isDisabling)
-
-            childProcess = exec(
-              './node_modules/.bin/playwright test -c playwright.config.js disabled-test.js',
-              {
-                cwd,
-                env: {
-                  ...getCiVisAgentlessConfig(receiver.port),
-                  PW_BASE_URL: `http://localhost:${webAppPort}`,
-                  TEST_DIR: './ci-visibility/playwright-tests-test-management',
-                  ...extraEnvVars
-                },
-                stdio: 'pipe'
-              }
-            )
-
-            childProcess.on('exit', (exitCode) => {
-              testAssertionsPromise.then(() => {
-                if (isDisabling) {
-                  assert.equal(exitCode, 0)
-                } else {
-                  assert.equal(exitCode, 1)
-                }
-                done()
-              }).catch(done)
-            })
-          }
-
-          it('can disable tests', (done) => {
-            receiver.setSettings({ test_management: { enabled: true } })
-
-            runDisableTest(done, true)
-          })
-
-          it('fails if disable is not enabled', (done) => {
-            receiver.setSettings({ test_management: { enabled: false } })
-
-            runDisableTest(done, false)
-          })
-
-          it('does not enable disable tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
-            receiver.setSettings({ test_management: { enabled: true } })
-
-            runDisableTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
-          })
+          runAttemptToFixTest(done, { isAttemptingToFix: true, shouldAlwaysPass: true })
         })
 
-        context('quarantine', () => {
-          beforeEach(() => {
-            receiver.setTestManagementTests({
-              playwright: {
-                suites: {
-                  'quarantine-test.js': {
-                    tests: {
-                      'quarantine should quarantine failed test': {
-                        properties: {
-                          quarantined: true
-                        }
+        it('can attempt to fix and not mark last attempt if attempts both pass and fail', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+          runAttemptToFixTest(done, { isAttemptingToFix: true, shouldFailSometimes: true })
+        })
+
+        it('does not attempt to fix tests if test management is not enabled', (done) => {
+          receiver.setSettings({ test_management: { enabled: false, attempt_to_fix_retries: 3 } })
+
+          runAttemptToFixTest(done)
+        })
+
+        it('does not enable attempt to fix tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+          runAttemptToFixTest(done, { extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' } })
+        })
+
+        it('does not fail retry if a test is quarantined', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+          receiver.setTestManagementTests({
+            playwright: {
+              suites: {
+                'attempt-to-fix-test.js': {
+                  tests: {
+                    'attempt to fix should attempt to fix failed test': {
+                      properties: {
+                        attempt_to_fix: true,
+                        quarantined: true
                       }
                     }
                   }
                 }
               }
-            })
+            }
           })
 
-          const getTestAssertions = (isQuarantining) =>
-            receiver
-              .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-                const events = payloads.flatMap(({ payload }) => payload.events)
+          runAttemptToFixTest(done, { isAttemptingToFix: true, isQuarantined: true })
+        })
 
-                const testSession = events.find(event => event.type === 'test_session_end').content
-                if (isQuarantining) {
-                  assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
-                } else {
-                  assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+        it('does not fail retry if a test is disabled', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+          receiver.setTestManagementTests({
+            playwright: {
+              suites: {
+                'attempt-to-fix-test.js': {
+                  tests: {
+                    'attempt to fix should attempt to fix failed test': {
+                      properties: {
+                        attempt_to_fix: true,
+                        disabled: true
+                      }
+                    }
+                  }
                 }
-
-                const failedTest = events.find(event => event.type === 'test').content
-
-                if (isQuarantining) {
-                  // TODO: manage to run the test
-                  assert.equal(failedTest.meta[TEST_STATUS], 'skip')
-                  assert.propertyVal(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED, 'true')
-                } else {
-                  assert.equal(failedTest.meta[TEST_STATUS], 'fail')
-                  assert.notProperty(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED)
-                }
-              })
-
-          const runQuarantineTest = (done, isQuarantining, extraEnvVars) => {
-            const testAssertionsPromise = getTestAssertions(isQuarantining)
-
-            childProcess = exec(
-              './node_modules/.bin/playwright test -c playwright.config.js quarantine-test.js',
-              {
-                cwd,
-                env: {
-                  ...getCiVisAgentlessConfig(receiver.port),
-                  PW_BASE_URL: `http://localhost:${webAppPort}`,
-                  TEST_DIR: './ci-visibility/playwright-tests-test-management',
-                  ...extraEnvVars
-                },
-                stdio: 'pipe'
               }
-            )
-
-            childProcess.on('exit', (exitCode) => {
-              testAssertionsPromise.then(() => {
-                if (isQuarantining) {
-                  assert.equal(exitCode, 0)
-                } else {
-                  assert.equal(exitCode, 1)
-                }
-                done()
-              }).catch(done)
-            })
-          }
-
-          it('can quarantine tests', (done) => {
-            receiver.setSettings({ test_management: { enabled: true } })
-
-            runQuarantineTest(done, true)
+            }
           })
 
-          it('fails if quarantine is not enabled', (done) => {
-            receiver.setSettings({ test_management: { enabled: false } })
-
-            runQuarantineTest(done, false)
-          })
-
-          it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
-            receiver.setSettings({ test_management: { enabled: true } })
-
-            runQuarantineTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
-          })
+          runAttemptToFixTest(done, { isAttemptingToFix: true, isDisabled: true })
         })
       })
-    }
+
+      context('disabled', () => {
+        beforeEach(() => {
+          receiver.setTestManagementTests({
+            playwright: {
+              suites: {
+                'disabled-test.js': {
+                  tests: {
+                    'disable should disable test': {
+                      properties: {
+                        disabled: true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          })
+        })
+
+        const getTestAssertions = (isDisabling) =>
+          receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              if (isDisabling) {
+                assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
+              } else {
+                assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+              }
+
+              const skippedTest = events.find(event => event.type === 'test').content
+
+              if (isDisabling) {
+                assert.equal(skippedTest.meta[TEST_STATUS], 'skip')
+                assert.propertyVal(skippedTest.meta, TEST_MANAGEMENT_IS_DISABLED, 'true')
+              } else {
+                assert.equal(skippedTest.meta[TEST_STATUS], 'fail')
+                assert.notProperty(skippedTest.meta, TEST_MANAGEMENT_IS_DISABLED)
+              }
+            })
+
+        const runDisableTest = (done, isDisabling, extraEnvVars) => {
+          const testAssertionsPromise = getTestAssertions(isDisabling)
+
+          childProcess = exec(
+            './node_modules/.bin/playwright test -c playwright.config.js disabled-test.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PW_BASE_URL: `http://localhost:${webAppPort}`,
+                TEST_DIR: './ci-visibility/playwright-tests-test-management',
+                ...extraEnvVars
+              },
+              stdio: 'pipe'
+            }
+          )
+
+          childProcess.on('exit', (exitCode) => {
+            testAssertionsPromise.then(() => {
+              if (isDisabling) {
+                assert.equal(exitCode, 0)
+              } else {
+                assert.equal(exitCode, 1)
+              }
+              done()
+            }).catch(done)
+          })
+        }
+
+        it('can disable tests', (done) => {
+          receiver.setSettings({ test_management: { enabled: true } })
+
+          runDisableTest(done, true)
+        })
+
+        it('fails if disable is not enabled', (done) => {
+          receiver.setSettings({ test_management: { enabled: false } })
+
+          runDisableTest(done, false)
+        })
+
+        it('does not enable disable tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+          receiver.setSettings({ test_management: { enabled: true } })
+
+          runDisableTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
+        })
+      })
+
+      context('quarantine', () => {
+        beforeEach(() => {
+          receiver.setTestManagementTests({
+            playwright: {
+              suites: {
+                'quarantine-test.js': {
+                  tests: {
+                    'quarantine should quarantine failed test': {
+                      properties: {
+                        quarantined: true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          })
+        })
+
+        const getTestAssertions = (isQuarantining) =>
+          receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              if (isQuarantining) {
+                assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
+              } else {
+                assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+              }
+
+              const failedTest = events.find(event => event.type === 'test').content
+
+              if (isQuarantining) {
+                // TODO: manage to run the test
+                assert.equal(failedTest.meta[TEST_STATUS], 'skip')
+                assert.propertyVal(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+              } else {
+                assert.equal(failedTest.meta[TEST_STATUS], 'fail')
+                assert.notProperty(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED)
+              }
+            })
+
+        const runQuarantineTest = (done, isQuarantining, extraEnvVars) => {
+          const testAssertionsPromise = getTestAssertions(isQuarantining)
+
+          childProcess = exec(
+            './node_modules/.bin/playwright test -c playwright.config.js quarantine-test.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PW_BASE_URL: `http://localhost:${webAppPort}`,
+                TEST_DIR: './ci-visibility/playwright-tests-test-management',
+                ...extraEnvVars
+              },
+              stdio: 'pipe'
+            }
+          )
+
+          childProcess.on('exit', (exitCode) => {
+            testAssertionsPromise.then(() => {
+              if (isQuarantining) {
+                assert.equal(exitCode, 0)
+              } else {
+                assert.equal(exitCode, 1)
+              }
+              done()
+            }).catch(done)
+          })
+        }
+
+        it('can quarantine tests', (done) => {
+          receiver.setSettings({ test_management: { enabled: true } })
+
+          runQuarantineTest(done, true)
+        })
+
+        it('fails if quarantine is not enabled', (done) => {
+          receiver.setSettings({ test_management: { enabled: false } })
+
+          runQuarantineTest(done, false)
+        })
+
+        it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+          receiver.setSettings({ test_management: { enabled: true } })
+
+          runQuarantineTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
+        })
+      })
+    })
 
     context('libraries capabilities', () => {
       it('adds capabilities to tests', (done) => {
@@ -1337,7 +1339,7 @@ versions.forEach((version) => {
               assert.equal(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
               assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
               assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
-              assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '2')
+              assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '4')
               // capabilities logic does not overwrite test session name
               assert.equal(metadata.test[TEST_SESSION_NAME], 'my-test-session-name')
             })
@@ -1365,122 +1367,151 @@ versions.forEach((version) => {
       })
     })
 
-    if (version === 'latest') {
-      context('active test span', () => {
-        it('can grab the test span and add tags', (done) => {
-          const receiverPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
+    context('active test span', () => {
+      it('can grab the test span and add tags', (done) => {
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
 
-              const test = events.find(event => event.type === 'test').content
+            const test = events.find(event => event.type === 'test').content
 
-              assert.equal(test.meta['test.custom_tag'], 'this is custom')
-            })
-
-          childProcess = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js active-test-span-tags-test.js',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                PW_BASE_URL: `http://localhost:${webAppPort}`,
-                TEST_DIR: './ci-visibility/playwright-tests-active-test-span'
-              },
-              stdio: 'pipe'
-            }
-          )
-
-          childProcess.on('exit', () => {
-            receiverPromise.then(() => done()).catch(done)
+            assert.equal(test.meta['test.custom_tag'], 'this is custom')
           })
-        })
 
-        it('can grab the test span and add spans', (done) => {
-          const receiverPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
+        childProcess = exec(
+          './node_modules/.bin/playwright test -c playwright.config.js active-test-span-tags-test.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-tests-active-test-span'
+            },
+            stdio: 'pipe'
+          }
+        )
 
-              const test = events.find(event => event.type === 'test').content
-              const spans = events.filter(event => event.type === 'span').map(event => event.content)
-
-              const customSpan = spans.find(span => span.name === 'my custom span')
-
-              assert.exists(customSpan)
-              assert.equal(customSpan.meta['test.really_custom_tag'], 'this is really custom')
-
-              // custom span is children of active test span
-              assert.equal(customSpan.trace_id.toString(), test.trace_id.toString())
-              assert.equal(customSpan.parent_id.toString(), test.span_id.toString())
-            })
-
-          childProcess = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js active-test-span-custom-span-test.js',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                PW_BASE_URL: `http://localhost:${webAppPort}`,
-                TEST_DIR: './ci-visibility/playwright-tests-active-test-span'
-              },
-              stdio: 'pipe'
-            }
-          )
-
-          childProcess.on('exit', () => {
-            receiverPromise.then(() => done()).catch(done)
-          })
+        childProcess.on('exit', () => {
+          receiverPromise.then(() => done()).catch(done)
         })
       })
 
-      context('correlation between tests and RUM sessions', () => {
-        const getTestAssertions = ({ isRedirecting }) =>
-          receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-              const playwrightTest = events.find(event => event.type === 'test').content
-              if (isRedirecting) {
-                assert.notProperty(playwrightTest.meta, TEST_IS_RUM_ACTIVE)
-                assert.notProperty(playwrightTest.meta, TEST_BROWSER_VERSION)
-              } else {
-                assert.property(playwrightTest.meta, TEST_IS_RUM_ACTIVE, 'true')
-                assert.property(playwrightTest.meta, TEST_BROWSER_VERSION)
-              }
-              assert.include(playwrightTest.meta, {
-                [TEST_BROWSER_NAME]: 'chromium',
-                [TEST_TYPE]: 'browser'
-              })
-            })
+      it('can grab the test span and add spans', (done) => {
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
 
-        const runTest = (done, { isRedirecting }, extraEnvVars) => {
-          const testAssertionsPromise = getTestAssertions({ isRedirecting })
+            const test = events.find(event => event.type === 'test').content
+            const spans = events.filter(event => event.type === 'span').map(event => event.content)
 
-          childProcess = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js active-test-span-rum-test.js',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                PW_BASE_URL: `http://localhost:${isRedirecting ? webPortWithRedirect : webAppPort}`,
-                TEST_DIR: './ci-visibility/playwright-tests-rum',
-                ...extraEnvVars
-              },
-              stdio: 'pipe'
-            }
-          )
+            const customSpan = spans.find(span => span.name === 'my custom span')
 
-          childProcess.on('exit', () => {
-            testAssertionsPromise.then(() => done()).catch(done)
+            assert.exists(customSpan)
+            assert.equal(customSpan.meta['test.really_custom_tag'], 'this is really custom')
+
+            // custom span is children of active test span
+            assert.equal(customSpan.trace_id.toString(), test.trace_id.toString())
+            assert.equal(customSpan.parent_id.toString(), test.span_id.toString())
           })
-        }
 
-        it('can correlate tests and RUM sessions', (done) => {
-          runTest(done, { isRedirecting: false })
-        })
+        childProcess = exec(
+          './node_modules/.bin/playwright test -c playwright.config.js active-test-span-custom-span-test.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-tests-active-test-span'
+            },
+            stdio: 'pipe'
+          }
+        )
 
-        it('do not crash when redirecting and RUM sessions are not active', (done) => {
-          runTest(done, { isRedirecting: true })
+        childProcess.on('exit', () => {
+          receiverPromise.then(() => done()).catch(done)
         })
       })
-    }
+    })
+
+    context('correlation between tests and RUM sessions', () => {
+      const getTestAssertions = ({ isRedirecting }) =>
+        receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const playwrightTest = events.find(event => event.type === 'test').content
+            if (isRedirecting) {
+              assert.notProperty(playwrightTest.meta, TEST_IS_RUM_ACTIVE)
+              assert.notProperty(playwrightTest.meta, TEST_BROWSER_VERSION)
+            } else {
+              assert.property(playwrightTest.meta, TEST_IS_RUM_ACTIVE, 'true')
+              assert.property(playwrightTest.meta, TEST_BROWSER_VERSION)
+            }
+            assert.include(playwrightTest.meta, {
+              [TEST_BROWSER_NAME]: 'chromium',
+              [TEST_TYPE]: 'browser'
+            })
+          })
+
+      const runTest = (done, { isRedirecting }, extraEnvVars) => {
+        const testAssertionsPromise = getTestAssertions({ isRedirecting })
+
+        childProcess = exec(
+          './node_modules/.bin/playwright test -c playwright.config.js active-test-span-rum-test.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${isRedirecting ? webPortWithRedirect : webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-tests-rum',
+              ...extraEnvVars
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          testAssertionsPromise.then(() => done()).catch(done)
+        })
+      }
+
+      it('can correlate tests and RUM sessions', (done) => {
+        runTest(done, { isRedirecting: false })
+      })
+
+      it('do not crash when redirecting and RUM sessions are not active', (done) => {
+        runTest(done, { isRedirecting: true })
+      })
+    })
+
+    context('run session status', () => {
+      it('session status is not changed if it fails before running any test', (done) => {
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.equal(testSession.meta[TEST_STATUS], 'fail')
+          })
+
+        receiver.setSettings({ test_management: { enabled: true } })
+
+        childProcess = exec(
+          './node_modules/.bin/playwright test -c playwright.config.js exit-code-test.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-tests-exit-code'
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', (exitCode) => {
+          assert.equal(exitCode, 1)
+          receiverPromise.then(() => done()).catch(done)
+        })
+      })
+    })
   })
 })

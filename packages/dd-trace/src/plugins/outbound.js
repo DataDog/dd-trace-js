@@ -28,7 +28,10 @@ class OutboundPlugin extends TracingPlugin {
 
   startSpan (...args) {
     const span = super.startSpan(...args)
-    if (this._tracerConfig.codeOriginForSpans.enabled) {
+    if (
+      this._tracerConfig.codeOriginForSpans.enabled &&
+      this._tracerConfig.codeOriginForSpans.experimental.exit_spans.enabled
+    ) {
       span.addTags(exitTags(this.startSpan))
     }
     return span
@@ -64,7 +67,6 @@ class OutboundPlugin extends TracingPlugin {
         }
       }
     }
-    return undefined
   }
 
   getPeerServiceRemap (peerData) {
@@ -84,8 +86,13 @@ class OutboundPlugin extends TracingPlugin {
     return peerData
   }
 
-  finish () {
-    this.tagPeerService(this.activeSpan)
+  bindFinish (ctx) {
+    return ctx.parentStore
+  }
+
+  finish (ctx) {
+    const span = ctx?.currentStore?.span || this.activeSpan
+    this.tagPeerService(span)
     super.finish(...arguments)
   }
 

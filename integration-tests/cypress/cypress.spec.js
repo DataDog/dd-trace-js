@@ -56,7 +56,7 @@ const {
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
-const { NODE_MAJOR } = require('../../version')
+const { DD_MAJOR, NODE_MAJOR } = require('../../version')
 
 const version = process.env.CYPRESS_VERSION
 const hookFile = 'dd-trace/loader-hook.mjs'
@@ -76,18 +76,37 @@ const moduleTypes = [
   }
 ].filter(moduleType => !process.env.CYPRESS_MODULE_TYPE || process.env.CYPRESS_MODULE_TYPE === moduleType.type)
 
+function shouldTestsRun (type) {
+  if (DD_MAJOR === 5) {
+    if (NODE_MAJOR <= 16) {
+      return version === '6.7.0' && type === 'commonJS'
+    }
+    if (NODE_MAJOR > 16) {
+      return version === 'latest'
+    }
+  }
+  if (DD_MAJOR === 6) {
+    if (NODE_MAJOR <= 16) {
+      return false
+    }
+    if (NODE_MAJOR > 16) {
+      return version === '10.2.0' || version === 'latest'
+    }
+  }
+  return false
+}
+
 moduleTypes.forEach(({
   type,
   testCommand
 }) => {
-  // cypress only supports esm on versions >= 10.0.0
-  if (type === 'esm' && version === '6.7.0') {
-    return
-  }
-  if (version === '6.7.0' && NODE_MAJOR > 16) {
-    return
-  }
   describe(`cypress@${version} ${type}`, function () {
+    if (!shouldTestsRun(type)) {
+      // eslint-disable-next-line no-console
+      console.log(`Skipping tests for cypress@${version} ${type} for dd-trace@${DD_MAJOR} node@${NODE_MAJOR}`)
+      return
+    }
+
     this.retries(2)
     this.timeout(60000)
     let sandbox, cwd, receiver, childProcess, webAppPort, secondWebAppServer
@@ -1875,13 +1894,13 @@ moduleTypes.forEach(({
                 if (isLastAttempt) {
                   if (shouldFailSometimes) {
                     assert.notProperty(test.meta, TEST_HAS_FAILED_ALL_RETRIES)
-                    assert.notProperty(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED)
+                    assert.propertyVal(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
                   } else if (shouldAlwaysPass) {
                     assert.propertyVal(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
                     assert.notProperty(test.meta, TEST_HAS_FAILED_ALL_RETRIES)
                   } else {
                     assert.propertyVal(test.meta, TEST_HAS_FAILED_ALL_RETRIES, 'true')
-                    assert.notProperty(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED)
+                    assert.propertyVal(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
                   }
                 }
               }
@@ -2239,7 +2258,7 @@ moduleTypes.forEach(({
               assert.equal(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
               assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
               assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
-              assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '2')
+              assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '4')
               // capabilities logic does not overwrite test session name
               assert.equal(metadata.test[TEST_SESSION_NAME], 'my-test-session-name')
             })

@@ -333,28 +333,39 @@ class JestPlugin extends CiPlugin {
       this.telemetry.distribution(TELEMETRY_CODE_COVERAGE_NUM_FILES, {}, files.length)
     })
 
-    this.addSub('ci:jest:test:start', (test) => {
+    this.addBind('ci:jest:test:start', (ctx) => {
       const store = storage('legacy').getStore()
-      const span = this.startTestSpan(test)
+      const span = this.startTestSpan(ctx)
 
-      this.enter(span, store)
+      ctx.parentStore = store
+      ctx.currentStore = { ...store, span }
+
       this.activeTestSpan = span
+
+      return ctx.currentStore
+    })
+
+    this.addBind('ci:jest:test:fn', (ctx) => {
+      return ctx.currentStore
     })
 
     this.addSub('ci:jest:test:finish', ({
+      span,
       status,
       testStartLine,
       attemptToFixPassed,
       failedAllTests,
+      attemptToFixFailed,
       isAtrRetry
     }) => {
-      const span = storage('legacy').getStore().span
       span.setTag(TEST_STATUS, status)
       if (testStartLine) {
         span.setTag(TEST_SOURCE_START, testStartLine)
       }
       if (attemptToFixPassed) {
         span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
+      } else if (attemptToFixFailed) {
+        span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
       }
       if (failedAllTests) {
         span.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
@@ -381,11 +392,9 @@ class JestPlugin extends CiPlugin {
       this.activeTestSpan = null
     })
 
-    this.addSub('ci:jest:test:err', ({ error, shouldSetProbe, promises }) => {
+    this.addSub('ci:jest:test:err', ({ span, error, shouldSetProbe, promises }) => {
       if (error) {
-        const store = storage('legacy').getStore()
-        if (store && store.span) {
-          const span = store.span
+        if (span) {
           span.setTag(TEST_STATUS, 'fail')
           span.setTag('error', getFormattedError(error, this.repositoryRoot))
           if (shouldSetProbe) {

@@ -10,17 +10,12 @@ const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
 const vulnerabilityReporter = require('../../../../src/appsec/iast/vulnerability-reporter')
 const agent = require('../../../plugins/agent')
-const semver = require('semver')
 
 const base = 'dc=example,dc=org'
-
-const isOldNode = semver.satisfies(process.version, '<=14')
 
 describe('ldap-injection-analyzer with ldapjs', () => {
   let client
   withVersions('ldapjs', 'ldapjs', version => {
-    if (isOldNode && version !== '2.0.0') return
-
     prepareTestServerForIast('ldapjs', (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
       beforeEach(async () => {
         await agent.load('ldapjs')
@@ -171,8 +166,6 @@ describe('ldap-injection-analyzer with ldapjs', () => {
   })
 
   withVersions('ldapjs', 'ldapjs-promise', promiseVersion => {
-    if (isOldNode && promiseVersion !== '2.0.0') return
-
     prepareTestServerForIast('ldapjs-promise', (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
       const srcFilePath = path.join(__dirname, 'resources', 'ldap-injection-methods.js')
       const dstFilePath = path.join(os.tmpdir(), 'ldap-injection-methods.js')
