@@ -17,7 +17,6 @@ import { fileURLToPath } from 'node:url'
 import {
   load as origLoad,
   resolve as origResolve,
-
   getSource as origGetSource
 } from 'import-in-the-middle/hook.mjs'
 
@@ -58,4 +57,5 @@ if (isMainThread) {
     })
   }
 }
+
 export { getFormat } from 'import-in-the-middle/hook.mjs'

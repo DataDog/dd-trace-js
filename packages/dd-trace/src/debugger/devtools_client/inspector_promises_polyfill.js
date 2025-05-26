@@ -2,7 +2,7 @@
 
 const { builtinModules } = require('node:module')
 
-if (builtinModules.includes('node:inspector/promises')) {
+if (builtinModules.includes('inspector/promises')) {
   module.exports = require('node:inspector/promises')
 } else {
   const inspector = require('node:inspector')

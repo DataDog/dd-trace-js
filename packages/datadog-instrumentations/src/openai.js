@@ -177,11 +177,10 @@ function addStreamedChunk (content, chunk) {
 
           if (oldTool) {
             oldTool.function.arguments += newTool.function.arguments
-          } else {
-            return newTool
+            return oldTool
           }
 
-          return oldTool
+          return newTool
         })
       }
     }
@@ -193,8 +192,7 @@ function convertBufferstoObjects (chunks = []) {
     .concat(chunks) // combine the buffers
     .toString() // stringify
     .split(/(?=data:)/) // split on "data:"
-    .map(chunk => chunk.split('\n').join('')) // remove newlines
-    .map(chunk => chunk.slice(6)) // remove 'data: ' from the front
+    .map(chunk => chunk.replace(/\n/g, '').slice(6)) // remove newlines and 'data: ' from the front
     .slice(0, -1) // remove the last [DONE] message
     .map(JSON.parse) // parse all of the returned objects
 }
