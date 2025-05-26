@@ -515,7 +515,7 @@ class MochaPlugin extends CiPlugin {
       extraTags[TEST_IS_MODIFIED] = 'true'
       if (isEfdRetry) {
         extraTags[TEST_IS_RETRY] = 'true'
-        extraTags[TEST_RETRY_REASON] = 'early_flake_detection'
+        extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.efd
       }
     }
 
@@ -532,7 +532,7 @@ class MochaPlugin extends CiPlugin {
       extraTags[TEST_IS_NEW] = 'true'
       if (isEfdRetry) {
         extraTags[TEST_IS_RETRY] = 'true'
-        extraTags[TEST_RETRY_REASON] = 'early_flake_detection'
+        extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.efd
       }
     }
 

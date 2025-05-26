@@ -479,9 +479,9 @@ function getRunTestsWrapper (runTests, config) {
     if (config.isKnownTestsEnabled) {
       // by the time we reach `this.on('test')`, it is too late. We need to add retries here
       suite.tests.forEach(test => {
-        if (!test.isPending() && isNewTest(test, config.knownTests) && !test._ddIsModified) {
+        if (!test.isPending() && isNewTest(test, config.knownTests)) {
           test._ddIsNew = true
-          if (config.isEarlyFlakeDetectionEnabled && !test._ddIsAttemptToFix) {
+          if (config.isEarlyFlakeDetectionEnabled && !test._ddIsAttemptToFix && !test._ddIsModified) {
             retryTest(
               test,
               config.earlyFlakeDetectionNumRetries,

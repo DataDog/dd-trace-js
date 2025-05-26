@@ -2546,7 +2546,7 @@ versions.forEach(version => {
       before(() => {
         execSync('git checkout -b feature-branch', { cwd, stdio: 'ignore' })
         fs.writeFileSync(
-          path.join(cwd, 'ci-visibility/features-impacted-test', 'impacted-test.feature'),
+          path.join(cwd, 'ci-visibility/features-impacted-test/impacted-test.feature'),
           `Feature: Impacted Test
            Scenario: Say impacted test
            When the greeter says impacted test
