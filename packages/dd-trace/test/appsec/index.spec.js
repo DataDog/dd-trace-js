@@ -78,7 +78,13 @@ describe('AppSec Index', function () {
           sampleDelay: 10
         },
         rasp: {
-          enabled: true
+          enabled: true,
+          bodyCollection: true
+        },
+        extendedHeadersCollection: {
+          enabled: true,
+          redaction: false,
+          maxHeaders: 42
         }
       }
     }
@@ -153,7 +159,7 @@ describe('AppSec Index', function () {
     sinon.stub(fs, 'readFileSync').returns(JSON.stringify(RULES))
     sinon.stub(waf, 'init').callThrough()
     sinon.stub(RuleManager, 'loadRules')
-    sinon.stub(Reporter, 'setRateLimit')
+    sinon.stub(Reporter, 'init')
     sinon.stub(incomingHttpRequestStart, 'subscribe')
     sinon.stub(incomingHttpRequestEnd, 'subscribe')
   })
@@ -170,7 +176,7 @@ describe('AppSec Index', function () {
 
       expect(blocking.setTemplates).to.have.been.calledOnceWithExactly(config)
       expect(RuleManager.loadRules).to.have.been.calledOnceWithExactly(config.appsec)
-      expect(Reporter.setRateLimit).to.have.been.calledOnceWithExactly(42)
+      expect(Reporter.init).to.have.been.calledOnceWithExactly(config.appsec)
       expect(UserTracking.setCollectionMode).to.have.been.calledOnceWithExactly('anon', false)
       expect(incomingHttpRequestStart.subscribe)
         .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
