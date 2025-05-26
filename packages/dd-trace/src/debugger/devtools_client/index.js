@@ -65,6 +65,12 @@ session.on('Debugger.paused', async ({ params }) => {
   for (let i = 0; i < params.hitBreakpoints.length; i++) {
     const probesAtLocation = breakpointToProbes.get(params.hitBreakpoints[i])
 
+    if (probesAtLocation === undefined) {
+      // This might happen due to a race condition where the breakpoint is in the process of being removed
+      log.error('[debugger:devtools_client] No probes found for breakpoint %s', params.hitBreakpoints[i])
+      continue
+    }
+
     if (probesAtLocation.size !== 1) {
       numberOfProbesOnBreakpoint = numberOfProbesOnBreakpoint + probesAtLocation.size - 1
       if (numberOfProbesOnBreakpoint > snapshotProbeIndex.length) {

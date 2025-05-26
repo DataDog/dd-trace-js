@@ -144,6 +144,7 @@ async function removeBreakpoint ({ id }) {
   if (probesAtLocation.size === 0) {
     locationToBreakpoint.delete(locationKey)
     breakpointToProbes.delete(breakpoint.id)
+    // TODO: If anything below in this if-block throws, the state is out of sync.
     if (breakpointToProbes.size === 0) {
       await stop() // This will also remove the breakpoint
     } else {
