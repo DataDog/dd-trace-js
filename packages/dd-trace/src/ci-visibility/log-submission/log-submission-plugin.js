@@ -26,7 +26,7 @@ function getWinstonLogSubmissionParameters (config) {
       path: defaultParameters.path,
       headers: defaultParameters.headers
     }
-  } catch (e) {
+  } catch {
     log.error('Could not parse DD_AGENTLESS_LOG_SUBMISSION_URL')
     return defaultParameters
   }

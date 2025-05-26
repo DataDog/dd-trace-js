@@ -138,7 +138,7 @@ class RateMetric extends Metric {
 
   track (value = 1) {
     this.rate += value
-    const rate = this.interval ? (this.rate / this.interval) : 0.0
+    const rate = this.interval ? (this.rate / this.interval) : 0
     this.points = [[now(), rate]]
   }
 }

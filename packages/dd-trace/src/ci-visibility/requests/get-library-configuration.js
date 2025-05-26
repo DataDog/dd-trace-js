@@ -38,7 +38,7 @@ function getLibraryConfiguration ({
       'Content-Type': 'application/json'
     },
     url,
-    timeout: 20000
+    timeout: 20_000
   }
 
   if (isEvpProxy) {

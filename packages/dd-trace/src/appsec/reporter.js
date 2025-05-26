@@ -285,11 +285,9 @@ function reportAttack (attackData) {
 
   // merge JSON arrays without parsing them
   const attackDataStr = JSON.stringify(attackData)
-  if (currentJson) {
-    newTags['_dd.appsec.json'] = currentJson.slice(0, -2) + ',' + attackDataStr.slice(1) + '}'
-  } else {
-    newTags['_dd.appsec.json'] = '{"triggers":' + attackDataStr + '}'
-  }
+  newTags['_dd.appsec.json'] = currentJson
+    ? currentJson.slice(0, -2) + ',' + attackDataStr.slice(1) + '}'
+    : '{"triggers":' + attackDataStr + '}'
 
   if (req.socket) {
     newTags['network.client.ip'] = req.socket.remoteAddress
