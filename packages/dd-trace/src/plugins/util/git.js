@@ -23,7 +23,8 @@ const {
   distributionMetric,
   TELEMETRY_GIT_COMMAND,
   TELEMETRY_GIT_COMMAND_MS,
-  TELEMETRY_GIT_COMMAND_ERRORS
+  TELEMETRY_GIT_COMMAND_ERRORS,
+  TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY
 } = require('../../ci-visibility/telemetry')
 const { filterSensitiveInfoFromRepository } = require('./url')
 const { storage } = require('../../../../datadog-core')
@@ -332,6 +333,27 @@ function getGitMetadata (ciMetadata) {
     committerDate
   ] = sanitizedExec('git', ['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI']).split(',')
 
+  let gitInformationDiscrepancy = false
+  if (repositoryUrl) {
+    const gitRepositoryUrl = sanitizedExec('git', ['ls-remote', '--get-url'])
+    const hasRepositoryDiscrepancy = repositoryUrl !== gitRepositoryUrl
+    const hasCommitDiscrepancy = commitSHA &&
+      !hasRepositoryDiscrepancy &&
+      sanitizedExec('git', ['rev-parse', 'HEAD']) !== commitSHA
+
+    if (hasRepositoryDiscrepancy || hasCommitDiscrepancy) {
+      gitInformationDiscrepancy = true
+      incrementCountMetric(
+        TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY,
+        {
+          expected_provider: 'ci_provider',
+          discrepant_provider: 'git_client',
+          type: hasRepositoryDiscrepancy ? 'repository_discrepancy' : 'commit_discrepancy'
+        }
+      )
+    }
+  }
+
   const tags = {
     [GIT_COMMIT_MESSAGE]:
       commitMessage || sanitizedExec('git', ['show', '-s', '--format=%B'], null, null, null, false),
@@ -359,7 +381,7 @@ function getGitMetadata (ciMetadata) {
     }
   }
 
-  return tags
+  return { tags, gitInformationDiscrepancy }
 }
 
 module.exports = {

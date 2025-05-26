@@ -14,6 +14,11 @@ const {
 
 const { normalizeRef } = require('./ci')
 const { filterSensitiveInfoFromRepository } = require('./url')
+const {
+  incrementCountMetric,
+  TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY,
+  TELEMETRY_GIT_SHA_MATCH
+} = require('../../ci-visibility/telemetry')
 
 function removeEmptyValues (tags) {
   return Object.keys(tags).reduce((filteredTags, tag) => {
@@ -40,7 +45,7 @@ function validateGitCommitSha (gitCommitSha) {
   return isValidSha1 || isValidSha256
 }
 
-function getUserProviderGitMetadata () {
+function getUserProviderGitMetadata ({ tags, gitInformationDiscrepancy }) {
   const {
     DD_GIT_COMMIT_SHA,
     DD_GIT_BRANCH,
@@ -62,6 +67,32 @@ function getUserProviderGitMetadata () {
   if ((DD_GIT_BRANCH || '').includes('origin/tags') || (DD_GIT_BRANCH || '').includes('refs/heads/tags')) {
     tag = normalizeRef(DD_GIT_BRANCH)
   }
+
+  let gitCommitShaMatch = gitInformationDiscrepancy
+  if (DD_GIT_REPOSITORY_URL) {
+    const userSuppliedRepositoryUrl = filterSensitiveInfoFromRepository(DD_GIT_REPOSITORY_URL)
+    const hasRepositoryDiscrepancy = tags[GIT_REPOSITORY_URL] !== userSuppliedRepositoryUrl
+    const hasCommitDiscrepancy = DD_GIT_COMMIT_SHA &&
+      !hasRepositoryDiscrepancy &&
+      DD_GIT_COMMIT_SHA !== tags[GIT_COMMIT_SHA]
+
+    if (hasRepositoryDiscrepancy || hasCommitDiscrepancy) {
+      gitCommitShaMatch = true
+      incrementCountMetric(
+        TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY,
+        {
+          expected_provider: 'user_supplied',
+          discrepant_provider: 'ci_provider',
+          type: hasRepositoryDiscrepancy ? 'repository_discrepancy' : 'commit_discrepancy'
+        }
+      )
+    }
+  }
+
+  incrementCountMetric(
+    TELEMETRY_GIT_SHA_MATCH,
+    { match: gitCommitShaMatch }
+  )
 
   return removeEmptyValues({
     [GIT_COMMIT_SHA]: DD_GIT_COMMIT_SHA,
