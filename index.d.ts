@@ -713,7 +713,12 @@ declare namespace tracer {
         /** Whether to enable RASP.
          * @default false
          */
-        enabled?: boolean
+        enabled?: boolean,
+
+        /** Whether to enable request body collection on RASP event
+         * @default false
+         */
+        bodyCollection?: boolean
       },
       /**
        * Configuration for stack trace reporting
@@ -733,6 +738,25 @@ declare namespace tracer {
          * @default 32
          */
         maxDepth?: number,
+      },
+      /**
+       * Configuration for extended headers collection tied to security events
+       */
+      extendedHeadersCollection?: {
+        /** Whether to enable extended headers collection
+         * @default false
+         */
+        enabled: boolean,
+
+        /** Whether to redact collected headers
+         * @default true
+         */
+        redaction: boolean,
+
+        /** Specifies the maximum number of headers collected.
+         * @default 50
+         */
+        maxHeaders: number,
       }
     }
 
