@@ -45,7 +45,8 @@ const {
   GIT_COMMIT_SHA,
   GIT_BRANCH,
   CI_WORKSPACE_PATH,
-  GIT_COMMIT_MESSAGE
+  GIT_COMMIT_MESSAGE,
+  GIT_TAG
 } = require('./util/tags')
 const { OS_VERSION, OS_PLATFORM, OS_ARCHITECTURE, RUNTIME_NAME, RUNTIME_VERSION } = require('./util/env')
 const getDiClient = require('../ci-visibility/dynamic-instrumentation')
@@ -253,7 +254,8 @@ module.exports = class CiPlugin extends Plugin {
       [GIT_BRANCH]: branch,
       [CI_PROVIDER_NAME]: ciProviderName,
       [CI_WORKSPACE_PATH]: repositoryRoot,
-      [GIT_COMMIT_MESSAGE]: commitMessage
+      [GIT_COMMIT_MESSAGE]: commitMessage,
+      [GIT_TAG]: tag
     } = this.testEnvironmentMetadata
 
     this.repositoryRoot = repositoryRoot || process.cwd()
@@ -272,7 +274,8 @@ module.exports = class CiPlugin extends Plugin {
       runtimeVersion,
       branch,
       testLevel: 'suite',
-      commitMessage
+      commitMessage,
+      tag
     }
   }
 
