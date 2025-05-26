@@ -347,7 +347,7 @@ function ensureProfilers (profilers, options) {
   }
 
   // Filter out any invalid profilers
-  return profilers.filter(v => v)
+  return profilers.filter(Boolean)
 }
 
 function ensureLogger (logger) {

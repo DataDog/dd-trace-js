@@ -4,7 +4,7 @@ const limiter = require('limiter')
 
 class RateLimiter {
   constructor (rateLimit, interval = 'second') {
-    this._rateLimit = parseInt(rateLimit)
+    this._rateLimit = Number.parseInt(rateLimit)
     this._limiter = new limiter.RateLimiter(this._rateLimit, interval)
     this._tokensRequested = 0
     this._prevIntervalTokens = 0

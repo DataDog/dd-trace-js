@@ -23,7 +23,7 @@ function getCallSiteList (maxDepth = 100) {
     Error.prepareStackTrace = function (_, callsites) {
       callsiteList = callsites
     }
-    const e = new Error()
+    const e = new Error('message')
     e.stack
   } finally {
     Error.prepareStackTrace = previousPrepareStackTrace
