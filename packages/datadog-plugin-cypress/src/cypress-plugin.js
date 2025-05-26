@@ -183,26 +183,23 @@ function getTestManagementTests (tracer, testConfiguration) {
 }
 
 function getModifiedTests (testEnvironmentMetadata) {
-  return new Promise(resolve => {
-    const {
-      [GIT_PULL_REQUEST_BASE_BRANCH]: pullRequestBaseBranch,
-      [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseBranchSha,
-      [GIT_COMMIT_HEAD_SHA]: commitHeadSha
-    } = testEnvironmentMetadata
+  const {
+    [GIT_PULL_REQUEST_BASE_BRANCH]: pullRequestBaseBranch,
+    [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseBranchSha,
+    [GIT_COMMIT_HEAD_SHA]: commitHeadSha
+  } = testEnvironmentMetadata
 
-    const baseBranchSha = pullRequestBaseBranchSha || getPullRequestBaseBranch(pullRequestBaseBranch)
+  const baseBranchSha = pullRequestBaseBranchSha || getPullRequestBaseBranch(pullRequestBaseBranch)
 
-    if (baseBranchSha) {
-      const diff = getPullRequestDiff(baseBranchSha, commitHeadSha)
-      const modifiedTests = getModifiedTestsFromDiff(diff)
-      if (modifiedTests) {
-        return resolve({ err: null, modifiedTests })
-      }
+  if (baseBranchSha) {
+    const diff = getPullRequestDiff(baseBranchSha, commitHeadSha)
+    const modifiedTests = getModifiedTestsFromDiff(diff)
+    if (modifiedTests) {
+      return modifiedTests
     }
+  }
 
-    // TODO: Add telemetry for this type of error
-    return resolve({ err: new Error('No modified tests could have been retrieved') })
-  })
+  throw new Error('Modified tests could not be retrieved')
 }
 
 function getSuiteStatus (suiteStats) {
@@ -327,6 +324,18 @@ class CypressPlugin {
         return this.cypressConfig
       })
     return this.libraryConfigurationPromise
+  }
+
+  getIsTestModified (testSuiteAbsolutePath) {
+    const relativeTestSuitePath = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+    if (!this.modifiedTests) {
+      return false
+    }
+    const lines = this.modifiedTests[relativeTestSuitePath]
+    if (!lines) {
+      return false
+    }
+    return lines.length > 0
   }
 
   getTestSuiteProperties (testSuite) {
@@ -494,12 +503,11 @@ class CypressPlugin {
     }
 
     if (this.isImpactedTestsEnabled) {
-      const impactedTestsResponse = await getModifiedTests(this.testEnvironmentMetadata)
-      if (impactedTestsResponse.err) {
-        log.error('Cypress impacted tests response error', impactedTestsResponse.err)
+      try {
+        this.modifiedTests = getModifiedTests(this.testEnvironmentMetadata)
+      } catch (error) {
+        log.error(error)
         this.isImpactedTestsEnabled = false
-      } else {
-        this.modifiedTests = impactedTestsResponse.modifiedTests
       }
     }
 
@@ -775,7 +783,7 @@ class CypressPlugin {
           testManagementAttemptToFixRetries: this.testManagementAttemptToFixRetries,
           testManagementTests: this.getTestSuiteProperties(testSuite),
           isImpactedTestsEnabled: this.isImpactedTestsEnabled,
-          modifiedTests: this.modifiedTests,
+          isModifiedTest: this.getIsTestModified(testSuiteAbsolutePath),
           repositoryRoot: this.repositoryRoot
         }
 
