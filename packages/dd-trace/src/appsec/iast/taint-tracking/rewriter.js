@@ -157,7 +157,7 @@ function shimPrepareStackTrace () {
     return
   }
   const pstDescriptor = Object.getOwnPropertyDescriptor(global.Error, 'prepareStackTrace')
-  if (pstDescriptor?.configurable || pstDescriptor?.writable) {
+  if (!pstDescriptor || pstDescriptor?.configurable || pstDescriptor?.writable) {
     Object.defineProperty(global.Error, 'prepareStackTrace', getPrepareStackTraceAccessor())
   }
   shimmedPrepareStackTrace = true
