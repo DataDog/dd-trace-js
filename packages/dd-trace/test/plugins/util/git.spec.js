@@ -65,7 +65,7 @@ describe('git', () => {
       authorName: 'ciAuthorName',
       ciWorkspacePath: 'ciWorkspacePath'
     }
-    const metadata = getGitMetadata(ciMetadata)
+    const { tags: metadata } = getGitMetadata(ciMetadata)
 
     expect(metadata).to.contain(
       {
@@ -88,7 +88,7 @@ describe('git', () => {
   it('does not crash if git is not available', () => {
     execFileSyncStub.returns('')
     const ciMetadata = { repositoryUrl: 'https://github.com/datadog/safe-repository.git' }
-    const metadata = getGitMetadata(ciMetadata)
+    const { tags: metadata } = getGitMetadata(ciMetadata)
 
     expect(metadata).to.eql({
       [GIT_BRANCH]: '',
@@ -114,7 +114,7 @@ describe('git', () => {
       .onCall(4).returns('ciWorkspacePath')
       .onCall(5).returns('https://github.com/datadog/safe-repository.git')
 
-    const metadata = getGitMetadata({ tag: 'ciTag' })
+    const { tags: metadata } = getGitMetadata({ tag: 'ciTag' })
 
     expect(metadata).to.eql({
       [GIT_BRANCH]: 'gitBranch',
@@ -359,7 +359,7 @@ describe('user credentials', () => {
       )
       .onCall(5).returns('https://x-oauth-basic:ghp_safe_characters@github.com/datadog/safe-repository.git')
 
-    const metadata = getGitMetadata({})
+    const { tags: metadata } = getGitMetadata({})
     expect(metadata[GIT_REPOSITORY_URL])
       .to.equal('https://github.com/datadog/safe-repository.git')
   })
@@ -372,7 +372,7 @@ describe('user credentials', () => {
       )
       .onCall(5).returns('ssh://username@host.xz:port/path/to/repo.git/')
 
-    const metadata = getGitMetadata({})
+    const { tags: metadata } = getGitMetadata({})
     expect(metadata[GIT_REPOSITORY_URL])
       .to.equal('ssh://host.xz:port/path/to/repo.git/')
   })
