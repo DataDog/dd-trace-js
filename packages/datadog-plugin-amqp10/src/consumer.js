@@ -12,7 +12,7 @@ class Amqp10ConsumerPlugin extends ConsumerPlugin {
     const address = getAddress(link)
 
     this.startSpan({
-      resource: ['receive', source].filter(v => v).join(' '),
+      resource: ['receive', source].filter(Boolean).join(' '),
       type: 'worker',
       meta: {
         'amqp.link.source.address': source,

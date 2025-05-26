@@ -611,13 +611,9 @@ class CypressPlugin {
       const isSkippedByItr = this.testsToSkip.find(test =>
         cypressTestName === test.name && spec.relative === test.suite
       )
-      let testSourceFile
-
-      if (spec.absolute && this.repositoryRoot) {
-        testSourceFile = getTestSuitePath(spec.absolute, this.repositoryRoot)
-      } else {
-        testSourceFile = spec.relative
-      }
+      const testSourceFile = spec.absolute && this.repositoryRoot
+        ? getTestSuitePath(spec.absolute, this.repositoryRoot)
+        : spec.relative
 
       const skippedTestSpan = this.getTestSpan({ testName: cypressTestName, testSuite: spec.relative, testSourceFile })
 
@@ -693,12 +689,9 @@ class CypressPlugin {
         if (this.itrCorrelationId) {
           finishedTest.testSpan.setTag(ITR_CORRELATION_ID, this.itrCorrelationId)
         }
-        let testSourceFile
-        if (spec.absolute && this.repositoryRoot) {
-          testSourceFile = getTestSuitePath(spec.absolute, this.repositoryRoot)
-        } else {
-          testSourceFile = spec.relative
-        }
+        const testSourceFile = spec.absolute && this.repositoryRoot
+          ? getTestSuitePath(spec.absolute, this.repositoryRoot)
+          : spec.relative
         if (testSourceFile) {
           finishedTest.testSpan.setTag(TEST_SOURCE_FILE, testSourceFile)
         }
@@ -746,7 +739,7 @@ class CypressPlugin {
       },
       'dd:beforeEach': (test) => {
         const { testName, testSuite } = test
-        const shouldSkip = !!this.testsToSkip.find(test => {
+        const shouldSkip = this.testsToSkip.some(test => {
           return testName === test.name && testSuite === test.suite
         })
         const isUnskippable = this.unskippableSuites.includes(testSuite)

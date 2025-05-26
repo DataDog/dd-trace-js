@@ -90,11 +90,9 @@ class NativeWallProfiler {
     this._pprof = undefined
 
     // Bind these to this so they can be used as callbacks
-    if (this._withContexts) {
-      if (this._captureSpanData) {
-        this._enter = this._enter.bind(this)
-        this._spanFinished = this._spanFinished.bind(this)
-      }
+    if (this._withContexts && this._captureSpanData) {
+      this._enter = this._enter.bind(this)
+      this._spanFinished = this._spanFinished.bind(this)
     }
     this._generateLabels = this._generateLabels.bind(this)
 

@@ -25,7 +25,7 @@ const unfinishedRegistry = createRegistry('unfinished')
 const finishedRegistry = createRegistry('finished')
 
 const OTEL_ENABLED = !!process.env.DD_TRACE_OTEL_ENABLED
-const ALLOWED = ['string', 'number', 'boolean']
+const ALLOWED = new Set(['string', 'number', 'boolean'])
 
 const integrationCounters = {
   spans_created: {},
@@ -128,7 +128,7 @@ class DatadogSpan {
     const spanContext = this.context()
     const resourceName = spanContext._tags['resource.name'] || ''
     const resource = resourceName.length > 100
-      ? `${resourceName.substring(0, 97)}...`
+      ? `${resourceName.slice(0, 97)}...`
       : resourceName
     const json = JSON.stringify({
       traceId: spanContext._traceId,
@@ -234,10 +234,8 @@ class DatadogSpan {
       return
     }
 
-    if (DD_TRACE_EXPERIMENTAL_STATE_TRACKING === 'true') {
-      if (!this._spanContext._tags['service.name']) {
-        log.error('Finishing invalid span: %s', this)
-      }
+    if (DD_TRACE_EXPERIMENTAL_STATE_TRACKING === 'true' && !this._spanContext._tags['service.name']) {
+      log.error('Finishing invalid span: %s', this)
     }
 
     getIntegrationCounter('spans_finished', this._integrationName).inc()
@@ -255,7 +253,7 @@ class DatadogSpan {
       finishedRegistry.register(this, this._name)
     }
 
-    finishTime = parseFloat(finishTime) || this._getTime()
+    finishTime = Number.parseFloat(finishTime) || this._getTime()
 
     this._duration = finishTime - this._startTime
     this._spanContext._trace.finished.push(this)
@@ -274,7 +272,7 @@ class DatadogSpan {
         }
       } else {
         const maybeScalar = maybeArray
-        if (ALLOWED.includes(typeof maybeScalar)) {
+        if (ALLOWED.has(typeof maybeScalar)) {
           // Wrap the value as a string if it's not already a string
           sanitizedAttributes[key] = typeof maybeScalar === 'string' ? maybeScalar : String(maybeScalar)
         } else {
@@ -298,14 +296,14 @@ class DatadogSpan {
       if (Array.isArray(value)) {
         const newArray = []
         for (const subkey in value) {
-          if (ALLOWED.includes(typeof value[subkey])) {
+          if (ALLOWED.has(typeof value[subkey])) {
             newArray.push(value[subkey])
           } else {
             log.warn('Dropping span event attribute. It is not of an allowed type')
           }
         }
         sanitizedAttributes[key] = newArray
-      } else if (ALLOWED.includes(typeof value)) {
+      } else if (ALLOWED.has(typeof value)) {
         sanitizedAttributes[key] = value
       } else {
         log.warn('Dropping span event attribute. It is not of an allowed type')

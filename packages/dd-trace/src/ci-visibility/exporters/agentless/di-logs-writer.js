@@ -27,7 +27,7 @@ class DynamicInstrumentationLogsWriter extends BaseWriter {
         'Content-Type': 'application/json'
       },
       // TODO: what's a good value for timeout for the logs intake?
-      timeout: this.timeout || 15000,
+      timeout: this.timeout || 15_000,
       url: this._url
     }
 

@@ -42,7 +42,7 @@ const {
 } = require('../../dd-trace/src/plugins/util/test')
 
 const isMarkedAsUnskippable = (pickle) => {
-  return !!pickle.tags.find(tag => tag.name === '@datadog:unskippable')
+  return pickle.tags.some(tag => tag.name === '@datadog:unskippable')
 }
 
 // We'll preserve the original coverage here
@@ -82,7 +82,7 @@ let skippedSuites = []
 let isSuitesSkipped = false
 
 function getSuiteStatusFromTestStatuses (testStatuses) {
-  if (testStatuses.some(status => status === 'fail')) {
+  if (testStatuses.includes('fail')) {
     return 'fail'
   }
   if (testStatuses.every(status => status === 'skip')) {
@@ -133,7 +133,7 @@ function getTestStatusFromRetries (testStatuses) {
   if (testStatuses.every(status => status === 'fail')) {
     return 'fail'
   }
-  if (testStatuses.some(status => status === 'pass')) {
+  if (testStatuses.includes('pass')) {
     return 'pass'
   }
   return 'pass'
@@ -246,7 +246,7 @@ function wrapRun (pl, isLatestVersion) {
     }
     const ctx = testStartPayload
     numAttemptToCtx.set(numAttempt, ctx)
-    testStartCh.runStores(ctx, () => { })
+    testStartCh.runStores(ctx, () => {})
     const promises = {}
     try {
       this.eventBroadcaster.on('envelope', shimmer.wrapFunction(null, () => async (testCase) => {
@@ -258,7 +258,7 @@ function wrapRun (pl, isLatestVersion) {
             try {
               const cucumberResult = this.getWorstStepResult()
               error = getErrorFromCucumberResult(cucumberResult)
-            } catch (e) {
+            } catch {
               // ignore error
             }
 
@@ -276,7 +276,7 @@ function wrapRun (pl, isLatestVersion) {
             const newCtx = { ...testStartPayload, promises }
             numAttemptToCtx.set(numAttempt, newCtx)
 
-            testStartCh.runStores(newCtx, () => { })
+            testStartCh.runStores(newCtx, () => {})
           }
         }
       }))
@@ -547,7 +547,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
           originalCoverageMap.merge(fromCoverageMapToCoverage(untestedCoverage))
         }
         testCodeCoverageLinesTotal = originalCoverageMap.getCoverageSummary().lines.pct
-      } catch (e) {
+      } catch {
         // ignore errors
       }
       // restore the original coverage
@@ -577,12 +577,9 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
 // Handles EFD in both the main process and the worker process.
 function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = false, isWorker = false) {
   return async function () {
-    let pickle
-    if (isNewerCucumberVersion) {
-      pickle = arguments[0].pickle
-    } else {
-      pickle = this.eventDataCollector.getPickle(arguments[0])
-    }
+    const pickle = isNewerCucumberVersion
+      ? arguments[0].pickle
+      : this.eventDataCollector.getPickle(arguments[0])
 
     const testFileAbsolutePath = pickle.uri
     const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())
@@ -626,7 +623,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     let runTestCaseResult = await runTestCaseFunction.apply(this, arguments)
 
     const testStatuses = lastStatusByPickleId.get(pickle.id)
-    const lastTestStatus = testStatuses[testStatuses.length - 1]
+    const lastTestStatus = testStatuses.at(-1)
 
     // New tests should not be marked as attempt to fix, so EFD + Attempt to fix should not be enabled at the same time
     if (isAttemptToFix && lastTestStatus !== 'skip') {
@@ -721,13 +718,7 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
       }
     }
 
-    let envelope
-
-    if (isNewVersion) {
-      envelope = message.envelope
-    } else {
-      envelope = message.jsonEnvelope
-    }
+    const envelope = isNewVersion ? message.envelope : message.jsonEnvelope
 
     if (!envelope) {
       return parseWorkerMessageFunction.apply(this, arguments)
@@ -737,7 +728,7 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
     if (typeof parsed === 'string') {
       try {
         parsed = JSON.parse(envelope)
-      } catch (e) {
+      } catch {
         // ignore errors and continue
         return parseWorkerMessageFunction.apply(this, arguments)
       }

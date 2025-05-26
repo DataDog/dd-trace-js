@@ -161,7 +161,7 @@ session.on('Debugger.paused', async ({ params }) => {
 
   log.debug(
     '[debugger:devtools_client] Finished processing breakpoints - main thread paused for: %d ms',
-    Number(diff) / 1000000
+    Number(diff) / 1_000_000
   )
 
   const logger = {
