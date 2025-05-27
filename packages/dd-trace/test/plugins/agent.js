@@ -425,7 +425,9 @@ module.exports = {
    * Each of these traces is an array of spans.
    *
    * @param {testAssertionTracesCallback} callback - runs once per agent payload
-   * @param {Object} options
+   * @param {Object} [options] - An options object
+   * @param {number} [options.timeoutMs=1000] - The timeout in ms.
+   * @param {boolean} [options.rejectFirst=false] - If true, reject the first time the callback throws.
    * @returns Promise
    */
   assertSomeTraces (callback, options) {
@@ -437,7 +439,9 @@ module.exports = {
    * This callback gets executed once for every payload received by the agent.
 
    * @param {testAssertionSpanCallback} callback - runs once per agent payload
-   * @param {Object} options
+   * @param {Object} [options] - An options object
+   * @param {number} [options.timeoutMs=1000] - The timeout in ms.
+   * @param {boolean} [options.rejectFirst=false] - If true, reject the first time the callback throws.
    * @returns Promise
    */
   assertFirstTraceSpan (callback, options) {
@@ -464,8 +468,8 @@ module.exports = {
   /**
    * Stop the mock agent, reset all expectations and wipe the require cache.
    * @param {Object} opts
-   * @param {boolean} opts.ritmReset - If true, resets the Require In The MIddle cache, useful for TODO.
-   * @param {boolean} opts.wipe - If true, wipes the tracer and non-native modules from the require cache.
+   * @param {boolean} opts.ritmReset - Resets the Require In The Middle cache. You probably don't need this.
+   * @param {boolean} opts.wipe - Wipes tracer and non-native modules from require cache. You probably don't need this.
    * @returns
    */
   close (opts = {}) {
