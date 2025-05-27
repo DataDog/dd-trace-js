@@ -139,6 +139,7 @@ export default [
       'unicorn/explicit-length-check': 'off', // 68 errors
       'unicorn/filename-case': ['off', { case: 'kebabCase' }], // 59 errors
       'unicorn/import-style': 'off', // 9 errors - controversial
+      'unicorn/no-accessor-recursion': 'off', // TODO: throws a TypeError when eslint-plugin-n is enabled
       'unicorn/no-anonymous-default-export': 'off', // only makes a difference for ESM
       'unicorn/no-array-callback-reference': 'off', // too strict
       'unicorn/no-array-for-each': 'off', // 122 errors
