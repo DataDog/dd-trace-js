@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 
 import { FlatCompat } from '@eslint/eslintrc'
 import eslintPluginJs from '@eslint/js'
-import eslintPluginStylistic from '@stylistic/eslint-plugin-js'
+import eslintPluginStylistic from '@stylistic/eslint-plugin'
 import eslintPluginMocha from 'eslint-plugin-mocha'
 import eslintPluginN from 'eslint-plugin-n'
 import eslintPluginUnicorn from 'eslint-plugin-unicorn'
@@ -56,7 +56,7 @@ export default [
     name: 'dd-trace/defaults',
 
     plugins: {
-      '@stylistic/js': eslintPluginStylistic,
+      '@stylistic': eslintPluginStylistic,
       n: eslintPluginN,
       unicorn: eslintPluginUnicorn
     },
@@ -80,9 +80,9 @@ export default [
     },
 
     rules: {
-      '@stylistic/js/max-len': ['error', { code: 120, tabWidth: 2, ignoreUrls: true }],
-      '@stylistic/js/object-curly-newline': ['error', { multiline: true, consistent: true }],
-      '@stylistic/js/object-curly-spacing': ['error', 'always'],
+      '@stylistic/max-len': ['error', { code: 120, tabWidth: 2, ignoreUrls: true }],
+      '@stylistic/object-curly-newline': ['error', { multiline: true, consistent: true }],
+      '@stylistic/object-curly-spacing': ['error', 'always'],
       'import/no-extraneous-dependencies': 'error',
       'n/no-restricted-require': ['error', ['diagnostics_channel']],
       'no-console': 'error',
