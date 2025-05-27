@@ -484,7 +484,7 @@ describe('TextMapPropagator', () => {
 
       // should not add baggage when key list is empty
       config = new Config({
-        baggageToSpanTagKeys: ''
+        baggageTagKeys: ''
       })
       propagator = new TextMapPropagator(config)
       const spanContextB = propagator.extract(carrier)
@@ -492,7 +492,7 @@ describe('TextMapPropagator', () => {
 
       // should not add baggage when key list is empty
       config = new Config({
-        baggageToSpanTagKeys: 'customKey'
+        baggageTagKeys: 'customKey'
       })
       propagator = new TextMapPropagator(config)
       carrier = {
@@ -507,7 +507,7 @@ describe('TextMapPropagator', () => {
 
       // should add all baggage to span tags
       config = new Config({
-        baggageToSpanTagKeys: '*'
+        baggageTagKeys: '*'
       })
       propagator = new TextMapPropagator(config)
       carrier = {
