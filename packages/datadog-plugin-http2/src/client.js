@@ -48,7 +48,8 @@ class Http2ClientPlugin extends ClientPlugin {
         'span.type': 'http',
         'http.method': method,
         'http.url': uri,
-        'out.host': sessionDetails.host
+        'out.host': sessionDetails.host,
+        'peer.service': sessionDetails.host
       },
       metrics: {
         [CLIENT_PORT_KEY]: parseInt(sessionDetails.port)

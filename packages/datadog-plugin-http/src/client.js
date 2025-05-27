@@ -46,7 +46,8 @@ class HttpClientPlugin extends ClientPlugin {
         'span.type': 'http',
         'http.method': method,
         'http.url': uri,
-        'out.host': hostname
+        'out.host': hostname,
+        'peer.service': hostname
       },
       metrics: {
         [CLIENT_PORT_KEY]: parseInt(options.port)

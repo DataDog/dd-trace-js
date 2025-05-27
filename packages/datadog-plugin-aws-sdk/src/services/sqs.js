@@ -7,7 +7,7 @@ const { DsmPathwayCodec, getHeadersSize } = require('../../../dd-trace/src/datas
 
 class Sqs extends BaseAwsSdkPlugin {
   static get id () { return 'sqs' }
-  //static get peerServicePrecursors () { return ['queuename'] }
+  static get peerServicePrecursors () { return ['queuename'] }
   static get isPayloadReporter () { return true }
 
   constructor (...args) {
