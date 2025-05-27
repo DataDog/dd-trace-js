@@ -7,7 +7,6 @@ const {
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
 
-// eslint-disable-next-line n/no-unsupported-features/node-builtins
 const describe = globalThis.fetch ? globalThis.describe : globalThis.describe.skip
 
 describe('esm', () => {

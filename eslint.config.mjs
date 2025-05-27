@@ -55,6 +55,8 @@ export default [
   {
     ...eslintPluginN.configs['flat/recommended'],
     ignores: [
+      'integration-tests/debugger/target-app/re-evaluation/index.js',
+      'integration-tests/debugger/target-app/re-evaluation/unique-filename.js',
       'packages/dd-trace/test/appsec/next/app-dir/**/*.js',
       'packages/dd-trace/test/appsec/next/pages-dir/**/*.js',
       'packages/datadog-plugin-next/test/app/**/*.js',
@@ -99,9 +101,11 @@ export default [
       'n/no-process-exit': 'off', // TODO: Enable this rule once we have a plan to address it
       'n/no-unsupported-features/node-builtins': ['error', {
         ignores: [
+          'Response',
           'async_hooks.createHook',
           'async_hooks.executionAsyncId',
-          'async_hooks.executionAsyncResource'
+          'async_hooks.executionAsyncResource',
+          'fetch'
         ]
       }],
       'no-console': 'error',
