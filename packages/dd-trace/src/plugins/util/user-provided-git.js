@@ -1,3 +1,5 @@
+'use strict'
+
 const {
   GIT_COMMIT_SHA,
   GIT_BRANCH,

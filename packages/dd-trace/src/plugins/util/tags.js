@@ -1,3 +1,5 @@
+'use strict'
+
 const GIT_COMMIT_SHA = 'git.commit.sha'
 const GIT_BRANCH = 'git.branch'
 const GIT_REPOSITORY_URL = 'git.repository_url'
