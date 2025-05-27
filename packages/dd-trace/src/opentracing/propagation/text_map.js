@@ -634,8 +634,8 @@ class TextMapPropagator {
     if (!spanContext) removeAllBaggageItems()
     const baggages = carrier.baggage.split(',')
     let keysToSpanTag = new Set()
-    if (this._config.baggageToSpanTagKeys !== '*') {
-      keysToSpanTag = new Set(this._config.baggageToSpanTagKeys.split(','))
+    if (this._config.baggageTagKeys !== '*') {
+      keysToSpanTag = new Set(this._config.baggageTagKeys.split(','))
     }
     for (const keyValue of baggages) {
       if (!keyValue.includes('=')) {
@@ -653,7 +653,7 @@ class TextMapPropagator {
       if (spanContext) {
         if (key in spanContext._baggageItems) continue
         spanContext._baggageItems[key] = value
-        if (this._config.baggageToSpanTagKeys === '*' || keysToSpanTag.has(key)) {
+        if (this._config.baggageTagKeys === '*' || keysToSpanTag.has(key)) {
           spanContext._trace.tags['baggage.' + key] = value
         }
       } else {
