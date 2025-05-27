@@ -65,7 +65,7 @@ describe('git', () => {
       authorName: 'ciAuthorName',
       ciWorkspacePath: 'ciWorkspacePath'
     }
-    const { tags: metadata } = getGitMetadata(ciMetadata)
+    const metadata = getGitMetadata(ciMetadata)
 
     expect(metadata).to.contain(
       {
@@ -88,7 +88,7 @@ describe('git', () => {
   it('does not crash if git is not available', () => {
     execFileSyncStub.returns('')
     const ciMetadata = { repositoryUrl: 'https://github.com/datadog/safe-repository.git' }
-    const { tags: metadata } = getGitMetadata(ciMetadata)
+    const metadata = getGitMetadata(ciMetadata)
 
     expect(metadata).to.eql({
       [GIT_BRANCH]: '',
@@ -114,7 +114,7 @@ describe('git', () => {
       .onCall(4).returns('ciWorkspacePath')
       .onCall(5).returns('https://github.com/datadog/safe-repository.git')
 
-    const { tags: metadata } = getGitMetadata({ tag: 'ciTag' })
+    const metadata = getGitMetadata({ tag: 'ciTag' })
 
     expect(metadata).to.eql({
       [GIT_BRANCH]: 'gitBranch',
@@ -359,7 +359,7 @@ describe('user credentials', () => {
       )
       .onCall(5).returns('https://x-oauth-basic:ghp_safe_characters@github.com/datadog/safe-repository.git')
 
-    const { tags: metadata } = getGitMetadata({})
+    const metadata = getGitMetadata({})
     expect(metadata[GIT_REPOSITORY_URL])
       .to.equal('https://github.com/datadog/safe-repository.git')
   })
@@ -372,7 +372,7 @@ describe('user credentials', () => {
       )
       .onCall(5).returns('ssh://username@host.xz:port/path/to/repo.git/')
 
-    const { tags: metadata } = getGitMetadata({})
+    const metadata = getGitMetadata({})
     expect(metadata[GIT_REPOSITORY_URL])
       .to.equal('ssh://host.xz:port/path/to/repo.git/')
   })
@@ -397,5 +397,42 @@ describe('isGitAvailable', () => {
     process.env.PATH = ''
 
     expect(isGitAvailable()).to.be.false
+  })
+})
+
+describe('getGitInformationDiscrepancy', () => {
+  const { getGitInformationDiscrepancy } = proxyquire('../../../src/plugins/util/git',
+    {
+      child_process: {
+        execFileSync: execFileSyncStub
+      }
+    }
+  )
+
+  it('returns git repository URL and commit SHA', () => {
+    execFileSyncStub
+      .onCall(0).returns('https://github.com/datadog/safe-repository.git')
+      .onCall(1).returns('abc123')
+
+    const result = getGitInformationDiscrepancy()
+
+    expect(result).to.eql({
+      gitRepositoryUrl: 'https://github.com/datadog/safe-repository.git',
+      gitCommitSHA: 'abc123'
+    })
+
+    expect(execFileSyncStub).to.have.been.calledWith('git', ['ls-remote', '--get-url'])
+    expect(execFileSyncStub).to.have.been.calledWith('git', ['rev-parse', 'HEAD'])
+  })
+
+  it('returns empty strings when git commands fail', () => {
+    execFileSyncStub.throws(new Error('git command failed'))
+
+    const result = getGitInformationDiscrepancy()
+
+    expect(result).to.eql({
+      gitRepositoryUrl: '',
+      gitCommitSHA: ''
+    })
   })
 })
