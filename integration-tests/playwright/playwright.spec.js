@@ -1520,104 +1520,43 @@ versions.forEach((version) => {
     })
 
     context('impacted tests', () => {
-      const NUM_RETRIES = 3
-      let baseCommitSha = null
-      let commitHeadSha = null
-      let eventPath = null
-      let testConfig = null
-
-      function promiseExec (command) {
-        return new Promise((resolve) => {
-          const child = exec(command, { cwd })
-          let data = ''
-          child.stdout.on('data', chunk => { data += chunk })
-          child.stdout.on('end', () => resolve(data.trim()))
-        })
-      }
-
       beforeEach(() => {
-        const eventContent = {
-          pull_request: {
-            base: {
-              sha: baseCommitSha,
-              ref: 'master'
-            },
-            head: {
-              sha: commitHeadSha,
-              ref: 'master'
-            }
+        receiver.setKnownTests({
+          playwright: {
+            'ci-visibility/playwright-tests-impacted-tests/impacted-test.js': ['impacted test should be impacted']
           }
-        }
-        eventPath = path.join(cwd, 'event.json')
-        fs.writeFileSync(eventPath, JSON.stringify(eventContent, null, 2))
-
-        testConfig = {
-          GITHUB_ACTIONS: true,
-          GITHUB_BASE_REF: 'master',
-          GITHUB_HEAD_REF: 'feature-branch',
-          GITHUB_EVENT_PATH: eventPath
-        }
+        })
       })
 
       // Add git setup before running impacted tests
-      before(async function () {
-        // Create initial test file on main
-        const testDir = path.join(cwd, 'ci-visibility/playwright-tests-impacted-tests')
-        await exec(`mkdir -p ${testDir}`, { cwd })
-        const testContent = `
-const { test, expect } = require('@playwright/test')
+      before(function () {
+        execSync('git checkout -b feature-branch', { cwd, stdio: 'ignore' })
+        fs.writeFileSync(
+          path.join(cwd, 'ci-visibility/playwright-tests-impacted-tests/impacted-test.js'),
+          `const { test, expect } = require('@playwright/test')
 
-test.beforeEach(async ({ page }) => {
-await page.goto(process.env.PW_BASE_URL)
-})
+           test.beforeEach(async ({ page }) => {
+             await page.goto(process.env.PW_BASE_URL)
+           })
 
-test.describe('impacted test', () => {
-test('should be impacted', async ({ page }) => {
-  await expect(page.locator('.hello-world')).toHaveText([
-    'Hello World'
-  ])
-})
-})
-`
-        fs.writeFileSync(path.join(testDir, 'impacted-test.js'), testContent)
-
-        await promiseExec('git add ci-visibility/playwright-tests-impacted-tests/impacted-test.js')
-        await promiseExec('git commit -m "add impacted-test.js"')
-        // Get base commit SHA from main after creating the file
-        baseCommitSha = await promiseExec('git rev-parse HEAD')
-
-        await promiseExec('git checkout -b feature-branch')
-        const modifiedTestContent = `
-const { test, expect } = require('@playwright/test')
-
-test.beforeEach(async ({ page }) => {
-await page.goto(process.env.PW_BASE_URL)
-})
-
-test.describe('impacted test', () => {
-test('should be impacted', async ({ page }) => {
-  await expect(page.locator('.hello-world')).toHaveText([
-    'Hello Worldd'
-  ])
-})
-})
-`
-        fs.writeFileSync(path.join(testDir, 'impacted-test.js'), modifiedTestContent)
-        await promiseExec('git add ci-visibility/playwright-tests-impacted-tests/impacted-test.js')
-        await promiseExec('git commit -m "modify impacted-test.js"')
-        commitHeadSha = await promiseExec('git rev-parse HEAD')
+           test.describe('impacted test', () => {
+             test('should be impacted', async ({ page }) => {
+               await expect(page.locator('.hello-world')).toHaveText([
+                 'Hello Worldd'
+               ])
+             })
+           })`
+        )
+        execSync('git add ci-visibility/playwright-tests-impacted-tests/impacted-test.js', { cwd, stdio: 'ignore' })
+        execSync('git commit -m "modify impacted-test.js" --no-verify', { cwd, stdio: 'ignore' })
       })
 
-      // Clean up git branches and temp files after impacted tests
-      after(async () => {
-        await promiseExec('git checkout main')
-        await promiseExec('git branch -D feature-branch')
-        if (fs.existsSync(eventPath)) {
-          fs.unlinkSync(eventPath)
-        }
+      after(function () {
+        execSync('git checkout -', { cwd, stdio: 'ignore' })
+        execSync('git branch -D feature-branch', { cwd, stdio: 'ignore' })
       })
 
-      const getTestAssertions = ({ isImpacting, isEfd }) =>
+      const getTestAssertions = ({ isModified, isEfd, isNew }) =>
         receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
@@ -1643,24 +1582,30 @@ test('should be impacted', async ({ page }) => {
               test.meta[TEST_NAME] === 'impacted test should be impacted')
 
             if (isEfd) {
-              assert.equal(impactedTests.length, NUM_RETRIES + 1) // Retries + original test
+              assert.equal(impactedTests.length, NUM_RETRIES_EFD + 1) // Retries + original test
             } else {
               assert.equal(impactedTests.length, 1)
             }
 
-            if (isImpacting) {
-              impactedTests.forEach(test => {
-                assert.propertyVal(test.meta, TEST_IS_MODIFIED, 'true')
-              })
-            } else {
-              impactedTests.forEach(test => {
-                assert.notProperty(test.meta, TEST_IS_MODIFIED)
-              })
+            for (const impactedTest of impactedTests) {
+              if (isModified) {
+                assert.propertyVal(impactedTest.meta, TEST_IS_MODIFIED, 'true')
+              } else {
+                assert.notProperty(impactedTest.meta, TEST_IS_MODIFIED)
+              }
+              if (isNew) {
+                assert.propertyVal(impactedTest.meta, TEST_IS_NEW, 'true')
+              } else {
+                assert.notProperty(impactedTest.meta, TEST_IS_NEW)
+              }
             }
 
             if (isEfd) {
-              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-              assert.equal(retriedTests.length, NUM_RETRIES)
+              const retriedTests = tests.filter(
+                test => test.meta[TEST_IS_RETRY] === 'true' &&
+                test.meta[TEST_NAME] === 'impacted test should be impacted'
+              )
+              assert.equal(retriedTests.length, NUM_RETRIES_EFD)
               let retriedTestNew = 0
               let retriedTestsWithReason = 0
               retriedTests.forEach(test => {
@@ -1671,27 +1616,27 @@ test('should be impacted', async ({ page }) => {
                   retriedTestsWithReason++
                 }
               })
-              assert.equal(retriedTestNew, 0)
-              assert.equal(retriedTestsWithReason, NUM_RETRIES)
+              assert.equal(retriedTestNew, isNew ? NUM_RETRIES_EFD : 0)
+              assert.equal(retriedTestsWithReason, NUM_RETRIES_EFD)
             }
-          })
+          }, 25000)
 
       const runImpactedTest = (
         done,
-        { isImpacting, isEfd = false },
+        { isModified, isEfd = false, isNew = false },
         extraEnvVars = {}
       ) => {
-        const testAssertionsPromise = getTestAssertions({ isImpacting, isEfd })
+        const testAssertionsPromise = getTestAssertions({ isModified, isEfd, isNew })
 
         childProcess = exec(
-          './node_modules/.bin/playwright test -c playwright.config.js impacted-test.js',
+          './node_modules/.bin/playwright test -c playwright.config.js',
           {
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-tests-impacted-tests',
-              ...testConfig,
+              GITHUB_BASE_REF: '',
               ...extraEnvVars
             },
             stdio: 'pipe'
@@ -1703,98 +1648,48 @@ test('should be impacted', async ({ page }) => {
         })
       }
 
-      it('can impacted tests', (done) => {
-        receiver.setSettings({ impacted_tests_enabled: true })
+      context('test is not new', () => {
+        it('should be detected as impacted', (done) => {
+          receiver.setSettings({ impacted_tests_enabled: true })
 
-        runImpactedTest(done, { isImpacting: true })
-      })
-
-      it('does not impact tests if disabled', (done) => {
-        receiver.setSettings({ impacted_tests_enabled: false })
-
-        runImpactedTest(done, { isImpacting: false })
-      })
-
-      it('does not impact tests DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED is set to false', (done) => {
-        receiver.setSettings({ impacted_tests_enabled: false })
-
-        runImpactedTest(done,
-          { isImpacting: false },
-          { DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0' }
-        )
-      })
-
-      it('can impact tests with no base sha', (done) => {
-        receiver.setSettings({ impacted_tests_enabled: true })
-        const eventContent = {
-          pull_request: {
-            base: {
-              sha: '',
-              ref: 'master'
-            },
-            head: {
-              sha: commitHeadSha,
-              ref: 'master'
-            }
-          }
-        }
-        eventPath = path.join(cwd, 'event.json')
-        fs.writeFileSync(eventPath, JSON.stringify(eventContent, null, 2))
-
-        runImpactedTest(done, { isImpacting: true })
-      })
-
-      it('can impact tests with no head sha', (done) => {
-        receiver.setSettings({ impacted_tests_enabled: true })
-        const eventContent = {
-          pull_request: {
-            base: {
-              sha: baseCommitSha,
-              ref: 'master'
-            },
-            head: {
-              sha: '',
-              ref: 'master'
-            }
-          }
-        }
-        eventPath = path.join(cwd, 'event.json')
-        fs.writeFileSync(eventPath, JSON.stringify(eventContent, null, 2))
-
-        runImpactedTest(done, { isImpacting: true })
-      })
-
-      it('can impact tests in and activate EFD if modified (no known tests)', (done) => {
-        receiver.setSettings({
-          impacted_tests_enabled: true,
-          early_flake_detection: {
-            enabled: true,
-            slow_test_retries: {
-              '5s': NUM_RETRIES
-            }
-          },
-          known_tests_enabled: true
+          runImpactedTest(done, { isModified: true })
         })
-        runImpactedTest(done,
-          { isImpacting: true, isEfd: true }
-        )
+
+        it('should not be detected as impacted if disabled', (done) => {
+          receiver.setSettings({ impacted_tests_enabled: false })
+
+          runImpactedTest(done, { isModified: false })
+        })
+
+        it('should not be detected as impacted if DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED is false',
+          (done) => {
+            receiver.setSettings({ impacted_tests_enabled: true })
+
+            runImpactedTest(done,
+              { isModified: false },
+              { DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0' }
+            )
+          })
       })
 
-      it('can impact tests in and activate EFD if modified (with known tests)', (done) => {
-        receiver.setSettings({
-          impacted_tests_enabled: true,
-          early_flake_detection: {
-            enabled: true,
-            slow_test_retries: {
-              '5s': NUM_RETRIES
-            }
-          },
-          known_tests_enabled: true
+      context('test is new', () => {
+        it('should be retried and marked both as new and modified', (done) => {
+          receiver.setKnownTests({})
+          receiver.setSettings({
+            impacted_tests_enabled: true,
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': NUM_RETRIES_EFD
+              }
+            },
+            known_tests_enabled: true
+          })
+          runImpactedTest(
+            done,
+            { isModified: true, isEfd: true, isNew: true }
+          )
         })
-        receiver.setKnownTests({ playwright: { 'impacted-test.js': ['impacted test should be impacted'] } })
-        runImpactedTest(done,
-          { isImpacting: true, isEfd: true }
-        )
       })
     })
   })

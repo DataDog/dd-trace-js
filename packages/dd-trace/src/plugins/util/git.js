@@ -275,37 +275,22 @@ function getSourceBranch () {
 
 function checkAndFetchBranch (branch, remoteName) {
   try {
-    const success = sanitizedExec(
-      'git',
-      ['show-ref', '--verify', '--quiet', `refs/heads/${branch}`],
-      { name: TELEMETRY_GIT_COMMAND, tags: { command: 'check_and_fetch_branch' } },
-      { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'check_and_fetch_branch' } },
-      { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'check_and_fetch_branch' } }
-    )
-    if (success) {
-      return
+    cp.execFileSync('git', ['show-ref', '--verify', '--quiet', `refs/heads/${branch}`], { stdio: 'pipe' })
+    // branch exists locally
+  } catch (e) {
+    // branch does not exist locally, so we will check the remote
+    try {
+      // IMPORTANT: we use timeouts because these commands hang if the branch can't be found
+      cp.execFileSync('git', ['ls-remote', '--heads', remoteName, branch], { stdio: 'pipe', timeout: 2000 })
+      // branch exists, so we'll fetch it
+      cp.execFileSync(
+        'git',
+        ['fetch', '--depth', '1', remoteName, `${branch}:${branch}`],
+        { stdio: 'pipe', timeout: 5000 }
+      )
+    } catch (e) {
+      // branch does not exist or couldn't be fetched, so we can't do anything
     }
-
-    const remoteHeads = sanitizedExec(
-      'git',
-      ['ls-remote', '--heads', remoteName, branch],
-      { name: TELEMETRY_GIT_COMMAND, tags: { command: 'check_and_fetch_branch' } },
-      { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'check_and_fetch_branch' } },
-      { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'check_and_fetch_branch' } }
-    )
-    if (!remoteHeads || remoteHeads.length === 0) {
-      return
-    }
-
-    sanitizedExec(
-      'git',
-      ['fetch', '--depth', '1', remoteName, `${branch}:${branch}`],
-      { name: TELEMETRY_GIT_COMMAND, tags: { command: 'check_and_fetch_branch' } },
-      { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'check_and_fetch_branch' } },
-      { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'check_and_fetch_branch' } }
-    )
-  } catch (err) {
-    log.error('Git plugin error checking and fetching branch: %s', err.message)
   }
 }
 

@@ -821,6 +821,7 @@ function getLibraryCapabilitiesTags (testFramework, isParallel) {
   }
 }
 
+// TODO: review this with unit tests
 function getPullRequestBaseBranch (pullRequestBaseBranch) {
   const remoteName = getGitRemoteName()
 
