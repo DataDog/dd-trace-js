@@ -53,11 +53,23 @@ export default [
   { name: '@eslint/js/recommended', ...eslintPluginJs.configs.recommended },
   ...compat.extends('standard').map((config, i) => ({ name: config.name || `standard/${i + 1}`, ...config })),
   {
+    ...eslintPluginN.configs['flat/recommended'],
+    ignores: [
+      'integration-tests/debugger/target-app/re-evaluation/index.js',
+      'integration-tests/debugger/target-app/re-evaluation/unique-filename.js',
+      'packages/dd-trace/test/appsec/next/app-dir/**/*.js',
+      'packages/dd-trace/test/appsec/next/pages-dir/**/*.js',
+      'packages/datadog-plugin-next/test/app/**/*.js',
+      'packages/datadog-plugin-next/test/**/pages/**/*.js',
+      'packages/datadog-plugin-next/test/middleware.js',
+      '**/*.mjs' // TODO: This shoudln't be required, research why it is
+    ]
+  },
+  {
     name: 'dd-trace/defaults',
 
     plugins: {
       '@stylistic': eslintPluginStylistic,
-      n: eslintPluginN,
       unicorn: eslintPluginUnicorn
     },
 
@@ -85,6 +97,17 @@ export default [
       '@stylistic/object-curly-spacing': ['error', 'always'],
       'import/no-extraneous-dependencies': 'error',
       'n/no-restricted-require': ['error', ['diagnostics_channel']],
+      'n/hashbang': 'off', // TODO: Enable this rule once we have a plan to address it
+      'n/no-process-exit': 'off', // TODO: Enable this rule once we have a plan to address it
+      'n/no-unsupported-features/node-builtins': ['error', {
+        ignores: [
+          'Response',
+          'async_hooks.createHook',
+          'async_hooks.executionAsyncId',
+          'async_hooks.executionAsyncResource',
+          'fetch'
+        ]
+      }],
       'no-console': 'error',
       'no-prototype-builtins': 'off', // Override (turned on by @eslint/js/recommnded)
       'no-unused-expressions': 'off', // Override (turned on by standard)
@@ -116,6 +139,7 @@ export default [
       'unicorn/explicit-length-check': 'off', // 68 errors
       'unicorn/filename-case': ['off', { case: 'kebabCase' }], // 59 errors
       'unicorn/import-style': 'off', // 9 errors - controversial
+      'unicorn/no-accessor-recursion': 'off', // TODO: throws a TypeError when eslint-plugin-n is enabled
       'unicorn/no-anonymous-default-export': 'off', // only makes a difference for ESM
       'unicorn/no-array-callback-reference': 'off', // too strict
       'unicorn/no-array-for-each': 'off', // 122 errors
@@ -167,6 +191,15 @@ export default [
     files: TEST_FILES
   },
   {
+    name: 'dd-trace/benchmarks',
+    files: [
+      'benchmark/**/*'
+    ],
+    rules: {
+      'n/no-missing-require': 'off'
+    }
+  },
+  {
     name: 'dd-trace/tests/all',
     files: TEST_FILES,
     languageOptions: {
@@ -191,6 +224,7 @@ export default [
       'mocha/no-skipped-tests': 'off',
       'mocha/no-top-level-hooks': 'off',
       'n/handle-callback-err': 'off',
+      'n/no-missing-require': 'off',
       'require-await': 'off'
     }
   },
