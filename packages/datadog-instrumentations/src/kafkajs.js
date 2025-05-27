@@ -62,16 +62,16 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
         const ctx = {}
         ctx.bootstrapServers = bootstrapServers
         ctx.clusterId = clusterId
+        ctx.disableHeaderInjection = disabledHeaderWeakSet.has(producer)
 
         const { topic, messages = [] } = arguments[0]
         for (const message of messages) {
-          if (message !== null && typeof message === 'object') {
+          if (message !== null && typeof message === 'object' && !ctx.disableHeaderInjection) {
             message.headers = message.headers || {}
           }
         }
         ctx.topic = topic
         ctx.messages = messages
-        ctx.disableHeaderInjection = disabledHeaderWeakSet.has(producer)
 
         return producerStartCh.runStores(ctx, () => {
           try {
