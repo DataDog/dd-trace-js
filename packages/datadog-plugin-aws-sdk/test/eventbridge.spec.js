@@ -1,4 +1,4 @@
-/* eslint-disable @stylistic/js/max-len */
+/* eslint-disable @stylistic/max-len */
 'use strict'
 
 const EventBridge = require('../src/services/eventbridge')
