@@ -83,9 +83,10 @@ function wrapEvents (events) {
   return [events].flat().map(event => {
     if (!event || !event.method) return event
 
-    return Object.assign({}, event, {
+    return {
+      ...event,
       method: wrapExtension(event.method)
-    })
+    }
   })
 }
 

@@ -5,20 +5,30 @@ const tagger = {
     if (!tags) return {}
 
     switch (typeof tags) {
-      case 'object':
-        return Array.isArray(tags)
-          ? tags.reduce((prev, next) => {
+      case 'object': {
+        if (Array.isArray(tags)) {
+          return tags.reduce((prev, next) => {
             const parts = next.split(':')
             const key = parts.shift().trim()
+            if (!key) return prev
+
             const value = parts.join(':').trim()
+            if (!value) return prev
 
-            if (!key || !value) return prev
-
-            return Object.assign(prev, { [key]: value })
+            prev[key] = value
+            return prev
           }, {})
-          : tagger.parse(Object.keys(tags)
-            .filter(key => tags[key] !== undefined && tags[key] !== null)
-            .map(key => `${key}:${tags[key]}`))
+        }
+
+        const tagsArray = []
+        for (const [key, value] of Object.entries(tags)) {
+          if (value != null) {
+            tagsArray.push(`${key}:${value}`)
+          }
+        }
+
+        return tagger.parse(tagsArray)
+      }
       case 'string':
         return tagger.parse(tags.split(','))
       default:

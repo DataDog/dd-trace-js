@@ -174,17 +174,19 @@ function normalizeConfig (config) {
   const filter = getFilter(config)
   const headers = getHeaders(config)
 
-  return Object.assign({}, config, {
+  return {
+    ...config,
     validateStatus,
     filter,
     headers
-  })
+  }
 }
 
 function getFilter (config) {
-  config = Object.assign({}, config, {
+  config = {
+    ...config,
     blocklist: config.blocklist || []
-  })
+  }
 
   return urlFilter.getFilter(config)
 }

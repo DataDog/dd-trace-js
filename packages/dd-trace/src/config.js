@@ -1015,7 +1015,7 @@ class Config {
     const tags = {}
     setHiddenProperty(this, '_optsUnprocessed', {})
 
-    options = setHiddenProperty(this, '_optionsArg', Object.assign({ ingestion: {} }, options, opts))
+    options = setHiddenProperty(this, '_optionsArg', { ingestion: {}, ...options, ...opts })
 
     tagger.add(tags, options.tags)
 
