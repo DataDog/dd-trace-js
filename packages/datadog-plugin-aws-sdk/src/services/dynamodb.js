@@ -7,7 +7,7 @@ const { extractPrimaryKeys, generatePointerHash } = require('../util')
 
 class DynamoDb extends BaseAwsSdkPlugin {
   static get id () { return 'dynamodb' }
-  static get peerServicePrecursors () { return ['tablename'] }
+  //static get peerServicePrecursors () { return ['tablename'] }
   static get isPayloadReporter () { return true }
 
   generateTags (params, operation, response) {

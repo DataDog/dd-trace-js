@@ -5,7 +5,7 @@ const BaseAwsSdkPlugin = require('../base')
 
 class Sns extends BaseAwsSdkPlugin {
   static get id () { return 'sns' }
-  static get peerServicePrecursors () { return ['topicname'] }
+  //static get peerServicePrecursors () { return ['topicname'] }
   static get isPayloadReporter () { return true }
 
   generateTags (params, operation, response) {

@@ -7,7 +7,7 @@ const { S3_PTR_KIND, SPAN_POINTER_DIRECTION } = require('../../../dd-trace/src/c
 
 class S3 extends BaseAwsSdkPlugin {
   static get id () { return 's3' }
-  static get peerServicePrecursors () { return ['bucketname'] }
+  //static get peerServicePrecursors () { return ['bucketname'] }
   static get isPayloadReporter () { return true }
 
   generateTags (params, operation, response) {
