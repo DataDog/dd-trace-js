@@ -22,13 +22,14 @@ const publishStartCh = channel('apm:amqplib:publish:start')
 const publishFinishCh = channel('apm:amqplib:publish:finish')
 const publishErrorCh = channel('apm:amqplib:publish:error')
 
-let methods = {}
+const methods = {}
 
 addHook({ name: 'amqplib', file: 'lib/defs.js', versions: [MIN_VERSION] }, defs => {
-  methods = Object.keys(defs)
-    .filter(key => Number.isInteger(defs[key]))
-    .filter(key => isCamelCase(key))
-    .reduce((acc, key) => Object.assign(acc, { [defs[key]]: kebabCase(key).replace('-', '.') }), {})
+  for (const [key, value] of Object.entries(defs)) {
+    if (Number.isInteger(value) && isCamelCase(key)) {
+      methods[value] = kebabCase(key).replaceAll('-', '.')
+    }
+  }
   return defs
 })
 

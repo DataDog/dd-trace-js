@@ -1,7 +1,5 @@
 'use strict'
 
-const semver = require('semver')
-
 // TODO: benchmark the tracer as well but for now it's just too slow
 if (Number(process.env.WITH_TRACER)) {
   const tracer = require('../../..').init()
@@ -16,9 +14,7 @@ if (Number(process.env.WITH_TRACER)) {
 }
 
 if (Number(process.env.WITH_ASYNC_HOOKS)) {
-  const hook = semver.satisfies(process.versions.node, '>=14.5')
-    ? { init () {} }
-    : { init () {}, before () {}, after () {}, destroy () {} }
+  const hook = { init () {} }
 
   require('async_hooks').createHook(hook).enable()
 }

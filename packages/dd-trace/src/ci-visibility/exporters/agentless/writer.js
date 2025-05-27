@@ -32,7 +32,7 @@ class Writer extends BaseWriter {
         'dd-api-key': process.env.DATADOG_API_KEY || process.env.DD_API_KEY,
         'Content-Type': 'application/msgpack'
       },
-      timeout: 15000,
+      timeout: 15_000,
       url: this._url
     }
 

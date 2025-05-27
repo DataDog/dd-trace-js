@@ -1,5 +1,3 @@
-const satisfies = require('semifies')
-
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const {
@@ -8,6 +6,7 @@ const {
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE
 } = require('../../dd-trace/src/plugins/util/test')
 const log = require('../../dd-trace/src/log')
+const { DD_MAJOR } = require('../../../version')
 
 const testStartCh = channel('ci:playwright:test:start')
 const testFinishCh = channel('ci:playwright:test:finish')
@@ -25,8 +24,8 @@ const testSuiteFinishCh = channel('ci:playwright:test-suite:finish')
 const workerReportCh = channel('ci:playwright:worker:report')
 const testPageGotoCh = channel('ci:playwright:test:page-goto')
 
-const testToAr = new WeakMap()
-const testSuiteToAr = new Map()
+const testToCtx = new WeakMap()
+const testSuiteToCtx = new Map()
 const testSuiteToTestStatuses = new Map()
 const testSuiteToErrors = new Map()
 const testsToTestStatuses = new Map()
@@ -55,7 +54,6 @@ let testManagementAttemptToFixRetries = 0
 let testManagementTests = {}
 const quarantinedOrDisabledTestsAttemptToFix = []
 let rootDir = ''
-const MINIMUM_SUPPORTED_VERSION_RANGE_EFD = '>=1.38.0'
 
 function getTestProperties (test) {
   const testName = getTestFullname(test)
@@ -104,11 +102,7 @@ function deepCloneSuite (suite, filterTest, tags = []) {
 
 function getTestsBySuiteFromTestGroups (testGroups) {
   return testGroups.reduce((acc, { requireFile, tests }) => {
-    if (acc[requireFile]) {
-      acc[requireFile] = acc[requireFile].concat(tests)
-    } else {
-      acc[requireFile] = tests
-    }
+    acc[requireFile] = acc[requireFile] ? acc[requireFile].concat(tests) : tests
     return acc
   }, {})
 }
@@ -132,10 +126,10 @@ function getTestsBySuiteFromTestsById (testsById) {
 function getPlaywrightConfig (playwrightRunner) {
   try {
     return playwrightRunner._configLoader.fullConfig()
-  } catch (e) {
+  } catch {
     try {
       return playwrightRunner._loader.fullConfig()
-    } catch (e) {
+    } catch {
       return playwrightRunner._config || {}
     }
   }
@@ -242,7 +236,7 @@ function getChannelPromise (channelToPublishTo) {
     })
   })
 }
-// eslint-disable-next-line
+
 // Inspired by https://github.com/microsoft/playwright/blob/2b77ed4d7aafa85a600caa0b0d101b72c8437eeb/packages/playwright/src/reporters/base.ts#L293
 // We can't use test.outcome() directly because it's set on follow up handlers:
 // our `testEndHandler` is called before the outcome is set.
@@ -279,11 +273,9 @@ function testBeginHandler (test, browserName, isMainProcess) {
 
   if (isNewTestSuite) {
     startedSuites.push(testSuiteAbsolutePath)
-    const testSuiteAsyncResource = new AsyncResource('bound-anonymous-fn')
-    testSuiteToAr.set(testSuiteAbsolutePath, testSuiteAsyncResource)
-    testSuiteAsyncResource.runInAsyncScope(() => {
-      testSuiteStartCh.publish(testSuiteAbsolutePath)
-    })
+    const testSuiteCtx = { testSuiteAbsolutePath }
+    testSuiteToCtx.set(testSuiteAbsolutePath, testSuiteCtx)
+    testSuiteStartCh.runStores(testSuiteCtx, () => {})
   }
 
   // We disable retries by default if attemptToFix is true
@@ -293,19 +285,17 @@ function testBeginHandler (test, browserName, isMainProcess) {
 
   // this handles tests that do not go through the worker process (because they're skipped)
   if (isMainProcess) {
-    const testAsyncResource = new AsyncResource('bound-anonymous-fn')
-    testToAr.set(test, testAsyncResource)
     const testName = getTestFullname(test)
+    const testCtx = {
+      testName,
+      testSuiteAbsolutePath,
+      testSourceLine,
+      browserName,
+      isDisabled: test._ddIsDisabled
+    }
+    testToCtx.set(test, testCtx)
 
-    testAsyncResource.runInAsyncScope(() => {
-      testStartCh.publish({
-        testName,
-        testSuiteAbsolutePath,
-        testSourceLine,
-        browserName,
-        isDisabled: test._ddIsDisabled
-      })
-    })
+    testStartCh.runStores(testCtx, () => {})
   }
 }
 
@@ -349,29 +339,28 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout, isMain
 
   // this handles tests that do not go through the worker process (because they're skipped)
   if (isMainProcess) {
-    const testResult = results[results.length - 1]
-    const testAsyncResource = testToAr.get(test)
+    const testResult = results.at(-1)
+    const testCtx = testToCtx.get(test)
     const isAtrRetry = testResult?.retry > 0 &&
       isFlakyTestRetriesEnabled &&
       !test._ddIsAttemptToFix &&
       !test._ddIsEfdRetry
-    testAsyncResource.runInAsyncScope(() => {
-      testFinishCh.publish({
-        testStatus,
-        steps: testResult?.steps || [],
-        isRetry: testResult?.retry > 0,
-        error,
-        extraTags: annotationTags,
-        isNew: test._ddIsNew,
-        isAttemptToFix: test._ddIsAttemptToFix,
-        isAttemptToFixRetry: test._ddIsAttemptToFixRetry,
-        isQuarantined: test._ddIsQuarantined,
-        isEfdRetry: test._ddIsEfdRetry,
-        hasFailedAllRetries: test._ddHasFailedAllRetries,
-        hasPassedAttemptToFixRetries: test._ddHasPassedAttemptToFixRetries,
-        hasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
-        isAtrRetry
-      })
+    testFinishCh.publish({
+      testStatus,
+      steps: testResult?.steps || [],
+      isRetry: testResult?.retry > 0,
+      error,
+      extraTags: annotationTags,
+      isNew: test._ddIsNew,
+      isAttemptToFix: test._ddIsAttemptToFix,
+      isAttemptToFixRetry: test._ddIsAttemptToFixRetry,
+      isQuarantined: test._ddIsQuarantined,
+      isEfdRetry: test._ddIsEfdRetry,
+      hasFailedAllRetries: test._ddHasFailedAllRetries,
+      hasPassedAttemptToFixRetries: test._ddHasPassedAttemptToFixRetries,
+      hasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
+      isAtrRetry,
+      ...testCtx.currentStore
     })
   }
 
@@ -394,17 +383,15 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout, isMain
   if (!remainingTestsByFile[testSuiteAbsolutePath].length) {
     const testStatuses = testSuiteToTestStatuses.get(testSuiteAbsolutePath)
     let testSuiteStatus = 'pass'
-    if (testStatuses.some(status => status === 'fail')) {
+    if (testStatuses.includes('fail')) {
       testSuiteStatus = 'fail'
     } else if (testStatuses.every(status => status === 'skip')) {
       testSuiteStatus = 'skip'
     }
 
     const suiteError = getTestSuiteError(testSuiteAbsolutePath)
-    const testSuiteAsyncResource = testSuiteToAr.get(testSuiteAbsolutePath)
-    testSuiteAsyncResource.runInAsyncScope(() => {
-      testSuiteFinishCh.publish({ status: testSuiteStatus, error: suiteError })
-    })
+    const testSuiteCtx = testSuiteToCtx.get(testSuiteAbsolutePath)
+    testSuiteFinishCh.publish({ status: testSuiteStatus, error: suiteError, ...testSuiteCtx.currentStore })
   }
 }
 
@@ -420,7 +407,7 @@ function dispatcherRunWrapperNew (run) {
     if (!this._allTests) {
       // Removed in https://github.com/microsoft/playwright/commit/1e52c37b254a441cccf332520f60225a5acc14c7
       // Not available from >=1.44.0
-      this._ddAllTests = testGroups.map(g => g.tests).flat()
+      this._ddAllTests = testGroups.flatMap(g => g.tests)
     }
     remainingTestsByFile = getTestsBySuiteFromTestGroups(arguments[0])
     return run.apply(this, arguments)
@@ -442,7 +429,7 @@ function dispatcherHook (dispatcherExport) {
         const { test } = dispatcher._testById.get(params.testId)
 
         const { results } = test
-        const testResult = results[results.length - 1]
+        const testResult = results.at(-1)
 
         const isTimeout = testResult.status === 'timedOut'
         testEndHandler(
@@ -537,7 +524,7 @@ function runnerHook (runnerExport, playwrightVersion) {
       log.error('Playwright session start error', e)
     }
 
-    if (isKnownTestsEnabled && satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)) {
+    if (isKnownTestsEnabled) {
       try {
         const { err, knownTests: receivedKnownTests } = await getChannelPromise(knownTestsCh)
         if (!err) {
@@ -553,7 +540,7 @@ function runnerHook (runnerExport, playwrightVersion) {
       }
     }
 
-    if (isTestManagementTestsEnabled && satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)) {
+    if (isTestManagementTestsEnabled) {
       try {
         const { err, testManagementTests: receivedTestManagementTests } = await getChannelPromise(testManagementTestsCh)
         if (!err) {
@@ -610,7 +597,7 @@ function runnerHook (runnerExport, playwrightVersion) {
         totalAttemptToFixFailedTestCount += testStatuses.filter(status => status === 'fail').length
       }
 
-      if (totalFailedTestCount === totalAttemptToFixFailedTestCount) {
+      if (totalFailedTestCount > 0 && totalFailedTestCount === totalAttemptToFixFailedTestCount) {
         runAllTestsReturn = 'passed'
       }
     }
@@ -639,37 +626,38 @@ function runnerHook (runnerExport, playwrightVersion) {
   return runnerExport
 }
 
-addHook({
-  name: '@playwright/test',
-  file: 'lib/runner.js',
-  versions: ['>=1.18.0 <=1.30.0']
-}, runnerHook)
+if (DD_MAJOR < 6) { // <1.38.0 is only supported up to version 5
+  addHook({
+    name: '@playwright/test',
+    file: 'lib/runner.js',
+    versions: ['>=1.18.0 <=1.30.0']
+  }, runnerHook)
 
-addHook({
-  name: '@playwright/test',
-  file: 'lib/dispatcher.js',
-  versions: ['>=1.18.0 <1.30.0']
-}, dispatcherHook)
+  addHook({
+    name: '@playwright/test',
+    file: 'lib/dispatcher.js',
+    versions: ['>=1.18.0 <1.30.0']
+  }, dispatcherHook)
 
-addHook({
-  name: '@playwright/test',
-  file: 'lib/dispatcher.js',
-  versions: ['>=1.30.0 <1.31.0']
-}, (dispatcher) => dispatcherHookNew(dispatcher, dispatcherRunWrapper))
+  addHook({
+    name: '@playwright/test',
+    file: 'lib/dispatcher.js',
+    versions: ['>=1.30.0 <1.31.0']
+  }, (dispatcher) => dispatcherHookNew(dispatcher, dispatcherRunWrapper))
 
-addHook({
-  name: '@playwright/test',
-  file: 'lib/runner/dispatcher.js',
-  versions: ['>=1.31.0 <1.38.0']
-}, (dispatcher) => dispatcherHookNew(dispatcher, dispatcherRunWrapperNew))
+  addHook({
+    name: '@playwright/test',
+    file: 'lib/runner/dispatcher.js',
+    versions: ['>=1.31.0 <1.38.0']
+  }, (dispatcher) => dispatcherHookNew(dispatcher, dispatcherRunWrapperNew))
 
-addHook({
-  name: '@playwright/test',
-  file: 'lib/runner/runner.js',
-  versions: ['>=1.31.0 <1.38.0']
-}, runnerHook)
+  addHook({
+    name: '@playwright/test',
+    file: 'lib/runner/runner.js',
+    versions: ['>=1.31.0 <1.38.0']
+  }, runnerHook)
+}
 
-// From >=1.38.0
 addHook({
   name: 'playwright',
   file: 'lib/runner/runner.js',
@@ -680,13 +668,12 @@ addHook({
   name: 'playwright',
   file: 'lib/runner/dispatcher.js',
   versions: ['>=1.38.0']
-}, (dispatcher) => dispatcherHookNew(dispatcher, dispatcherRunWrapperNew))
+}, (dispatcher, version) => dispatcherHookNew(dispatcher, dispatcherRunWrapperNew, version))
 
-// Hook used for early flake detection. EFD only works from >=1.38.0
 addHook({
   name: 'playwright',
   file: 'lib/common/suiteUtils.js',
-  versions: [MINIMUM_SUPPORTED_VERSION_RANGE_EFD]
+  versions: ['>=1.38.0']
 }, suiteUtilsPackage => {
   // We grab `applyRepeatEachIndex` to use it later
   // `applyRepeatEachIndex` needs to be applied to a cloned suite
@@ -694,11 +681,10 @@ addHook({
   return suiteUtilsPackage
 })
 
-// Hook used for early flake detection. EFD only works from >=1.38.0
 addHook({
   name: 'playwright',
   file: 'lib/runner/loadUtils.js',
-  versions: [MINIMUM_SUPPORTED_VERSION_RANGE_EFD]
+  versions: ['>=1.38.0']
 }, (loadUtilsPackage) => {
   const oldCreateRootSuite = loadUtilsPackage.createRootSuite
 
@@ -873,17 +859,16 @@ addHook({
     // If test events are created in the worker process I need to stop creating it in the main process
     // Probably yet another test worker exporter is needed in addition to the ones for mocha, jest and cucumber
     // it's probably hard to tell that's a playwright worker though, as I don't think there is a specific env variable
-    const testAsyncResource = new AsyncResource('bound-anonymous-fn')
+    const testCtx = {
+      testName,
+      testSuiteAbsolutePath,
+      testSourceLine,
+      browserName
+    }
+    testToCtx.set(test, testCtx)
     // TODO - In the future we may need to implement a mechanism to send test properties
     // to the worker process before _runTest is called
-    testAsyncResource.runInAsyncScope(() => {
-      testStartCh.publish({
-        testName,
-        testSuiteAbsolutePath,
-        testSourceLine,
-        browserName
-      })
-
+    testStartCh.runStores(testCtx, () => {
       let existAfterEachHook = false
 
       // We try to find an existing afterEach hook with _ddHook to avoid adding a new one
@@ -976,25 +961,24 @@ addHook({
     // Wait for the properties to be received
     await ddPropertiesPromise
 
-    testAsyncResource.runInAsyncScope(() => {
-      testFinishCh.publish({
-        testStatus: STATUS_TO_TEST_STATUS[status],
-        steps: steps.filter(step => step.testId === testId),
-        error,
-        extraTags: annotationTags,
-        isNew: test._ddIsNew,
-        isRetry: retry > 0,
-        isEfdRetry: test._ddIsEfdRetry,
-        isAttemptToFix: test._ddIsAttemptToFix,
-        isDisabled: test._ddIsDisabled,
-        isQuarantined: test._ddIsQuarantined,
-        isAttemptToFixRetry: test._ddIsAttemptToFixRetry,
-        hasFailedAllRetries: test._ddHasFailedAllRetries,
-        hasPassedAttemptToFixRetries: test._ddHasPassedAttemptToFixRetries,
-        hasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
-        isAtrRetry: test._ddIsAtrRetry,
-        onDone
-      })
+    testFinishCh.publish({
+      testStatus: STATUS_TO_TEST_STATUS[status],
+      steps: steps.filter(step => step.testId === testId),
+      error,
+      extraTags: annotationTags,
+      isNew: test._ddIsNew,
+      isRetry: retry > 0,
+      isEfdRetry: test._ddIsEfdRetry,
+      isAttemptToFix: test._ddIsAttemptToFix,
+      isDisabled: test._ddIsDisabled,
+      isQuarantined: test._ddIsQuarantined,
+      isAttemptToFixRetry: test._ddIsAttemptToFixRetry,
+      hasFailedAllRetries: test._ddHasFailedAllRetries,
+      hasPassedAttemptToFixRetries: test._ddHasPassedAttemptToFixRetries,
+      hasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
+      isAtrRetry: test._ddIsAtrRetry,
+      onDone,
+      ...testCtx.currentStore
     })
 
     await flushPromise

@@ -33,7 +33,7 @@ const privateIPMatcher = new BlockList()
 for (const cidr of privateCIDRs) {
   const [address, prefix] = cidr.split('/')
 
-  privateIPMatcher.addSubnet(address, parseInt(prefix), net.isIPv6(address) ? 'ipv6' : 'ipv4')
+  privateIPMatcher.addSubnet(address, Number.parseInt(prefix), net.isIPv6(address) ? 'ipv6' : 'ipv4')
 }
 
 function extractIp (config, req) {
