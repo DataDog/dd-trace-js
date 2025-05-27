@@ -6,7 +6,7 @@ const ALLOWED_ENV_VARIABLES = new Set(['LD_PRELOAD', 'LD_LIBRARY_PATH', 'PATH'])
 const PROCESS_DENYLIST = new Set(['md5'])
 
 const VARNAMES_REGEX = /\$([\w\d_]*)(?:[^\w\d_]|$)/gmi
-// eslint-disable-next-line @stylistic/js/max-len
+// eslint-disable-next-line @stylistic/max-len
 const PARAM_PATTERN = '^-{0,2}(?:p(?:ass(?:w(?:or)?d)?)?|address|api[-_]?key|e?mail|secret(?:[-_]?key)?|a(?:ccess|uth)[-_]?token|mysql_pwd|credentials|(?:stripe)?token)$'
 const regexParam = new RegExp(PARAM_PATTERN, 'i')
 const ENV_PATTERN = '^(\\w+=\\w+;)*\\w+=\\w+;?$'
