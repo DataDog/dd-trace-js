@@ -3,28 +3,30 @@
 import path from 'path'
 import { URL } from 'url'
 import { getName } from '../telemetry/verbosity.js'
-import { isNotLibraryFile, isPrivateModule } from './filter.js'
+import { isDdTrace, isPrivateModule } from './filter.js'
 import constants from './constants.js'
 
 const currentUrl = new URL(import.meta.url)
 const ddTraceDir = path.join(currentUrl.pathname, '..', '..', '..', '..', '..', '..')
 
-let port, rewriter
+let port, rewriter, iastEnabled
 
 export async function initialize (data) {
-  if (rewriter) return Promise.reject(new Error('ALREADY INITIALIZED'))
+  if (rewriter) throw new Error('ALREADY INITIALIZED')
 
-  const { csiMethods, telemetryVerbosity, chainSourceMap } = data
+  const { csiMethods, telemetryVerbosity, chainSourceMap, orchestrionConfig } = data
   port = data.port
+  iastEnabled = data.iastEnabled
 
-  const iastRewriter = await import('@datadog/native-iast-rewriter')
+  const iastRewriter = await import('@datadog/wasm-js-rewriter')
 
   const { NonCacheRewriter } = iastRewriter.default
 
   rewriter = new NonCacheRewriter({
     csiMethods,
     telemetryVerbosity: getName(telemetryVerbosity),
-    chainSourceMap
+    chainSourceMap,
+    orchestrion: orchestrionConfig
   })
 }
 
@@ -35,15 +37,26 @@ export async function load (url, context, nextLoad) {
   if (!result.source) return result
   if (url.includes(ddTraceDir) || url.includes('iitm=true')) return result
 
+  let passes
   try {
-    if (isPrivateModule(url) && isNotLibraryFile(url)) {
-      const rewritten = rewriter.rewrite(result.source.toString(), url)
-
-      if (rewritten?.content) {
-        result.source = rewritten.content || result.source
-        const data = { url, rewritten }
-        port.postMessage({ type: constants.REWRITTEN_MESSAGE, data })
+    if (isDdTrace(url)) {
+      return result
+    }
+    if (isPrivateModule(url)) {
+      // TODO error tracking needs to be added based on config
+      passes = ['error_tracking']
+      if (iastEnabled) {
+        passes.push('iast')
       }
+    } else {
+      passes = ['orchestrion']
+    }
+    const rewritten = rewriter.rewrite(result.source.toString(), url, passes)
+
+    if (rewritten?.content) {
+      result.source = rewritten.content || result.source
+      const data = { url, rewritten }
+      port.postMessage({ type: constants.REWRITTEN_MESSAGE, data })
     }
   } catch (e) {
     const newErrObject = {

@@ -7,6 +7,7 @@ const ssrf = require('./ssrf')
 const sqli = require('./sql_injection')
 const lfi = require('./lfi')
 const cmdi = require('./command_injection')
+const { updateRaspRuleMatchMetricTags } = require('../telemetry')
 
 const { DatadogRaspAbortError } = require('./utils')
 
@@ -84,9 +85,12 @@ function blockOnDatadogRaspAbortError ({ error }) {
   const abortError = findDatadogRaspAbortError(error)
   if (!abortError) return false
 
-  const { req, res, blockingAction } = abortError
+  const { req, res, blockingAction, raspRule, ruleTriggered } = abortError
   if (!isBlocked(res)) {
-    block(req, res, web.root(req), null, blockingAction)
+    const blocked = block(req, res, web.root(req), null, blockingAction)
+    if (ruleTriggered) {
+      updateRaspRuleMatchMetricTags(req, raspRule, true, blocked)
+    }
   }
 
   return true

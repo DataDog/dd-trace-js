@@ -10,7 +10,8 @@ const {
   SPAN_ID_LABEL,
   LOCAL_ROOT_SPAN_ID_LABEL,
   getNonJSThreadsLabels,
-  getThreadLabels
+  getThreadLabels,
+  encodeProfileAsync
 } = require('./shared')
 
 const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('../webspan-utils')
@@ -89,11 +90,9 @@ class NativeWallProfiler {
     this._pprof = undefined
 
     // Bind these to this so they can be used as callbacks
-    if (this._withContexts) {
-      if (this._captureSpanData) {
-        this._enter = this._enter.bind(this)
-        this._spanFinished = this._spanFinished.bind(this)
-      }
+    if (this._withContexts && this._captureSpanData) {
+      this._enter = this._enter.bind(this)
+      this._spanFinished = this._spanFinished.bind(this)
     }
     this._generateLabels = this._generateLabels.bind(this)
 
@@ -111,8 +110,6 @@ class NativeWallProfiler {
 
   start ({ mapper } = {}) {
     if (this._started) return
-
-    ensureChannelsActivated()
 
     this._mapper = mapper
     this._pprof = require('@datadog/pprof')
@@ -142,6 +139,8 @@ class NativeWallProfiler {
       if (this._captureSpanData) {
         this._profilerState = this._pprof.time.getState()
         this._lastSampleCount = 0
+
+        ensureChannelsActivated()
 
         beforeCh.subscribe(this._enter)
         enterCh.subscribe(this._enter)
@@ -326,7 +325,7 @@ class NativeWallProfiler {
   }
 
   encode (profile) {
-    return this._pprof.encode(profile)
+    return encodeProfileAsync(profile)
   }
 
   stop () {

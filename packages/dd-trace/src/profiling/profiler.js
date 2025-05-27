@@ -8,6 +8,9 @@ const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('./we
 const dc = require('dc-polyfill')
 const crashtracker = require('../crashtracking')
 
+const { promisify } = require('util')
+const zlib = require('zlib')
+
 const profileSubmittedChannel = dc.channel('datadog:profiling:profile-submitted')
 const spanFinishedChannel = dc.channel('dd-trace:span:finish')
 
@@ -18,9 +21,9 @@ function maybeSourceMap (sourceMap, SourceMapper, debug) {
   ], debug)
 }
 
-function logError (logger, err) {
+function logError (logger, ...args) {
   if (logger) {
-    logger.error(err)
+    logger.error(...args)
   }
 }
 
@@ -52,7 +55,8 @@ class Profiler extends EventEmitter {
 
   start (options) {
     return this._start(options).catch((err) => {
-      logError(options.logger, err)
+      logError(options.logger, 'Error starting profiler. For troubleshooting tips, see ' +
+        '<https://dtdg.co/nodejs-profiler-troubleshooting>', err)
       return false
     })
   }
@@ -84,6 +88,28 @@ class Profiler extends EventEmitter {
             ? 'Found no source maps'
             : `Found source maps for following files: [${Array.from(mapper.infoMap.keys()).join(', ')}]`
         })
+      }
+
+      const clevel = config.uploadCompression.level
+      switch (config.uploadCompression.method) {
+        case 'gzip':
+          this._compressionFn = promisify(zlib.gzip)
+          if (clevel !== undefined) {
+            this._compressionOptions = {
+              level: clevel
+            }
+          }
+          break
+        case 'zstd':
+          this._compressionFn = promisify(zlib.zstdCompress)
+          if (clevel !== undefined) {
+            this._compressionOptions = {
+              params: {
+                [zlib.constants.ZSTD_c_compressionLevel]: clevel
+              }
+            }
+          }
+          break
       }
     } catch (err) {
       this._logError(err)
@@ -217,7 +243,14 @@ class Profiler extends EventEmitter {
       // encode and export asynchronously
       for (const { profiler, profile } of profiles) {
         try {
-          encodedProfiles[profiler.type] = await profiler.encode(profile)
+          const encoded = await profiler.encode(profile)
+          let compressed
+          if (encoded instanceof Buffer && this._compressionFn !== undefined) {
+            compressed = await this._compressionFn(encoded, this._compressionOptions)
+          } else {
+            compressed = encoded
+          }
+          encodedProfiles[profiler.type] = compressed
           this._logger.debug(() => {
             const profileJson = JSON.stringify(profile, (key, value) => {
               return typeof value === 'bigint' ? value.toString() : value

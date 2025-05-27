@@ -21,7 +21,7 @@ jobs:
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:ci
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d # v5.4.2
 
   ubuntu:
     runs-on: ubuntu-latest
@@ -36,7 +36,7 @@ jobs:
       - run: yarn test:appsec:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:ci
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d # v5.4.2
 
   windows:
     runs-on: windows-latest
@@ -47,7 +47,7 @@ jobs:
         with:
           cache: 'true'
       - run: yarn test:appsec:ci
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d # v5.4.2
 
   ldapjs:
     runs-on: ubuntu-latest
@@ -71,7 +71,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/active-lts
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d # v5.4.2
 
   postgres:
     runs-on: ubuntu-latest
@@ -93,7 +93,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/newest-maintenance-lts
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d # v5.4.2
 
   mysql:
     runs-on: ubuntu-latest
@@ -115,7 +115,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/newest-maintenance-lts
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d # v5.4.2
 
   express:
     runs-on: ubuntu-latest
@@ -128,7 +128,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/active-lts
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d # v5.4.2
 
   graphql:
     runs-on: ubuntu-latest
@@ -141,7 +141,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/active-lts
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d # v5.4.2
 
   mongodb-core:
     runs-on: ubuntu-latest
@@ -160,7 +160,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/active-lts
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d # v5.4.2
 
   mongoose:
     runs-on: ubuntu-latest
@@ -179,7 +179,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/active-lts
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d # v5.4.2
 
   sourcing:
     runs-on: ubuntu-latest
@@ -196,14 +196,14 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d # v5.4.2
 
   next:
     strategy:
       fail-fast: false
       matrix:
         version:
-          - 18
+          - oldest
           - latest
         range: ['>=10.2.0 <11', '>=11.0.0 <13', '11.1.4', '>=13.0.0 <14', '13.2.0', '>=14.0.0 <=14.2.6', '>=14.2.7 <15', '>=15.0.0']
         include:
@@ -230,16 +230,16 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/testagent/start
-      - uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4.2.0
+      - uses: ./.github/actions/node
         with:
-          node-version: ${{ matrix.version }}
+          version: ${{ matrix.version }}
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
           suffix: appsec-${{ github.job }}-${{ matrix.version }}-${{ matrix.range_clean }}
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d # v5.4.2
 
   lodash:
     runs-on: ubuntu-latest
@@ -252,7 +252,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/active-lts
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d # v5.4.2
 
   integration:
     runs-on: ubuntu-latest
@@ -275,7 +275,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/active-lts
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d # v5.4.2
 
   template:
     runs-on: ubuntu-latest
@@ -288,7 +288,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/active-lts
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d # v5.4.2
 
   node-serialize:
     runs-on: ubuntu-latest
@@ -301,4 +301,4 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/active-lts
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+      - uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d # v5.4.2

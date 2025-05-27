@@ -113,8 +113,22 @@ suiteDescribe('runtimeMetrics', () => {
   let Client
 
   beforeEach(() => {
+    // This is needed because sinon spies keep references to arguments which
+    // breaks tests because the tags parameter is now mutated right after the
+    // call.
+    const wrapSpy = (client, spy) => {
+      return function (stat, value, tags) {
+        return spy.call(client, stat, value, [].concat(tags))
+      }
+    }
+
     Client = sinon.spy(function () {
-      return client
+      return {
+        gauge: wrapSpy(client, client.gauge),
+        increment: wrapSpy(client, client.increment),
+        histogram: wrapSpy(client, client.histogram),
+        flush: client.flush.bind(client)
+      }
     })
 
     Client.generateClientConfig = DogStatsDClient.generateClientConfig
@@ -295,6 +309,7 @@ suiteDescribe('runtimeMetrics', () => {
 
     describe('histogram', () => {
       it('should add a record to a histogram', () => {
+        runtimeMetrics.histogram('test', 0)
         runtimeMetrics.histogram('test', 1)
         runtimeMetrics.histogram('test', 2)
         runtimeMetrics.histogram('test', 3)
@@ -302,13 +317,13 @@ suiteDescribe('runtimeMetrics', () => {
         clock.tick(10000)
 
         expect(client.gauge).to.have.been.calledWith('test.max', 3)
-        expect(client.gauge).to.have.been.calledWith('test.min', 1)
+        expect(client.gauge).to.have.been.calledWith('test.min', 0)
         expect(client.increment).to.have.been.calledWith('test.sum', 6)
         expect(client.increment).to.have.been.calledWith('test.total', 6)
-        expect(client.gauge).to.have.been.calledWith('test.avg', 2)
+        expect(client.gauge).to.have.been.calledWith('test.avg', 1.5)
         expect(client.gauge).to.have.been.calledWith('test.median', sinon.match.number)
         expect(client.gauge).to.have.been.calledWith('test.95percentile', sinon.match.number)
-        expect(client.increment).to.have.been.calledWith('test.count', 3)
+        expect(client.increment).to.have.been.calledWith('test.count', 4)
       })
     })
 

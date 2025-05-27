@@ -40,7 +40,8 @@ const {
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_HAS_FAILED_ALL_RETRIES,
-  getLibraryCapabilitiesTags
+  getLibraryCapabilitiesTags,
+  TEST_RETRY_REASON_TYPES
 } = require('../../dd-trace/src/plugins/util/test')
 const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
@@ -66,7 +67,8 @@ const {
   GIT_BRANCH,
   CI_PROVIDER_NAME,
   CI_WORKSPACE_PATH,
-  GIT_COMMIT_MESSAGE
+  GIT_COMMIT_MESSAGE,
+  GIT_TAG
 } = require('../../dd-trace/src/plugins/util/tags')
 const {
   OS_VERSION,
@@ -75,6 +77,7 @@ const {
   RUNTIME_NAME,
   RUNTIME_VERSION
 } = require('../../dd-trace/src/plugins/util/env')
+const { DD_MAJOR } = require('../../../version')
 
 const TEST_FRAMEWORK_NAME = 'cypress'
 
@@ -204,7 +207,8 @@ class CypressPlugin {
       [GIT_BRANCH]: branch,
       [CI_PROVIDER_NAME]: ciProviderName,
       [CI_WORKSPACE_PATH]: repositoryRoot,
-      [GIT_COMMIT_MESSAGE]: commitMessage
+      [GIT_COMMIT_MESSAGE]: commitMessage,
+      [GIT_TAG]: tag
     } = this.testEnvironmentMetadata
 
     this.repositoryRoot = repositoryRoot
@@ -221,7 +225,8 @@ class CypressPlugin {
       runtimeVersion,
       branch,
       testLevel: 'test',
-      commitMessage
+      commitMessage,
+      tag
     }
     this.finishedTestsByFile = {}
     this.testStatuses = {}
@@ -229,6 +234,7 @@ class CypressPlugin {
     this.isTestsSkipped = false
     this.isSuitesSkippingEnabled = false
     this.isCodeCoverageEnabled = false
+    this.isFlakyTestRetriesEnabled = false
     this.isEarlyFlakeDetectionEnabled = false
     this.isKnownTestsEnabled = false
     this.earlyFlakeDetectionNumRetries = 0
@@ -278,6 +284,7 @@ class CypressPlugin {
           this.earlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
           this.isKnownTestsEnabled = isKnownTestsEnabled
           if (isFlakyTestRetriesEnabled) {
+            this.isFlakyTestRetriesEnabled = true
             this.cypressConfig.retries.runMode = flakyTestRetriesCount
           }
           this.isTestManagementTestsEnabled = isTestManagementEnabled
@@ -471,7 +478,13 @@ class CypressPlugin {
       testSessionSpanMetadata[TEST_EARLY_FLAKE_ENABLED] = 'true'
     }
 
-    const testSessionName = getTestSessionName(this.tracer._tracer._config, this.command, this.testEnvironmentMetadata)
+    const trimmedCommand = DD_MAJOR < 6 ? this.command : 'cypress run'
+
+    const testSessionName = getTestSessionName(
+      this.tracer._tracer._config,
+      trimmedCommand,
+      this.testEnvironmentMetadata
+    )
 
     if (this.tracer._tracer._exporter?.addMetadataTags) {
       const metadataTags = {}
@@ -598,13 +611,9 @@ class CypressPlugin {
       const isSkippedByItr = this.testsToSkip.find(test =>
         cypressTestName === test.name && spec.relative === test.suite
       )
-      let testSourceFile
-
-      if (spec.absolute && this.repositoryRoot) {
-        testSourceFile = getTestSuitePath(spec.absolute, this.repositoryRoot)
-      } else {
-        testSourceFile = spec.relative
-      }
+      const testSourceFile = spec.absolute && this.repositoryRoot
+        ? getTestSuitePath(spec.absolute, this.repositoryRoot)
+        : spec.relative
 
       const skippedTestSpan = this.getTestSpan({ testName: cypressTestName, testSuite: spec.relative, testSourceFile })
 
@@ -654,10 +663,18 @@ class CypressPlugin {
         let cypressTestStatus = CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state]
         if (cypressTest.attempts && cypressTest.attempts[attemptIndex]) {
           cypressTestStatus = CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.attempts[attemptIndex].state]
+          const isAtrRetry = attemptIndex > 0 &&
+            this.isFlakyTestRetriesEnabled &&
+            !finishedTest.isAttemptToFix &&
+            !finishedTest.isEfdRetry
           if (attemptIndex > 0) {
             finishedTest.testSpan.setTag(TEST_IS_RETRY, 'true')
             if (finishedTest.isEfdRetry) {
-              finishedTest.testSpan.setTag(TEST_RETRY_REASON, 'efd')
+              finishedTest.testSpan.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
+            } else if (isAtrRetry) {
+              finishedTest.testSpan.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atr)
+            } else {
+              finishedTest.testSpan.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.ext)
             }
           }
         }
@@ -672,12 +689,9 @@ class CypressPlugin {
         if (this.itrCorrelationId) {
           finishedTest.testSpan.setTag(ITR_CORRELATION_ID, this.itrCorrelationId)
         }
-        let testSourceFile
-        if (spec.absolute && this.repositoryRoot) {
-          testSourceFile = getTestSuitePath(spec.absolute, this.repositoryRoot)
-        } else {
-          testSourceFile = spec.relative
-        }
+        const testSourceFile = spec.absolute && this.repositoryRoot
+          ? getTestSuitePath(spec.absolute, this.repositoryRoot)
+          : spec.relative
         if (testSourceFile) {
           finishedTest.testSpan.setTag(TEST_SOURCE_FILE, testSourceFile)
         }
@@ -725,7 +739,7 @@ class CypressPlugin {
       },
       'dd:beforeEach': (test) => {
         const { testName, testSuite } = test
-        const shouldSkip = !!this.testsToSkip.find(test => {
+        const shouldSkip = this.testsToSkip.some(test => {
           return testName === test.name && testSuite === test.suite
         })
         const isUnskippable = this.unskippableSuites.includes(testSuite)
@@ -816,17 +830,20 @@ class CypressPlugin {
           this.activeTestSpan.setTag(TEST_IS_NEW, 'true')
           if (isEfdRetry) {
             this.activeTestSpan.setTag(TEST_IS_RETRY, 'true')
-            this.activeTestSpan.setTag(TEST_RETRY_REASON, 'efd')
+            this.activeTestSpan.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
           }
         }
         if (isAttemptToFix) {
           this.activeTestSpan.setTag(TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX, 'true')
           if (testStatuses.length > 1) {
             this.activeTestSpan.setTag(TEST_IS_RETRY, 'true')
-            this.activeTestSpan.setTag(TEST_RETRY_REASON, 'attempt_to_fix')
+            this.activeTestSpan.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atf)
           }
           const isLastAttempt = testStatuses.length === this.testManagementAttemptToFixRetries + 1
           if (isLastAttempt) {
+            if (testStatuses.some(status => status === 'fail')) {
+              this.activeTestSpan.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
+            }
             if (testStatuses.every(status => status === 'fail')) {
               this.activeTestSpan.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
             } else if (testStatuses.every(status => status === 'pass')) {
@@ -840,7 +857,8 @@ class CypressPlugin {
           testStatus,
           finishTime: this.activeTestSpan._getTime(), // we store the finish time here
           testSpan: this.activeTestSpan,
-          isEfdRetry
+          isEfdRetry,
+          isAttemptToFix
         }
         if (this.finishedTestsByFile[testSuite]) {
           this.finishedTestsByFile[testSuite].push(finishedTest)

@@ -7,7 +7,8 @@ function getTestManagementTests ({
   evpProxyPrefix,
   isGzipCompatible,
   repositoryUrl,
-  commitMessage
+  commitMessage,
+  sha
 }, done) {
   const options = {
     path: '/api/v2/test/libraries/test-management/tests',
@@ -15,7 +16,7 @@ function getTestManagementTests ({
     headers: {
       'Content-Type': 'application/json'
     },
-    timeout: 20000,
+    timeout: 20_000,
     url
   }
 
@@ -41,7 +42,8 @@ function getTestManagementTests ({
       type: 'ci_app_libraries_tests_request',
       attributes: {
         repository_url: repositoryUrl,
-        commit_message: commitMessage
+        commit_message: commitMessage,
+        sha
       }
     }
   })

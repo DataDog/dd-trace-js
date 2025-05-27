@@ -163,6 +163,11 @@ function handleTraceRequest (req, res, sendToTestAgent) {
       })
 
     testAgentReq.on('response', testAgentRes => {
+      if (res._closed) {
+        // Skip handling for already closed agents
+        return
+      }
+
       if (testAgentRes.statusCode !== 200) {
         // handle request failures from the Test Agent here
         let body = ''
@@ -191,7 +196,7 @@ function handleTraceRequest (req, res, sendToTestAgent) {
 function checkAgentStatus () {
   const agentUrl = process.env.DD_TRACE_AGENT_URL || 'http://127.0.0.1:9126'
 
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const request = http.request(`${agentUrl}/info`, { method: 'GET' }, response => {
       if (response.statusCode === 200) {
         resolve(true)
@@ -200,8 +205,8 @@ function checkAgentStatus () {
       }
     })
 
-    request.on('error', error => {
-      reject(error)
+    request.on('error', (_error_) => {
+      resolve(false)
     })
 
     request.end()
@@ -283,12 +288,12 @@ module.exports = {
       next()
     })
 
-    let useTestAgent
+    const innerAgent = agent
 
-    try {
-      useTestAgent = await checkAgentStatus()
-    } catch (error) {
-      useTestAgent = false
+    const useTestAgent = await checkAgentStatus()
+
+    if (agent !== innerAgent) {
+      throw new Error('Agent got replaced since last load')
     }
 
     agent.get('/info', (req, res) => {
@@ -389,7 +394,7 @@ module.exports = {
   /**
    * Register a callback with expectations to be run on every tracing payload sent to the agent.
    */
-  use (callback, options) {
+  assertSomeTraces (callback, options) {
     return runCallback(callback, options, traceHandlers)
   },
 
@@ -408,6 +413,11 @@ module.exports = {
 
   // Stop the mock agent, reset all expectations and wipe the require cache.
   close (opts = {}) {
+    // Allow close to be called idempotent
+    if (listener === null) {
+      return Promise.resolve()
+    }
+
     const { ritmReset, wipe } = opts
 
     listener.close()

@@ -2,9 +2,10 @@
 
 const { useEnv } = require('../../../integration-tests/helpers')
 const agent = require('../../dd-trace/test/plugins/agent')
+const iastFilter = require('../../dd-trace/src/appsec/iast/taint-tracking/filter')
 
 const nock = require('nock')
-
+const semver = require('semver')
 function stubCall ({ base = '', path = '', code = 200, response = {} }) {
   const responses = Array.isArray(response) ? response : [response]
   const times = responses.length
@@ -16,6 +17,8 @@ const openAiBaseCompletionInfo = { base: 'https://api.openai.com', path: '/v1/co
 const openAiBaseChatInfo = { base: 'https://api.openai.com', path: '/v1/chat/completions' }
 const openAiBaseEmbeddingInfo = { base: 'https://api.openai.com', path: '/v1/embeddings' }
 
+const isDdTrace = iastFilter.isDdTrace
+
 describe('Plugin', () => {
   let langchainOpenai
   let langchainAnthropic
@@ -26,6 +29,15 @@ describe('Plugin', () => {
   let langchainPrompts
   let langchainRunnables
 
+  /**
+   * In OpenAI 4.91.0, the default response format for embeddings was changed from `float` to `base64`.
+   * We do not have control in @langchain/openai embeddings to change this for an individual call,
+   * so we need to check the version and stub the response accordingly. If the OpenAI version installed with
+   * @langchain/openai is less than 4.91.0, we stub the response to be a float array of zeros.
+   * If it is 4.91.0 or greater, we stub with a pre-recorded fixture of a 1536 base64 encoded embedding.
+   */
+  let langchainOpenaiOpenAiVersion
+
   // so we can verify it gets tagged properly
   useEnv({
     OPENAI_API_KEY: '<not-a-real-key>',
@@ -35,13 +47,20 @@ describe('Plugin', () => {
 
   describe('langchain', () => {
     withVersions('langchain', ['@langchain/core'], version => {
-      beforeEach(() => {
+      before(() => {
+        iastFilter.isDdTrace = file => {
+          if (file.includes('dd-trace-js/versions/')) {
+            return false
+          }
+          return isDdTrace(file)
+        }
         return agent.load('langchain')
       })
 
-      afterEach(() => {
+      after(() => {
+        iastFilter.isDdTrace = isDdTrace
         // wiping in order to read new env vars for the config each time
-        return agent.close({ ritmReset: false, wipe: true })
+        return agent.close({ ritmReset: false })
       })
 
       beforeEach(() => {
@@ -59,88 +78,15 @@ describe('Plugin', () => {
           .get('@langchain/core/output_parsers')
         langchainPrompts = require(`../../../versions/@langchain/core@${version}`).get('@langchain/core/prompts')
         langchainRunnables = require(`../../../versions/@langchain/core@${version}`).get('@langchain/core/runnables')
+
+        langchainOpenaiOpenAiVersion =
+            require(`../../../versions/@langchain/openai@${version}`)
+              .get('openai/version')
+              .VERSION
       })
 
       afterEach(() => {
         nock.cleanAll()
-      })
-
-      describe('with global configurations', () => {
-        describe('with sampling rate', () => {
-          useEnv({
-            DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE: 0
-          })
-
-          it('does not tag prompt or completion', async () => {
-            stubCall({
-              ...openAiBaseCompletionInfo,
-              response: {
-                model: 'gpt-3.5-turbo-instruct',
-                choices: [{
-                  text: 'The answer is 4',
-                  index: 0,
-                  logprobs: null,
-                  finish_reason: 'length'
-                }],
-                usage: { prompt_tokens: 8, completion_tokens: 12, otal_tokens: 20 }
-              }
-            })
-
-            const llm = new langchainOpenai.OpenAI({ model: 'gpt-3.5-turbo-instruct' })
-            const checkTraces = agent
-              .use(traces => {
-                expect(traces[0].length).to.equal(1)
-                const span = traces[0][0]
-
-                expect(span.meta).to.not.have.property('langchain.request.prompts.0.content')
-                expect(span.meta).to.not.have.property('langchain.response.completions.0.text')
-              })
-
-            const result = await llm.generate(['what is 2 + 2?'])
-
-            expect(result.generations[0][0].text).to.equal('The answer is 4')
-
-            await checkTraces
-          })
-        })
-
-        describe('with span char limit', () => {
-          useEnv({
-            DD_LANGCHAIN_SPAN_CHAR_LIMIT: 5
-          })
-
-          it('truncates the prompt and completion', async () => {
-            stubCall({
-              ...openAiBaseCompletionInfo,
-              response: {
-                model: 'gpt-3.5-turbo-instruct',
-                choices: [{
-                  text: 'The answer is 4',
-                  index: 0,
-                  logprobs: null,
-                  finish_reason: 'length'
-                }],
-                usage: { prompt_tokens: 8, completion_tokens: 12, otal_tokens: 20 }
-              }
-            })
-
-            const llm = new langchainOpenai.OpenAI({ model: 'gpt-3.5-turbo-instruct' })
-            const checkTraces = agent
-              .use(traces => {
-                expect(traces[0].length).to.equal(1)
-                const span = traces[0][0]
-
-                expect(span.meta).to.have.property('langchain.request.prompts.0.content', 'what ...')
-                expect(span.meta).to.have.property('langchain.response.completions.0.text', 'The a...')
-              })
-
-            const result = await llm.generate(['what is 2 + 2?'])
-
-            expect(result.generations[0][0].text).to.equal('The answer is 4')
-
-            await checkTraces
-          })
-        })
       })
 
       describe('llm', () => {
@@ -148,7 +94,7 @@ describe('Plugin', () => {
           nock('https://api.openai.com').post('/v1/completions').reply(403)
 
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0].length).to.equal(1)
 
               const span = traces[0][0]
@@ -188,7 +134,7 @@ describe('Plugin', () => {
 
           const llm = new langchainOpenai.OpenAI({ model: 'gpt-3.5-turbo-instruct' })
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0].length).to.equal(1)
               const span = traces[0][0]
 
@@ -237,7 +183,7 @@ describe('Plugin', () => {
           })
 
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0].length).to.equal(1)
               const span = traces[0][0]
 
@@ -281,7 +227,7 @@ describe('Plugin', () => {
           })
 
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0].length).to.equal(1)
               const span = traces[0][0]
 
@@ -308,7 +254,7 @@ describe('Plugin', () => {
           nock('https://api.openai.com').post('/v1/chat/completions').reply(403)
 
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0].length).to.equal(1)
 
               const span = traces[0][0]
@@ -352,7 +298,7 @@ describe('Plugin', () => {
           })
 
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0].length).to.equal(1)
               const span = traces[0][0]
 
@@ -407,7 +353,7 @@ describe('Plugin', () => {
           })
 
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0].length).to.equal(1)
               const span = traces[0][0]
 
@@ -456,7 +402,7 @@ describe('Plugin', () => {
           })
 
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0].length).to.equal(1)
               const span = traces[0][0]
 
@@ -512,7 +458,7 @@ describe('Plugin', () => {
           })
 
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0].length).to.equal(1)
               const span = traces[0][0]
 
@@ -577,7 +523,7 @@ describe('Plugin', () => {
           })
 
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0].length).to.equal(1)
               const span = traces[0][0]
 
@@ -610,7 +556,7 @@ describe('Plugin', () => {
           nock('https://api.openai.com').post('/v1/chat/completions').reply(403)
 
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0].length).to.equal(2)
 
               const chainSpan = traces[0][0]
@@ -659,7 +605,7 @@ describe('Plugin', () => {
           })
 
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = traces[0]
               expect(spans).to.have.length(2)
 
@@ -733,7 +679,7 @@ describe('Plugin', () => {
           ])
 
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = traces[0]
               expect(spans).to.have.length(2)
 
@@ -807,7 +753,7 @@ describe('Plugin', () => {
           ])
 
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = traces[0]
               expect(spans).to.have.length(3) // 1 chain + 2 chat model
 
@@ -850,7 +796,7 @@ describe('Plugin', () => {
           })
 
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = traces[0]
               expect(spans).to.have.length(2) // 1 chain + 1 chat model
 
@@ -885,7 +831,7 @@ describe('Plugin', () => {
             nock('https://api.openai.com').post('/v1/embeddings').reply(403)
 
             const checkTraces = agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0].length).to.equal(1)
 
                 const span = traces[0][0]
@@ -906,21 +852,29 @@ describe('Plugin', () => {
           })
 
           it('instruments a langchain openai embedQuery call', async () => {
-            stubCall({
-              ...openAiBaseEmbeddingInfo,
-              response: {
-                object: 'list',
-                data: [{
-                  object: 'embedding',
-                  index: 0,
-                  embedding: [-0.0034387498, -0.026400521]
-                }]
-              }
-            })
+            if (semver.satisfies(langchainOpenaiOpenAiVersion, '>=4.91.0')) {
+              stubCall({
+                ...openAiBaseEmbeddingInfo,
+                response: require('./fixtures/single-embedding.json')
+              })
+            } else {
+              stubCall({
+                ...openAiBaseEmbeddingInfo,
+                response: {
+                  object: 'list',
+                  data: [{
+                    object: 'embedding',
+                    index: 0,
+                    embedding: Array(1536).fill(0)
+                  }]
+                }
+              })
+            }
+
             const embeddings = new langchainOpenai.OpenAIEmbeddings()
 
             const checkTraces = agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0].length).to.equal(1)
                 const span = traces[0][0]
 
@@ -934,37 +888,43 @@ describe('Plugin', () => {
 
                 expect(span.meta).to.have.property('langchain.request.inputs.0.text', 'Hello, world!')
                 expect(span.metrics).to.have.property('langchain.request.input_counts', 1)
-                expect(span.metrics).to.have.property('langchain.response.outputs.embedding_length', 2)
+                expect(span.metrics).to.have.property('langchain.response.outputs.embedding_length', 1536)
               })
 
             const query = 'Hello, world!'
             const result = await embeddings.embedQuery(query)
 
-            expect(result).to.have.length(2)
-            expect(result).to.deep.equal([-0.0034387498, -0.026400521])
+            expect(result).to.have.length(1536)
 
             await checkTraces
           })
 
           it('instruments a langchain openai embedDocuments call', async () => {
-            stubCall({
-              ...openAiBaseEmbeddingInfo,
-              response: {
-                object: 'list',
-                data: [{
-                  object: 'embedding',
-                  index: 0,
-                  embedding: [-0.0034387498, -0.026400521]
-                }, {
-                  object: 'embedding',
-                  index: 1,
-                  embedding: [-0.026400521, -0.0034387498]
-                }]
-              }
-            })
+            if (semver.satisfies(langchainOpenaiOpenAiVersion, '>=4.91.0')) {
+              stubCall({
+                ...openAiBaseEmbeddingInfo,
+                response: require('./fixtures/double-embedding.json')
+              })
+            } else {
+              stubCall({
+                ...openAiBaseEmbeddingInfo,
+                response: {
+                  object: 'list',
+                  data: [{
+                    object: 'embedding',
+                    index: 0,
+                    embedding: Array(1536).fill(0)
+                  }, {
+                    object: 'embedding',
+                    index: 1,
+                    embedding: Array(1536).fill(0)
+                  }]
+                }
+              })
+            }
 
             const checkTraces = agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0].length).to.equal(1)
                 const span = traces[0][0]
 
@@ -972,7 +932,7 @@ describe('Plugin', () => {
                 expect(span.meta).to.have.property('langchain.request.inputs.1.text', 'Goodbye, world!')
                 expect(span.metrics).to.have.property('langchain.request.input_counts', 2)
 
-                expect(span.metrics).to.have.property('langchain.response.outputs.embedding_length', 2)
+                expect(span.metrics).to.have.property('langchain.response.outputs.embedding_length', 1536)
               })
 
             const embeddings = new langchainOpenai.OpenAIEmbeddings()
@@ -981,8 +941,8 @@ describe('Plugin', () => {
             const result = await embeddings.embedDocuments(documents)
 
             expect(result).to.have.length(2)
-            expect(result[0]).to.deep.equal([-0.0034387498, -0.026400521])
-            expect(result[1]).to.deep.equal([-0.026400521, -0.0034387498])
+            expect(result[0]).to.have.length(1536)
+            expect(result[1]).to.have.length(1536)
 
             await checkTraces
           })
@@ -1026,7 +986,7 @@ describe('Plugin', () => {
             })
 
             const checkTraces = agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0].length).to.equal(1)
 
                 const span = traces[0][0]

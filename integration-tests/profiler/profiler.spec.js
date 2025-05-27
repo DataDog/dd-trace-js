@@ -19,6 +19,8 @@ if (process.platform !== 'win32') {
   DEFAULT_PROFILE_TYPES.push('events')
 }
 
+const TIMEOUT = 30000
+
 function checkProfiles (agent, proc, timeout,
   expectedProfileTypes = DEFAULT_PROFILE_TYPES, expectBadExit = false, multiplicity = 1
 ) {
@@ -150,8 +152,8 @@ class NetworkEventProcessor extends TimelineEventProcessor {
   }
 }
 
-async function gatherNetworkTimelineEvents (cwd, scriptFilePath, eventType, args) {
-  return gatherTimelineEvents(cwd, scriptFilePath, eventType, args, NetworkEventProcessor)
+async function gatherNetworkTimelineEvents (cwd, scriptFilePath, agentPort, eventType, args) {
+  return gatherTimelineEvents(cwd, scriptFilePath, agentPort, eventType, args, NetworkEventProcessor)
 }
 
 class FilesystemEventProcessor extends TimelineEventProcessor {
@@ -201,22 +203,23 @@ class FilesystemEventProcessor extends TimelineEventProcessor {
   }
 }
 
-async function gatherFilesystemTimelineEvents (cwd, scriptFilePath) {
-  return gatherTimelineEvents(cwd, scriptFilePath, 'fs', [], FilesystemEventProcessor)
+async function gatherFilesystemTimelineEvents (cwd, scriptFilePath, agentPort) {
+  return gatherTimelineEvents(cwd, scriptFilePath, agentPort, 'fs', [], FilesystemEventProcessor)
 }
 
-async function gatherTimelineEvents (cwd, scriptFilePath, eventType, args, Processor) {
+async function gatherTimelineEvents (cwd, scriptFilePath, agentPort, eventType, args, Processor) {
   const procStart = BigInt(Date.now() * 1000000)
   const proc = fork(path.join(cwd, scriptFilePath), args, {
     cwd,
     env: {
       DD_PROFILING_EXPORTERS: 'file',
       DD_PROFILING_ENABLED: 1,
-      DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED: 0 // capture all events
+      DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED: 0, // capture all events
+      DD_TRACE_AGENT_PORT: agentPort
     }
   })
 
-  await processExitPromise(proc, 30000)
+  await processExitPromise(proc, TIMEOUT)
   const procEnd = BigInt(Date.now() * 1000000)
 
   const { profile, encoded } = await getLatestProfile(cwd, /^events_.+\.pprof$/)
@@ -284,7 +287,20 @@ describe('profiler', () => {
   let oomTestFile
   let oomEnv
   let oomExecArgv
-  const timeout = 30000
+  const timeout = TIMEOUT
+
+  // Target sample count per span for the code hotspots test
+  const idealSamplesPerSpan = 10
+
+  // Intrinsic invariants for the code hotspots test
+  const expectedSpans = 9 // codehotspots.js creates 3x3 spans
+  const profilerSamplingFrequency = 99 // Hz
+
+  // Computed values for the code hotspots test. busyCycleTimeNs is adaptively adjusted by the test
+  // when it needs to be repeated.
+  const idealSampleCount = idealSamplesPerSpan * expectedSpans // we'd like 10 samples per span, ideally
+  let busyCycleTimeNs = 1000000000 * idealSamplesPerSpan / profilerSamplingFrequency
+  const maxBusyCycleTimeNs = (timeout - 1000) * 1000000 / expectedSpans
 
   before(async () => {
     sandbox = await createSandbox()
@@ -299,18 +315,31 @@ describe('profiler', () => {
     await sandbox.remove()
   })
 
+  beforeEach(async () => {
+    agent = await new FakeAgent().start()
+  })
+
+  afterEach(async () => {
+    await agent.stop()
+  })
+
   if (process.platform !== 'win32') {
-    it('code hotspots and endpoint tracing works', async () => {
+    it('code hotspots and endpoint tracing works', async function () {
+      // see comment on busyCycleTimeNs recomputation below. Ideally a single retry should be enough
+      // with recomputed busyCycleTimeNs, but let's give ourselves more leeway.
+      this.retries(9)
       const procStart = BigInt(Date.now() * 1000000)
       const proc = fork(path.join(cwd, 'profiler/codehotspots.js'), {
         cwd,
         env: {
           DD_PROFILING_EXPORTERS: 'file',
-          DD_PROFILING_ENABLED: 1
+          DD_PROFILING_ENABLED: 1,
+          BUSY_CYCLE_TIME: (busyCycleTimeNs | 0).toString(),
+          DD_TRACE_AGENT_PORT: agent.port
         }
       })
 
-      await processExitPromise(proc, 30000)
+      await processExitPromise(proc, timeout)
       const procEnd = BigInt(Date.now() * 1000000)
 
       // Must've counted the number of times each endpoint was hit
@@ -318,6 +347,14 @@ describe('profiler', () => {
       assert.deepEqual(event.endpoint_counts, { 'endpoint-0': 1, 'endpoint-1': 1, 'endpoint-2': 1 })
 
       const { profile, encoded } = await getLatestProfile(cwd, /^wall_.+\.pprof$/)
+
+      // Recompute in case we need to retry. It is possible that some of the assertions in the test
+      // will fail because we gathered a too small number of samples. This can happen if the machine
+      // is CPU-constrained so the V8 thread that triggers PROF signals gets CPU starved. If we need
+      // to retry, the busyCycleTime will be prolonged to have the next execution of codehotspots.js
+      // run for long enough in the current environment for the profiler to capture the ideal number
+      // of samples.
+      busyCycleTimeNs = Math.min(maxBusyCycleTimeNs, busyCycleTimeNs * idealSampleCount / profile.sample.length)
 
       // We check the profile for following invariants:
       // - every sample needs to have an 'end_timestamp_ns' label that has values (nanos since UNIX
@@ -415,7 +452,7 @@ describe('profiler', () => {
     })
 
     it('fs timeline events work', async () => {
-      const fsEvents = await gatherFilesystemTimelineEvents(cwd, 'profiler/fstest.js')
+      const fsEvents = await gatherFilesystemTimelineEvents(cwd, 'profiler/fstest.js', agent.port)
       assert.equal(fsEvents.length, 6)
       const path = fsEvents[0].path
       const fd = fsEvents[1].fd
@@ -431,7 +468,7 @@ describe('profiler', () => {
     })
 
     it('dns timeline events work', async () => {
-      const dnsEvents = await gatherNetworkTimelineEvents(cwd, 'profiler/dnstest.js', 'dns')
+      const dnsEvents = await gatherNetworkTimelineEvents(cwd, 'profiler/dnstest.js', agent.port, 'dns')
       assert.sameDeepMembers(dnsEvents, [
         { operation: 'lookup', host: 'example.org' },
         { operation: 'lookup', host: 'example.com' },
@@ -469,7 +506,7 @@ describe('profiler', () => {
           const args = [String(port1), String(port2), msg]
           // Invoke the profiled program, passing it the ports of the servers and
           // the expected message.
-          const events = await gatherNetworkTimelineEvents(cwd, 'profiler/nettest.js', 'net', args)
+          const events = await gatherNetworkTimelineEvents(cwd, 'profiler/nettest.js', agent.port, 'net', args)
           // The profiled program should have two TCP connection events to the two
           // servers.
           assert.sameDeepMembers(events, [
@@ -486,8 +523,7 @@ describe('profiler', () => {
   }
 
   context('shutdown', () => {
-    beforeEach(async () => {
-      agent = await new FakeAgent().start()
+    beforeEach(() => {
       oomEnv = {
         DD_TRACE_AGENT_PORT: agent.port,
         DD_PROFILING_ENABLED: 1,
@@ -496,9 +532,8 @@ describe('profiler', () => {
       }
     })
 
-    afterEach(async () => {
+    afterEach(() => {
       proc.kill()
-      await agent.stop()
     })
 
     it('records profile on process exit', () => {
@@ -564,6 +599,17 @@ describe('profiler', () => {
         return checkProfiles(agent, proc, timeout, ['space'], true)
       })
 
+      it('sends a heap profile on OOM in worker thread and exits successfully', () => {
+        proc = fork(oomTestFile, [1, 50], {
+          cwd,
+          env: { ...oomEnv, DD_PROFILING_WALLTIME_ENABLED: 0 }
+        })
+        return checkProfiles(agent, proc, timeout, ['space'], false, 2)
+      })
+
+      // Following tests are flaky because they use unreliable strategies to export profiles
+      // (or check that the process can recover from OOM, which is also unreliable).
+      // We retry them 3 times to decrease flakiness.
       it('sends a heap profile on OOM with external process and exits successfully', () => {
         proc = fork(oomTestFile, {
           cwd,
@@ -575,7 +621,7 @@ describe('profiler', () => {
           }
         })
         return checkProfiles(agent, proc, timeout, ['space'], false, 2)
-      })
+      }).retries(3)
 
       it('sends a heap profile on OOM with async callback', () => {
         proc = fork(oomTestFile, {
@@ -589,7 +635,7 @@ describe('profiler', () => {
           }
         })
         return checkProfiles(agent, proc, timeout, ['space'], true)
-      })
+      }).retries(3)
 
       it('sends heap profiles on OOM with multiple strategies', () => {
         proc = fork(oomTestFile, {
@@ -603,26 +649,13 @@ describe('profiler', () => {
           }
         })
         return checkProfiles(agent, proc, timeout, ['space'], true, 2)
-      })
-
-      it('sends a heap profile on OOM in worker thread and exits successfully', () => {
-        proc = fork(oomTestFile, [1, 50], {
-          cwd,
-          env: { ...oomEnv, DD_PROFILING_WALLTIME_ENABLED: 0 }
-        })
-        return checkProfiles(agent, proc, timeout, ['space'], false, 2)
-      })
+      }).retries(3)
     }
   })
 
   context('SSI heuristics', () => {
-    beforeEach(async () => {
-      agent = await new FakeAgent().start()
-    })
-
-    afterEach(async () => {
+    afterEach(() => {
       proc.kill()
-      await agent.stop()
     })
 
     describe('does not trigger for', () => {

@@ -96,6 +96,9 @@ const CUCUMBER_WORKER_TRACE_PAYLOAD_CODE = 70
 // mocha worker variables
 const MOCHA_WORKER_TRACE_PAYLOAD_CODE = 80
 
+// playwright worker variables
+const PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE = 90
+
 // Early flake detection util strings
 const EFD_STRING = "Retried by Datadog's Early Flake Detection"
 const EFD_TEST_NAME_REGEX = new RegExp(EFD_STRING + ' \\(#\\d+\\): ', 'g')
@@ -117,6 +120,12 @@ const TEST_LEVEL_EVENT_TYPES = [
   'test_module_end',
   'test_session_end'
 ]
+const TEST_RETRY_REASON_TYPES = {
+  efd: 'early_flake_detection',
+  atr: 'auto_test_retry',
+  atf: 'attempt_to_fix',
+  ext: 'external'
+}
 
 const DD_TEST_IS_USER_PROVIDED_SERVICE = '_dd.test.is_user_provided_service'
 
@@ -162,6 +171,7 @@ module.exports = {
   JEST_WORKER_LOGS_PAYLOAD_CODE,
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
+  PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
   TEST_SOURCE_START,
   TEST_SKIPPED_BY_ITR,
   TEST_IS_NEW,
@@ -223,6 +233,7 @@ module.exports = {
   DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
   DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
   TEST_LEVEL_EVENT_TYPES,
+  TEST_RETRY_REASON_TYPES,
   getNumFromKnownTests,
   getFileAndLineNumberFromError,
   DI_ERROR_DEBUG_INFO_CAPTURED,
@@ -244,7 +255,7 @@ module.exports = {
 function getPkgManager () {
   try {
     return process.env.npm_config_user_agent.split(' ')[0].replace('/', '-')
-  } catch (e) {
+  } catch {
     return ''
   }
 }
@@ -253,29 +264,23 @@ function validateUrl (url) {
   try {
     const urlObject = new URL(url)
     return (urlObject.protocol === 'https:' || urlObject.protocol === 'http:')
-  } catch (e) {
+  } catch {
     return false
   }
 }
 
 function removeInvalidMetadata (metadata) {
   return Object.keys(metadata).reduce((filteredTags, tag) => {
-    if (tag === GIT_REPOSITORY_URL) {
-      if (!validateGitRepositoryUrl(metadata[GIT_REPOSITORY_URL])) {
-        log.error('Repository URL is not a valid repository URL: %s.', metadata[GIT_REPOSITORY_URL])
-        return filteredTags
-      }
+    if (tag === GIT_REPOSITORY_URL && !validateGitRepositoryUrl(metadata[GIT_REPOSITORY_URL])) {
+      log.error('Repository URL is not a valid repository URL: %s.', metadata[GIT_REPOSITORY_URL])
+      return filteredTags
     }
-    if (tag === GIT_COMMIT_SHA) {
-      if (!validateGitCommitSha(metadata[GIT_COMMIT_SHA])) {
-        log.error('Git commit SHA must be a full-length git SHA: %s.', metadata[GIT_COMMIT_SHA])
-        return filteredTags
-      }
+    if (tag === GIT_COMMIT_SHA && !validateGitCommitSha(metadata[GIT_COMMIT_SHA])) {
+      log.error('Git commit SHA must be a full-length git SHA: %s.', metadata[GIT_COMMIT_SHA])
+      return filteredTags
     }
-    if (tag === CI_PIPELINE_URL) {
-      if (!validateUrl(metadata[CI_PIPELINE_URL])) {
-        return filteredTags
-      }
+    if (tag === CI_PIPELINE_URL && !validateUrl(metadata[CI_PIPELINE_URL])) {
+      return filteredTags
     }
     filteredTags[tag] = metadata[tag]
     return filteredTags
@@ -333,7 +338,7 @@ function getTestParametersString (parametersByTestName, testName) {
     // test is invoked with each parameter set sequencially
     const testParameters = parametersByTestName[testName].shift()
     return JSON.stringify({ arguments: testParameters, metadata: {} })
-  } catch (e) {
+  } catch {
     // We can't afford to interrupt the test if `testParameters` is not serializable to JSON,
     // so we ignore the test parameters and move on
     return ''
@@ -402,7 +407,7 @@ function readCodeOwners (rootDir) {
   for (const location of POSSIBLE_CODEOWNERS_LOCATIONS) {
     try {
       return fs.readFileSync(path.join(rootDir, location)).toString()
-    } catch (e) {
+    } catch {
       // retry with next path
     }
   }
@@ -456,7 +461,7 @@ function getCodeOwnersForFilename (filename, entries) {
       if (isResponsible) {
         return JSON.stringify(entry.owners)
       }
-    } catch (e) {
+    } catch {
       return null
     }
   }
@@ -608,8 +613,8 @@ function getTestLineStart (err, testSuitePath) {
   const testFileLine = err.stack.split('\n').find(line => line.includes(testSuitePath))
   try {
     const testFileLineMatch = testFileLine.match(/at (?:(.+?)\s+\()?(?:(.+?):(\d+)(?::(\d+))?|([^)]+))\)?/)
-    return parseInt(testFileLineMatch[3], 10) || null
-  } catch (e) {
+    return Number.parseInt(testFileLineMatch[3], 10) || null
+  } catch {
     return null
   }
 }
@@ -675,14 +680,14 @@ function getIsFaultyEarlyFlakeDetection (projectSuites, testsBySuiteName, faulty
   )
 }
 
-function getTestSessionName (config, testCommand, envTags) {
+function getTestSessionName (config, trimmedCommand, envTags) {
   if (config.ciVisibilityTestSessionName) {
     return config.ciVisibilityTestSessionName
   }
   if (envTags[CI_JOB_NAME]) {
-    return `${envTags[CI_JOB_NAME]}-${testCommand}`
+    return `${envTags[CI_JOB_NAME]}-${trimmedCommand}`
   }
-  return testCommand
+  return trimmedCommand
 }
 
 // Calculate the number of a tests from the known tests response, which has a shape like:
@@ -775,7 +780,7 @@ function getLibraryCapabilitiesTags (testFramework, isParallel) {
     [DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE]: '1',
     [DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE]: '1',
     [DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX]: isAttemptToFixSupported(testFramework, isParallel)
-      ? '2'
+      ? '4'
       : undefined
   }
 }

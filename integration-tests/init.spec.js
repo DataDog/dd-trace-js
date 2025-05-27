@@ -3,7 +3,8 @@ const {
   runAndCheckWithTelemetry: testFile,
   useEnv,
   useSandbox,
-  sandboxCwd
+  sandboxCwd,
+  setShouldKill
 } = require('./helpers')
 const path = require('path')
 const fs = require('fs')
@@ -159,6 +160,7 @@ function stubTracerIfNeeded () {
 }
 
 describe('init.js', () => {
+  setShouldKill(false)
   useSandbox()
   stubTracerIfNeeded()
 
@@ -166,13 +168,11 @@ describe('init.js', () => {
   testRuntimeVersionChecks('require', 'init.js')
 })
 
-// ESM is not supportable prior to Node.js 12.17.0, 14.13.1 on the 14.x line,
+// ESM is not supportable prior to Node.js 14.13.1 on the 14.x line,
 // or on 18.0.0 in particular.
-if (
-  semver.satisfies(process.versions.node, '>=12.17.0') &&
-  semver.satisfies(process.versions.node, '>=14.13.1')
-) {
+if (semver.satisfies(process.versions.node, '>=14.13.1')) {
   describe('initialize.mjs', () => {
+    setShouldKill(false)
     useSandbox()
     stubTracerIfNeeded()
 

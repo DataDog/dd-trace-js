@@ -1,8 +1,13 @@
 'use strict'
 
 const { DD_TELEMETRY_REQUEST_METRICS } = require('./common')
-const { addRaspRequestMetrics, trackRaspMetrics } = require('./rasp')
-const { incrementMissingUserId, incrementMissingUserLogin } = require('./user')
+const { incrementMissingUserId, incrementMissingUserLogin, incrementSdkEvent } = require('./user')
+const {
+  addRaspRequestMetrics,
+  trackRaspMetrics,
+  trackRaspRuleMatch,
+  trackRaspRuleSkipped
+} = require('./rasp')
 const {
   addWafRequestMetrics,
   trackWafMetrics,
@@ -34,7 +39,9 @@ function newStore () {
       wafTimeouts: 0,
       raspTimeouts: 0,
       wafErrorCode: null,
-      raspErrorCode: null
+      raspErrorCode: null,
+      wafVersion: null,
+      rulesVersion: null
     }
   }
 }
@@ -58,7 +65,21 @@ function updateRaspRequestsMetricTags (metrics, req, raspRule) {
 
   if (!enabled) return
 
-  trackRaspMetrics(metrics, raspRule)
+  trackRaspMetrics(store, metrics, raspRule)
+}
+
+function updateRaspRuleMatchMetricTags (req, raspRule, blockTriggered, blocked) {
+  if (!enabled || !req) return
+
+  const store = getStore(req)
+
+  trackRaspRuleMatch(store, raspRule, blockTriggered, blocked)
+}
+
+function updateRaspRuleSkippedMetricTags (raspRule, reason) {
+  if (!enabled) return
+
+  trackRaspRuleSkipped(raspRule, reason)
 }
 
 function updateWafRequestsMetricTags (metrics, req) {
@@ -121,6 +142,12 @@ function incrementMissingUserIdMetric (framework, eventType) {
   incrementMissingUserId(framework, eventType)
 }
 
+function incrementSdkEventMetric (eventType, sdkVersion) {
+  if (!enabled) return
+
+  incrementSdkEvent(eventType, sdkVersion)
+}
+
 function getRequestMetrics (req) {
   if (req) {
     const store = getStore(req)
@@ -136,11 +163,14 @@ module.exports = {
   updateRateLimitedMetric,
   updateBlockFailureMetric,
   updateRaspRequestsMetricTags,
+  updateRaspRuleMatchMetricTags,
+  updateRaspRuleSkippedMetricTags,
   incrementWafInitMetric,
   incrementWafUpdatesMetric,
   incrementWafRequestsMetric,
   incrementMissingUserLoginMetric,
   incrementMissingUserIdMetric,
+  incrementSdkEventMetric,
 
   getRequestMetrics
 }

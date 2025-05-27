@@ -15,7 +15,6 @@ const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
 
 const maxActiveRequests = 8
-const containerId = docker.id()
 
 let activeRequests = 0
 
@@ -63,9 +62,7 @@ function request (data, options, callback) {
     options.headers['Content-Length'] = byteLength(dataArray)
   }
 
-  if (containerId) {
-    options.headers['Datadog-Container-ID'] = containerId
-  }
+  docker.inject(options.headers)
 
   options.agent = isSecure ? httpsAgent : httpAgent
 
@@ -103,7 +100,7 @@ function request (data, options, callback) {
             options.url || options.hostname || `http://localhost:${options.port}`
           ).href
           errorMessage = `Error from ${fullUrl}: ${res.statusCode} ${http.STATUS_CODES[res.statusCode]}.`
-        } catch (e) {
+        } catch {
           // ignore error
         }
         const responseData = buffer.toString()

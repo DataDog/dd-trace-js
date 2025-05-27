@@ -8,9 +8,11 @@ const msgpack = require('@msgpack/msgpack')
 
 const agent = require('../../plugins/agent')
 const axios = require('axios')
+const rewriter = require('../../../src/appsec/iast/taint-tracking/rewriter')
 const iast = require('../../../src/appsec/iast')
 const Config = require('../../../src/config')
 const vulnerabilityReporter = require('../../../src/appsec/iast/vulnerability-reporter')
+const overheadController = require('../../../src/appsec/iast/overhead-controller')
 const { getWebSpan } = require('../utils')
 
 function testInRequest (app, tests) {
@@ -67,25 +69,28 @@ function testOutsideRequestHasVulnerability (fnToTest, vulnerability, plugins, t
   })
   beforeEach(() => {
     const tracer = require('../../..')
-    iast.enable(new Config({
+    const config = new Config({
       experimental: {
         iast: {
           enabled: true,
           requestSampling: 100
         }
       }
-    }), tracer)
+    })
+    iast.enable(config, tracer)
+    rewriter.enable(config)
   })
 
   afterEach(() => {
     iast.disable()
+    rewriter.disable()
   })
   it(`should detect ${vulnerability} vulnerability out of request`, function (done) {
     if (timeout) {
       this.timeout(timeout)
     }
     agent
-      .use(traces => {
+      .assertSomeTraces(traces => {
         expect(traces[0][0].meta['_dd.iast.json']).to.include(`"${vulnerability}"`)
         expect(traces[0][0].metrics['_dd.iast.enabled']).to.be.equal(1)
       }, { timeoutMs: 10000 })
@@ -113,10 +118,13 @@ function beforeEachIastTest (iastConfig) {
   }
 
   beforeEach(() => {
+    overheadController.clearGlobalRouteMap()
     vulnerabilityReporter.clearCache()
-    iast.enable(new Config({
+    const config = new Config({
       iast: iastConfig
-    }))
+    })
+    iast.enable(config)
+    rewriter.enable(config)
   })
 }
 
@@ -138,7 +146,7 @@ function endResponse (res, appResult) {
 
 function checkNoVulnerabilityInRequest (vulnerability, config, done, makeRequest) {
   agent
-    .use(traces => {
+    .assertSomeTraces(traces => {
       if (traces[0][0].type !== 'web') throw new Error('Not a web span')
       // iastJson == undefiend is valid
       const iastJson = traces[0][0].meta['_dd.iast.json'] || ''
@@ -169,7 +177,7 @@ function checkVulnerabilityInRequest (
     occurrences = occurrencesAndLocation.occurrences
   }
   agent
-    .use(traces => {
+    .assertSomeTraces(traces => {
       expect(traces[0][0].metrics['_dd.iast.enabled']).to.be.equal(1)
       expect(traces[0][0].meta).to.have.property('_dd.iast.json')
 
@@ -261,6 +269,7 @@ function prepareTestServerForIast (description, tests, iastConfig) {
 
     afterEach(() => {
       iast.disable()
+      rewriter.disable()
       app = null
     })
 
@@ -344,6 +353,7 @@ function prepareTestServerForIastInExpress (description, expressVersion, loadMid
 
     afterEach(() => {
       iast.disable()
+      rewriter.disable()
       app = null
     })
 

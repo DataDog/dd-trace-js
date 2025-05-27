@@ -7,6 +7,7 @@ const id = require('../../../src/id')
 const SpanContext = require('../../../src/opentracing/span_context')
 const TraceState = require('../../../src/opentracing/propagation/tracestate')
 const { channel } = require('dc-polyfill')
+const { setBaggageItem, getBaggageItem, getAllBaggageItems, removeAllBaggageItems } = require('../../../src/baggage')
 
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
 const { SAMPLING_MECHANISM_MANUAL } = require('../../../src/constants')
@@ -140,6 +141,16 @@ describe('TextMapPropagator', () => {
 
       propagator.inject(spanContext, carrier)
       expect(carrier.baggage).to.equal('raccoon=chunky')
+    })
+
+    it('should inject baggage items when spanContext is null', () => {
+      const carrier = {}
+      const spanContext = null
+      removeAllBaggageItems()
+      setBaggageItem('spring', 'blossom')
+
+      propagator.inject(spanContext, carrier)
+      expect(carrier.baggage).to.equal('spring=blossom')
     })
 
     it('should inject an existing sampling priority', () => {
@@ -492,8 +503,8 @@ describe('TextMapPropagator', () => {
       expect(spanContext._trace.tags).to.not.have.property('_dd.p.tid')
     })
 
-    // temporary test. On the contrary, it SHOULD extract baggage
-    it('should not extract baggage when it is the only propagation style', () => {
+    it('should extract baggage when it is the only propagation style', () => {
+      removeAllBaggageItems()
       config = new Config({
         tracePropagationStyle: {
           extract: ['baggage']
@@ -505,6 +516,8 @@ describe('TextMapPropagator', () => {
       }
       const spanContext = propagator.extract(carrier)
       expect(spanContext).to.be.null
+      expect(getBaggageItem('foo')).to.equal('bar')
+      expect(getAllBaggageItems()).to.deep.equal({ foo: 'bar' })
     })
 
     it('should convert signed IDs to unsigned', () => {
@@ -1175,6 +1188,55 @@ describe('TextMapPropagator', () => {
           'Extract from carrier (tracecontext):',
           `{"traceparent":"${traceparent}","tracestate":"${tracestate}"}.`
         ].join(' '))
+      })
+    })
+
+    describe('tracePropagationBehaviorExtract', () => {
+      let traceId
+      let spanId
+
+      beforeEach(() => {
+        traceId = '1111aaaa2222bbbb3333cccc4444dddd'
+        spanId = '5555eeee6666ffff'
+        textMap = {
+          'x-datadog-trace-id': '123',
+          'x-datadog-parent-id': '456',
+          'ot-baggage-foo': 'bar',
+          traceparent: `00-${traceId}-${spanId}-01`,
+          baggage: 'foo=bar'
+        }
+      })
+
+      it('should reset span links when Trace_Propagation_Behavior_Extract is set to ignore', () => {
+        process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'ignore'
+        config = new Config({
+          tracePropagationStyle: {
+            extract: ['tracecontext', 'datadog']
+          }
+        })
+        propagator = new TextMapPropagator(config)
+        const extractedContext = propagator.extract(textMap)
+
+        // No span links should occur when we return from extract
+        expect(extractedContext._links.length).to.equal(0)
+      })
+
+      it('should set span link to extracted trace when Trace_Propagation_Behavior_Extract is set to restart', () => {
+        process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'restart'
+        config = new Config({
+          tracePropagationStyle: {
+            extract: ['tracecontext', 'datadog']
+          }
+        })
+        propagator = new TextMapPropagator(config)
+        const extractedContext = propagator.extract(textMap)
+
+        // Expect to see span links related to the extracted span
+        expect(extractedContext._links.length).to.equal(1)
+        expect(extractedContext._links[0].context.toTraceId(true)).to.equal(traceId)
+        expect(extractedContext._links[0].context.toSpanId(true)).to.equal(spanId)
+        expect(extractedContext._links[0].attributes.reason).to.equal('propagation_behavior_extract')
+        expect(extractedContext._links[0].attributes.context_headers).to.equal('tracecontext')
       })
     })
   })

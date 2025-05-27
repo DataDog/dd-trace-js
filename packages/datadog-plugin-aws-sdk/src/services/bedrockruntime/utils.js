@@ -47,15 +47,15 @@ class Generation {
 class RequestParams {
   constructor ({
     prompt = '',
-    temperature = undefined,
-    topP = undefined,
-    topK = undefined,
-    maxTokens = undefined,
+    temperature,
+    topP,
+    topK,
+    maxTokens,
     stopSequences = [],
     inputType = '',
     truncate = '',
     stream = '',
-    n = undefined
+    n
   } = {}) {
     // stringify prompt as it could be a single prompt as well as a list of message objects
     this.prompt = typeof prompt === 'string' ? prompt : JSON.stringify(prompt) || ''
@@ -92,7 +92,7 @@ function parseModelId (modelId) {
     if (modelMeta.length < 2) {
       return { modelProvider: 'custom', modelName: modelMeta[0] }
     }
-    return { modelProvider: modelMeta[modelMeta.length - 2], modelName: modelMeta[modelMeta.length - 1] }
+    return { modelProvider: modelMeta.at(-2), modelName: modelMeta.at(-1) }
   }
 
   for (const identifier of MODEL_TYPE_IDENTIFIERS) {
@@ -105,7 +105,7 @@ function parseModelId (modelId) {
       if (modelMeta.length < 2) {
         return { modelProvider: 'custom', modelName: modelId }
       }
-      return { modelProvider: modelMeta[modelMeta.length - 2], modelName: modelMeta[modelMeta.length - 1] }
+      return { modelProvider: modelMeta.at(-2), modelName: modelMeta.at(-1) }
     }
     return { modelProvider: 'custom', modelName: modelId }
   }
@@ -296,7 +296,7 @@ function extractTextAndResponseReason (response, provider, modelName) {
         return new Generation()
       }
     }
-  } catch (error) {
+  } catch {
     log.warn('Unable to extract text/finishReason from response body. Defaulting to empty text/finishReason.')
     return new Generation()
   }
