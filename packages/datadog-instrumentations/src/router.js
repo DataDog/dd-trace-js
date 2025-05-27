@@ -1,6 +1,7 @@
 'use strict'
 
-const METHODS = [...require('http').METHODS.map(v => v.toLowerCase()), 'all']
+const METHODS = require('http').METHODS.map(v => v.toLowerCase())
+METHODS.push('all')
 const pathToRegExp = require('path-to-regexp')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel } = require('./helpers/instrument')
@@ -70,8 +71,8 @@ function createWrapRouterMethod (name) {
     })
   }
 
-  function wrapStack (stack, offset, matchers) {
-    [stack].flat().slice(offset).forEach(layer => {
+  function wrapStack (layers, matchers) {
+    for (const layer of layers) {
       if (layer.__handle) { // express-async-errors
         layer.__handle = wrapLayerHandle(layer, layer.__handle)
       } else {
@@ -89,7 +90,7 @@ function createWrapRouterMethod (name) {
           layer.route[method] = wrapMethod(layer.route[method])
         })
       }
-    })
+    }
   }
 
   function wrapNext (req, next) {
@@ -106,8 +107,7 @@ function createWrapRouterMethod (name) {
   }
 
   function extractMatchers (fn) {
-    // TODO: This likely does not need to be wrapped in an array in case it's a method
-    const arg = [fn].flat(Infinity)
+    const arg = Array.isArray(fn) ? fn : [fn]
 
     if (typeof arg[0] === 'function') {
       return []
@@ -136,7 +136,10 @@ function createWrapRouterMethod (name) {
 
   function wrapMethod (original) {
     return shimmer.wrapFunction(original, original => function methodWithTrace (fn) {
-      const offset = this.stack ? [this.stack].flat().length : 0
+      let offset = 0
+      if (this.stack) {
+        offset = Array.isArray(this.stack) ? this.stack.length : 1
+      }
       const router = original.apply(this, arguments)
 
       if (typeof this.stack === 'function') {
@@ -147,7 +150,9 @@ function createWrapRouterMethod (name) {
         routeAddedChannel.publish({ topOfStackFunc: methodWithTrace, layer: this.stack[0] })
       }
 
-      wrapStack(this.stack, offset, extractMatchers(fn))
+      if (this.stack.length > offset) {
+        wrapStack(this.stack.slice(offset), extractMatchers(fn))
+      }
 
       return router
     })

@@ -29,7 +29,7 @@ function wrapServer (server) {
 
 function wrapStart (start) {
   return shimmer.wrapFunction(start, start => function () {
-    if (this && typeof this.ext === 'function') {
+    if (typeof this?.ext === 'function') {
       this.ext('onPreResponse', onPreResponse)
     }
 
@@ -42,7 +42,7 @@ function wrapExt (ext) {
     if (events !== null && typeof events === 'object') {
       arguments[0] = wrapEvents(events)
     } else {
-      arguments[1] = wrapExtension(method)
+      arguments[1] = wrapHandler(method)
     }
 
     return ext.apply(this, arguments)
@@ -75,17 +75,16 @@ function wrapRebuild (rebuild) {
   }
 }
 
-function wrapExtension (method) {
-  return [method].flat().map(wrapHandler)
-}
-
 function wrapEvents (events) {
-  return [events].flat().map(event => {
-    if (!event || !event.method) return event
+  if (!Array.isArray(events)) {
+    events = [events]
+  }
+  return events.map(event => {
+    if (!event?.method) return event
 
     return {
       ...event,
-      method: wrapExtension(event.method)
+      method: wrapHandler(event.method)
     }
   })
 }

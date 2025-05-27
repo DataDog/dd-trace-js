@@ -44,16 +44,17 @@ function patch (http, methodName) {
   shimmer.wrap(http, methodName, instrumentRequest)
 
   function instrumentRequest (request) {
-    return function (...args) {
+    return function () {
       if (!startChannel.hasSubscribers) {
-        return request.apply(this, args)
+        return request.apply(this, arguments)
       }
 
+      let args
       try {
-        args = normalizeArgs.apply(null, args)
+        args = normalizeArgs.apply(null, arguments)
       } catch (e) {
         log.error('Error normalising http req arguments', e)
-        return request.apply(this, args)
+        return request.apply(this, arguments)
       }
 
       const abortController = new AbortController()
@@ -119,7 +120,7 @@ function patch (http, methodName) {
                 finish()
             }
 
-            return emit.apply(this, args)
+            return emit.apply(this, arguments)
           }
 
           if (abortController.signal.aborted) {

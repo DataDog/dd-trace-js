@@ -118,7 +118,7 @@ class Sqs extends BaseAwsSdkPlugin {
   responseExtract (params, operation, response) {
     if (operation !== 'receiveMessage') return
     if (params.MaxNumberOfMessages && params.MaxNumberOfMessages !== 1) return
-    if (!response || !response.Messages || !response.Messages[0]) return
+    if (!response?.Messages?.[0]) return
 
     let message = response.Messages[0]
 
@@ -135,7 +135,7 @@ class Sqs extends BaseAwsSdkPlugin {
       }
     }
 
-    if (!message.MessageAttributes || !message.MessageAttributes._datadog) return
+    if (!message.MessageAttributes?._datadog) return
 
     const datadogAttribute = message.MessageAttributes._datadog
 

@@ -33,7 +33,6 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
           this.analyze({ filter }, store)
         })
       }
-
       return store
     }
 

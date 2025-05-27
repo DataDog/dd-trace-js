@@ -71,7 +71,7 @@ function wrap (prefix, fn, expectedArgs, rrtype) {
     const ctx = { args }
 
     return startCh.runStores(ctx, () => {
-      args[args.length - 1] = shimmer.wrapFunction(cb, cb => function (error, result, ...args) {
+      arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => function (error, result, ...args) {
         if (error) {
           ctx.error = error
           errorCh.publish(ctx)
@@ -82,7 +82,7 @@ function wrap (prefix, fn, expectedArgs, rrtype) {
       })
 
       try {
-        return fn.apply(this, args)
+        return fn.apply(this, arguments)
       // TODO deal with promise versions when we support `dns/promises`
       } catch (error) {
         error.stack // trigger getting the stack at the original throwing point

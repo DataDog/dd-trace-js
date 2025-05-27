@@ -74,9 +74,9 @@ class PrioritySampler {
    * @param opts {SamplingConfig}
    */
   configure (env, opts = {}) {
-    const { sampleRate, provenance, rateLimit = 100, rules = [] } = opts
+    const { sampleRate, provenance, rateLimit = 100, rules } = opts
     this._env = env
-    this._rules = this.#normalizeRules(rules, sampleRate, rateLimit, provenance)
+    this._rules = this.#normalizeRules(rules || [], sampleRate, rateLimit, provenance)
     this._limiter = new RateLimiter(rateLimit)
 
     log.trace(env, opts)
@@ -314,12 +314,12 @@ class PrioritySampler {
     rules.push({ sampleRate, maxPerSecond: rateLimit, provenance })
 
     const result = []
-    for (const rule of rules) {
-      rule.sampleRate = Number.parseFloat(rule.sampleRate)
+    for (let rule of rules) {
+      rule = { ...rule, sampleRate: Number.parseFloat(rule.sampleRate) }
       if (!Number.isNaN(rule.sampleRate)) {
+        // TODO(BridgeAR): Debug logging invalid rules fails our tests.
+        // Should we definitely not know about these?
         result.push(SamplingRule.from(rule))
-      } else {
-        log.debug('Invalid sampling rule:', rule)
       }
     }
     return result
