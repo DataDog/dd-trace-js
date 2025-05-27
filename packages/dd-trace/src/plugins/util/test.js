@@ -406,7 +406,7 @@ function getTestEnvironmentMetadata (testFramework, config) {
     ciWorkspacePath
   })
 
-  const userProvidedGitMetadata = getUserProviderGitMetadata(gitMetadata)
+  const userProvidedGitMetadata = getUserProviderGitMetadata()
 
   checkShaDiscrepancies(ciMetadata, userProvidedGitMetadata)
 
@@ -415,7 +415,7 @@ function getTestEnvironmentMetadata (testFramework, config) {
   const metadata = {
     [TEST_FRAMEWORK]: testFramework,
     [DD_TEST_IS_USER_PROVIDED_SERVICE]: (config && config.isServiceUserProvided) ? 'true' : 'false',
-    ...gitMetadata.tags,
+    ...gitMetadata,
     ...ciMetadata,
     ...userProvidedGitMetadata,
     ...runtimeAndOSMetadata

@@ -40,7 +40,7 @@ function validateGitCommitSha (gitCommitSha) {
   return isValidSha1 || isValidSha256
 }
 
-function getUserProviderGitMetadata ({ tags, gitInformationDiscrepancy }) {
+function getUserProviderGitMetadata () {
   const {
     DD_GIT_COMMIT_SHA,
     DD_GIT_BRANCH,
