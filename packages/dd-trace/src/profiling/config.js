@@ -37,6 +37,7 @@ class Config {
       DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED,
       DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED,
       DD_PROFILING_HEAP_ENABLED,
+      DD_PROFILING_HEAP_SAMPLING_INTERVAL,
       DD_PROFILING_PPROF_PREFIX,
       DD_PROFILING_PROFILERS,
       DD_PROFILING_SOURCE_MAP,
@@ -193,6 +194,8 @@ class Config {
     logExperimentalVarDeprecation('CPU_ENABLED')
     checkOptionWithSamplingContextAllowed(this.cpuProfilingEnabled, 'CPU profiling')
 
+    this.heapSamplingInterval = coalesce(options.heapSamplingInterval,
+      Number(DD_PROFILING_HEAP_SAMPLING_INTERVAL))
     const uploadCompression0 = coalesce(options.uploadCompression, DD_PROFILING_DEBUG_UPLOAD_COMPRESSION, 'on')
     let [uploadCompression, level0] = uploadCompression0.split('-')
     if (!['on', 'off', 'gzip', 'zstd'].includes(uploadCompression)) {
