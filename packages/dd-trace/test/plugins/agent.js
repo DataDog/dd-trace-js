@@ -245,7 +245,7 @@ function runCallbackAgainstTraces (callback, options, handlers) {
   })
 
   const rejectionTimeout = setTimeout(() => {
-    reject(error)
+    if (error) reject(error)
   }, options?.timeoutMs || 1000)
 
   const handlerPayload = {
