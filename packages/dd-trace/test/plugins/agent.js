@@ -245,7 +245,7 @@ function runCallbackAgainstTraces (callback, options, handlers) {
   })
 
   const rejectionTimeout = setTimeout(() => {
-    if (error) reject(error)
+    reject(error)
   }, options?.timeoutMs || 1000)
 
   const handlerPayload = {
@@ -280,8 +280,8 @@ module.exports = {
    * Load the plugin on the tracer with an optional config and start a mock agent.
    *
    * @param {String|Array<String>} pluginName - Name or list of names of plugins to load
-   * @param {Object} config
-   * @param {Object} tracerConfig
+   * @param {Record<string, unknown>} config
+   * @param {Record<string, unknown>} tracerConfig
    * @returns Promise<void>
    */
   async load (pluginName, config, tracerConfig = {}) {
@@ -390,7 +390,7 @@ module.exports = {
   },
 
   /**
-   * Register handler to be executed each agent call, multiple times
+   * Register handler to be executed on each agent call, multiple times
    * @param {Function} handler
    */
   subscribe (handler) {
