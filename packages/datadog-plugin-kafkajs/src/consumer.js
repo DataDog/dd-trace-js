@@ -99,7 +99,7 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
     }
 
     if (afterStartCh.hasSubscribers) {
-      afterStartCh.publish({ topic, partition, message, groupId })
+      afterStartCh.publish({ topic, partition, message, groupId, currentStore: ctx.currentStore })
     }
 
     return ctx.currentStore
