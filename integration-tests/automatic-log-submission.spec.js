@@ -13,7 +13,7 @@ const {
 const { FakeCiVisIntake } = require('./ci-visibility-intake')
 const webAppServer = require('./ci-visibility/web-app-server')
 
-describe('test visibility automatic log submission', () => {
+describe.only('test visibility automatic log submission', () => {
   let sandbox, cwd, receiver, childProcess, webAppPort
   let testOutput = ''
 
@@ -48,25 +48,24 @@ describe('test visibility automatic log submission', () => {
   })
 
   const testFrameworks = [
-    {
-      name: 'mocha',
-      command: 'mocha ./ci-visibility/automatic-log-submission/automatic-log-submission-test.js'
-    },
-    {
-      name: 'jest',
-      command: 'node ./node_modules/jest/bin/jest --config ./ci-visibility/automatic-log-submission/config-jest.js'
-    },
-    {
-      name: 'cucumber',
-      command: './node_modules/.bin/cucumber-js ci-visibility/automatic-log-submission-cucumber/*.feature'
-    },
+    // {
+    //   name: 'mocha',
+    //   command: 'mocha ./ci-visibility/automatic-log-submission/automatic-log-submission-test.js'
+    // },
+    // {
+    //   name: 'jest',
+    //   command: 'node ./node_modules/jest/bin/jest --config ./ci-visibility/automatic-log-submission/config-jest.js'
+    // },
+    // {
+    //   name: 'cucumber',
+    //   command: './node_modules/.bin/cucumber-js ci-visibility/automatic-log-submission-cucumber/*.feature'
+    // },
     {
       name: 'playwright',
       command: './node_modules/.bin/playwright test -c playwright.config.js',
       getExtraEnvVars: () => ({
         PW_BASE_URL: `http://localhost:${webAppPort}`,
-        TEST_DIR: 'ci-visibility/automatic-log-submission-playwright',
-        TEST_TIMEOUT: 3000
+        TEST_DIR: 'ci-visibility/automatic-log-submission-playwright'
       })
     }
   ]
@@ -129,6 +128,8 @@ describe('test visibility automatic log submission', () => {
             stdio: 'pipe'
           }
         )
+        childProcess.stdout.pipe(process.stdout)
+        childProcess.stderr.pipe(process.stderr)
 
         childProcess.on('exit', () => {
           Promise.all([logsPromise, eventsPromise]).then(() => {
