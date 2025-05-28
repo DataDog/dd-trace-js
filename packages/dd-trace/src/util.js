@@ -86,7 +86,7 @@ module.exports = {
   isFalse,
   isError,
   globMatch,
-  calculateDDBasePath,
+  ddBasePath: calculateDDBasePath(__dirname),
   hasOwn,
   normalizeProfilingEnabledValue
 }

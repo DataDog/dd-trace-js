@@ -39,27 +39,6 @@ describe('path-line', function () {
     })
   })
 
-  describe('calculateDDBasePath', () => {
-    it('/node_modules/dd-trace', () => {
-      const basePath = path.join(rootPath, 'node_modules', 'dd-trace', 'packages', path.sep)
-      const result = pathLine.calculateDDBasePath(path.join(basePath, PATH_LINE_PATH))
-      expect(result).to.be.equals(basePath)
-    })
-
-    it('/packages/project/path/node_modules/dd-trace', () => {
-      const basePath =
-        path.join(rootPath, 'packages', 'project', 'path', 'node_modules', 'dd-trace', 'packages', path.sep)
-      const result = pathLine.calculateDDBasePath(path.join(basePath, PATH_LINE_PATH))
-      expect(result).to.be.equals(basePath)
-    })
-
-    it('/project/path/node_modules/dd-trace', () => {
-      const basePath = path.join(rootPath, 'project', 'path', 'node_modules', 'dd-trace', 'packages', path.sep)
-      const result = pathLine.calculateDDBasePath(path.join(basePath, PATH_LINE_PATH))
-      expect(result).to.be.equals(basePath)
-    })
-  })
-
   describe('getNonDDCallSiteFrames', () => {
     describe('does not fail', () => {
       it('with null parameter', () => {
