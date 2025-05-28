@@ -33,7 +33,7 @@ module.exports = function (integrationName, tracerConfig) {
   const integrationConfig = tracerConfig[integrationName] || {}
   const { spanCharLimit, spanPromptCompletionSampleRate } = integrationConfig
 
-  const sampler = new Sampler(spanPromptCompletionSampleRate ?? 1.0)
+  const sampler = new Sampler(spanPromptCompletionSampleRate ?? 1)
 
   return {
     normalize: str => normalize(str, spanCharLimit),
