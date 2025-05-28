@@ -72,6 +72,7 @@ const {
   CI_PROVIDER_NAME,
   CI_WORKSPACE_PATH,
   GIT_COMMIT_MESSAGE,
+  GIT_TAG,
   GIT_PULL_REQUEST_BASE_BRANCH_SHA,
   GIT_COMMIT_HEAD_SHA,
   GIT_PULL_REQUEST_BASE_BRANCH
@@ -83,6 +84,7 @@ const {
   RUNTIME_NAME,
   RUNTIME_VERSION
 } = require('../../dd-trace/src/plugins/util/env')
+const { DD_MAJOR } = require('../../../version')
 
 const TEST_FRAMEWORK_NAME = 'cypress'
 
@@ -233,6 +235,7 @@ class CypressPlugin {
       [CI_PROVIDER_NAME]: ciProviderName,
       [CI_WORKSPACE_PATH]: repositoryRoot,
       [GIT_COMMIT_MESSAGE]: commitMessage,
+      [GIT_TAG]: tag,
       [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseSha,
       [GIT_COMMIT_HEAD_SHA]: commitHeadSha
     } = this.testEnvironmentMetadata
@@ -252,6 +255,7 @@ class CypressPlugin {
       branch,
       testLevel: 'test',
       commitMessage,
+      tag,
       pullRequestBaseSha,
       commitHeadSha
     }
@@ -530,7 +534,13 @@ class CypressPlugin {
       testSessionSpanMetadata[TEST_EARLY_FLAKE_ENABLED] = 'true'
     }
 
-    const testSessionName = getTestSessionName(this.tracer._tracer._config, this.command, this.testEnvironmentMetadata)
+    const trimmedCommand = DD_MAJOR < 6 ? this.command : 'cypress run'
+
+    const testSessionName = getTestSessionName(
+      this.tracer._tracer._config,
+      trimmedCommand,
+      this.testEnvironmentMetadata
+    )
 
     if (this.tracer._tracer._exporter?.addMetadataTags) {
       const metadataTags = {}
@@ -657,13 +667,9 @@ class CypressPlugin {
       const isSkippedByItr = this.testsToSkip.find(test =>
         cypressTestName === test.name && spec.relative === test.suite
       )
-      let testSourceFile
-
-      if (spec.absolute && this.repositoryRoot) {
-        testSourceFile = getTestSuitePath(spec.absolute, this.repositoryRoot)
-      } else {
-        testSourceFile = spec.relative
-      }
+      const testSourceFile = spec.absolute && this.repositoryRoot
+        ? getTestSuitePath(spec.absolute, this.repositoryRoot)
+        : spec.relative
 
       const skippedTestSpan = this.getTestSpan({ testName: cypressTestName, testSuite: spec.relative, testSourceFile })
 
@@ -739,12 +745,9 @@ class CypressPlugin {
         if (this.itrCorrelationId) {
           finishedTest.testSpan.setTag(ITR_CORRELATION_ID, this.itrCorrelationId)
         }
-        let testSourceFile
-        if (spec.absolute && this.repositoryRoot) {
-          testSourceFile = getTestSuitePath(spec.absolute, this.repositoryRoot)
-        } else {
-          testSourceFile = spec.relative
-        }
+        const testSourceFile = spec.absolute && this.repositoryRoot
+          ? getTestSuitePath(spec.absolute, this.repositoryRoot)
+          : spec.relative
         if (testSourceFile) {
           finishedTest.testSpan.setTag(TEST_SOURCE_FILE, testSourceFile)
         }
@@ -795,7 +798,7 @@ class CypressPlugin {
       },
       'dd:beforeEach': (test) => {
         const { testName, testSuite } = test
-        const shouldSkip = !!this.testsToSkip.find(test => {
+        const shouldSkip = this.testsToSkip.some(test => {
           return testName === test.name && testSuite === test.suite
         })
         const isUnskippable = this.unskippableSuites.includes(testSuite)

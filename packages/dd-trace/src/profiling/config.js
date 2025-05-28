@@ -15,6 +15,7 @@ const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
 const { tagger } = require('./tagger')
 const { isFalse, isTrue } = require('../util')
 const { getAzureTagsFromMetadata, getAzureAppMetadata } = require('../azure_metadata')
+const satisfies = require('semifies')
 
 class Config {
   constructor (options = {}) {
@@ -25,6 +26,7 @@ class Config {
       DD_PROFILING_CODEHOTSPOTS_ENABLED,
       DD_PROFILING_CPU_ENABLED,
       DD_PROFILING_DEBUG_SOURCE_MAPS,
+      DD_PROFILING_DEBUG_UPLOAD_COMPRESSION,
       DD_PROFILING_ENDPOINT_COLLECTION_ENABLED,
       DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED,
       DD_PROFILING_EXPERIMENTAL_CPU_ENABLED,
@@ -35,6 +37,7 @@ class Config {
       DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED,
       DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED,
       DD_PROFILING_HEAP_ENABLED,
+      DD_PROFILING_HEAP_SAMPLING_INTERVAL,
       DD_PROFILING_PPROF_PREFIX,
       DD_PROFILING_PROFILERS,
       DD_PROFILING_SOURCE_MAP,
@@ -191,6 +194,46 @@ class Config {
     logExperimentalVarDeprecation('CPU_ENABLED')
     checkOptionWithSamplingContextAllowed(this.cpuProfilingEnabled, 'CPU profiling')
 
+    this.heapSamplingInterval = coalesce(options.heapSamplingInterval,
+      Number(DD_PROFILING_HEAP_SAMPLING_INTERVAL))
+    const uploadCompression0 = coalesce(options.uploadCompression, DD_PROFILING_DEBUG_UPLOAD_COMPRESSION, 'on')
+    let [uploadCompression, level0] = uploadCompression0.split('-')
+    if (!['on', 'off', 'gzip', 'zstd'].includes(uploadCompression)) {
+      logger.warn(`Invalid profile upload compression method "${uploadCompression0}". Will use "on".`)
+      uploadCompression = 'on'
+    } else if (uploadCompression === 'zstd' && !satisfies(process.versions.node, '>=23.8.0')) {
+      logger.warn(
+        'Profile upload compression method "zstd" is only supported on Node.js 23.8.0 or above. Will use "on".')
+      uploadCompression = 'on'
+    }
+    let level = level0 ? parseInt(level0, 10) : undefined
+    if (level !== undefined) {
+      if (['on', 'off'].includes(uploadCompression)) {
+        logger.warn(`Compression levels are not supported for "${uploadCompression}".`)
+        level = undefined
+      } else if (isNaN(level)) {
+        logger.warn(
+          `Invalid compression level "${level0}". Will use default level.`)
+        level = undefined
+      } else if (level < 1) {
+        logger.warn(`Invalid compression level ${level}. Will use 1.`)
+        level = 1
+      } else {
+        const maxLevel = { gzip: 9, zstd: 22 }[uploadCompression]
+        if (level > maxLevel) {
+          logger.warn(`Invalid compression level ${level}. Will use ${maxLevel}.`)
+          level = maxLevel
+        }
+      }
+    }
+
+    // Default to gzip
+    if (uploadCompression === 'on') {
+      uploadCompression = 'gzip'
+    }
+
+    this.uploadCompression = { method: uploadCompression, level }
+
     this.profilers = ensureProfilers(profilers, this)
   }
 }
@@ -307,7 +350,7 @@ function ensureProfilers (profilers, options) {
   }
 
   // Filter out any invalid profilers
-  return profilers.filter(v => v)
+  return profilers.filter(Boolean)
 }
 
 function ensureLogger (logger) {

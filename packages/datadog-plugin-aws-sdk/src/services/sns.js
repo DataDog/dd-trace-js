@@ -19,7 +19,7 @@ class Sns extends BaseAwsSdkPlugin {
     const arnParts = TopicArn.split(':')
 
     // Get the topic name from the last part of the ARN
-    const topicName = arnParts[arnParts.length - 1]
+    const topicName = arnParts.at(-1)
 
     return {
       'resource.name': `${operation} ${params.TopicArn || response.data.TopicArn}`,

@@ -85,7 +85,7 @@ function extractInferredProxyContext (headers) {
 
   return {
     requestTime: headers[PROXY_HEADER_START_TIME_MS]
-      ? parseInt(headers[PROXY_HEADER_START_TIME_MS], 10)
+      ? Number.parseInt(headers[PROXY_HEADER_START_TIME_MS], 10)
       : null,
     method: headers[PROXY_HEADER_HTTPMETHOD],
     path: headers[PROXY_HEADER_PATH],

@@ -366,7 +366,7 @@ function massWrap (target, methods, wrapper) {
 function wrap (target, method, wrapper) {
   try {
     shimmer.wrap(target, method, wrapper)
-  } catch (e) {
+  } catch {
     // skip unavailable method
   }
 }

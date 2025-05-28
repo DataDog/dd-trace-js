@@ -6,7 +6,7 @@ const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const web = require('../../dd-trace/src/plugins/util/web')
 
-const errorPages = ['/404', '/500', '/_error', '/_not-found', '/_not-found/page']
+const errorPages = new Set(['/404', '/500', '/_error', '/_not-found', '/_not-found/page'])
 
 class NextPlugin extends ServerPlugin {
   static get id () {
@@ -97,7 +97,7 @@ class NextPlugin extends ServerPlugin {
 
     // Only use error page names if there's not already a name
     const current = span.context()._tags['next.page']
-    const isErrorPage = errorPages.includes(page)
+    const isErrorPage = errorPages.has(page)
 
     if (current && isErrorPage) {
       return
@@ -106,7 +106,7 @@ class NextPlugin extends ServerPlugin {
     // remove ending /route or /page for appDir projects
     // need to check if not an error page too, as those are marked as app directory
     // in newer versions
-    if (isAppPath && !isErrorPage) page = page.substring(0, page.lastIndexOf('/'))
+    if (isAppPath && !isErrorPage) page = page.slice(0, Math.max(0, page.lastIndexOf('/')))
 
     // handle static resource
     if (isStatic) {
