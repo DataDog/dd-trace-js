@@ -219,7 +219,8 @@ function getGitDiff (baseCommit, targetCommit) {
     flags,
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'diff' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'diff' } },
-    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'diff' } }
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'diff' } },
+    false // important not to trim or we'll lose the line breaks which we need to detect impacted tests
   )
 }
 
