@@ -482,13 +482,25 @@ describe('TextMapPropagator', () => {
         'baggage.account.id': '789'
       })
 
+      // should add baggage with case sensitive keys
+      carrier = {
+        'x-datadog-trace-id': '123',
+        'x-datadog-parent-id': '456',
+        baggage: 'user.id=capybara,sesSion.id=987,account.id=789'
+      }
+      const spanContextB = propagator.extract(carrier)
+      expect(spanContextB._trace.tags).to.deep.equal({
+        'baggage.user.id': 'capybara',
+        'baggage.account.id': '789'
+      })
+
       // should not add baggage when key list is empty
       config = new Config({
         baggageTagKeys: ''
       })
       propagator = new TextMapPropagator(config)
-      const spanContextB = propagator.extract(carrier)
-      expect(spanContextB._trace.tags).to.deep.equal({})
+      const spanContextC = propagator.extract(carrier)
+      expect(spanContextC._trace.tags).to.deep.equal({})
 
       // should not add baggage when key list is empty
       config = new Config({
@@ -500,8 +512,8 @@ describe('TextMapPropagator', () => {
         'x-datadog-parent-id': '456',
         baggage: 'customKey=beluga,randomKey=shouldBeIgnored'
       }
-      const spanContextC = propagator.extract(carrier)
-      expect(spanContextC._trace.tags).to.deep.equal({
+      const spanContextD = propagator.extract(carrier)
+      expect(spanContextD._trace.tags).to.deep.equal({
         'baggage.customKey': 'beluga'
       })
 
@@ -515,8 +527,8 @@ describe('TextMapPropagator', () => {
         'x-datadog-parent-id': '456',
         baggage: 'customKey=beluga,randomKey=nothingIsIgnored'
       }
-      const spanContextD = propagator.extract(carrier)
-      expect(spanContextD._trace.tags).to.deep.equal({
+      const spanContextE = propagator.extract(carrier)
+      expect(spanContextE._trace.tags).to.deep.equal({
         'baggage.customKey': 'beluga',
         'baggage.randomKey': 'nothingIsIgnored'
       })
