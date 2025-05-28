@@ -636,7 +636,6 @@ class TextMapPropagator {
     const keysToSpanTag = this._config.baggageTagKeys !== '*'
       ? new Set(this._config.baggageTagKeys.split(','))
       : undefined
-    }
     for (const keyValue of baggages) {
       if (!keyValue.includes('=')) {
         if (spanContext) spanContext._baggageItems = {}
