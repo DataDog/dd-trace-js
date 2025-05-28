@@ -40,8 +40,6 @@ async function run () {
   assertFolder()
   await assertVersions()
   assertWorkspace()
-  // Some native addon packages rely on libraries that are not supported on ARM64
-  excludeList.forEach(pkg => delete workspaces[pkg])
   install()
 }
 
