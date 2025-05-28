@@ -102,6 +102,10 @@ describe('PrioritySampler', () => {
     it('should sample by default', () => {
       expect(prioritySampler.isSampled(span)).to.be.true
     })
+
+    it('should accept a span context', () => {
+      expect(prioritySampler.isSampled(context)).to.be.true
+    })
   })
 
   describe('sample', () => {

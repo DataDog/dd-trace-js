@@ -22,7 +22,7 @@ function normalize (text, limit = 128) {
  * Determines whether a prompt completion should be sampled based on the configured sampling rate.
  *
  * @param {Sampler} sampler
- * @param {Span} span
+ * @param {Span|SpanContext} spanContext
  * @returns {boolean} `true` if the prompt completion should be sampled, otherwise `false`.
  */
 function isPromptCompletionSampled (sampler, span) {
@@ -40,7 +40,7 @@ module.exports = function (integrationName, tracerConfig) {
     /**
      * Determines whether a prompt completion should be sampled based on the configured sampling rate.
      *
-     * @param {Span} span
+     * @param {Span|SpanContext} span
      * @returns {boolean} `true` if the prompt completion should be sampled, otherwise `false`.
      */
     isPromptCompletionSampled: (span) => isPromptCompletionSampled(sampler, span)

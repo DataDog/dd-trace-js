@@ -32,10 +32,7 @@ describe('llm utils', () => {
     })
 
     it('should always sample prompt completion', () => {
-      const span = {
-        context: sinon.stub().returns(new SpanContext({ traceId: id() }))
-      }
-      expect(utils.isPromptCompletionSampled(span)).to.be.true
+      expect(utils.isPromptCompletionSampled(new SpanContext({ traceId: id() }))).to.be.true
     })
   })
 
@@ -56,17 +53,11 @@ describe('llm utils', () => {
 
     describe('with sampling rate 0.6', () => {
       it('should not sample prompt completion', () => {
-        const span = {
-          context: sinon.stub().returns(new SpanContext({ traceId: id('8081965455359722133', 10) }))
-        }
-        expect(utils.isPromptCompletionSampled(span)).to.be.false
+        expect(utils.isPromptCompletionSampled(new SpanContext({ traceId: id('8081965455359722133', 10) }))).to.be.false
       })
 
       it('should sample prompt completion', () => {
-        const span = {
-          context: sinon.stub().returns(new SpanContext({ traceId: id('5533085789307409170', 10) }))
-        }
-        expect(utils.isPromptCompletionSampled(span)).to.be.true
+        expect(utils.isPromptCompletionSampled(new SpanContext({ traceId: id('5533085789307409170', 10) }))).to.be.true
       })
     })
   })
