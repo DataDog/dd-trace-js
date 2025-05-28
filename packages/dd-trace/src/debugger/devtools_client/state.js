@@ -16,6 +16,9 @@ module.exports = {
   breakpointToProbes: new Map(),
   probeToLocation: new Map(),
 
+  _loadedScripts: loadedScripts, // Only exposed for testing
+  _scriptUrls: scriptUrls, // Only exposed for testing
+
   /**
    * Find the script to inspect based on a partial or absolute path. Handles both Windows and POSIX paths.
    *
@@ -99,7 +102,7 @@ module.exports = {
       // the `scriptUrls` map. That might result in this the `scriptUrls.get` call above returning `undefined`, which
       // will throw when `startsWith` is called on it.
       let fileName = scriptUrls.get(frame.location.scriptId)
-      if (fileName.startsWith('file://')) fileName = fileName.substr(7) // TODO: This might not be required
+      if (fileName.startsWith('file://')) fileName = fileName.slice(7) // TODO: This might not be required
       return {
         fileName,
         function: frame.functionName,
@@ -107,6 +110,14 @@ module.exports = {
         columnNumber: frame.location.columnNumber + 1 // Beware! columnNumber is zero-indexed
       }
     })
+  },
+
+  // The maps locationToBreakpoint, breakpointToProbes, and probeToLocation are always updated when breakpoints are
+  // removed. Therefore they do not need to get manually cleared. Only the state internal to this file needs to be
+  // cleared.
+  clearState () {
+    loadedScripts.length = 0
+    scriptUrls.clear()
   }
 }
 
@@ -117,7 +128,6 @@ module.exports = {
 // Unknown params.url values:
 // - `structured-stack` - Not sure what this is, but should just be ignored
 // - `` - Not sure what this is, but should just be ignored
-// TODO: Event fired for all files, every time debugger is enabled. So when we disable it, we need to reset the state
 session.on('Debugger.scriptParsed', ({ params }) => {
   scriptUrls.set(params.scriptId, params.url)
   if (params.url.startsWith('file:')) {

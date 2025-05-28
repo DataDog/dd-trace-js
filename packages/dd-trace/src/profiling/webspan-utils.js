@@ -9,7 +9,7 @@ function endpointNameFromTags (tags) {
   return tags[RESOURCE_NAME] || [
     tags[HTTP_METHOD],
     tags[HTTP_ROUTE]
-  ].filter(v => v).join(' ')
+  ].filter(Boolean).join(' ')
 }
 
 function getStartedSpans (context) {

@@ -62,9 +62,9 @@ class PrioritySampler {
    * @param opts {SamplingConfig}
    */
   configure (env, opts = {}) {
-    const { sampleRate, provenance = undefined, rateLimit = 100, rules = [] } = opts
+    const { sampleRate, provenance, rateLimit = 100, rules = [] } = opts
     this._env = env
-    this._rules = this.#_normalizeRules(rules, sampleRate, rateLimit, provenance)
+    this._rules = this.#normalizeRules(rules, sampleRate, rateLimit, provenance)
     this._limiter = new RateLimiter(rateLimit)
 
     log.trace(env, opts)
@@ -110,7 +110,7 @@ class PrioritySampler {
       return
     }
 
-    this.#_addDecisionMaker(root)
+    this.#addDecisionMaker(root)
   }
 
   /**
@@ -174,7 +174,7 @@ class PrioritySampler {
 
     log.trace(span, samplingPriority, mechanism)
 
-    this.#_addDecisionMaker(root)
+    this.#addDecisionMaker(root)
   }
 
   /**
@@ -193,11 +193,11 @@ class PrioritySampler {
    */
   _getPriorityFromAuto (span) {
     const context = this._getContext(span)
-    const rule = this.#_findRule(span)
+    const rule = this.#findRule(span)
 
     return rule
-      ? this.#_getPriorityByRule(context, rule)
-      : this.#_getPriorityByAgent(context)
+      ? this.#getPriorityByRule(context, rule)
+      : this.#getPriorityByAgent(context)
   }
 
   /**
@@ -213,7 +213,7 @@ class PrioritySampler {
     } else if (hasOwn(tags, MANUAL_DROP) && tags[MANUAL_DROP] !== false) {
       return USER_REJECT
     } else {
-      const priority = parseInt(tags[SAMPLING_PRIORITY], 10)
+      const priority = Number.parseInt(tags[SAMPLING_PRIORITY], 10)
 
       if (priority === 1 || priority === 2) {
         return USER_KEEP
@@ -229,7 +229,7 @@ class PrioritySampler {
    * @param rule {SamplingRule}
    * @returns {SamplingPriority}
    */
-  #_getPriorityByRule (context, rule) {
+  #getPriorityByRule (context, rule) {
     context._trace[SAMPLING_RULE_DECISION] = rule.sampleRate
     context._sampling.mechanism = SAMPLING_MECHANISM_RULE
     if (rule.provenance === 'customer') context._sampling.mechanism = SAMPLING_MECHANISM_REMOTE_USER
@@ -260,17 +260,13 @@ class PrioritySampler {
    * @returns {SamplingPriority}
    * @private
    */
-  #_getPriorityByAgent (context) {
+  #getPriorityByAgent (context) {
     const key = `service:${context._tags[SERVICE_NAME]},env:${this._env}`
     const sampler = this._samplers[key] || this._samplers[DEFAULT_KEY]
 
     context._trace[SAMPLING_AGENT_DECISION] = sampler.rate()
 
-    if (sampler === defaultSampler) {
-      context._sampling.mechanism = SAMPLING_MECHANISM_DEFAULT
-    } else {
-      context._sampling.mechanism = SAMPLING_MECHANISM_AGENT
-    }
+    context._sampling.mechanism = sampler === defaultSampler ? SAMPLING_MECHANISM_DEFAULT : SAMPLING_MECHANISM_AGENT
 
     return sampler.isSampled(context) ? AUTO_KEEP : AUTO_REJECT
   }
@@ -281,7 +277,7 @@ class PrioritySampler {
    * @private
    * @returns {void}
    */
-  #_addDecisionMaker (span) {
+  #addDecisionMaker (span) {
     const context = span.context()
     const trace = context._trace
     const priority = context._sampling.priority
@@ -305,13 +301,13 @@ class PrioritySampler {
    * @returns {SamplingRule[]}
    * @private
    */
-  #_normalizeRules (rules, sampleRate, rateLimit, provenance) {
+  #normalizeRules (rules, sampleRate, rateLimit, provenance) {
     rules = [].concat(rules || [])
 
     return rules
       .concat({ sampleRate, maxPerSecond: rateLimit, provenance })
-      .map(rule => ({ ...rule, sampleRate: parseFloat(rule.sampleRate) }))
-      .filter(rule => !isNaN(rule.sampleRate))
+      .map(rule => ({ ...rule, sampleRate: Number.parseFloat(rule.sampleRate) }))
+      .filter(rule => !Number.isNaN(rule.sampleRate))
       .map(SamplingRule.from)
   }
 
@@ -321,8 +317,11 @@ class PrioritySampler {
    * @returns {SamplingRule}
    * @private
    */
-  #_findRule (span) {
+  #findRule (span) {
     for (const rule of this._rules) {
+      // Rule is a special object with a .match() property.
+      // It has nothing to do with a regular expression.
+      // eslint-disable-next-line unicorn/prefer-regexp-test
       if (rule.match(span)) return rule
     }
   }

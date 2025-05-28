@@ -27,7 +27,7 @@ class StableConfig {
     try {
       libdatadog = require('@datadog/libdatadog')
       this.wasm_loaded = true
-    } catch (e) {
+    } catch {
       this.warnings.push('Can\'t load libdatadog library')
       return
     }

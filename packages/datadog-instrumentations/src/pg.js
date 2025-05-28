@@ -45,7 +45,7 @@ function wrapQuery (query) {
     const textProp = Object.getOwnPropertyDescriptor(textPropObj, 'text')
     const stream = typeof textPropObj.read === 'function'
 
-    // Only alter `text` property if safe to do so.
+    // Only alter `text` property if safe to do so. Initially, it's a property, not a getter.
     if (!textProp || textProp.configurable) {
       const originalText = textPropObj.text
 
@@ -77,7 +77,6 @@ function wrapQuery (query) {
       if (abortController.signal.aborted) {
         const error = abortController.signal.reason || new Error('Aborted')
 
-        // eslint-disable-next-line @stylistic/js/max-len
         // Based on: https://github.com/brianc/node-postgres/blob/54eb0fa216aaccd727765641e7d1cf5da2bc483d/packages/pg/lib/client.js#L510
         const reusingQuery = typeof pgQuery.submit === 'function'
         const callback = arguments[arguments.length - 1]
@@ -115,7 +114,7 @@ function wrapQuery (query) {
       const queryQueue = this.queryQueue || this._queryQueue
       const activeQuery = this.activeQuery || this._activeQuery
 
-      const newQuery = queryQueue[queryQueue.length - 1] || activeQuery
+      const newQuery = queryQueue.at(-1) || activeQuery
 
       if (!newQuery) {
         return retval

@@ -55,6 +55,7 @@ describe('AppSec Index', function () {
   let apiSecuritySampler
   let rasp
   let standalone
+  let serverless
 
   const RULES = { rules: [{ a: 1 }] }
 
@@ -77,7 +78,13 @@ describe('AppSec Index', function () {
           sampleDelay: 10
         },
         rasp: {
-          enabled: true
+          enabled: true,
+          bodyCollection: true
+        },
+        extendedHeadersCollection: {
+          enabled: true,
+          redaction: false,
+          maxHeaders: 42
         }
       }
     }
@@ -131,6 +138,11 @@ describe('AppSec Index', function () {
       disable: sinon.stub()
     }
 
+    serverless = {
+      isInServerlessEnvironment: sinon.stub()
+    }
+    serverless.isInServerlessEnvironment.returns(false)
+
     AppSec = proxyquire('../../src/appsec', {
       '../log': log,
       '../plugins/util/web': web,
@@ -140,13 +152,14 @@ describe('AppSec Index', function () {
       './graphql': graphql,
       './api_security_sampler': apiSecuritySampler,
       './rasp': rasp,
-      './standalone': standalone
+      './standalone': standalone,
+      '../serverless': serverless
     })
 
     sinon.stub(fs, 'readFileSync').returns(JSON.stringify(RULES))
     sinon.stub(waf, 'init').callThrough()
     sinon.stub(RuleManager, 'loadRules')
-    sinon.stub(Reporter, 'setRateLimit')
+    sinon.stub(Reporter, 'init')
     sinon.stub(incomingHttpRequestStart, 'subscribe')
     sinon.stub(incomingHttpRequestEnd, 'subscribe')
   })
@@ -163,7 +176,7 @@ describe('AppSec Index', function () {
 
       expect(blocking.setTemplates).to.have.been.calledOnceWithExactly(config)
       expect(RuleManager.loadRules).to.have.been.calledOnceWithExactly(config.appsec)
-      expect(Reporter.setRateLimit).to.have.been.calledOnceWithExactly(42)
+      expect(Reporter.init).to.have.been.calledOnceWithExactly(config.appsec)
       expect(UserTracking.setCollectionMode).to.have.been.calledOnceWithExactly('anon', false)
       expect(incomingHttpRequestStart.subscribe)
         .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
@@ -180,6 +193,20 @@ describe('AppSec Index', function () {
       AppSec.enable(config)
 
       expect(log.error).to.have.been.calledOnceWithExactly('[ASM] Unable to start AppSec', err)
+      expect(incomingHttpRequestStart.subscribe).to.not.have.been.called
+      expect(incomingHttpRequestEnd.subscribe).to.not.have.been.called
+    })
+
+    it('should not log when enable fails in serverless', () => {
+      RuleManager.loadRules.restore()
+
+      const err = new Error('Invalid Rules')
+      sinon.stub(RuleManager, 'loadRules').throws(err)
+      serverless.isInServerlessEnvironment.returns(true)
+
+      AppSec.enable(config)
+
+      expect(log.error).to.not.have.been.called
       expect(incomingHttpRequestStart.subscribe).to.not.have.been.called
       expect(incomingHttpRequestEnd.subscribe).to.not.have.been.called
     })
