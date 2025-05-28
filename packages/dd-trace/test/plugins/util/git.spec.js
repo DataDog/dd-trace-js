@@ -476,7 +476,7 @@ describe('getGitRemoteName', () => {
   it('returns first remote when upstream is not available', () => {
     execFileSyncStub
       .onCall(0).throws()
-      .onCall(1).returns('upstream')
+      .onCall(1).returns('upstream\norigin')
 
     const { getGitRemoteName } = proxyquire('../../../src/plugins/util/git',
       {

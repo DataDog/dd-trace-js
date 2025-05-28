@@ -233,22 +233,19 @@ function getGitRemoteName () {
   )
 
   if (upstreamRemote) {
-    try {
-      return upstreamRemote.split('/')[0]
-    } catch (e) {
-      // ignore error and go to the fallback
-    }
+    return upstreamRemote.split('/')[0]
   }
 
-  const firstRemote = sanitizedExec(
+  const remotes = sanitizedExec(
     'git',
     ['remote'],
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
-    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_remote_name' } }
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_remote_name' } },
+    false
   )
 
-  return firstRemote || 'origin'
+  return remotes.split('\n')[0] || 'origin'
 }
 
 function getSourceBranch () {

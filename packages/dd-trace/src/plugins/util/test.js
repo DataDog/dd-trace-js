@@ -160,7 +160,7 @@ const ATTEMPT_TEST_NAME_REGEX = new RegExp(ATTEMPT_TO_FIX_STRING + ' \\(#\\d+\\)
 
 // Impacted tests
 const POSSIBLE_BASE_BRANCHES = ['main', 'master', 'preprod', 'prod', 'dev', 'development', 'trunk']
-const BASE_LIKE_BRANCH_FILTER = /^(main|master|preprod|prod|dev|development|trunk|release\/.*|hotfix\/.*)$/g
+const BASE_LIKE_BRANCH_FILTER = /^(main|master|preprod|prod|dev|development|trunk|release\/.*|hotfix\/.*)$/
 
 module.exports = {
   TEST_CODE_OWNERS,
@@ -270,7 +270,8 @@ module.exports = {
   getPullRequestDiff,
   getPullRequestBaseBranch,
   getModifiedTestsFromDiff,
-  isModifiedTest
+  isModifiedTest,
+  POSSIBLE_BASE_BRANCHES
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
@@ -821,7 +822,6 @@ function getLibraryCapabilitiesTags (testFramework, isParallel) {
   }
 }
 
-// TODO: review this with unit tests
 function getPullRequestBaseBranch (pullRequestBaseBranch) {
   const remoteName = getGitRemoteName()
 
