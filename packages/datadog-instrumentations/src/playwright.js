@@ -106,11 +106,7 @@ function deepCloneSuite (suite, filterTest, tags = []) {
 
 function getTestsBySuiteFromTestGroups (testGroups) {
   return testGroups.reduce((acc, { requireFile, tests }) => {
-    if (acc[requireFile]) {
-      acc[requireFile] = acc[requireFile].concat(tests)
-    } else {
-      acc[requireFile] = tests
-    }
+    acc[requireFile] = acc[requireFile] ? acc[requireFile].concat(tests) : tests
     return acc
   }, {})
 }
@@ -134,10 +130,10 @@ function getTestsBySuiteFromTestsById (testsById) {
 function getPlaywrightConfig (playwrightRunner) {
   try {
     return playwrightRunner._configLoader.fullConfig()
-  } catch (e) {
+  } catch {
     try {
       return playwrightRunner._loader.fullConfig()
-    } catch (e) {
+    } catch {
       return playwrightRunner._config || {}
     }
   }
@@ -244,7 +240,7 @@ function getChannelPromise (channelToPublishTo, params) {
     })
   })
 }
-// eslint-disable-next-line
+
 // Inspired by https://github.com/microsoft/playwright/blob/2b77ed4d7aafa85a600caa0b0d101b72c8437eeb/packages/playwright/src/reporters/base.ts#L293
 // We can't use test.outcome() directly because it's set on follow up handlers:
 // our `testEndHandler` is called before the outcome is set.
@@ -283,7 +279,7 @@ function testBeginHandler (test, browserName, isMainProcess) {
     startedSuites.push(testSuiteAbsolutePath)
     const testSuiteCtx = { testSuiteAbsolutePath }
     testSuiteToCtx.set(testSuiteAbsolutePath, testSuiteCtx)
-    testSuiteStartCh.runStores(testSuiteCtx, () => { })
+    testSuiteStartCh.runStores(testSuiteCtx, () => {})
   }
 
   // We disable retries by default if attemptToFix is true
@@ -303,7 +299,7 @@ function testBeginHandler (test, browserName, isMainProcess) {
     }
     testToCtx.set(test, testCtx)
 
-    testStartCh.runStores(testCtx, () => { })
+    testStartCh.runStores(testCtx, () => {})
   }
 }
 
@@ -347,7 +343,7 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout, isMain
 
   // this handles tests that do not go through the worker process (because they're skipped)
   if (isMainProcess) {
-    const testResult = results[results.length - 1]
+    const testResult = results.at(-1)
     const testCtx = testToCtx.get(test)
     const isAtrRetry = testResult?.retry > 0 &&
       isFlakyTestRetriesEnabled &&
@@ -392,7 +388,7 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout, isMain
   if (!remainingTestsByFile[testSuiteAbsolutePath].length) {
     const testStatuses = testSuiteToTestStatuses.get(testSuiteAbsolutePath)
     let testSuiteStatus = 'pass'
-    if (testStatuses.some(status => status === 'fail')) {
+    if (testStatuses.includes('fail')) {
       testSuiteStatus = 'fail'
     } else if (testStatuses.every(status => status === 'skip')) {
       testSuiteStatus = 'skip'
@@ -416,7 +412,7 @@ function dispatcherRunWrapperNew (run) {
     if (!this._allTests) {
       // Removed in https://github.com/microsoft/playwright/commit/1e52c37b254a441cccf332520f60225a5acc14c7
       // Not available from >=1.44.0
-      this._ddAllTests = testGroups.map(g => g.tests).flat()
+      this._ddAllTests = testGroups.flatMap(g => g.tests)
     }
     remainingTestsByFile = getTestsBySuiteFromTestGroups(arguments[0])
     return run.apply(this, arguments)
@@ -438,7 +434,7 @@ function dispatcherHook (dispatcherExport) {
         const { test } = dispatcher._testById.get(params.testId)
 
         const { results } = test
-        const testResult = results[results.length - 1]
+        const testResult = results.at(-1)
 
         const isTimeout = testResult.status === 'timedOut'
         testEndHandler(

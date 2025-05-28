@@ -3,7 +3,6 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const { channel } = require('../src/helpers/instrument')
 const semver = require('semver')
-const { NODE_MAJOR } = require('../../../version')
 
 const startCh = channel('datadog:mongoose:model:filter:start')
 const finishCh = channel('datadog:mongoose:model:filter:finish')
@@ -16,7 +15,6 @@ describe('mongoose instrumentations', () => {
     describe(range, () => {
       withVersions('mongoose', ['mongoose'], range, (version) => {
         const specificVersion = require(`../../../versions/mongoose@${version}`).version()
-        if (NODE_MAJOR === 14 && semver.satisfies(specificVersion, '>=8')) return
 
         let Test, dbName, id, mongoose
 

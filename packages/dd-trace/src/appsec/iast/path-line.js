@@ -2,13 +2,12 @@
 
 const path = require('path')
 const process = require('process')
-const { calculateDDBasePath } = require('../../util')
+const { ddBasePath } = require('../../util')
 const pathLine = {
   getNodeModulesPaths,
   getRelativePath,
   getNonDDCallSiteFrames,
-  calculateDDBasePath, // Exported only for test purposes
-  ddBasePath: calculateDDBasePath(__dirname) // Only for test purposes
+  ddBasePath // Exported only for test purposes
 }
 
 const EXCLUDED_PATHS = [
@@ -32,7 +31,7 @@ function getNonDDCallSiteFrames (callSiteFrames, externallyExcludedPaths) {
 
   for (const callsite of callSiteFrames) {
     const filepath = callsite.file
-    if (!isExcluded(callsite, externallyExcludedPaths) && filepath.indexOf(pathLine.ddBasePath) === -1) {
+    if (!isExcluded(callsite, externallyExcludedPaths) && !filepath.includes(pathLine.ddBasePath)) {
       callsite.path = getRelativePath(filepath)
       callsite.isInternal = !path.isAbsolute(filepath)
 
@@ -59,7 +58,7 @@ function isExcluded (callsite, externallyExcludedPaths) {
   }
 
   for (let i = 0; i < excludedPaths.length; i++) {
-    if (filename.indexOf(excludedPaths[i]) > -1) {
+    if (filename.includes(excludedPaths[i])) {
       return true
     }
   }

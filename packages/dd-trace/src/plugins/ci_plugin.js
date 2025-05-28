@@ -49,12 +49,22 @@ const {
   GIT_BRANCH,
   CI_WORKSPACE_PATH,
   GIT_COMMIT_MESSAGE,
+  GIT_TAG,
   GIT_PULL_REQUEST_BASE_BRANCH_SHA,
   GIT_COMMIT_HEAD_SHA,
   GIT_PULL_REQUEST_BASE_BRANCH
 } = require('./util/tags')
 const { OS_VERSION, OS_PLATFORM, OS_ARCHITECTURE, RUNTIME_NAME, RUNTIME_VERSION } = require('./util/env')
 const getDiClient = require('../ci-visibility/dynamic-instrumentation')
+const { DD_MAJOR } = require('../../../../version')
+
+const FRAMEWORK_TO_TRIMMED_COMMAND = {
+  vitest: 'vitest run',
+  mocha: 'mocha',
+  cucumber: 'cucumber-js',
+  playwright: 'playwright test',
+  jest: 'jest'
+}
 
 module.exports = class CiPlugin extends Plugin {
   constructor (...args) {
@@ -109,7 +119,11 @@ module.exports = class CiPlugin extends Plugin {
       // only for playwright
       this.rootDir = rootDir
 
-      const testSessionName = getTestSessionName(this.config, this.command, this.testEnvironmentMetadata)
+      const testSessionName = getTestSessionName(
+        this.config,
+        DD_MAJOR < 6 ? this.command : FRAMEWORK_TO_TRIMMED_COMMAND[this.constructor.id],
+        this.testEnvironmentMetadata
+      )
 
       const metadataTags = {}
       for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
@@ -268,6 +282,7 @@ module.exports = class CiPlugin extends Plugin {
       [CI_PROVIDER_NAME]: ciProviderName,
       [CI_WORKSPACE_PATH]: repositoryRoot,
       [GIT_COMMIT_MESSAGE]: commitMessage,
+      [GIT_TAG]: tag,
       [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseSha,
       [GIT_COMMIT_HEAD_SHA]: commitHeadSha
     } = this.testEnvironmentMetadata
@@ -289,6 +304,7 @@ module.exports = class CiPlugin extends Plugin {
       branch,
       testLevel: 'suite',
       commitMessage,
+      tag,
       pullRequestBaseSha,
       commitHeadSha
     }

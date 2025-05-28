@@ -248,7 +248,7 @@ function getOnTestHandler (isMain) {
 
     const ctx = testInfo
     testToContext.set(test.fn, ctx)
-    testStartCh.runStores(ctx, () => { })
+    testStartCh.runStores(ctx, () => {})
   }
 }
 
@@ -353,12 +353,12 @@ function getOnFailHandler (isMain) {
       if (isHook) {
         err.message = `${testOrHook.fullTitle()}: ${err.message}`
         testContext.err = err
-        errorCh.runStores(testContext, () => { })
+        errorCh.runStores(testContext, () => {})
         // if it's a hook and it has failed, 'test end' will not be called
         testFinishCh.publish({ status: 'fail', hasBeenRetried: isMochaRetry(test), ...testContext.currentStore })
       } else {
         testContext.err = err
-        errorCh.runStores(testContext, () => { })
+        errorCh.runStores(testContext, () => {})
       }
     }
 
@@ -372,7 +372,7 @@ function getOnFailHandler (isMain) {
         )
         testSuiteError.stack = err.stack
         testSuiteContext.error = testSuiteError
-        testSuiteErrorCh.runStores(testSuiteContext, () => { })
+        testSuiteErrorCh.runStores(testSuiteContext, () => {})
       }
     }
   }
@@ -422,7 +422,7 @@ function getOnPendingHandler () {
       } else {
         testToContext.set(test, testCtx)
       }
-      skipCh.runStores(testCtx, () => { })
+      skipCh.runStores(testCtx, () => {})
     }
   }
 }

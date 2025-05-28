@@ -32,7 +32,7 @@ function wrapMaybeInvoke (_maybeInvoke) {
     const callbackIndex = args.length - 1
     const callback = args[callbackIndex]
 
-    if (callback instanceof Function) {
+    if (typeof callback === 'function') {
       args[callbackIndex] = AsyncResource.bind(callback)
     }
 

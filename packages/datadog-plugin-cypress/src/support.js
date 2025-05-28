@@ -1,3 +1,4 @@
+/* eslint-disable unicorn/no-abusive-eslint-disable */
 const path = require('path')
 
 /* eslint-disable */

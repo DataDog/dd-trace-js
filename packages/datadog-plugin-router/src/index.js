@@ -90,7 +90,7 @@ class RouterPlugin extends WebPlugin {
     if (!context) return
     if (context.middleware.length === 0) return context.span
 
-    return context.middleware[context.middleware.length - 1]
+    return context.middleware.at(-1)
   }
 
   _getStoreSpan () {

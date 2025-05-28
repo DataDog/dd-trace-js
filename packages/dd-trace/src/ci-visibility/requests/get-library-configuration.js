@@ -28,7 +28,8 @@ function getLibraryConfiguration ({
   runtimeVersion,
   branch,
   testLevel = 'suite',
-  custom
+  custom,
+  tag
 }, done) {
   const options = {
     path: '/api/v2/libraries/tests/services/setting',
@@ -37,7 +38,7 @@ function getLibraryConfiguration ({
       'Content-Type': 'application/json'
     },
     url,
-    timeout: 20000
+    timeout: 20_000
   }
 
   if (isEvpProxy) {
@@ -69,7 +70,7 @@ function getLibraryConfiguration ({
         env,
         repository_url: repositoryUrl,
         sha,
-        branch
+        branch: branch || tag
       }
     }
   })
