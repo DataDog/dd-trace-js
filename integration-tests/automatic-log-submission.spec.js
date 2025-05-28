@@ -23,7 +23,8 @@ describe('test visibility automatic log submission', () => {
       '@cucumber/cucumber',
       'jest',
       'winston',
-      'chai@4'
+      'chai@4',
+      '@playwright/test'
     ], true)
     cwd = sandbox.folder
     webAppPort = await getPort()
@@ -58,10 +59,19 @@ describe('test visibility automatic log submission', () => {
     {
       name: 'cucumber',
       command: './node_modules/.bin/cucumber-js ci-visibility/automatic-log-submission-cucumber/*.feature'
+    },
+    {
+      name: 'playwright',
+      command: './node_modules/.bin/playwright test -c playwright.config.js',
+      getExtraEnvVars: () => ({
+        PW_BASE_URL: `http://localhost:${webAppPort}`,
+        TEST_DIR: 'ci-visibility/automatic-log-submission-playwright',
+        TEST_TIMEOUT: 3000
+      })
     }
   ]
 
-  testFrameworks.forEach(({ name, command }) => {
+  testFrameworks.forEach(({ name, command, getExtraEnvVars = () => ({}) }) => {
     context(`with ${name}`, () => {
       it('can automatically submit logs', (done) => {
         let logIds, testIds
@@ -113,11 +123,13 @@ describe('test visibility automatic log submission', () => {
               DD_AGENTLESS_LOG_SUBMISSION_ENABLED: '1',
               DD_AGENTLESS_LOG_SUBMISSION_URL: `http://localhost:${receiver.port}`,
               DD_API_KEY: '1',
-              DD_SERVICE: 'my-service'
+              DD_SERVICE: 'my-service',
+              ...getExtraEnvVars()
             },
             stdio: 'pipe'
           }
         )
+
         childProcess.on('exit', () => {
           Promise.all([logsPromise, eventsPromise]).then(() => {
             const { logSpanId, logTraceId } = logIds
@@ -151,7 +163,8 @@ describe('test visibility automatic log submission', () => {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               DD_AGENTLESS_LOG_SUBMISSION_URL: `http://localhost:${receiver.port}`,
-              DD_SERVICE: 'my-service'
+              DD_SERVICE: 'my-service',
+              ...getExtraEnvVars()
             },
             stdio: 'pipe'
           }
@@ -181,7 +194,8 @@ describe('test visibility automatic log submission', () => {
               DD_SERVICE: 'my-service',
               DD_TRACE_DEBUG: '1',
               DD_TRACE_LOG_LEVEL: 'warn',
-              DD_API_KEY: ''
+              DD_API_KEY: '',
+              ...getExtraEnvVars()
             },
             stdio: 'pipe'
           }
