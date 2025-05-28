@@ -1,7 +1,6 @@
 'use strict'
 
 const shimmer = require('../../../../../../datadog-shimmer')
-const { storage } = require('../../../../../../datadog-core')
 const { getIastContext } = require('../../iast-context')
 const { KAFKA_MESSAGE_KEY, KAFKA_MESSAGE_VALUE } = require('../source-types')
 const { newTaintedObject, newTaintedString } = require('../operations')
