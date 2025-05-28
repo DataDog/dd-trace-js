@@ -651,7 +651,7 @@ class TextMapPropagator {
       }
       // the current code assumes precedence of ot-baggage- (legacy opentracing baggage) over baggage
       if (spanContext) {
-        if (key in spanContext._baggageItems) continue
+        if (Object.hasOwn(spanContext._baggageItems, key)) continue
         spanContext._baggageItems[key] = value
         if (this._config.baggageTagKeys === '*' || keysToSpanTag.has(key)) {
           spanContext._trace.tags['baggage.' + key] = value
