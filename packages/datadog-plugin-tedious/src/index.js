@@ -8,28 +8,28 @@ class TediousPlugin extends DatabasePlugin {
   static get operation () { return 'request' } // TODO: change to match other database plugins
   static get system () { return 'mssql' }
 
-  bindStart (ctx) {
+  bindStart (payload) {
     const service = this.serviceName({ pluginConfig: this.config, system: this.system })
     const span = this.startSpan(this.operationName(), {
       service,
-      resource: ctx.queryOrProcedure,
+      resource: payload.queryOrProcedure,
       type: 'sql',
       kind: 'client',
       meta: {
         'db.type': 'mssql',
         component: 'tedious',
-        'out.host': ctx.connectionConfig.server,
-        [CLIENT_PORT_KEY]: ctx.connectionConfig.options.port,
-        'db.user': ctx.connectionConfig.userName || ctx.connectionConfig.authentication.options.userName,
-        'db.name': ctx.connectionConfig.options.database,
-        'db.instance': ctx.connectionConfig.options.instanceName
+        'out.host': payload.connectionConfig.server,
+        [CLIENT_PORT_KEY]: payload.connectionConfig.options.port,
+        'db.user': payload.connectionConfig.userName || payload.connectionConfig.authentication.options.userName,
+        'db.name': payload.connectionConfig.options.database,
+        'db.instance': payload.connectionConfig.options.instanceName
       }
-    }, ctx)
+    }, payload)
 
     // SQL Server includes comments when caching queries
     // For that reason we allow service mode but not full mode
-    ctx.sql = this.injectDbmQuery(span, ctx.queryOrProcedure, service, true)
-    return ctx.currentStore
+    payload.sql = this.injectDbmQuery(span, payload.queryOrProcedure, service, true)
+    return payload.currentStore
   }
 }
 
