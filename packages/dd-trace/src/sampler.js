@@ -34,7 +34,7 @@ class Sampler {
   /**
    * Determines whether a trace/span should be sampled based on the configured sampling rate.
    *
-   * @param {Span|SpanContext} span - The span or span context to evaluate.
+   * @param {Span} span - The span to evaluate.
    * @returns {boolean} `true` if the trace/span should be sampled, otherwise `false`.
    */
   isSampled (span) {
@@ -46,9 +46,7 @@ class Sampler {
       return false
     }
 
-    span = typeof span.context === 'function' ? span.context() : span
-
-    return (span._traceId.toBigInt() * SAMPLING_KNUTH_FACTOR) % UINT64_MODULO <= this._threshold
+    return (span.context()._traceId.toBigInt() * SAMPLING_KNUTH_FACTOR) % UINT64_MODULO <= this._threshold
   }
 }
 

@@ -49,20 +49,37 @@ describe('Sampler', () => {
     it('should always sample when rate is 1', () => {
       sampler = new Sampler(1)
 
-      expect(sampler.isSampled(new SpanContext({ traceId: id() }))).to.be.true
+      const span = {
+        context: sinon.stub().returns(new SpanContext({ traceId: id() }))
+      }
+
+      expect(sampler.isSampled(span)).to.be.true
     })
 
     it('should never sample when rate is 0', () => {
       sampler = new Sampler(0)
 
-      expect(sampler.isSampled(new SpanContext({ traceId: id() }))).to.be.false
+      const span = {
+        context: sinon.stub().returns(new SpanContext({ traceId: id() }))
+      }
+
+      expect(sampler.isSampled(span)).to.be.false
     })
 
     it('should sample according to the rate', () => {
       sampler = new Sampler(0.1234)
 
-      expect(sampler.isSampled(new SpanContext({ traceId: id('8135292307740797052', 10) }))).to.be.true
-      expect(sampler.isSampled(new SpanContext({ traceId: id('2263640730249415707', 10) }))).to.be.false
+      let span = {
+        context: sinon.stub().returns(new SpanContext({ traceId: id('8135292307740797052', 10) }))
+      }
+
+      expect(sampler.isSampled(span)).to.be.true
+
+      span = {
+        context: sinon.stub().returns(new SpanContext({ traceId: id('2263640730249415707', 10) }))
+      }
+
+      expect(sampler.isSampled(span)).to.be.false
     })
 
     it('should sample according to different rates', () => {
@@ -100,7 +117,10 @@ describe('Sampler', () => {
 
       idsAndRates.forEach(([id, rate, expected]) => {
         const sampler = new Sampler(rate)
-        expect(sampler.isSampled(new SpanContext({ traceId: id }))).to.equal(expected)
+        const span = {
+          context: sinon.stub().returns(new SpanContext({ traceId: id }))
+        }
+        expect(sampler.isSampled(span)).to.equal(expected)
       })
     })
   })

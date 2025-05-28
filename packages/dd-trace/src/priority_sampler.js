@@ -128,6 +128,11 @@ class PrioritySampler {
 
     samplers[DEFAULT_KEY] = samplers[DEFAULT_KEY] || defaultSampler
 
+    /**
+     * @private
+     * @type {Record<string, Sampler>}
+     * @description Maps service to their corresponding Sampler instances.
+     */
     this._samplers = samplers
 
     log.trace(rates)
@@ -192,12 +197,11 @@ class PrioritySampler {
    * @returns {SamplingPriority}
    */
   _getPriorityFromAuto (span) {
-    const context = this._getContext(span)
     const rule = this.#findRule(span)
 
     return rule
-      ? this.#getPriorityByRule(context, rule)
-      : this.#getPriorityByAgent(context)
+      ? this.#getPriorityByRule(span, rule)
+      : this.#getPriorityByAgent(span)
   }
 
   /**
@@ -225,11 +229,12 @@ class PrioritySampler {
 
   /**
    *
-   * @param context {DatadogSpanContext}
+   * @param span {DatadogSpan}
    * @param rule {SamplingRule}
    * @returns {SamplingPriority}
    */
-  #getPriorityByRule (context, rule) {
+  #getPriorityByRule (span, rule) {
+    const context = this._getContext(span)
     context._trace[SAMPLING_RULE_DECISION] = rule.sampleRate
     context._sampling.mechanism = SAMPLING_MECHANISM_RULE
     if (rule.provenance === 'customer') context._sampling.mechanism = SAMPLING_MECHANISM_REMOTE_USER
@@ -256,11 +261,12 @@ class PrioritySampler {
 
   /**
    *
-   * @param context {DatadogSpanContext}
+   * @param span {DatadogSpan}
    * @returns {SamplingPriority}
    * @private
    */
-  #getPriorityByAgent (context) {
+  #getPriorityByAgent (span) {
+    const context = this._getContext(span)
     const key = `service:${context._tags[SERVICE_NAME]},env:${this._env}`
     const sampler = this._samplers[key] || this._samplers[DEFAULT_KEY]
 
@@ -268,7 +274,7 @@ class PrioritySampler {
 
     context._sampling.mechanism = sampler === defaultSampler ? SAMPLING_MECHANISM_DEFAULT : SAMPLING_MECHANISM_AGENT
 
-    return sampler.isSampled(context) ? AUTO_KEEP : AUTO_REJECT
+    return sampler.isSampled(span) ? AUTO_KEEP : AUTO_REJECT
   }
 
   /**
