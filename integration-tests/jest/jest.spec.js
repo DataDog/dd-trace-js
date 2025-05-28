@@ -3563,6 +3563,9 @@ describe('jest CommonJS', () => {
         jest: {
           'ci-visibility/test-impacted-test/test-impacted-1.js': [
             'impacted tests can pass normally'
+          ],
+          'ci-visibility/test-impacted-test/test-impacted-2.js': [
+            'impacted tests 2 can pass normally'
           ]
         }
       })
@@ -3684,6 +3687,7 @@ describe('jest CommonJS', () => {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: 'test-impacted-test/test-impacted-1',
+            GITHUB_BASE_REF: '',
             ...extraEnvVars
           },
           stdio: 'inherit'
@@ -3717,7 +3721,15 @@ describe('jest CommonJS', () => {
             { DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0' }
           )
         })
-      // TODO: add test for parallel mode
+
+      it('should be detected as impacted in parallel mode', (done) => {
+        receiver.setSettings({ impacted_tests_enabled: true })
+
+        runImpactedTest(done, { isModified: true, isParallel: true }, {
+          TESTS_TO_RUN: 'test-impacted-test/test-impacted',
+          RUN_IN_PARALLEL: true
+        })
+      })
     })
 
     context('test is new', () => {
