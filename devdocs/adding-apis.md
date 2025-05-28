@@ -27,16 +27,18 @@ In either case, you’ll also update the `datadog-plugin-dd-trace-api` to bridge
 Locate or add the desired method in `dd-trace` (e.g., `tracer.js`, `appsec`, etc.).
 
 **Existing method example**:
-\`\`\`js
+
+```js
 class DatadogTracer extends Tracer {
   getVersion() {
     return this._version
   }
 }
-\`\`\`
+```
 
 **New method example**:
-\`\`\`js
+
+```js
 class DatadogTracer extends Tracer {
   getEnvironmentInfo() {
     return {
@@ -46,7 +48,7 @@ class DatadogTracer extends Tracer {
     }
   }
 }
-\`\`\`
+```
 
 ---
 
@@ -62,27 +64,27 @@ Refer to the [contribution guide](https://github.com/DataDog/dd-trace-api-js/blo
 
 Bridge the method in `datadog-plugin-dd-trace-api` by adding a `handleEvent()` call:
 
-\`\`\`js
+```js
 handleEvent('getVersion')             // For tracer methods
 handleEvent('appsec:checkPermission') // For subsystem methods
-\`\`\`
+```
 
 File location:
-\`\`\`
+```
 packages/datadog-plugin-dd-trace-api/src/index.js
-\`\`\`
+```
 
 ---
 
 ### 4. Add Tests
 
 Add a test in:
-\`\`\`
+```
 packages/datadog-plugin-dd-trace-api/test/index.spec.js
-\`\`\`
+```
 
 **Example**:
-\`\`\`js
+```js
 describe('getVersion', () => {
   it('should call underlying API', () => {
     testChannel({
@@ -92,7 +94,7 @@ describe('getVersion', () => {
     })
   })
 })
-\`\`\`
+```
 
 ---
 
@@ -100,15 +102,15 @@ describe('getVersion', () => {
 
 Use the `subsystem:method` format in `handleEvent()`:
 
-\`\`\`js
+```js
 handleEvent('appsec:checkPermission')
-\`\`\`
+```
 
 And test with `describeSubsystem()`:
 
-\`\`\`js
+```js
 describeSubsystem('appsec', 'checkPermission', true)
-\`\`\`
+```
 
 ---
 
@@ -116,7 +118,7 @@ describeSubsystem('appsec', 'checkPermission', true)
 
 For non-trivial logic, define a custom handler:
 
-\`\`\`js
+```js
 this.addSub('datadog-api:v1:complexMethod', ({ self, args, ret, proxy }) => {
   try {
     ret.value = self.complexMethod(...args)
@@ -124,7 +126,7 @@ this.addSub('datadog-api:v1:complexMethod', ({ self, args, ret, proxy }) => {
     ret.error = e
   }
 })
-\`\`\`
+```
 
 ---
 
@@ -152,28 +154,28 @@ this.addSub('datadog-api:v1:complexMethod', ({ self, args, ret, proxy }) => {
 ## Example: Full API Addition
 
 1. **Method in `dd-trace`**:
-\`\`\`js
+```js
 class DatadogTracer extends Tracer {
   getServiceName() {
     return this._service
   }
 }
-\`\`\`
+```
 
 2. **Expose in `dd-trace-api`**:
-\`\`\`js
+```js
 getServiceName() {
   return this._publicApi.channel.publish('getServiceName', {})
 }
-\`\`\`
+```
 
 3. **Bridge in plugin**:
-\`\`\`js
+```js
 handleEvent('getServiceName')
-\`\`\`
+```
 
 4. **Add test**:
-\`\`\`js
+```js
 describe('getServiceName', () => {
   it('should call underlying API', () => {
     testChannel({
@@ -183,7 +185,7 @@ describe('getServiceName', () => {
     })
   })
 })
-\`\`\`
+```
 
 ---
 
