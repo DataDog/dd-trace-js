@@ -92,17 +92,7 @@ async function assertModules (name, version, external) {
 }
 
 function assertFolder (name, version) {
-  if (!fs.existsSync(folder())) {
-    fs.mkdirSync(folder())
-  }
-
-  if (name && name.includes(path.sep)) {
-    name.split(path.sep).reduce(parent => assertFolder(parent))
-  }
-
-  if (!fs.existsSync(folder(name, version))) {
-    fs.mkdirSync(folder(name, version))
-  }
+  fs.mkdirSync(folder(name, version), { recursive: true })
 }
 
 async function assertPackage (name, version, dependencyVersionRange, external) {
