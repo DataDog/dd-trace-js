@@ -210,138 +210,132 @@ function getLatestCommits () {
 }
 
 function getGitDiff (baseCommit, targetCommit) {
-  try {
-    const flags = ['diff', '-U0', '--word-diff=porcelain', baseCommit]
-    if (targetCommit) {
-      flags.push(targetCommit)
-    }
-    return sanitizedExec(
-      'git',
-      flags,
-      { name: TELEMETRY_GIT_COMMAND, tags: { command: 'diff' } },
-      { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'diff' } },
-      { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'diff' } },
-      false
-    )
-  } catch (err) {
-    log.error('Git plugin error executing git diff command: %s', err.message)
-    return ''
+  const flags = ['diff', '-U0', '--word-diff=porcelain', baseCommit]
+  if (targetCommit) {
+    flags.push(targetCommit)
   }
+  return sanitizedExec(
+    'git',
+    flags,
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'diff' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'diff' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'diff' } }
+  )
 }
 
 function getGitRemoteName () {
-  try {
-    const upstreamRemote = sanitizedExec(
-      'git',
-      ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'],
-      { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
-      { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
-      { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_remote_name' } }
-    )
+  const upstreamRemote = sanitizedExec(
+    'git',
+    ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_remote_name' } }
+  )
 
-    if (upstreamRemote) {
+  if (upstreamRemote) {
+    try {
       return upstreamRemote.split('/')[0]
+    } catch (e) {
+      // ignore error and go to the fallback
     }
-
-    const firstRemote = sanitizedExec(
-      'git',
-      ['remote'],
-      { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
-      { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
-      { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_remote_name' } }
-    )
-
-    return firstRemote || 'origin'
-  } catch (err) {
-    log.error('Git plugin error getting remote name: %s', err.message)
-    return ''
   }
+
+  const firstRemote = sanitizedExec(
+    'git',
+    ['remote'],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_remote_name' } }
+  )
+
+  return firstRemote || 'origin'
 }
 
 function getSourceBranch () {
-  try {
-    return sanitizedExec(
-      'git',
-      ['rev-parse', '--abbrev-ref', 'HEAD'],
-      { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_source_branch' } },
-      { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_source_branch' } },
-      { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_source_branch' } }
-    )
-  } catch (err) {
-    log.error('Git plugin error getting source branch: %s', err.message)
-    return ''
-  }
+  return sanitizedExec(
+    'git',
+    ['rev-parse', '--abbrev-ref', 'HEAD'],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_source_branch' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_source_branch' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_source_branch' } }
+  )
 }
 
 function checkAndFetchBranch (branch, remoteName) {
   try {
+    // `git show-ref --verify --quiet refs/heads/${branch}` will exit 0 if the branch exists locally
+    // Otherwise it will exit 1
     cp.execFileSync('git', ['show-ref', '--verify', '--quiet', `refs/heads/${branch}`], { stdio: 'pipe' })
-    // branch exists locally
+    // branch exists locally, so we finish
   } catch (e) {
     // branch does not exist locally, so we will check the remote
     try {
       // IMPORTANT: we use timeouts because these commands hang if the branch can't be found
-      cp.execFileSync('git', ['ls-remote', '--heads', remoteName, branch], { stdio: 'pipe', timeout: 2000 })
-      // branch exists, so we'll fetch it
-      cp.execFileSync(
+      // `git ls-remote --heads origin my-branch` will exit 0 even if the branch doesn't exist.
+      // The piece of information we need is whether the command outputs anything.
+      // `git ls-remote --heads origin my-branch` could exit an error code if the remote does not exist.
+      const remoteHeads = cp.execFileSync(
         'git',
-        ['fetch', '--depth', '1', remoteName, `${branch}:${branch}`],
-        { stdio: 'pipe', timeout: 5000 }
+        ['ls-remote', '--heads', remoteName, branch],
+        { stdio: 'pipe', timeout: 2000 }
       )
+      if (remoteHeads) {
+        // branch exists, so we'll fetch it
+        cp.execFileSync(
+          'git',
+          ['fetch', '--depth', '1', remoteName, `${branch}:${branch}`],
+          { stdio: 'pipe', timeout: 5000 }
+        )
+      }
     } catch (e) {
       // branch does not exist or couldn't be fetched, so we can't do anything
+      log.error('Git plugin error checking and fetching branch', e)
     }
   }
 }
 
 function getLocalBranches (remoteName) {
+  const localBranches = sanitizedExec(
+    'git',
+    ['for-each-ref', '--format=%(refname:short)', 'refs/heads', `refs/remotes/${remoteName}`],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_local_branches' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_local_branches' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_local_branches' } },
+    false
+  )
   try {
-    const localBranches = sanitizedExec(
-      'git',
-      ['for-each-ref', '--format=%(refname:short)', 'refs/heads', `"refs/remotes/${remoteName}"`],
-      { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_local_branches' } },
-      { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_local_branches' } },
-      { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_local_branches' } },
-      false
-    )
     return localBranches.split('\n').filter(branch => branch)
-  } catch (err) {
-    log.error('Git plugin error getting local branches: %s', err.message)
-    return ''
+  } catch (e) {
+    return []
   }
 }
 
 function getMergeBase (baseBranch, sourceBranch) {
-  try {
-    return sanitizedExec(
-      'git',
-      ['merge-base', baseBranch, sourceBranch],
-      { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_merge_base' } },
-      { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_merge_base' } },
-      { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_merge_base' } }
-    )
-  } catch (err) {
-    log.error('Git plugin error getting merge base: %s', err.message)
-    return ''
-  }
+  return sanitizedExec(
+    'git',
+    ['merge-base', baseBranch, sourceBranch],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_merge_base' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_merge_base' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_merge_base' } }
+  )
 }
 
 function getCounts (sourceBranch, candidateBranch) {
+  const counts = sanitizedExec(
+    'git',
+    ['rev-list', '--left-right', '--count', `${candidateBranch}...${sourceBranch}`],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_counts' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_counts' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_counts' } }
+  )
   try {
-    const counts = sanitizedExec(
-      'git',
-      ['rev-list', '--left-right', '--count', `${candidateBranch}...${sourceBranch}`],
-      { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_counts' } },
-      { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_counts' } },
-      { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_counts' } }
-    )
-    const countsArray = counts.split(' ')
-    const behind = countsArray[0] ? countsArray[0] : null
-    const ahead = countsArray[1] ? countsArray[1] : null
+    if (!counts) {
+      return { behind: null, ahead: null }
+    }
+    const [behind, ahead] = counts.split(/\s+/).map(Number)
     return { behind, ahead }
-  } catch (err) {
-    log.error('Git plugin error getting counts: %s', err.message)
-    return null
+  } catch (e) {
+    return { behind: null, ahead: null }
   }
 }
 

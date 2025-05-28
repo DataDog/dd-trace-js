@@ -831,11 +831,12 @@ function getPullRequestBaseBranch (pullRequestBaseBranch) {
     return null
   }
   // TODO: We will get the default branch name from the backend in the future.
-  const defaultBranch = 'main'
+  const POSSIBLE_DEFAULT_BRANCHES = ['main', 'master']
 
-  const candidatesBranches = []
+  const candidateBranches = []
   if (pullRequestBaseBranch) {
-    candidatesBranches.push(pullRequestBaseBranch)
+    checkAndFetchBranch(pullRequestBaseBranch, remoteName)
+    candidateBranches.push(pullRequestBaseBranch)
   } else {
     for (const branch of POSSIBLE_BASE_BRANCHES) {
       checkAndFetchBranch(branch, remoteName)
@@ -844,17 +845,17 @@ function getPullRequestBaseBranch (pullRequestBaseBranch) {
     const localBranches = getLocalBranches(remoteName)
     for (const branch of localBranches) {
       if (branch !== sourceBranch && BASE_LIKE_BRANCH_FILTER.test(branch)) {
-        candidatesBranches.push(branch)
+        candidateBranches.push(branch)
       }
     }
   }
 
-  if (candidatesBranches.length === 1) {
-    return getMergeBase(candidatesBranches[0], sourceBranch)
+  if (candidateBranches.length === 1) {
+    return getMergeBase(candidateBranches[0], sourceBranch)
   }
 
   const metrics = {}
-  for (const candidate of candidatesBranches) {
+  for (const candidate of candidateBranches) {
     // Find common ancestor
     const baseSha = getMergeBase(candidate, sourceBranch)
     if (!baseSha) {
@@ -874,16 +875,24 @@ function getPullRequestBaseBranch (pullRequestBaseBranch) {
     }
   }
 
+  function isDefaultBranch (branch) {
+    return POSSIBLE_DEFAULT_BRANCHES.some(defaultBranch =>
+      branch === defaultBranch || branch === `${remoteName}/${defaultBranch}`
+    )
+  }
+
   if (Object.keys(metrics).length === 0) {
     return null
   }
   // Find branch with smallest "ahead" value, preferring default branch on tie
   let bestBranch = null
-  let bestScore = [Infinity, 1] // [ahead, is_not_default]
+  let bestScore = Infinity
   for (const branch of Object.keys(metrics)) {
-    const isDefault = branch === defaultBranch || branch === `${remoteName}/${defaultBranch}` ? 0 : 1
-    const score = [metrics[branch].ahead, isDefault]
+    const score = metrics[branch].ahead
     if (score < bestScore) {
+      bestScore = score
+      bestBranch = branch
+    } else if (score === bestScore && isDefaultBranch(branch)) {
       bestScore = score
       bestBranch = branch
     }
@@ -899,8 +908,8 @@ function getPullRequestDiff (baseCommit, targetCommit) {
 }
 
 function getModifiedTestsFromDiff (diff) {
-  const result = {}
   if (!diff) return null
+  const result = {}
 
   const filesRegex = /^diff --git a\/(?<file>.+) b\/(?<file2>.+)$/g
   const linesRegex = /^@@ -\d+(,\d+)? \+(?<start>\d+)(,(?<count>\d+))? @@/g
@@ -909,9 +918,7 @@ function getModifiedTestsFromDiff (diff) {
 
   // Go line by line
   const lines = diff.split('\n')
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-
+  for (const line of lines) {
     // Check for new file
     const fileMatch = filesRegex.exec(line)
     if (fileMatch && fileMatch.groups.file) {
@@ -923,8 +930,8 @@ function getModifiedTestsFromDiff (diff) {
     // Check for changed lines
     const lineMatch = linesRegex.exec(line)
     if (lineMatch && currentFile) {
-      const start = parseInt(lineMatch.groups.start, 10)
-      const count = lineMatch.groups.count ? parseInt(lineMatch.groups.count, 10) : 1
+      const start = Number(lineMatch.groups.start)
+      const count = lineMatch.groups.count ? Number(lineMatch.groups.count) : 1
       for (let j = 0; j < count; j++) {
         result[currentFile].push(start + j)
       }

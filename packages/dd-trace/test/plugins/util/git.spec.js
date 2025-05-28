@@ -421,7 +421,15 @@ describe('getGitDiff', () => {
     ])
   })
 
-  it('returns empty string when git command fails', () => {
+  it('returns the diff between a commit and the current HEAD', () => {
+    const expectedDiff = 'diff --git a/file.js b/file.js'
+    execFileSyncStub.returns(expectedDiff)
+    const diff = getGitDiff('base-commit')
+    expect(diff).to.equal(expectedDiff)
+    expect(execFileSyncStub).to.have.been.calledWith('git', ['diff', '-U0', '--word-diff=porcelain', 'base-commit'])
+  })
+
+  it('returns an empty string when git command fails because SHAs could not be found', () => {
     const logErrorSpy = sinon.spy()
 
     const { getGitDiff } = proxyquire('../../../src/plugins/util/git',
@@ -544,42 +552,82 @@ describe('checkAndFetchBranch', () => {
   })
 
   it('does nothing if the branch exists locally', () => {
-    execFileSyncStub.returns('something')
+    execFileSyncStub.returns('')
     const { checkAndFetchBranch } = proxyquire('../../../src/plugins/util/git', {
       child_process: { execFileSync: execFileSyncStub }
     })
     checkAndFetchBranch('my-branch', 'origin')
     expect(execFileSyncStub).to.have.been.calledWith('git', ['show-ref', '--verify', '--quiet', 'refs/heads/my-branch'])
+    expect(execFileSyncStub).not.to.have.been.calledWith(
+      'git',
+      ['ls-remote', '--heads', 'origin', 'my-branch'],
+      { stdio: 'pipe', timeout: 2000 }
+    )
     // Should not call fetch
     expect(execFileSyncStub).not.to.have.been.calledWith(
       'git',
-      ['fetch', '--depth', '1', 'origin', 'my-branch:my-branch']
+      ['fetch', '--depth', '1', 'origin', 'my-branch:my-branch'],
+      { stdio: 'pipe', timeout: 5000 }
     )
   })
 
   it('fetches the branch if it does not exist locally but exists on remote', () => {
     execFileSyncStub
-      .onCall(0).returns('') // local check fails
+      .onCall(0).throws() // local check fails
       .onCall(1).returns('something') // remote check passes
       .onCall(2).returns('') // fetch
     const { checkAndFetchBranch } = proxyquire('../../../src/plugins/util/git', {
       child_process: { execFileSync: execFileSyncStub }
     })
     checkAndFetchBranch('my-branch', 'origin')
+    expect(execFileSyncStub).to.have.been.calledWith('git', ['show-ref', '--verify', '--quiet', 'refs/heads/my-branch'])
+    expect(execFileSyncStub).to.have.been.calledWith(
+      'git',
+      ['ls-remote', '--heads', 'origin', 'my-branch'],
+      { stdio: 'pipe', timeout: 2000 }
+    )
     expect(execFileSyncStub).to.have.been.calledWith('git', ['fetch', '--depth', '1', 'origin', 'my-branch:my-branch'])
   })
 
   it('does nothing if the branch does not exist locally or on remote', () => {
     execFileSyncStub
-      .onCall(0).returns('') // local check fails
+      .onCall(0).throws() // local check fails
       .onCall(1).returns('') // remote check fails
     const { checkAndFetchBranch } = proxyquire('../../../src/plugins/util/git', {
       child_process: { execFileSync: execFileSyncStub }
     })
     checkAndFetchBranch('my-branch', 'origin')
+    expect(execFileSyncStub).to.have.been.calledWith('git', ['show-ref', '--verify', '--quiet', 'refs/heads/my-branch'])
+    expect(execFileSyncStub).to.have.been.calledWith(
+      'git',
+      ['ls-remote', '--heads', 'origin', 'my-branch'],
+      { stdio: 'pipe', timeout: 2000 }
+    )
     expect(execFileSyncStub).not.to.have.been.calledWith(
       'git',
-      ['fetch', '--depth', '1', 'origin', 'my-branch:my-branch']
+      ['fetch', '--depth', '1', 'origin', 'my-branch:my-branch'],
+      { stdio: 'pipe', timeout: 5000 }
+    )
+  })
+
+  it('does nothing if the remote does not exist', () => {
+    execFileSyncStub
+      .onCall(0).throws() // local check fails
+      .onCall(1).throws('') // remote does not exist
+    const { checkAndFetchBranch } = proxyquire('../../../src/plugins/util/git', {
+      child_process: { execFileSync: execFileSyncStub }
+    })
+    checkAndFetchBranch('my-branch', 'origin')
+    expect(execFileSyncStub).to.have.been.calledWith('git', ['show-ref', '--verify', '--quiet', 'refs/heads/my-branch'])
+    expect(execFileSyncStub).to.have.been.calledWith(
+      'git',
+      ['ls-remote', '--heads', 'origin', 'my-branch'],
+      { stdio: 'pipe', timeout: 2000 }
+    )
+    expect(execFileSyncStub).not.to.have.been.calledWith(
+      'git',
+      ['fetch', '--depth', '1', 'origin', 'my-branch:my-branch'],
+      { stdio: 'pipe', timeout: 5000 }
     )
   })
 
@@ -605,7 +653,7 @@ describe('getLocalBranches', () => {
     const { getLocalBranches } = proxyquire('../../../src/plugins/util/git', {
       child_process: { execFileSync: execFileSyncStub }
     })
-    const branches = getLocalBranches('origin')
+    const branches = getLocalBranches('my-origin')
     expect(branches).to.deep.equal(['branch1', 'branch2', 'branch3'])
     expect(execFileSyncStub).to.have.been.calledWith(
       'git',
@@ -613,12 +661,12 @@ describe('getLocalBranches', () => {
         'for-each-ref',
         '--format=%(refname:short)',
         'refs/heads',
-        '"refs/remotes/origin"'
+        'refs/remotes/my-origin'
       ]
     )
   })
 
-  it('returns empty array if command throws', () => {
+  it('returns empty array if command throws and logs an error', () => {
     const logErrorSpy = sinon.spy()
     execFileSyncStub.throws(new Error('git command failed'))
     const { getLocalBranches } = proxyquire('../../../src/plugins/util/git', {
@@ -665,12 +713,12 @@ describe('getCounts', () => {
   })
 
   it('returns the counts of commits ahead and behind', () => {
-    execFileSyncStub.returns('2 3')
+    execFileSyncStub.returns('38\t3')
     const { getCounts } = proxyquire('../../../src/plugins/util/git', {
       child_process: { execFileSync: execFileSyncStub }
     })
     const counts = getCounts('feature', 'main')
-    expect(counts).to.deep.equal({ behind: '2', ahead: '3' })
+    expect(counts).to.deep.equal({ behind: 38, ahead: 3 })
     expect(execFileSyncStub).to.have.been.calledWith('git', ['rev-list', '--left-right', '--count', 'main...feature'])
   })
 
