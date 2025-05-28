@@ -7,7 +7,7 @@ const STRINGIFY_RANGE_KEY = 'DD_' + crypto.randomBytes(20).toString('hex')
 const STRINGIFY_SENSITIVE_KEY = STRINGIFY_RANGE_KEY + 'SENSITIVE'
 const STRINGIFY_SENSITIVE_NOT_STRING_KEY = STRINGIFY_SENSITIVE_KEY + 'NOTSTRING'
 
-// eslint-disable-next-line @stylistic/js/max-len
+// eslint-disable-next-line @stylistic/max-len
 const KEYS_REGEX_WITH_SENSITIVE_RANGES = new RegExp(`(?:"(${STRINGIFY_RANGE_KEY}_\\d+_))|(?:"(${STRINGIFY_SENSITIVE_KEY}_\\d+_(\\d+)_))|("${STRINGIFY_SENSITIVE_NOT_STRING_KEY}_\\d+_([\\s0-9.a-zA-Z]*)")`, 'gm')
 const KEYS_REGEX_WITHOUT_SENSITIVE_RANGES = new RegExp(`"(${STRINGIFY_RANGE_KEY}_\\d+_)`, 'gm')
 
@@ -99,22 +99,17 @@ function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {
         } else {
           currentLevelClone[key] = val
         }
-      } else if (Array.isArray(val)) {
-        currentLevelClone[key] = []
       } else {
-        currentLevelClone[key] = {}
+        currentLevelClone[key] = Array.isArray(val) ? [] : {}
       }
     })
 
     value = JSON.stringify(cloneObj, null, 2)
 
     if (counter > 0) {
-      let keysRegex
-      if (loadSensitiveRanges) {
-        keysRegex = KEYS_REGEX_WITH_SENSITIVE_RANGES
-      } else {
-        keysRegex = KEYS_REGEX_WITHOUT_SENSITIVE_RANGES
-      }
+      const keysRegex = loadSensitiveRanges
+        ? KEYS_REGEX_WITH_SENSITIVE_RANGES
+        : KEYS_REGEX_WITHOUT_SENSITIVE_RANGES
       keysRegex.lastIndex = 0
 
       let regexRes = keysRegex.exec(value)
@@ -141,7 +136,7 @@ function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {
 
           sensitiveRanges.push({
             start: offset,
-            end: offset + parseInt(regexRes[3])
+            end: offset + Number.parseInt(regexRes[3])
           })
 
           value = value.replace(sensitiveId, '')

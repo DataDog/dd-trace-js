@@ -40,7 +40,7 @@ async function getLocalStateForCallFrame (
     return () => new Error('Error getting local state')
   }
 
-  // Deplay calling `processRawState` so the caller gets a chance to resume the main thread before processing `rawState`
+  // Delay calling `processRawState` so the caller gets a chance to resume the main thread before processing `rawState`
   return () => {
     processedState = processedState ?? processRawState(rawState, maxLength)
     return processedState

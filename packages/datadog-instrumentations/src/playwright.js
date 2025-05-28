@@ -1,5 +1,3 @@
-const satisfies = require('semifies')
-
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const {
@@ -8,6 +6,7 @@ const {
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE
 } = require('../../dd-trace/src/plugins/util/test')
 const log = require('../../dd-trace/src/log')
+const { DD_MAJOR } = require('../../../version')
 
 const testStartCh = channel('ci:playwright:test:start')
 const testFinishCh = channel('ci:playwright:test:finish')
@@ -55,7 +54,6 @@ let testManagementAttemptToFixRetries = 0
 let testManagementTests = {}
 const quarantinedOrDisabledTestsAttemptToFix = []
 let rootDir = ''
-const MINIMUM_SUPPORTED_VERSION_RANGE_EFD = '>=1.38.0'
 
 function getTestProperties (test) {
   const testName = getTestFullname(test)
@@ -104,11 +102,7 @@ function deepCloneSuite (suite, filterTest, tags = []) {
 
 function getTestsBySuiteFromTestGroups (testGroups) {
   return testGroups.reduce((acc, { requireFile, tests }) => {
-    if (acc[requireFile]) {
-      acc[requireFile] = acc[requireFile].concat(tests)
-    } else {
-      acc[requireFile] = tests
-    }
+    acc[requireFile] = acc[requireFile] ? acc[requireFile].concat(tests) : tests
     return acc
   }, {})
 }
@@ -132,10 +126,10 @@ function getTestsBySuiteFromTestsById (testsById) {
 function getPlaywrightConfig (playwrightRunner) {
   try {
     return playwrightRunner._configLoader.fullConfig()
-  } catch (e) {
+  } catch {
     try {
       return playwrightRunner._loader.fullConfig()
-    } catch (e) {
+    } catch {
       return playwrightRunner._config || {}
     }
   }
@@ -242,7 +236,7 @@ function getChannelPromise (channelToPublishTo) {
     })
   })
 }
-// eslint-disable-next-line
+
 // Inspired by https://github.com/microsoft/playwright/blob/2b77ed4d7aafa85a600caa0b0d101b72c8437eeb/packages/playwright/src/reporters/base.ts#L293
 // We can't use test.outcome() directly because it's set on follow up handlers:
 // our `testEndHandler` is called before the outcome is set.
@@ -281,7 +275,7 @@ function testBeginHandler (test, browserName, isMainProcess) {
     startedSuites.push(testSuiteAbsolutePath)
     const testSuiteCtx = { testSuiteAbsolutePath }
     testSuiteToCtx.set(testSuiteAbsolutePath, testSuiteCtx)
-    testSuiteStartCh.runStores(testSuiteCtx, () => { })
+    testSuiteStartCh.runStores(testSuiteCtx, () => {})
   }
 
   // We disable retries by default if attemptToFix is true
@@ -301,7 +295,7 @@ function testBeginHandler (test, browserName, isMainProcess) {
     }
     testToCtx.set(test, testCtx)
 
-    testStartCh.runStores(testCtx, () => { })
+    testStartCh.runStores(testCtx, () => {})
   }
 }
 
@@ -345,7 +339,7 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout, isMain
 
   // this handles tests that do not go through the worker process (because they're skipped)
   if (isMainProcess) {
-    const testResult = results[results.length - 1]
+    const testResult = results.at(-1)
     const testCtx = testToCtx.get(test)
     const isAtrRetry = testResult?.retry > 0 &&
       isFlakyTestRetriesEnabled &&
@@ -389,7 +383,7 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout, isMain
   if (!remainingTestsByFile[testSuiteAbsolutePath].length) {
     const testStatuses = testSuiteToTestStatuses.get(testSuiteAbsolutePath)
     let testSuiteStatus = 'pass'
-    if (testStatuses.some(status => status === 'fail')) {
+    if (testStatuses.includes('fail')) {
       testSuiteStatus = 'fail'
     } else if (testStatuses.every(status => status === 'skip')) {
       testSuiteStatus = 'skip'
@@ -413,7 +407,7 @@ function dispatcherRunWrapperNew (run) {
     if (!this._allTests) {
       // Removed in https://github.com/microsoft/playwright/commit/1e52c37b254a441cccf332520f60225a5acc14c7
       // Not available from >=1.44.0
-      this._ddAllTests = testGroups.map(g => g.tests).flat()
+      this._ddAllTests = testGroups.flatMap(g => g.tests)
     }
     remainingTestsByFile = getTestsBySuiteFromTestGroups(arguments[0])
     return run.apply(this, arguments)
@@ -435,7 +429,7 @@ function dispatcherHook (dispatcherExport) {
         const { test } = dispatcher._testById.get(params.testId)
 
         const { results } = test
-        const testResult = results[results.length - 1]
+        const testResult = results.at(-1)
 
         const isTimeout = testResult.status === 'timedOut'
         testEndHandler(
@@ -530,7 +524,7 @@ function runnerHook (runnerExport, playwrightVersion) {
       log.error('Playwright session start error', e)
     }
 
-    if (isKnownTestsEnabled && satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)) {
+    if (isKnownTestsEnabled) {
       try {
         const { err, knownTests: receivedKnownTests } = await getChannelPromise(knownTestsCh)
         if (!err) {
@@ -546,7 +540,7 @@ function runnerHook (runnerExport, playwrightVersion) {
       }
     }
 
-    if (isTestManagementTestsEnabled && satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)) {
+    if (isTestManagementTestsEnabled) {
       try {
         const { err, testManagementTests: receivedTestManagementTests } = await getChannelPromise(testManagementTestsCh)
         if (!err) {
@@ -632,37 +626,38 @@ function runnerHook (runnerExport, playwrightVersion) {
   return runnerExport
 }
 
-addHook({
-  name: '@playwright/test',
-  file: 'lib/runner.js',
-  versions: ['>=1.18.0 <=1.30.0']
-}, runnerHook)
+if (DD_MAJOR < 6) { // <1.38.0 is only supported up to version 5
+  addHook({
+    name: '@playwright/test',
+    file: 'lib/runner.js',
+    versions: ['>=1.18.0 <=1.30.0']
+  }, runnerHook)
 
-addHook({
-  name: '@playwright/test',
-  file: 'lib/dispatcher.js',
-  versions: ['>=1.18.0 <1.30.0']
-}, dispatcherHook)
+  addHook({
+    name: '@playwright/test',
+    file: 'lib/dispatcher.js',
+    versions: ['>=1.18.0 <1.30.0']
+  }, dispatcherHook)
 
-addHook({
-  name: '@playwright/test',
-  file: 'lib/dispatcher.js',
-  versions: ['>=1.30.0 <1.31.0']
-}, (dispatcher) => dispatcherHookNew(dispatcher, dispatcherRunWrapper))
+  addHook({
+    name: '@playwright/test',
+    file: 'lib/dispatcher.js',
+    versions: ['>=1.30.0 <1.31.0']
+  }, (dispatcher) => dispatcherHookNew(dispatcher, dispatcherRunWrapper))
 
-addHook({
-  name: '@playwright/test',
-  file: 'lib/runner/dispatcher.js',
-  versions: ['>=1.31.0 <1.38.0']
-}, (dispatcher) => dispatcherHookNew(dispatcher, dispatcherRunWrapperNew))
+  addHook({
+    name: '@playwright/test',
+    file: 'lib/runner/dispatcher.js',
+    versions: ['>=1.31.0 <1.38.0']
+  }, (dispatcher) => dispatcherHookNew(dispatcher, dispatcherRunWrapperNew))
 
-addHook({
-  name: '@playwright/test',
-  file: 'lib/runner/runner.js',
-  versions: ['>=1.31.0 <1.38.0']
-}, runnerHook)
+  addHook({
+    name: '@playwright/test',
+    file: 'lib/runner/runner.js',
+    versions: ['>=1.31.0 <1.38.0']
+  }, runnerHook)
+}
 
-// From >=1.38.0
 addHook({
   name: 'playwright',
   file: 'lib/runner/runner.js',
@@ -673,13 +668,12 @@ addHook({
   name: 'playwright',
   file: 'lib/runner/dispatcher.js',
   versions: ['>=1.38.0']
-}, (dispatcher) => dispatcherHookNew(dispatcher, dispatcherRunWrapperNew))
+}, (dispatcher, version) => dispatcherHookNew(dispatcher, dispatcherRunWrapperNew, version))
 
-// Hook used for early flake detection. EFD only works from >=1.38.0
 addHook({
   name: 'playwright',
   file: 'lib/common/suiteUtils.js',
-  versions: [MINIMUM_SUPPORTED_VERSION_RANGE_EFD]
+  versions: ['>=1.38.0']
 }, suiteUtilsPackage => {
   // We grab `applyRepeatEachIndex` to use it later
   // `applyRepeatEachIndex` needs to be applied to a cloned suite
@@ -687,11 +681,10 @@ addHook({
   return suiteUtilsPackage
 })
 
-// Hook used for early flake detection. EFD only works from >=1.38.0
 addHook({
   name: 'playwright',
   file: 'lib/runner/loadUtils.js',
-  versions: [MINIMUM_SUPPORTED_VERSION_RANGE_EFD]
+  versions: ['>=1.38.0']
 }, (loadUtilsPackage) => {
   const oldCreateRootSuite = loadUtilsPackage.createRootSuite
 

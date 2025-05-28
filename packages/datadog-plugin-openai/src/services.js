@@ -11,8 +11,8 @@ let logger = null
 let interval = null
 
 module.exports.init = function (tracerConfig) {
-  if (tracerConfig && tracerConfig.dogstatsd) {
-    metrics = new DogStatsDClient({
+  metrics = tracerConfig && tracerConfig.dogstatsd
+    ? new DogStatsDClient({
       host: tracerConfig.dogstatsd.hostname,
       port: tracerConfig.dogstatsd.port,
       tags: [
@@ -21,21 +21,17 @@ module.exports.init = function (tracerConfig) {
         `version:${tracerConfig.tags.version}`
       ]
     })
-  } else {
-    metrics = new NoopDogStatsDClient()
-  }
+    : new NoopDogStatsDClient()
 
-  if (tracerConfig && tracerConfig.apiKey) {
-    logger = new ExternalLogger({
+  logger = tracerConfig && tracerConfig.apiKey
+    ? new ExternalLogger({
       ddsource: 'openai',
       hostname: tracerConfig.hostname,
       service: tracerConfig.service,
       apiKey: tracerConfig.apiKey,
       interval: FLUSH_INTERVAL
     })
-  } else {
-    logger = new NoopExternalLogger()
-  }
+    : new NoopExternalLogger()
 
   interval = setInterval(() => {
     metrics.flush()
