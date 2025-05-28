@@ -55,7 +55,7 @@ const { once } = require('node:events')
 
 const NUM_RETRIES_EFD = 3
 
-const versions = ['latest']
+const versions = ['1.6.0', 'latest']
 
 const linePctMatchRegex = /Lines\s+:\s+([\d.]+)%/
 

@@ -652,15 +652,13 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
       ).map(scenario => scenario.scenario)
       const stepIds = testCase?.testSteps?.flatMap(testStep => testStep.stepDefinitionIds)
 
-      sessionAsyncResource.runInAsyncScope(() => {
-        isModifiedCh.publish({
-          scenarios,
-          testFileAbsolutePath: gherkinDocument.uri,
-          modifiedTests,
-          stepIds,
-          stepDefinitions: this.supportCodeLibrary.stepDefinitions,
-          setIsModified
-        })
+      isModifiedCh.publish({
+        scenarios,
+        testFileAbsolutePath: gherkinDocument.uri,
+        modifiedTests,
+        stepIds,
+        stepDefinitions: this.supportCodeLibrary.stepDefinitions,
+        setIsModified
       })
       modifiedTestsByPickleId.set(pickle.id, isModified)
     }
