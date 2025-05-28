@@ -2,13 +2,12 @@
 
 const path = require('path')
 const process = require('process')
-const { calculateDDBasePath } = require('../../util')
+const { ddBasePath } = require('../../util')
 const pathLine = {
   getNodeModulesPaths,
   getRelativePath,
   getNonDDCallSiteFrames,
-  calculateDDBasePath, // Exported only for test purposes
-  ddBasePath: calculateDDBasePath(__dirname) // Only for test purposes
+  ddBasePath // Exported only for test purposes
 }
 
 const EXCLUDED_PATHS = [
