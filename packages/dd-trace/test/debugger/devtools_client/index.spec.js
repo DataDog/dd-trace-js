@@ -56,6 +56,7 @@ describe('onPause', function () {
       './session': session,
       './send': send,
       './status': { ackReceived },
+      './telemetry': { threadPausedMsMetric: sinon.spy(), '@noCallThru': true },
       './remote_config': { '@noCallThru': true }
     })
 

@@ -219,7 +219,6 @@ function heartbeat (config, application, host) {
     sendData(config, application, host, reqType, payload, updateRetryData)
     heartbeat(config, application, host)
   }, heartbeatInterval).unref()
-  return heartbeatTimeout
 }
 
 function extendedHeartbeat (config) {
@@ -232,7 +231,6 @@ function extendedHeartbeat (config) {
     sendData(config, application, host, 'app-extended-heartbeat', payload)
     Object.keys(extendedHeartbeatPayload).forEach(key => delete extendedHeartbeatPayload[key])
   }, 1000 * 60 * 60 * 24).unref()
-  return extendedInterval
 }
 
 function start (aConfig, thePluginManager) {

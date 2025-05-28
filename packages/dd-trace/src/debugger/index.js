@@ -3,6 +3,7 @@
 const { types } = require('util')
 const { join } = require('path')
 const { Worker, MessageChannel, threadId: parentThreadId } = require('worker_threads')
+const { onTelemetryMessage } = require('./telemetry')
 const log = require('../log')
 
 let worker = null
@@ -24,6 +25,7 @@ function start (config, rc) {
   const rcAckCallbacks = new Map()
   const rcChannel = new MessageChannel()
   configChannel = new MessageChannel()
+  const telemetryChannel = new MessageChannel()
 
   process[Symbol.for('datadog:node:util:types')] = types
 
@@ -45,6 +47,12 @@ function start (config, rc) {
   })
   rcChannel.port2.on('messageerror', (err) => log.error('[debugger] received "messageerror" on RC port', err))
 
+  telemetryChannel.port2.on('message', onTelemetryMessage)
+  telemetryChannel.port2.on(
+    'messageerror',
+    (err) => log.error('[debugger] received "messageerror" on telemetry port', err)
+  )
+
   worker = new Worker(
     join(__dirname, 'devtools_client', 'index.js'),
     {
@@ -54,9 +62,10 @@ function start (config, rc) {
         config: config.serialize(),
         parentThreadId,
         rcPort: rcChannel.port1,
-        configPort: configChannel.port1
+        configPort: configChannel.port1,
+        telemetryPort: telemetryChannel.port1
       },
-      transferList: [rcChannel.port1, configChannel.port1]
+      transferList: [rcChannel.port1, configChannel.port1, telemetryChannel.port1]
     }
   )
 
@@ -87,6 +96,8 @@ function start (config, rc) {
   rcChannel.port2.unref()
   configChannel.port1.unref()
   configChannel.port2.unref()
+  telemetryChannel.port1.unref()
+  telemetryChannel.port2.unref()
 }
 
 function configure (config) {
