@@ -48,14 +48,10 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
       ? this.options.target.address
       : undefined
 
-    const ctx = { targetAddress, host, port, msg }
+    const ctx = { targetAddress, host, port, msg, connection: this.connection }
     return startSendCh.runStores(ctx, () => {
       const delivery = send.apply(this, arguments)
-      const context = {
-        sendCtx: ctx,
-        connection: this.connection
-      }
-      contexts.set(delivery, context)
+      contexts.set(delivery, ctx)
 
       addToInFlightDeliveries(this.connection, delivery)
       try {
@@ -79,11 +75,7 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
       const ctx = { msgObj, connection: this.connection }
       return startReceiveCh.runStores(ctx, () => {
         if (msgObj.delivery) {
-          const context = {
-            receiveCtx: ctx,
-            connection: this.connection
-          }
-          contexts.set(msgObj.delivery, context)
+          contexts.set(msgObj.delivery, ctx)
           msgObj.delivery.update = wrapDeliveryUpdate(msgObj.delivery, msgObj.delivery.update)
           addToInFlightDeliveries(this.connection, msgObj.delivery)
         }
@@ -109,8 +101,7 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/connection.js' }, Connecti
       const error = obj.error || this.saved_error
       if (this[inFlightDeliveries]) {
         this[inFlightDeliveries].forEach(delivery => {
-          const context = contexts.get(delivery)
-          const ctx = context && context.receiveCtx
+          const ctx = contexts.get(delivery)
 
           if (!ctx) return
 
@@ -146,13 +137,11 @@ function getHostAndPort (connection) {
 }
 
 function wrapDeliveryUpdate (obj, update) {
-  const context = contexts.get(obj)
-  const ctx = context && context.receiveCtx
+  const ctx = contexts.get(obj)
   if (obj && ctx) {
     const cb = update
     return shimmer.wrapFunction(cb, cb => function wrappedUpdate (settled, stateData) {
-      const state = getStateFromData(stateData)
-      ctx.state = state
+      ctx.state = getStateFromData(stateData)
       dispatchReceiveCh.runStores(ctx, () => {
         return cb.apply(this, arguments)
       })
@@ -178,12 +167,11 @@ function patchCircularBuffer (proto, Session) {
         if (CircularBuffer && !patched.has(CircularBuffer.prototype)) {
           shimmer.wrap(CircularBuffer.prototype, 'pop_if', popIf => function (fn) {
             arguments[0] = shimmer.wrapFunction(fn, fn => function (entry) {
-              const context = contexts.get(entry)
-              const ctx = context && context.sendCtx
+              const ctx = contexts.get(entry)
 
               if (!ctx) return fn(entry)
 
-              const shouldPop = () => fn(entry)
+              const shouldPop = fn(entry)
 
               if (shouldPop) {
                 const remoteState = entry.remote_state
@@ -220,15 +208,14 @@ function addToInFlightDeliveries (connection, delivery) {
 }
 
 function beforeFinish (delivery, state) {
-  const context = contexts.get(delivery)
-  const ctx = context && context.receiveCtx
+  const ctx = contexts.get(delivery)
   if (ctx) {
     if (state) {
       ctx.state = state
       dispatchReceiveCh.publish(ctx)
     }
-    if (context.connection && context.connection[inFlightDeliveries]) {
-      context.connection[inFlightDeliveries].delete(delivery)
+    if (ctx.connection && ctx.connection[inFlightDeliveries]) {
+      ctx.connection[inFlightDeliveries].delete(delivery)
     }
   }
 }

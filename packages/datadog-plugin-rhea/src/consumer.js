@@ -10,9 +10,9 @@ class RheaConsumerPlugin extends ConsumerPlugin {
   constructor (...args) {
     super(...args)
 
-    this.addTraceSub('dispatch', ({ state }) => {
-      const span = storage('legacy').getStore().span
-      span.setTag('amqp.delivery.state', state)
+    this.addTraceSub('dispatch', (ctx) => {
+      const span = ctx.currentStore.span
+      span.setTag('amqp.delivery.state', ctx.state)
     })
   }
 
