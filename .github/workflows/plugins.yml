@@ -257,15 +257,7 @@ jobs:
     strategy:
       matrix:
         # using node versions matrix since this plugin testing fails due to install differences between node versions
-        include:
-          - node-version: 'latest'
-            node-opts: --no-async-context-frame
-          - node-version: '22'
-            node-opts: ''
-          - node-version: '20'
-            node-opts: ''
-          - node-version: '18'
-            node-opts: ''
+        node-version: ['18', '20', '22']
     runs-on: ubuntu-latest
     services:
       kafka:
