@@ -84,7 +84,7 @@
   },
   "dependencies": {
     "@datadog/libdatadog": "^0.5.1",
-    "@datadog/native-appsec": "file:datadog-native-appsec-8.5.2.tgz",
+    "@datadog/native-appsec": "9.0.0",
     "@datadog/native-iast-taint-tracking": "4.0.0",
     "@datadog/native-metrics": "^3.1.1",
     "@datadog/pprof": "5.8.0",
@@ -153,8 +153,5 @@
     "tap": "^16.3.10",
     "tiktoken": "^1.0.21",
     "yaml": "^2.8.0"
-  },
-  "bundledDependencies": [
-    "@datadog/native-appsec"
-  ]
+  }
 }
