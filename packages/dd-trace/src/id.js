@@ -26,6 +26,10 @@ class Identifier {
       : toNumberString(this._buffer, radix)
   }
 
+  toBigInt () {
+    return Buffer.from(this._buffer).readBigUInt64BE(0)
+  }
+
   toBuffer () {
     return this._buffer
   }

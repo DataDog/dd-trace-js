@@ -4,6 +4,7 @@ require('./setup/tap')
 
 const { expect } = require('chai')
 const id = require('../src/id')
+const SpanContext = require('../src/opentracing/span_context')
 
 function createDummySpans () {
   const operations = [
@@ -352,7 +353,7 @@ describe('sampling rule', () => {
         maxPerSecond: 1
       })
 
-      expect(rule.sample()).to.equal(true)
+      expect(rule.sample(new SpanContext({ traceId: id() }))).to.equal(true)
     })
 
     it('should not sample on non-allowed sample rate', () => {
@@ -363,7 +364,7 @@ describe('sampling rule', () => {
         maxPerSecond: 1
       })
 
-      expect(rule.sample()).to.equal(false)
+      expect(rule.sample(new SpanContext({ traceId: id('6148299799767393280', 10) }))).to.equal(false)
     })
   })
 
@@ -399,8 +400,10 @@ describe('sampling rule', () => {
         maxPerSecond: 1
       })
 
-      expect(rule.sample()).to.equal(true)
-      expect(rule.sample()).to.equal(false)
+      const spanContext = new SpanContext({ traceId: id('2986627970102095326', 10) })
+
+      expect(rule.sample(spanContext)).to.equal(true)
+      expect(rule.sample(spanContext)).to.equal(false)
     })
 
     it('should allow unlimited rate limits', () => {
@@ -411,7 +414,7 @@ describe('sampling rule', () => {
       })
 
       for (let i = 0; i < 1e3; i++) {
-        expect(rule.sample()).to.equal(true)
+        expect(rule.sample(new SpanContext({ traceId: id() }))).to.equal(true)
       }
     })
 
@@ -424,10 +427,10 @@ describe('sampling rule', () => {
       })
 
       const clock = sinon.useFakeTimers(new Date())
-      expect(rule.sample()).to.equal(true)
-      expect(rule.sample()).to.equal(false)
+      expect(rule.sample(new SpanContext({ traceId: id() }))).to.equal(true)
+      expect(rule.sample(new SpanContext({ traceId: id() }))).to.equal(false)
       clock.tick(1000)
-      expect(rule.sample()).to.equal(true)
+      expect(rule.sample(new SpanContext({ traceId: id() }))).to.equal(true)
     })
   })
 })
