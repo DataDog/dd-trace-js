@@ -488,7 +488,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
           this.pickleIds = picklesToRun
         }
 
-        skippedSuites = Array.from(filteredPickles.skippedSuites)
+        skippedSuites = [...filteredPickles.skippedSuites]
         itrCorrelationId = skippableResponse.itrCorrelationId
       }
     }

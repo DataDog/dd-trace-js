@@ -237,7 +237,7 @@ function getExecutionConfiguration (runner, isParallel, onFinishRequest) {
 
     runner.suite.suites = suitesToRun
 
-    skippedSuites = Array.from(filteredSuites.skippedSuites)
+    skippedSuites = [...filteredSuites.skippedSuites]
 
     onFinishRequest()
   }

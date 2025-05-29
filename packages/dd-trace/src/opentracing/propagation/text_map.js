@@ -39,7 +39,7 @@ const tracestateKey = 'tracestate'
 const ddKeys = [traceKey, spanKey, samplingKey, originKey]
 const b3Keys = [b3TraceKey, b3SpanKey, b3ParentKey, b3SampledKey, b3FlagsKey, b3HeaderKey]
 const w3cKeys = [traceparentKey, tracestateKey]
-const logKeys = ddKeys.concat(b3Keys, w3cKeys)
+const logKeys = [...ddKeys, ...b3Keys, ...w3cKeys]
 // Origin value in tracestate replaces '~', ',' and ';' with '_"
 const tracestateOriginFilter = /[^\x20-\x2B\x2D-\x3A\x3C-\x7D]/g
 // Tag keys in tracestate replace ' ', ',' and '=' with '_'
