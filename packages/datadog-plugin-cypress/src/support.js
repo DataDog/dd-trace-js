@@ -126,7 +126,6 @@ before(function () {
       testManagementTests = suiteConfig.testManagementTests
       isImpactedTestsEnabled = suiteConfig.isImpactedTestsEnabled
       isModifiedTest = suiteConfig.isModifiedTest
-      repositoryRoot = suiteConfig.repositoryRoot
     }
   })
 })
