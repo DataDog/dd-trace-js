@@ -468,7 +468,7 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
 
       const isTimeout = status === 'timedOut'
       testEndHandler(test, annotations, STATUS_TO_TEST_STATUS[status], errors && errors[0], isTimeout, false)
-      const testResult = test.results[test.results.length - 1]
+      const testResult = test.results.at(-1)
       const isAtrRetry = testResult?.retry > 0 &&
         isFlakyTestRetriesEnabled &&
         !test._ddIsAttemptToFix &&
