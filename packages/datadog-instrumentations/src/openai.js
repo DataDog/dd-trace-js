@@ -137,10 +137,7 @@ function addStreamedChunk (content, chunk) {
   for (const choice of chunk.choices) {
     const choiceIdx = choice.index
     const oldChoice = content.choices.find(choice => choice?.index === choiceIdx)
-    if (!oldChoice) {
-      // we don't know which choices arrive in which order
-      content.choices[choiceIdx] = choice
-    } else {
+    if (oldChoice) {
       if (!oldChoice.finish_reason) {
         oldChoice.finish_reason = choice.finish_reason
       }
@@ -183,6 +180,9 @@ function addStreamedChunk (content, chunk) {
           return newTool
         })
       }
+    } else {
+      // we don't know which choices arrive in which order
+      content.choices[choiceIdx] = choice
     }
   }
 }

@@ -101,7 +101,7 @@ const PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE = 90
 
 // Early flake detection util strings
 const EFD_STRING = "Retried by Datadog's Early Flake Detection"
-const EFD_TEST_NAME_REGEX = new RegExp(EFD_STRING + ' \\(#\\d+\\): ', 'g')
+const EFD_TEST_NAME_REGEX = new RegExp(EFD_STRING + String.raw` \(#\d+\): `, 'g')
 
 // Library Capabilities Tagging
 const DD_CAPABILITIES_TEST_IMPACT_ANALYSIS = '_dd.library_capabilities.test_impact_analysis'
@@ -145,7 +145,7 @@ const TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED = 'test.test_management.attempt_to_f
 
 // Test Management utils strings
 const ATTEMPT_TO_FIX_STRING = "Retried by Datadog's Test Management"
-const ATTEMPT_TEST_NAME_REGEX = new RegExp(ATTEMPT_TO_FIX_STRING + ' \\(#\\d+\\): ', 'g')
+const ATTEMPT_TEST_NAME_REGEX = new RegExp(ATTEMPT_TO_FIX_STRING + String.raw` \(#\d+\): `, 'g')
 
 module.exports = {
   TEST_CODE_OWNERS,

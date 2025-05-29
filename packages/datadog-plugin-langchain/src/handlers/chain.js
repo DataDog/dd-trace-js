@@ -13,15 +13,15 @@ class LangChainChainHandler extends LangChainHandler {
 
     for (const idx in inputs) {
       const input = inputs[idx]
-      if (typeof input !== 'object') {
-        tags[`langchain.request.inputs.${idx}`] = this.normalize(input)
-      } else {
+      if (typeof input === 'object') {
         for (const [key, value] of Object.entries(input)) {
         // these are mappings to the python client names, ie lc_kwargs
         // only present on BaseMessage types
           if (key.includes('lc_')) continue
           tags[`langchain.request.inputs.${idx}.${key}`] = this.normalize(value)
         }
+      } else {
+        tags[`langchain.request.inputs.${idx}`] = this.normalize(input)
       }
     }
 

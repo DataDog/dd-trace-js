@@ -8,8 +8,8 @@ function normalize (text, limit = 128) {
   if (typeof text !== 'string' || !text || (typeof text === 'string' && text.length === 0)) return
 
   text = text
-    .replace(RE_NEWLINE, '\\n')
-    .replace(RE_TAB, '\\t')
+    .replace(RE_NEWLINE, String.raw`\n`)
+    .replace(RE_TAB, String.raw`\t`)
 
   if (text.length > limit) {
     return text.slice(0, limit) + '...'
