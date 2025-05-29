@@ -29,7 +29,7 @@ class GraphQLResolvePlugin extends TracingPlugin {
     const document = context.source
     const fieldNode = info.fieldNodes.find(fieldNode => fieldNode.kind === 'Field')
     const loc = this.config.source && document && fieldNode && fieldNode.loc
-    const source = loc && document.substring(loc.start, loc.end)
+    const source = loc && document.slice(loc.start, loc.end)
 
     const span = this.startSpan('graphql.resolve', {
       service: this.config.service,

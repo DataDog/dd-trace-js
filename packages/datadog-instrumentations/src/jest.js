@@ -353,10 +353,10 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         testStartCh.runStores(ctx, () => {
           for (const hook of event.test.parent.hooks) {
             let hookFn = hook.fn
-            if (!originalHookFns.has(hook)) {
-              originalHookFns.set(hook, hookFn)
-            } else {
+            if (originalHookFns.has(hook)) {
               hookFn = originalHookFns.get(hook)
+            } else {
+              originalHookFns.set(hook, hookFn)
             }
             const wrapperHook = function () {
               return testFnCh.runStores(ctx, () => hookFn.apply(this, arguments))
@@ -673,12 +673,12 @@ function cliWrapper (cli, jestVersion) {
 
       try {
         const { err, knownTests: receivedKnownTests } = await knownTestsPromise
-        if (!err) {
-          knownTests = receivedKnownTests
-        } else {
+        if (err) {
           // We disable EFD if there has been an error in the known tests request
           isEarlyFlakeDetectionEnabled = false
           isKnownTestsEnabled = false
+        } else {
+          knownTests = receivedKnownTests
         }
       } catch (err) {
         log.error('Jest known tests error', err)
@@ -746,7 +746,7 @@ function cliWrapper (cli, jestVersion) {
     if (isUserCodeCoverageEnabled) {
       try {
         const { pct, total } = coverageMap.getCoverageSummary().lines
-        testCodeCoverageLinesTotal = total !== 0 ? pct : 0
+        testCodeCoverageLinesTotal = total === 0 ? 0 : pct
       } catch {
         // ignore errors
       }

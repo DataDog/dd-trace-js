@@ -810,10 +810,10 @@ class CypressPlugin {
         this.activeTestSpan.setTag(TEST_STATUS, testStatus)
 
         // Save the test status to know if it has passed all retries
-        if (!this.testStatuses[testName]) {
-          this.testStatuses[testName] = [testStatus]
-        } else {
+        if (this.testStatuses[testName]) {
           this.testStatuses[testName].push(testStatus)
+        } else {
+          this.testStatuses[testName] = [testStatus]
         }
         const testStatuses = this.testStatuses[testName]
 

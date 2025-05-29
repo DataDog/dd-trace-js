@@ -125,7 +125,7 @@ class RemoteConfigManager extends EventEmitter {
   }
 
   updateProducts () {
-    this.state.client.products = Array.from(this._handlers.keys())
+    this.state.client.products = [...this._handlers.keys()]
   }
 
   getPayload () {
