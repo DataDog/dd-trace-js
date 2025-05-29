@@ -122,7 +122,6 @@ export default [
       'unicorn/no-array-reduce': 'off', // too strict
       'unicorn/no-for-loop': 'off', // 15 errors
       'unicorn/no-hex-escape': 'off', // too strict
-      'unicorn/no-lonely-if': 'off', // 19 errors
       'unicorn/no-negated-condition': 'off', // too strict
       'unicorn/no-nested-ternary': 'off', // too strict
       'unicorn/no-new-array': 'off', // 6 errors
@@ -131,25 +130,19 @@ export default [
       'unicorn/no-this-assignment': 'off', // too strict
       'unicorn/no-unreadable-array-destructuring': 'off', // TODO: undecided
       'unicorn/no-unreadable-iife': 'off', // too strict
-      'unicorn/no-useless-undefined': 'off', // 59 errors
-      'unicorn/number-literal-case': 'off', // 44 errors
       'unicorn/numeric-separators-style': 'off', // 35 errors
       'unicorn/prefer-array-flat': 'off', // 9 errors
       'unicorn/prefer-at': 'off', // 47 errors
       'unicorn/prefer-code-point': 'off', // 3 errors
       'unicorn/prefer-event-target': 'off', // TODO: undecided (2 errors)
       'unicorn/prefer-global-this': 'off', // 23 errors
-      'unicorn/prefer-includes': 'off', // 19 errors
-      'unicorn/prefer-logical-operator-over-ternary': 'off', // 15 errors
       'unicorn/prefer-math-trunc': 'off', // 8 errors
       'unicorn/prefer-module': 'off', // too strict
-      'unicorn/prefer-native-coercion-functions': 'off', // 18 errors
       'unicorn/prefer-node-protocol': 'off', // 148 errors
       'unicorn/prefer-number-properties': 'off', // 56 errors
       'unicorn/prefer-object-from-entries': 'off', // 3 errors
       'unicorn/prefer-optional-catch-binding': 'off', // 62 errors
       'unicorn/prefer-reflect-apply': 'off', // too strict
-      'unicorn/prefer-set-has': 'off', // 18 errors
       'unicorn/prefer-spread': 'off', // 36 errors
       'unicorn/prefer-string-raw': 'off', // 22 errors
       'unicorn/prefer-string-replace-all': 'off', // 33 errors

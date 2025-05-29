@@ -47,7 +47,7 @@ function startupLog ({ agentError } = {}) {
   if (agentError) {
     warn('DATADOG TRACER DIAGNOSTIC - Agent Error: ' + agentError.message)
     errors.agentError = {
-      code: agentError.code ? agentError.code : '',
+      code: agentError.code ?? '',
       message: `Agent Error:${agentError.message}`
     }
   }

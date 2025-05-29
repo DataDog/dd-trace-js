@@ -166,13 +166,11 @@ class Config {
       exportCommand
     }
 
-    const profilers = options.profilers
-      ? options.profilers
-      : getProfilers({
-        DD_PROFILING_HEAP_ENABLED,
-        DD_PROFILING_WALLTIME_ENABLED,
-        DD_PROFILING_PROFILERS
-      })
+    const profilers = options.profilers || getProfilers({
+      DD_PROFILING_HEAP_ENABLED,
+      DD_PROFILING_WALLTIME_ENABLED,
+      DD_PROFILING_PROFILERS
+    })
 
     this.timelineEnabled = isTrue(coalesce(options.timelineEnabled,
       DD_PROFILING_TIMELINE_ENABLED,

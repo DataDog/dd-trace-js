@@ -841,7 +841,7 @@ class CypressPlugin {
           }
           const isLastAttempt = testStatuses.length === this.testManagementAttemptToFixRetries + 1
           if (isLastAttempt) {
-            if (testStatuses.some(status => status === 'fail')) {
+            if (testStatuses.includes('fail')) {
               this.activeTestSpan.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
             }
             if (testStatuses.every(status => status === 'fail')) {
