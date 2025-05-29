@@ -229,7 +229,7 @@ function normalizeConfig (config, serviceIdentifier) {
 const noop = () => {}
 
 function getHooks (config) {
-  const request = config?.hooks.request || noop
+  const request = config.hooks?.request || noop
 
   return { request }
 }

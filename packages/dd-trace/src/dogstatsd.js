@@ -116,12 +116,11 @@ class DogStatsDClient {
   _add (stat, value, type, tags) {
     const message = `${this._prefix + stat}:${value}|${type}`
 
-    if (tags) {
-      this._tags.push(...tags)
-    }
+    // Don't manipulate this._tags as it is still used
+    tags = tags ? [...this._tags, ...tags] : this._tags
 
-    if (this._tags.length > 0) {
-      this._write(`${message}|#${this._tags.join(',')}\n`)
+    if (tags.length > 0) {
+      this._write(`${message}|#${tags.join(',')}\n`)
     } else {
       this._write(`${message}\n`)
     }
