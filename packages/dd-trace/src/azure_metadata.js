@@ -78,7 +78,7 @@ function getAzureAppMetadata () {
   // DD_AZURE_APP_SERVICES is an environment variable introduced by the .NET APM team and is set automatically for
   // anyone using the Datadog APM Extensions (.NET, Java, or Node) for Windows Azure App Services
   // See: https://github.com/DataDog/datadog-aas-extension/blob/01f94b5c28b7fa7a9ab264ca28bd4e03be603900/node/src/applicationHost.xdt#L20-L21
-  return process.env.DD_AZURE_APP_SERVICES !== undefined ? buildMetadata() : undefined
+  return process.env.DD_AZURE_APP_SERVICES === undefined ? undefined : buildMetadata()
 }
 
 function getAzureFunctionMetadata () {

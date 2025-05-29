@@ -1,4 +1,5 @@
 'use strict'
+/* eslint-disable unicorn/prefer-string-slice */
 
 const log = require('../../../../log')
 const vulnerabilities = require('../../vulnerabilities')
@@ -82,7 +83,7 @@ class SensitiveHandler {
 
     for (let i = 0; i < value.length; i++) {
       if (nextTainted != null && nextTainted.start === i) {
-        this.writeValuePart(valueParts, value.substring(start, i), sourceIndex)
+        this.writeValuePart(valueParts, value.slice(start, i), sourceIndex)
 
         sourceIndex = sourcesIndexes[nextTaintedIndex]
 
@@ -120,7 +121,7 @@ class SensitiveHandler {
         }
 
         if (redactedSources.includes(sourceIndex)) {
-          const partValue = value.substring(i, i + (nextTainted.end - nextTainted.start))
+          const partValue = value.slice(i, i + (nextTainted.end - nextTainted.start))
           this.writeRedactedValuePart(
             valueParts,
             partValue.length,
@@ -133,7 +134,7 @@ class SensitiveHandler {
           redactedSourcesContext[sourceIndex] = []
         } else {
           const substringEnd = Math.min(nextTainted.end, value.length)
-          this.writeValuePart(valueParts, value.substring(nextTainted.start, substringEnd), sourceIndex)
+          this.writeValuePart(valueParts, value.slice(nextTainted.start, substringEnd), sourceIndex)
         }
 
         start = i + (nextTainted.end - nextTainted.start)
@@ -142,7 +143,7 @@ class SensitiveHandler {
         nextTaintedIndex++
         sourceIndex = null
       } else if (nextSensitive != null && nextSensitive.start === i) {
-        this.writeValuePart(valueParts, value.substring(start, i), sourceIndex)
+        this.writeValuePart(valueParts, value.slice(start, i), sourceIndex)
         if (nextTainted != null && intersects(nextSensitive, nextTainted)) {
           sourceIndex = sourcesIndexes[nextTaintedIndex]
 
@@ -195,10 +196,10 @@ class SensitiveHandler {
 
   writeValuePart (valueParts, value, source) {
     if (value.length > 0) {
-      if (source != null) {
-        valueParts.push({ value, source })
-      } else {
+      if (source == null) {
         valueParts.push({ value })
+      } else {
+        valueParts.push({ value, source })
       }
     }
   }
@@ -212,7 +213,9 @@ class SensitiveHandler {
     sourceRedactionContext,
     isSensibleSource
   ) {
-    if (sourceIndex != null) {
+    if (sourceIndex == null) {
+      valueParts.push({ redacted: true })
+    } else {
       const placeholder = source.value.includes(partValue)
         ? source.pattern
         : '*'.repeat(length)
@@ -239,10 +242,10 @@ class SensitiveHandler {
           if (_sourceRedactionContext.start > 0) {
             valueParts.push({
               source: sourceIndex,
-              value: _value.slice(0, _sourceRedactionContext.start - offset)
+              value: _value.substring(0, _sourceRedactionContext.start - offset)
             })
 
-            _value = _value.slice(_sourceRedactionContext.start - offset)
+            _value = _value.substring(_sourceRedactionContext.start - offset)
             offset = _sourceRedactionContext.start
           }
 
@@ -250,9 +253,9 @@ class SensitiveHandler {
             _value.substring(_sourceRedactionContext.start - offset, _sourceRedactionContext.end - offset)
           const indexOfPartValueInPattern = source.value.indexOf(sensitive)
 
-          const pattern = indexOfPartValueInPattern !== -1
-            ? placeholder.substring(indexOfPartValueInPattern, indexOfPartValueInPattern + sensitive.length)
-            : placeholder.substring(_sourceRedactionContext.start, _sourceRedactionContext.end)
+          const pattern = indexOfPartValueInPattern === -1
+            ? placeholder.substring(_sourceRedactionContext.start, _sourceRedactionContext.end)
+            : placeholder.substring(indexOfPartValueInPattern, indexOfPartValueInPattern + sensitive.length)
 
           valueParts.push({
             redacted: true,
@@ -271,8 +274,6 @@ class SensitiveHandler {
           })
         }
       }
-    } else {
-      valueParts.push({ redacted: true })
     }
   }
 

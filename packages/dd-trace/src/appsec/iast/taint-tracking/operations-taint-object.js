@@ -20,10 +20,10 @@ function taintObject (iastContext, object, type) {
       try {
         if (typeof value === 'string') {
           const tainted = TaintedUtils.newTaintedString(transactionId, value, property, type)
-          if (!parent) {
-            result = tainted
-          } else {
+          if (parent) {
             parent[key] = tainted
+          } else {
+            result = tainted
           }
         } else if (typeof value === 'object' && !visited.has(value)) {
           visited.add(value)

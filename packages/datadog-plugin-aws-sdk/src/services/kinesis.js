@@ -145,17 +145,17 @@ class Kinesis extends BaseAwsSdkPlugin {
     let stream
     switch (operation) {
       case 'putRecord':
-        stream = params.StreamArn ? params.StreamArn : (params.StreamName ? params.StreamName : '')
+        stream = params.StreamArn ?? params.StreamName ?? ''
         this.injectToMessage(span, params, stream, true)
         break
       case 'putRecords':
-        stream = params.StreamArn ? params.StreamArn : (params.StreamName ? params.StreamName : '')
+        stream = params.StreamArn ?? params.StreamName ?? ''
         for (let i = 0; i < params.Records.length; i++) {
           this.injectToMessage(
             span,
             params.Records[i],
             stream,
-            i === 0 || (this.config.batchPropagationEnabled)
+            i === 0 || this.config.batchPropagationEnabled
           )
         }
     }

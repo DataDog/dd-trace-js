@@ -136,12 +136,12 @@ function wrapConnection (Connection, version) {
           if (error) {
             errorCh.publish(error)
           }
-          finishCh.publish(undefined)
+          finishCh.publish()
           onResult.apply(this, arguments)
         }, 'bound-anonymous-fn', this))
       } else {
         this.on(errorMonitor, asyncResource.bind(error => errorCh.publish(error)))
-        this.on('end', asyncResource.bind(() => finishCh.publish(undefined)))
+        this.on('end', asyncResource.bind(() => finishCh.publish()))
       }
 
       this.execute = execute

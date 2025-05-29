@@ -94,13 +94,13 @@ class DogStatsDClient {
   }
 
   _sendUdp (queue) {
-    if (this._family !== 0) {
-      this._sendUdpFromQueue(queue, this._host, this._family)
-    } else {
+    if (this._family === 0) {
       lookup(this._host, (err, address, family) => {
         if (err) return log.error('DogStatsDClient: Host not found', err)
         this._sendUdpFromQueue(queue, address, family)
       })
+    } else {
+      this._sendUdpFromQueue(queue, this._host, this._family)
     }
   }
 

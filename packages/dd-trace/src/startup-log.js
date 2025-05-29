@@ -18,7 +18,7 @@ function getIntegrationsAndAnalytics () {
   for (const pluginName in pluginManager._pluginsByName) {
     integrations.add(pluginName)
   }
-  extras.integrations_loaded = Array.from(integrations)
+  extras.integrations_loaded = [...integrations]
   return extras
 }
 
@@ -47,7 +47,7 @@ function startupLog ({ agentError } = {}) {
   if (agentError) {
     warn('DATADOG TRACER DIAGNOSTIC - Agent Error: ' + agentError.message)
     errors.agentError = {
-      code: agentError.code ? agentError.code : '',
+      code: agentError.code ?? '',
       message: `Agent Error:${agentError.message}`
     }
   }

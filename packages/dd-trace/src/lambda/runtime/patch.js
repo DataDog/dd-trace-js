@@ -60,7 +60,10 @@ function patchLambdaHandler (lambdaHandler) {
 const lambdaTaskRoot = process.env.LAMBDA_TASK_ROOT
 const originalLambdaHandler = process.env.DD_LAMBDA_HANDLER
 
-if (originalLambdaHandler !== undefined) {
+if (originalLambdaHandler === undefined) {
+  // Instrumentation is done manually.
+  addHook({ name: 'datadog-lambda-js' }, patchDatadogLambdaModule)
+} else {
   const [moduleRoot, moduleAndHandler] = _extractModuleRootAndHandler(originalLambdaHandler)
   const [_module, handlerPath] = _extractModuleNameAndHandlerPath(moduleAndHandler)
 
@@ -70,7 +73,4 @@ if (originalLambdaHandler !== undefined) {
   for (const lambdaFilePath of lambdaFilePaths) {
     addHook({ name: lambdaFilePath }, patchLambdaModule(handlerPath))
   }
-} else {
-  // Instrumentation is done manually.
-  addHook({ name: 'datadog-lambda-js' }, patchDatadogLambdaModule)
 }

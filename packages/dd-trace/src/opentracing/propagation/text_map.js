@@ -39,7 +39,7 @@ const tracestateKey = 'tracestate'
 const ddKeys = [traceKey, spanKey, samplingKey, originKey]
 const b3Keys = [b3TraceKey, b3SpanKey, b3ParentKey, b3SampledKey, b3FlagsKey, b3HeaderKey]
 const w3cKeys = [traceparentKey, tracestateKey]
-const logKeys = ddKeys.concat(b3Keys, w3cKeys)
+const logKeys = [...ddKeys, ...b3Keys, ...w3cKeys]
 // Origin value in tracestate replaces '~', ',' and ';' with '_"
 const tracestateOriginFilter = /[^\x20-\x2B\x2D-\x3A\x3C-\x7D]/g
 // Tag keys in tracestate replace ' ', ',' and '=' with '_'
@@ -590,7 +590,7 @@ class TextMapPropagator {
       }
 
       if (parts[2]) {
-        b3[b3SampledKey] = parts[2] !== '0' ? '1' : '0'
+        b3[b3SampledKey] = parts[2] === '0' ? '0' : '1'
 
         if (parts[2] === 'd') {
           b3[b3FlagsKey] = '1'
@@ -633,6 +633,9 @@ class TextMapPropagator {
     if (!carrier || !carrier.baggage) return
     if (!spanContext) removeAllBaggageItems()
     const baggages = carrier.baggage.split(',')
+    const keysToSpanTag = this._config.baggageTagKeys === '*'
+      ? undefined
+      : new Set(this._config.baggageTagKeys.split(','))
     for (const keyValue of baggages) {
       if (!keyValue.includes('=')) {
         if (spanContext) spanContext._baggageItems = {}
@@ -647,8 +650,11 @@ class TextMapPropagator {
       }
       // the current code assumes precedence of ot-baggage- (legacy opentracing baggage) over baggage
       if (spanContext) {
-        if (key in spanContext._baggageItems) return
+        if (Object.hasOwn(spanContext._baggageItems, key)) continue
         spanContext._baggageItems[key] = value
+        if (this._config.baggageTagKeys === '*' || keysToSpanTag.has(key)) {
+          spanContext._trace.tags['baggage.' + key] = value
+        }
       } else {
         setBaggageItem(key, value)
       }

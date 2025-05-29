@@ -79,7 +79,7 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
             const result = send.apply(this, arguments)
             result.then(
               innerAsyncResource.bind(res => {
-                producerFinishCh.publish(undefined)
+                producerFinishCh.publish()
                 producerCommitCh.publish(res)
               }),
               innerAsyncResource.bind(err => {
@@ -96,27 +96,27 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
                   }
                   producerErrorCh.publish(err)
                 }
-                producerFinishCh.publish(undefined)
+                producerFinishCh.publish()
               })
             )
 
             return result
           } catch (e) {
             producerErrorCh.publish(e)
-            producerFinishCh.publish(undefined)
+            producerFinishCh.publish()
             throw e
           }
         })
       }
 
-      if (!isPromise(kafkaClusterIdPromise)) {
-        // promise is already resolved
-        return wrappedSend(kafkaClusterIdPromise)
-      } else {
+      if (isPromise(kafkaClusterIdPromise)) {
         // promise is not resolved
         return kafkaClusterIdPromise.then((clusterId) => {
           return wrappedSend(clusterId)
         })
+      } else {
+        // promise is already resolved
+        return wrappedSend(kafkaClusterIdPromise)
       }
     }
     return producer
@@ -170,14 +170,14 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
         })
       }
 
-      if (!isPromise(kafkaClusterIdPromise)) {
-        // promise is already resolved
-        return wrapConsume(kafkaClusterIdPromise)
-      } else {
+      if (isPromise(kafkaClusterIdPromise)) {
         // promise is not resolved
         return kafkaClusterIdPromise.then((clusterId) => {
           return wrapConsume(clusterId)
         })
+      } else {
+        // promise is already resolved
+        return wrapConsume(kafkaClusterIdPromise)
       }
     }
     return consumer
@@ -197,21 +197,21 @@ const wrappedCallback = (fn, startCh, finishCh, errorCh, extractArgs, clusterId)
           const result = fn.apply(this, args)
           if (result && typeof result.then === 'function') {
             result.then(
-              innerAsyncResource.bind(() => finishCh.publish(undefined)),
+              innerAsyncResource.bind(() => finishCh.publish()),
               innerAsyncResource.bind(err => {
                 if (err) {
                   errorCh.publish(err)
                 }
-                finishCh.publish(undefined)
+                finishCh.publish()
               })
             )
           } else {
-            finishCh.publish(undefined)
+            finishCh.publish()
           }
           return result
         } catch (e) {
           errorCh.publish(e)
-          finishCh.publish(undefined)
+          finishCh.publish()
           throw e
         }
       })

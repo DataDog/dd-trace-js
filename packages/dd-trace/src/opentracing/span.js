@@ -197,7 +197,7 @@ class DatadogSpan {
 
   addLink (context, attributes) {
     this._links.push({
-      context: context._ddContext ? context._ddContext : context,
+      context: context._ddContext ?? context,
       attributes: this._sanitizeAttributes(attributes)
     })
   }

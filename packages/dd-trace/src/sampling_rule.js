@@ -123,8 +123,14 @@ class SamplingRule {
     return true
   }
 
-  sample () {
-    if (!this._sampler.isSampled()) {
+  /**
+   * Determines whether a span should be sampled based on the configured sampling rule.
+   *
+   * @param {Span|SpanContext} span - The span or span context to evaluate.
+   * @returns {boolean} `true` if the span should be sampled, otherwise `false`.
+   */
+  sample (span) {
+    if (!this._sampler.isSampled(span)) {
       return false
     }
 

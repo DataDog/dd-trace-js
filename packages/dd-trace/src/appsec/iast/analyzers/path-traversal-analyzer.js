@@ -20,10 +20,10 @@ class PathTraversalAnalyzer extends InjectionAnalyzer {
     this.internalExclusionList = [
       'node:fs',
       'node:internal/fs',
-      'node:internal\\fs',
+      String.raw`node:internal\fs`,
       'fs.js',
       'internal/fs',
-      'internal\\fs'
+      String.raw`internal\fs`
     ]
   }
 

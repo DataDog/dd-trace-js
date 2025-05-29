@@ -52,10 +52,8 @@ function getOperation (document, operationName) {
   }
 
   for (const definition of document.definitions) {
-    if (definition && types.has(definition.operation)) {
-      if (!operationName || definition.name?.value === operationName) {
-        return definition
-      }
+    if (definition && types.has(definition.operation) && (!operationName || definition.name?.value === operationName)) {
+      return definition
     }
   }
 }

@@ -26,6 +26,10 @@ class Identifier {
       : toNumberString(this._buffer, radix)
   }
 
+  toBigInt () {
+    return Buffer.from(this._buffer).readBigUInt64BE(0)
+  }
+
   toBuffer () {
     return this._buffer
   }
@@ -66,7 +70,7 @@ function createBuffer (value) {
   value = value.padStart(size, '0')
 
   for (let i = 0; i < bytes; i++) {
-    buffer[i] = Number.parseInt(value.substring(i * 2, i * 2 + 2), 16)
+    buffer[i] = Number.parseInt(value.slice(i * 2, i * 2 + 2), 16)
   }
 
   return buffer

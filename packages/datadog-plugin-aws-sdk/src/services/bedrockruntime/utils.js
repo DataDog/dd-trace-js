@@ -59,15 +59,15 @@ class RequestParams {
   } = {}) {
     // stringify prompt as it could be a single prompt as well as a list of message objects
     this.prompt = typeof prompt === 'string' ? prompt : JSON.stringify(prompt) || ''
-    this.temperature = temperature !== undefined ? temperature : undefined
-    this.topP = topP !== undefined ? topP : undefined
-    this.topK = topK !== undefined ? topK : undefined
-    this.maxTokens = maxTokens !== undefined ? maxTokens : undefined
+    this.temperature = temperature === undefined ? undefined : temperature
+    this.topP = topP === undefined ? undefined : topP
+    this.topK = topK === undefined ? undefined : topK
+    this.maxTokens = maxTokens === undefined ? undefined : maxTokens
     this.stopSequences = stopSequences || []
     this.inputType = inputType || ''
     this.truncate = truncate || ''
     this.stream = stream || ''
-    this.n = n !== undefined ? n : undefined
+    this.n = n === undefined ? undefined : n
   }
 }
 

@@ -353,10 +353,10 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         testStartCh.runStores(ctx, () => {
           for (const hook of event.test.parent.hooks) {
             let hookFn = hook.fn
-            if (!originalHookFns.has(hook)) {
-              originalHookFns.set(hook, hookFn)
-            } else {
+            if (originalHookFns.has(hook)) {
               hookFn = originalHookFns.get(hook)
+            } else {
+              originalHookFns.set(hook, hookFn)
             }
             const wrapperHook = function () {
               return testFnCh.runStores(ctx, () => hookFn.apply(this, arguments))
@@ -436,7 +436,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             // If it is, we'll set the failedAllTests flag to true if all the tests failed
             // If all tests passed, we'll set the attemptToFixPassed flag to true
             if (testStatuses.length === testManagementAttemptToFixRetries + 1) {
-              if (testStatuses.some(status => status === 'fail')) {
+              if (testStatuses.includes('fail')) {
                 attemptToFixFailed = true
               }
               if (testStatuses.every(status => status === 'fail')) {
@@ -673,12 +673,12 @@ function cliWrapper (cli, jestVersion) {
 
       try {
         const { err, knownTests: receivedKnownTests } = await knownTestsPromise
-        if (!err) {
-          knownTests = receivedKnownTests
-        } else {
+        if (err) {
           // We disable EFD if there has been an error in the known tests request
           isEarlyFlakeDetectionEnabled = false
           isKnownTestsEnabled = false
+        } else {
+          knownTests = receivedKnownTests
         }
       } catch (err) {
         log.error('Jest known tests error', err)
@@ -746,7 +746,7 @@ function cliWrapper (cli, jestVersion) {
     if (isUserCodeCoverageEnabled) {
       try {
         const { pct, total } = coverageMap.getCoverageSummary().lines
-        testCodeCoverageLinesTotal = total !== 0 ? pct : 0
+        testCodeCoverageLinesTotal = total === 0 ? 0 : pct
       } catch {
         // ignore errors
       }
@@ -872,7 +872,7 @@ function cliWrapper (cli, jestVersion) {
 }
 
 function coverageReporterWrapper (coverageReporter) {
-  const CoverageReporter = coverageReporter.default ? coverageReporter.default : coverageReporter
+  const CoverageReporter = coverageReporter.default ?? coverageReporter
 
   /**
    * If ITR is active, we're running fewer tests, so of course the total code coverage is reduced.
@@ -911,7 +911,7 @@ addHook({
 }, cliWrapper)
 
 function jestAdapterWrapper (jestAdapter, jestVersion) {
-  const adapter = jestAdapter.default ? jestAdapter.default : jestAdapter
+  const adapter = jestAdapter.default ?? jestAdapter
   const newAdapter = shimmer.wrapFunction(adapter, adapter => function () {
     const environment = arguments[2]
     if (!environment) {
@@ -1080,7 +1080,7 @@ addHook({
   versions: ['>=24.8.0'],
   file: 'build/SearchSource.js'
 }, (searchSourcePackage, frameworkVersion) => {
-  const SearchSource = searchSourcePackage.default ? searchSourcePackage.default : searchSourcePackage
+  const SearchSource = searchSourcePackage.default ?? searchSourcePackage
 
   shimmer.wrap(SearchSource.prototype, 'getTestPaths', getTestPaths => async function () {
     const testPaths = await getTestPaths.apply(this, arguments)
@@ -1155,7 +1155,7 @@ addHook({
   name: 'jest-runtime',
   versions: ['>=24.8.0']
 }, (runtimePackage) => {
-  const Runtime = runtimePackage.default ? runtimePackage.default : runtimePackage
+  const Runtime = runtimePackage.default ?? runtimePackage
 
   shimmer.wrap(Runtime.prototype, 'requireModuleOrMock', requireModuleOrMock => function (from, moduleName) {
     // TODO: do this for every library that we instrument

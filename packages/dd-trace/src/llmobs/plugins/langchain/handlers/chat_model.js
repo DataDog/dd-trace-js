@@ -61,12 +61,12 @@ class LangChainLLMObsChatModelHandler extends LangChainLLMObsHandler {
 
         if (!isWorkflow && !tokensSetTopLevel) {
           const { tokens, runId } = this.checkTokenUsageFromAIMessage(chatCompletionMessage)
-          if (!tokensPerRunId[runId]) {
-            tokensPerRunId[runId] = tokens
-          } else {
+          if (tokensPerRunId[runId]) {
             tokensPerRunId[runId].inputTokens += tokens.inputTokens
             tokensPerRunId[runId].outputTokens += tokens.outputTokens
             tokensPerRunId[runId].totalTokens += tokens.totalTokens
+          } else {
+            tokensPerRunId[runId] = tokens
           }
         }
       }

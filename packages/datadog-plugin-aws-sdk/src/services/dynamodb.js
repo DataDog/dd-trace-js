@@ -80,10 +80,12 @@ class DynamoDb extends BaseAwsSdkPlugin {
             const hash =
               DynamoDb.calculatePutItemHash(item.Put.TableName, item.Put.Item, this.getPrimaryKeyConfig())
             if (hash) hashes.push(hash)
-          } else if (item.Update || item.Delete) {
-            const operation = item.Update ? item.Update : item.Delete
-            const hash = DynamoDb.calculateHashWithKnownKeys(operation.TableName, operation.Key)
-            if (hash) hashes.push(hash)
+          } else {
+            const operation = item.Update || item.Delete
+            if (operation) {
+              const hash = DynamoDb.calculateHashWithKnownKeys(operation.TableName, operation.Key)
+              if (hash) hashes.push(hash)
+            }
           }
         }
         break

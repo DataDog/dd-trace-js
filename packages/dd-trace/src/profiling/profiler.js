@@ -86,7 +86,7 @@ class Profiler extends EventEmitter {
         this._logger.debug(() => {
           return mapper.infoMap.size === 0
             ? 'Found no source maps'
-            : `Found source maps for following files: [${Array.from(mapper.infoMap.keys()).join(', ')}]`
+            : `Found source maps for following files: [${[...mapper.infoMap.keys()].join(', ')}]`
         })
       }
 

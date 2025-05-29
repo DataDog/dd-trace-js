@@ -107,6 +107,12 @@ class DatadogTracer {
   }
 }
 
+/**
+ * Get the span context from a span or a span context.
+ *
+ * @param {Span|SpanContext} spanContext
+ * @returns {SpanContext}
+ */
 function getContext (spanContext) {
   if (spanContext instanceof Span) {
     spanContext = spanContext.context()

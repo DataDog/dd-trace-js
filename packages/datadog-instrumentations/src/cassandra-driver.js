@@ -176,7 +176,7 @@ function finish (finishCh, errorCh, error) {
   if (error) {
     errorCh.publish(error)
   }
-  finishCh.publish(undefined)
+  finishCh.publish()
 }
 
 function wrapCallback (finishCh, errorCh, asyncResource, callback) {
