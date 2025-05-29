@@ -23,7 +23,7 @@ const vulnerabilityIndexes = Object.values(vulnerabilities).reduce((obj, item, i
 }, {})
 
 function newCountersArray () {
-  return Array.from({ length: vulnerabilitiesSize }, () => 0)
+  return (new Array(vulnerabilitiesSize)).fill(0)
 }
 
 function copyFromGlobalMap (route) {

@@ -329,7 +329,7 @@ function truncateRequestBody (target, depth = 0) {
       if (Array.isArray(target)) {
         const maxArrayLength = Math.min(target.length, COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE)
         wasTruncated = target.length > COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE
-        const truncatedArray = []
+        const truncatedArray = new Array(maxArrayLength)
         for (let i = 0; i < maxArrayLength; i++) {
           const { value, truncated } = truncateRequestBody(target[i], depth + 1)
           if (truncated) wasTruncated = true

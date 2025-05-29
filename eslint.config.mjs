@@ -124,6 +124,7 @@ export default [
       'unicorn/no-hex-escape': 'off', // too strict
       'unicorn/no-negated-condition': 'off', // too strict
       'unicorn/no-nested-ternary': 'off', // too strict
+      'unicorn/no-new-array': 'off', // 6 errors
       'unicorn/no-null': 'off', // too strict
       'unicorn/no-object-as-default-parameter': 'off', // too strict
       'unicorn/no-this-assignment': 'off', // too strict
