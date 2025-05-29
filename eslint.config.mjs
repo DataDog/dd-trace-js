@@ -146,7 +146,6 @@ export default [
       'unicorn/prefer-object-from-entries': 'off', // 3 errors
       'unicorn/prefer-optional-catch-binding': 'off', // 62 errors
       'unicorn/prefer-reflect-apply': 'off', // too strict
-      'unicorn/prefer-set-has': 'off', // 18 errors
       'unicorn/prefer-spread': 'off', // 36 errors
       'unicorn/prefer-string-raw': 'off', // 22 errors
       'unicorn/prefer-string-replace-all': 'off', // 33 errors
