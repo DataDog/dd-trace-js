@@ -115,22 +115,17 @@ export default [
       'unicorn/expiring-todo-comments': 'off',
       'unicorn/explicit-length-check': 'off', // 68 errors
       'unicorn/filename-case': ['off', { case: 'kebabCase' }], // 59 errors
-      'unicorn/import-style': 'off', // 9 errors - controversial
       'unicorn/no-anonymous-default-export': 'off', // only makes a difference for ESM
-      'unicorn/no-array-callback-reference': 'off', // too strict
       'unicorn/no-array-for-each': 'off', // 122 errors
-      'unicorn/no-array-reduce': 'off', // too strict
       'unicorn/no-for-loop': 'off', // 15 errors
       'unicorn/no-negated-condition': 'off', // too strict
       'unicorn/no-nested-ternary': 'off', // too strict
       'unicorn/no-null': 'off', // too strict
-      'unicorn/no-object-as-default-parameter': 'off', // too strict
       'unicorn/no-this-assignment': 'off', // too strict
       'unicorn/prefer-array-flat': 'off', // 9 errors
       'unicorn/prefer-at': 'off', // 17 errors | Difficult to fix
       'unicorn/prefer-code-point': 'off', // 3 errors
       'unicorn/prefer-math-trunc': 'off', // 8 errors
-      'unicorn/prefer-reflect-apply': 'off', // too strict
       'unicorn/prefer-spread': 'off', // 36 errors
       'unicorn/prefer-string-replace-all': 'off', // 33 errors
       'unicorn/prefer-switch': 'off', // 8 errors
@@ -139,13 +134,19 @@ export default [
       'unicorn/prevent-abbreviations': 'off', // too strict
       'unicorn/switch-case-braces': 'off', // too strict
 
+      // These rules could potentially evaluated again at a much later point
+      'unicorn/no-array-callback-reference': 'off',
+
       // The following rules should not be activated!
+      'unicorn/import-style': 'off', // Questionable benefit
+      'unicorn/no-array-reduce': 'off', // Questionable benefit
       'unicorn/no-hex-escape': 'off', // Questionable benefit
       'unicorn/no-new-array': 'off', // new Array is often used for performance reasons
       'unicorn/prefer-event-target': 'off', // Benefit only outside of Node.js
       'unicorn/prefer-global-this': 'off', // Questionable benefit in Node.js alone
       'unicorn/prefer-module': 'off', // We use CJS
-      'unicorn/prefer-node-protocol': 'off' // May not be used due to guardrails
+      'unicorn/prefer-node-protocol': 'off', // May not be used due to guardrails
+      'unicorn/prefer-reflect-apply': 'off' // Questionable benefit and more than 500 matches
     }
   },
   {
