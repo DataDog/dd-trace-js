@@ -131,7 +131,6 @@ export default [
       'unicorn/no-this-assignment': 'off', // too strict
       'unicorn/no-unreadable-array-destructuring': 'off', // TODO: undecided
       'unicorn/no-unreadable-iife': 'off', // too strict
-      'unicorn/number-literal-case': 'off', // 44 errors
       'unicorn/numeric-separators-style': 'off', // 35 errors
       'unicorn/prefer-array-flat': 'off', // 9 errors
       'unicorn/prefer-at': 'off', // 47 errors
