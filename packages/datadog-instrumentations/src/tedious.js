@@ -22,7 +22,8 @@ addHook({ name: 'tedious', versions: ['>=1.0.0'] }, tedious => {
     }
 
     const connectionConfig = this.config
-    const ctx = { queryOrProcedure, connectionConfig }
+    const payload = { queryOrProcedure, connectionConfig }
+    const ctx = { payload }
 
     return startCh.runStores(ctx, () => {
       queryParent[queryField] = ctx.sql
