@@ -1,4 +1,5 @@
 'use strict'
+/* eslint-disable unicorn/prefer-string-slice */
 
 const log = require('../../../../log')
 const vulnerabilities = require('../../vulnerabilities')
@@ -241,20 +242,20 @@ class SensitiveHandler {
           if (_sourceRedactionContext.start > 0) {
             valueParts.push({
               source: sourceIndex,
-              value: _value.slice(0, _sourceRedactionContext.start - offset)
+              value: _value.substring(0, _sourceRedactionContext.start - offset)
             })
 
-            _value = _value.slice(_sourceRedactionContext.start - offset)
+            _value = _value.substring(_sourceRedactionContext.start - offset)
             offset = _sourceRedactionContext.start
           }
 
           const sensitive =
-            _value.slice(_sourceRedactionContext.start - offset, _sourceRedactionContext.end - offset)
+            _value.substring(_sourceRedactionContext.start - offset, _sourceRedactionContext.end - offset)
           const indexOfPartValueInPattern = source.value.indexOf(sensitive)
 
           const pattern = indexOfPartValueInPattern === -1
-            ? placeholder.slice(_sourceRedactionContext.start, _sourceRedactionContext.end)
-            : placeholder.slice(indexOfPartValueInPattern, indexOfPartValueInPattern + sensitive.length)
+            ? placeholder.substring(_sourceRedactionContext.start, _sourceRedactionContext.end)
+            : placeholder.substring(indexOfPartValueInPattern, indexOfPartValueInPattern + sensitive.length)
 
           valueParts.push({
             redacted: true,
