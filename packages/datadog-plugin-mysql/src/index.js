@@ -8,22 +8,21 @@ class MySQLPlugin extends DatabasePlugin {
   static get system () { return 'mysql' }
 
   bindStart (ctx) {
-    const { payload } = ctx
-    const service = this.serviceName({ pluginConfig: this.config, dbConfig: payload.conf, system: this.system })
+    const service = this.serviceName({ pluginConfig: this.config, dbConfig: ctx.conf, system: this.system })
     const span = this.startSpan(this.operationName(), {
       service,
-      resource: payload.sql,
+      resource: ctx.sql,
       type: 'sql',
       kind: 'client',
       meta: {
         'db.type': this.system,
-        'db.user': payload.conf.user,
-        'db.name': payload.conf.database,
-        'out.host': payload.conf.host,
-        [CLIENT_PORT_KEY]: payload.conf.port
+        'db.user': ctx.conf.user,
+        'db.name': ctx.conf.database,
+        'out.host': ctx.conf.host,
+        [CLIENT_PORT_KEY]: ctx.conf.port
       }
     }, ctx)
-    payload.sql = this.injectDbmQuery(span, payload.sql, service)
+    ctx.sql = this.injectDbmQuery(span, ctx.sql, service)
 
     return ctx.currentStore
   }
