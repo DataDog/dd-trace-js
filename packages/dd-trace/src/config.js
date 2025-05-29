@@ -134,11 +134,11 @@ function checkIfBothOtelAndDdEnvVarSet () {
 const fromEntries = Object.fromEntries || (entries =>
   entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
 
-// eslint-disable-next-line @stylistic/js/max-len
+// eslint-disable-next-line @stylistic/max-len
 const qsRegex = '(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\\s|%20)*(?:=|%3D)[^&]+|(?:"|%22)(?:\\s|%20)*(?::|%3A)(?:\\s|%20)*(?:"|%22)(?:%2[^2]|%[^2]|[^"%])+(?:"|%22))|bearer(?:\\s|%20)+[a-z0-9\\._\\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\\w=-]|%3D)+\\.ey[I-L](?:[\\w=-]|%3D)+(?:\\.(?:[\\w.+\\/=-]|%3D|%2F|%2B)+)?|[\\-]{5}BEGIN(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY[\\-]{5}[^\\-]+[\\-]{5}END(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY|ssh-rsa(?:\\s|%20)*(?:[a-z0-9\\/\\.+]|%2F|%5C|%2B){100,}'
-// eslint-disable-next-line @stylistic/js/max-len
+// eslint-disable-next-line @stylistic/max-len
 const defaultWafObfuscatorKeyRegex = '(?i)pass|pw(?:or)?d|secret|(?:api|private|public|access)[_-]?key|token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)|bearer|authorization|jsessionid|phpsessid|asp\\.net[_-]sessionid|sid|jwt'
-// eslint-disable-next-line @stylistic/js/max-len
+// eslint-disable-next-line @stylistic/max-len
 const defaultWafObfuscatorValueRegex = '(?i)(?:p(?:ass)?w(?:or)?d|pass(?:[_-]?phrase)?|secret(?:[_-]?key)?|(?:(?:api|private|public|access)[_-]?)key(?:[_-]?id)?|(?:(?:auth|access|id|refresh)[_-]?)?token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?|jsessionid|phpsessid|asp\\.net(?:[_-]|-)sessionid|sid|jwt)(?:\\s*=([^;&]+)|"\\s*:\\s*("[^"]+"|\\d+))|bearer\\s+([a-z0-9\\._\\-]+)|token\\s*:\\s*([a-z0-9]{13})|gh[opsu]_([0-9a-zA-Z]{36})|ey[I-L][\\w=-]+\\.(ey[I-L][\\w=-]+(?:\\.[\\w.+\\/=-]+)?)|[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}([^\\-]+)[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*([a-z0-9\\/\\.+]{100,})'
 const runtimeId = uuid()
 
@@ -477,6 +477,7 @@ class Config {
     this._setValue(defaults, 'appsec.wafTimeout', 5e3) // µs
     this._setValue(defaults, 'baggageMaxBytes', 8192)
     this._setValue(defaults, 'baggageMaxItems', 64)
+    this._setValue(defaults, 'baggageTagKeys', 'user.id,session.id,account.id')
     this._setValue(defaults, 'ciVisibilityTestSessionName', '')
     this._setValue(defaults, 'clientIpEnabled', false)
     this._setValue(defaults, 'clientIpHeader', null)
@@ -731,6 +732,7 @@ class Config {
       DD_TRACE_AWS_ADD_SPAN_POINTERS,
       DD_TRACE_BAGGAGE_MAX_BYTES,
       DD_TRACE_BAGGAGE_MAX_ITEMS,
+      DD_TRACE_BAGGAGE_TAG_KEYS,
       DD_TRACE_CLIENT_IP_ENABLED,
       DD_TRACE_CLIENT_IP_HEADER,
       DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS,
@@ -833,6 +835,7 @@ class Config {
     this._envUnprocessed['appsec.wafTimeout'] = DD_APPSEC_WAF_TIMEOUT
     this._setValue(env, 'baggageMaxBytes', DD_TRACE_BAGGAGE_MAX_BYTES)
     this._setValue(env, 'baggageMaxItems', DD_TRACE_BAGGAGE_MAX_ITEMS)
+    this._setValue(env, 'baggageTagKeys', DD_TRACE_BAGGAGE_TAG_KEYS)
     this._setBoolean(env, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
     this._setString(env, 'clientIpHeader', DD_TRACE_CLIENT_IP_HEADER?.toLowerCase())
     this._setBoolean(env, 'crashtracking.enabled', coalesce(
@@ -1063,6 +1066,7 @@ class Config {
     this._setString(opts, 'clientIpHeader', options.clientIpHeader?.toLowerCase())
     this._setValue(opts, 'baggageMaxBytes', options.baggageMaxBytes)
     this._setValue(opts, 'baggageMaxItems', options.baggageMaxItems)
+    this._setValue(opts, 'baggageTagKeys', options.baggageTagKeys)
     this._setBoolean(opts, 'codeOriginForSpans.enabled', options.codeOriginForSpans?.enabled)
     this._setBoolean(
       opts,

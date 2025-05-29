@@ -1,7 +1,7 @@
 'use strict'
 
 const log = require('../../log')
-const { calculateDDBasePath } = require('../../util')
+const { ddBasePath } = require('../../util')
 
 const logs = new Map() // hash -> log
 
@@ -30,7 +30,6 @@ function isValid (logEntry) {
   return logEntry?.level && logEntry.message
 }
 
-const ddBasePath = calculateDDBasePath(__dirname)
 const EOL = '\n'
 const STACK_FRAME_LINE_REGEX = /^\s*at\s/gm
 

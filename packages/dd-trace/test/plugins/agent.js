@@ -234,36 +234,37 @@ let availableEndpoints = DEFAULT_AVAILABLE_ENDPOINTS
  * @param {Set} [handlers] - Set of handlers to add the callback to.
  * @returns {Promise<void>} A promise resolving if expectations are met
  */
-function runCallback (callback, options, handlers) {
-  const deferred = {}
-  const promise = new Promise((resolve, reject) => {
-    deferred.resolve = resolve
-    deferred.reject = reject
+function runCallbackAgainstTraces (callback, options, handlers) {
+  let error
+
+  let resolve
+  let reject
+  const promise = new Promise((_resolve, _reject) => {
+    resolve = _resolve
+    reject = _reject
   })
 
-  const timeoutMs = options !== null && typeof options === 'object' && options.timeoutMs ? options.timeoutMs : 1000
+  const rejectionTimeout = setTimeout(() => {
+    if (error) reject(error)
+  }, options?.timeoutMs || 1000)
 
-  const timeout = setTimeout(() => {
-    if (error) {
-      deferred.reject(error)
-    }
-  }, timeoutMs)
-
-  let error
-  const handlerPayload = { handler, spanResourceMatch: options && options.spanResourceMatch }
+  const handlerPayload = {
+    handler,
+    spanResourceMatch: options?.spanResourceMatch
+  }
 
   function handler () {
     try {
       const result = callback.apply(null, arguments)
       handlers.delete(handlerPayload)
-      clearTimeout(timeout)
-      deferred.resolve(result)
+      clearTimeout(rejectionTimeout)
+      resolve(result)
     } catch (e) {
-      if (options && options.rejectFirst) {
-        clearTimeout(timeout)
-        deferred.reject(e)
+      if (options?.rejectFirst) {
+        clearTimeout(rejectionTimeout)
+        reject(e)
       } else {
-        error = error || e
+        error = error || e // if no spans match we report exactly the first mismatch error (which is unintuitive)
       }
     }
   }
@@ -275,7 +276,14 @@ function runCallback (callback, options, handlers) {
 }
 
 module.exports = {
-  // Load the plugin on the tracer with an optional config and start a mock agent.
+  /**
+   * Load the plugin on the tracer with an optional config and start a mock agent.
+   *
+   * @param {String|Array<String>} pluginName - Name or list of names of plugins to load
+   * @param {Record<string, unknown>} config
+   * @param {Record<string, unknown>} tracerConfig
+   * @returns Promise<void>
+   */
   async load (pluginName, config, tracerConfig = {}) {
     tracer = require('../..')
     agent = express()
@@ -336,7 +344,7 @@ module.exports = {
 
     server.on('connection', socket => sockets.push(socket))
 
-    const promise = new Promise((resolve, reject) => {
+    const promise = new Promise((resolve, _reject) => {
       listener = server.listen(0, () => {
         const port = listener.address().port
 
@@ -381,37 +389,89 @@ module.exports = {
     }
   },
 
-  // Register handler to be executed each agent call, multiple times
+  /**
+   * Register handler to be executed on each agent call, multiple times
+   * @param {Function} handler
+   */
   subscribe (handler) {
-    traceHandlers.add({ handler })
+    traceHandlers.add({ handler }) // TODO: SHOULD BE .add(handler) SO WE CAN DELETE
   },
 
-  // Remove a handler
+  /**
+   * Remove a handler (TODO: THIS DOES NOTHING)
+   * @param {Function} handler
+   */
   unsubscribe (handler) {
     traceHandlers.delete(handler)
   },
 
   /**
-   * Register a callback with expectations to be run on every tracing payload sent to the agent.
+   * Callback for running test assertions against traces.
+   *
+   * @callback testAssertionTracesCallback
+   * @param {Array.<Array.<span>>} traces - For a given payload, an array of traces, each trace is an array of spans.
+   */
+
+  /**
+   * Callback for running test assertions against a span.
+   *
+   * @callback testAssertionSpanCallback
+   * @param {span} span - For a given payload, the first span of the first trace.
+   */
+
+  /**
+   * This callback gets executed once for every payload received by the agent.
+   * It calls the callback with a `traces` argument which is an array of traces.
+   * Each of these traces is an array of spans.
+   *
+   * @param {testAssertionTracesCallback} callback - runs once per agent payload
+   * @param {Object} [options] - An options object
+   * @param {number} [options.timeoutMs=1000] - The timeout in ms.
+   * @param {boolean} [options.rejectFirst=false] - If true, reject the first time the callback throws.
+   * @returns Promise
    */
   assertSomeTraces (callback, options) {
-    return runCallback(callback, options, traceHandlers)
+    return runCallbackAgainstTraces(callback, options, traceHandlers)
+  },
+
+  /**
+   * Same as assertSomeTraces() but only provides the first span (traces[0][0])
+   * This callback gets executed once for every payload received by the agent.
+
+   * @param {testAssertionSpanCallback} callback - runs once per agent payload
+   * @param {Object} [options] - An options object
+   * @param {number} [options.timeoutMs=1000] - The timeout in ms.
+   * @param {boolean} [options.rejectFirst=false] - If true, reject the first time the callback throws.
+   * @returns Promise
+   */
+  assertFirstTraceSpan (callback, options) {
+    return runCallbackAgainstTraces(function (traces) {
+      return callback(traces[0][0])
+    }, options, traceHandlers)
   },
 
   /**
    * Register a callback with expectations to be run on every stats payload sent to the agent.
    */
   expectPipelineStats (callback, options) {
-    return runCallback(callback, options, statsHandlers)
+    return runCallbackAgainstTraces(callback, options, statsHandlers)
   },
 
-  // Unregister any outstanding expectation callbacks.
+  /**
+   * Unregister any outstanding expectation callbacks.
+   */
   reset () {
     traceHandlers.clear()
     statsHandlers.clear()
   },
 
-  // Stop the mock agent, reset all expectations and wipe the require cache.
+  /**
+   * Stop the mock agent, reset all expectations and wipe the require cache.
+   * @param {Object} opts
+   * @param {boolean} opts.ritmReset - Resets the Require In The Middle cache. You probably don't need this.
+   * @param {boolean} opts.wipe - Wipes tracer and non-native modules from require cache. You probably don't need this.
+   * @returns
+   */
   close (opts = {}) {
     // Allow close to be called idempotent
     if (listener === null) {
