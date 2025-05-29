@@ -9,7 +9,7 @@ const routeAddedChannel = channel('apm:fastify:route:added')
 
 const parsingResources = new WeakMap()
 
-function wrapFastify (fastify, hasParsingEvents) {
+function wrapFastify (fastify, hasParsingEvents = false, supportsCodeOrigin = false) {
   if (typeof fastify !== 'function') return fastify
 
   return function fastifyWithTrace () {
@@ -17,7 +17,9 @@ function wrapFastify (fastify, hasParsingEvents) {
 
     if (!app || typeof app.addHook !== 'function') return app
 
-    app.addHook('onRoute', onRoute)
+    if (supportsCodeOrigin) {
+      app.addHook('onRoute', onRoute)
+    }
     app.addHook('onRequest', onRequest)
     app.addHook('preHandler', preHandler)
 
@@ -161,19 +163,25 @@ function onRoute (routeOptions) {
   routeAddedChannel.publish({ routeOptions, onRoute })
 }
 
-addHook({ name: 'fastify', versions: ['>=3'] }, fastify => {
-  const wrapped = shimmer.wrapFunction(fastify, fastify => wrapFastify(fastify, true))
+addHook({ name: 'fastify', versions: ['>=4.10.0'] }, genModernFastifyWrapper(true))
 
-  wrapped.fastify = wrapped
-  wrapped.default = wrapped
-
-  return wrapped
-})
+addHook({ name: 'fastify', versions: ['>=3 <4.10.0'] }, genModernFastifyWrapper(false))
 
 addHook({ name: 'fastify', versions: ['2'] }, fastify => {
   return shimmer.wrapFunction(fastify, fastify => wrapFastify(fastify, true))
 })
 
 addHook({ name: 'fastify', versions: ['1'] }, fastify => {
-  return shimmer.wrapFunction(fastify, fastify => wrapFastify(fastify, false))
+  return shimmer.wrapFunction(fastify, fastify => wrapFastify(fastify))
 })
+
+function genModernFastifyWrapper (supportsCodeOrigin) {
+  return (fastify) => {
+    const wrapped = shimmer.wrapFunction(fastify, fastify => wrapFastify(fastify, true, supportsCodeOrigin))
+
+    wrapped.fastify = wrapped
+    wrapped.default = wrapped
+
+    return wrapped
+  }
+}
