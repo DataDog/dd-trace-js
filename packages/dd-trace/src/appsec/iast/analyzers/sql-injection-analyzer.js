@@ -14,7 +14,7 @@ class SqlInjectionAnalyzer extends StoredInjectionAnalyzer {
   }
 
   onConfigure () {
-    this.addSub('apm:mysql:query:start', ({ sql }) => this.analyze(sql, undefined, 'MYSQL'))
+    this.addSub('apm:mysql:query:start', ({ payload }) => this.analyze(payload.sql, undefined, 'MYSQL'))
     this.addSub('apm:mysql2:query:start', ({ sql }) => this.analyze(sql, undefined, 'MYSQL'))
     this.addSub('apm:pg:query:start', ({ query }) => this.analyze(query.text, undefined, 'POSTGRES'))
 
@@ -27,7 +27,9 @@ class SqlInjectionAnalyzer extends StoredInjectionAnalyzer {
     this.addSub('datadog:pg:pool:query:start', ({ query }) => this.getStoreAndAnalyze(query.text, 'POSTGRES'))
     this.addSub('datadog:pg:pool:query:finish', () => this.returnToParentStore())
 
-    this.addSub('datadog:mysql:pool:query:start', ({ sql }) => this.getStoreAndAnalyze(sql, 'MYSQL'))
+    this.addSub('datadog:mysql:pool:query:start', ({ sql }) => {
+      this.getStoreAndAnalyze(sql, 'MYSQL')
+    })
     this.addSub('datadog:mysql:pool:query:finish', () => this.returnToParentStore())
 
     this.addSub('datadog:knex:raw:start', ({ sql, dialect: knexDialect }) => {
