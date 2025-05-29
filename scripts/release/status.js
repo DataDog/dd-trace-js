@@ -33,17 +33,17 @@ async function checkStatuses (contexts) {
   const { statuses } = JSON.parse(await response.text())
 
   for (const status of statuses) {
-    if (contexts.has(status.context)) {
-      switch (status.state) {
-        case 'success':
-          contexts.delete(status.context)
-          break
-        case 'cancelled':
-        case 'failure':
-        case 'stale':
-        case 'timed_out':
-          throw new Error(`Job was not successful: ${status.context}.`)
-      }
+    if (!contexts.has(status.context)) continue
+
+    switch (status.state) {
+      case 'success':
+        contexts.delete(status.context)
+        break
+      case 'cancelled':
+      case 'failure':
+      case 'stale':
+      case 'timed_out':
+        throw new Error(`Job was not successful: ${status.context}.`)
     }
   }
 
