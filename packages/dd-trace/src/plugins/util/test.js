@@ -303,7 +303,7 @@ function checkShaDiscrepancies (ciMetadata, userProvidedGitMetadata) {
   } = userProvidedGitMetadata
   const { gitRepositoryUrl, gitCommitSHA } = getGitInformationDiscrepancy()
 
-  const checkDiscrepancy = (value1, value2, type, expectedProvider, discrepantProvider) => {
+  const checkDiscrepancyAndSendMetrics = (value1, value2, type, expectedProvider, discrepantProvider) => {
     if (value1 && value2 && value1 !== value2) {
       incrementCountMetric(
         TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY,
@@ -369,7 +369,7 @@ function checkShaDiscrepancies (ciMetadata, userProvidedGitMetadata) {
   let gitCommitShaMatch = true
   for (const checkConfig of checkConfigs) {
     const { v1, v2, type, expected, discrepant } = checkConfig
-    const discrepancy = checkDiscrepancy(v1, v2, type, expected, discrepant)
+    const discrepancy = checkDiscrepancyAndSendMetrics(v1, v2, type, expected, discrepant)
     if (discrepancy) {
       gitCommitShaMatch = false
     }
