@@ -138,26 +138,26 @@ function extractSessionDetails (authority, options) {
 }
 
 function hasAmazonSignature (headers, path) {
+  if (path?.toLowerCase().includes('x-amz-signature=')) {
+    return true
+  }
+
   if (headers) {
-    headers = Object.keys(headers)
-      .reduce((prev, next) => Object.assign(prev, {
-        [next.toLowerCase()]: headers[next]
-      }), {})
-
-    if (headers['x-amz-signature']) {
-      return true
-    }
-
-    if ([].concat(headers.authorization).some(startsWith('AWS4-HMAC-SHA256'))) {
-      return true
+    for (const [key, value] of Object.entries(headers)) {
+      const lowerCaseKey = key.toLowerCase()
+      if (lowerCaseKey === 'x-amz-signature' && value) {
+        return true
+      }
+      if (lowerCaseKey === 'authorization' && value) {
+        const authorization = Array.isArray(value) ? value : [value]
+        if (authorization.some((val) => val.startsWith('AWS4-HMAC-SHA256'))) {
+          return true
+        }
+      }
     }
   }
 
-  return path && path.toLowerCase().includes('x-amz-signature=')
-}
-
-function startsWith (searchString) {
-  return value => String(value).startsWith(searchString)
+  return false
 }
 
 function getStatusValidator (config) {

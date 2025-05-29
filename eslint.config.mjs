@@ -128,12 +128,9 @@ export default [
       'unicorn/no-this-assignment': 'off', // too strict
       'unicorn/no-unreadable-iife': 'off', // too strict
       'unicorn/prefer-array-flat': 'off', // 9 errors
-      'unicorn/prefer-at': 'off', // 47 errors
+      'unicorn/prefer-at': 'off', // 17 errors | Difficult to fix
       'unicorn/prefer-code-point': 'off', // 3 errors
-      'unicorn/prefer-event-target': 'off', // TODO: undecided (2 errors)
-      'unicorn/prefer-global-this': 'off', // 23 errors
       'unicorn/prefer-math-trunc': 'off', // 8 errors
-      'unicorn/prefer-object-from-entries': 'off', // 3 errors
       'unicorn/prefer-reflect-apply': 'off', // too strict
       'unicorn/prefer-spread': 'off', // 36 errors
       'unicorn/prefer-string-replace-all': 'off', // 33 errors
@@ -146,6 +143,8 @@ export default [
       // The following rules should not be activated!
       'unicorn/no-hex-escape': 'off', // Questionable benefit
       'unicorn/no-new-array': 'off', // new Array is often used for performance reasons
+      'unicorn/prefer-event-target': 'off', // Benefit only outside of Node.js
+      'unicorn/prefer-global-this': 'off', // Questionable benefit in Node.js alone
       'unicorn/prefer-module': 'off', // We use CJS
       'unicorn/prefer-node-protocol': 'off' // May not be used due to guardrails
     }
