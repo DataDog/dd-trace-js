@@ -477,6 +477,7 @@ class Config {
     this._setValue(defaults, 'appsec.wafTimeout', 5e3) // µs
     this._setValue(defaults, 'baggageMaxBytes', 8192)
     this._setValue(defaults, 'baggageMaxItems', 64)
+    this._setValue(defaults, 'baggageTagKeys', 'user.id,session.id,account.id')
     this._setValue(defaults, 'ciVisibilityTestSessionName', '')
     this._setValue(defaults, 'clientIpEnabled', false)
     this._setValue(defaults, 'clientIpHeader', null)
@@ -732,6 +733,7 @@ class Config {
       DD_TRACE_AWS_ADD_SPAN_POINTERS,
       DD_TRACE_BAGGAGE_MAX_BYTES,
       DD_TRACE_BAGGAGE_MAX_ITEMS,
+      DD_TRACE_BAGGAGE_TAG_KEYS,
       DD_TRACE_CLIENT_IP_ENABLED,
       DD_TRACE_CLIENT_IP_HEADER,
       DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS,
@@ -834,6 +836,7 @@ class Config {
     this._envUnprocessed['appsec.wafTimeout'] = DD_APPSEC_WAF_TIMEOUT
     this._setValue(env, 'baggageMaxBytes', DD_TRACE_BAGGAGE_MAX_BYTES)
     this._setValue(env, 'baggageMaxItems', DD_TRACE_BAGGAGE_MAX_ITEMS)
+    this._setValue(env, 'baggageTagKeys', DD_TRACE_BAGGAGE_TAG_KEYS)
     this._setBoolean(env, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
     this._setString(env, 'clientIpHeader', DD_TRACE_CLIENT_IP_HEADER?.toLowerCase())
     this._setBoolean(env, 'crashtracking.enabled', coalesce(
@@ -1064,6 +1067,7 @@ class Config {
     this._setString(opts, 'clientIpHeader', options.clientIpHeader?.toLowerCase())
     this._setValue(opts, 'baggageMaxBytes', options.baggageMaxBytes)
     this._setValue(opts, 'baggageMaxItems', options.baggageMaxItems)
+    this._setValue(opts, 'baggageTagKeys', options.baggageTagKeys)
     this._setBoolean(opts, 'codeOriginForSpans.enabled', options.codeOriginForSpans?.enabled)
     this._setBoolean(
       opts,

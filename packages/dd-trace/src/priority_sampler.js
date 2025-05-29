@@ -235,7 +235,7 @@ class PrioritySampler {
     if (rule.provenance === 'customer') context._sampling.mechanism = SAMPLING_MECHANISM_REMOTE_USER
     if (rule.provenance === 'dynamic') context._sampling.mechanism = SAMPLING_MECHANISM_REMOTE_DYNAMIC
 
-    return rule.sample() && this._isSampledByRateLimit(context)
+    return rule.sample(context) && this._isSampledByRateLimit(context)
       ? USER_KEEP
       : USER_REJECT
   }
