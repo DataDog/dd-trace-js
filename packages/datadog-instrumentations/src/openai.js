@@ -236,8 +236,8 @@ function wrapStreamIterator (response, options, n, ctx) {
                   // this will include import data like created, id, model, etc.
                   body = { ...chunks[0], choices: Array.from({ length: n }) }
                   // start from the first chunk, and add its choices into the body
-                  for (let i = 0; i < chunks.length; i++) {
-                    addStreamedChunk(body, chunks[i])
+                  for (const chunk_ of chunks) {
+                    addStreamedChunk(body, chunk_)
                   }
                 }
               }

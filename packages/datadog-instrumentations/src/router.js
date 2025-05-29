@@ -57,9 +57,9 @@ function createWrapRouterMethod (name) {
 
       if (matchers) {
         // Try to guess which path actually matched
-        for (let i = 0; i < matchers.length; i++) {
-          if (matchers[i].test(layer)) {
-            route = matchers[i].path
+        for (const matcher of matchers) {
+          if (matcher.test(layer)) {
+            route = matcher.path
 
             break
           }
