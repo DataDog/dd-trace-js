@@ -128,7 +128,6 @@ export default [
       'unicorn/no-null': 'off', // too strict
       'unicorn/no-object-as-default-parameter': 'off', // too strict
       'unicorn/no-this-assignment': 'off', // too strict
-      'unicorn/no-unreadable-array-destructuring': 'off', // TODO: undecided
       'unicorn/no-unreadable-iife': 'off', // too strict
       'unicorn/numeric-separators-style': 'off', // 35 errors
       'unicorn/prefer-array-flat': 'off', // 9 errors
