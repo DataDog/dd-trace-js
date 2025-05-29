@@ -380,17 +380,15 @@ class EventsProfiler {
       }
     }
 
-    if (options.codeHotspotsEnabled) {
+    this.eventSource = options.codeHotspotsEnabled
       // Use Datadog instrumentation to collect events with span IDs. Still use
       // Node API for GC events.
-      this.eventSource = new CompositeEventSource([
+      ? new CompositeEventSource([
         new DatadogInstrumentationEventSource(eventHandler, eventFilter),
         new NodeApiEventSource(filteringEventHandler, ['gc'])
       ])
-    } else {
       // Use Node API instrumentation to collect events without span IDs
-      this.eventSource = new NodeApiEventSource(filteringEventHandler)
-    }
+      : new NodeApiEventSource(filteringEventHandler)
   }
 
   start () {
