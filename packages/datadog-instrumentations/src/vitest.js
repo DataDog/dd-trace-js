@@ -451,8 +451,8 @@ addHook({
         testSuiteAbsolutePath: task.file.filepath,
         testName,
         onDone: (isNew) => {
-          if (isNew && !attemptToFixTasks.has(task) && !modifiedTasks.has(task)) {
-            if (isEarlyFlakeDetectionEnabled) {
+          if (isNew && !attemptToFixTasks.has(task)) {
+            if (isEarlyFlakeDetectionEnabled && !modifiedTasks.has(task)) {
               isRetryReasonEfd = task.repeats !== numRepeats
               task.repeats = numRepeats
             }

@@ -11,7 +11,7 @@ let isTestManagementEnabled = false
 let testManagementAttemptToFixRetries = 0
 let testManagementTests = {}
 let isImpactedTestsEnabled = false
-let modifiedTests = {}
+let isModifiedTest = false
 
 let repositoryRoot = ''
 // We need to grab the original window as soon as possible,
@@ -66,20 +66,6 @@ function getTestSuitePath (testSuiteAbsolutePath, sourceRoot) {
   return testSuitePath.replace(path.sep, '/')
 }
 
-function isModifiedTest (testPath, modifiedTests) {
-  if (modifiedTests === undefined) {
-    return false
-  }
-
-  const lines = modifiedTests[testPath]
-  if (!lines) {
-    return false
-  }
-
-  return lines.length > 0
-}
-
-
 const oldRunTests = Cypress.mocha.getRunner().runTests
 Cypress.mocha.getRunner().runTests = function (suite, fn) {
   if (!isKnownTestsEnabled && !isTestManagementEnabled && !isImpactedTestsEnabled) {
@@ -98,21 +84,24 @@ Cypress.mocha.getRunner().runTests = function (suite, fn) {
         retryTest(test, suite.tests, testManagementAttemptToFixRetries, ['_ddIsAttemptToFix'])
       }
     }
-    let isModified = false
-    if (isImpactedTestsEnabled) {
-      const testPath = getTestSuitePath(test.invocationDetails.absoluteFile, repositoryRoot)
-      isModified = isModifiedTest(testPath, modifiedTests)
-      if (isModified) {
-        test._ddIsModified = true
-        if (isEarlyFlakeDetectionEnabled && !isAttemptToFix) {
-          retryTest(test, suite.tests, earlyFlakeDetectionNumRetries, ['_ddIsModified', '_ddIsEfdRetry'])
-        }
+    if (isImpactedTestsEnabled && isModifiedTest) {
+      test._ddIsModified = true
+      if (isEarlyFlakeDetectionEnabled && !isAttemptToFix) {
+        retryTest(
+          test,
+          suite.tests,
+          earlyFlakeDetectionNumRetries,
+          ['_ddIsModified', '_ddIsEfdRetry', isKnownTestsEnabled && isNewTest(test) && '_ddIsNew']
+        )
       }
     }
     if (isKnownTestsEnabled) {
       if (!test._ddIsNew && !test.isPending() && isNewTest(test)) {
         test._ddIsNew = true
-        if (isEarlyFlakeDetectionEnabled && !isAttemptToFix && !isModified) {
+        if (isImpactedTestsEnabled && isModifiedTest) {
+          test._ddIsModified = true
+        }
+        if (isEarlyFlakeDetectionEnabled && !isAttemptToFix && !isModifiedTest) {
           retryTest(test, suite.tests, earlyFlakeDetectionNumRetries, ['_ddIsNew', '_ddIsEfdRetry'])
         }
       }
@@ -151,7 +140,7 @@ before(function () {
       testManagementAttemptToFixRetries = suiteConfig.testManagementAttemptToFixRetries
       testManagementTests = suiteConfig.testManagementTests
       isImpactedTestsEnabled = suiteConfig.isImpactedTestsEnabled
-      modifiedTests = suiteConfig.modifiedTests
+      isModifiedTest = suiteConfig.isModifiedTest
       repositoryRoot = suiteConfig.repositoryRoot
     }
   })

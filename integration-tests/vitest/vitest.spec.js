@@ -1,6 +1,6 @@
 'use strict'
 
-const { exec } = require('child_process')
+const { exec, execSync } = require('child_process')
 const path = require('path')
 const fs = require('fs')
 
@@ -1894,92 +1894,38 @@ versions.forEach((version) => {
     })
 
     context('impacted tests', () => {
-      const NUM_RETRIES = 3
-      let baseCommitSha = null
-      let commitHeadSha = null
-      let eventPath = null
-      let testConfig = null
-
-      function promiseExec (command) {
-        return new Promise((resolve) => {
-          const child = exec(command, { cwd })
-          let data = ''
-          child.stdout.on('data', chunk => { data += chunk })
-          child.stdout.on('end', () => resolve(data.trim()))
-        })
-      }
-
       beforeEach(() => {
-        const eventContent = {
-          pull_request: {
-            base: {
-              sha: baseCommitSha,
-              ref: 'master'
-            },
-            head: {
-              sha: commitHeadSha,
-              ref: 'master'
-            }
+        receiver.setKnownTests({
+          vitest: {
+            'ci-visibility/vitest-tests/impacted-test.mjs': [
+              'impacted test can impacted test'
+            ]
           }
-        }
-        eventPath = path.join(cwd, 'event.json')
-        fs.writeFileSync(eventPath, JSON.stringify(eventContent, null, 2))
-
-        testConfig = {
-          GITHUB_ACTIONS: true,
-          GITHUB_BASE_REF: 'master',
-          GITHUB_HEAD_REF: 'feature-branch',
-          GITHUB_EVENT_PATH: eventPath
-        }
+        })
       })
 
-      // Add git setup before running impacted tests
-      before(async function () {
-        // Create initial test file on main
-        const testDir = path.join(cwd, 'ci-visibility/vitest-tests')
-        await exec(`mkdir -p ${testDir}`, { cwd })
-        const testContent = `
-import { describe, test, expect } from 'vitest'
-
-describe('impacted test', () => {
-  test('can impacted test', () => {
-    expect(1 + 2).to.equal(4)
-  })
-})
-`
-        fs.writeFileSync(path.join(testDir, 'impacted-test.mjs'), testContent)
-
-        await promiseExec('git add ci-visibility/vitest-tests/impacted-test.mjs')
-        await promiseExec('git commit -m "add impacted-test.mjs"')
-        // Get base commit SHA from main after creating the file
-        baseCommitSha = await promiseExec('git rev-parse HEAD')
-
-        await promiseExec('git checkout -b feature-branch')
-        const modifiedTestContent = `
-import { describe, test, expect } from 'vitest'
-
-describe('impacted test', () => {
-  test('can impacted test', () => {
-    expect(1 + 2).to.equal(5)
-  })
-})
-`
-        fs.writeFileSync(path.join(testDir, 'impacted-test.mjs'), modifiedTestContent)
-        await promiseExec('git add ci-visibility/vitest-tests/impacted-test.mjs')
-        await promiseExec('git commit -m "modify impacted-test.mjs"')
-        commitHeadSha = await promiseExec('git rev-parse HEAD')
+      // Modify `impacted-test.mjs` to mark it as impacted
+      before(() => {
+        execSync('git checkout -b feature-branch', { cwd, stdio: 'ignore' })
+        fs.writeFileSync(
+          path.join(cwd, 'ci-visibility/vitest-tests/impacted-test.mjs'),
+          `import { describe, test, expect } from 'vitest'
+           describe('impacted test', () => {
+             test('can impacted test', () => {
+               expect(1 + 2).to.equal(4)
+             })
+           })`
+        )
+        execSync('git add ci-visibility/vitest-tests/impacted-test.mjs', { cwd, stdio: 'ignore' })
+        execSync('git commit -m "modify impacted-test.mjs"', { cwd, stdio: 'ignore' })
       })
 
-      // Clean up git branches and temp files after impacted tests
-      after(async () => {
-        await promiseExec('git checkout main')
-        await promiseExec('git branch -D feature-branch')
-        if (fs.existsSync(eventPath)) {
-          fs.unlinkSync(eventPath)
-        }
+      after(() => {
+        execSync('git checkout -', { cwd, stdio: 'ignore' })
+        execSync('git branch -D feature-branch', { cwd, stdio: 'ignore' })
       })
 
-      const getTestAssertions = ({ isImpacting, isEfd }) =>
+      const getTestAssertions = ({ isModified, isEfd, isNew }) =>
         receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
@@ -2005,24 +1951,27 @@ describe('impacted test', () => {
               test.meta[TEST_NAME] === 'impacted test can impacted test')
 
             if (isEfd) {
-              assert.equal(impactedTests.length, NUM_RETRIES + 1) // Retries + original test
+              assert.equal(impactedTests.length, NUM_RETRIES_EFD + 1) // Retries + original test
             } else {
               assert.equal(impactedTests.length, 1)
             }
 
-            if (isImpacting) {
-              impactedTests.forEach(test => {
-                assert.propertyVal(test.meta, TEST_IS_MODIFIED, 'true')
-              })
-            } else {
-              impactedTests.forEach(test => {
-                assert.notProperty(test.meta, TEST_IS_MODIFIED)
-              })
+            for (const impactedTest of impactedTests) {
+              if (isModified) {
+                assert.propertyVal(impactedTest.meta, TEST_IS_MODIFIED, 'true')
+              } else {
+                assert.notProperty(impactedTest.meta, TEST_IS_MODIFIED)
+              }
+              if (isNew) {
+                assert.propertyVal(impactedTest.meta, TEST_IS_NEW, 'true')
+              } else {
+                assert.notProperty(impactedTest.meta, TEST_IS_NEW)
+              }
             }
 
             if (isEfd) {
               const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-              assert.equal(retriedTests.length, NUM_RETRIES)
+              assert.equal(retriedTests.length, NUM_RETRIES_EFD)
               let retriedTestNew = 0
               let retriedTestsWithReason = 0
               retriedTests.forEach(test => {
@@ -2033,17 +1982,17 @@ describe('impacted test', () => {
                   retriedTestsWithReason++
                 }
               })
-              assert.equal(retriedTestNew, 0)
-              assert.equal(retriedTestsWithReason, NUM_RETRIES)
+              assert.equal(retriedTestNew, isNew ? NUM_RETRIES_EFD : 0)
+              assert.equal(retriedTestsWithReason, NUM_RETRIES_EFD)
             }
           })
 
       const runImpactedTest = (
         done,
-        { isImpacting, isEfd = false },
+        { isModified, isEfd = false, isParallel = false, isNew = false },
         extraEnvVars = {}
       ) => {
-        const testAssertionsPromise = getTestAssertions({ isImpacting, isEfd })
+        const testAssertionsPromise = getTestAssertions({ isModified, isEfd, isParallel, isNew })
 
         childProcess = exec(
           './node_modules/.bin/vitest run',
@@ -2053,7 +2002,7 @@ describe('impacted test', () => {
               ...getCiVisAgentlessConfig(receiver.port),
               TEST_DIR: 'ci-visibility/vitest-tests/impacted-test*',
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
-              ...testConfig,
+              GITHUB_BASE_REF: '',
               ...extraEnvVars
             },
             stdio: 'inherit'
@@ -2065,104 +2014,44 @@ describe('impacted test', () => {
         })
       }
 
-      it('can impacted tests', (done) => {
-        receiver.setSettings({ impacted_tests_enabled: true })
+      context('test is not new', () => {
+        it('should be detected as impacted', (done) => {
+          receiver.setSettings({ impacted_tests_enabled: true })
 
-        runImpactedTest(done, { isImpacting: true })
+          runImpactedTest(done, { isModified: true })
+        })
+
+        it('should not be detected as impacted if disabled', (done) => {
+          receiver.setSettings({ impacted_tests_enabled: false })
+
+          runImpactedTest(done, { isModified: false })
+        })
+
+        it('should not be detected as impacted if DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED is false',
+          (done) => {
+            receiver.setSettings({ impacted_tests_enabled: true })
+
+            runImpactedTest(done,
+              { isModified: false },
+              { DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0' }
+            )
+          })
       })
-
-      it('does not impact tests if disabled', (done) => {
-        receiver.setSettings({ impacted_tests_enabled: false })
-
-        runImpactedTest(done, { isImpacting: false })
-      })
-
-      it('does not impact tests DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED is set to false', (done) => {
-        receiver.setSettings({ impacted_tests_enabled: false })
-
-        runImpactedTest(done,
-          { isImpacting: false },
-          { DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0' }
-        )
-      })
-
-      it('can impact tests with no base sha', (done) => {
-        receiver.setSettings({ impacted_tests_enabled: true })
-        const eventContent = {
-          pull_request: {
-            base: {
-              sha: '',
-              ref: 'master'
+      context('test is new', () => {
+        it('should be retried and marked both as new and modified', (done) => {
+          receiver.setKnownTests({})
+          receiver.setSettings({
+            impacted_tests_enabled: true,
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': NUM_RETRIES_EFD
+              }
             },
-            head: {
-              sha: commitHeadSha,
-              ref: 'master'
-            }
-          }
-        }
-        eventPath = path.join(cwd, 'event.json')
-        fs.writeFileSync(eventPath, JSON.stringify(eventContent, null, 2))
-
-        runImpactedTest(done, { isImpacting: true })
-      })
-
-      it('can impact tests with no head sha', (done) => {
-        receiver.setSettings({ impacted_tests_enabled: true })
-        const eventContent = {
-          pull_request: {
-            base: {
-              sha: baseCommitSha,
-              ref: 'master'
-            },
-            head: {
-              sha: '',
-              ref: 'master'
-            }
-          }
-        }
-        eventPath = path.join(cwd, 'event.json')
-        fs.writeFileSync(eventPath, JSON.stringify(eventContent, null, 2))
-
-        runImpactedTest(done, { isImpacting: true })
-      })
-
-      it('can impact tests in and activate EFD if modified (no known tests)', (done) => {
-        receiver.setSettings({
-          impacted_tests_enabled: true,
-          early_flake_detection: {
-            enabled: true,
-            slow_test_retries: {
-              '5s': NUM_RETRIES
-            }
-          },
-          known_tests_enabled: true
+            known_tests_enabled: true
+          })
+          runImpactedTest(done, { isModified: true, isEfd: true, isNew: true })
         })
-        runImpactedTest(done,
-          { isImpacting: true, isEfd: true }
-        )
-      })
-
-      it('can impact tests in and activate EFD if modified (with known tests)', (done) => {
-        receiver.setSettings({
-          impacted_tests_enabled: true,
-          early_flake_detection: {
-            enabled: true,
-            slow_test_retries: {
-              '5s': NUM_RETRIES
-            }
-          },
-          known_tests_enabled: true
-        })
-        receiver.setKnownTests({
-          vitest: {
-            'ci-visibility/vitest-tests/impacted-test.mjs': [
-              'impacted test can impacted test'
-            ]
-          }
-        })
-        runImpactedTest(done,
-          { isImpacting: true, isEfd: true }
-        )
       })
     })
   })

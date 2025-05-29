@@ -752,6 +752,7 @@ addHook({
 
     if (isImpactedTestsEnabled) {
       for (const test of allTests) {
+        const isNew = isKnownTestsEnabled && isNewTest(test)
         const { isModified } = await getChannelPromise(isModifiedCh, {
           filePath: test._requireFile,
           modifiedTests
@@ -766,6 +767,7 @@ addHook({
           const isModifiedTest = () => isModified
           for (let repeatEachIndex = 1; repeatEachIndex <= earlyFlakeDetectionNumRetries; repeatEachIndex++) {
             const copyFileSuite = deepCloneSuite(fileSuite, isModifiedTest, [
+              isNew && '_ddIsNew',
               '_ddIsModified',
               '_ddIsEfdRetry'
             ])
@@ -781,11 +783,8 @@ addHook({
 
       for (const newTest of newTests) {
         // No need to filter out attempt to fix tests here because attempt to fix tests are never new
-        if (newTest._ddIsModified) {
-          continue
-        }
         newTest._ddIsNew = true
-        if (isEarlyFlakeDetectionEnabled && newTest.expectedStatus !== 'skipped') {
+        if (isEarlyFlakeDetectionEnabled && newTest.expectedStatus !== 'skipped' && !newTest._ddIsModified) {
           const fileSuite = getSuiteType(newTest, 'file')
           const projectSuite = getSuiteType(newTest, 'project')
           for (let repeatEachIndex = 1; repeatEachIndex <= earlyFlakeDetectionNumRetries; repeatEachIndex++) {

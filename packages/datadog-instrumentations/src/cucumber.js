@@ -25,6 +25,7 @@ const sessionStartCh = channel('ci:cucumber:session:start')
 const sessionFinishCh = channel('ci:cucumber:session:finish')
 const testManagementTestsCh = channel('ci:cucumber:test-management-tests')
 const impactedTestsCh = channel('ci:cucumber:modified-tests')
+const isModifiedCh = channel('ci:cucumber:is-modified-test')
 
 const workerReportTraceCh = channel('ci:cucumber:worker-report:trace')
 
@@ -39,9 +40,7 @@ const {
   fromCoverageMapToCoverage,
   getTestSuitePath,
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
-  getIsFaultyEarlyFlakeDetection,
-  getTestEndLine,
-  isModifiedTest
+  getIsFaultyEarlyFlakeDetection
 } = require('../../dd-trace/src/plugins/util/test')
 
 const isMarkedAsUnskippable = (pickle) => {
@@ -342,7 +341,7 @@ function wrapRun (pl, isLatestVersion) {
           isModified = modifiedTestsByPickleId.get(this.pickle.id)
         }
 
-        if (isKnownTestsEnabled && status !== 'skip' && !isAttemptToFix && !isModified) {
+        if (isKnownTestsEnabled && status !== 'skip') {
           isNew = numRetries !== undefined
         }
 
@@ -644,46 +643,24 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     }
 
     if (isImpactedTestsEnabled) {
-      // Check if the scenario is modified
+      const setIsModified = (receivedIsModified) => { isModified = receivedIsModified }
       const scenarios = gherkinDocument.feature?.children?.filter(
         children => pickle.astNodeIds.includes(children.scenario.id)
       ).map(scenario => scenario.scenario)
-      const testScenarioPath = getTestSuitePath(gherkinDocument.uri, process.cwd())
-      for (const scenario of scenarios) {
-        if (isModified) {
-          break
-        }
-        isModified = isModifiedTest(
-          testScenarioPath,
-          scenario.location.line,
-          scenario.steps[scenario.steps.length - 1].location.line,
-          modifiedTests,
-          'cucumber'
-        )
-      }
-      // We iterate through the stepDefinitions too see if any of them are modified
-      const stepsIds = testCase?.testSteps?.flatMap(testStep => testStep.stepDefinitionIds)
-      for (const stepDefinition of this.supportCodeLibrary.stepDefinitions) {
-        if (isModified) {
-          break
-        }
-        if (!stepsIds?.includes(stepDefinition.id)) {
-          continue
-        }
-        const testStartLineStep = stepDefinition.line
-        const testEndLineStep = getTestEndLine(stepDefinition.code, testStartLineStep)
-        isModified = isModifiedTest(
-          stepDefinition.uri,
-          testStartLineStep,
-          testEndLineStep,
-          modifiedTests,
-          'cucumber'
-        )
-      }
+      const stepIds = testCase?.testSteps?.flatMap(testStep => testStep.stepDefinitionIds)
+
+      isModifiedCh.publish({
+        scenarios,
+        testFileAbsolutePath: gherkinDocument.uri,
+        modifiedTests,
+        stepIds,
+        stepDefinitions: this.supportCodeLibrary.stepDefinitions,
+        setIsModified
+      })
       modifiedTestsByPickleId.set(pickle.id, isModified)
     }
 
-    if (isKnownTestsEnabled && !isAttemptToFix && !isModified) {
+    if (isKnownTestsEnabled && !isAttemptToFix) {
       isNew = isNewTest(testSuitePath, pickle.name)
       if (isNew) {
         numRetriesByPickleId.set(pickle.id, 0)

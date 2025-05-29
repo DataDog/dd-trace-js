@@ -369,7 +369,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
 
         if (this.isKnownTestsEnabled) {
-          isNewTest = retriedTestsToNumAttempts.has(originalTestName) && !isModified
+          isNewTest = retriedTestsToNumAttempts.has(originalTestName)
         }
 
         if (this.isEarlyFlakeDetectionEnabled) {

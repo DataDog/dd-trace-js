@@ -21,6 +21,7 @@ const {
   isModifiedTest
 } = require('../../../src/plugins/util/test')
 
+const proxyquire = require('proxyquire')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA, CI_PIPELINE_URL } = require('../../../src/plugins/util/tags')
 
 describe('getTestParametersString', () => {
@@ -480,5 +481,79 @@ describe('isModifiedTest', () => {
 
   it('should handle empty modifiedTests object', () => {
     expect(isModifiedTest('test/file.js', 1, 10, {}, 'jest')).to.be.false
+  })
+})
+
+describe('getPullRequestBaseBranch', () => {
+  it('returns null if the source branch is default-like', () => {
+    const { getPullRequestBaseBranch } = proxyquire('../../../src/plugins/util/test', {
+      './git': {
+        getGitRemoteName: () => 'origin',
+        getSourceBranch: () => 'main'
+      }
+    })
+    const baseBranch = getPullRequestBaseBranch()
+    expect(baseBranch).to.be.null
+  })
+
+  context('there is a pull request base branch', () => {
+    it('returns base commit SHA to compare against ', () => {
+      const getMergeBaseStub = sinon.stub()
+      getMergeBaseStub.returns('1234af')
+      const checkAndFetchBranchStub = sinon.stub()
+      const getLocalBranchesStub = sinon.stub()
+      const { getPullRequestBaseBranch } = proxyquire('../../../src/plugins/util/test', {
+        './git': {
+          getGitRemoteName: () => 'origin',
+          getSourceBranch: () => 'feature-branch',
+          getMergeBase: getMergeBaseStub,
+          checkAndFetchBranch: checkAndFetchBranchStub,
+          getLocalBranches: getLocalBranchesStub
+        }
+      })
+      const baseBranch = getPullRequestBaseBranch('trunk')
+      expect(baseBranch).to.equal('1234af')
+      expect(checkAndFetchBranchStub).to.have.been.calledWith('trunk', 'origin')
+      expect(getMergeBaseStub).to.have.been.calledWith('trunk', 'feature-branch')
+      expect(getLocalBranchesStub).not.to.have.been.called
+    })
+  })
+
+  context('there is no pull request base branch', () => {
+    it('returns the best base branch SHA from local branches', () => {
+      const checkAndFetchBranchStub = sinon.stub()
+      const getLocalBranchesStub = sinon.stub().returns(['trunk', 'master', 'feature-branch'])
+
+      const getMergeBaseStub = sinon.stub()
+      getMergeBaseStub.withArgs('trunk', 'feature-branch').returns('1234af')
+      getMergeBaseStub.withArgs('master', 'feature-branch').returns('fa4321')
+
+      const getCountsStub = sinon.stub()
+      getCountsStub.withArgs('trunk', 'feature-branch').returns({ ahead: 0, behind: 0 })
+      // master should be chosen because even though it has the same "ahead" value, it is a default branch
+      getCountsStub.withArgs('master', 'feature-branch').returns({ ahead: 0, behind: 1 })
+
+      const { getPullRequestBaseBranch, POSSIBLE_BASE_BRANCHES } = proxyquire('../../../src/plugins/util/test', {
+        './git': {
+          getGitRemoteName: () => 'origin',
+          getSourceBranch: () => 'feature-branch',
+          getMergeBase: getMergeBaseStub,
+          checkAndFetchBranch: checkAndFetchBranchStub,
+          getLocalBranches: getLocalBranchesStub,
+          getCounts: getCountsStub
+        }
+      })
+      const baseBranch = getPullRequestBaseBranch()
+      expect(baseBranch).to.equal('fa4321')
+
+      POSSIBLE_BASE_BRANCHES.forEach((baseBranch) => {
+        expect(checkAndFetchBranchStub).to.have.been.calledWith(baseBranch, 'origin')
+      })
+      expect(getLocalBranchesStub).to.have.been.calledWith('origin')
+      expect(getMergeBaseStub).to.have.been.calledWith('master', 'feature-branch')
+      expect(getMergeBaseStub).to.have.been.calledWith('trunk', 'feature-branch')
+      expect(getCountsStub).to.have.been.calledWith('master', 'feature-branch')
+      expect(getCountsStub).to.have.been.calledWith('trunk', 'feature-branch')
+    })
   })
 })
