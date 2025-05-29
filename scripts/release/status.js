@@ -23,29 +23,31 @@ async function checkStatuses (contexts) {
     console.log(response)
     console.log(response.text())
 
-    throw new Error('Could not get status from GitHub.')
+    throw new Error([
+      'Could not get status from GitHub.',
+      util.inspect(response),
+      util.inspect(response.text?.())
+    ].join('\n\n'))
   }
 
   const { statuses } = JSON.parse(await response.text())
 
   for (const status of statuses) {
-    for (const context of contexts) {
-      if (status.context === context) {
-        switch (status.state) {
-          case 'success':
-            contexts = contexts.filter(c => c !== context)
-            break
-          case 'cancelled':
-          case 'failure':
-          case 'stale':
-          case 'timed_out':
-            throw new Error(`Job was not successful: ${context}.`)
-        }
+    if (contexts.has(status.context)) {
+      switch (status.state) {
+        case 'success':
+          contexts.delete(status.context)
+          break
+        case 'cancelled':
+        case 'failure':
+        case 'stale':
+        case 'timed_out':
+          throw new Error(`Job was not successful: ${status.context}.`)
       }
     }
   }
 
-  if (contexts.length === 0) return
+  if (contexts.size === 0) return
 
   attempts++
 
@@ -56,7 +58,7 @@ async function checkStatuses (contexts) {
   setTimeout(() => checkStatuses(contexts), TIMEOUT)
 }
 
-checkStatuses([
+checkStatuses(new Set([
   'dd-gitlab/promote-oci-to-prod',
   'dd-gitlab/publish-lib-init-ghcr-tags'
-])
+]))
