@@ -1,3 +1,5 @@
+const satisfies = require('semifies')
+
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const {
@@ -54,6 +56,7 @@ let testManagementAttemptToFixRetries = 0
 let testManagementTests = {}
 const quarantinedOrDisabledTestsAttemptToFix = []
 let rootDir = ''
+const MINIMUM_SUPPORTED_VERSION_RANGE_EFD = '>=1.38.0' // TODO: remove this once we drop support for v5
 
 function getTestProperties (test) {
   const testName = getTestFullname(test)
@@ -524,7 +527,7 @@ function runnerHook (runnerExport, playwrightVersion) {
       log.error('Playwright session start error', e)
     }
 
-    if (isKnownTestsEnabled) {
+    if (isKnownTestsEnabled && satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)) {
       try {
         const { err, knownTests: receivedKnownTests } = await getChannelPromise(knownTestsCh)
         if (!err) {
@@ -540,7 +543,7 @@ function runnerHook (runnerExport, playwrightVersion) {
       }
     }
 
-    if (isTestManagementTestsEnabled) {
+    if (isTestManagementTestsEnabled && satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)) {
       try {
         const { err, testManagementTests: receivedTestManagementTests } = await getChannelPromise(testManagementTestsCh)
         if (!err) {
@@ -668,7 +671,7 @@ addHook({
   name: 'playwright',
   file: 'lib/runner/dispatcher.js',
   versions: ['>=1.38.0']
-}, (dispatcher, version) => dispatcherHookNew(dispatcher, dispatcherRunWrapperNew, version))
+}, (dispatcher) => dispatcherHookNew(dispatcher, dispatcherRunWrapperNew))
 
 addHook({
   name: 'playwright',
