@@ -436,7 +436,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             // If it is, we'll set the failedAllTests flag to true if all the tests failed
             // If all tests passed, we'll set the attemptToFixPassed flag to true
             if (testStatuses.length === testManagementAttemptToFixRetries + 1) {
-              if (testStatuses.some(status => status === 'fail')) {
+              if (testStatuses.includes('fail')) {
                 attemptToFixFailed = true
               }
               if (testStatuses.every(status => status === 'fail')) {
@@ -872,7 +872,7 @@ function cliWrapper (cli, jestVersion) {
 }
 
 function coverageReporterWrapper (coverageReporter) {
-  const CoverageReporter = coverageReporter.default ? coverageReporter.default : coverageReporter
+  const CoverageReporter = coverageReporter.default ?? coverageReporter
 
   /**
    * If ITR is active, we're running fewer tests, so of course the total code coverage is reduced.
@@ -911,7 +911,7 @@ addHook({
 }, cliWrapper)
 
 function jestAdapterWrapper (jestAdapter, jestVersion) {
-  const adapter = jestAdapter.default ? jestAdapter.default : jestAdapter
+  const adapter = jestAdapter.default ?? jestAdapter
   const newAdapter = shimmer.wrapFunction(adapter, adapter => function () {
     const environment = arguments[2]
     if (!environment) {
@@ -1080,7 +1080,7 @@ addHook({
   versions: ['>=24.8.0'],
   file: 'build/SearchSource.js'
 }, (searchSourcePackage, frameworkVersion) => {
-  const SearchSource = searchSourcePackage.default ? searchSourcePackage.default : searchSourcePackage
+  const SearchSource = searchSourcePackage.default ?? searchSourcePackage
 
   shimmer.wrap(SearchSource.prototype, 'getTestPaths', getTestPaths => async function () {
     const testPaths = await getTestPaths.apply(this, arguments)
@@ -1155,7 +1155,7 @@ addHook({
   name: 'jest-runtime',
   versions: ['>=24.8.0']
 }, (runtimePackage) => {
-  const Runtime = runtimePackage.default ? runtimePackage.default : runtimePackage
+  const Runtime = runtimePackage.default ?? runtimePackage
 
   shimmer.wrap(Runtime.prototype, 'requireModuleOrMock', requireModuleOrMock => function (from, moduleName) {
     // TODO: do this for every library that we instrument

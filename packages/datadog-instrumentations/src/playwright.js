@@ -330,7 +330,7 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout, isMain
   }
 
   if (testStatuses.length === testManagementAttemptToFixRetries + 1) {
-    if (testStatuses.some(status => status === 'fail')) {
+    if (testStatuses.includes('fail')) {
       test._ddHasFailedAttemptToFixRetries = true
     }
     if (testStatuses.every(status => status === 'fail')) {

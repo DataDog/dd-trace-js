@@ -608,7 +608,7 @@ addHook({
         if (statuses.length === testManagementAttemptToFixRetries) {
           if (statuses.every(status => status === 'pass')) {
             attemptToFixPassed = true
-          } else if (statuses.some(status => status === 'fail')) {
+          } else if (statuses.includes('fail')) {
             attemptToFixFailed = true
           }
         }
@@ -767,7 +767,7 @@ addHook({
           let attemptToFixFailed = false
           if (attemptToFixTasks.has(task)) {
             const statuses = taskToStatuses.get(task)
-            if (statuses.some(status => status === 'fail')) {
+            if (statuses.includes('fail')) {
               attemptToFixFailed = true
             }
             if (statuses.every(status => status === 'fail')) {

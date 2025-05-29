@@ -110,9 +110,9 @@ const DD_CAPABILITIES_AUTO_TEST_RETRIES = '_dd.library_capabilities.auto_test_re
 const DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE = '_dd.library_capabilities.test_management.quarantine'
 const DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE = '_dd.library_capabilities.test_management.disable'
 const DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX = '_dd.library_capabilities.test_management.attempt_to_fix'
-const UNSUPPORTED_TIA_FRAMEWORKS = ['playwright', 'vitest']
-const UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE = ['cucumber', 'mocha']
-const UNSUPPORTED_ATTEMPT_TO_FIX_FRAMEWORKS_PARALLEL_MODE = ['mocha']
+const UNSUPPORTED_TIA_FRAMEWORKS = new Set(['playwright', 'vitest'])
+const UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE = new Set(['cucumber', 'mocha'])
+const UNSUPPORTED_ATTEMPT_TO_FIX_FRAMEWORKS_PARALLEL_MODE = new Set(['mocha'])
 
 const TEST_LEVEL_EVENT_TYPES = [
   'test',
@@ -757,17 +757,17 @@ function getFormattedError (error, repositoryRoot) {
 
 function getLibraryCapabilitiesTags (testFramework, isParallel) {
   function isTiaSupported (testFramework, isParallel) {
-    if (UNSUPPORTED_TIA_FRAMEWORKS.includes(testFramework)) {
+    if (UNSUPPORTED_TIA_FRAMEWORKS.has(testFramework)) {
       return false
     }
-    if (isParallel && UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE.includes(testFramework)) {
+    if (isParallel && UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE.has(testFramework)) {
       return false
     }
     return true
   }
 
   function isAttemptToFixSupported (testFramework, isParallel) {
-    if (isParallel && UNSUPPORTED_ATTEMPT_TO_FIX_FRAMEWORKS_PARALLEL_MODE.includes(testFramework)) {
+    if (isParallel && UNSUPPORTED_ATTEMPT_TO_FIX_FRAMEWORKS_PARALLEL_MODE.has(testFramework)) {
       return false
     }
     return true
