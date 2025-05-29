@@ -727,7 +727,7 @@ describe('Plugin', () => {
 
         const result = dynamoDbInstance.getPrimaryKeyConfig()
         expect(result).to.deep.equal({
-          Table42: ['key1'],
+          Table42: ['key1']
         })
       })
     })
