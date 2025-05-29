@@ -137,7 +137,6 @@ export default [
       'unicorn/prefer-code-point': 'off', // 3 errors
       'unicorn/prefer-event-target': 'off', // TODO: undecided (2 errors)
       'unicorn/prefer-global-this': 'off', // 23 errors
-      'unicorn/prefer-includes': 'off', // 19 errors
       'unicorn/prefer-logical-operator-over-ternary': 'off', // 15 errors
       'unicorn/prefer-math-trunc': 'off', // 8 errors
       'unicorn/prefer-module': 'off', // too strict

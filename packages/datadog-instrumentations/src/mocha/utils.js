@@ -281,7 +281,7 @@ function getOnTestEndHandler (config) {
     const isLastAttempt = testStatuses.length === config.testManagementAttemptToFixRetries + 1
 
     if (test._ddIsAttemptToFix && isLastAttempt) {
-      if (testStatuses.some(status => status === 'fail')) {
+      if (testStatuses.includes('fail')) {
         attemptToFixFailed = true
       }
       if (testStatuses.every(status => status === 'fail')) {
