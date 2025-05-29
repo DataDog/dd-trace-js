@@ -119,10 +119,9 @@ export default [
       'unicorn/no-null': 'off', // too strict
       'unicorn/prefer-array-flat': 'off', // 9 errors
       'unicorn/prefer-at': 'off', // 17 errors | Difficult to fix
-      'unicorn/prefer-spread': 'off', // 36 errors
+      'unicorn/prefer-spread': 'off', // 13 errors | Difficult to fix
       'unicorn/prefer-string-replace-all': 'off', // 33 errors
       'unicorn/prefer-switch': 'off', // 8 errors
-      'unicorn/prefer-top-level-await': 'off', // too strict
       'unicorn/prevent-abbreviations': 'off', // too strict
       'unicorn/switch-case-braces': 'off', // too strict
 
@@ -133,6 +132,7 @@ export default [
       'unicorn/prefer-code-point': 'off', // Should be activated, but needs a refactor of some code
 
       // The following rules should not be activated!
+      'unicorn/prefer-top-level-await': 'off', // Only useful when using ESM
       'unicorn/prefer-math-trunc': 'off', // Math.trunc is not a 1-to-1 replacement for most of our usage
       'unicorn/import-style': 'off', // Questionable benefit
       'unicorn/no-array-reduce': 'off', // Questionable benefit

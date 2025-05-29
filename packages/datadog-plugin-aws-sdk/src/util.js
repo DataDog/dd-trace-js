@@ -65,7 +65,8 @@ function encodeValue (valueObject) {
  * // Returns ["timestamp", Buffer.from("1234"), "userId", Buffer.from("user123")]
  */
 const extractPrimaryKeys = (keySet, keyValuePairs) => {
-  const keyNames = Array.from(keySet)
+  // TODO(BridgeAR): Rewrite this. No set should be passed through.
+  const keyNames = [...keySet]
   if (keyNames.length === 0) {
     return
   }
