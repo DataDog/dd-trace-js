@@ -257,6 +257,12 @@ class EventSerializer {
   }
 }
 
+function add (items) {
+  for (const item of items.getEntries()) {
+    this.eventHandler(item)
+  }
+}
+
 /**
  * Class that sources timeline events through Node.js performance measurement APIs.
  */
@@ -270,12 +276,6 @@ class NodeApiEventSource {
   start () {
     // if already started, do nothing
     if (this.observer) return
-
-    function add (items) {
-      for (const item of items.getEntries()) {
-        this.eventHandler(item)
-      }
-    }
 
     this.observer = new PerformanceObserver(add.bind(this))
     this.observer.observe({ entryTypes: this.entryTypes })

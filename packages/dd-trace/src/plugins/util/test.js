@@ -755,24 +755,24 @@ function getFormattedError (error, repositoryRoot) {
   return newError
 }
 
+function isTiaSupported (testFramework, isParallel) {
+  if (UNSUPPORTED_TIA_FRAMEWORKS.has(testFramework)) {
+    return false
+  }
+  if (isParallel && UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE.has(testFramework)) {
+    return false
+  }
+  return true
+}
+
+function isAttemptToFixSupported (testFramework, isParallel) {
+  if (isParallel && UNSUPPORTED_ATTEMPT_TO_FIX_FRAMEWORKS_PARALLEL_MODE.has(testFramework)) {
+    return false
+  }
+  return true
+}
+
 function getLibraryCapabilitiesTags (testFramework, isParallel) {
-  function isTiaSupported (testFramework, isParallel) {
-    if (UNSUPPORTED_TIA_FRAMEWORKS.has(testFramework)) {
-      return false
-    }
-    if (isParallel && UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE.has(testFramework)) {
-      return false
-    }
-    return true
-  }
-
-  function isAttemptToFixSupported (testFramework, isParallel) {
-    if (isParallel && UNSUPPORTED_ATTEMPT_TO_FIX_FRAMEWORKS_PARALLEL_MODE.has(testFramework)) {
-      return false
-    }
-    return true
-  }
-
   return {
     [DD_CAPABILITIES_TEST_IMPACT_ANALYSIS]: isTiaSupported(testFramework, isParallel) ? '1' : undefined,
     [DD_CAPABILITIES_EARLY_FLAKE_DETECTION]: '1',

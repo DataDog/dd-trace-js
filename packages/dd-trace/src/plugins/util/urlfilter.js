@@ -2,6 +2,18 @@
 
 const log = require('../../log')
 
+function applyFilter (filter, uri) {
+  if (typeof filter === 'function') {
+    return filter(uri)
+  } else if (filter instanceof RegExp) {
+    return filter.test(uri)
+  } else if (Array.isArray(filter)) {
+    return filter.some(filter => applyFilter(filter, uri))
+  }
+
+  return filter === uri
+}
+
 const urlFilter = {
   getFilter (config) {
     if (typeof config.filter === 'function') {
@@ -17,18 +29,6 @@ const urlFilter = {
       const allowed = applyFilter(allowlist, uri)
       const blocked = applyFilter(blocklist, uri)
       return allowed && !blocked
-    }
-
-    function applyFilter (filter, uri) {
-      if (typeof filter === 'function') {
-        return filter(uri)
-      } else if (filter instanceof RegExp) {
-        return filter.test(uri)
-      } else if (Array.isArray(filter)) {
-        return filter.some(filter => applyFilter(filter, uri))
-      }
-
-      return filter === uri
     }
   }
 }

@@ -208,8 +208,9 @@ function getHeaders (config) {
     .map(([key, tag]) => [key.toLowerCase(), tag])
 }
 
+const noop = () => {}
+
 function getHooks (config) {
-  const noop = () => {}
   const request = (config.hooks && config.hooks.request) || noop
 
   return { request }

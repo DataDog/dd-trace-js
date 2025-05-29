@@ -137,8 +137,9 @@ function normalizeConfig (config) {
   return Object.assign({}, config, { hooks, validateStatus })
 }
 
+const noop = () => {}
+
 function getHooks (config) {
-  const noop = () => {}
   const request = (config.hooks && config.hooks.request) || noop
 
   return { request }

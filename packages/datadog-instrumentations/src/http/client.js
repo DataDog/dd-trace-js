@@ -26,6 +26,19 @@ function hookFn (http) {
   return http
 }
 
+function combineOptions (inputURL, inputOptions) {
+  return inputOptions !== null && typeof inputOptions === 'object'
+    ? Object.assign(inputURL || {}, inputOptions)
+    : inputURL
+}
+function normalizeHeaders (options) {
+  options.headers = options.headers || {}
+}
+
+function normalizeCallback (inputOptions, callback, inputURL) {
+  return typeof inputOptions === 'function' ? [inputOptions, inputURL || {}] : [callback, inputOptions]
+}
+
 function patch (http, methodName) {
   shimmer.wrap(http, methodName, instrumentRequest)
 
@@ -141,19 +154,6 @@ function patch (http, methodName) {
     const uri = url.format(options)
 
     return { uri, options, callback, originalUrl }
-  }
-
-  function combineOptions (inputURL, inputOptions) {
-    return inputOptions !== null && typeof inputOptions === 'object'
-      ? Object.assign(inputURL || {}, inputOptions)
-      : inputURL
-  }
-  function normalizeHeaders (options) {
-    options.headers = options.headers || {}
-  }
-
-  function normalizeCallback (inputOptions, callback, inputURL) {
-    return typeof inputOptions === 'function' ? [inputOptions, inputURL || {}] : [callback, inputOptions]
   }
 
   function normalizeOptions (inputURL) {

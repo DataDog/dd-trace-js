@@ -358,6 +358,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             } else {
               originalHookFns.set(hook, hookFn)
             }
+            // eslint-disable-next-line unicorn/consistent-function-scoping
             const wrapperHook = function () {
               return testFnCh.runStores(ctx, () => hookFn.apply(this, arguments))
             }
