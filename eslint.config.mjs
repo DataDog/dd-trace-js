@@ -126,7 +126,6 @@ export default [
       'unicorn/no-null': 'off', // too strict
       'unicorn/no-object-as-default-parameter': 'off', // too strict
       'unicorn/no-this-assignment': 'off', // too strict
-      'unicorn/no-unreadable-iife': 'off', // too strict
       'unicorn/prefer-array-flat': 'off', // 9 errors
       'unicorn/prefer-at': 'off', // 17 errors | Difficult to fix
       'unicorn/prefer-code-point': 'off', // 3 errors
