@@ -164,11 +164,11 @@ class DynamoDb extends BaseAwsSdkPlugin {
       log.debug('Unable to calculate hash because missing required parameters')
       return
     }
-    if (!primaryKeyConfig) {
+    const keyNames = primaryKeyConfig?.[tableName]
+    if (!keyNames) {
       return
     }
-    const primaryKeyNames = primaryKeyConfig[tableName]
-    const keyValues = extractPrimaryKeys(primaryKeyNames, item)
+    const keyValues = extractPrimaryKeys(keyNames, item)
     if (keyValues) {
       return generatePointerHash([tableName, ...keyValues])
     }
@@ -189,8 +189,8 @@ class DynamoDb extends BaseAwsSdkPlugin {
       log.debug('Unable to calculate hash because missing parameters')
       return
     }
-    const keyNamesSet = Object.keys(keysObject)
-    const keyValues = extractPrimaryKeys(keyNamesSet, keysObject)
+    const keyNames = Object.keys(keysObject)
+    const keyValues = extractPrimaryKeys(keyNames, keysObject)
     if (keyValues) {
       return generatePointerHash([tableName, ...keyValues])
     }
