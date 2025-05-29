@@ -1,6 +1,6 @@
 'use strict'
 
-module.exports = (object, props) => {
+module.exports = function pick (object, props) {
   const result = {}
   props.forEach(prop => {
     if (prop in object) {

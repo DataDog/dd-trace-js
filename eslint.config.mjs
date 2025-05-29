@@ -115,7 +115,6 @@ export default [
       'unicorn/expiring-todo-comments': 'off',
       'unicorn/explicit-length-check': 'off', // 68 errors
       'unicorn/filename-case': ['off', { case: 'kebabCase' }], // 59 errors
-      'unicorn/no-anonymous-default-export': 'off', // only makes a difference for ESM
       'unicorn/no-array-for-each': 'off', // 122 errors
       'unicorn/no-for-loop': 'off', // 15 errors
       'unicorn/no-null': 'off', // too strict

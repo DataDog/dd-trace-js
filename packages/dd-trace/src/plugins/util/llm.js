@@ -29,7 +29,7 @@ function isPromptCompletionSampled (sampler, span) {
   return sampler.isSampled(span)
 }
 
-module.exports = function (integrationName, tracerConfig) {
+module.exports = function makeUtilities (integrationName, tracerConfig) {
   const integrationConfig = tracerConfig[integrationName] || {}
   const { spanCharLimit, spanPromptCompletionSampleRate } = integrationConfig
 
