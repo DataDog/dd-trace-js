@@ -140,7 +140,6 @@ export default [
       'unicorn/prefer-logical-operator-over-ternary': 'off', // 15 errors
       'unicorn/prefer-math-trunc': 'off', // 8 errors
       'unicorn/prefer-module': 'off', // too strict
-      'unicorn/prefer-native-coercion-functions': 'off', // 18 errors
       'unicorn/prefer-node-protocol': 'off', // 148 errors
       'unicorn/prefer-number-properties': 'off', // 56 errors
       'unicorn/prefer-object-from-entries': 'off', // 3 errors
