@@ -29,7 +29,7 @@ function checkTimeout (context) {
   apmFlushDeadline = apmFlushDeadline < 0 ? 100 : apmFlushDeadline
 
   __lambdaTimeout = setTimeout(() => {
-    timeoutChannel.publish(undefined)
+    timeoutChannel.publish()
   }, remainingTimeInMillis - apmFlushDeadline)
 }
 
