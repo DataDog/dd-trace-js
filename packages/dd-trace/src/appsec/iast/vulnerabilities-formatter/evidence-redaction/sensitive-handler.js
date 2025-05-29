@@ -250,7 +250,7 @@ class SensitiveHandler {
           }
 
           const sensitive =
-            _value.slice(_sourceRedactionContext.start - offset, _sourceRedactionContext.end - offset)
+            _value.substring(_sourceRedactionContext.start - offset, _sourceRedactionContext.end - offset)
           const indexOfPartValueInPattern = source.value.indexOf(sensitive)
 
           const pattern = indexOfPartValueInPattern === -1
