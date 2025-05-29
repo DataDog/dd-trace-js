@@ -139,7 +139,6 @@ export default [
       'unicorn/prefer-node-protocol': 'off', // 148 errors
       'unicorn/prefer-number-properties': 'off', // 56 errors
       'unicorn/prefer-object-from-entries': 'off', // 3 errors
-      'unicorn/prefer-optional-catch-binding': 'off', // 62 errors
       'unicorn/prefer-reflect-apply': 'off', // too strict
       'unicorn/prefer-spread': 'off', // 36 errors
       'unicorn/prefer-string-replace-all': 'off', // 33 errors

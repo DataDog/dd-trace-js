@@ -824,7 +824,7 @@ addHook({
           })
         }
       }
-    } catch (e) {
+    } catch {
       // ignore errors such as redirects, context destroyed, etc
     }
 
@@ -912,7 +912,7 @@ addHook({
                   }
                 }
               }
-            } catch (e) {
+            } catch {
               // ignore errors
             }
           },

@@ -211,7 +211,7 @@ function getSortWrapper (sort) {
       try {
         const workspaceProject = this.ctx.getCoreWorkspaceProject()
         workspaceProject._provided._ddIsFlakyTestRetriesEnabled = isFlakyTestRetriesEnabled
-      } catch (e) {
+      } catch {
         log.warn('Could not send library configuration to workers.')
       }
     }
