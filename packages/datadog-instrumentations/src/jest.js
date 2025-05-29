@@ -358,11 +358,12 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             } else {
               originalHookFns.set(hook, hookFn)
             }
+            // The rule has a bug, see https://github.com/sindresorhus/eslint-plugin-unicorn/issues/2164
             // eslint-disable-next-line unicorn/consistent-function-scoping
             const wrapperHook = function () {
               return testFnCh.runStores(ctx, () => hookFn.apply(this, arguments))
             }
-            // If we don't do this, the timeout will be not be triggered
+            // If we don't do this, the timeout will not be triggered
             Object.defineProperty(wrapperHook, 'length', { value: hookFn.length })
             hook.fn = wrapperHook
           }

@@ -105,6 +105,8 @@ function findArgumentsBounds (str) {
   let end = -1
   let closerCount = 0
 
+  // TODO(BridgeAR): This "breaks" up codePoints.
+  // Investigate if this is a problem.
   for (let i = 0; i < str.length; i++) {
     const char = str[i]
 

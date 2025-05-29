@@ -32,7 +32,7 @@ function combineOptions (inputURL, inputOptions) {
     : inputURL
 }
 function normalizeHeaders (options) {
-  options.headers = options.headers || {}
+  options.headers ??= {}
 }
 
 function normalizeCallback (inputOptions, callback, inputURL) {

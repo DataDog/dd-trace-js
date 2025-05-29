@@ -16,13 +16,10 @@ const OK = 0
 const CANCELLED = 1
 
 const isValid = (server, args) => {
-  if (!startChannel.hasSubscribers) return false
-  if (!server || !server.type) return false
-  if (!args[0]) return false
-  if (server.type !== 'unary' && !isEmitter(args[0])) return false
-  if (server.type === 'unary' && typeof args[1] !== 'function') return false
-
-  return true
+  return Boolean(startChannel.hasSubscribers &&
+    server?.type &&
+    args[0] &&
+    (server.type === 'unary' ? typeof args[1] === 'function' : isEmitter(args[0])))
 }
 
 function wrapHandler (func, name) {

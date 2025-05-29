@@ -57,10 +57,10 @@ function getVariablesFilter (config) {
 
 const noop = () => {}
 
-function getHooks (config) {
-  const execute = config.hooks?.execute || noop
-  const parse = config.hooks?.parse || noop
-  const validate = config.hooks?.validate || noop
+function getHooks ({ hooks }) {
+  const execute = hooks?.execute ?? noop
+  const parse = hooks?.parse ?? noop
+  const validate = hooks?.validate ?? noop
 
   return { execute, parse, validate }
 }

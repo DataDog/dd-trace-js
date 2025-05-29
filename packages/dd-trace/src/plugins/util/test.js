@@ -756,20 +756,12 @@ function getFormattedError (error, repositoryRoot) {
 }
 
 function isTiaSupported (testFramework, isParallel) {
-  if (UNSUPPORTED_TIA_FRAMEWORKS.has(testFramework)) {
-    return false
-  }
-  if (isParallel && UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE.has(testFramework)) {
-    return false
-  }
-  return true
+  return !(UNSUPPORTED_TIA_FRAMEWORKS.has(testFramework) ||
+           (isParallel && UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE.has(testFramework)))
 }
 
 function isAttemptToFixSupported (testFramework, isParallel) {
-  if (isParallel && UNSUPPORTED_ATTEMPT_TO_FIX_FRAMEWORKS_PARALLEL_MODE.has(testFramework)) {
-    return false
-  }
-  return true
+  return !(isParallel && UNSUPPORTED_ATTEMPT_TO_FIX_FRAMEWORKS_PARALLEL_MODE.has(testFramework))
 }
 
 function getLibraryCapabilitiesTags (testFramework, isParallel) {

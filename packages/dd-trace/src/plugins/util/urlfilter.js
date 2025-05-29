@@ -25,11 +25,7 @@ const urlFilter = {
     const allowlist = config.allowlist || config.whitelist || /.*/
     const blocklist = config.blocklist || config.blacklist || []
 
-    return uri => {
-      const allowed = applyFilter(allowlist, uri)
-      const blocked = applyFilter(blocklist, uri)
-      return allowed && !blocked
-    }
+    return uri => applyFilter(allowlist, uri) && !applyFilter(blocklist, uri)
   }
 }
 

@@ -116,7 +116,7 @@ const onStatusWithPeer = function (ctx, arg1, thisArg) {
   finishChannel.publish(ctx)
 }
 
-const onStatusWithoutPeer = function (ctx, arg1, thisArg) {
+const onStatusWithoutPeer = function (ctx, arg1) {
   ctx.result = arg1
   finishChannel.publish(ctx)
 }
