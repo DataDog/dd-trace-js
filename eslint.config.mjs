@@ -122,7 +122,6 @@ export default [
       'unicorn/no-array-reduce': 'off', // too strict
       'unicorn/no-for-loop': 'off', // 15 errors
       'unicorn/no-hex-escape': 'off', // too strict
-      'unicorn/no-lonely-if': 'off', // 19 errors
       'unicorn/no-negated-condition': 'off', // too strict
       'unicorn/no-nested-ternary': 'off', // too strict
       'unicorn/no-new-array': 'off', // 6 errors
