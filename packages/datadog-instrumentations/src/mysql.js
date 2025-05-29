@@ -80,7 +80,7 @@ addHook({ name: 'mysql', file: 'lib/Pool.js', versions: ['>=2'] }, Pool => {
       const cb = arguments[arguments.length - 1]
       if (typeof cb === 'function') {
         arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => function () {
-          return finishPoolQueryCh.runStores(ctx, cb, this, arguments)
+          return finishPoolQueryCh.runStores(ctx, cb, this, ...arguments)
         })
       }
 

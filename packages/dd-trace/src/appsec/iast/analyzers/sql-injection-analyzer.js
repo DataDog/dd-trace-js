@@ -14,7 +14,7 @@ class SqlInjectionAnalyzer extends StoredInjectionAnalyzer {
   }
 
   onConfigure () {
-    this.addSub('apm:mysql:query:start', ({ sql }) => this.analyze(sql, undefined, 'MYSQL'))
+    this.addSub('apm:mysql:query:start', ({ payload }) => this.analyze(payload.sql, undefined, 'MYSQL'))
     this.addSub('apm:mysql2:query:start', ({ sql }) => this.analyze(sql, undefined, 'MYSQL'))
     this.addSub('apm:pg:query:start', ({ query }) => this.analyze(query.text, undefined, 'POSTGRES'))
 
