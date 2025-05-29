@@ -2,6 +2,8 @@
 
 /* eslint-disable no-console */
 
+const util = require('util')
+
 const { GITHUB_REF, GITHUB_TOKEN } = process.env
 
 const TIMEOUT = 10 * 1000
@@ -23,11 +25,9 @@ async function checkStatuses (contexts) {
     console.log(response)
     console.log(response.text())
 
-    throw new Error([
-      'Could not get status from GitHub.',
-      util.inspect(response),
-      util.inspect(response.text?.())
-    ].join('\n\n'))
+    throw new Error(
+      util.format('Could not get status from GitHub.\n\n%o\n\n%s', response, response.text?.())
+    )
   }
 
   const { statuses } = JSON.parse(await response.text())
