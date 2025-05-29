@@ -13,11 +13,11 @@ function formatSpan (span, config) {
   span = normalizeSpan(truncateSpan(span, false))
   if (span.span_events) {
     // ensure span events are encoded as tags if agent doesn't support native top level span events
-    if (!config?.trace?.nativeSpanEvents) {
+    if (config?.trace?.nativeSpanEvents) {
+      formatSpanEvents(span)
+    } else {
       span.meta.events = JSON.stringify(span.span_events)
       delete span.span_events
-    } else {
-      formatSpanEvents(span)
     }
   }
   return span
@@ -351,10 +351,10 @@ function formatSpanEvents (span) {
     if (spanEvent.attributes) {
       for (const [key, value] of Object.entries(spanEvent.attributes)) {
         const newValue = convertSpanEventAttributeValues(key, value)
-        if (newValue !== undefined) {
-          spanEvent.attributes[key] = newValue
-        } else {
+        if (newValue === undefined) {
           delete spanEvent.attributes[key] // delete from attributes if undefined
+        } else {
+          spanEvent.attributes[key] = newValue
         }
       }
       if (Object.keys(spanEvent.attributes).length === 0) {

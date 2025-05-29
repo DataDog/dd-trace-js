@@ -271,10 +271,10 @@ function getOnTestEndHandler (config) {
 
     const testName = getTestFullName(test)
 
-    if (!testsStatuses.get(testName)) {
-      testsStatuses.set(testName, [status])
-    } else {
+    if (testsStatuses.get(testName)) {
       testsStatuses.get(testName).push(status)
+    } else {
+      testsStatuses.set(testName, [status])
     }
     const testStatuses = testsStatuses.get(testName)
 

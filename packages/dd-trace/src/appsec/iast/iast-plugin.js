@@ -141,7 +141,7 @@ class IastPlugin extends Plugin {
           firstSep = channelName.indexOf(':', 'tracing:'.length + 1)
         }
         const lastSep = channelName.indexOf(':', firstSep + 1)
-        moduleName = channelName.slice(firstSep + 1, lastSep !== -1 ? lastSep : channelName.length)
+        moduleName = channelName.slice(firstSep + 1, lastSep === -1 ? channelName.length : lastSep)
       }
     }
 

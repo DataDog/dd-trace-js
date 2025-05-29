@@ -590,7 +590,7 @@ class TextMapPropagator {
       }
 
       if (parts[2]) {
-        b3[b3SampledKey] = parts[2] !== '0' ? '1' : '0'
+        b3[b3SampledKey] = parts[2] === '0' ? '0' : '1'
 
         if (parts[2] === 'd') {
           b3[b3FlagsKey] = '1'
@@ -633,9 +633,9 @@ class TextMapPropagator {
     if (!carrier || !carrier.baggage) return
     if (!spanContext) removeAllBaggageItems()
     const baggages = carrier.baggage.split(',')
-    const keysToSpanTag = this._config.baggageTagKeys !== '*'
-      ? new Set(this._config.baggageTagKeys.split(','))
-      : undefined
+    const keysToSpanTag = this._config.baggageTagKeys === '*'
+      ? undefined
+      : new Set(this._config.baggageTagKeys.split(','))
     for (const keyValue of baggages) {
       if (!keyValue.includes('=')) {
         if (spanContext) spanContext._baggageItems = {}

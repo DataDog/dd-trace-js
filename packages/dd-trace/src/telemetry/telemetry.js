@@ -361,14 +361,14 @@ function updateConfig (changes, config) {
     return !names.includes(entry.name)
   }
 
-  if (!configWithOrigin.length) {
-    configWithOrigin = configuration
-  } else {
+  if (configWithOrigin.length) {
     // update configWithOrigin to contain up-to-date full list of config values for app-extended-heartbeat
     configWithOrigin = configWithOrigin.filter(isNotModified)
     configWithOrigin = [...configWithOrigin, ...configuration]
     const { reqType, payload } = createPayload('app-client-configuration-change', { configuration })
     sendData(config, application, host, reqType, payload, updateRetryData)
+  } else {
+    configWithOrigin = configuration
   }
 }
 

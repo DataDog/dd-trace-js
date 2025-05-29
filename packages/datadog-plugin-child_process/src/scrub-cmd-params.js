@@ -71,19 +71,33 @@ function scrubChildProcessCmd (expression) {
         } else if (token.comment) {
           result.push(`#${token.comment}`)
         }
-      } else if (!foundBinary) {
+      } else if (foundBinary) {
+        const paramKeyValue = token.split('=')
+        const paramKey = paramKeyValue[0]
+
+        if (regexParam.test(paramKey)) {
+          if (paramKeyValue.length === 1) {
+            expressionTokens[index + 1] = REDACTED
+            result.push(token)
+          } else {
+            result.push(`${paramKey}=${REDACTED}`)
+          }
+        } else {
+          result.push(token)
+        }
+      } else {
         if (envVarRegex.test(token)) {
           const envSplit = token.split('=')
 
-          if (!ALLOWED_ENV_VARIABLES.has(envSplit[0])) {
+          if (ALLOWED_ENV_VARIABLES.has(envSplit[0])) {
+            result.push(token)
+          } else {
             envSplit[1] = REDACTED
 
             const newToken = envSplit.join('=')
             expressionTokens[index] = newToken
 
             result.push(newToken)
-          } else {
-            result.push(token)
           }
         } else {
           foundBinary = true
@@ -102,20 +116,6 @@ function scrubChildProcessCmd (expression) {
             }
             break
           }
-        }
-      } else {
-        const paramKeyValue = token.split('=')
-        const paramKey = paramKeyValue[0]
-
-        if (regexParam.test(paramKey)) {
-          if (paramKeyValue.length === 1) {
-            expressionTokens[index + 1] = REDACTED
-            result.push(token)
-          } else {
-            result.push(`${paramKey}=${REDACTED}`)
-          }
-        } else {
-          result.push(token)
         }
       }
     }

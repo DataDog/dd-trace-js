@@ -18,7 +18,7 @@ function isInfoAllowed (value) {
 function getVerbosity (verbosity) {
   if (verbosity) {
     verbosity = verbosity.toUpperCase()
-    return Verbosity[verbosity] !== undefined ? Verbosity[verbosity] : Verbosity.INFORMATION
+    return Verbosity[verbosity] === undefined ? Verbosity.INFORMATION : Verbosity[verbosity]
   } else {
     return Verbosity.INFORMATION
   }

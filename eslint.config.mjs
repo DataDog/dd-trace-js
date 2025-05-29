@@ -118,14 +118,9 @@ export default [
       'unicorn/no-anonymous-default-export': 'off', // only makes a difference for ESM
       'unicorn/no-array-for-each': 'off', // 122 errors
       'unicorn/no-for-loop': 'off', // 15 errors
-      'unicorn/no-negated-condition': 'off', // too strict
-      'unicorn/no-nested-ternary': 'off', // too strict
       'unicorn/no-null': 'off', // too strict
-      'unicorn/no-this-assignment': 'off', // too strict
       'unicorn/prefer-array-flat': 'off', // 9 errors
       'unicorn/prefer-at': 'off', // 17 errors | Difficult to fix
-      'unicorn/prefer-code-point': 'off', // 3 errors
-      'unicorn/prefer-math-trunc': 'off', // 8 errors
       'unicorn/prefer-spread': 'off', // 36 errors
       'unicorn/prefer-string-replace-all': 'off', // 33 errors
       'unicorn/prefer-switch': 'off', // 8 errors
@@ -136,8 +131,12 @@ export default [
 
       // These rules could potentially evaluated again at a much later point
       'unicorn/no-array-callback-reference': 'off',
+      'unicorn/no-nested-ternary': 'off', // Not really an issue in the code and the benefit is small
+      'unicorn/no-this-assignment': 'off', // This would need some further refactoring and the benefit is small
+      'unicorn/prefer-code-point': 'off', // Should be activated, but needs a refactor of some code
 
       // The following rules should not be activated!
+      'unicorn/prefer-math-trunc': 'off', // Math.trunc is not a 1-to-1 replacement for most of our usage
       'unicorn/import-style': 'off', // Questionable benefit
       'unicorn/no-array-reduce': 'off', // Questionable benefit
       'unicorn/no-hex-escape': 'off', // Questionable benefit

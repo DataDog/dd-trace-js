@@ -239,8 +239,8 @@ class Config {
 
     options = {
       ...options,
-      appsec: options.appsec != null ? options.appsec : options.experimental?.appsec,
-      iast: options.iast != null ? options.iast : options.experimental?.iast
+      appsec: options.appsec == null ? options.experimental?.appsec : options.appsec,
+      iast: options.iast == null ? options.experimental?.iast : options.iast
     }
 
     // Configure the logger first so it can be used to warn about other configs
@@ -1387,7 +1387,7 @@ class Config {
       value = value.split(',').map(item => {
         // Trim each item and remove whitespace around the colon
         const [key, val] = item.split(':').map(part => part.trim())
-        return val !== undefined ? `${key}:${val}` : key
+        return val === undefined ? key : `${key}:${val}`
       })
     }
 

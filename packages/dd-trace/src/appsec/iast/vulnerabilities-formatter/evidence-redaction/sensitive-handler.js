@@ -195,10 +195,10 @@ class SensitiveHandler {
 
   writeValuePart (valueParts, value, source) {
     if (value.length > 0) {
-      if (source != null) {
-        valueParts.push({ value, source })
-      } else {
+      if (source == null) {
         valueParts.push({ value })
+      } else {
+        valueParts.push({ value, source })
       }
     }
   }
@@ -212,7 +212,9 @@ class SensitiveHandler {
     sourceRedactionContext,
     isSensibleSource
   ) {
-    if (sourceIndex != null) {
+    if (sourceIndex == null) {
+      valueParts.push({ redacted: true })
+    } else {
       const placeholder = source.value.includes(partValue)
         ? source.pattern
         : '*'.repeat(length)
@@ -250,9 +252,9 @@ class SensitiveHandler {
             _value.slice(_sourceRedactionContext.start - offset, _sourceRedactionContext.end - offset)
           const indexOfPartValueInPattern = source.value.indexOf(sensitive)
 
-          const pattern = indexOfPartValueInPattern !== -1
-            ? placeholder.slice(indexOfPartValueInPattern, indexOfPartValueInPattern + sensitive.length)
-            : placeholder.slice(_sourceRedactionContext.start, _sourceRedactionContext.end)
+          const pattern = indexOfPartValueInPattern === -1
+            ? placeholder.slice(_sourceRedactionContext.start, _sourceRedactionContext.end)
+            : placeholder.slice(indexOfPartValueInPattern, indexOfPartValueInPattern + sensitive.length)
 
           valueParts.push({
             redacted: true,
@@ -271,8 +273,6 @@ class SensitiveHandler {
           })
         }
       }
-    } else {
-      valueParts.push({ redacted: true })
     }
   }
 

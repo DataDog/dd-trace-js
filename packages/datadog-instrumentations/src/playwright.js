@@ -530,11 +530,11 @@ function runnerHook (runnerExport, playwrightVersion) {
     if (isKnownTestsEnabled && satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)) {
       try {
         const { err, knownTests: receivedKnownTests } = await getChannelPromise(knownTestsCh)
-        if (!err) {
-          knownTests = receivedKnownTests
-        } else {
+        if (err) {
           isEarlyFlakeDetectionEnabled = false
           isKnownTestsEnabled = false
+        } else {
+          knownTests = receivedKnownTests
         }
       } catch (err) {
         isEarlyFlakeDetectionEnabled = false
@@ -546,10 +546,10 @@ function runnerHook (runnerExport, playwrightVersion) {
     if (isTestManagementTestsEnabled && satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)) {
       try {
         const { err, testManagementTests: receivedTestManagementTests } = await getChannelPromise(testManagementTestsCh)
-        if (!err) {
-          testManagementTests = receivedTestManagementTests
-        } else {
+        if (err) {
           isTestManagementTestsEnabled = false
+        } else {
+          testManagementTests = receivedTestManagementTests
         }
       } catch (err) {
         isTestManagementTestsEnabled = false
