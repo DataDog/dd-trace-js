@@ -1,11 +1,8 @@
 /* eslint-disable unicorn/no-abusive-eslint-disable */
-const path = require('path')
-
 /* eslint-disable */
 let isEarlyFlakeDetectionEnabled = false
 let isKnownTestsEnabled = false
 let knownTestsForSuite = []
-let suiteTests = []
 let earlyFlakeDetectionNumRetries = 0
 let isTestManagementEnabled = false
 let testManagementAttemptToFixRetries = 0
@@ -13,7 +10,6 @@ let testManagementTests = {}
 let isImpactedTestsEnabled = false
 let isModifiedTest = false
 
-let repositoryRoot = ''
 // We need to grab the original window as soon as possible,
 // in case the test changes the origin. If the test does change the origin,
 // any call to `cy.window()` will result in a cross origin error.
@@ -53,17 +49,6 @@ function retryTest (test, suiteTests, numRetries, tags) {
       clonedTest[tag] = true
     })
   }
-}
-
-function getTestSuitePath (testSuiteAbsolutePath, sourceRoot) {
-  if (!testSuiteAbsolutePath) {
-    return sourceRoot
-  }
-  const testSuitePath = testSuiteAbsolutePath === sourceRoot
-    ? testSuiteAbsolutePath
-    : path.relative(sourceRoot, testSuiteAbsolutePath)
-
-  return testSuitePath.replace(path.sep, '/')
 }
 
 const oldRunTests = Cypress.mocha.getRunner().runTests

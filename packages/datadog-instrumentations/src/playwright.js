@@ -565,7 +565,7 @@ function runnerHook (runnerExport, playwrightVersion) {
       }
     }
 
-    if (isImpactedTestsEnabled) {
+    if (isImpactedTestsEnabled && satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)) {
       try {
         const { err, modifiedTests: receivedModifiedTests } = await getChannelPromise(impactedTestsCh)
         if (!err) {

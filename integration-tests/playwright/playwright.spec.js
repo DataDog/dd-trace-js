@@ -1526,7 +1526,7 @@ versions.forEach((version) => {
       })
     })
 
-    context('impacted tests', () => {
+    contextNewVersions('impacted tests', () => {
       beforeEach(() => {
         receiver.setKnownTests({
           playwright: {
