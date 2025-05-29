@@ -105,7 +105,7 @@ function validateEnvVarType (envVar) {
     case 'OTEL_TRACES_SAMPLER':
       return getFromOtelSamplerMap(value, process.env.OTEL_TRACES_SAMPLER_ARG) !== undefined
     case 'OTEL_TRACES_SAMPLER_ARG':
-      return !isNaN(Number.parseFloat(value))
+      return !Number.isNaN(Number.parseFloat(value))
     case 'OTEL_SDK_DISABLED':
       return value.toLowerCase() === 'true' || value.toLowerCase() === 'false'
     case 'OTEL_TRACES_EXPORTER':
@@ -1375,7 +1375,7 @@ class Config {
 
     value = Number.parseFloat(value)
 
-    if (!isNaN(value)) {
+    if (!Number.isNaN(value)) {
       // TODO: Ignore out of range values instead of normalizing them.
       this._setValue(obj, name, Math.min(Math.max(value, 0), 1))
     }
@@ -1548,12 +1548,12 @@ function parseSpaceSeparatedTags (tagString) {
 
 function maybeInt (number) {
   const parsed = Number.parseInt(number)
-  return isNaN(parsed) ? undefined : parsed
+  return Number.isNaN(parsed) ? undefined : parsed
 }
 
 function maybeFloat (number) {
   const parsed = Number.parseFloat(number)
-  return isNaN(parsed) ? undefined : parsed
+  return Number.isNaN(parsed) ? undefined : parsed
 }
 
 function getAgentUrl (url, options) {

@@ -121,10 +121,8 @@ export default [
       'unicorn/no-array-for-each': 'off', // 122 errors
       'unicorn/no-array-reduce': 'off', // too strict
       'unicorn/no-for-loop': 'off', // 15 errors
-      'unicorn/no-hex-escape': 'off', // too strict
       'unicorn/no-negated-condition': 'off', // too strict
       'unicorn/no-nested-ternary': 'off', // too strict
-      'unicorn/no-new-array': 'off', // 6 errors
       'unicorn/no-null': 'off', // too strict
       'unicorn/no-object-as-default-parameter': 'off', // too strict
       'unicorn/no-this-assignment': 'off', // too strict
@@ -135,9 +133,6 @@ export default [
       'unicorn/prefer-event-target': 'off', // TODO: undecided (2 errors)
       'unicorn/prefer-global-this': 'off', // 23 errors
       'unicorn/prefer-math-trunc': 'off', // 8 errors
-      'unicorn/prefer-module': 'off', // too strict
-      'unicorn/prefer-node-protocol': 'off', // 148 errors
-      'unicorn/prefer-number-properties': 'off', // 56 errors
       'unicorn/prefer-object-from-entries': 'off', // 3 errors
       'unicorn/prefer-reflect-apply': 'off', // too strict
       'unicorn/prefer-spread': 'off', // 36 errors
@@ -146,7 +141,13 @@ export default [
       'unicorn/prefer-ternary': 'off', // 48 errors
       'unicorn/prefer-top-level-await': 'off', // too strict
       'unicorn/prevent-abbreviations': 'off', // too strict
-      'unicorn/switch-case-braces': 'off' // too strict
+      'unicorn/switch-case-braces': 'off', // too strict
+
+      // The following rules should not be activated!
+      'unicorn/no-hex-escape': 'off', // Questionable benefit
+      'unicorn/no-new-array': 'off', // new Array is often used for performance reasons
+      'unicorn/prefer-module': 'off', // We use CJS
+      'unicorn/prefer-node-protocol': 'off' // May not be used due to guardrails
     }
   },
   {
