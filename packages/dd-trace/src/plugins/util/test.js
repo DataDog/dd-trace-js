@@ -324,14 +324,14 @@ function checkShaDiscrepancies (ciMetadata, userProvidedGitMetadata) {
       v1: userProvidedRepositoryUrl,
       v2: gitRepositoryUrl,
       type: 'repository_discrepancy',
-      expected: 'user_provided',
+      expected: 'user_supplied',
       discrepant: 'git_client'
     },
     {
       v1: userProvidedCommitSHA,
       v2: gitCommitSHA,
       type: 'commit_discrepancy',
-      expected: 'user_provided',
+      expected: 'user_supplied',
       discrepant: 'git_client'
     },
     // User provided vs CI metadata
@@ -339,14 +339,14 @@ function checkShaDiscrepancies (ciMetadata, userProvidedGitMetadata) {
       v1: userProvidedRepositoryUrl,
       v2: ciRepositoryUrl,
       type: 'repository_discrepancy',
-      expected: 'user_provided',
+      expected: 'user_supplied',
       discrepant: 'ci_provider'
     },
     {
       v1: userProvidedCommitSHA,
       v2: ciCommitSHA,
       type: 'commit_discrepancy',
-      expected: 'user_provided',
+      expected: 'user_supplied',
       discrepant: 'ci_provider'
     },
     // CI metadata vs Git metadata
