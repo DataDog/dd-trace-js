@@ -82,7 +82,7 @@ class SensitiveHandler {
 
     for (let i = 0; i < value.length; i++) {
       if (nextTainted != null && nextTainted.start === i) {
-        this.writeValuePart(valueParts, value.substring(start, i), sourceIndex)
+        this.writeValuePart(valueParts, value.slice(start, i), sourceIndex)
 
         sourceIndex = sourcesIndexes[nextTaintedIndex]
 
@@ -120,7 +120,7 @@ class SensitiveHandler {
         }
 
         if (redactedSources.includes(sourceIndex)) {
-          const partValue = value.substring(i, i + (nextTainted.end - nextTainted.start))
+          const partValue = value.slice(i, i + (nextTainted.end - nextTainted.start))
           this.writeRedactedValuePart(
             valueParts,
             partValue.length,
@@ -133,7 +133,7 @@ class SensitiveHandler {
           redactedSourcesContext[sourceIndex] = []
         } else {
           const substringEnd = Math.min(nextTainted.end, value.length)
-          this.writeValuePart(valueParts, value.substring(nextTainted.start, substringEnd), sourceIndex)
+          this.writeValuePart(valueParts, value.slice(nextTainted.start, substringEnd), sourceIndex)
         }
 
         start = i + (nextTainted.end - nextTainted.start)
@@ -142,7 +142,7 @@ class SensitiveHandler {
         nextTaintedIndex++
         sourceIndex = null
       } else if (nextSensitive != null && nextSensitive.start === i) {
-        this.writeValuePart(valueParts, value.substring(start, i), sourceIndex)
+        this.writeValuePart(valueParts, value.slice(start, i), sourceIndex)
         if (nextTainted != null && intersects(nextSensitive, nextTainted)) {
           sourceIndex = sourcesIndexes[nextTaintedIndex]
 
@@ -247,12 +247,12 @@ class SensitiveHandler {
           }
 
           const sensitive =
-            _value.substring(_sourceRedactionContext.start - offset, _sourceRedactionContext.end - offset)
+            _value.slice(_sourceRedactionContext.start - offset, _sourceRedactionContext.end - offset)
           const indexOfPartValueInPattern = source.value.indexOf(sensitive)
 
           const pattern = indexOfPartValueInPattern !== -1
-            ? placeholder.substring(indexOfPartValueInPattern, indexOfPartValueInPattern + sensitive.length)
-            : placeholder.substring(_sourceRedactionContext.start, _sourceRedactionContext.end)
+            ? placeholder.slice(indexOfPartValueInPattern, indexOfPartValueInPattern + sensitive.length)
+            : placeholder.slice(_sourceRedactionContext.start, _sourceRedactionContext.end)
 
           valueParts.push({
             redacted: true,

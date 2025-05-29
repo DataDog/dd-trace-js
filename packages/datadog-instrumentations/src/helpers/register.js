@@ -215,7 +215,7 @@ function parseHookInstrumentationFileName (packageName) {
     let moduleName = match[1]
     // Remove leading '../' if present
     if (moduleName.startsWith('../')) {
-      moduleName = moduleName.substring(3)
+      moduleName = moduleName.slice(3)
     }
     return moduleName
   }

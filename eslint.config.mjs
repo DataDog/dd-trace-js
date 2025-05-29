@@ -142,7 +142,6 @@ export default [
       'unicorn/prefer-reflect-apply': 'off', // too strict
       'unicorn/prefer-spread': 'off', // 36 errors
       'unicorn/prefer-string-replace-all': 'off', // 33 errors
-      'unicorn/prefer-string-slice': 'off', // 53 errors
       'unicorn/prefer-switch': 'off', // 8 errors
       'unicorn/prefer-ternary': 'off', // 48 errors
       'unicorn/prefer-top-level-await': 'off', // too strict
