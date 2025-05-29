@@ -18,7 +18,7 @@ function getIntegrationsAndAnalytics () {
   for (const pluginName in pluginManager._pluginsByName) {
     integrations.add(pluginName)
   }
-  extras.integrations_loaded = Array.from(integrations)
+  extras.integrations_loaded = [...integrations]
   return extras
 }
 

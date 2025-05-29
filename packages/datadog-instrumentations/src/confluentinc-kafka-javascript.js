@@ -402,5 +402,5 @@ function updateLatestOffset (topic, partition, offset, groupId) {
 }
 
 function getLatestOffsets () {
-  return Array.from(latestConsumerOffsets.values())
+  return [...latestConsumerOffsets.values()]
 }

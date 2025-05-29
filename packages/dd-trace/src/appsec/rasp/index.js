@@ -41,19 +41,7 @@ function findDatadogRaspAbortError (err, deep = 10) {
 function handleUncaughtExceptionMonitor (error) {
   if (!blockOnDatadogRaspAbortError({ error })) return
 
-  if (!process.hasUncaughtExceptionCaptureCallback()) {
-    const cleanUp = removeAllListeners(process, 'uncaughtException')
-    const handler = () => {
-      process.removeListener('uncaughtException', handler)
-    }
-
-    setTimeout(() => {
-      process.removeListener('uncaughtException', handler)
-      cleanUp()
-    })
-
-    process.on('uncaughtException', handler)
-  } else {
+  if (process.hasUncaughtExceptionCaptureCallback()) {
     // uncaughtException event is not executed when hasUncaughtExceptionCaptureCallback is true
     let previousCb
     const cb = ({ currentCallback, abortController }) => {
@@ -78,6 +66,18 @@ function handleUncaughtExceptionMonitor (error) {
         process.setUncaughtExceptionCaptureCallback(previousCb)
       })
     }
+  } else {
+    const cleanUp = removeAllListeners(process, 'uncaughtException')
+    const handler = () => {
+      process.removeListener('uncaughtException', handler)
+    }
+
+    setTimeout(() => {
+      process.removeListener('uncaughtException', handler)
+      cleanUp()
+    })
+
+    process.on('uncaughtException', handler)
   }
 }
 

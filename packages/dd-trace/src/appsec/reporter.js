@@ -321,7 +321,7 @@ function truncateRequestBody (target, depth = 0) {
       if (typeof target.toJSON === 'function') {
         try {
           return truncateRequestBody(target.toJSON(), depth + 1)
-        } catch (e) {
+        } catch {
           return { truncated: false }
         }
       }
