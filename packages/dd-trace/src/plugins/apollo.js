@@ -1,13 +1,12 @@
 const TracingPlugin = require('./tracing')
-const { storage } = require('../../../datadog-core')
 
 class ApolloBasePlugin extends TracingPlugin {
   static get id () { return 'apollo.gateway' }
   static get type () { return 'web' }
   static get kind () { return 'server' }
 
-  bindStart (ctx) {
-    const store = storage('legacy').getStore()
+  start (ctx) {
+    const store = ctx.parentStore
     const childOf = store ? store.span : null
 
     const span = this.startSpan(this.getOperationName(), {
@@ -16,7 +15,7 @@ class ApolloBasePlugin extends TracingPlugin {
       type: this.constructor.type,
       kind: this.constructor.kind,
       meta: {}
-    }, false)
+    }, ctx)
 
     ctx.parentStore = store
     ctx.currentStore = { ...store, span }

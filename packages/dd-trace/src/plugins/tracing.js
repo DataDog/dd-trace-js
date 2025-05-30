@@ -51,6 +51,17 @@ class TracingPlugin extends Plugin {
     })
   }
 
+  bindStart (ctx) {
+    const store = ctx.hasOwnProperty('parentStore')
+      ? ctx.parentStore
+      : storage('legacy').getStore()
+
+    ctx.parentStore = store
+    ctx.currentStore = { ...store }
+
+    return ctx.currentStore
+  }
+
   start () {} // implemented by individual plugins
 
   finish (ctx) {
@@ -103,7 +114,7 @@ class TracingPlugin extends Plugin {
   }
 
   startSpan (name, { childOf, kind, meta, metrics, service, resource, type } = {}, enterOrCtx = true) {
-    const store = storage('legacy').getStore()
+    const store = typeof enterOrCtx === 'object' ? enterOrCtx.parentStore : storage('legacy').getStore()
     if (store && childOf === undefined) {
       childOf = store.span
     }
@@ -129,8 +140,12 @@ class TracingPlugin extends Plugin {
     if (enterOrCtx === true) {
       storage('legacy').enterWith({ ...store, span })
     } else if (enterOrCtx) {
-      enterOrCtx.parentStore = store
-      enterOrCtx.currentStore = { ...store, span }
+      if (enterOrCtx.currentStore) {
+        enterOrCtx.currentStore.span = span
+      } else {
+        enterOrCtx.parentStore = store
+        enterOrCtx.currentStore = { ...store, span }
+      }
     }
 
     return span

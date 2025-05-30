@@ -1,6 +1,5 @@
 'use strict'
 
-const { storage } = require('../../datadog-core')
 const ServerPlugin = require('../../dd-trace/src/plugins/server')
 const { TEXT_MAP } = require('../../../ext/formats')
 const { addMetadataTags, getFilter, getMethodMetadata } = require('./util')
@@ -26,8 +25,7 @@ class GrpcServerPlugin extends ServerPlugin {
     })
   }
 
-  bindStart (message) {
-    const store = storage('legacy').getStore()
+  start (message) {
     const { name, metadata, type } = message
     const metadataFilter = this.config.metadataFilter
     const childOf = extract(this.tracer, metadata)
@@ -54,10 +52,6 @@ class GrpcServerPlugin extends ServerPlugin {
     addMetadataTags(span, metadata, metadataFilter, 'request')
 
     message.span = span
-    message.parentStore = store
-    message.currentStore = { ...store, span }
-
-    return message.currentStore
   }
 
   bindAsyncStart ({ parentStore }) {

@@ -1,6 +1,5 @@
 'use strict'
 
-const { storage } = require('../../datadog-core')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 
 const AEROSPIKE_PEER_SERVICE = 'aerospike.namespace'
@@ -17,35 +16,29 @@ class AerospikePlugin extends DatabasePlugin {
     return [AEROSPIKE_PEER_SERVICE]
   }
 
-  bindStart (ctx) {
+  start (ctx) {
     const { commandName, commandArgs } = ctx
     const resourceName = commandName.slice(0, commandName.indexOf('Command'))
-    const store = storage('legacy').getStore()
+    const store = ctx.parentStore
     const childOf = store ? store.span : null
     const meta = getMeta(resourceName, commandArgs)
 
-    const span = this.startSpan(this.operationName(), {
+    this.startSpan(this.operationName(), {
       childOf,
       service: this.serviceName({ pluginConfig: this.config }),
       type: 'aerospike',
       kind: 'client',
       resource: resourceName,
       meta
-    }, false)
-
-    ctx.parentStore = store
-    ctx.currentStore = { ...store, span }
-
-    return ctx.currentStore
+    }, ctx)
   }
 
-  bindAsyncStart (ctx) {
-    if (ctx.currentStore) {
-      // have to manually trigger peer service calculation when using tracing channel
-      this.tagPeerService(ctx.currentStore.span)
-      ctx.currentStore.span.finish()
-    }
-    return ctx.parentStore
+  asyncStart (ctx) {
+    if (!ctx.currentStore) return
+
+    // have to manually trigger peer service calculation when using tracing channel
+    this.tagPeerService(ctx.currentStore.span)
+    ctx.currentStore.span.finish()
   }
 
   end (ctx) {

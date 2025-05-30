@@ -1,6 +1,5 @@
 'use strict'
 
-const { storage } = require('../../../datadog-core')
 const ApolloBasePlugin = require('../../../dd-trace/src/plugins/apollo')
 
 class ApolloGatewayFetchPlugin extends ApolloBasePlugin {
@@ -9,8 +8,8 @@ class ApolloGatewayFetchPlugin extends ApolloBasePlugin {
     return 'tracing:apm:apollo:gateway:fetch'
   }
 
-  bindStart (ctx) {
-    const store = storage('legacy').getStore()
+  start (ctx) {
+    const store = ctx.parentStore
     const childOf = store ? store.span : null
 
     const spanData = {
@@ -24,12 +23,7 @@ class ApolloGatewayFetchPlugin extends ApolloBasePlugin {
 
     if (serviceName) { spanData.meta.serviceName = serviceName }
 
-    const span = this.startSpan(this.getOperationName(), spanData, false)
-
-    ctx.parentStore = store
-    ctx.currentStore = { ...store, span }
-
-    return ctx.currentStore
+    this.startSpan(this.getOperationName(), spanData, ctx)
   }
 }
 

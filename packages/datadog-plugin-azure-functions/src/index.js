@@ -1,7 +1,6 @@
 'use strict'
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
-const { storage } = require('../../datadog-core')
 const serverless = require('../../dd-trace/src/plugins/util/serverless')
 const web = require('../../dd-trace/src/plugins/util/web')
 
@@ -22,9 +21,8 @@ class AzureFunctionsPlugin extends TracingPlugin {
 
   static get prefix () { return 'tracing:datadog:azure:functions:invoke' }
 
-  bindStart (ctx) {
+  start (ctx) {
     const { functionName, methodName } = ctx
-    const store = storage('legacy').getStore()
 
     const span = this.startSpan(this.operationName(), {
       service: this.serviceName(),
@@ -33,13 +31,9 @@ class AzureFunctionsPlugin extends TracingPlugin {
         'aas.function.name': functionName,
         'aas.function.trigger': mapTriggerTag(methodName)
       }
-    }, false)
+    }, ctx)
 
     ctx.span = span
-    ctx.parentStore = store
-    ctx.currentStore = { ...store, span }
-
-    return ctx.currentStore
   }
 
   error (ctx) {

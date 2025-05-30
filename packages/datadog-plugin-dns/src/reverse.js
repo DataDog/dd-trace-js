@@ -6,7 +6,7 @@ class DNSReversePlugin extends ClientPlugin {
   static get id () { return 'dns' }
   static get operation () { return 'reverse' }
 
-  bindStart (ctx) {
+  start (ctx) {
     const [ip] = ctx.args
 
     this.startSpan('dns.reverse', {
@@ -17,8 +17,6 @@ class DNSReversePlugin extends ClientPlugin {
         'dns.ip': ip
       }
     }, ctx)
-
-    return ctx.currentStore
   }
 }
 

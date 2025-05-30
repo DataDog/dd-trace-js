@@ -6,7 +6,7 @@ class DNSLookupServicePlugin extends ClientPlugin {
   static get id () { return 'dns' }
   static get operation () { return 'lookup_service' }
 
-  bindStart (ctx) {
+  start (ctx) {
     const [address, port] = ctx.args
 
     this.startSpan('dns.lookup_service', {
@@ -20,8 +20,6 @@ class DNSLookupServicePlugin extends ClientPlugin {
         'dns.port': port
       }
     }, ctx)
-
-    return ctx.currentStore
   }
 }
 

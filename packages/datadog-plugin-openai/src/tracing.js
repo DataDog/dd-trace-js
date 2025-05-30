@@ -3,7 +3,6 @@
 const path = require('path')
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
-const { storage } = require('../../datadog-core')
 const services = require('./services')
 const Sampler = require('../../dd-trace/src/sampler')
 const { MEASURED } = require('../../../ext/tags')
@@ -58,12 +57,12 @@ class OpenAiTracingPlugin extends TracingPlugin {
     super.configure(config)
   }
 
-  bindStart (ctx) {
+  start (ctx) {
     const { methodName, args, basePath, apiKey } = ctx
     const payload = normalizeRequestPayload(methodName, args)
     const normalizedMethodName = normalizeMethodName(methodName)
 
-    const store = storage('legacy').getStore() || {}
+    const store = ctx.parentStore || {}
 
     // hold onto these to make response extraction matching efficient
     // the original method name corresponds to the SDK method name (e.g. createChatCompletion, chat.completions.create)
@@ -100,7 +99,7 @@ class OpenAiTracingPlugin extends TracingPlugin {
         'openai.request.user': payload.user,
         'openai.request.file_id': payload.file_id // deleteFile, retrieveFile, downloadFile
       }
-    }, false)
+    }, ctx)
 
     const openaiStore = Object.create(null)
 
@@ -182,9 +181,7 @@ class OpenAiTracingPlugin extends TracingPlugin {
 
     span.addTags(tags)
 
-    ctx.currentStore = { ...store, span, openai: openaiStore }
-
-    return ctx.currentStore
+    ctx.currentStore.openai = openaiStore
   }
 
   asyncEnd (ctx) {

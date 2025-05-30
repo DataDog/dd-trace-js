@@ -6,7 +6,7 @@ class DNSLookupPlugin extends ClientPlugin {
   static get id () { return 'dns' }
   static get operation () { return 'lookup' }
 
-  bindStart (ctx) {
+  start (ctx) {
     const [hostname] = ctx.args
 
     this.startSpan('dns.lookup', {
@@ -19,11 +19,9 @@ class DNSLookupPlugin extends ClientPlugin {
         'dns.addresses': ''
       }
     }, ctx)
-
-    return ctx.currentStore
   }
 
-  bindFinish (ctx) {
+  finish (ctx) {
     const span = ctx.currentStore.span
     const result = ctx.result
 
@@ -38,7 +36,7 @@ class DNSLookupPlugin extends ClientPlugin {
       span.setTag('dns.address', result)
     }
 
-    return ctx.parentStore
+    super.finish(ctx)
   }
 }
 
