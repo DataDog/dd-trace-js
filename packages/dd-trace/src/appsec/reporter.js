@@ -116,7 +116,7 @@ function filterHeaders (headers, map) {
   for (const [headerName, tagName] of map) {
     const headerValue = headers[headerName]
     if (headerValue) {
-      result[tagName] = '' + headerValue
+      result[tagName] = String(headerValue)
     }
   }
 
@@ -132,7 +132,7 @@ function filterExtendedHeaders (headers, excludedHeaderNames, tagPrefix, limit =
   for (const [headerName, headerValue] of Object.entries(headers)) {
     if (counter >= limit) break
     if (!excludedHeaderNames.has(headerName)) {
-      result[getHeaderTag(tagPrefix, headerName)] = '' + headerValue
+      result[getHeaderTag(tagPrefix, headerName)] = String(headerValue)
       counter++
     }
   }

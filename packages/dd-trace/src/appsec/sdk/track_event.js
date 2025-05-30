@@ -196,7 +196,7 @@ function trackEvent (eventName, fields, sdkMethodName, rootSpan) {
     }
 
     for (const metadataKey of Object.keys(flatFields)) {
-      tags[`appsec.events.${eventName}.${metadataKey}`] = '' + flatFields[metadataKey]
+      tags[`appsec.events.${eventName}.${metadataKey}`] = String(flatFields[metadataKey])
     }
   }
 
@@ -211,11 +211,11 @@ function runWaf (eventName, user) {
   }
 
   if (user?.id) {
-    persistent[addresses.USER_ID] = '' + user.id
+    persistent[addresses.USER_ID] = String(user.id)
   }
 
   if (user?.login) {
-    persistent[addresses.USER_LOGIN] = '' + user.login
+    persistent[addresses.USER_LOGIN] = String(user.login)
   }
 
   waf.run({ persistent })
