@@ -111,31 +111,28 @@ export default [
 
       // Overriding recommended unicorn rules
       'unicorn/catch-error-name': ['off', { name: 'err' }], // 166 errors
-      'unicorn/consistent-function-scoping': 'off', // 21 errors
       'unicorn/expiring-todo-comments': 'off',
       'unicorn/explicit-length-check': 'off', // 68 errors
       'unicorn/filename-case': ['off', { case: 'kebabCase' }], // 59 errors
-      'unicorn/no-anonymous-default-export': 'off', // only makes a difference for ESM
       'unicorn/no-array-for-each': 'off', // 122 errors
-      'unicorn/no-for-loop': 'off', // 15 errors
       'unicorn/no-null': 'off', // too strict
-      'unicorn/prefer-array-flat': 'off', // 9 errors
+      'unicorn/prefer-array-flat': 'off', // 7 errors | Difficult to fix
       'unicorn/prefer-at': 'off', // 17 errors | Difficult to fix
-      'unicorn/prefer-spread': 'off', // 36 errors
+      'unicorn/prefer-spread': 'off', // 13 errors | Difficult to fix
       'unicorn/prefer-string-replace-all': 'off', // 33 errors
       'unicorn/prefer-switch': 'off', // 8 errors
-      'unicorn/prefer-ternary': 'off', // 48 errors
-      'unicorn/prefer-top-level-await': 'off', // too strict
       'unicorn/prevent-abbreviations': 'off', // too strict
       'unicorn/switch-case-braces': 'off', // too strict
 
       // These rules could potentially evaluated again at a much later point
       'unicorn/no-array-callback-reference': 'off',
+      'unicorn/no-for-loop': 'off', // Activate if this is resolved https://github.com/sindresorhus/eslint-plugin-unicorn/issues/2664
       'unicorn/no-nested-ternary': 'off', // Not really an issue in the code and the benefit is small
       'unicorn/no-this-assignment': 'off', // This would need some further refactoring and the benefit is small
       'unicorn/prefer-code-point': 'off', // Should be activated, but needs a refactor of some code
 
       // The following rules should not be activated!
+      'unicorn/prefer-top-level-await': 'off', // Only useful when using ESM
       'unicorn/prefer-math-trunc': 'off', // Math.trunc is not a 1-to-1 replacement for most of our usage
       'unicorn/import-style': 'off', // Questionable benefit
       'unicorn/no-array-reduce': 'off', // Questionable benefit

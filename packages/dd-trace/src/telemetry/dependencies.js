@@ -35,8 +35,8 @@ function waitAndSend (config, application, host) {
     immediate = setImmediate(() => {
       immediate = null
       if (savedDependenciesToSend.size > 0) {
-        const dependencies = Array.from(savedDependenciesToSend.values())
-          // if a depencdency is from the initial load, *always* send the event
+        const dependencies = [...savedDependenciesToSend.values()]
+          // if a dependency is from the initial load, *always* send the event
           // Otherwise, only send if dependencyCollection is enabled
           .filter(dep => {
             const initialLoadModule = isTrue(dep.split(' ')[2])

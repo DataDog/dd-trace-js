@@ -89,7 +89,7 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
                 if (err) {
                   // Fixes bug where we would inject message headers for kafka brokers that don't support headers
                   // (version <0.11). On the error, we disable header injection.
-                  // Tnfortunately the error name / type is not more specific.
+                  // Unfortunately the error name / type is not more specific.
                   // This approach is implemented by other tracers as well.
                   if (err.name === 'KafkaJSProtocolError' && err.type === 'UNKNOWN') {
                     disabledHeaderWeakSet.add(producer)
@@ -117,10 +117,10 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
         return kafkaClusterIdPromise.then((clusterId) => {
           return wrappedSend(clusterId)
         })
-      } else {
-        // promise is already resolved
-        return wrappedSend(kafkaClusterIdPromise)
       }
+
+      // promise is already resolved
+      return wrappedSend(kafkaClusterIdPromise)
     }
     return producer
   })
@@ -178,10 +178,10 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
         return kafkaClusterIdPromise.then((clusterId) => {
           return wrapConsume(clusterId)
         })
-      } else {
-        // promise is already resolved
-        return wrapConsume(kafkaClusterIdPromise)
       }
+
+      // promise is already resolved
+      return wrapConsume(kafkaClusterIdPromise)
     }
     return consumer
   })
