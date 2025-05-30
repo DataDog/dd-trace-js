@@ -211,14 +211,13 @@ class PrioritySampler {
       return USER_KEEP
     } else if (Object.hasOwn(tags, MANUAL_DROP) && tags[MANUAL_DROP] !== false) {
       return USER_REJECT
-    } else {
-      const priority = Number.parseInt(tags[SAMPLING_PRIORITY], 10)
+    }
+    const priority = Number.parseInt(tags[SAMPLING_PRIORITY], 10)
 
-      if (priority === 1 || priority === 2) {
-        return USER_KEEP
-      } else if (priority === 0 || priority === -1) {
-        return USER_REJECT
-      }
+    if (priority === 1 || priority === 2) {
+      return USER_KEEP
+    } else if (priority === 0 || priority === -1) {
+      return USER_REJECT
     }
   }
 

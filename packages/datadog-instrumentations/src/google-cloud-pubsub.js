@@ -87,20 +87,19 @@ function wrapMethod (method) {
         }))
 
         return method.apply(this, arguments)
-      } else {
-        return method.apply(this, arguments)
-          .then(
-            response => {
-              requestFinishCh.publish()
-              return response
-            },
-            error => {
-              requestErrorCh.publish(error)
-              requestFinishCh.publish()
-              throw error
-            }
-          )
       }
+      return method.apply(this, arguments)
+        .then(
+          response => {
+            requestFinishCh.publish()
+            return response
+          },
+          error => {
+            requestErrorCh.publish(error)
+            requestFinishCh.publish()
+            throw error
+          }
+        )
     })
   }
 }

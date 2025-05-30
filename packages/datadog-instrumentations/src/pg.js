@@ -178,9 +178,8 @@ function wrapPoolQuery (query) {
           cb(error)
 
           return
-        } else {
-          return Promise.reject(error)
         }
+        return Promise.reject(error)
       }
 
       if (typeof cb === 'function') {

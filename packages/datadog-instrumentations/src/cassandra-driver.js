@@ -34,13 +34,12 @@ addHook({ name: 'cassandra-driver', versions: ['>=3.0.0'] }, cassandra => {
         const res = batch.apply(this, arguments)
         if (typeof res === 'function' || !res) {
           return wrapCallback(finishCh, errorCh, asyncResource, res)
-        } else {
-          const promiseAsyncResource = new AsyncResource('bound-anonymous-fn')
-          return res.then(
-            promiseAsyncResource.bind(() => finish(finishCh, errorCh)),
-            promiseAsyncResource.bind(err => finish(finishCh, errorCh, err))
-          )
         }
+        const promiseAsyncResource = new AsyncResource('bound-anonymous-fn')
+        return res.then(
+          promiseAsyncResource.bind(() => finish(finishCh, errorCh)),
+          promiseAsyncResource.bind(err => finish(finishCh, errorCh, err))
+        )
       } catch (e) {
         finish(finishCh, errorCh, e)
         throw e

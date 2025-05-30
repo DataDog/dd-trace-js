@@ -108,6 +108,7 @@ export default [
       ]],
 
       'no-await-in-loop': 'error',
+      'no-else-return': ['error', { allowElseIf: true }],
       'no-useless-assignment': 'error',
       'operator-assignment': 'error',
       'prefer-exponentiation-operator': 'error',

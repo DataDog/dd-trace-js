@@ -581,22 +581,21 @@ class TextMapPropagator {
       return {
         [b3SampledKey]: parts[0]
       }
-    } else {
-      const b3 = {
-        [b3TraceKey]: parts[0],
-        [b3SpanKey]: parts[1]
-      }
-
-      if (parts[2]) {
-        b3[b3SampledKey] = parts[2] === '0' ? '0' : '1'
-
-        if (parts[2] === 'd') {
-          b3[b3FlagsKey] = '1'
-        }
-      }
-
-      return b3
     }
+    const b3 = {
+      [b3TraceKey]: parts[0],
+      [b3SpanKey]: parts[1]
+    }
+
+    if (parts[2]) {
+      b3[b3SampledKey] = parts[2] === '0' ? '0' : '1'
+
+      if (parts[2] === 'd') {
+        b3[b3FlagsKey] = '1'
+      }
+    }
+
+    return b3
   }
 
   _extractOrigin (carrier, spanContext) {

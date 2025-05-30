@@ -36,10 +36,9 @@ function getPayload (payload) {
   // 'logs' request type payload is meant to send library logs to Datadog’s backend.
   if (Array.isArray(payload)) {
     return payload
-  } else {
-    const { logger, tags, serviceMapping, ...trimmedPayload } = payload
-    return trimmedPayload
   }
+  const { logger, tags, serviceMapping, ...trimmedPayload } = payload
+  return trimmedPayload
 }
 
 function sendData (config, application, host, reqType, payload = {}, cb = () => {}) {

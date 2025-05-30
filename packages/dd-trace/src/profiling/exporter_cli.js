@@ -15,25 +15,24 @@ const timeoutMs = 15 * 1000
 function exporterFromURL (url) {
   if (url.protocol === 'file:') {
     return new FileExporter({ pprofPrefix: fileURLToPath(url) })
-  } else {
-    const injectionEnabled = (process.env.DD_INJECTION_ENABLED || '').split(',')
-    const libraryInjected = injectionEnabled.length > 0
-    const profilingEnabled = (process.env.DD_PROFILING_ENABLED || '').toLowerCase()
-    const activation = ['true', '1'].includes(profilingEnabled)
-      ? 'manual'
-      : profilingEnabled === 'auto'
-        ? 'auto'
-        : injectionEnabled.includes('profiling')
-          ? 'injection'
-          : 'unknown'
-    return new AgentExporter({
-      url,
-      logger,
-      uploadTimeout: timeoutMs,
-      libraryInjected,
-      activation
-    })
   }
+  const injectionEnabled = (process.env.DD_INJECTION_ENABLED || '').split(',')
+  const libraryInjected = injectionEnabled.length > 0
+  const profilingEnabled = (process.env.DD_PROFILING_ENABLED || '').toLowerCase()
+  const activation = ['true', '1'].includes(profilingEnabled)
+    ? 'manual'
+    : profilingEnabled === 'auto'
+      ? 'auto'
+      : injectionEnabled.includes('profiling')
+        ? 'injection'
+        : 'unknown'
+  return new AgentExporter({
+    url,
+    logger,
+    uploadTimeout: timeoutMs,
+    libraryInjected,
+    activation
+  })
 }
 
 async function exportProfile (urls, tags, profileType, profile) {
