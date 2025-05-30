@@ -29,7 +29,7 @@ function checkTimeout (context) {
   apmFlushDeadline = apmFlushDeadline < 0 ? 100 : apmFlushDeadline
 
   __lambdaTimeout = setTimeout(() => {
-    timeoutChannel.publish(undefined)
+    timeoutChannel.publish()
   }, remainingTimeInMillis - apmFlushDeadline)
 }
 
@@ -43,14 +43,14 @@ function checkTimeout (context) {
  */
 function crashFlush () {
   const activeSpan = tracer.scope().active()
-  if (activeSpan !== null) {
+  if (activeSpan === null) {
+    log.debug('An impending timeout was reached, but no root span was found. No error will be tagged.')
+  } else {
     const error = new ImpendingTimeout('Datadog detected an impending timeout')
     activeSpan.addTags({
       [ERROR_MESSAGE]: error.message,
       [ERROR_TYPE]: error.name
     })
-  } else {
-    log.debug('An impending timeout was reached, but no root span was found. No error will be tagged.')
   }
 
   tracer._processor.killAll()

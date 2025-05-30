@@ -110,7 +110,7 @@ const PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE = 90
 
 // Early flake detection util strings
 const EFD_STRING = "Retried by Datadog's Early Flake Detection"
-const EFD_TEST_NAME_REGEX = new RegExp(EFD_STRING + ' \\(#\\d+\\): ', 'g')
+const EFD_TEST_NAME_REGEX = new RegExp(EFD_STRING + String.raw` \(#\d+\): `, 'g')
 
 // Library Capabilities Tagging
 const DD_CAPABILITIES_TEST_IMPACT_ANALYSIS = '_dd.library_capabilities.test_impact_analysis'
@@ -120,9 +120,9 @@ const DD_CAPABILITIES_IMPACTED_TESTS = '_dd.library_capabilities.impacted_tests'
 const DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE = '_dd.library_capabilities.test_management.quarantine'
 const DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE = '_dd.library_capabilities.test_management.disable'
 const DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX = '_dd.library_capabilities.test_management.attempt_to_fix'
-const UNSUPPORTED_TIA_FRAMEWORKS = ['playwright', 'vitest']
-const UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE = ['cucumber', 'mocha']
-const UNSUPPORTED_ATTEMPT_TO_FIX_FRAMEWORKS_PARALLEL_MODE = ['mocha']
+const UNSUPPORTED_TIA_FRAMEWORKS = new Set(['playwright', 'vitest'])
+const UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE = new Set(['cucumber', 'mocha'])
+const UNSUPPORTED_ATTEMPT_TO_FIX_FRAMEWORKS_PARALLEL_MODE = new Set(['mocha'])
 const NOT_SUPPORTED_GRANULARITY_IMPACTED_TESTS_FRAMEWORKS = ['mocha', 'playwright', 'vitest']
 
 const TEST_LEVEL_EVENT_TYPES = [
@@ -156,7 +156,7 @@ const TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED = 'test.test_management.attempt_to_f
 
 // Test Management utils strings
 const ATTEMPT_TO_FIX_STRING = "Retried by Datadog's Test Management"
-const ATTEMPT_TEST_NAME_REGEX = new RegExp(ATTEMPT_TO_FIX_STRING + ' \\(#\\d+\\): ', 'g')
+const ATTEMPT_TEST_NAME_REGEX = new RegExp(ATTEMPT_TO_FIX_STRING + String.raw` \(#\d+\): `, 'g')
 
 // Impacted tests
 const POSSIBLE_BASE_BRANCHES = ['main', 'master', 'preprod', 'prod', 'dev', 'development', 'trunk']
@@ -787,17 +787,17 @@ function getFormattedError (error, repositoryRoot) {
 
 function getLibraryCapabilitiesTags (testFramework, isParallel) {
   function isTiaSupported (testFramework, isParallel) {
-    if (UNSUPPORTED_TIA_FRAMEWORKS.includes(testFramework)) {
+    if (UNSUPPORTED_TIA_FRAMEWORKS.has(testFramework)) {
       return false
     }
-    if (isParallel && UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE.includes(testFramework)) {
+    if (isParallel && UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE.has(testFramework)) {
       return false
     }
     return true
   }
 
   function isAttemptToFixSupported (testFramework, isParallel) {
-    if (isParallel && UNSUPPORTED_ATTEMPT_TO_FIX_FRAMEWORKS_PARALLEL_MODE.includes(testFramework)) {
+    if (isParallel && UNSUPPORTED_ATTEMPT_TO_FIX_FRAMEWORKS_PARALLEL_MODE.has(testFramework)) {
       return false
     }
     return true

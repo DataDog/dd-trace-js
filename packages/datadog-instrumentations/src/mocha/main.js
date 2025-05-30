@@ -258,7 +258,7 @@ function getExecutionConfiguration (runner, isParallel, onFinishRequest) {
 
     runner.suite.suites = suitesToRun
 
-    skippedSuites = Array.from(filteredSuites.skippedSuites)
+    skippedSuites = [...filteredSuites.skippedSuites]
 
     onFinishRequest()
   }
@@ -708,10 +708,10 @@ addHook({
         const testFullName = getTestFullName(test)
         const tests = newTests[testFullName]
 
-        if (!tests) {
-          newTests[testFullName] = [test]
-        } else {
+        if (tests) {
           tests.push(test)
+        } else {
+          newTests[testFullName] = [test]
         }
       }
       // `testsQuarantined` is filled in the worker process, so we need to use the test results to fill it here too.

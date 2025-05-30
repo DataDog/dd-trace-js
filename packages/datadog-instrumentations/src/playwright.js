@@ -334,7 +334,7 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout, isMain
   }
 
   if (testStatuses.length === testManagementAttemptToFixRetries + 1) {
-    if (testStatuses.some(status => status === 'fail')) {
+    if (testStatuses.includes('fail')) {
       test._ddHasFailedAttemptToFixRetries = true
     }
     if (testStatuses.every(status => status === 'fail')) {
@@ -473,7 +473,7 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
 
       const isTimeout = status === 'timedOut'
       testEndHandler(test, annotations, STATUS_TO_TEST_STATUS[status], errors && errors[0], isTimeout, false)
-      const testResult = test.results[test.results.length - 1]
+      const testResult = test.results.at(-1)
       const isAtrRetry = testResult?.retry > 0 &&
         isFlakyTestRetriesEnabled &&
         !test._ddIsAttemptToFix &&
@@ -538,11 +538,11 @@ function runnerHook (runnerExport, playwrightVersion) {
     if (isKnownTestsEnabled && satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)) {
       try {
         const { err, knownTests: receivedKnownTests } = await getChannelPromise(knownTestsCh)
-        if (!err) {
-          knownTests = receivedKnownTests
-        } else {
+        if (err) {
           isEarlyFlakeDetectionEnabled = false
           isKnownTestsEnabled = false
+        } else {
+          knownTests = receivedKnownTests
         }
       } catch (err) {
         isEarlyFlakeDetectionEnabled = false
@@ -554,10 +554,10 @@ function runnerHook (runnerExport, playwrightVersion) {
     if (isTestManagementTestsEnabled && satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)) {
       try {
         const { err, testManagementTests: receivedTestManagementTests } = await getChannelPromise(testManagementTestsCh)
-        if (!err) {
-          testManagementTests = receivedTestManagementTests
-        } else {
+        if (err) {
           isTestManagementTestsEnabled = false
+        } else {
+          testManagementTests = receivedTestManagementTests
         }
       } catch (err) {
         isTestManagementTestsEnabled = false
@@ -874,7 +874,7 @@ addHook({
           })
         }
       }
-    } catch (e) {
+    } catch {
       // ignore errors such as redirects, context destroyed, etc
     }
 
@@ -962,7 +962,7 @@ addHook({
                   }
                 }
               }
-            } catch (e) {
+            } catch {
               // ignore errors
             }
           },

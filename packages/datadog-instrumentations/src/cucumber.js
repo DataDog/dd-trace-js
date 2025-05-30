@@ -469,11 +469,11 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
 
     if (isKnownTestsEnabled) {
       const knownTestsResponse = await getChannelPromise(knownTestsCh)
-      if (!knownTestsResponse.err) {
-        knownTests = knownTestsResponse.knownTests
-      } else {
+      if (knownTestsResponse.err) {
         isEarlyFlakeDetectionEnabled = false
         isKnownTestsEnabled = false
+      } else {
+        knownTests = knownTestsResponse.knownTests
       }
     }
 
@@ -503,7 +503,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
           this.pickleIds = picklesToRun
         }
 
-        skippedSuites = Array.from(filteredPickles.skippedSuites)
+        skippedSuites = [...filteredPickles.skippedSuites]
         itrCorrelationId = skippableResponse.itrCorrelationId
       }
     }
@@ -525,10 +525,10 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
 
     if (isTestManagementTestsEnabled) {
       const testManagementTestsResponse = await getChannelPromise(testManagementTestsCh)
-      if (!testManagementTestsResponse.err) {
-        testManagementTests = testManagementTestsResponse.testManagementTests
-      } else {
+      if (testManagementTestsResponse.err) {
         isTestManagementTestsEnabled = false
+      } else {
+        testManagementTests = testManagementTestsResponse.testManagementTests
       }
     }
 
@@ -711,10 +711,10 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
       shouldBePassedByTestManagement = true
     }
 
-    if (!pickleResultByFile[testFileAbsolutePath]) {
-      pickleResultByFile[testFileAbsolutePath] = [testStatus]
-    } else {
+    if (pickleResultByFile[testFileAbsolutePath]) {
       pickleResultByFile[testFileAbsolutePath].push(testStatus)
+    } else {
+      pickleResultByFile[testFileAbsolutePath] = [testStatus]
     }
 
     // If it's a worker, suite events are handled in `getWrappedParseWorkerMessage`
@@ -828,11 +828,11 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
       if (isEarlyFlakeDetectionEnabled && isNew) {
         const testFullname = `${pickle.uri}:${pickle.name}`
         let testStatuses = newTestsByTestFullname.get(testFullname)
-        if (!testStatuses) {
+        if (testStatuses) {
+          testStatuses.push(status)
+        } else {
           testStatuses = [status]
           newTestsByTestFullname.set(testFullname, testStatuses)
-        } else {
-          testStatuses.push(status)
         }
         // We have finished all retries
         if (testStatuses.length === earlyFlakeDetectionNumRetries + 1) {

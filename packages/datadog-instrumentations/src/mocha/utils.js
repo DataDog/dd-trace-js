@@ -273,17 +273,17 @@ function getOnTestEndHandler (config) {
 
     const testName = getTestFullName(test)
 
-    if (!testsStatuses.get(testName)) {
-      testsStatuses.set(testName, [status])
-    } else {
+    if (testsStatuses.get(testName)) {
       testsStatuses.get(testName).push(status)
+    } else {
+      testsStatuses.set(testName, [status])
     }
     const testStatuses = testsStatuses.get(testName)
 
     const isLastAttempt = testStatuses.length === config.testManagementAttemptToFixRetries + 1
 
     if (test._ddIsAttemptToFix && isLastAttempt) {
-      if (testStatuses.some(status => status === 'fail')) {
+      if (testStatuses.includes('fail')) {
         attemptToFixFailed = true
       }
       if (testStatuses.every(status => status === 'fail')) {

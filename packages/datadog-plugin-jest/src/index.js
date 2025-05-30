@@ -395,16 +395,14 @@ class JestPlugin extends CiPlugin {
     })
 
     this.addSub('ci:jest:test:err', ({ span, error, shouldSetProbe, promises }) => {
-      if (error) {
-        if (span) {
-          span.setTag(TEST_STATUS, 'fail')
-          span.setTag('error', getFormattedError(error, this.repositoryRoot))
-          if (shouldSetProbe) {
-            const probeInformation = this.addDiProbe(error)
-            if (probeInformation) {
-              const { setProbePromise } = probeInformation
-              promises.isProbeReady = withTimeout(setProbePromise, 2000)
-            }
+      if (error && span) {
+        span.setTag(TEST_STATUS, 'fail')
+        span.setTag('error', getFormattedError(error, this.repositoryRoot))
+        if (shouldSetProbe) {
+          const probeInformation = this.addDiProbe(error)
+          if (probeInformation) {
+            const { setProbePromise } = probeInformation
+            promises.isProbeReady = withTimeout(setProbePromise, 2000)
           }
         }
       }

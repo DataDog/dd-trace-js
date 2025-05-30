@@ -224,14 +224,17 @@ function getSortWrapper (sort) {
       try {
         const workspaceProject = this.ctx.getCoreWorkspaceProject()
         workspaceProject._provided._ddIsFlakyTestRetriesEnabled = isFlakyTestRetriesEnabled
-      } catch (e) {
+      } catch {
         log.warn('Could not send library configuration to workers.')
       }
     }
 
     if (isKnownTestsEnabled) {
       const knownTestsResponse = await getChannelPromise(knownTestsCh)
-      if (!knownTestsResponse.err) {
+      if (knownTestsResponse.err) {
+        isEarlyFlakeDetectionEnabled = false
+        isKnownTestsEnabled = false
+      } else {
         knownTests = knownTestsResponse.knownTests
         const getFilePaths = this.ctx.getTestFilepaths || this.ctx._globTestFilepaths
 
@@ -261,9 +264,6 @@ function getSortWrapper (sort) {
             log.warn('Could not send known tests to workers so Early Flake Detection will not work.')
           }
         }
-      } else {
-        isEarlyFlakeDetectionEnabled = false
-        isKnownTestsEnabled = false
       }
     }
 
@@ -278,7 +278,10 @@ function getSortWrapper (sort) {
 
     if (isTestManagementTestsEnabled) {
       const { err, testManagementTests: receivedTestManagementTests } = await getChannelPromise(testManagementTestsCh)
-      if (!err) {
+      if (err) {
+        isTestManagementTestsEnabled = false
+        log.error('Could not get test management tests.')
+      } else {
         testManagementTests = receivedTestManagementTests
         try {
           const workspaceProject = this.ctx.getCoreWorkspaceProject()
@@ -288,9 +291,6 @@ function getSortWrapper (sort) {
         } catch {
           log.warn('Could not send test management tests to workers so Test Management will not work.')
         }
-      } else {
-        isTestManagementTestsEnabled = false
-        log.error('Could not get test management tests.')
       }
     }
 
@@ -658,7 +658,7 @@ addHook({
         if (statuses.length === testManagementAttemptToFixRetries) {
           if (statuses.every(status => status === 'pass')) {
             attemptToFixPassed = true
-          } else if (statuses.some(status => status === 'fail')) {
+          } else if (statuses.includes('fail')) {
             attemptToFixFailed = true
           }
         }
@@ -817,7 +817,7 @@ addHook({
           let attemptToFixFailed = false
           if (attemptToFixTasks.has(task)) {
             const statuses = taskToStatuses.get(task)
-            if (statuses.some(status => status === 'fail')) {
+            if (statuses.includes('fail')) {
               attemptToFixFailed = true
             }
             if (statuses.every(status => status === 'fail')) {
@@ -829,7 +829,7 @@ addHook({
             const isRetry = task.result?.retryCount > 0
             // `duration` is the duration of all the retries, so it can't be used if there are retries
             testErrorCh.publish({
-              duration: !isRetry ? duration : undefined,
+              duration: isRetry ? undefined : duration,
               error: testError,
               hasFailedAllRetries,
               attemptToFixFailed,

@@ -185,7 +185,7 @@ class SpyMap extends Map {
 }
 
 function concatArrays (files) {
-  return Array.from(files.values()).flat()
+  return [...files.values()].flat()
 }
 
 /*
@@ -209,7 +209,7 @@ function mergeRulesData (files) {
       }
     }
   }
-  return Array.from(mergedRulesData.values())
+  return [...mergedRulesData.values()]
 }
 
 function rulesReducer (existingEntries, rulesDataEntry) {

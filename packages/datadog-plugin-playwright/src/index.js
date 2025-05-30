@@ -362,7 +362,7 @@ class PlaywrightPlugin extends CiPlugin {
           stepSpan.setTag('error', step.error)
         }
         let stepDuration = step.duration
-        if (stepDuration <= 0 || isNaN(stepDuration)) {
+        if (stepDuration <= 0 || Number.isNaN(stepDuration)) {
           stepDuration = 0
         }
         stepSpan.finish(stepStartTime + stepDuration)
