@@ -35,11 +35,11 @@ class Kinesis extends BaseAwsSdkPlugin {
           obj.needsFinish = true
           const options = {
             childOf: responseExtraction.maybeChildOf,
-            tags: Object.assign(
-              {},
-              this.requestTags.get(request) || {},
-              { 'span.kind': 'server' }
-            )
+            tags: {
+
+              ...this.requestTags.get(request),
+              'span.kind': 'server'
+            }
           }
           span = plugin.tracer.startSpan('aws.response', options)
           this.enter(span, store)

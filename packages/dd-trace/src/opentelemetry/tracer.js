@@ -32,7 +32,7 @@ class Tracer {
       spanId: id(),
       parentId: parentSpanContext._spanId,
       sampling: parentSpanContext._sampling,
-      baggageItems: Object.assign({}, parentSpanContext._baggageItems),
+      baggageItems: { ...parentSpanContext._baggageItems },
       trace: parentSpanContext._trace,
       tracestate: parentSpanContext._tracestate
     })
