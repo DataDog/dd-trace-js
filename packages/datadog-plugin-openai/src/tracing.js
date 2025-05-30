@@ -256,9 +256,11 @@ class OpenAiTracingPlugin extends TracingPlugin {
     if (error) {
       this.metrics.increment('openai.request.error', 1, tags)
     } else {
-      tags.push(`org:${headers['openai-organization']}`)
-      tags.push(`endpoint:${endpoint}`) // just "/v1/models", no method
-      tags.push(`model:${headers['openai-model'] || body.model}`)
+      tags.push(
+        `org:${headers['openai-organization']}`,
+        `endpoint:${endpoint}`,
+        `model:${headers['openai-model'] || body.model}`
+      )
     }
 
     this.metrics.distribution('openai.request.duration', duration * 1000, tags)
@@ -324,7 +326,7 @@ class OpenAiTracingPlugin extends TracingPlugin {
   sendLog (methodName, span, tags, openaiStore, error) {
     if (!openaiStore) return
     if (!Object.keys(openaiStore).length) return
-    if (!this.sampler.isSampled()) return
+    if (!this.sampler.isSampled(span)) return
 
     const log = {
       status: error ? 'error' : 'info',
@@ -770,7 +772,7 @@ function commonCreateResponseExtraction (tags, body, openaiStore, methodName) {
     const choice = body.choices[choiceIdx]
 
     // logprobs can be null and we still want to tag it as 'returned' even when set to 'null'
-    const specifiesLogProb = Object.keys(choice).indexOf('logprobs') !== -1
+    const specifiesLogProb = Object.keys(choice).includes('logprobs')
 
     tags[`openai.response.choices.${choiceIdx}.finish_reason`] = choice.finish_reason
     tags[`openai.response.choices.${choiceIdx}.logprobs`] = specifiesLogProb ? 'returned' : undefined
@@ -835,7 +837,7 @@ function usageExtraction (tags, body, methodName, openaiStore) {
 }
 
 function truncateApiKey (apiKey) {
-  return apiKey && `sk-...${apiKey.substr(apiKey.length - 4)}`
+  return apiKey && `sk-...${apiKey.slice(-4)}`
 }
 
 function tagChatCompletionRequestContent (contents, messageIdx, tags) {
@@ -1039,8 +1041,6 @@ function defensiveArrayLength (maybeArray) {
       return 1
     }
   }
-
-  return undefined
 }
 
 module.exports = OpenAiTracingPlugin

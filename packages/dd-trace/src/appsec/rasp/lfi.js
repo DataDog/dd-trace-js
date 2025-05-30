@@ -88,6 +88,7 @@ function pathToStr (path) {
   if (!path) return
 
   if (typeof path === 'string' ||
+      // eslint-disable-next-line unicorn/no-instanceof-builtins
       path instanceof String ||
       path instanceof Buffer ||
       path instanceof URL) {
@@ -104,7 +105,7 @@ function shouldAnalyze (path, fs) {
 
 function shouldAnalyzeURLFile (path, fs) {
   if (path.startsWith('file://')) {
-    return shouldAnalyze(path.substring(7), fs)
+    return shouldAnalyze(path.slice(7), fs)
   }
 }
 

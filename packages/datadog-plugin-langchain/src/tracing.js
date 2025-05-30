@@ -54,22 +54,23 @@ class BaseLangChainTracingPlugin extends TracingPlugin {
     const provider = handler.extractProvider(instance)
     const model = handler.extractModel(instance)
 
-    const tags = handler.getSpanStartTags(ctx, provider) || []
+    const span = this.startSpan('langchain.request', {
+      service: this.config.service,
+      resource,
+      kind: 'client',
+      meta: {
+        [MEASURED]: 1
+      }
+    }, false)
+
+    const tags = handler.getSpanStartTags(ctx, provider, span) || []
 
     if (apiKey) tags[API_KEY] = apiKey
     if (provider) tags[PROVIDER] = provider
     if (model) tags[MODEL] = model
     if (type) tags[TYPE] = type
 
-    const span = this.startSpan('langchain.request', {
-      service: this.config.service,
-      resource,
-      kind: 'client',
-      meta: {
-        [MEASURED]: 1,
-        ...tags
-      }
-    }, false)
+    span.addTags(tags)
 
     const store = storage('legacy').getStore() || {}
     ctx.currentStore = { ...store, span }
@@ -83,7 +84,7 @@ class BaseLangChainTracingPlugin extends TracingPlugin {
     const { type } = ctx
 
     const handler = this.handlers[type] || this.handlers.default
-    const tags = handler.getSpanEndTags(ctx) || {}
+    const tags = handler.getSpanEndTags(ctx, span) || {}
 
     span.addTags(tags)
 

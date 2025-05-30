@@ -5,6 +5,7 @@ const agent = require('../../../../plugins/agent')
 const iast = require('../../../../../src/appsec/iast')
 const Config = require('../../../../../src/config')
 const vulnerabilityReporter = require('../../../../../src/appsec/iast/vulnerability-reporter')
+const overheadController = require('../../../../../src/appsec/iast/overhead-controller')
 
 const schema = `
 type Book {
@@ -75,6 +76,7 @@ function graphqlCommonTests (config) {
         }
       }))
       vulnerabilityReporter.clearCache()
+      overheadController.clearGlobalRouteMap()
     })
 
     afterEach(() => {

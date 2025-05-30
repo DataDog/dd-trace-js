@@ -3,13 +3,13 @@
 const log = require('../../../../../log')
 
 const STRING_LITERAL = '\'(?:\'\'|[^\'])*\''
-const POSTGRESQL_ESCAPED_LITERAL = '\\$([^$]*)\\$.*?\\$\\1\\$'
-const MYSQL_STRING_LITERAL = '"(?:\\\\"|[^"])*"|\'(?:\\\\\'|[^\'])*\''
+const POSTGRESQL_ESCAPED_LITERAL = String.raw`\$([^$]*)\$.*?\$\1\$`
+const MYSQL_STRING_LITERAL = String.raw`"(?:\\"|[^"])*"|'(?:\\'|[^'])*'`
 const LINE_COMMENT = '--.*$'
-const BLOCK_COMMENT = '/\\*[\\s\\S]*\\*/'
-const EXPONENT = '(?:E[-+]?\\d+[fd]?)?'
-const INTEGER_NUMBER = '(?<!\\w)\\d+'
-const DECIMAL_NUMBER = '\\d*\\.\\d+'
+const BLOCK_COMMENT = String.raw`/\*[\s\S]*\*/`
+const EXPONENT = String.raw`(?:E[-+]?\d+[fd]?)?`
+const INTEGER_NUMBER = String.raw`(?<!\w)\d+`
+const DECIMAL_NUMBER = String.raw`\d*\.\d+`
 const HEX_NUMBER = 'x\'[0-9a-f]+\'|0x[0-9a-f]+'
 const BIN_NUMBER = 'b\'[0-9a-f]+\'|0b[0-9a-f]+'
 const NUMERIC_LITERAL =
@@ -21,7 +21,7 @@ const NUMERIC_LITERAL =
       INTEGER_NUMBER + EXPONENT
     ].join('|')
   })`
-const ORACLE_ESCAPED_LITERAL = 'q\'<.*?>\'|q\'\\(.*?\\)\'|q\'\\{.*?\\}\'|q\'\\[.*?\\]\'|q\'(?<ESCAPE>.).*?\\k<ESCAPE>\''
+const ORACLE_ESCAPED_LITERAL = String.raw`q'<.*?>'|q'\(.*?\)'|q'\{.*?\}'|q'\[.*?\]'|q'(?<ESCAPE>.).*?\k<ESCAPE>'`
 
 const patterns = {
   ANSI: new RegExp( // Default

@@ -3,15 +3,15 @@
  * @implements {DogStatsD}
  */
 module.exports = class NoopDogStatsDClient {
-  increment () { }
+  increment () {}
 
-  decrement () { }
+  decrement () {}
 
-  gauge () { }
+  gauge () {}
 
-  distribution () { }
+  distribution () {}
 
-  histogram () { }
+  histogram () {}
 
-  flush () { }
+  flush () {}
 }

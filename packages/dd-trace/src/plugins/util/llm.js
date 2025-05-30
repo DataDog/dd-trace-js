@@ -8,28 +8,41 @@ function normalize (text, limit = 128) {
   if (typeof text !== 'string' || !text || (typeof text === 'string' && text.length === 0)) return
 
   text = text
-    .replace(RE_NEWLINE, '\\n')
-    .replace(RE_TAB, '\\t')
+    .replace(RE_NEWLINE, String.raw`\n`)
+    .replace(RE_TAB, String.raw`\t`)
 
   if (text.length > limit) {
-    return text.substring(0, limit) + '...'
+    return text.slice(0, limit) + '...'
   }
 
   return text
 }
 
-function isPromptCompletionSampled (sampler) {
-  return sampler.isSampled()
+/**
+ * Determines whether a prompt completion should be sampled based on the configured sampling rate.
+ *
+ * @param {Sampler} sampler
+ * @param {Span|SpanContext} spanContext
+ * @returns {boolean} `true` if the prompt completion should be sampled, otherwise `false`.
+ */
+function isPromptCompletionSampled (sampler, span) {
+  return sampler.isSampled(span)
 }
 
 module.exports = function (integrationName, tracerConfig) {
   const integrationConfig = tracerConfig[integrationName] || {}
   const { spanCharLimit, spanPromptCompletionSampleRate } = integrationConfig
 
-  const sampler = new Sampler(spanPromptCompletionSampleRate ?? 1.0)
+  const sampler = new Sampler(spanPromptCompletionSampleRate ?? 1)
 
   return {
     normalize: str => normalize(str, spanCharLimit),
-    isPromptCompletionSampled: () => isPromptCompletionSampled(sampler)
+    /**
+     * Determines whether a prompt completion should be sampled based on the configured sampling rate.
+     *
+     * @param {Span|SpanContext} span
+     * @returns {boolean} `true` if the prompt completion should be sampled, otherwise `false`.
+     */
+    isPromptCompletionSampled: (span) => isPromptCompletionSampled(sampler, span)
   }
 }

@@ -20,7 +20,6 @@ class Sqs extends BaseAwsSdkPlugin {
     this.addSub('apm:aws:response:start:sqs', obj => {
       const { request, response } = obj
       const store = storage('legacy').getStore()
-      const plugin = this
       const contextExtraction = this.responseExtract(request.params, request.operation, response)
       let span
       let parsedMessageAttributes = null
@@ -35,7 +34,7 @@ class Sqs extends BaseAwsSdkPlugin {
           )
         }
         parsedMessageAttributes = contextExtraction.parsedAttributes
-        span = plugin.tracer.startSpan('aws.response', options)
+        span = this.tracer.startSpan('aws.response', options)
         this.enter(span, store)
       }
       // extract DSM context after as we might not have a parent-child but may have a DSM context
@@ -134,7 +133,7 @@ class Sqs extends BaseAwsSdkPlugin {
         if (body.Type === 'Notification') {
           message = body
         }
-      } catch (e) {
+      } catch {
         // SQS to SQS
       }
     }
@@ -186,7 +185,7 @@ class Sqs extends BaseAwsSdkPlugin {
             if (body.Type === 'Notification') {
               message = body
             }
-          } catch (e) {
+          } catch {
             // SQS to SQS
           }
         }
