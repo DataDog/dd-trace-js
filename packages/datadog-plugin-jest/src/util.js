@@ -25,15 +25,15 @@ function getFormattedJestTestParameters (testParameters) {
   // Way 2.
   const parameterKeys = parameterArray[0].split('|').map(key => key.trim())
   const formattedParameters = []
+  let lastFormattedParameter = {}
   for (let index = 0; index < parameterValues.length; index++) {
-    const parameterValue = parameterValues[index]
     const parameterIndex = index % parameterKeys.length
-    if (!parameterIndex) {
-      formattedParameters.push({})
+    if (parameterIndex === 0) {
+      lastFormattedParameter = {}
+      formattedParameters.push(lastFormattedParameter)
     }
-    const parameterKey = parameterKeys[parameterIndex]
-    const lastFormattedParameter = formattedParameters.at(-1)
-    lastFormattedParameter[parameterKey] = parameterValue
+    const key = parameterKeys[parameterIndex]
+    lastFormattedParameter[key] = parameterValues[index]
   }
 
   return formattedParameters
