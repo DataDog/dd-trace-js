@@ -103,7 +103,7 @@ const REDACTED_IDENTIFIERS = new Set(
 
 function normalizeName (name, isSymbol) {
   if (isSymbol) name = name.slice(7, -1) // Remove `Symbol(` and `)`
-  return name.toLowerCase().replace(/[-_@$.]/g, '')
+  return name.toLowerCase().replaceAll(/[-_@$.]/g, '')
 }
 
 module.exports = {

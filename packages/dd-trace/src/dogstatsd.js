@@ -169,7 +169,7 @@ class DogStatsDClient {
         })
         .forEach(key => {
           // https://docs.datadoghq.com/tagging/#defining-tags
-          const value = config.tags[key].replace(/[^a-z0-9_:./-]/ig, '_')
+          const value = config.tags[key].replaceAll(/[^a-z0-9_:./-]/ig, '_')
 
           tags.push(`${key}:${value}`)
         })

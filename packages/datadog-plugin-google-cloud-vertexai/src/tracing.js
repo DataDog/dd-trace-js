@@ -82,7 +82,7 @@ class GoogleCloudVertexAITracingPlugin extends TracingPlugin {
 
     const generationConfig = instance.generationConfig || {}
     for (const key of Object.keys(generationConfig)) {
-      const transformedKey = key.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase()
+      const transformedKey = key.replaceAll(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase()
       tags[`vertexai.request.generation_config.${transformedKey}`] = JSON.stringify(generationConfig[key])
     }
 

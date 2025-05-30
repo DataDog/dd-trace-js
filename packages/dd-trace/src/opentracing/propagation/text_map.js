@@ -239,8 +239,8 @@ class TextMapPropagator {
 
       if (typeof origin === 'string') {
         const originValue = origin
-          .replace(tracestateOriginFilter, '_')
-          .replace(/[\x3D]/g, '~')
+          .replaceAll(tracestateOriginFilter, '_')
+          .replaceAll(/[\x3D]/g, '~')
 
         state.set('o', originValue)
       }
@@ -249,12 +249,12 @@ class TextMapPropagator {
         if (!tags[key] || !key.startsWith('_dd.p.')) continue
 
         const tagKey = 't.' + key.slice(6)
-          .replace(tracestateTagKeyFilter, '_')
+          .replaceAll(tracestateTagKeyFilter, '_')
 
         const tagValue = tags[key]
           .toString()
-          .replace(tracestateTagValueFilter, '_')
-          .replace(/[\x3D]/g, '~')
+          .replaceAll(tracestateTagValueFilter, '_')
+          .replaceAll(/[\x3D]/g, '~')
 
         state.set(tagKey, tagValue)
       }
@@ -508,7 +508,7 @@ class TextMapPropagator {
             default: {
               if (!key.startsWith('t.')) continue
               const subKey = key.slice(2) // e.g. t.tid -> tid
-              const transformedValue = value.replace(/[\x7E]/gm, '=')
+              const transformedValue = value.replaceAll(/[\x7E]/gm, '=')
 
               // If subkey is tid  then do nothing because trace header tid should always be preserved
               if (subKey === 'tid') {
