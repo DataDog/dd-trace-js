@@ -230,9 +230,15 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders, storedRespons
   return headersTags
 }
 
-function reportWafInit (wafVersion, rulesVersion, success = false) {
+function reportWafInit (wafVersion, rulesVersion, diagnosticsRules = {}, success = false) {
   if (success) {
     metricsQueue.set('_dd.appsec.waf.version', wafVersion)
+
+    metricsQueue.set('_dd.appsec.event_rules.loaded', diagnosticsRules.loaded?.length || 0)
+    metricsQueue.set('_dd.appsec.event_rules.error_count', diagnosticsRules.failed?.length || 0)
+    if (diagnosticsRules.failed?.length) {
+      metricsQueue.set('_dd.appsec.event_rules.errors', JSON.stringify(diagnosticsRules.errors))
+    }
   }
 
   incrementWafInitMetric(wafVersion, rulesVersion, success)
