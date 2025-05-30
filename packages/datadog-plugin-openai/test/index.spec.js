@@ -29,7 +29,6 @@ describe('Plugin', () => {
   let globalFile
 
   describe('openai', () => {
-    // TODO: Remove the range once we support openai 5
     withVersions('openai', 'openai', version => {
       const moduleRequirePath = `../../../versions/openai@${version}`
 
