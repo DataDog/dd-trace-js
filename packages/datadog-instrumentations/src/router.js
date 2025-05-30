@@ -6,11 +6,11 @@ const shimmer = require('../../datadog-shimmer')
 const { addHook, channel } = require('./helpers/instrument')
 
 function isFastStar (layer, matchers) {
-  layer.regexp?.fast_star ?? matchers.some(matcher => matcher.path === '*')
+  return layer.regexp?.fast_star ?? matchers.some(matcher => matcher.path === '*')
 }
 
 function isFastSlash (layer, matchers) {
-  layer.regexp?.fast_slash ?? matchers.some(matcher => matcher.path === '/')
+  return layer.regexp?.fast_slash ?? matchers.some(matcher => matcher.path === '/')
 }
 
 function flatten (arr) {
