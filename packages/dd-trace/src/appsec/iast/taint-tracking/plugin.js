@@ -67,7 +67,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
         const iastContext = getIastContext(storage('legacy').getStore())
         if (!iastContext || !query) return
 
-        taintQueryWithCache(iastContext, query, HTTP_REQUEST_PARAMETER)
+        taintQueryWithCache(iastContext, query)
       }
     )
 

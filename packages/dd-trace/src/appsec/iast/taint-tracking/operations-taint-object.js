@@ -2,6 +2,7 @@
 
 const TaintedUtils = require('@datadog/native-iast-taint-tracking')
 const { IAST_TRANSACTION_ID } = require('../iast-context')
+const { HTTP_REQUEST_PARAMETER } = require('./source-types')
 const log = require('../../../log')
 
 function taintObject (iastContext, object, type) {
@@ -40,15 +41,19 @@ function taintObject (iastContext, object, type) {
   return result
 }
 
-function taintQueryWithCache (iastContext, query, type) {
+function taintQueryWithCache (iastContext, query) {
   const transactionId = iastContext?.[IAST_TRANSACTION_ID]
-  if (!transactionId || !query) return
+  if (!transactionId || !query) return query
 
-  if (!iastContext.queryCache) {
-    iastContext.queryCache = {}
-  }
+  iastContext.queryCache ??= Object.create(null)
 
-  return traverseAndTaint(query, iastContext.queryCache, '', type, transactionId)
+  return traverseAndTaint(
+    query,
+    iastContext.queryCache,
+    '',
+    HTTP_REQUEST_PARAMETER,
+    transactionId
+  )
 }
 
 function traverseAndTaint (value, cache, path, type, transactionId) {
@@ -64,27 +69,49 @@ function traverseAndTaint (value, cache, path, type, transactionId) {
   }
 
   if (typeof value === 'object') {
-    const isArray = Array.isArray(value)
-    if (!cache || typeof cache !== 'object' || Array.isArray(cache) !== isArray) {
-      cache = isArray ? [] : Object.create(null)
+    const valueIsArray = Array.isArray(value)
+    if (!cache || typeof cache !== 'object' || Array.isArray(cache) !== valueIsArray) {
+      cache = valueIsArray ? [] : Object.create(null)
     }
 
-    for (const key of Object.keys(value)) {
-      const childPath = path ? `${path}.${key}` : key
-      const childValue = value[key]
+    if (valueIsArray) {
+      for (let i = 0; i < value.length; i++) {
+        const childPath = path ? `${path}.${i}` : String(i)
+        const taintedChild = traverseAndTaint(
+          value[i],
+          cache[i],
+          childPath,
+          type,
+          transactionId
+        )
 
-      value[key] = traverseAndTaint(
-        childValue,
-        cache[key],
-        childPath,
-        type,
-        transactionId
-      )
+        value[i] = taintedChild
+        cache[i] = cloneObject(taintedChild)
+      }
+    } else {
+      for (const key of Object.keys(value)) {
+        const childPath = path ? `${path}.${key}` : key
+        const taintedChild = traverseAndTaint(
+          value[key],
+          cache[key],
+          childPath,
+          type,
+          transactionId
+        )
 
-      cache[key] = value[key]
+        value[key] = taintedChild
+        cache[key] = cloneObject(taintedChild)
+      }
     }
   }
 
+  return value
+}
+
+function cloneObject (value) {
+  if (typeof value === 'object' && value !== null) {
+    return Array.isArray(value) ? [...value] : { ...value }
+  }
   return value
 }
 
