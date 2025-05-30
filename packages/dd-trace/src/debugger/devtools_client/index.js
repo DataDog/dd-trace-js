@@ -134,7 +134,7 @@ session.on('Debugger.paused', async ({ params }) => {
 
   const timestamp = Date.now()
 
-  let evalResults = null
+  let evalResults
   const { result } = await session.post('Debugger.evaluateOnCallFrame', {
     callFrameId: params.callFrames[0].callFrameId,
     expression: templateExpressions.length === 0

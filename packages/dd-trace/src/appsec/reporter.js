@@ -301,8 +301,6 @@ function reportAttack (attackData) {
 }
 
 function truncateRequestBody (target, depth = 0) {
-  let wasTruncated = false
-
   switch (typeof target) {
     case 'string':
       if (target.length > COLLECTED_REQUEST_BODY_MAX_STRING_LENGTH) {
@@ -328,7 +326,7 @@ function truncateRequestBody (target, depth = 0) {
 
       if (Array.isArray(target)) {
         const maxArrayLength = Math.min(target.length, COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE)
-        wasTruncated = target.length > COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE
+        let wasTruncated = target.length > COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE
         const truncatedArray = new Array(maxArrayLength)
         for (let i = 0; i < maxArrayLength; i++) {
           const { value, truncated } = truncateRequestBody(target[i], depth + 1)
@@ -341,7 +339,7 @@ function truncateRequestBody (target, depth = 0) {
 
       const keys = Object.keys(target)
       const maxKeysLength = Math.min(keys.length, COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE)
-      wasTruncated = keys.length > COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE
+      let wasTruncated = keys.length > COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE
 
       const truncatedObject = {}
       for (let i = 0; i < maxKeysLength; i++) {
