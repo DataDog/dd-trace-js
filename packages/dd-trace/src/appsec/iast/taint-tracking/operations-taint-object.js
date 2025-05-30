@@ -86,7 +86,10 @@ function traverseAndTaint (value, cache, path, type, transactionId) {
         )
 
         value[i] = taintedChild
-        cache[i] = cloneObject(taintedChild)
+        
+        if (cache[i] === undefined || typeof taintedChild !== 'object') {
+          cache[i] = taintedChild
+        }
       }
     } else {
       for (const key of Object.keys(value)) {
@@ -100,18 +103,14 @@ function traverseAndTaint (value, cache, path, type, transactionId) {
         )
 
         value[key] = taintedChild
-        cache[key] = cloneObject(taintedChild)
+        
+        if (cache[key] === undefined || typeof taintedChild !== 'object') {
+          cache[key] = taintedChild
+        }
       }
     }
   }
 
-  return value
-}
-
-function cloneObject (value) {
-  if (typeof value === 'object' && value !== null) {
-    return Array.isArray(value) ? [...value] : { ...value }
-  }
   return value
 }
 
