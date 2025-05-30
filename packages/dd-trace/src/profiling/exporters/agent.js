@@ -150,7 +150,7 @@ class AgentExporter extends EventSerializer {
             'DD-EVP-ORIGIN-VERSION': version,
             ...form.getHeaders()
           },
-          timeout: this._backoffTime * Math.pow(2, attempt)
+          timeout: this._backoffTime * 2 ** attempt
         }
 
         docker.inject(options.headers)
