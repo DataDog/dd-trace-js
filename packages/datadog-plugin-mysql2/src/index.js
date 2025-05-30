@@ -16,10 +16,6 @@ class MySQL2Plugin extends MySQLPlugin {
     this.addBind(`apm:${this.component}:command:start`, ctx => ctx.parentStore)
     this.addBind(`apm:${this.component}:command:finish`, ctx => ctx.parentStore)
   }
-
-  bindStart (ctx) {
-    return storage('legacy').run(ctx.parentStore, () => super.bindStart(ctx))
-  }
 }
 
 module.exports = MySQL2Plugin
