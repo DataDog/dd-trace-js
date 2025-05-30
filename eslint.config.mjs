@@ -109,8 +109,9 @@ export default [
         }
       ]],
 
-      'prefer-object-spread': 'error',
+      'no-useless-assignment': 'error',
       'prefer-object-has-own': 'error',
+      'prefer-object-spread': 'error',
 
       ...eslintPluginUnicorn.configs.recommended.rules,
 
