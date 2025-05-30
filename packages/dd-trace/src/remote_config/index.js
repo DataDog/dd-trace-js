@@ -61,13 +61,9 @@ function enable (config, appsec) {
 
 function enableOrDisableAppsec (action, rcConfig, config, appsec) {
   if (typeof rcConfig.asm?.enabled === 'boolean') {
-    let shouldEnable
-
-    if (action === 'apply' || action === 'modify') {
-      shouldEnable = rcConfig.asm.enabled // take control
-    } else {
-      shouldEnable = config.appsec.enabled // give back control to local config
-    }
+    const shouldEnable = action === 'apply' || action === 'modify'
+      ? rcConfig.asm.enabled // take control
+      : config.appsec.enabled // give back control to local config
 
     if (shouldEnable) {
       appsec.enable(config)

@@ -304,8 +304,9 @@ class PrioritySampler {
   #normalizeRules (rules, sampleRate, rateLimit, provenance) {
     rules = [].concat(rules || [])
 
+    rules.push({ sampleRate, maxPerSecond: rateLimit, provenance })
+
     return rules
-      .concat({ sampleRate, maxPerSecond: rateLimit, provenance })
       .map(rule => ({ ...rule, sampleRate: Number.parseFloat(rule.sampleRate) }))
       .filter(rule => !Number.isNaN(rule.sampleRate))
       .map(SamplingRule.from)

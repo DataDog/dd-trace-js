@@ -141,11 +141,7 @@ function wrap (target, name, wrapper, options) {
   } else {
     if (descriptor.get) {
       // `replaceGetter` may only be used when the getter has no side effect.
-      if (options?.replaceGetter) {
-        descriptor.get = () => wrapped
-      } else {
-        descriptor.get = wrapped
-      }
+      descriptor.get = options?.replaceGetter ? () => wrapped : wrapped
     } else {
       descriptor.value = wrapped
     }

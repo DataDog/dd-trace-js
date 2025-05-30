@@ -55,11 +55,12 @@ function getVariablesFilter (config) {
   return null
 }
 
-function getHooks (config) {
-  const noop = () => {}
-  const execute = config.hooks?.execute || noop
-  const parse = config.hooks?.parse || noop
-  const validate = config.hooks?.validate || noop
+const noop = () => {}
+
+function getHooks ({ hooks }) {
+  const execute = hooks?.execute ?? noop
+  const parse = hooks?.parse ?? noop
+  const validate = hooks?.validate ?? noop
 
   return { execute, parse, validate }
 }
