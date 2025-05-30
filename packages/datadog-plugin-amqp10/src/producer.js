@@ -9,7 +9,9 @@ class Amqp10ProducerPlugin extends ProducerPlugin {
   static get operation () { return 'send' }
   static get system () { return 'amqp' }
 
-  start ({ link }) {
+  bindStart (ctx) {
+    const { link } = ctx
+
     const address = getAddress(link)
     const target = getShortName(link)
 
@@ -26,7 +28,9 @@ class Amqp10ProducerPlugin extends ProducerPlugin {
         'amqp.connection.port': address.port,
         'amqp.connection.user': address.user
       }
-    })
+    }, ctx)
+
+    return ctx.currentStore
   }
 }
 
