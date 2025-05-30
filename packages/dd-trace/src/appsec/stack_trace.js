@@ -1,8 +1,6 @@
 'use strict'
 
-const { calculateDDBasePath } = require('../util')
-
-const ddBasePath = calculateDDBasePath(__dirname)
+const { ddBasePath } = require('../util')
 
 const LIBRARY_FRAMES_BUFFER = 20
 

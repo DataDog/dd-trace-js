@@ -1,7 +1,7 @@
 'use strict'
 
 const log = require('../../log')
-const { calculateDDBasePath } = require('../../util')
+const { ddBasePath } = require('../../util')
 
 const logs = new Map() // hash -> log
 
@@ -20,9 +20,9 @@ function hashCode (hashSource) {
 
 function createHash (logEntry) {
   const prime = 31
-  let result = ((!logEntry.level) ? 0 : hashCode(logEntry.level))
-  result = (((prime * result) | 0) + ((!logEntry.message) ? 0 : hashCode(logEntry.message))) | 0
-  result = (((prime * result) | 0) + ((!logEntry.stack_trace) ? 0 : hashCode(logEntry.stack_trace))) | 0
+  let result = logEntry.level ? hashCode(logEntry.level) : 0
+  result = (((prime * result) | 0) + (logEntry.message ? hashCode(logEntry.message) : 0)) | 0
+  result = (((prime * result) | 0) + (logEntry.stack_trace ? hashCode(logEntry.stack_trace) : 0)) | 0
   return result
 }
 
@@ -30,7 +30,6 @@ function isValid (logEntry) {
   return logEntry?.level && logEntry.message
 }
 
-const ddBasePath = calculateDDBasePath(__dirname)
 const EOL = '\n'
 const STACK_FRAME_LINE_REGEX = /^\s*at\s/gm
 
@@ -78,11 +77,11 @@ const logCollector = {
         return false
       }
       const hash = createHash(logEntry)
-      if (!logs.has(hash)) {
+      if (logs.has(hash)) {
+        logs.get(hash).count++
+      } else {
         logs.set(hash, logEntry)
         return true
-      } else {
-        logs.get(hash).count++
       }
     } catch (e) {
       log.error('Unable to add log to logCollector: %s', e.message)

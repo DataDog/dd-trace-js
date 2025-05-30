@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 
 import { FlatCompat } from '@eslint/eslintrc'
 import eslintPluginJs from '@eslint/js'
-import eslintPluginStylistic from '@stylistic/eslint-plugin-js'
+import eslintPluginStylistic from '@stylistic/eslint-plugin'
 import eslintPluginMocha from 'eslint-plugin-mocha'
 import eslintPluginN from 'eslint-plugin-n'
 import eslintPluginUnicorn from 'eslint-plugin-unicorn'
@@ -56,7 +56,7 @@ export default [
     name: 'dd-trace/defaults',
 
     plugins: {
-      '@stylistic/js': eslintPluginStylistic,
+      '@stylistic': eslintPluginStylistic,
       n: eslintPluginN,
       unicorn: eslintPluginUnicorn
     },
@@ -80,9 +80,9 @@ export default [
     },
 
     rules: {
-      '@stylistic/js/max-len': ['error', { code: 120, tabWidth: 2, ignoreUrls: true }],
-      '@stylistic/js/object-curly-newline': ['error', { multiline: true, consistent: true }],
-      '@stylistic/js/object-curly-spacing': ['error', 'always'],
+      '@stylistic/max-len': ['error', { code: 120, tabWidth: 2, ignoreUrls: true }],
+      '@stylistic/object-curly-newline': ['error', { multiline: true, consistent: true }],
+      '@stylistic/object-curly-spacing': ['error', 'always'],
       'import/no-extraneous-dependencies': 'error',
       'n/no-restricted-require': ['error', ['diagnostics_channel']],
       'no-console': 'error',
@@ -115,50 +115,37 @@ export default [
       'unicorn/expiring-todo-comments': 'off',
       'unicorn/explicit-length-check': 'off', // 68 errors
       'unicorn/filename-case': ['off', { case: 'kebabCase' }], // 59 errors
-      'unicorn/import-style': 'off', // 9 errors - controversial
       'unicorn/no-anonymous-default-export': 'off', // only makes a difference for ESM
-      'unicorn/no-array-callback-reference': 'off', // too strict
       'unicorn/no-array-for-each': 'off', // 122 errors
-      'unicorn/no-array-reduce': 'off', // too strict
       'unicorn/no-for-loop': 'off', // 15 errors
-      'unicorn/no-hex-escape': 'off', // too strict
-      'unicorn/no-lonely-if': 'off', // 19 errors
-      'unicorn/no-negated-condition': 'off', // too strict
-      'unicorn/no-nested-ternary': 'off', // too strict
-      'unicorn/no-new-array': 'off', // 6 errors
       'unicorn/no-null': 'off', // too strict
-      'unicorn/no-object-as-default-parameter': 'off', // too strict
-      'unicorn/no-this-assignment': 'off', // too strict
-      'unicorn/no-unreadable-array-destructuring': 'off', // TODO: undecided
-      'unicorn/no-unreadable-iife': 'off', // too strict
-      'unicorn/no-useless-undefined': 'off', // 59 errors
-      'unicorn/number-literal-case': 'off', // 44 errors
-      'unicorn/numeric-separators-style': 'off', // 35 errors
       'unicorn/prefer-array-flat': 'off', // 9 errors
-      'unicorn/prefer-at': 'off', // 47 errors
-      'unicorn/prefer-code-point': 'off', // 3 errors
-      'unicorn/prefer-event-target': 'off', // TODO: undecided (2 errors)
-      'unicorn/prefer-global-this': 'off', // 23 errors
-      'unicorn/prefer-includes': 'off', // 19 errors
-      'unicorn/prefer-logical-operator-over-ternary': 'off', // 15 errors
-      'unicorn/prefer-math-trunc': 'off', // 8 errors
-      'unicorn/prefer-module': 'off', // too strict
-      'unicorn/prefer-native-coercion-functions': 'off', // 18 errors
-      'unicorn/prefer-node-protocol': 'off', // 148 errors
-      'unicorn/prefer-number-properties': 'off', // 56 errors
-      'unicorn/prefer-object-from-entries': 'off', // 3 errors
-      'unicorn/prefer-optional-catch-binding': 'off', // 62 errors
-      'unicorn/prefer-reflect-apply': 'off', // too strict
-      'unicorn/prefer-set-has': 'off', // 18 errors
+      'unicorn/prefer-at': 'off', // 17 errors | Difficult to fix
       'unicorn/prefer-spread': 'off', // 36 errors
-      'unicorn/prefer-string-raw': 'off', // 22 errors
       'unicorn/prefer-string-replace-all': 'off', // 33 errors
-      'unicorn/prefer-string-slice': 'off', // 53 errors
       'unicorn/prefer-switch': 'off', // 8 errors
       'unicorn/prefer-ternary': 'off', // 48 errors
       'unicorn/prefer-top-level-await': 'off', // too strict
       'unicorn/prevent-abbreviations': 'off', // too strict
-      'unicorn/switch-case-braces': 'off' // too strict
+      'unicorn/switch-case-braces': 'off', // too strict
+
+      // These rules could potentially evaluated again at a much later point
+      'unicorn/no-array-callback-reference': 'off',
+      'unicorn/no-nested-ternary': 'off', // Not really an issue in the code and the benefit is small
+      'unicorn/no-this-assignment': 'off', // This would need some further refactoring and the benefit is small
+      'unicorn/prefer-code-point': 'off', // Should be activated, but needs a refactor of some code
+
+      // The following rules should not be activated!
+      'unicorn/prefer-math-trunc': 'off', // Math.trunc is not a 1-to-1 replacement for most of our usage
+      'unicorn/import-style': 'off', // Questionable benefit
+      'unicorn/no-array-reduce': 'off', // Questionable benefit
+      'unicorn/no-hex-escape': 'off', // Questionable benefit
+      'unicorn/no-new-array': 'off', // new Array is often used for performance reasons
+      'unicorn/prefer-event-target': 'off', // Benefit only outside of Node.js
+      'unicorn/prefer-global-this': 'off', // Questionable benefit in Node.js alone
+      'unicorn/prefer-module': 'off', // We use CJS
+      'unicorn/prefer-node-protocol': 'off', // May not be used due to guardrails
+      'unicorn/prefer-reflect-apply': 'off' // Questionable benefit and more than 500 matches
     }
   },
   {

@@ -16,12 +16,12 @@ class RateLimiter {
     const curIntervalTokens = this._limiter.tokensThisInterval
     const allowed = this._isAllowed()
 
-    if (curIntervalStart !== this._limiter.curIntervalStart) {
+    if (curIntervalStart === this._limiter.curIntervalStart) {
+      this._tokensRequested++
+    } else {
       this._prevIntervalTokens = curIntervalTokens
       this._prevTokensRequested = this._tokensRequested
       this._tokensRequested = 1
-    } else {
-      this._tokensRequested++
     }
 
     return allowed

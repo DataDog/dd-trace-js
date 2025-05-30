@@ -6,10 +6,10 @@ const ALLOWED_ENV_VARIABLES = new Set(['LD_PRELOAD', 'LD_LIBRARY_PATH', 'PATH'])
 const PROCESS_DENYLIST = new Set(['md5'])
 
 const VARNAMES_REGEX = /\$([\w\d_]*)(?:[^\w\d_]|$)/gmi
-// eslint-disable-next-line @stylistic/js/max-len
+// eslint-disable-next-line @stylistic/max-len
 const PARAM_PATTERN = '^-{0,2}(?:p(?:ass(?:w(?:or)?d)?)?|address|api[-_]?key|e?mail|secret(?:[-_]?key)?|a(?:ccess|uth)[-_]?token|mysql_pwd|credentials|(?:stripe)?token)$'
 const regexParam = new RegExp(PARAM_PATTERN, 'i')
-const ENV_PATTERN = '^(\\w+=\\w+;)*\\w+=\\w+;?$'
+const ENV_PATTERN = String.raw`^(\w+=\w+;)*\w+=\w+;?$`
 const envVarRegex = new RegExp(ENV_PATTERN)
 const REDACTED = '?'
 
@@ -71,19 +71,33 @@ function scrubChildProcessCmd (expression) {
         } else if (token.comment) {
           result.push(`#${token.comment}`)
         }
-      } else if (!foundBinary) {
+      } else if (foundBinary) {
+        const paramKeyValue = token.split('=')
+        const paramKey = paramKeyValue[0]
+
+        if (regexParam.test(paramKey)) {
+          if (paramKeyValue.length === 1) {
+            expressionTokens[index + 1] = REDACTED
+            result.push(token)
+          } else {
+            result.push(`${paramKey}=${REDACTED}`)
+          }
+        } else {
+          result.push(token)
+        }
+      } else {
         if (envVarRegex.test(token)) {
           const envSplit = token.split('=')
 
-          if (!ALLOWED_ENV_VARIABLES.has(envSplit[0])) {
+          if (ALLOWED_ENV_VARIABLES.has(envSplit[0])) {
+            result.push(token)
+          } else {
             envSplit[1] = REDACTED
 
             const newToken = envSplit.join('=')
             expressionTokens[index] = newToken
 
             result.push(newToken)
-          } else {
-            result.push(token)
           }
         } else {
           foundBinary = true
@@ -102,20 +116,6 @@ function scrubChildProcessCmd (expression) {
             }
             break
           }
-        }
-      } else {
-        const paramKeyValue = token.split('=')
-        const paramKey = paramKeyValue[0]
-
-        if (regexParam.test(paramKey)) {
-          if (paramKeyValue.length === 1) {
-            expressionTokens[index + 1] = REDACTED
-            result.push(token)
-          } else {
-            result.push(`${paramKey}=${REDACTED}`)
-          }
-        } else {
-          result.push(token)
         }
       }
     }
