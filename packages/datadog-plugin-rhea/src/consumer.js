@@ -1,7 +1,6 @@
 'use strict'
 
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
-const { storage } = require('../../datadog-core')
 const { getAmqpMessageSize } = require('../../dd-trace/src/datastreams')
 
 class RheaConsumerPlugin extends ConsumerPlugin {
