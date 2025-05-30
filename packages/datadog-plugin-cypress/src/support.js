@@ -3,11 +3,13 @@
 let isEarlyFlakeDetectionEnabled = false
 let isKnownTestsEnabled = false
 let knownTestsForSuite = []
-let suiteTests = []
 let earlyFlakeDetectionNumRetries = 0
 let isTestManagementEnabled = false
 let testManagementAttemptToFixRetries = 0
 let testManagementTests = {}
+let isImpactedTestsEnabled = false
+let isModifiedTest = false
+
 // We need to grab the original window as soon as possible,
 // in case the test changes the origin. If the test does change the origin,
 // any call to `cy.window()` will result in a cross origin error.
@@ -49,10 +51,9 @@ function retryTest (test, suiteTests, numRetries, tags) {
   }
 }
 
-
 const oldRunTests = Cypress.mocha.getRunner().runTests
 Cypress.mocha.getRunner().runTests = function (suite, fn) {
-  if (!isKnownTestsEnabled && !isTestManagementEnabled) {
+  if (!isKnownTestsEnabled && !isTestManagementEnabled && !isImpactedTestsEnabled) {
     return oldRunTests.apply(this, arguments)
   }
   // We copy the new tests at the beginning of the suite run (runTests), so that they're run
@@ -68,10 +69,24 @@ Cypress.mocha.getRunner().runTests = function (suite, fn) {
         retryTest(test, suite.tests, testManagementAttemptToFixRetries, ['_ddIsAttemptToFix'])
       }
     }
+    if (isImpactedTestsEnabled && isModifiedTest) {
+      test._ddIsModified = true
+      if (isEarlyFlakeDetectionEnabled && !isAttemptToFix) {
+        retryTest(
+          test,
+          suite.tests,
+          earlyFlakeDetectionNumRetries,
+          ['_ddIsModified', '_ddIsEfdRetry', isKnownTestsEnabled && isNewTest(test) && '_ddIsNew']
+        )
+      }
+    }
     if (isKnownTestsEnabled) {
       if (!test._ddIsNew && !test.isPending() && isNewTest(test)) {
         test._ddIsNew = true
-        if (isEarlyFlakeDetectionEnabled && !isAttemptToFix) {
+        if (isImpactedTestsEnabled && isModifiedTest) {
+          test._ddIsModified = true
+        }
+        if (isEarlyFlakeDetectionEnabled && !isAttemptToFix && !isModifiedTest) {
           retryTest(test, suite.tests, earlyFlakeDetectionNumRetries, ['_ddIsNew', '_ddIsEfdRetry'])
         }
       }
@@ -109,6 +124,8 @@ before(function () {
       isTestManagementEnabled = suiteConfig.isTestManagementEnabled
       testManagementAttemptToFixRetries = suiteConfig.testManagementAttemptToFixRetries
       testManagementTests = suiteConfig.testManagementTests
+      isImpactedTestsEnabled = suiteConfig.isImpactedTestsEnabled
+      isModifiedTest = suiteConfig.isModifiedTest
     }
   })
 })
@@ -134,7 +151,8 @@ afterEach(function () {
     error: currentTest.err,
     isNew: currentTest._ddIsNew,
     isEfdRetry: currentTest._ddIsEfdRetry,
-    isAttemptToFix: currentTest._ddIsAttemptToFix
+    isAttemptToFix: currentTest._ddIsAttemptToFix,
+    isModified: currentTest._ddIsModified
   }
   try {
     testInfo.testSourceLine = Cypress.mocha.getRunner().currentRunnable.invocationDetails.line

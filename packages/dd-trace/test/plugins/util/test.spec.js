@@ -16,9 +16,12 @@ const {
   removeInvalidMetadata,
   parseAnnotations,
   getIsFaultyEarlyFlakeDetection,
-  getNumFromKnownTests
+  getNumFromKnownTests,
+  getModifiedTestsFromDiff,
+  isModifiedTest
 } = require('../../../src/plugins/util/test')
 
+const proxyquire = require('proxyquire')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA, CI_PIPELINE_URL } = require('../../../src/plugins/util/tags')
 
 describe('getTestParametersString', () => {
@@ -363,5 +366,194 @@ describe('getNumFromKnownTests', () => {
 
     const numTestsNull = getNumFromKnownTests(null)
     expect(numTestsNull).to.equal(0)
+  })
+})
+
+describe('getModifiedTestsFromDiff', () => {
+  it('should parse git diff and return modified lines per file', () => {
+    const diff = `diff --git a/test/file1.js b/test/file1.js
+index 1234567..89abcde 100644
+--- a/test/file1.js
++++ b/test/file1.js
+@@ -2 +2 @@
+-line2
++line2 modified
+@@ -4,0 +4,1 @@
++new line
+diff --git a/test/file2.js b/test/file2.js
+index 1234567..89abcde 100644
+--- a/test/file2.js
++++ b/test/file2.js
+@@ -5,0 +5,1 @@
++new line`
+
+    const expected = {
+      'test/file1.js': [2, 4],
+      'test/file2.js': [5]
+    }
+
+    expect(getModifiedTestsFromDiff(diff)).to.eql(expected)
+  })
+
+  it('should return null for empty or invalid diff', () => {
+    expect(getModifiedTestsFromDiff('')).to.be.null
+    expect(getModifiedTestsFromDiff(null)).to.be.null
+    expect(getModifiedTestsFromDiff(undefined)).to.be.null
+  })
+
+  it('should handle multiple line changes in a single hunk', () => {
+    const diff = `diff --git a/test/file.js b/test/file.js
+index 1234567..89abcde 100644
+--- a/test/file.js
++++ b/test/file.js
+@@ -2 +2 @@
+-line2
++line2 modified
+@@ -4,0 +4,1 @@
++new line
+@@ -6,0 +6,1 @@
++another new line`
+
+    const expected = {
+      'test/file.js': [2, 4, 6]
+    }
+
+    expect(getModifiedTestsFromDiff(diff)).to.eql(expected)
+  })
+})
+
+describe('isModifiedTest', () => {
+  describe('when tests come from local diff', () => {
+    const testFramework = 'jest'
+
+    it('should return true when test lines overlap with modified lines', () => {
+      const modifiedTests = {
+        'test/file.js': [2, 4, 6]
+      }
+      expect(isModifiedTest('test/file.js', 1, 3, modifiedTests, testFramework)).to.be.true // overlaps with line 2
+      expect(isModifiedTest('test/file.js', 3, 5, modifiedTests, testFramework)).to.be.true // overlaps with line 4
+      expect(isModifiedTest('test/file.js', 5, 7, modifiedTests, testFramework)).to.be.true // overlaps with line 6
+    })
+
+    it('should return false when test lines do not overlap with modified lines', () => {
+      const modifiedTests = {
+        'test/file.js': [2, 4, 6]
+      }
+      expect(isModifiedTest('test/file.js', 7, 9, modifiedTests, testFramework)).to.be.false
+      expect(isModifiedTest('test/file.js', 0, 1, modifiedTests, testFramework)).to.be.false
+    })
+
+    it('should return false when file is not in modified tests', () => {
+      const modifiedTests = {
+        'test/file.js': [2, 4, 6]
+      }
+      expect(isModifiedTest('test/other.js', 1, 3, modifiedTests, testFramework)).to.be.false
+    })
+
+    it('should handle single line tests', () => {
+      const modifiedTests = {
+        'test/file.js': [2, 4, 6]
+      }
+      expect(isModifiedTest('test/file.js', 2, 2, modifiedTests, testFramework)).to.be.true
+      expect(isModifiedTest('test/file.js', 3, 3, modifiedTests, testFramework)).to.be.false
+    })
+  })
+
+  describe('when tests frameworks do not support granular impacted tests', () => {
+    const testFramework = 'playwright'
+
+    it('should return true when test file is in modifiedTests', () => {
+      const modifiedTests = {
+        'test/file.js': [2, 4, 6],
+        'test/other.js': [2, 4, 6]
+      }
+      expect(isModifiedTest('test/file.js', 1, 10, modifiedTests, testFramework)).to.be.true
+      expect(isModifiedTest('test/other.js', 1, 10, modifiedTests, testFramework)).to.be.true
+    })
+
+    it('should return false when test file is not in modifiedTests', () => {
+      const modifiedTests = {
+        'test/file.js': [2, 4, 6]
+      }
+      expect(isModifiedTest('test/other.js', 1, 10, modifiedTests, testFramework)).to.be.false
+    })
+  })
+
+  it('should handle empty modifiedTests object', () => {
+    expect(isModifiedTest('test/file.js', 1, 10, {}, 'jest')).to.be.false
+  })
+})
+
+describe('getPullRequestBaseBranch', () => {
+  it('returns null if the source branch is default-like', () => {
+    const { getPullRequestBaseBranch } = proxyquire('../../../src/plugins/util/test', {
+      './git': {
+        getGitRemoteName: () => 'origin',
+        getSourceBranch: () => 'main'
+      }
+    })
+    const baseBranch = getPullRequestBaseBranch()
+    expect(baseBranch).to.be.null
+  })
+
+  context('there is a pull request base branch', () => {
+    it('returns base commit SHA to compare against ', () => {
+      const getMergeBaseStub = sinon.stub()
+      getMergeBaseStub.returns('1234af')
+      const checkAndFetchBranchStub = sinon.stub()
+      const getLocalBranchesStub = sinon.stub()
+      const { getPullRequestBaseBranch } = proxyquire('../../../src/plugins/util/test', {
+        './git': {
+          getGitRemoteName: () => 'origin',
+          getSourceBranch: () => 'feature-branch',
+          getMergeBase: getMergeBaseStub,
+          checkAndFetchBranch: checkAndFetchBranchStub,
+          getLocalBranches: getLocalBranchesStub
+        }
+      })
+      const baseBranch = getPullRequestBaseBranch('trunk')
+      expect(baseBranch).to.equal('1234af')
+      expect(checkAndFetchBranchStub).to.have.been.calledWith('trunk', 'origin')
+      expect(getMergeBaseStub).to.have.been.calledWith('trunk', 'feature-branch')
+      expect(getLocalBranchesStub).not.to.have.been.called
+    })
+  })
+
+  context('there is no pull request base branch', () => {
+    it('returns the best base branch SHA from local branches', () => {
+      const checkAndFetchBranchStub = sinon.stub()
+      const getLocalBranchesStub = sinon.stub().returns(['trunk', 'master', 'feature-branch'])
+
+      const getMergeBaseStub = sinon.stub()
+      getMergeBaseStub.withArgs('trunk', 'feature-branch').returns('1234af')
+      getMergeBaseStub.withArgs('master', 'feature-branch').returns('fa4321')
+
+      const getCountsStub = sinon.stub()
+      getCountsStub.withArgs('trunk', 'feature-branch').returns({ ahead: 0, behind: 0 })
+      // master should be chosen because even though it has the same "ahead" value, it is a default branch
+      getCountsStub.withArgs('master', 'feature-branch').returns({ ahead: 0, behind: 1 })
+
+      const { getPullRequestBaseBranch, POSSIBLE_BASE_BRANCHES } = proxyquire('../../../src/plugins/util/test', {
+        './git': {
+          getGitRemoteName: () => 'origin',
+          getSourceBranch: () => 'feature-branch',
+          getMergeBase: getMergeBaseStub,
+          checkAndFetchBranch: checkAndFetchBranchStub,
+          getLocalBranches: getLocalBranchesStub,
+          getCounts: getCountsStub
+        }
+      })
+      const baseBranch = getPullRequestBaseBranch()
+      expect(baseBranch).to.equal('fa4321')
+
+      POSSIBLE_BASE_BRANCHES.forEach((baseBranch) => {
+        expect(checkAndFetchBranchStub).to.have.been.calledWith(baseBranch, 'origin')
+      })
+      expect(getLocalBranchesStub).to.have.been.calledWith('origin')
+      expect(getMergeBaseStub).to.have.been.calledWith('master', 'feature-branch')
+      expect(getMergeBaseStub).to.have.been.calledWith('trunk', 'feature-branch')
+      expect(getCountsStub).to.have.been.calledWith('master', 'feature-branch')
+      expect(getCountsStub).to.have.been.calledWith('trunk', 'feature-branch')
+    })
   })
 })

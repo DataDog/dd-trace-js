@@ -24,6 +24,8 @@ const skippableSuitesCh = channel('ci:cucumber:test-suite:skippable')
 const sessionStartCh = channel('ci:cucumber:session:start')
 const sessionFinishCh = channel('ci:cucumber:session:finish')
 const testManagementTestsCh = channel('ci:cucumber:test-management-tests')
+const impactedTestsCh = channel('ci:cucumber:modified-tests')
+const isModifiedCh = channel('ci:cucumber:is-modified-test')
 
 const workerReportTraceCh = channel('ci:cucumber:worker-report:trace')
 
@@ -55,6 +57,7 @@ const lastStatusByPickleId = new Map()
 const numRetriesByPickleId = new Map()
 const numAttemptToCtx = new Map()
 const newTestsByTestFullname = new Map()
+const modifiedTestsByPickleId = new Map()
 
 let eventDataCollector = null
 let pickleByFile = {}
@@ -74,8 +77,10 @@ let isEarlyFlakeDetectionFaulty = false
 let isFlakyTestRetriesEnabled = false
 let isKnownTestsEnabled = false
 let isTestManagementTestsEnabled = false
+let isImpactedTestsEnabled = false
 let testManagementAttemptToFixRetries = 0
 let testManagementTests = {}
+let modifiedTests = {}
 let numTestRetries = 0
 let knownTests = []
 let skippedSuites = []
@@ -305,6 +310,7 @@ function wrapRun (pl, isLatestVersion) {
         let hasFailedAttemptToFix = false
         let isDisabled = false
         let isQuarantined = false
+        let isModified = false
 
         if (isTestManagementTestsEnabled) {
           const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())
@@ -329,10 +335,17 @@ function wrapRun (pl, isLatestVersion) {
           }
         }
 
-        if (isKnownTestsEnabled && status !== 'skip' && !isAttemptToFix) {
-          const numRetries = numRetriesByPickleId.get(this.pickle.id)
+        const numRetries = numRetriesByPickleId.get(this.pickle.id)
 
+        if (isImpactedTestsEnabled) {
+          isModified = modifiedTestsByPickleId.get(this.pickle.id)
+        }
+
+        if (isKnownTestsEnabled && status !== 'skip') {
           isNew = numRetries !== undefined
+        }
+
+        if (isNew || isModified) {
           isEfdRetry = numRetries > 0
         }
 
@@ -357,6 +370,7 @@ function wrapRun (pl, isLatestVersion) {
           hasFailedAttemptToFix,
           isDisabled,
           isQuarantined,
+          isModified,
           ...attemptCtx.currentStore
         })
       })
@@ -451,6 +465,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     isKnownTestsEnabled = configurationResponse.libraryConfig?.isKnownTestsEnabled
     isTestManagementTestsEnabled = configurationResponse.libraryConfig?.isTestManagementEnabled
     testManagementAttemptToFixRetries = configurationResponse.libraryConfig?.testManagementAttemptToFixRetries
+    isImpactedTestsEnabled = configurationResponse.libraryConfig?.isImpactedTestsEnabled
 
     if (isKnownTestsEnabled) {
       const knownTestsResponse = await getChannelPromise(knownTestsCh)
@@ -517,6 +532,13 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       }
     }
 
+    if (isImpactedTestsEnabled) {
+      const impactedTestsResponse = await getChannelPromise(impactedTestsCh)
+      if (!impactedTestsResponse.err) {
+        modifiedTests = impactedTestsResponse.modifiedTests
+      }
+    }
+
     const processArgv = process.argv.slice(2).join(' ')
     const command = process.env.npm_lifecycle_script || `cucumber-js ${processArgv}`
 
@@ -580,6 +602,12 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     const pickle = isNewerCucumberVersion
       ? arguments[0].pickle
       : this.eventDataCollector.getPickle(arguments[0])
+    const testCase = isNewerCucumberVersion
+      ? arguments[0].testCase
+      : arguments[1]
+    const gherkinDocument = isNewerCucumberVersion
+      ? arguments[0].gherkinDocument
+      : this.eventDataCollector.getGherkinDocument(pickle.uri)
 
     const testFileAbsolutePath = pickle.uri
     const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())
@@ -601,6 +629,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     let isAttemptToFix = false
     let isDisabled = false
     let isQuarantined = false
+    let isModified = false
 
     if (isTestManagementTestsEnabled) {
       const testProperties = getTestProperties(testSuitePath, pickle.name)
@@ -611,6 +640,24 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
       if (!isAttemptToFix && isDisabled) {
         this.options.dryRun = true
       }
+    }
+
+    if (isImpactedTestsEnabled) {
+      const setIsModified = (receivedIsModified) => { isModified = receivedIsModified }
+      const scenarios = gherkinDocument.feature?.children?.filter(
+        children => pickle.astNodeIds.includes(children.scenario.id)
+      ).map(scenario => scenario.scenario)
+      const stepIds = testCase?.testSteps?.flatMap(testStep => testStep.stepDefinitionIds)
+
+      isModifiedCh.publish({
+        scenarios,
+        testFileAbsolutePath: gherkinDocument.uri,
+        modifiedTests,
+        stepIds,
+        stepDefinitions: this.supportCodeLibrary.stepDefinitions,
+        setIsModified
+      })
+      modifiedTestsByPickleId.set(pickle.id, isModified)
     }
 
     if (isKnownTestsEnabled && !isAttemptToFix) {
@@ -634,7 +681,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     }
 
     // If it's a new test and it hasn't been skipped, we run it again
-    if (isEarlyFlakeDetectionEnabled && lastTestStatus !== 'skip' && isNew) {
+    if (isEarlyFlakeDetectionEnabled && lastTestStatus !== 'skip' && (isNew || isModified)) {
       for (let retryIndex = 0; retryIndex < earlyFlakeDetectionNumRetries; retryIndex++) {
         numRetriesByPickleId.set(pickle.id, retryIndex + 1)
         runTestCaseResult = await runTestCaseFunction.apply(this, arguments)
@@ -643,7 +690,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     let testStatus = lastTestStatus
     let shouldBePassedByEFD = false
     let shouldBePassedByTestManagement = false
-    if (isNew && isEarlyFlakeDetectionEnabled) {
+    if ((isNew || isModified) && isEarlyFlakeDetectionEnabled) {
       /**
        * If Early Flake Detection (EFD) is enabled the logic is as follows:
        * - If all attempts for a test are failing, the test has failed and we will let the test process fail.
@@ -691,7 +738,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
       testSuiteFinishCh.publish({ status: testSuiteStatus, testSuitePath })
     }
 
-    if (isNewerCucumberVersion && isEarlyFlakeDetectionEnabled && isNew) {
+    if (isNewerCucumberVersion && isEarlyFlakeDetectionEnabled && (isNew || isModified)) {
       return shouldBePassedByEFD
     }
 
@@ -938,6 +985,11 @@ addHook({
       this.options.worldParameters._ddEarlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
     }
 
+    if (isImpactedTestsEnabled) {
+      this.options.worldParameters._ddImpactedTestsEnabled = isImpactedTestsEnabled
+      this.options.worldParameters._ddModifiedTests = modifiedTests
+    }
+
     return startWorker.apply(this, arguments)
   })
   return adapterPackage
@@ -963,6 +1015,10 @@ addHook({
       isEarlyFlakeDetectionEnabled = !!this.options.worldParameters._ddIsEarlyFlakeDetectionEnabled
       if (isEarlyFlakeDetectionEnabled) {
         earlyFlakeDetectionNumRetries = this.options.worldParameters._ddEarlyFlakeDetectionNumRetries
+      }
+      isImpactedTestsEnabled = !!this.options.worldParameters._ddImpactedTestsEnabled
+      if (isImpactedTestsEnabled) {
+        modifiedTests = this.options.worldParameters._ddModifiedTests
       }
     }
   )

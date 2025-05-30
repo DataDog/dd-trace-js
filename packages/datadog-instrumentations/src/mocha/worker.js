@@ -34,6 +34,12 @@ addHook({
       delete this.options._ddEfdNumRetries
       delete this.options._ddIsKnownTestsEnabled
     }
+    if (this.options._ddIsImpactedTestsEnabled) {
+      config.isImpactedTestsEnabled = true
+      config.modifiedTests = this.options._ddModifiedTests
+      delete this.options._ddIsImpactedTestsEnabled
+      delete this.options._ddModifiedTests
+    }
     if (this.options._ddIsTestManagementTestsEnabled) {
       config.isTestManagementTestsEnabled = true
       // TODO: attempt to fix does not work in parallel mode yet
