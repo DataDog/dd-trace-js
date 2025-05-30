@@ -953,7 +953,7 @@ function isModifiedTest (testPath, testStartLine, testEndLine, modifiedTests, te
   }
 
   // For unsupported frameworks, consider the test modified if any lines were changed
-  if (NOT_SUPPORTED_GRANULARITY_IMPACTED_TESTS_FRAMEWORKS.includes(testFramework)) {
+  if (NOT_SUPPORTED_GRANULARITY_IMPACTED_TESTS_FRAMEWORKS.has(testFramework)) {
     return lines.length > 0
   }
 
