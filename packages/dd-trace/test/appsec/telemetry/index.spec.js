@@ -14,6 +14,10 @@ describe('appsec enabled metric', () => {
     originalAppsecEnabled = process.env.DD_APPSEC_ENABLED
     originalSetInterval = global.setInterval
     appsecNamespace = telemetryMetrics.manager.namespace('appsec')
+
+    appsecNamespace.reset()
+    appsecNamespace.metrics.clear()
+    appsecNamespace.distributions.clear()
   })
 
   afterEach(() => {
