@@ -247,7 +247,7 @@ class Profiler extends EventEmitter {
       }
 
       // encode and export asynchronously
-      for (const { profiler, profile } of profiles) {
+      await Promise.all(profiles.map(async ({ profiler, profile }) => {
         try {
           const encoded = await profiler.encode(profile)
           const compressed = encoded instanceof Buffer && this._compressionFn !== undefined
@@ -265,7 +265,7 @@ class Profiler extends EventEmitter {
           // encode and submit the other profile types.
           this._logError(err)
         }
-      }
+      }))
 
       if (Object.keys(encodedProfiles).length > 0) {
         await this._submit(encodedProfiles, startDate, endDate, snapshotKind)

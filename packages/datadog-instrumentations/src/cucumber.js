@@ -676,6 +676,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     if (isAttemptToFix && lastTestStatus !== 'skip') {
       for (let retryIndex = 0; retryIndex < testManagementAttemptToFixRetries; retryIndex++) {
         numRetriesByPickleId.set(pickle.id, retryIndex + 1)
+        // eslint-disable-next-line no-await-in-loop
         runTestCaseResult = await runTestCaseFunction.apply(this, arguments)
       }
     }
@@ -684,6 +685,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     if (isEarlyFlakeDetectionEnabled && lastTestStatus !== 'skip' && (isNew || isModified)) {
       for (let retryIndex = 0; retryIndex < earlyFlakeDetectionNumRetries; retryIndex++) {
         numRetriesByPickleId.set(pickle.id, retryIndex + 1)
+        // eslint-disable-next-line no-await-in-loop
         runTestCaseResult = await runTestCaseFunction.apply(this, arguments)
       }
     }
