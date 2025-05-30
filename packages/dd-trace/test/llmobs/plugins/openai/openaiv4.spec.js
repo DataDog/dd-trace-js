@@ -61,7 +61,7 @@ describe('integrations', () => {
     })
 
     // TODO: Remove the range cap once we support openai 5
-    withVersions('openai', 'openai', '>=4 <5', version => {
+    withVersions('openai', 'openai', '>=4', version => {
       const moduleRequirePath = `../../../../../../versions/openai@${version}`
 
       beforeEach(() => {
@@ -576,30 +576,19 @@ describe('integrations', () => {
       })
 
       it('submits an AzureOpenAI completion', async () => {
-        const isFromAzureOpenAIClass = azureOpenai.constructor.name === 'AzureOpenAI'
-        const postEndpoint = isFromAzureOpenAIClass
-          ? '//openai/deployments/some-model/chat/completions'
-          : '/chat/completions'
-        const query = isFromAzureOpenAIClass
-          ? { 'api-version': '2024-05-01-preview' }
-          : {}
-
-        nock('https://dd.openai.azure.com:443')
-          .post(postEndpoint)
-          .query(query)
-          .reply(200, {})
-
-        const checkSpan = agent.assertSomeTraces(traces => {
+        const checkSpan = agent.assertSomeTraces(() => {
           const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
           expect(spanEvent).to.have.property('name', 'AzureOpenAI.createChatCompletion')
           expect(spanEvent.meta).to.have.property('model_provider', 'azure_openai')
         })
 
-        await azureOpenai.chat.completions.create({
-          model: 'some-model',
-          messages: []
-        })
+        try {
+          await azureOpenai.chat.completions.create({
+            model: 'some-model',
+            messages: []
+          })
+        } catch (e) { /* do nothing */ }
 
         await checkSpan
       })

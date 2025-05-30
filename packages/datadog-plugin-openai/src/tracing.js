@@ -366,6 +366,7 @@ function normalizeMethodName (methodName) {
     case 'files.retrieve':
       return 'retrieveFile'
     case 'files.del':
+    case 'files.delete':
       return 'deleteFile'
     case 'files.retrieveContent':
     case 'files.content':
@@ -410,6 +411,7 @@ function normalizeMethodName (methodName) {
     case 'models.retrieve':
       return 'retrieveModel'
     case 'models.del':
+    case 'models.delete':
       return 'deleteModel'
     default:
       return methodName
@@ -954,6 +956,7 @@ function normalizeRequestPayload (methodName, args) {
 
     case 'deleteFile':
     case 'files.del':
+    case 'files.delete':
     case 'retrieveFile':
     case 'files.retrieve':
     case 'downloadFile':
@@ -974,6 +977,7 @@ function normalizeRequestPayload (methodName, args) {
     case 'fine-tune.retrieve':
     case 'deleteModel':
     case 'models.del':
+    case 'models.delete':
     case 'cancelFineTune':
     case 'fine_tuning.jobs.cancel':
     case 'fine-tune.cancel':

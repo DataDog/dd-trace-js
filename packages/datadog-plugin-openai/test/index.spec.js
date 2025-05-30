@@ -16,7 +16,7 @@ const Sampler = require('../../dd-trace/src/sampler')
 
 const tracerRequirePath = '../../dd-trace'
 
-const { DD_MAJOR } = require('../../../version')
+const { DD_MAJOR, NODE_MAJOR } = require('../../../version')
 
 describe('Plugin', () => {
   let openai
@@ -26,9 +26,11 @@ describe('Plugin', () => {
   let realVersion
   let tracer
 
+  let globalFile
+
   describe('openai', () => {
     // TODO: Remove the range once we support openai 5
-    withVersions('openai', 'openai', '<5.0.0', version => {
+    withVersions('openai', 'openai', version => {
       const moduleRequirePath = `../../../versions/openai@${version}`
 
       beforeEach(() => {
@@ -49,6 +51,17 @@ describe('Plugin', () => {
         const requiredModule = require(moduleRequirePath)
         const module = requiredModule.get()
         realVersion = requiredModule.version()
+
+        if (semver.satisfies(realVersion, '>=5.0.0') && NODE_MAJOR < 20) {
+          /**
+           * resolves the following error for OpenAI v5
+           *
+           * Error: `File` is not defined as a global, which is required for file uploads.
+           * Update to Node 20 LTS or newer, or set `globalThis.File` to `import('node:buffer').File`.
+           */
+          globalFile = global.File
+          global.File = require('node:buffer').File
+        }
 
         if (semver.satisfies(realVersion, '>=4.0.0')) {
           const OpenAI = module
@@ -74,6 +87,12 @@ describe('Plugin', () => {
       afterEach(() => {
         clock.restore()
         sinon.restore()
+      })
+
+      after(() => {
+        if (semver.satisfies(realVersion, '>=5.0.0') && NODE_MAJOR < 20) {
+          global.File = globalFile
+        }
       })
 
       describe('with configuration', () => {
@@ -308,7 +327,6 @@ describe('Plugin', () => {
             }, [
               'Date', 'Mon, 15 May 2023 17:24:22 GMT',
               'Content-Type', 'application/json',
-              'Content-Length', '349',
               'Connection', 'close',
               'openai-model', 'text-davinci-002',
               'openai-organization', 'kill-9',
@@ -435,7 +453,6 @@ describe('Plugin', () => {
             .reply(200, {}, [
               'Date', 'Mon, 15 May 2023 17:24:22 GMT',
               'Content-Type', 'application/json',
-              'Content-Length', '349',
               'Connection', 'close',
               'openai-model', 'text-davinci-002',
               'openai-organization', 'kill-9',
@@ -496,7 +513,6 @@ describe('Plugin', () => {
             }, [
               'Date', 'Mon, 15 May 2023 20:49:06 GMT',
               'Content-Type', 'application/json',
-              'Content-Length', '75',
               'access-control-allow-origin', '*',
               'openai-organization', 'kill-9',
               'openai-processing-ms', '344',
@@ -572,7 +588,6 @@ describe('Plugin', () => {
             }, [
               'Date', 'Mon, 15 May 2023 20:49:06 GMT',
               'Content-Type', 'application/json',
-              'Content-Length', '75',
               'access-control-allow-origin', '*',
               'openai-organization', 'kill-9',
               'openai-processing-ms', '344',
@@ -740,7 +755,6 @@ describe('Plugin', () => {
             }, [
               'Date', 'Mon, 15 May 2023 23:26:42 GMT',
               'Content-Type', 'application/json',
-              'Content-Length', '63979',
               'Connection', 'close',
               'openai-version', '2020-10-01',
               'openai-processing-ms', '164'
@@ -814,7 +828,6 @@ describe('Plugin', () => {
             }, [
               'Date', 'Mon, 15 May 2023 23:41:40 GMT',
               'Content-Type', 'application/json',
-              'Content-Length', '548',
               'Connection', 'close',
               'openai-version', '2020-10-01',
               'openai-processing-ms', '27'
@@ -893,7 +906,6 @@ describe('Plugin', () => {
             }, [
               'Date', 'Tue, 16 May 2023 20:01:49 GMT',
               'Content-Type', 'application/json',
-              'Content-Length', '172',
               'Connection', 'close',
               'openai-model', 'text-davinci-edit:001',
               'openai-organization', 'kill-9',
@@ -1013,7 +1025,6 @@ describe('Plugin', () => {
             }, [
               'Date', 'Wed, 17 May 2023 21:34:04 GMT',
               'Content-Type', 'application/json',
-              'Content-Length', '25632',
               'Connection', 'close',
               'openai-version', '2020-10-01',
               'openai-organization', 'kill-9',
@@ -1078,7 +1089,6 @@ describe('Plugin', () => {
             }, [
               'Date', 'Wed, 17 May 2023 22:32:44 GMT',
               'Content-Type', 'application/json',
-              'Content-Length', '216',
               'Connection', 'close',
               'openai-version', '2020-10-01',
               'openai-organization', 'kill-9',
@@ -1148,7 +1158,6 @@ describe('Plugin', () => {
             }, [
               'Date', 'Wed, 17 May 2023 23:03:54 GMT',
               'Content-Type', 'application/json',
-              'Content-Length', '83',
               'Connection', 'close',
               'openai-version', '2020-10-01',
               'openai-organization', 'kill-9'
@@ -1180,8 +1189,12 @@ describe('Plugin', () => {
               expect(traces[0][0].metrics).to.have.property('openai.response.deleted', 1)
             })
 
-          if (semver.satisfies(realVersion, '>=4.0.0')) {
+          if (semver.satisfies(realVersion, '>=4.0.0 <5.0.0')) {
             const result = await openai.files.del('file-268aYWYhvxWwHb4nIzP9FHM6')
+
+            expect(result.deleted).to.eql(true)
+          } else if (semver.satisfies(realVersion, '>=5.0.0')) {
+            const result = await openai.files.delete('file-268aYWYhvxWwHb4nIzP9FHM6')
 
             expect(result.deleted).to.eql(true)
           } else {
@@ -1212,7 +1225,6 @@ describe('Plugin', () => {
             }, [
               'Date', 'Wed, 17 May 2023 23:14:02 GMT',
               'Content-Type', 'application/json',
-              'Content-Length', '240',
               'Connection', 'close',
               'openai-version', '2020-10-01',
               'openai-organization', 'kill-9',
@@ -1394,7 +1406,6 @@ describe('Plugin', () => {
             .reply(200, response, [
               'Date', 'Thu, 18 May 2023 20:41:30 GMT',
               'Content-Type', 'application/json',
-              'Content-Length', '898',
               'Connection', 'close',
               'openai-version', '2020-10-01',
               'openai-processing-ms', '116'
@@ -1659,7 +1670,6 @@ describe('Plugin', () => {
             .reply(200, response, [
               'Date', 'Thu, 18 May 2023 22:11:53 GMT',
               'Content-Type', 'application/json',
-              'Content-Length', '2727',
               'Connection', 'close',
               'openai-version', '2020-10-01',
               'openai-processing-ms', '51'
@@ -1940,7 +1950,6 @@ describe('Plugin', () => {
             .reply(200, response, [
               'Date', 'Thu, 18 May 2023 22:47:17 GMT',
               'Content-Type', 'application/json',
-              'Content-Length', '1718',
               'Connection', 'close',
               'openai-version', '2020-10-01',
               'openai-processing-ms', '33'
@@ -2007,7 +2016,6 @@ describe('Plugin', () => {
             }, [
               'Date', 'Thu, 18 May 2023 22:59:08 GMT',
               'Content-Type', 'application/json',
-              'Content-Length', '152',
               'Connection', 'close',
               'access-control-allow-origin', '*',
               'openai-version', '2020-10-01',
@@ -2039,8 +2047,12 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('openai.response.id', 'ft-10RCfqSvgyEcauomw7VpiYco')
             })
 
-          if (semver.satisfies(realVersion, '>=4.0.0')) {
+          if (semver.satisfies(realVersion, '>=4.0.0 <5.0.0')) {
             const result = await openai.models.del('ft-10RCfqSvgyEcauomw7VpiYco')
+
+            expect(result.deleted).to.eql(true)
+          } else if (semver.satisfies(realVersion, '>=5.0.0')) {
+            const result = await openai.models.delete('ft-10RCfqSvgyEcauomw7VpiYco')
 
             expect(result.deleted).to.eql(true)
           } else {
@@ -2123,7 +2135,6 @@ describe('Plugin', () => {
             .reply(200, response, [
               'Date', 'Thu, 18 May 2023 23:21:43 GMT',
               'Content-Type', 'application/json',
-              'Content-Length', '1042',
               'Connection', 'close',
               'openai-version', '2020-10-01',
               'openai-processing-ms', '78'
@@ -2234,7 +2245,6 @@ describe('Plugin', () => {
               }, [
                 'Date', 'Wed, 17 May 2023 19:58:01 GMT',
                 'Content-Type', 'application/json',
-                'Content-Length', '450',
                 'Connection', 'close',
                 'openai-version', '2020-10-01',
                 'openai-organization', 'kill-9',
@@ -2333,7 +2343,6 @@ describe('Plugin', () => {
               }, [
                 'Date', 'Tue, 16 May 2023 20:59:07 GMT',
                 'Content-Type', 'application/json',
-                'Content-Length', '545',
                 'Connection', 'close',
                 'openai-version', '2020-10-01',
                 'openai-organization', 'kill-9',
@@ -2544,7 +2553,6 @@ describe('Plugin', () => {
               }, [
                 'Date', 'Tue, 23 May 2023 13:55:18 GMT',
                 'Content-Type', 'application/json',
-                'Content-Length', '549',
                 'Connection', 'close',
                 'openai-version', '2020-10-01',
                 'openai-organization', 'kill-9',
@@ -2641,7 +2649,6 @@ describe('Plugin', () => {
               }, [
                 'Date', 'Tue, 23 May 2023 14:48:40 GMT',
                 'Content-Type', 'application/json',
-                'Content-Length', '547',
                 'Connection', 'close',
                 'openai-version', '2020-10-01',
                 'openai-organization', 'kill-9',
@@ -2740,7 +2747,6 @@ describe('Plugin', () => {
               }, [
                 'Date', 'Mon, 15 May 2023 22:00:21 GMT',
                 'Content-Type', 'application/json',
-                'Content-Length', '327',
                 'access-control-allow-origin', '*',
                 'openai-model', 'gpt-3.5-turbo-0301',
                 'openai-organization', 'kill-9',
@@ -3002,7 +3008,6 @@ describe('Plugin', () => {
               }, [
                 'Date', 'Mon, 15 May 2023 22:00:21 GMT',
                 'Content-Type', 'application/json',
-                'Content-Length', '327',
                 'access-control-allow-origin', '*',
                 'openai-model', 'gpt-3.5-turbo-0301',
                 'openai-organization', 'kill-9',
@@ -3128,7 +3133,6 @@ describe('Plugin', () => {
               }, [
                 'Date', 'Fri, 19 May 2023 03:19:49 GMT',
                 'Content-Type', 'text/plain; charset=utf-8',
-                'Content-Length', '15',
                 'Connection', 'close',
                 'openai-organization', 'kill-9',
                 'openai-processing-ms', '595',
@@ -3235,7 +3239,6 @@ describe('Plugin', () => {
               }, [
                 'Date', 'Fri, 19 May 2023 03:41:25 GMT',
                 'Content-Type', 'application/json',
-                'Content-Length', '334',
                 'Connection', 'close',
                 'openai-organization', 'kill-9',
                 'openai-processing-ms', '520',
@@ -3802,54 +3805,55 @@ describe('Plugin', () => {
         })
       }
 
-      if (semver.intersects('>=4.59.0', version)) {
-        it('makes a successful call with the beta chat completions', async () => {
-          nock('https://api.openai.com:443')
-            .post('/v1/chat/completions')
-            .reply(200, {
-              id: 'chatcmpl-7GaWqyMTD9BLmkmy8SxyjUGX3KSRN',
-              object: 'chat.completion',
-              created: 1684188020,
-              model: 'gpt-4o',
-              usage: {
-                prompt_tokens: 37,
-                completion_tokens: 10,
-                total_tokens: 47
-              },
-              choices: [
-                {
-                  message: {
-                    role: 'assistant',
-                    content: 'I am doing well, how about you?'
-                  },
-                  finish_reason: 'stop',
-                  index: 0
-                }
-              ]
-            })
-
-          const checkTraces = agent
-            .assertSomeTraces(traces => {
-              const span = traces[0][0]
-              expect(span).to.have.property('name', 'openai.request')
-            })
-
-          const prom = openai.beta.chat.completions.parse({
+      it('makes a successful call with the beta chat completions', async function () {
+        if (!semver.satisfies(realVersion, '>=4.59.0 <5.0.0')) {
+          this.skip()
+        }
+        nock('https://api.openai.com:443')
+          .post('/v1/chat/completions')
+          .reply(200, {
+            id: 'chatcmpl-7GaWqyMTD9BLmkmy8SxyjUGX3KSRN',
+            object: 'chat.completion',
+            created: 1684188020,
             model: 'gpt-4o',
-            messages: [{ role: 'user', content: 'Hello, OpenAI!', name: 'hunter2' }],
-            temperature: 0.5,
-            stream: false
+            usage: {
+              prompt_tokens: 37,
+              completion_tokens: 10,
+              total_tokens: 47
+            },
+            choices: [
+              {
+                message: {
+                  role: 'assistant',
+                  content: 'I am doing well, how about you?'
+                },
+                finish_reason: 'stop',
+                index: 0
+              }
+            ]
           })
 
-          expect(prom).to.have.property('withResponse')
+        const checkTraces = agent
+          .assertSomeTraces(traces => {
+            const span = traces[0][0]
+            expect(span).to.have.property('name', 'openai.request')
+          })
 
-          const response = await prom
-
-          expect(response.choices[0].message.content).to.eql('I am doing well, how about you?')
-
-          await checkTraces
+        const prom = openai.beta.chat.completions.parse({
+          model: 'gpt-4o',
+          messages: [{ role: 'user', content: 'Hello, OpenAI!', name: 'hunter2' }],
+          temperature: 0.5,
+          stream: false
         })
-      }
+
+        expect(prom).to.have.property('withResponse')
+
+        const response = await prom
+
+        expect(response.choices[0].message.content).to.eql('I am doing well, how about you?')
+
+        await checkTraces
+      })
     })
   })
 })
