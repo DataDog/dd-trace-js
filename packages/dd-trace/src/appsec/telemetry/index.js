@@ -15,17 +15,41 @@ const {
   incrementWafUpdates,
   incrementWafRequests
 } = require('./waf')
+const telemetryMetrics = require('../../telemetry/metrics')
 
 const metricsStoreMap = new WeakMap()
 
-let enabled = false
+const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
 
-function enable (telemetryConfig) {
+let enabled = false
+let interval
+function enable (config) {
+  const telemetryConfig = config.telemetry
   enabled = telemetryConfig?.enabled && telemetryConfig.metrics
+
+  if (enabled) {
+    let origin = 'remote_config'
+
+    if (config.appsec.enabled) {
+      origin = config.getOrigin('appsec.enabled')
+    }
+
+    const gauge = appsecMetrics.gauge('enabled', { origin }, telemetryConfig.heartbeatInterval / 1000)
+    gauge.track()
+
+    interval = setInterval(() => {
+      gauge.track()
+    }, telemetryConfig.heartbeatInterval)
+    interval.unref?.()
+  }
 }
 
 function disable () {
   enabled = false
+  if (interval) {
+    clearInterval(interval)
+    interval = undefined
+  }
 }
 
 function newStore () {

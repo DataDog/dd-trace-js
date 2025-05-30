@@ -1511,6 +1511,35 @@ class Config {
     updateConfig(changes, this)
   }
 
+  getOrigin (name) {
+    const containers = [
+      this._remote,
+      this._options,
+      this._fleetStableConfig,
+      this._env,
+      this._localStableConfig,
+      this._calculated,
+      this._defaults
+    ]
+    const origins = [
+      'remote_config',
+      'code',
+      'fleet_stable_config',
+      'env_var',
+      'local_stable_config',
+      'calculated',
+      'default'
+    ]
+
+    for (let i = 0; i < containers.length; i++) {
+      const container = containers[i]
+      const value = container[name]
+      if ((value !== null && value !== undefined) || container === this._defaults) {
+        return origins[i]
+      }
+    }
+  }
+
   // TODO: Refactor the Config class so it never produces any config objects that are incompatible with MessageChannel
   /**
    * Serializes the config object so it can be passed over a Worker Thread MessageChannel.
