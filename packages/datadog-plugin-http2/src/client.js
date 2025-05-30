@@ -124,9 +124,9 @@ function extractSessionDetails (authority, options) {
   }
 
   const protocol = authority.protocol || options.protocol || 'https:'
-  let port = '' + (authority.port === ''
-    ? (authority.protocol === 'http:' ? 80 : 443)
-    : authority.port)
+  let port = authority.port === ''
+    ? authority.protocol === 'http:' ? '80' : '443'
+    : String(authority.port)
   let host = authority.hostname || authority.host || 'localhost'
 
   if (protocol === 'https:' && options) {

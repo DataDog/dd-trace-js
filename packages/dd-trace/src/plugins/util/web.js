@@ -421,7 +421,7 @@ function addAllowHeaders (req, res, headers) {
   ]
 
   for (const header of contextHeaders) {
-    if (~requestHeaders.indexOf(header)) {
+    if (requestHeaders.includes(header)) {
       allowHeaders.push(header)
     }
   }

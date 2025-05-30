@@ -304,7 +304,7 @@ function onResponseWriteHead ({ req, res, abortController, statusCode, responseH
 
   const results = waf.run({
     persistent: {
-      [addresses.HTTP_INCOMING_RESPONSE_CODE]: '' + statusCode,
+      [addresses.HTTP_INCOMING_RESPONSE_CODE]: String(statusCode),
       [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: responseHeaders
     }
   }, req)
