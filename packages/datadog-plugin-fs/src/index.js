@@ -10,7 +10,7 @@ class FsPlugin extends TracingPlugin {
     return super.configure(...args)
   }
 
-  bindStart (ctx) {
+  start (ctx) {
     if (!this.activeSpan) return this.skip()
 
     const { operation, ...params } = ctx
@@ -40,8 +40,6 @@ class FsPlugin extends TracingPlugin {
         'file.uid': uid || ''
       }
     }, ctx)
-
-    return ctx.currentStore
   }
 
   bindFinish (ctx) {

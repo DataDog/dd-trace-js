@@ -6,7 +6,7 @@ class FetchPlugin extends HttpClientPlugin {
   static get id () { return 'fetch' }
   static get prefix () { return 'tracing:apm:fetch:request' }
 
-  bindStart (ctx) {
+  start (ctx) {
     const req = ctx.req
     const options = new URL(req.url)
     options.headers = Object.fromEntries(req.headers.entries())
@@ -15,15 +15,13 @@ class FetchPlugin extends HttpClientPlugin {
 
     ctx.args = { options }
 
-    const store = super.bindStart(ctx)
+    super.start(ctx)
 
     for (const name in options.headers) {
       if (!req.headers.has(name)) {
         req.headers.set(name, options.headers[name])
       }
     }
-
-    return store
   }
 
   error (ctx) {

@@ -1,7 +1,6 @@
 'use strict'
 
 const { MEASURED } = require('../../../ext/tags')
-const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
 const API_KEY = 'langchain.request.api_key'
@@ -32,7 +31,7 @@ class BaseLangChainTracingPlugin extends TracingPlugin {
     }
   }
 
-  bindStart (ctx) {
+  start (ctx) {
     // TODO(bengl): All this renaming is just so we don't have to change the existing handlers
     ctx.args = ctx.arguments
     ctx.instance = ctx.self
@@ -56,7 +55,7 @@ class BaseLangChainTracingPlugin extends TracingPlugin {
       meta: {
         [MEASURED]: 1
       }
-    }, false)
+    }, ctx)
 
     const tags = handler.getSpanStartTags(ctx, provider, span) || []
 
@@ -66,11 +65,6 @@ class BaseLangChainTracingPlugin extends TracingPlugin {
     if (type) tags[TYPE] = type
 
     span.addTags(tags)
-
-    const store = storage('legacy').getStore() || {}
-    ctx.currentStore = { ...store, span }
-
-    return ctx.currentStore
   }
 
   asyncEnd (ctx) {

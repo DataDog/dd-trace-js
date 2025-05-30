@@ -6,7 +6,7 @@ class NetIPCPlugin extends ClientPlugin {
   static get id () { return 'net' }
   static get operation () { return 'ipc' }
 
-  bindStart (ctx) {
+  start (ctx) {
     this.startSpan('ipc.connect', {
       service: this.config.service,
       resource: ctx.options.path,
@@ -15,8 +15,6 @@ class NetIPCPlugin extends ClientPlugin {
         'ipc.path': ctx.options.path
       }
     }, ctx)
-
-    return ctx.currentStore
   }
 }
 

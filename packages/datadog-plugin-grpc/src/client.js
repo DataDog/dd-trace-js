@@ -1,6 +1,5 @@
 'use strict'
 
-const { storage } = require('../../datadog-core')
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
 const { TEXT_MAP } = require('../../../ext/formats')
 const { addMetadataTags, getFilter, getMethodMetadata } = require('./util')
@@ -19,8 +18,7 @@ class GrpcClientPlugin extends ClientPlugin {
     })
   }
 
-  bindStart (message) {
-    const store = storage('legacy').getStore()
+  start (message) {
     const { metadata, path, type } = message
     const metadataFilter = this.config.metadataFilter
     const method = getMethodMetadata(path, type)
@@ -40,7 +38,7 @@ class GrpcClientPlugin extends ClientPlugin {
       metrics: {
         'grpc.status.code': 0
       }
-    }, false)
+    }, message)
     // needed as precursor for peer.service
     if (method.service && method.package) {
       span.setTag('rpc.service', method.package + '.' + method.service)
@@ -52,10 +50,6 @@ class GrpcClientPlugin extends ClientPlugin {
     }
 
     message.span = span
-    message.parentStore = store
-    message.currentStore = { ...store, span }
-
-    return message.currentStore
   }
 
   bindAsyncStart ({ parentStore }) {

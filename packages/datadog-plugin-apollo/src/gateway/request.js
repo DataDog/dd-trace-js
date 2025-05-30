@@ -1,6 +1,5 @@
 'use strict'
 
-const { storage } = require('../../../datadog-core')
 const ApolloBasePlugin = require('../../../dd-trace/src/plugins/apollo')
 
 let tools
@@ -14,8 +13,8 @@ class ApolloGatewayRequestPlugin extends ApolloBasePlugin {
     return 'tracing:apm:apollo:gateway:request'
   }
 
-  bindStart (ctx) {
-    const store = storage('legacy').getStore()
+  start (ctx) {
+    const store = ctx.parentStore
     const childOf = store ? store.span : null
     const spanData = {
       childOf,
@@ -46,12 +45,7 @@ class ApolloGatewayRequestPlugin extends ApolloBasePlugin {
       spanData.resource = getSignature(document, name, type, this?.config?.signature)
       spanData.meta['graphql.operation.type'] = type
     }
-    const span = this.startSpan(this.operationName({ id: `${this.constructor.id}.${this.constructor.operation}` }),
-      spanData, false)
-
-    ctx.parentStore = store
-    ctx.currentStore = { ...store, span }
-    return ctx.currentStore
+    this.startSpan(this.operationName({ id: `${this.constructor.id}.${this.constructor.operation}` }), spanData, ctx)
   }
 
   asyncStart (ctx) {

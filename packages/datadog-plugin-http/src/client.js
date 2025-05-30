@@ -1,7 +1,6 @@
 'use strict'
 
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
-const { storage } = require('../../datadog-core')
 const tags = require('../../../ext/tags')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const formats = require('../../../ext/formats')
@@ -19,9 +18,9 @@ class HttpClientPlugin extends ClientPlugin {
   static get id () { return 'http' }
   static get prefix () { return 'apm:http:client:request' }
 
-  bindStart (message) {
+  start (message) {
     const { args, http = {} } = message
-    const store = storage('legacy').getStore()
+    const store = message.parentStore
     const options = args.options
     const agent = options.agent || options._defaultAgent || http.globalAgent || {}
     const protocol = options.protocol || agent.protocol || 'http:'
@@ -51,7 +50,7 @@ class HttpClientPlugin extends ClientPlugin {
       metrics: {
         [CLIENT_PORT_KEY]: Number.parseInt(options.port)
       }
-    }, false)
+    }, message)
 
     // TODO: Figure out a better way to do this for any span.
     if (!allowed) {
@@ -70,10 +69,6 @@ class HttpClientPlugin extends ClientPlugin {
     analyticsSampler.sample(span, this.config.measured)
 
     message.span = span
-    message.parentStore = store
-    message.currentStore = { ...store, span }
-
-    return message.currentStore
   }
 
   shouldInjectTraceHeaders (options, uri) {

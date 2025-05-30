@@ -19,8 +19,8 @@ class NextPlugin extends ServerPlugin {
     this.addSub('apm:next:page:load', message => this.pageLoad(message))
   }
 
-  bindStart ({ req, res }) {
-    const store = storage('legacy').getStore()
+  start ({ parentStore, req, res }) {
+    const store = parentStore
     const childOf = store ? store.span : store
     const span = this.tracer.startSpan(this.operationName(), {
       childOf,
@@ -37,8 +37,6 @@ class NextPlugin extends ServerPlugin {
     analyticsSampler.sample(span, this.config.measured, true)
 
     this._requests.set(span, req)
-
-    return { ...store, span }
   }
 
   error ({ span, error }) {

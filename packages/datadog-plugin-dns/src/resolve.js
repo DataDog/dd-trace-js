@@ -6,7 +6,7 @@ class DNSResolvePlugin extends ClientPlugin {
   static get id () { return 'dns' }
   static get operation () { return 'resolve' }
 
-  bindStart (ctx) {
+  start (ctx) {
     const [hostname, maybeType] = ctx.args
     const rrtype = typeof maybeType === 'string' ? maybeType : 'A'
 
@@ -19,8 +19,6 @@ class DNSResolvePlugin extends ClientPlugin {
         'dns.rrtype': rrtype
       }
     }, ctx)
-
-    return ctx.currentStore
   }
 }
 

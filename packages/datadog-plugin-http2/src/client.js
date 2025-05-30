@@ -27,7 +27,7 @@ class Http2ClientPlugin extends ClientPlugin {
   static get id () { return 'http2' }
   static get prefix () { return 'apm:http2:client:request' }
 
-  bindStart (message) {
+  start (message) {
     const { authority, options, headers = {} } = message
     const sessionDetails = extractSessionDetails(authority, options)
     const path = headers[HTTP2_HEADER_PATH] || '/'
@@ -36,7 +36,7 @@ class Http2ClientPlugin extends ClientPlugin {
     const uri = `${sessionDetails.protocol}//${sessionDetails.host}:${sessionDetails.port}${pathname}`
     const allowed = this.config.filter(uri)
 
-    const store = storage('legacy').getStore()
+    const store = message.parentStore
     const childOf = store && allowed ? store.span : null
     const span = this.startSpan(this.operationName(), {
       childOf,
@@ -53,7 +53,7 @@ class Http2ClientPlugin extends ClientPlugin {
       metrics: {
         [CLIENT_PORT_KEY]: Number.parseInt(sessionDetails.port)
       }
-    }, false)
+    }, message)
 
     // TODO: Figure out a better way to do this for any span.
     if (!allowed) {
@@ -65,14 +65,9 @@ class Http2ClientPlugin extends ClientPlugin {
     if (!hasAmazonSignature(headers, path)) {
       this.tracer.inject(span, HTTP_HEADERS, headers)
     }
-
-    message.parentStore = store
-    message.currentStore = { ...store, span }
-
-    return message.currentStore
   }
 
-  bindAsyncStart ({ eventName, eventData, currentStore, parentStore }) {
+  asyncStart ({ eventName, eventData, currentStore, parentStore }) {
     // Plugin wasn't enabled when the request started.
     if (!currentStore) return storage('legacy').getStore()
 
@@ -87,8 +82,6 @@ class Http2ClientPlugin extends ClientPlugin {
         this._onClose(currentStore, eventData)
         return parentStore
     }
-
-    return storage('legacy').getStore()
   }
 
   configure (config) {

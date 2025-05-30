@@ -1,7 +1,6 @@
 'use strict'
 
 const { MEASURED } = require('../../../ext/tags')
-const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const makeUtilities = require('../../dd-trace/src/plugins/util/llm')
 
@@ -22,7 +21,7 @@ class GoogleCloudVertexAITracingPlugin extends TracingPlugin {
     Object.assign(this, makeUtilities('vertexai', this._tracerConfig))
   }
 
-  bindStart (ctx) {
+  start (ctx) {
     const { instance, request, resource, stream } = ctx
 
     const span = this.startSpan('vertexai.request', {
@@ -32,15 +31,10 @@ class GoogleCloudVertexAITracingPlugin extends TracingPlugin {
       meta: {
         [MEASURED]: 1
       }
-    }, false)
+    }, ctx)
 
     const tags = this.tagRequest(request, instance, stream, span)
     span.addTags(tags)
-
-    const store = storage('legacy').getStore() || {}
-    ctx.currentStore = { ...store, span }
-
-    return ctx.currentStore
   }
 
   asyncEnd (ctx) {
