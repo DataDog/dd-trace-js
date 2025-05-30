@@ -85,6 +85,16 @@ export default [
       '@stylistic/max-len': ['error', { code: 120, tabWidth: 2, ignoreUrls: true }],
       '@stylistic/object-curly-newline': ['error', { multiline: true, consistent: true }],
       '@stylistic/object-curly-spacing': ['error', 'always'],
+      '@stylistic/comma-dangle': ['error', {
+        arrays: 'only-multiline',
+        objects: 'only-multiline',
+        imports: 'always-multiline',
+        exports: 'always-multiline',
+        functions: 'only-multiline',
+        importAttributes: 'always-multiline',
+        dynamicImports: 'always-multiline'
+      }],
+      'comma-dangle': 'off', // Override (turned on by @eslint/js/recommended)
       'import/no-extraneous-dependencies': 'error',
       'n/no-restricted-require': ['error', ['diagnostics_channel']],
       'no-console': 'error',
@@ -134,7 +144,6 @@ export default [
       'unicorn/prefer-at': 'off', // 17 errors | Difficult to fix
       'unicorn/prefer-spread': 'off', // 13 errors | Difficult to fix
       'unicorn/prevent-abbreviations': 'off', // too strict
-      'unicorn/switch-case-braces': 'off', // too strict
 
       // These rules could potentially evaluated again at a much later point
       'unicorn/no-array-callback-reference': 'off',
@@ -155,7 +164,8 @@ export default [
       'unicorn/prefer-node-protocol': 'off', // May not be used due to guardrails
       'unicorn/prefer-reflect-apply': 'off', // Questionable benefit and more than 500 matches
       'unicorn/prefer-switch': 'off', // Questionable benefit
-      'unicorn/prefer-top-level-await': 'off' // Only useful when using ESM
+      'unicorn/prefer-top-level-await': 'off', // Only useful when using ESM
+      'unicorn/switch-case-braces': 'off', // Questionable benefit
     }
   },
   {

@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url'
 import {
   load as origLoad,
   resolve as origResolve,
-  getSource as origGetSource
+  getSource as origGetSource,
 } from 'import-in-the-middle/hook.mjs'
 
 let hasInsertedInit = false
