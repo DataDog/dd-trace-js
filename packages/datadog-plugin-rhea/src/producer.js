@@ -13,7 +13,8 @@ class RheaProducerPlugin extends ProducerPlugin {
     this.addTraceSub('encode', this.encode.bind(this))
   }
 
-  start ({ targetAddress, host, port }) {
+  bindStart (ctx) {
+    const { targetAddress, host, port } = ctx
     const name = targetAddress || 'amq.topic'
     this.startSpan({
       resource: name,
@@ -24,7 +25,9 @@ class RheaProducerPlugin extends ProducerPlugin {
         'out.host': host,
         [CLIENT_PORT_KEY]: port
       }
-    })
+    }, ctx)
+
+    return ctx.currentStore
   }
 
   encode (msg) {

@@ -2,8 +2,7 @@
 
 const {
   channel,
-  addHook,
-  AsyncResource
+  addHook
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
@@ -15,9 +14,9 @@ addHook({ name: 'amqp10', file: 'lib/sender_link.js', versions: ['>=3'] }, Sende
     if (!startCh.hasSubscribers) {
       return send.apply(this, arguments)
     }
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-    return asyncResource.runInAsyncScope(() => {
-      startCh.publish({ link: this })
+    const ctx = { link: this }
+
+    return startCh.runStores(ctx, () => {
       try {
         const promise = send.apply(this, arguments)
 
@@ -26,12 +25,13 @@ addHook({ name: 'amqp10', file: 'lib/sender_link.js', versions: ['>=3'] }, Sende
           return promise
         }
 
-        promise.then(asyncResource.bind(() => finish(finishCh, errorCh)),
-          asyncResource.bind(e => finish(finishCh, errorCh, e)))
-
+        promise.then(
+          () => finish(finishCh, errorCh, null, ctx),
+          e => finish(finishCh, errorCh, e, ctx)
+        )
         return promise
       } catch (err) {
-        finish(finishCh, errorCh, err)
+        finish(finishCh, errorCh, err, ctx)
         throw err
       }
     })
@@ -47,25 +47,27 @@ addHook({ name: 'amqp10', file: 'lib/receiver_link.js', versions: ['>=3'] }, Rec
     if (!transferFrame || transferFrame.aborted || transferFrame.more) {
       return messageReceived.apply(this, arguments)
     }
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-    return asyncResource.runInAsyncScope(() => {
-      startCh.publish({ link: this })
+    const ctx = { link: this }
+
+    return startCh.runStores(ctx, () => {
       try {
         return messageReceived.apply(this, arguments)
       } catch (err) {
-        errorCh.publish(err)
+        ctx.error = err
+        errorCh.publish(ctx)
         throw err
       } finally {
-        finishCh.publish()
+        finishCh.publish(ctx)
       }
     })
   })
   return ReceiverLink
 })
 
-function finish (finishCh, errorCh, error) {
+function finish (finishCh, errorCh, error, ctx) {
   if (error) {
-    errorCh.publish(error)
+    ctx.error = error
+    errorCh.publish(ctx)
   }
-  finishCh.publish()
+  finishCh.publish(ctx)
 }

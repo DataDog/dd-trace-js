@@ -2,8 +2,7 @@
 
 const {
   channel,
-  addHook,
-  AsyncResource
+  addHook
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
@@ -65,38 +64,34 @@ function wrapMethod (method) {
   return function (request) {
     if (!requestStartCh.hasSubscribers) return method.apply(this, arguments)
 
-    const innerAsyncResource = new AsyncResource('bound-anonymous-fn')
-
-    return innerAsyncResource.runInAsyncScope(() => {
-      const projectId = this.auth._cachedProjectId
+    const ctx = { request, api, projectId: this.auth._cachedProjectId }
+    return requestStartCh.runStores(ctx, () => {
       const cb = arguments[arguments.length - 1]
 
-      requestStartCh.publish({ request, api, projectId })
-
       if (typeof cb === 'function') {
-        const outerAsyncResource = new AsyncResource('bound-anonymous-fn')
-
-        arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => innerAsyncResource.bind(function (error) {
+        arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => function (error) {
           if (error) {
-            requestErrorCh.publish(error)
+            ctx.error = error
+            requestErrorCh.publish(ctx)
           }
 
-          requestFinishCh.publish()
+          requestFinishCh.publish(ctx)
 
-          return outerAsyncResource.runInAsyncScope(() => cb.apply(this, arguments))
-        }))
+          return cb.apply(this, arguments)
+        })
 
         return method.apply(this, arguments)
       } else {
         return method.apply(this, arguments)
           .then(
             response => {
-              requestFinishCh.publish()
+              requestFinishCh.publish(ctx)
               return response
             },
             error => {
-              requestErrorCh.publish(error)
-              requestFinishCh.publish()
+              ctx.error = error
+              requestErrorCh.publish(ctx)
+              requestFinishCh.publish(ctx)
               throw error
             }
           )
@@ -119,16 +114,14 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
   shimmer.wrap(Subscription.prototype, 'emit', emit => function (eventName, message) {
     if (eventName !== 'message' || !message) return emit.apply(this, arguments)
 
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-
-    return asyncResource.runInAsyncScope(() => {
-      try {
-        return emit.apply(this, arguments)
-      } catch (err) {
-        receiveErrorCh.publish(err)
-        throw err
-      }
-    })
+    const ctx = {}
+    try {
+      return emit.apply(this, arguments)
+    } catch (err) {
+      ctx.error = err
+      receiveErrorCh.publish(ctx)
+      throw err
+    }
   })
 
   return obj
@@ -136,22 +129,29 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
 
 addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/lease-manager.js' }, (obj) => {
   const LeaseManager = obj.LeaseManager
+  const ctx = {}
 
   shimmer.wrap(LeaseManager.prototype, '_dispense', dispense => function (message) {
     if (receiveStartCh.hasSubscribers) {
-      receiveStartCh.publish({ message })
+      ctx.message = message
+      receiveStartCh.runStores(ctx, () => {
+        return dispense.apply(this, arguments)
+      })
+    } else {
+      return dispense.apply(this, arguments)
     }
-    return dispense.apply(this, arguments)
   })
 
   shimmer.wrap(LeaseManager.prototype, 'remove', remove => function (message) {
-    receiveFinishCh.publish({ message })
-    return remove.apply(this, arguments)
+    receiveFinishCh.runStores(ctx, () => {
+      return remove.apply(this, arguments)
+    })
   })
 
   shimmer.wrap(LeaseManager.prototype, 'clear', clear => function () {
     for (const message of this._messages) {
-      receiveFinishCh.publish({ message })
+      ctx.message = message
+      receiveFinishCh.runStores(ctx, () => {})
     }
     return clear.apply(this, arguments)
   })
