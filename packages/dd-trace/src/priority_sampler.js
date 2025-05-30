@@ -5,7 +5,6 @@ const RateLimiter = require('./rate_limiter')
 const Sampler = require('./sampler')
 const { setSamplingRules } = require('./startup-log')
 const SamplingRule = require('./sampling_rule')
-const { hasOwn } = require('./util')
 
 const {
   SAMPLING_MECHANISM_DEFAULT,
@@ -208,9 +207,9 @@ class PrioritySampler {
    * @returns {SamplingPriority}
    */
   _getPriorityFromTags (tags, _context) {
-    if (hasOwn(tags, MANUAL_KEEP) && tags[MANUAL_KEEP] !== false) {
+    if (Object.hasOwn(tags, MANUAL_KEEP) && tags[MANUAL_KEEP] !== false) {
       return USER_KEEP
-    } else if (hasOwn(tags, MANUAL_DROP) && tags[MANUAL_DROP] !== false) {
+    } else if (Object.hasOwn(tags, MANUAL_DROP) && tags[MANUAL_DROP] !== false) {
       return USER_REJECT
     } else {
       const priority = Number.parseInt(tags[SAMPLING_PRIORITY], 10)

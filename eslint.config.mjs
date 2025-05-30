@@ -110,6 +110,7 @@ export default [
       ]],
 
       'prefer-object-spread': 'error',
+      'prefer-object-has-own': 'error',
 
       ...eslintPluginUnicorn.configs.recommended.rules,
 
