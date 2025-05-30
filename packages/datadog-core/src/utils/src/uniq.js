@@ -1,5 +1,5 @@
 'use strict'
 
-module.exports = function (arr) {
+module.exports = function uniq (arr) {
   return [...new Set(arr)]
 }

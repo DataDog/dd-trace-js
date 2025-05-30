@@ -257,6 +257,12 @@ class EventSerializer {
   }
 }
 
+function add (items) {
+  for (const item of items.getEntries()) {
+    this.eventHandler(item)
+  }
+}
+
 /**
  * Class that sources timeline events through Node.js performance measurement APIs.
  */
@@ -270,12 +276,6 @@ class NodeApiEventSource {
   start () {
     // if already started, do nothing
     if (this.observer) return
-
-    function add (items) {
-      for (const item of items.getEntries()) {
-        this.eventHandler(item)
-      }
-    }
 
     this.observer = new PerformanceObserver(add.bind(this))
     this.observer.observe({ entryTypes: this.entryTypes })
@@ -380,17 +380,15 @@ class EventsProfiler {
       }
     }
 
-    if (options.codeHotspotsEnabled) {
+    this.eventSource = options.codeHotspotsEnabled
       // Use Datadog instrumentation to collect events with span IDs. Still use
       // Node API for GC events.
-      this.eventSource = new CompositeEventSource([
+      ? new CompositeEventSource([
         new DatadogInstrumentationEventSource(eventHandler, eventFilter),
         new NodeApiEventSource(filteringEventHandler, ['gc'])
       ])
-    } else {
       // Use Node API instrumentation to collect events without span IDs
-      this.eventSource = new NodeApiEventSource(filteringEventHandler)
-    }
+      : new NodeApiEventSource(filteringEventHandler)
   }
 
   start () {
