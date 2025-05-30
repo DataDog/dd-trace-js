@@ -244,7 +244,7 @@ class MetricsAggregationClient {
     const container = monotonic ? this._counters : this._gauges
     const node = this._ensureTree(container, name, tags, 0)
 
-    node.value = node.value + count
+    node.value += count
   }
 
   gauge (name, value, tags) {

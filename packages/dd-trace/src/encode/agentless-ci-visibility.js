@@ -161,20 +161,20 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   _encodeEventContent (bytes, content) {
     let totalKeysLength = TEST_AND_SPAN_KEYS_LENGTH
     if (content.meta.test_session_id) {
-      totalKeysLength = totalKeysLength + 1
+      totalKeysLength += 1
     }
     if (content.meta.test_module_id) {
-      totalKeysLength = totalKeysLength + 1
+      totalKeysLength += 1
     }
     if (content.meta.test_suite_id) {
-      totalKeysLength = totalKeysLength + 1
+      totalKeysLength += 1
     }
     const itrCorrelationId = content.meta[ITR_CORRELATION_ID]
     if (itrCorrelationId) {
-      totalKeysLength = totalKeysLength + 1
+      totalKeysLength += 1
     }
     if (content.type) {
-      totalKeysLength = totalKeysLength + 1
+      totalKeysLength += 1
     }
     this._encodeMapPrefix(bytes, totalKeysLength)
     if (content.type) {
