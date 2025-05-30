@@ -399,3 +399,40 @@ describe('isGitAvailable', () => {
     expect(isGitAvailable()).to.be.false
   })
 })
+
+describe('getGitInformationDiscrepancy', () => {
+  const { getGitInformationDiscrepancy } = proxyquire('../../../src/plugins/util/git',
+    {
+      child_process: {
+        execFileSync: execFileSyncStub
+      }
+    }
+  )
+
+  it('returns git repository URL and commit SHA', () => {
+    execFileSyncStub
+      .onCall(0).returns('https://github.com/datadog/safe-repository.git')
+      .onCall(1).returns('abc123')
+
+    const result = getGitInformationDiscrepancy()
+
+    expect(result).to.eql({
+      gitRepositoryUrl: 'https://github.com/datadog/safe-repository.git',
+      gitCommitSHA: 'abc123'
+    })
+
+    expect(execFileSyncStub).to.have.been.calledWith('git', ['ls-remote', '--get-url'])
+    expect(execFileSyncStub).to.have.been.calledWith('git', ['rev-parse', 'HEAD'])
+  })
+
+  it('returns empty strings when git commands fail', () => {
+    execFileSyncStub.throws(new Error('git command failed'))
+
+    const result = getGitInformationDiscrepancy()
+
+    expect(result).to.eql({
+      gitRepositoryUrl: '',
+      gitCommitSHA: ''
+    })
+  })
+})

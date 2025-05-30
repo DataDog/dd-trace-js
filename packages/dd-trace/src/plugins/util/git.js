@@ -362,6 +362,26 @@ function getGitMetadata (ciMetadata) {
   return tags
 }
 
+function getGitInformationDiscrepancy () {
+  const gitRepositoryUrl = sanitizedExec(
+    'git',
+    ['ls-remote', '--get-url'],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_repository_url' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_repository_url' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_repository_url' } }
+  )
+
+  const gitCommitSHA = sanitizedExec(
+    'git',
+    ['rev-parse', 'HEAD'],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_commit_sha' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_commit_sha' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_commit_sha' } }
+  )
+
+  return { gitRepositoryUrl, gitCommitSHA }
+}
+
 module.exports = {
   getGitMetadata,
   getLatestCommits,
@@ -371,5 +391,6 @@ module.exports = {
   GIT_REV_LIST_MAX_BUFFER,
   isShallowRepository,
   unshallowRepository,
-  isGitAvailable
+  isGitAvailable,
+  getGitInformationDiscrepancy
 }
