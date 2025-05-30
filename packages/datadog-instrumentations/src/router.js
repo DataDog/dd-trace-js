@@ -1,20 +1,17 @@
 'use strict'
 
-const METHODS = [...require('http').METHODS.map(v => v.toLowerCase()), 'all']
+const METHODS = require('http').METHODS.map(v => v.toLowerCase())
+METHODS.push('all')
 const pathToRegExp = require('path-to-regexp')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel } = require('./helpers/instrument')
 
 function isFastStar (layer, matchers) {
-  layer.regexp?.fast_star ?? matchers.some(matcher => matcher.path === '*')
+  return layer.regexp?.fast_star ?? matchers.some(matcher => matcher.path === '*')
 }
 
 function isFastSlash (layer, matchers) {
-  layer.regexp?.fast_slash ?? matchers.some(matcher => matcher.path === '/')
-}
-
-function flatten (arr) {
-  return arr.reduce((acc, val) => Array.isArray(val) ? acc.concat(flatten(val)) : acc.concat(val), [])
+  return layer.regexp?.fast_slash ?? matchers.some(matcher => matcher.path === '/')
 }
 
 // TODO: Move this function to a shared file between Express and Router
@@ -74,8 +71,8 @@ function createWrapRouterMethod (name) {
     })
   }
 
-  function wrapStack (stack, offset, matchers) {
-    [].concat(stack).slice(offset).forEach(layer => {
+  function wrapStack (layers, matchers) {
+    for (const layer of layers) {
       if (layer.__handle) { // express-async-errors
         layer.__handle = wrapLayerHandle(layer, layer.__handle)
       } else {
@@ -93,7 +90,7 @@ function createWrapRouterMethod (name) {
           layer.route[method] = wrapMethod(layer.route[method])
         })
       }
-    })
+    }
   }
 
   function wrapNext (req, next) {
@@ -110,7 +107,7 @@ function createWrapRouterMethod (name) {
   }
 
   function extractMatchers (fn) {
-    const arg = flatten([].concat(fn))
+    const arg = Array.isArray(fn) ? fn : [fn]
 
     if (typeof arg[0] === 'function') {
       return []
@@ -139,7 +136,10 @@ function createWrapRouterMethod (name) {
 
   function wrapMethod (original) {
     return shimmer.wrapFunction(original, original => function methodWithTrace (fn) {
-      const offset = this.stack ? [].concat(this.stack).length : 0
+      let offset = 0
+      if (this.stack) {
+        offset = Array.isArray(this.stack) ? this.stack.length : 1
+      }
       const router = original.apply(this, arguments)
 
       if (typeof this.stack === 'function') {
@@ -150,7 +150,9 @@ function createWrapRouterMethod (name) {
         routeAddedChannel.publish({ topOfStackFunc: methodWithTrace, layer: this.stack[0] })
       }
 
-      wrapStack(this.stack, offset, extractMatchers(fn))
+      if (this.stack.length > offset) {
+        wrapStack(this.stack.slice(offset), extractMatchers(fn))
+      }
 
       return router
     })

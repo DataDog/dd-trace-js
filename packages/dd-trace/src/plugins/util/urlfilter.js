@@ -1,11 +1,12 @@
 'use strict'
 
+const { types } = require('util')
 const log = require('../../log')
 
 function applyFilter (filter, uri) {
   if (typeof filter === 'function') {
     return filter(uri)
-  } else if (filter instanceof RegExp) {
+  } else if (types.isRegExp(filter)) {
     return filter.test(uri)
   } else if (Array.isArray(filter)) {
     return filter.some(filter => applyFilter(filter, uri))

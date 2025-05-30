@@ -10,7 +10,7 @@ function publishRequestCookieAndNext (req, res, next) {
     if (cookieParserReadCh.hasSubscribers && req) {
       const abortController = new AbortController()
 
-      const mergedCookies = Object.assign({}, req.cookies, req.signedCookies)
+      const mergedCookies = { ...req.cookies, ...req.signedCookies }
 
       cookieParserReadCh.publish({ req, res, abortController, cookies: mergedCookies })
 

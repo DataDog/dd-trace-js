@@ -185,17 +185,17 @@ function wrapChildProcessCustomPromisifyMethod (customPromisifyMethod, shell) {
 
 function wrapChildProcessAsyncMethod (ChildProcess, shell = false) {
   return function wrapMethod (childProcessMethod) {
-    function wrappedChildProcessMethod () {
-      if (!childProcessChannel.start.hasSubscribers || arguments.length === 0) {
-        return childProcessMethod.apply(this, arguments)
+    function wrappedChildProcessMethod (...args) {
+      if (!childProcessChannel.start.hasSubscribers || args.length === 0) {
+        return childProcessMethod.apply(this, args)
       }
 
-      const childProcessInfo = normalizeArgs(arguments, shell)
+      const childProcessInfo = normalizeArgs(args, shell)
 
-      const cb = arguments[arguments.length - 1]
+      const cb = args.at(-1)
       if (typeof cb === 'function') {
         const callbackResource = new AsyncResource('bound-anonymous-fn')
-        arguments[arguments.length - 1] = callbackResource.bind(cb)
+        args[args.length - 1] = callbackResource.bind(cb)
       }
 
       const innerResource = new AsyncResource('bound-anonymous-fn')
@@ -214,7 +214,7 @@ function wrapChildProcessAsyncMethod (ChildProcess, shell = false) {
             const error = abortController.signal.reason || new Error('Aborted')
             childProcess.emit('error', error)
 
-            const cb = arguments[arguments.length - 1]
+            const cb = args.at(-1)
             if (typeof cb === 'function') {
               cb(error)
             }
@@ -222,7 +222,7 @@ function wrapChildProcessAsyncMethod (ChildProcess, shell = false) {
             childProcess.emit('close')
           })
         } else {
-          childProcess = childProcessMethod.apply(this, arguments)
+          childProcess = childProcessMethod.apply(this, args)
         }
 
         if (childProcess) {

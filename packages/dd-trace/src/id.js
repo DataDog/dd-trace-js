@@ -78,7 +78,7 @@ function createBuffer (value) {
 
 // Convert a numerical string to a buffer using the specified radix.
 function fromString (str, raddix) {
-  const buffer = new Array(8)
+  const buffer = Array.from({ length: 8 })
   const len = str.length
 
   let pos = 0

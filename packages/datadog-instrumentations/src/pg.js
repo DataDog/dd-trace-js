@@ -28,18 +28,18 @@ addHook({ name: 'pg', file: 'lib/native/index.js', versions: ['>=8.0.3'] }, Clie
 })
 
 function wrapQuery (query) {
-  return function () {
+  return function (...args) {
     if (!startCh.hasSubscribers) {
-      return query.apply(this, arguments)
+      return query.apply(this, args)
     }
 
     const callbackResource = new AsyncResource('bound-anonymous-fn')
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     const processId = this.processID
 
-    const pgQuery = arguments[0] !== null && typeof arguments[0] === 'object'
-      ? arguments[0]
-      : { text: arguments[0] }
+    const pgQuery = args[0] !== null && typeof args[0] === 'object'
+      ? args[0]
+      : { text: args[0] }
 
     const textPropObj = pgQuery.cursor ?? pgQuery
     const textProp = Object.getOwnPropertyDescriptor(textPropObj, 'text')
@@ -79,7 +79,7 @@ function wrapQuery (query) {
 
         // Based on: https://github.com/brianc/node-postgres/blob/54eb0fa216aaccd727765641e7d1cf5da2bc483d/packages/pg/lib/client.js#L510
         const reusingQuery = typeof pgQuery.submit === 'function'
-        const callback = arguments[arguments.length - 1]
+        const callback = args.at(-1)
 
         finish(error)
 
@@ -108,9 +108,9 @@ function wrapQuery (query) {
         return Promise.reject(error)
       }
 
-      arguments[0] = pgQuery
+      args[0] = pgQuery
 
-      const retval = query.apply(this, arguments)
+      const retval = query.apply(this, args)
       const queryQueue = this.queryQueue || this._queryQueue
       const activeQuery = this.activeQuery || this._activeQuery
 
@@ -147,14 +147,14 @@ function wrapQuery (query) {
 }
 
 function wrapPoolQuery (query) {
-  return function () {
+  return function (...args) {
     if (!startPoolQueryCh.hasSubscribers) {
-      return query.apply(this, arguments)
+      return query.apply(this, args)
     }
 
     const asyncResource = new AsyncResource('bound-anonymous-fn')
 
-    const pgQuery = arguments[0] !== null && typeof arguments[0] === 'object' ? arguments[0] : { text: arguments[0] }
+    const pgQuery = args[0] !== null && typeof args[0] === 'object' ? args[0] : { text: args[0] }
 
     return asyncResource.runInAsyncScope(() => {
       const abortController = new AbortController()
@@ -168,7 +168,7 @@ function wrapPoolQuery (query) {
         finishPoolQueryCh.publish()
       })
 
-      const cb = arguments[arguments.length - 1]
+      const cb = args.at(-1)
 
       if (abortController.signal.aborted) {
         const error = abortController.signal.reason || new Error('Aborted')
@@ -176,26 +176,23 @@ function wrapPoolQuery (query) {
 
         if (typeof cb === 'function') {
           cb(error)
-
           return
-        } else {
-          return Promise.reject(error)
         }
+
+        return Promise.reject(error)
       }
 
       if (typeof cb === 'function') {
-        arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => function () {
+        args[args.length - 1] = shimmer.wrapFunction(cb, cb => function () {
           finish()
-          return cb.apply(this, arguments)
+          return cb.apply(this, args)
         })
       }
 
-      const retval = query.apply(this, arguments)
+      const retval = query.apply(this, args)
 
-      if (retval && retval.then) {
-        retval.then(() => {
-          finish()
-        }).catch(() => {
+      if (retval?.then) {
+        retval.finally(() => {
           finish()
         })
       }

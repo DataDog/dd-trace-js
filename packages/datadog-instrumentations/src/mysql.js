@@ -74,14 +74,14 @@ addHook({ name: 'mysql', file: 'lib/Pool.js', versions: ['>=2'] }, Pool => {
     return getConnection.apply(this, arguments)
   })
 
-  shimmer.wrap(Pool.prototype, 'query', query => function () {
+  shimmer.wrap(Pool.prototype, 'query', query => function (...args) {
     if (!startPoolQueryCh.hasSubscribers) {
-      return query.apply(this, arguments)
+      return query.apply(this, args)
     }
 
     const asyncResource = new AsyncResource('bound-anonymous-fn')
 
-    const sql = arguments[0].sql || arguments[0]
+    const sql = args[0].sql || args[0]
 
     return asyncResource.runInAsyncScope(() => {
       startPoolQueryCh.publish({ sql })
@@ -90,18 +90,18 @@ addHook({ name: 'mysql', file: 'lib/Pool.js', versions: ['>=2'] }, Pool => {
         finishPoolQueryCh.publish()
       })
 
-      const cb = arguments[arguments.length - 1]
+      const cb = args.at(-1)
       if (typeof cb === 'function') {
-        arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => function () {
+        args[args.length - 1] = shimmer.wrapFunction(cb, cb => function (...innerArgs) {
           finish()
-          return cb.apply(this, arguments)
+          return cb.apply(this, innerArgs)
         })
       }
 
-      const retval = query.apply(this, arguments)
+      const retval = query.apply(this, args)
 
-      if (retval && retval.then) {
-        retval.then(finish).catch(finish)
+      if (retval?.then) {
+        retval.finally(finish)
       }
 
       return retval

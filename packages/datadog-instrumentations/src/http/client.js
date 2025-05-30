@@ -31,6 +31,7 @@ function combineOptions (inputURL, inputOptions) {
     ? Object.assign(inputURL || {}, inputOptions)
     : inputURL
 }
+
 function normalizeHeaders (options) {
   options.headers ??= {}
 }
@@ -49,7 +50,6 @@ function patch (http, methodName) {
       }
 
       let args
-
       try {
         args = normalizeArgs.apply(null, arguments)
       } catch (e) {
@@ -66,9 +66,9 @@ function patch (http, methodName) {
         let callback = args.callback
 
         if (callback) {
-          callback = shimmer.wrapFunction(args.callback, cb => function () {
+          callback = shimmer.wrapFunction(args.callback, cb => function (...innerArgs) {
             return asyncStartChannel.runStores(ctx, () => {
-              return cb.apply(this, arguments)
+              return cb.apply(this, innerArgs)
             })
           })
         }
@@ -91,9 +91,9 @@ function patch (http, methodName) {
 
           // tracked to accurately discern custom request socket timeout
           let customRequestTimeout = false
-          req.setTimeout = function () {
+          req.setTimeout = function (...innerArgs) {
             customRequestTimeout = true
-            return setTimeout.apply(this, arguments)
+            return setTimeout.apply(this, innerArgs)
           }
 
           req.emit = function (eventName, arg) {

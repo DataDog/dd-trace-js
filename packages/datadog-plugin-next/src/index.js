@@ -134,7 +134,11 @@ function normalizeConfig (config) {
     ? config.validateStatus
     : code => code < 500
 
-  return Object.assign({}, config, { hooks, validateStatus })
+  return {
+    ...config,
+    hooks,
+    validateStatus
+  }
 }
 
 const noop = () => {}
