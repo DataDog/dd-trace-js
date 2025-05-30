@@ -7,7 +7,7 @@ class LangChainLLMObsVectorStoreHandler extends LangChainLLMObsHandler {
   setMetaTags ({ span, inputs, results }) {
     const input = this.formatIO(inputs)
     if (spanHasError(span)) {
-      this._tagger.tagRetrievalIO(span, input, undefined)
+      this._tagger.tagRetrievalIO(span, input)
       return
     }
 

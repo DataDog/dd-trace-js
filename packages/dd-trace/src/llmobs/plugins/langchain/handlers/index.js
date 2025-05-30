@@ -34,9 +34,7 @@ class LangChainLLMObsHandler {
   }
 
   getContentFromMessage (message) {
-    if (typeof message !== 'object') {
-      return message
-    } else {
+    if (typeof message === 'object') {
       try {
         const messageContent = {}
         messageContent.content = message.content || ''
@@ -48,6 +46,8 @@ class LangChainLLMObsHandler {
       } catch {
         return JSON.stringify(message)
       }
+    } else {
+      return message
     }
   }
 
