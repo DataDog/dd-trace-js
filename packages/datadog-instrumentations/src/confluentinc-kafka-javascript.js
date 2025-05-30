@@ -122,6 +122,7 @@ function instrumentBaseModule (module) {
                       ctx.partition = message?.partition
                       ctx.message = message
 
+                      // TODO: We should be using publish here instead of runStores but we need bindStart to be called
                       channels.consumerStart.runStores(ctx, () => {})
                       updateLatestOffset(message?.topic, message?.partition, message?.offset, groupId)
                     })
