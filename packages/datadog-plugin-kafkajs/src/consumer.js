@@ -107,7 +107,7 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
 
   finish (ctx) {
     if (beforeFinishCh.hasSubscribers) {
-      beforeFinishCh.publish(ctx)
+      beforeFinishCh.publish()
     }
 
     super.finish(ctx)
