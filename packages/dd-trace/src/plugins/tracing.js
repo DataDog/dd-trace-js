@@ -58,6 +58,10 @@ class TracingPlugin extends Plugin {
     span?.finish()
   }
 
+  bindFinish (ctx) {
+    return ctx.parentStore
+  }
+
   error (ctxOrError) {
     if (ctxOrError?.currentStore) {
       ctxOrError.currentStore?.span.setTag('error', ctxOrError?.error)

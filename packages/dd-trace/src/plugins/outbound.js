@@ -86,10 +86,6 @@ class OutboundPlugin extends TracingPlugin {
     return peerData
   }
 
-  bindFinish (ctx) {
-    return ctx.parentStore
-  }
-
   finish (ctx) {
     const span = ctx?.currentStore?.span || this.activeSpan
     this.tagPeerService(span)
