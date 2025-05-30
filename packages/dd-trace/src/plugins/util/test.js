@@ -253,7 +253,8 @@ module.exports = {
   TEST_MANAGEMENT_IS_QUARANTINED,
   TEST_MANAGEMENT_ENABLED,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
-  getLibraryCapabilitiesTags
+  getLibraryCapabilitiesTags,
+  checkShaDiscrepancies
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
@@ -303,12 +304,12 @@ function checkShaDiscrepancies (ciMetadata, userProvidedGitMetadata) {
   } = userProvidedGitMetadata
   const { gitRepositoryUrl, gitCommitSHA } = getGitInformationDiscrepancy()
 
-  const checkDiscrepancyAndSendMetrics = (value1, value2, type, expectedProvider, discrepantProvider) => {
-    if (value1 && value2 && value1 !== value2) {
+  const checkDiscrepancyAndSendMetrics = (valueExpected, valueDiscrepant, discrepancyType, expectedProvider, discrepantProvider) => {
+    if (valueExpected && valueDiscrepant && valueExpected !== valueDiscrepant) {
       incrementCountMetric(
         TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY,
         {
-          type,
+          type: discrepancyType,
           expected_provider: expectedProvider,
           discrepant_provider: discrepantProvider
         }
@@ -351,15 +352,15 @@ function checkShaDiscrepancies (ciMetadata, userProvidedGitMetadata) {
     },
     // CI metadata vs Git metadata
     {
-      v1: gitRepositoryUrl,
-      v2: ciRepositoryUrl,
+      v1: ciRepositoryUrl,
+      v2: gitRepositoryUrl,
       type: 'repository_discrepancy',
       expected: 'ci_provider',
       discrepant: 'git_client'
     },
     {
-      v1: gitCommitSHA,
-      v2: ciCommitSHA,
+      v1: ciCommitSHA,
+      v2: gitCommitSHA,
       type: 'commit_discrepancy',
       expected: 'ci_provider',
       discrepant: 'git_client'
