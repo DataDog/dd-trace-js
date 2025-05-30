@@ -568,10 +568,10 @@ function runnerHook (runnerExport, playwrightVersion) {
     if (isImpactedTestsEnabled && satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)) {
       try {
         const { err, modifiedTests: receivedModifiedTests } = await getChannelPromise(impactedTestsCh)
-        if (!err) {
-          modifiedTests = receivedModifiedTests
-        } else {
+        if (err) {
           isImpactedTestsEnabled = false
+        } else {
+          modifiedTests = receivedModifiedTests
         }
       } catch (err) {
         isImpactedTestsEnabled = false

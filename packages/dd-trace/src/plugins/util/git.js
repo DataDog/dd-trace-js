@@ -265,7 +265,7 @@ function checkAndFetchBranch (branch, remoteName) {
     // Otherwise it will exit 1
     cp.execFileSync('git', ['show-ref', '--verify', '--quiet', `refs/heads/${branch}`], { stdio: 'pipe' })
     // branch exists locally, so we finish
-  } catch (e) {
+  } catch {
     // branch does not exist locally, so we will check the remote
     try {
       // IMPORTANT: we use timeouts because these commands hang if the branch can't be found
@@ -302,8 +302,8 @@ function getLocalBranches (remoteName) {
     false
   )
   try {
-    return localBranches.split('\n').filter(branch => branch)
-  } catch (e) {
+    return localBranches.split('\n').filter(Boolean)
+  } catch {
     return []
   }
 }
@@ -332,7 +332,7 @@ function getCounts (sourceBranch, candidateBranch) {
     }
     const [behind, ahead] = counts.split(/\s+/).map(Number)
     return { behind, ahead }
-  } catch (e) {
+  } catch {
     return { behind: null, ahead: null }
   }
 }

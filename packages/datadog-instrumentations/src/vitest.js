@@ -296,18 +296,18 @@ function getSortWrapper (sort) {
 
     if (isImpactedTestsEnabled) {
       const { err, modifiedTests: receivedModifiedTests } = await getChannelPromise(impactedTestsCh)
-      if (!err) {
+      if (err) {
+        isImpactedTestsEnabled = false
+        log.error('Could not get modified tests.')
+      } else {
         modifiedTests = receivedModifiedTests
         try {
           const workspaceProject = this.ctx.getCoreWorkspaceProject()
           workspaceProject._provided._ddIsImpactedTestsEnabled = isImpactedTestsEnabled
           workspaceProject._provided._ddModifiedTests = modifiedTests
-        } catch (e) {
+        } catch {
           log.warn('Could not send modified tests to workers so Impacted Tests will not work.')
         }
-      } else {
-        isImpactedTestsEnabled = false
-        log.error('Could not get modified tests.')
       }
     }
 
