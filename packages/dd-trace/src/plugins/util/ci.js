@@ -67,7 +67,7 @@ function normalizeRef (ref) {
   if (!ref) {
     return ref
   }
-  return ref.replace(/origin\/|refs\/heads\/|tags\//gm, '')
+  return ref.replaceAll(/origin\/|refs\/heads\/|tags\//gm, '')
 }
 
 function resolveTilde (filePath) {
@@ -431,7 +431,7 @@ module.exports = {
         [GIT_TAG]: BITBUCKET_TAG,
         [GIT_REPOSITORY_URL]: BITBUCKET_GIT_SSH_ORIGIN || BITBUCKET_GIT_HTTP_ORIGIN,
         [CI_WORKSPACE_PATH]: BITBUCKET_CLONE_DIR,
-        [CI_PIPELINE_ID]: BITBUCKET_PIPELINE_UUID && BITBUCKET_PIPELINE_UUID.replace(/{|}/gm, ''),
+        [CI_PIPELINE_ID]: BITBUCKET_PIPELINE_UUID && BITBUCKET_PIPELINE_UUID.replaceAll(/{|}/gm, ''),
         [GIT_PULL_REQUEST_BASE_BRANCH]: BITBUCKET_PR_DESTINATION_BRANCH
       }
     }

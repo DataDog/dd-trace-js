@@ -45,7 +45,7 @@ function filterTags (tags) {
 
 function processTagValue (tags) {
   return tags.map(tag => tag.includes(':') ? tag.split(':')[1] : tag)
-    .join('_').replace(/\./g, '_')
+    .join('_').replaceAll('.', '_')
 }
 
 module.exports = {

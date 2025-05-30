@@ -96,7 +96,7 @@ function formatHeaderName (name) {
   return name
     .trim()
     .slice(0, 200)
-    .replace(/[^a-zA-Z0-9_\-:/]/g, '_')
+    .replaceAll(/[^a-zA-Z0-9_\-:/]/g, '_')
     .toLowerCase()
 }
 

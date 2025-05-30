@@ -118,6 +118,9 @@ export default [
       'prefer-object-has-own': 'error',
       'prefer-object-spread': 'error',
 
+      // Too strict for now. Slowly migrate to this rule by using rest parameters.
+      // 'prefer-rest-params': 'error',
+
       ...eslintPluginUnicorn.configs.recommended.rules,
 
       // Overriding recommended unicorn rules
@@ -130,8 +133,6 @@ export default [
       'unicorn/prefer-array-flat': 'off', // 7 errors | Difficult to fix
       'unicorn/prefer-at': 'off', // 17 errors | Difficult to fix
       'unicorn/prefer-spread': 'off', // 13 errors | Difficult to fix
-      'unicorn/prefer-string-replace-all': 'off', // 33 errors
-      'unicorn/prefer-switch': 'off', // 8 errors
       'unicorn/prevent-abbreviations': 'off', // too strict
       'unicorn/switch-case-braces': 'off', // too strict
 
@@ -143,17 +144,18 @@ export default [
       'unicorn/prefer-code-point': 'off', // Should be activated, but needs a refactor of some code
 
       // The following rules should not be activated!
-      'unicorn/prefer-top-level-await': 'off', // Only useful when using ESM
-      'unicorn/prefer-math-trunc': 'off', // Math.trunc is not a 1-to-1 replacement for most of our usage
       'unicorn/import-style': 'off', // Questionable benefit
       'unicorn/no-array-reduce': 'off', // Questionable benefit
       'unicorn/no-hex-escape': 'off', // Questionable benefit
       'unicorn/no-new-array': 'off', // new Array is often used for performance reasons
       'unicorn/prefer-event-target': 'off', // Benefit only outside of Node.js
       'unicorn/prefer-global-this': 'off', // Questionable benefit in Node.js alone
+      'unicorn/prefer-math-trunc': 'off', // Math.trunc is not a 1-to-1 replacement for most of our usage
       'unicorn/prefer-module': 'off', // We use CJS
       'unicorn/prefer-node-protocol': 'off', // May not be used due to guardrails
-      'unicorn/prefer-reflect-apply': 'off' // Questionable benefit and more than 500 matches
+      'unicorn/prefer-reflect-apply': 'off', // Questionable benefit and more than 500 matches
+      'unicorn/prefer-switch': 'off', // Questionable benefit
+      'unicorn/prefer-top-level-await': 'off' // Only useful when using ESM
     }
   },
   {

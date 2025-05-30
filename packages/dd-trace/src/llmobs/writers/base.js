@@ -157,7 +157,7 @@ class BaseLLMObsWriter {
         return encodeUnicode(value) // serialize unicode characters
       }
       return value
-    }).replace(/\\\\u/g, String.raw`\u`) // remove double escaping
+    }).replaceAll(String.raw`\\u`, String.raw`\u`) // remove double escaping
   }
 }
 

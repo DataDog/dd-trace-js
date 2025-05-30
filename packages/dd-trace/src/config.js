@@ -1536,12 +1536,12 @@ function handleOtel (tagString) {
     ?.replace(/(^|,)deployment\.environment=/, '$1env:')
     .replace(/(^|,)service\.name=/, '$1service:')
     .replace(/(^|,)service\.version=/, '$1version:')
-    .replace(/=/g, ':')
+    .replaceAll('=', ':')
 }
 
 function parseSpaceSeparatedTags (tagString) {
   if (tagString && !tagString.includes(',')) {
-    tagString = tagString.replace(/\s+/g, ',')
+    tagString = tagString.replaceAll(/\s+/g, ',')
   }
   return tagString
 }
