@@ -1,6 +1,7 @@
 'use strict'
 
 const { exec, execSync } = require('child_process')
+const satisfies = require('semifies')
 
 const getPort = require('get-port')
 const { assert } = require('chai')
@@ -55,6 +56,12 @@ const NUM_RETRIES_EFD = 3
 const versions = [DD_MAJOR >= 6 ? '1.38.0' : '1.18.0', 'latest']
 
 versions.forEach((version) => {
+  // TODO: Remove this once we drop suppport for v5
+  const contextNewVersions = (...args) => {
+    if (satisfies(version, '>=1.38.0') || version === 'latest') {
+      context(...args)
+    }
+  }
   describe(`playwright@${version}`, () => {
     let sandbox, cwd, receiver, childProcess, webAppPort, webPortWithRedirect
 
@@ -282,7 +289,7 @@ versions.forEach((version) => {
       )
     })
 
-    context('early flake detection', () => {
+    contextNewVersions('early flake detection', () => {
       it('retries new tests', (done) => {
         receiver.setSettings({
           early_flake_detection: {
@@ -820,7 +827,7 @@ versions.forEach((version) => {
       })
     })
 
-    context('known tests without early flake detection', () => {
+    contextNewVersions('known tests without early flake detection', () => {
       it('detects new tests without retrying them', (done) => {
         receiver.setSettings({
           known_tests_enabled: true
@@ -914,7 +921,7 @@ versions.forEach((version) => {
       })
     })
 
-    context('test management', () => {
+    contextNewVersions('test management', () => {
       context('attempt to fix', () => {
         beforeEach(() => {
           receiver.setTestManagementTests({
@@ -1367,7 +1374,7 @@ versions.forEach((version) => {
       })
     })
 
-    context('active test span', () => {
+    contextNewVersions('active test span', () => {
       it('can grab the test span and add tags', (done) => {
         const receiverPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
@@ -1433,7 +1440,7 @@ versions.forEach((version) => {
       })
     })
 
-    context('correlation between tests and RUM sessions', () => {
+    contextNewVersions('correlation between tests and RUM sessions', () => {
       const getTestAssertions = ({ isRedirecting }) =>
         receiver
           .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {

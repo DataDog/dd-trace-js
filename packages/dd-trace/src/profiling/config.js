@@ -166,13 +166,11 @@ class Config {
       exportCommand
     }
 
-    const profilers = options.profilers
-      ? options.profilers
-      : getProfilers({
-        DD_PROFILING_HEAP_ENABLED,
-        DD_PROFILING_WALLTIME_ENABLED,
-        DD_PROFILING_PROFILERS
-      })
+    const profilers = options.profilers || getProfilers({
+      DD_PROFILING_HEAP_ENABLED,
+      DD_PROFILING_WALLTIME_ENABLED,
+      DD_PROFILING_PROFILERS
+    })
 
     this.timelineEnabled = isTrue(coalesce(options.timelineEnabled,
       DD_PROFILING_TIMELINE_ENABLED,
@@ -206,12 +204,12 @@ class Config {
         'Profile upload compression method "zstd" is only supported on Node.js 23.8.0 or above. Will use "on".')
       uploadCompression = 'on'
     }
-    let level = level0 ? parseInt(level0, 10) : undefined
+    let level = level0 ? Number.parseInt(level0, 10) : undefined
     if (level !== undefined) {
       if (['on', 'off'].includes(uploadCompression)) {
         logger.warn(`Compression levels are not supported for "${uploadCompression}".`)
         level = undefined
-      } else if (isNaN(level)) {
+      } else if (Number.isNaN(level)) {
         logger.warn(
           `Invalid compression level "${level0}". Will use default level.`)
         level = undefined

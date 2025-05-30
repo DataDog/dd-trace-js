@@ -112,14 +112,14 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
         })
       }
 
-      if (!isPromise(kafkaClusterIdPromise)) {
-        // promise is already resolved
-        return wrappedSend(kafkaClusterIdPromise)
-      } else {
+      if (isPromise(kafkaClusterIdPromise)) {
         // promise is not resolved
         return kafkaClusterIdPromise.then((clusterId) => {
           return wrappedSend(clusterId)
         })
+      } else {
+        // promise is already resolved
+        return wrappedSend(kafkaClusterIdPromise)
       }
     }
     return producer
@@ -173,14 +173,14 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
         })
       }
 
-      if (!isPromise(kafkaClusterIdPromise)) {
-        // promise is already resolved
-        return wrapConsume(kafkaClusterIdPromise)
-      } else {
+      if (isPromise(kafkaClusterIdPromise)) {
         // promise is not resolved
         return kafkaClusterIdPromise.then((clusterId) => {
           return wrapConsume(clusterId)
         })
+      } else {
+        // promise is already resolved
+        return wrapConsume(kafkaClusterIdPromise)
       }
     }
     return consumer
