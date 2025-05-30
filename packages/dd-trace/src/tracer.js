@@ -74,9 +74,8 @@ class DatadogTracer extends Tracer {
             throw err
           }
         )
-      } else {
-        span.finish()
       }
+      span.finish()
 
       return result
     } catch (e) {
@@ -108,9 +107,8 @@ class DatadogTracer extends Tracer {
 
           return fn.apply(this, arguments)
         })
-      } else {
-        return tracer.trace(name, optionsObj, () => fn.apply(this, arguments))
       }
+      return tracer.trace(name, optionsObj, () => fn.apply(this, arguments))
     }
   }
 
