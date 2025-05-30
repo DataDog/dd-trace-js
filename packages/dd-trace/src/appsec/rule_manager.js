@@ -61,10 +61,8 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
       }
 
       // check asm actions
-      if (updateResult.success && item.product === 'ASM') {
-        if (item.file?.actions?.length) {
-          newActions.set(item.id, item.file.actions)
-        }
+      if (updateResult.success && item.product === 'ASM' && item.file?.actions?.length) {
+        newActions.set(item.id, item.file.actions)
       }
     } catch (e) {
       wafUpdatedSuccess = false

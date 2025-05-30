@@ -277,7 +277,7 @@ describe('Appsec Waf Telemetry metrics', () => {
 
         expect(count).to.have.been.calledOnceWithExactly('waf.config_errors', {
           waf_version: wafVersion,
-          event_rules_version: rulesVersion,
+          event_rules_version: rulesVersion
         })
         expect(inc).to.have.been.calledOnce
       })
