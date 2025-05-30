@@ -98,8 +98,12 @@ function handleLLMObsParentIdInjection ({ carrier }) {
   const parent = storage.getStore()?.span
   const mlObsSpanTags = LLMObsTagger.tagMap.get(parent)
 
-  const parentId = parent?.context().toSpanId()
-  const mlApp = mlObsSpanTags?.[ML_APP] || globalTracerConfig.llmobs.mlApp
+  const parentContext = parent?.context()
+  const parentId = parentContext?.toSpanId()
+  const mlApp =
+    mlObsSpanTags?.[ML_APP] ||
+    parentContext?._trace?.tags?.[PROPAGATED_ML_APP_KEY] ||
+    globalTracerConfig.llmobs.mlApp
 
   if (parentId) carrier['x-datadog-tags'] += `,${PROPAGATED_PARENT_ID_KEY}=${parentId}`
   if (mlApp) carrier['x-datadog-tags'] += `,${PROPAGATED_ML_APP_KEY}=${mlApp}`
