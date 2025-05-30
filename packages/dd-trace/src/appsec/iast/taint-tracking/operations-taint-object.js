@@ -5,6 +5,8 @@ const { IAST_TRANSACTION_ID } = require('../iast-context')
 const { HTTP_REQUEST_PARAMETER } = require('./source-types')
 const log = require('../../../log')
 
+const SEPARATOR = '\u0000' // Unit Separator (cannot be in URL keys)
+
 function taintObject (iastContext, object, type) {
   let result = object
   const transactionId = iastContext?.[IAST_TRANSACTION_ID]
@@ -45,73 +47,36 @@ function taintQueryWithCache (iastContext, query) {
   const transactionId = iastContext?.[IAST_TRANSACTION_ID]
   if (!transactionId || !query) return query
 
-  iastContext.queryCache ??= Object.create(null)
+  iastContext.queryCache ??= new Map() // key: "a.b.c", value: tainted string
 
-  return traverseAndTaint(
-    query,
-    iastContext.queryCache,
-    '',
-    HTTP_REQUEST_PARAMETER,
-    transactionId
-  )
+  traverseAndTaint(query, '', iastContext.queryCache, transactionId)
+  return query
 }
 
-function traverseAndTaint (value, cache, path, type, transactionId) {
-  if (value == null) return value
+function traverseAndTaint (node, path, cache, transactionId) {
+  if (node == null) return node
 
-  if (typeof value === 'string') {
-    // If we already have a tainted version of this exact string in the cache
-    if (value === cache) {
-      return cache
+  if (typeof node === 'string') {
+    if (cache.has(path)) {
+      return cache.get(path)
     }
-
-    return TaintedUtils.newTaintedString(transactionId, value, path, type)
+    
+    const tainted = TaintedUtils.newTaintedString(transactionId, node, path, HTTP_REQUEST_PARAMETER)
+    cache.set(path, tainted)
+    return tainted
   }
 
-  if (typeof value === 'object') {
-    const valueIsArray = Array.isArray(value)
-    if (!cache || typeof cache !== 'object' || Array.isArray(cache) !== valueIsArray) {
-      cache = valueIsArray ? [] : Object.create(null)
-    }
-
-    if (valueIsArray) {
-      for (let i = 0; i < value.length; i++) {
-        const childPath = path ? `${path}.${i}` : String(i)
-        const taintedChild = traverseAndTaint(
-          value[i],
-          cache[i],
-          childPath,
-          type,
-          transactionId
-        )
-
-        value[i] = taintedChild
-        
-        if (cache[i] === undefined || typeof taintedChild !== 'object') {
-          cache[i] = taintedChild
-        }
-      }
-    } else {
-      for (const key of Object.keys(value)) {
-        const childPath = path ? `${path}.${key}` : key
-        const taintedChild = traverseAndTaint(
-          value[key],
-          cache[key],
-          childPath,
-          type,
-          transactionId
-        )
-
-        value[key] = taintedChild
-        
-        if (cache[key] === undefined || typeof taintedChild !== 'object') {
-          cache[key] = taintedChild
-        }
-      }
+  if (typeof node === 'object') {
+    const keys = Array.isArray(node) ? node.keys() : Object.keys(node)
+    
+    for (const key of keys) {
+      const childPath = path ? `${path}${SEPARATOR}${key}` : String(key)
+      const tainted = traverseAndTaint(node[key], childPath, cache, transactionId)
+      node[key] = tainted
     }
   }
-
-  return value
+  
+  return node
 }
 
 module.exports = {
