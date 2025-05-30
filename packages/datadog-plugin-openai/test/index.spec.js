@@ -1188,12 +1188,9 @@ describe('Plugin', () => {
               expect(traces[0][0].metrics).to.have.property('openai.response.deleted', 1)
             })
 
-          if (semver.satisfies(realVersion, '>=4.0.0 <5.0.0')) {
-            const result = await openai.files.del('file-268aYWYhvxWwHb4nIzP9FHM6')
-
-            expect(result.deleted).to.eql(true)
-          } else if (semver.satisfies(realVersion, '>=5.0.0')) {
-            const result = await openai.files.delete('file-268aYWYhvxWwHb4nIzP9FHM6')
+          if (semver.satisfies(realVersion, '>=4.0.0')) {
+            const method = semver.satisfies(realVersion, '>=5.0.0') ? 'delete' : 'del'
+            const result = await openai.files[method]('file-268aYWYhvxWwHb4nIzP9FHM6')
 
             expect(result.deleted).to.eql(true)
           } else {
@@ -2046,12 +2043,9 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('openai.response.id', 'ft-10RCfqSvgyEcauomw7VpiYco')
             })
 
-          if (semver.satisfies(realVersion, '>=4.0.0 <5.0.0')) {
-            const result = await openai.models.del('ft-10RCfqSvgyEcauomw7VpiYco')
-
-            expect(result.deleted).to.eql(true)
-          } else if (semver.satisfies(realVersion, '>=5.0.0')) {
-            const result = await openai.models.delete('ft-10RCfqSvgyEcauomw7VpiYco')
+          if (semver.satisfies(realVersion, '>=4.0.0')) {
+            const method = semver.satisfies(realVersion, '>=5.0.0') ? 'delete' : 'del'
+            const result = await openai.models[method]('ft-10RCfqSvgyEcauomw7VpiYco')
 
             expect(result.deleted).to.eql(true)
           } else {
