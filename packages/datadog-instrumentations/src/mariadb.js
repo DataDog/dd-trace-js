@@ -82,7 +82,7 @@ function createWrapQueryCallback (options) {
       const ctx = { sql, conf: options }
 
       if (typeof cb !== 'function') {
-        arguments.length = arguments.length + 1
+        arguments.length += 1
       }
 
       arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => function (err) {

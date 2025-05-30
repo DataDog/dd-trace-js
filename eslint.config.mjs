@@ -111,6 +111,7 @@ export default [
 
       'no-await-in-loop': 'error',
       'no-useless-assignment': 'error',
+      'operator-assignment': 'error',
       'prefer-object-has-own': 'error',
       'prefer-object-spread': 'error',
 
