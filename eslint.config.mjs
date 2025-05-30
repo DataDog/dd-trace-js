@@ -109,6 +109,8 @@ export default [
         }
       ]],
 
+      'prefer-object-spread': 'error',
+
       ...eslintPluginUnicorn.configs.recommended.rules,
 
       // Overriding recommended unicorn rules

@@ -27,11 +27,11 @@ class Sqs extends BaseAwsSdkPlugin {
         obj.needsFinish = true
         const options = {
           childOf: contextExtraction.datadogContext,
-          tags: Object.assign(
-            {},
-            this.requestTags.get(request) || {},
-            { 'span.kind': 'server' }
-          )
+          tags: {
+
+            ...this.requestTags.get(request),
+            'span.kind': 'server'
+          }
         }
         parsedMessageAttributes = contextExtraction.parsedAttributes
         span = this.tracer.startSpan('aws.response', options)

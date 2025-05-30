@@ -56,7 +56,7 @@ class DatadogSpan {
   constructor (tracer, processor, prioritySampler, fields, debug) {
     const operationName = fields.operationName
     const parent = fields.parent || null
-    const tags = Object.assign({}, fields.tags)
+    const tags = { ...fields.tags }
     const hostname = fields.hostname
 
     this._parentTracer = tracer
@@ -333,7 +333,7 @@ class DatadogSpan {
         spanId: id(),
         parentId: parent._spanId,
         sampling: parent._sampling,
-        baggageItems: Object.assign({}, parent._baggageItems),
+        baggageItems: { ...parent._baggageItems },
         trace: parent._trace,
         tracestate: parent._tracestate
       })
