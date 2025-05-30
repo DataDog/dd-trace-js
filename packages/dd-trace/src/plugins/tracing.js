@@ -60,7 +60,7 @@ class TracingPlugin extends Plugin {
 
   error (ctxOrError) {
     if (ctxOrError?.currentStore) {
-      ctxOrError.currentStore?.span.setTag('error', ctxOrError?.error)
+      ctxOrError.currentStore?.span.setTag('error', ctxOrError?.error || ctxOrError?.err)
       return
     }
     this.addError(ctxOrError)

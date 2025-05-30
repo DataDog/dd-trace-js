@@ -2,6 +2,7 @@
 
 const { expect } = require('chai')
 const semver = require('semver')
+const { storage } = require('../../datadog-core')
 const dc = require('dc-polyfill')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
@@ -353,7 +354,9 @@ describe('Plugin', () => {
             const afterStart = dc.channel('dd-trace:kafkajs:consumer:afterStart')
 
             const spy = sinon.spy(() => {
-              expect(tracer.scope().active()).to.not.be.null
+              const store = storage('legacy').getStore()
+              expect(store).to.not.be.null
+              expect(store).to.not.be.undefined
               afterStart.unsubscribe(spy)
             })
             afterStart.subscribe(spy)
