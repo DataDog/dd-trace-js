@@ -3,12 +3,12 @@
 const LangChainHandler = require('./default')
 
 class LangChainEmbeddingHandler extends LangChainHandler {
-  getSpanStartTags (ctx) {
+  getSpanStartTags (ctx, provider, span) {
     const tags = {}
 
     const inputTexts = ctx.args?.[0]
 
-    const sampled = this.isPromptCompletionSampled()
+    const sampled = this.isPromptCompletionSampled(span)
     if (typeof inputTexts === 'string') {
       // embed query
       if (sampled) {

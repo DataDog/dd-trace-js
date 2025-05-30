@@ -7,6 +7,8 @@ const {
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
+const log = require('../../dd-trace/src/log')
+
 const producerStartCh = channel('apm:kafkajs:produce:start')
 const producerCommitCh = channel('apm:kafkajs:produce:commit')
 const producerFinishCh = channel('apm:kafkajs:produce:finish')
@@ -20,6 +22,8 @@ const consumerErrorCh = channel('apm:kafkajs:consume:error')
 const batchConsumerStartCh = channel('apm:kafkajs:consume-batch:start')
 const batchConsumerFinishCh = channel('apm:kafkajs:consume-batch:finish')
 const batchConsumerErrorCh = channel('apm:kafkajs:consume-batch:error')
+
+const disabledHeaderWeakSet = new WeakSet()
 
 function commitsFromEvent (event) {
   const { payload: { groupId, topics } } = event
@@ -65,45 +69,54 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
 
           try {
             const { topic, messages = [] } = arguments[0]
-            for (const message of messages) {
-              if (message !== null && typeof message === 'object') {
-                message.headers = message.headers || {}
-              }
-            }
-            producerStartCh.publish({ topic, messages, bootstrapServers, clusterId })
-
+            producerStartCh.publish({
+              topic,
+              messages,
+              bootstrapServers,
+              clusterId,
+              disableHeaderInjection: disabledHeaderWeakSet.has(producer)
+            })
             const result = send.apply(this, arguments)
-
             result.then(
               innerAsyncResource.bind(res => {
-                producerFinishCh.publish(undefined)
+                producerFinishCh.publish()
                 producerCommitCh.publish(res)
               }),
               innerAsyncResource.bind(err => {
                 if (err) {
+                  // Fixes bug where we would inject message headers for kafka brokers that don't support headers
+                  // (version <0.11). On the error, we disable header injection.
+                  // Tnfortunately the error name / type is not more specific.
+                  // This approach is implemented by other tracers as well.
+                  if (err.name === 'KafkaJSProtocolError' && err.type === 'UNKNOWN') {
+                    disabledHeaderWeakSet.add(producer)
+                    log.error('Kafka Broker responded with UNKNOWN_SERVER_ERROR (-1). ' +
+                      'Please look at broker logs for more information. ' +
+                      'Tracer message header injection for Kafka is disabled.')
+                  }
                   producerErrorCh.publish(err)
                 }
-                producerFinishCh.publish(undefined)
+                producerFinishCh.publish()
               })
             )
 
             return result
           } catch (e) {
             producerErrorCh.publish(e)
-            producerFinishCh.publish(undefined)
+            producerFinishCh.publish()
             throw e
           }
         })
       }
 
-      if (!isPromise(kafkaClusterIdPromise)) {
-        // promise is already resolved
-        return wrappedSend(kafkaClusterIdPromise)
-      } else {
+      if (isPromise(kafkaClusterIdPromise)) {
         // promise is not resolved
         return kafkaClusterIdPromise.then((clusterId) => {
           return wrappedSend(clusterId)
         })
+      } else {
+        // promise is already resolved
+        return wrappedSend(kafkaClusterIdPromise)
       }
     }
     return producer
@@ -157,14 +170,14 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
         })
       }
 
-      if (!isPromise(kafkaClusterIdPromise)) {
-        // promise is already resolved
-        return wrapConsume(kafkaClusterIdPromise)
-      } else {
+      if (isPromise(kafkaClusterIdPromise)) {
         // promise is not resolved
         return kafkaClusterIdPromise.then((clusterId) => {
           return wrapConsume(clusterId)
         })
+      } else {
+        // promise is already resolved
+        return wrapConsume(kafkaClusterIdPromise)
       }
     }
     return consumer
@@ -184,21 +197,21 @@ const wrappedCallback = (fn, startCh, finishCh, errorCh, extractArgs, clusterId)
           const result = fn.apply(this, args)
           if (result && typeof result.then === 'function') {
             result.then(
-              innerAsyncResource.bind(() => finishCh.publish(undefined)),
+              innerAsyncResource.bind(() => finishCh.publish()),
               innerAsyncResource.bind(err => {
                 if (err) {
                   errorCh.publish(err)
                 }
-                finishCh.publish(undefined)
+                finishCh.publish()
               })
             )
           } else {
-            finishCh.publish(undefined)
+            finishCh.publish()
           }
           return result
         } catch (e) {
           errorCh.publish(e)
-          finishCh.publish(undefined)
+          finishCh.publish()
           throw e
         }
       })

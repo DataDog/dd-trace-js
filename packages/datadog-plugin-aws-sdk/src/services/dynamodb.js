@@ -25,18 +25,17 @@ class DynamoDb extends BaseAwsSdkPlugin {
       // batch operations have different format, collect table name for batch
       // https://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/DynamoDB.html#batchGetItem-property`
       // dynamoDB batch TableName
-      if (params.RequestItems !== null) {
-        if (typeof params.RequestItems === 'object') {
-          if (Object.keys(params.RequestItems).length === 1) {
-            const tableName = Object.keys(params.RequestItems)[0]
+      if (params.RequestItems !== null && typeof params.RequestItems === 'object') {
+        const requestItemsKeys = Object.keys(params.RequestItems)
+        if (requestItemsKeys.length === 1) {
+          const tableName = requestItemsKeys[0]
 
-            // also add span type to match serverless convention
-            Object.assign(tags, {
-              'resource.name': `${operation} ${tableName}`,
-              'aws.dynamodb.table_name': tableName,
-              tablename: tableName
-            })
-          }
+          // also add span type to match serverless convention
+          Object.assign(tags, {
+            'resource.name': `${operation} ${tableName}`,
+            'aws.dynamodb.table_name': tableName,
+            tablename: tableName
+          })
         }
       }
 
@@ -81,10 +80,12 @@ class DynamoDb extends BaseAwsSdkPlugin {
             const hash =
               DynamoDb.calculatePutItemHash(item.Put.TableName, item.Put.Item, this.getPrimaryKeyConfig())
             if (hash) hashes.push(hash)
-          } else if (item.Update || item.Delete) {
-            const operation = item.Update ? item.Update : item.Delete
-            const hash = DynamoDb.calculateHashWithKnownKeys(operation.TableName, operation.Key)
-            if (hash) hashes.push(hash)
+          } else {
+            const operation = item.Update || item.Delete
+            if (operation) {
+              const hash = DynamoDb.calculateHashWithKnownKeys(operation.TableName, operation.Key)
+              if (hash) hashes.push(hash)
+            }
           }
         }
         break

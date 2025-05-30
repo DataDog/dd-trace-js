@@ -37,7 +37,7 @@ function combine (queries) {
 function trim (str, size) {
   if (!str || str.length <= size) return str
 
-  return `${str.substr(0, size - 3)}...`
+  return `${str.slice(0, size - 3)}...`
 }
 
 module.exports = CassandraDriverPlugin

@@ -175,7 +175,7 @@ function getOnEndHandler (isParallel) {
           originalCoverageMap.merge(fromCoverageMapToCoverage(untestedCoverage))
         }
         testCodeCoverageLinesTotal = originalCoverageMap.getCoverageSummary().lines.pct
-      } catch (e) {
+      } catch {
         // ignore errors
       }
       // restore the original coverage
@@ -237,7 +237,7 @@ function getExecutionConfiguration (runner, isParallel, onFinishRequest) {
 
     runner.suite.suites = suitesToRun
 
-    skippedSuites = Array.from(filteredSuites.skippedSuites)
+    skippedSuites = [...filteredSuites.skippedSuites]
 
     onFinishRequest()
   }
@@ -441,7 +441,7 @@ addHook({
           itrCorrelationId
         }
         testFileToSuiteCtx.set(suite.file, ctx)
-        testSuiteStartCh.runStores(ctx, () => { })
+        testSuiteStartCh.runStores(ctx, () => {})
       }
     })
 
@@ -485,7 +485,7 @@ addHook({
 
       const ctx = testFileToSuiteCtx.get(suite.file)
       if (ctx) {
-        testSuiteFinishCh.publish({ status, ...ctx.currentStore }, () => { })
+        testSuiteFinishCh.publish({ status, ...ctx.currentStore }, () => {})
       } else {
         log.warn(() => `No AsyncResource found for suite ${suite.file}`)
       }
@@ -523,7 +523,7 @@ addHook({
       return exec.apply(this, arguments)
     }
     const [testSuiteAbsolutePath] = path
-    const testSuiteContext = { }
+    const testSuiteContext = {}
 
     function onMessage (message) {
       if (Array.isArray(message)) {
@@ -537,28 +537,28 @@ addHook({
     this.worker.on('message', onMessage)
 
     testSuiteContext.testSuiteAbsolutePath = testSuiteAbsolutePath
-    testSuiteStartCh.runStores(testSuiteContext, () => { })
+    testSuiteStartCh.runStores(testSuiteContext, () => {})
 
     try {
       const promise = exec.apply(this, arguments)
       promise.then(
         (result) => {
           const status = result.failureCount === 0 ? 'pass' : 'fail'
-          testSuiteFinishCh.publish({ status, ...testSuiteContext.currentStore }, () => { })
+          testSuiteFinishCh.publish({ status, ...testSuiteContext.currentStore }, () => {})
           this.worker.off('message', onMessage)
         },
         (err) => {
           testSuiteContext.error = err
-          testSuiteErrorCh.runStores(testSuiteContext, () => { })
-          testSuiteFinishCh.publish({ status: 'fail', ...testSuiteContext.currentStore }, () => { })
+          testSuiteErrorCh.runStores(testSuiteContext, () => {})
+          testSuiteFinishCh.publish({ status: 'fail', ...testSuiteContext.currentStore }, () => {})
           this.worker.off('message', onMessage)
         }
       )
       return promise
     } catch (err) {
       testSuiteContext.error = err
-      testSuiteErrorCh.runStores(testSuiteContext, () => { })
-      testSuiteFinishCh.publish({ status: 'fail', ...testSuiteContext.currentStore }, () => { })
+      testSuiteErrorCh.runStores(testSuiteContext, () => {})
+      testSuiteFinishCh.publish({ status: 'fail', ...testSuiteContext.currentStore }, () => {})
       this.worker.off('message', onMessage)
       throw err
     }
@@ -669,10 +669,10 @@ addHook({
         const testFullName = getTestFullName(test)
         const tests = newTests[testFullName]
 
-        if (!tests) {
-          newTests[testFullName] = [test]
-        } else {
+        if (tests) {
           tests.push(test)
+        } else {
+          newTests[testFullName] = [test]
         }
       }
       // `testsQuarantined` is filled in the worker process, so we need to use the test results to fill it here too.

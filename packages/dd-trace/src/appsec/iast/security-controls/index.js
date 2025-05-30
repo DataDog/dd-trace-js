@@ -52,7 +52,7 @@ function onModuleLoaded (payload) {
 
 function getControls (filename) {
   if (filename.startsWith('file://')) {
-    filename = filename.substring(7)
+    filename = filename.slice(7)
   }
 
   let key = path.isAbsolute(filename) ? path.relative(process.cwd(), filename) : filename
@@ -74,12 +74,9 @@ function hookModule (filename, module, controlsByFile) {
         return
       }
 
-      let wrapper
-      if (type === SANITIZER_TYPE) {
-        wrapper = wrapSanitizer(target, secureMarks)
-      } else {
-        wrapper = wrapInputValidator(target, parameters, secureMarks)
-      }
+      const wrapper = type === SANITIZER_TYPE
+        ? wrapSanitizer(target, secureMarks)
+        : wrapInputValidator(target, parameters, secureMarks)
 
       if (methodName) {
         parent[methodName] = wrapper
@@ -97,11 +94,7 @@ function hookModule (filename, module, controlsByFile) {
 function resolve (path, obj, separator = '.') {
   if (!path) {
     // esm module with default export
-    if (obj?.default) {
-      return { target: obj.default, parent: obj, methodName: 'default' }
-    } else {
-      return { target: obj, parent: obj }
-    }
+    return obj?.default ? { target: obj.default, parent: obj, methodName: 'default' } : { target: obj, parent: obj }
   }
 
   const properties = path.split(separator)
@@ -164,7 +157,7 @@ function addSecureMarks (value, secureMarks, createNewTainted = true) {
         if (createNewTainted) {
           parent[lastKey] = securedTainted
         }
-      } catch (e) {
+      } catch {
         // if it is a readonly property, do nothing
       }
     })

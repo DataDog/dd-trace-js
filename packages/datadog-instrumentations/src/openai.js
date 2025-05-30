@@ -137,10 +137,7 @@ function addStreamedChunk (content, chunk) {
   for (const choice of chunk.choices) {
     const choiceIdx = choice.index
     const oldChoice = content.choices.find(choice => choice?.index === choiceIdx)
-    if (!oldChoice) {
-      // we don't know which choices arrive in which order
-      content.choices[choiceIdx] = choice
-    } else {
+    if (oldChoice) {
       if (!oldChoice.finish_reason) {
         oldChoice.finish_reason = choice.finish_reason
       }
@@ -177,13 +174,15 @@ function addStreamedChunk (content, chunk) {
 
           if (oldTool) {
             oldTool.function.arguments += newTool.function.arguments
-          } else {
-            return newTool
+            return oldTool
           }
 
-          return oldTool
+          return newTool
         })
       }
+    } else {
+      // we don't know which choices arrive in which order
+      content.choices[choiceIdx] = choice
     }
   }
 }
@@ -193,8 +192,7 @@ function convertBufferstoObjects (chunks = []) {
     .concat(chunks) // combine the buffers
     .toString() // stringify
     .split(/(?=data:)/) // split on "data:"
-    .map(chunk => chunk.split('\n').join('')) // remove newlines
-    .map(chunk => chunk.substring(6)) // remove 'data: ' from the front
+    .map(chunk => chunk.replace(/\n/g, '').slice(6)) // remove newlines and 'data: ' from the front
     .slice(0, -1) // remove the last [DONE] message
     .map(JSON.parse) // parse all of the returned objects
 }

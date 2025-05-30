@@ -72,7 +72,7 @@ function getProvidedContext () {
       testManagementTests,
       isFlakyTestRetriesEnabled
     }
-  } catch (e) {
+  } catch {
     log.error('Vitest workers could not parse provided context, so some features will not work.')
     return {
       isDiEnabled: false,
@@ -123,7 +123,6 @@ function getSessionStatus (state) {
   return 'pass'
 }
 
-// eslint-disable-next-line
 // From https://github.com/vitest-dev/vitest/blob/51c04e2f44d91322b334f8ccbcdb368facc3f8ec/packages/runner/src/run.ts#L243-L250
 function getVitestTestStatus (test, retryCount) {
   if (test.result.state !== 'fail') {
@@ -200,7 +199,7 @@ function getSortWrapper (sort) {
         isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
         testManagementAttemptToFixRetries = libraryConfig.testManagementAttemptToFixRetries
       }
-    } catch (e) {
+    } catch {
       isFlakyTestRetriesEnabled = false
       isEarlyFlakeDetectionEnabled = false
       isDiEnabled = false
@@ -212,14 +211,17 @@ function getSortWrapper (sort) {
       try {
         const workspaceProject = this.ctx.getCoreWorkspaceProject()
         workspaceProject._provided._ddIsFlakyTestRetriesEnabled = isFlakyTestRetriesEnabled
-      } catch (e) {
+      } catch {
         log.warn('Could not send library configuration to workers.')
       }
     }
 
     if (isKnownTestsEnabled) {
       const knownTestsResponse = await getChannelPromise(knownTestsCh)
-      if (!knownTestsResponse.err) {
+      if (knownTestsResponse.err) {
+        isEarlyFlakeDetectionEnabled = false
+        isKnownTestsEnabled = false
+      } else {
         knownTests = knownTestsResponse.knownTests
         const getFilePaths = this.ctx.getTestFilepaths || this.ctx._globTestFilepaths
 
@@ -245,13 +247,10 @@ function getSortWrapper (sort) {
             workspaceProject._provided._ddKnownTests = knownTests.vitest || {}
             workspaceProject._provided._ddIsEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
             workspaceProject._provided._ddEarlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
-          } catch (e) {
+          } catch {
             log.warn('Could not send known tests to workers so Early Flake Detection will not work.')
           }
         }
-      } else {
-        isEarlyFlakeDetectionEnabled = false
-        isKnownTestsEnabled = false
       }
     }
 
@@ -259,26 +258,26 @@ function getSortWrapper (sort) {
       try {
         const workspaceProject = this.ctx.getCoreWorkspaceProject()
         workspaceProject._provided._ddIsDiEnabled = isDiEnabled
-      } catch (e) {
+      } catch {
         log.warn('Could not send Dynamic Instrumentation configuration to workers.')
       }
     }
 
     if (isTestManagementTestsEnabled) {
       const { err, testManagementTests: receivedTestManagementTests } = await getChannelPromise(testManagementTestsCh)
-      if (!err) {
+      if (err) {
+        isTestManagementTestsEnabled = false
+        log.error('Could not get test management tests.')
+      } else {
         testManagementTests = receivedTestManagementTests
         try {
           const workspaceProject = this.ctx.getCoreWorkspaceProject()
           workspaceProject._provided._ddIsTestManagementTestsEnabled = isTestManagementTestsEnabled
           workspaceProject._provided._ddTestManagementAttemptToFixRetries = testManagementAttemptToFixRetries
           workspaceProject._provided._ddTestManagementTests = testManagementTests
-        } catch (e) {
+        } catch {
           log.warn('Could not send test management tests to workers so Test Management will not work.')
         }
-      } else {
-        isTestManagementTestsEnabled = false
-        log.error('Could not get test management tests.')
       }
     }
 
@@ -290,7 +289,7 @@ function getSortWrapper (sort) {
 
         try {
           testCodeCoverageLinesTotal = totalCodeCoverage.getCoverageSummary().lines.pct
-        } catch (e) {
+        } catch {
           // ignore errors
         }
         return totalCodeCoverage
@@ -579,7 +578,7 @@ addHook({
     }
     taskToCtx.set(task, ctx)
 
-    testStartCh.runStores(ctx, () => { })
+    testStartCh.runStores(ctx, () => {})
     return onBeforeTryTask.apply(this, arguments)
   })
 
@@ -609,7 +608,7 @@ addHook({
         if (statuses.length === testManagementAttemptToFixRetries) {
           if (statuses.every(status => status === 'pass')) {
             attemptToFixPassed = true
-          } else if (statuses.some(status => status === 'fail')) {
+          } else if (statuses.includes('fail')) {
             attemptToFixFailed = true
           }
         }
@@ -621,7 +620,7 @@ addHook({
         ctx.task = task
         ctx.attemptToFixPassed = attemptToFixPassed
         ctx.attemptToFixFailed = attemptToFixFailed
-        testFinishTimeCh.runStores(ctx, () => { })
+        testFinishTimeCh.runStores(ctx, () => {})
       }
 
       return result
@@ -726,7 +725,7 @@ addHook({
     const testSuiteAbsolutePath = testPaths[0]?.filepath || testPaths[0]
 
     const testSuiteCtx = { testSuiteAbsolutePath, frameworkVersion }
-    testSuiteStartCh.runStores(testSuiteCtx, () => { })
+    testSuiteStartCh.runStores(testSuiteCtx, () => {})
     const startTestsResponse = await startTests.apply(this, arguments)
 
     let onFinish = null
@@ -768,7 +767,7 @@ addHook({
           let attemptToFixFailed = false
           if (attemptToFixTasks.has(task)) {
             const statuses = taskToStatuses.get(task)
-            if (statuses.some(status => status === 'fail')) {
+            if (statuses.includes('fail')) {
               attemptToFixFailed = true
             }
             if (statuses.every(status => status === 'fail')) {
@@ -780,7 +779,7 @@ addHook({
             const isRetry = task.result?.retryCount > 0
             // `duration` is the duration of all the retries, so it can't be used if there are retries
             testErrorCh.publish({
-              duration: !isRetry ? duration : undefined,
+              duration: isRetry ? undefined : duration,
               error: testError,
               hasFailedAllRetries,
               attemptToFixFailed,
@@ -815,7 +814,7 @@ addHook({
 
     if (testSuiteError) {
       testSuiteCtx.error = testSuiteError
-      testSuiteErrorCh.runStores(testSuiteCtx, () => { })
+      testSuiteErrorCh.runStores(testSuiteCtx, () => {})
     }
 
     testSuiteFinishCh.publish({ status: testSuiteResult.state, onFinish, ...testSuiteCtx.currentStore })

@@ -47,7 +47,7 @@ addHook({ name: 'mysql', file: 'lib/Connection.js', versions: ['>=2'] }, Connect
           }))
         } else {
           const cb = asyncResource.bind(function () {
-            finishCh.publish(undefined)
+            finishCh.publish()
           })
           res.on('end', cb)
         }

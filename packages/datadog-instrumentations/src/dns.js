@@ -62,7 +62,7 @@ function wrap (prefix, fn, expectedArgs, rrtype) {
       return fn.apply(this, arguments)
     }
 
-    const args = Array.from(arguments)
+    const args = [...arguments]
     args.pop() // gets rid of the callback
     if (rrtype) {
       args.push(rrtype)

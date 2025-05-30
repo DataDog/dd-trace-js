@@ -108,7 +108,7 @@ describe('integrations', () => {
             usage: { prompt_tokens: 3, completion_tokens: 16, total_tokens: 19 }
           }, [])
 
-        const checkSpan = agent.use(traces => {
+        const checkSpan = agent.assertSomeTraces(traces => {
           const span = traces[0][0]
           const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
@@ -163,7 +163,7 @@ describe('integrations', () => {
             }]
           }, [])
 
-        const checkSpan = agent.use(traces => {
+        const checkSpan = agent.assertSomeTraces(traces => {
           const span = traces[0][0]
           const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
@@ -216,7 +216,7 @@ describe('integrations', () => {
             }
           }, [])
 
-        const checkSpan = agent.use(traces => {
+        const checkSpan = agent.assertSomeTraces(traces => {
           const span = traces[0][0]
           const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
@@ -281,7 +281,7 @@ describe('integrations', () => {
               }]
             }, [])
 
-          const checkSpan = agent.use(traces => {
+          const checkSpan = agent.assertSomeTraces(traces => {
             const span = traces[0][0]
             const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
@@ -339,7 +339,7 @@ describe('integrations', () => {
               'openai-organization': 'kill-9'
             })
 
-          const checkSpan = agent.use(traces => {
+          const checkSpan = agent.assertSomeTraces(traces => {
             const span = traces[0][0]
             const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
@@ -390,7 +390,7 @@ describe('integrations', () => {
               'openai-organization': 'kill-9'
             })
 
-          const checkSpan = agent.use(traces => {
+          const checkSpan = agent.assertSomeTraces(traces => {
             const span = traces[0][0]
             const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
@@ -441,7 +441,7 @@ describe('integrations', () => {
                 'openai-organization': 'kill-9'
               })
 
-            const checkSpan = agent.use(traces => {
+            const checkSpan = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
               const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
@@ -496,7 +496,7 @@ describe('integrations', () => {
           .reply(400, {})
 
         let error
-        const checkSpan = agent.use(traces => {
+        const checkSpan = agent.assertSomeTraces(traces => {
           const span = traces[0][0]
           const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
@@ -538,7 +538,7 @@ describe('integrations', () => {
           .reply(400, {})
 
         let error
-        const checkSpan = agent.use(traces => {
+        const checkSpan = agent.assertSomeTraces(traces => {
           const span = traces[0][0]
           const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
@@ -588,7 +588,7 @@ describe('integrations', () => {
           .query(query)
           .reply(200, {})
 
-        const checkSpan = agent.use(traces => {
+        const checkSpan = agent.assertSomeTraces(traces => {
           const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
           expect(spanEvent).to.have.property('name', 'AzureOpenAI.createChatCompletion')
@@ -608,7 +608,7 @@ describe('integrations', () => {
           .post('/chat/completions')
           .reply(200, {})
 
-        const checkSpan = agent.use(traces => {
+        const checkSpan = agent.assertSomeTraces(traces => {
           const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
           expect(spanEvent).to.have.property('name', 'DeepSeek.createChatCompletion')
