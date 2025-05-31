@@ -47,7 +47,7 @@ class GrpcServerPlugin extends ServerPlugin {
       metrics: {
         'grpc.status.code': 0
       }
-    })
+    }, message)
 
     addMetadataTags(span, metadata, metadataFilter, 'request')
 
