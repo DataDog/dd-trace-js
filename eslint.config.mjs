@@ -140,9 +140,7 @@ export default [
       'unicorn/explicit-length-check': 'off', // 68 errors
       'unicorn/filename-case': ['off', { case: 'kebabCase' }], // 59 errors
       'unicorn/no-array-for-each': 'off', // 122 errors
-      'unicorn/no-null': 'off', // too strict
       'unicorn/prefer-at': 'off', // 17 errors | Difficult to fix
-      'unicorn/prefer-spread': 'off', // 13 errors | Difficult to fix
       'unicorn/prevent-abbreviations': 'off', // too strict
 
       // These rules could potentially evaluated again at a much later point
@@ -157,6 +155,7 @@ export default [
       'unicorn/no-array-reduce': 'off', // Questionable benefit
       'unicorn/no-hex-escape': 'off', // Questionable benefit
       'unicorn/no-new-array': 'off', // new Array is often used for performance reasons
+      'unicorn/no-null': 'off', // We do not control external APIs and it is hard to differentiate these
       'unicorn/prefer-event-target': 'off', // Benefit only outside of Node.js
       'unicorn/prefer-global-this': 'off', // Questionable benefit in Node.js alone
       'unicorn/prefer-math-trunc': 'off', // Math.trunc is not a 1-to-1 replacement for most of our usage

@@ -109,7 +109,12 @@ function deepCloneSuite (suite, filterTest, tags = []) {
 
 function getTestsBySuiteFromTestGroups (testGroups) {
   return testGroups.reduce((acc, { requireFile, tests }) => {
-    acc[requireFile] = acc[requireFile] ? acc[requireFile].concat(tests) : tests
+    if (acc[requireFile]) {
+      acc[requireFile].push(...tests)
+    } else {
+      // Copy the tests, otherwise we modify the original tests
+      acc[requireFile] = [...tests]
+    }
     return acc
   }, {})
 }
@@ -417,7 +422,7 @@ function dispatcherRunWrapperNew (run) {
       // Not available from >=1.44.0
       this._ddAllTests = testGroups.flatMap(g => g.tests)
     }
-    remainingTestsByFile = getTestsBySuiteFromTestGroups(arguments[0])
+    remainingTestsByFile = getTestsBySuiteFromTestGroups(testGroups)
     return run.apply(this, arguments)
   }
 }
