@@ -109,6 +109,7 @@ session.on('Debugger.paused', async ({ params }) => {
       if (probe.condition !== undefined) {
         // TODO: Bundle all conditions and evaluate them in a single call
         // TODO: Handle errors
+        // eslint-disable-next-line no-await-in-loop
         const { result } = await session.post('Debugger.evaluateOnCallFrame', {
           callFrameId: params.callFrames[0].callFrameId,
           expression: probe.condition,
