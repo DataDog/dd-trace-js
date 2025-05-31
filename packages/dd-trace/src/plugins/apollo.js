@@ -9,18 +9,13 @@ class ApolloBasePlugin extends TracingPlugin {
     const store = ctx.parentStore
     const childOf = store ? store.span : null
 
-    const span = this.startSpan(this.getOperationName(), {
+    this.startSpan(this.getOperationName(), {
       childOf,
       service: this.getServiceName(),
       type: this.constructor.type,
       kind: this.constructor.kind,
       meta: {}
     }, ctx)
-
-    ctx.parentStore = store
-    ctx.currentStore = { ...store, span }
-
-    return ctx.currentStore
   }
 
   end (ctx) {
