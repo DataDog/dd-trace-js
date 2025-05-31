@@ -25,7 +25,7 @@ const unfinishedRegistry = createRegistry('unfinished')
 const finishedRegistry = createRegistry('finished')
 
 const OTEL_ENABLED = !!process.env.DD_TRACE_OTEL_ENABLED
-const ALLOWED = new Set(['string', 'number', 'boolean'])
+const ALLOWED_TYPES = new Set(['string', 'number', 'boolean'])
 
 const integrationCounters = {
   spans_created: {},
@@ -52,11 +52,24 @@ function getIntegrationCounter (event, integration) {
   return counter
 }
 
+const addArrayOrScalarAttributes = (key, value, sanitizedAttributes) => {
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i++) {
+      addArrayOrScalarAttributes(`${key}.${i}`, value[i], sanitizedAttributes)
+    }
+  } else if (ALLOWED_TYPES.has(typeof value)) {
+    sanitizedAttributes[key] = String(value)
+  } else {
+    log.warn('Dropping span link attribute. It is not of an allowed type')
+  }
+}
+
 class DatadogSpan {
   constructor (tracer, processor, prioritySampler, fields, debug) {
     const operationName = fields.operationName
     const parent = fields.parent || null
-    // TODO(BridgeAR): Investigate why this is causing a performance regression
+    // Using the spread notation here causes a performance issue in older V8 versions.
+    // This is fixed in Node.js 22 and later, but we still need to support older versions.
     // eslint-disable-next-line prefer-object-spread
     const tags = Object.assign({}, fields.tags)
     const hostname = fields.hostname
@@ -128,7 +141,7 @@ class DatadogSpan {
 
   toString () {
     const spanContext = this.context()
-    const resourceName = spanContext._tags['resource.name'] || ''
+    const resourceName = spanContext._tags['resource.name'] ?? ''
     const resource = resourceName.length > 100
       ? `${resourceName.slice(0, 97)}...`
       : resourceName
@@ -182,7 +195,7 @@ class DatadogSpan {
   }
 
   setTag (key, value) {
-    this._addTags({ [key]: value })
+    this._spanContext._tags[key] = value
     return this
   }
 
@@ -264,48 +277,32 @@ class DatadogSpan {
     this._processor.process(this)
   }
 
-  _sanitizeAttributes (attributes = {}) {
-    const sanitizedAttributes = {}
-
-    const addArrayOrScalarAttributes = (key, maybeArray) => {
-      if (Array.isArray(maybeArray)) {
-        for (const subkey in maybeArray) {
-          addArrayOrScalarAttributes(`${key}.${subkey}`, maybeArray[subkey])
-        }
-      } else {
-        const maybeScalar = maybeArray
-        if (ALLOWED.has(typeof maybeScalar)) {
-          // Wrap the value as a string if it's not already a string
-          sanitizedAttributes[key] = typeof maybeScalar === 'string' ? maybeScalar : String(maybeScalar)
-        } else {
-          log.warn('Dropping span link attribute. It is not of an allowed type')
-        }
-      }
+  _sanitizeAttributes (attributes) {
+    if (attributes === undefined) {
+      return {}
     }
-
-    Object.entries(attributes).forEach(entry => {
-      const [key, value] = entry
-      addArrayOrScalarAttributes(key, value)
-    })
+    const sanitizedAttributes = {}
+    for (const [key, value] of Object.entries(attributes)) {
+      addArrayOrScalarAttributes(key, value, sanitizedAttributes)
+    }
     return sanitizedAttributes
   }
 
-  _sanitizeEventAttributes (attributes = {}) {
+  _sanitizeEventAttributes (attributes) {
     const sanitizedAttributes = {}
 
-    for (const key in attributes) {
-      const value = attributes[key]
+    for (const [key, value] of Object.entries(attributes)) {
       if (Array.isArray(value)) {
         const newArray = []
-        for (const subkey in value) {
-          if (ALLOWED.has(typeof value[subkey])) {
-            newArray.push(value[subkey])
+        for (const subValue of value) {
+          if (ALLOWED_TYPES.has(typeof subValue)) {
+            newArray.push(subValue)
           } else {
             log.warn('Dropping span event attribute. It is not of an allowed type')
           }
         }
         sanitizedAttributes[key] = newArray
-      } else if (ALLOWED.has(typeof value)) {
+      } else if (ALLOWED_TYPES.has(typeof value)) {
         sanitizedAttributes[key] = value
       } else {
         log.warn('Dropping span event attribute. It is not of an allowed type')
