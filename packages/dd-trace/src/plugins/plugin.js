@@ -31,13 +31,7 @@ class Subscription {
 class StoreBinding {
   constructor (event, transform) {
     this._channel = dc.channel(event)
-    this._transform = data => {
-      const store = storage('legacy').getStore()
-
-      return !store || !store.noop
-        ? transform(data)
-        : store
-    }
+    this._transform = transform
   }
 
   enable () {
