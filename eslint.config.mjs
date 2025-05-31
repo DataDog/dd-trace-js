@@ -141,7 +141,6 @@ export default [
       'unicorn/filename-case': ['off', { case: 'kebabCase' }], // 59 errors
       'unicorn/no-array-for-each': 'off', // 122 errors
       'unicorn/no-null': 'off', // too strict
-      'unicorn/prefer-array-flat': 'off', // 7 errors | Difficult to fix
       'unicorn/prefer-at': 'off', // 17 errors | Difficult to fix
       'unicorn/prefer-spread': 'off', // 13 errors | Difficult to fix
       'unicorn/prevent-abbreviations': 'off', // too strict
