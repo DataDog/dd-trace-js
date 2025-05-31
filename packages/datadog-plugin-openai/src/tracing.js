@@ -62,7 +62,7 @@ class OpenAiTracingPlugin extends TracingPlugin {
     const payload = normalizeRequestPayload(methodName, args)
     const normalizedMethodName = normalizeMethodName(methodName)
 
-    const store = ctx.parentStore || {}
+    const store = ctx.currentStore || {}
 
     // hold onto these to make response extraction matching efficient
     // the original method name corresponds to the SDK method name (e.g. createChatCompletion, chat.completions.create)
@@ -181,7 +181,7 @@ class OpenAiTracingPlugin extends TracingPlugin {
 
     span.addTags(tags)
 
-    ctx.currentStore.openai = openaiStore
+    store.openai = openaiStore
   }
 
   asyncEnd (ctx) {
