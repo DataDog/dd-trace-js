@@ -45,7 +45,7 @@ async function exportProfile (urls, tags, profileType, profile) {
 
   const encodedProfile = await encode(heap.convertProfile(profile, undefined, mapper))
   const start = new Date()
-  for (const url of urls) {
+  await Promise.all(urls.map(async (url) => {
     const exporter = exporterFromURL(url)
 
     await exporter.export({
@@ -56,7 +56,7 @@ async function exportProfile (urls, tags, profileType, profile) {
       end: start,
       tags
     })
-  }
+  }))
 }
 
 /** Expected command line arguments are:
