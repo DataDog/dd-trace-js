@@ -13,10 +13,6 @@ function isFastSlash (layer, matchers) {
   return layer.regexp?.fast_slash ?? matchers.some(matcher => matcher.path === '/')
 }
 
-function flatten (arr) {
-  return arr.reduce((acc, val) => Array.isArray(val) ? acc.concat(flatten(val)) : acc.concat(val), [])
-}
-
 // TODO: Move this function to a shared file between Express and Router
 function createWrapRouterMethod (name) {
   const enterChannel = channel(`apm:${name}:middleware:enter`)
@@ -110,7 +106,7 @@ function createWrapRouterMethod (name) {
   }
 
   function extractMatchers (fn) {
-    const arg = flatten([].concat(fn))
+    const arg = Array.isArray(fn) ? fn.flat(Infinity) : [fn]
 
     if (typeof arg[0] === 'function') {
       return []

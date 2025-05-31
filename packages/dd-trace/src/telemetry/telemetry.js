@@ -376,12 +376,7 @@ function profilingEnabledToBoolean (profilingEnabled) {
   if (typeof profilingEnabled === 'boolean') {
     return profilingEnabled
   }
-  if (['auto', 'true'].includes(profilingEnabled)) {
-    return true
-  }
-  if (profilingEnabled === 'false') {
-    return false
-  }
+  return profilingEnabled === 'true' || profilingEnabled === 'auto'
 }
 
 module.exports = {

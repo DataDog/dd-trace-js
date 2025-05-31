@@ -187,7 +187,7 @@ function addStreamedChunk (content, chunk) {
   }
 }
 
-function convertBufferstoObjects (chunks = []) {
+function convertBufferstoObjects (chunks) {
   return Buffer
     .concat(chunks) // combine the buffers
     .toString() // stringify
