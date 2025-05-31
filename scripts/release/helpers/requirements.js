@@ -1,7 +1,5 @@
 'use strict'
 
-/* eslint-disable @stylistic/js/max-len */
-
 const { join } = require('path')
 const { existsSync, readFileSync } = require('fs')
 const os = require('os')

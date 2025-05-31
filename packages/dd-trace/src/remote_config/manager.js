@@ -59,13 +59,17 @@ class RemoteConfigManager extends EventEmitter {
           targets_version: 0,
           // Use getter so `apply_*` can be updated async and still affect the content of `config_states`
           get config_states () {
-            return Array.from(appliedConfigs.values()).map((conf) => ({
-              id: conf.id,
-              version: conf.version,
-              product: conf.product,
-              apply_state: conf.apply_state,
-              apply_error: conf.apply_error
-            }))
+            const configs = []
+            for (const conf of appliedConfigs.values()) {
+              configs.push({
+                id: conf.id,
+                version: conf.version,
+                product: conf.product,
+                apply_state: conf.apply_state,
+                apply_error: conf.apply_error
+              })
+            }
+            return configs
           },
           has_error: false,
           error: '',
@@ -125,7 +129,7 @@ class RemoteConfigManager extends EventEmitter {
   }
 
   updateProducts () {
-    this.state.client.products = Array.from(this._handlers.keys())
+    this.state.client.products = [...this._handlers.keys()]
   }
 
   getPayload () {
@@ -246,11 +250,19 @@ class RemoteConfigManager extends EventEmitter {
       this.dispatch(toApply, 'apply')
       this.dispatch(toModify, 'modify')
 
-      this.state.cached_target_files = Array.from(this.appliedConfigs.values()).map((conf) => ({
-        path: conf.path,
-        length: conf.length,
-        hashes: Object.entries(conf.hashes).map((entry) => ({ algorithm: entry[0], hash: entry[1] }))
-      }))
+      this.state.cached_target_files = []
+
+      for (const conf of this.appliedConfigs.values()) {
+        const hashes = []
+        for (const hash of Object.entries(conf.hashes)) {
+          hashes.push({ algorithm: hash[0], hash: hash[1] })
+        }
+        this.state.cached_target_files.push({
+          path: conf.path,
+          length: conf.length,
+          hashes
+        })
+      }
     }
   }
 

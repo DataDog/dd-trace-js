@@ -1,6 +1,6 @@
 'use strict'
 
-const lock = require('mutexify/promise')()
+const mutex = require('mutexify/promise')()
 const { getGeneratedPosition } = require('./source-maps')
 const session = require('./session')
 const { compile: compileCondition, compileSegments, templateRequiresEvaluation } = require('./condition')
@@ -36,8 +36,9 @@ session.on('scriptLoadingStabilized', () => {
 })
 
 module.exports = {
-  addBreakpoint,
-  removeBreakpoint
+  addBreakpoint: lock(addBreakpoint),
+  removeBreakpoint: lock(removeBreakpoint),
+  modifyBreakpoint: lock(modifyBreakpoint)
 }
 
 async function addBreakpoint (probe) {
@@ -89,89 +90,84 @@ async function addBreakpoint (probe) {
     throw new Error(`Cannot compile expression: ${probe.when.dsl}`, { cause: err })
   }
 
-  const release = await lock()
+  const locationKey = generateLocationKey(scriptId, lineNumber, columnNumber)
+  const breakpoint = locationToBreakpoint.get(locationKey)
 
-  try {
-    const locationKey = generateLocationKey(scriptId, lineNumber, columnNumber)
-    const breakpoint = locationToBreakpoint.get(locationKey)
+  log.debug(
+    '[debugger:devtools_client] %s breakpoint at %s:%d:%d (probe: %s, version: %d)',
+    breakpoint ? 'Updating' : 'Adding', url, lineNumber, columnNumber, probe.id, probe.version
+  )
 
-    log.debug(
-      '[debugger:devtools_client] %s breakpoint at %s:%d:%d (probe: %s, version: %d)',
-      breakpoint ? 'Updating' : 'Adding', url, lineNumber, columnNumber, probe.id, probe.version
-    )
-
-    if (breakpoint) {
-      // A breakpoint already exists at this location, so we need to add the probe to the existing breakpoint
-      await updateBreakpoint(breakpoint, probe)
-    } else {
-      // No breakpoint exists at this location, so we need to create a new one
-      const location = {
-        scriptId,
-        lineNumber: lineNumber - 1, // Beware! lineNumber is zero-indexed
-        columnNumber
-      }
-      let result
-      try {
-        result = await session.post('Debugger.setBreakpoint', {
-          location,
-          condition: probe.condition
-        })
-      } catch (err) {
-        throw new Error(`Error setting breakpoint for probe ${probe.id}`, { cause: err })
-      }
-      probeToLocation.set(probe.id, locationKey)
-      locationToBreakpoint.set(locationKey, { id: result.breakpointId, location, locationKey })
-      breakpointToProbes.set(result.breakpointId, new Map([[probe.id, probe]]))
+  if (breakpoint) {
+    // A breakpoint already exists at this location, so we need to add the probe to the existing breakpoint
+    await updateBreakpointInternal(breakpoint, probe)
+  } else {
+    // No breakpoint exists at this location, so we need to create a new one
+    const location = {
+      scriptId,
+      lineNumber: lineNumber - 1, // Beware! lineNumber is zero-indexed
+      columnNumber
     }
-  } finally {
-    release()
+    let result
+    try {
+      result = await session.post('Debugger.setBreakpoint', {
+        location,
+        condition: probe.condition
+      })
+    } catch (err) {
+      throw new Error(`Error setting breakpoint for probe ${probe.id}`, { cause: err })
+    }
+    probeToLocation.set(probe.id, locationKey)
+    locationToBreakpoint.set(locationKey, { id: result.breakpointId, location, locationKey })
+    breakpointToProbes.set(result.breakpointId, new Map([[probe.id, probe]]))
   }
 }
 
 async function removeBreakpoint ({ id }) {
   if (!sessionStarted) {
     // We should not get in this state, but abort if we do, so the code doesn't fail unexpected
-    throw Error(`Cannot remove probe ${id}: Debugger not started`)
+    throw new Error(`Cannot remove probe ${id}: Debugger not started`)
   }
   if (!probeToLocation.has(id)) {
-    throw Error(`Unknown probe id: ${id}`)
+    throw new Error(`Unknown probe id: ${id}`)
   }
 
   probes.delete(id)
 
-  const release = await lock()
+  const locationKey = probeToLocation.get(id)
+  const breakpoint = locationToBreakpoint.get(locationKey)
+  const probesAtLocation = breakpointToProbes.get(breakpoint.id)
 
-  try {
-    const locationKey = probeToLocation.get(id)
-    const breakpoint = locationToBreakpoint.get(locationKey)
-    const probesAtLocation = breakpointToProbes.get(breakpoint.id)
+  probesAtLocation.delete(id)
+  probeToLocation.delete(id)
 
-    probesAtLocation.delete(id)
-    probeToLocation.delete(id)
-
-    if (probesAtLocation.size === 0) {
-      locationToBreakpoint.delete(locationKey)
-      breakpointToProbes.delete(breakpoint.id)
-      if (breakpointToProbes.size === 0) {
-        await stop() // TODO: Will this actually delete the breakpoint?
-      } else {
-        try {
-          await session.post('Debugger.removeBreakpoint', { breakpointId: breakpoint.id })
-        } catch (err) {
-          throw new Error(`Error removing breakpoint for probe ${id}`, { cause: err })
-        }
-      }
+  if (probesAtLocation.size === 0) {
+    locationToBreakpoint.delete(locationKey)
+    breakpointToProbes.delete(breakpoint.id)
+    // TODO: If anything below in this if-block throws, the state is out of sync.
+    if (breakpointToProbes.size === 0) {
+      await stop() // This will also remove the breakpoint
     } else {
-      await updateBreakpoint(breakpoint)
+      try {
+        await session.post('Debugger.removeBreakpoint', { breakpointId: breakpoint.id })
+      } catch (err) {
+        throw new Error(`Error removing breakpoint for probe ${id}`, { cause: err })
+      }
     }
-  } finally {
-    release()
+  } else {
+    await updateBreakpointInternal(breakpoint)
   }
 }
 
-async function updateBreakpoint (breakpoint, probe) {
+// TODO: Modify existing probe instead of removing it (DEBUG-2817)
+async function modifyBreakpoint (probe) {
+  await removeBreakpoint(probe)
+  await addBreakpoint(probe)
+}
+
+async function updateBreakpointInternal (breakpoint, probe) {
   const probesAtLocation = breakpointToProbes.get(breakpoint.id)
-  const conditionBeforeNewProbe = compileCompoundCondition(Array.from(probesAtLocation.values()))
+  const conditionBeforeNewProbe = compileCompoundCondition([...probesAtLocation.values()])
 
   // If a probe is provided, add it to the breakpoint. If not, it's because we're removing a probe, but potentially
   // need to update the condtion of the breakpoint.
@@ -180,7 +176,7 @@ async function updateBreakpoint (breakpoint, probe) {
     probeToLocation.set(probe.id, breakpoint.locationKey)
   }
 
-  const condition = compileCompoundCondition(Array.from(probesAtLocation.values()))
+  const condition = compileCompoundCondition([...probesAtLocation.values()])
 
   if (condition || conditionBeforeNewProbe !== condition) {
     try {
@@ -233,6 +229,17 @@ function stop () {
   clearState()
   log.debug('[debugger:devtools_client] Stopping debugger')
   return session.post('Debugger.disable')
+}
+
+function lock (fn) {
+  return async function (...args) {
+    const release = await mutex()
+    try {
+      return await fn(...args)
+    } finally {
+      release()
+    }
+  }
 }
 
 // Only if all probes have a condition can we use a compound condition.

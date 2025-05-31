@@ -4,6 +4,7 @@ require('../setup/tap')
 
 const expect = require('chai').expect
 const sinon = require('sinon')
+const satisfies = require('semifies')
 
 const SpaceProfiler = require('../../src/profiling/profilers/space')
 const WallProfiler = require('../../src/profiling/profilers/wall')
@@ -246,21 +247,70 @@ describe('profiler', function () {
       sinon.assert.calledOnce(exporter.export)
     })
 
-    it('should export profiles', async () => {
+    async function shouldExportProfiles (compression, magicBytes) {
+      wallProfile = Buffer.from('uncompressed profile - wall')
+      wallProfilePromise = Promise.resolve(wallProfile)
+      wallProfiler.encode.returns(wallProfilePromise)
+      spaceProfile = Buffer.from('uncompressed profile - space')
+      spaceProfilePromise = Promise.resolve(spaceProfile)
+      spaceProfiler.encode.returns(spaceProfilePromise)
+
+      exporterPromise = new Promise(resolve => {
+        exporter.export = (exportSpec) => {
+          resolve(exportSpec)
+          return exporterPromise
+        }
+      })
+
+      const env = process.env
+      process.env = {
+        DD_PROFILING_DEBUG_UPLOAD_COMPRESSION: compression
+      }
       await profiler._start({ profilers, exporters, tags: { foo: 'foo' } })
+      process.env = env
 
       clock.tick(interval)
 
-      await waitForExport()
+      const { profiles, start, end, tags } = await exporterPromise
 
-      const { profiles, start, end, tags } = exporter.export.args[0][0]
-
-      expect(profiles).to.have.property('wall', wallProfile)
-      expect(profiles).to.have.property('space', spaceProfile)
+      expect(profiles).to.have.property('wall')
+      expect(profiles.wall).to.be.instanceOf(Buffer)
+      expect(profiles.wall.indexOf(magicBytes)).to.equal(0)
+      expect(profiles).to.have.property('space')
+      expect(profiles.space).to.be.instanceOf(Buffer)
+      expect(profiles.space.indexOf(magicBytes)).to.equal(0)
       expect(start).to.be.a('date')
       expect(end).to.be.a('date')
       expect(end - start).to.equal(65000)
       expect(tags).to.have.property('foo', 'foo')
+    }
+
+    it('should export uncompressed profiles', async () => {
+      await shouldExportProfiles('off', Buffer.from('uncompressed profile - '))
+    })
+
+    it('should export gzip profiles', async () => {
+      await shouldExportProfiles('gzip', Buffer.from([0x1f, 0x8b]))
+    })
+
+    it('should export zstd profiles', async function () {
+      if (!satisfies(process.versions.node, '>=23.8.0')) {
+        this.skip()
+      } else {
+        await shouldExportProfiles('zstd', Buffer.from([0x28, 0xb5, 0x2f, 0xfd]))
+      }
+    })
+
+    it('should export gzip profiles with a level', async () => {
+      await shouldExportProfiles('gzip-3', Buffer.from([0x1f, 0x8b]))
+    })
+
+    it('should export zstd profiles with a level', async function () {
+      if (!satisfies(process.versions.node, '>=23.8.0')) {
+        this.skip()
+      } else {
+        await shouldExportProfiles('zstd-4', Buffer.from([0x28, 0xb5, 0x2f, 0xfd]))
+      }
     })
 
     it('should log exporter errors', async () => {

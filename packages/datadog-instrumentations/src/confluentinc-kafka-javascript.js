@@ -73,12 +73,12 @@ function instrumentBaseModule (module) {
 
                   const result = produce.apply(this, arguments)
 
-                  channels.producerCommit.publish(undefined)
-                  channels.producerFinish.publish(undefined)
+                  channels.producerCommit.publish()
+                  channels.producerFinish.publish()
                   return result
                 } catch (error) {
                   channels.producerError.publish(error)
-                  channels.producerFinish.publish(undefined)
+                  channels.producerFinish.publish()
                   throw error
                 }
               })
@@ -131,11 +131,11 @@ function instrumentBaseModule (module) {
 
                   try {
                     const result = callback.apply(this, arguments)
-                    channels.consumerFinish.publish(undefined)
+                    channels.consumerFinish.publish()
                     return result
                   } catch (error) {
                     channels.consumerError.publish(error)
-                    channels.consumerFinish.publish(undefined)
+                    channels.consumerFinish.publish()
                     throw error
                   }
                 })
@@ -219,7 +219,7 @@ function instrumentKafkaJS (kafkaJS) {
                         result.then(
                           asyncResource.bind(res => {
                             channels.producerCommit.publish(res)
-                            channels.producerFinish.publish(undefined)
+                            channels.producerFinish.publish()
                           }),
                           asyncResource.bind(err => {
                             if (err) {
@@ -235,14 +235,14 @@ function instrumentKafkaJS (kafkaJS) {
                               }
                               channels.producerError.publish(err)
                             }
-                            channels.producerFinish.publish(undefined)
+                            channels.producerFinish.publish()
                           })
                         )
 
                         return result
                       } catch (e) {
                         channels.producerError.publish(e)
-                        channels.producerFinish.publish(undefined)
+                        channels.producerFinish.publish()
                         throw e
                       }
                     })
@@ -362,21 +362,21 @@ function wrapKafkaCallback (callback, { startCh, commitCh, finishCh, errorCh }, 
         if (result && typeof result.then === 'function') {
           return result
             .then(asyncResource.bind(res => {
-              finishCh.publish(undefined)
+              finishCh.publish()
               return res
             }))
             .catch(asyncResource.bind(err => {
               errorCh.publish(err)
-              finishCh.publish(undefined)
+              finishCh.publish()
               throw err
             }))
         } else {
-          finishCh.publish(undefined)
+          finishCh.publish()
           return result
         }
       } catch (error) {
         errorCh.publish(error)
-        finishCh.publish(undefined)
+        finishCh.publish()
         throw error
       }
     })
@@ -402,5 +402,5 @@ function updateLatestOffset (topic, partition, offset, groupId) {
 }
 
 function getLatestOffsets () {
-  return Array.from(latestConsumerOffsets.values())
+  return [...latestConsumerOffsets.values()]
 }

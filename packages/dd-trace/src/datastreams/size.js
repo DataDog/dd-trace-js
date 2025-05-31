@@ -4,7 +4,7 @@ const { types } = require('util')
 
 function getSizeOrZero (obj) {
   if (typeof obj === 'string') {
-    return Buffer.from(obj, 'utf-8').length
+    return Buffer.from(obj, 'utf8').length
   }
   if (types.isArrayBuffer(obj)) {
     return obj.byteLength

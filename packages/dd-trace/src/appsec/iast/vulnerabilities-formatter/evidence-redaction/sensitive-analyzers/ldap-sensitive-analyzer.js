@@ -2,7 +2,7 @@
 
 const log = require('../../../../../log')
 
-const LDAP_PATTERN = '\\(.*?(?:~=|=|<=|>=)(?<LITERAL>[^)]+)\\)'
+const LDAP_PATTERN = String.raw`\(.*?(?:~=|=|<=|>=)(?<LITERAL>[^)]+)\)`
 const pattern = new RegExp(LDAP_PATTERN, 'gmi')
 
 module.exports = function extractSensitiveRanges (evidence) {

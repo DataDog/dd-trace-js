@@ -6,7 +6,7 @@ const dc = require('dc-polyfill')
 const log = require('../log')
 
 // If the process lives for at least 30 seconds, it's considered long-lived
-const DEFAULT_LONG_LIVED_THRESHOLD = 30000
+const DEFAULT_LONG_LIVED_THRESHOLD = 30_000
 
 /**
  * This class embodies the SSI profiler-triggering heuristics and also emits telemetry metrics about
@@ -107,10 +107,8 @@ class SSIHeuristics {
   }
 
   _maybeTriggered () {
-    if (!this.shortLived && !this.noSpan) {
-      if (typeof this.triggeredCallback === 'function') {
-        this.triggeredCallback.call(null)
-      }
+    if (!this.shortLived && !this.noSpan && typeof this.triggeredCallback === 'function') {
+      this.triggeredCallback.call(null)
     }
   }
 

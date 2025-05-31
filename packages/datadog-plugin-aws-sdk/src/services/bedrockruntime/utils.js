@@ -47,27 +47,27 @@ class Generation {
 class RequestParams {
   constructor ({
     prompt = '',
-    temperature = undefined,
-    topP = undefined,
-    topK = undefined,
-    maxTokens = undefined,
+    temperature,
+    topP,
+    topK,
+    maxTokens,
     stopSequences = [],
     inputType = '',
     truncate = '',
     stream = '',
-    n = undefined
+    n
   } = {}) {
     // stringify prompt as it could be a single prompt as well as a list of message objects
     this.prompt = typeof prompt === 'string' ? prompt : JSON.stringify(prompt) || ''
-    this.temperature = temperature !== undefined ? temperature : undefined
-    this.topP = topP !== undefined ? topP : undefined
-    this.topK = topK !== undefined ? topK : undefined
-    this.maxTokens = maxTokens !== undefined ? maxTokens : undefined
+    this.temperature = temperature === undefined ? undefined : temperature
+    this.topP = topP === undefined ? undefined : topP
+    this.topK = topK === undefined ? undefined : topK
+    this.maxTokens = maxTokens === undefined ? undefined : maxTokens
     this.stopSequences = stopSequences || []
     this.inputType = inputType || ''
     this.truncate = truncate || ''
     this.stream = stream || ''
-    this.n = n !== undefined ? n : undefined
+    this.n = n === undefined ? undefined : n
   }
 }
 
@@ -92,7 +92,7 @@ function parseModelId (modelId) {
     if (modelMeta.length < 2) {
       return { modelProvider: 'custom', modelName: modelMeta[0] }
     }
-    return { modelProvider: modelMeta[modelMeta.length - 2], modelName: modelMeta[modelMeta.length - 1] }
+    return { modelProvider: modelMeta.at(-2), modelName: modelMeta.at(-1) }
   }
 
   for (const identifier of MODEL_TYPE_IDENTIFIERS) {
@@ -105,7 +105,7 @@ function parseModelId (modelId) {
       if (modelMeta.length < 2) {
         return { modelProvider: 'custom', modelName: modelId }
       }
-      return { modelProvider: modelMeta[modelMeta.length - 2], modelName: modelMeta[modelMeta.length - 1] }
+      return { modelProvider: modelMeta.at(-2), modelName: modelMeta.at(-1) }
     }
     return { modelProvider: 'custom', modelName: modelId }
   }
@@ -296,7 +296,7 @@ function extractTextAndResponseReason (response, provider, modelName) {
         return new Generation()
       }
     }
-  } catch (error) {
+  } catch {
     log.warn('Unable to extract text/finishReason from response body. Defaulting to empty text/finishReason.')
     return new Generation()
   }

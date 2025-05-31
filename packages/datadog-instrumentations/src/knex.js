@@ -22,6 +22,10 @@ function patch (file) {
   })
 }
 
+function finish () {
+  finishRawQueryCh.publish()
+}
+
 addHook({
   name: 'knex',
   versions: ['>=2'],
@@ -40,10 +44,6 @@ addHook({
     }
 
     const asyncResource = new AsyncResource('bound-anonymous-fn')
-
-    function finish () {
-      finishRawQueryCh.publish()
-    }
 
     return asyncResource.runInAsyncScope(() => {
       startRawQueryCh.publish({ sql, dialect: this.dialect })

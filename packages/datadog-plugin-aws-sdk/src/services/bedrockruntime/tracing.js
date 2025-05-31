@@ -3,14 +3,14 @@
 const BaseAwsSdkPlugin = require('../../base')
 const { parseModelId, extractRequestParams, extractTextAndResponseReason } = require('./utils')
 
-const enabledOperations = ['invokeModel']
+const enabledOperations = new Set(['invokeModel'])
 
 class BedrockRuntime extends BaseAwsSdkPlugin {
   static get id () { return 'bedrockruntime' }
 
   isEnabled (request) {
     const operation = request.operation
-    if (!enabledOperations.includes(operation)) {
+    if (!enabledOperations.has(operation)) {
       return false
     }
 

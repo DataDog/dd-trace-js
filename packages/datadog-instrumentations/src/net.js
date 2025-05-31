@@ -87,7 +87,7 @@ function getOptions (args) {
       if (Array.isArray(args[0])) return getOptions(args[0])
       return args[0]
     case 'string':
-      if (isNaN(parseFloat(args[0]))) {
+      if (Number.isNaN(Number.parseFloat(args[0]))) {
         return {
           path: args[0]
         }

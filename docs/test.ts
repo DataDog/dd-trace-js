@@ -118,12 +118,18 @@ tracer.init({
       enabled: true,
     },
     rasp: {
-      enabled: true
+      enabled: true,
+      bodyCollection: true
     },
     stackTrace: {
       enabled: true,
       maxStackTraces: 5,
       maxDepth: 42
+    },
+    extendedHeadersCollection: {
+      enabled: true,
+      redaction: false,
+      maxHeaders: 42
     }
   },
   iast: {
@@ -378,8 +384,6 @@ tracer.use('opensearch');
 tracer.use('opensearch', openSearchOptions);
 tracer.use('oracledb');
 tracer.use('oracledb', { service: params => `${params.host}-${params.database}` });
-tracer.use('paperplane');
-tracer.use('paperplane', httpServerOptions);
 tracer.use('playwright');
 tracer.use('pg');
 tracer.use('pg', { service: params => `${params.host}-${params.database}` });

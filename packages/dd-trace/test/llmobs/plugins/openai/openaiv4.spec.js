@@ -60,7 +60,8 @@ describe('integrations', () => {
       return agent.close({ ritmReset: false, wipe: true })
     })
 
-    withVersions('openai', 'openai', '>=4', version => {
+    // TODO: Remove the range cap once we support openai 5
+    withVersions('openai', 'openai', '>=4 <5', version => {
       const moduleRequirePath = `../../../../../../versions/openai@${version}`
 
       beforeEach(() => {

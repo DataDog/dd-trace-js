@@ -103,7 +103,7 @@ function getResource (plugin, ns, query, operationName) {
 }
 
 function truncate (input) {
-  return input.slice(0, Math.min(input.length, 10000))
+  return input.slice(0, Math.min(input.length, 10_000))
 }
 
 function shouldSimplify (input) {

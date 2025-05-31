@@ -144,7 +144,7 @@ class TestVisDynamicInstrumentation {
 
 let dynamicInstrumentation
 
-module.exports = (config) => {
+module.exports = function createAndGetTestVisDynamicInstrumentation (config) {
   if (dynamicInstrumentation) {
     return dynamicInstrumentation
   }

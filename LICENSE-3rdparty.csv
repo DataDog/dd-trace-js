@@ -37,7 +37,7 @@ dev,@types/node,MIT,Copyright Authors
 dev,@eslint/eslintrc,MIT,Copyright OpenJS Foundation and other contributors, <www.openjsf.org>
 dev,@eslint/js,MIT,Copyright OpenJS Foundation and other contributors, <www.openjsf.org>
 dev,@msgpack/msgpack,ISC,Copyright 2019 The MessagePack Community
-dev,@stylistic/eslint-plugin-js,MIT,Copyright OpenJS Foundation and other contributors, <www.openjsf.org>
+dev,@stylistic/eslint-plugin,MIT,Copyright OpenJS Foundation and other contributors, <www.openjsf.org>
 dev,axios,MIT,Copyright 2014-present Matt Zabriskie
 dev,benchmark,MIT,Copyright 2010-2016 Mathias Bynens Robert Kieffer John-David Dalton
 dev,body-parser,MIT,Copyright 2014 Jonathan Ong 2014-2015 Douglas Christopher Wilson

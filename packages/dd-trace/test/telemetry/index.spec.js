@@ -472,7 +472,7 @@ describe('Telemetry extended heartbeat', () => {
         {
           name: 'DD_TRACE_SAMPLING_RULES',
           value:
-          // eslint-disable-next-line @stylistic/js/max-len
+          // eslint-disable-next-line @stylistic/max-len
           '[{"service":"*","sampling_rate":1},{"service":"svc*","resource":"*abc","name":"op-??","tags":{"tag-a":"ta-v*","tag-b":"tb-v?","tag-c":"tc-v"},"sample_rate":0.5}]',
           origin: 'code'
         }

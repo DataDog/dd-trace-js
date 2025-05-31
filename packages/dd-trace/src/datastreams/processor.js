@@ -103,10 +103,8 @@ class StatsBucket {
   forBacklog (backlogData) {
     const backlog = new Backlog(backlogData)
     const existingBacklog = this._backlogs.get(backlog.hash)
-    if (existingBacklog !== undefined) {
-      if (existingBacklog.offset > backlog.offset) {
-        return existingBacklog
-      }
+    if (existingBacklog !== undefined && existingBacklog.offset > backlog.offset) {
+      return existingBacklog
     }
     this._backlogs.set(backlog.hash, backlog)
     return backlog
@@ -205,7 +203,9 @@ class DataStreamsProcessor {
     let parentHash = ENTRY_PARENT_HASH
     let closestOppositeDirectionHash = ENTRY_PARENT_HASH
     let closestOppositeDirectionEdgeStart = nowNs
-    if (ctx != null) {
+    if (ctx == null) {
+      log.debug(() => 'Setting DSM Checkpoint with empty parent context.')
+    } else {
       pathwayStartNs = ctx.pathwayStartNs
       edgeStartNs = ctx.edgeStartNs
       parentHash = ctx.hash
@@ -229,8 +229,6 @@ class DataStreamsProcessor {
       log.debug(
         () => `Setting DSM Checkpoint from extracted parent context with hash: ${parentHash} and edge tags: ${edgeTags}`
       )
-    } else {
-      log.debug(() => 'Setting DSM Checkpoint with empty parent context.')
     }
     const hash = computePathwayHash(this.service, this.env, edgeTags, parentHash)
     const edgeLatencyNs = nowNs - edgeStartNs

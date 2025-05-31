@@ -4,7 +4,7 @@ function convertToTextMap (bufferMap) {
   if (!bufferMap) return null
 
   // rdKafka returns an array of header maps
-  if (bufferMap instanceof Array) {
+  if (Array.isArray(bufferMap)) {
     const headers = {}
     for (const headerMap of bufferMap) {
       for (const key of Object.keys(headerMap)) {

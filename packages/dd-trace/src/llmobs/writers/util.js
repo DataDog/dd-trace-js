@@ -27,7 +27,7 @@ function setAgentStrategy (config, setWritersAgentlessValue) {
     }
 
     const endpoints = agentInfo.endpoints
-    const hasEndpoint = Array.isArray(endpoints) && endpoints.some(endpoint => endpoint === EVP_PROXY_AGENT_BASE_PATH)
+    const hasEndpoint = Array.isArray(endpoints) && endpoints.includes(EVP_PROXY_AGENT_BASE_PATH)
     setWritersAgentlessValue(!hasEndpoint)
   })
 }

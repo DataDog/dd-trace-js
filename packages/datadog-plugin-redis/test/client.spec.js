@@ -1,15 +1,10 @@
 'use strict'
 
-const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE } = require('../../dd-trace/src/constants')
 
 const { expectedSchema, rawExpectedSchema } = require('./naming')
-
-const modules = semver.satisfies(process.versions.node, '>=14')
-  ? ['@node-redis/client', '@redis/client']
-  : ['@node-redis/client']
 
 describe('Plugin', () => {
   let redis
@@ -17,7 +12,7 @@ describe('Plugin', () => {
   let tracer
 
   describe('redis', () => {
-    withVersions('redis', modules, (version, moduleName) => {
+    withVersions('redis', ['@node-redis/client', '@redis/client'], (version, moduleName) => {
       describe('without configuration', () => {
         before(() => {
           return agent.load('redis')

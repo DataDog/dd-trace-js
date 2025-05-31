@@ -69,11 +69,7 @@ function setHeader (headers, key, value) {
 }
 
 function getEncoder (protocolVersion) {
-  if (protocolVersion === '0.5') {
-    return require('../../encode/0.5').AgentEncoder
-  } else {
-    return require('../../encode/0.4').AgentEncoder
-  }
+  return require(`../../encode/${protocolVersion === '0.5' ? '0.5' : '0.4'}`).AgentEncoder
 }
 
 function makeRequest (version, data, count, url, headers, lookup, needsStartupLog, cb) {

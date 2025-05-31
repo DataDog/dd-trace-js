@@ -25,7 +25,8 @@ describe('Plugin', () => {
   let tracer
 
   describe('openai', () => {
-    withVersions('openai', 'openai', version => {
+    // TODO: Remove the range once we support openai 5
+    withVersions('openai', 'openai', '<5.0.0', version => {
       const moduleRequirePath = `../../../versions/openai@${version}`
 
       beforeEach(() => {

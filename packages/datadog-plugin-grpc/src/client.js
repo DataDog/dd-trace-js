@@ -87,8 +87,8 @@ class GrpcClientPlugin extends ClientPlugin {
       // more are supported by the library
       // https://github.com/grpc/grpc/blob/v1.60.0/doc/naming.md
       const parts = peer.split(':')
-      if (parts[parts.length - 1].match(/^\d+/)) {
-        const port = parts[parts.length - 1]
+      if (/^\d+/.test(parts.at(-1))) {
+        const port = parts.at(-1)
         const ip = parts.slice(0, -1).join(':')
         span.setTag('network.destination.ip', ip)
         span.setTag('network.destination.port', port)
