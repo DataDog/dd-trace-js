@@ -9,6 +9,7 @@ const satisfies = require('semifies')
 const SpaceProfiler = require('../../src/profiling/profilers/space')
 const WallProfiler = require('../../src/profiling/profilers/wall')
 const EventsProfiler = require('../../src/profiling/profilers/events')
+const { setTimeout } = require('node:timers/promises')
 
 const samplingContextsAvailable = process.platform !== 'win32'
 
@@ -205,6 +206,7 @@ describe('profiler', function () {
       clock.tick(interval)
 
       await rejected.catch(() => {})
+      await setTimeout(1)
 
       sinon.assert.notCalled(wallProfiler.stop)
       sinon.assert.notCalled(spaceProfiler.stop)
@@ -221,6 +223,7 @@ describe('profiler', function () {
       clock.tick(interval)
 
       await rejected.catch(() => {})
+      await setTimeout(1)
 
       sinon.assert.notCalled(wallProfiler.stop)
       sinon.assert.notCalled(spaceProfiler.stop)
@@ -333,6 +336,7 @@ describe('profiler', function () {
       clock.tick(interval)
 
       await waitForExport()
+      await setTimeout(1)
 
       const [
         startWall,
