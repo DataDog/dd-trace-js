@@ -106,7 +106,7 @@ function createWrapRouterMethod (name) {
   }
 
   function extractMatchers (fn) {
-    const arg = Array.isArray(fn) ? fn.flat(Infinity) : [fn]
+    const arg = [].concat(fn).flat(Infinity)
 
     if (typeof arg[0] === 'function') {
       return []

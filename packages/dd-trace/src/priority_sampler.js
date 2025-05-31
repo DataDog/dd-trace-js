@@ -308,14 +308,20 @@ class PrioritySampler {
    * @returns {SamplingRule[]}
    */
   #normalizeRules (rules, sampleRate, rateLimit, provenance) {
-    rules = [].concat(rules || [])
+    rules = Array.isArray(rules) ? rules.flat() : [rules]
 
     rules.push({ sampleRate, maxPerSecond: rateLimit, provenance })
 
-    return rules
-      .map(rule => ({ ...rule, sampleRate: Number.parseFloat(rule.sampleRate) }))
-      .filter(rule => !Number.isNaN(rule.sampleRate))
-      .map(SamplingRule.from)
+    const result = []
+    for (let rule of rules) {
+      const sampleRate = Number.parseFloat(rule.sampleRate)
+      // TODO(BridgeAR): Debug logging invalid rules fails our tests.
+      // Should we definitely not know about these?
+      if (!Number.isNaN(sampleRate)) {
+        result.push(SamplingRule.from({ ...rule, sampleRate }))
+      }
+    }
+    return result
   }
 
   /**
