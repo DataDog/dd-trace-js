@@ -36,7 +36,6 @@ class Kinesis extends BaseAwsSdkPlugin {
           const options = {
             childOf: responseExtraction.maybeChildOf,
             tags: {
-
               ...this.requestTags.get(request),
               'span.kind': 'server'
             }

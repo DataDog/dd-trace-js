@@ -7,15 +7,13 @@ class Lambda extends BaseAwsSdkPlugin {
   static get id () { return 'lambda' }
 
   generateTags (params, operation, response) {
-    const tags = {}
+    if (!params?.FunctionName) return {}
 
-    if (!params || !params.FunctionName) return tags
-
-    return Object.assign(tags, {
+    return {
       'resource.name': `${operation} ${params.FunctionName}`,
       functionname: params.FunctionName,
       'aws.lambda': params.FunctionName
-    })
+    }
   }
 
   requestInject (span, request) {
