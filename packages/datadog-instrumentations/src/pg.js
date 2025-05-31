@@ -178,9 +178,8 @@ function wrapPoolQuery (query) {
           cb(error)
 
           return
-        } else {
-          return Promise.reject(error)
         }
+        return Promise.reject(error)
       }
 
       if (typeof cb === 'function') {
@@ -192,10 +191,8 @@ function wrapPoolQuery (query) {
 
       const retval = query.apply(this, arguments)
 
-      if (retval && retval.then) {
-        retval.then(() => {
-          finish()
-        }).catch(() => {
+      if (retval?.then) {
+        retval.finally(() => {
           finish()
         })
       }

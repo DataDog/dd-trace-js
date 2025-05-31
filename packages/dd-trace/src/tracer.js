@@ -46,9 +46,7 @@ class DatadogTracer extends Tracer {
   }
 
   trace (name, options, fn) {
-    options = Object.assign({
-      childOf: this.scope().active()
-    }, options)
+    options = { childOf: this.scope().active(), ...options }
 
     const span = this.startSpan(name, options)
 
@@ -76,9 +74,8 @@ class DatadogTracer extends Tracer {
             throw err
           }
         )
-      } else {
-        span.finish()
       }
+      span.finish()
 
       return result
     } catch (e) {
@@ -110,9 +107,8 @@ class DatadogTracer extends Tracer {
 
           return fn.apply(this, arguments)
         })
-      } else {
-        return tracer.trace(name, optionsObj, () => fn.apply(this, arguments))
       }
+      return tracer.trace(name, optionsObj, () => fn.apply(this, arguments))
     }
   }
 

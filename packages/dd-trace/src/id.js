@@ -174,11 +174,11 @@ function readInt32 (buffer, offset) {
 // Write unsigned integer bytes to a buffer.
 function writeUInt32BE (buffer, value, offset) {
   buffer[3 + offset] = value & 255
-  value = value >> 8
+  value >>= 8
   buffer[2 + offset] = value & 255
-  value = value >> 8
+  value >>= 8
   buffer[1 + offset] = value & 255
-  value = value >> 8
+  value >>= 8
   buffer[0 + offset] = value & 255
 }
 

@@ -357,7 +357,7 @@ class LLMObsTagger {
     }
 
     const tagsCarrier = registry.get(span)
-    Object.assign(tagsCarrier, { [key]: value })
+    tagsCarrier[key] = value
   }
 }
 

@@ -32,9 +32,8 @@ class MissingHeaderAnalyzer extends Analyzer {
     const headerValue = res.getHeader(headerName)
     if (Array.isArray(headerValue)) {
       return headerValue
-    } else {
-      return headerValue ? [headerValue.toString()] : []
     }
+    return headerValue ? [headerValue.toString()] : []
   }
 
   _getLocation () {}

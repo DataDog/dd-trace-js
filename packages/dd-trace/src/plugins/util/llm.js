@@ -11,8 +11,8 @@ function normalize (text, limit = 128) {
   }
 
   text = text
-    .replace(RE_NEWLINE, String.raw`\n`)
-    .replace(RE_TAB, String.raw`\t`)
+    .replaceAll(RE_NEWLINE, String.raw`\n`)
+    .replaceAll(RE_TAB, String.raw`\t`)
 
   // In case the replace above matched, more characters were added that must now be considered.
   if (text.length > limit) {

@@ -39,12 +39,12 @@ addHook({ name: names }, dns => {
 })
 
 function patchResolveShorthands (prototype) {
-  Object.keys(rrtypes)
-    .filter(method => !!prototype[method])
-    .forEach(method => {
+  for (const method of Object.keys(rrtypes)) {
+    if (prototype[method]) {
       rrtypeMap.set(prototype[method], rrtypes[method])
       shimmer.wrap(prototype, method, fn => wrap('apm:dns:resolve', fn, 2, rrtypes[method]))
-    })
+    }
+  }
 }
 
 function wrap (prefix, fn, expectedArgs, rrtype) {

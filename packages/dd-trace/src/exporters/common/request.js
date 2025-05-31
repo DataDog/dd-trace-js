@@ -56,7 +56,7 @@ function request (data, options, callback) {
   const timeout = options.timeout || 2000
   const isSecure = options.protocol === 'https:'
   const client = isSecure ? https : http
-  const dataArray = [].concat(data)
+  const dataArray = Array.isArray(data) ? data : [data]
 
   if (!isReadable) {
     options.headers['Content-Length'] = byteLength(dataArray)

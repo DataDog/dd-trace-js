@@ -163,7 +163,7 @@ class MsgpackEncoder {
 
   encodeLong (bytes, value) {
     const offset = bytes.length
-    const hi = (value / Math.pow(2, 32)) >> 0
+    const hi = (value / 2 ** 32) >> 0
     const lo = value >>> 0
 
     bytes.reserve(9)
@@ -216,7 +216,7 @@ class MsgpackEncoder {
       bytes.buffer[offset + 3] = value >> 8
       bytes.buffer[offset + 4] = value
     } else {
-      const hi = Math.floor(value / Math.pow(2, 32))
+      const hi = Math.floor(value / 2 ** 32)
       const lo = value >>> 0
 
       bytes.reserve(9)
@@ -255,7 +255,7 @@ class MsgpackEncoder {
       bytes.buffer[offset + 3] = value >> 8
       bytes.buffer[offset + 4] = value
     } else {
-      const hi = (value / Math.pow(2, 32)) >> 0
+      const hi = (value / 2 ** 32) >> 0
       const lo = value >>> 0
 
       bytes.reserve(9)

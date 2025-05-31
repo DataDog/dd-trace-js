@@ -95,7 +95,7 @@ function createWrapQueryCallback (options) {
       const callbackResource = new AsyncResource('bound-anonymous-fn')
 
       if (typeof cb !== 'function') {
-        arguments.length = arguments.length + 1
+        arguments.length += 1
       }
 
       arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => asyncResource.bind(function (err) {

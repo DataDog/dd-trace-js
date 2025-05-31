@@ -889,9 +889,8 @@ addHook({
                   if (window.DD_RUM && window.DD_RUM.stopSession) {
                     window.DD_RUM.stopSession()
                     return true
-                  } else {
-                    return false
                   }
+                  return false
                 })
 
                 if (isRumActive) {

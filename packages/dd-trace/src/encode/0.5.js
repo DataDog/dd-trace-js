@@ -23,12 +23,10 @@ class AgentEncoder extends BaseEncoder {
     const traceSize = this._traceBytes.length + 5
     const buffer = Buffer.allocUnsafe(prefixSize + stringSize + traceSize)
 
-    let offset = 0
+    buffer[0] = ARRAY_OF_TWO
 
-    buffer[offset++] = ARRAY_OF_TWO
-
-    offset = this._writeStrings(buffer, offset)
-    offset = this._writeTraces(buffer, offset)
+    const offset = this._writeStrings(buffer, 1)
+    this._writeTraces(buffer, offset)
 
     this._reset()
 
