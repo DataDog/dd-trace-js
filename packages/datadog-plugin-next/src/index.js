@@ -19,12 +19,13 @@ class NextPlugin extends ServerPlugin {
     this.addSub('apm:next:page:load', message => this.pageLoad(message))
   }
 
-  start ({ parentStore, req, res }) {
-    const store = parentStore
+  start (ctx) {
+    const { req } = ctx
+    const store = ctx.parentStore
     const childOf = store ? store.span : store
-    const span = this.tracer.startSpan(this.operationName(), {
+    const span = this.startSpan(this.operationName(), {
       childOf,
-      tags: {
+      meta: {
         [COMPONENT]: this.constructor.id,
         'service.name': this.config.service || this.serviceName(),
         'resource.name': req.method,
@@ -32,7 +33,7 @@ class NextPlugin extends ServerPlugin {
         'span.kind': 'server',
         'http.method': req.method
       }
-    })
+    }, ctx)
 
     analyticsSampler.sample(span, this.config.measured, true)
 
