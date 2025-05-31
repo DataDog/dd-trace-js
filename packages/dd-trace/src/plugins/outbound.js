@@ -86,6 +86,11 @@ class OutboundPlugin extends TracingPlugin {
     return peerData
   }
 
+  bindAsyncStart (ctx) {
+    return ctx.parentStore
+  }
+
+  // TODO: Remove after transition to publish asyncStart everywhere is done.
   bindFinish (ctx) {
     return ctx.parentStore
   }

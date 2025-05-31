@@ -79,10 +79,6 @@ class HttpClientPlugin extends ClientPlugin {
     return true
   }
 
-  bindAsyncStart ({ parentStore }) {
-    return parentStore
-  }
-
   finish ({ req, res, span }) {
     if (!span) return
     if (res) {
