@@ -200,7 +200,7 @@ const visitedParams = new WeakSet()
 
 function wrapHandleRequest (original) {
   return function wrappedHandleRequest (req, res, next) {
-    if (routerParamStartCh.hasSubscribers && Object.keys(req.params).length && !visitedParams.has(req.params)) {
+    if (routerParamStartCh.hasSubscribers && !visitedParams.has(req.params) && Object.keys(req.params).length) {
       visitedParams.add(req.params)
 
       const abortController = new AbortController()
