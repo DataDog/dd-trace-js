@@ -56,7 +56,9 @@ class DatadogSpan {
   constructor (tracer, processor, prioritySampler, fields, debug) {
     const operationName = fields.operationName
     const parent = fields.parent || null
-    const tags = { ...fields.tags }
+    // TODO(BridgeAR): Investigate why this is causing a performance regression
+    // eslint-disable-next-line prefer-object-spread
+    const tags = Object.assign({}, fields.tags)
     const hostname = fields.hostname
 
     this._parentTracer = tracer

@@ -313,7 +313,7 @@ class PrioritySampler {
     rules.push({ sampleRate, maxPerSecond: rateLimit, provenance })
 
     const result = []
-    for (let rule of rules) {
+    for (const rule of rules) {
       const sampleRate = Number.parseFloat(rule.sampleRate)
       // TODO(BridgeAR): Debug logging invalid rules fails our tests.
       // Should we definitely not know about these?
