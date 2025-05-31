@@ -191,10 +191,8 @@ function wrapPoolQuery (query) {
 
       const retval = query.apply(this, arguments)
 
-      if (retval && retval.then) {
-        retval.then(() => {
-          finish()
-        }).catch(() => {
+      if (retval?.then) {
+        retval.finally(() => {
           finish()
         })
       }
