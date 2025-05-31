@@ -6,12 +6,15 @@ const WAFContextWrapper = require('./waf_context_wrapper')
 
 const contexts = new WeakMap()
 
+const DEFAULT_WAF_CONFIG_PATH = 'datadog/00/ASM_DD/default/config'
+
 class WAFManager {
   constructor (rules, config) {
     this.config = config
     this.wafTimeout = config.wafTimeout
     this.ddwaf = this._loadDDWAF(rules)
     this.rulesVersion = this.ddwaf.diagnostics.ruleset_version
+    this.defaultRules = rules
 
     Reporter.reportWafInit(this.ddwafVersion, this.rulesVersion, this.ddwaf.diagnostics.rules, true)
   }
@@ -23,7 +26,7 @@ class WAFManager {
       this.ddwafVersion = DDWAF.version()
 
       const { obfuscatorKeyRegex, obfuscatorValueRegex } = this.config
-      return new DDWAF(rules, { obfuscatorKeyRegex, obfuscatorValueRegex })
+      return new DDWAF(rules, DEFAULT_WAF_CONFIG_PATH, { obfuscatorKeyRegex, obfuscatorValueRegex })
     } catch (err) {
       this.ddwafVersion = this.ddwafVersion || 'unknown'
       Reporter.reportWafInit(this.ddwafVersion, 'unknown')
@@ -51,19 +54,34 @@ class WAFManager {
     return wafContext
   }
 
-  update (newRules) {
-    try {
-      this.ddwaf.update(newRules)
+  update (product, rules, path) {
+    if (product === 'ASM_DD' && this.ddwaf.configPaths.includes(DEFAULT_WAF_CONFIG_PATH)) {
+      this.ddwaf.removeConfig(DEFAULT_WAF_CONFIG_PATH)
+    }
 
-      if (this.ddwaf.diagnostics.ruleset_version) {
-        this.rulesVersion = this.ddwaf.diagnostics.ruleset_version
-      }
+    const success = this.ddwaf.createOrUpdateConfig(rules, path)
+    const diagnostics = this.ddwaf.diagnostics
 
-      Reporter.reportWafUpdate(this.ddwafVersion, this.rulesVersion, true)
-    } catch (error) {
-      Reporter.reportWafUpdate(this.ddwafVersion, 'unknown', false)
+    if (diagnostics.ruleset_version) {
+      this.rulesVersion = diagnostics.ruleset_version
+    }
 
-      throw error
+    if (product === 'ASM_DD' && !success && !this.ddwaf.configPaths.some(cp => cp.includes('ASM_DD'))) {
+      this.ddwaf.createOrUpdateConfig(this.defaultRules, DEFAULT_WAF_CONFIG_PATH)
+    }
+
+    return { success, diagnostics }
+  }
+
+  remove (path) {
+    this.ddwaf.removeConfig(path)
+
+    if (!this.ddwaf.configPaths.some(cp => cp.includes('ASM_DD'))) {
+      this.ddwaf.createOrUpdateConfig(this.defaultRules, DEFAULT_WAF_CONFIG_PATH)
+    }
+
+    if (this.ddwaf.diagnostics.ruleset_version) {
+      this.rulesVersion = this.ddwaf.diagnostics.ruleset_version
     }
   }
 

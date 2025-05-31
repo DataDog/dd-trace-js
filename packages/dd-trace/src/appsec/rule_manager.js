@@ -3,20 +3,14 @@
 const fs = require('fs')
 const waf = require('./waf')
 const { ACKNOWLEDGED, ERROR } = require('../remote_config/apply_states')
+const Reporter = require('./reporter')
 
 const blocking = require('./blocking')
 
-let defaultRules
-
-let appliedRulesData = new Map()
-let appliedRulesetId
-let appliedRulesOverride = new Map()
-let appliedExclusions = new Map()
-let appliedCustomRules = new Map()
 let appliedActions = new Map()
 
 function loadRules (config) {
-  defaultRules = config.rules
+  const defaultRules = config.rules
     ? JSON.parse(fs.readFileSync(config.rules))
     : require('./recommended.json')
 
@@ -26,137 +20,66 @@ function loadRules (config) {
 }
 
 function updateWafFromRC ({ toUnapply, toApply, toModify }) {
-  const batch = new Set()
-
-  const newRulesData = new SpyMap(appliedRulesData)
-  let newRuleset
-  let newRulesetId
-  const newRulesOverride = new SpyMap(appliedRulesOverride)
-  const newExclusions = new SpyMap(appliedExclusions)
-  const newCustomRules = new SpyMap(appliedCustomRules)
   const newActions = new SpyMap(appliedActions)
 
-  for (const item of toUnapply) {
-    const { product, id } = item
+  let wafUpdated = false
+  let wafUpdatedSuccess = true
 
-    if (product === 'ASM_DATA') {
-      newRulesData.delete(id)
-    } else if (product === 'ASM_DD') {
-      if (appliedRulesetId === id) {
-        newRuleset = defaultRules
+  for (const item of toUnapply) {
+    if (!['ASM_DD', 'ASM_DATA', 'ASM'].includes(item.product)) continue
+
+    try {
+      waf.wafManager.remove(item.path)
+      item.apply_state = ACKNOWLEDGED
+      wafUpdated = true
+
+      if (item.product === 'ASM') {
+        newActions.delete(item.id)
       }
-    } else if (product === 'ASM') {
-      newRulesOverride.delete(id)
-      newExclusions.delete(id)
-      newCustomRules.delete(id)
-      newActions.delete(id)
+    } catch (e) {
+      wafUpdatedSuccess = false
+      item.apply_state = ERROR
+      item.apply_error = e.toString()
+      Reporter.reportWafConfigError(waf.wafManager.ddwafVersion, waf.wafManager.rulesVersion)
     }
   }
 
   for (const item of [...toApply, ...toModify]) {
-    const { product, id, file } = item
-
-    if (product === 'ASM_DATA') {
-      if (file && file.rules_data && file.rules_data.length) {
-        newRulesData.set(id, file.rules_data)
-      }
-
-      batch.add(item)
-    } else if (product === 'ASM_DD') {
-      if (appliedRulesetId && appliedRulesetId !== id && newRuleset !== defaultRules) {
-        item.apply_state = ERROR
-        item.apply_error = 'Multiple ruleset received in ASM_DD'
-      } else {
-        if (file?.rules?.length) {
-          const { version, metadata, rules, processors, scanners } = file
-
-          newRuleset = { version, metadata, rules, processors, scanners }
-          newRulesetId = id
-        }
-
-        batch.add(item)
-      }
-    } else if (product === 'ASM') {
-      if (file?.rules_override?.length) {
-        newRulesOverride.set(id, file.rules_override)
-      }
-
-      if (file?.exclusions?.length) {
-        newExclusions.set(id, file.exclusions)
-      }
-
-      if (file?.custom_rules?.length) {
-        newCustomRules.set(id, file.custom_rules)
-      }
-
-      if (file?.actions?.length) {
-        newActions.set(id, file.actions)
-      }
-
-      batch.add(item)
-    }
-  }
-
-  let newApplyState = ACKNOWLEDGED
-  let newApplyError
-
-  if (newRulesData.modified ||
-    newRuleset ||
-    newRulesOverride.modified ||
-    newExclusions.modified ||
-    newCustomRules.modified ||
-    newActions.modified
-  ) {
-    const payload = newRuleset || {}
-
-    if (newRulesData.modified) {
-      payload.rules_data = mergeRulesData(newRulesData)
-    }
-    if (newRulesOverride.modified) {
-      payload.rules_override = concatArrays(newRulesOverride)
-    }
-    if (newExclusions.modified) {
-      payload.exclusions = concatArrays(newExclusions)
-    }
-    if (newCustomRules.modified) {
-      payload.custom_rules = concatArrays(newCustomRules)
-    }
-    if (newActions.modified) {
-      payload.actions = concatArrays(newActions)
-    }
+    if (!['ASM_DD', 'ASM_DATA', 'ASM'].includes(item.product)) continue
 
     try {
-      waf.update(payload)
+      const updateResult = waf.wafManager.update(item.product, item.file, item.path)
+      item.apply_state = updateResult.success ? ACKNOWLEDGED : ERROR
 
-      if (newRulesData.modified) {
-        appliedRulesData = newRulesData
+      if (updateResult.success) {
+        wafUpdated = true
+        Reporter.reportSuccessfulWafUpdate(item.product, item.id, updateResult.diagnostics)
+      } else {
+        wafUpdatedSuccess = false
+        item.apply_error = JSON.stringify(extractErrors(updateResult.diagnostics))
+        Reporter.reportWafConfigError(waf.wafManager.ddwafVersion, waf.wafManager.rulesVersion)
       }
-      if (newRuleset) {
-        appliedRulesetId = newRulesetId
-      }
-      if (newRulesOverride.modified) {
-        appliedRulesOverride = newRulesOverride
-      }
-      if (newExclusions.modified) {
-        appliedExclusions = newExclusions
-      }
-      if (newCustomRules.modified) {
-        appliedCustomRules = newCustomRules
-      }
-      if (newActions.modified) {
-        appliedActions = newActions
 
-        blocking.setDefaultBlockingActionParameters(concatArrays(newActions))
+      // check asm actions
+      if (updateResult.success && item.product === 'ASM' && item.file?.actions?.length) {
+        newActions.set(item.id, item.file.actions)
       }
-    } catch (err) {
-      newApplyState = ERROR
-      newApplyError = err.toString()
+    } catch (e) {
+      wafUpdatedSuccess = false
+      item.apply_state = ERROR
+      item.apply_error = e.toString()
+      Reporter.reportWafConfigError(waf.wafManager.ddwafVersion, waf.wafManager.rulesVersion)
     }
   }
 
-  for (const config of batch) {
-    config.apply_state = newApplyState
-    if (newApplyError) config.apply_error = newApplyError
+  if (wafUpdated) {
+    Reporter.reportWafUpdate(waf.wafManager.ddwafVersion, waf.wafManager.rulesVersion, wafUpdatedSuccess)
+  }
+
+  // Manage blocking actions
+  if (newActions.modified) {
+    appliedActions = newActions
+    blocking.setDefaultBlockingActionParameters(concatArrays(newActions))
   }
 }
 
@@ -188,67 +111,28 @@ function concatArrays (files) {
   return [...files.values()].flat()
 }
 
-/*
-  ASM_DATA Merge strategy:
-  The merge should be based on the id and type. For any duplicate items, the longer expiration should be taken.
-  As a result, multiple Rule Data may use the same DATA_ID and DATA_TYPE. In this case, all values are considered part
-  of a set and are merged. For instance, a denylist customized by environment may use a global Rule Data for all
-  environments and a Rule Data per environment
-*/
+function extractErrors (obj) {
+  if (typeof obj !== 'object' || obj === null) return null
 
-function mergeRulesData (files) {
-  const mergedRulesData = new Map()
-  for (const [, file] of files) {
-    for (const ruleData of file) {
-      const key = `${ruleData.id}+${ruleData.type}`
-      if (mergedRulesData.has(key)) {
-        const existingRulesData = mergedRulesData.get(key)
-        ruleData.data.reduce(rulesReducer, existingRulesData.data)
-      } else {
-        mergedRulesData.set(key, copyRulesData(ruleData))
+  const result = {}
+
+  for (const [key, value] of Object.entries(obj)) {
+    if (key === 'error' || key === 'errors') {
+      result[key] = value
+    } else if (typeof value === 'object' && value !== null) {
+      const child = extractErrors(value)
+      if (child && Object.keys(child).length > 0) {
+        result[key] = child
       }
     }
   }
-  return [...mergedRulesData.values()]
-}
 
-function rulesReducer (existingEntries, rulesDataEntry) {
-  const existingEntry = existingEntries.find((entry) => entry.value === rulesDataEntry.value)
-  if (existingEntry && !('expiration' in existingEntry)) return existingEntries
-  if (existingEntry && 'expiration' in rulesDataEntry && rulesDataEntry.expiration > existingEntry.expiration) {
-    existingEntry.expiration = rulesDataEntry.expiration
-  } else if (existingEntry && !('expiration' in rulesDataEntry)) {
-    delete existingEntry.expiration
-  } else if (!existingEntry) {
-    existingEntries.push({ ...rulesDataEntry })
-  }
-  return existingEntries
-}
-
-function copyRulesData (rulesData) {
-  const copy = { ...rulesData }
-  if (copy.data) {
-    const data = []
-    copy.data.forEach(item => {
-      data.push({ ...item })
-    })
-    copy.data = data
-  }
-  return copy
+  return Object.keys(result).length > 0 ? result : null
 }
 
 function clearAllRules () {
   waf.destroy()
-
-  defaultRules = undefined
-
-  appliedRulesData.clear()
-  appliedRulesetId = undefined
-  appliedRulesOverride.clear()
-  appliedExclusions.clear()
-  appliedCustomRules.clear()
   appliedActions.clear()
-
   blocking.setDefaultBlockingActionParameters(undefined)
 }
 
