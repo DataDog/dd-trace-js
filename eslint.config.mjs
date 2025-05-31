@@ -98,6 +98,7 @@ export default [
       'import/no-extraneous-dependencies': 'error',
       'n/no-restricted-require': ['error', ['diagnostics_channel']],
       'no-console': 'error',
+      'no-mixed-operators': 'off', // Override (turned on by standard)
       'no-prototype-builtins': 'off', // Override (turned on by @eslint/js/recommended)
       'no-unused-expressions': 'off', // Override (turned on by standard)
       'no-var': 'error', // Override (set to warn in standard)
