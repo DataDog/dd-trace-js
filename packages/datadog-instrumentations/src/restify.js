@@ -49,28 +49,30 @@ function wrapFn (fn) {
 
     enterChannel.publish({ req, route })
 
+    let usesPromises = false
     try {
       const result = fn.apply(this, arguments)
       if (result !== null && typeof result === 'object' && typeof result.then === 'function') {
-        return result.then(function () {
-          nextChannel.publish({ req })
-          finishChannel.publish({ req })
-          return arguments[0]
-        }).catch(function (error) {
+        usesPromises = true
+        return result.catch(function (error) {
           errorChannel.publish({ req, error })
+          throw error
+        }).finally(() => {
           nextChannel.publish({ req })
           finishChannel.publish({ req })
-          throw error
+          exitChannel.publish({ req })
         })
       }
       return result
     } catch (error) {
       errorChannel.publish({ req, error })
-      nextChannel.publish({ req })
-      finishChannel.publish({ req })
       throw error
     } finally {
-      exitChannel.publish({ req })
+      if (!usesPromises) {
+        nextChannel.publish({ req })
+        finishChannel.publish({ req })
+        exitChannel.publish({ req })
+      }
     }
   })
 }
