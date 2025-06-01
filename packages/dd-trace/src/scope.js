@@ -18,6 +18,7 @@ class Scope {
 
     const oldStore = storage('legacy').getStore()
     const newStore = span ? storage('legacy').getStore(span._store) : oldStore
+                  // span ? storage('legacy').getStore(span) : oldStore
 
     storage('legacy').enterWith({ ...newStore, span })
 
