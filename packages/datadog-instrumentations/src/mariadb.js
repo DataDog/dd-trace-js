@@ -91,11 +91,9 @@ function createWrapQueryCallback (options) {
           errorCh.publish(ctx)
         }
 
-        if (typeof cb === 'function') {
-          return finishCh.runStores(ctx, cb, this, ...arguments)
-        } else {
-          return finishCh.publish(ctx)
-        }
+        return typeof cb === 'function'
+          ? finishCh.runStores(ctx, cb, this, ...arguments)
+          : finishCh.publish(ctx)
       })
 
       return startCh.runStores(ctx, query, this, ...arguments)

@@ -72,10 +72,9 @@ addHook({ name: 'mysql', file: 'lib/Pool.js', versions: ['>=2'] }, Pool => {
 
     const sql = arguments[0].sql || arguments[0]
     const ctx = { sql }
+    const finish = () => finishPoolQueryCh.publish(ctx)
 
     return startPoolQueryCh.runStores(ctx, () => {
-      const finish = () => finishPoolQueryCh.publish(ctx)
-
       const cb = arguments[arguments.length - 1]
       if (typeof cb === 'function') {
         arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => function () {
