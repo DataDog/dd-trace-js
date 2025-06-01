@@ -117,19 +117,22 @@ function extractErrors (obj) {
   if (typeof obj !== 'object' || obj === null) return null
 
   const result = {}
+  let isResultPopulated = false
 
   for (const [key, value] of Object.entries(obj)) {
     if (key === 'error' || key === 'errors') {
       result[key] = value
+      isResultPopulated = true
     } else if (typeof value === 'object' && value !== null) {
       const child = extractErrors(value)
-      if (child && Object.keys(child).length > 0) {
+      if (child) {
+        isResultPopulated = true
         result[key] = child
       }
     }
   }
 
-  return Object.keys(result).length > 0 ? result : null
+  return isResultPopulated ? result : null
 }
 
 function clearAllRules () {
