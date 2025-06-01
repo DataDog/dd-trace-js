@@ -257,13 +257,34 @@ describe('AppSec Rule Manager', () => {
           loaded: ['http-endpoint-fingerprint'],
           failed: [],
           skipped: [],
+          errors: {
+            'missing mapping definition': [
+              'http-endpoint-fingerprint'
+            ]
+          },
           warnings: {
             'no mappings defined': [
               'http-endpoint-fingerprint'
             ]
           }
+        },
+        scanners: {
+          error: 'Fatal error'
         }
       }
+
+      const expectedApplyError = {
+        rules: {
+          errors: diagnostics.rules.errors
+        },
+        processors: {
+          errors: diagnostics.processors.errors
+        },
+        scanners: {
+          error: diagnostics.scanners.error
+        }
+      }
+
       WAFManager.prototype.update.returns({ success: false, diagnostics })
 
       const { toModify, toApply } = getRcConfigs()
@@ -271,9 +292,9 @@ describe('AppSec Rule Manager', () => {
       RuleManager.updateWafFromRC({ toUnapply: [], toApply, toModify })
 
       assert.strictEqual(toApply[0].apply_state, ERROR)
-      assert.strictEqual(toApply[0].apply_error, JSON.stringify({ rules: { errors: diagnostics.rules.errors } }))
+      assert.strictEqual(toApply[0].apply_error, JSON.stringify(expectedApplyError))
       assert.strictEqual(toModify[0].apply_state, ERROR)
-      assert.strictEqual(toModify[0].apply_error, JSON.stringify({ rules: { errors: diagnostics.rules.errors } }))
+      assert.strictEqual(toModify[0].apply_error, JSON.stringify(expectedApplyError))
     })
 
     it('should report successful waf update', () => {
