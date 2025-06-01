@@ -7,6 +7,8 @@ const Reporter = require('./reporter')
 
 const blocking = require('./blocking')
 
+const ASM_PRODUCTS = new Set(['ASM', 'ASM_DD', 'ASM_DATA'])
+
 let appliedActions = new Map()
 
 function loadRules (config) {
@@ -26,7 +28,7 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
   let wafUpdatedSuccess = true
 
   for (const item of toUnapply) {
-    if (!['ASM_DD', 'ASM_DATA', 'ASM'].includes(item.product)) continue
+    if (!ASM_PRODUCTS.has(item.product)) continue
 
     try {
       waf.wafManager.remove(item.path)
@@ -45,7 +47,7 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
   }
 
   for (const item of [...toApply, ...toModify]) {
-    if (!['ASM_DD', 'ASM_DATA', 'ASM'].includes(item.product)) continue
+    if (!ASM_PRODUCTS.has(item.product)) continue
 
     try {
       const updateResult = waf.wafManager.update(item.product, item.file, item.path)
