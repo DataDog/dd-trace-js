@@ -3,6 +3,7 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const proxyquire = require('proxyquire').noPreserveCache()
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
@@ -46,7 +47,7 @@ describe('Plugin', () => {
                 'span.kind': 'client',
                 'out.host': 'localhost',
                 'network.destination.port': '11211',
-                'component': 'memcached'
+                component: 'memcached'
               }
             })
             .then(done)
@@ -79,14 +80,16 @@ describe('Plugin', () => {
           let error
 
           agent
-            .assertFirstTraceSpan({
-              error: 1,
-              meta: {
-                [ERROR_TYPE]: error.name,
-                [ERROR_MESSAGE]: error.message,
-                [ERROR_STACK]: error.stack,
-                'component': 'memcached'
-              }
+            .assertFirstTraceSpan((trace) => {
+              assertObjectContains(trace, {
+                error: 1,
+                meta: {
+                  [ERROR_TYPE]: error.name,
+                  [ERROR_MESSAGE]: error.message,
+                  [ERROR_STACK]: error.stack,
+                  component: 'memcached'
+                }
+              })
             })
             .then(done)
             .catch(done)
@@ -104,7 +107,7 @@ describe('Plugin', () => {
               meta: {
                 'out.host': 'localhost',
                 'network.destination.port': '11211',
-                'component': 'memcached'
+                component: 'memcached'
               }
             })
             .then(done)
@@ -124,7 +127,7 @@ describe('Plugin', () => {
               meta: {
                 'out.host': 'localhost',
                 'network.destination.port': '11211',
-                'component': 'memcached'
+                component: 'memcached'
               }
             })
             .then(done)
@@ -150,7 +153,7 @@ describe('Plugin', () => {
                 meta: {
                   'out.host': 'localhost',
                   'network.destination.port': '11211',
-                  'component': 'memcached'
+                  component: 'memcached'
                 }
               })
               .then(done)

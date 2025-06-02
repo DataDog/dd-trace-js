@@ -3,6 +3,7 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 describe('Plugin', () => {
   let aerospike
@@ -73,7 +74,7 @@ describe('Plugin', () => {
                   'aerospike.namespace': ns,
                   'aerospike.setname': set,
                   'aerospike.userkey': userKey,
-                  'component': 'aerospike'
+                  component: 'aerospike'
                 }
               })
               .then(done)
@@ -96,7 +97,7 @@ describe('Plugin', () => {
                 type: 'aerospike',
                 meta: {
                   'span.kind': 'client',
-                  'component': 'aerospike'
+                  component: 'aerospike'
                 }
               })
               .then(done)
@@ -118,7 +119,7 @@ describe('Plugin', () => {
                   'aerospike.namespace': ns,
                   'aerospike.setname': set,
                   'aerospike.userkey': userKey,
-                  'component': 'aerospike'
+                  component: 'aerospike'
                 }
               })
               .then(done)
@@ -143,7 +144,7 @@ describe('Plugin', () => {
                   'aerospike.namespace': ns,
                   'aerospike.setname': set,
                   'aerospike.userkey': userKey,
-                  'component': 'aerospike'
+                  component: 'aerospike'
                 }
               })
               .then(done)
@@ -175,7 +176,7 @@ describe('Plugin', () => {
                   'aerospike.setname': 'demo',
                   'aerospike.bin': 'tags',
                   'aerospike.index': 'tags_idx',
-                  'component': 'aerospike'
+                  component: 'aerospike'
                 }
               })
               .then(done)
@@ -206,7 +207,7 @@ describe('Plugin', () => {
                   'span.kind': 'client',
                   'aerospike.namespace': ns,
                   'aerospike.setname': set,
-                  'component': 'aerospike'
+                  component: 'aerospike'
                 }
               })
               .then(done)
@@ -252,13 +253,15 @@ describe('Plugin', () => {
             let error
 
             agent
-              .assertFirstTraceSpan({
-                meta: {
-                  [ERROR_TYPE]: error.name,
-                  [ERROR_MESSAGE]: error.message,
-                  [ERROR_STACK]: error.stack,
-                  'component': 'aerospike'
-                }
+              .assertFirstTraceSpan((trace) => {
+                assertObjectContains(trace, {
+                  meta: {
+                    [ERROR_TYPE]: error.name,
+                    [ERROR_MESSAGE]: error.message,
+                    [ERROR_STACK]: error.stack,
+                    component: 'aerospike'
+                  }
+                })
               })
               .then(done)
               .catch(done)

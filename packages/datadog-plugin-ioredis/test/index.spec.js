@@ -38,12 +38,12 @@ describe('Plugin', () => {
             resource: 'get',
             type: 'redis',
             meta: {
-              'component': 'ioredis',
+              component: 'ioredis',
               'db.name': '0',
               'db.type': 'redis',
               'span.kind': 'client',
               'out.host': 'localhost',
-              'redis.raw_command': 'GET foo',
+              'redis.raw_command': 'GET foo'
             },
             metrics: {
               'network.destination.port': 6379
@@ -75,8 +75,8 @@ describe('Plugin', () => {
               [ERROR_TYPE]: error.name,
               [ERROR_MESSAGE]: error.message,
               [ERROR_STACK]: error.stack,
-              component: 'ioredis',
-            },
+              component: 'ioredis'
+            }
           })
         })
 
@@ -96,7 +96,7 @@ describe('Plugin', () => {
               'span.kind': 'client',
               'out.host': 'localhost',
               'redis.raw_command': 'GET foo',
-              'component': 'ioredis'
+              component: 'ioredis'
             },
             metrics: {
               'network.destination.port': 6379

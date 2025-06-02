@@ -3,6 +3,7 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const proxyquire = require('proxyquire').noPreserveCache()
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
@@ -84,7 +85,7 @@ describe('Plugin', () => {
                 'db.name': 'db',
                 'db.user': 'root',
                 'db.type': 'mysql',
-                'component': 'mysql'
+                component: 'mysql'
               }
             })
             .then(done)
@@ -99,13 +100,15 @@ describe('Plugin', () => {
           let error
 
           agent
-            .assertFirstTraceSpan({
-              meta: {
-                [ERROR_TYPE]: error.name,
-                [ERROR_MESSAGE]: error.message,
-                [ERROR_STACK]: error.stack,
-                'component': 'mysql'
-              }
+            .assertFirstTraceSpan((trace) => {
+              assertObjectContains(trace, {
+                meta: {
+                  [ERROR_TYPE]: error.name,
+                  [ERROR_MESSAGE]: error.message,
+                  [ERROR_STACK]: error.stack,
+                  component: 'mysql'
+                }
+              })
             })
             .then(done)
             .catch(done)
@@ -262,7 +265,7 @@ describe('Plugin', () => {
                 'span.kind': 'client',
                 'db.user': 'root',
                 'db.type': 'mysql',
-                'component': 'mysql'
+                component: 'mysql'
               }
             })
             .then(done)

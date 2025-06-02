@@ -451,6 +451,7 @@ module.exports = {
         try {
           assertObjectContains(traces[0][0], callbackOrExpected)
         } catch (error) {
+          // eslint-disable-next-line no-console
           console.error('Expected span %o did not match traces:\n%o', callbackOrExpected, traces)
           throw error
         }

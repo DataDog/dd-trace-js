@@ -65,7 +65,7 @@ describe('Plugin', () => {
                 'opensearch.method': 'POST',
                 'opensearch.url': '/docs/_search',
                 'opensearch.body': '{"query":{"match_all":{}}}',
-                'component': 'opensearch',
+                component: 'opensearch',
                 'out.host': 'localhost'
               }
             })
@@ -275,7 +275,7 @@ describe('Plugin', () => {
               meta: {
                 'opensearch.params': 'foo',
                 'opensearch.method': 'POST',
-                'component': 'opensearch'
+                component: 'opensearch'
               }
             })
             .then(done)

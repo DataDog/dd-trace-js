@@ -4,6 +4,7 @@ const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_TYPE, ERROR_MESSAGE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 describe('Plugin', () => {
   let cassandra
@@ -64,7 +65,7 @@ describe('Plugin', () => {
                 'out.host': '127.0.0.1',
                 'cassandra.query': query,
                 'cassandra.keyspace': 'system',
-                'component': 'cassandra-driver',
+                component: 'cassandra-driver',
                 'network.destination.port': '9042',
                 'db.cassandra.contact.points': '127.0.0.1'
               }
@@ -117,13 +118,15 @@ describe('Plugin', () => {
           let error
 
           agent
-            .assertFirstTraceSpan({
-              meta: {
-                [ERROR_TYPE]: error.name,
-                [ERROR_MESSAGE]: error.message,
-                [ERROR_STACK]: error.stack,
-                'component': 'cassandra-driver'
-              }
+            .assertFirstTraceSpan((trace) => {
+              assertObjectContains(trace, {
+                meta: {
+                  [ERROR_TYPE]: error.name,
+                  [ERROR_MESSAGE]: error.message,
+                  [ERROR_STACK]: error.stack,
+                  component: 'cassandra-driver'
+                }
+              })
             })
             .then(done)
             .catch(done)
@@ -196,8 +199,8 @@ describe('Plugin', () => {
           agent.assertFirstTraceSpan({
             service: 'custom'
           })
-          .then(done)
-          .catch(done)
+            .then(done)
+            .catch(done)
 
           client.execute('SELECT now() FROM local;', err => err && done(err))
         })
@@ -263,7 +266,7 @@ describe('Plugin', () => {
                   'out.host': '127.0.0.1',
                   'cassandra.query': query,
                   'cassandra.keyspace': 'system',
-                  'component': 'cassandra-driver',
+                  component: 'cassandra-driver',
                   'network.destination.port': '9042'
                 }
               })
