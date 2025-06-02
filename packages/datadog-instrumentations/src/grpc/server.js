@@ -15,17 +15,14 @@ const emitChannel = channel('apm:grpc:server:request:emit')
 const OK = 0
 const CANCELLED = 1
 
+const isValid = (server, args) => {
+  return Boolean(startChannel.hasSubscribers &&
+    server?.type &&
+    args[0] &&
+    (server.type === 'unary' ? typeof args[1] === 'function' : isEmitter(args[0])))
+}
+
 function wrapHandler (func, name) {
-  const isValid = (server, args) => {
-    if (!startChannel.hasSubscribers) return false
-    if (!server || !server.type) return false
-    if (!args[0]) return false
-    if (server.type !== 'unary' && !isEmitter(args[0])) return false
-    if (server.type === 'unary' && typeof args[1] !== 'function') return false
-
-    return true
-  }
-
   return function (call, callback) {
     if (!isValid(this, arguments)) return func.apply(this, arguments)
 

@@ -1,6 +1,6 @@
 'use strict'
 
-module.exports = (object, path, value) => {
+module.exports = function set (object, path, value) {
   const pathArr = path.split('.')
   let property = object
   let i

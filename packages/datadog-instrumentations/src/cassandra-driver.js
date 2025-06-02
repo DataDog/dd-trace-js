@@ -73,6 +73,10 @@ addHook({ name: 'cassandra-driver', versions: ['>=4.4'] }, cassandra => {
   return cassandra
 })
 
+const isValid = (args) => {
+  return args.length === 4 || typeof args[3] === 'function'
+}
+
 addHook({ name: 'cassandra-driver', versions: ['3 - 4.3'] }, cassandra => {
   shimmer.wrap(cassandra.Client.prototype, '_innerExecute', _innerExecute =>
     function (query, params, execOptions, callback) {
@@ -81,9 +85,6 @@ addHook({ name: 'cassandra-driver', versions: ['3 - 4.3'] }, cassandra => {
       }
       const callbackResource = new AsyncResource('bound-anonymous-fn')
       const asyncResource = new AsyncResource('bound-anonymous-fn')
-      const isValid = (args) => {
-        return args.length === 4 || typeof args[3] === 'function'
-      }
 
       if (!isValid(arguments)) {
         return _innerExecute.apply(this, arguments)
