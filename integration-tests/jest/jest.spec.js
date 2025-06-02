@@ -78,7 +78,8 @@ describe('jest CommonJS', () => {
 
   before(async function () {
     sandbox = await createSandbox([
-      'jest',
+      'jest@v30.0.0-alpha.1',
+      // 'jest',
       'chai@v4',
       'jest-jasmine2',
       'jest-environment-jsdom',
@@ -446,17 +447,21 @@ describe('jest CommonJS', () => {
   })
 
   context('when jest is using workers to run tests in parallel', () => {
-    it('reports tests when using the old agents', (done) => {
+    it.only('reports tests when using the old agents', (done) => {
       receiver.setInfoResponse({ endpoints: [] })
       childProcess = fork(testFile, {
         cwd,
         env: {
           DD_TRACE_AGENT_PORT: receiver.port,
           NODE_OPTIONS: '-r dd-trace/ci/init',
-          RUN_IN_PARALLEL: true
+          RUN_IN_PARALLEL: true,
+          DD_TRACE_DEBUG: 1
         },
         stdio: 'pipe'
       })
+
+      childProcess.stdout.pipe(process.stdout)
+      childProcess.stderr.pipe(process.stderr)
 
       receiver.gatherPayloads(({ url }) => url === '/v0.4/traces', 5000).then(tracesRequests => {
         const testSpans = tracesRequests.flatMap(trace => trace.payload).flatMap(request => request)

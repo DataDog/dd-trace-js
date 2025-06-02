@@ -1,5 +1,6 @@
 'use strict'
 
+const satisfies = require('semifies')
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
@@ -583,12 +584,8 @@ function getWrappedScheduleTests (scheduleTests, frameworkVersion) {
   }
 }
 
-addHook({
-  name: '@jest/core',
-  file: 'build/TestScheduler.js',
-  versions: ['>=27.0.0']
-}, (testSchedulerPackage, frameworkVersion) => {
-  const oldCreateTestScheduler = testSchedulerPackage.createTestScheduler
+function getWrappedTestScheduler (testSchedulerPackage, frameworkVersion) {
+  const oldCreateTestScheduler = testSchedulerPackage.createTestScheduler ?? testSchedulerPackage
   const newCreateTestScheduler = async function () {
     if (!isSuitesSkippingEnabled || hasFilteredSkippableSuites) {
       return oldCreateTestScheduler.apply(this, arguments)
@@ -598,9 +595,19 @@ addHook({
     shimmer.wrap(scheduler, 'scheduleTests', scheduleTests => getWrappedScheduleTests(scheduleTests, frameworkVersion))
     return scheduler
   }
+  frameworkVersion = frameworkVersion.split('-')[0] // TODO: REMOVE THIS BEFORE MERGING IS ONLY FOR TESTING
+  if (satisfies(frameworkVersion, '>=30.0.0')) {
+    return newCreateTestScheduler
+  }
   testSchedulerPackage.createTestScheduler = newCreateTestScheduler
   return testSchedulerPackage
-})
+}
+
+addHook({
+  name: '@jest/core',
+  file: 'build/TestScheduler.js',
+  versions: ['>=27.0.0']
+}, getWrappedTestScheduler)
 
 addHook({
   name: '@jest/core',
@@ -633,7 +640,23 @@ addHook({
 })
 
 function cliWrapper (cli, jestVersion) {
-  return shimmer.wrap(cli, 'runCLI', runCLI => async function () {
+  let cliWrapper = cli
+  jestVersion = jestVersion.split('-')[0] // TODO: REMOVE THIS BEFORE MERGING IS ONLY FOR TESTING
+  if (satisfies(jestVersion, '>=30.0.0')) {
+    cliWrapper = shimmer.wrap(
+      cliWrapper,
+      'SearchSource',
+      searchSource => searchSourceWrapper(searchSource, jestVersion),
+      { replaceGetter: true }
+    )
+    cliWrapper = shimmer.wrap(
+      cliWrapper,
+      'createTestScheduler',
+      createTestScheduler => getWrappedTestScheduler(createTestScheduler, jestVersion),
+      { replaceGetter: true }
+    )
+  }
+  return shimmer.wrap(cliWrapper, 'runCLI', runCLI => async function () {
     let onDone
     const configurationPromise = new Promise((resolve) => {
       onDone = resolve
@@ -866,6 +889,8 @@ function cliWrapper (cli, jestVersion) {
     }
 
     return result
+  }, {
+    replaceGetter: true
   })
 }
 
@@ -901,6 +926,13 @@ addHook({
   file: 'build/CoverageReporter.js',
   versions: ['>=26.6.2']
 }, coverageReporterWrapper)
+
+addHook({
+  name: '@jest/reporters',
+  versions: ['>=30']
+}, (reporters) => {
+  return shimmer.wrap(reporters, 'CoverageReporter', coverageReporterWrapper, { replaceGetter: true })
+})
 
 addHook({
   name: '@jest/core',
@@ -1022,12 +1054,11 @@ function configureTestEnvironment (readConfigsResult) {
 }
 
 function jestConfigAsyncWrapper (jestConfig) {
-  shimmer.wrap(jestConfig, 'readConfigs', readConfigs => async function () {
+  return shimmer.wrap(jestConfig, 'readConfigs', readConfigs => async function () {
     const readConfigsResult = await readConfigs.apply(this, arguments)
     configureTestEnvironment(readConfigsResult)
     return readConfigsResult
   })
-  return jestConfig
 }
 
 function jestConfigSyncWrapper (jestConfig) {
@@ -1081,14 +1112,7 @@ addHook({
   return transformPackage
 })
 
-/**
- * Hook to remove the test paths (test suite) that are part of `skippableSuites`
- */
-addHook({
-  name: '@jest/core',
-  versions: ['>=24.8.0'],
-  file: 'build/SearchSource.js'
-}, (searchSourcePackage, frameworkVersion) => {
+const searchSourceWrapper = (searchSourcePackage, frameworkVersion) => {
   const SearchSource = searchSourcePackage.default ? searchSourcePackage.default : searchSourcePackage
 
   shimmer.wrap(SearchSource.prototype, 'getTestPaths', getTestPaths => async function () {
@@ -1130,7 +1154,15 @@ addHook({
   })
 
   return searchSourcePackage
-})
+}
+/**
+ * Hook to remove the test paths (test suite) that are part of `skippableSuites`
+ */
+addHook({
+  name: '@jest/core',
+  versions: ['>=24.8.0'],
+  file: 'build/SearchSource.js'
+}, searchSourceWrapper)
 
 // from 25.1.0 on, readConfigs becomes async
 addHook({
