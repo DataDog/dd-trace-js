@@ -1,6 +1,8 @@
 'use strict'
 
-const { exec } = require('child_process')
+const { exec, execSync } = require('child_process')
+const path = require('path')
+const fs = require('fs')
 
 const { assert } = require('chai')
 
@@ -44,7 +46,9 @@ const {
   DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
   DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
   DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
-  TEST_RETRY_REASON_TYPES
+  TEST_RETRY_REASON_TYPES,
+  TEST_IS_MODIFIED,
+  DD_CAPABILITIES_IMPACTED_TESTS
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { once } = require('node:events')
@@ -1859,6 +1863,7 @@ versions.forEach((version) => {
               assert.equal(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], undefined)
               assert.equal(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')
               assert.equal(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
+              assert.equal(metadata.test[DD_CAPABILITIES_IMPACTED_TESTS], '1')
               assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
               assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
               assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '4')
@@ -1884,6 +1889,168 @@ versions.forEach((version) => {
           eventsPromise.then(() => {
             done()
           }).catch(done)
+        })
+      })
+    })
+
+    context('impacted tests', () => {
+      beforeEach(() => {
+        receiver.setKnownTests({
+          vitest: {
+            'ci-visibility/vitest-tests/impacted-test.mjs': [
+              'impacted test can impacted test'
+            ]
+          }
+        })
+      })
+
+      // Modify `impacted-test.mjs` to mark it as impacted
+      before(() => {
+        execSync('git checkout -b feature-branch', { cwd, stdio: 'ignore' })
+        fs.writeFileSync(
+          path.join(cwd, 'ci-visibility/vitest-tests/impacted-test.mjs'),
+          `import { describe, test, expect } from 'vitest'
+           describe('impacted test', () => {
+             test('can impacted test', () => {
+               expect(1 + 2).to.equal(4)
+             })
+           })`
+        )
+        execSync('git add ci-visibility/vitest-tests/impacted-test.mjs', { cwd, stdio: 'ignore' })
+        execSync('git commit -m "modify impacted-test.mjs"', { cwd, stdio: 'ignore' })
+      })
+
+      after(() => {
+        execSync('git checkout -', { cwd, stdio: 'ignore' })
+        execSync('git branch -D feature-branch', { cwd, stdio: 'ignore' })
+      })
+
+      const getTestAssertions = ({ isModified, isEfd, isNew }) =>
+        receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+
+            if (isEfd) {
+              assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
+            } else {
+              assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
+            }
+
+            const resourceNames = tests.map(span => span.resource)
+
+            assert.includeMembers(resourceNames,
+              [
+                'ci-visibility/vitest-tests/impacted-test.mjs.impacted test can impacted test'
+              ]
+            )
+
+            const impactedTests = tests.filter(test =>
+              test.meta[TEST_SOURCE_FILE] === 'ci-visibility/vitest-tests/impacted-test.mjs' &&
+              test.meta[TEST_NAME] === 'impacted test can impacted test')
+
+            if (isEfd) {
+              assert.equal(impactedTests.length, NUM_RETRIES_EFD + 1) // Retries + original test
+            } else {
+              assert.equal(impactedTests.length, 1)
+            }
+
+            for (const impactedTest of impactedTests) {
+              if (isModified) {
+                assert.propertyVal(impactedTest.meta, TEST_IS_MODIFIED, 'true')
+              } else {
+                assert.notProperty(impactedTest.meta, TEST_IS_MODIFIED)
+              }
+              if (isNew) {
+                assert.propertyVal(impactedTest.meta, TEST_IS_NEW, 'true')
+              } else {
+                assert.notProperty(impactedTest.meta, TEST_IS_NEW)
+              }
+            }
+
+            if (isEfd) {
+              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+              assert.equal(retriedTests.length, NUM_RETRIES_EFD)
+              let retriedTestNew = 0
+              let retriedTestsWithReason = 0
+              retriedTests.forEach(test => {
+                if (test.meta[TEST_IS_NEW] === 'true') {
+                  retriedTestNew++
+                }
+                if (test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd) {
+                  retriedTestsWithReason++
+                }
+              })
+              assert.equal(retriedTestNew, isNew ? NUM_RETRIES_EFD : 0)
+              assert.equal(retriedTestsWithReason, NUM_RETRIES_EFD)
+            }
+          })
+
+      const runImpactedTest = (
+        done,
+        { isModified, isEfd = false, isParallel = false, isNew = false },
+        extraEnvVars = {}
+      ) => {
+        const testAssertionsPromise = getTestAssertions({ isModified, isEfd, isParallel, isNew })
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/impacted-test*',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
+              GITHUB_BASE_REF: '',
+              ...extraEnvVars
+            },
+            stdio: 'inherit'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          testAssertionsPromise.then(done).catch(done)
+        })
+      }
+
+      context('test is not new', () => {
+        it('should be detected as impacted', (done) => {
+          receiver.setSettings({ impacted_tests_enabled: true })
+
+          runImpactedTest(done, { isModified: true })
+        })
+
+        it('should not be detected as impacted if disabled', (done) => {
+          receiver.setSettings({ impacted_tests_enabled: false })
+
+          runImpactedTest(done, { isModified: false })
+        })
+
+        it('should not be detected as impacted if DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED is false',
+          (done) => {
+            receiver.setSettings({ impacted_tests_enabled: true })
+
+            runImpactedTest(done,
+              { isModified: false },
+              { DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0' }
+            )
+          })
+      })
+      context('test is new', () => {
+        it('should be retried and marked both as new and modified', (done) => {
+          receiver.setKnownTests({})
+          receiver.setSettings({
+            impacted_tests_enabled: true,
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': NUM_RETRIES_EFD
+              }
+            },
+            known_tests_enabled: true
+          })
+          runImpactedTest(done, { isModified: true, isEfd: true, isNew: true })
         })
       })
     })

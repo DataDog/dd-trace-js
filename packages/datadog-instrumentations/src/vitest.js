@@ -12,6 +12,7 @@ const isNewTestCh = channel('ci:vitest:test:is-new')
 const isAttemptToFixCh = channel('ci:vitest:test:is-attempt-to-fix')
 const isDisabledCh = channel('ci:vitest:test:is-disabled')
 const isQuarantinedCh = channel('ci:vitest:test:is-quarantined')
+const isModifiedCh = channel('ci:vitest:test:is-modified')
 
 // test suite hooks
 const testSuiteStartCh = channel('ci:vitest:test-suite:start')
@@ -25,6 +26,7 @@ const libraryConfigurationCh = channel('ci:vitest:library-configuration')
 const knownTestsCh = channel('ci:vitest:known-tests')
 const isEarlyFlakeDetectionFaultyCh = channel('ci:vitest:is-early-flake-detection-faulty')
 const testManagementTestsCh = channel('ci:vitest:test-management-tests')
+const impactedTestsCh = channel('ci:vitest:modified-tests')
 
 const taskToCtx = new WeakMap()
 const taskToStatuses = new WeakMap()
@@ -32,6 +34,7 @@ const newTasks = new WeakSet()
 const disabledTasks = new WeakSet()
 const quarantinedTasks = new WeakSet()
 const attemptToFixTasks = new WeakSet()
+const modifiedTasks = new WeakSet()
 let isRetryReasonEfd = false
 let isRetryReasonAttemptToFix = false
 const switchedStatuses = new WeakSet()
@@ -58,7 +61,9 @@ function getProvidedContext () {
       _ddIsTestManagementTestsEnabled: isTestManagementTestsEnabled,
       _ddTestManagementAttemptToFixRetries: testManagementAttemptToFixRetries,
       _ddTestManagementTests: testManagementTests,
-      _ddIsFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled
+      _ddIsFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled,
+      _ddIsImpactedTestsEnabled: isImpactedTestsEnabled,
+      _ddModifiedTests: modifiedTests
     } = globalThis.__vitest_worker__.providedContext
 
     return {
@@ -70,7 +75,9 @@ function getProvidedContext () {
       isTestManagementTestsEnabled,
       testManagementAttemptToFixRetries,
       testManagementTests,
-      isFlakyTestRetriesEnabled
+      isFlakyTestRetriesEnabled,
+      isImpactedTestsEnabled,
+      modifiedTests
     }
   } catch {
     log.error('Vitest workers could not parse provided context, so some features will not work.')
@@ -83,7 +90,9 @@ function getProvidedContext () {
       isTestManagementTestsEnabled: false,
       testManagementAttemptToFixRetries: 0,
       testManagementTests: {},
-      isFlakyTestRetriesEnabled: false
+      isFlakyTestRetriesEnabled: false,
+      isImpactedTestsEnabled: false,
+      modifiedTests: {}
     }
   }
 }
@@ -182,10 +191,12 @@ function getSortWrapper (sort) {
     let isEarlyFlakeDetectionFaulty = false
     let isKnownTestsEnabled = false
     let isTestManagementTestsEnabled = false
+    let isImpactedTestsEnabled = false
     let testManagementAttemptToFixRetries = 0
     let isDiEnabled = false
     let knownTests = {}
     let testManagementTests = {}
+    let modifiedTests = {}
 
     try {
       const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh)
@@ -198,12 +209,14 @@ function getSortWrapper (sort) {
         isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
         isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
         testManagementAttemptToFixRetries = libraryConfig.testManagementAttemptToFixRetries
+        isImpactedTestsEnabled = libraryConfig.isImpactedTestsEnabled
       }
     } catch {
       isFlakyTestRetriesEnabled = false
       isEarlyFlakeDetectionEnabled = false
       isDiEnabled = false
       isKnownTestsEnabled = false
+      isImpactedTestsEnabled = false
     }
 
     if (isFlakyTestRetriesEnabled && !this.ctx.config.retry && flakyTestRetriesCount > 0) {
@@ -277,6 +290,23 @@ function getSortWrapper (sort) {
           workspaceProject._provided._ddTestManagementTests = testManagementTests
         } catch {
           log.warn('Could not send test management tests to workers so Test Management will not work.')
+        }
+      }
+    }
+
+    if (isImpactedTestsEnabled) {
+      const { err, modifiedTests: receivedModifiedTests } = await getChannelPromise(impactedTestsCh)
+      if (err) {
+        isImpactedTestsEnabled = false
+        log.error('Could not get modified tests.')
+      } else {
+        modifiedTests = receivedModifiedTests
+        try {
+          const workspaceProject = this.ctx.getCoreWorkspaceProject()
+          workspaceProject._provided._ddIsImpactedTestsEnabled = isImpactedTestsEnabled
+          workspaceProject._provided._ddModifiedTests = modifiedTests
+        } catch {
+          log.warn('Could not send modified tests to workers so Impacted Tests will not work.')
         }
       }
     }
@@ -363,7 +393,9 @@ addHook({
       numRepeats,
       isTestManagementTestsEnabled,
       testManagementAttemptToFixRetries,
-      testManagementTests
+      testManagementTests,
+      isImpactedTestsEnabled,
+      modifiedTests
     } = getProvidedContext()
 
     if (isTestManagementTestsEnabled) {
@@ -396,6 +428,23 @@ addHook({
       })
     }
 
+    if (isImpactedTestsEnabled) {
+      isModifiedCh.publish({
+        modifiedTests,
+        testSuiteAbsolutePath: task.file.filepath,
+        onDone: (isImpacted) => {
+          if (isImpacted) {
+            if (isEarlyFlakeDetectionEnabled) {
+              isRetryReasonEfd = task.repeats !== numRepeats
+              task.repeats = numRepeats
+            }
+            modifiedTasks.add(task)
+            taskToStatuses.set(task, [])
+          }
+        }
+      })
+    }
+
     if (isKnownTestsEnabled) {
       isNewTestCh.publish({
         knownTests,
@@ -403,7 +452,7 @@ addHook({
         testName,
         onDone: (isNew) => {
           if (isNew && !attemptToFixTasks.has(task)) {
-            if (isEarlyFlakeDetectionEnabled) {
+            if (isEarlyFlakeDetectionEnabled && !modifiedTasks.has(task)) {
               isRetryReasonEfd = task.repeats !== numRepeats
               task.repeats = numRepeats
             }
@@ -574,7 +623,8 @@ addHook({
       isAttemptToFix: attemptToFixTasks.has(task),
       isDisabled: disabledTasks.has(task),
       isQuarantined,
-      isRetryReasonAtr
+      isRetryReasonAtr,
+      isModified: modifiedTasks.has(task)
     }
     taskToCtx.set(task, ctx)
 
