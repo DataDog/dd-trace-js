@@ -26,8 +26,10 @@ describe('AgentProxyCiVisibilityExporter', () => {
     const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
 
     expect(agentProxyCiVisibilityExporter).not.to.be.null
-    expect(scope.isDone()).to.be.true
-    done()
+    queueMicrotask(() => {
+      expect(scope.isDone()).to.be.true
+      done()
+    })
   })
 
   it('should store traces and coverages as is until the query to /info is resolved', async () => {
