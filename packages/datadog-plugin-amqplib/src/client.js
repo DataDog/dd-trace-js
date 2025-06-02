@@ -10,7 +10,9 @@ class AmqplibClientPlugin extends ClientPlugin {
   static get type () { return 'messaging' }
   static get operation () { return 'command' }
 
-  start ({ channel = {}, method, fields }) {
+  bindStart (ctx) {
+    const { channel = {}, method, fields } = ctx
+
     if (method === 'basic.deliver' || method === 'basic.get') return
     if (method === 'basic.publish') return
 
@@ -29,11 +31,13 @@ class AmqplibClientPlugin extends ClientPlugin {
         'amqp.source': fields.source,
         'amqp.destination': fields.destination
       }
-    })
+    }, ctx)
 
     fields.headers = fields.headers || {}
 
     this.tracer.inject(span, TEXT_MAP, fields.headers)
+
+    return ctx.currentStore
   }
 }
 
