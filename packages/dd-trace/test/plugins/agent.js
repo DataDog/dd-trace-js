@@ -445,13 +445,17 @@ module.exports = {
    * @param {boolean} [options.rejectFirst=false] - If true, reject the first time the callback throws.
    * @returns Promise
    */
-  assertFirstTraceSpan (callback, options) {
+  assertFirstTraceSpan (callbackOrExpected, options) {
     return runCallbackAgainstTraces(function (traces) {
-      if (typeof callback !== 'function') {
-        // TODO(BridgeAR): Log all traces if the assertion fails.
-        assertObjectContains(callback, traces[0][0])
+      if (typeof callbackOrExpected !== 'function') {
+        try {
+          assertObjectContains(traces[0][0], callbackOrExpected)
+        } catch (error) {
+          console.error('Expected span %o did not match traces:\n%o', callbackOrExpected, traces)
+          throw error
+        }
       } else {
-        return callback(traces[0][0])
+        return callbackOrExpected(traces[0][0])
       }
     }, options, traceHandlers)
   },
