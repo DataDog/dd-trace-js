@@ -35,8 +35,12 @@ class PrismaClientPlugin extends DatabasePlugin {
     this.finish(ctx)
   }
 
+  bindAsyncStart (ctx) {
+    return this.bindFinish(ctx)
+  }
+
   asyncStart (ctx) {
-    super.asyncStart(ctx)
+    this.finish(ctx)
   }
 
   error (error) {
