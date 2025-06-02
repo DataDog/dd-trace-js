@@ -5,6 +5,18 @@ const pathToRegExp = require('path-to-regexp')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel } = require('./helpers/instrument')
 
+function isFastStar (layer, matchers) {
+  return layer.regexp?.fast_star ?? matchers.some(matcher => matcher.path === '*')
+}
+
+function isFastSlash (layer, matchers) {
+  return layer.regexp?.fast_slash ?? matchers.some(matcher => matcher.path === '/')
+}
+
+function flatten (arr) {
+  return arr.reduce((acc, val) => Array.isArray(val) ? acc.concat(flatten(val)) : acc.concat(val), [])
+}
+
 // TODO: Move this function to a shared file between Express and Router
 function createWrapRouterMethod (name) {
   const enterChannel = channel(`apm:${name}:middleware:enter`)
@@ -37,9 +49,9 @@ function createWrapRouterMethod (name) {
 
       if (matchers) {
         // Try to guess which path actually matched
-        for (let i = 0; i < matchers.length; i++) {
-          if (matchers[i].test(layer)) {
-            route = matchers[i].path
+        for (const matcher of matchers) {
+          if (matcher.test(layer)) {
+            route = matcher.path
 
             break
           }
@@ -113,26 +125,6 @@ function createWrapRouterMethod (name) {
           cachedPathToRegExp(pattern).test(layer.path)
       }
     }))
-  }
-
-  function isFastStar (layer, matchers) {
-    if (layer.regexp?.fast_star !== undefined) {
-      return layer.regexp.fast_star
-    }
-
-    return matchers.some(matcher => matcher.path === '*')
-  }
-
-  function isFastSlash (layer, matchers) {
-    if (layer.regexp?.fast_slash !== undefined) {
-      return layer.regexp.fast_slash
-    }
-
-    return matchers.some(matcher => matcher.path === '/')
-  }
-
-  function flatten (arr) {
-    return arr.reduce((acc, val) => Array.isArray(val) ? acc.concat(flatten(val)) : acc.concat(val), [])
   }
 
   function cachedPathToRegExp (pattern) {

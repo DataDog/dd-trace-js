@@ -860,11 +860,7 @@ addHook({
     try {
       if (page) {
         const isRumActive = await page.evaluate(() => {
-          if (window.DD_RUM && window.DD_RUM.getInternalContext) {
-            return !!window.DD_RUM.getInternalContext()
-          } else {
-            return false
-          }
+          return window.DD_RUM && window.DD_RUM.getInternalContext ? !!window.DD_RUM.getInternalContext() : false
         })
 
         if (isRumActive) {

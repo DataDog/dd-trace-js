@@ -535,6 +535,15 @@ addHook({
   file: 'lib/runnable.js'
 }, (runnablePackage) => runnableWrapper(runnablePackage, config))
 
+function onMessage (message) {
+  if (Array.isArray(message)) {
+    const [messageCode, payload] = message
+    if (messageCode === MOCHA_WORKER_TRACE_PAYLOAD_CODE) {
+      workerReportTraceCh.publish(payload)
+    }
+  }
+}
+
 // Only used in parallel mode (--parallel flag is passed)
 // Used to generate suite events and receive test payloads from workers
 addHook({
@@ -554,15 +563,6 @@ addHook({
     }
     const [testSuiteAbsolutePath] = path
     const testSuiteContext = {}
-
-    function onMessage (message) {
-      if (Array.isArray(message)) {
-        const [messageCode, payload] = message
-        if (messageCode === MOCHA_WORKER_TRACE_PAYLOAD_CODE) {
-          workerReportTraceCh.publish(payload)
-        }
-      }
-    }
 
     this.worker.on('message', onMessage)
 

@@ -18,7 +18,7 @@ const noopTask = {
   }
 }
 
-module.exports = (on, config) => {
+module.exports = function CypressPlugin (on, config) {
   const tracer = require('../../dd-trace')
 
   if (satisfies(config.version, '<10.2.0')) {
