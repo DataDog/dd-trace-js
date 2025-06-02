@@ -120,7 +120,7 @@ describe('Plugin', () => {
         after(() => { return agent.close({ ritmReset: false }) })
 
         it('should do automatic instrumentation', async () => {
-          const tracingPromise = agent.use(traces => {
+          const tracingPromise = agent.assertSomeTraces(traces => {
             expect(traces[0][0].resource).to.equal('queryRaw')
             expect(traces[0][0].meta).to.have.property('prisma.type', 'client')
             expect(traces[0][0].meta).to.have.property('prisma.method', 'queryRaw')
@@ -144,7 +144,7 @@ describe('Plugin', () => {
 
         it('should handle errors', async () => {
           let error
-          const tracingPromise = agent.use(traces => {
+          const tracingPromise = agent.assertSomeTraces(traces => {
             expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
             expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
             expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
@@ -158,7 +158,7 @@ describe('Plugin', () => {
         })
 
         it('should create client spans from callback', async () => {
-          const tracingPromise = agent.use(traces => {
+          const tracingPromise = agent.assertSomeTraces(traces => {
             expect(traces[0][0].name).to.equal('prisma.client')
             expect(traces[0][0].resource).to.equal('users.findMany')
             expect(traces[0][0].meta).to.have.property('prisma.type', 'client')
@@ -182,7 +182,7 @@ describe('Plugin', () => {
         })
 
         it('should generate engine span from array of spans', async () => {
-          const tracingPromise = agent.use(traces => {
+          const tracingPromise = agent.assertSomeTraces(traces => {
             expect(traces[0].length).to.equal(2)
             expect(traces[0][0].span_id).to.equal(traces[0][1].parent_id)
             expect(traces[0][0].name).to.equal('prisma.engine')
@@ -243,7 +243,7 @@ describe('Plugin', () => {
           })
 
           it('should be configured with the correct values', async () => {
-            const tracingPromise = agent.use(traces => {
+            const tracingPromise = agent.assertSomeTraces(traces => {
               expect(traces[0][0].service).to.equal('custom')
             })
 
@@ -270,7 +270,7 @@ describe('Plugin', () => {
           })
 
           it('should disable prisma client', async () => {
-            const tracingPromise = agent.use(traces => {
+            const tracingPromise = agent.assertSomeTraces(traces => {
               const clientSpans = traces[0].find(span => span.meta['prisma.type'] === 'client')
               expect(clientSpans).not.to.exist
             })
@@ -304,7 +304,7 @@ describe('Plugin', () => {
           })
 
           it('should disable prisma engine', async () => {
-            const tracingPromise = agent.use(traces => {
+            const tracingPromise = agent.assertSomeTraces(traces => {
               const engineSpans = traces[0].find(span => span.meta['prisma.type'] === 'engine')
               expect(engineSpans).not.to.exist
             })
