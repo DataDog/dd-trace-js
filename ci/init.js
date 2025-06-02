@@ -8,12 +8,17 @@ const isCucumberWorker = !!process.env.CUCUMBER_WORKER_ID
 const isMochaWorker = !!process.env.MOCHA_WORKER_ID
 
 const isPlaywrightWorker = !!process.env.DD_PLAYWRIGHT_WORKER
+// we can't use VITEST_WORKER_ID because it's set _after_ the worker is initialized
+// maybe we can intercept tinypool to inject it to be sure
+const isVitestWorker = !!process.env.TINYPOOL_WORKER_ID
 
 const packageManagers = [
   'npm',
   'yarn',
   'pnpm'
 ]
+
+console.log('init', isVitestWorker)
 
 const isPackageManager = () => {
   return packageManagers.some(packageManager => process.argv[1]?.includes(`bin/${packageManager}`))
@@ -72,6 +77,13 @@ if (isMochaWorker) {
 if (isPlaywrightWorker) {
   options.experimental = {
     exporter: 'playwright_worker'
+  }
+}
+
+if (isVitestWorker) {
+  console.log('initializing as vites tworker')
+  options.experimental = {
+    exporter: 'vitest_worker'
   }
 }
 

@@ -1,7 +1,8 @@
+const v8 = require('node:v8')
+
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
-
 // test hooks
 const testStartCh = channel('ci:vitest:test:start')
 const testFinishTimeCh = channel('ci:vitest:test:finish-time')
@@ -25,6 +26,8 @@ const libraryConfigurationCh = channel('ci:vitest:library-configuration')
 const knownTestsCh = channel('ci:vitest:known-tests')
 const isEarlyFlakeDetectionFaultyCh = channel('ci:vitest:is-early-flake-detection-faulty')
 const testManagementTestsCh = channel('ci:vitest:test-management-tests')
+
+const workerReporterCh = channel('ci:vitest:worker-report:trace')
 
 const taskToCtx = new WeakMap()
 const taskToStatuses = new WeakMap()
@@ -60,6 +63,8 @@ function getProvidedContext () {
       _ddTestManagementTests: testManagementTests,
       _ddIsFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled
     } = globalThis.__vitest_worker__.providedContext
+
+    // console.log('globalThis.__vitest_worker__', globalThis.__vitest_worker__)
 
     return {
       isDiEnabled: _ddIsDiEnabled,
@@ -187,6 +192,11 @@ function getSortWrapper (sort) {
     let knownTests = {}
     let testManagementTests = {}
 
+    // console.log('this.ctx.vitest', this.ctx.vitest)
+    // console.log('this.ctx.rpc', this.ctx.rpc)
+    console.log('__vitest_worker__', global.__vitest_worker__)
+    // console.log('this.ctx.getCoreWorkspaceProject()', this.ctx.getCoreWorkspaceProject())
+    // console.log('this.ctx', this)
     try {
       const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh)
       if (!err) {
@@ -262,24 +272,25 @@ function getSortWrapper (sort) {
         log.warn('Could not send Dynamic Instrumentation configuration to workers.')
       }
     }
+    debugger
 
-    if (isTestManagementTestsEnabled) {
-      const { err, testManagementTests: receivedTestManagementTests } = await getChannelPromise(testManagementTestsCh)
-      if (!err) {
-        testManagementTests = receivedTestManagementTests
-        try {
-          const workspaceProject = this.ctx.getCoreWorkspaceProject()
-          workspaceProject._provided._ddIsTestManagementTestsEnabled = isTestManagementTestsEnabled
-          workspaceProject._provided._ddTestManagementAttemptToFixRetries = testManagementAttemptToFixRetries
-          workspaceProject._provided._ddTestManagementTests = testManagementTests
-        } catch {
-          log.warn('Could not send test management tests to workers so Test Management will not work.')
-        }
-      } else {
-        isTestManagementTestsEnabled = false
-        log.error('Could not get test management tests.')
-      }
-    }
+    // if (isTestManagementTestsEnabled) {
+    //   const { err, testManagementTests: receivedTestManagementTests } = await getChannelPromise(testManagementTestsCh)
+    //   if (!err) {
+    //     testManagementTests = receivedTestManagementTests
+    //     try {
+    //       const workspaceProject = this.ctx.getCoreWorkspaceProject()
+    //       workspaceProject._provided._ddIsTestManagementTestsEnabled = isTestManagementTestsEnabled
+    //       workspaceProject._provided._ddTestManagementAttemptToFixRetries = testManagementAttemptToFixRetries
+    //       workspaceProject._provided._ddTestManagementTests = testManagementTests
+    //     } catch {
+    //       log.warn('Could not send test management tests to workers so Test Management will not work.')
+    //     }
+    //   } else {
+    //     isTestManagementTestsEnabled = false
+    //     log.error('Could not get test management tests.')
+    //   }
+    // }
 
     let testCodeCoverageLinesTotal
 
@@ -344,6 +355,47 @@ function getCreateCliWrapper (vitestPackage, frameworkVersion) {
   return vitestPackage
 }
 
+
+// UNUSED RIGHT NOW, but we can use it to bind the async resource to the test fn
+// getFn is what's used to get the test fn to run it with vitest:
+// https://github.com/vitest-dev/vitest/blob/0cbad1b0d0d56f1ec60f8496678d1435f8bb8977/packages/runner/src/run.ts#L315-L321
+let getFn = null
+
+// run in workers only
+addHook({
+  name: '@vitest/runner',
+  versions: ['>=1.6.0'],
+  file: 'dist/index.js'
+}, (suitePackage) => {
+  getFn = suitePackage.getFn
+
+  return suitePackage
+})
+
+addHook({
+  name: 'tinypool',
+  versions: ['>=1.0.0'],
+  file: 'dist/index.js'
+}, (TinyPool) => {
+  debugger
+  // we can pass handle here to the worker, and then use it to send messages to the main process
+  shimmer.wrap(TinyPool.prototype, 'run', run => function (_, { channel }) {
+    const res = run.apply(this, arguments)
+
+    this.threads.forEach(thread => {
+      thread.process.on('message', (message) => {
+        if (message.__tinypool_worker_message__ && message.data) {
+          workerReporterCh.publish(message.data)
+        }
+      })
+    })
+
+    return res
+  })
+
+  return TinyPool
+})
+
 addHook({
   name: 'vitest',
   versions: ['>=1.6.0'],
@@ -354,6 +406,7 @@ addHook({
   // `onBeforeRunTask` is run before any repetition or attempt is run
   // `onBeforeRunTask` is an async function
   shimmer.wrap(VitestTestRunner.prototype, 'onBeforeRunTask', onBeforeRunTask => function (task) {
+    // console.log('on before run task', process.env)
     const testName = getTestName(task)
 
     const {
@@ -420,6 +473,7 @@ addHook({
   // `onAfterRunTask` is run after all repetitions or attempts are run
   // `onAfterRunTask` is an async function
   shimmer.wrap(VitestTestRunner.prototype, 'onAfterRunTask', onAfterRunTask => function (task) {
+    // console.log('task', task)
     const { isEarlyFlakeDetectionEnabled, isTestManagementTestsEnabled } = getProvidedContext()
 
     if (isTestManagementTestsEnabled) {
@@ -819,6 +873,7 @@ addHook({
 
     testSuiteFinishCh.publish({ status: testSuiteResult.state, onFinish, ...testSuiteCtx.currentStore })
 
+    // console.log('test usite finish!')
     // TODO: fix too frequent flushes
     await onFinishPromise
 

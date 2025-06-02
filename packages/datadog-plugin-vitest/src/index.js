@@ -35,6 +35,7 @@ const {
   TELEMETRY_TEST_SESSION
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 const { DD_MAJOR } = require('../../../version')
+const id = require('../../dd-trace/src/id')
 
 // Milliseconds that we subtract from the error test duration
 // so that they do not overlap with the following test
@@ -385,6 +386,22 @@ class VitestPlugin extends CiPlugin {
         autoInjected: !!process.env.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER
       })
       this.tracer._exporter.flush(onFinish)
+    })
+
+    this.addSub('ci:vitest:worker-report:trace', (traces) => {
+      // it has no test session or test module id so there are hanging
+      const formattedTraces = JSON.parse(traces).map(trace => {
+        return trace.map(span => ({
+          ...span,
+          span_id: id(span.span_id),
+          trace_id: id(span.trace_id),
+          parent_id: id(span.parent_id)
+        }))
+      })
+
+      formattedTraces.forEach(trace => {
+        this.tracer._exporter.export(trace)
+      })
     })
   }
 

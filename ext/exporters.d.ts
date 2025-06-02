@@ -6,7 +6,8 @@ declare const exporters: {
   JEST_WORKER: 'jest_worker',
   CUCUMBER_WORKER: 'cucumber_worker',
   MOCHA_WORKER: 'mocha_worker',
-  PLAYWRIGHT_WORKER: 'playwright_worker'
+  PLAYWRIGHT_WORKER: 'playwright_worker',
+  VITEST_WORKER: 'vitest_worker'
 }
 
 export = exporters

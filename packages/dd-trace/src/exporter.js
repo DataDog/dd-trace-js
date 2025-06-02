@@ -21,6 +21,7 @@ module.exports = name => {
     case exporters.CUCUMBER_WORKER:
     case exporters.MOCHA_WORKER:
     case exporters.PLAYWRIGHT_WORKER:
+    case exporters.VITEST_WORKER:
       return require('./ci-visibility/exporters/test-worker')
     default:
       return inAWSLambda && !usingLambdaExtension ? require('./exporters/log') : require('./exporters/agent')
