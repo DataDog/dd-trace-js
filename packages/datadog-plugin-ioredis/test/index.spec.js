@@ -32,18 +32,22 @@ describe('Plugin', () => {
         it('should do automatic instrumentation when using callbacks', async () => {
           await redis.get('foo')
 
-          await agent.assertFirstTraceSpan(span => {
-            expect(span).to.have.property('name', expectedSchema.outbound.opName)
-            expect(span).to.have.property('service', expectedSchema.outbound.serviceName)
-            expect(span).to.have.property('resource', 'get')
-            expect(span).to.have.property('type', 'redis')
-            expect(span.meta).to.have.property('component', 'ioredis')
-            expect(span.meta).to.have.property('db.name', '0')
-            expect(span.meta).to.have.property('db.type', 'redis')
-            expect(span.meta).to.have.property('span.kind', 'client')
-            expect(span.meta).to.have.property('out.host', 'localhost')
-            expect(span.meta).to.have.property('redis.raw_command', 'GET foo')
-            expect(span.metrics).to.have.property('network.destination.port', 6379)
+          await agent.assertFirstTraceSpan({
+            name: expectedSchema.outbound.opName,
+            service: expectedSchema.outbound.serviceName,
+            resource: 'get',
+            type: 'redis',
+            meta: {
+              'component': 'ioredis',
+              'db.name': '0',
+              'db.type': 'redis',
+              'span.kind': 'client',
+              'out.host': 'localhost',
+              'redis.raw_command': 'GET foo',
+            },
+            metrics: {
+              'network.destination.port': 6379
+            }
           })
         })
 
@@ -65,12 +69,14 @@ describe('Plugin', () => {
             error = err
           }
 
-          await agent.assertFirstTraceSpan(span => {
-            expect(span).to.have.property('error', 1)
-            expect(span.meta).to.have.property(ERROR_TYPE, error.name)
-            expect(span.meta).to.have.property(ERROR_MESSAGE, error.message)
-            expect(span.meta).to.have.property(ERROR_STACK, error.stack)
-            expect(span.meta).to.have.property('component', 'ioredis')
+          await agent.assertFirstTraceSpan({
+            error: 1,
+            meta: {
+              [ERROR_TYPE]: error.name,
+              [ERROR_MESSAGE]: error.message,
+              [ERROR_STACK]: error.stack,
+              component: 'ioredis',
+            },
           })
         })
 
@@ -79,18 +85,22 @@ describe('Plugin', () => {
 
           await redis.get('foo')
 
-          await agent.assertFirstTraceSpan(span => {
-            expect(span).to.have.property('name', expectedSchema.outbound.opName)
-            expect(span).to.have.property('service', expectedSchema.outbound.serviceName)
-            expect(span).to.have.property('resource', 'get')
-            expect(span).to.have.property('type', 'redis')
-            expect(span.meta).to.have.property('db.name', '0')
-            expect(span.meta).to.have.property('db.type', 'redis')
-            expect(span.meta).to.have.property('span.kind', 'client')
-            expect(span.meta).to.have.property('out.host', 'localhost')
-            expect(span.meta).to.have.property('redis.raw_command', 'GET foo')
-            expect(span.meta).to.have.property('component', 'ioredis')
-            expect(span.metrics).to.have.property('network.destination.port', 6379)
+          await agent.assertFirstTraceSpan({
+            name: expectedSchema.outbound.opName,
+            service: expectedSchema.outbound.serviceName,
+            resource: 'get',
+            type: 'redis',
+            meta: {
+              'db.name': '0',
+              'db.type': 'redis',
+              'span.kind': 'client',
+              'out.host': 'localhost',
+              'redis.raw_command': 'GET foo',
+              'component': 'ioredis'
+            },
+            metrics: {
+              'network.destination.port': 6379
+            }
           })
         })
 
@@ -112,16 +122,16 @@ describe('Plugin', () => {
         it('should be configured with the correct values', async () => {
           await redis.get('foo')
 
-          agent.assertFirstTraceSpan(span => {
-            expect(span).to.have.property('service', 'custom-test')
+          await agent.assertFirstTraceSpan({
+            service: 'custom-test'
           })
         })
 
         it('should be able to filter commands', async () => {
           await redis.get('foo')
 
-          await agent.assertFirstTraceSpan(span => {
-            expect(span).to.have.property('resource', 'get')
+          await agent.assertFirstTraceSpan({
+            resource: 'get'
           })
         })
 
@@ -150,8 +160,8 @@ describe('Plugin', () => {
         it('should be able to filter commands', async () => {
           await redis.get('foo')
 
-          await agent.assertFirstTraceSpan(span => {
-            expect(span).to.have.property('resource', 'get')
+          await agent.assertFirstTraceSpan({
+            resource: 'get'
           })
         })
       })

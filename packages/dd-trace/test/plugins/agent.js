@@ -7,6 +7,7 @@ const express = require('express')
 const path = require('path')
 const ritm = require('../../src/ritm')
 const { storage } = require('../../../datadog-core')
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
 const traceHandlers = new Set()
 const statsHandlers = new Set()
@@ -438,7 +439,7 @@ module.exports = {
    * Same as assertSomeTraces() but only provides the first span (traces[0][0])
    * This callback gets executed once for every payload received by the agent.
 
-   * @param {testAssertionSpanCallback} callback - runs once per agent payload
+   * @param {testAssertionSpanCallback|Record<string|symbol, unknown>} callbackOrExpected - runs once per agent payload
    * @param {Object} [options] - An options object
    * @param {number} [options.timeoutMs=1000] - The timeout in ms.
    * @param {boolean} [options.rejectFirst=false] - If true, reject the first time the callback throws.
@@ -446,7 +447,12 @@ module.exports = {
    */
   assertFirstTraceSpan (callback, options) {
     return runCallbackAgainstTraces(function (traces) {
-      return callback(traces[0][0])
+      if (typeof callback !== 'function') {
+        // TODO(BridgeAR): Log all traces if the assertion fails.
+        assertObjectContains(callback, traces[0][0])
+      } else {
+        return callback(traces[0][0])
+      }
     }, options, traceHandlers)
   },
 

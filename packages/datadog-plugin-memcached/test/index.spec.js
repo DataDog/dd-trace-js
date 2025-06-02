@@ -37,15 +37,17 @@ describe('Plugin', () => {
           memcached = new Memcached('localhost:11211', { retries: 0 })
 
           agent
-            .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-              expect(traces[0][0]).to.have.property('resource', 'get')
-              expect(traces[0][0]).to.have.property('type', 'memcached')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
-              expect(traces[0][0].meta).to.have.property('network.destination.port', '11211')
-              expect(traces[0][0].meta).to.have.property('component', 'memcached')
+            .assertFirstTraceSpan({
+              name: expectedSchema.outbound.opName,
+              service: expectedSchema.outbound.serviceName,
+              resource: 'get',
+              type: 'memcached',
+              meta: {
+                'span.kind': 'client',
+                'out.host': 'localhost',
+                'network.destination.port': '11211',
+                'component': 'memcached'
+              }
             })
             .then(done)
             .catch(done)
@@ -77,12 +79,14 @@ describe('Plugin', () => {
           let error
 
           agent
-            .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('error', 1)
-              expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
-              expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
-              expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
-              expect(traces[0][0].meta).to.have.property('component', 'memcached')
+            .assertFirstTraceSpan({
+              error: 1,
+              meta: {
+                [ERROR_TYPE]: error.name,
+                [ERROR_MESSAGE]: error.message,
+                [ERROR_STACK]: error.stack,
+                'component': 'memcached'
+              }
             })
             .then(done)
             .catch(done)
@@ -96,10 +100,12 @@ describe('Plugin', () => {
           memcached = new Memcached(['localhost:11211'], { retries: 0 })
 
           agent
-            .assertSomeTraces(traces => {
-              expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
-              expect(traces[0][0].meta).to.have.property('network.destination.port', '11211')
-              expect(traces[0][0].meta).to.have.property('component', 'memcached')
+            .assertFirstTraceSpan({
+              meta: {
+                'out.host': 'localhost',
+                'network.destination.port': '11211',
+                'component': 'memcached'
+              }
             })
             .then(done)
             .catch(done)
@@ -114,10 +120,12 @@ describe('Plugin', () => {
           }, { retries: 0 })
 
           agent
-            .assertSomeTraces(traces => {
-              expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
-              expect(traces[0][0].meta).to.have.property('network.destination.port', '11211')
-              expect(traces[0][0].meta).to.have.property('component', 'memcached')
+            .assertFirstTraceSpan({
+              meta: {
+                'out.host': 'localhost',
+                'network.destination.port': '11211',
+                'component': 'memcached'
+              }
             })
             .then(done)
             .catch(done)
@@ -138,10 +146,12 @@ describe('Plugin', () => {
             memcached.del('test', err => err && done(err))
 
             agent
-              .assertSomeTraces(traces => {
-                expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
-                expect(traces[0][0].meta).to.have.property('network.destination.port', '11211')
-                expect(traces[0][0].meta).to.have.property('component', 'memcached')
+              .assertFirstTraceSpan({
+                meta: {
+                  'out.host': 'localhost',
+                  'network.destination.port': '11211',
+                  'component': 'memcached'
+                }
               })
               .then(done)
               .catch(done)
@@ -166,8 +176,8 @@ describe('Plugin', () => {
 
         it('should be configured with the correct values', done => {
           agent
-            .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('service', 'custom')
+            .assertFirstTraceSpan({
+              service: 'custom'
             })
             .then(done)
             .catch(done)
@@ -192,8 +202,10 @@ describe('Plugin', () => {
 
           it('trace should contain memcached.command', done => {
             agent
-              .assertSomeTraces(traces => {
-                expect(traces[0][0].meta).to.have.property('memcached.command', 'version')
+              .assertFirstTraceSpan({
+                meta: {
+                  'memcached.command': 'version'
+                }
               })
               .then(done)
               .catch(done)
