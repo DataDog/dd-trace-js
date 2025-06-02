@@ -57,14 +57,14 @@ function isExcluded (callsite, externallyExcludedPaths) {
     excludedPaths = [...excludedPaths, ...externallyExcludedPaths]
   }
 
-  for (let i = 0; i < excludedPaths.length; i++) {
-    if (filename.includes(excludedPaths[i])) {
+  for (const excludedPath of excludedPaths) {
+    if (filename.includes(excludedPath)) {
       return true
     }
   }
 
-  for (let i = 0; i < EXCLUDED_PATH_PREFIXES.length; i++) {
-    if (filename.indexOf(EXCLUDED_PATH_PREFIXES[i]) === 0) {
+  for (const EXCLUDED_PATH_PREFIX of EXCLUDED_PATH_PREFIXES) {
+    if (filename.indexOf(EXCLUDED_PATH_PREFIX) === 0) {
       return true
     }
   }
