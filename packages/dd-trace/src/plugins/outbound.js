@@ -26,6 +26,10 @@ class OutboundPlugin extends TracingPlugin {
     })
   }
 
+  bindFinish (ctx) {
+    return ctx.parentStore
+  }
+
   startSpan (...args) {
     const span = super.startSpan(...args)
     if (
