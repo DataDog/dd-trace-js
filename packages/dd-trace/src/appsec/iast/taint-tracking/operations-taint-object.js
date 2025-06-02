@@ -57,7 +57,7 @@ function traverseAndTaint (node, path, cache, transactionId) {
   if (node == null) return node
 
   if (typeof node === 'string') {
-    if (cache.has(path)) {
+    if (cache.get(path) === node) {
       return cache.get(path)
     }
 
