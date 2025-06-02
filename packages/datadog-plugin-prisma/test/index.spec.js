@@ -150,7 +150,8 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
           })
           await Promise.all([
-            prismaClient.$queryRaw`INVALID`.catch(e => {
+            // This will throw an error because no data object is provided
+            prismaClient.User.create({}).catch(e => {
               error = e
             }),
             tracingPromise

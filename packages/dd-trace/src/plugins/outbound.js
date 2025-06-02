@@ -86,6 +86,14 @@ class OutboundPlugin extends TracingPlugin {
     return peerData
   }
 
+  bindAsyncStart (ctx) {
+    return this.bindFinish(ctx)
+  }
+
+  asyncStart (ctx) {
+    this.finish(ctx)
+  }
+
   bindFinish (ctx) {
     return ctx.parentStore
   }

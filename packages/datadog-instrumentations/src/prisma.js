@@ -2,15 +2,12 @@
 
 const {
   channel,
-  addHook,
-  AsyncResource
+  addHook
 } = require('./helpers/instrument')
 
-const primsaClientStartCH = channel('apm:prisma:client:start')
-const primsaClientFinishCH = channel('apm:prisma:client:finish')
-const prismaClientErrorCH = channel('apm:prisma:client:error')
-
 const prismaEngineStart = channel('apm:prisma:engine:start')
+const tracingChannel = require('dc-polyfill').tracingChannel
+const clientCH = tracingChannel('apm:prisma:client')
 
 const allowedClientSpanOperations = new Set([
   'operation',
@@ -47,40 +44,16 @@ class TracingHelper {
     }
 
     if (allowedClientSpanOperations.has(options.name)) {
-      const asyncResource = new AsyncResource('bound-anonymous-fn')
       const ctx = {
         resourceName: options.name,
         attributes: options.attributes || {}
       }
 
-      return asyncResource.runInAsyncScope(() => {
-        if (!primsaClientStartCH.hasSubscribers) {
-          return callback.apply(this, ctx)
-        }
-        primsaClientStartCH.publish(ctx)
-        try {
-          const result = callback.apply(this, ctx)
-          if (typeof result?.then === 'function') {
-            result.catch((error) => {
-              prismaClientErrorCH.publish({ error, ctx })
-              throw error
-            })
-              .finally(() => {
-                if (primsaClientFinishCH.hasSubscribers) {
-                  primsaClientFinishCH.publish()
-                }
-              })
-          } else {
-            if (primsaClientFinishCH.hasSubscribers) {
-              primsaClientFinishCH.publish()
-            }
-          }
-          return result
-        } catch (error) {
-          prismaClientErrorCH.publish({ error, ctx })
-          throw error
-        }
-      })
+      if (options.name === 'operation' || options.name === 'transaction') {
+        return clientCH.tracePromise(callback, ctx, this, ...arguments)
+      }
+
+      return clientCH.traceSync(callback, ctx, this, ...arguments)
     }
     return callback()
   }
