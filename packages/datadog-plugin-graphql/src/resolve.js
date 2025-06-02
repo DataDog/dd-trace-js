@@ -122,7 +122,7 @@ function getResolverInfo (info, args) {
   let resolverInfo = null
   const resolverVars = {}
 
-  if (args && Object.keys(args).length) {
+  if (args) {
     Object.assign(resolverVars, args)
   }
 

@@ -1,6 +1,6 @@
 'use strict'
 
-module.exports = (object, path) => {
+module.exports = function get (object, path) {
   const pathArr = path.split('.')
   let val = object
   for (const p of pathArr) {

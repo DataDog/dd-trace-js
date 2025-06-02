@@ -244,12 +244,9 @@ class Profiler extends EventEmitter {
       for (const { profiler, profile } of profiles) {
         try {
           const encoded = await profiler.encode(profile)
-          let compressed
-          if (encoded instanceof Buffer && this._compressionFn !== undefined) {
-            compressed = await this._compressionFn(encoded, this._compressionOptions)
-          } else {
-            compressed = encoded
-          }
+          const compressed = encoded instanceof Buffer && this._compressionFn !== undefined
+            ? await this._compressionFn(encoded, this._compressionOptions)
+            : encoded
           encodedProfiles[profiler.type] = compressed
           this._logger.debug(() => {
             const profileJson = JSON.stringify(profile, (key, value) => {
