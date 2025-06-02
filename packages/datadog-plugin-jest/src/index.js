@@ -31,7 +31,8 @@ const {
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_HAS_FAILED_ALL_RETRIES,
-  TEST_RETRY_REASON_TYPES
+  TEST_RETRY_REASON_TYPES,
+  TEST_IS_MODIFIED
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -185,6 +186,7 @@ class JestPlugin extends CiPlugin {
         config._ddFlakyTestRetriesCount = this.libraryConfig?.flakyTestRetriesCount
         config._ddIsDiEnabled = this.libraryConfig?.isDiEnabled ?? false
         config._ddIsKnownTestsEnabled = this.libraryConfig?.isKnownTestsEnabled ?? false
+        config._ddIsImpactedTestsEnabled = this.libraryConfig?.isImpactedTestsEnabled ?? false
       })
     })
 
@@ -436,7 +438,8 @@ class JestPlugin extends CiPlugin {
       isAttemptToFixRetry,
       isJestRetry,
       isDisabled,
-      isQuarantined
+      isQuarantined,
+      isModified
     } = test
 
     const extraTags = {
@@ -461,6 +464,12 @@ class JestPlugin extends CiPlugin {
     if (isAttemptToFixRetry) {
       extraTags[TEST_IS_RETRY] = 'true'
       extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.atf
+    } else if (isEfdRetry) {
+      extraTags[TEST_IS_RETRY] = 'true'
+      extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.efd
+    } else if (isJestRetry) {
+      extraTags[TEST_IS_RETRY] = 'true'
+      extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.ext
     }
 
     if (isDisabled) {
@@ -471,17 +480,12 @@ class JestPlugin extends CiPlugin {
       extraTags[TEST_MANAGEMENT_IS_QUARANTINED] = 'true'
     }
 
-    if (isNew) {
-      extraTags[TEST_IS_NEW] = 'true'
-      if (isEfdRetry) {
-        extraTags[TEST_IS_RETRY] = 'true'
-        extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.efd
-      }
+    if (isModified) {
+      extraTags[TEST_IS_MODIFIED] = 'true'
     }
 
-    if (isJestRetry) {
-      extraTags[TEST_IS_RETRY] = 'true'
-      extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.ext
+    if (isNew) {
+      extraTags[TEST_IS_NEW] = 'true'
     }
 
     return super.startTestSpan(name, suite, this.testSuiteSpan, extraTags)
