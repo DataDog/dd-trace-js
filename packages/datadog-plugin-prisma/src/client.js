@@ -1,14 +1,17 @@
 'use strict'
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
-
-class PrismaCLientPlugin extends DatabasePlugin {
+class PrismaClientPlugin extends DatabasePlugin {
   static get id () { return 'prisma' }
   static get operation () { return 'client' }
   static get system () { return 'prisma' }
+  static get prefix () {
+    return 'tracing:apm:prisma:client'
+  }
 
-  start (ctx) {
+  bindStart (ctx) {
     const service = this.serviceName({ pluginConfig: this.config })
     const resource = formatResourceName(ctx.resourceName, ctx.attributes)
+
     const options = { service, resource }
 
     if (ctx.resourceName === 'operation') {
@@ -20,7 +23,24 @@ class PrismaCLientPlugin extends DatabasePlugin {
         }
       }
     }
-    this.startSpan(this.operationName({ operation: this.operation }), options)
+    const operationName = this.operationName({ operation: this.operation })
+    this.startSpan(operationName, options, ctx)
+
+    return ctx.currentStore
+  }
+
+  end (ctx) {
+    // Only synchronous operations would have `result` on `end`.
+    if (!ctx.hasOwnProperty('result')) return
+    this.finish(ctx)
+  }
+
+  asyncStart (ctx) {
+    super.asyncStart(ctx)
+  }
+
+  error (error) {
+    this.addError(error)
   }
 }
 
@@ -34,4 +54,4 @@ function formatResourceName (resource, attributes) {
   return resource
 }
 
-module.exports = PrismaCLientPlugin
+module.exports = PrismaClientPlugin
