@@ -95,7 +95,7 @@ class Sqs extends BaseAwsSdkPlugin {
     // 'https://sqs.us-east-1.amazonaws.com/123456789012/my-queue';
     let queueName = params.QueueName
     if (params.QueueUrl) {
-      queueName = params.QueueUrl.split('/')[params.QueueUrl.split('/').length - 1]
+      queueName = params.QueueUrl.split('/').at(-1)
     }
 
     Object.assign(tags, {

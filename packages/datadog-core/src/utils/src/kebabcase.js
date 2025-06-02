@@ -1,6 +1,6 @@
 'use strict'
 
-module.exports = str => {
+module.exports = function kebabcase (str) {
   if (typeof str !== 'string') {
     throw new TypeError('Expected a string')
   }

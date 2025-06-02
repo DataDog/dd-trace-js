@@ -27,9 +27,7 @@ class HeaderInjectionAnalyzer extends InjectionAnalyzer {
   onConfigure () {
     this.addSub('datadog:http:server:response:set-header:finish', ({ name, value }) => {
       if (Array.isArray(value)) {
-        for (let i = 0; i < value.length; i++) {
-          const headerValue = value[i]
-
+        for (const headerValue of value) {
           this.analyze({ name, value: headerValue })
         }
       } else {

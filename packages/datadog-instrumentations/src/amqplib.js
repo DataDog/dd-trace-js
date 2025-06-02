@@ -16,7 +16,6 @@ const commandErrorCh = channel('apm:amqplib:command:error')
 
 const consumeStartCh = channel('apm:amqplib:consume:start')
 const consumeFinishCh = channel('apm:amqplib:consume:finish')
-// const consumeErrorCh = channel('apm:amqplib:consume:error')
 
 const publishStartCh = channel('apm:amqplib:publish:start')
 const publishFinishCh = channel('apm:amqplib:publish:finish')

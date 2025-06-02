@@ -6,7 +6,16 @@ const log = require('../../log')
 const istanbul = require('istanbul-lib-coverage')
 const ignore = require('ignore')
 
-const { getGitMetadata } = require('./git')
+const {
+  getGitMetadata,
+  getGitDiff,
+  getGitRemoteName,
+  getSourceBranch,
+  checkAndFetchBranch,
+  getLocalBranches,
+  getMergeBase,
+  getCounts
+} = require('./git')
 const { getUserProviderGitMetadata, validateGitRepositoryUrl, validateGitCommitSha } = require('./user-provided-git')
 const { getCIMetadata } = require('./ci')
 const { getRuntimeAndOSMetadata } = require('./env')
@@ -59,7 +68,7 @@ const TEST_EARLY_FLAKE_ENABLED = 'test.early_flake.enabled'
 const TEST_EARLY_FLAKE_ABORT_REASON = 'test.early_flake.abort_reason'
 const TEST_RETRY_REASON = 'test.retry_reason'
 const TEST_HAS_FAILED_ALL_RETRIES = 'test.has_failed_all_retries'
-
+const TEST_IS_MODIFIED = 'test.is_modified'
 const CI_APP_ORIGIN = 'ciapp-test'
 
 const JEST_TEST_RUNNER = 'test.jest.test_runner'
@@ -107,12 +116,14 @@ const EFD_TEST_NAME_REGEX = new RegExp(EFD_STRING + String.raw` \(#\d+\): `, 'g'
 const DD_CAPABILITIES_TEST_IMPACT_ANALYSIS = '_dd.library_capabilities.test_impact_analysis'
 const DD_CAPABILITIES_EARLY_FLAKE_DETECTION = '_dd.library_capabilities.early_flake_detection'
 const DD_CAPABILITIES_AUTO_TEST_RETRIES = '_dd.library_capabilities.auto_test_retries'
+const DD_CAPABILITIES_IMPACTED_TESTS = '_dd.library_capabilities.impacted_tests'
 const DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE = '_dd.library_capabilities.test_management.quarantine'
 const DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE = '_dd.library_capabilities.test_management.disable'
 const DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX = '_dd.library_capabilities.test_management.attempt_to_fix'
 const UNSUPPORTED_TIA_FRAMEWORKS = new Set(['playwright', 'vitest'])
 const UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE = new Set(['cucumber', 'mocha'])
 const UNSUPPORTED_ATTEMPT_TO_FIX_FRAMEWORKS_PARALLEL_MODE = new Set(['mocha'])
+const NOT_SUPPORTED_GRANULARITY_IMPACTED_TESTS_FRAMEWORKS = new Set(['mocha', 'playwright', 'vitest'])
 
 const TEST_LEVEL_EVENT_TYPES = [
   'test',
@@ -147,6 +158,10 @@ const TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED = 'test.test_management.attempt_to_f
 const ATTEMPT_TO_FIX_STRING = "Retried by Datadog's Test Management"
 const ATTEMPT_TEST_NAME_REGEX = new RegExp(ATTEMPT_TO_FIX_STRING + String.raw` \(#\d+\): `, 'g')
 
+// Impacted tests
+const POSSIBLE_BASE_BRANCHES = ['main', 'master', 'preprod', 'prod', 'dev', 'development', 'trunk']
+const BASE_LIKE_BRANCH_FILTER = /^(main|master|preprod|prod|dev|development|trunk|release\/.*|hotfix\/.*)$/
+
 module.exports = {
   TEST_CODE_OWNERS,
   TEST_SESSION_NAME,
@@ -180,6 +195,7 @@ module.exports = {
   TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_RETRY_REASON,
   TEST_HAS_FAILED_ALL_RETRIES,
+  TEST_IS_MODIFIED,
   getTestEnvironmentMetadata,
   getTestParametersString,
   finishAllTraceSpans,
@@ -212,6 +228,7 @@ module.exports = {
   mergeCoverage,
   fromCoverageMapToCoverage,
   getTestLineStart,
+  getTestEndLine,
   removeInvalidMetadata,
   parseAnnotations,
   EFD_STRING,
@@ -229,6 +246,7 @@ module.exports = {
   DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
   DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
   DD_CAPABILITIES_AUTO_TEST_RETRIES,
+  DD_CAPABILITIES_IMPACTED_TESTS,
   DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
   DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
   DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
@@ -248,7 +266,12 @@ module.exports = {
   TEST_MANAGEMENT_IS_QUARANTINED,
   TEST_MANAGEMENT_ENABLED,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
-  getLibraryCapabilitiesTags
+  getLibraryCapabilitiesTags,
+  getPullRequestDiff,
+  getPullRequestBaseBranch,
+  getModifiedTestsFromDiff,
+  isModifiedTest,
+  POSSIBLE_BASE_BRANCHES
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
@@ -619,6 +642,13 @@ function getTestLineStart (err, testSuitePath) {
   }
 }
 
+// Get the end line of a test by inspecting a given function's source code
+function getTestEndLine (testFn, startLine = 0) {
+  const source = testFn.toString()
+  const lineCount = source.split('\n').length
+  return startLine + lineCount - 1
+}
+
 /**
  * Gets an object of test tags from an Playwright annotations array.
  * @param {Object[]} annotations - Annotations from a Playwright test.
@@ -755,32 +785,170 @@ function getFormattedError (error, repositoryRoot) {
   return newError
 }
 
+function isTiaSupported (testFramework, isParallel) {
+  return !(UNSUPPORTED_TIA_FRAMEWORKS.has(testFramework) ||
+           (isParallel && UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE.has(testFramework)))
+}
+
+function isAttemptToFixSupported (testFramework, isParallel) {
+  return !(isParallel && UNSUPPORTED_ATTEMPT_TO_FIX_FRAMEWORKS_PARALLEL_MODE.has(testFramework))
+}
+
 function getLibraryCapabilitiesTags (testFramework, isParallel) {
-  function isTiaSupported (testFramework, isParallel) {
-    if (UNSUPPORTED_TIA_FRAMEWORKS.has(testFramework)) {
-      return false
-    }
-    if (isParallel && UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE.has(testFramework)) {
-      return false
-    }
-    return true
-  }
-
-  function isAttemptToFixSupported (testFramework, isParallel) {
-    if (isParallel && UNSUPPORTED_ATTEMPT_TO_FIX_FRAMEWORKS_PARALLEL_MODE.has(testFramework)) {
-      return false
-    }
-    return true
-  }
-
   return {
     [DD_CAPABILITIES_TEST_IMPACT_ANALYSIS]: isTiaSupported(testFramework, isParallel) ? '1' : undefined,
     [DD_CAPABILITIES_EARLY_FLAKE_DETECTION]: '1',
     [DD_CAPABILITIES_AUTO_TEST_RETRIES]: '1',
+    [DD_CAPABILITIES_IMPACTED_TESTS]: '1',
     [DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE]: '1',
     [DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE]: '1',
     [DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX]: isAttemptToFixSupported(testFramework, isParallel)
       ? '4'
       : undefined
   }
+}
+
+function getPullRequestBaseBranch (pullRequestBaseBranch) {
+  const remoteName = getGitRemoteName()
+
+  const sourceBranch = getSourceBranch()
+  const shortBranchName = sourceBranch.replace(new RegExp(`^${remoteName}/`), '')
+  if (BASE_LIKE_BRANCH_FILTER.test(shortBranchName)) {
+    return null
+  }
+  // TODO: We will get the default branch name from the backend in the future.
+  const POSSIBLE_DEFAULT_BRANCHES = ['main', 'master']
+
+  const candidateBranches = []
+  if (pullRequestBaseBranch) {
+    checkAndFetchBranch(pullRequestBaseBranch, remoteName)
+    candidateBranches.push(pullRequestBaseBranch)
+  } else {
+    for (const branch of POSSIBLE_BASE_BRANCHES) {
+      checkAndFetchBranch(branch, remoteName)
+    }
+
+    const localBranches = getLocalBranches(remoteName)
+    for (const branch of localBranches) {
+      if (branch !== sourceBranch && BASE_LIKE_BRANCH_FILTER.test(branch)) {
+        candidateBranches.push(branch)
+      }
+    }
+  }
+
+  if (candidateBranches.length === 1) {
+    return getMergeBase(candidateBranches[0], sourceBranch)
+  }
+
+  const metrics = {}
+  for (const candidate of candidateBranches) {
+    // Find common ancestor
+    const baseSha = getMergeBase(candidate, sourceBranch)
+    if (!baseSha) {
+      continue
+    }
+    // Count commits ahead/behind
+    const counts = getCounts(candidate, sourceBranch)
+    if (!counts) {
+      continue
+    }
+    const behind = counts.behind
+    const ahead = counts.ahead
+    metrics[candidate] = {
+      behind,
+      ahead,
+      baseSha
+    }
+  }
+
+  function isDefaultBranch (branch) {
+    return POSSIBLE_DEFAULT_BRANCHES.some(defaultBranch =>
+      branch === defaultBranch || branch === `${remoteName}/${defaultBranch}`
+    )
+  }
+
+  if (Object.keys(metrics).length === 0) {
+    return null
+  }
+  // Find branch with smallest "ahead" value, preferring default branch on tie
+  let bestBranch = null
+  let bestScore = Infinity
+  for (const branch of Object.keys(metrics)) {
+    const score = metrics[branch].ahead
+    if (score < bestScore) {
+      bestScore = score
+      bestBranch = branch
+    } else if (score === bestScore && isDefaultBranch(branch)) {
+      bestScore = score
+      bestBranch = branch
+    }
+  }
+  return bestBranch ? metrics[bestBranch].baseSha : null
+}
+
+function getPullRequestDiff (baseCommit, targetCommit) {
+  if (!baseCommit) {
+    return
+  }
+  return getGitDiff(baseCommit, targetCommit)
+}
+
+function getModifiedTestsFromDiff (diff) {
+  if (!diff) return null
+  const result = {}
+
+  const filesRegex = /^diff --git a\/(?<file>.+) b\/(?<file2>.+)$/g
+  const linesRegex = /^@@ -\d+(,\d+)? \+(?<start>\d+)(,(?<count>\d+))? @@/g
+
+  let currentFile = null
+
+  // Go line by line
+  const lines = diff.split('\n')
+  for (const line of lines) {
+    // Check for new file
+    const fileMatch = filesRegex.exec(line)
+    if (fileMatch && fileMatch.groups.file) {
+      currentFile = fileMatch.groups.file
+      result[currentFile] = []
+      continue
+    }
+
+    // Check for changed lines
+    const lineMatch = linesRegex.exec(line)
+    if (lineMatch && currentFile) {
+      const start = Number(lineMatch.groups.start)
+      const count = lineMatch.groups.count ? Number(lineMatch.groups.count) : 1
+      for (let j = 0; j < count; j++) {
+        result[currentFile].push(start + j)
+      }
+    }
+
+    // Reset regexes to allow re-use
+    filesRegex.lastIndex = 0
+    linesRegex.lastIndex = 0
+  }
+
+  if (Object.keys(result).length === 0) {
+    return null
+  }
+  return result
+}
+
+function isModifiedTest (testPath, testStartLine, testEndLine, modifiedTests, testFramework) {
+  if (modifiedTests === undefined) {
+    return false
+  }
+
+  const lines = modifiedTests[testPath]
+  if (!lines) {
+    return false
+  }
+
+  // For unsupported frameworks, consider the test modified if any lines were changed
+  if (NOT_SUPPORTED_GRANULARITY_IMPACTED_TESTS_FRAMEWORKS.has(testFramework)) {
+    return lines.length > 0
+  }
+
+  // For supported frameworks, check if the test's line range overlaps with modified lines
+  return lines.some(line => line >= testStartLine && line <= testEndLine)
 }
