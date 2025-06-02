@@ -12,11 +12,11 @@ const prismaClientErrorCH = channel('apm:prisma:client:error')
 
 const prismaEngineStart = channel('apm:prisma:engine:start')
 
-const allowedClientSpanOperations = [
+const allowedClientSpanOperations = new Set([
   'operation',
   'serialize',
   'transaction'
-]
+])
 
 class TracingHelper {
   dbConfig = null
@@ -46,7 +46,7 @@ class TracingHelper {
       }
     }
 
-    if (allowedClientSpanOperations.includes(options.name)) {
+    if (allowedClientSpanOperations.has(options.name)) {
       const asyncResource = new AsyncResource('bound-anonymous-fn')
       const ctx = {
         resourceName: options.name,
@@ -116,7 +116,6 @@ addHook({ name: '@prisma/client', versions: ['>=6.1.0'] }, prisma => {
     * This is done by setting a global tacing helper that Prisma uses
     * throuthout the Prisma codebase
   */
-  // eslint-disable-next-line @stylistic/js/max-len
   // https://github.com/prisma/prisma/blob/478293bbfce91e41ceff02f2a0b03bb8acbca03e/packages/instrumentation/src/PrismaInstrumentation.ts#L42
   global.PRISMA_INSTRUMENTATION = {
     helper: tracingHelper
