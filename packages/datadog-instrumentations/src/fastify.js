@@ -6,6 +6,8 @@ const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const errorChannel = channel('apm:fastify:middleware:error')
 const handleChannel = channel('apm:fastify:request:handle')
 const routeAddedChannel = channel('apm:fastify:route:added')
+const fastifyBodyParserChannel = channel('datadog:fastify:body-parser:finish')
+const processQueryParamsStartCh = channel('datadog:fastify:query-params:start')
 
 const parsingResources = new WeakMap()
 
@@ -108,11 +110,37 @@ function preHandler (request, reply, done) {
 
 function preValidation (request, reply, done) {
   const req = getReq(request)
+  const res = getRes(reply)
   const parsingResource = parsingResources.get(req)
 
-  if (!parsingResource) return done()
+  const processInContext = () => {
+    if (request.query && processQueryParamsStartCh.hasSubscribers) {
+      const abortController = new AbortController()
 
-  parsingResource.runInAsyncScope(() => done())
+      processQueryParamsStartCh.publish({
+        req,
+        res,
+        abortController,
+        query: request.query
+      })
+
+      if (abortController.signal.aborted) return
+    }
+
+    if (fastifyBodyParserChannel.hasSubscribers && request.body !== undefined) {
+      const abortController = new AbortController()
+
+      fastifyBodyParserChannel.publish({ req, res, body: request.body, abortController })
+
+      if (abortController.signal.aborted) return
+    }
+
+    done()
+  }
+
+  if (!parsingResource) return processInContext()
+
+  parsingResource.runInAsyncScope(processInContext)
 }
 
 function preParsing (request, reply, payload, done) {

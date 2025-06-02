@@ -7,6 +7,7 @@ module.exports = {
   bodyParser: dc.channel('datadog:body-parser:read:finish'),
   cookieParser: dc.channel('datadog:cookie-parser:read:finish'),
   multerParser: dc.channel('datadog:multer:read:finish'),
+  fastifyBodyParser: dc.channel('datadog:fastify:body-parser:finish'),
   startGraphqlResolve: dc.channel('datadog:graphql:resolver:start'),
   graphqlMiddlewareChannel: dc.tracingChannel('datadog:apollo:middleware'),
   apolloChannel: dc.tracingChannel('datadog:apollo:request'),
@@ -33,5 +34,6 @@ module.exports = {
   wafRunFinished: dc.channel('datadog:waf:run:finish'),
   fsOperationStart: dc.channel('apm:fs:operation:start'),
   expressMiddlewareError: dc.channel('apm:express:middleware:error'),
-  childProcessExecutionTracingChannel: dc.tracingChannel('datadog:child_process:execution')
+  childProcessExecutionTracingChannel: dc.tracingChannel('datadog:child_process:execution'),
+  fastifyQueryParamsStart: dc.channel('datadog:fastify:query-params:start')
 }
