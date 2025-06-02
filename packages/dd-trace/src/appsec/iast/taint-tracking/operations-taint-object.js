@@ -60,7 +60,7 @@ function traverseAndTaint (node, path, cache, transactionId) {
     if (cache.has(path)) {
       return cache.get(path)
     }
-    
+
     const tainted = TaintedUtils.newTaintedString(transactionId, node, path, HTTP_REQUEST_PARAMETER)
     cache.set(path, tainted)
     return tainted
@@ -68,14 +68,14 @@ function traverseAndTaint (node, path, cache, transactionId) {
 
   if (typeof node === 'object') {
     const keys = Array.isArray(node) ? node.keys() : Object.keys(node)
-    
+
     for (const key of keys) {
       const childPath = path ? `${path}${SEPARATOR}${key}` : String(key)
       const tainted = traverseAndTaint(node[key], childPath, cache, transactionId)
       node[key] = tainted
     }
   }
-  
+
   return node
 }
 
