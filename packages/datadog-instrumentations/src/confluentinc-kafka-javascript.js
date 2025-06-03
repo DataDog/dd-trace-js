@@ -53,7 +53,7 @@ function instrumentBaseModule (module) {
         // Hook the produce method
         if (typeof producer?.produce === 'function') {
           shimmer.wrap(producer, 'produce', function wrapProduce (produce) {
-            return function wrappedProduce (topic, partition, message, key, timestamp, opaque) {
+            return function wrappedProduce (topic, partition, message, key, timestamp, opaque, headers) {
               if (!channels.producerStart.hasSubscribers) {
                 return produce.apply(this, arguments)
               }
