@@ -132,7 +132,7 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/le
   shimmer.wrap(LeaseManager.prototype, '_dispense', dispense => function (message) {
     if (receiveStartCh.hasSubscribers) {
       ctx.message = message
-      receiveStartCh.runStores(ctx, dispense, this, ...arguments)
+      return receiveStartCh.runStores(ctx, dispense, this, ...arguments)
     } else {
       return dispense.apply(this, arguments)
     }
