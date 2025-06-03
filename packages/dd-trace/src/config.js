@@ -105,7 +105,7 @@ function validateEnvVarType (envVar) {
     case 'OTEL_TRACES_SAMPLER':
       return getFromOtelSamplerMap(value, process.env.OTEL_TRACES_SAMPLER_ARG) !== undefined
     case 'OTEL_TRACES_SAMPLER_ARG':
-      return !isNaN(parseFloat(value))
+      return !Number.isNaN(Number.parseFloat(value))
     case 'OTEL_SDK_DISABLED':
       return value.toLowerCase() === 'true' || value.toLowerCase() === 'false'
     case 'OTEL_TRACES_EXPORTER':
@@ -131,15 +131,12 @@ function checkIfBothOtelAndDdEnvVarSet () {
   }
 }
 
-const fromEntries = Object.fromEntries || (entries =>
-  entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
-
-// eslint-disable-next-line @stylistic/js/max-len
-const qsRegex = '(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\\s|%20)*(?:=|%3D)[^&]+|(?:"|%22)(?:\\s|%20)*(?::|%3A)(?:\\s|%20)*(?:"|%22)(?:%2[^2]|%[^2]|[^"%])+(?:"|%22))|bearer(?:\\s|%20)+[a-z0-9\\._\\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\\w=-]|%3D)+\\.ey[I-L](?:[\\w=-]|%3D)+(?:\\.(?:[\\w.+\\/=-]|%3D|%2F|%2B)+)?|[\\-]{5}BEGIN(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY[\\-]{5}[^\\-]+[\\-]{5}END(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY|ssh-rsa(?:\\s|%20)*(?:[a-z0-9\\/\\.+]|%2F|%5C|%2B){100,}'
-// eslint-disable-next-line @stylistic/js/max-len
-const defaultWafObfuscatorKeyRegex = '(?i)pass|pw(?:or)?d|secret|(?:api|private|public|access)[_-]?key|token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)|bearer|authorization|jsessionid|phpsessid|asp\\.net[_-]sessionid|sid|jwt'
-// eslint-disable-next-line @stylistic/js/max-len
-const defaultWafObfuscatorValueRegex = '(?i)(?:p(?:ass)?w(?:or)?d|pass(?:[_-]?phrase)?|secret(?:[_-]?key)?|(?:(?:api|private|public|access)[_-]?)key(?:[_-]?id)?|(?:(?:auth|access|id|refresh)[_-]?)?token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?|jsessionid|phpsessid|asp\\.net(?:[_-]|-)sessionid|sid|jwt)(?:\\s*=[^;]|"\\s*:\\s*"[^"]+")|bearer\\s+[a-z0-9\\._\\-]+|token:[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=-]+\\.ey[I-L][\\w=-]+(?:\\.[\\w.+\\/=-]+)?|[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}'
+// eslint-disable-next-line @stylistic/max-len
+const qsRegex = String.raw`(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\s|%20)*(?:=|%3D)[^&]+|(?:"|%22)(?:\s|%20)*(?::|%3A)(?:\s|%20)*(?:"|%22)(?:%2[^2]|%[^2]|[^"%])+(?:"|%22))|bearer(?:\s|%20)+[a-z0-9\._\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\w=-]|%3D)+\.ey[I-L](?:[\w=-]|%3D)+(?:\.(?:[\w.+\/=-]|%3D|%2F|%2B)+)?|[\-]{5}BEGIN(?:[a-z\s]|%20)+PRIVATE(?:\s|%20)KEY[\-]{5}[^\-]+[\-]{5}END(?:[a-z\s]|%20)+PRIVATE(?:\s|%20)KEY|ssh-rsa(?:\s|%20)*(?:[a-z0-9\/\.+]|%2F|%5C|%2B){100,}`
+// eslint-disable-next-line @stylistic/max-len
+const defaultWafObfuscatorKeyRegex = String.raw`(?i)pass|pw(?:or)?d|secret|(?:api|private|public|access)[_-]?key|token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)|bearer|authorization|jsessionid|phpsessid|asp\.net[_-]sessionid|sid|jwt`
+// eslint-disable-next-line @stylistic/max-len
+const defaultWafObfuscatorValueRegex = String.raw`(?i)(?:p(?:ass)?w(?:or)?d|pass(?:[_-]?phrase)?|secret(?:[_-]?key)?|(?:(?:api|private|public|access)[_-]?)key(?:[_-]?id)?|(?:(?:auth|access|id|refresh)[_-]?)?token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?|jsessionid|phpsessid|asp\.net(?:[_-]|-)sessionid|sid|jwt)(?:\s*=([^;&]+)|"\s*:\s*("[^"]+"|\d+))|bearer\s+([a-z0-9\._\-]+)|token\s*:\s*([a-z0-9]{13})|gh[opsu]_([0-9a-zA-Z]{36})|ey[I-L][\w=-]+\.(ey[I-L][\w=-]+(?:\.[\w.+\/=-]+)?)|[\-]{5}BEGIN[a-z\s]+PRIVATE\sKEY[\-]{5}([^\-]+)[\-]{5}END[a-z\s]+PRIVATE\sKEY|ssh-rsa\s*([a-z0-9\/\.+]{100,})`
 const runtimeId = uuid()
 
 function maybeFile (filepath) {
@@ -148,26 +145,23 @@ function maybeFile (filepath) {
     return fs.readFileSync(filepath, 'utf8')
   } catch (e) {
     log.error('Error reading file %s', filepath, e)
-    return undefined
   }
 }
 
 function safeJsonParse (input) {
   try {
     return JSON.parse(input)
-  } catch (err) {
-    return undefined
-  }
+  } catch {}
 }
 
-const namingVersions = ['v0', 'v1']
+const namingVersions = new Set(['v0', 'v1'])
 const defaultNamingVersion = 'v0'
 
 function validateNamingVersion (versionString) {
   if (!versionString) {
     return defaultNamingVersion
   }
-  if (!namingVersions.includes(versionString)) {
+  if (!namingVersions.has(versionString)) {
     log.warn(
       `Unexpected input for config.spanAttributeSchema, picked default ${defaultNamingVersion}`
     )
@@ -245,8 +239,8 @@ class Config {
 
     options = {
       ...options,
-      appsec: options.appsec != null ? options.appsec : options.experimental?.appsec,
-      iast: options.iast != null ? options.iast : options.experimental?.iast
+      appsec: options.appsec == null ? options.experimental?.appsec : options.appsec,
+      iast: options.iast == null ? options.experimental?.iast : options.iast
     }
 
     // Configure the logger first so it can be used to warn about other configs
@@ -429,8 +423,7 @@ class Config {
     )
     const defaultPropagationStyle = ['datadog', 'tracecontext']
     if (isTrue(DD_TRACE_B3_ENABLED)) {
-      defaultPropagationStyle.push('b3')
-      defaultPropagationStyle.push('b3 single header')
+      defaultPropagationStyle.push('b3', 'b3 single header')
     }
     return defaultPropagationStyle
   }
@@ -460,16 +453,20 @@ class Config {
     this._setBoolean(defaults, 'apmTracingEnabled', true)
     this._setValue(defaults, 'appsec.apiSecurity.enabled', true)
     this._setValue(defaults, 'appsec.apiSecurity.sampleDelay', 30)
-    this._setValue(defaults, 'appsec.blockedTemplateGraphql', undefined)
-    this._setValue(defaults, 'appsec.blockedTemplateHtml', undefined)
-    this._setValue(defaults, 'appsec.blockedTemplateJson', undefined)
-    this._setValue(defaults, 'appsec.enabled', undefined)
+    this._setValue(defaults, 'appsec.blockedTemplateGraphql')
+    this._setValue(defaults, 'appsec.blockedTemplateHtml')
+    this._setValue(defaults, 'appsec.blockedTemplateJson')
+    this._setValue(defaults, 'appsec.enabled')
     this._setValue(defaults, 'appsec.eventTracking.mode', 'identification')
+    this._setValue(defaults, 'appsec.extendedHeadersCollection.enabled', false)
+    this._setValue(defaults, 'appsec.extendedHeadersCollection.redaction', true)
+    this._setValue(defaults, 'appsec.extendedHeadersCollection.maxHeaders', 50)
     this._setValue(defaults, 'appsec.obfuscatorKeyRegex', defaultWafObfuscatorKeyRegex)
     this._setValue(defaults, 'appsec.obfuscatorValueRegex', defaultWafObfuscatorValueRegex)
     this._setValue(defaults, 'appsec.rasp.enabled', true)
+    this._setValue(defaults, 'appsec.rasp.bodyCollection', false)
     this._setValue(defaults, 'appsec.rateLimit', 100)
-    this._setValue(defaults, 'appsec.rules', undefined)
+    this._setValue(defaults, 'appsec.rules')
     this._setValue(defaults, 'appsec.sca.enabled', null)
     this._setValue(defaults, 'appsec.stackTrace.enabled', true)
     this._setValue(defaults, 'appsec.stackTrace.maxDepth', 32)
@@ -477,6 +474,7 @@ class Config {
     this._setValue(defaults, 'appsec.wafTimeout', 5e3) // µs
     this._setValue(defaults, 'baggageMaxBytes', 8192)
     this._setValue(defaults, 'baggageMaxItems', 64)
+    this._setValue(defaults, 'baggageTagKeys', 'user.id,session.id,account.id')
     this._setValue(defaults, 'ciVisibilityTestSessionName', '')
     this._setValue(defaults, 'clientIpEnabled', false)
     this._setValue(defaults, 'clientIpHeader', null)
@@ -490,9 +488,9 @@ class Config {
     this._setValue(defaults, 'dynamicInstrumentation.enabled', false)
     this._setValue(defaults, 'dynamicInstrumentation.redactedIdentifiers', [])
     this._setValue(defaults, 'dynamicInstrumentation.redactionExcludedIdentifiers', [])
-    this._setValue(defaults, 'env', undefined)
+    this._setValue(defaults, 'env')
     this._setValue(defaults, 'experimental.enableGetRumData', false)
-    this._setValue(defaults, 'experimental.exporter', undefined)
+    this._setValue(defaults, 'experimental.exporter')
     this._setValue(defaults, 'experimental.runtimeId', false)
     this._setValue(defaults, 'flushInterval', 2000)
     this._setValue(defaults, 'flushMinSpans', 1000)
@@ -525,10 +523,10 @@ class Config {
     this._setValue(defaults, 'isIntelligentTestRunnerEnabled', false)
     this._setValue(defaults, 'isManualApiEnabled', false)
     this._setValue(defaults, 'langchain.spanCharLimit', 128)
-    this._setValue(defaults, 'langchain.spanPromptCompletionSampleRate', 1.0)
-    this._setValue(defaults, 'llmobs.agentlessEnabled', undefined)
+    this._setValue(defaults, 'langchain.spanPromptCompletionSampleRate', 1)
+    this._setValue(defaults, 'llmobs.agentlessEnabled')
     this._setValue(defaults, 'llmobs.enabled', false)
-    this._setValue(defaults, 'llmobs.mlApp', undefined)
+    this._setValue(defaults, 'llmobs.mlApp')
     this._setValue(defaults, 'ciVisibilityTestSessionName', '')
     this._setValue(defaults, 'ciVisAgentlessLogSubmissionEnabled', false)
     this._setValue(defaults, 'legacyBaggageEnabled', true)
@@ -536,8 +534,9 @@ class Config {
     this._setValue(defaults, 'isServiceUserProvided', false)
     this._setValue(defaults, 'testManagementAttemptToFixRetries', 20)
     this._setValue(defaults, 'isTestManagementEnabled', false)
+    this._setValue(defaults, 'isImpactedTestsEnabled', false)
     this._setValue(defaults, 'logInjection', false)
-    this._setValue(defaults, 'lookup', undefined)
+    this._setValue(defaults, 'lookup')
     this._setValue(defaults, 'inferredProxyServicesEnabled', false)
     this._setValue(defaults, 'memcachedCommandEnabled', false)
     this._setValue(defaults, 'middlewareTracingEnabled', true)
@@ -546,21 +545,21 @@ class Config {
     this._setValue(defaults, 'peerServiceMapping', {})
     this._setValue(defaults, 'plugins', true)
     this._setValue(defaults, 'port', '8126')
-    this._setValue(defaults, 'profiling.enabled', undefined)
+    this._setValue(defaults, 'profiling.enabled')
     this._setValue(defaults, 'profiling.exporters', 'agent')
     this._setValue(defaults, 'profiling.sourceMap', true)
-    this._setValue(defaults, 'profiling.longLivedThreshold', undefined)
+    this._setValue(defaults, 'profiling.longLivedThreshold')
     this._setValue(defaults, 'protocolVersion', '0.4')
     this._setValue(defaults, 'queryStringObfuscation', qsRegex)
     this._setValue(defaults, 'remoteConfig.enabled', true)
     this._setValue(defaults, 'remoteConfig.pollInterval', 5) // seconds
     this._setValue(defaults, 'reportHostname', false)
     this._setValue(defaults, 'runtimeMetrics', false)
-    this._setValue(defaults, 'sampleRate', undefined)
+    this._setValue(defaults, 'sampleRate')
     this._setValue(defaults, 'sampler.rateLimit', 100)
     this._setValue(defaults, 'sampler.rules', [])
     this._setValue(defaults, 'sampler.spanSamplingRules', [])
-    this._setValue(defaults, 'scope', undefined)
+    this._setValue(defaults, 'scope')
     this._setValue(defaults, 'service', service)
     this._setValue(defaults, 'serviceMapping', {})
     this._setValue(defaults, 'site', 'datadoghq.com')
@@ -575,7 +574,7 @@ class Config {
     this._setValue(defaults, 'telemetry.debug', false)
     this._setValue(defaults, 'telemetry.dependencyCollection', true)
     this._setValue(defaults, 'telemetry.enabled', true)
-    this._setValue(defaults, 'telemetry.heartbeatInterval', 60000)
+    this._setValue(defaults, 'telemetry.heartbeatInterval', 60_000)
     this._setValue(defaults, 'telemetry.logCollection', true)
     this._setValue(defaults, 'telemetry.metrics', true)
     this._setValue(defaults, 'traceEnabled', true)
@@ -587,13 +586,13 @@ class Config {
     this._setValue(defaults, 'tracePropagationStyle.extract', ['datadog', 'tracecontext', 'baggage'])
     this._setValue(defaults, 'tracePropagationStyle.otelPropagators', false)
     this._setValue(defaults, 'tracing', true)
-    this._setValue(defaults, 'url', undefined)
+    this._setValue(defaults, 'url')
     this._setValue(defaults, 'version', pkg.version)
-    this._setValue(defaults, 'instrumentation_config_id', undefined)
+    this._setValue(defaults, 'instrumentation_config_id')
     this._setValue(defaults, 'vertexai.spanCharLimit', 128)
-    this._setValue(defaults, 'vertexai.spanPromptCompletionSampleRate', 1.0)
+    this._setValue(defaults, 'vertexai.spanPromptCompletionSampleRate', 1)
     this._setValue(defaults, 'trace.aws.addSpanPointers', true)
-    this._setValue(defaults, 'trace.dynamoDb.tablePrimaryKeys', undefined)
+    this._setValue(defaults, 'trace.dynamoDb.tablePrimaryKeys')
     this._setValue(defaults, 'trace.nativeSpanEvents', false)
   }
 
@@ -645,10 +644,13 @@ class Config {
       DD_APM_TRACING_ENABLED,
       DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE,
       DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING,
+      DD_APPSEC_COLLECT_ALL_HEADERS,
       DD_APPSEC_ENABLED,
       DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON,
+      DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED,
       DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML,
       DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON,
+      DD_APPSEC_MAX_COLLECTED_HEADERS,
       DD_APPSEC_MAX_STACK_TRACES,
       DD_APPSEC_MAX_STACK_TRACE_DEPTH,
       DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP,
@@ -657,6 +659,7 @@ class Config {
       DD_APPSEC_SCA_ENABLED,
       DD_APPSEC_STACK_TRACE_ENABLED,
       DD_APPSEC_RASP_ENABLED,
+      DD_APPSEC_RASP_COLLECT_REQUEST_BODY,
       DD_APPSEC_TRACE_RATE_LIMIT,
       DD_APPSEC_WAF_TIMEOUT,
       DD_CRASHTRACKING_ENABLED,
@@ -727,6 +730,7 @@ class Config {
       DD_TRACE_AWS_ADD_SPAN_POINTERS,
       DD_TRACE_BAGGAGE_MAX_BYTES,
       DD_TRACE_BAGGAGE_MAX_ITEMS,
+      DD_TRACE_BAGGAGE_TAG_KEYS,
       DD_TRACE_CLIENT_IP_ENABLED,
       DD_TRACE_CLIENT_IP_HEADER,
       DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS,
@@ -803,9 +807,18 @@ class Config {
       DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE,
       DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING // TODO: remove in next major
     ))
+    this._setBoolean(env, 'appsec.extendedHeadersCollection.enabled', DD_APPSEC_COLLECT_ALL_HEADERS)
+    this._setBoolean(
+      env,
+      'appsec.extendedHeadersCollection.redaction',
+      DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED
+    )
+    this._setValue(env, 'appsec.extendedHeadersCollection.maxHeaders', maybeInt(DD_APPSEC_MAX_COLLECTED_HEADERS))
+    this._envUnprocessed['appsec.extendedHeadersCollection.maxHeaders'] = DD_APPSEC_MAX_COLLECTED_HEADERS
     this._setString(env, 'appsec.obfuscatorKeyRegex', DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP)
     this._setString(env, 'appsec.obfuscatorValueRegex', DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP)
     this._setBoolean(env, 'appsec.rasp.enabled', DD_APPSEC_RASP_ENABLED)
+    this._setBoolean(env, 'appsec.rasp.bodyCollection', DD_APPSEC_RASP_COLLECT_REQUEST_BODY)
     this._setValue(env, 'appsec.rateLimit', maybeInt(DD_APPSEC_TRACE_RATE_LIMIT))
     this._envUnprocessed['appsec.rateLimit'] = DD_APPSEC_TRACE_RATE_LIMIT
     this._setString(env, 'appsec.rules', DD_APPSEC_RULES)
@@ -820,6 +833,7 @@ class Config {
     this._envUnprocessed['appsec.wafTimeout'] = DD_APPSEC_WAF_TIMEOUT
     this._setValue(env, 'baggageMaxBytes', DD_TRACE_BAGGAGE_MAX_BYTES)
     this._setValue(env, 'baggageMaxItems', DD_TRACE_BAGGAGE_MAX_ITEMS)
+    this._setValue(env, 'baggageTagKeys', DD_TRACE_BAGGAGE_TAG_KEYS)
     this._setBoolean(env, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
     this._setString(env, 'clientIpHeader', DD_TRACE_CLIENT_IP_HEADER?.toLowerCase())
     this._setBoolean(env, 'crashtracking.enabled', coalesce(
@@ -893,7 +907,7 @@ class Config {
     this._setValue(env, 'openai.spanCharLimit', maybeInt(DD_OPENAI_SPAN_CHAR_LIMIT))
     this._envUnprocessed.openaiSpanCharLimit = DD_OPENAI_SPAN_CHAR_LIMIT
     if (DD_TRACE_PEER_SERVICE_MAPPING) {
-      this._setValue(env, 'peerServiceMapping', fromEntries(
+      this._setValue(env, 'peerServiceMapping', Object.fromEntries(
         DD_TRACE_PEER_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
       ))
       this._envUnprocessed.peerServiceMapping = DD_TRACE_PEER_SERVICE_MAPPING
@@ -941,7 +955,7 @@ class Config {
     this._setString(env, 'scope', DD_TRACE_SCOPE)
     this._setString(env, 'service', DD_SERVICE || DD_SERVICE_NAME || tags.service || OTEL_SERVICE_NAME)
     if (DD_SERVICE_MAPPING) {
-      this._setValue(env, 'serviceMapping', fromEntries(
+      this._setValue(env, 'serviceMapping', Object.fromEntries(
         process.env.DD_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
       ))
     }
@@ -1018,9 +1032,24 @@ class Config {
     this._optsUnprocessed['appsec.blockedTemplateJson'] = options.appsec?.blockedTemplateJson
     this._setBoolean(opts, 'appsec.enabled', options.appsec?.enabled)
     this._setString(opts, 'appsec.eventTracking.mode', options.appsec?.eventTracking?.mode)
+    this._setBoolean(
+      opts,
+      'appsec.extendedHeadersCollection.enabled',
+      options.appsec?.extendedHeadersCollection?.enabled
+    )
+    this._setBoolean(
+      opts,
+      'appsec.extendedHeadersCollection.redaction',
+      options.appsec?.extendedHeadersCollection?.redaction
+    )
+    this._setValue(opts,
+      'appsec.extendedHeadersCollection.maxHeaders',
+      options.appsec?.extendedHeadersCollection?.maxHeaders
+    )
     this._setString(opts, 'appsec.obfuscatorKeyRegex', options.appsec?.obfuscatorKeyRegex)
     this._setString(opts, 'appsec.obfuscatorValueRegex', options.appsec?.obfuscatorValueRegex)
     this._setBoolean(opts, 'appsec.rasp.enabled', options.appsec?.rasp?.enabled)
+    this._setBoolean(opts, 'appsec.rasp.bodyCollection', options.appsec?.rasp?.bodyCollection)
     this._setValue(opts, 'appsec.rateLimit', maybeInt(options.appsec?.rateLimit))
     this._optsUnprocessed['appsec.rateLimit'] = options.appsec?.rateLimit
     this._setString(opts, 'appsec.rules', options.appsec?.rules)
@@ -1035,6 +1064,7 @@ class Config {
     this._setString(opts, 'clientIpHeader', options.clientIpHeader?.toLowerCase())
     this._setValue(opts, 'baggageMaxBytes', options.baggageMaxBytes)
     this._setValue(opts, 'baggageMaxItems', options.baggageMaxItems)
+    this._setValue(opts, 'baggageTagKeys', options.baggageTagKeys)
     this._setBoolean(opts, 'codeOriginForSpans.enabled', options.codeOriginForSpans?.enabled)
     this._setBoolean(
       opts,
@@ -1245,7 +1275,8 @@ class Config {
       DD_AGENTLESS_LOG_SUBMISSION_ENABLED,
       DD_TEST_FAILED_TEST_REPLAY_ENABLED,
       DD_TEST_MANAGEMENT_ENABLED,
-      DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES
+      DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES,
+      DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED
     } = process.env
 
     if (DD_CIVISIBILITY_AGENTLESS_URL) {
@@ -1270,6 +1301,7 @@ class Config {
         'testManagementAttemptToFixRetries',
         coalesce(maybeInt(DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES), 20)
       )
+      this._setBoolean(calc, 'isImpactedTestsEnabled', !isFalse(DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED))
     }
     this._setString(calc, 'dogstatsd.hostname', this._getHostname())
     this._setBoolean(calc, 'isGitUploadEnabled',
@@ -1341,9 +1373,9 @@ class Config {
       return this._setValue(obj, name, value)
     }
 
-    value = parseFloat(value)
+    value = Number.parseFloat(value)
 
-    if (!isNaN(value)) {
+    if (!Number.isNaN(value)) {
       // TODO: Ignore out of range values instead of normalizing them.
       this._setValue(obj, name, Math.min(Math.max(value, 0), 1))
     }
@@ -1358,7 +1390,7 @@ class Config {
       value = value.split(',').map(item => {
         // Trim each item and remove whitespace around the colon
         const [key, val] = item.split(':').map(part => part.trim())
-        return val !== undefined ? `${key}:${val}` : key
+        return val === undefined ? key : `${key}:${val}`
       })
     }
 
@@ -1426,7 +1458,6 @@ class Config {
   // TODO: Deeply merge configurations.
   // TODO: Move change tracking to telemetry.
   // for telemetry reporting, `name`s in `containers` need to be keys from:
-  // eslint-disable-next-line @stylistic/js/max-len
   // https://github.com/DataDog/dd-go/blob/prod/trace/apps/tracer-telemetry-intake/telemetry-payload/static/config_norm_rules.json
   _merge () {
     const containers = [
@@ -1516,13 +1547,13 @@ function parseSpaceSeparatedTags (tagString) {
 }
 
 function maybeInt (number) {
-  const parsed = parseInt(number)
-  return isNaN(parsed) ? undefined : parsed
+  const parsed = Number.parseInt(number)
+  return Number.isNaN(parsed) ? undefined : parsed
 }
 
 function maybeFloat (number) {
-  const parsed = parseFloat(number)
-  return isNaN(parsed) ? undefined : parsed
+  const parsed = Number.parseFloat(number)
+  return Number.isNaN(parsed) ? undefined : parsed
 }
 
 function getAgentUrl (url, options) {

@@ -7,6 +7,8 @@ const {
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
+const log = require('../../dd-trace/src/log')
+
 // Create channels for Confluent Kafka JavaScript
 const channels = {
   producerStart: channel('apm:@confluentinc/kafka-javascript:produce:start'),
@@ -24,6 +26,8 @@ const channels = {
   batchConsumerError: channel('apm:@confluentinc/kafka-javascript:consume-batch:error'),
   batchConsumerCommit: channel('apm:@confluentinc/kafka-javascript:consume-batch:commit')
 }
+
+const disabledHeaderWeakSet = new WeakSet()
 
 // we need to store the offset per partition per topic for the consumer to track offsets for DSM
 const latestConsumerOffsets = new Map()
@@ -69,12 +73,12 @@ function instrumentBaseModule (module) {
 
                   const result = produce.apply(this, arguments)
 
-                  channels.producerCommit.publish(undefined)
-                  channels.producerFinish.publish(undefined)
+                  channels.producerCommit.publish()
+                  channels.producerFinish.publish()
                   return result
                 } catch (error) {
                   channels.producerError.publish(error)
-                  channels.producerFinish.publish(undefined)
+                  channels.producerFinish.publish()
                   throw error
                 }
               })
@@ -127,11 +131,11 @@ function instrumentBaseModule (module) {
 
                   try {
                     const result = callback.apply(this, arguments)
-                    channels.consumerFinish.publish(undefined)
+                    channels.consumerFinish.publish()
                     return result
                   } catch (error) {
                     channels.consumerError.publish(error)
-                    channels.consumerFinish.publish(undefined)
+                    channels.consumerFinish.publish()
                     throw error
                   }
                 })
@@ -206,7 +210,8 @@ function instrumentKafkaJS (kafkaJS) {
                         channels.producerStart.publish({
                           topic: payload?.topic,
                           messages: payload?.messages || [],
-                          bootstrapServers: kafka._ddBrokers
+                          bootstrapServers: kafka._ddBrokers,
+                          disableHeaderInjection: disabledHeaderWeakSet.has(producer)
                         })
 
                         const result = send.apply(this, arguments)
@@ -214,20 +219,30 @@ function instrumentKafkaJS (kafkaJS) {
                         result.then(
                           asyncResource.bind(res => {
                             channels.producerCommit.publish(res)
-                            channels.producerFinish.publish(undefined)
+                            channels.producerFinish.publish()
                           }),
                           asyncResource.bind(err => {
                             if (err) {
+                              // Fixes bug where we would inject message headers for kafka brokers
+                              // that don't support headers (version <0.11). On the error, we disable
+                              // header injection. Tnfortunately the error name / type is not more specific.
+                              // This approach is implemented by other tracers as well.
+                              if (err.name === 'KafkaJSError' && err.type === 'ERR_UNKNOWN') {
+                                disabledHeaderWeakSet.add(producer)
+                                log.error('Kafka Broker responded with UNKNOWN_SERVER_ERROR (-1). ' +
+                                  'Please look at broker logs for more information. ' +
+                                  'Tracer message header injection for Kafka is disabled.')
+                              }
                               channels.producerError.publish(err)
                             }
-                            channels.producerFinish.publish(undefined)
+                            channels.producerFinish.publish()
                           })
                         )
 
                         return result
                       } catch (e) {
                         channels.producerError.publish(e)
-                        channels.producerFinish.publish(undefined)
+                        channels.producerFinish.publish()
                         throw e
                       }
                     })
@@ -347,21 +362,21 @@ function wrapKafkaCallback (callback, { startCh, commitCh, finishCh, errorCh }, 
         if (result && typeof result.then === 'function') {
           return result
             .then(asyncResource.bind(res => {
-              finishCh.publish(undefined)
+              finishCh.publish()
               return res
             }))
             .catch(asyncResource.bind(err => {
               errorCh.publish(err)
-              finishCh.publish(undefined)
+              finishCh.publish()
               throw err
             }))
         } else {
-          finishCh.publish(undefined)
+          finishCh.publish()
           return result
         }
       } catch (error) {
         errorCh.publish(error)
-        finishCh.publish(undefined)
+        finishCh.publish()
         throw error
       }
     })
@@ -387,5 +402,5 @@ function updateLatestOffset (topic, partition, offset, groupId) {
 }
 
 function getLatestOffsets () {
-  return Array.from(latestConsumerOffsets.values())
+  return [...latestConsumerOffsets.values()]
 }

@@ -26,7 +26,9 @@ const {
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_HAS_FAILED_ALL_RETRIES,
   getLibraryCapabilitiesTags,
-  TEST_RETRY_REASON_TYPES
+  TEST_RETRY_REASON_TYPES,
+  isModifiedTest,
+  TEST_IS_MODIFIED
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -34,6 +36,7 @@ const {
   TELEMETRY_EVENT_FINISHED,
   TELEMETRY_TEST_SESSION
 } = require('../../dd-trace/src/ci-visibility/telemetry')
+const { DD_MAJOR } = require('../../../version')
 
 // Milliseconds that we subtract from the error test duration
 // so that they do not overlap with the following test
@@ -82,6 +85,13 @@ class VitestPlugin extends CiPlugin {
       onDone(isQuarantined)
     })
 
+    this.addSub('ci:vitest:test:is-modified', ({ modifiedTests, testSuiteAbsolutePath, onDone }) => {
+      const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+      const isModified = isModifiedTest(testSuite, 0, 0, modifiedTests, this.constructor.id)
+
+      onDone(isModified)
+    })
+
     this.addSub('ci:vitest:is-early-flake-detection-faulty', ({
       knownTests,
       testFilepaths,
@@ -107,7 +117,8 @@ class VitestPlugin extends CiPlugin {
         mightHitProbe,
         isRetryReasonEfd,
         isRetryReasonAttemptToFix,
-        isRetryReasonAtr
+        isRetryReasonAtr,
+        isModified
       } = ctx
 
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
@@ -139,6 +150,9 @@ class VitestPlugin extends CiPlugin {
       }
       if (isDisabled) {
         extraTags[TEST_MANAGEMENT_IS_DISABLED] = 'true'
+      }
+      if (isModified) {
+        extraTags[TEST_IS_MODIFIED] = 'true'
       }
 
       const span = this.startTestSpan(
@@ -267,8 +281,9 @@ class VitestPlugin extends CiPlugin {
         'x-datadog-parent-id': process.env.DD_CIVISIBILITY_TEST_MODULE_ID
       })
 
+      const trimmedCommand = DD_MAJOR < 6 ? this.command : 'vitest run'
       // test suites run in a different process, so they also need to init the metadata dictionary
-      const testSessionName = getTestSessionName(this.config, this.command, this.testEnvironmentMetadata)
+      const testSessionName = getTestSessionName(this.config, trimmedCommand, this.testEnvironmentMetadata)
       const metadataTags = {}
       for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
         metadataTags[testLevel] = {

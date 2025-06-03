@@ -37,7 +37,7 @@ addHook({ name: 'tedious', versions: ['>=1.0.0'] }, tedious => {
         if (error) {
           errorCh.publish(error)
         }
-        finishCh.publish(undefined)
+        finishCh.publish()
 
         return cb.apply(this, arguments)
       }, null, request)

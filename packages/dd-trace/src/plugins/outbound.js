@@ -67,7 +67,6 @@ class OutboundPlugin extends TracingPlugin {
         }
       }
     }
-    return undefined
   }
 
   getPeerServiceRemap (peerData) {

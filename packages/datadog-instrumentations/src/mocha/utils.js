@@ -18,7 +18,7 @@ const testRetryCh = channel('ci:mocha:test:retry')
 const errorCh = channel('ci:mocha:test:error')
 const skipCh = channel('ci:mocha:test:skip')
 const testFnCh = channel('ci:mocha:test:fn')
-
+const isModifiedCh = channel('ci:mocha:test:is-modified')
 // suite channels
 const testSuiteErrorCh = channel('ci:mocha:test-suite:error')
 
@@ -209,7 +209,8 @@ function getOnTestHandler (isMain) {
       _ddIsEfdRetry: isEfdRetry,
       _ddIsAttemptToFix: isAttemptToFix,
       _ddIsDisabled: isDisabled,
-      _ddIsQuarantined: isQuarantined
+      _ddIsQuarantined: isQuarantined,
+      _ddIsModified: isModified
     } = test
 
     const testName = removeEfdStringFromTestName(removeAttemptToFixStringFromTestName(test.fullTitle()))
@@ -230,6 +231,7 @@ function getOnTestHandler (isMain) {
     testInfo.isAttemptToFix = isAttemptToFix
     testInfo.isDisabled = isDisabled
     testInfo.isQuarantined = isQuarantined
+    testInfo.isModified = isModified
     // We want to store the result of the new tests
     if (isNew) {
       const testFullName = getTestFullName(test)
@@ -246,7 +248,7 @@ function getOnTestHandler (isMain) {
 
     const ctx = testInfo
     testToContext.set(test.fn, ctx)
-    testStartCh.runStores(ctx, () => { })
+    testStartCh.runStores(ctx, () => {})
   }
 }
 
@@ -271,17 +273,17 @@ function getOnTestEndHandler (config) {
 
     const testName = getTestFullName(test)
 
-    if (!testsStatuses.get(testName)) {
-      testsStatuses.set(testName, [status])
-    } else {
+    if (testsStatuses.get(testName)) {
       testsStatuses.get(testName).push(status)
+    } else {
+      testsStatuses.set(testName, [status])
     }
     const testStatuses = testsStatuses.get(testName)
 
     const isLastAttempt = testStatuses.length === config.testManagementAttemptToFixRetries + 1
 
     if (test._ddIsAttemptToFix && isLastAttempt) {
-      if (testStatuses.some(status => status === 'fail')) {
+      if (testStatuses.includes('fail')) {
         attemptToFixFailed = true
       }
       if (testStatuses.every(status => status === 'fail')) {
@@ -351,12 +353,12 @@ function getOnFailHandler (isMain) {
       if (isHook) {
         err.message = `${testOrHook.fullTitle()}: ${err.message}`
         testContext.err = err
-        errorCh.runStores(testContext, () => { })
+        errorCh.runStores(testContext, () => {})
         // if it's a hook and it has failed, 'test end' will not be called
         testFinishCh.publish({ status: 'fail', hasBeenRetried: isMochaRetry(test), ...testContext.currentStore })
       } else {
         testContext.err = err
-        errorCh.runStores(testContext, () => { })
+        errorCh.runStores(testContext, () => {})
       }
     }
 
@@ -370,7 +372,7 @@ function getOnFailHandler (isMain) {
         )
         testSuiteError.stack = err.stack
         testSuiteContext.error = testSuiteError
-        testSuiteErrorCh.runStores(testSuiteContext, () => { })
+        testSuiteErrorCh.runStores(testSuiteContext, () => {})
       }
     }
   }
@@ -420,7 +422,7 @@ function getOnPendingHandler () {
       } else {
         testToContext.set(test, testCtx)
       }
-      skipCh.runStores(testCtx, () => { })
+      skipCh.runStores(testCtx, () => {})
     }
   }
 }
@@ -452,12 +454,34 @@ function getRunTestsWrapper (runTests, config) {
       })
     }
 
+    if (config.isImpactedTestsEnabled) {
+      suite.tests.forEach((test) => {
+        isModifiedCh.publish({
+          modifiedTests: config.modifiedTests,
+          file: suite.file,
+          onDone: (isModified) => {
+            if (isModified) {
+              test._ddIsModified = true
+              if (!test.isPending() && !test._ddIsAttemptToFix && config.isEarlyFlakeDetectionEnabled) {
+                retryTest(
+                  test,
+                  config.earlyFlakeDetectionNumRetries,
+                  addEfdStringToTestName,
+                  ['_ddIsModified', '_ddIsEfdRetry']
+                )
+              }
+            }
+          }
+        })
+      })
+    }
+
     if (config.isKnownTestsEnabled) {
       // by the time we reach `this.on('test')`, it is too late. We need to add retries here
       suite.tests.forEach(test => {
         if (!test.isPending() && isNewTest(test, config.knownTests)) {
           test._ddIsNew = true
-          if (config.isEarlyFlakeDetectionEnabled) {
+          if (config.isEarlyFlakeDetectionEnabled && !test._ddIsAttemptToFix && !test._ddIsModified) {
             retryTest(
               test,
               config.earlyFlakeDetectionNumRetries,

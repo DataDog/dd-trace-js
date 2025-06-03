@@ -13,11 +13,11 @@ function formatSpan (span, config) {
   span = normalizeSpan(truncateSpan(span, false))
   if (span.span_events) {
     // ensure span events are encoded as tags if agent doesn't support native top level span events
-    if (!config?.trace?.nativeSpanEvents) {
+    if (config?.trace?.nativeSpanEvents) {
+      formatSpanEvents(span)
+    } else {
       span.meta.events = JSON.stringify(span.span_events)
       delete span.span_events
-    } else {
-      formatSpanEvents(span)
     }
   }
   return span
@@ -175,7 +175,7 @@ class AgentEncoder {
 
     id = id.toArray()
 
-    bytes.buffer[offset] = 0xcf
+    bytes.buffer[offset] = 0xCF
     bytes.buffer[offset + 1] = id[0]
     bytes.buffer[offset + 2] = id[1]
     bytes.buffer[offset + 3] = id[2]
@@ -266,7 +266,7 @@ class AgentEncoder {
 
     // we should do it after encoding the object to know the real length
     const length = bytes.length - offset - prefixLength
-    bytes.buffer[offset] = 0xc6
+    bytes.buffer[offset] = 0xC6
     bytes.buffer[offset + 1] = length >> 24
     bytes.buffer[offset + 2] = length >> 16
     bytes.buffer[offset + 3] = length >> 8
@@ -326,7 +326,7 @@ class AgentEncoder {
   }
 
   _writeArrayPrefix (buffer, offset, count) {
-    buffer[offset++] = 0xdd
+    buffer[offset++] = 0xDD
     buffer.writeUInt32BE(count, offset)
 
     return offset + 4
@@ -351,10 +351,10 @@ function formatSpanEvents (span) {
     if (spanEvent.attributes) {
       for (const [key, value] of Object.entries(spanEvent.attributes)) {
         const newValue = convertSpanEventAttributeValues(key, value)
-        if (newValue !== undefined) {
-          spanEvent.attributes[key] = newValue
-        } else {
+        if (newValue === undefined) {
           delete spanEvent.attributes[key] // delete from attributes if undefined
+        } else {
+          spanEvent.attributes[key] = newValue
         }
       }
       if (Object.keys(spanEvent.attributes).length === 0) {

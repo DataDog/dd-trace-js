@@ -151,7 +151,44 @@ describe('CI Visibility Exporter', () => {
         })
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
       })
-
+      it('should handle git metadata with tag but no branch', (done) => {
+        let requestBody
+        const scope = nock(`http://localhost:${port}`)
+          .post('/api/v2/libraries/tests/services/setting', function (body) {
+            requestBody = body
+            return true
+          })
+          .reply(200, JSON.stringify({
+            data: {
+              attributes: {
+                itr_enabled: true,
+                require_git: false,
+                code_coverage: true,
+                tests_skipping: true
+              }
+            }
+          }))
+        const ciVisibilityExporter = new CiVisibilityExporter({
+          port,
+          isIntelligentTestRunnerEnabled: true
+        })
+        const testConfiguration = {
+          tag: 'v1.0.0'
+        }
+        ciVisibilityExporter.getLibraryConfiguration(testConfiguration, (err, libraryConfig) => {
+          expect(err).to.be.null
+          expect(libraryConfig).to.contain({
+            requireGit: false,
+            isCodeCoverageEnabled: true,
+            isItrEnabled: true,
+            isSuitesSkippingEnabled: true
+          })
+          expect(scope.isDone()).to.be.true
+          expect(requestBody.data.attributes.branch).to.equal('v1.0.0')
+          done()
+        })
+        ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+      })
       it('should request the API after EVP proxy is resolved', (done) => {
         const scope = nock(`http://localhost:${port}`)
           .post('/api/v2/libraries/tests/services/setting')

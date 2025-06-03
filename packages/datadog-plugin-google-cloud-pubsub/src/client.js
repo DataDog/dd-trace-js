@@ -12,7 +12,7 @@ class GoogleCloudPubsubClientPlugin extends ClientPlugin {
 
     this.startSpan(this.operationName(), {
       service: this.config.service || this.serviceName(),
-      resource: [api, request.name].filter(x => x).join(' '),
+      resource: [api, request.name].filter(Boolean).join(' '),
       kind: this.constructor.kind,
       meta: {
         'pubsub.method': api,

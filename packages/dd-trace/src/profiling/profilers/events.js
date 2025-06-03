@@ -1,10 +1,9 @@
 const { performance, constants, PerformanceObserver } = require('perf_hooks')
-const { END_TIMESTAMP_LABEL, SPAN_ID_LABEL, LOCAL_ROOT_SPAN_ID_LABEL } = require('./shared')
+const { END_TIMESTAMP_LABEL, SPAN_ID_LABEL, LOCAL_ROOT_SPAN_ID_LABEL, encodeProfileAsync } = require('./shared')
 const { Function, Label, Line, Location, Profile, Sample, StringTable, ValueType } = require('pprof-format')
-const pprof = require('@datadog/pprof/')
 
 // perf_hooks uses millis, with fractional part representing nanos. We emit nanos into the pprof file.
-const MS_TO_NS = 1000000
+const MS_TO_NS = 1_000_000
 
 // While this is an "events profiler", meaning it emits a pprof file based on events observed as
 // perf_hooks events, the emitted pprof file uses the type "timeline".
@@ -50,10 +49,10 @@ class GCDecorator {
     // Create labels for all GC performance flags and kinds of GC
     for (const [key, value] of Object.entries(constants)) {
       if (key.startsWith('NODE_PERFORMANCE_GC_FLAGS_')) {
-        this.flagObj[key.substring(26).toLowerCase()] = value
+        this.flagObj[key.slice(26).toLowerCase()] = value
       } else if (key.startsWith('NODE_PERFORMANCE_GC_')) {
         // It's a constant for a kind of GC
-        const kind = key.substring(20).toLowerCase()
+        const kind = key.slice(20).toLowerCase()
         this.kindLabels[value] = labelFromStr(stringTable, kindLabelKey, kind)
       }
     }
@@ -258,6 +257,12 @@ class EventSerializer {
   }
 }
 
+function add (items) {
+  for (const item of items.getEntries()) {
+    this.eventHandler(item)
+  }
+}
+
 /**
  * Class that sources timeline events through Node.js performance measurement APIs.
  */
@@ -271,12 +276,6 @@ class NodeApiEventSource {
   start () {
     // if already started, do nothing
     if (this.observer) return
-
-    function add (items) {
-      for (const item of items.getEntries()) {
-        this.eventHandler(item)
-      }
-    }
 
     this.observer = new PerformanceObserver(add.bind(this))
     this.observer.observe({ entryTypes: this.entryTypes })
@@ -381,17 +380,15 @@ class EventsProfiler {
       }
     }
 
-    if (options.codeHotspotsEnabled) {
+    this.eventSource = options.codeHotspotsEnabled
       // Use Datadog instrumentation to collect events with span IDs. Still use
       // Node API for GC events.
-      this.eventSource = new CompositeEventSource([
+      ? new CompositeEventSource([
         new DatadogInstrumentationEventSource(eventHandler, eventFilter),
         new NodeApiEventSource(filteringEventHandler, ['gc'])
       ])
-    } else {
       // Use Node API instrumentation to collect events without span IDs
-      this.eventSource = new NodeApiEventSource(filteringEventHandler)
-    }
+      : new NodeApiEventSource(filteringEventHandler)
   }
 
   start () {
@@ -412,7 +409,7 @@ class EventsProfiler {
   }
 
   encode (profile) {
-    return pprof.encode(profile())
+    return encodeProfileAsync(profile())
   }
 }
 
