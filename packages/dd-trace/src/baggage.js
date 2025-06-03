@@ -23,7 +23,7 @@ function removeBaggageItem (keyToRemove) {
 }
 
 function removeAllBaggageItems () {
-  storage('baggage').enterWith({})
+  storage('baggage').enterWith(undefined)
   return storage('baggage').getStore()
 }
 
