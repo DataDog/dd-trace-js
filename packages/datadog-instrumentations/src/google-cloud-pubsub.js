@@ -75,9 +75,7 @@ function wrapMethod (method) {
             requestErrorCh.publish(ctx)
           }
 
-          requestFinishCh.publish(ctx)
-
-          return cb.apply(this, arguments)
+          return requestFinishCh.runStores(ctx, cb, this, ...arguments)
         })
 
         return method.apply(this, arguments)
@@ -134,24 +132,20 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/le
   shimmer.wrap(LeaseManager.prototype, '_dispense', dispense => function (message) {
     if (receiveStartCh.hasSubscribers) {
       ctx.message = message
-      receiveStartCh.runStores(ctx, () => {
-        return dispense.apply(this, arguments)
-      })
+      receiveStartCh.runStores(ctx, dispense, this, ...arguments)
     } else {
       return dispense.apply(this, arguments)
     }
   })
 
   shimmer.wrap(LeaseManager.prototype, 'remove', remove => function (message) {
-    receiveFinishCh.runStores(ctx, () => {
-      return remove.apply(this, arguments)
-    })
+    receiveFinishCh.runStores(ctx, remove, this, ...arguments)
   })
 
   shimmer.wrap(LeaseManager.prototype, 'clear', clear => function () {
     for (const message of this._messages) {
       ctx.message = message
-      receiveFinishCh.runStores(ctx, () => {})
+      receiveFinishCh.publish(ctx)
     }
     return clear.apply(this, arguments)
   })
