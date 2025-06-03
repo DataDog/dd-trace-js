@@ -194,7 +194,6 @@ function getSortWrapper (sort) {
     let isImpactedTestsEnabled = false
     let testManagementAttemptToFixRetries = 0
     let isDiEnabled = false
-    let modifiedTests = {}
 
     try {
       const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh)
@@ -291,12 +290,11 @@ function getSortWrapper (sort) {
     }
 
     if (isImpactedTestsEnabled) {
-      const { err, modifiedTests: receivedModifiedTests } = await getChannelPromise(impactedTestsCh)
+      const { err, modifiedTests } = await getChannelPromise(impactedTestsCh)
       if (err) {
         isImpactedTestsEnabled = false
         log.error('Could not get modified tests.')
       } else {
-        modifiedTests = receivedModifiedTests
         try {
           const workspaceProject = this.ctx.getCoreWorkspaceProject()
           workspaceProject._provided._ddIsImpactedTestsEnabled = isImpactedTestsEnabled

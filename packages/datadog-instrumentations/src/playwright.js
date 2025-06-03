@@ -759,8 +759,7 @@ addHook({
     }
 
     if (isImpactedTestsEnabled) {
-      for (const test of allTests) {
-        const isNew = isKnownTestsEnabled && isNewTest(test)
+      await Promise.all(allTests.map(async (test) => {
         const { isModified } = await getChannelPromise(isModifiedCh, {
           filePath: test._requireFile,
           modifiedTests
@@ -769,6 +768,7 @@ addHook({
           test._ddIsModified = true
         }
         if (isEarlyFlakeDetectionEnabled && test.expectedStatus !== 'skipped') {
+          const isNew = isKnownTestsEnabled && isNewTest(test)
           const fileSuite = getSuiteType(test, 'file')
           const projectSuite = getSuiteType(test, 'project')
           // If something change in the file, all tests in the file are impacted
@@ -783,7 +783,7 @@ addHook({
             projectSuite._addSuite(copyFileSuite)
           }
         }
-      }
+      }))
     }
 
     if (isKnownTestsEnabled) {
