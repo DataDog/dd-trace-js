@@ -360,10 +360,10 @@ function setShouldKill (value) {
   })
 }
 
-function assertObjectContains (actual, expected) {
+const assertObjectContains = assert.partialDeepStrictEqual || function assertObjectContains (actual, expected) {
   for (const [key, val] of Object.entries(expected)) {
     if (val !== null && typeof val === 'object') {
-      assert.ok(key in actual)
+      assert.ok(Object.hasOwn(actual, key))
       assert.notStrictEqual(actual[key], null)
       assert.strictEqual(typeof actual[key], 'object')
       assertObjectContains(actual[key], val)

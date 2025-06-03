@@ -42,8 +42,8 @@ describe('Plugin', () => {
 
         it('should sanitize the resource name', done => {
           agent
-            .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('resource', 'POST /logstash-?.?.?/_search')
+            .assertFirstTraceSpan({
+              resource: 'POST /logstash-?.?.?/_search'
             })
             .then(done)
             .catch(done)
@@ -56,19 +56,18 @@ describe('Plugin', () => {
 
         it('should set the correct tags', done => {
           agent
-            .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-              expect(traces[0][0].meta).to.have.property('db.type', 'opensearch')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('opensearch.method', 'POST')
-              expect(traces[0][0].meta).to.have.property('opensearch.url', '/docs/_search')
-              expect(traces[0][0].meta).to.have.property(
-                'opensearch.body',
-                '{"query":{"match_all":{}}}'
-              )
-              expect(traces[0][0].meta).to.have.property('component', 'opensearch')
-              expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
+            .assertFirstTraceSpan({
+              name: expectedSchema.outbound.opName,
+              service: expectedSchema.outbound.serviceName,
+              meta: {
+                'db.type': 'opensearch',
+                'span.kind': 'client',
+                'opensearch.method': 'POST',
+                'opensearch.url': '/docs/_search',
+                'opensearch.body': '{"query":{"match_all":{}}}',
+                component: 'opensearch',
+                'out.host': 'localhost'
+              }
             })
             .then(done)
             .catch(done)
@@ -270,12 +269,14 @@ describe('Plugin', () => {
           })
 
           agent
-            .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', 'custom')
-              expect(traces[0][0].meta).to.have.property('opensearch.params', 'foo')
-              expect(traces[0][0].meta).to.have.property('opensearch.method', 'POST')
-              expect(traces[0][0].meta).to.have.property('component', 'opensearch')
+            .assertFirstTraceSpan({
+              name: expectedSchema.outbound.opName,
+              service: 'custom',
+              meta: {
+                'opensearch.params': 'foo',
+                'opensearch.method': 'POST',
+                component: 'opensearch'
+              }
             })
             .then(done)
             .catch(done)
