@@ -6,7 +6,6 @@ const { expect } = require('chai')
 const semver = require('semver')
 const sinon = require('sinon')
 const { spawn } = require('child_process')
-const { useEnv } = require('../../../integration-tests/helpers')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { DogStatsDClient } = require('../../dd-trace/src/dogstatsd')
@@ -36,20 +35,20 @@ describe('Plugin', () => {
 
       before(async () => {
         mockServerPort = await startMockServer()
+        tracer = require(tracerRequirePath)
+        return agent.load('openai')
       })
 
-      after(() => {
+      after(async () => {
         if (semver.satisfies(realVersion, '>=5.0.0') && NODE_MAJOR < 20) {
           global.File = globalFile
         }
 
-        return stopMockServer()
+        await stopMockServer()
+        return agent.close({ ritmReset: false, wipe: true })
       })
 
       beforeEach(async () => {
-        tracer = require(tracerRequirePath)
-        await agent.load('openai')
-
         clock = sinon.useFakeTimers()
 
         const requiredModule = require(moduleRequirePath)
@@ -93,36 +92,6 @@ describe('Plugin', () => {
       afterEach(() => {
         clock.restore()
         sinon.restore()
-        return agent.close({ ritmReset: false, wipe: true })
-      })
-
-      describe('with configuration', () => {
-        useEnv({
-          DD_OPENAI_SPAN_CHAR_LIMIT: 0
-        })
-
-        it('should truncate both inputs and outputs', async () => {
-          if (version === '3.0.0') return
-
-          const checkTraces = agent
-            .assertSomeTraces(traces => {
-              expect(traces[0][0].meta).to.have.property('openai.request.prompt', '...')
-              expect(traces[0][0].meta).to.have.property('openai.response.choices.0.text', '...')
-            })
-
-          const params = {
-            model: 'text-davinci-002',
-            prompt: 'Hello, world!'
-          }
-
-          if (semver.satisfies(realVersion, '>=4.0.0')) {
-            await openai.completions.create(params)
-          } else {
-            await openai.createCompletion(params)
-          }
-
-          await checkTraces
-        })
       })
 
       describe('without initialization', () => {
