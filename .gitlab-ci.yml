@@ -11,6 +11,12 @@ check_config_inversion_local_file:
   variables:
     LOCAL_JSON_PATH: "packages/dd-trace/src/supported-configurations.json"
 
+config_inversion_update_central:
+  rules:
+    - when: on_success
+  variables:
+    LOCAL_REPO_NAME: "dd-trace-js"
+
 include:
   # See: https://gitlab.ddbuild.io/DataDog/apm-reliability/libdatadog-build
   - remote: https://gitlab-templates.ddbuild.io/libdatadog/include-wip/anna/config-inversion-add-step/one-pipeline.yml
