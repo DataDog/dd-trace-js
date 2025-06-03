@@ -372,17 +372,22 @@ addHook({
   return suitePackage
 })
 
+const processToHandler = new WeakMap()
+
 addHook({
   name: 'tinypool',
   versions: ['>=1.0.0'],
   file: 'dist/index.js'
 }, (TinyPool) => {
-  debugger
   // we can pass handle here to the worker, and then use it to send messages to the main process
   shimmer.wrap(TinyPool.prototype, 'run', run => function (_, { channel }) {
     const res = run.apply(this, arguments)
 
     this.threads.forEach(thread => {
+      if (processToHandler.has(thread.process)) {
+        return
+      }
+      processToHandler.set(thread.process, true)
       thread.process.on('message', (message) => {
         if (message.__tinypool_worker_message__ && message.data) {
           workerReporterCh.publish(message.data)
