@@ -93,7 +93,20 @@ app.post('/v1/completions', (req, res) => {
 })
 
 app.post('/v1/chat/completions', (req, res) => {
-  const { model, tools, stream = false, n = 1, stream_options: streamOptions = {} } = req.body
+  const { messages, model, tools, stream = false, n = 1, stream_options: streamOptions = {} } = req.body
+
+  if (typeof messages !== 'object') {
+    res.status(400).json({
+      error: {
+        message: 'Invalid request body',
+        type: 'invalid_request_error',
+        param: null,
+        code: null
+      }
+    })
+
+    return
+  }
 
   if (stream) {
     // streamed responses are pre-recorded in a separate directory

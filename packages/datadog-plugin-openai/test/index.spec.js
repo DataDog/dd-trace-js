@@ -4,7 +4,6 @@ const fs = require('fs')
 const Path = require('path')
 const { expect } = require('chai')
 const semver = require('semver')
-const nock = require('nock')
 const sinon = require('sinon')
 const { spawn } = require('child_process')
 const { useEnv } = require('../../../integration-tests/helpers')
@@ -140,65 +139,55 @@ describe('Plugin', () => {
         })
       })
 
-      // describe.skip('with error', () => {
-      //   let scope
+      describe('with error', () => {
+        it('should attach the error to the span', async function () {
+          if (semver.satisfies(realVersion, '3.0.0')) {
+            this.skip()
+          }
 
-      //   beforeEach(() => {
-      //     scope = nock('https://api.openai.com:443')
-      //       .get('/v1/models')
-      //       .reply(400, {
-      //         error: {
-      //           message: 'fake message',
-      //           type: 'fake type',
-      //           param: 'fake param',
-      //           code: null
-      //         }
-      //       })
-      //   })
+          const checkTraces = agent
+            .assertSomeTraces(traces => {
+              expect(traces[0][0]).to.have.property('error', 1)
+              // the message content differs on OpenAI version, even between patches
+              expect(traces[0][0].meta['error.message']).to.exist
+              expect(traces[0][0].meta).to.have.property('error.type', 'Error')
+              expect(traces[0][0].meta['error.stack']).to.exist
+            })
 
-      //   afterEach(() => {
-      //     nock.removeInterceptor(scope)
-      //     scope.done()
-      //   })
+          try {
+            if (semver.satisfies(realVersion, '>=4.0.0')) {
+              await openai.chat.completions.create({
+                model: 'gpt-4o',
+                messages: 5 // trigger an error
+              })
+            } else {
+              await openai.createChatCompletion({
+                model: 'gpt-4o',
+                messages: 5 // trigger an error
+              })
+            }
+          } catch {
+            // ignore, we expect an error
+          }
 
-      //   it.skip('should attach the error to the span', async () => {
-      //     const checkTraces = agent
-      //       .assertSomeTraces(traces => {
-      //         expect(traces[0][0]).to.have.property('error', 1)
-      //         // the message content differs on OpenAI version, even between patches
-      //         expect(traces[0][0].meta['error.message']).to.exist
-      //         expect(traces[0][0].meta).to.have.property('error.type', 'Error')
-      //         expect(traces[0][0].meta['error.stack']).to.exist
-      //       })
+          await checkTraces
 
-      //     try {
-      //       if (semver.satisfies(realVersion, '>=4.0.0')) {
-      //         await openai.models.list()
-      //       } else {
-      //         await openai.listModels()
-      //       }
-      //     } catch {
-      //       // ignore, we expect an error
-      //     }
+          clock.tick(10 * 1000)
 
-      //     await checkTraces
+          const expectedTags = ['error:1']
 
-      //     clock.tick(10 * 1000)
+          expect(metricStub).to.have.been.calledWith('openai.request.error', 1, 'c', expectedTags)
+          expect(metricStub).to.have.been.calledWith('openai.request.duration') // timing value not guaranteed
 
-      //     const expectedTags = ['error:1']
-
-      //     expect(metricStub).to.have.been.calledWith('openai.request.error', 1, 'c', expectedTags)
-      //     expect(metricStub).to.have.been.calledWith('openai.request.duration') // timing value not guaranteed
-
-      //     expect(metricStub).to.not.have.been.calledWith('openai.tokens.prompt')
-      //     expect(metricStub).to.not.have.been.calledWith('openai.tokens.completion')
-      //     expect(metricStub).to.not.have.been.calledWith('openai.tokens.total')
-      //     expect(metricStub).to.not.have.been.calledWith('openai.ratelimit.requests')
-      //     expect(metricStub).to.not.have.been.calledWith('openai.ratelimit.tokens')
-      //     expect(metricStub).to.not.have.been.calledWith('openai.ratelimit.remaining.requests')
-      //     expect(metricStub).to.not.have.been.calledWith('openai.ratelimit.remaining.tokens')
-      //   })
-      // })
+          expect(metricStub).to.not.have.been.calledWith('openai.tokens.prompt')
+          expect(metricStub).to.not.have.been.calledWith('openai.tokens.completion')
+          expect(metricStub).to.not.have.been.calledWith('openai.tokens.total')
+          expect(metricStub).to.not.have.been.calledWith('openai.ratelimit.requests')
+          expect(metricStub).to.not.have.been.calledWith('openai.ratelimit.tokens')
+          expect(metricStub).to.not.have.been.calledWith('openai.ratelimit.remaining.requests')
+          expect(metricStub).to.not.have.been.calledWith('openai.ratelimit.remaining.tokens')
+        })
+      })
 
       describe('maintains context', () => {
         it('should maintain the context with a non-streamed call', async () => {
@@ -2029,15 +2018,6 @@ describe('Plugin', () => {
           })
 
           it('makes a successful chat completion call with empty stream', async () => {
-            nock('https://api.openai.com:443')
-              .post('/v1/chat/completions')
-              .reply(200, function () {
-                return fs.createReadStream(Path.join(__dirname, 'streamed-responses/chat.completions.empty.txt'))
-              }, {
-                'Content-Type': 'text/plain',
-                'openai-organization': 'kill-9'
-              })
-
             const checkTraces = agent
               .assertSomeTraces(traces => {
                 const span = traces[0][0]
@@ -2069,15 +2049,6 @@ describe('Plugin', () => {
           })
 
           it('makes a successful chat completion call with multiple choices', async () => {
-            nock('https://api.openai.com:443')
-              .post('/v1/chat/completions')
-              .reply(200, function () {
-                return fs.createReadStream(Path.join(__dirname, 'streamed-responses/chat.completions.multiple.txt'))
-              }, {
-                'Content-Type': 'text/plain',
-                'openai-organization': 'kill-9'
-              })
-
             const checkTraces = agent
               .assertSomeTraces(traces => {
                 const span = traces[0][0]
@@ -2356,17 +2327,6 @@ describe('Plugin', () => {
             })
 
             it('makes a successful chat completion call with tools and content', async () => {
-              nock('https://api.openai.com:443')
-                .post('/v1/chat/completions')
-                .reply(200, function () {
-                  return fs.createReadStream(
-                    Path.join(__dirname, 'streamed-responses/chat.completions.tool.and.content.txt')
-                  )
-                }, {
-                  'Content-Type': 'text/plain',
-                  'openai-organization': 'kill-9'
-                })
-
               const checkTraces = agent
                 .assertSomeTraces(traces => {
                   const span = traces[0][0]
