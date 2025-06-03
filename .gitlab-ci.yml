@@ -19,7 +19,7 @@ config_inversion_update_central:
 
 include:
   # See: https://gitlab.ddbuild.io/DataDog/apm-reliability/libdatadog-build
-  - remote: https://gitlab-templates.ddbuild.io/libdatadog/include-wip/anna/config-inversion-add-step/one-pipeline.yml
+  - remote: https://gitlab-templates.ddbuild.io/libdatadog/include-wip/mhlidd/config-inversion-update-central/one-pipeline.yml
   - local: ".gitlab/benchmarks.yml"
   - local: ".gitlab/macrobenchmarks.yml"
 
