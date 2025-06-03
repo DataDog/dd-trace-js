@@ -66,9 +66,6 @@ function wrapFn (fn) {
       finishChannel.publish({ req })
       throw error
     } finally {
-      // TODO(BridgeAR): This might not be correct in case promises are used.
-      // It should be handled there and not trigger here anymore in case the
-      // method returns a promise.
       exitChannel.publish({ req })
     }
   })

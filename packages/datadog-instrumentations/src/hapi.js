@@ -77,7 +77,7 @@ function wrapRebuild (rebuild) {
 
 function wrapEvents (events) {
   if (!Array.isArray(events)) {
-    events = [events]
+    events = [events].flat()
   }
   return events.map(event => {
     if (!event?.method) return event

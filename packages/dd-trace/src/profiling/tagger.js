@@ -13,7 +13,7 @@ const tagger = {
             if (colon === -1) continue
             const key = tag.slice(0, colon).trim()
             const value = tag.slice(colon + 1).trim()
-            if (key.length > 0 && value.length > 0) {
+            if (key.length !== 0 && value.length !== 0) {
               tagObject[key] = value
             }
           }
