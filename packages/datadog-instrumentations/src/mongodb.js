@@ -4,8 +4,7 @@ require('./mongodb-core')
 
 const {
   channel,
-  addHook,
-  AsyncResource
+  addHook
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
@@ -41,19 +40,16 @@ addHook({ name: 'mongodb', versions: ['>=3.3 <5', '5', '>=6'] }, mongodb => {
           return method.apply(this, arguments)
         }
 
-        const asyncResource = new AsyncResource('bound-anonymous-fn')
+        const ctx = {
+          filters: [arguments[0]],
+          methodName
+        }
 
-        return asyncResource.runInAsyncScope(() => {
-          const filters = [arguments[0]]
-          if (useTwoArguments) {
-            filters.push(arguments[1])
-          }
+        if (useTwoArguments) {
+          ctx.filters.push(arguments[1])
+        }
 
-          startCh.publish({
-            filters,
-            methodName
-          })
-
+        return startCh.runStores(ctx, () => {
           return method.apply(this, arguments)
         })
       }

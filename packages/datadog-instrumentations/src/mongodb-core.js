@@ -2,8 +2,7 @@
 
 const {
   channel,
-  addHook,
-  AsyncResource
+  addHook
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
@@ -56,22 +55,6 @@ addHook({ name: 'mongodb-core', versions: ['~3.1.10'], file: 'lib/wireprotocol/3
 addHook({ name: 'mongodb-core', versions: ['~3.1.10'], file: 'lib/wireprotocol/2_6_support.js' }, WireProtocol => {
   shimmer.wrap(WireProtocol.prototype, 'command', command => wrapUnifiedCommand(command, 'command'))
   return WireProtocol
-})
-
-addHook({ name: 'mongodb', versions: ['>=3.5.4 <4.11.0'], file: 'lib/utils.js' }, util => {
-  shimmer.wrap(util, 'maybePromise', maybePromise => function (parent, callback, fn) {
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-    const callbackIndex = arguments.length - 2
-
-    callback = arguments[callbackIndex]
-
-    if (typeof callback === 'function') {
-      arguments[callbackIndex] = asyncResource.bind(callback)
-    }
-
-    return maybePromise.apply(this, arguments)
-  })
-  return util
 })
 
 function wrapWp (wp) {
@@ -148,61 +131,69 @@ function wrapCommand (command, operation, name) {
   return wrapped
 }
 
-function instrument (operation, command, ctx, args, server, ns, ops, options = {}) {
+function instrument (operation, command, mongoCtx, args, server, ns, ops, options = {}) {
   const name = options.name || (ops && Object.keys(ops)[0])
   const index = args.length - 1
   let callback = args[index]
 
-  if (typeof callback !== 'function') return command.apply(ctx, args)
+  if (typeof callback !== 'function') return command.apply(mongoCtx, args)
 
   const serverInfo = server && server.s && server.s.options
-  const callbackResource = new AsyncResource('bound-anonymous-fn')
-  const asyncResource = new AsyncResource('bound-anonymous-fn')
 
-  callback = callbackResource.bind(callback)
-
-  return asyncResource.runInAsyncScope(() => {
-    startCh.publish({ ns, ops, options: serverInfo, name })
-
-    args[index] = shimmer.wrapFunction(callback, callback => asyncResource.bind(function (err, res) {
+  const ctx = {
+    ns,
+    ops,
+    options: serverInfo,
+    name
+  }
+  return startCh.runStores(ctx, () => {
+    args[index] = shimmer.wrapFunction(callback, callback => function (err, res) {
       if (err) {
-        errorCh.publish(err)
+        ctx.error = err
+        errorCh.publish(ctx)
       }
 
-      finishCh.publish()
+      finishCh.publish(ctx)
 
       if (callback) {
         return callback.apply(this, arguments)
       }
-    }))
+    })
 
     try {
-      return command.apply(ctx, args)
+      return command.apply(mongoCtx, args)
     } catch (err) {
-      errorCh.publish(err)
+      ctx.error = err
+      errorCh.publish(ctx)
 
       throw err
     }
   })
 }
 
-function instrumentPromise (operation, command, ctx, args, server, ns, ops, options = {}) {
+function instrumentPromise (operation, command, mongoCtx, args, server, ns, ops, options = {}) {
   const name = options.name || (ops && Object.keys(ops)[0])
 
   const serverInfo = server && server.s && server.s.options
-  const asyncResource = new AsyncResource('bound-anonymous-fn')
 
-  return asyncResource.runInAsyncScope(() => {
-    startCh.publish({ ns, ops, options: serverInfo, name })
+  const ctx = {
+    ns,
+    ops,
+    options: serverInfo,
+    name
+  }
 
-    const promise = command.apply(ctx, args)
+  return startCh.runStores(ctx, () => {
+    const promise = command.apply(mongoCtx, args)
 
     return promise.then(function (res) {
-      finishCh.publish()
+      ctx.result = res
+      finishCh.publish(ctx)
       return res
     }, function (err) {
-      errorCh.publish(err)
-      finishCh.publish()
+      ctx.error = err
+      errorCh.publish(ctx)
+      finishCh.publish(ctx)
 
       throw err
     })
