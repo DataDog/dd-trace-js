@@ -207,7 +207,7 @@ async function createSandbox (dependencies = [], isGitRepo = false,
     await exec('git add -A', { cwd: folder })
     await exec('git commit -m "first commit" --no-verify', { cwd: folder })
     await exec(`git remote add origin ${localRemotePath}`, { cwd: folder })
-    await exec('git push', { cwd: folder })
+    await exec('git push --set-upstream origin HEAD', { cwd: folder })
   }
 
   return {
