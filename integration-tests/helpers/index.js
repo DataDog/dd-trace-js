@@ -147,7 +147,7 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   integrationTestsPaths = ['./integration-tests/*'], followUpCommand) {
   // We might use NODE_OPTIONS to init the tracer. We don't want this to affect this operations
   const { NODE_OPTIONS, ...restOfEnv } = process.env
-  const noSandbox = String(process.env.NO_INTEGRATION_TESTS_SANDBOX)
+  const noSandbox = String(process.env.TESTING_NO_INTEGRATION_SANDBOX)
   if (noSandbox === '1' || noSandbox.toLowerCase() === 'true') {
     // Execute integration tests without a sandbox. This is useful when you have other components
     // yarn-linked into dd-trace and want to run the integration tests against them.
