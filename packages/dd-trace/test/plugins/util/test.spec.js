@@ -485,17 +485,6 @@ describe('isModifiedTest', () => {
 })
 
 describe('getPullRequestBaseBranch', () => {
-  it('returns null if the source branch is default-like', () => {
-    const { getPullRequestBaseBranch } = proxyquire('../../../src/plugins/util/test', {
-      './git': {
-        getGitRemoteName: () => 'origin',
-        getSourceBranch: () => 'main'
-      }
-    })
-    const baseBranch = getPullRequestBaseBranch()
-    expect(baseBranch).to.be.null
-  })
-
   context('there is a pull request base branch', () => {
     it('returns base commit SHA to compare against ', () => {
       const getMergeBaseStub = sinon.stub()

@@ -812,10 +812,6 @@ function getPullRequestBaseBranch (pullRequestBaseBranch) {
   const remoteName = getGitRemoteName()
 
   const sourceBranch = getSourceBranch()
-  const shortBranchName = sourceBranch.replace(new RegExp(`^${remoteName}/`), '')
-  if (BASE_LIKE_BRANCH_FILTER.test(shortBranchName)) {
-    return null
-  }
   // TODO: We will get the default branch name from the backend in the future.
   const POSSIBLE_DEFAULT_BRANCHES = ['main', 'master']
 
