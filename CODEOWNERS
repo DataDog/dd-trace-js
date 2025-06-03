@@ -65,7 +65,7 @@
 /packages/datadog-plugin-aws-sdk/test/bedrockruntime.spec.js @DataDog/ml-observability
 
 # CI
-/.github/workflows/apm-capabilities.yml @DataDog/dd-trace-js
+/.github/workflows/apm-capabilities.yml @DataDog/apm-sdk-api-js
 /.github/workflows/apm-integrations.yml @Datadog/apm-idm-js
 /.github/workflows/appsec.yml @DataDog/asm-js
 /.github/workflows/codeql-analysis.yml @DataDog/dd-trace-js
