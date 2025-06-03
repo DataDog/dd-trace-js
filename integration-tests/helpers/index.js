@@ -197,10 +197,17 @@ async function createSandbox (dependencies = [], isGitRepo = false,
     await exec('git config user.email "john@doe.com"', { cwd: folder })
     await exec('git config user.name "John Doe"', { cwd: folder })
     await exec('git config commit.gpgsign false', { cwd: folder })
-    await exec(
-      'git add -A && git commit -m "first commit" --no-verify && git remote add origin git@git.com:datadog/example.git',
-      { cwd: folder }
-    )
+
+    // Create a unique local bare repo for this test
+    const localRemotePath = path.join(folder, '..', `${path.basename(folder)}-remote.git`)
+    if (!fs.existsSync(localRemotePath)) {
+      await exec(`git init --bare ${localRemotePath}`)
+    }
+
+    await exec('git add -A', { cwd: folder })
+    await exec('git commit -m "first commit" --no-verify', { cwd: folder })
+    await exec(`git remote add origin ${localRemotePath}`, { cwd: folder })
+    await exec('git push origin master', { cwd: folder })
   }
 
   return {
