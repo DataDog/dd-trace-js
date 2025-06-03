@@ -96,7 +96,7 @@ const log = {
     return this._deprecate(code, message)
   },
 
-  isEnabled (fleetStableConfigValue = undefined, localStableConfigValue = undefined) {
+  isEnabled (fleetStableConfigValue, localStableConfigValue) {
     return isTrue(coalesce(
       fleetStableConfigValue,
       getConfiguration('DD_TRACE_DEBUG'),
@@ -107,9 +107,9 @@ const log = {
   },
 
   getLogLevel (
-    optionsValue = undefined,
-    fleetStableConfigValue = undefined,
-    localStableConfigValue = undefined
+    optionsValue,
+    fleetStableConfigValue,
+    localStableConfigValue
   ) {
     return coalesce(
       optionsValue,

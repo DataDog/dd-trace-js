@@ -38,7 +38,9 @@ const {
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
-  TEST_RETRY_REASON_TYPES
+  TEST_RETRY_REASON_TYPES,
+  TEST_IS_MODIFIED,
+  isModifiedTest
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -132,11 +134,9 @@ class MochaPlugin extends CiPlugin {
         testSuiteMetadata[TEST_ITR_FORCED_RUN] = 'true'
         this.telemetry.count(TELEMETRY_ITR_FORCED_TO_RUN, { testLevel: 'suite' })
       }
-      if (this.repositoryRoot !== this.sourceRoot && !!this.repositoryRoot) {
-        testSuiteMetadata[TEST_SOURCE_FILE] = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
-      } else {
-        testSuiteMetadata[TEST_SOURCE_FILE] = testSuite
-      }
+      testSuiteMetadata[TEST_SOURCE_FILE] = this.repositoryRoot !== this.sourceRoot && !!this.repositoryRoot
+        ? getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+        : testSuite
       if (testSuiteMetadata[TEST_SOURCE_FILE]) {
         testSuiteMetadata[TEST_SOURCE_START] = 1
       }
@@ -191,6 +191,19 @@ class MochaPlugin extends CiPlugin {
       }
 
       return ctx.currentStore
+    })
+
+    this.addSub('ci:mocha:test:is-modified', ({ modifiedTests, file, onDone }) => {
+      const testPath = getTestSuitePath(file, this.repositoryRoot)
+      const isModified = isModifiedTest(
+        testPath,
+        null,
+        null,
+        modifiedTests,
+        this.constructor.id
+      )
+
+      onDone(isModified)
     })
 
     this.addBind('ci:mocha:test:fn', (ctx) => {
@@ -467,7 +480,8 @@ class MochaPlugin extends CiPlugin {
       isParallel,
       isAttemptToFix,
       isDisabled,
-      isQuarantined
+      isQuarantined,
+      isModified
     } = testInfo
 
     const extraTags = {}
@@ -496,20 +510,26 @@ class MochaPlugin extends CiPlugin {
       extraTags[TEST_MANAGEMENT_IS_QUARANTINED] = 'true'
     }
 
+    if (isModified) {
+      extraTags[TEST_IS_MODIFIED] = 'true'
+      if (isEfdRetry) {
+        extraTags[TEST_IS_RETRY] = 'true'
+        extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.efd
+      }
+    }
+
     const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.sourceRoot)
     const testSuiteSpan = this._testSuites.get(testSuite)
 
-    if (this.repositoryRoot !== this.sourceRoot && !!this.repositoryRoot) {
-      extraTags[TEST_SOURCE_FILE] = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
-    } else {
-      extraTags[TEST_SOURCE_FILE] = testSuite
-    }
+    extraTags[TEST_SOURCE_FILE] = this.repositoryRoot !== this.sourceRoot && !!this.repositoryRoot
+      ? getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+      : testSuite
 
     if (isNew) {
       extraTags[TEST_IS_NEW] = 'true'
       if (isEfdRetry) {
         extraTags[TEST_IS_RETRY] = 'true'
-        extraTags[TEST_RETRY_REASON] = 'early_flake_detection'
+        extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.efd
       }
     }
 

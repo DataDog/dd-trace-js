@@ -12,6 +12,7 @@ const isNewTestCh = channel('ci:vitest:test:is-new')
 const isAttemptToFixCh = channel('ci:vitest:test:is-attempt-to-fix')
 const isDisabledCh = channel('ci:vitest:test:is-disabled')
 const isQuarantinedCh = channel('ci:vitest:test:is-quarantined')
+const isModifiedCh = channel('ci:vitest:test:is-modified')
 
 // test suite hooks
 const testSuiteStartCh = channel('ci:vitest:test-suite:start')
@@ -25,6 +26,7 @@ const libraryConfigurationCh = channel('ci:vitest:library-configuration')
 const knownTestsCh = channel('ci:vitest:known-tests')
 const isEarlyFlakeDetectionFaultyCh = channel('ci:vitest:is-early-flake-detection-faulty')
 const testManagementTestsCh = channel('ci:vitest:test-management-tests')
+const impactedTestsCh = channel('ci:vitest:modified-tests')
 
 const taskToCtx = new WeakMap()
 const taskToStatuses = new WeakMap()
@@ -32,6 +34,7 @@ const newTasks = new WeakSet()
 const disabledTasks = new WeakSet()
 const quarantinedTasks = new WeakSet()
 const attemptToFixTasks = new WeakSet()
+const modifiedTasks = new WeakSet()
 let isRetryReasonEfd = false
 let isRetryReasonAttemptToFix = false
 const switchedStatuses = new WeakSet()
@@ -58,7 +61,9 @@ function getProvidedContext () {
       _ddIsTestManagementTestsEnabled: isTestManagementTestsEnabled,
       _ddTestManagementAttemptToFixRetries: testManagementAttemptToFixRetries,
       _ddTestManagementTests: testManagementTests,
-      _ddIsFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled
+      _ddIsFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled,
+      _ddIsImpactedTestsEnabled: isImpactedTestsEnabled,
+      _ddModifiedTests: modifiedTests
     } = globalThis.__vitest_worker__.providedContext
 
     return {
@@ -70,9 +75,11 @@ function getProvidedContext () {
       isTestManagementTestsEnabled,
       testManagementAttemptToFixRetries,
       testManagementTests,
-      isFlakyTestRetriesEnabled
+      isFlakyTestRetriesEnabled,
+      isImpactedTestsEnabled,
+      modifiedTests
     }
-  } catch (e) {
+  } catch {
     log.error('Vitest workers could not parse provided context, so some features will not work.')
     return {
       isDiEnabled: false,
@@ -83,7 +90,9 @@ function getProvidedContext () {
       isTestManagementTestsEnabled: false,
       testManagementAttemptToFixRetries: 0,
       testManagementTests: {},
-      isFlakyTestRetriesEnabled: false
+      isFlakyTestRetriesEnabled: false,
+      isImpactedTestsEnabled: false,
+      modifiedTests: {}
     }
   }
 }
@@ -123,7 +132,6 @@ function getSessionStatus (state) {
   return 'pass'
 }
 
-// eslint-disable-next-line
 // From https://github.com/vitest-dev/vitest/blob/51c04e2f44d91322b334f8ccbcdb368facc3f8ec/packages/runner/src/run.ts#L243-L250
 function getVitestTestStatus (test, retryCount) {
   if (test.result.state !== 'fail') {
@@ -183,10 +191,12 @@ function getSortWrapper (sort) {
     let isEarlyFlakeDetectionFaulty = false
     let isKnownTestsEnabled = false
     let isTestManagementTestsEnabled = false
+    let isImpactedTestsEnabled = false
     let testManagementAttemptToFixRetries = 0
     let isDiEnabled = false
     let knownTests = {}
     let testManagementTests = {}
+    let modifiedTests = {}
 
     try {
       const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh)
@@ -199,12 +209,14 @@ function getSortWrapper (sort) {
         isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
         isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
         testManagementAttemptToFixRetries = libraryConfig.testManagementAttemptToFixRetries
+        isImpactedTestsEnabled = libraryConfig.isImpactedTestsEnabled
       }
-    } catch (e) {
+    } catch {
       isFlakyTestRetriesEnabled = false
       isEarlyFlakeDetectionEnabled = false
       isDiEnabled = false
       isKnownTestsEnabled = false
+      isImpactedTestsEnabled = false
     }
 
     if (isFlakyTestRetriesEnabled && !this.ctx.config.retry && flakyTestRetriesCount > 0) {
@@ -212,14 +224,17 @@ function getSortWrapper (sort) {
       try {
         const workspaceProject = this.ctx.getCoreWorkspaceProject()
         workspaceProject._provided._ddIsFlakyTestRetriesEnabled = isFlakyTestRetriesEnabled
-      } catch (e) {
+      } catch {
         log.warn('Could not send library configuration to workers.')
       }
     }
 
     if (isKnownTestsEnabled) {
       const knownTestsResponse = await getChannelPromise(knownTestsCh)
-      if (!knownTestsResponse.err) {
+      if (knownTestsResponse.err) {
+        isEarlyFlakeDetectionEnabled = false
+        isKnownTestsEnabled = false
+      } else {
         knownTests = knownTestsResponse.knownTests
         const getFilePaths = this.ctx.getTestFilepaths || this.ctx._globTestFilepaths
 
@@ -245,13 +260,10 @@ function getSortWrapper (sort) {
             workspaceProject._provided._ddKnownTests = knownTests.vitest || {}
             workspaceProject._provided._ddIsEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
             workspaceProject._provided._ddEarlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
-          } catch (e) {
+          } catch {
             log.warn('Could not send known tests to workers so Early Flake Detection will not work.')
           }
         }
-      } else {
-        isEarlyFlakeDetectionEnabled = false
-        isKnownTestsEnabled = false
       }
     }
 
@@ -259,26 +271,43 @@ function getSortWrapper (sort) {
       try {
         const workspaceProject = this.ctx.getCoreWorkspaceProject()
         workspaceProject._provided._ddIsDiEnabled = isDiEnabled
-      } catch (e) {
+      } catch {
         log.warn('Could not send Dynamic Instrumentation configuration to workers.')
       }
     }
 
     if (isTestManagementTestsEnabled) {
       const { err, testManagementTests: receivedTestManagementTests } = await getChannelPromise(testManagementTestsCh)
-      if (!err) {
+      if (err) {
+        isTestManagementTestsEnabled = false
+        log.error('Could not get test management tests.')
+      } else {
         testManagementTests = receivedTestManagementTests
         try {
           const workspaceProject = this.ctx.getCoreWorkspaceProject()
           workspaceProject._provided._ddIsTestManagementTestsEnabled = isTestManagementTestsEnabled
           workspaceProject._provided._ddTestManagementAttemptToFixRetries = testManagementAttemptToFixRetries
           workspaceProject._provided._ddTestManagementTests = testManagementTests
-        } catch (e) {
+        } catch {
           log.warn('Could not send test management tests to workers so Test Management will not work.')
         }
+      }
+    }
+
+    if (isImpactedTestsEnabled) {
+      const { err, modifiedTests: receivedModifiedTests } = await getChannelPromise(impactedTestsCh)
+      if (err) {
+        isImpactedTestsEnabled = false
+        log.error('Could not get modified tests.')
       } else {
-        isTestManagementTestsEnabled = false
-        log.error('Could not get test management tests.')
+        modifiedTests = receivedModifiedTests
+        try {
+          const workspaceProject = this.ctx.getCoreWorkspaceProject()
+          workspaceProject._provided._ddIsImpactedTestsEnabled = isImpactedTestsEnabled
+          workspaceProject._provided._ddModifiedTests = modifiedTests
+        } catch {
+          log.warn('Could not send modified tests to workers so Impacted Tests will not work.')
+        }
       }
     }
 
@@ -290,7 +319,7 @@ function getSortWrapper (sort) {
 
         try {
           testCodeCoverageLinesTotal = totalCodeCoverage.getCoverageSummary().lines.pct
-        } catch (e) {
+        } catch {
           // ignore errors
         }
         return totalCodeCoverage
@@ -364,7 +393,9 @@ addHook({
       numRepeats,
       isTestManagementTestsEnabled,
       testManagementAttemptToFixRetries,
-      testManagementTests
+      testManagementTests,
+      isImpactedTestsEnabled,
+      modifiedTests
     } = getProvidedContext()
 
     if (isTestManagementTestsEnabled) {
@@ -397,6 +428,23 @@ addHook({
       })
     }
 
+    if (isImpactedTestsEnabled) {
+      isModifiedCh.publish({
+        modifiedTests,
+        testSuiteAbsolutePath: task.file.filepath,
+        onDone: (isImpacted) => {
+          if (isImpacted) {
+            if (isEarlyFlakeDetectionEnabled) {
+              isRetryReasonEfd = task.repeats !== numRepeats
+              task.repeats = numRepeats
+            }
+            modifiedTasks.add(task)
+            taskToStatuses.set(task, [])
+          }
+        }
+      })
+    }
+
     if (isKnownTestsEnabled) {
       isNewTestCh.publish({
         knownTests,
@@ -404,7 +452,7 @@ addHook({
         testName,
         onDone: (isNew) => {
           if (isNew && !attemptToFixTasks.has(task)) {
-            if (isEarlyFlakeDetectionEnabled) {
+            if (isEarlyFlakeDetectionEnabled && !modifiedTasks.has(task)) {
               isRetryReasonEfd = task.repeats !== numRepeats
               task.repeats = numRepeats
             }
@@ -575,11 +623,12 @@ addHook({
       isAttemptToFix: attemptToFixTasks.has(task),
       isDisabled: disabledTasks.has(task),
       isQuarantined,
-      isRetryReasonAtr
+      isRetryReasonAtr,
+      isModified: modifiedTasks.has(task)
     }
     taskToCtx.set(task, ctx)
 
-    testStartCh.runStores(ctx, () => { })
+    testStartCh.runStores(ctx, () => {})
     return onBeforeTryTask.apply(this, arguments)
   })
 
@@ -609,7 +658,7 @@ addHook({
         if (statuses.length === testManagementAttemptToFixRetries) {
           if (statuses.every(status => status === 'pass')) {
             attemptToFixPassed = true
-          } else if (statuses.some(status => status === 'fail')) {
+          } else if (statuses.includes('fail')) {
             attemptToFixFailed = true
           }
         }
@@ -621,7 +670,7 @@ addHook({
         ctx.task = task
         ctx.attemptToFixPassed = attemptToFixPassed
         ctx.attemptToFixFailed = attemptToFixFailed
-        testFinishTimeCh.runStores(ctx, () => { })
+        testFinishTimeCh.runStores(ctx, () => {})
       }
 
       return result
@@ -726,7 +775,7 @@ addHook({
     const testSuiteAbsolutePath = testPaths[0]?.filepath || testPaths[0]
 
     const testSuiteCtx = { testSuiteAbsolutePath, frameworkVersion }
-    testSuiteStartCh.runStores(testSuiteCtx, () => { })
+    testSuiteStartCh.runStores(testSuiteCtx, () => {})
     const startTestsResponse = await startTests.apply(this, arguments)
 
     let onFinish = null
@@ -768,7 +817,7 @@ addHook({
           let attemptToFixFailed = false
           if (attemptToFixTasks.has(task)) {
             const statuses = taskToStatuses.get(task)
-            if (statuses.some(status => status === 'fail')) {
+            if (statuses.includes('fail')) {
               attemptToFixFailed = true
             }
             if (statuses.every(status => status === 'fail')) {
@@ -780,7 +829,7 @@ addHook({
             const isRetry = task.result?.retryCount > 0
             // `duration` is the duration of all the retries, so it can't be used if there are retries
             testErrorCh.publish({
-              duration: !isRetry ? duration : undefined,
+              duration: isRetry ? undefined : duration,
               error: testError,
               hasFailedAllRetries,
               attemptToFixFailed,
@@ -815,7 +864,7 @@ addHook({
 
     if (testSuiteError) {
       testSuiteCtx.error = testSuiteError
-      testSuiteErrorCh.runStores(testSuiteCtx, () => { })
+      testSuiteErrorCh.runStores(testSuiteCtx, () => {})
     }
 
     testSuiteFinishCh.publish({ status: testSuiteResult.state, onFinish, ...testSuiteCtx.currentStore })

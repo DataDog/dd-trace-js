@@ -61,11 +61,11 @@ function Hook (modules, options, onrequire) {
     let filename
     try {
       filename = Module._resolveFilename(request, this)
-    } catch (resolveErr) {
+    } catch {
       return _origRequire.apply(this, arguments)
     }
 
-    const core = filename.indexOf(path.sep) === -1
+    const core = !filename.includes(path.sep)
     let name, basedir, hooks
     // return known patched modules immediately
     if (cache[filename]) {
@@ -114,7 +114,7 @@ function Hook (modules, options, onrequire) {
       const inAWSLambda = getConfiguration('AWS_LAMBDA_FUNCTION_NAME') !== undefined
       const hasLambdaHandler = getConfiguration('DD_LAMBDA_HANDLER') !== undefined
       const segments = filename.split(path.sep)
-      const filenameFromNodeModule = segments.lastIndexOf('node_modules') !== -1
+      const filenameFromNodeModule = segments.includes('node_modules')
       // decide how to assign the stat
       // first case will only happen when patching an AWS Lambda Handler
       const stat = inAWSLambda && hasLambdaHandler && !filenameFromNodeModule ? { name: filename } : parse(filename)
@@ -135,7 +135,7 @@ function Hook (modules, options, onrequire) {
       let res
       try {
         res = Module._findPath(name, [basedir, ...paths])
-      } catch (e) {
+      } catch {
         // case where the file specified in package.json "main" doesn't exist
         // in this case, the file is treated as module-internal
       }

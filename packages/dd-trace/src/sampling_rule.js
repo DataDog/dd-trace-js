@@ -69,7 +69,7 @@ function resourceLocator (span) {
 }
 
 class SamplingRule {
-  constructor ({ name, service, resource, tags, sampleRate = 1.0, provenance = undefined, maxPerSecond } = {}) {
+  constructor ({ name, service, resource, tags, sampleRate = 1, provenance, maxPerSecond } = {}) {
     this.matchers = []
 
     if (name) {
@@ -112,6 +112,9 @@ class SamplingRule {
 
   match (span) {
     for (const matcher of this.matchers) {
+      // Rule is a special object with a .match() property.
+      // It has nothing to do with a regular expression.
+      // eslint-disable-next-line unicorn/prefer-regexp-test
       if (!matcher.match(span)) {
         return false
       }
@@ -120,8 +123,14 @@ class SamplingRule {
     return true
   }
 
-  sample () {
-    if (!this._sampler.isSampled()) {
+  /**
+   * Determines whether a span should be sampled based on the configured sampling rule.
+   *
+   * @param {Span|SpanContext} span - The span or span context to evaluate.
+   * @returns {boolean} `true` if the span should be sampled, otherwise `false`.
+   */
+  sample (span) {
+    if (!this._sampler.isSampled(span)) {
       return false
     }
 

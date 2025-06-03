@@ -1,8 +1,6 @@
 'use strict'
 
-const { calculateDDBasePath } = require('../util')
-
-const ddBasePath = calculateDDBasePath(__dirname)
+const { ddBasePath } = require('../util')
 
 const LIBRARY_FRAMES_BUFFER = 20
 
@@ -23,7 +21,7 @@ function getCallSiteList (maxDepth = 100) {
     Error.prepareStackTrace = function (_, callsites) {
       callsiteList = callsites
     }
-    const e = new Error()
+    const e = new Error('message')
     e.stack
   } finally {
     Error.prepareStackTrace = previousPrepareStackTrace

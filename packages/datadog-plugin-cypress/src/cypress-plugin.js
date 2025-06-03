@@ -41,7 +41,11 @@ const {
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_HAS_FAILED_ALL_RETRIES,
   getLibraryCapabilitiesTags,
-  TEST_RETRY_REASON_TYPES
+  TEST_RETRY_REASON_TYPES,
+  getPullRequestDiff,
+  getModifiedTestsFromDiff,
+  TEST_IS_MODIFIED,
+  getPullRequestBaseBranch
 } = require('../../dd-trace/src/plugins/util/test')
 const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
@@ -68,7 +72,11 @@ const {
   GIT_BRANCH,
   CI_PROVIDER_NAME,
   CI_WORKSPACE_PATH,
-  GIT_COMMIT_MESSAGE
+  GIT_COMMIT_MESSAGE,
+  GIT_TAG,
+  GIT_PULL_REQUEST_BASE_BRANCH_SHA,
+  GIT_COMMIT_HEAD_SHA,
+  GIT_PULL_REQUEST_BASE_BRANCH
 } = require('../../dd-trace/src/plugins/util/tags')
 const {
   OS_VERSION,
@@ -77,6 +85,7 @@ const {
   RUNTIME_NAME,
   RUNTIME_VERSION
 } = require('../../dd-trace/src/plugins/util/env')
+const { DD_MAJOR } = require('../../../version')
 
 const TEST_FRAMEWORK_NAME = 'cypress'
 
@@ -176,6 +185,26 @@ function getTestManagementTests (tracer, testConfiguration) {
   })
 }
 
+function getModifiedTests (testEnvironmentMetadata) {
+  const {
+    [GIT_PULL_REQUEST_BASE_BRANCH]: pullRequestBaseBranch,
+    [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseBranchSha,
+    [GIT_COMMIT_HEAD_SHA]: commitHeadSha
+  } = testEnvironmentMetadata
+
+  const baseBranchSha = pullRequestBaseBranchSha || getPullRequestBaseBranch(pullRequestBaseBranch)
+
+  if (baseBranchSha) {
+    const diff = getPullRequestDiff(baseBranchSha, commitHeadSha)
+    const modifiedTests = getModifiedTestsFromDiff(diff)
+    if (modifiedTests) {
+      return modifiedTests
+    }
+  }
+
+  throw new Error('Modified tests could not be retrieved')
+}
+
 function getSuiteStatus (suiteStats) {
   if (!suiteStats) {
     return 'skip'
@@ -206,10 +235,13 @@ class CypressPlugin {
       [GIT_BRANCH]: branch,
       [CI_PROVIDER_NAME]: ciProviderName,
       [CI_WORKSPACE_PATH]: repositoryRoot,
-      [GIT_COMMIT_MESSAGE]: commitMessage
+      [GIT_COMMIT_MESSAGE]: commitMessage,
+      [GIT_TAG]: tag,
+      [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseSha,
+      [GIT_COMMIT_HEAD_SHA]: commitHeadSha
     } = this.testEnvironmentMetadata
 
-    this.repositoryRoot = repositoryRoot
+    this.repositoryRoot = repositoryRoot || process.cwd()
     this.ciProviderName = ciProviderName
     this.codeOwnersEntries = getCodeOwnersFileEntries(repositoryRoot)
 
@@ -223,7 +255,10 @@ class CypressPlugin {
       runtimeVersion,
       branch,
       testLevel: 'test',
-      commitMessage
+      commitMessage,
+      tag,
+      pullRequestBaseSha,
+      commitHeadSha
     }
     this.finishedTestsByFile = {}
     this.testStatuses = {}
@@ -243,6 +278,8 @@ class CypressPlugin {
     this.knownTests = []
     this.isTestManagementTestsEnabled = false
     this.testManagementAttemptToFixRetries = 0
+    this.isImpactedTestsEnabled = false
+    this.modifiedTests = []
   }
 
   // Init function returns a promise that resolves with the Cypress configuration
@@ -272,7 +309,8 @@ class CypressPlugin {
               flakyTestRetriesCount,
               isKnownTestsEnabled,
               isTestManagementEnabled,
-              testManagementAttemptToFixRetries
+              testManagementAttemptToFixRetries,
+              isImpactedTestsEnabled
             }
           } = libraryConfigurationResponse
           this.isSuitesSkippingEnabled = isSuitesSkippingEnabled
@@ -286,10 +324,23 @@ class CypressPlugin {
           }
           this.isTestManagementTestsEnabled = isTestManagementEnabled
           this.testManagementAttemptToFixRetries = testManagementAttemptToFixRetries
+          this.isImpactedTestsEnabled = isImpactedTestsEnabled
         }
         return this.cypressConfig
       })
     return this.libraryConfigurationPromise
+  }
+
+  getIsTestModified (testSuiteAbsolutePath) {
+    const relativeTestSuitePath = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+    if (!this.modifiedTests) {
+      return false
+    }
+    const lines = this.modifiedTests[relativeTestSuitePath]
+    if (!lines) {
+      return false
+    }
+    return lines.length > 0
   }
 
   getTestSuiteProperties (testSuite) {
@@ -456,6 +507,15 @@ class CypressPlugin {
       }
     }
 
+    if (this.isImpactedTestsEnabled) {
+      try {
+        this.modifiedTests = getModifiedTests(this.testEnvironmentMetadata)
+      } catch (error) {
+        log.error(error)
+        this.isImpactedTestsEnabled = false
+      }
+    }
+
     // `details.specs` are test files
     details.specs?.forEach(({ absolute, relative }) => {
       const isUnskippableSuite = isMarkedAsUnskippable({ path: absolute })
@@ -475,7 +535,13 @@ class CypressPlugin {
       testSessionSpanMetadata[TEST_EARLY_FLAKE_ENABLED] = 'true'
     }
 
-    const testSessionName = getTestSessionName(this.tracer._tracer._config, this.command, this.testEnvironmentMetadata)
+    const trimmedCommand = DD_MAJOR < 6 ? this.command : 'cypress run'
+
+    const testSessionName = getTestSessionName(
+      this.tracer._tracer._config,
+      trimmedCommand,
+      this.testEnvironmentMetadata
+    )
 
     if (this.tracer._tracer._exporter?.addMetadataTags) {
       const metadataTags = {}
@@ -602,13 +668,9 @@ class CypressPlugin {
       const isSkippedByItr = this.testsToSkip.find(test =>
         cypressTestName === test.name && spec.relative === test.suite
       )
-      let testSourceFile
-
-      if (spec.absolute && this.repositoryRoot) {
-        testSourceFile = getTestSuitePath(spec.absolute, this.repositoryRoot)
-      } else {
-        testSourceFile = spec.relative
-      }
+      const testSourceFile = spec.absolute && this.repositoryRoot
+        ? getTestSuitePath(spec.absolute, this.repositoryRoot)
+        : spec.relative
 
       const skippedTestSpan = this.getTestSpan({ testName: cypressTestName, testSuite: spec.relative, testSourceFile })
 
@@ -684,12 +746,9 @@ class CypressPlugin {
         if (this.itrCorrelationId) {
           finishedTest.testSpan.setTag(ITR_CORRELATION_ID, this.itrCorrelationId)
         }
-        let testSourceFile
-        if (spec.absolute && this.repositoryRoot) {
-          testSourceFile = getTestSuitePath(spec.absolute, this.repositoryRoot)
-        } else {
-          testSourceFile = spec.relative
-        }
+        const testSourceFile = spec.absolute && this.repositoryRoot
+          ? getTestSuitePath(spec.absolute, this.repositoryRoot)
+          : spec.relative
         if (testSourceFile) {
           finishedTest.testSpan.setTag(TEST_SOURCE_FILE, testSourceFile)
         }
@@ -726,7 +785,10 @@ class CypressPlugin {
           isKnownTestsEnabled: this.isKnownTestsEnabled,
           isTestManagementEnabled: this.isTestManagementTestsEnabled,
           testManagementAttemptToFixRetries: this.testManagementAttemptToFixRetries,
-          testManagementTests: this.getTestSuiteProperties(testSuite)
+          testManagementTests: this.getTestSuiteProperties(testSuite),
+          isImpactedTestsEnabled: this.isImpactedTestsEnabled,
+          isModifiedTest: this.getIsTestModified(testSuiteAbsolutePath),
+          repositoryRoot: this.repositoryRoot
         }
 
         if (this.testSuiteSpan) {
@@ -737,7 +799,7 @@ class CypressPlugin {
       },
       'dd:beforeEach': (test) => {
         const { testName, testSuite } = test
-        const shouldSkip = !!this.testsToSkip.find(test => {
+        const shouldSkip = this.testsToSkip.some(test => {
           return testName === test.name && testSuite === test.suite
         })
         const isUnskippable = this.unskippableSuites.includes(testSuite)
@@ -784,7 +846,8 @@ class CypressPlugin {
           testName,
           isNew,
           isEfdRetry,
-          isAttemptToFix
+          isAttemptToFix,
+          isModified
         } = test
         if (coverage && this.isCodeCoverageEnabled && this.tracer._tracer._exporter?.exportCoverage) {
           const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
@@ -808,10 +871,10 @@ class CypressPlugin {
         this.activeTestSpan.setTag(TEST_STATUS, testStatus)
 
         // Save the test status to know if it has passed all retries
-        if (!this.testStatuses[testName]) {
-          this.testStatuses[testName] = [testStatus]
-        } else {
+        if (this.testStatuses[testName]) {
           this.testStatuses[testName].push(testStatus)
+        } else {
+          this.testStatuses[testName] = [testStatus]
         }
         const testStatuses = this.testStatuses[testName]
 
@@ -831,6 +894,13 @@ class CypressPlugin {
             this.activeTestSpan.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
           }
         }
+        if (isModified) {
+          this.activeTestSpan.setTag(TEST_IS_MODIFIED, 'true')
+          if (isEfdRetry) {
+            this.activeTestSpan.setTag(TEST_IS_RETRY, 'true')
+            this.activeTestSpan.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
+          }
+        }
         if (isAttemptToFix) {
           this.activeTestSpan.setTag(TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX, 'true')
           if (testStatuses.length > 1) {
@@ -839,7 +909,7 @@ class CypressPlugin {
           }
           const isLastAttempt = testStatuses.length === this.testManagementAttemptToFixRetries + 1
           if (isLastAttempt) {
-            if (testStatuses.some(status => status === 'fail')) {
+            if (testStatuses.includes('fail')) {
               this.activeTestSpan.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
             }
             if (testStatuses.every(status => status === 'fail')) {

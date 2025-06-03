@@ -32,7 +32,7 @@ const {
  */
 function _extractModuleRootAndHandler (fullHandler) {
   const handlerString = path.basename(fullHandler)
-  const moduleRoot = fullHandler.substring(0, fullHandler.indexOf(handlerString))
+  const moduleRoot = fullHandler.slice(0, Math.max(0, fullHandler.indexOf(handlerString)))
 
   return [moduleRoot, handlerString]
 }

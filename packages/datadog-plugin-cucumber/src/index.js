@@ -35,7 +35,10 @@ const {
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
-  TEST_RETRY_REASON_TYPES
+  TEST_RETRY_REASON_TYPES,
+  TEST_IS_MODIFIED,
+  isModifiedTest,
+  getTestEndLine
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
@@ -346,7 +349,8 @@ class CucumberPlugin extends CiPlugin {
       hasPassedAllRetries,
       hasFailedAttemptToFix,
       isDisabled,
-      isQuarantined
+      isQuarantined,
+      isModified
     }) => {
       const statusTag = isStep ? 'step.status' : TEST_STATUS
 
@@ -401,6 +405,14 @@ class CucumberPlugin extends CiPlugin {
         span.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
       }
 
+      if (isModified) {
+        span.setTag(TEST_IS_MODIFIED, 'true')
+        if (isEfdRetry) {
+          span.setTag(TEST_IS_RETRY, 'true')
+          span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
+        }
+      }
+
       span.finish()
       if (!isStep) {
         const spanTags = span.context()._tags
@@ -442,6 +454,49 @@ class CucumberPlugin extends CiPlugin {
 
     this.addBind('ci:cucumber:test:fn', (ctx) => {
       return ctx.currentStore
+    })
+
+    this.addSub('ci:cucumber:is-modified-test', ({
+      scenarios,
+      testFileAbsolutePath,
+      modifiedTests,
+      stepIds,
+      stepDefinitions,
+      setIsModified
+    }) => {
+      const testScenarioPath = getTestSuitePath(testFileAbsolutePath, this.repositoryRoot || process.cwd())
+      for (const scenario of scenarios) {
+        const isModified = isModifiedTest(
+          testScenarioPath,
+          scenario.location.line,
+          scenario.steps[scenario.steps.length - 1].location.line,
+          modifiedTests,
+          'cucumber'
+        )
+        if (isModified) {
+          setIsModified(true)
+          return
+        }
+      }
+      for (const stepDefinition of stepDefinitions) {
+        if (!stepIds?.includes(stepDefinition.id)) {
+          continue
+        }
+        const testStartLineStep = stepDefinition.line
+        const testEndLineStep = getTestEndLine(stepDefinition.code, testStartLineStep)
+        const isModified = isModifiedTest(
+          stepDefinition.uri,
+          testStartLineStep,
+          testEndLineStep,
+          modifiedTests,
+          'cucumber'
+        )
+        if (isModified) {
+          setIsModified(true)
+          return
+        }
+      }
+      setIsModified(false)
     })
   }
 

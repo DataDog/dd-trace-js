@@ -1,5 +1,6 @@
 'use strict'
 
+const { errorMonitor } = require('events')
 const {
   channel,
   addHook,
@@ -31,7 +32,7 @@ function wrapMaybeInvoke (_maybeInvoke) {
     const callbackIndex = args.length - 1
     const callback = args[callbackIndex]
 
-    if (callback instanceof Function) {
+    if (typeof callback === 'function') {
       args[callbackIndex] = AsyncResource.bind(callback)
     }
 
@@ -183,12 +184,12 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.12'] }, Buc
       startCh.publish({ resource: n1qlQuery, bucket: { name: this.name || this._name }, seedNodes: this._dd_hosts })
 
       emitter.once('rows', asyncResource.bind(() => {
-        finishCh.publish(undefined)
+        finishCh.publish()
       }))
 
-      emitter.once('error', asyncResource.bind((error) => {
+      emitter.once(errorMonitor, asyncResource.bind((error) => {
         errorCh.publish(error)
-        finishCh.publish(undefined)
+        finishCh.publish()
       }))
 
       try {

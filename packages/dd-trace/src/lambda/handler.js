@@ -26,11 +26,11 @@ let __lambdaTimeout
 function checkTimeout (context) {
   const remainingTimeInMillis = context.getRemainingTimeInMillis()
 
-  let apmFlushDeadline = parseInt(getConfiguration('DD_APM_FLUSH_DEADLINE_MILLISECONDS')) || 100
+  let apmFlushDeadline = Number.parseInt(getConfiguration('DD_APM_FLUSH_DEADLINE_MILLISECONDS')) || 100
   apmFlushDeadline = apmFlushDeadline < 0 ? 100 : apmFlushDeadline
 
   __lambdaTimeout = setTimeout(() => {
-    timeoutChannel.publish(undefined)
+    timeoutChannel.publish()
   }, remainingTimeInMillis - apmFlushDeadline)
 }
 
@@ -44,14 +44,14 @@ function checkTimeout (context) {
  */
 function crashFlush () {
   const activeSpan = tracer.scope().active()
-  if (activeSpan !== null) {
+  if (activeSpan === null) {
+    log.debug('An impending timeout was reached, but no root span was found. No error will be tagged.')
+  } else {
     const error = new ImpendingTimeout('Datadog detected an impending timeout')
     activeSpan.addTags({
       [ERROR_MESSAGE]: error.message,
       [ERROR_TYPE]: error.name
     })
-  } else {
-    log.debug('An impending timeout was reached, but no root span was found. No error will be tagged.')
   }
 
   tracer._processor.killAll()
@@ -71,7 +71,7 @@ function extractContext (args) {
   if (context === undefined || context.getRemainingTimeInMillis === undefined) {
     context = args.length > 2 ? args[2] : undefined
     if (context === undefined || context.getRemainingTimeInMillis === undefined) {
-      throw Error('Could not extract context')
+      throw new Error('Could not extract context')
     }
   }
   return context

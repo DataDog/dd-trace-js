@@ -10,7 +10,7 @@ const DD_EXTERNAL_ENV = getConfiguration('DD_EXTERNAL_ENV')
 const uuidSource =
 '[0-9a-f]{8}[-_][0-9a-f]{4}[-_][0-9a-f]{4}[-_][0-9a-f]{4}[-_][0-9a-f]{12}|[0-9a-f]{8}(?:-[0-9a-f]{4}){4}$'
 const containerSource = '[0-9a-f]{64}'
-const taskSource = '[0-9a-f]{32}-\\d+'
+const taskSource = String.raw`[0-9a-f]{32}-\d+`
 const lineReg = /^(\d+):([^:]*):(.+)$/m
 const entityReg = new RegExp(`.*(${uuidSource}|${containerSource}|${taskSource})(?:\\.scope)?$`, 'm')
 

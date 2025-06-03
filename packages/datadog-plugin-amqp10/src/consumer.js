@@ -7,12 +7,14 @@ class Amqp10ConsumerPlugin extends ConsumerPlugin {
   static get id () { return 'amqp10' }
   static get system () { return 'amqp' }
 
-  start ({ link }) {
+  bindStart (ctx) {
+    const { link } = ctx
+
     const source = getShortName(link)
     const address = getAddress(link)
 
     this.startSpan({
-      resource: ['receive', source].filter(v => v).join(' '),
+      resource: ['receive', source].filter(Boolean).join(' '),
       type: 'worker',
       meta: {
         'amqp.link.source.address': source,
@@ -23,7 +25,9 @@ class Amqp10ConsumerPlugin extends ConsumerPlugin {
         'amqp.connection.port': address.port,
         'amqp.connection.user': address.user
       }
-    })
+    }, ctx)
+
+    return ctx.currentStore
   }
 }
 
