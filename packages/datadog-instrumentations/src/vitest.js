@@ -292,7 +292,6 @@ function getSortWrapper (sort) {
     if (isImpactedTestsEnabled) {
       const { err, modifiedTests } = await getChannelPromise(impactedTestsCh)
       if (err) {
-        isImpactedTestsEnabled = false
         log.error('Could not get modified tests.')
       } else {
         try {
