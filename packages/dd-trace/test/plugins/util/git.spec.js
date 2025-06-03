@@ -767,7 +767,7 @@ describe('getGitInformationDiscrepancy', () => {
       gitCommitSHA: 'abc123'
     })
 
-    expect(execFileSyncStub).to.have.been.calledWith('git', ['ls-remote', '--get-url'])
+    expect(execFileSyncStub).to.have.been.calledWith('git', ['config', '--get', 'remote.origin.url'], { stdio: 'pipe' })
     expect(execFileSyncStub).to.have.been.calledWith('git', ['rev-parse', 'HEAD'])
   })
 
