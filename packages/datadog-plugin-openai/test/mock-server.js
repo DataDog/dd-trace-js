@@ -31,6 +31,8 @@ app.post('/v1/completions', (req, res) => {
         type: 'invalid_request_error'
       }
     })
+
+    return
   }
 
   if (stream) {
@@ -101,7 +103,7 @@ app.post('/v1/completions', (req, res) => {
 })
 
 app.post('/v1/chat/completions', (req, res) => {
-  const { messages, model, tools, stream = false, n = 1, stream_options: streamOptions = {} } = req.body
+  const { messages, model, tools, functions, stream = false, n = 1, stream_options: streamOptions = {} } = req.body
 
   if (typeof messages !== 'object') {
     res.status(400).json({
@@ -168,25 +170,31 @@ app.post('/v1/chat/completions', (req, res) => {
     }]
   }
 
-  if (tools) {
+  const toolsOrFunctions = tools || functions
+
+  if (toolsOrFunctions) {
     const toolCalls = []
 
-    for (let idx = 0; idx < tools.length; idx++) {
-      const tool = tools[idx]
+    for (let idx = 0; idx < toolsOrFunctions.length; idx++) {
+      const toolOrFunction = toolsOrFunctions[idx]
       toolCalls.push({
         id: `tool-${idx + 1}`,
         type: 'function',
         function: {
-          name: tool.function.name,
-          arguments: JSON.stringify(Object.keys(tool.function.parameters.properties).reduce((acc, argName) => {
-            acc[argName] = 'some-value'
-            return acc
-          }, {}))
+          name: toolOrFunction.function.name,
+          arguments: JSON.stringify(
+            Object
+              .keys(toolOrFunction.function.parameters.properties)
+              .reduce((acc, argName) => {
+                acc[argName] = 'some-value'
+                return acc
+              }, {}))
         }
       })
     }
 
-    response.choices[0].message.tool_calls = toolCalls
+    if (tools?.length) response.choices[0].message.tool_calls = toolCalls
+    if (functions?.length) response.choices[0].message.function_call = toolCalls[0].function
     response.choices[0].finish_reason = 'tool_calls'
     response.choices[0].message.content = null
   }
