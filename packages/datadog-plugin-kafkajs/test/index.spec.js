@@ -2,7 +2,6 @@
 
 const { expect } = require('chai')
 const semver = require('semver')
-const { storage } = require('../../datadog-core')
 const dc = require('dc-polyfill')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
