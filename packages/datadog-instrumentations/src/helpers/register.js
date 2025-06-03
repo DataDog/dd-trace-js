@@ -30,7 +30,7 @@ for (const [key, value] of Object.entries(process.env)) {
   if (match && (value?.toLowerCase() === 'false' || value === '0')) {
     const integration = match[1].toLowerCase()
     disabledInstrumentations.add(integration)
-  } else {
+  } else if (match && (value?.toLowerCase() === 'true' || value === '1')) {
     const integration = match[1].toLowerCase()
     enabledInstrumentations.add(integration)
   }
