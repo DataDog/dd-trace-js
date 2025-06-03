@@ -139,7 +139,7 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/le
   })
 
   shimmer.wrap(LeaseManager.prototype, 'remove', remove => function (message) {
-    receiveFinishCh.runStores(ctx, remove, this, ...arguments)
+    return receiveFinishCh.runStores(ctx, remove, this, ...arguments)
   })
 
   shimmer.wrap(LeaseManager.prototype, 'clear', clear => function () {
