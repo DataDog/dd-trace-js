@@ -646,6 +646,7 @@ class TextMapPropagator {
         return
       }
       if (spanContext) {
+        // eslint-disable-next-line unicorn/no-lonely-if
         if (this._config.baggageTagKeys === '*' || keysToSpanTag.has(key)) {
           spanContext._trace.tags['baggage.' + key] = value
         }
