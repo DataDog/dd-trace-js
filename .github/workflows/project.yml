@@ -84,3 +84,37 @@ jobs:
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
       - run: node scripts/verify-ci-config.js
+
+  yarn-dedupe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Node.js
+        uses: ./.github/actions/node/active-lts
+
+      - name: Install dependencies
+        uses: ./.github/actions/install
+
+      - name: Run yarn dependencies:dedupe
+        run: yarn dependencies:dedupe
+
+      - name: Check if yarn.lock was modified
+        run: |
+          if git diff --exit-code yarn.lock; then
+            echo "✅ yarn.lock is already properly deduplicated"
+          else
+            echo "❌ The yarn.lock file needs deduplication!"
+            echo ""
+            echo "The yarn dedupe command has modified your yarn.lock file."
+            echo "This means there were duplicate dependencies that could be optimized."
+            echo ""
+            echo "To fix this issue:"
+            echo "1. Run 'yarn dependencies:dedupe' locally"
+            echo "2. Commit the updated yarn.lock file"
+            echo "3. Push your changes"
+            echo ""
+            echo "This helps keep the dependency tree clean."
+            exit 1
+          fi
