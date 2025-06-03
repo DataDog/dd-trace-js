@@ -15,8 +15,7 @@ const {
   DD_TRACE_DEBUG = ''
 } = process.env
 
-const { hooks, DISABLED_BY_DEFAULT_INTEGRATIONS } = require('./hooks')
-
+const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
 const names = Object.keys(hooks)
 const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
@@ -25,7 +24,6 @@ const disabledInstrumentations = new Set(
 )
 
 // Check for DD_TRACE_<INTEGRATION>_ENABLED environment variables
-const enabledIntegrationsOverrides = new Set()
 for (const [key, value] of Object.entries(process.env)) {
   const match = key.match(/^DD_TRACE_(.+)_ENABLED$/)
   if (match && (value?.toLowerCase() === 'false' || value === '0')) {
@@ -33,13 +31,6 @@ for (const [key, value] of Object.entries(process.env)) {
     disabledInstrumentations.add(integration)
   }
 }
-
-// Apply overrides
-enabledIntegrationsOverrides.forEach(integration => delete DISABLED_BY_DEFAULT_INTEGRATIONS[integration])
-// Add disabled by default integrations
-Object.entries(DISABLED_BY_DEFAULT_INTEGRATIONS).forEach(
-  ([integration, packageName]) => disabledInstrumentations.add(packageName)
-)
 
 const loadChannel = channel('dd-trace:instrumentation:load')
 

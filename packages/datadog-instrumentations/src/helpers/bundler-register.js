@@ -7,7 +7,7 @@ const {
   loadChannel,
   matchVersion
 } = require('./register.js')
-const { hooks } = require('./hooks')
+const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
 const log = require('../../../dd-trace/src/log')
 
