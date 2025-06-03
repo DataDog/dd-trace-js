@@ -16,6 +16,8 @@ const Sampler = require('../../dd-trace/src/sampler')
 
 const tracerRequirePath = '../../dd-trace'
 
+const { DD_MAJOR } = require('../../../version')
+
 describe('Plugin', () => {
   let openai
   let clock
@@ -25,7 +27,8 @@ describe('Plugin', () => {
   let tracer
 
   describe('openai', () => {
-    withVersions('openai', 'openai', version => {
+    // TODO: Remove the range once we support openai 5
+    withVersions('openai', 'openai', '<5.0.0', version => {
       const moduleRequirePath = `../../../versions/openai@${version}`
 
       beforeEach(() => {
@@ -93,7 +96,7 @@ describe('Plugin', () => {
             })
 
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0].meta).to.have.property('openai.request.messages.0.content',
                 '...')
               expect(traces[0][0].meta).to.have.property('openai.request.messages.1.content',
@@ -171,7 +174,7 @@ describe('Plugin', () => {
 
         it('should attach the error to the span', async () => {
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('error', 1)
               // the message content differs on OpenAI version, even between patches
               expect(traces[0][0].meta['error.message']).to.exist
@@ -321,10 +324,10 @@ describe('Plugin', () => {
             ])
 
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.0.0')) {
+              if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'completions.create')
               } else {
                 expect(traces[0][0]).to.have.property('resource', 'createCompletion')
@@ -411,7 +414,7 @@ describe('Plugin', () => {
 
           expect(externalLoggerStub).to.have.been.calledWith({
             status: 'info',
-            message: semver.satisfies(realVersion, '>=4.0.0')
+            message: semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6
               ? 'sampled completions.create'
               : 'sampled createCompletion',
             prompt: 'Hello, \n\nFriend\t\tHi',
@@ -448,7 +451,7 @@ describe('Plugin', () => {
             ])
 
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
             })
 
@@ -501,10 +504,10 @@ describe('Plugin', () => {
             ])
 
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.0.0')) {
+              if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'embeddings.create')
               } else {
                 expect(traces[0][0]).to.have.property('resource', 'createEmbedding')
@@ -543,7 +546,9 @@ describe('Plugin', () => {
 
           expect(externalLoggerStub).to.have.been.calledWith({
             status: 'info',
-            message: semver.satisfies(realVersion, '>=4.0.0') ? 'sampled embeddings.create' : 'sampled createEmbedding',
+            message: semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6
+              ? 'sampled embeddings.create'
+              : 'sampled createEmbedding',
             input: 'Cat?'
           })
         })
@@ -575,10 +580,10 @@ describe('Plugin', () => {
             ])
 
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.0.0')) {
+              if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'embeddings.create')
               } else {
                 expect(traces[0][0]).to.have.property('resource', 'createEmbedding')
@@ -618,7 +623,9 @@ describe('Plugin', () => {
 
           expect(externalLoggerStub).to.have.been.calledWith({
             status: 'info',
-            message: semver.satisfies(realVersion, '>=4.0.0') ? 'sampled embeddings.create' : 'sampled createEmbedding',
+            message: semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6
+              ? 'sampled embeddings.create'
+              : 'sampled createEmbedding',
             input: 'Cat?'
           })
         })
@@ -646,7 +653,7 @@ describe('Plugin', () => {
             }, [])
 
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0].metrics).to.have.property('openai.response.usage.prompt_tokens', 0)
               expect(traces[0][0].metrics).to.not.have.property('openai.response.usage.completion_tokens')
               expect(traces[0][0].metrics).to.not.have.property('openai.response.usage.total_tokens')
@@ -747,10 +754,10 @@ describe('Plugin', () => {
 
         it('makes a successful call', async () => {
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.0.0')) {
+              if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'models.list')
               } else {
                 expect(traces[0][0]).to.have.property('resource', 'listModels')
@@ -821,10 +828,10 @@ describe('Plugin', () => {
 
         it('makes a successful call', async () => {
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.0.0')) {
+              if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'models.retrieve')
               } else {
                 expect(traces[0][0]).to.have.property('resource', 'retrieveModel')
@@ -909,7 +916,7 @@ describe('Plugin', () => {
           // `edits.create` was deprecated and removed after 4.0.0
           it('makes a successful call', async () => {
             const checkTraces = agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0]).to.have.property('name', 'openai.request')
                 expect(traces[0][0]).to.have.property('type', 'openai')
                 expect(traces[0][0]).to.have.property('resource', 'createEdit')
@@ -962,7 +969,9 @@ describe('Plugin', () => {
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: semver.satisfies(realVersion, '>=4.0.0') ? 'sampled edits.create' : 'sampled createEdit',
+              message: semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6
+                ? 'sampled edits.create'
+                : 'sampled createEdit',
               input: 'What day of the wek is it?',
               instruction: 'Fix the spelling mistakes',
               choices: [{
@@ -1019,10 +1028,10 @@ describe('Plugin', () => {
 
         it('makes a successful call', async () => {
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.0.0')) {
+              if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'files.list')
               } else {
                 expect(traces[0][0]).to.have.property('resource', 'listFiles')
@@ -1084,10 +1093,10 @@ describe('Plugin', () => {
 
         it('makes a successful call', async () => {
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.0.0')) {
+              if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'files.create')
               } else {
                 expect(traces[0][0]).to.have.property('resource', 'createFile')
@@ -1153,10 +1162,10 @@ describe('Plugin', () => {
 
         it('makes a successful call', async () => {
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.0.0')) {
+              if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'files.del')
               } else {
                 expect(traces[0][0]).to.have.property('resource', 'deleteFile')
@@ -1218,10 +1227,10 @@ describe('Plugin', () => {
 
         it('makes a successful call', async () => {
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.0.0')) {
+              if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'files.retrieve')
               } else {
                 expect(traces[0][0]).to.have.property('resource', 'retrieveFile')
@@ -1281,12 +1290,12 @@ describe('Plugin', () => {
         // TODO: issues with content being async arraybuffer, how to compute byteLength before promise resolves?
         it('makes a successful call', async () => {
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.0.0 <4.17.1')) {
+              if (semver.satisfies(realVersion, '>=4.0.0 <4.17.1') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'files.retrieveContent')
-              } else if (semver.satisfies(realVersion, '>=4.17.1')) {
+              } else if (semver.satisfies(realVersion, '>=4.17.1') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'files.content')
               } else {
                 expect(traces[0][0]).to.have.property('resource', 'downloadFile')
@@ -1399,12 +1408,12 @@ describe('Plugin', () => {
 
         it('makes a successful call', async () => {
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.1.0')) {
+              if (semver.satisfies(realVersion, '>=4.1.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'fine_tuning.jobs.create')
-              } else if (semver.satisfies(realVersion, '>=4.0.0')) {
+              } else if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'fine-tune.create')
               } else {
                 expect(traces[0][0]).to.have.property('resource', 'createFineTune')
@@ -1491,7 +1500,7 @@ describe('Plugin', () => {
 
         it('does not throw when missing classification betas', async () => {
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
             })
 
@@ -1664,12 +1673,12 @@ describe('Plugin', () => {
 
         it('makes a successful call', async () => {
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.1.0')) {
+              if (semver.satisfies(realVersion, '>=4.1.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'fine_tuning.jobs.retrieve')
-              } else if (semver.satisfies(realVersion, '>=4.0.0')) {
+              } else if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'fine-tune.retrieve')
               } else {
                 expect(traces[0][0]).to.have.property('resource', 'retrieveFineTune')
@@ -1810,12 +1819,12 @@ describe('Plugin', () => {
 
         it('makes a successful call', async () => {
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.1.0')) {
+              if (semver.satisfies(realVersion, '>=4.1.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'fine_tuning.jobs.list')
-              } else if (semver.satisfies(realVersion, '>=4.0.0')) {
+              } else if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'fine-tune.list')
               } else {
                 expect(traces[0][0]).to.have.property('resource', 'listFineTunes')
@@ -1945,12 +1954,12 @@ describe('Plugin', () => {
 
         it('makes a successful call', async () => {
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.1.0')) {
+              if (semver.satisfies(realVersion, '>=4.1.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'fine_tuning.jobs.listEvents')
-              } else if (semver.satisfies(realVersion, '>=4.0.0')) {
+              } else if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'fine-tune.listEvents')
               } else {
                 expect(traces[0][0]).to.have.property('resource', 'listFineTuneEvents')
@@ -2013,10 +2022,10 @@ describe('Plugin', () => {
 
         it('makes a successful call', async () => {
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.0.0')) {
+              if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'models.del')
               } else {
                 expect(traces[0][0]).to.have.property('resource', 'deleteModel')
@@ -2128,12 +2137,12 @@ describe('Plugin', () => {
 
         it('makes a successful call', async () => {
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.1.0')) {
+              if (semver.satisfies(realVersion, '>=4.1.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'fine_tuning.jobs.cancel')
-              } else if (semver.satisfies(realVersion, '>=4.0.0')) {
+              } else if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                 expect(traces[0][0]).to.have.property('resource', 'fine-tune.cancel')
               } else {
                 expect(traces[0][0]).to.have.property('resource', 'cancelFineTune')
@@ -2240,10 +2249,10 @@ describe('Plugin', () => {
 
           it('makes a successful call', async () => {
             const checkTraces = agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0]).to.have.property('name', 'openai.request')
                 expect(traces[0][0]).to.have.property('type', 'openai')
-                if (semver.satisfies(realVersion, '>=4.0.0')) {
+                if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                   expect(traces[0][0]).to.have.property('resource', 'moderations.create')
                 } else {
                   expect(traces[0][0]).to.have.property('resource', 'createModeration')
@@ -2299,7 +2308,7 @@ describe('Plugin', () => {
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: semver.satisfies(realVersion, '>=4.0.0')
+              message: semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6
                 ? 'sampled moderations.create'
                 : 'sampled createModeration',
               input: 'I want to harm the robots'
@@ -2339,10 +2348,10 @@ describe('Plugin', () => {
 
           it('makes a successful call using a string prompt', async () => {
             const checkTraces = agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0]).to.have.property('name', 'openai.request')
                 expect(traces[0][0]).to.have.property('type', 'openai')
-                if (semver.satisfies(realVersion, '>=4.0.0')) {
+                if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                   expect(traces[0][0]).to.have.property('resource', 'images.generate')
                 } else {
                   expect(traces[0][0]).to.have.property('resource', 'createImage')
@@ -2390,7 +2399,7 @@ describe('Plugin', () => {
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: semver.satisfies(realVersion, '>=4.0.0')
+              message: semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6
                 ? 'sampled images.generate'
                 : 'sampled createImage',
               prompt: 'A datadog wearing headphones'
@@ -2399,7 +2408,7 @@ describe('Plugin', () => {
 
           it('makes a successful call using an array of tokens prompt', async () => {
             const checkTraces = agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0].meta).to.have.property('openai.request.prompt', '[999, 888, 777, 666, 555]')
               })
 
@@ -2429,7 +2438,7 @@ describe('Plugin', () => {
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: semver.satisfies(realVersion, '>=4.0.0')
+              message: semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6
                 ? 'sampled images.generate'
                 : 'sampled createImage',
               prompt: [999, 888, 777, 666, 555]
@@ -2438,7 +2447,7 @@ describe('Plugin', () => {
 
           it('makes a successful call using an array of string prompts', async () => {
             const checkTraces = agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0].meta).to.have.property('openai.request.prompt.0', 'foo')
                 expect(traces[0][0].meta).to.have.property('openai.request.prompt.1', 'bar')
               })
@@ -2469,7 +2478,7 @@ describe('Plugin', () => {
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: semver.satisfies(realVersion, '>=4.0.0')
+              message: semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6
                 ? 'sampled images.generate'
                 : 'sampled createImage',
               prompt: ['foo', 'bar']
@@ -2478,7 +2487,7 @@ describe('Plugin', () => {
 
           it('makes a successful call using an array of tokens prompts', async () => {
             const checkTraces = agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0].meta).to.have.property('openai.request.prompt.0', '[111, 222, 333]')
                 expect(traces[0][0].meta).to.have.property('openai.request.prompt.1', '[444, 555, 666]')
               })
@@ -2512,7 +2521,7 @@ describe('Plugin', () => {
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: semver.satisfies(realVersion, '>=4.0.0')
+              message: semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6
                 ? 'sampled images.generate'
                 : 'sampled createImage',
               prompt: [[111, 222, 333], [444, 555, 666]]
@@ -2550,10 +2559,10 @@ describe('Plugin', () => {
 
           it('makes a successful call', async () => {
             const checkTraces = agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0]).to.have.property('name', 'openai.request')
                 expect(traces[0][0]).to.have.property('type', 'openai')
-                if (semver.satisfies(realVersion, '>=4.0.0')) {
+                if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                   expect(traces[0][0]).to.have.property('resource', 'images.edit')
                 } else {
                   expect(traces[0][0]).to.have.property('resource', 'createImageEdit')
@@ -2607,7 +2616,7 @@ describe('Plugin', () => {
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: semver.satisfies(realVersion, '>=4.0.0')
+              message: semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6
                 ? 'sampled images.edit'
                 : 'sampled createImageEdit',
               prompt: 'Change all red to blue',
@@ -2647,10 +2656,10 @@ describe('Plugin', () => {
 
           it('makes a successful call', async () => {
             const checkTraces = agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0]).to.have.property('name', 'openai.request')
                 expect(traces[0][0]).to.have.property('type', 'openai')
-                if (semver.satisfies(realVersion, '>=4.0.0')) {
+                if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                   expect(traces[0][0]).to.have.property('resource', 'images.createVariation')
                 } else {
                   expect(traces[0][0]).to.have.property('resource', 'createImageVariation')
@@ -2693,7 +2702,7 @@ describe('Plugin', () => {
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: semver.satisfies(realVersion, '>=4.0.0')
+              message: semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6
                 ? 'sampled images.createVariation'
                 : 'sampled createImageVariation',
               file: 'ntsc.png'
@@ -2747,10 +2756,10 @@ describe('Plugin', () => {
 
           it('makes a successful call', async () => {
             const checkTraces = agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0]).to.have.property('name', 'openai.request')
                 expect(traces[0][0]).to.have.property('type', 'openai')
-                if (semver.satisfies(realVersion, '>=4.0.0')) {
+                if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                   expect(traces[0][0]).to.have.property('resource', 'chat.completions.create')
                 } else {
                   expect(traces[0][0]).to.have.property('resource', 'createChatCompletion')
@@ -2849,7 +2858,7 @@ describe('Plugin', () => {
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
               message:
-                  semver.satisfies(realVersion, '>=4.0.0')
+                  semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6
                     ? 'sampled chat.completions.create'
                     : 'sampled createChatCompletion',
               messages: [
@@ -2879,7 +2888,7 @@ describe('Plugin', () => {
 
           it('does not error with invalid .messages or missing .logit_bias', async () => {
             const checkTraces = agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0]).to.have.property('name', 'openai.request')
               })
 
@@ -2900,7 +2909,7 @@ describe('Plugin', () => {
 
           it('should tag image_url', async () => {
             const checkTraces = agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
                 // image_url is only relevant on request/input, output has the same shape as a normal chat completion
                 expect(span.meta).to.have.property('openai.request.messages.0.content.0.type', 'text')
@@ -3009,7 +3018,7 @@ describe('Plugin', () => {
 
           it('tags the tool calls successfully', async () => {
             const checkTraces = agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0].meta)
                   .to.have.property('openai.response.choices.0.message.tool_calls.0.function.name',
                     'extract_fictional_info')
@@ -3059,7 +3068,7 @@ describe('Plugin', () => {
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
               message:
-                  semver.satisfies(realVersion, '>=4.0.0')
+                  semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6
                     ? 'sampled chat.completions.create'
                     : 'sampled createChatCompletion',
               messages: [
@@ -3135,10 +3144,10 @@ describe('Plugin', () => {
 
           it('makes a successful call', async () => {
             const checkTraces = agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0]).to.have.property('name', 'openai.request')
                 expect(traces[0][0]).to.have.property('type', 'openai')
-                if (semver.satisfies(realVersion, '>=4.0.0')) {
+                if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                   expect(traces[0][0]).to.have.property('resource', 'audio.transcriptions.create')
                 } else {
                   expect(traces[0][0]).to.have.property('resource', 'createTranscription')
@@ -3190,7 +3199,7 @@ describe('Plugin', () => {
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: semver.satisfies(realVersion, '>=4.0.0')
+              message: semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6
                 ? 'sampled audio.transcriptions.create'
                 : 'sampled createTranscription',
               prompt: 'what does this say',
@@ -3241,10 +3250,10 @@ describe('Plugin', () => {
 
           it('makes a successful call', async () => {
             const checkTraces = agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0]).to.have.property('name', 'openai.request')
                 expect(traces[0][0]).to.have.property('type', 'openai')
-                if (semver.satisfies(realVersion, '>=4.0.0')) {
+                if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
                   expect(traces[0][0]).to.have.property('resource', 'audio.translations.create')
                 } else {
                   expect(traces[0][0]).to.have.property('resource', 'createTranslation')
@@ -3292,7 +3301,7 @@ describe('Plugin', () => {
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: semver.satisfies(realVersion, '>=4.0.0')
+              message: semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6
                 ? 'sampled audio.translations.create'
                 : 'sampled createTranslation',
               prompt: 'greeting',
@@ -3319,7 +3328,7 @@ describe('Plugin', () => {
               })
 
             const checkTraces = agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
                 expect(span).to.have.property('name', 'openai.request')
                 expect(span).to.have.property('type', 'openai')
@@ -3375,7 +3384,7 @@ describe('Plugin', () => {
               })
 
             const checkTraces = agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
                 expect(span).to.have.property('name', 'openai.request')
                 expect(span).to.have.property('type', 'openai')
@@ -3414,7 +3423,7 @@ describe('Plugin', () => {
               })
 
             const checkTraces = agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
                 expect(span).to.have.property('name', 'openai.request')
                 expect(span).to.have.property('type', 'openai')
@@ -3480,7 +3489,7 @@ describe('Plugin', () => {
               })
 
             const checkTraces = agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
 
                 expect(span.meta).to.have.property('openai.response.choices.0.message.content', 'I\'m just a computer')
@@ -3528,7 +3537,7 @@ describe('Plugin', () => {
               })
 
             const checkTraces = agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
 
                 // we shouldn't be trying to capture the image_url tokens
@@ -3576,7 +3585,7 @@ describe('Plugin', () => {
               })
 
             const checkTraces = agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
 
                 expect(span).to.have.property('name', 'openai.request')
@@ -3628,7 +3637,7 @@ describe('Plugin', () => {
               })
 
             const checkTraces = agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
 
                 expect(span.meta).to.have.property('openai.response.choices.0.text', '\\n\\nI am an AI')
@@ -3677,7 +3686,7 @@ describe('Plugin', () => {
                 })
 
               const checkTraces = agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const span = traces[0][0]
 
                   expect(span).to.have.property('name', 'openai.request')
@@ -3748,7 +3757,7 @@ describe('Plugin', () => {
                 })
 
               const checkTraces = agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   const span = traces[0][0]
 
                   expect(span).to.have.property('name', 'openai.request')
@@ -3820,7 +3829,7 @@ describe('Plugin', () => {
             })
 
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const span = traces[0][0]
               expect(span).to.have.property('name', 'openai.request')
             })

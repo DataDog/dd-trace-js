@@ -22,14 +22,12 @@ function addWafRequestMetrics (store, { duration, durationExt, wafTimeout, error
   }
 
   if (errorCode) {
-    if (store[DD_TELEMETRY_REQUEST_METRICS].wafErrorCode) {
-      store[DD_TELEMETRY_REQUEST_METRICS].wafErrorCode = Math.max(
+    store[DD_TELEMETRY_REQUEST_METRICS].wafErrorCode = store[DD_TELEMETRY_REQUEST_METRICS].wafErrorCode
+      ? Math.max(
         errorCode,
         store[DD_TELEMETRY_REQUEST_METRICS].wafErrorCode
       )
-    } else {
-      store[DD_TELEMETRY_REQUEST_METRICS].wafErrorCode = errorCode
-    }
+      : errorCode
   }
 }
 

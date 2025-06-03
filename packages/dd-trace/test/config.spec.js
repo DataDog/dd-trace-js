@@ -223,7 +223,8 @@ describe('Config', () => {
     expect(config).to.have.property('reportHostname', false)
     expect(config).to.have.property('scope', undefined)
     expect(config).to.have.property('logLevel', 'debug')
-    expect(config).to.have.nested.property('codeOriginForSpans.enabled', false)
+    expect(config).to.have.nested.property('codeOriginForSpans.enabled', true)
+    expect(config).to.have.nested.property('codeOriginForSpans.experimental.exit_spans.enabled', false)
     expect(config).to.have.nested.property('dynamicInstrumentation.enabled', false)
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactedIdentifiers', [])
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactionExcludedIdentifiers', [])
@@ -246,13 +247,14 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.enabled', undefined)
     expect(config).to.have.nested.property('appsec.rules', undefined)
     expect(config).to.have.nested.property('appsec.rasp.enabled', true)
+    expect(config).to.have.nested.property('appsec.rasp.bodyCollection', false)
     expect(config).to.have.nested.property('appsec.rateLimit', 100)
     expect(config).to.have.nested.property('appsec.stackTrace.enabled', true)
     expect(config).to.have.nested.property('appsec.stackTrace.maxDepth', 32)
     expect(config).to.have.nested.property('appsec.stackTrace.maxStackTraces', 2)
     expect(config).to.have.nested.property('appsec.wafTimeout', 5e3)
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex').with.length(190)
-    expect(config).to.have.nested.property('appsec.obfuscatorValueRegex').with.length(550)
+    expect(config).to.have.nested.property('appsec.obfuscatorValueRegex').with.length(578)
     expect(config).to.have.nested.property('appsec.blockedTemplateHtml', undefined)
     expect(config).to.have.nested.property('appsec.blockedTemplateJson', undefined)
     expect(config).to.have.nested.property('appsec.blockedTemplateGraphql', undefined)
@@ -260,6 +262,9 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
     expect(config).to.have.nested.property('appsec.apiSecurity.sampleDelay', 30)
     expect(config).to.have.nested.property('appsec.sca.enabled', null)
+    expect(config).to.have.nested.property('appsec.extendedHeadersCollection.enabled', false)
+    expect(config).to.have.nested.property('appsec.extendedHeadersCollection.redaction', true)
+    expect(config).to.have.nested.property('appsec.extendedHeadersCollection.maxHeaders', 50)
     expect(config).to.have.nested.property('remoteConfig.enabled', true)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 5)
     expect(config).to.have.nested.property('iast.enabled', false)
@@ -283,19 +288,23 @@ describe('Config', () => {
       { name: 'appsec.blockedTemplateJson', value: undefined, origin: 'default' },
       { name: 'appsec.enabled', value: undefined, origin: 'default' },
       { name: 'appsec.eventTracking.mode', value: 'identification', origin: 'default' },
+      { name: 'appsec.extendedHeadersCollection.enabled', value: false, origin: 'default' },
+      { name: 'appsec.extendedHeadersCollection.redaction', value: true, origin: 'default' },
+      { name: 'appsec.extendedHeadersCollection.maxHeaders', value: 50, origin: 'default' },
       {
         name: 'appsec.obfuscatorKeyRegex',
-        // eslint-disable-next-line @stylistic/js/max-len
+        // eslint-disable-next-line @stylistic/max-len
         value: '(?i)pass|pw(?:or)?d|secret|(?:api|private|public|access)[_-]?key|token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)|bearer|authorization|jsessionid|phpsessid|asp\\.net[_-]sessionid|sid|jwt',
         origin: 'default'
       },
       {
         name: 'appsec.obfuscatorValueRegex',
-        // eslint-disable-next-line @stylistic/js/max-len
-        value: '(?i)(?:p(?:ass)?w(?:or)?d|pass(?:[_-]?phrase)?|secret(?:[_-]?key)?|(?:(?:api|private|public|access)[_-]?)key(?:[_-]?id)?|(?:(?:auth|access|id|refresh)[_-]?)?token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?|jsessionid|phpsessid|asp\\.net(?:[_-]|-)sessionid|sid|jwt)(?:\\s*=[^;]|"\\s*:\\s*"[^"]+")|bearer\\s+[a-z0-9\\._\\-]+|token:[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=-]+\\.ey[I-L][\\w=-]+(?:\\.[\\w.+\\/=-]+)?|[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}',
+        // eslint-disable-next-line @stylistic/max-len
+        value: '(?i)(?:p(?:ass)?w(?:or)?d|pass(?:[_-]?phrase)?|secret(?:[_-]?key)?|(?:(?:api|private|public|access)[_-]?)key(?:[_-]?id)?|(?:(?:auth|access|id|refresh)[_-]?)?token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?|jsessionid|phpsessid|asp\\.net(?:[_-]|-)sessionid|sid|jwt)(?:\\s*=([^;&]+)|"\\s*:\\s*("[^"]+"|\\d+))|bearer\\s+([a-z0-9\\._\\-]+)|token\\s*:\\s*([a-z0-9]{13})|gh[opsu]_([0-9a-zA-Z]{36})|ey[I-L][\\w=-]+\\.(ey[I-L][\\w=-]+(?:\\.[\\w.+\\/=-]+)?)|[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}([^\\-]+)[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*([a-z0-9\\/\\.+]{100,})',
         origin: 'default'
       },
       { name: 'appsec.rasp.enabled', value: true, origin: 'default' },
+      { name: 'appsec.rasp.bodyCollection', value: false, origin: 'default' },
       { name: 'appsec.rateLimit', value: 100, origin: 'default' },
       { name: 'appsec.rules', value: undefined, origin: 'default' },
       { name: 'appsec.sca.enabled', value: null, origin: 'default' },
@@ -305,7 +314,8 @@ describe('Config', () => {
       { name: 'appsec.wafTimeout', value: 5e3, origin: 'default' },
       { name: 'clientIpEnabled', value: false, origin: 'default' },
       { name: 'clientIpHeader', value: null, origin: 'default' },
-      { name: 'codeOriginForSpans.enabled', value: false, origin: 'default' },
+      { name: 'codeOriginForSpans.enabled', value: true, origin: 'default' },
+      { name: 'codeOriginForSpans.experimental.exit_spans.enabled', value: false, origin: 'default' },
       { name: 'dbmPropagationMode', value: 'disabled', origin: 'default' },
       { name: 'dogstatsd.hostname', value: '127.0.0.1', origin: 'calculated' },
       { name: 'dogstatsd.port', value: '8125', origin: 'default' },
@@ -322,7 +332,6 @@ describe('Config', () => {
       { name: 'gitMetadataEnabled', value: true, origin: 'default' },
       { name: 'headerTags', value: [], origin: 'default' },
       { name: 'hostname', value: '127.0.0.1', origin: 'default' },
-      { name: 'iast.cookieFilterPattern', value: '.{32,}', origin: 'default' },
       { name: 'iast.dbRowsToTaint', value: 1, origin: 'default' },
       { name: 'iast.deduplicationEnabled', value: true, origin: 'default' },
       { name: 'iast.enabled', value: false, origin: 'default' },
@@ -365,7 +374,7 @@ describe('Config', () => {
       { name: 'protocolVersion', value: '0.4', origin: 'default' },
       {
         name: 'queryStringObfuscation',
-        // eslint-disable-next-line @stylistic/js/max-len
+        // eslint-disable-next-line @stylistic/max-len
         value: '(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\\s|%20)*(?:=|%3D)[^&]+|(?:"|%22)(?:\\s|%20)*(?::|%3A)(?:\\s|%20)*(?:"|%22)(?:%2[^2]|%[^2]|[^"%])+(?:"|%22))|bearer(?:\\s|%20)+[a-z0-9\\._\\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\\w=-]|%3D)+\\.ey[I-L](?:[\\w=-]|%3D)+(?:\\.(?:[\\w.+\\/=-]|%3D|%2F|%2B)+)?|[\\-]{5}BEGIN(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY[\\-]{5}[^\\-]+[\\-]{5}END(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY|ssh-rsa(?:\\s|%20)*(?:[a-z0-9\\/\\.+]|%2F|%5C|%2B){100,}',
         origin: 'default'
       },
@@ -441,7 +450,8 @@ describe('Config', () => {
   })
 
   it('should initialize from environment variables', () => {
-    process.env.DD_CODE_ORIGIN_FOR_SPANS_ENABLED = 'true'
+    process.env.DD_CODE_ORIGIN_FOR_SPANS_ENABLED = 'false'
+    process.env.DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED = 'true'
     process.env.DD_TRACE_AGENT_HOSTNAME = 'agent'
     process.env.DD_TRACE_AGENT_PORT = '6218'
     process.env.DD_DOGSTATSD_HOSTNAME = 'dsd-agent'
@@ -489,12 +499,12 @@ describe('Config', () => {
     process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'v1'
     process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'true'
     process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED = 'true'
-    process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED = true
     process.env.DD_APM_TRACING_ENABLED = 'false'
     process.env.DD_APPSEC_ENABLED = 'true'
     process.env.DD_APPSEC_MAX_STACK_TRACES = '5'
     process.env.DD_APPSEC_MAX_STACK_TRACE_DEPTH = '42'
     process.env.DD_APPSEC_RASP_ENABLED = 'false'
+    process.env.DD_APPSEC_RASP_COLLECT_REQUEST_BODY = 'true'
     process.env.DD_APPSEC_RULES = RULES_JSON_PATH
     process.env.DD_APPSEC_STACK_TRACE_ENABLED = 'false'
     process.env.DD_APPSEC_TRACE_RATE_LIMIT = '42'
@@ -506,6 +516,9 @@ describe('Config', () => {
     process.env.DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_GRAPHQL_PATH
     process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = 'extended'
     process.env.DD_APPSEC_SCA_ENABLED = true
+    process.env.DD_APPSEC_COLLECT_ALL_HEADERS = 'true'
+    process.env.DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED = 'false'
+    process.env.DD_APPSEC_MAX_COLLECTED_HEADERS = '42'
     process.env.DD_REMOTE_CONFIGURATION_ENABLED = 'false'
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = '42'
     process.env.DD_IAST_ENABLED = 'true'
@@ -513,7 +526,6 @@ describe('Config', () => {
     process.env.DD_IAST_SECURITY_CONTROLS_CONFIGURATION = 'SANITIZER:CODE_INJECTION:sanitizer.js:method'
     process.env.DD_IAST_MAX_CONCURRENT_REQUESTS = '3'
     process.env.DD_IAST_MAX_CONTEXT_OPERATIONS = '4'
-    process.env.DD_IAST_COOKIE_FILTER_PATTERN = '.*'
     process.env.DD_IAST_DB_ROWS_TO_TAINT = 2
     process.env.DD_IAST_DEDUPLICATION_ENABLED = false
     process.env.DD_IAST_REDACTION_ENABLED = false
@@ -563,7 +575,8 @@ describe('Config', () => {
     expect(config).to.have.property('middlewareTracingEnabled', false)
     expect(config).to.have.property('runtimeMetrics', true)
     expect(config).to.have.property('reportHostname', true)
-    expect(config).to.have.nested.property('codeOriginForSpans.enabled', true)
+    expect(config).to.have.nested.property('codeOriginForSpans.enabled', false)
+    expect(config).to.have.nested.property('codeOriginForSpans.experimental.exit_spans.enabled', true)
     expect(config).to.have.nested.property('dynamicInstrumentation.enabled', true)
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactedIdentifiers', ['foo', 'bar'])
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactionExcludedIdentifiers', ['a', 'b', 'c'])
@@ -611,6 +624,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('apmTracingEnabled', false)
     expect(config).to.have.nested.property('appsec.enabled', true)
     expect(config).to.have.nested.property('appsec.rasp.enabled', false)
+    expect(config).to.have.nested.property('appsec.rasp.bodyCollection', true)
     expect(config).to.have.nested.property('appsec.rules', RULES_JSON_PATH)
     expect(config).to.have.nested.property('appsec.rateLimit', 42)
     expect(config).to.have.nested.property('appsec.stackTrace.enabled', false)
@@ -623,6 +637,9 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.blockedTemplateJson', BLOCKED_TEMPLATE_JSON)
     expect(config).to.have.nested.property('appsec.blockedTemplateGraphql', BLOCKED_TEMPLATE_GRAPHQL)
     expect(config).to.have.nested.property('appsec.eventTracking.mode', 'extended')
+    expect(config).to.have.nested.property('appsec.extendedHeadersCollection.enabled', true)
+    expect(config).to.have.nested.property('appsec.extendedHeadersCollection.redaction', false)
+    expect(config).to.have.nested.property('appsec.extendedHeadersCollection.maxHeaders', 42)
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
     expect(config).to.have.nested.property('appsec.apiSecurity.sampleDelay', 25)
     expect(config).to.have.nested.property('appsec.sca.enabled', true)
@@ -632,7 +649,6 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.requestSampling', 40)
     expect(config).to.have.nested.property('iast.maxConcurrentRequests', 3)
     expect(config).to.have.nested.property('iast.maxContextOperations', 4)
-    expect(config).to.have.nested.property('iast.cookieFilterPattern', '.*')
     expect(config).to.have.nested.property('iast.dbRowsToTaint', 2)
     expect(config).to.have.nested.property('iast.deduplicationEnabled', false)
     expect(config).to.have.nested.property('iast.redactionEnabled', false)
@@ -658,10 +674,14 @@ describe('Config', () => {
       { name: 'appsec.blockedTemplateJson', value: BLOCKED_TEMPLATE_JSON_PATH, origin: 'env_var' },
       { name: 'appsec.enabled', value: true, origin: 'env_var' },
       { name: 'appsec.eventTracking.mode', value: 'extended', origin: 'env_var' },
+      { name: 'appsec.extendedHeadersCollection.enabled', value: true, origin: 'env_var' },
+      { name: 'appsec.extendedHeadersCollection.redaction', value: false, origin: 'env_var' },
+      { name: 'appsec.extendedHeadersCollection.maxHeaders', value: '42', origin: 'env_var' },
       { name: 'appsec.obfuscatorKeyRegex', value: '.*', origin: 'env_var' },
       { name: 'appsec.obfuscatorValueRegex', value: '.*', origin: 'env_var' },
       { name: 'appsec.rateLimit', value: '42', origin: 'env_var' },
       { name: 'appsec.rasp.enabled', value: false, origin: 'env_var' },
+      { name: 'appsec.rasp.bodyCollection', value: true, origin: 'env_var' },
       { name: 'appsec.rules', value: RULES_JSON_PATH, origin: 'env_var' },
       { name: 'appsec.stackTrace.enabled', value: false, origin: 'env_var' },
       { name: 'appsec.stackTrace.maxDepth', value: '42', origin: 'env_var' },
@@ -671,7 +691,8 @@ describe('Config', () => {
       { name: 'clientIpEnabled', value: true, origin: 'env_var' },
       { name: 'clientIpHeader', value: 'x-true-client-ip', origin: 'env_var' },
       { name: 'crashtracking.enabled', value: false, origin: 'env_var' },
-      { name: 'codeOriginForSpans.enabled', value: true, origin: 'env_var' },
+      { name: 'codeOriginForSpans.enabled', value: false, origin: 'env_var' },
+      { name: 'codeOriginForSpans.experimental.exit_spans.enabled', value: true, origin: 'env_var' },
       { name: 'dogstatsd.hostname', value: 'dsd-agent', origin: 'env_var' },
       { name: 'dogstatsd.port', value: '5218', origin: 'env_var' },
       { name: 'dynamicInstrumentation.enabled', value: true, origin: 'env_var' },
@@ -682,7 +703,6 @@ describe('Config', () => {
       { name: 'experimental.exporter', value: 'log', origin: 'env_var' },
       { name: 'experimental.runtimeId', value: true, origin: 'env_var' },
       { name: 'hostname', value: 'agent', origin: 'env_var' },
-      { name: 'iast.cookieFilterPattern', value: '.*', origin: 'env_var' },
       { name: 'iast.dbRowsToTaint', value: 2, origin: 'env_var' },
       { name: 'iast.deduplicationEnabled', value: false, origin: 'env_var' },
       { name: 'iast.enabled', value: true, origin: 'env_var' },
@@ -890,7 +910,12 @@ describe('Config', () => {
       clientIpEnabled: true,
       clientIpHeader: 'x-true-client-ip',
       codeOriginForSpans: {
-        enabled: false
+        enabled: false,
+        experimental: {
+          exit_spans: {
+            enabled: true
+          }
+        }
       },
       sampleRate: 0.5,
       rateLimit: 1000,
@@ -940,7 +965,6 @@ describe('Config', () => {
           requestSampling: 50,
           maxConcurrentRequests: 4,
           maxContextOperations: 5,
-          cookieFilterPattern: '.*',
           dbRowsToTaint: 2,
           deduplicationEnabled: false,
           redactionEnabled: false,
@@ -994,6 +1018,7 @@ describe('Config', () => {
     expect(config).to.have.property('plugins', false)
     expect(config).to.have.property('logLevel', logLevel)
     expect(config).to.have.nested.property('codeOriginForSpans.enabled', false)
+    expect(config).to.have.nested.property('codeOriginForSpans.experimental.exit_spans.enabled', true)
     expect(config).to.have.property('traceId128BitGenerationEnabled', true)
     expect(config).to.have.property('traceId128BitLoggingEnabled', true)
     expect(config).to.have.property('spanRemoveIntegrationFromService', true)
@@ -1014,7 +1039,6 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.requestSampling', 50)
     expect(config).to.have.nested.property('iast.maxConcurrentRequests', 4)
     expect(config).to.have.nested.property('iast.maxContextOperations', 5)
-    expect(config).to.have.nested.property('iast.cookieFilterPattern', '.*')
     expect(config).to.have.nested.property('iast.dbRowsToTaint', 2)
     expect(config).to.have.nested.property('iast.deduplicationEnabled', false)
     expect(config).to.have.nested.property('iast.redactionEnabled', false)
@@ -1054,6 +1078,7 @@ describe('Config', () => {
       { name: 'clientIpEnabled', value: true, origin: 'code' },
       { name: 'clientIpHeader', value: 'x-true-client-ip', origin: 'code' },
       { name: 'codeOriginForSpans.enabled', value: false, origin: 'code' },
+      { name: 'codeOriginForSpans.experimental.exit_spans.enabled', value: true, origin: 'code' },
       { name: 'dogstatsd.hostname', value: 'agent-dsd', origin: 'code' },
       { name: 'dogstatsd.port', value: '5218', origin: 'code' },
       { name: 'dynamicInstrumentation.enabled', value: true, origin: 'code' },
@@ -1066,7 +1091,6 @@ describe('Config', () => {
       { name: 'flushInterval', value: 5000, origin: 'code' },
       { name: 'flushMinSpans', value: 500, origin: 'code' },
       { name: 'hostname', value: 'agent', origin: 'code' },
-      { name: 'iast.cookieFilterPattern', value: '.*', origin: 'code' },
       { name: 'iast.dbRowsToTaint', value: 2, origin: 'code' },
       { name: 'iast.deduplicationEnabled', value: false, origin: 'code' },
       { name: 'iast.enabled', value: true, origin: 'code' },
@@ -1266,6 +1290,8 @@ describe('Config', () => {
     process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
     process.env.DD_TRACE_REPORT_HOSTNAME = 'true'
     process.env.DD_ENV = 'test'
+    process.env.DD_CODE_ORIGIN_FOR_SPANS_ENABLED = 'false'
+    process.env.DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED = 'true'
     process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS = 'foo,bar'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS = 'a,b,c'
@@ -1291,6 +1317,7 @@ describe('Config', () => {
     process.env.DD_APPSEC_MAX_STACK_TRACES = '11'
     process.env.DD_APPSEC_MAX_STACK_TRACE_DEPTH = '11'
     process.env.DD_APPSEC_RASP_ENABLED = 'true'
+    process.env.DD_APPSEC_RASP_COLLECT_REQUEST_BODY = 'false'
     process.env.DD_APPSEC_RULES = RECOMMENDED_JSON_PATH
     process.env.DD_APPSEC_STACK_TRACE_ENABLED = 'true'
     process.env.DD_APPSEC_TRACE_RATE_LIMIT = 11
@@ -1302,11 +1329,13 @@ describe('Config', () => {
     process.env.DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_JSON_PATH // json and html here
     process.env.DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE = 'disabled'
     process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = 'disabled'
+    process.env.DD_APPSEC_COLLECT_ALL_HEADERS = 'false'
+    process.env.DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED = 'false'
+    process.env.DD_APPSEC_MAX_COLLECTED_HEADERS = '11'
     process.env.DD_API_SECURITY_ENABLED = 'false'
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = 11
     process.env.DD_IAST_ENABLED = 'false'
     process.env.DD_IAST_DB_ROWS_TO_TAINT = '2'
-    process.env.DD_IAST_COOKIE_FILTER_PATTERN = '.*'
     process.env.DD_IAST_REDACTION_NAME_PATTERN = 'name_pattern_to_be_overriden_by_options'
     process.env.DD_IAST_REDACTION_VALUE_PATTERN = 'value_pattern_to_be_overriden_by_options'
     process.env.DD_IAST_STACK_TRACE_ENABLED = 'true'
@@ -1380,17 +1409,22 @@ describe('Config', () => {
           enabled: true
         },
         rasp: {
-          enabled: false
+          enabled: false,
+          bodyCollection: true
         },
         stackTrace: {
           enabled: false,
           maxDepth: 42,
           maxStackTraces: 5
+        },
+        extendedHeadersCollection: {
+          enabled: true,
+          redaction: true,
+          maxHeaders: 42
         }
       },
       iast: {
         enabled: true,
-        cookieFilterPattern: '.{10,}',
         dbRowsToTaint: 3,
         redactionNamePattern: 'REDACTION_NAME_PATTERN',
         redactionValuePattern: 'REDACTION_VALUE_PATTERN',
@@ -1403,7 +1437,12 @@ describe('Config', () => {
         pollInterval: 42
       },
       codeOriginForSpans: {
-        enabled: false
+        enabled: true,
+        experimental: {
+          exit_spans: {
+            enabled: false
+          }
+        }
       },
       traceId128BitGenerationEnabled: false,
       traceId128BitLoggingEnabled: false,
@@ -1426,7 +1465,8 @@ describe('Config', () => {
     expect(config).to.have.property('flushMinSpans', 500)
     expect(config).to.have.property('service', 'test')
     expect(config).to.have.property('version', '1.0.0')
-    expect(config).to.have.nested.property('codeOriginForSpans.enabled', false)
+    expect(config).to.have.nested.property('codeOriginForSpans.enabled', true)
+    expect(config).to.have.nested.property('codeOriginForSpans.experimental.exit_spans.enabled', false)
     expect(config).to.have.nested.property('dynamicInstrumentation.enabled', false)
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactedIdentifiers', ['foo2', 'bar2'])
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactionExcludedIdentifiers', ['a2', 'b2'])
@@ -1450,6 +1490,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('apmTracingEnabled', true)
     expect(config).to.have.nested.property('appsec.enabled', true)
     expect(config).to.have.nested.property('appsec.rasp.enabled', false)
+    expect(config).to.have.nested.property('appsec.rasp.bodyCollection', true)
     expect(config).to.have.nested.property('appsec.rules', RULES_JSON_PATH)
     expect(config).to.have.nested.property('appsec.rateLimit', 42)
     expect(config).to.have.nested.property('appsec.stackTrace.enabled', false)
@@ -1463,6 +1504,9 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.blockedTemplateGraphql', BLOCKED_TEMPLATE_GRAPHQL)
     expect(config).to.have.nested.property('appsec.eventTracking.mode', 'anonymous')
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
+    expect(config).to.have.nested.property('appsec.extendedHeadersCollection.enabled', true)
+    expect(config).to.have.nested.property('appsec.extendedHeadersCollection.redaction', true)
+    expect(config).to.have.nested.property('appsec.extendedHeadersCollection.maxHeaders', 42)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
     expect(config).to.have.nested.property('iast.requestSampling', 30)
@@ -1470,7 +1514,6 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.maxContextOperations', 2)
     expect(config).to.have.nested.property('iast.dbRowsToTaint', 3)
     expect(config).to.have.nested.property('iast.deduplicationEnabled', true)
-    expect(config).to.have.nested.property('iast.cookieFilterPattern', '.{10,}')
     expect(config).to.have.nested.property('iast.redactionEnabled', true)
     expect(config).to.have.nested.property('iast.redactionNamePattern', 'REDACTION_NAME_PATTERN')
     expect(config).to.have.nested.property('iast.redactionValuePattern', 'REDACTION_VALUE_PATTERN')
@@ -1500,7 +1543,13 @@ describe('Config', () => {
           enabled: true
         },
         rasp: {
-          enabled: false
+          enabled: false,
+          bodyCollection: true
+        },
+        extendedHeadersCollection: {
+          enabled: true,
+          redaction: true,
+          maxHeaders: 42
         }
       },
       iast: {
@@ -1508,7 +1557,6 @@ describe('Config', () => {
         requestSampling: 15,
         maxConcurrentRequests: 3,
         maxContextOperations: 4,
-        cookieFilterPattern: '.*',
         dbRowsToTaint: 3,
         deduplicationEnabled: false,
         redactionEnabled: false,
@@ -1537,7 +1585,13 @@ describe('Config', () => {
             enabled: false
           },
           rasp: {
-            enabled: true
+            enabled: true,
+            bodyCollection: false
+          },
+          extendedHeadersCollection: {
+            enabled: false,
+            redaction: false,
+            maxHeaders: 0
           }
         },
         iast: {
@@ -1545,7 +1599,6 @@ describe('Config', () => {
           requestSampling: 25,
           maxConcurrentRequests: 6,
           maxContextOperations: 7,
-          cookieFilterPattern: '.{10,}',
           dbRowsToTaint: 2,
           deduplicationEnabled: true,
           redactionEnabled: true,
@@ -1580,12 +1633,18 @@ describe('Config', () => {
         enabled: null
       },
       rasp: {
-        enabled: false
+        enabled: false,
+        bodyCollection: true
       },
       stackTrace: {
         enabled: true,
         maxStackTraces: 2,
         maxDepth: 32
+      },
+      extendedHeadersCollection: {
+        enabled: true,
+        redaction: true,
+        maxHeaders: 42
       }
     })
 
@@ -1594,7 +1653,6 @@ describe('Config', () => {
       requestSampling: 15,
       maxConcurrentRequests: 3,
       maxContextOperations: 4,
-      cookieFilterPattern: '.*',
       dbRowsToTaint: 3,
       deduplicationEnabled: false,
       redactionEnabled: false,

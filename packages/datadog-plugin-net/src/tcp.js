@@ -10,24 +10,28 @@ class NetTCPPlugin extends ClientPlugin {
   constructor (...args) {
     super(...args)
 
-    this.addTraceSub('connection', ({ socket }) => {
-      const span = this.activeSpan
+    this.addTraceBind('ready', (ctx) => {
+      return ctx.parentStore
+    })
+
+    this.addTraceSub('connection', (ctx) => {
+      const span = ctx.currentStore.span
 
       span.addTags({
-        'tcp.local.address': socket.localAddress,
-        'tcp.local.port': socket.localPort
+        'tcp.local.address': ctx.socket.localAddress,
+        'tcp.local.port': ctx.socket.localPort
       })
     })
   }
 
-  start ({ options }) {
-    const host = options.host || 'localhost'
-    const port = options.port || 0
-    const family = options.family || 4
+  bindStart (ctx) {
+    const host = ctx.options.host || 'localhost'
+    const port = ctx.options.port || 0
+    const family = ctx.options.family || 4
 
     this.startSpan('tcp.connect', {
       service: this.config.service,
-      resource: [host, port].filter(val => val).join(':'),
+      resource: [host, port].filter(Boolean).join(':'),
       kind: 'client',
       meta: {
         'tcp.remote.host': host,
@@ -40,7 +44,9 @@ class NetTCPPlugin extends ClientPlugin {
         'tcp.local.port': 0,
         [CLIENT_PORT_KEY]: port
       }
-    })
+    }, ctx)
+
+    return ctx.currentStore
   }
 }
 

@@ -50,8 +50,13 @@ describe('Plugin', () => {
         before(done => {
           const requireVersion = version === '3.0.0' ? '3.422.0' : '>=3.422.0'
           AWS = require(`../../../../../../versions/${bedrockRuntimeClientName}@${requireVersion}`).get()
+          const NodeHttpHandler =
+            require(`../../../../../../versions/${bedrockRuntimeClientName}@${requireVersion}`)
+              .get('@smithy/node-http-handler')
+              .NodeHttpHandler
+
           bedrockRuntimeClient = new AWS.BedrockRuntimeClient(
-            { endpoint: 'http://127.0.0.1:4566', region: 'us-east-1', ServiceId: serviceName }
+            { endpoint: 'http://127.0.0.1:4566', region: 'us-east-1', ServiceId: serviceName, requestHandler: new NodeHttpHandler() }
           )
           done()
         })
@@ -90,7 +95,7 @@ describe('Plugin', () => {
             const expectedOutput = { content: model.output }
             if (model.outputRole) expectedOutput.role = model.outputRole
 
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               const span = traces[0][0]
               const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
               const expected = expectedLLMObsLLMSpanEvent({

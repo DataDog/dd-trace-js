@@ -22,7 +22,7 @@ describe('LLMObsEvalMetricsWriter', () => {
 
     writer.flush = flush // just to stop the beforeExit flush call
 
-    expect(writer._url.href).to.equal('https://api.datadoghq.com/api/intake/llm-obs/v1/eval-metric')
+    expect(writer.url).to.equal('https://api.datadoghq.com/api/intake/llm-obs/v1/eval-metric')
     expect(writer._eventType).to.equal('evaluation_metric')
   })
 
@@ -32,7 +32,7 @@ describe('LLMObsEvalMetricsWriter', () => {
       hostname: 'localhost'
     })
     writer.setAgentless(false)
-    expect(writer._url.href).to.equal('http://localhost:8126/evp_proxy/v2/api/intake/llm-obs/v1/eval-metric')
+    expect(writer.url).to.equal('http://localhost:8126/evp_proxy/v2/api/intake/llm-obs/v1/eval-metric')
     expect(writer._eventType).to.equal('evaluation_metric')
   })
 

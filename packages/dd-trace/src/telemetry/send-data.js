@@ -74,7 +74,7 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
 
   const data = JSON.stringify({
     api_version: 'v2',
-    naming_schema_version: config.spanAttributeSchema ? config.spanAttributeSchema : '',
+    naming_schema_version: config.spanAttributeSchema ?? '',
     request_type: reqType,
     tracer_time: Math.floor(Date.now() / 1000),
     runtime_id: config.tags['runtime-id'],

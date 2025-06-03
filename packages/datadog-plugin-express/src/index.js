@@ -1,18 +1,16 @@
 'use strict'
 
-const RouterPlugin = require('../../datadog-plugin-router/src')
+const ExpressTracingPlugin = require('./tracing')
+const ExpressCodeOriginForSpansPlugin = require('./code_origin')
+const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 
-class ExpressPlugin extends RouterPlugin {
-  static get id () {
-    return 'express'
-  }
-
-  constructor (...args) {
-    super(...args)
-
-    this.addSub('apm:express:request:handle', ({ req }) => {
-      this.setFramework(req, 'express', this.config)
-    })
+class ExpressPlugin extends CompositePlugin {
+  static get id () { return 'express' }
+  static get plugins () {
+    return {
+      tracing: ExpressTracingPlugin,
+      codeOriginForSpans: ExpressCodeOriginForSpansPlugin
+    }
   }
 }
 

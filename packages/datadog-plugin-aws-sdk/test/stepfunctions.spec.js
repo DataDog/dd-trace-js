@@ -106,7 +106,7 @@ describe('Sfn', () => {
             stateMachineArn,
             input: JSON.stringify({ moduleName })
           }
-          const expectSpanPromise = agent.use(traces => {
+          const expectSpanPromise = agent.assertSomeTraces(traces => {
             const span = traces[0][0]
             expect(span).to.have.property('resource', 'startExecution')
             expect(span.meta).to.have.property('statemachinearn', stateMachineArn)

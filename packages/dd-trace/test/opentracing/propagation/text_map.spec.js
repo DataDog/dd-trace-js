@@ -7,6 +7,7 @@ const id = require('../../../src/id')
 const SpanContext = require('../../../src/opentracing/span_context')
 const TraceState = require('../../../src/opentracing/propagation/tracestate')
 const { channel } = require('dc-polyfill')
+const { setBaggageItem, getBaggageItem, getAllBaggageItems, removeAllBaggageItems } = require('../../../src/baggage')
 
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
 const { SAMPLING_MECHANISM_MANUAL } = require('../../../src/constants')
@@ -114,7 +115,7 @@ describe('TextMapPropagator', () => {
       const spanContext = createContext({ baggageItems })
 
       propagator.inject(spanContext, carrier)
-      // eslint-disable-next-line @stylistic/js/max-len
+      // eslint-disable-next-line @stylistic/max-len
       expect(carrier.baggage).to.be.equal('%22%2C%3B%5C%28%29%2F%3A%3C%3D%3E%3F%40%5B%5D%7B%7D%F0%9F%90%B6%C3%A9%E6%88%91=%22%2C%3B%5C%F0%9F%90%B6%C3%A9%E6%88%91')
     })
 
@@ -140,6 +141,16 @@ describe('TextMapPropagator', () => {
 
       propagator.inject(spanContext, carrier)
       expect(carrier.baggage).to.equal('raccoon=chunky')
+    })
+
+    it('should inject baggage items when spanContext is null', () => {
+      const carrier = {}
+      const spanContext = null
+      removeAllBaggageItems()
+      setBaggageItem('spring', 'blossom')
+
+      propagator.inject(spanContext, carrier)
+      expect(carrier.baggage).to.equal('spring=blossom')
     })
 
     it('should inject an existing sampling priority', () => {
@@ -457,6 +468,72 @@ describe('TextMapPropagator', () => {
       expect(spanContextD._baggageItems).to.deep.equal({})
     })
 
+    it('should add baggage items to span tags', () => {
+      // should add baggage with default keys
+      let carrier = {
+        'x-datadog-trace-id': '123',
+        'x-datadog-parent-id': '456',
+        baggage: 'user.id=capybara,session.id=987,account.id=789,nonDefaultKey=shouldBeIgnored'
+      }
+      const spanContextA = propagator.extract(carrier)
+      expect(spanContextA._trace.tags).to.deep.equal({
+        'baggage.user.id': 'capybara',
+        'baggage.session.id': '987',
+        'baggage.account.id': '789'
+      })
+
+      // should add baggage with case sensitive keys
+      carrier = {
+        'x-datadog-trace-id': '123',
+        'x-datadog-parent-id': '456',
+        baggage: 'user.id=capybara,sesSion.id=987,account.id=789'
+      }
+      const spanContextB = propagator.extract(carrier)
+      expect(spanContextB._trace.tags).to.deep.equal({
+        'baggage.user.id': 'capybara',
+        'baggage.account.id': '789'
+      })
+
+      // should not add baggage when key list is empty
+      config = new Config({
+        baggageTagKeys: ''
+      })
+      propagator = new TextMapPropagator(config)
+      const spanContextC = propagator.extract(carrier)
+      expect(spanContextC._trace.tags).to.deep.equal({})
+
+      // should not add baggage when key list is empty
+      config = new Config({
+        baggageTagKeys: 'customKey'
+      })
+      propagator = new TextMapPropagator(config)
+      carrier = {
+        'x-datadog-trace-id': '123',
+        'x-datadog-parent-id': '456',
+        baggage: 'customKey=beluga,randomKey=shouldBeIgnored'
+      }
+      const spanContextD = propagator.extract(carrier)
+      expect(spanContextD._trace.tags).to.deep.equal({
+        'baggage.customKey': 'beluga'
+      })
+
+      // should add all baggage to span tags
+      config = new Config({
+        baggageTagKeys: '*'
+      })
+      propagator = new TextMapPropagator(config)
+      carrier = {
+        'x-datadog-trace-id': '123',
+        'x-datadog-parent-id': '456',
+        baggage: 'customKey=beluga,randomKey=nothingIsIgnored'
+      }
+      const spanContextE = propagator.extract(carrier)
+      expect(spanContextE._trace.tags).to.deep.equal({
+        'baggage.customKey': 'beluga',
+        'baggage.randomKey': 'nothingIsIgnored'
+      })
+    })
+
     it('should discard malformed tids', () => {
       // tid with malformed characters
       let carrier = {
@@ -492,8 +569,8 @@ describe('TextMapPropagator', () => {
       expect(spanContext._trace.tags).to.not.have.property('_dd.p.tid')
     })
 
-    // temporary test. On the contrary, it SHOULD extract baggage
-    it('should not extract baggage when it is the only propagation style', () => {
+    it('should extract baggage when it is the only propagation style', () => {
+      removeAllBaggageItems()
       config = new Config({
         tracePropagationStyle: {
           extract: ['baggage']
@@ -505,6 +582,8 @@ describe('TextMapPropagator', () => {
       }
       const spanContext = propagator.extract(carrier)
       expect(spanContext).to.be.null
+      expect(getBaggageItem('foo')).to.equal('bar')
+      expect(getAllBaggageItems()).to.deep.equal({ foo: 'bar' })
     })
 
     it('should convert signed IDs to unsigned', () => {

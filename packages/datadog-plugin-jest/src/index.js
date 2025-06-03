@@ -31,7 +31,8 @@ const {
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_HAS_FAILED_ALL_RETRIES,
-  TEST_RETRY_REASON_TYPES
+  TEST_RETRY_REASON_TYPES,
+  TEST_IS_MODIFIED
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -185,6 +186,7 @@ class JestPlugin extends CiPlugin {
         config._ddFlakyTestRetriesCount = this.libraryConfig?.flakyTestRetriesCount
         config._ddIsDiEnabled = this.libraryConfig?.isDiEnabled ?? false
         config._ddIsKnownTestsEnabled = this.libraryConfig?.isKnownTestsEnabled ?? false
+        config._ddIsImpactedTestsEnabled = this.libraryConfig?.isImpactedTestsEnabled ?? false
       })
     })
 
@@ -333,28 +335,39 @@ class JestPlugin extends CiPlugin {
       this.telemetry.distribution(TELEMETRY_CODE_COVERAGE_NUM_FILES, {}, files.length)
     })
 
-    this.addSub('ci:jest:test:start', (test) => {
+    this.addBind('ci:jest:test:start', (ctx) => {
       const store = storage('legacy').getStore()
-      const span = this.startTestSpan(test)
+      const span = this.startTestSpan(ctx)
 
-      this.enter(span, store)
+      ctx.parentStore = store
+      ctx.currentStore = { ...store, span }
+
       this.activeTestSpan = span
+
+      return ctx.currentStore
+    })
+
+    this.addBind('ci:jest:test:fn', (ctx) => {
+      return ctx.currentStore
     })
 
     this.addSub('ci:jest:test:finish', ({
+      span,
       status,
       testStartLine,
       attemptToFixPassed,
       failedAllTests,
+      attemptToFixFailed,
       isAtrRetry
     }) => {
-      const span = storage('legacy').getStore().span
       span.setTag(TEST_STATUS, status)
       if (testStartLine) {
         span.setTag(TEST_SOURCE_START, testStartLine)
       }
       if (attemptToFixPassed) {
         span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
+      } else if (attemptToFixFailed) {
+        span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
       }
       if (failedAllTests) {
         span.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
@@ -381,19 +394,15 @@ class JestPlugin extends CiPlugin {
       this.activeTestSpan = null
     })
 
-    this.addSub('ci:jest:test:err', ({ error, shouldSetProbe, promises }) => {
-      if (error) {
-        const store = storage('legacy').getStore()
-        if (store && store.span) {
-          const span = store.span
-          span.setTag(TEST_STATUS, 'fail')
-          span.setTag('error', getFormattedError(error, this.repositoryRoot))
-          if (shouldSetProbe) {
-            const probeInformation = this.addDiProbe(error)
-            if (probeInformation) {
-              const { setProbePromise } = probeInformation
-              promises.isProbeReady = withTimeout(setProbePromise, 2000)
-            }
+    this.addSub('ci:jest:test:err', ({ span, error, shouldSetProbe, promises }) => {
+      if (error && span) {
+        span.setTag(TEST_STATUS, 'fail')
+        span.setTag('error', getFormattedError(error, this.repositoryRoot))
+        if (shouldSetProbe) {
+          const probeInformation = this.addDiProbe(error)
+          if (probeInformation) {
+            const { setProbePromise } = probeInformation
+            promises.isProbeReady = withTimeout(setProbePromise, 2000)
           }
         }
       }
@@ -429,7 +438,8 @@ class JestPlugin extends CiPlugin {
       isAttemptToFixRetry,
       isJestRetry,
       isDisabled,
-      isQuarantined
+      isQuarantined,
+      isModified
     } = test
 
     const extraTags = {
@@ -454,6 +464,12 @@ class JestPlugin extends CiPlugin {
     if (isAttemptToFixRetry) {
       extraTags[TEST_IS_RETRY] = 'true'
       extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.atf
+    } else if (isEfdRetry) {
+      extraTags[TEST_IS_RETRY] = 'true'
+      extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.efd
+    } else if (isJestRetry) {
+      extraTags[TEST_IS_RETRY] = 'true'
+      extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.ext
     }
 
     if (isDisabled) {
@@ -464,17 +480,12 @@ class JestPlugin extends CiPlugin {
       extraTags[TEST_MANAGEMENT_IS_QUARANTINED] = 'true'
     }
 
-    if (isNew) {
-      extraTags[TEST_IS_NEW] = 'true'
-      if (isEfdRetry) {
-        extraTags[TEST_IS_RETRY] = 'true'
-        extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.efd
-      }
+    if (isModified) {
+      extraTags[TEST_IS_MODIFIED] = 'true'
     }
 
-    if (isJestRetry) {
-      extraTags[TEST_IS_RETRY] = 'true'
-      extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.ext
+    if (isNew) {
+      extraTags[TEST_IS_NEW] = 'true'
     }
 
     return super.startTestSpan(name, suite, this.testSuiteSpan, extraTags)
