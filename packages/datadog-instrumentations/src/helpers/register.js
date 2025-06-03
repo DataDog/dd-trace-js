@@ -22,6 +22,7 @@ const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
 const disabledInstrumentations = new Set(
   DD_TRACE_DISABLED_INSTRUMENTATIONS ? DD_TRACE_DISABLED_INSTRUMENTATIONS.split(',') : []
 )
+const enabledInstrumentations = new Set()
 
 // Check for DD_TRACE_<INTEGRATION>_ENABLED environment variables
 for (const [key, value] of Object.entries(process.env)) {
@@ -29,6 +30,9 @@ for (const [key, value] of Object.entries(process.env)) {
   if (match && (value?.toLowerCase() === 'false' || value === '0')) {
     const integration = match[1].toLowerCase()
     disabledInstrumentations.add(integration)
+  } else {
+    const integration = match[1].toLowerCase()
+    enabledInstrumentations.add(integration)
   }
 }
 
@@ -66,6 +70,12 @@ for (const packageName of names) {
 
     hookOptions.internals = hook.esmFirst
     hook = hook.fn
+
+    // some integrations are disabled by default, but can be enabled by setting
+    // the DD_TRACE_<INTEGRATION>_ENABLED environment variable to true
+    if (hook.disabled === true && !enabledInstrumentations.has(packageName)) {
+      continue
+    }
   }
 
   // get the instrumentation file name to save all hooked versions
