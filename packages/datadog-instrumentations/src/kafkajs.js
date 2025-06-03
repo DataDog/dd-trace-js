@@ -59,31 +59,33 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
 
     producer.send = function () {
       const wrappedSend = (clusterId) => {
-        const ctx = {}
-        ctx.bootstrapServers = bootstrapServers
-        ctx.clusterId = clusterId
-        ctx.disableHeaderInjection = disabledHeaderWeakSet.has(producer)
-
         const { topic, messages = [] } = arguments[0]
+
+        const ctx = {
+          bootstrapServers,
+          clusterId,
+          disableHeaderInjection: disabledHeaderWeakSet.has(producer),
+          messages,
+          topic
+        }
+
         for (const message of messages) {
           if (message !== null && typeof message === 'object' && !ctx.disableHeaderInjection) {
             message.headers = message.headers || {}
           }
         }
-        ctx.topic = topic
-        ctx.messages = messages
 
         return producerStartCh.runStores(ctx, () => {
           try {
             const result = send.apply(this, arguments)
             result.then(
               (res) => {
-                ctx.res = res
-                producerFinishCh.runStores(ctx, () => {})
+                ctx.result = res
+                producerFinishCh.publish(ctx)
                 producerCommitCh.publish(ctx)
               },
               (err) => {
-                ctx.err = err
+                ctx.error = err
                 if (err) {
                   // Fixes bug where we would inject message headers for kafka brokers that don't support headers
                   // (version <0.11). On the error, we disable header injection.
@@ -97,14 +99,14 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
                   }
                   producerErrorCh.publish(err)
                 }
-                producerFinishCh.runStores(ctx, () => {})
+                producerFinishCh.publish(ctx)
               })
 
             return result
           } catch (e) {
-            ctx.err = e
+            ctx.error = e
             producerErrorCh.publish(ctx)
-            producerFinishCh.runStores(ctx, () => {})
+            producerFinishCh.publish(ctx)
             throw e
           }
         })
@@ -189,9 +191,10 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
 const wrappedCallback = (fn, startCh, finishCh, errorCh, extractArgs, clusterId) => {
   return typeof fn === 'function'
     ? function (...args) {
-      const ctx = {}
       const extractedArgs = extractArgs(args, clusterId)
-      ctx.extractedArgs = extractedArgs
+      const ctx = {
+        extractedArgs
+      }
 
       return startCh.runStores(ctx, () => {
         try {
@@ -199,24 +202,24 @@ const wrappedCallback = (fn, startCh, finishCh, errorCh, extractArgs, clusterId)
           if (result && typeof result.then === 'function') {
             result.then(
               (res) => {
-                ctx.res = res
-                finishCh.runStores(ctx, () => {})
+                ctx.result = res
+                finishCh.publish(ctx)
               },
               (err) => {
-                ctx.err = err
+                ctx.error = err
                 if (err) {
                   errorCh.publish(ctx)
                 }
-                finishCh.runStores(ctx, () => {})
+                finishCh.publish(ctx)
               })
           } else {
-            finishCh.runStores(ctx, () => {})
+            finishCh.publish(ctx)
           }
           return result
         } catch (e) {
-          ctx.err = e
+          ctx.error = e
           errorCh.publish(ctx)
-          finishCh.publish(undefined)
+          finishCh.publish(ctx)
           throw e
         }
       })

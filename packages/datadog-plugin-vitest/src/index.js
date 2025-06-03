@@ -218,37 +218,38 @@ class VitestPlugin extends CiPlugin {
       hasFailedAllRetries,
       attemptToFixFailed
     }) => {
-      if (span) {
-        if (shouldSetProbe && this.di) {
-          const probeInformation = this.addDiProbe(error)
-          if (probeInformation) {
-            const { file, line, stackIndex, setProbePromise } = probeInformation
-            this.runningTestProbe = { file, line }
-            this.testErrorStackIndex = stackIndex
-            promises.setProbePromise = setProbePromise
-          }
-        }
-        this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
-          hasCodeowners: !!span.context()._tags[TEST_CODE_OWNERS]
-        })
-        span.setTag(TEST_STATUS, 'fail')
-
-        if (error) {
-          span.setTag('error', error)
-        }
-        if (hasFailedAllRetries) {
-          span.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
-        }
-        if (attemptToFixFailed) {
-          span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
-        }
-        if (duration) {
-          span.finish(span._startTime + duration - MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION) // milliseconds
-        } else {
-          span.finish() // `duration` is empty for retries, so we'll use clock time
-        }
-        finishAllTraceSpans(span)
+      if (!span) {
+        return
       }
+      if (shouldSetProbe && this.di && error?.stack) {
+        const probeInformation = this.addDiProbe(error)
+        if (probeInformation) {
+          const { file, line, stackIndex, setProbePromise } = probeInformation
+          this.runningTestProbe = { file, line }
+          this.testErrorStackIndex = stackIndex
+          promises.setProbePromise = setProbePromise
+        }
+      }
+      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
+        hasCodeowners: !!span.context()._tags[TEST_CODE_OWNERS]
+      })
+      span.setTag(TEST_STATUS, 'fail')
+
+      if (error) {
+        span.setTag('error', error)
+      }
+      if (hasFailedAllRetries) {
+        span.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
+      }
+      if (attemptToFixFailed) {
+        span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
+      }
+      if (duration) {
+        span.finish(span._startTime + duration - MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION) // milliseconds
+      } else {
+        span.finish() // `duration` is empty for retries, so we'll use clock time
+      }
+      finishAllTraceSpans(span)
     })
 
     this.addSub('ci:vitest:test:skip', ({ testName, testSuiteAbsolutePath, isNew, isDisabled }) => {

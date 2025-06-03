@@ -60,24 +60,25 @@ function instrumentBaseModule (module) {
 
               const brokers = this.globalConfig?.['bootstrap.servers']
 
-              const ctx = {}
-              ctx.topic = topic
-              ctx.messages = [{ key, value: message }]
-              ctx.bootstrapServers = brokers
+              const ctx = {
+                topic,
+                messages: [{ key, value: message }],
+                bootstrapServers: brokers
+              }
 
               return channels.producerStart.runStores(ctx, () => {
                 try {
-                  headers = convertHeaders(ctx.messages[0].headers)
+                  const headers = convertHeaders(ctx.messages[0].headers)
                   const result = produce.apply(this, [topic, partition, message, key, timestamp, opaque, headers])
 
-                  ctx.res = result
+                  ctx.result = result
                   channels.producerCommit.publish(ctx)
-                  channels.producerFinish.runStores(ctx, () => {})
+                  channels.producerFinish.publish(ctx)
                   return result
                 } catch (error) {
-                  ctx.err = error
+                  ctx.error = error
                   channels.producerError.publish(ctx)
-                  channels.producerFinish.runStores(ctx, () => {})
+                  channels.producerFinish.publish(ctx)
                   throw error
                 }
               })
@@ -109,7 +110,9 @@ function instrumentBaseModule (module) {
                 callback = numMessages
               }
 
-              const ctx = {}
+              const ctx = {
+                groupId
+              }
               // Handle callback-based consumption
               if (typeof callback === 'function') {
                 return consume.call(this, numMessages, function wrappedCallback (err, messages) {
@@ -118,28 +121,28 @@ function instrumentBaseModule (module) {
                       ctx.topic = message?.topic
                       ctx.partition = message?.partition
                       ctx.message = message
-                      ctx.groupId = groupId
 
+                      // TODO: We should be using publish here instead of runStores but we need bindStart to be called
                       channels.consumerStart.runStores(ctx, () => {})
                       updateLatestOffset(message?.topic, message?.partition, message?.offset, groupId)
                     })
                   }
 
                   if (err) {
-                    ctx.err = err
+                    ctx.error = err
                     channels.consumerError.publish(ctx)
                   }
 
                   try {
                     const result = callback.apply(this, arguments)
                     if (messages && messages.length > 0) {
-                      channels.consumerFinish.runStores(ctx, () => {})
+                      channels.consumerFinish.publish(ctx)
                     }
                     return result
                   } catch (error) {
-                    ctx.err = error
+                    ctx.error = error
                     channels.consumerError.publish(ctx)
-                    channels.consumerFinish.runStores(ctx, () => {})
+                    channels.consumerFinish.publish(ctx)
                     throw error
                   }
                 })
@@ -208,20 +211,21 @@ function instrumentKafkaJS (kafkaJS) {
                       return send.apply(this, arguments)
                     }
 
-                    const ctx = {}
-                    ctx.topic = payload?.topic
-                    ctx.messages = payload?.messages || []
-                    ctx.bootstrapServers = kafka._ddBrokers
-                    ctx.disableHeaderInjection = disabledHeaderWeakSet.has(producer)
+                    const ctx = {
+                      topic: payload?.topic,
+                      messages: payload?.messages || [],
+                      bootstrapServers: kafka._ddBrokers,
+                      disableHeaderInjection: disabledHeaderWeakSet.has(producer)
+                    }
 
                     return channels.producerStart.runStores(ctx, () => {
                       try {
                         const result = send.apply(this, arguments)
 
                         result.then((res) => {
-                          ctx.res = res
+                          ctx.result = res
                           channels.producerCommit.publish(ctx)
-                          channels.producerFinish.publish(undefined)
+                          channels.producerFinish.publish(ctx)
                         }, (err) => {
                           if (err) {
                             // Fixes bug where we would inject message headers for kafka brokers
@@ -234,17 +238,17 @@ function instrumentKafkaJS (kafkaJS) {
                                 'Please look at broker logs for more information. ' +
                                 'Tracer message header injection for Kafka is disabled.')
                             }
-                            ctx.err = err
+                            ctx.error = err
                             channels.producerError.publish(ctx)
                           }
-                          channels.producerFinish.publish(undefined)
+                          channels.producerFinish.publish(ctx)
                         })
 
                         return result
                       } catch (e) {
-                        ctx.err = e
+                        ctx.error = e
                         channels.producerError.publish(ctx)
-                        channels.producerFinish.publish(undefined)
+                        channels.producerFinish.publish(ctx)
                         throw e
                       }
                     })
@@ -352,8 +356,9 @@ function wrapKafkaCallback (callback, { startCh, commitCh, finishCh, errorCh }, 
   return function wrappedKafkaCallback (payload) {
     const commitPayload = getPayload(payload)
 
-    const ctx = {}
-    ctx.extractedArgs = commitPayload
+    const ctx = {
+      extractedArgs: commitPayload
+    }
 
     return startCh.runStores(ctx, () => {
       updateLatestOffset(commitPayload?.topic, commitPayload?.partition, commitPayload?.offset, commitPayload?.groupId)
@@ -364,24 +369,24 @@ function wrapKafkaCallback (callback, { startCh, commitCh, finishCh, errorCh }, 
         if (result && typeof result.then === 'function') {
           return result
             .then((res) => {
-              ctx.res = res
-              finishCh.runStores(ctx, () => {})
+              ctx.result = res
+              finishCh.publish(ctx)
               return res
             })
             .catch((err) => {
-              ctx.err = err
+              ctx.error = err
               errorCh.publish(ctx)
-              finishCh.runStores(ctx, () => {})
+              finishCh.publish(ctx)
               throw err
             })
         } else {
-          finishCh.runStores(ctx, () => {})
+          finishCh.publish(ctx)
           return result
         }
       } catch (error) {
-        ctx.err = error
+        ctx.error = error
         errorCh.publish(ctx)
-        finishCh.runStores(ctx, () => {})
+        finishCh.publish(ctx)
         throw error
       }
     })

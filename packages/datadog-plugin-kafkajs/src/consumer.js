@@ -105,14 +105,12 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
     return ctx.currentStore
   }
 
-  bindFinish (ctx) {
+  finish (ctx) {
     if (beforeFinishCh.hasSubscribers) {
       beforeFinishCh.publish()
     }
 
-    super.finish()
-
-    return ctx.parentStore
+    super.finish(ctx)
   }
 }
 
