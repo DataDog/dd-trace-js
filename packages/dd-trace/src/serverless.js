@@ -1,5 +1,7 @@
 'use strict'
 
+const { getConfiguration } = require('./config-helper')
+
 function getIsGCPFunction () {
   const isDeprecatedGCPFunction =
     getConfiguration('FUNCTION_NAME') !== undefined &&
