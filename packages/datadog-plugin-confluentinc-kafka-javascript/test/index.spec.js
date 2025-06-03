@@ -491,7 +491,7 @@ describe('Plugin', () => {
             tracer.use('@confluentinc/kafka-javascript', { dsmEnabled: true })
             messages = [{ key: 'key1', value: 'test2' }]
             consumer = kafka.consumer({
-              kafkaJS: { groupId: 'test-group', autoCommit: false }
+              kafkaJS: { groupId: 'test-group', fromBeginning: false }
             })
             await consumer.connect()
             await consumer.subscribe({ topic: testTopic })
@@ -515,7 +515,6 @@ describe('Plugin', () => {
 
             afterEach(async () => {
               setDataStreamsContextSpy.restore()
-              await consumer.disconnect()
             })
 
             it('Should set a checkpoint on produce', async () => {
