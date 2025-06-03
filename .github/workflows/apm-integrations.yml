@@ -195,22 +195,6 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/plugins/test
 
-  bluebird:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: bluebird
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/plugins/test
-
-  body-parser:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: body-parser
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/plugins/test
-
   bunyan:
     runs-on: ubuntu-latest
     env:
@@ -292,14 +276,6 @@ jobs:
         with:
           suffix: plugins-${{ github.job }}-${{ matrix.node-version }}
       - uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
-
-  cookie-parser:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: cookie-parser
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/plugins/test
 
   couchbase:
     strategy:
@@ -419,21 +395,6 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/plugins/test
 
-  express-mongo-sanitize:
-    runs-on: ubuntu-latest
-    services:
-      mongodb:
-        image: circleci/mongo
-        ports:
-          - 27017:27017
-    env:
-      PLUGINS: express-mongo-sanitize
-      PACKAGE_NAMES: express-mongo-sanitize
-      SERVICES: mongo
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/plugins/test
-
   fastify:
     runs-on: ubuntu-latest
     env:
@@ -454,14 +415,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PLUGINS: fs
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/plugins/test
-
-  generic-pool:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: generic-pool
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/plugins/test
@@ -570,14 +523,6 @@ jobs:
     env:
       PLUGINS: kafkajs
       SERVICES: kafka
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/plugins/test
-
-  knex:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: knex
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/plugins/test
@@ -900,22 +845,6 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/plugins/test
 
-  promise:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: promise
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/plugins/test-and-upstream
-
-  promise-js:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: promise-js
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/plugins/test
-
   protobufjs:
     runs-on: ubuntu-latest
     env:
@@ -924,14 +853,6 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/plugins/test-and-upstream
-
-  q:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: q
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/plugins/test
 
   redis:
     runs-on: ubuntu-latest
@@ -1056,22 +977,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PLUGINS: undici
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/plugins/test
-
-  url:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: url
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/plugins/test
-
-  when:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: when
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/plugins/test
