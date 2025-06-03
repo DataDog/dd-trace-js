@@ -23,7 +23,15 @@ const debug = (...args) => {
 }
 
 app.post('/v1/completions', (req, res) => {
-  const { model, n = 1, stream = false, stream_options: streamOptions = {} } = req.body
+  const { prompt, model, n = 1, stream = false, stream_options: streamOptions = {} } = req.body
+
+  if (typeof prompt !== 'string') {
+    res.status(400).json({
+      error: {
+        type: 'invalid_request_error'
+      }
+    })
+  }
 
   if (stream) {
     // streamed responses are pre-recorded in a separate directory
@@ -98,10 +106,7 @@ app.post('/v1/chat/completions', (req, res) => {
   if (typeof messages !== 'object') {
     res.status(400).json({
       error: {
-        message: 'Invalid request body',
-        type: 'invalid_request_error',
-        param: null,
-        code: null
+        type: 'invalid_request_error'
       }
     })
 
@@ -718,29 +723,6 @@ app.post('/v1/fine-tunes/:id/cancel', (req, res) => {
     })
 })
 
-/**
- * Starts the mock OpenAI server
- * @returns {Promise<number>} The port the server is listening on
- */
-function startMockServer () {
-  return new Promise((resolve, reject) => {
-    server = app.listen(0, 'localhost', (err) => {
-      if (err) {
-        return reject(err)
-      }
-      server.on('connection', connection => {
-        connections.add(connection)
-        connection.on('close', () => {
-          connections.delete(connection)
-        })
-      })
-
-      debug(`Mock OpenAI server started on http://localhost:${server.address().port}`)
-      resolve(server.address().port)
-    })
-  })
-}
-
 app.post('/v1/moderations', (req, res) => {
   res
     .setHeaders(new Map([
@@ -878,6 +860,34 @@ app.post('/v1/audio/translations', (req, res) => {
       text: 'Guten Tag!'
     })
 })
+
+/**
+ * Starts the mock OpenAI server
+ * @returns {Promise<number>} The port the server is listening on
+ */
+function startMockServer () {
+  if (server) {
+    return Promise.resolve(server.address().port)
+  }
+
+  return new Promise((resolve, reject) => {
+    server = app.listen(0, 'localhost', (err) => {
+      if (err) {
+        return reject(err)
+      }
+      server.on('connection', connection => {
+        connections.add(connection)
+        connection.on('close', () => {
+          connections.delete(connection)
+        })
+      })
+
+      debug(`Mock OpenAI server started on http://localhost:${server.address().port}`)
+      resolve(server.address().port)
+    })
+  })
+}
+
 /**
  * Stops the mock OpenAI server
  * @returns {Promise<void>}
