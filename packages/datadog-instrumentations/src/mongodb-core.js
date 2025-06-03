@@ -134,7 +134,7 @@ function wrapCommand (command, operation, name) {
 function instrument (operation, command, mongoCtx, args, server, ns, ops, options = {}) {
   const name = options.name || (ops && Object.keys(ops)[0])
   const index = args.length - 1
-  let callback = args[index]
+  const callback = args[index]
 
   if (typeof callback !== 'function') return command.apply(mongoCtx, args)
 

@@ -2,7 +2,6 @@
 
 const { addHook, channel } = require('./helpers/instrument')
 const { wrapThen } = require('./helpers/promise')
-const { AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
 function wrapAddQueue (addQueue) {
@@ -68,27 +67,21 @@ addHook({
           return method.apply(this, arguments)
         }
 
-        const asyncResource = new AsyncResource('bound-anonymous-fn')
-
         const filters = [arguments[0]]
         if (useTwoArguments) {
           filters.push(arguments[1])
         }
 
-        const finish = asyncResource.bind(function () {
-          finishCh.publish()
-        })
-
         let callbackWrapped = false
 
-        const wrapCallbackIfExist = (args) => {
+        const wrapCallbackIfExist = (args, ctx) => {
           const lastArgumentIndex = args.length - 1
 
           if (typeof args[lastArgumentIndex] === 'function') {
             // is a callback, wrap it to execute finish()
             shimmer.wrap(args, lastArgumentIndex, originalCb => {
               return function () {
-                finish()
+                finishCh.publish(ctx)
 
                 return originalCb.apply(this, arguments)
               }
@@ -98,13 +91,13 @@ addHook({
           }
         }
 
-        wrapCallbackIfExist(arguments)
+        const ctx = {
+          filters,
+          methodName
+        }
 
-        return asyncResource.runInAsyncScope(() => {
-          startCh.publish({
-            filters,
-            methodName
-          })
+        return startCh.runStores(ctx, () => {
+          wrapCallbackIfExist(arguments, ctx)
 
           const res = method.apply(this, arguments)
 
@@ -129,7 +122,7 @@ addHook({
                     const reject = arguments[1]
 
                     arguments[0] = shimmer.wrapFunction(resolve, resolve => function wrappedResolve () {
-                      finish()
+                      finishCh.publish(ctx)
 
                       if (resolve) {
                         return resolve.apply(this, arguments)
@@ -137,7 +130,7 @@ addHook({
                     })
 
                     arguments[1] = shimmer.wrapFunction(reject, reject => function wrappedReject () {
-                      finish()
+                      finishCh.publish(ctx)
 
                       if (reject) {
                         return reject.apply(this, arguments)
