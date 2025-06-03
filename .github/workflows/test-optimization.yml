@@ -41,7 +41,7 @@ jobs:
       matrix:
         node-version: [oldest, latest]
         playwright-version: [oldest, latest]
-        name: integration-playwright (${{ matrix.playwright-version}}, node-${{ matrix.node-version }})
+    name: integration-playwright (${{ matrix.playwright-version}}, node-${{ matrix.node-version }})
     runs-on: ubuntu-latest
     env:
       DD_SERVICE: dd-trace-js-integration-tests
