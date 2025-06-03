@@ -557,7 +557,10 @@ describe('checkAndFetchBranch', () => {
       child_process: { execFileSync: execFileSyncStub }
     })
     checkAndFetchBranch('my-branch', 'origin')
-    expect(execFileSyncStub).to.have.been.calledWith('git', ['show-ref', '--verify', '--quiet', 'refs/remotes/origin/my-branch'])
+    expect(execFileSyncStub).to.have.been.calledWith(
+      'git',
+      ['show-ref', '--verify', '--quiet', 'refs/remotes/origin/my-branch']
+    )
     expect(execFileSyncStub).not.to.have.been.calledWith(
       'git',
       ['ls-remote', '--heads', 'origin', 'my-branch'],
@@ -580,7 +583,10 @@ describe('checkAndFetchBranch', () => {
       child_process: { execFileSync: execFileSyncStub }
     })
     checkAndFetchBranch('my-branch', 'origin')
-    expect(execFileSyncStub).to.have.been.calledWith('git', ['show-ref', '--verify', '--quiet', 'refs/remotes/origin/my-branch'])
+    expect(execFileSyncStub).to.have.been.calledWith(
+      'git',
+      ['show-ref', '--verify', '--quiet', 'refs/remotes/origin/my-branch']
+    )
     expect(execFileSyncStub).to.have.been.calledWith(
       'git',
       ['ls-remote', '--heads', 'origin', 'my-branch'],
@@ -597,7 +603,10 @@ describe('checkAndFetchBranch', () => {
       child_process: { execFileSync: execFileSyncStub }
     })
     checkAndFetchBranch('my-branch', 'origin')
-    expect(execFileSyncStub).to.have.been.calledWith('git', ['show-ref', '--verify', '--quiet', 'refs/remotes/origin/my-branch'])
+    expect(execFileSyncStub).to.have.been.calledWith(
+      'git',
+      ['show-ref', '--verify', '--quiet', 'refs/remotes/origin/my-branch']
+    )
     expect(execFileSyncStub).to.have.been.calledWith(
       'git',
       ['ls-remote', '--heads', 'origin', 'my-branch'],
@@ -618,7 +627,10 @@ describe('checkAndFetchBranch', () => {
       child_process: { execFileSync: execFileSyncStub }
     })
     checkAndFetchBranch('my-branch', 'origin')
-    expect(execFileSyncStub).to.have.been.calledWith('git', ['show-ref', '--verify', '--quiet', 'refs/remotes/origin/my-branch'])
+    expect(execFileSyncStub).to.have.been.calledWith(
+      'git',
+      ['show-ref', '--verify', '--quiet', 'refs/remotes/origin/my-branch']
+    )
     expect(execFileSyncStub).to.have.been.calledWith(
       'git',
       ['ls-remote', '--heads', 'origin', 'my-branch'],

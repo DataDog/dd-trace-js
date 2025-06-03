@@ -263,7 +263,11 @@ function checkAndFetchBranch (branch, remoteName) {
   try {
     // `git show-ref --verify --quiet refs/remotes/${remoteName}/${branch}` will exit 0 if the branch exists
     // Otherwise it will exit 1
-    cp.execFileSync('git', ['show-ref', '--verify', '--quiet', `refs/remotes/${remoteName}/${branch}`], { stdio: 'pipe' })
+    cp.execFileSync(
+      'git',
+      ['show-ref', '--verify', '--quiet', `refs/remotes/${remoteName}/${branch}`],
+      { stdio: 'pipe' }
+    )
     // branch exists locally, so we finish
   } catch {
     // branch does not exist locally, so we will check the remote
