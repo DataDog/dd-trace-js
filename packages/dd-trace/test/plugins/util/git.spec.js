@@ -672,7 +672,6 @@ describe('getLocalBranches', () => {
       [
         'for-each-ref',
         '--format=%(refname:short)',
-        'refs/heads',
         'refs/remotes/my-origin'
       ]
     )

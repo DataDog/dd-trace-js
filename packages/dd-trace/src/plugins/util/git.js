@@ -299,8 +299,7 @@ function checkAndFetchBranch (branch, remoteName) {
 function getLocalBranches (remoteName) {
   const localBranches = sanitizedExec(
     'git',
-    ['for-each-ref', '--format=%(refname:short)', 'refs/heads', `refs/remotes/${remoteName}`],
-    // ['for-each-ref', '--format=%(refname:short)', `refs/remotes/${remoteName}`],
+    ['for-each-ref', '--format=%(refname:short)', `refs/remotes/${remoteName}`],
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_local_branches' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_local_branches' } },
     { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_local_branches' } },

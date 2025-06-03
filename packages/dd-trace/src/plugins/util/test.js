@@ -826,7 +826,8 @@ function getPullRequestBaseBranch (pullRequestBaseBranch) {
 
     const localBranches = getLocalBranches(remoteName)
     for (const branch of localBranches) {
-      if (branch !== sourceBranch && BASE_LIKE_BRANCH_FILTER.test(branch)) {
+      const shortBranchName = branch.replace(new RegExp(`^${remoteName}/`), '')
+      if (branch !== sourceBranch && BASE_LIKE_BRANCH_FILTER.test(shortBranchName)) {
         candidateBranches.push(branch)
       }
     }
