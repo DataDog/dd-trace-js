@@ -5,15 +5,14 @@ stages:
   - single-step-instrumentation-tests
   - macrobenchmarks
 
+# CI checks for Config Inversion
 check_config_inversion_local_file:
-  rules:
-    - when: on_success
+  extends: .check_config_inversion_local_file
   variables:
     LOCAL_JSON_PATH: "packages/dd-trace/src/supported-configurations.json"
 
 config_inversion_update_central:
-  rules:
-    - when: on_success
+  extends: .config_inversion_update_central
   variables:
     LOCAL_REPO_NAME: "dd-trace-js"
 
