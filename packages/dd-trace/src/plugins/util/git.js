@@ -495,13 +495,7 @@ function getGitMetadata (ciMetadata) {
 }
 
 function getGitInformationDiscrepancy () {
-  const gitRepositoryUrl = sanitizedExec(
-    'git',
-    ['ls-remote', '--get-url'],
-    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_repository_url' } },
-    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_repository_url' } },
-    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_repository_url' } }
-  )
+  const gitRepositoryUrl = getRepositoryUrl()
 
   const gitCommitSHA = sanitizedExec(
     'git',
