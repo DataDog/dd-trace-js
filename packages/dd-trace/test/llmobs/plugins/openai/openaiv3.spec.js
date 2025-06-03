@@ -5,7 +5,6 @@ const Sampler = require('../../../../src/sampler')
 const { DogStatsDClient } = require('../../../../src/dogstatsd')
 const { NoopExternalLogger } = require('../../../../src/external-logger/src')
 
-const nock = require('nock')
 const { expectedLLMObsLLMSpanEvent, deepEqualWithMockValues } = require('../../util')
 const chai = require('chai')
 const semver = require('semver')
@@ -47,7 +46,6 @@ describe('integrations', () => {
     })
 
     afterEach(() => {
-      nock.cleanAll()
       LLMObsSpanWriter.prototype.append.reset()
     })
 
