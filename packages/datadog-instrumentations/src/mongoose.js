@@ -4,17 +4,17 @@ const { addHook, channel } = require('./helpers/instrument')
 const { wrapThen } = require('./helpers/promise')
 const shimmer = require('../../datadog-shimmer')
 
-function wrapAddQueue (addQueue) {
-  return function addQueueWithTrace (name) {
-    if (typeof name === 'function') {
-      arguments[0] = AsyncResource.bind(name)
-    } else if (typeof this[name] === 'function') {
-      arguments[0] = AsyncResource.bind((...args) => this[name](...args))
-    }
+// function wrapAddQueue (addQueue) {
+//   return function addQueueWithTrace (name) {
+//     if (typeof name === 'function') {
+//       arguments[0] = AsyncResource.bind(name)
+//     } else if (typeof this[name] === 'function') {
+//       arguments[0] = AsyncResource.bind((...args) => this[name](...args))
+//     }
 
-    return addQueue.apply(this, arguments)
-  }
-}
+//     return addQueue.apply(this, arguments)
+//   }
+// }
 
 addHook({
   name: 'mongoose',
@@ -25,7 +25,7 @@ addHook({
     shimmer.wrap(mongoose.Promise.prototype, 'then', wrapThen)
   }
 
-  shimmer.wrap(mongoose.Collection.prototype, 'addQueue', wrapAddQueue)
+  // shimmer.wrap(mongoose.Collection.prototype, 'addQueue', wrapAddQueue)
 
   return mongoose
 })
