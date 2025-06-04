@@ -608,7 +608,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           }
         }
       }
-      return super.teardown()
+      await super.teardown()
     }
   }
 }
@@ -1318,7 +1318,7 @@ const sendWrapper = (send) => function (request) {
     return send.apply(this, arguments)
   }
   const [type] = request
-  
+
   // https://github.com/jestjs/jest/blob/1d682f21c7a35da4d3ab3a1436a357b980ebd0fa/packages/jest-worker/src/workers/ChildProcessWorker.ts#L424
   if (type === CHILD_MESSAGE_CALL) {
     // This is the message that the main process sends to the worker to run a test suite (=test file).
@@ -1337,9 +1337,9 @@ const sendWrapper = (send) => function (request) {
 
     const suiteTestManagementTests = testManagementTests?.jest?.suites?.[testSuite]?.tests || {}
 
-      const suiteModifiedTests = Object.keys(modifiedTests).length > 0
-        ? modifiedTests
-        : {}
+    const suiteModifiedTests = Object.keys(modifiedTests).length > 0
+      ? modifiedTests
+      : {}
 
     args[0].config = {
       ...config,
@@ -1347,7 +1347,7 @@ const sendWrapper = (send) => function (request) {
         ...config.testEnvironmentOptions,
         _ddKnownTests: suiteKnownTests,
         _ddTestManagementTests: suiteTestManagementTests,
-          _ddModifiedTests: suiteModifiedTests
+        _ddModifiedTests: suiteModifiedTests
       }
     }
   }
@@ -1378,7 +1378,7 @@ const onMessageWrapper = _onMessage => function () {
   return _onMessage.apply(this, arguments)
 }
 
-const enqueueWrapper =  enqueue => function (...args) {
+const enqueueWrapper = enqueue => function (...args) {
   const originalOnStart = args[0].onStart
   args[0].onStart = (worker) => {
     if (worker) {
@@ -1410,7 +1410,7 @@ addHook({
 
 addHook({
   name: 'jest-worker',
-  versions: ['>=30.0.0'],
+  versions: ['>=30.0.0']
 }, (jestWorkerPackage) => {
   shimmer.wrap(jestWorkerPackage.FifoQueue.prototype, 'enqueue', enqueueWrapper)
   shimmer.wrap(jestWorkerPackage.PriorityQueue.prototype, 'enqueue', enqueueWrapper)
