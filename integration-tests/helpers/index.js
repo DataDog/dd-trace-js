@@ -216,7 +216,7 @@ async function createSandbox (
         'git init && ' +
         'git config user.email "john@doe.com" && ' +
         'git config user.name "John Doe" && ' +
-        'git config commit.gpgsign false && git config commit.gpgsign false',
+        'git config commit.gpgsign false',
         { cwd: folder }
       )
     ])
@@ -228,8 +228,8 @@ async function createSandbox (
     }
 
     await exec(
-      'git commit -a -m "first commit" --no-verify &&' +
-      `git remote add origin ${localRemotePath}` +
+      'git commit -a -m "first commit" --no-verify && ' +
+      `git remote add origin ${localRemotePath} && ` +
       'git push --set-upstream origin HEAD',
       { cwd: folder }
     )
