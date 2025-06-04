@@ -39,7 +39,7 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
           it('should initialize the tracer', () => doTest('init/trace.js', 'true\n', []))
           it('should initialize instrumentation', () => doTest('init/instrument.js', 'true\n', []))
           it(`should ${esmWorks ? '' : 'not '}initialize ESM instrumentation`, () =>
-            doTest('init/instrument.mjs', `${esmWorks}\n`, [], esmWorks ? 'ssi' : undefined))
+            doTest('init/instrument.mjs', `${esmWorks}\n`, []))
         })
       }
       context('with DD_INJECTION_ENABLED', () => {
@@ -58,7 +58,7 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
         it('should initialize the tracer', () => doTest('init/trace.js', 'true\n', []))
         it('should initialize instrumentation', () => doTest('init/instrument.js', 'true\n', []))
         it(`should ${esmWorks ? '' : 'not '}initialize ESM instrumentation`, () =>
-          doTest('init/instrument.mjs', esmWorks, `${esmWorks}\n`, []))
+          doTest('init/instrument.mjs', `${esmWorks}\n`, []))
       })
       context('with DD_INJECTION_ENABLED', () => {
         useEnv({ DD_INJECTION_ENABLED })
@@ -66,7 +66,7 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
         it('should initialize the tracer', () => doTest('init/trace.js', 'true\n', telemetryGood))
         it('should initialize instrumentation', () => doTest('init/instrument.js', 'true\n', telemetryGood))
         it(`should ${esmWorks ? '' : 'not '}initialize ESM instrumentation`, () =>
-          doTest('init/instrument.mjs', esmWorks, `${esmWorks}\n`, []))
+          doTest('init/instrument.mjs', `${esmWorks}\n`, []))
       })
     })
   })
