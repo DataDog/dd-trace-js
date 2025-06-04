@@ -4,7 +4,7 @@ const { assert } = require('chai')
 const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
-  const t = setup()
+  const t = setup({ dependencies: ['fastify'] })
 
   describe('input messages', function () {
     describe('with snapshot', function () {
