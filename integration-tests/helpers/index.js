@@ -1,6 +1,6 @@
 'use strict'
 
-const { promisify } = require('util')
+const { promisify, inspect } = require('util')
 const childProcess = require('child_process')
 const { fork, spawn } = childProcess
 const exec = promisify(childProcess.exec)
@@ -10,30 +10,49 @@ const os = require('os')
 const path = require('path')
 const assert = require('assert')
 const rimraf = promisify(require('rimraf'))
+const { setTimeout: wait } = require('timers/promises')
 const FakeAgent = require('./fake-agent')
 const id = require('../../packages/dd-trace/src/id')
+const { StringDecoder } = require('string_decoder');
 
 const hookFile = 'dd-trace/loader-hook.mjs'
 
 // This is set by the setShouldKill function
-let shouldKill
+let shouldKill = true
+
+// End the process if nothing was received for a second.
+// This is potentially flaky while we wait for the process to end, but it is
+// better than leaving it hanging forever.
+function potentiallyKill (proc, timeout) {
+  if (shouldKill) {
+    clearTimeout(timeout)
+    return setTimeout(() => {
+      if (proc.exitCode === null) {
+        proc.kill()
+      }
+    }, 1000)
+  }
+}
 
 async function runAndCheckOutput (filename, cwd, expectedOut) {
   const proc = spawn('node', [filename], { cwd, stdio: 'pipe' })
   const pid = proc.pid
   let out = await new Promise((resolve, reject) => {
-    proc.on('error', reject)
-    let out = Buffer.alloc(0)
+    let timeout = potentiallyKill(proc)
+    proc.on('error', () => {
+      reject()
+    })
+    const decoder = new StringDecoder('utf8');
+    let out = ''
     proc.stdout.on('data', data => {
-      out = Buffer.concat([out, data])
+      out += decoder.write(data)
+      timeout = potentiallyKill(proc, timeout)
     })
     proc.stderr.pipe(process.stdout)
-    proc.on('exit', () => resolve(out.toString('utf8')))
-    if (shouldKill) {
-      setTimeout(() => {
-        if (proc.exitCode === null) proc.kill()
-      }, 1000) // TODO this introduces flakiness. find a better way to end the process.
-    }
+    proc.on('exit', () => {
+      out += decoder.end()
+      resolve(out)
+    })
   })
   if (typeof expectedOut === 'function') {
     expectedOut(out)
@@ -58,13 +77,8 @@ async function runAndCheckWithTelemetry (filename, expectedOut, ...expectedTelem
   const msgs = await cleanup()
   if (expectedTelemetryPoints.length === 0) {
     // assert no telemetry sent
-    try {
-      assert.deepStrictEqual(msgs.length, 0)
-    } catch (e) {
-      // This console.log is useful for debugging telemetry. Plz don't remove.
-      // eslint-disable-next-line no-console
-      console.error('Expected no telemetry, but got:\n', msgs.map(msg => JSON.stringify(msg[1].points)).join('\n'))
-      throw e
+    if (msgs?.length !== 0) {
+      assert.fail(`Expected no telemetry, but got:\n ${msgs.map(msg => inspect(msg[1].points)).join('\n')}`)
     }
     return
   }
@@ -72,12 +86,12 @@ async function runAndCheckWithTelemetry (filename, expectedOut, ...expectedTelem
   for (const [telemetryType, data] of msgs) {
     assert.strictEqual(telemetryType, 'library_entrypoint')
     assert.deepStrictEqual(data.metadata, meta(pid))
-    points = points.concat(data.points)
+    points.push(...data.points)
   }
   let expectedPoints = getPoints(...expectedTelemetryPoints)
   // We now have to sort both the expected and actual telemetry points.
   // This is because data can come in in any order.
-  // We'll just contatenate all the data together for each point and sort them.
+  // We'll just concatenate all the data together for each point and sort them.
   points = points.map(p => p.name + '\t' + p.tags.join(',')).sort().join('\n')
   expectedPoints = expectedPoints.map(p => p.name + '\t' + p.tags.join(',')).sort().join('\n')
   assert.strictEqual(points, expectedPoints)
@@ -143,8 +157,12 @@ function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
   })
 }
 
-async function createSandbox (dependencies = [], isGitRepo = false,
-  integrationTestsPaths = ['./integration-tests/*'], followUpCommand) {
+async function createSandbox (
+  dependencies = [],
+  isGitRepo = false,
+  integrationTestsPaths = ['./integration-tests/*'],
+  followUpCommand
+) {
   // We might use NODE_OPTIONS to init the tracer. We don't want this to affect this operations
   const { NODE_OPTIONS, ...restOfEnv } = process.env
   const noSandbox = String(process.env.TESTING_NO_INTEGRATION_SANDBOX)
@@ -153,23 +171,22 @@ async function createSandbox (dependencies = [], isGitRepo = false,
     // yarn-linked into dd-trace and want to run the integration tests against them.
 
     // Link dd-trace to itself, then...
-    await exec('yarn link')
-    await exec('yarn link dd-trace')
+    await exec('yarn link && yarn link dd-trace')
     // ... run the tests in the current directory.
     return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
   }
   const folder = path.join(os.tmpdir(), id().toString())
   const out = path.join(folder, 'dd-trace.tgz')
-  const allDependencies = [`file:${out}`].concat(dependencies)
+  const allDependencies = [`file:${out}`, ...dependencies]
 
-  fs.mkdirSync(folder)
+  await fs.promises.mkdir(folder)
   const addCommand = `yarn add ${allDependencies.join(' ')} --ignore-engines`
   const addOptions = { cwd: folder, env: restOfEnv }
   await exec(`yarn pack --filename ${out}`, { env: restOfEnv }) // TODO: cache this
 
   try {
     await exec(addCommand, addOptions)
-  } catch (e) { // retry in case of server error from registry
+  } catch { // retry in case of server error from registry
     await exec(addCommand, addOptions)
   }
 
@@ -192,11 +209,16 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   }
 
   if (isGitRepo) {
-    await exec('git init', { cwd: folder })
-    fs.writeFileSync(path.join(folder, '.gitignore'), 'node_modules/', { flush: true })
-    await exec('git config user.email "john@doe.com"', { cwd: folder })
-    await exec('git config user.name "John Doe"', { cwd: folder })
-    await exec('git config commit.gpgsign false', { cwd: folder })
+    await Promise.all([
+      fs.promises.writeFile(path.join(folder, '.gitignore'), 'node_modules/', { flush: true }),
+      exec(
+        'git init && ' +
+        'git config user.email "john@doe.com" && ' +
+        'git config user.name "John Doe" && ' +
+        'git config commit.gpgsign false && git config commit.gpgsign false',
+        { cwd: folder }
+      )
+    ])
 
     // Create a unique local bare repo for this test
     const localRemotePath = path.join(folder, '..', `${path.basename(folder)}-remote.git`)
@@ -204,10 +226,12 @@ async function createSandbox (dependencies = [], isGitRepo = false,
       await exec(`git init --bare ${localRemotePath}`)
     }
 
-    await exec('git add -A', { cwd: folder })
-    await exec('git commit -m "first commit" --no-verify', { cwd: folder })
-    await exec(`git remote add origin ${localRemotePath}`, { cwd: folder })
-    await exec('git push --set-upstream origin HEAD', { cwd: folder })
+    await exec(
+      'git commit -a -m "first commit" --no-verify &&' +
+      `git remote add origin ${localRemotePath}` +
+      'git push --set-upstream origin HEAD',
+      { cwd: folder }
+    )
   }
 
   return {
@@ -225,7 +249,7 @@ function telemetryForwarder (expectedTelemetryPoints) {
 
   const tryAgain = async function () {
     retries += 1
-    await new Promise(resolve => setTimeout(resolve, 100))
+    await wait(100)
     return cleanup()
   }
 
@@ -264,7 +288,7 @@ function telemetryForwarder (expectedTelemetryPoints) {
   return cleanup
 }
 
-async function curl (url, useHttp2 = false) {
+async function curl (url) {
   if (url !== null && typeof url === 'object') {
     if (url.then) {
       return curl(await url)
@@ -272,12 +296,16 @@ async function curl (url, useHttp2 = false) {
     url = url.url
   }
 
+  const decoder = new StringDecoder('utf8');
   return new Promise((resolve, reject) => {
     http.get(url, res => {
-      const bufs = []
-      res.on('data', d => bufs.push(d))
+      let body = ''
+      res.on('data', data => {
+        body += decoder.write(data)
+      })
       res.on('end', () => {
-        res.body = Buffer.concat(bufs).toString('utf8')
+        out += decoder.end()
+        res.body = body
         resolve(res)
       })
       res.on('error', reject)
