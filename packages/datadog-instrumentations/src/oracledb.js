@@ -18,7 +18,7 @@ function finish (err) {
   if (err) {
     errorChannel.publish(err)
   }
-  finishChannel.publish(undefined)
+  finishChannel.publish()
 }
 
 addHook({ name: 'oracledb', versions: ['>=5'] }, oracledb => {

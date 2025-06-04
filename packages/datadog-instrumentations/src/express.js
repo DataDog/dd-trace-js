@@ -149,11 +149,9 @@ addHook({ name: 'express', versions: ['>=4.3.0 <5.0.0'] }, express => {
 const queryReadCh = channel('datadog:express:query:finish')
 
 addHook({ name: 'express', file: ['lib/request.js'], versions: ['>=5.0.0'] }, request => {
-  const requestDescriptor = Object.getOwnPropertyDescriptor(request, 'query')
-
-  shimmer.wrap(requestDescriptor, 'get', function (originalGet) {
+  shimmer.wrap(request, 'query', function (originalGet) {
     return function wrappedGet () {
-      const query = originalGet.apply(this, arguments)
+      const query = originalGet.call(this)
 
       if (queryReadCh.hasSubscribers && query) {
         queryReadCh.publish({ query })
@@ -162,8 +160,6 @@ addHook({ name: 'express', file: ['lib/request.js'], versions: ['>=5.0.0'] }, re
       return query
     }
   })
-
-  Object.defineProperty(request, 'query', requestDescriptor)
 
   return request
 })

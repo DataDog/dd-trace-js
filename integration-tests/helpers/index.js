@@ -145,15 +145,22 @@ function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
 
 async function createSandbox (dependencies = [], isGitRepo = false,
   integrationTestsPaths = ['./integration-tests/*'], followUpCommand) {
-  /* To execute integration tests without a sandbox uncomment the next line
-   * and do `yarn link && yarn link dd-trace` */
-  // return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
+  // We might use NODE_OPTIONS to init the tracer. We don't want this to affect this operations
+  const { NODE_OPTIONS, ...restOfEnv } = process.env
+  const noSandbox = String(process.env.TESTING_NO_INTEGRATION_SANDBOX)
+  if (noSandbox === '1' || noSandbox.toLowerCase() === 'true') {
+    // Execute integration tests without a sandbox. This is useful when you have other components
+    // yarn-linked into dd-trace and want to run the integration tests against them.
+
+    // Link dd-trace to itself, then...
+    await exec('yarn link')
+    await exec('yarn link dd-trace')
+    // ... run the tests in the current directory.
+    return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
+  }
   const folder = path.join(os.tmpdir(), id().toString())
   const out = path.join(folder, 'dd-trace.tgz')
   const allDependencies = [`file:${out}`].concat(dependencies)
-
-  // We might use NODE_OPTIONS to init the tracer. We don't want this to affect this operations
-  const { NODE_OPTIONS, ...restOfEnv } = process.env
 
   fs.mkdirSync(folder)
   const addCommand = `yarn add ${allDependencies.join(' ')} --ignore-engines`
@@ -190,10 +197,17 @@ async function createSandbox (dependencies = [], isGitRepo = false,
     await exec('git config user.email "john@doe.com"', { cwd: folder })
     await exec('git config user.name "John Doe"', { cwd: folder })
     await exec('git config commit.gpgsign false', { cwd: folder })
-    await exec(
-      'git add -A && git commit -m "first commit" --no-verify && git remote add origin git@git.com:datadog/example.git',
-      { cwd: folder }
-    )
+
+    // Create a unique local bare repo for this test
+    const localRemotePath = path.join(folder, '..', `${path.basename(folder)}-remote.git`)
+    if (!fs.existsSync(localRemotePath)) {
+      await exec(`git init --bare ${localRemotePath}`)
+    }
+
+    await exec('git add -A', { cwd: folder })
+    await exec('git commit -m "first commit" --no-verify', { cwd: folder })
+    await exec(`git remote add origin ${localRemotePath}`, { cwd: folder })
+    await exec('git push --set-upstream origin HEAD', { cwd: folder })
   }
 
   return {
@@ -353,10 +367,10 @@ function setShouldKill (value) {
   })
 }
 
-function assertObjectContains (actual, expected) {
+const assertObjectContains = assert.partialDeepStrictEqual || function assertObjectContains (actual, expected) {
   for (const [key, val] of Object.entries(expected)) {
     if (val !== null && typeof val === 'object') {
-      assert.ok(key in actual)
+      assert.ok(Object.hasOwn(actual, key))
       assert.notStrictEqual(actual[key], null)
       assert.strictEqual(typeof actual[key], 'object')
       assertObjectContains(actual[key], val)

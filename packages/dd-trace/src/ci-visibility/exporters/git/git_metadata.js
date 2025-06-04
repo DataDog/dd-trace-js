@@ -51,7 +51,7 @@ function getCommonRequestOptions (url) {
     headers: {
       'dd-api-key': getEnvironmentVariable('DD_API_KEY')
     },
-    timeout: 15000,
+    timeout: 15_000,
     url
   }
 }
@@ -149,7 +149,7 @@ function uploadPackFile ({ url, isEvpProxy, evpProxyPrefix, packFileToUpload, re
       filename,
       contentType: 'application/octet-stream'
     })
-  } catch (e) {
+  } catch {
     callback(new Error(`Could not read "${packFileToUpload}"`))
     return
   }

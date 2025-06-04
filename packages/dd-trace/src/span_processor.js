@@ -48,14 +48,14 @@ class SpanProcessor {
       this._gitMetadataTagger.tagGitMetadata(spanContext)
 
       for (const span of started) {
-        if (span._duration !== undefined) {
+        if (span._duration === undefined) {
+          active.push(span)
+        } else {
           const formattedSpan = format(span)
           this._stats?.onSpanFinished(formattedSpan)
           formatted.push(formattedSpan)
 
           spanProcessCh.publish({ span })
-        } else {
-          active.push(span)
         }
       }
 

@@ -7,7 +7,6 @@ export default {
     schema: []
   },
   create (context) {
-    // eslint-disable-next-line @stylistic/js/max-len
     const allowedFile = /[/\\]packages[/\\]dd-trace[/\\]src[/\\](config-helper|guardrails[/\\](index|log|telemetry))\.js$/
 
     const filename = context.getFilename()

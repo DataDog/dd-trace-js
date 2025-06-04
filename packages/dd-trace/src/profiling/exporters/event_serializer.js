@@ -7,16 +7,16 @@ const libuvThreadPoolSize = (() => {
   const ss = getEnvironmentVariable('UV_THREADPOOL_SIZE')
   if (ss === undefined) {
     // Backend will apply the default size based on Node version.
-    return undefined
+    return
   }
   // libuv uses atoi to parse the value, which is almost the same as parseInt, except that parseInt
   // will return NaN on invalid input, while atoi will return 0. This is handled at return.
-  const s = parseInt(ss)
-  // We dont' interpret the value further here in the library. Backend will interpret the number
+  const s = Number.parseInt(ss)
+  // We don't interpret the value further here in the library. Backend will interpret the number
   // based on Node version. In all currently known Node versions, 0 results in 1 worker thread,
   // negative values (because they're assigned to an unsigned int) become very high positive values,
   // and the value is finally capped at 1024.
-  return isNaN(s) ? 0 : s
+  return Number.isNaN(s) ? 0 : s
 })()
 
 class EventSerializer {
@@ -88,7 +88,7 @@ class EventSerializer {
           // We'll keep it like this as we want cross-engine consistency. We
           // also aren't changing the format of the existing tag as we don't want
           // to break it.
-          version: process.version.substring(1)
+          version: process.version.slice(1)
         }
       }
     })

@@ -32,7 +32,7 @@ class Writer extends BaseWriter {
         'dd-api-key': getEnvironmentVariable('DD_API_KEY'),
         ...form.getHeaders()
       },
-      timeout: 15000,
+      timeout: 15_000,
       url: this._url
     }
 

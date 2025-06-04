@@ -12,10 +12,7 @@ check_config_inversion_local_file:
     LOCAL_JSON_PATH: "packages/dd-trace/src/supported-configurations.json"
 
 include:
-  # See: https://gitlab.ddbuild.io/DataDog/apm-reliability/libdatadog-build
-  - project: DataDog/apm-reliability/libdatadog-build
-    ref: 710da75324e3898bb90e60411d6835b3bedb06d0
-    file: templates/one-pipeline.yml
+  - local: ".gitlab/one-pipeline.locked.yml"
   - local: ".gitlab/benchmarks.yml"
   - local: ".gitlab/macrobenchmarks.yml"
 

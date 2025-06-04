@@ -15,7 +15,7 @@ addHook({
       if (JSON.parse(getEnvironmentVariable('NYC_CONFIG')).all) {
         codeCoverageWrapCh.publish(this)
       }
-    } catch (e) {
+    } catch {
       // ignore errors
     }
 

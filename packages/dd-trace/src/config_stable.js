@@ -28,7 +28,7 @@ class StableConfig {
     try {
       libdatadog = require('@datadog/libdatadog')
       this.wasm_loaded = true
-    } catch (e) {
+    } catch {
       this.warnings.push('Can\'t load libdatadog library')
       return
     }
@@ -81,8 +81,8 @@ class StableConfig {
         fleetConfigPath = '/opt/datadog-agent/etc/managed/datadog-agent/stable/application_monitoring.yaml'
         break
       case 'win32':
-        localConfigPath = 'C:\\ProgramData\\Datadog\\application_monitoring.yaml'
-        fleetConfigPath = 'C:\\ProgramData\\Datadog\\managed\\datadog-agent\\stable\\application_monitoring.yaml'
+        localConfigPath = String.raw`C:\ProgramData\Datadog\application_monitoring.yaml`
+        fleetConfigPath = String.raw`C:\ProgramData\Datadog\managed\datadog-agent\stable\application_monitoring.yaml`
         break
       default:
         break

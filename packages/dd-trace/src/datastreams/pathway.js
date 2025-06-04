@@ -77,19 +77,19 @@ function decodePathwayContextBase64 (pathwayContext) {
   return decodePathwayContext(encodedPathway)
 }
 
-class DsmPathwayCodec {
+const DsmPathwayCodec = {
   // we use a class for encoding / decoding in case we update our encoding/decoding. A class will make updates easier
   // instead of using individual functions.
-  static encode (dataStreamsContext, carrier) {
+  encode (dataStreamsContext, carrier) {
     if (!dataStreamsContext || !dataStreamsContext.hash) {
       return
     }
     carrier[CONTEXT_PROPAGATION_KEY_BASE64] = encodePathwayContextBase64(dataStreamsContext)
 
     log.debug(() => `Injected into DSM carrier: ${JSON.stringify(pick(carrier, logKeys))}.`)
-  }
+  },
 
-  static decode (carrier) {
+  decode (carrier) {
     log.debug(() => `Attempting extract from DSM carrier: ${JSON.stringify(pick(carrier, logKeys))}.`)
 
     if (carrier == null) return

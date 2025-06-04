@@ -41,47 +41,23 @@ function removeTransaction (iastContext) {
 }
 
 function newTaintedString (iastContext, string, name, type) {
-  let result
   const transactionId = iastContext?.[IAST_TRANSACTION_ID]
-  if (transactionId) {
-    result = TaintedUtils.newTaintedString(transactionId, string, name, type)
-  } else {
-    result = string
-  }
-  return result
+  return transactionId ? TaintedUtils.newTaintedString(transactionId, string, name, type) : string
 }
 
 function newTaintedObject (iastContext, obj, name, type) {
-  let result
   const transactionId = iastContext?.[IAST_TRANSACTION_ID]
-  if (transactionId) {
-    result = TaintedUtils.newTaintedObject(transactionId, obj, name, type)
-  } else {
-    result = obj
-  }
-  return result
+  return transactionId ? TaintedUtils.newTaintedObject(transactionId, obj, name, type) : obj
 }
 
 function isTainted (iastContext, string) {
-  let result
   const transactionId = iastContext?.[IAST_TRANSACTION_ID]
-  if (transactionId) {
-    result = TaintedUtils.isTainted(transactionId, string)
-  } else {
-    result = false
-  }
-  return result
+  return transactionId ? TaintedUtils.isTainted(transactionId, string) : false
 }
 
 function getRanges (iastContext, string) {
-  let result
   const transactionId = iastContext?.[IAST_TRANSACTION_ID]
-  if (transactionId) {
-    result = TaintedUtils.getRanges(transactionId, string)
-  } else {
-    result = []
-  }
-  return result
+  return transactionId ? TaintedUtils.getRanges(transactionId, string) : []
 }
 
 function addSecureMark (iastContext, string, mark, createNewTainted = true) {

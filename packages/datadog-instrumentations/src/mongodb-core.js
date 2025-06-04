@@ -204,7 +204,7 @@ function instrumentPromise (operation, command, ctx, args, server, ns, ops, opti
       errorCh.publish(err)
       finishCh.publish()
 
-      return Promise.reject(err)
+      throw err
     })
   })
 }

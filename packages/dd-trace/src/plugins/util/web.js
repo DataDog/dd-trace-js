@@ -253,7 +253,7 @@ const web = {
     if (!context) return null
     if (context.middleware.length === 0) return context.span || null
 
-    return context.middleware.slice(-1)[0]
+    return context.middleware.at(-1)
   },
 
   // Extract the parent span from the headers and start a new span as its child
@@ -500,7 +500,7 @@ function addResourceTag (context) {
   if (tags['resource.name']) return
 
   const resource = [req.method, tags[HTTP_ROUTE]]
-    .filter(val => val)
+    .filter(Boolean)
     .join(' ')
 
   span.setTag(RESOURCE_NAME, resource)
@@ -567,9 +567,10 @@ function getStatusValidator (config) {
   return code => code < 500
 }
 
+const noop = () => {}
+
 function getHooks (config) {
-  const noop = () => {}
-  const request = (config.hooks && config.hooks.request) || noop
+  const request = config.hooks?.request ?? noop
 
   return { request }
 }

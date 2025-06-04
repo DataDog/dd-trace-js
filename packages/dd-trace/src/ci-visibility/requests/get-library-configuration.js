@@ -29,7 +29,8 @@ function getLibraryConfiguration ({
   runtimeVersion,
   branch,
   testLevel = 'suite',
-  custom
+  custom,
+  tag
 }, done) {
   const options = {
     path: '/api/v2/libraries/tests/services/setting',
@@ -38,7 +39,7 @@ function getLibraryConfiguration ({
       'Content-Type': 'application/json'
     },
     url,
-    timeout: 20000
+    timeout: 20_000
   }
 
   if (isEvpProxy) {
@@ -70,7 +71,7 @@ function getLibraryConfiguration ({
         env,
         repository_url: repositoryUrl,
         sha,
-        branch
+        branch: branch || tag
       }
     }
   })
@@ -96,7 +97,8 @@ function getLibraryConfiguration ({
               flaky_test_retries_enabled: isFlakyTestRetriesEnabled,
               di_enabled: isDiEnabled,
               known_tests_enabled: isKnownTestsEnabled,
-              test_management: testManagementConfig
+              test_management: testManagementConfig,
+              impacted_tests_enabled: isImpactedTestsEnabled
             }
           }
         } = JSON.parse(res)
@@ -116,7 +118,8 @@ function getLibraryConfiguration ({
           isKnownTestsEnabled,
           isTestManagementEnabled: (testManagementConfig?.enabled ?? false),
           testManagementAttemptToFixRetries:
-            testManagementConfig?.attempt_to_fix_retries
+            testManagementConfig?.attempt_to_fix_retries,
+          isImpactedTestsEnabled
         }
 
         log.debug(() => `Remote settings: ${JSON.stringify(settings)}`)

@@ -48,9 +48,12 @@ describe('RASP - utils.js', () => {
       const rootSpan = {}
       const stackId = 'test_stack_id'
       const result = {
-        generate_stack: {
-          stack_id: stackId
-        }
+        actions: {
+          generate_stack: {
+            stack_id: stackId
+          }
+        },
+        events: [{ a: [1] }]
       }
 
       web.root.returns(rootSpan)
@@ -69,8 +72,10 @@ describe('RASP - utils.js', () => {
         }
       }
       const result = {
-        generate_stack: {
-          stack_id: 'stackId'
+        actions: {
+          generate_stack: {
+            stack_id: 'stackId'
+          }
         }
       }
 
@@ -102,8 +107,10 @@ describe('RASP - utils.js', () => {
 
     it('should not report stack trace when stack trace reporting is disabled', () => {
       const result = {
-        generate_stack: {
-          stack_id: 'stackId'
+        actions: {
+          generate_stack: {
+            stack_id: 'stackId'
+          }
         }
       }
       const config = {
@@ -129,7 +136,9 @@ describe('RASP - utils.js', () => {
         signal: {}
       }
       const result = {
-        blocking_action: { type: 'block_request' }
+        actions: {
+          blocking_action: { type: 'block_request' }
+        }
       }
 
       web.root.returns(rootSpan)
@@ -140,7 +149,7 @@ describe('RASP - utils.js', () => {
       const abortError = abortController.abort.firstCall.args[0]
       expect(abortError).to.be.instanceOf(utils.DatadogRaspAbortError)
       expect(abortError.raspRule).to.equal(raspRule)
-      expect(abortError.blockingAction).to.equal(result.blocking_action)
+      expect(abortError.blockingAction).to.equal(result.actions.blocking_action)
     })
 
     it('should call updateRaspRuleMatchMetricTags when no blockingAction is present', () => {
@@ -149,7 +158,9 @@ describe('RASP - utils.js', () => {
         abort: sinon.stub(),
         signal: {}
       }
-      const result = {}
+      const result = {
+        events: [{ a: [1] }]
+      }
 
       web.root.returns(rootSpan)
 
