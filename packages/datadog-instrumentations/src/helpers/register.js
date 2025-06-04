@@ -19,8 +19,15 @@ const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
 const names = Object.keys(hooks)
 const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
+
+const convertInstrumentationName = (name) => {
+  return name.replaceAll('@', '').replaceAll('-', '').replaceAll('/', '').replaceAll('_', '').toLowerCase()
+}
+
 const disabledInstrumentations = new Set(
-  DD_TRACE_DISABLED_INSTRUMENTATIONS ? DD_TRACE_DISABLED_INSTRUMENTATIONS.split(',') : []
+  DD_TRACE_DISABLED_INSTRUMENTATIONS
+    ? DD_TRACE_DISABLED_INSTRUMENTATIONS.split(',').map(convertInstrumentationName)
+    : []
 )
 const enabledInstrumentations = new Set()
 
@@ -28,10 +35,10 @@ const enabledInstrumentations = new Set()
 for (const [key, value] of Object.entries(process.env)) {
   const match = key.match(/^DD_TRACE_(.+)_ENABLED$/)
   if (match && (value?.toLowerCase() === 'false' || value === '0')) {
-    const integration = match[1].toLowerCase()
+    const integration = convertInstrumentationName(match[1])
     disabledInstrumentations.add(integration)
   } else if (match && (value?.toLowerCase() === 'true' || value === '1')) {
-    const integration = match[1].toLowerCase()
+    const integration = convertInstrumentationName(match[1])
     enabledInstrumentations.add(integration)
   }
 }
@@ -59,7 +66,8 @@ const allInstrumentations = {}
 
 // TODO: make this more efficient
 for (const packageName of names) {
-  if (disabledInstrumentations.has(packageName)) continue
+  const normalizedPackageName = convertInstrumentationName(packageName)
+  if (disabledInstrumentations.has(normalizedPackageName)) continue
 
   const hookOptions = {}
 
@@ -72,7 +80,7 @@ for (const packageName of names) {
 
     // some integrations are disabled by default, but can be enabled by setting
     // the DD_TRACE_<INTEGRATION>_ENABLED environment variable to true
-    if (hook.disabled === true && !enabledInstrumentations.has(packageName)) {
+    if (hook.disabled === true && !enabledInstrumentations.has(normalizedPackageName)) {
       continue
     }
 
