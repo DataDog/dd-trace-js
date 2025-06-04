@@ -5,7 +5,6 @@ require('../setup/tap')
 const { expect } = require('chai')
 const os = require('os')
 const path = require('path')
-const satisfies = require('semifies')
 
 const { AgentExporter } = require('../../src/profiling/exporters/agent')
 const { FileExporter } = require('../../src/profiling/exporters/file')
@@ -443,29 +442,21 @@ describe('config', () => {
 
       expect(config.uploadCompression).to.deep.equal({ method, level })
     }
-    const zstdSupported = satisfies(process.versions.node, '>=23.8.0')
 
     it('should accept known methods', () => {
       expectConfig(undefined, 'gzip', undefined)
       expectConfig('off', 'off', undefined)
       expectConfig('on', 'gzip', undefined)
       expectConfig('gzip', 'gzip', undefined)
-      if (zstdSupported) {
-        expectConfig('zstd', 'zstd', undefined)
-      }
+      expectConfig('zstd', 'zstd', undefined)
     })
 
     it('should reject unknown methods', () => {
-      if (!zstdSupported) {
-        expectConfig('zstd', 'gzip', undefined,
-          'Profile upload compression method "zstd" is only supported on Node.js 23.8.0 or above. Will use "on".')
-      }
       expectConfig('foo', 'gzip', undefined, 'Invalid profile upload compression method "foo". Will use "on".')
     })
 
     it('should accept supported compression levels in methods that support levels', () => {
-      const levelAcceptingMethods = zstdSupported ? [['gzip', 9], ['zstd', 22]] : [['gzip', 9]]
-      levelAcceptingMethods.forEach(([method, maxLevel]) => {
+      [['gzip', 9], ['zstd', 22]].forEach(([method, maxLevel]) => {
         for (let i = 1; i <= maxLevel; i++) {
           expectConfig(`${method}-${i}`, method, i)
         }
@@ -473,8 +464,7 @@ describe('config', () => {
     })
 
     it('should reject invalid compression levels in methods that support levels', () => {
-      const levelAcceptingMethods = zstdSupported ? ['gzip', 'zstd'] : ['gzip']
-      levelAcceptingMethods.forEach((method) => {
+      ['gzip', 'zstd'].forEach((method) => {
         expectConfig(`${method}-foo`, method, undefined,
           'Invalid compression level "foo". Will use default level.')
       })
@@ -494,11 +484,9 @@ describe('config', () => {
       expectConfig('gzip-0', 'gzip', 1, 'Invalid compression level 0. Will use 1.')
       expectConfig('gzip-10', 'gzip', 9, 'Invalid compression level 10. Will use 9.')
       expectConfig('gzip-3.14', 'gzip', 3)
-      if (zstdSupported) {
-        expectConfig('zstd-0', 'zstd', 1, 'Invalid compression level 0. Will use 1.')
-        expectConfig('zstd-23', 'zstd', 22, 'Invalid compression level 23. Will use 22.')
-        expectConfig('zstd-3.14', 'zstd', 3)
-      }
+      expectConfig('zstd-0', 'zstd', 1, 'Invalid compression level 0. Will use 1.')
+      expectConfig('zstd-23', 'zstd', 22, 'Invalid compression level 23. Will use 22.')
+      expectConfig('zstd-3.14', 'zstd', 3)
     })
   })
 })
