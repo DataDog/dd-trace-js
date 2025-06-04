@@ -29,7 +29,7 @@ const disabledInstrumentations = new Set(
     ? DD_TRACE_DISABLED_INSTRUMENTATIONS.split(',').map(convertInstrumentationName)
     : []
 )
-const enabledInstrumentations = new Set()
+const reenabledInstrumentations = new Set()
 
 // Check for DD_TRACE_<INTEGRATION>_ENABLED environment variables
 for (const [key, value] of Object.entries(process.env)) {
