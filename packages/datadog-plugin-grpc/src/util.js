@@ -27,7 +27,7 @@ module.exports = {
       tags.service = service
       tags.package = pkg
     } else {
-      tags.name = methodParts[methodParts.length - 1]
+      tags.name = methodParts.at(-1)
     }
 
     return tags
@@ -49,7 +49,7 @@ module.exports = {
       return config[filter]
     }
 
-    if (config[filter] instanceof Array) {
+    if (Array.isArray(config[filter])) {
       return element => pick(element, config[filter])
     }
 

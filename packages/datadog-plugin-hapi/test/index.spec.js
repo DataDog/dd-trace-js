@@ -93,7 +93,7 @@ describe('Plugin', () => {
         })
 
         agent
-          .use(traces => {
+          .assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('name', 'hapi.request')
             expect(traces[0][0]).to.have.property('service', 'test')
             expect(traces[0][0]).to.have.property('type', 'web')
@@ -259,7 +259,7 @@ describe('Plugin', () => {
         })
 
         agent
-          .use(traces => {
+          .assertSomeTraces(traces => {
             expect(traces[0][0].trace_id.toString()).to.equal('1234')
             expect(traces[0][0].parent_id.toString()).to.equal('5678')
           })
@@ -279,7 +279,7 @@ describe('Plugin', () => {
 
       it('should instrument the default route handler', done => {
         agent
-          .use(traces => {
+          .assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('name', 'hapi.request')
           })
           .then(done)
@@ -306,7 +306,7 @@ describe('Plugin', () => {
         })
 
         agent
-          .use(traces => {
+          .assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('error', 1)
             expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
             expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
@@ -338,7 +338,7 @@ describe('Plugin', () => {
         })
 
         agent
-          .use(traces => {
+          .assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('error', 0)
             expect(traces[0][0].meta).to.have.property('component', 'hapi')
           })

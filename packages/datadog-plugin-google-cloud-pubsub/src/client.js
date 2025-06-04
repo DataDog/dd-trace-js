@@ -7,18 +7,22 @@ class GoogleCloudPubsubClientPlugin extends ClientPlugin {
   static get type () { return 'messaging' }
   static get operation () { return 'request' }
 
-  start ({ request, api, projectId }) {
+  start (ctx) {
+    const { request, api, projectId } = ctx
+
     if (api === 'publish') return
 
     this.startSpan(this.operationName(), {
       service: this.config.service || this.serviceName(),
-      resource: [api, request.name].filter(x => x).join(' '),
+      resource: [api, request.name].filter(Boolean).join(' '),
       kind: this.constructor.kind,
       meta: {
         'pubsub.method': api,
         'gcloud.project_id': projectId
       }
-    })
+    }, ctx)
+
+    return ctx.currentStore
   }
 }
 

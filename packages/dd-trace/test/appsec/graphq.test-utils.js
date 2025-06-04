@@ -102,7 +102,7 @@ function graphqlCommonTests (config) {
     })
 
     it('Should set appsec.blocked on blocked attack', (done) => {
-      agent.use(payload => {
+      agent.assertSomeTraces(payload => {
         expect(payload[0][0].meta['appsec.blocked']).to.be.equal('true')
         done()
       })
@@ -201,7 +201,7 @@ function graphqlCommonTests (config) {
     })
 
     it('Should set appsec.blocked on blocked attack', (done) => {
-      agent.use(payload => {
+      agent.assertSomeTraces(payload => {
         expect(payload[0][0].meta['appsec.blocked']).to.be.equal('true')
         done()
       })

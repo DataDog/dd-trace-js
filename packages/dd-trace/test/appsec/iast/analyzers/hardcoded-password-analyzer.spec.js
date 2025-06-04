@@ -1,4 +1,4 @@
-/* eslint-disable @stylistic/js/max-len */
+/* eslint-disable @stylistic/max-len */
 'use strict'
 
 const path = require('path')
@@ -146,7 +146,7 @@ describe('Hardcoded Password Analyzer', () => {
 
       it('should detect vulnerability', (done) => {
         agent
-          .use(traces => {
+          .assertSomeTraces(traces => {
             expect(traces[0][0].meta['_dd.iast.json']).to.include('"HARDCODED_PASSWORD"')
             expect(traces[0][0].meta['_dd.iast.json']).to.include('"evidence":{"value":"pswd"}')
           })

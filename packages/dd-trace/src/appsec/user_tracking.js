@@ -40,12 +40,10 @@ function setCollectionMode (mode, overwrite = true) {
 }
 
 function obfuscateIfNeeded (str) {
-  if (collectionMode === 'anonymization') {
+  return collectionMode === 'anonymization'
     // get first 16 bytes of sha256 hash in lowercase hex
-    return 'anon_' + crypto.createHash('sha256').update(str).digest().toString('hex', 0, 16).toLowerCase()
-  } else {
-    return str
-  }
+    ? 'anon_' + crypto.createHash('sha256').update(str).digest().toString('hex', 0, 16).toLowerCase()
+    : str
 }
 
 // TODO: should we find other ways to get the user ID ?

@@ -89,7 +89,7 @@ describe('lambda', () => {
       expect(body.message).to.equal('hello!')
 
       // Expect traces to be correct.
-      const checkTraces = agent.use((_traces) => {
+      const checkTraces = agent.assertSomeTraces((_traces) => {
         const traces = _traces[0]
         expect(traces).lengthOf(1)
         traces.forEach((trace) => {
@@ -126,7 +126,7 @@ describe('lambda', () => {
       expect(body.message).to.equal('hello!')
 
       // Expect traces to be correct.
-      const checkTraces = agent.use((_traces) => {
+      const checkTraces = agent.assertSomeTraces((_traces) => {
         const traces = _traces[0]
         expect(traces).lengthOf(1)
         traces.forEach((trace) => {
@@ -160,7 +160,7 @@ describe('lambda', () => {
       }
 
       // Expect traces to be correct.
-      const checkTraces = agent.use((_traces) => {
+      const checkTraces = agent.assertSomeTraces((_traces) => {
         const traces = _traces[0]
         expect(traces).lengthOf(1)
         traces.forEach((trace) => {
@@ -191,7 +191,7 @@ describe('lambda', () => {
       const body = JSON.parse(result.body)
       expect(body.message).to.equal('hello!')
 
-      const checkTraces = agent.use((_traces) => {
+      const checkTraces = agent.assertSomeTraces((_traces) => {
         const traces = _traces[0]
         expect(traces).lengthOf(1)
         traces.forEach((trace) => {
@@ -239,7 +239,7 @@ describe('lambda', () => {
       datadog = require('./fixtures/datadog-lambda')
       const result = datadog(app.finishSpansEarlyTimeoutHandler)(_event, _context)
 
-      const checkTraces = agent.use((_traces) => {
+      const checkTraces = agent.assertSomeTraces((_traces) => {
         const traces = _traces[0]
         traces.forEach((trace) => {
           expect(trace.error).to.equal(0)
@@ -286,7 +286,7 @@ describe('lambda', () => {
 
           const result = datadog(app.timeoutHandler)(_event, _context)
 
-          const checkTraces = agent.use(_traces => {
+          const checkTraces = agent.assertSomeTraces(_traces => {
             // First trace, since errors are tagged at root span level.
             const trace = _traces[0][0]
             expect(trace.error).to.equal(1)

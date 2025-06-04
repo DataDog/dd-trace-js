@@ -52,7 +52,7 @@ class Scope {
   }
 
   _spanOrActive (span) {
-    return span !== undefined ? span : this.active()
+    return span === undefined ? this.active() : span
   }
 
   _isPromise (promise) {

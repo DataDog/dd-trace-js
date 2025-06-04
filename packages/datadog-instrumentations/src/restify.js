@@ -20,8 +20,8 @@ function wrapSetupRequest (setupRequest) {
 }
 
 function wrapMethod (method) {
-  return function (path) {
-    const middleware = wrapMiddleware(Array.prototype.slice.call(arguments, 1))
+  return function (path, ...rest) {
+    const middleware = wrapMiddleware(rest)
 
     return method.apply(this, [path].concat(middleware))
   }

@@ -9,12 +9,14 @@ class Amqp10ProducerPlugin extends ProducerPlugin {
   static get operation () { return 'send' }
   static get system () { return 'amqp' }
 
-  start ({ link }) {
+  bindStart (ctx) {
+    const { link } = ctx
+
     const address = getAddress(link)
     const target = getShortName(link)
 
     this.startSpan({
-      resource: ['send', target].filter(v => v).join(' '),
+      resource: ['send', target].filter(Boolean).join(' '),
       meta: {
         'amqp.link.target.address': target,
         'amqp.link.role': 'sender',
@@ -26,7 +28,9 @@ class Amqp10ProducerPlugin extends ProducerPlugin {
         'amqp.connection.port': address.port,
         'amqp.connection.user': address.user
       }
-    })
+    }, ctx)
+
+    return ctx.currentStore
   }
 }
 

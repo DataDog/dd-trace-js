@@ -49,7 +49,7 @@ class HttpClientPlugin extends ClientPlugin {
         'out.host': hostname
       },
       metrics: {
-        [CLIENT_PORT_KEY]: parseInt(options.port)
+        [CLIENT_PORT_KEY]: Number.parseInt(options.port)
       }
     }, false)
 
@@ -202,15 +202,26 @@ function getFilter (config) {
 function getHeaders (config) {
   if (!Array.isArray(config.headers)) return []
 
-  return config.headers
-    .filter(key => typeof key === 'string')
-    .map(h => h.split(':'))
-    .map(([key, tag]) => [key.toLowerCase(), tag])
+  const result = []
+  for (const header of config.headers) {
+    if (typeof header === 'string') {
+      const separatorIndex = header.indexOf(':')
+      result.push(separatorIndex === -1
+        ? [header, undefined]
+        : [
+            header.slice(0, separatorIndex).toLowerCase(),
+            header.slice(separatorIndex + 1)
+          ]
+      )
+    }
+  }
+  return result
 }
 
+const noop = () => {}
+
 function getHooks (config) {
-  const noop = () => {}
-  const request = (config.hooks && config.hooks.request) || noop
+  const request = config.hooks?.request ?? noop
 
   return { request }
 }

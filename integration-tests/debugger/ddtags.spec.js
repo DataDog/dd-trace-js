@@ -16,7 +16,8 @@ describe('Dynamic Instrumentation', function () {
           DD_GIT_COMMIT_SHA: 'test-commit-sha',
           DD_GIT_REPOSITORY_URL: 'test-repository-url'
         },
-        testApp: 'target-app/basic.js'
+        testApp: 'target-app/basic.js',
+        dependencies: ['fastify']
       })
 
       it('should add the expected ddtags as a query param to /debugger/v1/input', function (done) {
@@ -51,7 +52,7 @@ describe('Dynamic Instrumentation', function () {
     })
 
     describe('with undefined values', function () {
-      const t = setup({ testApp: 'target-app/basic.js' })
+      const t = setup({ testApp: 'target-app/basic.js', dependencies: ['fastify'] })
 
       it('should not include undefined values in the ddtags query param', function (done) {
         t.triggerBreakpoint()

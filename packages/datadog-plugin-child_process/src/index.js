@@ -17,7 +17,7 @@ function truncateCommand (cmdFields) {
 
     const argLen = cmdFields[i].length
     if (size < MAX_ARG_SIZE && size + argLen > MAX_ARG_SIZE) {
-      cmdFields[i] = cmdFields[i].substring(0, 2)
+      cmdFields[i] = cmdFields[i].slice(0, 2)
       truncated = true
     }
 
@@ -66,12 +66,12 @@ class ChildProcessPlugin extends TracingPlugin {
 
     if (result !== undefined) {
       exitCode = result?.status || 0
-    } else if (error !== undefined) {
-      exitCode = error?.status || error?.code || 0
-    } else {
+    } else if (error === undefined) {
       // TracingChannels call start, end synchronously. Later when the promise is resolved then asyncStart asyncEnd.
       // Therefore in the case of calling end with neither result nor error means that they will come in the asyncEnd.
       return
+    } else {
+      exitCode = error?.status || error?.code || 0
     }
 
     this.activeSpan?.setTag('cmd.exit_code', `${exitCode}`)

@@ -1,6 +1,7 @@
 'use strict'
 
 /* eslint-disable no-var */
+/* eslint-disable unicorn/prefer-number-properties */
 
 var ddMatches = require('./package.json').version.match(/^(\d+)\.(\d+)\.(\d+)/)
 var nodeMatches = process.versions.node.match(/^(\d+)\.(\d+)\.(\d+)/)

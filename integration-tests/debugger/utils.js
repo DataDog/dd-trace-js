@@ -18,7 +18,7 @@ module.exports = {
   setup
 }
 
-function setup ({ env, testApp, testAppSource } = {}) {
+function setup ({ env, testApp, testAppSource, dependencies } = {}) {
   let sandbox, cwd, appPort
   const breakpoints = getBreakpointInfo({
     deployedFile: testApp,
@@ -74,7 +74,7 @@ function setup ({ env, testApp, testAppSource } = {}) {
   }
 
   before(async function () {
-    sandbox = await createSandbox(['fastify']) // TODO: Make this dynamic
+    sandbox = await createSandbox(dependencies)
     cwd = sandbox.folder
     // The sandbox uses the `integration-tests` folder as its root
     t.appFile = join(cwd, 'debugger', breakpoints[0].deployedFile)

@@ -70,6 +70,7 @@ jobs:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
       DD_API_KEY: ${{ secrets.DD_API_KEY }}
+      OPTIONS_OVERRIDE: 1
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/node
@@ -92,6 +93,7 @@ jobs:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
       DD_API_KEY: ${{ secrets.DD_API_KEY }}
+      OPTIONS_OVERRIDE: 1
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/node
@@ -124,12 +126,11 @@ jobs:
   integration-cypress:
     strategy:
       matrix:
-        # Important: This is outside the minimum supported version of dd-trace-js
-        # Node > 16 does not work with Cypress@6.7.0 (not even without our plugin)
-        # TODO: figure out what to do with this: we might have to deprecate support for cypress@6.7.0
-        version: [eol, latest]
-        # 6.7.0 is the minimum version we support
-        cypress-version: [6.7.0, latest]
+        version: [eol, oldest, latest]
+        # 6.7.0 is the minimum version we support in <=5
+        # 10.2.0 is the minimum version we support in >=6
+        # The logic to decide whether the tests run lives in integration-tests/cypress/cypress.spec.js
+        cypress-version: [6.7.0, 10.2.0, latest]
         module-type: ['commonJS', 'esm']
     runs-on: ubuntu-latest
     env:
@@ -148,17 +149,24 @@ jobs:
           CYPRESS_VERSION: ${{ matrix.cypress-version }}
           NODE_OPTIONS: '-r ./ci/init'
           CYPRESS_MODULE_TYPE: ${{ matrix.module-type }}
+          OPTIONS_OVERRIDE: 1
 
 
   integration-vitest:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        version: [oldest, latest]
     env:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
       DD_API_KEY: ${{ secrets.DD_API_KEY }}
+      OPTIONS_OVERRIDE: 1
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/node
+        with:
+          version: ${{ matrix.version }}
       - uses: ./.github/actions/install
       - run: yarn test:integration:vitest
         env:

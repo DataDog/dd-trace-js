@@ -42,6 +42,8 @@ function httpGetPromise (host) {
   })
 }
 
+app.use(express.json())
+
 app.get('/crash', () => {
   process.nextTick(() => {
     throw new Error('Crash')
@@ -202,6 +204,11 @@ app.get('/ssrf/http/unhandled-axios', (req, res) => {
 
 app.get('/ssrf/http/unhandled-promise', (req, res) => {
   httpGetPromise(req.query.host)
+    .then(() => res.end('end'))
+})
+
+app.post('/ssrf', (req, res) => {
+  axios.get(`https://${req.body.host}`)
     .then(() => res.end('end'))
 })
 

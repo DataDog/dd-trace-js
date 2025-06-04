@@ -1,9 +1,21 @@
 'use strict'
 
-const METHODS = require('http').METHODS.map(v => v.toLowerCase()).concat('all')
+const METHODS = [...require('http').METHODS.map(v => v.toLowerCase()), 'all']
 const pathToRegExp = require('path-to-regexp')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel } = require('./helpers/instrument')
+
+function isFastStar (layer, matchers) {
+  return layer.regexp?.fast_star ?? matchers.some(matcher => matcher.path === '*')
+}
+
+function isFastSlash (layer, matchers) {
+  return layer.regexp?.fast_slash ?? matchers.some(matcher => matcher.path === '/')
+}
+
+function flatten (arr) {
+  return arr.reduce((acc, val) => Array.isArray(val) ? acc.concat(flatten(val)) : acc.concat(val), [])
+}
 
 // TODO: Move this function to a shared file between Express and Router
 function createWrapRouterMethod (name) {
@@ -12,6 +24,7 @@ function createWrapRouterMethod (name) {
   const finishChannel = channel(`apm:${name}:middleware:finish`)
   const errorChannel = channel(`apm:${name}:middleware:error`)
   const nextChannel = channel(`apm:${name}:middleware:next`)
+  const routeAddedChannel = channel(`apm:${name}:route:added`)
 
   const layerMatchers = new WeakMap()
   const regexpCache = Object.create(null)
@@ -36,16 +49,16 @@ function createWrapRouterMethod (name) {
 
       if (matchers) {
         // Try to guess which path actually matched
-        for (let i = 0; i < matchers.length; i++) {
-          if (matchers[i].test(layer)) {
-            route = matchers[i].path
+        for (const matcher of matchers) {
+          if (matcher.test(layer)) {
+            route = matcher.path
 
             break
           }
         }
       }
 
-      enterChannel.publish({ name, req, route })
+      enterChannel.publish({ name, req, route, layer })
 
       try {
         return original.apply(this, arguments)
@@ -114,26 +127,6 @@ function createWrapRouterMethod (name) {
     }))
   }
 
-  function isFastStar (layer, matchers) {
-    if (layer.regexp?.fast_star !== undefined) {
-      return layer.regexp.fast_star
-    }
-
-    return matchers.some(matcher => matcher.path === '*')
-  }
-
-  function isFastSlash (layer, matchers) {
-    if (layer.regexp?.fast_slash !== undefined) {
-      return layer.regexp.fast_slash
-    }
-
-    return matchers.some(matcher => matcher.path === '/')
-  }
-
-  function flatten (arr) {
-    return arr.reduce((acc, val) => Array.isArray(val) ? acc.concat(flatten(val)) : acc.concat(val), [])
-  }
-
   function cachedPathToRegExp (pattern) {
     const maybeCached = regexpCache[pattern]
     if (maybeCached) {
@@ -151,6 +144,10 @@ function createWrapRouterMethod (name) {
 
       if (typeof this.stack === 'function') {
         this.stack = [{ handle: this.stack }]
+      }
+
+      if (routeAddedChannel.hasSubscribers) {
+        routeAddedChannel.publish({ topOfStackFunc: methodWithTrace, layer: this.stack[0] })
       }
 
       wrapStack(this.stack, offset, extractMatchers(fn))

@@ -92,7 +92,7 @@ describe('Plugin', () => {
         useScenario({ scenario: 'generate-content-single-response' })
 
         it('makes a successful call', async () => {
-          const checkTraces = agent.use(traces => {
+          const checkTraces = agent.assertSomeTraces(traces => {
             const span = traces[0][0]
 
             expect(span).to.have.property('name', 'vertexai.request')
@@ -129,7 +129,7 @@ describe('Plugin', () => {
         })
 
         it('makes a successful call with a string argument', async () => {
-          const checkTraces = agent.use(traces => {
+          const checkTraces = agent.assertSomeTraces(traces => {
             expect(traces[0][0].meta).to.have.property('vertexai.request.contents.0.text',
               'Hello, how are you?')
           })
@@ -145,7 +145,7 @@ describe('Plugin', () => {
           useScenario({ scenario: 'generate-content-single-response-with-tools' })
 
           it('makes a successful call', async () => {
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
 
               expect(span.meta).to.have.property('vertexai.response.candidates.0.content.parts.0.text', 'undefined')
@@ -166,7 +166,7 @@ describe('Plugin', () => {
         useScenario({ scenario: 'generate-content-stream-single-response', statusCode: 200, stream: true })
 
         it('makes a successful call', async () => {
-          const checkTraces = agent.use(traces => {
+          const checkTraces = agent.assertSomeTraces(traces => {
             const span = traces[0][0]
 
             expect(span).to.have.property('name', 'vertexai.request')
@@ -218,7 +218,7 @@ describe('Plugin', () => {
           useScenario({ scenario: 'generate-content-single-response' })
 
           it('makes a successful call', async () => {
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
 
               expect(span).to.have.property('name', 'vertexai.request')
@@ -264,7 +264,7 @@ describe('Plugin', () => {
           })
 
           it('tags a string input', async () => {
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               expect(traces[0][0].meta).to.have.property('vertexai.request.contents.0.text',
                 'Hello, how are you?')
             })
@@ -278,7 +278,7 @@ describe('Plugin', () => {
           })
 
           it('tags an array of string inputs', async () => {
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               expect(traces[0][0].meta).to.have.property('vertexai.request.contents.0.text',
                 'Hello, how are you?')
               expect(traces[0][0].meta).to.have.property('vertexai.request.contents.1.text',
@@ -298,7 +298,7 @@ describe('Plugin', () => {
           useScenario({ scenario: 'generate-content-stream-single-response', statusCode: 200, stream: true })
 
           it('makes a successful call', async () => {
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
 
               expect(span).to.have.property('name', 'vertexai.request')
@@ -352,7 +352,7 @@ describe('Plugin', () => {
           useScenario({ statusCode: 404 })
 
           it('tags the error', async () => {
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('error', 1)
             })
 
@@ -372,7 +372,7 @@ describe('Plugin', () => {
           useScenario({ scenario: 'malformed-stream', stream: true })
 
           it('tags the error', async () => {
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('error', 1)
             })
 

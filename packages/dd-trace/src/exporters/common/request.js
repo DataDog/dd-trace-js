@@ -100,7 +100,7 @@ function request (data, options, callback) {
             options.url || options.hostname || `http://localhost:${options.port}`
           ).href
           errorMessage = `Error from ${fullUrl}: ${res.statusCode} ${http.STATUS_CODES[res.statusCode]}.`
-        } catch (e) {
+        } catch {
           // ignore error
         }
         const responseData = buffer.toString()

@@ -92,6 +92,7 @@ function onIncomingHttpRequestEnd (data) {
       const vulnerabilities = iastContext.vulnerabilities
       const rootSpan = iastContext.rootSpan
       vulnerabilityReporter.sendVulnerabilities(vulnerabilities, rootSpan)
+      overheadController.consolidateVulnerabilities(iastContext)
       removeTransaction(iastContext)
       iastTelemetry.onRequestEnd(iastContext, iastContext.rootSpan)
     }

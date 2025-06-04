@@ -112,7 +112,7 @@ describe('Plugin', () => {
               }
             }`
           agent
-            .use((traces) => {
+            .assertSomeTraces((traces) => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.server.opName)
               expect(traces[0][1]).to.have.property('name', 'apollo.gateway.validate')
               expect(traces[0][2]).to.have.property('name', 'apollo.gateway.plan')
@@ -139,7 +139,7 @@ describe('Plugin', () => {
           const source = `query ${operationName} { hello(name: "world") }`
           const variableValues = { who: 'world' }
           agent
-            .use((traces) => {
+            .assertSomeTraces((traces) => {
               // the spans are in order of execution
               expect(traces[0][0]).to.have.property('name', expectedSchema.server.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.server.serviceName)
@@ -194,7 +194,7 @@ describe('Plugin', () => {
         it('should instrument schema resolver', done => {
           const source = '{ hello(name: "world") }'
           agent
-            .use((traces) => {
+            .assertSomeTraces((traces) => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.server.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.server.serviceName)
               expect(traces[0][0]).to.have.property('resource', '{hello(name:"")}')
@@ -226,7 +226,7 @@ describe('Plugin', () => {
             }
           `
           agent
-            .use((traces) => {
+            .assertSomeTraces((traces) => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.server.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.server.serviceName)
               expect(traces[0][0]).to.have.property('resource', '{human{address{civicNumber street}name}}')
@@ -249,7 +249,7 @@ describe('Plugin', () => {
           const source = 'mutation { human { name } }'
 
           agent
-            .use((traces) => {
+            .assertSomeTraces((traces) => {
               expect(traces[0][0].meta).to.have.property('graphql.operation.type', 'mutation')
             })
             .then(done)
@@ -284,7 +284,7 @@ describe('Plugin', () => {
             }`
           const variableValues = { who: 'world' }
           agent
-            .use((traces) => {
+            .assertSomeTraces((traces) => {
               expect(traces[0].length).equal(2)
               expect(traces[0][0]).to.have.property('name', expectedSchema.server.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.server.serviceName)
@@ -319,7 +319,7 @@ describe('Plugin', () => {
           const source = `subscription ${operationName} { hello(name: "world") }`
           const variableValues = { who: 'world' }
           agent
-            .use((traces) => {
+            .assertSomeTraces((traces) => {
               expect(traces[0].length).equal(3)
               expect(traces[0][0]).to.have.property('name', expectedSchema.server.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.server.serviceName)
@@ -354,7 +354,7 @@ describe('Plugin', () => {
           const source = `query ${operationName} { hello(name: "world") }`
           const variableValues = { who: 'world' }
           agent
-            .use((traces) => {
+            .assertSomeTraces((traces) => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.server.opName)
               expect(traces[0][0]).to.have.property('error', 1)
               expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
@@ -414,7 +414,7 @@ describe('Plugin', () => {
           const variableValues = { who: 'world' }
 
           agent
-            .use((traces) => {
+            .assertSomeTraces((traces) => {
               // the spans are in order of execution
               expect(traces[0][0]).to.have.property('name', expectedSchema.server.opName)
 
@@ -470,7 +470,7 @@ describe('Plugin', () => {
             const source = `query ${operationName} { hello(name: "world") }`
             const variableValues = { who: 'world' }
             agent
-              .use((traces) => {
+              .assertSomeTraces((traces) => {
                 expect(traces[0][0]).to.have.property('name', expectedSchema.server.opName)
                 expect(traces[0][0]).to.have.property('service', 'custom')
                 expect(traces[0][0]).to.have.property('resource', `query ${operationName}`)

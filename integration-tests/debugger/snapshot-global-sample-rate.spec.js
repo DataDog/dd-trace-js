@@ -5,7 +5,8 @@ const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
   const t = setup({
-    testApp: 'target-app/basic.js'
+    testApp: 'target-app/basic.js',
+    dependencies: ['fastify']
   })
 
   describe('input messages', function () {

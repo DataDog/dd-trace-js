@@ -71,7 +71,11 @@ class Tracer {
 
         // Update meta and samplingPriority based on extracted values
         Object.assign(meta, otherPropagatedTags)
-        samplingPriority = TextMapPropagator._getSamplingPriority(traceFlag, parseInt(samplingPriorityTs, 10), origin)
+        samplingPriority = TextMapPropagator._getSamplingPriority(
+          traceFlag,
+          Number.parseInt(samplingPriorityTs, 10),
+          origin
+        )
       } else {
         log.debug(`no dd list member in tracestate from incoming request: ${ts}`)
       }
@@ -144,10 +148,7 @@ class Tracer {
 
       // Set initial span attributes. The attributes object may have been mutated
       // by the sampler, so we sanitize the merged attributes before setting them.
-      sanitizeAttributes(
-        // Object.assign(attributes, samplingResult.attributes)
-        attributes
-      )
+      sanitizeAttributes(attributes)
     )
   }
 

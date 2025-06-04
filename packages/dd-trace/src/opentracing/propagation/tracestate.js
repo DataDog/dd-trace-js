@@ -17,10 +17,14 @@ function fromString (Type, regex, value) {
 }
 
 function toString (map, pairSeparator, fieldSeparator) {
-  return Array.from(map.entries())
-    .reverse()
-    .map((pair) => pair.join(pairSeparator))
-    .join(fieldSeparator)
+  let result = ''
+  for (const [key, value] of map) {
+    if (result) {
+      result = `${fieldSeparator}${result}`
+    }
+    result = `${key}${pairSeparator}${value}${result}`
+  }
+  return result
 }
 
 class TraceStateData extends Map {

@@ -78,7 +78,7 @@ describe('common Plugin behaviour', () => {
 
       agent.reload(pluginName, pluginConf)
 
-      agent.use(
+      agent.assertSomeTraces(
         traces => {
           const span = traces[0][0]
           spanExpectations(span)

@@ -11,13 +11,13 @@ const {
 } = require('../taint-tracking/source-types')
 
 const EXCLUDED_PATHS = getNodeModulesPaths('express')
-const EXCLUDED_HEADER_NAMES = [
+const EXCLUDED_HEADER_NAMES = new Set([
   'location',
   'sec-websocket-location',
   'sec-websocket-accept',
   'upgrade',
   'connection'
-]
+])
 
 class HeaderInjectionAnalyzer extends InjectionAnalyzer {
   constructor () {
@@ -27,9 +27,7 @@ class HeaderInjectionAnalyzer extends InjectionAnalyzer {
   onConfigure () {
     this.addSub('datadog:http:server:response:set-header:finish', ({ name, value }) => {
       if (Array.isArray(value)) {
-        for (let i = 0; i < value.length; i++) {
-          const headerValue = value[i]
-
+        for (const headerValue of value) {
           this.analyze({ name, value: headerValue })
         }
       } else {
@@ -65,7 +63,7 @@ class HeaderInjectionAnalyzer extends InjectionAnalyzer {
   }
 
   isExcludedHeaderName (name) {
-    return EXCLUDED_HEADER_NAMES.includes(name)
+    return EXCLUDED_HEADER_NAMES.has(name)
   }
 
   isAllRangesFromHeader (ranges, headerName) {

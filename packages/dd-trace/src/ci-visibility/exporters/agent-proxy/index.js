@@ -16,17 +16,17 @@ function getLatestEvpProxyVersion (err, agentInfo) {
   return agentInfo.endpoints.reduce((acc, endpoint) => {
     if (endpoint.includes(AGENT_EVP_PROXY_PATH_PREFIX)) {
       const version = Number(endpoint.replace(AGENT_EVP_PROXY_PATH_REGEX, '$1'))
-      if (isNaN(version)) {
+      if (Number.isNaN(version)) {
         return acc
       }
-      return version > acc ? version : acc
+      return Math.max(version, acc)
     }
     return acc
   }, 0)
 }
 
 function getCanForwardDebuggerLogs (err, agentInfo) {
-  return !err && agentInfo.endpoints.some(endpoint => endpoint === AGENT_DEBUGGER_INPUT)
+  return !err && agentInfo.endpoints.includes(AGENT_DEBUGGER_INPUT)
 }
 
 class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {

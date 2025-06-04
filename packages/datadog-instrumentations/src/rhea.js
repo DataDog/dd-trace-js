@@ -2,8 +2,7 @@
 
 const {
   channel,
-  addHook,
-  AsyncResource
+  addHook
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
@@ -49,21 +48,17 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
       ? this.options.target.address
       : undefined
 
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-    return asyncResource.runInAsyncScope(() => {
-      startSendCh.publish({ targetAddress, host, port, msg })
+    const ctx = { targetAddress, host, port, msg, connection: this.connection }
+    return startSendCh.runStores(ctx, () => {
       const delivery = send.apply(this, arguments)
-      const context = {
-        asyncResource,
-        connection: this.connection
-      }
-      contexts.set(delivery, context)
+      contexts.set(delivery, ctx)
 
       addToInFlightDeliveries(this.connection, delivery)
       try {
         return delivery
       } catch (err) {
-        errorSendCh.publish(err)
+        ctx.error = err
+        errorSendCh.publish(ctx)
 
         throw err
       }
@@ -77,23 +72,18 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
     }
 
     if (eventName === 'message' && msgObj) {
-      const asyncResource = new AsyncResource('bound-anonymous-fn')
-      return asyncResource.runInAsyncScope(() => {
-        startReceiveCh.publish({ msgObj, connection: this.connection })
-
+      const ctx = { msgObj, connection: this.connection }
+      return startReceiveCh.runStores(ctx, () => {
         if (msgObj.delivery) {
-          const context = {
-            asyncResource,
-            connection: this.connection
-          }
-          contexts.set(msgObj.delivery, context)
+          contexts.set(msgObj.delivery, ctx)
           msgObj.delivery.update = wrapDeliveryUpdate(msgObj.delivery, msgObj.delivery.update)
           addToInFlightDeliveries(this.connection, msgObj.delivery)
         }
         try {
           return dispatch.apply(this, arguments)
         } catch (err) {
-          errorReceiveCh.publish(err)
+          ctx.error = err
+          errorReceiveCh.publish(ctx)
 
           throw err
         }
@@ -111,16 +101,14 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/connection.js' }, Connecti
       const error = obj.error || this.saved_error
       if (this[inFlightDeliveries]) {
         this[inFlightDeliveries].forEach(delivery => {
-          const context = contexts.get(delivery)
-          const asyncResource = context && context.asyncResource
+          const ctx = contexts.get(delivery)
 
-          if (!asyncResource) return
+          if (!ctx) return
 
-          asyncResource.runInAsyncScope(() => {
-            errorReceiveCh.publish(error)
-            exports.beforeFinish(delivery, null)
-            finishReceiveCh.publish()
-          })
+          ctx.error = error
+          errorReceiveCh.publish(ctx)
+          exports.beforeFinish(delivery, null)
+          finishReceiveCh.publish(ctx)
         })
       }
     }
@@ -149,15 +137,15 @@ function getHostAndPort (connection) {
 }
 
 function wrapDeliveryUpdate (obj, update) {
-  const context = contexts.get(obj)
-  const asyncResource = context.asyncResource
-  if (obj && asyncResource) {
-    const cb = asyncResource.bind(update)
-    return shimmer.wrapFunction(cb, cb => AsyncResource.bind(function wrappedUpdate (settled, stateData) {
-      const state = getStateFromData(stateData)
-      dispatchReceiveCh.publish({ state })
-      return cb.apply(this, arguments)
-    }))
+  const ctx = contexts.get(obj)
+  if (obj && ctx) {
+    const cb = update
+    return shimmer.wrapFunction(cb, cb => function wrappedUpdate (settled, stateData) {
+      ctx.state = getStateFromData(stateData)
+      dispatchReceiveCh.runStores(ctx, () => {
+        return cb.apply(this, arguments)
+      })
+    })
   }
   return function wrappedUpdate (settled, stateData) {
     return update.apply(this, arguments)
@@ -167,7 +155,8 @@ function wrapDeliveryUpdate (obj, update) {
 function patchCircularBuffer (proto, Session) {
   Object.defineProperty(proto, 'outgoing', {
     configurable: true,
-    get () { return undefined },
+    // eslint-disable-next-line getter-return
+    get () {},
     set (outgoing) {
       delete proto.outgoing // removes the setter on the prototype
       this.outgoing = outgoing // assigns on the instance, like normal
@@ -178,27 +167,25 @@ function patchCircularBuffer (proto, Session) {
         }
         if (CircularBuffer && !patched.has(CircularBuffer.prototype)) {
           shimmer.wrap(CircularBuffer.prototype, 'pop_if', popIf => function (fn) {
-            arguments[0] = shimmer.wrapFunction(fn, fn => AsyncResource.bind(function (entry) {
-              const context = contexts.get(entry)
-              const asyncResource = context && context.asyncResource
+            arguments[0] = shimmer.wrapFunction(fn, fn => function (entry) {
+              const ctx = contexts.get(entry)
 
-              if (!asyncResource) return fn(entry)
+              if (!ctx) return fn(entry)
 
-              const shouldPop = asyncResource.runInAsyncScope(() => fn(entry))
+              const shouldPop = fn(entry)
 
               if (shouldPop) {
                 const remoteState = entry.remote_state
                 const state = remoteState && remoteState.constructor
                   ? entry.remote_state.constructor.composite_type
                   : undefined
-                asyncResource.runInAsyncScope(() => {
-                  exports.beforeFinish(entry, state)
-                  finishSendCh.publish()
-                })
+                ctx.state = state
+                exports.beforeFinish(entry, state)
+                finishSendCh.publish(ctx)
               }
 
               return shouldPop
-            }))
+            })
             return popIf.apply(this, arguments)
           })
           patched.add(CircularBuffer.prototype)
@@ -222,13 +209,14 @@ function addToInFlightDeliveries (connection, delivery) {
 }
 
 function beforeFinish (delivery, state) {
-  const context = contexts.get(delivery)
-  if (context) {
+  const ctx = contexts.get(delivery)
+  if (ctx) {
     if (state) {
-      dispatchReceiveCh.publish({ state })
+      ctx.state = state
+      dispatchReceiveCh.publish(ctx)
     }
-    if (context.connection && context.connection[inFlightDeliveries]) {
-      context.connection[inFlightDeliveries].delete(delivery)
+    if (ctx.connection && ctx.connection[inFlightDeliveries]) {
+      ctx.connection[inFlightDeliveries].delete(delivery)
     }
   }
 }

@@ -7,7 +7,8 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
   static get id () { return 'google-cloud-pubsub' }
   static get operation () { return 'receive' }
 
-  start ({ message }) {
+  bindStart (ctx) {
+    const { message } = ctx
     const subscription = message._subscriber._subscription
     const topic = subscription.metadata && subscription.metadata.topic
     const childOf = this.tracer.extract('text_map', message.attributes) || null
@@ -23,25 +24,29 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       metrics: {
         'pubsub.ack': 0
       }
-    })
+    }, ctx)
+
     if (this.config.dsmEnabled && message?.attributes) {
       const payloadSize = getMessageSize(message)
       this.tracer.decodeDataStreamsContext(message.attributes)
       this.tracer
         .setCheckpoint(['direction:in', `topic:${topic}`, 'type:google-pubsub'], span, payloadSize)
     }
+
+    return ctx.currentStore
   }
 
-  finish (message) {
-    const span = this.activeSpan
+  bindFinish (ctx) {
+    const { message } = ctx
+    const span = ctx.currentStore.span
 
-    if (!span) return
-
-    if (message.message._handled) {
+    if (message?._handled) {
       span.setTag('pubsub.ack', 1)
     }
 
     super.finish()
+
+    return ctx.parentStore
   }
 }
 

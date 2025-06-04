@@ -6,7 +6,7 @@ const { NODE_MAJOR } = require('../../version')
 
 describe('Dynamic Instrumentation', function () {
   describe('template evaluation', function () {
-    const t = setup()
+    const t = setup({ dependencies: ['fastify'] })
 
     beforeEach(t.triggerBreakpoint)
 

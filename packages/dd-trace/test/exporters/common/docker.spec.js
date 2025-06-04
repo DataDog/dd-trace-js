@@ -74,7 +74,7 @@ describe('docker', () => {
   it('should support IDs with Kubernetes format', () => {
     const id = '7b8952daecf4c0e44bbcefe1b5c5ebc7b4839d4eefeccefe694709d3809b6199'
     const cgroup = [
-      `1:name=systemd:/kubepods.slice/kubepods-burstable.slice/kubepods-burstable-pod2d3da189_6407_48e3_9ab6_78188d75e609.slice/docker-${id}.scope` // eslint-disable-line @stylistic/js/max-len
+      `1:name=systemd:/kubepods.slice/kubepods-burstable.slice/kubepods-burstable-pod2d3da189_6407_48e3_9ab6_78188d75e609.slice/docker-${id}.scope` // eslint-disable-line @stylistic/max-len
     ].join('\n')
 
     fs.readFileSync.withArgs('/proc/self/cgroup', 'utf8').returns(cgroup)

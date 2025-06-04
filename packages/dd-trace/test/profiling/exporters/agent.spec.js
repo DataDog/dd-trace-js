@@ -12,7 +12,6 @@ const path = require('path')
 const { request } = require('http')
 const getPort = require('get-port')
 const proxyquire = require('proxyquire')
-const { gunzipSync } = require('zlib')
 const WallProfiler = require('../../../src/profiling/profilers/wall')
 const SpaceProfiler = require('../../../src/profiling/profilers/space')
 const logger = require('../../../src/log')
@@ -129,14 +128,14 @@ describe('exporters/agent', function () {
     expect(req.files[2]).to.have.property('mimetype', 'application/octet-stream')
     expect(req.files[2]).to.have.property('size', req.files[2].buffer.length)
 
-    const wallProfile = Profile.decode(gunzipSync(req.files[1].buffer))
-    const spaceProfile = Profile.decode(gunzipSync(req.files[2].buffer))
+    const wallProfile = Profile.decode(req.files[1].buffer)
+    const spaceProfile = Profile.decode(req.files[2].buffer)
 
     expect(wallProfile).to.be.a.profile
     expect(spaceProfile).to.be.a.profile
 
-    expect(wallProfile).to.deep.equal(Profile.decode(gunzipSync(profiles.wall)))
-    expect(spaceProfile).to.deep.equal(Profile.decode(gunzipSync(profiles.space)))
+    expect(wallProfile).to.deep.equal(Profile.decode(profiles.wall))
+    expect(spaceProfile).to.deep.equal(Profile.decode(profiles.space))
   }
 
   beforeEach(() => {

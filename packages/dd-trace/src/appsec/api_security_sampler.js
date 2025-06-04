@@ -18,8 +18,8 @@ let asmStandaloneEnabled
 let sampledRequests
 
 class NoopTTLCache {
-  clear () { }
-  set (_key, _value) { return undefined }
+  clear () {}
+  set (_key, _value) {}
   has (_key) { return false }
 }
 

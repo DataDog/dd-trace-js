@@ -8,6 +8,11 @@ class RedisPlugin extends CachePlugin {
   static get id () { return 'redis' }
   static get system () { return 'redis' }
 
+  constructor (...args) {
+    super(...args)
+    this._spanType = 'redis'
+  }
+
   start ({ db, command, args, connectionOptions = {}, connectionName }) {
     const resource = command
     const normalizedCommand = command.toUpperCase()
@@ -16,11 +21,11 @@ class RedisPlugin extends CachePlugin {
     this.startSpan({
       resource,
       service: this.serviceName({ pluginConfig: this.config, system: this.system, connectionName }),
-      type: 'redis',
+      type: this._spanType,
       meta: {
-        'db.type': 'redis',
+        'db.type': this._spanType,
         'db.name': db || '0',
-        'redis.raw_command': formatCommand(normalizedCommand, args),
+        [`${this._spanType}.raw_command`]: formatCommand(normalizedCommand, args),
         'out.host': connectionOptions.host,
         [CLIENT_PORT_KEY]: connectionOptions.port
       }
@@ -58,7 +63,7 @@ function formatArg (arg) {
 
 function trim (str, maxlen) {
   if (str.length > maxlen) {
-    str = str.substr(0, maxlen - 3) + '...'
+    str = str.slice(0, maxlen - 3) + '...'
   }
 
   return str

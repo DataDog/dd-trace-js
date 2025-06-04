@@ -1,7 +1,6 @@
 'use strict'
 
 require('../../setup/mocha')
-const { NODE_MAJOR } = require('../../../../../version')
 
 const parsedSourceMap = {
   version: 3,
@@ -95,57 +94,6 @@ describe('source map utils', function () {
     })
   })
 
-  describe('no cache', function () {
-    function setup () {
-      readFileSync = sinon.stub().returns(rawSourceMap)
-      readFile = sinon.stub().resolves(rawSourceMap)
-
-      const sourceMaps = proxyquire('../src/debugger/devtools_client/source-maps', {
-        fs: { readFileSync },
-        'fs/promises': { readFile }
-      })
-
-      loadSourceMap = sourceMaps.loadSourceMap
-      loadSourceMapSync = sourceMaps.loadSourceMapSync
-    }
-
-    before(function () {
-      if (NODE_MAJOR > 18) this.skip()
-    })
-
-    describe('loadSourceMap', function () {
-      before(setup)
-
-      it('should read from disk on the fist call', async function () {
-        const sourceMap = await loadSourceMap(dir, sourceMapURL)
-        expect(sourceMap).to.deep.equal(parsedSourceMap)
-        expect(readFile.callCount).to.equal(1)
-      })
-
-      it('should read from disk on the second call', async function () {
-        const sourceMap = await loadSourceMap(dir, sourceMapURL)
-        expect(sourceMap).to.deep.equal(parsedSourceMap)
-        expect(readFile.callCount).to.equal(2)
-      })
-    })
-
-    describe('loadSourceMapSync', function () {
-      before(setup)
-
-      it('should read from disk on the fist call', function () {
-        const sourceMap = loadSourceMapSync(dir, sourceMapURL)
-        expect(sourceMap).to.deep.equal(parsedSourceMap)
-        expect(readFileSync.callCount).to.equal(1)
-      })
-
-      it('should read from disk on the second call', function () {
-        const sourceMap = loadSourceMapSync(dir, sourceMapURL)
-        expect(sourceMap).to.deep.equal(parsedSourceMap)
-        expect(readFileSync.callCount).to.equal(2)
-      })
-    })
-  })
-
   describe('cache', function () {
     let clock
 
@@ -166,10 +114,6 @@ describe('source map utils', function () {
     function teardown () {
       clock.restore()
     }
-
-    before(function () {
-      if (NODE_MAJOR < 20) this.skip()
-    })
 
     describe('loadSourceMap', function () {
       before(setup)

@@ -3,6 +3,7 @@
 const sinon = require('sinon')
 const chai = require('chai')
 const sinonChai = require('sinon-chai')
+const { setTimeout } = require('timers/promises')
 const proxyquire = require('../proxyquire')
 const { NODE_MAJOR } = require('../../../../version')
 
@@ -13,14 +14,17 @@ const { NODE_MAJOR } = require('../../../../version')
   // because it's used in all sorts of places.
   const getPort = require('get-port')
   require.cache[require.resolve('get-port')].exports = async function (...args) {
-    let tries = 0
+    let tries = 10
     let err = null
-    while (tries++ < 10) {
+    while (tries-- > 0) {
       try {
         return await getPort(...args)
       } catch (e) {
         if (e.code !== 'EADDRINUSE') {
           throw e
+        }
+        if (tries) {
+          await setTimeout(5)
         }
         err = e
       }
@@ -55,29 +59,23 @@ if (NODE_MAJOR >= 24 && !process.env.OPTIONS_OVERRIDE) {
   const childProcess = require('child_process')
   const { exec, fork } = childProcess
 
-  childProcess.exec = function (...args) {
+  function addAsyncContextFrame (fn, thisArg, args) {
     const opts = args[1]
     if (opts) {
-      if (opts?.env?.NODE_OPTIONS && !opts.env.NODE_OPTIONS.includes('--no-async-context-frame')) {
-        opts.env.NODE_OPTIONS += ' --no-async-context-frame'
-      } else {
-        opts.env ||= {}
-        opts.env.NODE_OPTIONS = '--no-async-context-frame'
+      const env = opts.env ||= {}
+      env.NODE_OPTIONS ||= ''
+      if (!env.NODE_OPTIONS.includes('--no-async-context-frame')) {
+        env.NODE_OPTIONS += ' --no-async-context-frame'
       }
     }
-    return exec.apply(this, args)
+    return fn.apply(thisArg, args)
   }
 
-  childProcess.fork = function (...args) {
-    const opts = args[1]
-    if (opts) {
-      if (opts?.env?.NODE_OPTIONS && !opts.env.NODE_OPTIONS.includes('--no-async-context-frame')) {
-        opts.env.NODE_OPTIONS += ' --no-async-context-frame'
-      } else {
-        opts.env ||= {}
-        opts.env.NODE_OPTIONS = '--no-async-context-frame'
-      }
-    }
-    return fork.apply(this, args)
+  childProcess.exec = function () {
+    return addAsyncContextFrame(exec, this, arguments)
+  }
+
+  childProcess.fork = function () {
+    return addAsyncContextFrame(fork, this, arguments)
   }
 }

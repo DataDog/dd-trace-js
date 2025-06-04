@@ -34,6 +34,7 @@ const UserTracking = require('./user_tracking')
 const { storage } = require('../../../datadog-core')
 const graphql = require('./graphql')
 const rasp = require('./rasp')
+const { isInServerlessEnvironment } = require('../serverless')
 
 const responseAnalyzedSet = new WeakSet()
 
@@ -57,7 +58,7 @@ function enable (_config) {
 
     remoteConfig.enableWafUpdate(_config.appsec)
 
-    Reporter.setRateLimit(_config.appsec.rateLimit)
+    Reporter.init(_config.appsec)
 
     apiSecuritySampler.configure(_config)
 
@@ -83,7 +84,9 @@ function enable (_config) {
     isEnabled = true
     config = _config
   } catch (err) {
-    log.error('[ASM] Unable to start AppSec', err)
+    if (!isInServerlessEnvironment()) {
+      log.error('[ASM] Unable to start AppSec', err)
+    }
 
     disable()
   }
@@ -106,7 +109,7 @@ function onRequestBodyParsed ({ req, res, body, abortController }) {
     }
   }, req)
 
-  handleResults(results, req, res, rootSpan, abortController)
+  handleResults(results?.actions, req, res, rootSpan, abortController)
 }
 
 function onRequestCookieParser ({ req, res, abortController, cookies }) {
@@ -121,7 +124,7 @@ function onRequestCookieParser ({ req, res, abortController, cookies }) {
     }
   }, req)
 
-  handleResults(results, req, res, rootSpan, abortController)
+  handleResults(results?.actions, req, res, rootSpan, abortController)
 }
 
 function incomingHttpStartTranslator ({ req, res, abortController }) {
@@ -149,9 +152,9 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
     persistent[addresses.HTTP_CLIENT_IP] = clientIp
   }
 
-  const actions = waf.run({ persistent }, req)
+  const results = waf.run({ persistent }, req)
 
-  handleResults(actions, req, res, rootSpan, abortController)
+  handleResults(results?.actions, req, res, rootSpan, abortController)
 }
 
 function incomingHttpEndTranslator ({ req, res }) {
@@ -198,7 +201,7 @@ function onPassportVerify ({ framework, login, user, success, abortController })
 
   const results = UserTracking.trackLogin(framework, login, user, success, rootSpan)
 
-  handleResults(results, store.req, store.req.res, rootSpan, abortController)
+  handleResults(results?.actions, store.req, store.req.res, rootSpan, abortController)
 }
 
 function onPassportDeserializeUser ({ user, abortController }) {
@@ -212,7 +215,7 @@ function onPassportDeserializeUser ({ user, abortController }) {
 
   const results = UserTracking.trackUser(user, rootSpan)
 
-  handleResults(results, store.req, store.req.res, rootSpan, abortController)
+  handleResults(results?.actions, store.req, store.req.res, rootSpan, abortController)
 }
 
 function onExpressSession ({ req, res, sessionId, abortController }) {
@@ -231,7 +234,7 @@ function onExpressSession ({ req, res, sessionId, abortController }) {
     }
   }, req)
 
-  handleResults(results, req, res, rootSpan, abortController)
+  handleResults(results?.actions, req, res, rootSpan, abortController)
 }
 
 function onRequestQueryParsed ({ req, res, query, abortController }) {
@@ -251,7 +254,7 @@ function onRequestQueryParsed ({ req, res, query, abortController }) {
     }
   }, req)
 
-  handleResults(results, req, res, rootSpan, abortController)
+  handleResults(results?.actions, req, res, rootSpan, abortController)
 }
 
 function onRequestProcessParams ({ req, res, abortController, params }) {
@@ -266,7 +269,7 @@ function onRequestProcessParams ({ req, res, abortController, params }) {
     }
   }, req)
 
-  handleResults(results, req, res, rootSpan, abortController)
+  handleResults(results?.actions, req, res, rootSpan, abortController)
 }
 
 function onResponseBody ({ req, res, body }) {
@@ -308,7 +311,7 @@ function onResponseWriteHead ({ req, res, abortController, statusCode, responseH
 
   responseAnalyzedSet.add(res)
 
-  handleResults(results, req, res, rootSpan, abortController)
+  handleResults(results?.actions, req, res, rootSpan, abortController)
 }
 
 function onResponseSetHeader ({ res, abortController }) {

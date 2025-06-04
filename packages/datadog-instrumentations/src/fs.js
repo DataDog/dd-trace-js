@@ -1,5 +1,6 @@
 'use strict'
 
+const { errorMonitor } = require('events')
 const { channel, addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
@@ -199,16 +200,16 @@ function wrapCreateStream (original) {
         }
         const onFinish = () => {
           finishChannel.runStores(ctx, () => {})
-          stream.off('close', onFinish)
-          stream.off('end', onFinish)
-          stream.off('finish', onFinish)
-          stream.off('error', onError)
+          stream.removeListener('close', onFinish)
+          stream.removeListener('end', onFinish)
+          stream.removeListener('finish', onFinish)
+          stream.removeListener(errorMonitor, onError)
         }
 
         stream.once('close', onFinish)
         stream.once('end', onFinish)
         stream.once('finish', onFinish)
-        stream.once('error', onError)
+        stream.once(errorMonitor, onError)
 
         return stream
       } catch (error) {
@@ -365,7 +366,7 @@ function massWrap (target, methods, wrapper) {
 function wrap (target, method, wrapper) {
   try {
     shimmer.wrap(target, method, wrapper)
-  } catch (e) {
+  } catch {
     // skip unavailable method
   }
 }

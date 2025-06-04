@@ -94,7 +94,7 @@ describe('Plugin', () => {
           nock('https://api.openai.com').post('/v1/completions').reply(403)
 
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0].length).to.equal(1)
 
               const span = traces[0][0]
@@ -134,7 +134,7 @@ describe('Plugin', () => {
 
           const llm = new langchainOpenai.OpenAI({ model: 'gpt-3.5-turbo-instruct' })
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0].length).to.equal(1)
               const span = traces[0][0]
 
@@ -183,7 +183,7 @@ describe('Plugin', () => {
           })
 
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0].length).to.equal(1)
               const span = traces[0][0]
 
@@ -227,7 +227,7 @@ describe('Plugin', () => {
           })
 
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0].length).to.equal(1)
               const span = traces[0][0]
 
@@ -254,7 +254,7 @@ describe('Plugin', () => {
           nock('https://api.openai.com').post('/v1/chat/completions').reply(403)
 
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0].length).to.equal(1)
 
               const span = traces[0][0]
@@ -298,7 +298,7 @@ describe('Plugin', () => {
           })
 
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0].length).to.equal(1)
               const span = traces[0][0]
 
@@ -353,7 +353,7 @@ describe('Plugin', () => {
           })
 
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0].length).to.equal(1)
               const span = traces[0][0]
 
@@ -402,7 +402,7 @@ describe('Plugin', () => {
           })
 
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0].length).to.equal(1)
               const span = traces[0][0]
 
@@ -458,7 +458,7 @@ describe('Plugin', () => {
           })
 
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0].length).to.equal(1)
               const span = traces[0][0]
 
@@ -523,7 +523,7 @@ describe('Plugin', () => {
           })
 
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0].length).to.equal(1)
               const span = traces[0][0]
 
@@ -556,7 +556,7 @@ describe('Plugin', () => {
           nock('https://api.openai.com').post('/v1/chat/completions').reply(403)
 
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0].length).to.equal(2)
 
               const chainSpan = traces[0][0]
@@ -605,7 +605,7 @@ describe('Plugin', () => {
           })
 
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = traces[0]
               expect(spans).to.have.length(2)
 
@@ -679,7 +679,7 @@ describe('Plugin', () => {
           ])
 
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = traces[0]
               expect(spans).to.have.length(2)
 
@@ -753,7 +753,7 @@ describe('Plugin', () => {
           ])
 
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = traces[0]
               expect(spans).to.have.length(3) // 1 chain + 2 chat model
 
@@ -796,7 +796,7 @@ describe('Plugin', () => {
           })
 
           const checkTraces = agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = traces[0]
               expect(spans).to.have.length(2) // 1 chain + 1 chat model
 
@@ -831,7 +831,7 @@ describe('Plugin', () => {
             nock('https://api.openai.com').post('/v1/embeddings').reply(403)
 
             const checkTraces = agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0].length).to.equal(1)
 
                 const span = traces[0][0]
@@ -874,7 +874,7 @@ describe('Plugin', () => {
             const embeddings = new langchainOpenai.OpenAIEmbeddings()
 
             const checkTraces = agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0].length).to.equal(1)
                 const span = traces[0][0]
 
@@ -924,7 +924,7 @@ describe('Plugin', () => {
             }
 
             const checkTraces = agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0].length).to.equal(1)
                 const span = traces[0][0]
 
@@ -986,7 +986,7 @@ describe('Plugin', () => {
             })
 
             const checkTraces = agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0].length).to.equal(1)
 
                 const span = traces[0][0]

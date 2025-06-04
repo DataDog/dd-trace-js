@@ -57,6 +57,9 @@ tracer.use('pg', {
 <h5 id="ioredis"></h5>
 <h5 id="ioredis-tags"></h5>
 <h5 id="ioredis-config"></h5>
+<h5 id="iovalkey"></h5>
+<h5 id="iovalkey-tags"></h5>
+<h5 id="iovalkey-config"></h5>
 <h5 id="jest"></h5>
 <h5 id="kafkajs"></h5>
 <h5 id="koa"></h5>
@@ -83,9 +86,6 @@ tracer.use('pg', {
 <h5 id="next"></h5>
 <h5 id="opensearch"></h5>
 <h5 id="oracledb"></h5>
-<h5 id="paperplane"></h5>
-<h5 id="paperplane-tags"></h5>
-<h5 id="paperplane-config"></h5>
 <h5 id="pino"></h5>
 <h5 id="pg"></h5>
 <h5 id="pg-tags"></h5>
@@ -128,6 +128,7 @@ tracer.use('pg', {
 * [http](./interfaces/export_.plugins.http.html)
 * [http2](./interfaces/export_.plugins.http2.html)
 * [ioredis](./interfaces/export_.plugins.ioredis.html)
+* [iovalkey](./interfaces/export_.plugins.iovalkey.html)
 * [jest](./interfaces/export_.plugins.jest.html)
 * [kafkajs](./interfaces/export_.plugins.kafkajs.html)
 * [knex](./interfaces/export_.plugins.knex.html)
@@ -144,7 +145,6 @@ tracer.use('pg', {
 * [opensearch](./interfaces/export_.plugins.opensearch.html)
 * [openai](./interfaces/export_.plugins.openai.html)
 * [oracledb](./interfaces/export_.plugins.oracledb.html)
-* [paperplane](./interfaces/export_.plugins.paperplane.html)
 * [pino](./interfaces/export_.plugins.pino.html)
 * [pg](./interfaces/export_.plugins.pg.html)
 * [promise](./interfaces/export_.plugins.promise.html)

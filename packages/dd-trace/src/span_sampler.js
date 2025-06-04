@@ -10,6 +10,9 @@ class SpanSampler {
 
   findRule (context) {
     for (const rule of this._rules) {
+      // Rule is a special object with a .match() property.
+      // It has nothing to do with a regular expression.
+      // eslint-disable-next-line unicorn/prefer-regexp-test
       if (rule.match(context)) {
         return rule
       }
@@ -23,7 +26,7 @@ class SpanSampler {
     const { started } = spanContext._trace
     for (const span of started) {
       const rule = this.findRule(span)
-      if (rule && rule.sample()) {
+      if (rule && rule.sample(spanContext)) {
         span.context()._spanSampling = {
           sampleRate: rule.sampleRate,
           maxPerSecond: rule.maxPerSecond

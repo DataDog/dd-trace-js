@@ -130,7 +130,7 @@ describe('integrations', () => {
         useScenario({ scenario: 'generate-content-single-response' })
 
         it('makes a successful call', async () => {
-          const checkTraces = agent.use(traces => {
+          const checkTraces = agent.assertSomeTraces(traces => {
             const span = traces[0][0]
             const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
@@ -170,7 +170,7 @@ describe('integrations', () => {
         useScenario({ scenario: 'generate-content-single-response-with-tools' })
 
         it('makes a successful call', async () => {
-          const checkTraces = agent.use(traces => {
+          const checkTraces = agent.assertSomeTraces(traces => {
             const span = traces[0][0]
             const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
@@ -220,7 +220,7 @@ describe('integrations', () => {
           useScenario({ scenario: 'generate-content-single-response' })
 
           it('makes a successful call', async () => {
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
               const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 

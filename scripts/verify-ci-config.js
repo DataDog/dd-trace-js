@@ -94,13 +94,9 @@ function getRangesFromYaml (job) {
     if (job.strategy.matrix.include) {
       possibilities.push(...job.strategy.matrix.include)
     }
-    return possibilities.map(possibility => {
-      if (possibility.range) {
-        return [possibility.range].flat()
-      } else {
-        return undefined
-      }
-    }).flat()
+    return possibilities.flatMap(possibility => {
+      return [possibility.range]?.flat()
+    })
   }
 
   return null
@@ -161,14 +157,14 @@ checkPlugins(path.join(__dirname, '..', '.github', 'workflows', 'appsec.yml'))
 
 const IGNORED_WORKFLOWS = {
   all: [
+    'codeql-analysis.yml',
+    'pr-labels.yml',
     'release-3.yml',
     'release-4.yml',
     'release-dev.yml',
     'release-latest.yml',
     'release-proposal.yml',
-    'release-validate.yml',
-    'codeql-analysis.yml',
-    'pr-labels.yml'
+    'release-validate.yml'
   ],
   trigger_pull_request: [
     'stale.yml'
@@ -177,7 +173,9 @@ const IGNORED_WORKFLOWS = {
     'package-size.yml',
     'stale.yml'
   ],
-  trigger_schedule: []
+  trigger_schedule: [
+    'yarn-dedupe.yml'
+  ]
 }
 
 const workflows = fs.readdirSync(path.join(__dirname, '..', '.github', 'workflows'))

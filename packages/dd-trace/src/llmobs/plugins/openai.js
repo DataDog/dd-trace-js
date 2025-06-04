@@ -105,7 +105,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     const embeddingInput = embeddingInputs.map(input => ({ text: input }))
 
     if (error) {
-      this._tagger.tagEmbeddingIO(span, embeddingInput, undefined)
+      this._tagger.tagEmbeddingIO(span, embeddingInput)
       return
     }
 

@@ -22,7 +22,7 @@ function findPkg () {
 
   try {
     return JSON.parse(fs.readFileSync(filePath, 'utf8'))
-  } catch (e) {
+  } catch {
     return {}
   }
 }

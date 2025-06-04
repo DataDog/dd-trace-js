@@ -153,7 +153,7 @@ describe('Plugin', () => {
 
         describe('with payload tagging', () => {
           it('adds request and response payloads as flattened tags for putItem', async () => {
-            const agentPromise = agent.use(traces => {
+            const agentPromise = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
 
               expect(span.resource).to.equal(`putItem ${oneKeyTableName}`)
@@ -179,7 +179,7 @@ describe('Plugin', () => {
           })
 
           it('adds request and response payloads as flattened tags for updateItem', async () => {
-            const agentPromise = agent.use(traces => {
+            const agentPromise = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
 
               expect(span.resource).to.equal(`updateItem ${oneKeyTableName}`)
@@ -210,7 +210,7 @@ describe('Plugin', () => {
           })
 
           it('adds request and response payloads as flattened tags for deleteItem', async () => {
-            const agentPromise = agent.use(traces => {
+            const agentPromise = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
 
               expect(span.resource).to.equal(`deleteItem ${oneKeyTableName}`)
@@ -246,7 +246,7 @@ describe('Plugin', () => {
             // Wait a bit to ensure the put completes
             await wait(100)
 
-            const agentPromise = agent.use(traces => {
+            const agentPromise = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
 
               expect(span.resource).to.equal(`getItem ${oneKeyTableName}`)
@@ -292,7 +292,7 @@ describe('Plugin', () => {
             if (expectedHashes) {
               expectedLength = Array.isArray(expectedHashes) ? expectedHashes.length : 1
             }
-            const agentPromise = agent.use(traces => {
+            const agentPromise = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
               const links = JSON.parse(span.meta?.['_dd.span_links'] || '[]')
 
@@ -688,7 +688,7 @@ describe('Plugin', () => {
       })
 
       it('should return cached config if available', () => {
-        const cachedConfig = { Table1: new Set(['key1']) }
+        const cachedConfig = { Table1: ['key1'] }
         dynamoDbInstance.dynamoPrimaryKeyConfig = cachedConfig
 
         const result = dynamoDbInstance.getPrimaryKeyConfig()
@@ -706,7 +706,7 @@ describe('Plugin', () => {
 
         const result = dynamoDbInstance.getPrimaryKeyConfig()
         expect(result).to.deep.equal({
-          Table1: new Set(['key1', 'key2'])
+          Table1: ['key1', 'key2']
         })
       })
 
@@ -716,8 +716,18 @@ describe('Plugin', () => {
 
         const result = dynamoDbInstance.getPrimaryKeyConfig()
         expect(result).to.deep.equal({
-          Table1: new Set(['key1']),
-          Table2: new Set(['key2', 'key3'])
+          Table1: ['key1'],
+          Table2: ['key2', 'key3']
+        })
+      })
+
+      it('should fail for invalid entries', () => {
+        const configStr = '{"Table1": {"key1": 42}, "Table42": ["key1"], "Table2": ["key1", "key2", "key3"]}'
+        dynamoDbInstance._tracerConfig = { trace: { dynamoDb: { tablePrimaryKeys: configStr } } }
+
+        const result = dynamoDbInstance.getPrimaryKeyConfig()
+        expect(result).to.deep.equal({
+          Table42: ['key1']
         })
       })
     })
@@ -726,7 +736,7 @@ describe('Plugin', () => {
       it('generates correct hash for single string key', () => {
         const tableName = 'UserTable'
         const item = { userId: { S: 'user123' }, name: { S: 'John' } }
-        const keyConfig = { UserTable: new Set(['userId']) }
+        const keyConfig = { UserTable: ['userId'] }
 
         const actualHash = DynamoDb.calculatePutItemHash(tableName, item, keyConfig)
         const expectedHash = generatePointerHash([tableName, 'userId', 'user123', '', ''])
@@ -736,7 +746,7 @@ describe('Plugin', () => {
       it('generates correct hash for single number key', () => {
         const tableName = 'OrderTable'
         const item = { orderId: { N: '98765' }, total: { N: '50.00' } }
-        const keyConfig = { OrderTable: new Set(['orderId']) }
+        const keyConfig = { OrderTable: ['orderId'] }
 
         const actualHash = DynamoDb.calculatePutItemHash(tableName, item, keyConfig)
         const expectedHash = generatePointerHash([tableName, 'orderId', '98765', '', ''])
@@ -747,7 +757,7 @@ describe('Plugin', () => {
         const tableName = 'BinaryTable'
         const binaryData = Buffer.from([1, 2, 3])
         const item = { binaryId: { B: binaryData }, data: { S: 'test' } }
-        const keyConfig = { BinaryTable: new Set(['binaryId']) }
+        const keyConfig = { BinaryTable: ['binaryId'] }
 
         const actualHash = DynamoDb.calculatePutItemHash(tableName, item, keyConfig)
         const expectedHash = generatePointerHash([tableName, 'binaryId', binaryData, '', ''])
@@ -761,7 +771,7 @@ describe('Plugin', () => {
           email: { S: 'test@example.com' },
           verified: { BOOL: true }
         }
-        const keyConfig = { UserEmailTable: new Set(['userId', 'email']) }
+        const keyConfig = { UserEmailTable: ['userId', 'email'] }
 
         const actualHash = DynamoDb.calculatePutItemHash(tableName, item, keyConfig)
         const expectedHash = generatePointerHash([tableName, 'email', 'test@example.com', 'userId', 'user123'])
@@ -775,7 +785,7 @@ describe('Plugin', () => {
           timestamp: { N: '1234567' },
           action: { S: 'login' }
         }
-        const keyConfig = { UserActivityTable: new Set(['userId', 'timestamp']) }
+        const keyConfig = { UserActivityTable: ['userId', 'timestamp'] }
 
         const actualHash = DynamoDb.calculatePutItemHash(tableName, item, keyConfig)
         const expectedHash = generatePointerHash([tableName, 'timestamp', '1234567', 'userId', 'user123'])
@@ -791,7 +801,7 @@ describe('Plugin', () => {
           key2: { B: binary2 },
           data: { S: 'test' }
         }
-        const keyConfig = { BinaryTable: new Set(['key1', 'key2']) }
+        const keyConfig = { BinaryTable: ['key1', 'key2'] }
 
         const actualHash = DynamoDb.calculatePutItemHash(tableName, item, keyConfig)
         const expectedHash = generatePointerHash([tableName, 'key1', binary1, 'key2', binary2])
@@ -801,8 +811,8 @@ describe('Plugin', () => {
       it('generates unique hashes for different tables', () => {
         const item = { userId: { S: 'user123' } }
         const keyConfig = {
-          Table1: new Set(['userId']),
-          Table2: new Set(['userId'])
+          Table1: ['userId'],
+          Table2: ['userId']
         }
 
         const hash1 = DynamoDb.calculatePutItemHash('Table1', item, keyConfig)
@@ -814,7 +824,7 @@ describe('Plugin', () => {
         it('returns undefined for unknown table', () => {
           const tableName = 'UnknownTable'
           const item = { userId: { S: 'user123' } }
-          const keyConfig = { KnownTable: new Set(['userId']) }
+          const keyConfig = { KnownTable: ['userId'] }
 
           const result = DynamoDb.calculatePutItemHash(tableName, item, keyConfig)
           expect(result).to.be.undefined
@@ -828,31 +838,13 @@ describe('Plugin', () => {
           expect(result).to.be.undefined
         })
 
-        it('returns undefined for invalid primary key config', () => {
-          const tableName = 'UserTable'
-          const item = { userId: { S: 'user123' } }
-          const invalidConfig = { UserTable: ['userId'] } // Array instead of Set
-
-          const result = DynamoDb.calculatePutItemHash(tableName, item, invalidConfig)
-          expect(result).to.be.undefined
-        })
-
         it('returns undefined when missing attributes in item', () => {
           const tableName = 'UserTable'
           const item = { someOtherField: { S: 'value' } }
-          const keyConfig = { UserTable: new Set(['userId']) }
+          const keyConfig = { UserTable: ['userId'] }
 
           const actualHash = DynamoDb.calculatePutItemHash(tableName, item, keyConfig)
           expect(actualHash).to.be.undefined
-        })
-
-        it('returns undefined for Set with more than 2 keys', () => {
-          const tableName = 'TestTable'
-          const item = { key1: { S: 'value1' }, key2: { S: 'value2' }, key3: { S: 'value3' } }
-          const keyConfig = { TestTable: new Set(['key1', 'key2', 'key3']) }
-
-          const result = DynamoDb.calculatePutItemHash(tableName, item, keyConfig)
-          expect(result).to.be.undefined
         })
 
         it('returns undefined for empty keyConfig', () => {
