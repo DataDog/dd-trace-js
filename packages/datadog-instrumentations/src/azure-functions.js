@@ -11,12 +11,16 @@ const azureFunctionsChannel = dc.tracingChannel('datadog:azure:functions:invoke'
 addHook({ name: '@azure/functions', versions: ['>=4'] }, azureFunction => {
   const { app } = azureFunction
 
+  // Http triggers
   shimmer.wrap(app, 'deleteRequest', wrapHandler)
   shimmer.wrap(app, 'http', wrapHandler)
   shimmer.wrap(app, 'get', wrapHandler)
   shimmer.wrap(app, 'patch', wrapHandler)
   shimmer.wrap(app, 'post', wrapHandler)
   shimmer.wrap(app, 'put', wrapHandler)
+
+  // Service Bus triggers
+  shimmer.wrap(app, 'serviceBusQueue', wrapHandler)
 
   return azureFunction
 })
