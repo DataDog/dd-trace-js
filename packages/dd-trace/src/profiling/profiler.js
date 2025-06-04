@@ -101,13 +101,19 @@ class Profiler extends EventEmitter {
           }
           break
         case 'zstd':
-          this._compressionFn = promisify(zlib.zstdCompress)
-          if (clevel !== undefined) {
-            this._compressionOptions = {
-              params: {
-                [zlib.constants.ZSTD_c_compressionLevel]: clevel
+          if (typeof zlib.zstdCompress === 'function') {
+            this._compressionFn = promisify(zlib.zstdCompress)
+            if (clevel !== undefined) {
+              this._compressionOptions = {
+                params: {
+                  [zlib.constants.ZSTD_c_compressionLevel]: clevel
+                }
               }
             }
+          } else {
+            const zstdCompress = require('@datadog/libdatadog').load('datadog-js-zstd').zstd_compress
+            const level = clevel ?? 0 // 0 is zstd default compression level
+            this._compressionFn = (buffer) => Promise.resolve(Buffer.from(zstdCompress(buffer, level)))
           }
           break
       }
