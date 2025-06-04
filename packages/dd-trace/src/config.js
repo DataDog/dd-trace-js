@@ -596,7 +596,7 @@ class Config {
     this._setValue(defaults, 'trace.nativeSpanEvents', false)
     this._setValue(defaults, 'instrumentationSource', 'unknown')
     this._setValue(defaults, 'injectionForce', '')
-    this._setValue(defaults, 'DD_INJECTION_ENABLED', '')
+    this._setValue(defaults, 'injectionEnabled', '')
   }
 
   _applyLocalStableConfig () {
