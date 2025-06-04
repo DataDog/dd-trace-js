@@ -645,11 +645,8 @@ class TextMapPropagator {
         removeAllBaggageItems()
         return
       }
-      if (spanContext) {
-        // eslint-disable-next-line unicorn/no-lonely-if
-        if (this._config.baggageTagKeys === '*' || keysToSpanTag.has(key)) {
-          spanContext._trace.tags['baggage.' + key] = value
-        }
+      if (spanContext && (this._config.baggageTagKeys === '*' || keysToSpanTag.has(key))) {
+        spanContext._trace.tags['baggage.' + key] = value
       }
       setBaggageItem(key, value)
     }
