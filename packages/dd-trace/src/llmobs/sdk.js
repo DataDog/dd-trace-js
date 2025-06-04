@@ -121,7 +121,7 @@ class LLMObs extends NoopLLMObs {
     }
 
     const kind = validateKind(options.kind) // will throw if kind is undefined or not an expected kind
-    let name = options.name || (fn?.name ? fn.name : undefined) || kind
+    let name = options.name || fn?.name || kind
 
     if (!name) {
       logger.warn('No span name provided for `wrap`. Defaulting to "unnamed-anonymous-function".')

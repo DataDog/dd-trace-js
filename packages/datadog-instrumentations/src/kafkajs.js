@@ -2,8 +2,7 @@
 
 const {
   channel,
-  addHook,
-  AsyncResource
+  addHook
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
@@ -60,33 +59,37 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
 
     producer.send = function () {
       const wrappedSend = (clusterId) => {
-        const innerAsyncResource = new AsyncResource('bound-anonymous-fn')
+        const { topic, messages = [] } = arguments[0]
 
-        return innerAsyncResource.runInAsyncScope(() => {
-          if (!producerStartCh.hasSubscribers) {
-            return send.apply(this, arguments)
+        const ctx = {
+          bootstrapServers,
+          clusterId,
+          disableHeaderInjection: disabledHeaderWeakSet.has(producer),
+          messages,
+          topic
+        }
+
+        for (const message of messages) {
+          if (message !== null && typeof message === 'object' && !ctx.disableHeaderInjection) {
+            message.headers = message.headers || {}
           }
+        }
 
+        return producerStartCh.runStores(ctx, () => {
           try {
-            const { topic, messages = [] } = arguments[0]
-            producerStartCh.publish({
-              topic,
-              messages,
-              bootstrapServers,
-              clusterId,
-              disableHeaderInjection: disabledHeaderWeakSet.has(producer)
-            })
             const result = send.apply(this, arguments)
             result.then(
-              innerAsyncResource.bind(res => {
-                producerFinishCh.publish(undefined)
-                producerCommitCh.publish(res)
-              }),
-              innerAsyncResource.bind(err => {
+              (res) => {
+                ctx.result = res
+                producerFinishCh.publish(ctx)
+                producerCommitCh.publish(ctx)
+              },
+              (err) => {
+                ctx.error = err
                 if (err) {
                   // Fixes bug where we would inject message headers for kafka brokers that don't support headers
                   // (version <0.11). On the error, we disable header injection.
-                  // Tnfortunately the error name / type is not more specific.
+                  // Unfortunately the error name / type is not more specific.
                   // This approach is implemented by other tracers as well.
                   if (err.name === 'KafkaJSProtocolError' && err.type === 'UNKNOWN') {
                     disabledHeaderWeakSet.add(producer)
@@ -96,28 +99,28 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
                   }
                   producerErrorCh.publish(err)
                 }
-                producerFinishCh.publish(undefined)
+                producerFinishCh.publish(ctx)
               })
-            )
 
             return result
           } catch (e) {
-            producerErrorCh.publish(e)
-            producerFinishCh.publish(undefined)
+            ctx.error = e
+            producerErrorCh.publish(ctx)
+            producerFinishCh.publish(ctx)
             throw e
           }
         })
       }
 
-      if (!isPromise(kafkaClusterIdPromise)) {
-        // promise is already resolved
-        return wrappedSend(kafkaClusterIdPromise)
-      } else {
+      if (isPromise(kafkaClusterIdPromise)) {
         // promise is not resolved
         return kafkaClusterIdPromise.then((clusterId) => {
           return wrappedSend(clusterId)
         })
       }
+
+      // promise is already resolved
+      return wrappedSend(kafkaClusterIdPromise)
     }
     return producer
   })
@@ -170,15 +173,15 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
         })
       }
 
-      if (!isPromise(kafkaClusterIdPromise)) {
-        // promise is already resolved
-        return wrapConsume(kafkaClusterIdPromise)
-      } else {
+      if (isPromise(kafkaClusterIdPromise)) {
         // promise is not resolved
         return kafkaClusterIdPromise.then((clusterId) => {
           return wrapConsume(clusterId)
         })
       }
+
+      // promise is already resolved
+      return wrapConsume(kafkaClusterIdPromise)
     }
     return consumer
   })
@@ -188,30 +191,35 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
 const wrappedCallback = (fn, startCh, finishCh, errorCh, extractArgs, clusterId) => {
   return typeof fn === 'function'
     ? function (...args) {
-      const innerAsyncResource = new AsyncResource('bound-anonymous-fn')
-      return innerAsyncResource.runInAsyncScope(() => {
-        const extractedArgs = extractArgs(args, clusterId)
+      const extractedArgs = extractArgs(args, clusterId)
+      const ctx = {
+        extractedArgs
+      }
 
-        startCh.publish(extractedArgs)
+      return startCh.runStores(ctx, () => {
         try {
           const result = fn.apply(this, args)
           if (result && typeof result.then === 'function') {
             result.then(
-              innerAsyncResource.bind(() => finishCh.publish(undefined)),
-              innerAsyncResource.bind(err => {
+              (res) => {
+                ctx.result = res
+                finishCh.publish(ctx)
+              },
+              (err) => {
+                ctx.error = err
                 if (err) {
-                  errorCh.publish(err)
+                  errorCh.publish(ctx)
                 }
-                finishCh.publish(undefined)
+                finishCh.publish(ctx)
               })
-            )
           } else {
-            finishCh.publish(undefined)
+            finishCh.publish(ctx)
           }
           return result
         } catch (e) {
-          errorCh.publish(e)
-          finishCh.publish(undefined)
+          ctx.error = e
+          errorCh.publish(ctx)
+          finishCh.publish(ctx)
           throw e
         }
       })

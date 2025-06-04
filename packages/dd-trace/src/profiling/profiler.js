@@ -86,7 +86,7 @@ class Profiler extends EventEmitter {
         this._logger.debug(() => {
           return mapper.infoMap.size === 0
             ? 'Found no source maps'
-            : `Found source maps for following files: [${Array.from(mapper.infoMap.keys()).join(', ')}]`
+            : `Found source maps for following files: [${[...mapper.infoMap.keys()].join(', ')}]`
         })
       }
 
@@ -101,13 +101,19 @@ class Profiler extends EventEmitter {
           }
           break
         case 'zstd':
-          this._compressionFn = promisify(zlib.zstdCompress)
-          if (clevel !== undefined) {
-            this._compressionOptions = {
-              params: {
-                [zlib.constants.ZSTD_c_compressionLevel]: clevel
+          if (typeof zlib.zstdCompress === 'function') {
+            this._compressionFn = promisify(zlib.zstdCompress)
+            if (clevel !== undefined) {
+              this._compressionOptions = {
+                params: {
+                  [zlib.constants.ZSTD_c_compressionLevel]: clevel
+                }
               }
             }
+          } else {
+            const zstdCompress = require('@datadog/libdatadog').load('datadog-js-zstd').zstd_compress
+            const level = clevel ?? 0 // 0 is zstd default compression level
+            this._compressionFn = (buffer) => Promise.resolve(Buffer.from(zstdCompress(buffer, level)))
           }
           break
       }
@@ -244,12 +250,9 @@ class Profiler extends EventEmitter {
       for (const { profiler, profile } of profiles) {
         try {
           const encoded = await profiler.encode(profile)
-          let compressed
-          if (encoded instanceof Buffer && this._compressionFn !== undefined) {
-            compressed = await this._compressionFn(encoded, this._compressionOptions)
-          } else {
-            compressed = encoded
-          }
+          const compressed = encoded instanceof Buffer && this._compressionFn !== undefined
+            ? await this._compressionFn(encoded, this._compressionOptions)
+            : encoded
           encodedProfiles[profiler.type] = compressed
           this._logger.debug(() => {
             const profileJson = JSON.stringify(profile, (key, value) => {

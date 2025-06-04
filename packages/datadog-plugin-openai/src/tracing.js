@@ -1034,12 +1034,8 @@ function normalizeStringOrTokenArray (input, truncate) {
 
 function defensiveArrayLength (maybeArray) {
   if (maybeArray) {
-    if (Array.isArray(maybeArray)) {
-      return maybeArray.length
-    } else {
-      // case of a singular item (ie body.training_file vs body.training_files)
-      return 1
-    }
+    // Detect singular item (ie body.training_file vs body.training_files)
+    return Array.isArray(maybeArray) ? maybeArray.length : 1
   }
 }
 

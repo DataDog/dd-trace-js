@@ -15,7 +15,6 @@ const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
 const { tagger } = require('./tagger')
 const { isFalse, isTrue } = require('../util')
 const { getAzureTagsFromMetadata, getAzureAppMetadata } = require('../azure_metadata')
-const satisfies = require('semifies')
 
 class Config {
   constructor (options = {}) {
@@ -166,13 +165,11 @@ class Config {
       exportCommand
     }
 
-    const profilers = options.profilers
-      ? options.profilers
-      : getProfilers({
-        DD_PROFILING_HEAP_ENABLED,
-        DD_PROFILING_WALLTIME_ENABLED,
-        DD_PROFILING_PROFILERS
-      })
+    const profilers = options.profilers || getProfilers({
+      DD_PROFILING_HEAP_ENABLED,
+      DD_PROFILING_WALLTIME_ENABLED,
+      DD_PROFILING_PROFILERS
+    })
 
     this.timelineEnabled = isTrue(coalesce(options.timelineEnabled,
       DD_PROFILING_TIMELINE_ENABLED,
@@ -201,17 +198,13 @@ class Config {
     if (!['on', 'off', 'gzip', 'zstd'].includes(uploadCompression)) {
       logger.warn(`Invalid profile upload compression method "${uploadCompression0}". Will use "on".`)
       uploadCompression = 'on'
-    } else if (uploadCompression === 'zstd' && !satisfies(process.versions.node, '>=23.8.0')) {
-      logger.warn(
-        'Profile upload compression method "zstd" is only supported on Node.js 23.8.0 or above. Will use "on".')
-      uploadCompression = 'on'
     }
-    let level = level0 ? parseInt(level0, 10) : undefined
+    let level = level0 ? Number.parseInt(level0, 10) : undefined
     if (level !== undefined) {
       if (['on', 'off'].includes(uploadCompression)) {
         logger.warn(`Compression levels are not supported for "${uploadCompression}".`)
         level = undefined
-      } else if (isNaN(level)) {
+      } else if (Number.isNaN(level)) {
         logger.warn(
           `Invalid compression level "${level0}". Will use default level.`)
         level = undefined

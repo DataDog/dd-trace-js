@@ -20,7 +20,6 @@ class Sqs extends BaseAwsSdkPlugin {
     this.addSub('apm:aws:response:start:sqs', obj => {
       const { request, response } = obj
       const store = storage('legacy').getStore()
-      const plugin = this
       const contextExtraction = this.responseExtract(request.params, request.operation, response)
       let span
       let parsedMessageAttributes = null
@@ -35,7 +34,7 @@ class Sqs extends BaseAwsSdkPlugin {
           )
         }
         parsedMessageAttributes = contextExtraction.parsedAttributes
-        span = plugin.tracer.startSpan('aws.response', options)
+        span = this.tracer.startSpan('aws.response', options)
         this.enter(span, store)
       }
       // extract DSM context after as we might not have a parent-child but may have a DSM context
@@ -96,7 +95,7 @@ class Sqs extends BaseAwsSdkPlugin {
     // 'https://sqs.us-east-1.amazonaws.com/123456789012/my-queue';
     let queueName = params.QueueName
     if (params.QueueUrl) {
-      queueName = params.QueueUrl.split('/')[params.QueueUrl.split('/').length - 1]
+      queueName = params.QueueUrl.split('/').at(-1)
     }
 
     Object.assign(tags, {

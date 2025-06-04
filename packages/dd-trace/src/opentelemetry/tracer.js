@@ -148,10 +148,7 @@ class Tracer {
 
       // Set initial span attributes. The attributes object may have been mutated
       // by the sampler, so we sanitize the merged attributes before setting them.
-      sanitizeAttributes(
-        // Object.assign(attributes, samplingResult.attributes)
-        attributes
-      )
+      sanitizeAttributes(attributes)
     )
   }
 

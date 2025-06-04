@@ -81,7 +81,7 @@ const EVENT_HEADERS_MAP = mapHeaderAndTags(eventHeadersList, REQUEST_HEADER_TAG_
 
 const RESPONSE_HEADERS_MAP = mapHeaderAndTags(contentHeaderList, RESPONSE_HEADER_TAG_PREFIX)
 
-const NON_EXTENDED_REQUEST_HEADERS = new Set(requestHeadersList.concat(eventHeadersList))
+const NON_EXTENDED_REQUEST_HEADERS = new Set([...requestHeadersList, ...eventHeadersList])
 const NON_EXTENDED_RESPONSE_HEADERS = new Set(contentHeaderList)
 
 function init (_config) {
@@ -321,7 +321,7 @@ function truncateRequestBody (target, depth = 0) {
       if (typeof target.toJSON === 'function') {
         try {
           return truncateRequestBody(target.toJSON(), depth + 1)
-        } catch (e) {
+        } catch {
           return { truncated: false }
         }
       }

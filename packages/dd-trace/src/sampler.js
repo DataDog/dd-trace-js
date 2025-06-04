@@ -8,7 +8,7 @@ const MAX_TRACE_ID = 2 ** 64 - 1
 const UINT64_MODULO = 2n ** 64n
 
 // Knuth's factor for the sampling algorithm
-const SAMPLING_KNUTH_FACTOR = 1111111111111111111n
+const SAMPLING_KNUTH_FACTOR = 1_111_111_111_111_111_111n
 
 /**
  * `Sampler` determines whether or not to sample a trace/span based on the trace ID.

@@ -70,7 +70,7 @@ function createBuffer (value) {
   value = value.padStart(size, '0')
 
   for (let i = 0; i < bytes; i++) {
-    buffer[i] = Number.parseInt(value.substring(i * 2, i * 2 + 2), 16)
+    buffer[i] = Number.parseInt(value.slice(i * 2, i * 2 + 2), 16)
   }
 
   return buffer
@@ -182,4 +182,6 @@ function writeUInt32BE (buffer, value, offset) {
   buffer[0 + offset] = value & 255
 }
 
-module.exports = (value, radix) => new Identifier(value, radix)
+module.exports = function createIdentifier (value, radix) {
+  return new Identifier(value, radix)
+}
