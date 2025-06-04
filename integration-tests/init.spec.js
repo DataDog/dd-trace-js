@@ -36,18 +36,18 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
 
       if (currentVersionIsSupported) {
         context('without DD_INJECTION_ENABLED', () => {
-          it('should initialize the tracer', () => doTest('init/trace.js', 'true\n'))
-          it('should initialize instrumentation', () => doTest('init/instrument.js', 'true\n'))
+          it('should initialize the tracer', () => doTest('init/trace.js', true, 'true\n'))
+          it('should initialize instrumentation', () => doTest('init/instrument.js', true, 'true\n'))
           it(`should ${esmWorks ? '' : 'not '}initialize ESM instrumentation`, () =>
-            doTest('init/instrument.mjs', `${esmWorks}\n`))
+            doTest('init/instrument.mjs', true, `${esmWorks}\n`))
         })
       }
       context('with DD_INJECTION_ENABLED', () => {
         useEnv({ DD_INJECTION_ENABLED })
 
-        it('should not initialize the tracer', () => doTest('init/trace.js', 'false\n'))
-        it('should not initialize instrumentation', () => doTest('init/instrument.js', 'false\n'))
-        it('should not initialize ESM instrumentation', () => doTest('init/instrument.mjs', 'false\n'))
+        it('should not initialize the tracer', () => doTest('init/trace.js', false, 'false\n'))
+        it('should not initialize instrumentation', () => doTest('init/instrument.js', false, 'false\n'))
+        it('should not initialize ESM instrumentation', () => doTest('init/instrument.mjs', false, 'false\n'))
       })
     })
     context('when dd-trace in the app dir', () => {
@@ -55,18 +55,18 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
       useEnv({ NODE_OPTIONS })
 
       context('without DD_INJECTION_ENABLED', () => {
-        it('should initialize the tracer', () => doTest('init/trace.js', 'true\n'))
-        it('should initialize instrumentation', () => doTest('init/instrument.js', 'true\n'))
+        it('should initialize the tracer', () => doTest('init/trace.js', true, 'true\n'))
+        it('should initialize instrumentation', () => doTest('init/instrument.js', true, 'true\n'))
         it(`should ${esmWorks ? '' : 'not '}initialize ESM instrumentation`, () =>
-          doTest('init/instrument.mjs', `${esmWorks}\n`))
+          doTest('init/instrument.mjs', esmWorks, `${esmWorks}\n`))
       })
       context('with DD_INJECTION_ENABLED', () => {
         useEnv({ DD_INJECTION_ENABLED })
 
-        it('should initialize the tracer', () => doTest('init/trace.js', 'true\n', ...telemetryGood))
-        it('should initialize instrumentation', () => doTest('init/instrument.js', 'true\n', ...telemetryGood))
+        it('should initialize the tracer', () => doTest('init/trace.js', true, 'true\n', ...telemetryGood))
+        it('should initialize instrumentation', () => doTest('init/instrument.js', true, 'true\n', ...telemetryGood))
         it(`should ${esmWorks ? '' : 'not '}initialize ESM instrumentation`, () =>
-          doTest('init/instrument.mjs', `${esmWorks}\n`, ...telemetryGood))
+          doTest('init/instrument.mjs', esmWorks, `${esmWorks}\n`, ...telemetryGood))
       })
     })
   })
@@ -90,25 +90,25 @@ function testRuntimeVersionChecks (arg, filename) {
         useEnv({ NODE_OPTIONS })
 
         it('should not initialize the tracer', () =>
-          doTest('false\n'))
+          doTest(false, 'false\n'))
         context('with DD_INJECTION_ENABLED', () => {
           useEnv({ DD_INJECTION_ENABLED })
 
           context('without debug', () => {
-            it('should not initialize the tracer', () => doTest('false\n', ...telemetryAbort))
-            it('should initialize the tracer, if DD_INJECT_FORCE', () => doTestForced('true\n', ...telemetryForced))
+            it('should not initialize the tracer', () => doTest(false, 'false\n', ...telemetryAbort))
+            it('should initialize the tracer, if DD_INJECT_FORCE', () => doTestForced(true, 'true\n', ...telemetryForced))
           })
           context('with debug', () => {
             useEnv({ DD_TRACE_DEBUG })
 
             it('should not initialize the tracer', () =>
-              doTest(`Aborting application instrumentation due to incompatible_runtime.
+              doTest(false, `Aborting application instrumentation due to incompatible_runtime.
 Found incompatible runtime nodejs ${process.versions.node}, Supported runtimes: nodejs \
 >=18.
 false
 `, ...telemetryAbort))
             it('should initialize the tracer, if DD_INJECT_FORCE', () =>
-              doTestForced(`Aborting application instrumentation due to incompatible_runtime.
+              doTestForced(false, `Aborting application instrumentation due to incompatible_runtime.
 Found incompatible runtime nodejs ${process.versions.node}, Supported runtimes: nodejs \
 >=18.
 DD_INJECT_FORCE enabled, allowing unsupported runtimes and continuing.
@@ -122,22 +122,22 @@ true
       context('when node version is more than engines field', () => {
         useEnv({ NODE_OPTIONS })
 
-        it('should initialize the tracer, if no DD_INJECTION_ENABLED', () => doTest('true\n'))
+        it('should initialize the tracer, if no DD_INJECTION_ENABLED', () => doTest(true, 'true\n'))
         context('with DD_INJECTION_ENABLED', () => {
           useEnv({ DD_INJECTION_ENABLED })
 
           context('without debug', () => {
-            it('should initialize the tracer', () => doTest('true\n', ...telemetryGood))
+            it('should initialize the tracer', () => doTest(true, 'true\n', ...telemetryGood))
             it('should initialize the tracer, if DD_INJECT_FORCE', () =>
-              doTestForced('true\n', ...telemetryGood))
+              doTestForced(true, 'true\n', ...telemetryGood))
           })
           context('with debug', () => {
             useEnv({ DD_TRACE_DEBUG })
 
             it('should initialize the tracer', () =>
-              doTest('Application instrumentation bootstrapping complete\ntrue\n', ...telemetryGood))
+              doTest(true, 'Application instrumentation bootstrapping complete\ntrue\n', ...telemetryGood))
             it('should initialize the tracer, if DD_INJECT_FORCE', () =>
-              doTestForced('Application instrumentation bootstrapping complete\ntrue\n', ...telemetryGood))
+              doTestForced(true, 'Application instrumentation bootstrapping complete\ntrue\n', ...telemetryGood))
           })
         })
       })
