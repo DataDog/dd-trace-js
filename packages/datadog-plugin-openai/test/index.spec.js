@@ -243,7 +243,6 @@ describe('Plugin', () => {
             }, [
               'Date', 'Mon, 15 May 2023 17:24:22 GMT',
               'Content-Type', 'application/json',
-              'Content-Length', '349',
               'Connection', 'close',
               'openai-model', 'text-davinci-002',
               'openai-organization', 'kill-9',
@@ -370,7 +369,6 @@ describe('Plugin', () => {
             .reply(200, {}, [
               'Date', 'Mon, 15 May 2023 17:24:22 GMT',
               'Content-Type', 'application/json',
-              'Content-Length', '349',
               'Connection', 'close',
               'openai-model', 'text-davinci-002',
               'openai-organization', 'kill-9',
@@ -431,7 +429,6 @@ describe('Plugin', () => {
             }, [
               'Date', 'Mon, 15 May 2023 20:49:06 GMT',
               'Content-Type', 'application/json',
-              'Content-Length', '75',
               'access-control-allow-origin', '*',
               'openai-organization', 'kill-9',
               'openai-processing-ms', '344',
@@ -507,7 +504,6 @@ describe('Plugin', () => {
             }, [
               'Date', 'Mon, 15 May 2023 20:49:06 GMT',
               'Content-Type', 'application/json',
-              'Content-Length', '75',
               'access-control-allow-origin', '*',
               'openai-organization', 'kill-9',
               'openai-processing-ms', '344',
@@ -675,7 +671,6 @@ describe('Plugin', () => {
             }, [
               'Date', 'Mon, 15 May 2023 23:26:42 GMT',
               'Content-Type', 'application/json',
-              'Content-Length', '63979',
               'Connection', 'close',
               'openai-version', '2020-10-01',
               'openai-processing-ms', '164'
@@ -749,7 +744,6 @@ describe('Plugin', () => {
             }, [
               'Date', 'Mon, 15 May 2023 23:41:40 GMT',
               'Content-Type', 'application/json',
-              'Content-Length', '548',
               'Connection', 'close',
               'openai-version', '2020-10-01',
               'openai-processing-ms', '27'
@@ -828,7 +822,6 @@ describe('Plugin', () => {
             }, [
               'Date', 'Tue, 16 May 2023 20:01:49 GMT',
               'Content-Type', 'application/json',
-              'Content-Length', '172',
               'Connection', 'close',
               'openai-model', 'text-davinci-edit:001',
               'openai-organization', 'kill-9',
@@ -838,7 +831,6 @@ describe('Plugin', () => {
               'x-ratelimit-remaining-requests', '19',
               'x-ratelimit-reset-requests', '3s',
               'x-request-id', 'aa28029fd9758334bcead67af867e8fc'
-
             ])
         })
 
@@ -948,7 +940,6 @@ describe('Plugin', () => {
             }, [
               'Date', 'Wed, 17 May 2023 21:34:04 GMT',
               'Content-Type', 'application/json',
-              'Content-Length', '25632',
               'Connection', 'close',
               'openai-version', '2020-10-01',
               'openai-organization', 'kill-9',
@@ -1013,7 +1004,6 @@ describe('Plugin', () => {
             }, [
               'Date', 'Wed, 17 May 2023 22:32:44 GMT',
               'Content-Type', 'application/json',
-              'Content-Length', '216',
               'Connection', 'close',
               'openai-version', '2020-10-01',
               'openai-organization', 'kill-9',
@@ -1083,7 +1073,6 @@ describe('Plugin', () => {
             }, [
               'Date', 'Wed, 17 May 2023 23:03:54 GMT',
               'Content-Type', 'application/json',
-              'Content-Length', '83',
               'Connection', 'close',
               'openai-version', '2020-10-01',
               'openai-organization', 'kill-9'
@@ -1147,7 +1136,6 @@ describe('Plugin', () => {
             }, [
               'Date', 'Wed, 17 May 2023 23:14:02 GMT',
               'Content-Type', 'application/json',
-              'Content-Length', '240',
               'Connection', 'close',
               'openai-version', '2020-10-01',
               'openai-organization', 'kill-9',
@@ -1329,7 +1317,6 @@ describe('Plugin', () => {
             .reply(200, response, [
               'Date', 'Thu, 18 May 2023 20:41:30 GMT',
               'Content-Type', 'application/json',
-              'Content-Length', '898',
               'Connection', 'close',
               'openai-version', '2020-10-01',
               'openai-processing-ms', '116'
@@ -1594,7 +1581,6 @@ describe('Plugin', () => {
             .reply(200, response, [
               'Date', 'Thu, 18 May 2023 22:11:53 GMT',
               'Content-Type', 'application/json',
-              'Content-Length', '2727',
               'Connection', 'close',
               'openai-version', '2020-10-01',
               'openai-processing-ms', '51'
@@ -1875,7 +1861,6 @@ describe('Plugin', () => {
             .reply(200, response, [
               'Date', 'Thu, 18 May 2023 22:47:17 GMT',
               'Content-Type', 'application/json',
-              'Content-Length', '1718',
               'Connection', 'close',
               'openai-version', '2020-10-01',
               'openai-processing-ms', '33'
@@ -1942,7 +1927,6 @@ describe('Plugin', () => {
             }, [
               'Date', 'Thu, 18 May 2023 22:59:08 GMT',
               'Content-Type', 'application/json',
-              'Content-Length', '152',
               'Connection', 'close',
               'access-control-allow-origin', '*',
               'openai-version', '2020-10-01',
@@ -2058,7 +2042,6 @@ describe('Plugin', () => {
             .reply(200, response, [
               'Date', 'Thu, 18 May 2023 23:21:43 GMT',
               'Content-Type', 'application/json',
-              'Content-Length', '1042',
               'Connection', 'close',
               'openai-version', '2020-10-01',
               'openai-processing-ms', '78'
@@ -2169,7 +2152,6 @@ describe('Plugin', () => {
               }, [
                 'Date', 'Wed, 17 May 2023 19:58:01 GMT',
                 'Content-Type', 'application/json',
-                'Content-Length', '450',
                 'Connection', 'close',
                 'openai-version', '2020-10-01',
                 'openai-organization', 'kill-9',
@@ -2268,7 +2250,6 @@ describe('Plugin', () => {
               }, [
                 'Date', 'Tue, 16 May 2023 20:59:07 GMT',
                 'Content-Type', 'application/json',
-                'Content-Length', '545',
                 'Connection', 'close',
                 'openai-version', '2020-10-01',
                 'openai-organization', 'kill-9',
@@ -2479,7 +2460,6 @@ describe('Plugin', () => {
               }, [
                 'Date', 'Tue, 23 May 2023 13:55:18 GMT',
                 'Content-Type', 'application/json',
-                'Content-Length', '549',
                 'Connection', 'close',
                 'openai-version', '2020-10-01',
                 'openai-organization', 'kill-9',
@@ -2576,7 +2556,6 @@ describe('Plugin', () => {
               }, [
                 'Date', 'Tue, 23 May 2023 14:48:40 GMT',
                 'Content-Type', 'application/json',
-                'Content-Length', '547',
                 'Connection', 'close',
                 'openai-version', '2020-10-01',
                 'openai-organization', 'kill-9',
@@ -2675,7 +2654,6 @@ describe('Plugin', () => {
               }, [
                 'Date', 'Mon, 15 May 2023 22:00:21 GMT',
                 'Content-Type', 'application/json',
-                'Content-Length', '327',
                 'access-control-allow-origin', '*',
                 'openai-model', 'gpt-3.5-turbo-0301',
                 'openai-organization', 'kill-9',
@@ -2937,7 +2915,6 @@ describe('Plugin', () => {
               }, [
                 'Date', 'Mon, 15 May 2023 22:00:21 GMT',
                 'Content-Type', 'application/json',
-                'Content-Length', '327',
                 'access-control-allow-origin', '*',
                 'openai-model', 'gpt-3.5-turbo-0301',
                 'openai-organization', 'kill-9',
@@ -3063,7 +3040,6 @@ describe('Plugin', () => {
               }, [
                 'Date', 'Fri, 19 May 2023 03:19:49 GMT',
                 'Content-Type', 'text/plain; charset=utf-8',
-                'Content-Length', '15',
                 'Connection', 'close',
                 'openai-organization', 'kill-9',
                 'openai-processing-ms', '595',
@@ -3170,7 +3146,6 @@ describe('Plugin', () => {
               }, [
                 'Date', 'Fri, 19 May 2023 03:41:25 GMT',
                 'Content-Type', 'application/json',
-                'Content-Length', '334',
                 'Connection', 'close',
                 'openai-organization', 'kill-9',
                 'openai-processing-ms', '520',

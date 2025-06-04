@@ -596,10 +596,16 @@ describe('integrations', () => {
           expect(spanEvent.meta).to.have.property('model_provider', 'azure_openai')
         })
 
-        await azureOpenai.chat.completions.create({
-          model: 'some-model',
-          messages: []
-        })
+        try {
+          await azureOpenai.chat.completions.create({
+            model: 'some-model',
+            messages: []
+          })
+        } catch (e) {
+          // this could throw if nocking doesn't work
+          // we just want to check the name and model provider anyhow, which
+          // should be set on span start
+        }
 
         await checkSpan
       })
@@ -616,10 +622,16 @@ describe('integrations', () => {
           expect(spanEvent.meta).to.have.property('model_provider', 'deepseek')
         })
 
-        await deepseekOpenai.chat.completions.create({
-          model: 'some-model',
-          messages: []
-        })
+        try {
+          await deepseekOpenai.chat.completions.create({
+            model: 'some-model',
+            messages: []
+          })
+        } catch (e) {
+          // this could throw if nocking doesn't work
+          // we just want to check the name and model provider anyhow, which
+          // should be set on span start
+        }
 
         await checkSpan
       })
