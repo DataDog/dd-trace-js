@@ -20,7 +20,7 @@ function errorMsg (title, ...message) {
 }
 
 /// /
-/// / Verifying apm-integrations.yml and appsec.yml that plugins are consistently tested
+/// / Verifying that plugins are consistently tested in at least one GH workflow
 /// /
 
 if (!Module.isBuiltin) {
@@ -140,7 +140,7 @@ checkPlugins(path.join(__dirname, '..', '.github', 'workflows', 'test-optimizati
     .map(file => file.replace('.spec.js', ''))
   for (const instrumentation of testedInstrumentations) {
     if (!allTestedPlugins.has(instrumentation)) {
-      pluginErrorMsg(instrumentation, 'ERROR', 'Instrumentation is tested but not in apm-integrations.yml')
+      pluginErrorMsg(instrumentation, 'ERROR', 'Instrumentation is tested but not in at least one GitHub workflow')
     }
   }
   const allPlugins = fs.readdirSync(path.join(__dirname, '..', 'packages'))
@@ -149,7 +149,7 @@ checkPlugins(path.join(__dirname, '..', '.github', 'workflows', 'test-optimizati
     .map(file => file.replace('datadog-plugin-', ''))
   for (const plugin of allPlugins) {
     if (!allTestedPlugins.has(plugin)) {
-      pluginErrorMsg(plugin, 'ERROR', 'Plugin is tested but not in apm-integrations.yml')
+      pluginErrorMsg(plugin, 'ERROR', 'Plugin is tested but not in at least one GitHub')
     }
   }
 }

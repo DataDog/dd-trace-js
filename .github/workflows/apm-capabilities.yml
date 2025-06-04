@@ -1,4 +1,4 @@
-name: APM SDK
+name: APM Capabilities
 
 on:
   pull_request:
