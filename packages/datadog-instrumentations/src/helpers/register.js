@@ -39,7 +39,7 @@ for (const [key, value] of Object.entries(process.env)) {
     disabledInstrumentations.add(integration)
   } else if (match && (value?.toLowerCase() === 'true' || value === '1')) {
     const integration = convertInstrumentationName(match[1])
-    enabledInstrumentations.add(integration)
+    reenabledInstrumentations.add(integration)
   }
 }
 
