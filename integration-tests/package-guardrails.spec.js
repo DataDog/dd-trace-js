@@ -18,8 +18,6 @@ const DD_LOG_LEVEL = 'error'
 delete process.env.DD_INJECTION_ENABLED
 delete process.env.DD_INJECT_FORCE
 
-// add test here
-
 describe('package guardrails', () => {
   useEnv({ NODE_OPTIONS })
   const runTest = (...args) =>
@@ -32,12 +30,12 @@ describe('package guardrails', () => {
       it('should not instrument the package, and send telemetry', () =>
         runTest('false\n',
           ['complete', 'injection_forced:false',
-            'abort.integration', 'integration:bluebird,integration_version:1.0.0',
+            'abort.integration', 'integration:bluebird,integration_version:1.0.0'
           ]
         ))
     })
     context('with logging disabled', () => {
-      it('should not instrument the package', () => runTest('false\n'))
+      it('should not instrument the package', () => runTest('false\n', []))
     })
     context('with logging enabled', () => {
       useEnv({ DD_TRACE_DEBUG })

@@ -45,7 +45,7 @@ async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
     assert.strictEqual(out, expectedOut)
   }
 
-  assert.strictEqual(proc.env.DD_INSTRUMENTATION_SOURCE, expectedSource,
+  assert.strictEqual(process.env.DD_INSTRUMENTATION_SOURCE, expectedSource,
       `Expected the process to have the DD_INSTRUMENTATION_SOURCE environment variable set to "${expectedSource}"`)
   return pid
 }

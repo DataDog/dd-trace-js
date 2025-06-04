@@ -320,9 +320,9 @@ const nameMapping = {
   'grpc.client.error.statuses': 'DD_GRPC_CLIENT_ERROR_STATUSES',
   'grpc.server.error.statuses': 'DD_GRPC_SERVER_ERROR_STATUSES',
   traceId128BitLoggingEnabled: 'DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED',
-  'instrumentationSource': 'instrumentation_source',
-  'injectionEnabled': 'DD_INJECTION_ENABLED',
-  'injectionForce': 'DD_INJECT_FORCE',
+  instrumentationSource: 'instrumentation_source',
+  injectionEnabled: 'ssi_injection_enabled',
+  injectionForce: 'ssi_forced_injection_enabled'
 }
 
 function updateConfig (changes, config) {
