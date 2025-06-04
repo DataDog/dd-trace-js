@@ -1,6 +1,7 @@
 'use strict'
 
 const { join, dirname } = require('path')
+const { normalize } = require('source-map/lib/util')
 const { loadSourceMapSync } = require('./source-maps')
 const session = require('./session')
 const log = require('../../log')
@@ -151,7 +152,13 @@ session.on('Debugger.scriptParsed', ({ params }) => {
           ...params,
           sourceUrl: params.url,
           url: new URL(join(dir, source), 'file:').href,
-          source
+          // The source url provided by V8 unfortunately doesn't always match the source url used internally in the
+          // `source-map` dependency. Both read the same source maps, but the `source-map` dependency iterates over all
+          // the `sources` and normalize them using an internal `normalize` function. If these two strings don't match,
+          // the `source-map` dependency will not be able to find the generated position. Below we use the same
+          // internal `normalize` function, to ensure compatibility.
+          // TODO: Consider swapping out the `source-map` dependency for something better so we don't have to do this.
+          source: normalize(source)
         })
       }
     } else {

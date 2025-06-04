@@ -261,9 +261,13 @@ function getSourceBranch () {
 
 function checkAndFetchBranch (branch, remoteName) {
   try {
-    // `git show-ref --verify --quiet refs/heads/${branch}` will exit 0 if the branch exists locally
+    // `git show-ref --verify --quiet refs/remotes/${remoteName}/${branch}` will exit 0 if the branch exists
     // Otherwise it will exit 1
-    cp.execFileSync('git', ['show-ref', '--verify', '--quiet', `refs/heads/${branch}`], { stdio: 'pipe' })
+    cp.execFileSync(
+      'git',
+      ['show-ref', '--verify', '--quiet', `refs/remotes/${remoteName}/${branch}`],
+      { stdio: 'pipe' }
+    )
     // branch exists locally, so we finish
   } catch {
     // branch does not exist locally, so we will check the remote
@@ -281,7 +285,7 @@ function checkAndFetchBranch (branch, remoteName) {
         // branch exists, so we'll fetch it
         cp.execFileSync(
           'git',
-          ['fetch', '--depth', '1', remoteName, `${branch}:${branch}`],
+          ['fetch', '--depth', '1', remoteName, branch],
           { stdio: 'pipe', timeout: 5000 }
         )
       }
@@ -295,7 +299,7 @@ function checkAndFetchBranch (branch, remoteName) {
 function getLocalBranches (remoteName) {
   const localBranches = sanitizedExec(
     'git',
-    ['for-each-ref', '--format=%(refname:short)', 'refs/heads', `refs/remotes/${remoteName}`],
+    ['for-each-ref', '--format=%(refname:short)', `refs/remotes/${remoteName}`],
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_local_branches' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_local_branches' } },
     { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_local_branches' } },
@@ -490,6 +494,20 @@ function getGitMetadata (ciMetadata) {
   return tags
 }
 
+function getGitInformationDiscrepancy () {
+  const gitRepositoryUrl = getRepositoryUrl()
+
+  const gitCommitSHA = sanitizedExec(
+    'git',
+    ['rev-parse', 'HEAD'],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_commit_sha' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_commit_sha' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_commit_sha' } }
+  )
+
+  return { gitRepositoryUrl, gitCommitSHA }
+}
+
 module.exports = {
   getGitMetadata,
   getLatestCommits,
@@ -500,6 +518,7 @@ module.exports = {
   isShallowRepository,
   unshallowRepository,
   isGitAvailable,
+  getGitInformationDiscrepancy,
   getGitDiff,
   getGitRemoteName,
   getSourceBranch,
