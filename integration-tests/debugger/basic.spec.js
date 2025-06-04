@@ -10,7 +10,7 @@ const { version } = require('../../package.json')
 
 describe('Dynamic Instrumentation', function () {
   describe('Default env', function () {
-    const t = setup()
+    const t = setup({ dependencies: ['fastify'] })
 
     it('base case: target app should work as expected if no test probe has been added', async function () {
       const response = await t.axios.get(t.breakpoint.url)
@@ -727,7 +727,10 @@ describe('Dynamic Instrumentation', function () {
   })
 
   describe('DD_TRACING_ENABLED=true, DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED=true', function () {
-    const t = setup({ env: { DD_TRACING_ENABLED: true, DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED: true } })
+    const t = setup({
+      env: { DD_TRACING_ENABLED: true, DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED: true },
+      dependencies: ['fastify']
+    })
 
     describe('input messages', function () {
       it(
@@ -738,7 +741,10 @@ describe('Dynamic Instrumentation', function () {
   })
 
   describe('DD_TRACING_ENABLED=true, DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED=false', function () {
-    const t = setup({ env: { DD_TRACING_ENABLED: true, DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED: false } })
+    const t = setup({
+      env: { DD_TRACING_ENABLED: true, DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED: false },
+      dependencies: ['fastify']
+    })
 
     describe('input messages', function () {
       it(
@@ -749,7 +755,10 @@ describe('Dynamic Instrumentation', function () {
   })
 
   describe('DD_TRACING_ENABLED=false', function () {
-    const t = setup({ env: { DD_TRACING_ENABLED: false } })
+    const t = setup({
+      env: { DD_TRACING_ENABLED: false },
+      dependencies: ['fastify']
+    })
 
     describe('input messages', function () {
       it(
