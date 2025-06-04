@@ -13,7 +13,9 @@ check_config_inversion_local_file:
 
 include:
   # See: https://gitlab.ddbuild.io/DataDog/apm-reliability/libdatadog-build
-  - remote: https://gitlab-templates.ddbuild.io/libdatadog/include-wip/anna/config-inversion-add-step/one-pipeline.yml
+  - project: DataDog/apm-reliability/libdatadog-build
+    ref: 710da75324e3898bb90e60411d6835b3bedb06d0
+    file: templates/one-pipeline.yml
   - local: ".gitlab/benchmarks.yml"
   - local: ".gitlab/macrobenchmarks.yml"
 

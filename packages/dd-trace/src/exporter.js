@@ -3,10 +3,10 @@
 const exporters = require('../../../ext/exporters')
 const fs = require('fs')
 const constants = require('./constants')
-const { getConfiguration } = require('../../dd-trace/src/config-helper')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
 module.exports = name => {
-  const inAWSLambda = getConfiguration('AWS_LAMBDA_FUNCTION_NAME') !== undefined
+  const inAWSLambda = getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined
   const usingLambdaExtension = inAWSLambda && fs.existsSync(constants.DATADOG_LAMBDA_EXTENSION_PATH)
 
   switch (name) {

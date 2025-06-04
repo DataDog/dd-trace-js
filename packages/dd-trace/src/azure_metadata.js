@@ -5,7 +5,7 @@
 
 const os = require('os')
 const { getIsAzureFunction } = require('./serverless')
-const { getConfiguration, getConfigurations } = require('../../dd-trace/src/config-helper')
+const { getEnvironmentVariable, getEnvironmentVariables } = require('../../dd-trace/src/config-helper')
 
 function extractSubscriptionID (ownerName) {
   if (ownerName !== undefined) {
@@ -48,7 +48,7 @@ function buildMetadata () {
     WEBSITE_OS,
     WEBSITE_RESOURCE_GROUP,
     WEBSITE_SITE_NAME
-  } = getConfigurations()
+  } = getEnvironmentVariables()
 
   const subscriptionID = extractSubscriptionID(WEBSITE_OWNER_NAME)
 
@@ -82,7 +82,7 @@ function getAzureAppMetadata () {
   // anyone using the Datadog APM Extensions (.NET, Java, or Node) for Windows Azure App Services
   // eslint-disable-next-line @stylistic/js/max-len
   // See: https://github.com/DataDog/datadog-aas-extension/blob/01f94b5c28b7fa7a9ab264ca28bd4e03be603900/node/src/applicationHost.xdt#L20-L21
-  return getConfiguration('DD_AZURE_APP_SERVICES') !== undefined ? buildMetadata() : undefined
+  return getEnvironmentVariable('DD_AZURE_APP_SERVICES') !== undefined ? buildMetadata() : undefined
 }
 
 function getAzureFunctionMetadata () {

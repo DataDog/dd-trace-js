@@ -14,7 +14,7 @@ const {
 
 const { normalizeRef } = require('./ci')
 const { filterSensitiveInfoFromRepository } = require('./url')
-const { getConfigurations } = require('../../config-helper')
+const { getEnvironmentVariables } = require('../../config-helper')
 
 function removeEmptyValues (tags) {
   return Object.keys(tags).reduce((filteredTags, tag) => {
@@ -54,7 +54,7 @@ function getUserProviderGitMetadata () {
     DD_GIT_COMMIT_AUTHOR_NAME,
     DD_GIT_COMMIT_AUTHOR_EMAIL,
     DD_GIT_COMMIT_AUTHOR_DATE
-  } = getConfigurations()
+  } = getEnvironmentVariables()
 
   const branch = normalizeRef(DD_GIT_BRANCH)
   let tag = normalizeRef(DD_GIT_TAG)

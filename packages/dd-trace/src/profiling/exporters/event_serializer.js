@@ -1,10 +1,10 @@
 const os = require('os')
 const perf = require('perf_hooks').performance
 const version = require('../../../../../package.json').version
-const { getConfiguration } = require('../../config-helper')
+const { getEnvironmentVariable } = require('../../config-helper')
 
 const libuvThreadPoolSize = (() => {
-  const ss = getConfiguration('UV_THREADPOOL_SIZE')
+  const ss = getEnvironmentVariable('UV_THREADPOOL_SIZE')
   if (ss === undefined) {
     // Backend will apply the default size based on Node version.
     return undefined

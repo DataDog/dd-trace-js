@@ -4,18 +4,18 @@ const { channel } = require('dc-polyfill')
 const { isFalse } = require('./util')
 const plugins = require('./plugins')
 const log = require('./log')
-const { getConfiguration } = require('../../dd-trace/src/config-helper')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
 const loadChannel = channel('dd-trace:instrumentation:load')
 
 // instrument everything that needs Plugin System V2 instrumentation
 require('../../datadog-instrumentations')
-if (getConfiguration('AWS_LAMBDA_FUNCTION_NAME') !== undefined) {
+if (getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined) {
   // instrument lambda environment
   require('./lambda')
 }
 
-const DD_TRACE_DISABLED_PLUGINS = getConfiguration('DD_TRACE_DISABLED_PLUGINS')
+const DD_TRACE_DISABLED_PLUGINS = getEnvironmentVariable('DD_TRACE_DISABLED_PLUGINS')
 
 const disabledPlugins = new Set(
   DD_TRACE_DISABLED_PLUGINS && DD_TRACE_DISABLED_PLUGINS.split(',').map(plugin => plugin.trim())
@@ -33,7 +33,7 @@ function maybeEnable (Plugin) {
   if (!Plugin || typeof Plugin !== 'function') return
   if (!pluginClasses[Plugin.id]) {
     const envName = `DD_TRACE_${Plugin.id.toUpperCase()}_ENABLED`
-    const enabled = getConfiguration(envName.replace(/[^a-z0-9_]/ig, '_'))
+    const enabled = getEnvironmentVariable(envName.replace(/[^a-z0-9_]/ig, '_'))
 
     // TODO: remove the need to load the plugin class in order to disable the plugin
     if (isFalse(enabled) || disabledPlugins.has(Plugin.id)) {

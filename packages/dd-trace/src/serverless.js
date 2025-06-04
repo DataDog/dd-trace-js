@@ -1,7 +1,7 @@
 'use strict'
 
 const log = require('./log')
-const { getConfiguration } = require('./config-helper')
+const { getEnvironmentVariable } = require('./config-helper')
 
 function maybeStartServerlessMiniAgent (config) {
   if (process.platform !== 'win32' && process.platform !== 'linux') {
@@ -29,8 +29,8 @@ function maybeStartServerlessMiniAgent (config) {
 }
 
 function getRustBinaryPath (config) {
-  if (getConfiguration('DD_MINI_AGENT_PATH') !== undefined) {
-    return getConfiguration('DD_MINI_AGENT_PATH')
+  if (getEnvironmentVariable('DD_MINI_AGENT_PATH') !== undefined) {
+    return getEnvironmentVariable('DD_MINI_AGENT_PATH')
   }
 
   const rustBinaryPathRoot = config.isGCPFunction ? '/workspace' : '/home/site/wwwroot'
@@ -49,25 +49,25 @@ datadog-serverless-trace-mini-agent${rustBinaryExtension}`
 
 function getIsGCPFunction () {
   const isDeprecatedGCPFunction =
-    getConfiguration('FUNCTION_NAME') !== undefined &&
-    getConfiguration('GCP_PROJECT') !== undefined
+    getEnvironmentVariable('FUNCTION_NAME') !== undefined &&
+    getEnvironmentVariable('GCP_PROJECT') !== undefined
   const isNewerGCPFunction =
-    getConfiguration('K_SERVICE') !== undefined &&
-    getConfiguration('FUNCTION_TARGET') !== undefined
+    getEnvironmentVariable('K_SERVICE') !== undefined &&
+    getEnvironmentVariable('FUNCTION_TARGET') !== undefined
 
   return isDeprecatedGCPFunction || isNewerGCPFunction
 }
 
 function getIsAzureFunction () {
   const isAzureFunction =
-    getConfiguration('FUNCTIONS_EXTENSION_VERSION') !== undefined &&
-    getConfiguration('FUNCTIONS_WORKER_RUNTIME') !== undefined
+    getEnvironmentVariable('FUNCTIONS_EXTENSION_VERSION') !== undefined &&
+    getEnvironmentVariable('FUNCTIONS_WORKER_RUNTIME') !== undefined
 
   return isAzureFunction
 }
 
 function isInServerlessEnvironment () {
-  const inAWSLambda = getConfiguration('AWS_LAMBDA_FUNCTION_NAME') !== undefined
+  const inAWSLambda = getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined
   const isGCPFunction = getIsGCPFunction()
   const isAzureFunction = getIsAzureFunction()
 

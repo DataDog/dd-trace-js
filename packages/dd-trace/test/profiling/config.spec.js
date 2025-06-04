@@ -244,14 +244,6 @@ describe('config', () => {
 
     const config = new Config(options)
 
-    // expect(warnings.length).to.equal(2)
-    // expect(warnings[0]).to.equal(
-    //   'DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED is deprecated. ' +
-    //   'Use DD_PROFILING_ENDPOINT_COLLECTION_ENABLED instead.')
-    // expect(warnings[1]).to.equal(
-    //   'DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED is deprecated. ' +
-    //   'Use DD_PROFILING_CODEHOTSPOTS_ENABLED instead.')
-
     expect(config.profilers).to.be.an('array')
     expect(config.profilers.length).to.equal(2)
     expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)

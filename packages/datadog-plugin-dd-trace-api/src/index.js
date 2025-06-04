@@ -3,13 +3,13 @@
 const Plugin = require('../../dd-trace/src/plugins/plugin')
 const telemetryMetrics = require('../../dd-trace/src/telemetry/metrics')
 const apiMetrics = telemetryMetrics.manager.namespace('tracers')
-const { getConfiguration } = require('../../dd-trace/src/config-helper')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
 // api ==> here
 const objectMap = new WeakMap()
 
 const injectionEnabledTag =
-  `injection_enabled:${getConfiguration('DD_INJECTION_ENABLED') ? 'yes' : 'no'}`
+  `injection_enabled:${getEnvironmentVariable('DD_INJECTION_ENABLED') ? 'yes' : 'no'}`
 
 module.exports = class DdTraceApiPlugin extends Plugin {
   static get id () {

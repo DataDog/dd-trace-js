@@ -1,6 +1,6 @@
 const { addHook, channel } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
-const configHelper = require('../../dd-trace/src/config-helper')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
 const codeCoverageWrapCh = channel('ci:nyc:wrap')
 
@@ -12,7 +12,7 @@ addHook({
   shimmer.wrap(nycPackage.prototype, 'wrap', wrap => function () {
     // Only relevant if the config `all` is set to true
     try {
-      if (JSON.parse(configHelper.getConfiguration('NYC_CONFIG')).all) {
+      if (JSON.parse(getEnvironmentVariable('NYC_CONFIG')).all) {
         codeCoverageWrapCh.publish(this)
       }
     } catch (e) {

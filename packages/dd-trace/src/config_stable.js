@@ -1,6 +1,6 @@
 const os = require('os')
 const fs = require('fs')
-const { getConfiguration } = require('../../dd-trace/src/config-helper')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
 class StableConfig {
   constructor () {
@@ -89,11 +89,11 @@ class StableConfig {
     }
 
     // Allow overriding the paths for testing
-    if (getConfiguration('DD_TEST_LOCAL_CONFIG_PATH') !== undefined) {
-      localConfigPath = getConfiguration('DD_TEST_LOCAL_CONFIG_PATH')
+    if (getEnvironmentVariable('DD_TEST_LOCAL_CONFIG_PATH') !== undefined) {
+      localConfigPath = getEnvironmentVariable('DD_TEST_LOCAL_CONFIG_PATH')
     }
-    if (getConfiguration('DD_TEST_FLEET_CONFIG_PATH') !== undefined) {
-      fleetConfigPath = getConfiguration('DD_TEST_FLEET_CONFIG_PATH')
+    if (getEnvironmentVariable('DD_TEST_FLEET_CONFIG_PATH') !== undefined) {
+      fleetConfigPath = getEnvironmentVariable('DD_TEST_FLEET_CONFIG_PATH')
     }
 
     return { localConfigPath, fleetConfigPath }

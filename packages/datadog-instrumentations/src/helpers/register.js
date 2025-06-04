@@ -9,9 +9,9 @@ const log = require('../../../dd-trace/src/log')
 const checkRequireCache = require('./check-require-cache')
 const telemetry = require('../../../dd-trace/src/guardrails/telemetry')
 const { isInServerlessEnvironment } = require('../../../dd-trace/src/serverless')
-const { getConfigurations } = require('../../../dd-trace/src/config-helper')
+const { getEnvironmentVariables } = require('../../../dd-trace/src/config-helper')
 
-const envs = getConfigurations()
+const envs = getEnvironmentVariables()
 
 const {
   DD_TRACE_DISABLED_INSTRUMENTATIONS = '',

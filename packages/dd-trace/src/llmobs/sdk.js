@@ -14,7 +14,7 @@ const Span = require('../opentracing/span')
 
 const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
-const { getConfiguration } = require('../config-helper')
+const { getEnvironmentVariable } = require('../config-helper')
 const telemetry = require('./telemetry')
 
 const LLMObsTagger = require('./tagger')
@@ -48,7 +48,7 @@ class LLMObs extends NoopLLMObs {
 
     const { mlApp, agentlessEnabled } = options
 
-    const DD_LLMOBS_ENABLED = getConfiguration('DD_LLMOBS_ENABLED')
+    const DD_LLMOBS_ENABLED = getEnvironmentVariable('DD_LLMOBS_ENABLED')
 
     const llmobsConfig = {
       mlApp,
