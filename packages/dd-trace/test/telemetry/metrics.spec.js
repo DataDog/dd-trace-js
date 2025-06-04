@@ -480,12 +480,11 @@ describe('metrics', () => {
       const metric = ns.gauge('name', {
         foo: 'bar',
         baz: 'buz'
-      }, 10)
+      })
 
       expect(metric.type).to.equal('gauge')
       expect(metric).to.deep.equal({
         namespace: 'tracers',
-        interval: 10,
         metric: 'name',
         tags: [
           'foo:bar',

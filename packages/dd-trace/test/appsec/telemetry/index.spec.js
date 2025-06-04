@@ -58,7 +58,6 @@ describe('appsec enabled metric', () => {
 
       assert.equal(metrics.series.length, 1)
       assert.equal(metrics.series[0].metric, 'enabled')
-      assert.equal(metrics.series[0].interval, 10)
       assert.equal(metrics.series[0].type, 'gauge')
       assert.equal(metrics.series[0].points.length, 1)
       assert.deepEqual(metrics.series[0].tags, ['origin:remote_config'])
@@ -75,7 +74,6 @@ describe('appsec enabled metric', () => {
 
       assert.equal(metrics.series.length, 1)
       assert.equal(metrics.series[0].metric, 'enabled')
-      assert.equal(metrics.series[0].interval, 10)
       assert.equal(metrics.series[0].type, 'gauge')
       assert.equal(metrics.series[0].points.length, 1)
       assert.deepEqual(metrics.series[0].tags, ['origin:env_var'])
@@ -91,7 +89,6 @@ describe('appsec enabled metric', () => {
 
       assert.equal(metrics.series.length, 1)
       assert.equal(metrics.series[0].metric, 'enabled')
-      assert.equal(metrics.series[0].interval, 10)
       assert.equal(metrics.series[0].type, 'gauge')
       assert.equal(metrics.series[0].points.length, 1)
       assert.deepEqual(metrics.series[0].tags, ['origin:code'])
@@ -117,7 +114,6 @@ describe('appsec enabled metric', () => {
 
       assert.equal(metrics.series.length, 1)
       assert.equal(metrics.series[0].metric, 'enabled')
-      assert.equal(metrics.series[0].interval, 10)
       assert.equal(metrics.series[0].type, 'gauge')
       assert.equal(metrics.series[0].points.length, 3)
       assert.deepEqual(metrics.series[0].tags, ['origin:remote_config'])

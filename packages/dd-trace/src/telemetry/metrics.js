@@ -112,11 +112,6 @@ class DistributionMetric extends Metric {
 }
 
 class GaugeMetric extends Metric {
-  constructor (namespace, metric, common, tags, interval) {
-    super(namespace, metric, common, tags)
-    this.interval = interval
-  }
-
   get type () {
     return 'gauge'
   }
@@ -224,8 +219,8 @@ class Namespace {
     return getMetric(this.metrics, 'count', name, tags)
   }
 
-  gauge (name, tags, interval) {
-    return getMetric(this.metrics, 'gauge', name, tags, interval)
+  gauge (name, tags) {
+    return getMetric(this.metrics, 'gauge', name, tags)
   }
 
   rate (name, interval, tags) {

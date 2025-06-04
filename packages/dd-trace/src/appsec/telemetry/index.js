@@ -34,7 +34,7 @@ function enable (config) {
       origin = config.getOrigin('appsec.enabled')
     }
 
-    const gauge = appsecMetrics.gauge('enabled', { origin }, telemetryConfig.heartbeatInterval / 1000)
+    const gauge = appsecMetrics.gauge('enabled', { origin })
     gauge.track()
 
     interval = setInterval(() => {
