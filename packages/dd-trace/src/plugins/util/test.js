@@ -9,6 +9,7 @@ const ignore = require('ignore')
 
 const {
   getGitMetadata,
+  getGitInformationDiscrepancy,
   getGitDiff,
   getGitRemoteName,
   getSourceBranch,
@@ -33,6 +34,11 @@ const {
   CI_JOB_NAME
 } = require('./tags')
 const id = require('../../id')
+const {
+  incrementCountMetric,
+  TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY,
+  TELEMETRY_GIT_SHA_MATCH
+} = require('../../ci-visibility/telemetry')
 
 const { SPAN_TYPE, RESOURCE_NAME, SAMPLING_PRIORITY } = require('../../../../../ext/tags')
 const { SAMPLING_RULE_DECISION } = require('../../constants')
@@ -268,6 +274,7 @@ module.exports = {
   TEST_MANAGEMENT_ENABLED,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   getLibraryCapabilitiesTags,
+  checkShaDiscrepancies,
   getPullRequestDiff,
   getPullRequestBaseBranch,
   getModifiedTestsFromDiff,
@@ -311,6 +318,101 @@ function removeInvalidMetadata (metadata) {
   }, {})
 }
 
+function checkShaDiscrepancies (ciMetadata, userProvidedGitMetadata) {
+  const {
+    [GIT_COMMIT_SHA]: ciCommitSHA,
+    [GIT_REPOSITORY_URL]: ciRepositoryUrl
+  } = ciMetadata
+  const {
+    [GIT_COMMIT_SHA]: userProvidedCommitSHA,
+    [GIT_REPOSITORY_URL]: userProvidedRepositoryUrl
+  } = userProvidedGitMetadata
+  const { gitRepositoryUrl, gitCommitSHA } = getGitInformationDiscrepancy()
+
+  const checkDiscrepancyAndSendMetrics = (
+    valueExpected,
+    valueDiscrepant,
+    discrepancyType,
+    expectedProvider,
+    discrepantProvider
+  ) => {
+    if (valueExpected && valueDiscrepant && valueExpected !== valueDiscrepant) {
+      incrementCountMetric(
+        TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY,
+        {
+          type: discrepancyType,
+          expected_provider: expectedProvider,
+          discrepant_provider: discrepantProvider
+        }
+      )
+      return true
+    }
+    return false
+  }
+
+  const checkConfigs = [
+    // User provided vs Git metadata
+    {
+      v1: userProvidedRepositoryUrl,
+      v2: gitRepositoryUrl,
+      type: 'repository_discrepancy',
+      expected: 'user_supplied',
+      discrepant: 'git_client'
+    },
+    {
+      v1: userProvidedCommitSHA,
+      v2: gitCommitSHA,
+      type: 'commit_discrepancy',
+      expected: 'user_supplied',
+      discrepant: 'git_client'
+    },
+    // User provided vs CI metadata
+    {
+      v1: userProvidedRepositoryUrl,
+      v2: ciRepositoryUrl,
+      type: 'repository_discrepancy',
+      expected: 'user_supplied',
+      discrepant: 'ci_provider'
+    },
+    {
+      v1: userProvidedCommitSHA,
+      v2: ciCommitSHA,
+      type: 'commit_discrepancy',
+      expected: 'user_supplied',
+      discrepant: 'ci_provider'
+    },
+    // CI metadata vs Git metadata
+    {
+      v1: ciRepositoryUrl,
+      v2: gitRepositoryUrl,
+      type: 'repository_discrepancy',
+      expected: 'ci_provider',
+      discrepant: 'git_client'
+    },
+    {
+      v1: ciCommitSHA,
+      v2: gitCommitSHA,
+      type: 'commit_discrepancy',
+      expected: 'ci_provider',
+      discrepant: 'git_client'
+    }
+  ]
+
+  let gitCommitShaMatch = true
+  for (const checkConfig of checkConfigs) {
+    const { v1, v2, type, expected, discrepant } = checkConfig
+    const discrepancy = checkDiscrepancyAndSendMetrics(v1, v2, type, expected, discrepant)
+    if (discrepancy) {
+      gitCommitShaMatch = false
+    }
+  }
+
+  incrementCountMetric(
+    TELEMETRY_GIT_SHA_MATCH,
+    { match: gitCommitShaMatch }
+  )
+}
+
 function getTestEnvironmentMetadata (testFramework, config) {
   // TODO: eventually these will come from the tracer (generally available)
   const ciMetadata = getCIMetadata()
@@ -337,6 +439,8 @@ function getTestEnvironmentMetadata (testFramework, config) {
   })
 
   const userProvidedGitMetadata = getUserProviderGitMetadata()
+
+  checkShaDiscrepancies(ciMetadata, userProvidedGitMetadata)
 
   const runtimeAndOSMetadata = getRuntimeAndOSMetadata()
 

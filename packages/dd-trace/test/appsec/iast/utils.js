@@ -21,6 +21,13 @@ function testInRequest (app, tests) {
   let appListener
   const config = {}
 
+  before(() => {
+    return agent.load('http', undefined, { flushInterval: 1 })
+      .then(() => {
+        http = require('http')
+      })
+  })
+
   beforeEach(() => {
     listener = (req, res) => {
       const appResult = app && app(req, res)
@@ -36,13 +43,6 @@ function testInRequest (app, tests) {
     }
   })
 
-  beforeEach(() => {
-    return agent.load('http', undefined, { flushInterval: 1 })
-      .then(() => {
-        http = require('http')
-      })
-  })
-
   beforeEach(done => {
     const server = new http.Server(listener)
     appListener = server
@@ -54,6 +54,9 @@ function testInRequest (app, tests) {
 
   afterEach(() => {
     appListener && appListener.close()
+  })
+
+  after(() => {
     return agent.close({ ritmReset: false })
   })
 
