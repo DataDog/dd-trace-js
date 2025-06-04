@@ -1,5 +1,7 @@
 'use strict'
 
+/* eslint-disable eslint-rules/eslint-process-env */
+
 const { deprecate } = require('util')
 const { supportedConfigurations, aliases, deprecations } = require('./supported-configurations.json')
 

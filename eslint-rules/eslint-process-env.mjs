@@ -7,16 +7,6 @@ export default {
     schema: []
   },
   create (context) {
-    const allowedFile = /[/\\]packages[/\\]dd-trace[/\\]src[/\\](config-helper|guardrails[/\\](index|log|telemetry))\.js$/
-
-    const filename = context.getFilename()
-    const isAllowedFile = allowedFile.test(filename)
-
-    // If this is an allowed file, return empty handlers (no linting needed)
-    if (isAllowedFile) {
-      return {}
-    }
-
     const isProcessEnvObject = (node) => {
       return node?.type === 'MemberExpression' &&
              node.object?.name === 'process' &&
