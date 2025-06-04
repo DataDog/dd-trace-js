@@ -21,11 +21,10 @@ class AzureFunctionsPlugin extends TracingPlugin {
   static get type () { return 'serverless' }
 
   static get prefix () { return 'tracing:datadog:azure:functions:invoke' }
-
   bindStart (ctx) {
-    const { functionName, methodName } = ctx
+    const { functionName, methodName, httpRequest } = ctx
     const store = storage('legacy').getStore()
-
+    const childof = this._tracer.extract('http', httpRequest.headers)
     const span = this.startSpan(this.operationName(), {
       service: this.serviceName(),
       type: 'serverless',
