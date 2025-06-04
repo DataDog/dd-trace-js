@@ -319,7 +319,7 @@ const nameMapping = {
   clientIpHeader: 'DD_TRACE_CLIENT_IP_HEADER',
   'grpc.client.error.statuses': 'DD_GRPC_CLIENT_ERROR_STATUSES',
   'grpc.server.error.statuses': 'DD_GRPC_SERVER_ERROR_STATUSES',
-  traceId128BitLoggingEnabled: 'DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED'
+  traceId128BitLoggingEnabled: 'DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED',
   'instrumentationSource': 'instrumentation_source',
   'injectionEnabled': 'DD_INJECTION_ENABLED',
   'injectionForce': 'DD_INJECT_FORCE',
