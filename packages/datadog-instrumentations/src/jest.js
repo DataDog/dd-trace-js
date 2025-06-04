@@ -529,6 +529,18 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         })
       }
     }
+
+    async teardown () {
+      const jestVersionSplitted = jestVersion.split('-')[0] // TODO: REMOVE THIS BEFORE MERGING IS ONLY FOR TESTING
+      if (satisfies(jestVersionSplitted, '>=30.0.0')) {
+        for (const [key] of this._globalProxy.propertyToValue) {
+          if (typeof key === 'string' && key.startsWith('_dd')) {
+            this._globalProxy.propertyToValue.delete(key)
+          }
+        }
+      }
+      return super.teardown()
+    }
   }
 }
 
@@ -649,6 +661,7 @@ function cliWrapper (cli, jestVersion) {
       searchSource => searchSourceWrapper(searchSource, jestVersion),
       { replaceGetter: true }
     )
+    // TODO: THIS IS NEVER EXECUTED MUST BE REVIEWED
     cliWrapper = shimmer.wrap(
       cliWrapper,
       'createTestScheduler',
@@ -1210,6 +1223,79 @@ addHook({
   return runtimePackage
 })
 
+const sendWrapper = (send) => function (request) {
+  if (!isKnownTestsEnabled && !isTestManagementTestsEnabled) {
+    return send.apply(this, arguments)
+  }
+  const [type] = request
+  
+  // https://github.com/jestjs/jest/blob/1d682f21c7a35da4d3ab3a1436a357b980ebd0fa/packages/jest-worker/src/workers/ChildProcessWorker.ts#L424
+  if (type === CHILD_MESSAGE_CALL) {
+    // This is the message that the main process sends to the worker to run a test suite (=test file).
+    // In here we modify the config.testEnvironmentOptions to include the known tests for the suite.
+    // This way the suite only knows about the tests that are part of it.
+    const args = request.at(-1)
+    if (args.length > 1) {
+      return send.apply(this, arguments)
+    }
+    if (!args[0]?.config) {
+      return send.apply(this, arguments)
+    }
+    const [{ globalConfig, config, path: testSuiteAbsolutePath }] = args
+    const testSuite = getTestSuitePath(testSuiteAbsolutePath, globalConfig.rootDir || process.cwd())
+    const suiteKnownTests = knownTests?.jest?.[testSuite] || []
+
+    const suiteTestManagementTests = testManagementTests?.jest?.suites?.[testSuite]?.tests || {}
+
+    args[0].config = {
+      ...config,
+      testEnvironmentOptions: {
+        ...config.testEnvironmentOptions,
+        _ddKnownTests: suiteKnownTests,
+        _ddTestManagementTests: suiteTestManagementTests
+      }
+    }
+  }
+
+  return send.apply(this, arguments)
+}
+
+const onMessageWrapper = _onMessage => function () {
+  const [code, data] = arguments[0]
+  if (code === JEST_WORKER_TRACE_PAYLOAD_CODE) { // datadog trace payload
+    sessionAsyncResource.runInAsyncScope(() => {
+      workerReportTraceCh.publish(data)
+    })
+    return
+  }
+  if (code === JEST_WORKER_COVERAGE_PAYLOAD_CODE) { // datadog coverage payload
+    sessionAsyncResource.runInAsyncScope(() => {
+      workerReportCoverageCh.publish(data)
+    })
+    return
+  }
+  if (code === JEST_WORKER_LOGS_PAYLOAD_CODE) { // datadog logs payload
+    sessionAsyncResource.runInAsyncScope(() => {
+      workerReportLogsCh.publish(data)
+    })
+    return
+  }
+  return _onMessage.apply(this, arguments)
+}
+
+const enqueueWrapper =  enqueue => function (...args) {
+  const originalOnStart = args[0].onStart
+  args[0].onStart = (worker) => {
+    if (worker) {
+      worker._child.send = sendWrapper(worker._child.send)
+      worker._onMessage = onMessageWrapper(worker._onMessage)
+      worker._child.on('message', worker._onMessage.bind(worker))
+    }
+    originalOnStart(worker)
+  }
+  return enqueue.apply(this, args)
+}
+
 /*
 * This hook does three things:
 * - Pass known tests to the workers.
@@ -1222,63 +1308,16 @@ addHook({
   file: 'build/workers/ChildProcessWorker.js'
 }, (childProcessWorker) => {
   const ChildProcessWorker = childProcessWorker.default
-  shimmer.wrap(ChildProcessWorker.prototype, 'send', send => function (request) {
-    if (!isKnownTestsEnabled && !isTestManagementTestsEnabled) {
-      return send.apply(this, arguments)
-    }
-    const [type] = request
-
-    // https://github.com/jestjs/jest/blob/1d682f21c7a35da4d3ab3a1436a357b980ebd0fa/packages/jest-worker/src/workers/ChildProcessWorker.ts#L424
-    if (type === CHILD_MESSAGE_CALL) {
-      // This is the message that the main process sends to the worker to run a test suite (=test file).
-      // In here we modify the config.testEnvironmentOptions to include the known tests for the suite.
-      // This way the suite only knows about the tests that are part of it.
-      const args = request.at(-1)
-      if (args.length > 1) {
-        return send.apply(this, arguments)
-      }
-      if (!args[0]?.config) {
-        return send.apply(this, arguments)
-      }
-      const [{ globalConfig, config, path: testSuiteAbsolutePath }] = args
-      const testSuite = getTestSuitePath(testSuiteAbsolutePath, globalConfig.rootDir || process.cwd())
-      const suiteKnownTests = knownTests?.jest?.[testSuite] || []
-
-      const suiteTestManagementTests = testManagementTests?.jest?.suites?.[testSuite]?.tests || {}
-
-      args[0].config = {
-        ...config,
-        testEnvironmentOptions: {
-          ...config.testEnvironmentOptions,
-          _ddKnownTests: suiteKnownTests,
-          _ddTestManagementTests: suiteTestManagementTests
-        }
-      }
-    }
-
-    return send.apply(this, arguments)
-  })
-  shimmer.wrap(ChildProcessWorker.prototype, '_onMessage', _onMessage => function () {
-    const [code, data] = arguments[0]
-    if (code === JEST_WORKER_TRACE_PAYLOAD_CODE) { // datadog trace payload
-      sessionAsyncResource.runInAsyncScope(() => {
-        workerReportTraceCh.publish(data)
-      })
-      return
-    }
-    if (code === JEST_WORKER_COVERAGE_PAYLOAD_CODE) { // datadog coverage payload
-      sessionAsyncResource.runInAsyncScope(() => {
-        workerReportCoverageCh.publish(data)
-      })
-      return
-    }
-    if (code === JEST_WORKER_LOGS_PAYLOAD_CODE) { // datadog logs payload
-      sessionAsyncResource.runInAsyncScope(() => {
-        workerReportLogsCh.publish(data)
-      })
-      return
-    }
-    return _onMessage.apply(this, arguments)
-  })
+  shimmer.wrap(ChildProcessWorker.prototype, 'send', sendWrapper)
+  shimmer.wrap(ChildProcessWorker.prototype, '_onMessage', onMessageWrapper)
   return childProcessWorker
+})
+
+addHook({
+  name: 'jest-worker',
+  versions: ['>=30.0.0'],
+}, (jestWorkerPackage) => {
+  shimmer.wrap(jestWorkerPackage.FifoQueue.prototype, 'enqueue', enqueueWrapper)
+  shimmer.wrap(jestWorkerPackage.PriorityQueue.prototype, 'enqueue', enqueueWrapper)
+  return jestWorkerPackage
 })
