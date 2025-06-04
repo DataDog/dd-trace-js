@@ -45,7 +45,7 @@ describe('Plugin', () => {
         }
 
         await stopMockServer()
-        return agent.close({ ritmReset: false, wipe: true })
+        return agent.close({ ritmReset: false })
       })
 
       beforeEach(async () => {

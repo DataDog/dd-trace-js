@@ -26,6 +26,10 @@ class OutboundPlugin extends TracingPlugin {
     })
   }
 
+  bindFinish (ctx) {
+    return ctx.parentStore
+  }
+
   startSpan (...args) {
     const span = super.startSpan(...args)
     if (
@@ -84,10 +88,6 @@ class OutboundPlugin extends TracingPlugin {
       }
     }
     return peerData
-  }
-
-  bindFinish (ctx) {
-    return ctx.parentStore
   }
 
   finish (ctx) {

@@ -206,10 +206,10 @@
     "@babel/helper-string-parser" "^7.27.1"
     "@babel/helper-validator-identifier" "^7.27.1"
 
-"@datadog/libdatadog@^0.5.1":
-  version "0.5.1"
-  resolved "https://registry.yarnpkg.com/@datadog/libdatadog/-/libdatadog-0.5.1.tgz#fe5c101c457998b74cb66f555f63197b34cad4ba"
-  integrity sha512-KsdOxTUmtjoygaZInSS5U0+KnqoxPKGpcBjGgOHR9NDKfXzmbpy5AmoaPL7JxmMxQzwknpxSi7qzBOSB3yMoJg==
+"@datadog/libdatadog@^0.6.0":
+  version "0.6.0"
+  resolved "https://registry.yarnpkg.com/@datadog/libdatadog/-/libdatadog-0.6.0.tgz#299a717ca18d1ea643ecf5880095ed864ffa32a8"
+  integrity sha512-Ldu+U59LUnejtd7ceXMKJCAFZeYpNdTEEXr8PISY9HFXMa4DOwepcWMaJAAqCPU7LINJeivVwvSD1Pm14VZy7w==
 
 "@datadog/native-appsec@8.5.2":
   version "8.5.2"
