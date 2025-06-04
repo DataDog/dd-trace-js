@@ -895,7 +895,7 @@ class Config {
     this._setBoolean(env, 'iast.stackTrace.enabled', DD_IAST_STACK_TRACE_ENABLED)
     this._setArray(env, 'injectionEnabled', DD_INJECTION_ENABLED)
     this._setString(env, 'instrumentationSource', DD_INSTRUMENTATION_SOURCE)
-    this._setString(defaults, 'injectionForce', DD_INJECT_FORCE)
+    this._setString(env, 'injectionForce', DD_INJECT_FORCE)
     this._setBoolean(env, 'isAzureFunction', getIsAzureFunction())
     this._setBoolean(env, 'isGCPFunction', getIsGCPFunction())
     this._setValue(env, 'langchain.spanCharLimit', maybeInt(DD_LANGCHAIN_SPAN_CHAR_LIMIT))
