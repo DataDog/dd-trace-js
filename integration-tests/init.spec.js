@@ -66,7 +66,7 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
         it('should initialize the tracer', () => doTest('init/trace.js', 'true\n', telemetryGood))
         it('should initialize instrumentation', () => doTest('init/instrument.js', 'true\n', telemetryGood))
         it(`should ${esmWorks ? '' : 'not '}initialize ESM instrumentation`, () =>
-          doTest('init/instrument.mjs', `${esmWorks}\n`, []))
+          doTest('init/instrument.mjs', `${esmWorks}\n`, telemetryGood))
       })
     })
   })

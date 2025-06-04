@@ -66,7 +66,7 @@ false
       useSandbox(['fastify'])
       useEnv({ DD_TRACE_DEBUG })
       it('should instrument the package', () =>
-        runTest('Application instrumentation bootstrapping complete\ntrue\n', 'ssi'))
+        runTest('Application instrumentation bootstrapping complete\ntrue\n', [], 'ssi'))
     })
   })
 
