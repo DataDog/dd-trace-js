@@ -39,9 +39,10 @@ describe('package guardrails', () => {
     })
     context('with logging enabled', () => {
       useEnv({ DD_TRACE_DEBUG })
-      it('should not instrument the package', () =>
-        runTest(`Application instrumentation bootstrapping complete\n
-          Found incompatible integration version: bluebird@1.0.0\nfalse\n`, [], 'ssi'))
+      runTest(`Application instrumentation bootstrapping complete
+Found incompatible integration version: bluebird@1.0.0
+false
+`)
     })
   })
 
