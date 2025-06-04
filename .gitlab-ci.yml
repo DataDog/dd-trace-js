@@ -15,6 +15,7 @@ config_inversion_update_central:
   extends: .config_inversion_update_central
   variables:
     LOCAL_REPO_NAME: "dd-trace-js"
+    LOCAL_JSON_PATH: "packages/dd-trace/src/supported-configurations.json"
 
 include:
   # See: https://gitlab.ddbuild.io/DataDog/apm-reliability/libdatadog-build
