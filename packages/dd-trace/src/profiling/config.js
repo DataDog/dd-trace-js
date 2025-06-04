@@ -15,7 +15,6 @@ const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
 const { tagger } = require('./tagger')
 const { isFalse, isTrue } = require('../util')
 const { getAzureTagsFromMetadata, getAzureAppMetadata } = require('../azure_metadata')
-const satisfies = require('semifies')
 
 class Config {
   constructor (options = {}) {
@@ -198,10 +197,6 @@ class Config {
     let [uploadCompression, level0] = uploadCompression0.split('-')
     if (!['on', 'off', 'gzip', 'zstd'].includes(uploadCompression)) {
       logger.warn(`Invalid profile upload compression method "${uploadCompression0}". Will use "on".`)
-      uploadCompression = 'on'
-    } else if (uploadCompression === 'zstd' && !satisfies(process.versions.node, '>=23.8.0')) {
-      logger.warn(
-        'Profile upload compression method "zstd" is only supported on Node.js 23.8.0 or above. Will use "on".')
       uploadCompression = 'on'
     }
     let level = level0 ? Number.parseInt(level0, 10) : undefined
