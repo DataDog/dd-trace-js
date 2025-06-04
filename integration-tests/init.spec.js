@@ -47,7 +47,7 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
 
         it('should not initialize the tracer', () => doTest('init/trace.js', 'false\n', []))
         it('should not initialize instrumentation', () => doTest('init/instrument.js', 'false\n', []))
-        it('should not initialize ESM instrumentation', () => doTest('init/instrument.mjs', 'false', []))
+        it('should not initialize ESM instrumentation', () => doTest('init/instrument.mjs', 'false\n', []))
       })
     })
     context('when dd-trace in the app dir', () => {
@@ -66,7 +66,7 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
         it('should initialize the tracer', () => doTest('init/trace.js', 'true\n', telemetryGood))
         it('should initialize instrumentation', () => doTest('init/instrument.js', 'true\n', telemetryGood))
         it(`should ${esmWorks ? '' : 'not '}initialize ESM instrumentation`, () =>
-          doTest('init/instrument.mjs', esmWorks, `${esmWorks}\n`))
+          doTest('init/instrument.mjs', esmWorks, `${esmWorks}\n`, []))
       })
     })
   })
@@ -127,7 +127,7 @@ true
           useEnv({ DD_INJECTION_ENABLED })
 
           context('without debug', () => {
-            it('should initialize the tracer', () => doTest('true\n', telemetryGood, 'ssi'))
+            it('should initialize the tracer', () => doTest('true\n', telemetryGood))
             it('should initialize the tracer, if DD_INJECT_FORCE', () =>
               doTestForced('true\n', telemetryGood))
           })
@@ -135,9 +135,9 @@ true
             useEnv({ DD_TRACE_DEBUG })
 
             it('should initialize the tracer', () =>
-              doTest('Application instrumentation bootstrapping complete\ntrue\n', telemetryGood, 'ssi'))
+              doTest('Application instrumentation bootstrapping complete\ntrue\n', telemetryGood))
             it('should initialize the tracer, if DD_INJECT_FORCE', () =>
-              doTestForced('Application instrumentation bootstrapping complete\ntrue\n', telemetryGood, 'ssi'))
+              doTestForced('Application instrumentation bootstrapping complete\ntrue\n', telemetryGood))
           })
         })
       })

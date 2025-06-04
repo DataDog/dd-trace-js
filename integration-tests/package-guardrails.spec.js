@@ -42,7 +42,7 @@ describe('package guardrails', () => {
       runTest(`Application instrumentation bootstrapping complete
 Found incompatible integration version: bluebird@1.0.0
 false
-`)
+`, [])
     })
   })
 
