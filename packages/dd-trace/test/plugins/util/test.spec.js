@@ -23,6 +23,7 @@ const {
 
 const proxyquire = require('proxyquire')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA, CI_PIPELINE_URL } = require('../../../src/plugins/util/tags')
+const { TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY, TELEMETRY_GIT_SHA_MATCH } = require('../../../src/ci-visibility/telemetry')
 
 describe('getTestParametersString', () => {
   it('returns formatted test parameters and removes params from input', () => {
@@ -544,5 +545,110 @@ describe('getPullRequestBaseBranch', () => {
       expect(getCountsStub).to.have.been.calledWith('master', 'feature-branch')
       expect(getCountsStub).to.have.been.calledWith('trunk', 'feature-branch')
     })
+  })
+})
+
+describe('checkShaDiscrepancies', () => {
+  const incrementCountMetricStub = sinon.stub()
+  
+  it('should return true if the CI/Git Client repository URL is different from the user provided repository URL', () => {
+    const ciMetadata = {
+      [GIT_COMMIT_SHA]: '1234af',
+      [GIT_REPOSITORY_URL]: 'https://github.com/datadog/dd-trace-js.git'
+    }
+    const userProvidedGitMetadata = {
+      [GIT_COMMIT_SHA]: '1234af',
+      [GIT_REPOSITORY_URL]: 'Bad URL'
+    }
+    const getGitInformationDiscrepancyStub = sinon.stub()
+    getGitInformationDiscrepancyStub.returns({ gitRepositoryUrl: 'https://github.com/datadog/dd-trace-js.git', gitCommitSHA: '1234af' })
+    const { checkShaDiscrepancies } = proxyquire('../../../src/plugins/util/test', {
+      './git': {
+        getGitInformationDiscrepancy: getGitInformationDiscrepancyStub
+      },
+      '../../ci-visibility/telemetry': {
+        incrementCountMetric: incrementCountMetricStub
+      }
+    })
+    
+    checkShaDiscrepancies(ciMetadata, userProvidedGitMetadata)
+    
+    const expectedCalls = [
+      { type: 'repository_discrepancy', expected_provider: 'user_supplied', discrepant_provider: 'git_client' },
+      { type: 'repository_discrepancy', expected_provider: 'user_supplied', discrepant_provider: 'ci_provider' }
+    ]
+    
+    expectedCalls.forEach(({ type, expected_provider, discrepant_provider }) => {
+      expect(incrementCountMetricStub).to.have.been.calledWith(TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY, {
+        type: type,
+        expected_provider: expected_provider,
+        discrepant_provider: discrepant_provider,
+      })
+    })
+    expect(incrementCountMetricStub).to.have.been.calledWith(TELEMETRY_GIT_SHA_MATCH, { match: false })
+  })
+
+  it('should return true if the CI/Git Client commit SHA is different from the user provided commit SHA', () => {
+    incrementCountMetricStub.resetHistory()
+    const ciMetadata = {
+      [GIT_COMMIT_SHA]: 'abcd',
+      [GIT_REPOSITORY_URL]: 'https://github.com/datadog/dd-trace-js.git'
+    }
+    const userProvidedGitMetadata = {
+      [GIT_COMMIT_SHA]: 'efgh',
+      [GIT_REPOSITORY_URL]: 'https://github.com/datadog/dd-trace-js.git'
+    }
+    const getGitInformationDiscrepancyStub = sinon.stub()
+    getGitInformationDiscrepancyStub.returns({ gitRepositoryUrl: 'https://github.com/datadog/dd-trace-js.git', gitCommitSHA: 'ijkl' })
+    const { checkShaDiscrepancies } = proxyquire('../../../src/plugins/util/test', {
+      './git': {
+        getGitInformationDiscrepancy: getGitInformationDiscrepancyStub
+      },
+      '../../ci-visibility/telemetry': {
+        incrementCountMetric: incrementCountMetricStub
+      }
+    })
+
+    checkShaDiscrepancies(ciMetadata, userProvidedGitMetadata)
+
+    const expectedCalls = [
+      { type: 'commit_discrepancy', expected_provider: 'user_supplied', discrepant_provider: 'git_client' },
+      { type: 'commit_discrepancy', expected_provider: 'user_supplied', discrepant_provider: 'ci_provider' }
+    ]
+    
+    expectedCalls.forEach(({ type, expected_provider, discrepant_provider }) => {
+      expect(incrementCountMetricStub).to.have.been.calledWith(TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY, {
+        type,
+        expected_provider,
+        discrepant_provider
+      })
+    })
+    expect(incrementCountMetricStub).to.have.been.calledWith(TELEMETRY_GIT_SHA_MATCH, { match: false })
+  })
+
+  it('should increment TELEMETRY_GIT_SHA_MATCH with match: true when all values match', () => {
+    incrementCountMetricStub.resetHistory()
+    const ciMetadata = {
+      [GIT_COMMIT_SHA]: '1234af',
+      [GIT_REPOSITORY_URL]: 'https://github.com/datadog/dd-trace-js.git'
+    }
+    const userProvidedGitMetadata = {
+      [GIT_COMMIT_SHA]: '1234af',
+      [GIT_REPOSITORY_URL]: 'https://github.com/datadog/dd-trace-js.git'
+    }
+    const getGitInformationDiscrepancyStub = sinon.stub()
+    getGitInformationDiscrepancyStub.returns({ gitRepositoryUrl: 'https://github.com/datadog/dd-trace-js.git', gitCommitSHA: '1234af' })
+    const { checkShaDiscrepancies } = proxyquire('../../../src/plugins/util/test', {
+      './git': {
+        getGitInformationDiscrepancy: getGitInformationDiscrepancyStub
+      },
+      '../../ci-visibility/telemetry': {
+        incrementCountMetric: incrementCountMetricStub
+      }
+    })
+
+    checkShaDiscrepancies(ciMetadata, userProvidedGitMetadata)
+
+    expect(incrementCountMetricStub).to.have.been.calledWith(TELEMETRY_GIT_SHA_MATCH, { match: true })
   })
 })
