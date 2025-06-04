@@ -18,7 +18,7 @@ const hookFile = 'dd-trace/loader-hook.mjs'
 // This is set by the setShouldKill function
 let shouldKill
 
-async function runAndCheckOutput (filename, cwd, expectedOut, expectSSISuccessful) {
+async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
   const proc = spawn('node', [filename], { cwd, stdio: 'pipe' })
   const pid = proc.pid
   let out = await new Promise((resolve, reject) => {
@@ -45,13 +45,8 @@ async function runAndCheckOutput (filename, cwd, expectedOut, expectSSISuccessfu
     assert.strictEqual(out, expectedOut)
   }
 
-  if (expectSSISuccessful) {
-    assert.strictEqual(proc.env.DD_INSTRUMENTATION_SOURCE, 'ssi',
-      'Expected the process to have the DD_INSTRUMENTATION_SOURCE environment variable set to "ssi"')
-  } else {
-    assert.strictEqual(proc.env.DD_INSTRUMENTATION_SOURCE, undefined,
-      'Expected the process to not have the DD_INSTRUMENTATION_SOURCE environment variable set')
-  }
+  assert.strictEqual(proc.env.DD_INSTRUMENTATION_SOURCE, expectedSource,
+      `Expected the process to have the DD_INSTRUMENTATION_SOURCE environment variable set to "${expectedSource}"`)
   return pid
 }
 
@@ -59,10 +54,10 @@ async function runAndCheckOutput (filename, cwd, expectedOut, expectSSISuccessfu
 let sandbox
 
 // This _must_ be used with the useSandbox function
-async function runAndCheckWithTelemetry (filename, expectSSISuccessful, expectedOut, ...expectedTelemetryPoints) {
+async function runAndCheckWithTelemetry (filename, expectedOut, expectedTelemetryPoints, expectedSource) {
   const cwd = sandbox.folder
   const cleanup = telemetryForwarder(expectedTelemetryPoints)
-  const pid = await runAndCheckOutput(filename, cwd, expectedOut, expectSSISuccessful)
+  const pid = await runAndCheckOutput(filename, cwd, expectedOut, expectedSource)
   const msgs = await cleanup()
   if (expectedTelemetryPoints.length === 0) {
     // assert no telemetry sent
