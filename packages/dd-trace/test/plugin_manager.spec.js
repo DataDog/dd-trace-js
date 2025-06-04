@@ -73,7 +73,7 @@ describe('Plugin Manager', () => {
       './plugins': { ...plugins, '@noCallThru': true },
       '../../datadog-instrumentations': {},
       '../../dd-trace/src/config-helper': {
-        getConfiguration (name) {
+        getEnvironmentVariable (name) {
           return process.env[name]
         }
       }
