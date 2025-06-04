@@ -279,7 +279,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('llmobs.mlApp', undefined)
     expect(config).to.have.nested.property('llmobs.agentlessEnabled', undefined)
     expect(config).to.have.nested.property('llmobs.enabled', false)
-    expect(config).to.have.nested.property('injectionEnabled', [])
+    expect(config).to.have.nested.deep.property('injectionEnabled', [])
     expect(config).to.have.nested.property('instrumentationSource', 'unknown')
     expect(config).to.have.nested.property('injectionForce', '')
 

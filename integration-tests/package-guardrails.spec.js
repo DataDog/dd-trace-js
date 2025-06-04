@@ -93,7 +93,7 @@ addHook({ name: 'bluebird', versions: ['*'] }, Promise => {
     })
 
     context('with logging disabled', () => {
-      it('should not instrument the package', () => runTest('false\n'))
+      it('should not instrument the package', () => runTest('false\n', []))
     })
 
     context('with logging enabled', () => {
@@ -106,7 +106,7 @@ Error during ddtrace instrumentation of application, aborting.
 ReferenceError: this is a test error
     at `))
             assert.ok(log.includes('\nfalse\n'))
-          }))
+          }, []))
     })
   })
 })
