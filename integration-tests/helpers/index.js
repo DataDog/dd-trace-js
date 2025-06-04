@@ -51,6 +51,7 @@ async function runAndCheckOutput (filename, cwd, expectedOut) {
     proc.stderr.pipe(process.stdout)
     proc.on('exit', () => {
       out += decoder.end()
+      clearTimeout(timeout)
       resolve(out)
     })
   })
@@ -304,7 +305,7 @@ async function curl (url) {
         body += decoder.write(data)
       })
       res.on('end', () => {
-        out += decoder.end()
+        body += decoder.end()
         res.body = body
         resolve(res)
       })
