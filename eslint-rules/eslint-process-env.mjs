@@ -46,6 +46,13 @@ export default {
         }
       },
 
+      // Handle spread operator: { ...process.env }
+      SpreadElement (node) {
+        if (isProcessEnvObject(node.argument)) {
+          report(node)
+        }
+      },
+
       // Handle any function call with process.env as an argument
       CallExpression (node) {
         for (const arg of node.arguments) {

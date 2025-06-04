@@ -21,6 +21,8 @@ const SRC_FILES = [
   '*.mjs',
   'ext/**/*.js',
   'ext/**/*.mjs',
+  'ci/**/*.js',
+  'ci/**/*.mjs',
   'packages/*/src/**/*.js',
   'packages/*/src/**/*.mjs'
 ]

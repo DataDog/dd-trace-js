@@ -27,7 +27,7 @@ const {
   CI_NODE_NAME
 } = require('./tags')
 const { filterSensitiveInfoFromRepository } = require('./url')
-const { getConfiguration } = require('../../config-helper')
+const { getEnvironmentVariable } = require('../../config-helper')
 
 // Receives a string with the form 'John Doe <john.doe@gmail.com>'
 // and returns { name: 'John Doe', email: 'john.doe@gmail.com' }
@@ -77,16 +77,16 @@ function resolveTilde (filePath) {
   }
   // '~/folder/path' or '~'
   if (filePath[0] === '~' && (filePath[1] === '/' || filePath.length === 1)) {
-    return filePath.replace('~', getConfiguration('HOME'))
+    return filePath.replace('~', getEnvironmentVariable('HOME'))
   }
   return filePath
 }
 
 function getGitHubEventPayload () {
-  if (!getConfiguration('GITHUB_EVENT_PATH')) {
+  if (!getEnvironmentVariable('GITHUB_EVENT_PATH')) {
     return
   }
-  return JSON.parse(readFileSync(getConfiguration('GITHUB_EVENT_PATH'), 'utf8'))
+  return JSON.parse(readFileSync(getEnvironmentVariable('GITHUB_EVENT_PATH'), 'utf8'))
 }
 
 module.exports = {

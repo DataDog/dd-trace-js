@@ -15,7 +15,7 @@ const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
 const { tagger } = require('./tagger')
 const { isFalse, isTrue } = require('../util')
 const { getAzureTagsFromMetadata, getAzureAppMetadata } = require('../azure_metadata')
-const { getConfigurations } = require('../config-helper')
+const { getEnvironmentVariables } = require('../config-helper')
 
 class Config {
   constructor (options = {}) {
@@ -48,7 +48,7 @@ class Config {
       DD_TRACE_AGENT_PORT,
       DD_TRACE_AGENT_URL,
       DD_VERSION
-    } = getConfigurations()
+    } = getEnvironmentVariables()
 
     const env = coalesce(options.env, DD_ENV)
     const service = options.service || DD_SERVICE || 'node'
