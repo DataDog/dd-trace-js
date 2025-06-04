@@ -1,5 +1,8 @@
 'use strict'
 
+const dc = require('dc-polyfill')
+const zlib = require('zlib')
+
 const Limiter = require('../rate_limiter')
 const { storage } = require('../../../datadog-core')
 const web = require('../plugins/util/web')
@@ -7,6 +10,7 @@ const { ipHeaderList } = require('../plugins/util/ip_extractor')
 const {
   incrementWafInitMetric,
   incrementWafUpdatesMetric,
+  incrementWafConfigErrorsMetric,
   incrementWafRequestsMetric,
   updateWafRequestsMetricTags,
   updateRaspRequestsMetricTags,
@@ -14,7 +18,6 @@ const {
   updateRateLimitedMetric,
   getRequestMetrics
 } = require('./telemetry')
-const zlib = require('zlib')
 const { keepTrace } = require('../priority_sampler')
 const { ASM } = require('../standalone/product')
 
@@ -24,6 +27,20 @@ const RESPONSE_HEADER_TAG_PREFIX = 'http.response.headers.'
 const COLLECTED_REQUEST_BODY_MAX_STRING_LENGTH = 4096
 const COLLECTED_REQUEST_BODY_MAX_DEPTH = 20
 const COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE = 256
+
+const telemetryLogCh = dc.channel('datadog:telemetry:log')
+
+const WAF_DIAGNOSTICS_CONFIG_KEYS_TO_REPORT = [
+  'rules',
+  'custom_rules',
+  'exclusions',
+  'actions',
+  'processors',
+  'scanners',
+  'rules_override',
+  'rules_data',
+  'exclusion_data'
+]
 
 // default limiter, configurable with setRateLimit()
 let limiter = new Limiter(100)
@@ -223,6 +240,54 @@ function reportWafInit (wafVersion, rulesVersion, diagnosticsRules = {}, success
   }
 
   incrementWafInitMetric(wafVersion, rulesVersion, success)
+}
+
+function logWafDiagnosticMessage (product, rcConfigId, configKey, message, level) {
+  telemetryLogCh.publish({
+    message,
+    level,
+    tags: {
+      log_type: `rc::${product.toLowerCase()}::diagnostic`,
+      appsec_config_key: configKey,
+      rc_config_id: rcConfigId
+    }
+  })
+}
+
+function reportSuccessfulWafUpdate (product, rcConfigId, diagnostics) {
+  for (const configKey of WAF_DIAGNOSTICS_CONFIG_KEYS_TO_REPORT) {
+    const configDiagnostics = diagnostics[configKey]
+    if (!configDiagnostics) continue
+
+    if (configDiagnostics.error) {
+      logWafDiagnosticMessage(product, rcConfigId, configKey, configDiagnostics.error, 'ERROR')
+      continue
+    }
+
+    if (configDiagnostics.errors) {
+      for (const [errorMessage, errorIds] of Object.entries(configDiagnostics.errors)) {
+        logWafDiagnosticMessage(
+          product,
+          rcConfigId,
+          configKey,
+          `"${errorMessage}": ${JSON.stringify(errorIds)}`,
+          'ERROR'
+        )
+      }
+    }
+
+    if (configDiagnostics.warnings) {
+      for (const [warningMessage, warningIds] of Object.entries(configDiagnostics.warnings)) {
+        logWafDiagnosticMessage(
+          product,
+          rcConfigId,
+          configKey,
+          `"${warningMessage}": ${JSON.stringify(warningIds)}`,
+          'WARN'
+        )
+      }
+    }
+  }
 }
 
 function reportMetrics (metrics, raspRule) {
@@ -485,9 +550,11 @@ module.exports = {
   filterExtendedHeaders,
   formatHeaderName,
   reportWafInit,
+  reportSuccessfulWafUpdate,
   reportMetrics,
   reportAttack,
   reportWafUpdate: incrementWafUpdatesMetric,
+  reportWafConfigError: incrementWafConfigErrorsMetric,
   reportRaspRuleSkipped: updateRaspRuleSkippedMetricTags,
   reportDerivatives,
   finishRequest,
