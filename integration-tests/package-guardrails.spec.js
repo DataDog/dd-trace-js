@@ -32,7 +32,8 @@ describe('package guardrails', () => {
       it('should not instrument the package, and send telemetry', () =>
         runTest('false\n',
           ['complete', 'injection_forced:false',
-          'abort.integration', 'integration:bluebird,integration_version:1.0.0'],
+            'abort.integration', 'integration:bluebird,integration_version:1.0.0',
+          ]
         ))
     })
     context('with logging disabled', () => {
@@ -41,28 +42,26 @@ describe('package guardrails', () => {
     context('with logging enabled', () => {
       useEnv({ DD_TRACE_DEBUG })
       it('should not instrument the package', () =>
-        runTest(`Application instrumentation bootstrapping complete
-Found incompatible integration version: bluebird@1.0.0
-false
-`, 'ssi'))
+        runTest(`Application instrumentation bootstrapping complete\n
+          Found incompatible integration version: bluebird@1.0.0\nfalse\n`, [], 'ssi'))
     })
   })
 
   context('when package is in range', () => {
     context('when bluebird is 2.9.0', () => {
       useSandbox(['bluebird@2.9.0'])
-      it('should instrument the package', () => runTest('true\n', undefined, 'ssi'))
+      it('should instrument the package', () => runTest('true\n', [], 'ssi'))
     })
     context('when bluebird is 3.7.2', () => {
       useSandbox(['bluebird@3.7.2'])
-      it('should instrument the package', () => runTest('true\n', undefined, 'ssi'))
+      it('should instrument the package', () => runTest('true\n', [], 'ssi'))
     })
   })
 
   context('when package is in range (fastify)', () => {
     context('when fastify is latest', () => {
       useSandbox(['fastify'])
-      it('should instrument the package', () => runTest('true\n', undefined, 'ssi'))
+      it('should instrument the package', () => runTest('true\n', [], 'ssi'))
     })
     context('when fastify is latest and logging enabled', () => {
       useSandbox(['fastify'])
@@ -91,7 +90,7 @@ addHook({ name: 'bluebird', versions: ['*'] }, Promise => {
       it('should not instrument the package, and send telemetry', () =>
         runTest('false\n',
           ['complete', 'injection_forced:false',
-          'error', 'error_type:ReferenceError,integration:bluebird,integration_version:3.7.2']
+            'error', 'error_type:ReferenceError,integration:bluebird,integration_version:3.7.2']
         ))
     })
 
@@ -103,7 +102,6 @@ addHook({ name: 'bluebird', versions: ['*'] }, Promise => {
       useEnv({ DD_TRACE_DEBUG, DD_LOG_LEVEL })
       it('should not instrument the package', () =>
         runTest(
-          false,
           log => {
             assert.ok(log.includes(`
 Error during ddtrace instrumentation of application, aborting.
