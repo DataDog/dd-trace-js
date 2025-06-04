@@ -24,8 +24,9 @@ class AzureFunctionsPlugin extends TracingPlugin {
   bindStart (ctx) {
     const { functionName, methodName, httpRequest } = ctx
     const store = storage('legacy').getStore()
-    const childof = this._tracer.extract('http', httpRequest.headers)
+    const childof = extract(this._tracer, httpRequest.headers.entries())
     const span = this.startSpan(this.operationName(), {
+      childof,
       service: this.serviceName(),
       type: 'serverless',
       meta: {
@@ -67,6 +68,11 @@ class AzureFunctionsPlugin extends TracingPlugin {
   configure (config) {
     return super.configure(web.normalizeConfig(config))
   }
+}
+
+function extract (tracer, headers) {
+  if (!headers) return null
+  return tracer.extract('http_headers', headers)
 }
 
 function mapTriggerTag (methodName) {
