@@ -173,11 +173,10 @@ const IGNORED_WORKFLOWS = {
     'stale.yml'
   ],
   trigger_push: [
-    'package-size.yml',
     'stale.yml'
   ],
   trigger_schedule: [
-    'yarn-dedupe.yml'
+    'project.yml'
   ]
 }
 
