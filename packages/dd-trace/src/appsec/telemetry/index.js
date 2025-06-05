@@ -23,6 +23,7 @@ const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
 
 let enabled = false
 let interval
+
 function enable (config) {
   const telemetryConfig = config.telemetry
   enabled = telemetryConfig?.enabled && telemetryConfig.metrics

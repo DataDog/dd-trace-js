@@ -1454,12 +1454,7 @@ class Config {
     obj[name] = value
   }
 
-  // TODO: Report origin changes and errors to telemetry.
-  // TODO: Deeply merge configurations.
-  // TODO: Move change tracking to telemetry.
-  // for telemetry reporting, `name`s in `containers` need to be keys from:
-  // https://github.com/DataDog/dd-go/blob/prod/trace/apps/tracer-telemetry-intake/telemetry-payload/static/config_norm_rules.json
-  _merge () {
+  _getContainersAndOriginsOrdered () {
     const containers = [
       this._remote,
       this._options,
@@ -1478,6 +1473,17 @@ class Config {
       'calculated',
       'default'
     ]
+
+    return { containers, origins }
+  }
+
+  // TODO: Report origin changes and errors to telemetry.
+  // TODO: Deeply merge configurations.
+  // TODO: Move change tracking to telemetry.
+  // for telemetry reporting, `name`s in `containers` need to be keys from:
+  // https://github.com/DataDog/dd-go/blob/prod/trace/apps/tracer-telemetry-intake/telemetry-payload/static/config_norm_rules.json
+  _merge () {
+    const { containers, origins } = this._getContainersAndOriginsOrdered()
     const unprocessedValues = [
       this._remoteUnprocessed,
       this._optsUnprocessed,
@@ -1515,29 +1521,12 @@ class Config {
   }
 
   getOrigin (name) {
-    const containers = [
-      this._remote,
-      this._options,
-      this._fleetStableConfig,
-      this._env,
-      this._localStableConfig,
-      this._calculated,
-      this._defaults
-    ]
-    const origins = [
-      'remote_config',
-      'code',
-      'fleet_stable_config',
-      'env_var',
-      'local_stable_config',
-      'calculated',
-      'default'
-    ]
+    const { containers, origins } = this._getContainersAndOriginsOrdered()
 
     for (let i = 0; i < containers.length; i++) {
       const container = containers[i]
       const value = container[name]
-      if ((value !== null && value !== undefined) || container === this._defaults) {
+      if (value != null || container === this._defaults) {
         return origins[i]
       }
     }
