@@ -8,7 +8,6 @@ const { contains, intersects, remove } = require('./range-utils')
 
 const commandSensitiveAnalyzer = require('./sensitive-analyzers/command-sensitive-analyzer')
 const hardcodedPasswordAnalyzer = require('./sensitive-analyzers/hardcoded-password-analyzer')
-const headerSensitiveAnalyzer = require('./sensitive-analyzers/header-sensitive-analyzer')
 const jsonSensitiveAnalyzer = require('./sensitive-analyzers/json-sensitive-analyzer')
 const ldapSensitiveAnalyzer = require('./sensitive-analyzers/ldap-sensitive-analyzer')
 const sqlSensitiveAnalyzer = require('./sensitive-analyzers/sql-sensitive-analyzer')
