@@ -1370,9 +1370,16 @@ class Config {
 
     if (typeof value === 'string') {
       value = value.split(',').map(item => {
-        // Trim each item and remove whitespace around the colon
-        const [key, val] = item.split(':').map(part => part.trim())
-        return val === undefined ? key : `${key}:${val}`
+        const trimmedItem = item.trim()
+        const colonIndex = trimmedItem.indexOf(':')
+
+        if (colonIndex === -1) {
+          return trimmedItem
+        }
+
+        const key = trimmedItem.slice(0, colonIndex).trim()
+        const val = trimmedItem.slice(colonIndex + 1).trim()
+        return `${key}:${val}`
       })
     }
 
@@ -1385,19 +1392,25 @@ class Config {
     if (value == null) {
       return this._setValue(obj, name, null)
     }
-    value = value.split(',')
-    const result = []
 
-    value.forEach(val => {
-      if (val.includes('-')) {
-        const [start, end] = val.split('-').map(Number)
+    const result = []
+    const values = value.split(',')
+
+    for (const val of values) {
+      const trimmedVal = val.trim()
+      const dashIndex = trimmedVal.indexOf('-')
+
+      if (dashIndex === -1) {
+        result.push(Number(trimmedVal))
+      } else {
+        const start = Number(trimmedVal.slice(0, dashIndex))
+        const end = Number(trimmedVal.slice(dashIndex + 1))
         for (let i = start; i <= end; i++) {
           result.push(i)
         }
-      } else {
-        result.push(Number(val))
       }
-    })
+    }
+
     this._setValue(obj, name, result)
   }
 
@@ -1425,7 +1438,20 @@ class Config {
   }
 
   _setTags (obj, name, value) {
-    if (!value || Object.keys(value).length === 0) {
+    if (!value) {
+      return this._setValue(obj, name, null)
+    }
+
+    // More efficient check for empty object
+    let hasKeys = false
+    for (const key in value) {
+      if (Object.prototype.hasOwnProperty.call(value, key)) {
+        hasKeys = true
+        break
+      }
+    }
+
+    if (!hasKeys) {
       return this._setValue(obj, name, null)
     }
 
@@ -1443,17 +1469,19 @@ class Config {
       changeTracker[name] = {}
     }
 
-    const originExists = origin in changeTracker[name]
     const oldValue = changeTracker[name][origin]
 
-    if (!originExists || oldValue !== value) {
-      changeTracker[name][origin] = value
-      changes.push({
-        name,
-        value: unprocessedValue || value,
-        origin
-      })
+    // Early return if value hasn't changed
+    if (origin in changeTracker[name] && oldValue === value) {
+      return
     }
+
+    changeTracker[name][origin] = value
+    changes.push({
+      name,
+      value: unprocessedValue || value,
+      origin
+    })
   }
 
   // TODO: Report origin changes and errors to telemetry.
@@ -1522,11 +1550,13 @@ class Config {
 }
 
 function handleOtel (tagString) {
+  if (!tagString) return tagString
+
   return tagString
-    ?.replace(/(^|,)deployment\.environment=/, '$1env:')
-    .replace(/(^|,)service\.name=/, '$1service:')
-    .replace(/(^|,)service\.version=/, '$1version:')
-    .replaceAll('=', ':')
+    .replace(/(^|,)deployment\.environment=/g, '$1env:')
+    .replace(/(^|,)service\.name=/g, '$1service:')
+    .replace(/(^|,)service\.version=/g, '$1version:')
+    .replace(/=/g, ':')
 }
 
 function parseSpaceSeparatedTags (tagString) {
