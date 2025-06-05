@@ -5,7 +5,7 @@ stages:
   - single-step-instrumentation-tests
   - macrobenchmarks
 
-# CI checks for Config Inversion
+
 check_config_inversion_local_file:
   extends: .check_config_inversion_local_file
   variables:
