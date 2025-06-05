@@ -1437,7 +1437,7 @@ class Config {
     obj[name] = value ? String(value) : undefined // unset for empty strings
   }
 
-    _setTags (obj, name, value) {
+  _setTags (obj, name, value) {
     if (!value) {
       return this._setValue(obj, name, null)
     }
@@ -1462,7 +1462,7 @@ class Config {
     obj[name] = value
   }
 
-    _setAndTrackChange ({ name, value, origin, unprocessedValue, changes }) {
+  _setAndTrackChange ({ name, value, origin, unprocessedValue, changes }) {
     set(this, name, value)
 
     if (!changeTracker[name]) {
