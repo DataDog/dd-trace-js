@@ -16,12 +16,13 @@ const SAMPLING_KNUTH_FACTOR = 1_111_111_111_111_111_111n
  * This class uses a deterministic sampling algorithm that is consistent across all languages.
  */
 class Sampler {
+  #threshold = BigInt(0)
   /**
    * @param {number} rate
    */
   constructor (rate) {
     this._rate = rate
-    this._threshold = BigInt(Math.floor(rate * MAX_TRACE_ID))
+    this.#threshold = BigInt(Math.floor(rate * MAX_TRACE_ID))
   }
 
   /**
@@ -29,6 +30,10 @@ class Sampler {
    */
   rate () {
     return this._rate
+  }
+
+  get threshold () {
+    return this.#threshold
   }
 
   /**
@@ -48,7 +53,7 @@ class Sampler {
 
     span = typeof span.context === 'function' ? span.context() : span
 
-    return (span._traceId.toBigInt() * SAMPLING_KNUTH_FACTOR) % UINT64_MODULO <= this._threshold
+    return (span._traceId.toBigInt() * SAMPLING_KNUTH_FACTOR) % UINT64_MODULO <= this.#threshold
   }
 }
 

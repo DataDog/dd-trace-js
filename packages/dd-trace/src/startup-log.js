@@ -61,7 +61,9 @@ function tracerInfo () {
       return String(this)
     },
     toString () {
-      return JSON.stringify(this)
+      return JSON.stringify(this, (_key_, value) => {
+        return typeof value === 'bigint' || typeof value === 'symbol' ? String(value) : value
+      })
     }
   }
 
