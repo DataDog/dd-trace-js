@@ -56,6 +56,9 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
     let clusterId
     let disableHeaderInjection = false
 
+    // TODO: Change this by hooking into kafka's connect method.
+    // That receives the clusterId and we can avoid the admin call.
+    // That way the clusterId is also immediately available for all calls.
     producer.on(producer.events.CONNECT, () => {
       getKafkaClusterId(this).then((id) => {
         clusterId = id
@@ -63,14 +66,33 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
     })
 
     producer.send = function send (...args) {
-      const { topic, messages } = args[0]
+      // Do not manipulate user input by copying the messages
+      let malformedMessage = false
+      if (!args[0] || !Array.isArray(args[0].messages)) {
+        malformedMessage = true
+      } else if (!disableHeaderInjection) {
+        args[0] = {
+          ...args[0],
+          messages: args[0].messages.map((message) => {
+            if (typeof message !== 'object' || message === null) {
+              malformedMessage = true
+              return message
+            }
+            return { ...message, headers: { ...message.headers } }
+          })
+        }
+      }
+
+      const topic = args[0]?.topic
+      const messages = args[0]?.messages
 
       const ctx = {
         bootstrapServers,
         clusterId,
         disableHeaderInjection,
         messages,
-        topic
+        topic,
+        malformedMessage
       }
 
       return producerStartCh.runStores(ctx, () => {
@@ -84,6 +106,11 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
             },
             (err) => {
               ctx.error = err
+              // TODO: Read the broker's versions (minimum version 3) by hooking into that code.
+              // That way all messages would pass and it's clear from the beginning on if headers
+              // are allowed or not.
+              // Currently we only know that after the first message is sent, which the customer
+              // now has to resend.
               if (err) {
                 // Fixes bug where we would inject message headers for kafka brokers that don't support headers
                 // (version <0.11). On the error, we disable header injection.
@@ -117,22 +144,21 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
       return createConsumer.apply(this, arguments)
     }
 
-    const eachMessageExtractor = (args, clusterId) => {
+    let clusterId
+    const { groupId } = arguments[0]
+
+    const eachMessageExtractor = (args) => {
       const { topic, partition, message } = args[0]
       return { topic, partition, message, groupId, clusterId }
     }
 
-    const eachBatchExtractor = (args, clusterId) => {
+    const eachBatchExtractor = (args) => {
       const { batch } = args[0]
       const { topic, partition, messages } = batch
       return { topic, partition, messages, groupId, clusterId }
     }
 
     const consumer = createConsumer.apply(this, arguments)
-
-    let clusterId
-
-    const originalRun = consumer.run
 
     consumer.on(consumer.events.CONNECT, () => {
       getKafkaClusterId(this).then((id) => {
@@ -142,7 +168,7 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
 
     consumer.on(consumer.events.COMMIT_OFFSETS, commitsFromEvent)
 
-    const groupId = arguments[0].groupId
+    const originalRun = consumer.run
 
     consumer.run = function run ({ eachMessage, eachBatch, ...runArgs }) {
       return originalRun({
@@ -152,7 +178,6 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
           consumerFinishCh,
           consumerErrorCh,
           eachMessageExtractor,
-          clusterId
         ),
         eachBatch: wrappedCallback(
           eachBatch,
@@ -160,7 +185,6 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
           batchConsumerFinishCh,
           batchConsumerErrorCh,
           eachBatchExtractor,
-          clusterId
         ),
         ...runArgs
       })
@@ -170,40 +194,41 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
   return Kafka
 })
 
-const wrappedCallback = (fn, startCh, finishCh, errorCh, extractArgs, clusterId) => {
-  return typeof fn === 'function'
-    ? function (...args) {
-      const ctx = {
-        extractedArgs: extractArgs(args, clusterId)
-      }
-
-      return startCh.runStores(ctx, () => {
-        try {
-          const result = fn.apply(this, args)
-          if (typeof result?.then === 'function') {
-            result.then(
-              (res) => {
-                ctx.result = res
-                finishCh.publish(ctx)
-              },
-              (err) => {
-                ctx.error = err
-                errorCh.publish(ctx)
-                finishCh.publish(ctx)
-              })
-          } else {
-            finishCh.publish(ctx)
-          }
-          return result
-        } catch (e) {
-          ctx.error = e
-          errorCh.publish(ctx)
-          finishCh.publish(ctx)
-          throw e
-        }
-      })
+const wrappedCallback = (fn, startCh, finishCh, errorCh, extractArgs) => {
+  if (typeof fn !== 'function') {
+    return fn
+  }
+  return function (...args) {
+    const ctx = {
+      extractedArgs: extractArgs(args)
     }
-    : fn
+
+    return startCh.runStores(ctx, () => {
+      try {
+        const result = fn.apply(this, args)
+        if (typeof result?.then === 'function') {
+          result.then(
+            (res) => {
+              ctx.result = res
+              finishCh.publish(ctx)
+            },
+            (err) => {
+              ctx.error = err
+              errorCh.publish(ctx)
+              finishCh.publish(ctx)
+            })
+        } else {
+          finishCh.publish(ctx)
+        }
+        return result
+      } catch (e) {
+        ctx.error = e
+        errorCh.publish(ctx)
+        finishCh.publish(ctx)
+        throw e
+      }
+    })
+  }
 }
 
 const getKafkaClusterId = (kafka) => {

@@ -70,7 +70,7 @@ class KafkajsProducerPlugin extends ProducerPlugin {
   }
 
   bindStart (ctx) {
-    const { topic, messages, bootstrapServers, clusterId, disableHeaderInjection } = ctx
+    const { topic, messages, bootstrapServers, clusterId, disableHeaderInjection, malformedMessage } = ctx
     const span = this.startSpan({
       resource: topic,
       meta: {
@@ -86,24 +86,20 @@ class KafkajsProducerPlugin extends ProducerPlugin {
     if (bootstrapServers) {
       span.setTag(BOOTSTRAP_SERVERS_KEY, bootstrapServers)
     }
-    for (const message of messages) {
-      if (message !== null && typeof message === 'object') {
-        if (this.config.dsmEnabled) {
-          const payloadSize = getMessageSize(message)
-          const edgeTags = ['direction:out', `topic:${topic}`, 'type:kafka']
+    if (this.config.dsmEnabled && !malformedMessage) {
+      for (const message of messages) {
+        const payloadSize = getMessageSize(message)
+        const edgeTags = ['direction:out', `topic:${topic}`, 'type:kafka']
 
-          if (clusterId) {
-            edgeTags.push(`kafka_cluster_id:${clusterId}`)
-          }
+        if (clusterId) {
+          edgeTags.push(`kafka_cluster_id:${clusterId}`)
+        }
 
-          const dataStreamsContext = this.tracer.setCheckpoint(edgeTags, span, payloadSize)
-          if (!disableHeaderInjection) {
-            // Message headers are not supported for kafka broker versions <0.11
-            // TODO(BridgeAR): Should the message be copied instead of mutated?
-            message.headers ??= {}
-            this.tracer.inject(span, 'text_map', message.headers)
-            DsmPathwayCodec.encode(dataStreamsContext, message.headers)
-          }
+        const dataStreamsContext = this.tracer.setCheckpoint(edgeTags, span, payloadSize)
+        if (!disableHeaderInjection) {
+          // Message headers are not supported for kafka broker versions <0.11
+          this.tracer.inject(span, 'text_map', message.headers)
+          DsmPathwayCodec.encode(dataStreamsContext, message.headers)
         }
       }
     }
