@@ -1,9 +1,7 @@
 'use strict'
 
 const {
-  addHook,
-  channel,
-  AsyncResource
+  addHook
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
@@ -21,6 +19,21 @@ function createWrapRequest (ws, options) {
     }
   }
 }
+function createWrapEmit (ctx) {
+  return function wrapEmit (emit) {
+    return function (title, headers, req) {
+      ctx.resStatus = headers[0].split(' ')[1]
+
+      return ch.asyncStart.runStores(ctx, () => {
+        try {
+          return emit.apply(this, arguments)
+        } finally {
+          ch.asyncEnd.publish(ctx)
+        }
+      })
+    }
+  }
+}
 
 function wrapHandleUpgrade (handleUpgrade) {
   return function () {
@@ -30,6 +43,7 @@ function wrapHandleUpgrade (handleUpgrade) {
     const ctx = { req }
 
     return ch.tracePromise(() => {
+      shimmer.wrap(this, 'emit', createWrapEmit(ctx))
       handleUpgrade.call(this, req, socket, head, cb)
     }, ctx)
   }
