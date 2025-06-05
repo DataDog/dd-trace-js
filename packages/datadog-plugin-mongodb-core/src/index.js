@@ -23,7 +23,9 @@ class MongodbCorePlugin extends DatabasePlugin {
     )
   }
 
-  start ({ ns, ops, options = {}, name }) {
+  bindStart (ctx) {
+    const { ns, ops, options = {}, name } = ctx
+
     // heartbeat commands can be disabled if this.config.heartbeatEnabled is false
     if (!this.config.heartbeatEnabled && isHeartbeat(ops, this.config)) {
       return
@@ -43,11 +45,13 @@ class MongodbCorePlugin extends DatabasePlugin {
         'out.host': options.host,
         'out.port': options.port
       }
-    })
+    }, ctx)
     const comment = this.injectDbmComment(span, ops.comment, service)
     if (comment) {
       ops.comment = comment
     }
+
+    return ctx.currentStore
   }
 
   getPeerService (tags) {
