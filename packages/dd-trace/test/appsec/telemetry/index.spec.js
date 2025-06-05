@@ -24,6 +24,7 @@ describe('appsec enabled metric', () => {
     process.env.DD_TRACE_TELEMETRY_ENABLED = originalTelemetryEnabledEnvVar
     process.env.DD_APPSEC_ENABLED = originalAppsecEnabled
     global.setInterval = originalSetInterval
+
     appsecTelemetry.disable()
     appsecNamespace.reset()
   })
@@ -50,7 +51,6 @@ describe('appsec enabled metric', () => {
 
     it('should call to gauge.track metric when is enabled by remote config', () => {
       const config = new Config()
-      config.telemetry.heartbeatInterval = 10_000 // in milliseconds
 
       appsecTelemetry.enable(config)
 
@@ -66,7 +66,6 @@ describe('appsec enabled metric', () => {
     it('should call to gauge.track metric when is enabled by environment variable', () => {
       process.env.DD_APPSEC_ENABLED = 'true'
       const config = new Config()
-      config.telemetry.heartbeatInterval = 10_000 // in milliseconds
 
       appsecTelemetry.enable(config)
 
@@ -81,7 +80,6 @@ describe('appsec enabled metric', () => {
 
     it('should call to gauge.track metric when is enabled by code', () => {
       const config = new Config({ appsec: true })
-      config.telemetry.heartbeatInterval = 10_000 // in milliseconds
 
       appsecTelemetry.enable(config)
 
@@ -105,12 +103,14 @@ describe('appsec enabled metric', () => {
       appsecTelemetry.enable(config)
 
       sinon.assert.calledOnce(global.setInterval)
+      assert.equal(global.setInterval.firstCall.args[1], 10_000)
       const intervalCb = global.setInterval.firstCall.args[0]
       sinon.assert.calledOnce(unref)
       intervalCb()
       intervalCb()
 
       const metrics = appsecNamespace.metrics.toJSON()
+
 
       assert.equal(metrics.series.length, 1)
       assert.equal(metrics.series[0].metric, 'enabled')
