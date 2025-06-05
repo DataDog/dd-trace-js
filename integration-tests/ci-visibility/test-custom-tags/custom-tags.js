@@ -1,21 +1,21 @@
 const { expect } = require('chai')
 const sum = require('../test/sum')
-const ddTrace = require('dd-trace')
+const tracer = require('dd-trace')
 
-describe('ci visibility', () => {
+describe('test optimization custom tags', () => {
   beforeEach(() => {
-    const testSpan = ddTrace.scope().active()
+    const testSpan = tracer.scope().active()
     testSpan.setTag('custom_tag.beforeEach', 'true')
   })
 
   it('can report tests', () => {
-    const testSpan = ddTrace.scope().active()
+    const testSpan = tracer.scope().active()
     testSpan.setTag('custom_tag.it', 'true')
     expect(sum(1, 2)).to.equal(3)
   })
 
   afterEach(() => {
-    const testSpan = ddTrace.scope().active()
+    const testSpan = tracer.scope().active()
     testSpan.setTag('custom_tag.afterEach', 'true')
   })
 })
