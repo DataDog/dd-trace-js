@@ -11,7 +11,7 @@ const digitRegex = /^\d+$/
  * @param {Object} tags - Key/value pairs of tags
  * @returns Object - Parsed tags
  */
-module.exports = tags => {
+module.exports = function parseTags (tags) {
   const parsedTags = {}
   for (const [tag, value] of Object.entries(tags)) {
     const keys = tag.split('.')

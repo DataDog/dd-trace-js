@@ -15,7 +15,9 @@ const {
   getIsFaultyEarlyFlakeDetection,
   JEST_WORKER_LOGS_PAYLOAD_CODE,
   addAttemptToFixStringToTestName,
-  removeAttemptToFixStringFromTestName
+  removeAttemptToFixStringFromTestName,
+  getTestEndLine,
+  isModifiedTest
 } = require('../../dd-trace/src/plugins/util/test')
 const {
   getFormattedJestTestParameters,
@@ -47,6 +49,7 @@ const skippableSuitesCh = channel('ci:jest:test-suite:skippable')
 const libraryConfigurationCh = channel('ci:jest:library-configuration')
 const knownTestsCh = channel('ci:jest:known-tests')
 const testManagementTestsCh = channel('ci:jest:test-management-tests')
+const impactedTestsCh = channel('ci:jest:modified-tests')
 
 const itrSkippedSuitesCh = channel('ci:jest:itr:skipped-suites')
 
@@ -54,8 +57,8 @@ const itrSkippedSuitesCh = channel('ci:jest:itr:skipped-suites')
 // https://github.com/jestjs/jest/blob/1d682f21c7a35da4d3ab3a1436a357b980ebd0fa/packages/jest-worker/src/types.ts#L37
 const CHILD_MESSAGE_CALL = 1
 // Maximum time we'll wait for the tracer to flush
-const FLUSH_TIMEOUT = 10000
-// eslint-disable-next-line
+const FLUSH_TIMEOUT = 10_000
+
 // https://github.com/jestjs/jest/blob/41f842a46bb2691f828c3a5f27fc1d6290495b82/packages/jest-circus/src/types.ts#L9C8-L9C54
 const RETRY_TIMES = Symbol.for('RETRY_TIMES')
 
@@ -77,6 +80,8 @@ let isKnownTestsEnabled = false
 let isTestManagementTestsEnabled = false
 let testManagementTests = {}
 let testManagementAttemptToFixRetries = 0
+let isImpactedTestsEnabled = false
+let modifiedTests = {}
 
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
@@ -150,6 +155,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.isDiEnabled = this.testEnvironmentOptions._ddIsDiEnabled
       this.isKnownTestsEnabled = this.testEnvironmentOptions._ddIsKnownTestsEnabled
       this.isTestManagementTestsEnabled = this.testEnvironmentOptions._ddIsTestManagementTestsEnabled
+      this.isImpactedTestsEnabled = this.testEnvironmentOptions._ddIsImpactedTestsEnabled
 
       if (this.isKnownTestsEnabled) {
         try {
@@ -158,7 +164,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           this.knownTestsForThisSuite = hasKnownTests
             ? (knownTests?.jest?.[this.testSuite] || [])
             : this.getKnownTestsForSuite(this.testEnvironmentOptions._ddKnownTests)
-        } catch (e) {
+        } catch {
           // If there has been an error parsing the tests, we'll disable Early Flake Deteciton
           this.isEarlyFlakeDetectionEnabled = false
           this.isKnownTestsEnabled = false
@@ -184,6 +190,18 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           this.isTestManagementTestsEnabled = false
         }
       }
+
+      if (this.isImpactedTestsEnabled) {
+        try {
+          const hasImpactedTests = Object.keys(modifiedTests).length > 0
+          this.modifiedTestsForThisSuite = hasImpactedTests
+            ? this.getModifiedTestForThisSuite(modifiedTests)
+            : this.getModifiedTestForThisSuite(this.testEnvironmentOptions._ddModifiedTests)
+        } catch (e) {
+          log.error('Error parsing impacted tests', e)
+          this.isImpactedTestsEnabled = false
+        }
+      }
     }
 
     getHasSnapshotTests () {
@@ -194,7 +212,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       try {
         const { _snapshotData } = this.getVmContext().expect.getState().snapshotState
         hasSnapshotTests = Object.keys(_snapshotData).length > 0
-      } catch (e) {
+      } catch {
         // if we can't be sure, we'll err on the side of caution and assume it has snapshots
       }
       this.hasSnapshotTests = hasSnapshotTests
@@ -255,6 +273,19 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       return result
     }
 
+    getModifiedTestForThisSuite (modifiedTests) {
+      if (this.modifiedTestsForThisSuite) {
+        return this.modifiedTestsForThisSuite
+      }
+      let modifiedTestsForThisSuite = modifiedTests
+      // If jest is using workers, modified tests are serialized to json.
+      // If jest runs in band, they are not.
+      if (typeof modifiedTestsForThisSuite === 'string') {
+        modifiedTestsForThisSuite = JSON.parse(modifiedTestsForThisSuite)
+      }
+      return modifiedTestsForThisSuite
+    }
+
     // Generic function to handle test retries
     retryTest (testName, retryCount, addRetryStringToTestName, retryType, event) {
       // Retrying snapshots has proven to be problematic, so we'll skip them for now
@@ -288,18 +319,16 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
       const setNameToParams = (name, params) => { this.nameToParams[name] = [...params] }
 
-      if (event.name === 'setup') {
-        if (this.global.test) {
-          shimmer.wrap(this.global.test, 'each', each => function () {
-            const testParameters = getFormattedJestTestParameters(arguments)
-            const eachBind = each.apply(this, arguments)
-            return function () {
-              const [testName] = arguments
-              setNameToParams(testName, testParameters)
-              return eachBind.apply(this, arguments)
-            }
-          })
-        }
+      if (event.name === 'setup' && this.global.test) {
+        shimmer.wrap(this.global.test, 'each', each => function () {
+          const testParameters = getFormattedJestTestParameters(arguments)
+          const eachBind = each.apply(this, arguments)
+          return function () {
+            const [testName] = arguments
+            setNameToParams(testName, testParameters)
+            return eachBind.apply(this, arguments)
+          }
+        })
       }
       if (event.name === 'test_start') {
         let isNewTest = false
@@ -326,12 +355,26 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           }
         }
 
+        let isModified = false
+        if (this.isImpactedTestsEnabled) {
+          const testStartLine = getTestLineStart(event.test.asyncError, this.testSuite)
+          const testEndLine = getTestEndLine(event.test.fn, testStartLine)
+          isModified = isModifiedTest(
+            this.testSourceFile,
+            testStartLine,
+            testEndLine,
+            this.modifiedTestsForThisSuite,
+            'jest'
+          )
+        }
+
         if (this.isKnownTestsEnabled) {
           isNewTest = retriedTestsToNumAttempts.has(originalTestName)
-          if (isNewTest) {
-            numEfdRetry = retriedTestsToNumAttempts.get(originalTestName)
-            retriedTestsToNumAttempts.set(originalTestName, numEfdRetry + 1)
-          }
+        }
+
+        if (this.isEarlyFlakeDetectionEnabled && (isNewTest || isModified)) {
+          numEfdRetry = retriedTestsToNumAttempts.get(originalTestName)
+          retriedTestsToNumAttempts.set(originalTestName, numEfdRetry + 1)
         }
 
         const isJestRetry = event.test?.invocations > 1
@@ -348,22 +391,25 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           isAttemptToFixRetry: numOfAttemptsToFixRetries > 0,
           isJestRetry,
           isDisabled,
-          isQuarantined
+          isQuarantined,
+          isModified
         }
         testContexts.set(event.test, ctx)
 
         testStartCh.runStores(ctx, () => {
           for (const hook of event.test.parent.hooks) {
             let hookFn = hook.fn
-            if (!originalHookFns.has(hook)) {
-              originalHookFns.set(hook, hookFn)
-            } else {
+            if (originalHookFns.has(hook)) {
               hookFn = originalHookFns.get(hook)
+            } else {
+              originalHookFns.set(hook, hookFn)
             }
+            // The rule has a bug, see https://github.com/sindresorhus/eslint-plugin-unicorn/issues/2164
+            // eslint-disable-next-line unicorn/consistent-function-scoping
             const wrapperHook = function () {
               return testFnCh.runStores(ctx, () => hookFn.apply(this, arguments))
             }
-            // If we don't do this, the timeout will be not be triggered
+            // If we don't do this, the timeout will not be triggered
             Object.defineProperty(wrapperHook, 'length', { value: hookFn.length })
             hook.fn = wrapperHook
           }
@@ -391,6 +437,27 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
               testManagementAttemptToFixRetries,
               addAttemptToFixStringToTestName,
               'Test Management (Attempt to Fix)',
+              event
+            )
+          }
+        }
+        if (this.isImpactedTestsEnabled) {
+          const testStartLine = getTestLineStart(event.asyncError, this.testSuite)
+          const testEndLine = getTestEndLine(event.fn, testStartLine)
+          const isModified = isModifiedTest(
+            this.testSourceFile,
+            testStartLine,
+            testEndLine,
+            this.modifiedTestsForThisSuite,
+            'jest'
+          )
+          if (isModified && !retriedTestsToNumAttempts.has(originalTestName) && this.isEarlyFlakeDetectionEnabled) {
+            retriedTestsToNumAttempts.set(originalTestName, 0)
+            this.retryTest(
+              event.testName,
+              earlyFlakeDetectionNumRetries,
+              addEfdStringToTestName,
+              'Early flake detection',
               event
             )
           }
@@ -438,7 +505,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             // If it is, we'll set the failedAllTests flag to true if all the tests failed
             // If all tests passed, we'll set the attemptToFixPassed flag to true
             if (testStatuses.length === testManagementAttemptToFixRetries + 1) {
-              if (testStatuses.some(status => status === 'fail')) {
+              if (testStatuses.includes('fail')) {
                 attemptToFixFailed = true
               }
               if (testStatuses.every(status => status === 'fail')) {
@@ -635,7 +702,7 @@ addHook({
 })
 
 function cliWrapper (cli, jestVersion) {
-  const wrapped = shimmer.wrap(cli, 'runCLI', runCLI => async function () {
+  shimmer.wrap(cli, 'runCLI', runCLI => async function () {
     let onDone
     const configurationPromise = new Promise((resolve) => {
       onDone = resolve
@@ -659,6 +726,7 @@ function cliWrapper (cli, jestVersion) {
         isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
         isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
         testManagementAttemptToFixRetries = libraryConfig.testManagementAttemptToFixRetries
+        isImpactedTestsEnabled = libraryConfig.isImpactedTestsEnabled
       }
     } catch (err) {
       log.error('Jest library configuration error', err)
@@ -675,12 +743,12 @@ function cliWrapper (cli, jestVersion) {
 
       try {
         const { err, knownTests: receivedKnownTests } = await knownTestsPromise
-        if (!err) {
-          knownTests = receivedKnownTests
-        } else {
+        if (err) {
           // We disable EFD if there has been an error in the known tests request
           isEarlyFlakeDetectionEnabled = false
           isKnownTestsEnabled = false
+        } else {
+          knownTests = receivedKnownTests
         }
       } catch (err) {
         log.error('Jest known tests error', err)
@@ -725,6 +793,25 @@ function cliWrapper (cli, jestVersion) {
       }
     }
 
+    if (isImpactedTestsEnabled) {
+      const impactedTestsPromise = new Promise((resolve) => {
+        onDone = resolve
+      })
+
+      sessionAsyncResource.runInAsyncScope(() => {
+        impactedTestsCh.publish({ onDone })
+      })
+
+      try {
+        const { err, modifiedTests: receivedModifiedTests } = await impactedTestsPromise
+        if (!err) {
+          modifiedTests = receivedModifiedTests
+        }
+      } catch (err) {
+        log.error('Jest impacted tests error', err)
+      }
+    }
+
     const processArgv = process.argv.slice(2).join(' ')
     sessionAsyncResource.runInAsyncScope(() => {
       testSessionStartCh.publish({ command: `jest ${processArgv}`, frameworkVersion: jestVersion })
@@ -748,19 +835,15 @@ function cliWrapper (cli, jestVersion) {
     if (isUserCodeCoverageEnabled) {
       try {
         const { pct, total } = coverageMap.getCoverageSummary().lines
-        testCodeCoverageLinesTotal = total !== 0 ? pct : 0
-      } catch (e) {
+        testCodeCoverageLinesTotal = total === 0 ? 0 : pct
+      } catch {
         // ignore errors
       }
     }
     let status, error
 
     if (success) {
-      if (numTotalTests === 0 && numTotalTestSuites === 0) {
-        status = 'skip'
-      } else {
-        status = 'pass'
-      }
+      status = numTotalTests === 0 && numTotalTestSuites === 0 ? 'skip' : 'pass'
     } else {
       status = 'fail'
       error = new Error(`Failed test suites: ${numFailedTestSuites}. Failed tests: ${numFailedTests}`)
@@ -874,13 +957,11 @@ function cliWrapper (cli, jestVersion) {
     return result
   })
 
-  cli.runCLI = wrapped.runCLI
-
   return cli
 }
 
 function coverageReporterWrapper (coverageReporter) {
-  const CoverageReporter = coverageReporter.default ? coverageReporter.default : coverageReporter
+  const CoverageReporter = coverageReporter.default ?? coverageReporter
 
   /**
    * If ITR is active, we're running fewer tests, so of course the total code coverage is reduced.
@@ -919,7 +1000,7 @@ addHook({
 }, cliWrapper)
 
 function jestAdapterWrapper (jestAdapter, jestVersion) {
-  const adapter = jestAdapter.default ? jestAdapter.default : jestAdapter
+  const adapter = jestAdapter.default ?? jestAdapter
   const newAdapter = shimmer.wrapFunction(adapter, adapter => function () {
     const environment = arguments[2]
     if (!environment) {
@@ -1067,6 +1148,7 @@ addHook({
       _ddIsTestManagementTestsEnabled,
       _ddTestManagementTests,
       _ddTestManagementAttemptToFixRetries,
+      _ddModifiedTests,
       ...restOfTestEnvironmentOptions
     } = testEnvironmentOptions
 
@@ -1088,7 +1170,7 @@ addHook({
   versions: ['>=24.8.0'],
   file: 'build/SearchSource.js'
 }, (searchSourcePackage, frameworkVersion) => {
-  const SearchSource = searchSourcePackage.default ? searchSourcePackage.default : searchSourcePackage
+  const SearchSource = searchSourcePackage.default ?? searchSourcePackage
 
   shimmer.wrap(SearchSource.prototype, 'getTestPaths', getTestPaths => async function () {
     const testPaths = await getTestPaths.apply(this, arguments)
@@ -1142,7 +1224,7 @@ addHook({
   versions: ['24.8.0 - 24.9.0']
 }, jestConfigSyncWrapper)
 
-const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = [
+const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = new Set([
   'selenium-webdriver',
   'selenium-webdriver/chrome',
   'selenium-webdriver/edge',
@@ -1151,11 +1233,11 @@ const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = [
   'selenium-webdriver/ie',
   'selenium-webdriver/chromium',
   'winston'
-]
+])
 
 function shouldBypassJestRequireEngine (moduleName) {
   return (
-    LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.includes(moduleName)
+    LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)
   )
 }
 
@@ -1163,7 +1245,7 @@ addHook({
   name: 'jest-runtime',
   versions: ['>=24.8.0']
 }, (runtimePackage) => {
-  const Runtime = runtimePackage.default ? runtimePackage.default : runtimePackage
+  const Runtime = runtimePackage.default ?? runtimePackage
 
   shimmer.wrap(Runtime.prototype, 'requireModuleOrMock', requireModuleOrMock => function (from, moduleName) {
     // TODO: do this for every library that we instrument
@@ -1190,17 +1272,17 @@ addHook({
 }, (childProcessWorker) => {
   const ChildProcessWorker = childProcessWorker.default
   shimmer.wrap(ChildProcessWorker.prototype, 'send', send => function (request) {
-    if (!isKnownTestsEnabled && !isTestManagementTestsEnabled) {
+    if (!isKnownTestsEnabled && !isTestManagementTestsEnabled && !isImpactedTestsEnabled) {
       return send.apply(this, arguments)
     }
     const [type] = request
-    // eslint-disable-next-line
+
     // https://github.com/jestjs/jest/blob/1d682f21c7a35da4d3ab3a1436a357b980ebd0fa/packages/jest-worker/src/workers/ChildProcessWorker.ts#L424
     if (type === CHILD_MESSAGE_CALL) {
       // This is the message that the main process sends to the worker to run a test suite (=test file).
       // In here we modify the config.testEnvironmentOptions to include the known tests for the suite.
       // This way the suite only knows about the tests that are part of it.
-      const args = request[request.length - 1]
+      const args = request.at(-1)
       if (args.length > 1) {
         return send.apply(this, arguments)
       }
@@ -1213,12 +1295,17 @@ addHook({
 
       const suiteTestManagementTests = testManagementTests?.jest?.suites?.[testSuite]?.tests || {}
 
+      const suiteModifiedTests = Object.keys(modifiedTests).length > 0
+        ? modifiedTests
+        : {}
+
       args[0].config = {
         ...config,
         testEnvironmentOptions: {
           ...config.testEnvironmentOptions,
           _ddKnownTests: suiteKnownTests,
-          _ddTestManagementTests: suiteTestManagementTests
+          _ddTestManagementTests: suiteTestManagementTests,
+          _ddModifiedTests: suiteModifiedTests
         }
       }
     }

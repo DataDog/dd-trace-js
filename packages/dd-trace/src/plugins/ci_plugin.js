@@ -28,7 +28,10 @@ const {
   DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
   DI_DEBUG_ERROR_FILE_SUFFIX,
   DI_DEBUG_ERROR_LINE_SUFFIX,
-  getLibraryCapabilitiesTags
+  getLibraryCapabilitiesTags,
+  getPullRequestDiff,
+  getModifiedTestsFromDiff,
+  getPullRequestBaseBranch
 } = require('./util/test')
 const Plugin = require('./plugin')
 const { COMPONENT } = require('../constants')
@@ -45,10 +48,23 @@ const {
   GIT_COMMIT_SHA,
   GIT_BRANCH,
   CI_WORKSPACE_PATH,
-  GIT_COMMIT_MESSAGE
+  GIT_COMMIT_MESSAGE,
+  GIT_TAG,
+  GIT_PULL_REQUEST_BASE_BRANCH_SHA,
+  GIT_COMMIT_HEAD_SHA,
+  GIT_PULL_REQUEST_BASE_BRANCH
 } = require('./util/tags')
 const { OS_VERSION, OS_PLATFORM, OS_ARCHITECTURE, RUNTIME_NAME, RUNTIME_VERSION } = require('./util/env')
 const getDiClient = require('../ci-visibility/dynamic-instrumentation')
+const { DD_MAJOR } = require('../../../../version')
+
+const FRAMEWORK_TO_TRIMMED_COMMAND = {
+  vitest: 'vitest run',
+  mocha: 'mocha',
+  cucumber: 'cucumber-js',
+  playwright: 'playwright test',
+  jest: 'jest'
+}
 
 module.exports = class CiPlugin extends Plugin {
   constructor (...args) {
@@ -103,7 +119,11 @@ module.exports = class CiPlugin extends Plugin {
       // only for playwright
       this.rootDir = rootDir
 
-      const testSessionName = getTestSessionName(this.config, this.command, this.testEnvironmentMetadata)
+      const testSessionName = getTestSessionName(
+        this.config,
+        DD_MAJOR < 6 ? this.command : FRAMEWORK_TO_TRIMMED_COMMAND[this.constructor.id],
+        this.testEnvironmentMetadata
+      )
 
       const metadataTags = {}
       for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
@@ -194,6 +214,27 @@ module.exports = class CiPlugin extends Plugin {
         onDone({ err, testManagementTests })
       })
     })
+
+    this.addSub(`ci:${this.constructor.id}:modified-tests`, ({ onDone }) => {
+      const {
+        [GIT_PULL_REQUEST_BASE_BRANCH]: pullRequestBaseBranch,
+        [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseBranchSha,
+        [GIT_COMMIT_HEAD_SHA]: commitHeadSha
+      } = this.testEnvironmentMetadata
+
+      const baseBranchSha = pullRequestBaseBranchSha || getPullRequestBaseBranch(pullRequestBaseBranch)
+
+      if (baseBranchSha) {
+        const diff = getPullRequestDiff(baseBranchSha, commitHeadSha)
+        const modifiedTests = getModifiedTestsFromDiff(diff)
+        if (modifiedTests) {
+          return onDone({ err: null, modifiedTests })
+        }
+      }
+
+      // TODO: Add telemetry for this type of error
+      return onDone({ err: new Error('No modified tests could have been retrieved') })
+    })
   }
 
   get telemetry () {
@@ -240,7 +281,10 @@ module.exports = class CiPlugin extends Plugin {
       [GIT_BRANCH]: branch,
       [CI_PROVIDER_NAME]: ciProviderName,
       [CI_WORKSPACE_PATH]: repositoryRoot,
-      [GIT_COMMIT_MESSAGE]: commitMessage
+      [GIT_COMMIT_MESSAGE]: commitMessage,
+      [GIT_TAG]: tag,
+      [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseSha,
+      [GIT_COMMIT_HEAD_SHA]: commitHeadSha
     } = this.testEnvironmentMetadata
 
     this.repositoryRoot = repositoryRoot || process.cwd()
@@ -259,7 +303,10 @@ module.exports = class CiPlugin extends Plugin {
       runtimeVersion,
       branch,
       testLevel: 'suite',
-      commitMessage
+      commitMessage,
+      tag,
+      pullRequestBaseSha,
+      commitHeadSha
     }
   }
 
@@ -372,11 +419,12 @@ module.exports = class CiPlugin extends Plugin {
       return Promise.resolve()
     }
     log.debug('Removing all Dynamic Instrumentation probes')
-    return Promise.all(Array.from(this.fileLineToProbeId.keys())
-      .map((fileLine) => {
-        const [file, line] = fileLine.split(':')
-        return this.removeDiProbe({ file, line })
-      }))
+    const promises = []
+    for (const fileLine of this.fileLineToProbeId.keys()) {
+      const [file, line] = fileLine.split(':')
+      promises.push(this.removeDiProbe({ file, line }))
+    }
+    return Promise.all(promises)
   }
 
   removeDiProbe ({ file, line }) {
@@ -387,6 +435,10 @@ module.exports = class CiPlugin extends Plugin {
   }
 
   addDiProbe (err) {
+    if (!err?.stack) {
+      log.warn('Can not add breakpoint if the test error does not have a stack')
+      return
+    }
     const [file, line, stackIndex] = getFileAndLineNumberFromError(err, this.repositoryRoot)
 
     if (!file || !Number.isInteger(line)) {

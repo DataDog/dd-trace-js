@@ -102,7 +102,7 @@ class WAFContextWrapper {
 
       const end = process.hrtime.bigint()
 
-      metrics.durationExt = parseInt(end - start) / 1e3
+      metrics.durationExt = Number.parseInt(end - start) / 1e3
 
       if (typeof result.errorCode === 'number' && result.errorCode < 0) {
         const error = new Error('WAF code error')
@@ -137,7 +137,7 @@ class WAFContextWrapper {
       metrics.wafTimeout = result.timeout
 
       if (ruleTriggered) {
-        Reporter.reportAttack(JSON.stringify(result.events))
+        Reporter.reportAttack(result.events)
       }
 
       Reporter.reportDerivatives(result.derivatives)

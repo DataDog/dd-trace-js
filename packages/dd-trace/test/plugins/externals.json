@@ -52,7 +52,7 @@
     },
     {
       "name": "@aws-sdk/client-bedrock-runtime",
-      "versions": [">=3.422.0 <3.798.0"]
+      "versions": [">=3.422.0"]
     }
   ],
   "body-parser": [
@@ -71,12 +71,6 @@
     {
       "name": "kafkajs",
       "versions": [">=1.4.0"]
-    }
-  ],
-  "cypress": [
-    {
-      "name": "cypress",
-      "versions": [">=6.7.0"]
     }
   ],
   "express": [

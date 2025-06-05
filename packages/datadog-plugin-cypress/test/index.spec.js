@@ -65,7 +65,7 @@ describe('Plugin', function () {
           headless: true
         })
 
-        agent.use(traces => {
+        agent.assertSomeTraces(traces => {
           const passedTestSpan = traces[0][0]
           const failedTestSpan = traces[1][0]
           expect(passedTestSpan.name).to.equal('cypress.test')

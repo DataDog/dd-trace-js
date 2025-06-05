@@ -13,7 +13,6 @@ describe('Plugin', () => {
   describe('fastify', () => {
     withVersions('fastify', 'fastify', (version, _, specificVersion) => {
       if (NODE_MAJOR <= 18 && semver.satisfies(specificVersion, '>=5')) return
-
       afterEach(() => {
         app.close()
       })
@@ -44,7 +43,7 @@ describe('Plugin', () => {
               await app.listen(getListenOptions())
 
               await Promise.all([
-                agent.use(traces => {
+                agent.assertSomeTraces(traces => {
                   const spans = traces[0]
                   const tagNames = Object.keys(spans[0].meta)
                   expect(tagNames).to.all.not.match(/code_origin/)
@@ -83,7 +82,7 @@ describe('Plugin', () => {
                 await app.listen(getListenOptions())
 
                 await Promise.all([
-                  agent.use(traces => {
+                  agent.assertSomeTraces(traces => {
                     const spans = traces[0]
                     const tags = spans[0].meta
 
@@ -121,7 +120,7 @@ describe('Plugin', () => {
                 await app.listen(getListenOptions())
 
                 await Promise.all([
-                  agent.use(traces => {
+                  agent.assertSomeTraces(traces => {
                     const spans = traces[0]
                     const tags = spans[0].meta
 
@@ -152,7 +151,7 @@ describe('Plugin', () => {
                 await app.listen(getListenOptions())
 
                 await Promise.all([
-                  agent.use(traces => {
+                  agent.assertSomeTraces(traces => {
                     const spans = traces[0]
                     const tags = spans[0].meta
 
@@ -186,7 +185,7 @@ describe('Plugin', () => {
                 await app.listen(getListenOptions())
 
                 await Promise.all([
-                  agent.use(traces => {
+                  agent.assertSomeTraces(traces => {
                     const spans = traces[0]
                     const tags = spans[0].meta
 
