@@ -12,7 +12,7 @@ const fs = require('fs')
 const DD_INJECTION_ENABLED = 'tracing'
 const DD_INJECT_FORCE = 'true'
 const DD_TRACE_DEBUG = 'true'
-const DD_TRACE_AGENT_PORT = '1999' // Use an unused port so that tracer payloads are logged to stdout
+const DD_TELEMETRY_DEBUG = 'true'
 
 const telemetryAbort = ['abort', 'reason:incompatible_runtime', 'abort.runtime', '']
 const telemetryForced = ['complete', 'injection_forced:true']
@@ -62,12 +62,12 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
           doTest('init/instrument.mjs', `${esmWorks}\n`, []))
       })
       context('with DD_INJECTION_ENABLED', () => {
-        useEnv({ DD_INJECTION_ENABLED, DD_TRACE_DEBUG, DD_TRACE_AGENT_PORT })
+        useEnv({ DD_INJECTION_ENABLED, DD_TRACE_DEBUG, DD_TELEMETRY_DEBUG })
 
         it('should initialize the tracer', () => doTest('init/trace.js', 'true\n', telemetryGood, 'ssi'))
         it('should initialize instrumentation', () => doTest('init/instrument.js', 'true\n', telemetryGood, 'ssi'))
         it(`should ${esmWorks ? '' : 'not '}initialize ESM instrumentation`, () =>
-          doTest('init/instrument.mjs', `${esmWorks}\n`, telemetryGood, esmWorks ? 'ssi' : 'manual'))
+          doTest('init/instrument.mjs', `${esmWorks}\n`, telemetryGood, esmWorks ? '{name=ssi}' : 'manual'))
       })
     })
   })
@@ -100,7 +100,7 @@ function testRuntimeVersionChecks (arg, filename) {
             it('should initialize the tracer, if DD_INJECT_FORCE', () => doTestForced('true\n', telemetryForced))
           })
           context('with debug', () => {
-            useEnv({ DD_TRACE_DEBUG, DD_TRACE_AGENT_PORT })
+            useEnv({ DD_TRACE_DEBUG, DD_TELEMETRY_DEBUG })
 
             it('should not initialize the tracer', () =>
               doTest(`Aborting application instrumentation due to incompatible_runtime.
