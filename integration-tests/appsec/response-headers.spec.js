@@ -65,26 +65,28 @@ describe('Headers collection - Fastify', () => {
     })
 
     await agent.assertMessageReceived(({ headers, payload }) => {
-      if (payload[0][0].name === 'fastify.request') {
-        fastifyRequestReceived = true
-        assert.equal(
-          Object.keys(payload[0][0].meta).filter(tagName => tagName.startsWith('http.request.headers.')).length,
-          requestHeaders.length
-        )
-        requestHeaders.forEach((headerName) => {
-          assert.property(payload[0][0].meta, `http.request.headers.${headerName}`)
-        })
-
-        // Response headers
-        assert.equal(
-          Object.keys(payload[0][0].meta).filter(tagName => tagName.startsWith('http.response.headers.')).length,
-          responseHeaders.length
-        )
-        responseHeaders.forEach((headerName) => {
-          assert.property(payload[0][0].meta, `http.response.headers.${headerName}`)
-        })
+      if (payload[0][0].name !== 'fastify.request') {
+        throw new Error('Not the span we are looking for')
       }
-    }, 30000, 4)
+
+      fastifyRequestReceived = true
+      assert.equal(
+        Object.keys(payload[0][0].meta).filter(tagName => tagName.startsWith('http.request.headers.')).length,
+        requestHeaders.length
+      )
+      requestHeaders.forEach((headerName) => {
+        assert.property(payload[0][0].meta, `http.request.headers.${headerName}`)
+      })
+
+      // Response headers
+      assert.equal(
+        Object.keys(payload[0][0].meta).filter(tagName => tagName.startsWith('http.response.headers.')).length,
+        responseHeaders.length
+      )
+      responseHeaders.forEach((headerName) => {
+        assert.property(payload[0][0].meta, `http.response.headers.${headerName}`)
+      })
+    }, 30000, 10, true)
 
     assert.isTrue(fastifyRequestReceived)
   })
