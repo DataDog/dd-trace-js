@@ -1,11 +1,22 @@
 'use strict'
 
+const { storage } = require('../../datadog-core')
 const CLIENT_PORT_KEY = require('../../dd-trace/src/constants')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 
 class MySQLPlugin extends DatabasePlugin {
   static get id () { return 'mysql' }
   static get system () { return 'mysql' }
+
+  constructor () {
+    super(...arguments)
+
+    this.addSub(`apm:${this.component}:connection:start`, ctx => {
+      ctx.parentStore = storage('legacy').getStore()
+    })
+
+    this.addBind(`apm:${this.component}:connection:finish`, ctx => ctx.parentStore)
+  }
 
   bindStart (ctx) {
     const service = this.serviceName({ pluginConfig: this.config, dbConfig: ctx.conf, system: this.system })
