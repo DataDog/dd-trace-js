@@ -69,6 +69,7 @@ describe('Plugin', () => {
             brokers: ['127.0.0.1:9092'],
             logLevel: lib.logLevel.WARN
           })
+          await require('timers/promises').setTimeout(20)
         })
 
         describe('producer', () => {
@@ -230,6 +231,7 @@ describe('Plugin', () => {
             consumer = kafka.consumer({ groupId: 'test-group' })
             await consumer.connect()
             await consumer.subscribe({ topic: testTopic })
+            await require('timers/promises').setTimeout(20)
           })
 
           afterEach(async () => {
@@ -430,6 +432,7 @@ describe('Plugin', () => {
             consumer = kafka.consumer({ groupId: 'test-group' })
             await consumer.connect()
             await consumer.subscribe({ topic: testTopic })
+            await require('timers/promises').setTimeout(20)
           })
 
           before(() => {
@@ -595,6 +598,7 @@ function expectSpanWithDefaults (expected) {
 async function sendMessages (kafka, topic, messages) {
   const producer = kafka.producer()
   await producer.connect()
+  await require('timers/promises').setTimeout(20)
   await producer.send({
     topic,
     messages
