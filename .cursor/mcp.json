@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "Datadog (alpha3)": {
+      "command": "/Users/ayan.khan/.cursor/extensions/datadog.datadog-vscode-2.5.1/resources/scripts/mcp/stdio-app.mjs",
+      "args": [
+        "56542"
+      ]
+    }
+  }
+}
