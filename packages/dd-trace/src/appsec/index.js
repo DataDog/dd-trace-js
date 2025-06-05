@@ -37,6 +37,7 @@ const rasp = require('./rasp')
 const { isInServerlessEnvironment } = require('../serverless')
 
 const responseAnalyzedSet = new WeakSet()
+const storedResponseHeaders = new WeakMap()
 
 let isEnabled = false
 let config
@@ -187,7 +188,13 @@ function incomingHttpEndTranslator ({ req, res }) {
 
   waf.disposeContext(req)
 
-  Reporter.finishRequest(req, res)
+  const storedHeaders = storedResponseHeaders.get(req)
+
+  Reporter.finishRequest(req, res, storedHeaders)
+  
+  if (storedHeaders) {
+    storedResponseHeaders.delete(req)
+  }
 }
 
 function onPassportVerify ({ framework, login, user, success, abortController }) {
@@ -285,6 +292,10 @@ function onResponseBody ({ req, res, body }) {
 }
 
 function onResponseWriteHead ({ req, res, abortController, statusCode, responseHeaders }) {
+  if (Object.keys(responseHeaders).length) {
+    storedResponseHeaders.set(req, responseHeaders)
+  }
+
   // avoid "write after end" error
   if (isBlocked(res)) {
     abortController?.abort()
