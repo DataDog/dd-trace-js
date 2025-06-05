@@ -111,7 +111,6 @@ describe('appsec enabled metric', () => {
 
       const metrics = appsecNamespace.metrics.toJSON()
 
-
       assert.equal(metrics.series.length, 1)
       assert.equal(metrics.series[0].metric, 'enabled')
       assert.equal(metrics.series[0].type, 'gauge')
