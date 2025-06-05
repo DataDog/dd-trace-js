@@ -109,8 +109,16 @@ function wrapWriteHead (writeHead) {
       obj = headers
     }
 
-    // this doesn't support explicit duplicate headers, but it's an edge case
-    const responseHeaders = Object.assign(this.getHeaders(), obj)
+    // Store headers before calling writeHead
+    if (obj && typeof obj === 'object') {
+      for (const [key, value] of Object.entries(obj)) {
+        if (!this.headersSent) {
+          this.setHeader(key, value)
+        }
+      }
+    }
+
+    const responseHeaders = this.getHeaders()
 
     startWriteHeadCh.publish({
       req: this.req,
