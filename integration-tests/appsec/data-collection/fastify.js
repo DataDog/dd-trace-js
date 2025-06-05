@@ -22,4 +22,3 @@ app.get('/', (request, reply) => {
 app.listen({ port }, () => {
   process.send({ port })
 })
-

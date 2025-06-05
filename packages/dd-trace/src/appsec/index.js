@@ -191,7 +191,7 @@ function incomingHttpEndTranslator ({ req, res }) {
   const storedHeaders = storedResponseHeaders.get(req)
 
   Reporter.finishRequest(req, res, storedHeaders)
-  
+
   if (storedHeaders) {
     storedResponseHeaders.delete(req)
   }

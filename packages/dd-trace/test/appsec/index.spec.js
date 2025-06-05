@@ -459,12 +459,12 @@ describe('AppSec Index', function () {
       sinon.stub(Reporter, 'finishRequest')
       sinon.stub(waf, 'disposeContext')
 
-      responseWriteHead.publish({ 
-        req, 
-        res, 
-        abortController: { abort: sinon.stub() }, 
-        statusCode: 200, 
-        responseHeaders: storedHeaders 
+      responseWriteHead.publish({
+        req,
+        res,
+        abortController: { abort: sinon.stub() },
+        statusCode: 200,
+        responseHeaders: storedHeaders
       })
 
       AppSec.incomingHttpEndTranslator({ req, res })
