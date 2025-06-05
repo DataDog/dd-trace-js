@@ -1,3 +1,4 @@
+const { storage } = require('../../../datadog-core')
 const {
   getTestEnvironmentMetadata,
   getTestSessionName,
@@ -73,7 +74,10 @@ module.exports = class CiPlugin extends Plugin {
     this.fileLineToProbeId = new Map()
     this.rootDir = process.cwd() // fallback in case :session:start events are not emitted
 
-    this.addSub(`ci:${this.constructor.id}:library-configuration`, ({ onDone, isParallel }) => {
+    this.addSub(`ci:${this.constructor.id}:library-configuration`, (ctx) => {
+      const { onDone, isParallel } = ctx
+      ctx.currentStore = storage('legacy').getStore()
+
       if (!this.tracer._exporter || !this.tracer._exporter.getLibraryConfiguration) {
         return onDone({ err: new Error('Test optimization was not initialized correctly') })
       }
@@ -93,6 +97,10 @@ module.exports = class CiPlugin extends Plugin {
         this.tracer._exporter.addMetadataTags(metadataTags)
         onDone({ err, libraryConfig })
       })
+    })
+
+    this.addBind(`ci:${this.constructor.id}:test-suite:skippable`, (ctx) => {
+      return ctx.currentStore
     })
 
     this.addSub(`ci:${this.constructor.id}:test-suite:skippable`, ({ onDone }) => {
@@ -188,6 +196,10 @@ module.exports = class CiPlugin extends Plugin {
       this.telemetry.count(TELEMETRY_ITR_SKIPPED, { testLevel: 'suite' }, skippedSuites.length)
     })
 
+    this.addBind(`ci:${this.constructor.id}:known-tests`, (ctx) => {
+      return ctx.currentStore
+    })
+
     this.addSub(`ci:${this.constructor.id}:known-tests`, ({ onDone }) => {
       if (!this.tracer._exporter?.getKnownTests) {
         return onDone({ err: new Error('Test optimization was not initialized correctly') })
@@ -202,6 +214,10 @@ module.exports = class CiPlugin extends Plugin {
       })
     })
 
+    this.addBind(`ci:${this.constructor.id}:test-management-tests`, (ctx) => {
+      return ctx.currentStore
+    })
+
     this.addSub(`ci:${this.constructor.id}:test-management-tests`, ({ onDone }) => {
       if (!this.tracer._exporter?.getTestManagementTests) {
         return onDone({ err: new Error('Test optimization was not initialized correctly') })
@@ -213,6 +229,10 @@ module.exports = class CiPlugin extends Plugin {
         }
         onDone({ err, testManagementTests })
       })
+    })
+
+    this.addBind(`ci:${this.constructor.id}:modified-tests`, (ctx) => {
+      return ctx.currentStore
     })
 
     this.addSub(`ci:${this.constructor.id}:modified-tests`, ({ onDone }) => {

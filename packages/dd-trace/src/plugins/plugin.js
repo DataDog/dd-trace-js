@@ -34,7 +34,7 @@ class StoreBinding {
     this._transform = data => {
       const store = storage('legacy').getStore()
 
-      return !store || !store.noop || data?.currentStore
+      return !store || !store.noop || data?.hasOwnProperty('currentStore')
         ? transform(data)
         : store
     }
