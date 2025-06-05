@@ -352,8 +352,8 @@ describe('Plugin', () => {
           it('should publish on afterStart channel', (done) => {
             const afterStart = dc.channel('dd-trace:kafkajs:consumer:afterStart')
 
-            const spy = sinon.spy(() => {
-              expect(tracer.scope().active()).to.not.be.null
+            const spy = sinon.spy((ctx) => {
+              expect(ctx.currentStore.span).to.not.be.null
               afterStart.unsubscribe(spy)
             })
             afterStart.subscribe(spy)

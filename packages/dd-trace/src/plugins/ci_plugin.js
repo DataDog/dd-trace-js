@@ -455,6 +455,10 @@ module.exports = class CiPlugin extends Plugin {
   }
 
   addDiProbe (err) {
+    if (!err?.stack) {
+      log.warn('Can not add breakpoint if the test error does not have a stack')
+      return
+    }
     const [file, line, stackIndex] = getFileAndLineNumberFromError(err, this.repositoryRoot)
 
     if (!file || !Number.isInteger(line)) {
