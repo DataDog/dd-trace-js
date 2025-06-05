@@ -30,9 +30,6 @@ class SensitiveHandler {
     this._sensitiveAnalyzers.set(vulnerabilities.HARDCODED_PASSWORD, (evidence) => {
       return hardcodedPasswordAnalyzer(evidence, this._valuePattern)
     })
-    this._sensitiveAnalyzers.set(vulnerabilities.HEADER_INJECTION, (evidence) => {
-      return headerSensitiveAnalyzer(evidence, this._namePattern, this._valuePattern)
-    })
     this._sensitiveAnalyzers.set(vulnerabilities.LDAP_INJECTION, ldapSensitiveAnalyzer)
     this._sensitiveAnalyzers.set(vulnerabilities.NOSQL_MONGODB_INJECTION, jsonSensitiveAnalyzer)
     this._sensitiveAnalyzers.set(vulnerabilities.SQL_INJECTION, sqlSensitiveAnalyzer)
