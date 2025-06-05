@@ -494,6 +494,20 @@ function getGitMetadata (ciMetadata) {
   return tags
 }
 
+function getGitInformationDiscrepancy () {
+  const gitRepositoryUrl = getRepositoryUrl()
+
+  const gitCommitSHA = sanitizedExec(
+    'git',
+    ['rev-parse', 'HEAD'],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_commit_sha' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_commit_sha' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_commit_sha' } }
+  )
+
+  return { gitRepositoryUrl, gitCommitSHA }
+}
+
 module.exports = {
   getGitMetadata,
   getLatestCommits,
@@ -504,6 +518,7 @@ module.exports = {
   isShallowRepository,
   unshallowRepository,
   isGitAvailable,
+  getGitInformationDiscrepancy,
   getGitDiff,
   getGitRemoteName,
   getSourceBranch,
