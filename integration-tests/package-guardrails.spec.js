@@ -12,6 +12,7 @@ const NODE_OPTIONS = '--require dd-trace/init.js'
 const DD_TRACE_DEBUG = 'true'
 const DD_INJECTION_ENABLED = 'tracing'
 const DD_LOG_LEVEL = 'error'
+const DD_TRACE_AGENT_PORT = '1999' // Use an unused port so that tracer payloads are logged to stdout
 
 // These are on by default in release tests, so we'll turn them off for
 // more fine-grained control of these variables in these tests.
@@ -65,9 +66,9 @@ false
     })
     context('when fastify is latest and logging enabled', () => {
       useSandbox(['fastify'])
-      useEnv({ DD_TRACE_DEBUG })
+      useEnv({ DD_TRACE_DEBUG, DD_TRACE_AGENT_PORT })
       it('should instrument the package', () =>
-        runTest('Application instrumentation bootstrapping complete\ntrue\n', []))
+        runTest('Application instrumentation bootstrapping complete\ntrue\n', [], 'ssi'))
     })
   })
 
@@ -99,7 +100,7 @@ addHook({ name: 'bluebird', versions: ['*'] }, Promise => {
     })
 
     context('with logging enabled', () => {
-      useEnv({ DD_TRACE_DEBUG, DD_LOG_LEVEL })
+      useEnv({ DD_TRACE_DEBUG, DD_LOG_LEVEL, DD_TRACE_AGENT_PORT })
       it('should not instrument the package', () =>
         runTest(
           log => {
@@ -108,7 +109,7 @@ Error during ddtrace instrumentation of application, aborting.
 ReferenceError: this is a test error
     at `))
             assert.ok(log.includes('\nfalse\n'))
-          }, []))
+          }, [], 'manual'))
     })
   })
 })
