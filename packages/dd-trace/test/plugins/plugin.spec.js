@@ -3,10 +3,12 @@
 require('../setup/tap')
 
 const Plugin = require('../../src/plugins/plugin')
-const plugins = require('../../src/plugins')
+const { storage } = require('../../../datadog-core')
 const { channel } = require('dc-polyfill')
 
 describe('Plugin', () => {
+  let plugin
+
   class BadPlugin extends Plugin {
     static get id () { return 'badPlugin' }
 
@@ -33,20 +35,12 @@ describe('Plugin', () => {
     }
   }
 
-  const testPlugins = { badPlugin: BadPlugin, goodPlugin: GoodPlugin }
-  const loadChannel = channel('dd-trace:instrumentation:load')
-
-  before(() => {
-    for (const [name, cls] of Object.entries(testPlugins)) {
-      plugins[name] = cls
-      loadChannel.publish({ name })
-    }
+  after(() => {
+    plugin.configure({ enabled: false })
   })
 
-  after(() => { Object.keys(testPlugins).forEach(name => delete plugins[name]) })
-
   it('should disable upon error', () => {
-    const plugin = new BadPlugin()
+    plugin = new BadPlugin()
     plugin.configure({ enabled: true })
 
     expect(plugin._enabled).to.be.true
@@ -57,7 +51,7 @@ describe('Plugin', () => {
   })
 
   it('should not disable with no error', () => {
-    const plugin = new GoodPlugin()
+    plugin = new GoodPlugin()
     plugin.configure({ enabled: true })
 
     expect(plugin._enabled).to.be.true
@@ -65,5 +59,25 @@ describe('Plugin', () => {
     channel('apm:goodPlugin:start').publish({ foo: 'bar' })
 
     expect(plugin._enabled).to.be.true
+  })
+
+  it('should run binding transforms with an undefined current store', () => {
+    class TestPlugin extends Plugin {
+      static get id () { return 'test' }
+
+      constructor () {
+        super()
+        this.addBind('apm:test:start', ctx => ctx.currentStore)
+      }
+    }
+
+    plugin = new TestPlugin()
+    plugin.configure({ enabled: true })
+
+    storage('legacy').run({ noop: true }, () => {
+      channel('apm:test:start').runStores({ currentStore: undefined }, () => {
+        expect(storage('legacy').getStore()).to.equal(undefined)
+      })
+    })
   })
 })

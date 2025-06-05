@@ -411,7 +411,6 @@ describe('Overhead controller', () => {
 
       function tests (serverConfig) {
         const handlers = []
-
         beforeEach(() => {
           testRequestEventEmitter
             .removeAllListeners(TEST_REQUEST_STARTED)
@@ -583,7 +582,6 @@ describe('Overhead controller', () => {
           }
           handlers.push(handler)
           agent.subscribe(handler)
-
           testRequestEventEmitter.on(TEST_REQUEST_STARTED, (url) => {
             if (url === FIRST_REQUEST) {
               axios.get(`http://localhost:${serverConfig.port}${SECOND_REQUEST}`).then().catch(done)
@@ -591,21 +589,20 @@ describe('Overhead controller', () => {
               axios.get(`http://localhost:${serverConfig.port}${THIRD_REQUEST}`).then().catch(done)
             } else if (url === THIRD_REQUEST) {
               requestResolvers[FIRST_REQUEST]()
+            } else if (url === FOURTH_REQUEST) {
+              axios.get(`http://localhost:${serverConfig.port}${FIFTH_REQUEST}`).then().catch(done)
             } else if (url === FIFTH_REQUEST) {
               requestResolvers[SECOND_REQUEST]()
             }
           })
+
           testRequestEventEmitter.on(TEST_REQUEST_FINISHED, (url) => {
             if (url === FIRST_REQUEST) {
               axios.get(`http://localhost:${serverConfig.port}${FOURTH_REQUEST}`).then().catch(done)
-              axios.get(`http://localhost:${serverConfig.port}${FIFTH_REQUEST}`).then().catch(done)
             } else if (url === SECOND_REQUEST) {
-              // Previously this was a setImmediate, but that made this flaky. Waiting 100ms de-flakes it.
-              setTimeout(() => {
-                requestResolvers[THIRD_REQUEST]()
-                requestResolvers[FOURTH_REQUEST]()
-                requestResolvers[FIFTH_REQUEST]()
-              }, 100)
+              requestResolvers[THIRD_REQUEST]()
+              requestResolvers[FOURTH_REQUEST]()
+              requestResolvers[FIFTH_REQUEST]()
             }
           })
 
