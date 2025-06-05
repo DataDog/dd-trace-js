@@ -1437,15 +1437,15 @@ class Config {
     obj[name] = value ? String(value) : undefined // unset for empty strings
   }
 
-  _setTags (obj, name, value) {
+    _setTags (obj, name, value) {
     if (!value) {
       return this._setValue(obj, name, null)
     }
 
-    // More efficient check for empty object
+    // Check if object has any own enumerable properties (same behavior as Object.keys())
     let hasKeys = false
     for (const key in value) {
-      if (Object.prototype.hasOwnProperty.call(value, key)) {
+      if (value.hasOwnProperty(key)) {
         hasKeys = true
         break
       }
@@ -1462,26 +1462,24 @@ class Config {
     obj[name] = value
   }
 
-  _setAndTrackChange ({ name, value, origin, unprocessedValue, changes }) {
+    _setAndTrackChange ({ name, value, origin, unprocessedValue, changes }) {
     set(this, name, value)
 
     if (!changeTracker[name]) {
       changeTracker[name] = {}
     }
 
+    const originExists = origin in changeTracker[name]
     const oldValue = changeTracker[name][origin]
 
-    // Early return if value hasn't changed
-    if (origin in changeTracker[name] && oldValue === value) {
-      return
+    if (!originExists || oldValue !== value) {
+      changeTracker[name][origin] = value
+      changes.push({
+        name,
+        value: unprocessedValue || value,
+        origin
+      })
     }
-
-    changeTracker[name][origin] = value
-    changes.push({
-      name,
-      value: unprocessedValue || value,
-      origin
-    })
   }
 
   // TODO: Report origin changes and errors to telemetry.
