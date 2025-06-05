@@ -467,6 +467,10 @@ class MochaPlugin extends CiPlugin {
         this.tracer._exporter.export(trace)
       })
     })
+
+    this.addBind('ci:mocha:global:run', (ctx) => {
+      return ctx.currentStore
+    })
   }
 
   startTestSpan (testInfo) {
