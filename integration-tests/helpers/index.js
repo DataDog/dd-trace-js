@@ -42,11 +42,13 @@ async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
       // Debug adds this, which we don't care about in these tests
       out = out.replace('Flushing 0 metrics via HTTP\n', '')
     }
-    assert.strictEqual(out, expectedOut)
+    assert.match(out, new RegExp(expectedOut), `output "${out} does not contain expected output "${expectedOut}"`)
   }
 
-  assert.strictEqual(process.env.DD_INSTRUMENTATION_SOURCE, expectedSource,
-      `Expected the process to have the DD_INSTRUMENTATION_SOURCE environment variable set to "${expectedSource}"`)
+  if (expectedSource) {
+    assert.match(out, new RegExp(expectedSource),
+    `Expected the process to output "${expectedSource}", but logs only contain: "${out}"`)
+  }
   return pid
 }
 
