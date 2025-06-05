@@ -5,8 +5,21 @@ stages:
   - single-step-instrumentation-tests
   - macrobenchmarks
 
+
+check_config_inversion_local_file:
+  extends: .check_config_inversion_local_file
+  variables:
+    LOCAL_JSON_PATH: "packages/dd-trace/src/supported-configurations.json"
+
+config_inversion_update_central:
+  extends: .config_inversion_update_central
+  variables:
+    LOCAL_REPO_NAME: "dd-trace-js"
+    LOCAL_JSON_PATH: "packages/dd-trace/src/supported-configurations.json"
+
 include:
-  - local: ".gitlab/one-pipeline.locked.yml"
+  # See: https://gitlab.ddbuild.io/DataDog/apm-reliability/libdatadog-build
+  - remote: https://gitlab-templates.ddbuild.io/libdatadog/include-wip/mhlidd/config-inversion-update-central/one-pipeline.yml
   - local: ".gitlab/benchmarks.yml"
   - local: ".gitlab/macrobenchmarks.yml"
 

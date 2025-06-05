@@ -4,6 +4,7 @@ const { createCoverageMap } = require('istanbul-lib-coverage')
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
+const configHelper = require('../../dd-trace/src/config-helper')
 
 const testStartCh = channel('ci:cucumber:test:start')
 const testRetryCh = channel('ci:cucumber:test:retry')
@@ -247,7 +248,7 @@ function wrapRun (pl, isLatestVersion) {
       testName: this.pickle.name,
       testFileAbsolutePath,
       testSourceLine,
-      isParallel: !!process.env.CUCUMBER_WORKER_ID
+      isParallel: !!configHelper.getConfiguration('CUCUMBER_WORKER_ID')
     }
     const ctx = testStartPayload
     numAttemptToCtx.set(numAttempt, ctx)
@@ -540,7 +541,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     }
 
     const processArgv = process.argv.slice(2).join(' ')
-    const command = process.env.npm_lifecycle_script || `cucumber-js ${processArgv}`
+    const command = configHelper.getConfiguration('npm_lifecycle_script') || `cucumber-js ${processArgv}`
 
     if (isFlakyTestRetriesEnabled && !options.retry && numTestRetries > 0) {
       options.retry = numTestRetries
@@ -932,7 +933,7 @@ addHook({
   shimmer.wrap(
     workerPackage.Worker.prototype,
     'runTestCase',
-    runTestCase => getWrappedRunTestCase(runTestCase, true, !!process.env.CUCUMBER_WORKER_ID)
+    runTestCase => getWrappedRunTestCase(runTestCase, true, !!configHelper.getConfiguration('CUCUMBER_WORKER_ID'))
   )
   return workerPackage
 })

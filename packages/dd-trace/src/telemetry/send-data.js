@@ -1,6 +1,7 @@
 const request = require('../exporters/common/request')
 const log = require('../log')
 const { isTrue } = require('../util')
+const { getConfiguration } = require('../config-helper')
 
 let agentTelemetry = true
 
@@ -51,7 +52,7 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
 
   let url = config.url
 
-  const isCiVisibilityAgentlessMode = isCiVisibility && isTrue(process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED)
+  const isCiVisibilityAgentlessMode = isCiVisibility && isTrue(getConfiguration('DD_CIVISIBILITY_AGENTLESS_ENABLED'))
 
   if (isCiVisibilityAgentlessMode) {
     try {
@@ -85,14 +86,14 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
   })
 
   request(data, options, (error) => {
-    if (error && process.env.DD_API_KEY && config.site) {
+    if (error && getConfiguration('DD_API_KEY') && config.site) {
       if (agentTelemetry) {
         log.warn('Agent telemetry failed, started agentless telemetry')
         agentTelemetry = false
       }
       // figure out which data center to send to
       const backendUrl = getAgentlessTelemetryEndpoint(config.site)
-      const backendHeader = { ...options.headers, 'DD-API-KEY': process.env.DD_API_KEY }
+      const backendHeader = { ...options.headers, 'DD-API-KEY': getConfiguration('DD_API_KEY') }
       const backendOptions = {
         ...options,
         url: backendUrl,
