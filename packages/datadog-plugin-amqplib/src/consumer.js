@@ -7,9 +7,11 @@ const { getResourceName } = require('./util')
 
 class AmqplibConsumerPlugin extends ConsumerPlugin {
   static get id () { return 'amqplib' }
-  static get operation () { return 'command' }
+  static get operation () { return 'consume' }
 
-  start ({ method, fields, message, queue }) {
+  bindStart (ctx) {
+    const { method, fields, message, queue } = ctx
+
     if (method !== 'basic.deliver' && method !== 'basic.get') return
 
     const childOf = extract(this.tracer, message)
@@ -27,7 +29,7 @@ class AmqplibConsumerPlugin extends ConsumerPlugin {
         'amqp.source': fields.source,
         'amqp.destination': fields.destination
       }
-    })
+    }, ctx)
 
     if (
       this.config.dsmEnabled && message?.properties?.headers
@@ -37,6 +39,8 @@ class AmqplibConsumerPlugin extends ConsumerPlugin {
       this.tracer
         .setCheckpoint(['direction:in', `topic:${queueName}`, 'type:rabbitmq'], span, payloadSize)
     }
+
+    return ctx.currentStore
   }
 }
 
