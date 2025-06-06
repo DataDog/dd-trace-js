@@ -91,7 +91,9 @@ describe('Config', () => {
 
     it('should return aliased value', () => {
       process.env.DATADOG_API_KEY = '12345'
-      assert.strictEqual(getEnvironmentVariable('DATADOG_API_KEY'), '12345')
+      assert.throws(() => getEnvironmentVariable('DATADOG_API_KEY'), {
+        message: /Missing DATADOG_API_KEY env\/configuration in "supported-configurations.json" file./
+      })
       assert.strictEqual(getEnvironmentVariable('DD_API_KEY'), '12345')
       const { DD_API_KEY, DATADOG_API_KEY } = getEnvironmentVariables()
       assert.strictEqual(DATADOG_API_KEY, undefined)

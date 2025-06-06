@@ -72,9 +72,8 @@ module.exports = {
    * @throws {Error} if the configuration is not supported
    */
   getEnvironmentVariable (name) {
-    if ((name.startsWith('DD_') || name.startsWith('OTEL_')) &&
-        !supportedConfigurations[name] &&
-        !aliasToCanonical[name]) {
+    if ((name.startsWith('DD_') || name.startsWith('OTEL_') || aliasToCanonical[name]) &&
+        !supportedConfigurations[name]) {
       throw new Error(`Missing ${name} env/configuration in "supported-configurations.json" file.`)
     }
     const config = process.env[name]
