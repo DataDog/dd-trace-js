@@ -29,23 +29,24 @@ const telemetryCounters = {
 }
 
 function getCounter (event, ddVar, otelVar) {
-  const counters = telemetryCounters[event]
   const tags = []
-  const ddVarPrefix = 'config_datadog:'
-  const otelVarPrefix = 'config_opentelemetry:'
   if (ddVar) {
+    const ddVarPrefix = 'config_datadog:'
     ddVar = ddVarPrefix + ddVar.toLowerCase()
     tags.push(ddVar)
   }
   if (otelVar) {
+    const otelVarPrefix = 'config_opentelemetry:'
     otelVar = otelVarPrefix + otelVar.toLowerCase()
     tags.push(otelVar)
   }
 
-  if (!(otelVar in counters)) counters[otelVar] = {}
-
   const counter = tracerMetrics.count(event, tags)
+
+  const counters = telemetryCounters[event]
+  counters[otelVar] ??= {}
   counters[otelVar][ddVar] = counter
+
   return counter
 }
 
@@ -85,7 +86,7 @@ function validateOtelPropagators (propagators) {
     !getEnvironmentVariable('PROPAGATION_STYLE_INJECT') &&
     !getEnvironmentVariable('DD_TRACE_PROPAGATION_STYLE') &&
     getEnvironmentVariable('OTEL_PROPAGATORS')) {
-    for (const style in propagators) {
+    for (const style of Object.keys(propagators)) {
       if (!VALID_PROPAGATION_STYLES.has(style)) {
         log.warn('unexpected value for OTEL_PROPAGATORS environment variable')
         getCounter('otel.env.invalid', 'DD_TRACE_PROPAGATION_STYLE', 'OTEL_PROPAGATORS').inc()
@@ -190,7 +191,7 @@ function remapify (input, mappings) {
   if (!input) return
   const output = {}
   for (const [key, value] of Object.entries(input)) {
-    output[key in mappings ? mappings[key] : key] = value
+    output[mappings[key] ?? key] = value
   }
   return output
 }
@@ -1477,7 +1478,7 @@ class Config {
     ]
     const changes = []
 
-    for (const name in this._defaults) {
+    for (const name of Object.keys(this._defaults)) {
       for (let i = 0; i < containers.length; i++) {
         const container = containers[i]
         const value = container[name]

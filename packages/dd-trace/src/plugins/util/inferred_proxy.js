@@ -74,11 +74,11 @@ function setInferredProxySpanTags (span, proxyContext) {
 }
 
 function extractInferredProxyContext (headers) {
-  if (!(PROXY_HEADER_START_TIME_MS in headers)) {
+  if (headers.PROXY_HEADER_START_TIME_MS === undefined) {
     return null
   }
 
-  if (!(PROXY_HEADER_SYSTEM in headers && headers[PROXY_HEADER_SYSTEM] in supportedProxies)) {
+  if (!(headers.PROXY_HEADER_SYSTEM !== undefined && supportedProxies[headers[PROXY_HEADER_SYSTEM]] !== undefined)) {
     log.debug(`Received headers to create inferred proxy span but headers include an unsupported proxy type ${headers}`)
     return null
   }

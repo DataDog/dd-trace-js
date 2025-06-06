@@ -8,6 +8,8 @@ const coalesce = require('koalas')
 const { tagsFromRequest, tagsFromResponse } = require('../../dd-trace/src/payload-tagging')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
+const filteredKeys = new Set(['request', 'requestId', 'error', '$metadata'])
+
 class BaseAwsSdkPlugin extends ClientPlugin {
   static get id () { return 'aws' }
   static get isPayloadReporter () { return false }
@@ -112,7 +114,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
   }
 
   operationFromRequest (request) {
-    // can be overriden by subclasses
+    // can be overridden by subclasses
     return this.operationName({
       id: 'aws',
       type: 'web',
@@ -161,12 +163,16 @@ class BaseAwsSdkPlugin extends ClientPlugin {
   }
 
   extractResponseBody (response) {
-    if (Object.hasOwn(response, 'data')) {
+    if (response.data) {
       return response.data
     }
-    return Object.fromEntries(
-      Object.entries(response).filter(([key]) => !['request', 'requestId', 'error', '$metadata'].includes(key))
-    )
+    const response = {}
+    for (const [key, value] of Object.entries(response)) {
+      if (!filteredKeys.has(key)) {
+        response[key] = value
+      }
+    }
+    return response
   }
 
   generateTags () {

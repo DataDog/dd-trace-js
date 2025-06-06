@@ -95,10 +95,10 @@ const DsmPathwayCodec = {
     if (carrier == null) return
 
     let ctx
-    if (CONTEXT_PROPAGATION_KEY_BASE64 in carrier) {
+    if (Object.hasOwn(carrier, CONTEXT_PROPAGATION_KEY_BASE64)) {
       // decode v2 encoding of base64
       ctx = decodePathwayContextBase64(carrier[CONTEXT_PROPAGATION_KEY_BASE64])
-    } else if (CONTEXT_PROPAGATION_KEY in carrier) {
+    } else if (Object.hasOwn(carrier, CONTEXT_PROPAGATION_KEY)) {
       try {
         // decode v1 encoding
         ctx = decodePathwayContext(carrier[CONTEXT_PROPAGATION_KEY])
@@ -106,7 +106,7 @@ const DsmPathwayCodec = {
         // pass
       }
       // cover case where base64 context was received under wrong key
-      if (!ctx && CONTEXT_PROPAGATION_KEY in carrier) {
+      if (!ctx && Object.hasOwn(carrier, CONTEXT_PROPAGATION_KEY)) {
         ctx = decodePathwayContextBase64(carrier[CONTEXT_PROPAGATION_KEY])
       }
     }

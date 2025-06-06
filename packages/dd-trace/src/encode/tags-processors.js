@@ -29,26 +29,23 @@ const MAX_TYPE_LENGTH = 100
 
 // normally the agent truncates the resource and parses it in certain scenarios (e.g. SQL Queries)
 function truncateSpan (span, shouldTruncateResourceName = true) {
-  if (shouldTruncateResourceName && span.resource && span.resource.length > MAX_RESOURCE_NAME_LENGTH) {
+  if (shouldTruncateResourceName && span.resource?.length > MAX_RESOURCE_NAME_LENGTH) {
     span.resource = `${span.resource.slice(0, MAX_RESOURCE_NAME_LENGTH)}...`
   }
-  for (let metaKey in span.meta) {
-    const val = span.meta[metaKey]
-    if (metaKey.length > MAX_META_KEY_LENGTH) {
-      delete span.meta[metaKey]
-      metaKey = `${metaKey.slice(0, MAX_META_KEY_LENGTH)}...`
-      span.metrics[metaKey] = val
+  for (let [key, value] of Object.entries(span.meta)) {
+    if (key.length > MAX_META_KEY_LENGTH) {
+      delete span.meta[key]
+      key = `${key.slice(0, MAX_META_KEY_LENGTH)}...`
+      span.metrics[key] = value
     }
-    if (val && val.length > MAX_META_VALUE_LENGTH) {
-      span.meta[metaKey] = `${val.slice(0, MAX_META_VALUE_LENGTH)}...`
+    if (value?.length > MAX_META_VALUE_LENGTH) {
+      span.meta[key] = `${value.slice(0, MAX_META_VALUE_LENGTH)}...`
     }
   }
-  for (let metricsKey in span.metrics) {
-    const val = span.metrics[metricsKey]
-    if (metricsKey.length > MAX_METRIC_KEY_LENGTH) {
-      delete span.metrics[metricsKey]
-      metricsKey = `${metricsKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`
-      span.metrics[metricsKey] = val
+  for (const [key, metric] of Object.entries(span.metrics)) {
+    if (key.length > MAX_METRIC_KEY_LENGTH) {
+      delete span.metrics[key]
+      span.metrics[`${key.slice(0, MAX_METRIC_KEY_LENGTH)}...`] = metric
     }
   }
 
@@ -56,18 +53,18 @@ function truncateSpan (span, shouldTruncateResourceName = true) {
 }
 
 function normalizeSpan (span) {
-  span.service = span.service || DEFAULT_SERVICE_NAME
+  span.service ||= DEFAULT_SERVICE_NAME
   if (span.service.length > MAX_SERVICE_LENGTH) {
     span.service = span.service.slice(0, MAX_SERVICE_LENGTH)
   }
-  span.name = span.name || DEFAULT_SPAN_NAME
+  span.name ||= DEFAULT_SPAN_NAME
   if (span.name.length > MAX_NAME_LENGTH) {
     span.name = span.name.slice(0, MAX_NAME_LENGTH)
   }
   if (!span.resource) {
     span.resource = span.name
   }
-  if (span.type && span.type.length > MAX_TYPE_LENGTH) {
+  if (span.type?.length > MAX_TYPE_LENGTH) {
     span.type = span.type.slice(0, MAX_TYPE_LENGTH)
   }
 

@@ -139,6 +139,13 @@ export default [
       'no-await-in-loop': 'error',
       'no-else-return': ['error', { allowElseIf: false }],
       'no-implicit-coercion': ['error', { boolean: true, number: true, string: true, allow: ['!!'] }],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'BinaryExpression[operator="in"]',
+          message: 'Using "in" operator is not allowed.'
+        }
+      ],
       'no-useless-assignment': 'error',
       'operator-assignment': 'error',
       'prefer-exponentiation-operator': 'error',

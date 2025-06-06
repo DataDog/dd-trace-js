@@ -58,7 +58,7 @@ function spanNameMapper (spanName, kind, attributes) {
   // HTTP server and client requests
   // TODO: Drop http.method when http.request.method is supported.
   for (const key of ['http.method', 'http.request.method']) {
-    if (key in attributes) {
+    if (attributes[key]) {
       if (kind === SERVER) {
         return 'http.server.request'
       }
@@ -108,7 +108,7 @@ function spanNameMapper (spanName, kind, attributes) {
   // GraphQL
   // NOTE: Not part of Semantic Convention spec yet, but is used in the GraphQL
   // integration.
-  const isGraphQL = 'graphql.operation.type' in attributes
+  const isGraphQL = attributes['graphql.operation.type']
   if (isGraphQL) return 'graphql.server.request'
 
   // Network
@@ -203,7 +203,7 @@ class Span {
   }
 
   setAttributes (attributes) {
-    if ('http.response.status_code' in attributes) {
+    if (Object.hasOwn(attributes, 'http.response.status_code')) {
       attributes['http.status_code'] = attributes['http.response.status_code'].toString()
     }
 

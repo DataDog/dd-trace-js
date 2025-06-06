@@ -18,7 +18,7 @@ class LangChainEmbeddingHandler extends LangChainHandler {
     } else {
       // embed documents
       if (sampled) {
-        for (const idx in inputTexts) {
+        for (let idx = 0; idx < inputTexts.length; idx++) {
           const inputText = inputTexts[idx]
           tags[`langchain.request.inputs.${idx}.text`] = this.normalize(inputText)
         }

@@ -214,9 +214,9 @@ class TaintTrackingPlugin extends SourceIastPlugin {
       if (dbOrigin === 'sequelize' && result.dataValues) {
         result.dataValues = this._taintDatabaseResult(result.dataValues, dbOrigin, iastContext, name)
       } else {
-        for (const key in result) {
+        for (const [key, value] of Object.entries(result)) {
           const nextName = name ? `${name}.${key}` : key
-          result[key] = this._taintDatabaseResult(result[key], dbOrigin, iastContext, nextName)
+          result[key] = this._taintDatabaseResult(value, dbOrigin, iastContext, nextName)
         }
       }
     } else if (typeof result === 'string') {

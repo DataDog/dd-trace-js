@@ -416,7 +416,7 @@ describe('Span', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
       span.setTag('foo', 'bar')
 
-      expect(tagger.add).to.have.been.calledWith(span.context()._tags, { foo: 'bar' })
+      expect(span.context()._tags).to.have.property('foo', 'bar')
     })
   })
 

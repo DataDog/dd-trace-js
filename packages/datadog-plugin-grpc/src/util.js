@@ -38,8 +38,8 @@ module.exports = {
 
     const values = filter(metadata.getMap())
 
-    for (const key in values) {
-      span.setTag(`grpc.${type}.metadata.${key}`, values[key])
+    for (const [key, value] of Object.entries(values)) {
+      span.setTag(`grpc.${type}.metadata.${key}`, value)
     }
   },
 

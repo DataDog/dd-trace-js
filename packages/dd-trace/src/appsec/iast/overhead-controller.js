@@ -86,8 +86,8 @@ function _getNewContext () {
     tokens: {}
   }
 
-  for (const operation in OPERATIONS) {
-    OPERATIONS[operation].initContext(oceContext)
+  for (const operation of Object.values(OPERATIONS)) {
+    operation.initContext(oceContext)
   }
 
   return oceContext

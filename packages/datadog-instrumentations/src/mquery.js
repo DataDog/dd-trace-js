@@ -39,7 +39,7 @@ addHook({
   versions: ['>=5.0.0']
 }, Query => {
   for (const methodName of [...methods, ...methodsOptionalArgs]) {
-    if (!(methodName in Query.prototype)) continue
+    if (!Query.prototype[methodName]) continue
 
     shimmer.wrap(Query.prototype, methodName, method => {
       return function () {

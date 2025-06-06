@@ -347,7 +347,7 @@ function parseConfigPath (configPath) {
 }
 
 function supportsAckCallback (handler) {
-  if (kSupportsAckCallback in handler) return handler[kSupportsAckCallback]
+  if (handler[kSupportsAckCallback] !== undefined) return handler[kSupportsAckCallback]
 
   const numOfArgs = handler.length
   let result = false

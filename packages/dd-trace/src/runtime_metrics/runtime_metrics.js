@@ -195,6 +195,7 @@ function captureHeapSpace () {
     client.gauge('runtime.node.heap.physical_size.by.space', stats[i].physical_space_size, tags)
   }
 }
+
 function captureGCMetrics () {
   if (!gcProfiler) return
 
@@ -205,15 +206,15 @@ function captureGCMetrics () {
   for (const stat of profile.statistics) {
     const type = stat.gcType.replaceAll(/([a-z])([A-Z])/g, '$1_$2').toLowerCase()
 
-    pause[type] = pause[type] || new Histogram()
+    pause[type] ??= new Histogram()
     pause[type].record(stat.cost)
     pauseAll.record(stat.cost)
   }
 
   histogram('runtime.node.gc.pause', pauseAll)
 
-  for (const type in pause) {
-    histogram('runtime.node.gc.pause.by.type', pause[type], `gc_type:${type}`)
+  for (const [type, value] of Object.entries(pause)) {
+    histogram('runtime.node.gc.pause.by.type', value, `gc_type:${type}`)
   }
 
   gcProfiler.start()
@@ -228,7 +229,7 @@ function captureGCMetrics () {
  * performance.eventLoopUtilization available in Node.js >= v14.10, >= v12.19, >= v16
  */
 let captureELU = () => {}
-if ('eventLoopUtilization' in performance) {
+if (performance.eventLoopUtilization) {
   captureELU = () => {
     // if elu is undefined (first run) the measurement is from start of process
     elu = performance.eventLoopUtilization(elu)

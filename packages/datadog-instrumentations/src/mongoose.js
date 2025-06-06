@@ -60,7 +60,7 @@ addHook({
 }, Model => {
   for (const methodName of [...collectionMethodsWithFilter, ...collectionMethodsWithTwoFilters]) {
     const useTwoArguments = collectionMethodsWithTwoFilters.includes(methodName)
-    if (!(methodName in Model)) continue
+    if (!Model[methodName]) continue
 
     shimmer.wrap(Model, methodName, method => {
       return function wrappedModelMethod () {

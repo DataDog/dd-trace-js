@@ -96,10 +96,8 @@ class SchemaExtractor {
       const nestedSchemaExtractor = new SchemaExtractor(schema)
       builder.iterator = nestedSchemaExtractor
       const nestedSchema = SchemaBuilder.getSchema(schemaName, nestedSchemaExtractor, builder)
-      for (const nestedSubSchemaName in nestedSchema.components.schemas) {
-        if (Object.hasOwn(nestedSchema.components.schemas, nestedSubSchemaName)) {
-          builder.schema.components.schemas[nestedSubSchemaName] = nestedSchema.components.schemas[nestedSubSchemaName]
-        }
+      for (const [nestedSubSchemaName, value] of Object.entries(nestedSchema.components.schemas)) {
+        builder.schema.components.schemas[nestedSubSchemaName] = value
       }
       return true
     }

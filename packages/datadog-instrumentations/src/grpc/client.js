@@ -48,12 +48,13 @@ function createWrapMakeClientConstructor (hasPeer = false) {
 }
 
 function wrapPackageDefinition (def, hasPeer = false) {
-  for (const name in def) {
-    if (def[name].format) continue
-    if (def[name].service && def[name].prototype) {
-      wrapClientConstructor(def[name], def[name].service, hasPeer)
-    } else {
-      wrapPackageDefinition(def[name], hasPeer)
+  for (const pkg of Object.values(def)) {
+    if (!pkg.format) {
+      if (pkg.service && pkg.prototype) {
+        wrapClientConstructor(pkg, pkg.service, hasPeer)
+      } else {
+        wrapPackageDefinition(pkg, hasPeer)
+      }
     }
   }
 }
@@ -61,7 +62,7 @@ function wrapPackageDefinition (def, hasPeer = false) {
 function wrapClientConstructor (ServiceClient, methods, hasPeer = false) {
   const proto = ServiceClient.prototype
 
-  if (typeof methods !== 'object' || 'format' in methods) return
+  if (typeof methods !== 'object' || methods.format !== undefined) return
 
   for (const name of Object.keys(methods)) {
     if (!methods[name]) continue

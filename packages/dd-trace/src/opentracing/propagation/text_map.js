@@ -161,14 +161,14 @@ class TextMapPropagator {
 
     const tags = []
 
-    for (const key in trace.tags) {
-      if (!trace.tags[key] || !key.startsWith('_dd.p.')) continue
-      if (!this._validateTagKey(key) || !this._validateTagValue(trace.tags[key])) {
+    for (const [key, value] of Object.entries(trace.tags)) {
+      if (!value || !key.startsWith('_dd.p.')) continue
+      if (!this._validateTagKey(key) || !this._validateTagValue(value)) {
         log.error('Trace tags from span are invalid, skipping injection.')
         return
       }
 
-      tags.push(`${key}=${trace.tags[key]}`)
+      tags.push(`${key}=${value}`)
     }
 
     const header = tags.join(',')
@@ -245,7 +245,7 @@ class TextMapPropagator {
         state.set('o', originValue)
       }
 
-      for (const key in tags) {
+      for (const key of Object.keys(tags)) {
         if (!tags[key] || !key.startsWith('_dd.p.')) continue
 
         const tagKey = 't.' + key.slice(6)
@@ -274,7 +274,7 @@ class TextMapPropagator {
   }
 
   _hasParentIdInTags (spanContext) {
-    return tags.DD_PARENT_ID in spanContext._trace.tags
+    return spanContext._trace.tags[tags.DD_PARENT_ID] !== undefined
   }
 
   _updateParentIdFromDdHeaders (carrier, firstSpanContext) {

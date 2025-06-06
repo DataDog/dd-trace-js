@@ -10,10 +10,10 @@ class LangChainChatModelHandler extends LangChainLanguageModelHandler {
 
     const inputs = ctx.args?.[0]
 
-    for (const messageSetIndex in inputs) {
+    for (let messageSetIndex = 0; messageSetIndex < inputs.length; messageSetIndex++) {
       const messageSet = inputs[messageSetIndex]
 
-      for (const messageIndex in messageSet) {
+      for (let messageIndex = 0; messageIndex < messageSet.length; messageIndex++) {
         const message = messageSet[messageIndex]
         if (this.isPromptCompletionSampled(span)) {
           tags[`langchain.request.messages.${messageSetIndex}.${messageIndex}.content`] =
@@ -39,55 +39,47 @@ class LangChainChatModelHandler extends LangChainLanguageModelHandler {
     return tags
   }
 
-  getSpanEndTags (ctx, span) {
-    const { result } = ctx
+  getSpanEndTags ({ result, currentStore }, span) {
+    if (!result?.generations) {
+      return {}
+    }
 
     const tags = {}
 
     const sampled = this.isPromptCompletionSampled(span)
 
-    this.extractTokenMetrics(ctx.currentStore?.span, result)
+    this.extractTokenMetrics(currentStore?.span, result)
 
-    for (const messageSetIdx in result?.generations) {
+    for (let messageSetIdx = 0; messageSetIdx < result.generations.length; messageSetIdx++) {
       const messageSet = result.generations[messageSetIdx]
 
-      for (const chatCompletionIdx in messageSet) {
-        const chatCompletion = messageSet[chatCompletionIdx]
-
-        const text = chatCompletion.text
-        const message = chatCompletion.message
-        let toolCalls = message.tool_calls
+      for (let chatCompletionIdx = 0; chatCompletionIdx < messageSet.length; chatCompletionIdx++) {
+        const { text, message } = messageSet[chatCompletionIdx]
+        const prefix = `${COMPLETIONS}.${messageSetIdx}.${chatCompletionIdx}`
 
         if (text && sampled) {
-          tags[
-          `${COMPLETIONS}.${messageSetIdx}.${chatCompletionIdx}.content`
-          ] = this.normalize(text)
+          tags[`${prefix}.content`] = this.normalize(text)
         }
 
-        tags[
-        `${COMPLETIONS}.${messageSetIdx}.${chatCompletionIdx}.message_type`
-        ] = message.constructor.name
+        tags[`${prefix}.message_type`] = message.constructor.name
 
+        let toolCalls = message.tool_calls
         if (toolCalls) {
           if (!Array.isArray(toolCalls)) {
             toolCalls = [toolCalls]
           }
 
-          for (const toolCallIndex in toolCalls) {
-            const toolCall = toolCalls[toolCallIndex]
+          for (let toolCallIndex = 0; toolCallIndex < toolCalls.length; toolCallIndex++) {
+            const { id, name, args } = toolCalls[toolCallIndex]
+            const toolCallsPrefix = `${prefix}.tool_calls.${toolCallIndex}`
 
-            tags[
-            `${COMPLETIONS}.${messageSetIdx}.${chatCompletionIdx}.tool_calls.${toolCallIndex}.id`
-            ] = toolCall.id
-            tags[
-            `${COMPLETIONS}.${messageSetIdx}.${chatCompletionIdx}.tool_calls.${toolCallIndex}.name`
-            ] = toolCall.name
+            tags[`${toolCallsPrefix}.id`] = id
+            tags[`${toolCallsPrefix}.name`] = name
 
-            const args = toolCall.args || {}
-            for (const [name, value] of Object.entries(args)) {
-              tags[
-              `${COMPLETIONS}.${messageSetIdx}.${chatCompletionIdx}.tool_calls.${toolCallIndex}.args.${name}`
-              ] = this.normalize(value)
+            if (args) {
+              for (const [name, value] of Object.entries(args)) {
+                tags[`${toolCallsPrefix}.args.${name}`] = this.normalize(value)
+              }
             }
           }
         }

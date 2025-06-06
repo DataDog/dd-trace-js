@@ -121,8 +121,8 @@ function inject (tracer, span, metadata) {
 
   tracer.inject(span, TEXT_MAP, carrier)
 
-  for (const key in carrier) {
-    metadata.set(key, carrier[key])
+  for (const [key, value] of Object.entries(carrier)) {
+    metadata.set(key, value)
   }
 }
 

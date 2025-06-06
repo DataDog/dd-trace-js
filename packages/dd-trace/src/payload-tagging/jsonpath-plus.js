@@ -68,10 +68,10 @@ class Hooks {
    * @public
    */
   add(name, callback, first) {
-    if (typeof arguments[0] != 'string') {
+    if (typeof name != 'string') {
       // Multiple hook callbacks, keyed by name
-      for (let name in arguments[0]) {
-        this.add(name, arguments[0][name], arguments[1]);
+      for (let [key, value] of name) {
+        this.add(key, value, callback);
       }
     } else {
       (Array.isArray(name) ? name : [name]).forEach(function (name) {

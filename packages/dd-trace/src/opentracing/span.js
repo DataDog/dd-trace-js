@@ -37,7 +37,7 @@ const finishCh = channel('dd-trace:span:finish')
 function getIntegrationCounter (event, integration) {
   const counters = integrationCounters[event]
 
-  if (integration in counters) {
+  if (counters[integration] !== undefined) {
     return counters[integration]
   }
 
@@ -272,8 +272,8 @@ class DatadogSpan {
 
     const addArrayOrScalarAttributes = (key, maybeArray) => {
       if (Array.isArray(maybeArray)) {
-        for (const subkey in maybeArray) {
-          addArrayOrScalarAttributes(`${key}.${subkey}`, maybeArray[subkey])
+        for (let index = 0; index < maybeArray.length; index++) {
+          addArrayOrScalarAttributes(`${key}.${index}`, maybeArray[index])
         }
       } else {
         const maybeScalar = maybeArray
@@ -296,13 +296,12 @@ class DatadogSpan {
   _sanitizeEventAttributes (attributes = {}) {
     const sanitizedAttributes = {}
 
-    for (const key in attributes) {
-      const value = attributes[key]
+    for (const [key, value] of Object.entries(attributes)) {
       if (Array.isArray(value)) {
         const newArray = []
-        for (const subkey in value) {
-          if (ALLOWED.has(typeof value[subkey])) {
-            newArray.push(value[subkey])
+        for (let index = 0; index < value.length; index++) {
+          if (ALLOWED.has(typeof value[index])) {
+            newArray.push(value[index])
           } else {
             log.warn('Dropping span event attribute. It is not of an allowed type')
           }

@@ -214,12 +214,18 @@ function mergeRulesData (files) {
 
 function rulesReducer (existingEntries, rulesDataEntry) {
   const existingEntry = existingEntries.find((entry) => entry.value === rulesDataEntry.value)
-  if (existingEntry && !('expiration' in existingEntry)) return existingEntries
-  if (existingEntry && 'expiration' in rulesDataEntry && rulesDataEntry.expiration > existingEntry.expiration) {
-    existingEntry.expiration = rulesDataEntry.expiration
-  } else if (existingEntry && !('expiration' in rulesDataEntry)) {
-    delete existingEntry.expiration
-  } else if (!existingEntry) {
+  if (existingEntry) {
+    if (existingEntry.expiration === undefined) {
+      return existingEntries
+    }
+    if (rulesDataEntry.expiration !== undefined) {
+      if (rulesDataEntry.expiration > existingEntry.expiration) {
+        existingEntry.expiration = rulesDataEntry.expiration
+      }
+    } else {
+      delete existingEntry.expiration
+    }
+  } else {
     existingEntries.push({ ...rulesDataEntry })
   }
   return existingEntries

@@ -50,10 +50,7 @@ class SchemaBuilder {
   }
 
   shouldExtractSchema (schemaName, depth) {
-    if (depth > maxDepth) {
-      return false
-    }
-    if (schemaName in this.schema.components.schemas) {
+    if (depth > maxDepth || this.schema.components.schemas[schemaName]) {
       return false
     }
     this.schema.components.schemas[schemaName] = new OpenApiSchema.SCHEMA()

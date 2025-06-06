@@ -68,16 +68,16 @@ function updateRetryData (error, retryObj) {
 
 function getIntegrations () {
   const newIntegrations = []
-  for (const pluginName in pluginManager._pluginsByName) {
-    if (sentIntegrations.has(pluginName)) {
+  for (const [name, plugin] of Object.entries(pluginManager._pluginsByName)) {
+    if (sentIntegrations.has(name)) {
       continue
     }
     newIntegrations.push({
-      name: pluginName,
-      enabled: pluginManager._pluginsByName[pluginName]._enabled,
+      name,
+      enabled: plugin._enabled,
       auto_enabled: true
     })
-    sentIntegrations.add(pluginName)
+    sentIntegrations.add(name)
   }
   return newIntegrations
 }

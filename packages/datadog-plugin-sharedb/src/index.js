@@ -40,16 +40,14 @@ function getReadableResourceName (readableActionName, collection, query) {
 }
 
 function sanitize (input) {
-  const output = {}
-
   if (!isObject(input) || Buffer.isBuffer(input)) return '?'
 
-  for (const key in input) {
-    if (typeof input[key] === 'function') continue
-
-    output[key] = sanitize(input[key])
+  const output = {}
+  for (const [key, value] of Object.entries(input)) {
+    if (typeof value !== 'function') {
+      output[key] = sanitize(value)
+    }
   }
-
   return output
 }
 

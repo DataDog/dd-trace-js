@@ -360,14 +360,14 @@ class LLMObs extends NoopLLMObs {
       }
 
       if (tags) {
-        for (const key in tags) {
-          const tag = tags[key]
+        for (const [key, tag] of Object.entries(tags)) {
           if (typeof tag === 'string') {
             evaluationTags[key] = tag
           } else if (typeof tag.toString === 'function') {
             evaluationTags[key] = tag.toString()
           } else if (tag == null) {
-            evaluationTags[key] = Object.prototype.toString.call(tag)
+            // TODO(BridgeAR): should these not just be `null` and `undefined`?
+            evaluationTags[key] = tag === null ? '[object Null]' : '[object Undefined]'
           } else {
             // should be a rare case
             // every object in JS has a toString, otherwise every primitive has its own toString

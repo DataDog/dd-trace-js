@@ -131,12 +131,9 @@ class PrioritySampler {
    */
   update (rates) {
     const samplers = {}
-
-    for (const key in rates) {
-      const rate = rates[key]
+    for (const [key, rate] of Object.entries(rates)) {
       samplers[key] = new Sampler(rate)
     }
-
     samplers[DEFAULT_KEY] = samplers[DEFAULT_KEY] || defaultSampler
 
     this._samplers = samplers

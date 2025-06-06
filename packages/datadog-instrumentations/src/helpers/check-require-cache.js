@@ -52,13 +52,12 @@ module.exports.checkForRequiredModules = function () {
   for (const pathToModule of Object.keys(require.cache)) {
     const { pkg } = extractPackageAndModulePath(pathToModule)
 
-    if (naughties.has(pkg)) continue
-    if (!(pkg in packages)) continue
+    if (!naughties.has(pkg) && packages[pkg]) {
+      warnings.push(`Warning: Package '${pkg}' was loaded before dd-trace! This may break instrumentation.`)
 
-    warnings.push(`Warning: Package '${pkg}' was loaded before dd-trace! This may break instrumentation.`)
-
-    naughties.add(pkg)
-    didWarn = true
+      naughties.add(pkg)
+      didWarn = true
+    }
   }
 
   if (didWarn) warnings.push('Warning: Please ensure dd-trace is loaded before other modules.')
@@ -84,13 +83,12 @@ module.exports.checkForPotentialConflicts = function () {
 
   for (const pathToModule of Object.keys(require.cache)) {
     const { pkg } = extractPackageAndModulePath(pathToModule)
-    if (naughties.has(pkg)) continue
-    if (!potentialConflicts.has(pkg)) continue
+    if (!naughties.has(pkg) && potentialConflicts.has(pkg)) {
+      warnings.push(`Warning: Package '${pkg}' may cause conflicts with dd-trace.`)
 
-    warnings.push(`Warning: Package '${pkg}' may cause conflicts with dd-trace.`)
-
-    naughties.add(pkg)
-    didWarn = true
+      naughties.add(pkg)
+      didWarn = true
+    }
   }
 
   if (didWarn) warnings.push('Warning: Packages were loaded that may conflict with dd-trace.')
