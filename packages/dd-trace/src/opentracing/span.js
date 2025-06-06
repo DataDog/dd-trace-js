@@ -181,7 +181,9 @@ class DatadogSpan {
   }
 
   setTag (key, value) {
-    this._addTags({ [key]: value })
+    this._spanContext._tags[key] = value
+
+    this._prioritySampler.sample(this, false)
     return this
   }
 

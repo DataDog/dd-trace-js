@@ -169,9 +169,7 @@ const web = {
 
     analyticsSampler.sample(span, config.measured)
 
-    span.addTags({
-      [RESOURCE_NAME]: middleware._name || middleware.name || '<anonymous>'
-    })
+    span.setTag(RESOURCE_NAME, middleware._name || middleware.name || '<anonymous>')
 
     context.middleware.push(span)
 
@@ -483,12 +481,8 @@ function addResponseTags (context) {
     span.setTag(HTTP_ROUTE, route)
   }
 
-  span.addTags({
-    [HTTP_STATUS_CODE]: res.statusCode
-  })
-  inferredProxySpan?.addTags({
-    [HTTP_STATUS_CODE]: res.statusCode
-  })
+  span.setTag(HTTP_STATUS_CODE, res.statusCode)
+  inferredProxySpan?.setTag(HTTP_STATUS_CODE, res.statusCode)
 
   web.addStatusError(req, res.statusCode)
 }

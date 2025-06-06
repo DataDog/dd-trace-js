@@ -179,7 +179,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
 
       const requestId = err.RequestId || err.requestId
       if (requestId) {
-        span.addTags({ 'aws.response.request_id': requestId })
+        span.setTag('aws.response.request_id', requestId)
       }
     }
 

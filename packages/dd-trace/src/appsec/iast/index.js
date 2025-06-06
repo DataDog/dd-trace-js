@@ -72,9 +72,7 @@ function onIncomingHttpRequestStart (data) {
           taintTrackingPlugin.taintRequest(data.req, iastContext)
         }
         if (rootSpan.addTags) {
-          rootSpan.addTags({
-            [IAST_ENABLED_TAG_KEY]: isRequestAcquired ? 1 : 0
-          })
+          rootSpan.setTag(IAST_ENABLED_TAG_KEY, isRequestAcquired ? 1 : 0)
         }
       }
     }
