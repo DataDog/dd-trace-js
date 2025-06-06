@@ -361,7 +361,7 @@ function updateConfig (changes, config) {
   }
 
   function isNotModified (oldEntry) {
-    return !updatedTuples.has(`${oldEntry.name}|${oldEntry.origin}`)
+    return updatedTuples.get(oldEntry.name) !== oldEntry.origin
   }
 
   if (configWithOrigin.length) {
