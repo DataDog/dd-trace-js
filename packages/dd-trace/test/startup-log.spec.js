@@ -43,7 +43,7 @@ describe('startup logging', () => {
       sampler: {
         sampleRate: 1
       },
-      tags: { version: '1.2.3' },
+      tags: { version: '1.2.3', invalid_but_listed_due_to_mocking: 42n },
       logInjection: true,
       runtimeMetrics: true,
       startupLogs: true,
@@ -83,7 +83,7 @@ describe('startup logging', () => {
         'rule2',
         { matchers: [{ pattern: 'rule3' }], _sampler: { _rate: 1 } }
       ],
-      tags: { version: '1.2.3' },
+      tags: { version: '1.2.3', invalid_but_listed_due_to_mocking: '42' },
       dd_version: '1.2.3',
       log_injection_enabled: true,
       runtime_metrics_enabled: true,
