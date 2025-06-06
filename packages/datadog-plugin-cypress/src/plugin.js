@@ -1,7 +1,7 @@
 const NoopTracer = require('../../dd-trace/src/noop/tracer')
 const cypressPlugin = require('./cypress-plugin')
 const satisfies = require('semifies')
-const { DD_MAJOR, NODE_MAJOR } = require('../../../version')
+const { DD_MAJOR } = require('../../../version')
 
 const noopTask = {
   'dd:testSuiteStart': () => {
@@ -44,10 +44,6 @@ module.exports = function CypressPlugin (on, config) {
     // We still need to register these tasks or the support file will fail
     on('task', noopTask)
     return config
-  }
-
-  if (DD_MAJOR < 6 && NODE_MAJOR < 18) {
-    require('./polyfills')
   }
 
   on('before:run', cypressPlugin.beforeRun.bind(cypressPlugin))

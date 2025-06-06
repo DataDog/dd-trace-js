@@ -194,13 +194,15 @@ versions.forEach((version) => {
                 JSON.stringify({ arguments: { browser: 'chromium' }, metadata: {} })
               )
               assert.exists(testEvent.content.metrics[DD_HOST_CPU_COUNT])
-              if (testEvent.content.meta[TEST_STATUS] !== 'skip' &&
-                testEvent.content.meta[TEST_SUITE].includes('landing-page-test.js')) {
-                assert.propertyVal(testEvent.content.meta, 'custom_tag.beforeEach', 'hello beforeEach')
-                assert.propertyVal(testEvent.content.meta, 'custom_tag.afterEach', 'hello afterEach')
-              }
-              if (testEvent.content.meta[TEST_NAME].includes('should work with passing tests')) {
-                assert.propertyVal(testEvent.content.meta, 'custom_tag.it', 'hello it')
+              if (version === 'latest' || satisfies(version, '>=1.38.0')) {
+                if (testEvent.content.meta[TEST_STATUS] !== 'skip' &&
+                  testEvent.content.meta[TEST_SUITE].includes('landing-page-test.js')) {
+                  assert.propertyVal(testEvent.content.meta, 'custom_tag.beforeEach', 'hello beforeEach')
+                  assert.propertyVal(testEvent.content.meta, 'custom_tag.afterEach', 'hello afterEach')
+                }
+                if (testEvent.content.meta[TEST_NAME].includes('should work with passing tests')) {
+                  assert.propertyVal(testEvent.content.meta, 'custom_tag.it', 'hello it')
+                }
               }
             })
 
