@@ -68,7 +68,7 @@ describe('startup logging', () => {
       date: info.date,
       os_name: os.type(),
       os_version: os.release(),
-      architecture: 'arm64',
+      architecture: os.arch(),
       version: tracerVersion,
       lang: 'nodejs',
       lang_version: process.versions.node,
