@@ -24,7 +24,8 @@ const {
   OUTPUT_TOKENS_METRIC_KEY,
   TOTAL_TOKENS_METRIC_KEY,
   INTEGRATION,
-  DECORATOR
+  DECORATOR,
+  PROPAGATED_ML_APP_KEY
 } = require('./constants/tags')
 
 // global registry of LLMObs spans
@@ -73,12 +74,24 @@ class LLMObsTagger {
     if (integration) this._setTag(span, INTEGRATION, integration)
     if (_decorator) this._setTag(span, DECORATOR, _decorator)
 
-    if (!mlApp) mlApp = registry.get(parent)?.[ML_APP] || this._config.llmobs.mlApp
-    this._setTag(span, ML_APP, mlApp)
+    const spanMlApp =
+      mlApp ||
+      registry.get(parent)?.[ML_APP] ||
+      span.context()._trace.tags[PROPAGATED_ML_APP_KEY] ||
+      this._config.llmobs.mlApp
+
+    if (!spanMlApp) {
+      throw new Error(
+        '[LLMObs] Cannot start an LLMObs span without an mlApp configured.' +
+        'Ensure this configuration is set before running your application.'
+      )
+    }
+
+    this._setTag(span, ML_APP, spanMlApp)
 
     const parentId =
-      parent?.context().toSpanId() ||
-      span.context()._trace.tags[PROPAGATED_PARENT_ID_KEY] ||
+      parent?.context().toSpanId() ??
+      span.context()._trace.tags[PROPAGATED_PARENT_ID_KEY] ??
       ROOT_PARENT_ID
     this._setTag(span, PARENT_ID_KEY, parentId)
   }
@@ -357,7 +370,7 @@ class LLMObsTagger {
     }
 
     const tagsCarrier = registry.get(span)
-    Object.assign(tagsCarrier, { [key]: value })
+    tagsCarrier[key] = value
   }
 }
 

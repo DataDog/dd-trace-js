@@ -1,6 +1,5 @@
 'use strict'
 
-const { hasOwn } = require('../util')
 const PrioritySampler = require('../priority_sampler')
 const { MANUAL_KEEP } = require('../../../../ext/tags')
 const { USER_KEEP, AUTO_KEEP, AUTO_REJECT } = require('../../../../ext/priority')
@@ -16,7 +15,7 @@ class TraceSourcePrioritySampler extends PrioritySampler {
   }
 
   _getPriorityFromTags (tags, context) {
-    if (hasOwn(tags, MANUAL_KEEP) &&
+    if (Object.hasOwn(tags, MANUAL_KEEP) &&
       tags[MANUAL_KEEP] !== false &&
       hasTraceSourcePropagationTag(context._trace.tags)
     ) {

@@ -6,6 +6,7 @@ const log = require('../log')
 const { isTrue } = require('../util')
 const coalesce = require('koalas')
 const { memoize } = require('../log/utils')
+const { getEnvironmentVariable } = require('../config-helper')
 
 const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
 
@@ -32,7 +33,7 @@ class AgentEncoder {
     this._writer = writer
     this._reset()
     this._debugEncoding = isTrue(coalesce(
-      process.env.DD_TRACE_ENCODING_DEBUG,
+      getEnvironmentVariable('DD_TRACE_ENCODING_DEBUG'),
       false
     ))
     this._config = this._writer?._config
@@ -349,15 +350,17 @@ const memoizedLogDebug = memoize((key, message) => {
 function formatSpanEvents (span) {
   for (const spanEvent of span.span_events) {
     if (spanEvent.attributes) {
+      let hasAttributes = false
       for (const [key, value] of Object.entries(spanEvent.attributes)) {
         const newValue = convertSpanEventAttributeValues(key, value)
         if (newValue === undefined) {
           delete spanEvent.attributes[key] // delete from attributes if undefined
         } else {
+          hasAttributes = true
           spanEvent.attributes[key] = newValue
         }
       }
-      if (Object.keys(spanEvent.attributes).length === 0) {
+      if (!hasAttributes) {
         delete spanEvent.attributes
       }
     }

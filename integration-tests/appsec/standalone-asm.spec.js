@@ -9,8 +9,8 @@ const {
   spawnProc,
   curlAndAssertMessage,
   curl
-} = require('./helpers')
-const { USER_KEEP, AUTO_REJECT, AUTO_KEEP } = require('../ext/priority')
+} = require('../helpers')
+const { USER_KEEP, AUTO_REJECT, AUTO_KEEP } = require('../../ext/priority')
 
 describe('Standalone ASM', () => {
   let sandbox, cwd, startupTestFile, agent, proc, env

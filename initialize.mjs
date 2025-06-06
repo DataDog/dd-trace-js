@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url'
 import {
   load as origLoad,
   resolve as origResolve,
-  getSource as origGetSource
+  getSource as origGetSource,
 } from 'import-in-the-middle/hook.mjs'
 
 let hasInsertedInit = false
@@ -31,7 +31,7 @@ ${result.source}`
   return result
 }
 
-const [NODE_MAJOR, NODE_MINOR] = process.versions.node.split('.').map(x => +x)
+const [NODE_MAJOR, NODE_MINOR] = process.versions.node.split('.').map(Number)
 
 const brokenLoaders = NODE_MAJOR === 18 && NODE_MINOR === 0
 const iitmExclusions = [/langsmith/, /openai\/_shims/, /openai\/resources\/chat\/completions\/messages/]

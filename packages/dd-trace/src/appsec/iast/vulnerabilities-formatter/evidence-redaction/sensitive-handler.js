@@ -8,7 +8,6 @@ const { contains, intersects, remove } = require('./range-utils')
 
 const commandSensitiveAnalyzer = require('./sensitive-analyzers/command-sensitive-analyzer')
 const hardcodedPasswordAnalyzer = require('./sensitive-analyzers/hardcoded-password-analyzer')
-const headerSensitiveAnalyzer = require('./sensitive-analyzers/header-sensitive-analyzer')
 const jsonSensitiveAnalyzer = require('./sensitive-analyzers/json-sensitive-analyzer')
 const ldapSensitiveAnalyzer = require('./sensitive-analyzers/ldap-sensitive-analyzer')
 const sqlSensitiveAnalyzer = require('./sensitive-analyzers/sql-sensitive-analyzer')
@@ -29,9 +28,6 @@ class SensitiveHandler {
     this._sensitiveAnalyzers.set(vulnerabilities.COMMAND_INJECTION, commandSensitiveAnalyzer)
     this._sensitiveAnalyzers.set(vulnerabilities.HARDCODED_PASSWORD, (evidence) => {
       return hardcodedPasswordAnalyzer(evidence, this._valuePattern)
-    })
-    this._sensitiveAnalyzers.set(vulnerabilities.HEADER_INJECTION, (evidence) => {
-      return headerSensitiveAnalyzer(evidence, this._namePattern, this._valuePattern)
     })
     this._sensitiveAnalyzers.set(vulnerabilities.LDAP_INJECTION, ldapSensitiveAnalyzer)
     this._sensitiveAnalyzers.set(vulnerabilities.NOSQL_MONGODB_INJECTION, jsonSensitiveAnalyzer)

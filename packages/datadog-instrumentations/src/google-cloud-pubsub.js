@@ -79,21 +79,20 @@ function wrapMethod (method) {
         })
 
         return method.apply(this, arguments)
-      } else {
-        return method.apply(this, arguments)
-          .then(
-            response => {
-              requestFinishCh.publish(ctx)
-              return response
-            },
-            error => {
-              ctx.error = error
-              requestErrorCh.publish(ctx)
-              requestFinishCh.publish(ctx)
-              throw error
-            }
-          )
       }
+      return method.apply(this, arguments)
+        .then(
+          response => {
+            requestFinishCh.publish(ctx)
+            return response
+          },
+          error => {
+            ctx.error = error
+            requestErrorCh.publish(ctx)
+            requestFinishCh.publish(ctx)
+            throw error
+          }
+        )
     })
   }
 }
@@ -133,9 +132,8 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/le
     if (receiveStartCh.hasSubscribers) {
       ctx.message = message
       return receiveStartCh.runStores(ctx, dispense, this, ...arguments)
-    } else {
-      return dispense.apply(this, arguments)
     }
+    return dispense.apply(this, arguments)
   })
 
   shimmer.wrap(LeaseManager.prototype, 'remove', remove => function (message) {

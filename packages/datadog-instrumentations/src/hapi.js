@@ -42,7 +42,10 @@ function wrapExt (ext) {
     if (events !== null && typeof events === 'object') {
       arguments[0] = wrapEvents(events)
     } else {
-      arguments[1] = wrapExtension(method)
+      // The method should never be an array. The check is done as a safe guard
+      // during a refactoring where it was unclear if this would be possible or
+      // not.
+      arguments[1] = Array.isArray(method) ? method.map(wrapHandler) : [wrapHandler(method)]
     }
 
     return ext.apply(this, arguments)
@@ -75,17 +78,13 @@ function wrapRebuild (rebuild) {
   }
 }
 
-function wrapExtension (method) {
-  return [].concat(method).map(wrapHandler)
-}
+function wrapEvents (events, flat = false) {
+  const eventsArray = Array.isArray(events) ? events : [events]
 
-function wrapEvents (events) {
-  return [].concat(events).map(event => {
-    if (!event || !event.method) return event
+  return eventsArray.map(event => {
+    if (!event?.method) return event
 
-    return Object.assign({}, event, {
-      method: wrapExtension(event.method)
-    })
+    return { ...event, method: wrapHandler(event.method) }
   })
 }
 
@@ -93,7 +92,7 @@ function wrapHandler (handler) {
   if (typeof handler !== 'function') return handler
 
   return shimmer.wrapFunction(handler, handler => function (request, h) {
-    const req = request && request.raw && request.raw.req
+    const req = request?.raw?.req
 
     if (!req) return handler.apply(this, arguments)
 

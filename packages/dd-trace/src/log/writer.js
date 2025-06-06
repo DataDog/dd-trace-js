@@ -57,9 +57,8 @@ function getErrorLog (err) {
   if (typeof err?.delegate === 'function') {
     const result = err.delegate()
     return Array.isArray(result) ? Log.parse(...result) : Log.parse(result)
-  } else {
-    return err
   }
+  return err
 }
 
 function setStackTraceLimitFunction (fn) {

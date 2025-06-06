@@ -3,7 +3,9 @@
 const dc = require('dc-polyfill')
 const coalesce = require('koalas')
 const profileSubmittedChannel = dc.channel('datadog:profiling:mock-profile-submitted')
-const { DD_PROFILING_UPLOAD_PERIOD } = process.env
+const { getEnvironmentVariable } = require('../config-helper')
+
+const DD_PROFILING_UPLOAD_PERIOD = getEnvironmentVariable('DD_PROFILING_UPLOAD_PERIOD')
 
 let timerId
 

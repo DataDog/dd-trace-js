@@ -1,0 +1,13 @@
+name: Instrumentation Tests
+description: Run instrumentation tests
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/node/oldest-maintenance-lts
+    - uses: ./.github/actions/install
+    - run: yarn test:instrumentations:ci
+      shell: bash
+    - uses: ./.github/actions/node/active-lts
+    - run: yarn test:instrumentations:ci
+      shell: bash
+    - uses: codecov/codecov-action@0565863a31f2c772f9f0395002a31e3f06189574 # v5.4.0

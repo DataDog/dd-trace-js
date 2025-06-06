@@ -1,10 +1,12 @@
 'use strict'
 
-const { channel, addHook, AsyncResource } = require('./helpers/instrument')
+const { channel, addHook } = require('./helpers/instrument')
 
 const shimmer = require('../../datadog-shimmer')
 
 const commandAddCh = channel('apm:mariadb:command:add')
+const connectionStartCh = channel('apm:mariadb:connection:start')
+const connectionFinishCh = channel('apm:mariadb:connection:finish')
 const startCh = channel('apm:mariadb:query:start')
 const finishCh = channel('apm:mariadb:query:finish')
 const errorCh = channel('apm:mariadb:query:error')
@@ -82,7 +84,7 @@ function createWrapQueryCallback (options) {
       const ctx = { sql, conf: options }
 
       if (typeof cb !== 'function') {
-        arguments.length = arguments.length + 1
+        arguments.length += 1
       }
 
       arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => function (err) {
@@ -135,8 +137,13 @@ function wrapPoolGetConnectionMethod (getConnection) {
     const cb = arguments[arguments.length - 1]
     if (typeof cb !== 'function') return getConnection.apply(this, arguments)
 
-    const callbackResource = new AsyncResource('bound-anonymous-fn')
-    arguments[arguments.length - 1] = callbackResource.bind(cb)
+    const ctx = {}
+
+    arguments[arguments.length - 1] = function () {
+      return connectionFinishCh.runStores(ctx, cb, this, ...arguments)
+    }
+
+    connectionStartCh.publish(ctx)
 
     return getConnection.apply(this, arguments)
   }

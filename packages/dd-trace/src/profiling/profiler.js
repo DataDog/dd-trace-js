@@ -226,7 +226,7 @@ class Profiler extends EventEmitter {
     const encodedProfiles = {}
 
     try {
-      if (Object.keys(this._config.profilers).length === 0) {
+      if (this._config.profilers.length === 0) {
         throw new Error('No profile types configured.')
       }
 
@@ -246,8 +246,10 @@ class Profiler extends EventEmitter {
         this._capture(this._timeoutInterval, endDate)
       }
 
+      let hasEncoded = false
+
       // encode and export asynchronously
-      for (const { profiler, profile } of profiles) {
+      await Promise.all(profiles.map(async ({ profiler, profile }) => {
         try {
           const encoded = await profiler.encode(profile)
           const compressed = encoded instanceof Buffer && this._compressionFn !== undefined
@@ -260,14 +262,15 @@ class Profiler extends EventEmitter {
             })
             return `Collected ${profiler.type} profile: ` + profileJson
           })
+          hasEncoded = true
         } catch (err) {
           // If encoding one of the profile types fails, we should still try to
           // encode and submit the other profile types.
           this._logError(err)
         }
-      }
+      }))
 
-      if (Object.keys(encodedProfiles).length > 0) {
+      if (hasEncoded) {
         await this._submit(encodedProfiles, startDate, endDate, snapshotKind)
         profileSubmittedChannel.publish()
         this._logger.debug('Submitted profiles')

@@ -158,7 +158,7 @@ class LLMObsSpanProcessor {
     const add = (obj, carrier) => {
       for (const key in obj) {
         const value = obj[key]
-        if (!Object.prototype.hasOwnProperty.call(obj, key)) continue
+        if (!Object.hasOwn(obj, key)) continue
         if (typeof value === 'bigint' || isCircular(value)) {
           // mark as unserializable instead of dropping
           logger.warn(`Unserializable property found in metadata: ${key}`)

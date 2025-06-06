@@ -6,6 +6,7 @@ const { storage } = require('../../datadog-core')
 const { isTrue } = require('../../dd-trace/src/util')
 const coalesce = require('koalas')
 const { tagsFromRequest, tagsFromResponse } = require('../../dd-trace/src/payload-tagging')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
 class BaseAwsSdkPlugin extends ClientPlugin {
   static get id () { return 'aws' }
@@ -132,7 +133,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
 
   isEnabled (request) {
     const serviceId = this.serviceIdentifier.toUpperCase()
-    const envVarValue = process.env[`DD_TRACE_AWS_SDK_${serviceId}_ENABLED`]
+    const envVarValue = getEnvironmentVariable(`DD_TRACE_AWS_SDK_${serviceId}_ENABLED`)
     return envVarValue ? isTrue(envVarValue) : true
   }
 
@@ -142,11 +143,12 @@ class BaseAwsSdkPlugin extends ClientPlugin {
     const operation = response.request.operation
     const extraTags = this.generateTags(params, operation, response) || {}
 
-    const tags = Object.assign({
+    const tags = {
       'aws.response.request_id': response.requestId,
       'resource.name': operation,
-      'span.kind': 'client'
-    }, extraTags)
+      'span.kind': 'client',
+      ...extraTags
+    }
 
     span.addTags(tags)
 
@@ -211,19 +213,21 @@ function normalizeConfig (config, serviceIdentifier) {
   const batchPropagationEnabled = isTrue(
     coalesce(
       specificConfig.batchPropagationEnabled,
-      process.env[`DD_TRACE_AWS_SDK_${serviceId}_BATCH_PROPAGATION_ENABLED`],
+      getEnvironmentVariable(`DD_TRACE_AWS_SDK_${serviceId}_BATCH_PROPAGATION_ENABLED`),
       config.batchPropagationEnabled,
-      process.env.DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED,
+      getEnvironmentVariable('DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED'),
       false
     )
   )
 
   // Merge the specific config back into the main config
-  return Object.assign({}, config, specificConfig, {
+  return {
+    ...config,
+    ...specificConfig,
     splitByAwsService: config.splitByAwsService !== false,
     batchPropagationEnabled,
     hooks
-  })
+  }
 }
 
 const noop = () => {}

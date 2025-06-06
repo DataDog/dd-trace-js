@@ -55,11 +55,18 @@ const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 const { DD_MAJOR } = require('../../version')
 
+const { PLAYWRIGHT_VERSION } = process.env
+
 const NUM_RETRIES_EFD = 3
 
-const versions = [DD_MAJOR >= 6 ? '1.38.0' : '1.18.0', 'latest']
+const latest = 'latest'
+const oldest = DD_MAJOR >= 6 ? '1.38.0' : '1.18.0'
+const versions = [oldest, latest]
 
 versions.forEach((version) => {
+  if (PLAYWRIGHT_VERSION === 'oldest' && version !== oldest) return
+  if (PLAYWRIGHT_VERSION === 'latest' && version !== latest) return
+
   // TODO: Remove this once we drop suppport for v5
   const contextNewVersions = (...args) => {
     if (satisfies(version, '>=1.38.0') || version === 'latest') {
@@ -194,6 +201,16 @@ versions.forEach((version) => {
                 JSON.stringify({ arguments: { browser: 'chromium' }, metadata: {} })
               )
               assert.exists(testEvent.content.metrics[DD_HOST_CPU_COUNT])
+              if (version === 'latest' || satisfies(version, '>=1.38.0')) {
+                if (testEvent.content.meta[TEST_STATUS] !== 'skip' &&
+                  testEvent.content.meta[TEST_SUITE].includes('landing-page-test.js')) {
+                  assert.propertyVal(testEvent.content.meta, 'custom_tag.beforeEach', 'hello beforeEach')
+                  assert.propertyVal(testEvent.content.meta, 'custom_tag.afterEach', 'hello afterEach')
+                }
+                if (testEvent.content.meta[TEST_NAME].includes('should work with passing tests')) {
+                  assert.propertyVal(testEvent.content.meta, 'custom_tag.it', 'hello it')
+                }
+              }
             })
 
             stepEvents.forEach(stepEvent => {

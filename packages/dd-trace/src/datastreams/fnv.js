@@ -5,7 +5,7 @@ function fnv (data, hvalInit, fnvPrime, fnvSize) {
   let hval = hvalInit
   for (const byte of data) {
     hval = (hval * fnvPrime) % fnvSize
-    hval = hval ^ BigInt(byte)
+    hval ^= BigInt(byte)
   }
   return hval
 }

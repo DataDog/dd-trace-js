@@ -51,7 +51,7 @@ function sanitizedExec (
   try {
     let result = cp.execFileSync(cmd, flags, { stdio: 'pipe' }).toString()
     if (shouldTrim) {
-      result = result.replace(/(\r\n|\n|\r)/gm, '')
+      result = result.replaceAll(/(\r\n|\n|\r)/gm, '')
     }
     if (durationMetric) {
       distributionMetric(durationMetric.name, durationMetric.tags, Date.now() - startTime)

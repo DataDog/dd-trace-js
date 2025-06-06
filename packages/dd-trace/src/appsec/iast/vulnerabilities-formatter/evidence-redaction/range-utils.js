@@ -16,18 +16,17 @@ function remove (range, rangeToRemove) {
     return [range]
   } else if (contains(rangeToRemove, range)) {
     return []
-  } else {
-    const result = []
-    if (rangeToRemove.start > range.start) {
-      const offset = rangeToRemove.start - range.start
-      result.push({ start: range.start, end: range.start + offset })
-    }
-    if (rangeToRemove.end < range.end) {
-      const offset = range.end - rangeToRemove.end
-      result.push({ start: rangeToRemove.end, end: rangeToRemove.end + offset })
-    }
-    return result
   }
+  const result = []
+  if (rangeToRemove.start > range.start) {
+    const offset = rangeToRemove.start - range.start
+    result.push({ start: range.start, end: range.start + offset })
+  }
+  if (rangeToRemove.end < range.end) {
+    const offset = range.end - rangeToRemove.end
+    result.push({ start: rangeToRemove.end, end: rangeToRemove.end + offset })
+  }
+  return result
 }
 
 module.exports = {

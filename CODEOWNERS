@@ -65,13 +65,14 @@
 /packages/datadog-plugin-aws-sdk/test/bedrockruntime.spec.js @DataDog/ml-observability
 
 # CI
+/.github/workflows/apm-capabilities.yml @DataDog/apm-sdk-api-js
+/.github/workflows/apm-integrations.yml @Datadog/apm-idm-js
 /.github/workflows/appsec.yml @DataDog/asm-js
-/.github/workflows/ci-visibility-performance.yml @DataDog/ci-app-libraries
 /.github/workflows/codeql-analysis.yml @DataDog/dd-trace-js
-/.github/workflows/core.yml @DataDog/dd-trace-js
+/.github/workflows/debugger.yml @DataDog/debugger
 /.github/workflows/lambda.yml @DataDog/serverless-aws
-/.github/workflows/package-size.yml @DataDog/dd-trace-js
-/.github/workflows/plugins.yml @DataDog/dd-trace-js
+/.github/workflows/llmobs.yml @DataDog/ml-observability
+/.github/workflows/platform.yml @DataDog/dd-trace-js
 /.github/workflows/pr-labels.yml @DataDog/dd-trace-js
 /.github/workflows/profiling.yml @DataDog/profiling-js
 /.github/workflows/project.yml @DataDog/dd-trace-js
@@ -79,9 +80,10 @@
 /.github/workflows/release-dev.yml @DataDog/dd-trace-js
 /.github/workflows/release-latest.yml @DataDog/dd-trace-js
 /.github/workflows/release-proposal.yml @DataDog/dd-trace-js
-/.github/workflows/serverless-integration-test.yml @DataDog/serverless-aws @DataDog/serverless
+/.github/workflows/release-validate.yml @DataDog/dd-trace-js
+/.github/workflows/stale.yml @DataDog/dd-trace-js @DataDog/dd-trace-js
 /.github/workflows/system-tests.yml @DataDog/dd-trace-js @DataDog/asm-js
 /.github/workflows/test-k8s-lib-injection.yaml @DataDog/dd-trace-js
-/.github/workflows/tracing.yml @DataDog/dd-trace-js
+/.github/workflows/test-optimization.yml @DataDog/ci-app-libraries
 /.gitlab/benchmarks.yml @DataDog/dd-trace-js
 /.gitlab-ci.yml @DataDog/dd-trace-js

@@ -117,12 +117,12 @@ function convertKey (key) {
 function jsonStringify (obj, indent = 2) {
   // made to stringify json exactly similar to python / java in order for hashing to be the same
   const jsonString = JSON.stringify(obj, (_, value) => value, indent)
-  return jsonString.replace(/^ +/gm, ' ') // Replace leading spaces with single space
-    .replace(/\n/g, '') // Remove newlines
-    .replace(/{ /g, '{') // Remove space after '{'
-    .replace(/ }/g, '}') // Remove space before '}'
-    .replace(/\[ /g, '[') // Remove space after '['
-    .replace(/ \]/g, ']') // Remove space before ']'
+  return jsonString.replaceAll(/^ +/gm, ' ') // Replace leading spaces with single space
+    .replaceAll('\n', '') // Remove newlines
+    .replaceAll('{ ', '{') // Remove space after '{'
+    .replaceAll(' }', '}') // Remove space before '}'
+    .replaceAll('[ ', '[') // Remove space after '['
+    .replaceAll(' ]', ']') // Remove space before ']'
 }
 
 module.exports = {

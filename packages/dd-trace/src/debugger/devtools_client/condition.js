@@ -105,9 +105,8 @@ function compile (node) {
       return '$dd_key'
     } else if (value === '@value') {
       return '$dd_value'
-    } else {
-      return assertIdentifier(value)
     }
+    return assertIdentifier(value)
   } else if (Array.isArray(value)) {
     const args = value.map(compile)
     switch (type) {

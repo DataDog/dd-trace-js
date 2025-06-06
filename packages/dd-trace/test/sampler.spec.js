@@ -40,7 +40,7 @@ describe('Sampler', () => {
 
       rates.forEach(([rate, expected]) => {
         sampler = new Sampler(rate)
-        expect(sampler._threshold).to.equal(expected)
+        expect(sampler.threshold).to.equal(expected)
       })
     })
   })

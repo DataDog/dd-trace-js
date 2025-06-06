@@ -22,7 +22,7 @@ let heartbeatTimeout
 let heartbeatInterval
 let extendedInterval
 let integrations
-let configWithOrigin = []
+const configWithOrigin = new Map()
 let retryData = null
 const extendedHeartbeatPayload = {}
 
@@ -113,7 +113,7 @@ function getInstallSignature (config) {
 function appStarted (config) {
   const app = {
     products: getProducts(config),
-    configuration: configWithOrigin
+    configuration: [...configWithOrigin.values()]
   }
   const installSignature = getInstallSignature(config)
   if (installSignature) {
@@ -282,7 +282,7 @@ function stop () {
 }
 
 function updateIntegrations () {
-  if (!config || !config.telemetry.enabled) {
+  if (!config?.telemetry.enabled) {
     return
   }
   const integrations = getIntegrations()
@@ -325,6 +325,8 @@ const nameMapping = {
   injectionForce: 'ssi_forced_injection_enabled'
 }
 
+const namesNeedFormatting = new Set(['DD_TAGS', 'peerServiceMapping', 'serviceMapping'])
+
 function updateConfig (changes, config) {
   if (!config.telemetry.enabled) return
   if (changes.length === 0) return
@@ -334,15 +336,11 @@ function updateConfig (changes, config) {
   const application = createAppObject(config)
   const host = createHostObject()
 
-  const namesNeedFormatting = new Set(['DD_TAGS', 'peerServiceMapping', 'serviceMapping'])
-
-  const configuration = []
-  const names = [] // list of config names whose values have been changed
+  const changed = configWithOrigin.size > 0
 
   for (const change of changes) {
     const name = nameMapping[change.name] || change.name
 
-    names.push(name)
     const { origin, value } = change
     const entry = { name, value, origin }
 
@@ -357,21 +355,15 @@ function updateConfig (changes, config) {
     } else if (Array.isArray(entry.value)) {
       entry.value = value.join(',')
     }
-    configuration.push(entry)
+    configWithOrigin.set(name, entry)
   }
 
-  function isNotModified (entry) {
-    return !names.includes(entry.name)
-  }
-
-  if (configWithOrigin.length) {
+  if (changed) {
     // update configWithOrigin to contain up-to-date full list of config values for app-extended-heartbeat
-    configWithOrigin = configWithOrigin.filter(isNotModified)
-    configWithOrigin = [...configWithOrigin, ...configuration]
-    const { reqType, payload } = createPayload('app-client-configuration-change', { configuration })
+    const { reqType, payload } = createPayload('app-client-configuration-change', {
+      configuration: [...configWithOrigin.values()]
+    })
     sendData(config, application, host, reqType, payload, updateRetryData)
-  } else {
-    configWithOrigin = configuration
   }
 }
 
@@ -379,12 +371,7 @@ function profilingEnabledToBoolean (profilingEnabled) {
   if (typeof profilingEnabled === 'boolean') {
     return profilingEnabled
   }
-  if (['auto', 'true'].includes(profilingEnabled)) {
-    return true
-  }
-  if (profilingEnabled === 'false') {
-    return false
-  }
+  return profilingEnabled === 'true' || profilingEnabled === 'auto'
 }
 
 module.exports = {

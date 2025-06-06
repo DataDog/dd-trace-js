@@ -77,9 +77,7 @@ function normalizeConfig (config) {
 
   const filter = urlFilter.getFilter(config)
 
-  return Object.assign({}, config, {
-    filter
-  })
+  return { ...config, filter }
 }
 
 function uppercaseAllEntries (entries) {

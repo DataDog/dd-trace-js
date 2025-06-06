@@ -1,6 +1,6 @@
 'use strict'
 
-const { channel, addHook, AsyncResource } = require('./helpers/instrument')
+const { channel, addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
 addHook({ name: 'mysql', file: 'lib/Connection.js', versions: ['>=2'] }, Connection => {
@@ -57,11 +57,20 @@ addHook({ name: 'mysql', file: 'lib/Connection.js', versions: ['>=2'] }, Connect
 })
 
 addHook({ name: 'mysql', file: 'lib/Pool.js', versions: ['>=2'] }, Pool => {
+  const connectionStartCh = channel('apm:mysql:connection:start')
+  const connectionFinishCh = channel('apm:mysql:connection:finish')
   const startPoolQueryCh = channel('datadog:mysql:pool:query:start')
   const finishPoolQueryCh = channel('datadog:mysql:pool:query:finish')
 
   shimmer.wrap(Pool.prototype, 'getConnection', getConnection => function (cb) {
-    arguments[0] = AsyncResource.bind(cb)
+    arguments[0] = function () {
+      return connectionFinishCh.runStores(ctx, cb, this, ...arguments)
+    }
+
+    const ctx = {}
+
+    connectionStartCh.publish(ctx)
+
     return getConnection.apply(this, arguments)
   })
 

@@ -8,6 +8,7 @@ const { ConsoleLogger } = require('./loggers/console')
 const { tagger } = require('./tagger')
 const fs = require('fs')
 const { fileURLToPath } = require('url')
+const { getEnvironmentVariable } = require('../config-helper')
 
 const logger = new ConsoleLogger()
 const timeoutMs = 15 * 1000
@@ -15,25 +16,24 @@ const timeoutMs = 15 * 1000
 function exporterFromURL (url) {
   if (url.protocol === 'file:') {
     return new FileExporter({ pprofPrefix: fileURLToPath(url) })
-  } else {
-    const injectionEnabled = (process.env.DD_INJECTION_ENABLED || '').split(',')
-    const libraryInjected = injectionEnabled.length > 0
-    const profilingEnabled = (process.env.DD_PROFILING_ENABLED || '').toLowerCase()
-    const activation = ['true', '1'].includes(profilingEnabled)
-      ? 'manual'
-      : profilingEnabled === 'auto'
-        ? 'auto'
-        : injectionEnabled.includes('profiling')
-          ? 'injection'
-          : 'unknown'
-    return new AgentExporter({
-      url,
-      logger,
-      uploadTimeout: timeoutMs,
-      libraryInjected,
-      activation
-    })
   }
+  const injectionEnabled = (getEnvironmentVariable('DD_INJECTION_ENABLED') ?? '').split(',')
+  const libraryInjected = injectionEnabled.length > 0
+  const profilingEnabled = (getEnvironmentVariable('DD_PROFILING_ENABLED') ?? '').toLowerCase()
+  const activation = ['true', '1'].includes(profilingEnabled)
+    ? 'manual'
+    : profilingEnabled === 'auto'
+      ? 'auto'
+      : injectionEnabled.includes('profiling')
+        ? 'injection'
+        : 'unknown'
+  return new AgentExporter({
+    url,
+    logger,
+    uploadTimeout: timeoutMs,
+    libraryInjected,
+    activation
+  })
 }
 
 async function exportProfile (urls, tags, profileType, profile) {
@@ -46,7 +46,7 @@ async function exportProfile (urls, tags, profileType, profile) {
 
   const encodedProfile = await encode(heap.convertProfile(profile, undefined, mapper))
   const start = new Date()
-  for (const url of urls) {
+  await Promise.all(urls.map(async (url) => {
     const exporter = exporterFromURL(url)
 
     await exporter.export({
@@ -57,7 +57,7 @@ async function exportProfile (urls, tags, profileType, profile) {
       end: start,
       tags
     })
-  }
+  }))
 }
 
 /** Expected command line arguments are:

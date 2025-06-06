@@ -43,8 +43,11 @@ function expectProfileMessagePromise (agent, timeout,
       assert.propertyVal(event, 'family', 'node')
       assert.isString(event.info.profiler.activation)
       assert.isString(event.info.profiler.ssi.mechanism)
-      assert.deepPropertyVal(event, 'attachments', fileNames)
-      for (const [index, fileName] of fileNames.entries()) {
+      const attachments = event.attachments
+      assert.isArray(attachments)
+      // Profiler encodes the files with Promise.all, so their ordering is not guaranteed
+      assert.sameMembers(attachments, fileNames)
+      for (const [index, fileName] of attachments.entries()) {
         assert.propertyVal(files[index + 1], 'originalname', fileName)
       }
     } catch (e) {

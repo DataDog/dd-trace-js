@@ -4,7 +4,7 @@ require('../../dd-trace/test/setup/tap')
 
 const { expect } = require('chai')
 const { executionAsyncResource } = require('async_hooks')
-const storage = require('../src/storage')
+const { storage } = require('../src/storage')
 
 describe('storage', () => {
   let testStorage
@@ -16,17 +16,17 @@ describe('storage', () => {
   })
 
   afterEach(() => {
-    testStorage('legacy').enterWith(undefined)
+    testStorage.enterWith(undefined)
     testStorage2.enterWith(undefined)
   })
 
   it('should enter a store', done => {
     const store = 'foo'
 
-    testStorage('legacy').enterWith(store)
+    testStorage.enterWith(store)
 
     setImmediate(() => {
-      expect(testStorage('legacy').getStore()).to.equal(store)
+      expect(testStorage.getStore()).to.equal(store)
       done()
     })
   })
@@ -35,11 +35,11 @@ describe('storage', () => {
     const store = 'foo'
     const store2 = 'bar'
 
-    testStorage('legacy').enterWith(store)
+    testStorage.enterWith(store)
     testStorage2.enterWith(store2)
 
     setImmediate(() => {
-      expect(testStorage('legacy').getStore()).to.equal(store)
+      expect(testStorage.getStore()).to.equal(store)
       expect(testStorage2.getStore()).to.equal(store2)
       done()
     })
@@ -52,7 +52,7 @@ describe('storage', () => {
   it('should not have its store referenced by the underlying async resource', () => {
     const resource = executionAsyncResource()
 
-    testStorage('legacy').enterWith({ internal: 'internal' })
+    testStorage.enterWith({ internal: 'internal' })
 
     for (const sym of Object.getOwnPropertySymbols(resource)) {
       if (sym.toString() === 'Symbol(kResourceStore)' && resource[sym]) {

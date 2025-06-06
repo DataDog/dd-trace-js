@@ -27,11 +27,10 @@ class Sqs extends BaseAwsSdkPlugin {
         obj.needsFinish = true
         const options = {
           childOf: contextExtraction.datadogContext,
-          tags: Object.assign(
-            {},
-            this.requestTags.get(request) || {},
-            { 'span.kind': 'server' }
-          )
+          tags: {
+            ...this.requestTags.get(request),
+            'span.kind': 'server'
+          }
         }
         parsedMessageAttributes = contextExtraction.parsedAttributes
         span = this.tracer.startSpan('aws.response', options)
@@ -89,20 +88,18 @@ class Sqs extends BaseAwsSdkPlugin {
   }
 
   generateTags (params, operation, response) {
-    const tags = {}
-
-    if (!params || (!params.QueueName && !params.QueueUrl)) return tags
+    if (!params || (!params.QueueName && !params.QueueUrl)) return {}
     // 'https://sqs.us-east-1.amazonaws.com/123456789012/my-queue';
     let queueName = params.QueueName
     if (params.QueueUrl) {
       queueName = params.QueueUrl.split('/').at(-1)
     }
 
-    Object.assign(tags, {
+    const tags = {
       'resource.name': `${operation} ${params.QueueName || params.QueueUrl}`,
       'aws.sqs.queue_name': params.QueueName || params.QueueUrl,
       queuename: queueName
-    })
+    }
 
     switch (operation) {
       case 'receiveMessage':

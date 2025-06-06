@@ -102,17 +102,16 @@ class SchemaExtractor {
         }
       }
       return true
-    } else {
-      if (!builder.shouldExtractSchema(schemaName, depth)) {
-        return false
-      }
-      for (const field of schema.fieldsArray) {
-        if (!this.extractProperty(field, schemaName, field.name, builder, depth)) {
-          log.warn(`DSM: Unable to extract field with name: ${field.name} from Avro schema with name: ${schemaName}`)
-        }
-      }
-      return true
     }
+    if (!builder.shouldExtractSchema(schemaName, depth)) {
+      return false
+    }
+    for (const field of schema.fieldsArray) {
+      if (!this.extractProperty(field, schemaName, field.name, builder, depth)) {
+        log.warn(`DSM: Unable to extract field with name: ${field.name} from Avro schema with name: ${schemaName}`)
+      }
+    }
+    return true
   }
 
   static extractSchemas (descriptor, dataStreamsProcessor) {

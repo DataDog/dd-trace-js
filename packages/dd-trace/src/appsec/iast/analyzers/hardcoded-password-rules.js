@@ -1,4 +1,3 @@
-/* eslint-disable @stylistic/max-len */
 'use strict'
 
 const { NameAndValue } = require('./hardcoded-rule-type')

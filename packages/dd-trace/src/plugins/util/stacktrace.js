@@ -34,7 +34,14 @@ function getCallSites (constructorOpt) {
  *
  * @param {Function} constructorOpt - Function to pass along to Error.captureStackTrace
  * @param {number} [limit=Infinity] - The maximum number of frames to return
- * @returns {{ file: string, line: number, method: (string|undefined), type: (string|undefined) }[]} - A
+ * @returns {StackFrame[]} - A list of stack frames from user-land code
+ *
+ * @typedef {Object} StackFrame
+ * @property {string} file - The file path of the frame
+ * @property {number} line - The line number in the file
+ * @property {number} column - The column number in the file
+ * @property {string} [method] - The function name, if available
+ * @property {string} [type] - The type name, if available
  */
 function getUserLandFrames (constructorOpt, limit = Infinity) {
   const callsites = getCallSites(constructorOpt)

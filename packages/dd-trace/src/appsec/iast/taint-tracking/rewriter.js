@@ -14,6 +14,7 @@ const log = require('../../../log')
 const { isMainThread } = require('worker_threads')
 const { LOG_MESSAGE, REWRITTEN_MESSAGE } = require('./constants')
 const orchestrionConfig = require('../../../../../datadog-instrumentations/src/orchestrion-config')
+const { getEnvironmentVariable } = require('../../../config-helper')
 
 let config
 const hardcodedSecretCh = dc.channel('datadog:secrets:result')
@@ -26,7 +27,7 @@ let kSymbolPrepareStackTrace
 function noop () {}
 
 function isFlagPresent (flag) {
-  return process.env.NODE_OPTIONS?.includes(flag) ||
+  return getEnvironmentVariable('NODE_OPTIONS')?.includes(flag) ||
     process.execArgv?.some(arg => arg.includes(flag))
 }
 

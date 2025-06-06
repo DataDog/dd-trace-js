@@ -43,12 +43,11 @@ class LogPropagator {
       spanContext._trace.tags['_dd.p.tid'] = hi
 
       return spanContext
-    } else {
-      return new DatadogSpanContext({
-        traceId: id(carrier.dd.trace_id, 10),
-        spanId: id(carrier.dd.span_id, 10)
-      })
     }
+    return new DatadogSpanContext({
+      traceId: id(carrier.dd.trace_id, 10),
+      spanId: id(carrier.dd.span_id, 10)
+    })
   }
 }
 
