@@ -13,3 +13,4 @@ try {
 
   console.log(fastify.toString().startsWith('function fastifyWithTrace'))
 }
+console.log('instrumentation source:', global._ddtrace._tracer._config.instrumentationSource)

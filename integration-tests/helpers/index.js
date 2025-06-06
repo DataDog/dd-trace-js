@@ -46,7 +46,7 @@ async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
   }
 
   if (expectedSource) {
-    assert.match(out, new RegExp(expectedSource),
+    assert.match(out, new RegExp(`instrumentation source: ${expectedSource}`),
     `Expected the process to output "${expectedSource}", but logs only contain: "${out}"`)
   }
   return pid

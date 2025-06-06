@@ -1,5 +1,4 @@
 const request = require('../exporters/common/request')
-const { safeJSONStringify } = require('../exporters/common/util')
 const log = require('../log')
 const { isTrue } = require('../util')
 
@@ -84,10 +83,6 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
     application,
     host
   })
-
-  if (config.telemetry.debug) {
-    log.debug(`Sending telemetry data: ${safeJSONStringify(payload)}`)
-  }
 
   request(data, options, (error) => {
     if (error && process.env.DD_API_KEY && config.site) {
