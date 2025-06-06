@@ -69,10 +69,6 @@ function calculateDDBasePath (dirname) {
   return dirSteps.slice(0, packagesIndex + 1).join(path.sep) + path.sep
 }
 
-function hasOwn (object, prop) {
-  return Object.prototype.hasOwnProperty.call(object, prop)
-}
-
 function normalizeProfilingEnabledValue (configValue) {
   return isTrue(configValue)
     ? 'true'
@@ -87,6 +83,5 @@ module.exports = {
   isError,
   globMatch,
   ddBasePath: calculateDDBasePath(__dirname),
-  hasOwn,
   normalizeProfilingEnabledValue
 }

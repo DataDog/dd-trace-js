@@ -178,7 +178,7 @@ function validateNamingVersion (versionString) {
  * @param {string | string[]} input
  */
 function splitJSONPathRules (input) {
-  if (!input) return null
+  if (!input) return
   if (Array.isArray(input)) return input
   if (input === 'all') return []
   return input.split(',')
@@ -1016,7 +1016,7 @@ class Config {
     const tags = {}
     setHiddenProperty(this, '_optsUnprocessed', {})
 
-    options = setHiddenProperty(this, '_optionsArg', Object.assign({ ingestion: {} }, options, opts))
+    options = setHiddenProperty(this, '_optionsArg', { ingestion: {}, ...options, ...opts })
 
     tagger.add(tags, options.tags)
 
@@ -1454,12 +1454,7 @@ class Config {
     obj[name] = value
   }
 
-  // TODO: Report origin changes and errors to telemetry.
-  // TODO: Deeply merge configurations.
-  // TODO: Move change tracking to telemetry.
-  // for telemetry reporting, `name`s in `containers` need to be keys from:
-  // https://github.com/DataDog/dd-go/blob/prod/trace/apps/tracer-telemetry-intake/telemetry-payload/static/config_norm_rules.json
-  _merge () {
+  _getContainersAndOriginsOrdered () {
     const containers = [
       this._remote,
       this._options,
@@ -1478,6 +1473,17 @@ class Config {
       'calculated',
       'default'
     ]
+
+    return { containers, origins }
+  }
+
+  // TODO: Report origin changes and errors to telemetry.
+  // TODO: Deeply merge configurations.
+  // TODO: Move change tracking to telemetry.
+  // for telemetry reporting, `name`s in `containers` need to be keys from:
+  // https://github.com/DataDog/dd-go/blob/prod/trace/apps/tracer-telemetry-intake/telemetry-payload/static/config_norm_rules.json
+  _merge () {
+    const { containers, origins } = this._getContainersAndOriginsOrdered()
     const unprocessedValues = [
       this._remoteUnprocessed,
       this._optsUnprocessed,
@@ -1514,6 +1520,18 @@ class Config {
     updateConfig(changes, this)
   }
 
+  getOrigin (name) {
+    const { containers, origins } = this._getContainersAndOriginsOrdered()
+
+    for (let i = 0; i < containers.length; i++) {
+      const container = containers[i]
+      const value = container[name]
+      if (value != null || container === this._defaults) {
+        return origins[i]
+      }
+    }
+  }
+
   // TODO: Refactor the Config class so it never produces any config objects that are incompatible with MessageChannel
   /**
    * Serializes the config object so it can be passed over a Worker Thread MessageChannel.
@@ -1536,12 +1554,12 @@ function handleOtel (tagString) {
     ?.replace(/(^|,)deployment\.environment=/, '$1env:')
     .replace(/(^|,)service\.name=/, '$1service:')
     .replace(/(^|,)service\.version=/, '$1version:')
-    .replace(/=/g, ':')
+    .replaceAll('=', ':')
 }
 
 function parseSpaceSeparatedTags (tagString) {
   if (tagString && !tagString.includes(',')) {
-    tagString = tagString.replace(/\s+/g, ',')
+    tagString = tagString.replaceAll(/\s+/g, ',')
   }
   return tagString
 }

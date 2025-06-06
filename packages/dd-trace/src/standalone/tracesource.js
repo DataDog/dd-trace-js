@@ -1,7 +1,6 @@
 'use strict'
 
 const { TRACE_SOURCE_PROPAGATION_KEY } = require('../constants')
-const { hasOwn } = require('../util')
 
 function addTraceSourceTag (tags, product) {
   if (tags && product) {
@@ -13,7 +12,7 @@ function addTraceSourceTag (tags, product) {
 }
 
 function hasTraceSourcePropagationTag (tags) {
-  return hasOwn(tags, TRACE_SOURCE_PROPAGATION_KEY)
+  return Object.hasOwn(tags, TRACE_SOURCE_PROPAGATION_KEY)
 }
 
 module.exports = {
