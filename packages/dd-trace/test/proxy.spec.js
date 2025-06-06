@@ -661,7 +661,7 @@ describe('TracerProxy', () => {
         })
 
         it('should return empty object when no items exist', () => {
-          expect(proxy.getAllBaggageItems()).to.be.undefined
+          expect(proxy.getAllBaggageItems()).to.deep.equal({})
         })
       })
 
