@@ -68,7 +68,7 @@ function normalizeRef (ref) {
   if (!ref) {
     return ref
   }
-  return ref.replace(/origin\/|refs\/heads\/|tags\//gm, '')
+  return ref.replaceAll(/origin\/|refs\/heads\/|tags\//gm, '')
 }
 
 function resolveTilde (filePath) {
@@ -140,11 +140,10 @@ module.exports = {
 
       tags[refKey] = ref
 
-      let finalPipelineName = ''
       if (JOB_NAME) {
         // Job names can contain parameters, e.g. jobName/KEY1=VALUE1,KEY2=VALUE2/branchName
         const jobNameAndParams = JOB_NAME.split('/')
-        finalPipelineName = jobNameAndParams.length > 1 && jobNameAndParams[1].includes('=')
+        const finalPipelineName = jobNameAndParams.length > 1 && jobNameAndParams[1].includes('=')
           ? jobNameAndParams[0]
           : JOB_NAME.replace(`/${ref}`, '')
         tags[CI_PIPELINE_NAME] = finalPipelineName
@@ -433,7 +432,7 @@ module.exports = {
         [GIT_TAG]: BITBUCKET_TAG,
         [GIT_REPOSITORY_URL]: BITBUCKET_GIT_SSH_ORIGIN || BITBUCKET_GIT_HTTP_ORIGIN,
         [CI_WORKSPACE_PATH]: BITBUCKET_CLONE_DIR,
-        [CI_PIPELINE_ID]: BITBUCKET_PIPELINE_UUID && BITBUCKET_PIPELINE_UUID.replace(/{|}/gm, ''),
+        [CI_PIPELINE_ID]: BITBUCKET_PIPELINE_UUID && BITBUCKET_PIPELINE_UUID.replaceAll(/{|}/gm, ''),
         [GIT_PULL_REQUEST_BASE_BRANCH]: BITBUCKET_PR_DESTINATION_BRANCH
       }
     }

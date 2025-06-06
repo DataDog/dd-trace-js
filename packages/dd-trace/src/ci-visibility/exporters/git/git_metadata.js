@@ -39,7 +39,7 @@ function validateCommits (commits) {
       throw new Error('Invalid commit type response')
     }
     if (isValidSha1(commitSha) || isValidSha256(commitSha)) {
-      return commitSha.replace(/[^0-9a-f]+/g, '')
+      return commitSha.replaceAll(/[^0-9a-f]+/g, '')
     }
     throw new Error('Invalid commit format')
   })

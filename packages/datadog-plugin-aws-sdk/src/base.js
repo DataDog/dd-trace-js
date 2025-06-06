@@ -143,11 +143,12 @@ class BaseAwsSdkPlugin extends ClientPlugin {
     const operation = response.request.operation
     const extraTags = this.generateTags(params, operation, response) || {}
 
-    const tags = Object.assign({
+    const tags = {
       'aws.response.request_id': response.requestId,
       'resource.name': operation,
-      'span.kind': 'client'
-    }, extraTags)
+      'span.kind': 'client',
+      ...extraTags
+    }
 
     span.addTags(tags)
 
@@ -220,11 +221,13 @@ function normalizeConfig (config, serviceIdentifier) {
   )
 
   // Merge the specific config back into the main config
-  return Object.assign({}, config, specificConfig, {
+  return {
+    ...config,
+    ...specificConfig,
     splitByAwsService: config.splitByAwsService !== false,
     batchPropagationEnabled,
     hooks
-  })
+  }
 }
 
 const noop = () => {}

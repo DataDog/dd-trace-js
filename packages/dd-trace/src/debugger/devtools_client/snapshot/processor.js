@@ -129,11 +129,10 @@ function toFunctionOrClass (value, maxLength) {
     // This is a function
     // TODO: Would it make sense to detect if it's an arrow function or not?
     return toObject(value.className, value.properties, maxLength)
-  } else {
-    // This is a class
-    const className = classMatch[1].trim()
-    return { type: className ? `class ${className}` : 'class' }
   }
+  // This is a class
+  const className = classMatch[1].trim()
+  return { type: className ? `class ${className}` : 'class' }
 }
 
 function toString (str, maxLength) {

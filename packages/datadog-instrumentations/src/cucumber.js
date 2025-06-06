@@ -1,7 +1,7 @@
 'use strict'
 const { createCoverageMap } = require('istanbul-lib-coverage')
 
-const { addHook, channel, AsyncResource } = require('./helpers/instrument')
+const { addHook, channel } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
@@ -63,8 +63,6 @@ const modifiedTestsByPickleId = new Map()
 let eventDataCollector = null
 let pickleByFile = {}
 const pickleResultByFile = {}
-
-const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
 let skippableSuites = []
 let itrCorrelationId = ''
@@ -161,9 +159,7 @@ function getErrorFromCucumberResult (cucumberResult) {
 
 function getChannelPromise (channelToPublishTo, isParallel = false) {
   return new Promise(resolve => {
-    sessionAsyncResource.runInAsyncScope(() => {
-      channelToPublishTo.publish({ onDone: resolve, isParallel })
-    })
+    channelToPublishTo.publish({ onDone: resolve, isParallel })
   })
 }
 
@@ -547,9 +543,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       options.retry = numTestRetries
     }
 
-    sessionAsyncResource.runInAsyncScope(() => {
-      sessionStartCh.publish({ command, frameworkVersion })
-    })
+    sessionStartCh.publish({ command, frameworkVersion })
 
     if (!errorSkippableRequest && skippedSuites.length) {
       itrSkippedSuitesCh.publish({ skippedSuites, frameworkVersion })
@@ -577,19 +571,17 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       global.__coverage__ = fromCoverageMapToCoverage(originalCoverageMap)
     }
 
-    sessionAsyncResource.runInAsyncScope(() => {
-      sessionFinishCh.publish({
-        status: success ? 'pass' : 'fail',
-        isSuitesSkipped,
-        testCodeCoverageLinesTotal,
-        numSkippedSuites: skippedSuites.length,
-        hasUnskippableSuites: isUnskippable,
-        hasForcedToRunSuites: isForcedToRun,
-        isEarlyFlakeDetectionEnabled,
-        isEarlyFlakeDetectionFaulty,
-        isTestManagementTestsEnabled,
-        isParallel
-      })
+    sessionFinishCh.publish({
+      status: success ? 'pass' : 'fail',
+      isSuitesSkipped,
+      testCodeCoverageLinesTotal,
+      numSkippedSuites: skippedSuites.length,
+      hasUnskippableSuites: isUnskippable,
+      hasForcedToRunSuites: isForcedToRun,
+      isEarlyFlakeDetectionEnabled,
+      isEarlyFlakeDetectionFaulty,
+      isTestManagementTestsEnabled,
+      isParallel
     })
     eventDataCollector = null
     return success
@@ -677,6 +669,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     if (isAttemptToFix && lastTestStatus !== 'skip') {
       for (let retryIndex = 0; retryIndex < testManagementAttemptToFixRetries; retryIndex++) {
         numRetriesByPickleId.set(pickle.id, retryIndex + 1)
+        // eslint-disable-next-line no-await-in-loop
         runTestCaseResult = await runTestCaseFunction.apply(this, arguments)
       }
     }
@@ -685,6 +678,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     if (isEarlyFlakeDetectionEnabled && lastTestStatus !== 'skip' && (isNew || isModified)) {
       for (let retryIndex = 0; retryIndex < earlyFlakeDetectionNumRetries; retryIndex++) {
         numRetriesByPickleId.set(pickle.id, retryIndex + 1)
+        // eslint-disable-next-line no-await-in-loop
         runTestCaseResult = await runTestCaseFunction.apply(this, arguments)
       }
     }
@@ -759,9 +753,7 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
     if (Array.isArray(message)) {
       const [messageCode, payload] = message
       if (messageCode === CUCUMBER_WORKER_TRACE_PAYLOAD_CODE) {
-        sessionAsyncResource.runInAsyncScope(() => {
-          workerReportTraceCh.publish(payload)
-        })
+        workerReportTraceCh.publish(payload)
         return
       }
     }

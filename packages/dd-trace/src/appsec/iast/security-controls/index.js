@@ -150,19 +150,18 @@ function addSecureMarks (value, secureMarks, createNewTainted = true) {
 
   if (typeof value === 'string') {
     return TaintTrackingOperations.addSecureMark(iastContext, value, secureMarks, createNewTainted)
-  } else {
-    iterateObjectStrings(value, (value, levelKeys, parent, lastKey) => {
-      try {
-        const securedTainted = TaintTrackingOperations.addSecureMark(iastContext, value, secureMarks, createNewTainted)
-        if (createNewTainted) {
-          parent[lastKey] = securedTainted
-        }
-      } catch {
-        // if it is a readonly property, do nothing
-      }
-    })
-    return value
   }
+  iterateObjectStrings(value, (value, levelKeys, parent, lastKey) => {
+    try {
+      const securedTainted = TaintTrackingOperations.addSecureMark(iastContext, value, secureMarks, createNewTainted)
+      if (createNewTainted) {
+        parent[lastKey] = securedTainted
+      }
+    } catch {
+      // if it is a readonly property, do nothing
+    }
+  })
+  return value
 }
 
 function disable () {

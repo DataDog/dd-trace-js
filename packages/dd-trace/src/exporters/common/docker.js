@@ -25,7 +25,7 @@ try {
 
 const inodePath = cgroup.match(lineReg)?.[3]
 if (inodePath) {
-  const strippedPath = inodePath.replace(/^\/|\/$/g, '')
+  const strippedPath = inodePath.replaceAll(/^\/|\/$/g, '')
 
   try {
     inode = fs.statSync(`/sys/fs/cgroup/${strippedPath}`).ino

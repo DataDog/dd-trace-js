@@ -790,11 +790,11 @@ function addAttemptToFixStringToTestName (testName, numAttempt) {
 }
 
 function removeEfdStringFromTestName (testName) {
-  return testName.replace(EFD_TEST_NAME_REGEX, '')
+  return testName.replaceAll(EFD_TEST_NAME_REGEX, '')
 }
 
 function removeAttemptToFixStringFromTestName (testName) {
-  return testName.replace(ATTEMPT_TEST_NAME_REGEX, '')
+  return testName.replaceAll(ATTEMPT_TEST_NAME_REGEX, '')
 }
 
 function getIsFaultyEarlyFlakeDetection (projectSuites, testsBySuiteName, faultyThresholdPercentage) {

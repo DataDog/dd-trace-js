@@ -9,7 +9,7 @@ const {
   FakeAgent,
   createSandbox,
   spawnProc
-} = require('./helpers')
+} = require('../helpers')
 
 describe('graphql', () => {
   let sandbox, cwd, agent, webFile, proc, appPort

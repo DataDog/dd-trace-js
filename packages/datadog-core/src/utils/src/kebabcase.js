@@ -7,8 +7,8 @@ module.exports = function kebabcase (str) {
 
   return str
     .trim()
-    .replace(/([a-z])([A-Z])/g, '$1-$2') // Convert camelCase to kebab-case
-    .replace(/[\s_]+/g, '-') // Replace spaces and underscores with a single dash
-    .replace(/^-+|-+$/g, '') // Trim leading and trailing dashes
+    .replaceAll(/([a-z])([A-Z])/g, '$1-$2') // Convert camelCase to kebab-case
+    .replaceAll(/[\s_]+/g, '-') // Replace spaces and underscores with a single dash
+    .replaceAll(/^-+|-+$/g, '') // Trim leading and trailing dashes
     .toLowerCase()
 }

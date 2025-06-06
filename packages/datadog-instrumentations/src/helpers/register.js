@@ -99,9 +99,7 @@ for (const packageName of names) {
       // That way it would also not be duplicated. The actual name being used has to be identified else wise.
       // Maybe it is also not important to know what name was actually used?
       hook[HOOK_SYMBOL] ??= new WeakSet()
-      let matchesFile = false
-
-      matchesFile = moduleName === fullFilename
+      let matchesFile = moduleName === fullFilename
 
       if (fullFilePattern) {
         // Some libraries include a hash in their filenames when installed,

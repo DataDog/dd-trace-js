@@ -33,7 +33,7 @@ function maybeEnable (Plugin) {
   if (!Plugin || typeof Plugin !== 'function') return
   if (!pluginClasses[Plugin.id]) {
     const envName = `DD_TRACE_${Plugin.id.toUpperCase()}_ENABLED`
-    const enabled = getEnvironmentVariable(envName.replace(/[^a-z0-9_]/ig, '_'))
+    const enabled = getEnvironmentVariable(envName.replaceAll(/[^a-z0-9_]/ig, '_'))
 
     // TODO: remove the need to load the plugin class in order to disable the plugin
     if (isFalse(enabled) || disabledPlugins.has(Plugin.id)) {
