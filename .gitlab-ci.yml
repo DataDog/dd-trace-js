@@ -5,14 +5,12 @@ stages:
   - single-step-instrumentation-tests
   - macrobenchmarks
 
-# TODO(BridgeAR) Activate the gitlab CI job
-#
-# check_config_inversion_local_file:
-#   rules:
-#     - when: on_success
-#   extends: .check_config_inversion_local_file
-#   variables:
-#     LOCAL_JSON_PATH: "packages/dd-trace/src/supported-configurations.json"
+check_config_inversion_local_file:
+  rules:
+    - when: on_success
+  extends: .check_config_inversion_local_file
+  variables:
+    LOCAL_JSON_PATH: "packages/dd-trace/src/supported-configurations.json"
 
 include:
   - local: ".gitlab/one-pipeline.locked.yml"
