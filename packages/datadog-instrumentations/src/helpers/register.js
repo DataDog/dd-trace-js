@@ -9,6 +9,7 @@ const log = require('../../../dd-trace/src/log')
 const checkRequireCache = require('./check-require-cache')
 const telemetry = require('../../../dd-trace/src/guardrails/telemetry')
 const { isInServerlessEnvironment } = require('../../../dd-trace/src/serverless')
+const { isFalse, isTrue } = require('../../../dd-trace/src/util')
 
 const {
   DD_TRACE_DISABLED_INSTRUMENTATIONS = '',
@@ -21,7 +22,7 @@ const names = Object.keys(hooks)
 const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
 
 const convertInstrumentationName = (name) => {
-  return name.replaceAll('@', '').replaceAll('-', '').replaceAll('/', '').replaceAll('_', '').toLowerCase()
+  return name.replaceAll(/[-@_/]/g, '').toLowerCase()
 }
 
 const disabledInstrumentations = new Set(
@@ -34,12 +35,13 @@ const reenabledInstrumentations = new Set()
 // Check for DD_TRACE_<INTEGRATION>_ENABLED environment variables
 for (const [key, value] of Object.entries(process.env)) {
   const match = key.match(/^DD_TRACE_(.+)_ENABLED$/)
-  if (match && (value?.toLowerCase() === 'false' || value === '0')) {
+  if (match && value) {
     const integration = convertInstrumentationName(match[1])
-    disabledInstrumentations.add(integration)
-  } else if (match && (value?.toLowerCase() === 'true' || value === '1')) {
-    const integration = convertInstrumentationName(match[1])
-    reenabledInstrumentations.add(integration)
+    if (isFalse(value)) {
+      disabledInstrumentations.add(integration)
+    } else if (isTrue(value)) {
+      reenabledInstrumentations.add(integration)
+    }
   }
 }
 
