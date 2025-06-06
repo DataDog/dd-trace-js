@@ -207,7 +207,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
 
     if (Array.isArray(result)) {
       for (let i = 0; i < result.length && i < this._rowsToTaint; i++) {
-        const nextName = name ? `${name}.${i}` : '' + i
+        const nextName = name ? `${name}.${i}` : String(i)
         result[i] = this._taintDatabaseResult(result[i], dbOrigin, iastContext, nextName)
       }
     } else if (result && typeof result === 'object') {

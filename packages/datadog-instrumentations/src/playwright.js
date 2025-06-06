@@ -109,7 +109,12 @@ function deepCloneSuite (suite, filterTest, tags = []) {
 
 function getTestsBySuiteFromTestGroups (testGroups) {
   return testGroups.reduce((acc, { requireFile, tests }) => {
-    acc[requireFile] = acc[requireFile] ? acc[requireFile].concat(tests) : tests
+    if (acc[requireFile]) {
+      acc[requireFile].push(...tests)
+    } else {
+      // Copy the tests, otherwise we modify the original tests
+      acc[requireFile] = [...tests]
+    }
     return acc
   }, {})
 }
@@ -417,7 +422,7 @@ function dispatcherRunWrapperNew (run) {
       // Not available from >=1.44.0
       this._ddAllTests = testGroups.flatMap(g => g.tests)
     }
-    remainingTestsByFile = getTestsBySuiteFromTestGroups(arguments[0])
+    remainingTestsByFile = getTestsBySuiteFromTestGroups(testGroups)
     return run.apply(this, arguments)
   }
 }
@@ -754,8 +759,7 @@ addHook({
     }
 
     if (isImpactedTestsEnabled) {
-      for (const test of allTests) {
-        const isNew = isKnownTestsEnabled && isNewTest(test)
+      await Promise.all(allTests.map(async (test) => {
         const { isModified } = await getChannelPromise(isModifiedCh, {
           filePath: test._requireFile,
           modifiedTests
@@ -764,6 +768,7 @@ addHook({
           test._ddIsModified = true
         }
         if (isEarlyFlakeDetectionEnabled && test.expectedStatus !== 'skipped') {
+          const isNew = isKnownTestsEnabled && isNewTest(test)
           const fileSuite = getSuiteType(test, 'file')
           const projectSuite = getSuiteType(test, 'project')
           // If something change in the file, all tests in the file are impacted
@@ -778,7 +783,7 @@ addHook({
             projectSuite._addSuite(copyFileSuite)
           }
         }
-      }
+      }))
     }
 
     if (isKnownTestsEnabled) {
@@ -939,9 +944,8 @@ addHook({
                   if (window.DD_RUM && window.DD_RUM.stopSession) {
                     window.DD_RUM.stopSession()
                     return true
-                  } else {
-                    return false
                   }
+                  return false
                 })
 
                 if (isRumActive) {

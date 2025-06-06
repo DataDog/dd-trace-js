@@ -194,9 +194,6 @@ function getSortWrapper (sort) {
     let isImpactedTestsEnabled = false
     let testManagementAttemptToFixRetries = 0
     let isDiEnabled = false
-    let knownTests = {}
-    let testManagementTests = {}
-    let modifiedTests = {}
 
     try {
       const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh)
@@ -233,9 +230,8 @@ function getSortWrapper (sort) {
       const knownTestsResponse = await getChannelPromise(knownTestsCh)
       if (knownTestsResponse.err) {
         isEarlyFlakeDetectionEnabled = false
-        isKnownTestsEnabled = false
       } else {
-        knownTests = knownTestsResponse.knownTests
+        const knownTests = knownTestsResponse.knownTests
         const getFilePaths = this.ctx.getTestFilepaths || this.ctx._globTestFilepaths
 
         const testFilepaths = await getFilePaths.call(this.ctx)
@@ -249,7 +245,6 @@ function getSortWrapper (sort) {
         })
         if (isEarlyFlakeDetectionFaulty) {
           isEarlyFlakeDetectionEnabled = false
-          isKnownTestsEnabled = false
           log.warn('New test detection is disabled because the number of new tests is too high.')
         } else {
           // TODO: use this to pass session and module IDs to the worker, instead of polluting process.env
@@ -282,7 +277,7 @@ function getSortWrapper (sort) {
         isTestManagementTestsEnabled = false
         log.error('Could not get test management tests.')
       } else {
-        testManagementTests = receivedTestManagementTests
+        const testManagementTests = receivedTestManagementTests
         try {
           const workspaceProject = this.ctx.getCoreWorkspaceProject()
           workspaceProject._provided._ddIsTestManagementTestsEnabled = isTestManagementTestsEnabled
@@ -295,12 +290,10 @@ function getSortWrapper (sort) {
     }
 
     if (isImpactedTestsEnabled) {
-      const { err, modifiedTests: receivedModifiedTests } = await getChannelPromise(impactedTestsCh)
+      const { err, modifiedTests } = await getChannelPromise(impactedTestsCh)
       if (err) {
-        isImpactedTestsEnabled = false
         log.error('Could not get modified tests.')
       } else {
-        modifiedTests = receivedModifiedTests
         try {
           const workspaceProject = this.ctx.getCoreWorkspaceProject()
           workspaceProject._provided._ddIsImpactedTestsEnabled = isImpactedTestsEnabled

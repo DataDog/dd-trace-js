@@ -45,7 +45,7 @@ function wrapCommandQueueClass (cls) {
         try {
           const parsed = new URL(createClientUrl)
           if (parsed) {
-            this._url = { host: parsed.hostname, port: +parsed.port || 6379 }
+            this._url = { host: parsed.hostname, port: Number(parsed.port) || 6379 }
           }
         } catch {
           // ignore

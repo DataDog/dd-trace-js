@@ -63,7 +63,6 @@ function getQueryOrProcedure (request) {
     return [request.parametersByName.statement.value, request.parametersByName.statement, 'value']
   } else if (request.parametersByName.stmt) {
     return [request.parametersByName.stmt.value, request.parametersByName.stmt, 'value']
-  } else {
-    return [request.sqlTextOrProcedure, request, 'sqlTextOrProcedure']
   }
+  return [request.sqlTextOrProcedure, request, 'sqlTextOrProcedure']
 }
