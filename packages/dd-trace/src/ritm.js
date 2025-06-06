@@ -4,6 +4,7 @@ const path = require('path')
 const Module = require('module')
 const parse = require('module-details-from-path')
 const dc = require('dc-polyfill')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
 const origRequire = Module.prototype.require
 
@@ -109,8 +110,8 @@ function Hook (modules, options, onrequire) {
       if (!hooks) return exports // abort if module name isn't on whitelist
       name = filename
     } else {
-      const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
-      const hasLambdaHandler = process.env.DD_LAMBDA_HANDLER !== undefined
+      const inAWSLambda = getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined
+      const hasLambdaHandler = getEnvironmentVariable('DD_LAMBDA_HANDLER') !== undefined
       const segments = filename.split(path.sep)
       const filenameFromNodeModule = segments.includes('node_modules')
       // decide how to assign the stat
