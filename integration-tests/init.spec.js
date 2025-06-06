@@ -96,7 +96,7 @@ function testRuntimeVersionChecks (arg, filename) {
 
           context('without debug', () => {
             it('should not initialize the tracer', () => doTest('false\n', telemetryAbort))
-            it('should initialize the tracer, if DD_INJECT_FORCE', () => doTestForced('true\n', telemetryForced, 'ssi'))
+            it('should initialize the tracer, if DD_INJECT_FORCE', () => doTestForced('true\n', telemetryForced))
           })
           context('with debug', () => {
             useEnv({ DD_TRACE_DEBUG })
@@ -114,7 +114,7 @@ Found incompatible runtime nodejs ${process.versions.node}, Supported runtimes: 
 DD_INJECT_FORCE enabled, allowing unsupported runtimes and continuing.
 Application instrumentation bootstrapping complete
 true
-`, telemetryForced, 'ssi'))
+`, telemetryForced))
           })
         })
       })
