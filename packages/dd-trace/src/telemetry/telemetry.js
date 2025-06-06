@@ -344,8 +344,7 @@ function updateConfig (changes, config) {
 
     updatedTuples.add(`${name}|${change.origin}`)
     const { origin, value } = change
-    const entry = { name, value, origin, seq_id: seqId }
-    seqId++
+    const entry = { name, value, origin, seq_id: seqId++ }
 
     if (namesNeedFormatting.has(entry.name)) {
       entry.value = formatMapForTelemetry(entry.value)
