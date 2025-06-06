@@ -161,7 +161,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
   }
 
   extractResponseBody (response) {
-    if (response.hasOwnProperty('data')) {
+    if (Object.hasOwn(response, 'data')) {
       return response.data
     }
     return Object.fromEntries(

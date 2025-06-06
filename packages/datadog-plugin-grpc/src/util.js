@@ -53,7 +53,7 @@ module.exports = {
       return element => pick(element, config[filter])
     }
 
-    if (config.hasOwnProperty(filter)) {
+    if (Object.hasOwn(config, filter)) {
       log.error('Expected \'%s\' to be an array or function.', filter)
     }
 

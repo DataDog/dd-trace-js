@@ -1192,8 +1192,8 @@ class Config {
     )
 
     const peerServiceSet = (
-      this._optionsArg.hasOwnProperty('spanComputePeerService') ||
-      getEnvironmentVariables().hasOwnProperty('DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED')
+      Object.hasOwn(this._optionsArg, 'spanComputePeerService') ||
+      Object.hasOwn(getEnvironmentVariables(), 'DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED')
     )
     const peerServiceValue = coalesce(
       this._optionsArg.spanComputePeerService,

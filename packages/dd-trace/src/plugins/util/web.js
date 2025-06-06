@@ -461,7 +461,7 @@ function addRequestTags (context, spanType) {
   })
 
   // if client ip has already been set by appsec, no need to run it again
-  if (extractIp && !span.context()._tags.hasOwnProperty(HTTP_CLIENT_IP)) {
+  if (extractIp && !Object.hasOwn(span.context()._tags, HTTP_CLIENT_IP)) {
     const clientIp = extractIp(config, req)
 
     if (clientIp) {
@@ -601,7 +601,7 @@ function getQsObfuscator (config) {
     }
   }
 
-  if (config.hasOwnProperty('queryStringObfuscation')) {
+  if (Object.hasOwn(config, 'queryStringObfuscation')) {
     log.error('Expected `queryStringObfuscation` to be a regex string or boolean.')
   }
 

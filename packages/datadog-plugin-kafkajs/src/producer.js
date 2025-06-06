@@ -64,7 +64,7 @@ class KafkajsProducerPlugin extends ProducerPlugin {
       'topic'
     ]
     for (const commit of commitList.map(this.transformProduceResponse)) {
-      if (keys.some(key => !commit.hasOwnProperty(key))) continue
+      if (keys.some(key => !Object.hasOwn(commit, key))) continue
       this.tracer.setOffset(commit)
     }
   }

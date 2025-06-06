@@ -58,9 +58,11 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
       'offset',
       'topic'
     ]
-    for (const commit of commitList.map(this.transformCommit)) {
-      if (keys.some(key => !commit.hasOwnProperty(key))) continue
-      this.tracer.setOffset(commit)
+    for (const rawCommit of commitList) {
+      const commit = this.transformCommit(rawCommit)
+      if (!keys.some(key => !Object.hasOwn(commit, key))) {
+        this.tracer.setOffset(commit)
+      }
     }
   }
 

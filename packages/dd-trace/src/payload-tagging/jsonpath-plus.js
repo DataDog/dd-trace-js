@@ -498,7 +498,7 @@ class Jsep {
       // Don't accept a binary op when it is an identifier.
       // Binary ops that start with a identifier-valid character must be followed
       // by a non identifier-part valid character
-      if (Jsep.binary_ops.hasOwnProperty(to_check) && (!Jsep.isIdentifierStart(this.code) || this.index + to_check.length < this.expr.length && !Jsep.isIdentifierPart(this.expr.charCodeAt(this.index + to_check.length)))) {
+      if (Object.hasOwn(Jsep.binary_ops, to_check) && (!Jsep.isIdentifierStart(this.code) || this.index + to_check.length < this.expr.length && !Jsep.isIdentifierPart(this.expr.charCodeAt(this.index + to_check.length)))) {
         this.index += tc_len;
         return to_check;
       }
@@ -619,7 +619,7 @@ class Jsep {
         // Don't accept an unary op when it is an identifier.
         // Unary ops that start with a identifier-valid character must be followed
         // by a non identifier-part valid character
-        if (Jsep.unary_ops.hasOwnProperty(to_check) && (!Jsep.isIdentifierStart(this.code) || this.index + to_check.length < this.expr.length && !Jsep.isIdentifierPart(this.expr.charCodeAt(this.index + to_check.length)))) {
+        if (Object.hasOwn(Jsep.unary_ops, to_check) && (!Jsep.isIdentifierStart(this.code) || this.index + to_check.length < this.expr.length && !Jsep.isIdentifierPart(this.expr.charCodeAt(this.index + to_check.length)))) {
           this.index += tc_len;
           const argument = this.gobbleToken();
           if (!argument) {
@@ -636,7 +636,7 @@ class Jsep {
       }
       if (Jsep.isIdentifierStart(ch)) {
         node = this.gobbleIdentifier();
-        if (Jsep.literals.hasOwnProperty(node.name)) {
+        if (Object.hasOwn(Jsep.literals, node.name)) {
           node = {
             type: Jsep.LITERAL,
             value: Jsep.literals[node.name],
