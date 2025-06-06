@@ -218,12 +218,12 @@ function rulesReducer (existingEntries, rulesDataEntry) {
     if (existingEntry.expiration === undefined) {
       return existingEntries
     }
-    if (rulesDataEntry.expiration !== undefined) {
+    if (rulesDataEntry.expiration === undefined) {
+      delete existingEntry.expiration
+    } else {
       if (rulesDataEntry.expiration > existingEntry.expiration) {
         existingEntry.expiration = rulesDataEntry.expiration
       }
-    } else {
-      delete existingEntry.expiration
     }
   } else {
     existingEntries.push({ ...rulesDataEntry })

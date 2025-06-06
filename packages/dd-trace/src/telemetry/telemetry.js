@@ -68,6 +68,9 @@ function updateRetryData (error, retryObj) {
 
 function getIntegrations () {
   const newIntegrations = []
+  if (!pluginManager._pluginsByName) {
+    return newIntegrations
+  }
   for (const [name, plugin] of Object.entries(pluginManager._pluginsByName)) {
     if (sentIntegrations.has(name)) {
       continue

@@ -66,21 +66,16 @@ function wrapRouterUse (use) {
 }
 
 function wrapStack (layer) {
-  for (let i = 0; i < layer.stack.length; i++) {
-    const middleware = layer.stack[i]
-
+  layer.stack = layer.stack.map(middleware => {
     if (typeof middleware === 'function') {
-      const original = originals.get(middleware)
+      const original = originals.get(middleware) || middleware
 
-      if (original) {
-        // TODO: Verify if this refactoring is correct. It might need wrapping as below.
-        layer.stack[i] = original
-      } else {
-        layer.stack[i] = shimmer.wrapFunction(middleware, middleware => wrapMiddleware(middleware, layer))
-        originals.set(layer.stack[i], middleware)
-      }
+      const handler = shimmer.wrapFunction(original, middleware => wrapMiddleware(middleware, layer))
+      originals.set(handler, original)
+
+      return handler
     }
-  }
+  })
 }
 
 function wrapMiddleware (fn, layer) {

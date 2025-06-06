@@ -129,9 +129,9 @@ function wrapInputValidator (target, parameters, secureMarks) {
 
   return shimmer.wrapFunction(target, orig => function (...args) {
     try {
-      for (const [index, arg] of args.entries()) {
+      for (let index = 0; index < args.length; index++) {
         if (allParameters || parameters.includes(index)) {
-          addSecureMarks(arg, secureMarks, false)
+          addSecureMarks(args[index], secureMarks, false)
         }
       }
     } catch (error) {

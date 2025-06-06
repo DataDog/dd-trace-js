@@ -31,6 +31,9 @@ class ExternalLogger {
   }
 
   static tagString (tags) {
+    if (!tags) {
+      return ''
+    }
     let output = ''
     for (const [key, value] of Object.entries(tags)) {
       if (output) {

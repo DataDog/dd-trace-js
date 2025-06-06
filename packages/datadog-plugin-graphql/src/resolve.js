@@ -48,7 +48,7 @@ class GraphQLResolvePlugin extends TracingPlugin {
       const variables = this.config.variables(info.variableValues)
 
       for (const arg of fieldNode.arguments) {
-        const name = arg.value?.name.value
+        const name = arg.value?.name?.value
         if (name && arg.value.kind === 'Variable' && variables[name]) {
           span.setTag(`graphql.variables.${name}`, variables[name])
         }

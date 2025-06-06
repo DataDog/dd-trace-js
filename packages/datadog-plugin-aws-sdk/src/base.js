@@ -166,13 +166,13 @@ class BaseAwsSdkPlugin extends ClientPlugin {
     if (response.data) {
       return response.data
     }
-    const response = {}
+    const filteredResponse = {}
     for (const [key, value] of Object.entries(response)) {
       if (!filteredKeys.has(key)) {
-        response[key] = value
+        filteredResponse[key] = value
       }
     }
-    return response
+    return filteredResponse
   }
 
   generateTags () {
