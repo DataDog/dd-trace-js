@@ -1,6 +1,4 @@
 name: Retry
-description: |
-  Retry failed workflows to mitigate the impact of flaky jobs.
 
 on:
   workflow_run:
