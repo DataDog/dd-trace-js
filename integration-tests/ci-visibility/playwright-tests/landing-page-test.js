@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test')
+const tracer = require('dd-trace')
 
 test.beforeEach(async ({ page }) => {
   await page.goto(process.env.PW_BASE_URL)
@@ -8,7 +9,20 @@ test.describe('highest-level-describe', () => {
   test.describe(' leading and trailing spaces ', () => {
     // even empty describe blocks should be allowed
     test.describe(' ', () => {
+      test.beforeEach(async ({ page }) => {
+        tracer.scope().active().addTags({
+          'custom_tag.beforeEach': 'hello beforeEach'
+        })
+      })
+      test.afterEach(async ({ page }) => {
+        tracer.scope().active().addTags({
+          'custom_tag.afterEach': 'hello afterEach'
+        })
+      })
       test('should work with passing tests', async ({ page }) => {
+        tracer.scope().active().addTags({
+          'custom_tag.it': 'hello it'
+        })
         await expect(page.locator('.hello-world')).toHaveText([
           'Hello World'
         ])
