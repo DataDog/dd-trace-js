@@ -52,7 +52,7 @@ addHook({
       shimmer.wrap(rawResult, 'then', originalThen => function () {
         return asyncResource.runInAsyncScope(() => {
           arguments[0] = wrapCallbackWithFinish(arguments[0], finish)
-          arguments[1] &&= wrapCallbackWithFinish(arguments[1], finish)
+          if (arguments[1]) arguments[1] = wrapCallbackWithFinish(arguments[1], finish)
 
           const originalThenResult = originalThen.apply(this, arguments)
 

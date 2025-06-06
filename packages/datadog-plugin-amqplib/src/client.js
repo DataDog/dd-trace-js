@@ -33,7 +33,7 @@ class AmqplibClientPlugin extends ClientPlugin {
       }
     }, ctx)
 
-    fields.headers ||= {}
+    fields.headers = fields.headers || {}
 
     this.tracer.inject(span, TEXT_MAP, fields.headers)
 

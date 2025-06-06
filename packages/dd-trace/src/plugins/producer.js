@@ -11,9 +11,11 @@ class ProducerPlugin extends OutboundPlugin {
     const spanDefaults = {
       kind: this.constructor.kind
     }
-    options.service ||= this.config.service || this.serviceName()
+    if (!options.service) {
+      options.service = this.config.service || this.serviceName()
+    }
     for (const key of Object.keys(spanDefaults)) {
-      options[key] ||= spanDefaults[key]
+      if (!options[key]) options[key] = spanDefaults[key]
     }
 
     return super.startSpan(this.operationName(), options, enterOrCtx)

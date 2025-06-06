@@ -19,7 +19,9 @@ function fromString (Type, regex, value) {
 function toString (map, pairSeparator, fieldSeparator) {
   let result = ''
   for (const [key, value] of map) {
-    result &&= `${fieldSeparator}${result}`
+    if (result) {
+      result = `${fieldSeparator}${result}`
+    }
     result = `${key}${pairSeparator}${value}${result}`
   }
   return result

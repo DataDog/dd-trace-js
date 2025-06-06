@@ -358,7 +358,9 @@ function truncateRequestBody (target, depth = 0) {
 function reportRequestBody (rootSpan, requestBody) {
   if (!requestBody) return
 
-  rootSpan.meta_struct ||= {}
+  if (!rootSpan.meta_struct) {
+    rootSpan.meta_struct = {}
+  }
 
   if (!rootSpan.meta_struct['http.request.body']) {
     const { truncated, value } = truncateRequestBody(requestBody)

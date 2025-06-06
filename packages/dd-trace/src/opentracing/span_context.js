@@ -8,7 +8,7 @@ const TRACE_ID_128 = '_dd.p.tid'
 
 class DatadogSpanContext {
   constructor (props) {
-    props ||= {}
+    props = props || {}
 
     this._traceId = props.traceId
     this._spanId = props.spanId

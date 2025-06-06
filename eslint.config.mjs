@@ -136,9 +136,6 @@ export default [
         }
       ]],
 
-      'logical-assignment-operators': ['error', 'always', {
-        enforceForIfStatements: true,
-      }],
       'no-await-in-loop': 'error',
       'no-else-return': ['error', { allowElseIf: false }],
       'no-implicit-coercion': ['error', { boolean: true, number: true, string: true, allow: ['!!'] }],

@@ -177,7 +177,9 @@ class Tracer extends NoopProxy {
           })
         }
 
-        this._profilerStarted ||= Promise.resolve(false)
+        if (!this._profilerStarted) {
+          this._profilerStarted = Promise.resolve(false)
+        }
       }
 
       if (config.runtimeMetrics) {

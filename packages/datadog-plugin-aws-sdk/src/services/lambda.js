@@ -19,7 +19,9 @@ class Lambda extends BaseAwsSdkPlugin {
   requestInject (span, request) {
     const operation = request.operation
     if (operation === 'invoke') {
-      request.params ||= {}
+      if (!request.params) {
+        request.params = {}
+      }
 
       const isSyncInvocation = !request.params.InvocationType ||
         request.params.InvocationType === 'RequestResponse'
@@ -32,7 +34,9 @@ class Lambda extends BaseAwsSdkPlugin {
             const clientContextJson = Buffer.from(request.params.ClientContext, 'base64').toString('utf8')
             clientContext = JSON.parse(clientContextJson)
           }
-          clientContext.custom ||= {}
+          if (!clientContext.custom) {
+            clientContext.custom = {}
+          }
           this.tracer.inject(span, 'text_map', clientContext.custom)
           const newContextBase64 = Buffer.from(JSON.stringify(clientContext)).toString('base64')
           request.params.ClientContext = newContextBase64

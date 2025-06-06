@@ -65,7 +65,7 @@ function getSignature (document, operationName, operationType, calculate) {
   if (calculate !== false && tools !== false) {
     try {
       try {
-        tools ||= require('./tools')
+        tools = tools || require('./tools')
       } catch (error) {
         tools = false
         throw error

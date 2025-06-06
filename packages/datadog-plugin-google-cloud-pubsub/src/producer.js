@@ -24,7 +24,9 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
     }, ctx)
 
     for (const msg of messages) {
-      msg.attributes ||= {}
+      if (!msg.attributes) {
+        msg.attributes = {}
+      }
       this.tracer.inject(span, 'text_map', msg.attributes)
       if (this.config.dsmEnabled) {
         const payloadSize = getHeadersSize(msg)

@@ -68,7 +68,7 @@ function normalizeArgs (args, defaultFieldResolver) {
 }
 
 function normalizePositional (args, defaultFieldResolver) {
-  args[3] ||= {} // contextValue
+  args[3] = args[3] || {} // contextValue
   args[6] = wrapResolve(args[6] || defaultFieldResolver) // fieldResolver
   args.length = Math.max(args.length, 7)
 
@@ -222,7 +222,7 @@ function wrapResolve (resolve) {
 }
 
 function callInAsyncScope (fn, aR, thisArg, args, abortController, cb) {
-  cb ||= () => {}
+  cb = cb || (() => {})
 
   return aR.runInAsyncScope(() => {
     if (abortController?.signal.aborted) {

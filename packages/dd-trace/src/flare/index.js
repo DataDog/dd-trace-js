@@ -39,8 +39,8 @@ const flare = {
     logChannel?.unsubscribe(logger)
     logChannel = new LogChannel(logLevel)
     logChannel.subscribe(logger)
-    tracerLogs ||= new FlareFile()
-    timer ||= setTimeout(flare.cleanup, TIMEOUT)
+    tracerLogs = tracerLogs || new FlareFile()
+    timer = timer || setTimeout(flare.cleanup, TIMEOUT)
   },
 
   send (task) {

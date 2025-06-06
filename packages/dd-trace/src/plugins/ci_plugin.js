@@ -341,7 +341,9 @@ module.exports = class CiPlugin extends Plugin {
     } = tags
     // We'll try with the test source file if available (it could be different from the test suite)
     let codeOwners = getCodeOwnersForFilename(testSourceFile, this.codeOwnersEntries)
-    codeOwners ||= getCodeOwnersForFilename(testSuite, this.codeOwnersEntries)
+    if (!codeOwners) {
+      codeOwners = getCodeOwnersForFilename(testSuite, this.codeOwnersEntries)
+    }
     return codeOwners
   }
 

@@ -30,8 +30,8 @@ function Hook (modules, options, onrequire) {
     options = {}
   }
 
-  modules ||= []
-  options ||= {}
+  modules = modules || []
+  options = options || {}
 
   this.modules = modules
   this.options = options

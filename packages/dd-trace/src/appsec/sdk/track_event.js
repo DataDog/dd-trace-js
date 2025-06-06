@@ -160,7 +160,7 @@ function flattenFields (fields, depth = 0) {
 
     if (value && typeof value === 'object') {
       const { result: flatValue, truncated: inheritTruncated } = flattenFields(value, depth + 1)
-      truncated ||= inheritTruncated
+      truncated = truncated || inheritTruncated
 
       if (flatValue) {
         for (const flatKey of Object.keys(flatValue)) {

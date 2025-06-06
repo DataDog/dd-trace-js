@@ -3,7 +3,9 @@
 const memoize = func => {
   const cache = {}
   const memoized = function (key) {
-    cache[key] ||= func.apply(this, arguments)
+    if (!cache[key]) {
+      cache[key] = func.apply(this, arguments)
+    }
 
     return cache[key]
   }

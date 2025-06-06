@@ -249,7 +249,9 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
     return callback(new Error('Git is not available'))
   }
   let repositoryUrl = configRepositoryUrl
-  repositoryUrl ||= getRepositoryUrl()
+  if (!repositoryUrl) {
+    repositoryUrl = getRepositoryUrl()
+  }
 
   log.debug(`Uploading git history for repository ${repositoryUrl}`)
 

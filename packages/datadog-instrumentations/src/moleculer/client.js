@@ -12,7 +12,7 @@ function wrapCall (call) {
     const callResource = new AsyncResource('bound-anonymous-fn')
 
     opts = arguments[2] = opts || {}
-    opts.meta ||= {}
+    opts.meta = opts.meta || {}
 
     arguments.length = Math.max(3, arguments.length)
 

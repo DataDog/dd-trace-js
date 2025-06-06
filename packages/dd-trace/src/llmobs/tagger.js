@@ -69,7 +69,7 @@ class LLMObsTagger {
     if (modelName) this._setTag(span, MODEL_NAME, modelName)
     if (modelProvider) this._setTag(span, MODEL_PROVIDER, modelProvider)
 
-    sessionId ||= registry.get(parent)?.[SESSION_ID]
+    sessionId = sessionId || registry.get(parent)?.[SESSION_ID]
     if (sessionId) this._setTag(span, SESSION_ID, sessionId)
     if (integration) this._setTag(span, INTEGRATION, integration)
     if (_decorator) this._setTag(span, DECORATOR, _decorator)

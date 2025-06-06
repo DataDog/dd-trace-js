@@ -51,7 +51,7 @@ function wrapCommandQueueClass (cls) {
           // ignore
         }
       }
-      this._url ||= { host: 'localhost', port: 6379 }
+      this._url = this._url || { host: 'localhost', port: 6379 }
     }
   }
   return ret

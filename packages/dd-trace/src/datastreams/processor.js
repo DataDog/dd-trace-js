@@ -316,7 +316,9 @@ class DataStreamsProcessor {
   trySampleSchema (topic) {
     const nowMs = Date.now()
 
-    this._schemaSamplers[topic] ??= new SchemaSampler()
+    if (!this._schemaSamplers[topic]) {
+      this._schemaSamplers[topic] = new SchemaSampler()
+    }
 
     const sampler = this._schemaSamplers[topic]
     return sampler.trySample(nowMs)
@@ -325,7 +327,9 @@ class DataStreamsProcessor {
   canSampleSchema (topic) {
     const nowMs = Date.now()
 
-    this._schemaSamplers[topic] ??= new SchemaSampler()
+    if (!this._schemaSamplers[topic]) {
+      this._schemaSamplers[topic] = new SchemaSampler()
+    }
 
     const sampler = this._schemaSamplers[topic]
     return sampler.canSample(nowMs)

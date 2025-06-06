@@ -13,12 +13,16 @@ const log = require('../../../dd-trace/src/log')
 
 const CHANNEL = 'dd-trace:bundler:load'
 
-dc.subscribe ||= (channel, cb) => {
-  dc.channel(channel).subscribe(cb)
+if (!dc.subscribe) {
+  dc.subscribe = (channel, cb) => {
+    dc.channel(channel).subscribe(cb)
+  }
 }
-dc.unsubscribe ||= (channel, cb) => {
-  if (dc.channel(channel).hasSubscribers) {
-    dc.channel(channel).unsubscribe(cb)
+if (!dc.unsubscribe) {
+  dc.unsubscribe = (channel, cb) => {
+    if (dc.channel(channel).hasSubscribers) {
+      dc.channel(channel).unsubscribe(cb)
+    }
   }
 }
 

@@ -37,7 +37,7 @@ class RheaProducerPlugin extends ProducerPlugin {
 
 function addDeliveryAnnotations (msg, tracer, span) {
   if (msg) {
-    msg.delivery_annotations ||= {}
+    msg.delivery_annotations = msg.delivery_annotations || {}
 
     tracer.inject(span, 'text_map', msg.delivery_annotations)
 

@@ -207,6 +207,7 @@ describe('agentless-ci-visibility-encode', () => {
     expect(spanEvent.content.meta).to.eql({
       [`${tooLongKey.slice(0, MAX_META_KEY_LENGTH)}...`]: `${tooLongValue.slice(0, MAX_META_VALUE_LENGTH)}...`
     })
+    console.log(spanEvent.content.metrics)
     expect(spanEvent.content.metrics).to.eql({
       [`${tooLongKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`]: 15
     })

@@ -42,7 +42,7 @@ async function getLocalStateForCallFrame (
 
   // Delay calling `processRawState` so the caller gets a chance to resume the main thread before processing `rawState`
   return () => {
-    processedState ??= processRawState(rawState, maxLength)
+    processedState = processedState ?? processRawState(rawState, maxLength)
     return processedState
   }
 }

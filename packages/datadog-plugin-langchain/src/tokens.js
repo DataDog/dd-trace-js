@@ -25,7 +25,7 @@ function getTokensFromLlmOutput (result) {
   }
 
   // assign total_tokens again in case it was improperly set the first time, or was not on tokenUsage
-  tokens.total ||= tokens.input + tokens.output
+  tokens.total = tokens.total || tokens.input + tokens.output
 
   return tokens
 }

@@ -62,11 +62,21 @@ function getCallsiteFrames (maxDepth = 32, callSiteListGetter = getCallSiteList)
 }
 
 function reportStackTrace (rootSpan, stackId, frames, namespace = STACK_TRACE_NAMESPACES.RASP) {
-  if (!rootSpan || !Array.isArray(frames)) return
+  if (!rootSpan) return
+  if (!Array.isArray(frames)) return
 
-  rootSpan.meta_struct ||= {}
-  rootSpan.meta_struct['_dd.stack'] ||= {}
-  rootSpan.meta_struct['_dd.stack'][namespace] ||= []
+  if (!rootSpan.meta_struct) {
+    rootSpan.meta_struct = {}
+  }
+
+  if (!rootSpan.meta_struct['_dd.stack']) {
+    rootSpan.meta_struct['_dd.stack'] = {}
+  }
+
+  if (!rootSpan.meta_struct['_dd.stack'][namespace]) {
+    rootSpan.meta_struct['_dd.stack'][namespace] = []
+  }
+
   rootSpan.meta_struct['_dd.stack'][namespace].push({
     id: stackId,
     language: 'nodejs',

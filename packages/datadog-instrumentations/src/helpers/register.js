@@ -88,7 +88,9 @@ for (const packageName of names) {
     for (const { name, file, versions, hook, filePattern } of instrumentations[packageName]) {
       let fullFilePattern = filePattern
       const fullFilename = filename(name, file)
-      fullFilePattern &&= filename(name, fullFilePattern)
+      if (fullFilePattern) {
+        fullFilePattern = filename(name, fullFilePattern)
+      }
 
       // Create a WeakSet associated with the hook function so that patches on the same moduleExport only happens once
       // for example by instrumenting both dns and node:dns double the spans would be created
@@ -102,14 +104,14 @@ for (const packageName of names) {
       if (fullFilePattern) {
         // Some libraries include a hash in their filenames when installed,
         // so our instrumentation has to include a '.*' to match them for more than a single version.
-        matchesFile ||= new RegExp(fullFilePattern).test(moduleName)
+        matchesFile = matchesFile || new RegExp(fullFilePattern).test(moduleName)
       }
 
       if (matchesFile) {
         let version = moduleVersion
         try {
-          version ||= getVersion(moduleBaseDir)
-          allInstrumentations[instrumentationFileName] ||= false
+          version = version || getVersion(moduleBaseDir)
+          allInstrumentations[instrumentationFileName] = allInstrumentations[instrumentationFileName] || false
         } catch (error) {
           log.error('Error getting version for "%s": %s', name, error.message, error)
           continue

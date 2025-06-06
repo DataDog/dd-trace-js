@@ -21,7 +21,7 @@ function lazyClass (classGetter, methods = [], staticMethods = []) {
   }
 
   const activate = () => {
-    return (ActiveClass ||= classGetter())
+    return (ActiveClass = ActiveClass || classGetter())
   }
 
   for (const method of methods) {

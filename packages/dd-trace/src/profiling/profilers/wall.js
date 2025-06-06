@@ -116,8 +116,12 @@ class NativeWallProfiler {
     kSampleCount = this._pprof.time.constants.kSampleCount
 
     // pprof otherwise crashes in worker threads
-    process._startProfilerIdleNotifier ||= () => {}
-    process._stopProfilerIdleNotifier ||= () => {}
+    if (!process._startProfilerIdleNotifier) {
+      process._startProfilerIdleNotifier = () => {}
+    }
+    if (!process._stopProfilerIdleNotifier) {
+      process._stopProfilerIdleNotifier = () => {}
+    }
 
     this._pprof.time.start({
       intervalMicros: this._samplingIntervalMicros,

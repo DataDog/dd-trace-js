@@ -138,7 +138,9 @@ function addStreamedChunk (content, chunk) {
     const choiceIdx = choice.index
     const oldChoice = content.choices.find(choice => choice?.index === choiceIdx)
     if (oldChoice) {
-      oldChoice.finish_reason ||= choice.finish_reason
+      if (!oldChoice.finish_reason) {
+        oldChoice.finish_reason = choice.finish_reason
+      }
 
       // delta exists on chat completions
       const delta = choice.delta
