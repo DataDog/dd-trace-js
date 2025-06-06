@@ -255,13 +255,16 @@ jobs:
       - uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d # v5.4.2
 
   integration:
+    strategy:
+      matrix:
+        version: [oldest, maintenance, active, latest]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/install
-      - uses: ./.github/actions/node/oldest-maintenance-lts
-      - run: yarn test:integration:appsec
-      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/node
+        with:
+          version: ${{ matrix.version }}
       - run: yarn test:integration:appsec
 
   passport:
