@@ -23,6 +23,7 @@ const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
 
 let enabled = false
 let interval
+const SUPPORTED_ORIGINS = ['env_var', 'code', 'remote_config', 'unknown']
 
 function enable (config) {
   const telemetryConfig = config.telemetry
@@ -33,6 +34,10 @@ function enable (config) {
 
     if (config.appsec.enabled) {
       origin = config.getOrigin('appsec.enabled')
+
+      if (!SUPPORTED_ORIGINS.includes(origin)) {
+        origin = 'unknown'
+      }
     }
 
     const gauge = appsecMetrics.gauge('enabled', { origin })

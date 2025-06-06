@@ -92,6 +92,21 @@ describe('appsec enabled metric', () => {
       assert.deepEqual(metrics.series[0].tags, ['origin:code'])
     })
 
+    it('should call to gauge.track metric with unknown where is calculated', () => {
+      const config = new Config({ appsec: true })
+      config.getOrigin = () => 'calculated'
+
+      appsecTelemetry.enable(config)
+
+      const metrics = appsecNamespace.metrics.toJSON()
+
+      assert.equal(metrics.series.length, 1)
+      assert.equal(metrics.series[0].metric, 'enabled')
+      assert.equal(metrics.series[0].type, 'gauge')
+      assert.equal(metrics.series[0].points.length, 1)
+      assert.deepEqual(metrics.series[0].tags, ['origin:unknown'])
+    })
+
     it('should call to track each heartbeatInterval', () => {
       const unref = sinon.stub()
       global.setInterval = sinon.stub()
