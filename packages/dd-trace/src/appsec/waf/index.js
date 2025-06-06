@@ -40,9 +40,9 @@ function update (newRules) {
 
   try {
     waf.wafManager.update(newRules)
-  } catch (err) {
+  } catch (error) {
     log.error('[ASM] Could not apply rules from remote config')
-    throw err
+    throw error
   }
 }
 

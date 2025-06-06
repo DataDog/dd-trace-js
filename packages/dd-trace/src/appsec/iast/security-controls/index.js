@@ -32,8 +32,8 @@ function configure (iastConfig) {
       moduleLoadStartChannel.subscribe(onModuleLoaded)
       moduleLoadEndChannel.subscribe(onModuleLoaded)
     }
-  } catch (e) {
-    log.error('[ASM] Error configuring IAST Security Controls', e)
+  } catch (error) {
+    log.error('[ASM] Error configuring IAST Security Controls', error)
   }
 }
 
@@ -84,8 +84,8 @@ function hookModule (filename, module, controlsByFile) {
         module = wrapper
       }
     }
-  } catch (e) {
-    log.error('[ASM] Error initializing IAST security control for %', filename, e)
+  } catch (error) {
+    log.error('[ASM] Error initializing IAST security control for %', filename, error)
   }
 
   return module
@@ -116,8 +116,8 @@ function wrapSanitizer (target, secureMarks) {
 
     try {
       return addSecureMarks(result, secureMarks)
-    } catch (e) {
-      log.error('[ASM] Error adding Secure mark for sanitizer', e)
+    } catch (error) {
+      log.error('[ASM] Error adding Secure mark for sanitizer', error)
     }
 
     return result
@@ -134,8 +134,8 @@ function wrapInputValidator (target, parameters, secureMarks) {
           addSecureMarks(arg, secureMarks, false)
         }
       }
-    } catch (e) {
-      log.error('[ASM] Error adding Secure mark for input validator', e)
+    } catch (error) {
+      log.error('[ASM] Error adding Secure mark for input validator', error)
     }
 
     return orig.apply(this, args)

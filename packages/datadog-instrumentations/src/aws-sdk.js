@@ -144,17 +144,17 @@ function wrapCb (cb, serviceName, request, ar) {
           result = result.then(x => {
             finishChannel.publish()
             return x
-          }, e => {
-            finishChannel.publish(e)
-            throw e
+          }, error => {
+            finishChannel.publish(error)
+            throw error
           })
         } else {
           finishChannel.publish()
         }
         return result
-      } catch (e) {
-        finishChannel.publish(e)
-        throw e
+      } catch (error) {
+        finishChannel.publish(error)
+        throw error
       }
     })
   })

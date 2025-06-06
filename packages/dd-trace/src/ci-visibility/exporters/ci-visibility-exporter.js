@@ -371,8 +371,8 @@ class CiVisibilityExporter extends AgentInfoExporter {
       this._coverageUrl = coverageUrl
       this._writer.setUrl(url)
       this._coverageWriter.setUrl(coverageUrl)
-    } catch (e) {
-      log.error('Error setting CI exporter url', e)
+    } catch (error) {
+      log.error('Error setting CI exporter url', error)
     }
   }
 

@@ -114,10 +114,10 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
     const ctx = {}
     try {
       return emit.apply(this, arguments)
-    } catch (err) {
-      ctx.error = err
+    } catch (error) {
+      ctx.error = error
       receiveErrorCh.publish(ctx)
-      throw err
+      throw error
     }
   })
 

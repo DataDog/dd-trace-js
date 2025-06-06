@@ -78,8 +78,8 @@ class IastPlugin extends Plugin {
         }
       }
       return result
-    } catch (e) {
-      log.error('[ASM] Error executing handler or increasing metrics', e)
+    } catch (error) {
+      log.error('[ASM] Error executing handler or increasing metrics', error)
     }
   }
 

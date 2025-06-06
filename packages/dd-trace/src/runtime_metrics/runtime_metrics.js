@@ -43,8 +43,8 @@ const runtimeMetrics = module.exports = {
       } else {
         nativeMetrics.start()
       }
-    } catch (e) {
-      log.error('Error starting native metrics', e)
+    } catch (error) {
+      log.error('Error starting native metrics', error)
       nativeMetrics = null
     }
 

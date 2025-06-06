@@ -40,8 +40,8 @@ class Lambda extends BaseAwsSdkPlugin {
           this.tracer.inject(span, 'text_map', clientContext.custom)
           const newContextBase64 = Buffer.from(JSON.stringify(clientContext)).toString('base64')
           request.params.ClientContext = newContextBase64
-        } catch (err) {
-          log.error('Lambda error injecting request', err)
+        } catch (error) {
+          log.error('Lambda error injecting request', error)
         }
       }
     }

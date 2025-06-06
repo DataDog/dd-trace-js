@@ -105,10 +105,10 @@ addHook({ name: 'redis', versions: ['>=2.6 <4'] }, redis => {
 
       try {
         return internalSendCommand.apply(this, arguments)
-      } catch (err) {
-        errorCh.publish(err)
+      } catch (error) {
+        errorCh.publish(error)
 
-        throw err
+        throw error
       }
     })
   })
@@ -139,10 +139,10 @@ addHook({ name: 'redis', versions: ['>=0.12 <2.6'] }, redis => {
 
       try {
         return sendCommand.apply(this, arguments)
-      } catch (err) {
-        errorCh.publish(err)
+      } catch (error) {
+        errorCh.publish(error)
 
-        throw err
+        throw error
       }
     })
   })

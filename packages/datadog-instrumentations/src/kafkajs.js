@@ -84,30 +84,30 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
                 producerFinishCh.publish(ctx)
                 producerCommitCh.publish(ctx)
               },
-              (err) => {
-                ctx.error = err
-                if (err) {
+              (error) => {
+                ctx.error = error
+                if (error) {
                   // Fixes bug where we would inject message headers for kafka brokers that don't support headers
                   // (version <0.11). On the error, we disable header injection.
                   // Unfortunately the error name / type is not more specific.
                   // This approach is implemented by other tracers as well.
-                  if (err.name === 'KafkaJSProtocolError' && err.type === 'UNKNOWN') {
+                  if (error.name === 'KafkaJSProtocolError' && error.type === 'UNKNOWN') {
                     disabledHeaderWeakSet.add(producer)
                     log.error('Kafka Broker responded with UNKNOWN_SERVER_ERROR (-1). ' +
                       'Please look at broker logs for more information. ' +
                       'Tracer message header injection for Kafka is disabled.')
                   }
-                  producerErrorCh.publish(err)
+                  producerErrorCh.publish(error)
                 }
                 producerFinishCh.publish(ctx)
               })
 
             return result
-          } catch (e) {
-            ctx.error = e
+          } catch (error) {
+            ctx.error = error
             producerErrorCh.publish(ctx)
             producerFinishCh.publish(ctx)
-            throw e
+            throw error
           }
         })
       }
@@ -205,9 +205,9 @@ const wrappedCallback = (fn, startCh, finishCh, errorCh, extractArgs, clusterId)
                 ctx.result = res
                 finishCh.publish(ctx)
               },
-              (err) => {
-                ctx.error = err
-                if (err) {
+              (error) => {
+                ctx.error = error
+                if (error) {
                   errorCh.publish(ctx)
                 }
                 finishCh.publish(ctx)
@@ -216,11 +216,11 @@ const wrappedCallback = (fn, startCh, finishCh, errorCh, extractArgs, clusterId)
             finishCh.publish(ctx)
           }
           return result
-        } catch (e) {
-          ctx.error = e
+        } catch (error) {
+          ctx.error = error
           errorCh.publish(ctx)
           finishCh.publish(ctx)
-          throw e
+          throw error
         }
       })
     }

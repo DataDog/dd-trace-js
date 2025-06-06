@@ -27,12 +27,12 @@ addHook({ name: 'amqp10', file: 'lib/sender_link.js', versions: ['>=3'] }, Sende
 
         promise.then(
           () => finish(finishCh, errorCh, null, ctx),
-          e => finish(finishCh, errorCh, e, ctx)
+          error => finish(finishCh, errorCh, error, ctx)
         )
         return promise
-      } catch (err) {
-        finish(finishCh, errorCh, err, ctx)
-        throw err
+      } catch (error) {
+        finish(finishCh, errorCh, error, ctx)
+        throw error
       }
     })
   })
@@ -52,10 +52,10 @@ addHook({ name: 'amqp10', file: 'lib/receiver_link.js', versions: ['>=3'] }, Rec
     return startCh.runStores(ctx, () => {
       try {
         return messageReceived.apply(this, arguments)
-      } catch (err) {
-        ctx.error = err
+      } catch (error) {
+        ctx.error = error
         errorCh.publish(ctx)
-        throw err
+        throw error
       } finally {
         finishCh.publish(ctx)
       }

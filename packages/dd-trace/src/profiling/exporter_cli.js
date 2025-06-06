@@ -40,8 +40,8 @@ async function exportProfile (urls, tags, profileType, profile) {
   let mapper
   try {
     mapper = await SourceMapper.create([process.cwd()])
-  } catch (err) {
-    logger.error(err)
+  } catch (error) {
+    logger.error(error)
   }
 
   const encodedProfile = await encode(heap.convertProfile(profile, undefined, mapper))

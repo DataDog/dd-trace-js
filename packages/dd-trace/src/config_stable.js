@@ -52,17 +52,17 @@ class StableConfig {
           this.fleetEntries[entry.name] = entry.value
         }
       }
-    } catch (e) {
-      this.warnings.push(`Error parsing configuration from file: ${e.message}`)
+    } catch (error) {
+      this.warnings.push(`Error parsing configuration from file: ${error.message}`)
     }
   }
 
   _readConfigFromPath (path) {
     try {
       return fs.readFileSync(path, 'utf8')
-    } catch (err) {
-      if (err.code !== 'ENOENT') {
-        this.warnings.push(`Error reading config file at ${path}. ${err.code}: ${err.message}`)
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        this.warnings.push(`Error reading config file at ${path}. ${error.code}: ${error.message}`)
       }
       return '' // Always return a string to avoid undefined.toString() errors
     }

@@ -581,20 +581,20 @@ addHook({
           testSuiteFinishCh.publish({ status, ...testSuiteContext.currentStore }, () => {})
           this.worker.off('message', onMessage)
         },
-        (err) => {
-          testSuiteContext.error = err
+        (error) => {
+          testSuiteContext.error = error
           testSuiteErrorCh.runStores(testSuiteContext, () => {})
           testSuiteFinishCh.publish({ status: 'fail', ...testSuiteContext.currentStore }, () => {})
           this.worker.off('message', onMessage)
         }
       )
       return promise
-    } catch (err) {
-      testSuiteContext.error = err
+    } catch (error) {
+      testSuiteContext.error = error
       testSuiteErrorCh.runStores(testSuiteContext, () => {})
       testSuiteFinishCh.publish({ status: 'fail', ...testSuiteContext.currentStore }, () => {})
       this.worker.off('message', onMessage)
-      throw err
+      throw error
     }
   })
 

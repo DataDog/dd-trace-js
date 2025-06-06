@@ -42,8 +42,8 @@ function createMiddleware () {
                 throw error
               }
             )
-          } catch (e) {
-            errorChannel.publish(e)
+          } catch (error) {
+            errorChannel.publish(error)
             finishChannel.publish()
           }
         })

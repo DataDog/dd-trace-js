@@ -226,30 +226,30 @@ function instrumentKafkaJS (kafkaJS) {
                           ctx.result = res
                           channels.producerCommit.publish(ctx)
                           channels.producerFinish.publish(ctx)
-                        }, (err) => {
-                          if (err) {
+                        }, (error) => {
+                          if (error) {
                             // Fixes bug where we would inject message headers for kafka brokers
                             // that don't support headers (version <0.11). On the error, we disable
                             // header injection. Tnfortunately the error name / type is not more specific.
                             // This approach is implemented by other tracers as well.
-                            if (err.name === 'KafkaJSError' && err.type === 'ERR_UNKNOWN') {
+                            if (error.name === 'KafkaJSError' && error.type === 'ERR_UNKNOWN') {
                               disabledHeaderWeakSet.add(producer)
                               log.error('Kafka Broker responded with UNKNOWN_SERVER_ERROR (-1). ' +
                                 'Please look at broker logs for more information. ' +
                                 'Tracer message header injection for Kafka is disabled.')
                             }
-                            ctx.error = err
+                            ctx.error = error
                             channels.producerError.publish(ctx)
                           }
                           channels.producerFinish.publish(ctx)
                         })
 
                         return result
-                      } catch (e) {
-                        ctx.error = e
+                      } catch (error) {
+                        ctx.error = error
                         channels.producerError.publish(ctx)
                         channels.producerFinish.publish(ctx)
-                        throw e
+                        throw error
                       }
                     })
                   }
@@ -373,11 +373,11 @@ function wrapKafkaCallback (callback, { startCh, commitCh, finishCh, errorCh }, 
               finishCh.publish(ctx)
               return res
             })
-            .catch((err) => {
-              ctx.error = err
+            .catch((error) => {
+              ctx.error = error
               errorCh.publish(ctx)
               finishCh.publish(ctx)
-              throw err
+              throw error
             })
         }
         finishCh.publish(ctx)

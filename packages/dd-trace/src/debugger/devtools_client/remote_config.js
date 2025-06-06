@@ -36,9 +36,9 @@ rcPort.on('message', async ({ action, conf: probe, ackId }) => {
   try {
     await processMsg(action, probe)
     rcPort.postMessage({ ackId })
-  } catch (err) {
-    rcPort.postMessage({ ackId, error: err })
-    ackError(err, probe)
+  } catch (error) {
+    rcPort.postMessage({ ackId, error })
+    ackError(error, probe)
   }
 })
 rcPort.on('messageerror', (err) => log.error('[debugger:devtools_client] received "messageerror" on RC port', err))

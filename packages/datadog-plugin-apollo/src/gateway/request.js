@@ -106,9 +106,9 @@ function getSignature (document, operationName, operationType, calculate) {
     try {
       try {
         tools = tools || require('../../../datadog-plugin-graphql/src/tools')
-      } catch (e) {
+      } catch (error) {
         tools = false
-        throw e
+        throw error
       }
 
       return tools.defaultEngineReportingSignature(document, operationName)

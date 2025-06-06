@@ -54,9 +54,9 @@ class Profiler extends EventEmitter {
   }
 
   start (options) {
-    return this._start(options).catch((err) => {
+    return this._start(options).catch((error) => {
       logError(options.logger, 'Error starting profiler. For troubleshooting tips, see ' +
-        '<https://dtdg.co/nodejs-profiler-troubleshooting>', err)
+        '<https://dtdg.co/nodejs-profiler-troubleshooting>', error)
       return false
     })
   }
@@ -117,8 +117,8 @@ class Profiler extends EventEmitter {
           }
           break
       }
-    } catch (err) {
-      this._logError(err)
+    } catch (error) {
+      this._logError(error)
     }
 
     try {
@@ -139,8 +139,8 @@ class Profiler extends EventEmitter {
 
       this._capture(this._timeoutInterval, start)
       return true
-    } catch (e) {
-      this._logError(e)
+    } catch (error) {
+      this._logError(error)
       this._stop()
       return false
     }
@@ -263,10 +263,10 @@ class Profiler extends EventEmitter {
             return `Collected ${profiler.type} profile: ` + profileJson
           })
           hasEncoded = true
-        } catch (err) {
+        } catch (error) {
           // If encoding one of the profile types fails, we should still try to
           // encode and submit the other profile types.
-          this._logError(err)
+          this._logError(error)
         }
       }))
 
@@ -275,8 +275,8 @@ class Profiler extends EventEmitter {
         profileSubmittedChannel.publish()
         this._logger.debug('Submitted profiles')
       }
-    } catch (err) {
-      this._logError(err)
+    } catch (error) {
+      this._logError(error)
       this._stop()
     }
   }
@@ -294,9 +294,9 @@ class Profiler extends EventEmitter {
     tags.snapshot = snapshotKind
     const exportSpec = { profiles, start, end, tags, endpointCounts }
     const tasks = this._config.exporters.map(exporter =>
-      exporter.export(exportSpec).catch(err => {
+      exporter.export(exportSpec).catch(error => {
         if (this._logger) {
-          this._logger.warn(err)
+          this._logger.warn(error)
         }
       })
     )

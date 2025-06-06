@@ -79,8 +79,8 @@ module.exports = class Plugin {
     const wrappedHandler = function () {
       try {
         return handler.apply(this, arguments)
-      } catch (e) {
-        logger.error('Error in plugin handler:', e)
+      } catch (error) {
+        logger.error('Error in plugin handler:', error)
         logger.info('Disabling plugin: %s', plugin.id)
         plugin.configure(false)
       }

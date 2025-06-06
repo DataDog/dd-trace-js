@@ -29,8 +29,8 @@ session.on('scriptLoadingStabilized', () => {
   log.debug('[debugger:devtools_client] Re-evaluating probes')
   scriptLoadingStabilizedResolve()
   for (const probe of probes.values()) {
-    reEvaluateProbe(probe).catch(err => {
-      log.error('[debugger:devtools_client] Error re-evaluating probe %s', probe.id, err)
+    reEvaluateProbe(probe).catch(error => {
+      log.error('[debugger:devtools_client] Error re-evaluating probe %s', probe.id, error)
     })
   }
 })
@@ -86,8 +86,8 @@ async function addBreakpoint (probe) {
 
   try {
     probe.condition = probe.when?.json && compileCondition(probe.when.json)
-  } catch (err) {
-    throw new Error(`Cannot compile expression: ${probe.when.dsl}`, { cause: err })
+  } catch (error) {
+    throw new Error(`Cannot compile expression: ${probe.when.dsl}`, { cause: error })
   }
 
   const locationKey = generateLocationKey(scriptId, lineNumber, columnNumber)
@@ -114,8 +114,8 @@ async function addBreakpoint (probe) {
         location,
         condition: probe.condition
       })
-    } catch (err) {
-      throw new Error(`Error setting breakpoint for probe ${probe.id}`, { cause: err })
+    } catch (error) {
+      throw new Error(`Error setting breakpoint for probe ${probe.id}`, { cause: error })
     }
     probeToLocation.set(probe.id, locationKey)
     locationToBreakpoint.set(locationKey, { id: result.breakpointId, location, locationKey })
@@ -150,8 +150,8 @@ async function removeBreakpoint ({ id }) {
     } else {
       try {
         await session.post('Debugger.removeBreakpoint', { breakpointId: breakpoint.id })
-      } catch (err) {
-        throw new Error(`Error removing breakpoint for probe ${id}`, { cause: err })
+      } catch (error) {
+        throw new Error(`Error removing breakpoint for probe ${id}`, { cause: error })
       }
     }
   } else {
@@ -181,8 +181,8 @@ async function updateBreakpointInternal (breakpoint, probe) {
   if (condition || conditionBeforeNewProbe !== condition) {
     try {
       await session.post('Debugger.removeBreakpoint', { breakpointId: breakpoint.id })
-    } catch (err) {
-      throw new Error(`Error removing breakpoint for probe ${probe.id}`, { cause: err })
+    } catch (error) {
+      throw new Error(`Error removing breakpoint for probe ${probe.id}`, { cause: error })
     }
     breakpointToProbes.delete(breakpoint.id)
     let result
@@ -191,8 +191,8 @@ async function updateBreakpointInternal (breakpoint, probe) {
         location: breakpoint.location,
         condition
       })
-    } catch (err) {
-      throw new Error(`Error setting breakpoint for probe ${probe.id}`, { cause: err })
+    } catch (error) {
+      throw new Error(`Error setting breakpoint for probe ${probe.id}`, { cause: error })
     }
     breakpointToProbes.set(result.breakpointId, probesAtLocation)
   }

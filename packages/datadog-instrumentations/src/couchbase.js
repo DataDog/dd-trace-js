@@ -131,10 +131,10 @@ function wrapCBandPromise (fn, name, startData, thisArg, args) {
         asyncResource.bind((result) => finishCh.publish({ result })),
         asyncResource.bind((err) => errorCh.publish(err)))
       return res
-    } catch (e) {
-      e.stack
-      errorCh.publish(e)
-      throw e
+    } catch (error) {
+      error.stack
+      errorCh.publish(error)
+      throw error
     }
   })
 }
@@ -191,11 +191,11 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.12'] }, Buc
 
       try {
         return _n1qlReq.apply(this, arguments)
-      } catch (err) {
-        err.stack // trigger getting the stack at the original throwing point
-        errorCh.publish(err)
+      } catch (error) {
+        error.stack // trigger getting the stack at the original throwing point
+        errorCh.publish(error)
 
-        throw err
+        throw error
       }
     })
   })

@@ -45,8 +45,8 @@ function encodeValue (valueObject) {
       default:
         log.debug(`Found unknown type while trying to create DynamoDB span pointer: ${type}`)
     }
-  } catch (err) {
-    log.debug(`Failed to encode value while trying to create DynamoDB span pointer: ${err.message}`)
+  } catch (error) {
+    log.debug(`Failed to encode value while trying to create DynamoDB span pointer: ${error.message}`)
   }
 }
 

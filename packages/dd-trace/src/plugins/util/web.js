@@ -180,9 +180,9 @@ const web = {
   bindAndWrapMiddlewareErrors (fn, req, tracer, activeSpan) {
     try {
       return tracer.scope().bind(fn, activeSpan).apply(this, arguments)
-    } catch (e) {
-      web.addError(req, e) // TODO: remove when error formatting is moved to Span
-      throw e
+    } catch (error) {
+      web.addError(req, error) // TODO: remove when error formatting is moved to Span
+      throw error
     }
   },
 
@@ -543,8 +543,8 @@ function getHeadersToRecord (config) {
         const [key, tag] = header.split(':')
         return [key.toLowerCase(), tag]
       })
-    } catch (err) {
-      log.error('Web plugin error getting headers', err)
+    } catch (error) {
+      log.error('Web plugin error getting headers', error)
     }
   } else if (Object.hasOwn(config, 'headers')) {
     log.error('Expected `headers` to be an array of strings.')
@@ -596,8 +596,8 @@ function getQsObfuscator (config) {
 
     try {
       return new RegExp(obfuscator, 'gi')
-    } catch (err) {
-      log.error('Web plugin error getting qs obfuscator', err)
+    } catch (error) {
+      log.error('Web plugin error getting qs obfuscator', error)
     }
   }
 

@@ -166,11 +166,11 @@ class RemoteConfigManager extends EventEmitter {
       if (data && data !== '{}') { // '{}' means the tracer is up to date
         try {
           this.parseConfig(JSON.parse(data))
-        } catch (err) {
-          log.error('[RC] Could not parse remote config response', err)
+        } catch (error) {
+          log.error('[RC] Could not parse remote config response', error)
 
           this.state.client.state.has_error = true
-          this.state.client.state.error = err.toString()
+          this.state.client.state.error = error.toString()
         }
       }
 
@@ -309,18 +309,18 @@ class RemoteConfigManager extends EventEmitter {
         if (result instanceof Promise) {
           result.then(
             () => { item.apply_state = ACKNOWLEDGED },
-            (err) => {
+            (error) => {
               item.apply_state = ERROR
-              item.apply_error = err.toString()
+              item.apply_error = error.toString()
             }
           )
         } else {
           item.apply_state = ACKNOWLEDGED
         }
       }
-    } catch (err) {
+    } catch (error) {
       item.apply_state = ERROR
-      item.apply_error = err.toString()
+      item.apply_error = error.toString()
     }
   }
 }

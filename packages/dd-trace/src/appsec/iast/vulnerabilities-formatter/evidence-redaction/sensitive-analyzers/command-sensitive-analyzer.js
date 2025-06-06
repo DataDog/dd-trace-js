@@ -15,8 +15,8 @@ module.exports = function extractSensitiveRanges (evidence) {
       const end = start + regexResult[1].length
       return [{ start, end }]
     }
-  } catch (e) {
-    log.debug('[ASM] Error extracting sensitive ranges', e)
+  } catch (error) {
+    log.debug('[ASM] Error extracting sensitive ranges', error)
   }
   return []
 }

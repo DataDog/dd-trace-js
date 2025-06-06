@@ -68,10 +68,10 @@ addHook({ name: names }, (net, version, name) => {
 
       try {
         return connect.apply(this, arguments)
-      } catch (err) {
-        errorCh.publish(err)
+      } catch (error) {
+        errorCh.publish(error)
 
-        throw err
+        throw error
       }
     })
   })

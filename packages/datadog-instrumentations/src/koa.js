@@ -111,17 +111,17 @@ function wrapMiddleware (fn, layer) {
             fulfill(ctx)
             return result
           },
-          err => {
-            fulfill(ctx, err)
-            throw err
+          error => {
+            fulfill(ctx, error)
+            throw error
           }
         )
       }
       fulfill(ctx)
       return result
-    } catch (e) {
-      fulfill(ctx, e)
-      throw e
+    } catch (error) {
+      fulfill(ctx, error)
+      throw error
     } finally {
       exitChannel.publish({ req })
     }

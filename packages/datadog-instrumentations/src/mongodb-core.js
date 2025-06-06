@@ -178,10 +178,10 @@ function instrument (operation, command, ctx, args, server, ns, ops, options = {
 
     try {
       return command.apply(ctx, args)
-    } catch (err) {
-      errorCh.publish(err)
+    } catch (error) {
+      errorCh.publish(error)
 
-      throw err
+      throw error
     }
   })
 }
@@ -200,11 +200,11 @@ function instrumentPromise (operation, command, ctx, args, server, ns, ops, opti
     return promise.then(function (res) {
       finishCh.publish()
       return res
-    }, function (err) {
-      errorCh.publish(err)
+    }, function (error) {
+      errorCh.publish(error)
       finishCh.publish()
 
-      throw err
+      throw error
     })
   })
 }

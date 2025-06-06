@@ -23,12 +23,12 @@ class Scope {
 
     try {
       return callback()
-    } catch (e) {
+    } catch (error) {
       if (span && typeof span.setTag === 'function') {
-        span.setTag('error', e)
+        span.setTag('error', error)
       }
 
-      throw e
+      throw error
     } finally {
       storage('legacy').enterWith(oldStore)
     }

@@ -67,8 +67,8 @@ function getRewriter (telemetryVerbosity) {
         chainSourceMap,
         orchestrion: orchestrionConfig
       })
-    } catch (e) {
-      log.error('Unable to initialize Rewriter', e)
+    } catch (error) {
+      log.error('Unable to initialize Rewriter', error)
     }
   }
   return rewriter
@@ -115,8 +115,8 @@ function getCompileMethodFn (compileMethod) {
       if (rewritten?.content) {
         return compileMethod.apply(this, [rewritten.content, filename])
       }
-    } catch (e) {
-      log.error('Error rewriting file %s', filename, e)
+    } catch (error) {
+      log.error('Error rewriting file %s', filename, error)
     }
     return compileMethod.apply(this, [content, filename])
   }
@@ -173,8 +173,8 @@ function enableRewriter (telemetryVerbosity) {
     }
 
     enableEsmRewriter(telemetryVerbosity)
-  } catch (e) {
-    log.error('Error enabling Rewriter', e)
+  } catch (error) {
+    log.error('Error enabling Rewriter', error)
   }
 }
 
@@ -224,8 +224,8 @@ let enableEsmRewriter = function (telemetryVerbosity) {
           iastEnabled: config?.iast?.enabled
         }
       })
-    } catch (e) {
-      log.error('Error enabling ESM Rewriter', e)
+    } catch (error) {
+      log.error('Error enabling ESM Rewriter', error)
       port1.close()
       port2.close()
     }
@@ -247,8 +247,8 @@ function disable () {
     Error.prepareStackTrace = originalPrepareStackTrace
 
     shimmedPrepareStackTrace = false
-  } catch (e) {
-    log.warn('Error disabling Rewriter', e)
+  } catch (error) {
+    log.warn('Error disabling Rewriter', error)
   }
 }
 

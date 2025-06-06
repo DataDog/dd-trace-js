@@ -21,8 +21,8 @@ module.exports = function extractSensitiveRanges (evidence) {
       regexResult = pattern.exec(evidence.value)
     }
     return tokens
-  } catch (e) {
-    log.debug('[ASM] Error extracting sensitive ranges', e)
+  } catch (error) {
+    log.debug('[ASM] Error extracting sensitive ranges', error)
   }
   return []
 }

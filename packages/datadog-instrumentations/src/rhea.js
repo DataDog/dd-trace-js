@@ -56,11 +56,11 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
       addToInFlightDeliveries(this.connection, delivery)
       try {
         return delivery
-      } catch (err) {
-        ctx.error = err
+      } catch (error) {
+        ctx.error = error
         errorSendCh.publish(ctx)
 
-        throw err
+        throw error
       }
     })
   })
@@ -81,11 +81,11 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
         }
         try {
           return dispatch.apply(this, arguments)
-        } catch (err) {
-          ctx.error = err
+        } catch (error) {
+          ctx.error = error
           errorReceiveCh.publish(ctx)
 
-          throw err
+          throw error
         }
       })
     }

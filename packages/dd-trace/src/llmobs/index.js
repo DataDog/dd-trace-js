@@ -114,9 +114,9 @@ function handleFlush () {
   try {
     spanWriter.flush()
     evalWriter.flush()
-  } catch (e) {
+  } catch (error) {
     err = 'writer_flush_error'
-    log.warn(`Failed to flush LLMObs spans and evaluation metrics: ${e.message}`)
+    log.warn(`Failed to flush LLMObs spans and evaluation metrics: ${error.message}`)
   }
   telemetry.recordUserFlush(err)
 }
@@ -128,10 +128,10 @@ function handleSpanProcess (data) {
 function handleEvalMetricAppend (payload) {
   try {
     evalWriter.append(payload)
-  } catch (e) {
+  } catch (error) {
     log.warn(`
       Failed to append evaluation metric to LLM Observability writer, likely due to an unserializable property.
-      Evaluation metrics won't be sent to LLM Observability: ${e.message}
+      Evaluation metrics won't be sent to LLM Observability: ${error.message}
     `)
   }
 }

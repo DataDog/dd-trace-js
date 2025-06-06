@@ -58,10 +58,10 @@ export async function load (url, context, nextLoad) {
       const data = { url, rewritten }
       port.postMessage({ type: constants.REWRITTEN_MESSAGE, data })
     }
-  } catch (e) {
+  } catch (error) {
     const newErrObject = {
-      message: e.message,
-      stack: e.stack
+      message: error.message,
+      stack: error.stack
     }
 
     const data = {

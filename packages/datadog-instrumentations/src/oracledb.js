@@ -49,17 +49,17 @@ addHook({ name: 'oracledb', versions: ['>=5'] }, oracledb => {
                 finish()
                 return x
               },
-              e => {
-                finish(e)
-                throw e
+              error => {
+                finish(error)
+                throw error
               }
             )
           }
 
           return result
-        } catch (err) {
-          errorChannel.publish(err)
-          throw err
+        } catch (error) {
+          errorChannel.publish(error)
+          throw error
         }
       })
     }

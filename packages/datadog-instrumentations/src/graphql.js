@@ -105,11 +105,11 @@ function wrapParse (parse) {
         }
 
         return document
-      } catch (err) {
-        err.stack
-        parseErrorCh.publish(err)
+      } catch (error) {
+        error.stack
+        parseErrorCh.publish(error)
 
-        throw err
+        throw error
       } finally {
         parseFinishCh.publish({ source, document, docSource: documentSources.get(document) })
       }
@@ -135,11 +135,11 @@ function wrapValidate (validate) {
           validateErrorCh.publish(errors && errors[0])
         }
         return errors
-      } catch (err) {
-        err.stack
-        validateErrorCh.publish(err)
+      } catch (error) {
+        error.stack
+        validateErrorCh.publish(error)
 
-        throw err
+        throw error
       } finally {
         validateFinishCh.publish({ document, errors })
       }
@@ -242,9 +242,9 @@ function callInAsyncScope (fn, aR, thisArg, args, abortController, cb) {
         cb(null, result)
       }
       return result
-    } catch (err) {
-      cb(err)
-      throw err
+    } catch (error) {
+      cb(error)
+      throw error
     }
   })
 }

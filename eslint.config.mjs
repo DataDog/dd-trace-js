@@ -150,7 +150,6 @@ export default [
       ...eslintPluginUnicorn.configs.recommended.rules,
 
       // Overriding recommended unicorn rules
-      'unicorn/catch-error-name': ['off', { name: 'err' }], // 166 errors
       'unicorn/expiring-todo-comments': 'off',
       'unicorn/explicit-length-check': 'off', // 68 errors
       'unicorn/filename-case': ['off', { case: 'kebabCase' }], // 59 errors

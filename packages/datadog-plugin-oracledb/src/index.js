@@ -32,8 +32,8 @@ class OracledbPlugin extends DatabasePlugin {
 function getUrl (connectString) {
   try {
     return new URL(`http://${connectString}`)
-  } catch (e) {
-    log.error('Invalid oracle connection string', e)
+  } catch (error) {
+    log.error('Invalid oracle connection string', error)
     return {}
   }
 }

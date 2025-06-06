@@ -32,8 +32,8 @@ function taintObject (iastContext, object, type) {
             queue.push({ parent: value, property: property ? `${property}.${key}` : key, value: value[key], key })
           }
         }
-      } catch (e) {
-        log.error('[ASM] Error in taintObject when visiting property : %s', property, e)
+      } catch (error) {
+        log.error('[ASM] Error in taintObject when visiting property : %s', property, error)
       }
     }
   }

@@ -137,12 +137,12 @@ session.on('Debugger.scriptParsed', ({ params }) => {
       let sources
       try {
         sources = loadSourceMapSync(dir, params.sourceMapURL).sources
-      } catch (err) {
+      } catch (error) {
         if (typeof params.sourceMapURL === 'string' && params.sourceMapURL.startsWith('data:')) {
-          log.error('[debugger:devtools_client] could not load inline source map for "%s"', params.url, err)
+          log.error('[debugger:devtools_client] could not load inline source map for "%s"', params.url, error)
         } else {
           log.error('[debugger:devtools_client] could not load source map "%s" from "%s" for "%s"',
-            params.sourceMapURL, dir, params.url, err)
+            params.sourceMapURL, dir, params.url, error)
         }
         return
       }

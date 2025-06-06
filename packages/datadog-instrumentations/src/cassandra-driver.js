@@ -40,9 +40,9 @@ addHook({ name: 'cassandra-driver', versions: ['>=3.0.0'] }, cassandra => {
           promiseAsyncResource.bind(() => finish(finishCh, errorCh)),
           promiseAsyncResource.bind(err => finish(finishCh, errorCh, err))
         )
-      } catch (e) {
-        finish(finishCh, errorCh, e)
-        throw e
+      } catch (error) {
+        finish(finishCh, errorCh, error)
+        throw error
       }
     })
   })
@@ -103,9 +103,9 @@ addHook({ name: 'cassandra-driver', versions: ['3 - 4.3'] }, cassandra => {
 
         try {
           return _innerExecute.apply(this, arguments)
-        } catch (e) {
-          finish(finishCh, errorCh, e)
-          throw e
+        } catch (error) {
+          finish(finishCh, errorCh, error)
+          throw error
         }
       })
     }

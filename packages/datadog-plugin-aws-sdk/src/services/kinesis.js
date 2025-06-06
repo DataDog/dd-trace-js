@@ -92,8 +92,8 @@ class Kinesis extends BaseAwsSdkPlugin {
         maybeChildOf: this.tracer.extract('text_map', decodedData._datadog),
         parsedAttributes: decodedData._datadog
       }
-    } catch (e) {
-      log.error('Kinesis error extracting response', e)
+    } catch (error) {
+      log.error('Kinesis error extracting response', error)
     }
   }
 

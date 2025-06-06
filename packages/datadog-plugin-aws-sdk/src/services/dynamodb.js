@@ -138,8 +138,8 @@ class DynamoDb extends BaseAwsSdkPlugin {
 
       this.dynamoPrimaryKeyConfig = config
       return config
-    } catch (err) {
-      log.warn('Failed to parse DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS:', err.message)
+    } catch (error) {
+      log.warn('Failed to parse DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS:', error.message)
     }
   }
 

@@ -158,8 +158,8 @@ class Sqs extends BaseAwsSdkPlugin {
         const buffer = Buffer.from(attributes.Value ?? attributes.BinaryValue, 'base64')
         return JSON.parse(buffer)
       }
-    } catch (e) {
-      log.error('Sqs error parsing DD attributes', e)
+    } catch (error) {
+      log.error('Sqs error parsing DD attributes', error)
     }
   }
 

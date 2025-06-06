@@ -183,8 +183,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           this.testManagementTestsForThisSuite = hasTestManagementTests
             ? this.getTestManagementTestsForSuite(testManagementTests?.jest?.suites?.[this.testSuite]?.tests)
             : this.getTestManagementTestsForSuite(this.testEnvironmentOptions._ddTestManagementTests)
-        } catch (e) {
-          log.error('Error parsing test management tests', e)
+        } catch (error) {
+          log.error('Error parsing test management tests', error)
           this.isTestManagementTestsEnabled = false
         }
       }
@@ -195,8 +195,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           this.modifiedTestsForThisSuite = hasImpactedTests
             ? this.getModifiedTestForThisSuite(modifiedTests)
             : this.getModifiedTestForThisSuite(this.testEnvironmentOptions._ddModifiedTests)
-        } catch (e) {
-          log.error('Error parsing impacted tests', e)
+        } catch (error) {
+          log.error('Error parsing impacted tests', error)
           this.isImpactedTestsEnabled = false
         }
       }
@@ -721,8 +721,8 @@ function cliWrapper (cli, jestVersion) {
         testManagementAttemptToFixRetries = libraryConfig.testManagementAttemptToFixRetries
         isImpactedTestsEnabled = libraryConfig.isImpactedTestsEnabled
       }
-    } catch (err) {
-      log.error('Jest library configuration error', err)
+    } catch (error_) {
+      log.error('Jest library configuration error', error_)
     }
 
     if (isKnownTestsEnabled) {
@@ -741,8 +741,8 @@ function cliWrapper (cli, jestVersion) {
         } else {
           knownTests = receivedKnownTests
         }
-      } catch (err) {
-        log.error('Jest known tests error', err)
+      } catch (error_) {
+        log.error('Jest known tests error', error_)
       }
     }
 
@@ -758,8 +758,8 @@ function cliWrapper (cli, jestVersion) {
         if (!err) {
           skippableSuites = receivedSkippableSuites
         }
-      } catch (err) {
-        log.error('Jest test-suite skippable error', err)
+      } catch (error_) {
+        log.error('Jest test-suite skippable error', error_)
       }
     }
 
@@ -775,8 +775,8 @@ function cliWrapper (cli, jestVersion) {
         if (!err) {
           testManagementTests = receivedTestManagementTests
         }
-      } catch (err) {
-        log.error('Jest test management tests error', err)
+      } catch (error_) {
+        log.error('Jest test management tests error', error_)
       }
     }
 
@@ -792,8 +792,8 @@ function cliWrapper (cli, jestVersion) {
         if (!err) {
           modifiedTests = receivedModifiedTests
         }
-      } catch (err) {
-        log.error('Jest impacted tests error', err)
+      } catch (error_) {
+        log.error('Jest impacted tests error', error_)
       }
     }
 

@@ -14,8 +14,8 @@ function fetchAgentInfo (url, callback) {
     try {
       const response = JSON.parse(res)
       return callback(null, response)
-    } catch (e) {
-      return callback(e)
+    } catch (error) {
+      return callback(error)
     }
   })
 }

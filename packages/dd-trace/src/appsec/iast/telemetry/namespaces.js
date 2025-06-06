@@ -29,8 +29,8 @@ function finalizeRequestNamespace (context, rootSpan) {
     merge(namespace)
 
     namespace.clear()
-  } catch (e) {
-    log.error('[ASM] Error merging request metrics', e)
+  } catch (error) {
+    log.error('[ASM] Error merging request metrics', error)
   } finally {
     if (context) {
       delete context[DD_IAST_METRICS_NAMESPACE]

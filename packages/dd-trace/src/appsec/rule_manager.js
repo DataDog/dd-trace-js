@@ -148,9 +148,9 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
 
         blocking.setDefaultBlockingActionParameters(concatArrays(newActions))
       }
-    } catch (err) {
+    } catch (error) {
       newApplyState = ERROR
-      newApplyError = err.toString()
+      newApplyError = error.toString()
     }
   }
 

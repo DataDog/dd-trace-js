@@ -117,11 +117,11 @@ function wrapChildProcessSyncMethod (returnError, shell = false) {
           context.result = result
 
           return result
-        } catch (err) {
-          context.error = err
+        } catch (error) {
+          context.error = error
           childProcessChannel.error.publish(context)
 
-          throw err
+          throw error
         } finally {
           childProcessChannel.end.publish(context)
         }

@@ -102,11 +102,11 @@ function createWrapRequest (name) {
             finish(params)
           }
           return promise
-        } catch (err) {
-          err.stack // trigger getting the stack at the original throwing point
-          errorCh.publish(err)
+        } catch (error) {
+          error.stack // trigger getting the stack at the original throwing point
+          errorCh.publish(error)
 
-          throw err
+          throw error
         }
       })
     }

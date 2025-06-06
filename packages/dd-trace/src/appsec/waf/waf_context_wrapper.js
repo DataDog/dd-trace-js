@@ -147,10 +147,10 @@ class WAFContextWrapper {
       Reporter.reportDerivatives(result.derivatives)
 
       return result
-    } catch (err) {
-      log.error('[ASM] Error while running the AppSec WAF', err)
+    } catch (error) {
+      log.error('[ASM] Error while running the AppSec WAF', error)
 
-      metrics.errorCode = err.errorCode ?? -127
+      metrics.errorCode = error.errorCode ?? -127
     } finally {
       if (wafRunFinished.hasSubscribers) {
         wafRunFinished.publish({ payload })

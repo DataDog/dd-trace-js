@@ -216,8 +216,8 @@ class Tracer extends NoopProxy {
         // We instantiate the client but do not start the Worker here. The worker is started lazily
         getDynamicInstrumentationClient(config)
       }
-    } catch (e) {
-      log.error('Error initialising tracer', e)
+    } catch (error) {
+      log.error('Error initialising tracer', error)
     }
 
     return this
@@ -227,11 +227,11 @@ class Tracer extends NoopProxy {
     // do not stop tracer initialization if the profiler fails to be imported
     try {
       return require('./profiler').start(config)
-    } catch (e) {
+    } catch (error) {
       log.error(
         'Error starting profiler. For troubleshooting tips, see ' +
         '<https://dtdg.co/nodejs-profiler-troubleshooting>',
-        e
+        error
       )
     }
   }

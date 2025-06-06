@@ -527,12 +527,12 @@ function runnerHook (runnerExport, playwrightVersion) {
         testManagementAttemptToFixRetries = libraryConfig.testManagementAttemptToFixRetries
         isImpactedTestsEnabled = libraryConfig.isImpactedTestsEnabled
       }
-    } catch (e) {
+    } catch (error) {
       isEarlyFlakeDetectionEnabled = false
       isKnownTestsEnabled = false
       isTestManagementTestsEnabled = false
       isImpactedTestsEnabled = false
-      log.error('Playwright session start error', e)
+      log.error('Playwright session start error', error)
     }
 
     if (isKnownTestsEnabled && satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)) {
@@ -544,10 +544,10 @@ function runnerHook (runnerExport, playwrightVersion) {
         } else {
           knownTests = receivedKnownTests
         }
-      } catch (err) {
+      } catch (error) {
         isEarlyFlakeDetectionEnabled = false
         isKnownTestsEnabled = false
-        log.error('Playwright known tests error', err)
+        log.error('Playwright known tests error', error)
       }
     }
 
@@ -559,9 +559,9 @@ function runnerHook (runnerExport, playwrightVersion) {
         } else {
           testManagementTests = receivedTestManagementTests
         }
-      } catch (err) {
+      } catch (error) {
         isTestManagementTestsEnabled = false
-        log.error('Playwright test management tests error', err)
+        log.error('Playwright test management tests error', error)
       }
     }
 
@@ -573,9 +573,9 @@ function runnerHook (runnerExport, playwrightVersion) {
         } else {
           modifiedTests = receivedModifiedTests
         }
-      } catch (err) {
+      } catch (error) {
         isImpactedTestsEnabled = false
-        log.error('Playwright impacted tests error', err)
+        log.error('Playwright impacted tests error', error)
       }
     }
 
