@@ -21,6 +21,8 @@ class Sampler {
    * @param {number} rate
    */
   constructor (rate) {
+    // TODO: Should this be moved up to the calling parts?
+    rate = Math.min(Math.max(rate, 0), 1)
     this._rate = rate
     this.#threshold = BigInt(Math.floor(rate * MAX_TRACE_ID))
   }
