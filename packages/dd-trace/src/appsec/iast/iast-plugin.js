@@ -174,8 +174,11 @@ class IastPlugin extends Plugin {
   }
 
   _onInstrumentationLoaded (name) {
-    for (const sub of this.pluginSubs
-      .filter(sub => sub.matchesModuleInstrumented(name))) sub.increaseInstrumented()
+    for (const sub of this.pluginSubs) {
+      if (sub.matchesModuleInstrumented(name)) {
+        sub.increaseInstrumented()
+      }
+    }
   }
 }
 

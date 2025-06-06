@@ -42,7 +42,8 @@ function truncateSpan (span, shouldTruncateResourceName = true) {
       span.meta[key] = `${value.slice(0, MAX_META_VALUE_LENGTH)}...`
     }
   }
-  for (const [key, metric] of Object.entries(span.metrics)) {
+  for (const key of Object.keys(span.metrics)) {
+    const metric = span.metrics[key]
     if (key.length > MAX_METRIC_KEY_LENGTH) {
       delete span.metrics[key]
       span.metrics[`${key.slice(0, MAX_METRIC_KEY_LENGTH)}...`] = metric

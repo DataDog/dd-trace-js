@@ -7,9 +7,9 @@ function addMetricsToSpan (rootSpan, metrics, tagPrefix) {
   for (const data of metrics) {
     const metric = data?.metric
     if (metric) {
-      const value = sum(metric)
-      const name = taggedMetricName(metric)
+      const name = taggedMetricName(data)
       let total = flattenMap.get(name) ?? 0
+      const value = sum(data)
       total += value
       flattenMap.set(name, total)
     }
