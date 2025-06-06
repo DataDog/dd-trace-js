@@ -82,9 +82,8 @@ function Hook (modules, options, onrequire) {
     if (patched) {
       // If it's already patched, just return it as-is.
       return origRequire.apply(this, arguments)
-    } else {
-      patching[filename] = true
     }
+    patching[filename] = true
 
     const payload = {
       filename,

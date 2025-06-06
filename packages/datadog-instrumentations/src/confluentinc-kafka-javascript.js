@@ -379,10 +379,9 @@ function wrapKafkaCallback (callback, { startCh, commitCh, finishCh, errorCh }, 
               finishCh.publish(ctx)
               throw err
             })
-        } else {
-          finishCh.publish(ctx)
-          return result
         }
+        finishCh.publish(ctx)
+        return result
       } catch (error) {
         ctx.error = error
         errorCh.publish(ctx)

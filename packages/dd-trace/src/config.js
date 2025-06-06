@@ -178,7 +178,7 @@ function validateNamingVersion (versionString) {
  * @param {string | string[]} input
  */
 function splitJSONPathRules (input) {
-  if (!input) return null
+  if (!input) return
   if (Array.isArray(input)) return input
   if (input === 'all') return []
   return input.split(',')
@@ -1016,7 +1016,7 @@ class Config {
     const tags = {}
     setHiddenProperty(this, '_optsUnprocessed', {})
 
-    options = setHiddenProperty(this, '_optionsArg', Object.assign({ ingestion: {} }, options, opts))
+    options = setHiddenProperty(this, '_optionsArg', { ingestion: {}, ...options, ...opts })
 
     tagger.add(tags, options.tags)
 
@@ -1554,12 +1554,12 @@ function handleOtel (tagString) {
     ?.replace(/(^|,)deployment\.environment=/, '$1env:')
     .replace(/(^|,)service\.name=/, '$1service:')
     .replace(/(^|,)service\.version=/, '$1version:')
-    .replace(/=/g, ':')
+    .replaceAll('=', ':')
 }
 
 function parseSpaceSeparatedTags (tagString) {
   if (tagString && !tagString.includes(',')) {
-    tagString = tagString.replace(/\s+/g, ',')
+    tagString = tagString.replaceAll(/\s+/g, ',')
   }
   return tagString
 }
