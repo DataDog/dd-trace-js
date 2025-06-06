@@ -57,26 +57,30 @@ function wrapRouterUse (use) {
   return function useWithTrace () {
     const router = use.apply(this, arguments)
 
-    router.stack.forEach(wrapStack)
+    for (const layer of router.stack) {
+      wrapStack(layer)
+    }
 
     return router
   }
 }
 
 function wrapStack (layer) {
-  layer.stack = layer.stack.map(middleware => {
-    if (typeof middleware !== 'function') return middleware
+  for (let i = 0; i < layer.stack.length; i++) {
+    const middleware = layer.stack[i]
 
-    const original = originals.get(middleware)
+    if (typeof middleware === 'function') {
+      const original = originals.get(middleware)
 
-    middleware = original || middleware
-
-    const handler = shimmer.wrapFunction(middleware, middleware => wrapMiddleware(middleware, layer))
-
-    originals.set(handler, middleware)
-
-    return handler
-  })
+      if (original) {
+        // TODO: Verify if this refactoring is correct. It might need wrapping as below.
+        layer.stack[i] = original
+      } else {
+        layer.stack[i] = shimmer.wrapFunction(middleware, middleware => wrapMiddleware(middleware, layer))
+        originals.set(layer.stack[i], middleware)
+      }
+    }
+  }
 }
 
 function wrapMiddleware (fn, layer) {

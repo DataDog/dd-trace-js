@@ -160,17 +160,14 @@ class DogStatsDClient {
     const tags = []
 
     if (config.tags) {
-      for (const key of Object.keys(config.tags)
-        .filter(key => typeof config.tags[key] === 'string')
-        .filter(key => {
-          // Skip runtime-id unless enabled as cardinality may be too high
-          if (key !== 'runtime-id') return true
-          return (config.experimental && config.experimental.runtimeId)
-        })) {
-        // https://docs.datadoghq.com/tagging/#defining-tags
-        const value = config.tags[key].replaceAll(/[^a-z0-9_:./-]/ig, '_')
+      for (const key of Object.keys(config.tags)) {
+        // Skip runtime-id unless enabled as cardinality may be too high
+        if (typeof config.tags[key] === 'string' && (key !== 'runtime-id' || config.experimental?.runtimeId)) {
+          // https://docs.datadoghq.com/tagging/#defining-tags
+          const value = config.tags[key].replaceAll(/[^a-z0-9_:./-]/ig, '_')
 
-        tags.push(`${key}:${value}`)
+          tags.push(`${key}:${value}`)
+        }
       }
     }
 

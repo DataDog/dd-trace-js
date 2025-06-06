@@ -87,7 +87,9 @@ class DatadogSpan {
     this._startTime = fields.startTime || this._getTime()
 
     this._links = []
-    fields.links && fields.links.forEach(link => this.addLink(link.context, link.attributes))
+    if (fields.links) {
+      for (const link of fields.links) this.addLink(link.context, link.attributes)
+    }
 
     if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
       runtimeMetrics.increment('runtime.node.spans.unfinished')

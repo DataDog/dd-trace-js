@@ -126,10 +126,10 @@ class TextMapPropagator {
   }
 
   _injectBaggageItems (spanContext, carrier) {
-    if (this._config.legacyBaggageEnabled) {
-      spanContext?._baggageItems && Object.keys(spanContext._baggageItems).forEach(key => {
+    if (this._config.legacyBaggageEnabled && spanContext?._baggageItems) {
+      for (const key of Object.keys(spanContext._baggageItems)) {
         carrier[baggagePrefix + key] = String(spanContext._baggageItems[key])
-      })
+      }
     }
     if (this._hasPropagationStyle('inject', 'baggage')) {
       let baggage = ''

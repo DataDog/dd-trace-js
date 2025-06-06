@@ -15,14 +15,16 @@ const validTypes = new Set([INPUT_VALIDATOR_TYPE, SANITIZER_TYPE])
 function parse (securityControlsConfiguration) {
   const controls = new Map()
 
-  for (const control of securityControlsConfiguration?.replace(/[\r\n\t\v\f]*/g, '')
-    .split(SECURITY_CONTROL_DELIMITER)
-    .map(parseControl)
-    .filter(control => !!control)) {
-    if (!controls.has(control.file)) {
-      controls.set(control.file, [])
+  for (const rawControl of securityControlsConfiguration.replaceAll(/[\r\n\t\v\f]*/g, '').split(SECURITY_CONTROL_DELIMITER)) {
+    const control = parseControl(rawControl)
+    if (control) {
+      let file = controls.get(control.file)
+      if (!file) {
+        file = []
+        controls.set(control.file, file)
+      }
+      file.push(control)
     }
-    controls.get(control.file).push(control)
   }
 
   return controls

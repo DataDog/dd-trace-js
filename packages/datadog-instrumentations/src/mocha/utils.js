@@ -87,9 +87,9 @@ function getSuitesByTestFile (root) {
         suitesByTestFile[suite.file] = [suite]
       }
     }
-    suite.suites.forEach(suite => {
-      getSuites(suite)
-    })
+    for (const innerSuite of suite.suites) {
+      getSuites(innerSuite)
+    }
   }
   getSuites(root)
 
