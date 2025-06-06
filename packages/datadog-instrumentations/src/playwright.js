@@ -1,6 +1,6 @@
 const satisfies = require('semifies')
 
-const { addHook, channel, AsyncResource } = require('./helpers/instrument')
+const { addHook, channel } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const {
   parseAnnotations,
@@ -33,7 +33,6 @@ const testSuiteToCtx = new Map()
 const testSuiteToTestStatuses = new Map()
 const testSuiteToErrors = new Map()
 const testsToTestStatuses = new Map()
-const testSessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
 let applyRepeatEachIndex = null
 
@@ -243,9 +242,7 @@ function getTestByTestId (dispatcher, testId) {
 
 function getChannelPromise (channelToPublishTo, params) {
   return new Promise(resolve => {
-    testSessionAsyncResource.runInAsyncScope(() => {
-      channelToPublishTo.publish({ onDone: resolve, ...params })
-    })
+    channelToPublishTo.publish({ onDone: resolve, ...params })
   })
 }
 
@@ -516,9 +513,7 @@ function runnerHook (runnerExport, playwrightVersion) {
 
     const processArgv = process.argv.slice(2).join(' ')
     const command = `playwright ${processArgv}`
-    testSessionAsyncResource.runInAsyncScope(() => {
-      testSessionStartCh.publish({ command, frameworkVersion: playwrightVersion, rootDir })
-    })
+    testSessionStartCh.publish({ command, frameworkVersion: playwrightVersion, rootDir })
 
     try {
       const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh)
@@ -635,13 +630,11 @@ function runnerHook (runnerExport, playwrightVersion) {
     const flushWait = new Promise(resolve => {
       onDone = resolve
     })
-    testSessionAsyncResource.runInAsyncScope(() => {
-      testSessionFinishCh.publish({
-        status: STATUS_TO_TEST_STATUS[sessionStatus],
-        isEarlyFlakeDetectionEnabled,
-        isTestManagementTestsEnabled,
-        onDone
-      })
+    testSessionFinishCh.publish({
+      status: STATUS_TO_TEST_STATUS[sessionStatus],
+      isEarlyFlakeDetectionEnabled,
+      isTestManagementTestsEnabled,
+      onDone
     })
     await flushWait
 
