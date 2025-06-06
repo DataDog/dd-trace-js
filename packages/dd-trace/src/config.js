@@ -534,6 +534,7 @@ class Config {
     defaults.isServiceUserProvided = false
     defaults.testManagementAttemptToFixRetries = 20
     defaults.isTestManagementEnabled = false
+    defaults.isImpactedTestsEnabled = false
     defaults.logInjection = false
     defaults.lookup = undefined
     defaults.inferredProxyServicesEnabled = false
@@ -817,6 +818,7 @@ class Config {
     env['appsec.rateLimit'] = maybeInt(DD_APPSEC_TRACE_RATE_LIMIT)
     this._envUnprocessed['appsec.rateLimit'] = DD_APPSEC_TRACE_RATE_LIMIT
     env['appsec.rules'] = DD_APPSEC_RULES
+    // DD_APPSEC_SCA_ENABLED is never used locally, but only sent to the backend
     env['appsec.sca.enabled'] = isTrue(DD_APPSEC_SCA_ENABLED)
     env['appsec.stackTrace.enabled'] = isTrue(DD_APPSEC_STACK_TRACE_ENABLED)
     env['appsec.stackTrace.maxDepth'] = maybeInt(DD_APPSEC_MAX_STACK_TRACE_DEPTH)
@@ -835,7 +837,8 @@ class Config {
       !this._isInServerlessEnvironment()
     ))
     env['codeOriginForSpans.enabled'] = isTrue(DD_CODE_ORIGIN_FOR_SPANS_ENABLED)
-    env['codeOriginForSpans.experimental.exit_spans.enabled'] = isTrue(DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED)
+    env['codeOriginForSpans.experimental.exit_spans.enabled'] =
+      isTrue(DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED)
     env.dbmPropagationMode = DD_DBM_PROPAGATION_MODE
     env['dogstatsd.hostname'] = DD_DOGSTATSD_HOST || DD_DOGSTATSD_HOSTNAME
     env['dogstatsd.port'] = DD_DOGSTATSD_PORT
@@ -852,7 +855,9 @@ class Config {
     env['experimental.enableGetRumData'] = isTrue(DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED)
     env['experimental.exporter'] = DD_TRACE_EXPERIMENTAL_EXPORTER
     env['experimental.runtimeId'] = isTrue(DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED)
-    if (AWS_LAMBDA_FUNCTION_NAME) env.flushInterval = 0
+    if (AWS_LAMBDA_FUNCTION_NAME) {
+      env.flushInterval = 0
+    }
     env.flushMinSpans = maybeInt(DD_TRACE_PARTIAL_FLUSH_MIN_SPANS)
     this._envUnprocessed.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
     env.gitMetadataEnabled = isTrue(DD_TRACE_GIT_METADATA_ENABLED)
@@ -867,7 +872,7 @@ class Config {
     this._envUnprocessed['iast.maxConcurrentRequests'] = DD_IAST_MAX_CONCURRENT_REQUESTS
     env['iast.maxContextOperations'] = maybeInt(DD_IAST_MAX_CONTEXT_OPERATIONS)
     this._envUnprocessed['iast.maxContextOperations'] = DD_IAST_MAX_CONTEXT_OPERATIONS
-    this._setBoolean(env, 'iast.redactionEnabled', DD_IAST_REDACTION_ENABLED && !isFalse(DD_IAST_REDACTION_ENABLED))
+    env['iast.redactionEnabled'] = isTrue(DD_IAST_REDACTION_ENABLED && !isFalse(DD_IAST_REDACTION_ENABLED))
     env['iast.redactionNamePattern'] = DD_IAST_REDACTION_NAME_PATTERN
     env['iast.redactionValuePattern'] = DD_IAST_REDACTION_VALUE_PATTERN
     const iastRequestSampling = maybeInt(DD_IAST_REQUEST_SAMPLING)
@@ -886,7 +891,9 @@ class Config {
     env.legacyBaggageEnabled = isTrue(DD_TRACE_LEGACY_BAGGAGE_ENABLED)
     env['llmobs.agentlessEnabled'] = isTrue(DD_LLMOBS_AGENTLESS_ENABLED)
     env['llmobs.enabled'] = isTrue(DD_LLMOBS_ENABLED)
+    env['llmobs.mlApp'] = DD_LLMOBS_ML_APP
     env.logInjection = isTrue(DD_LOGS_INJECTION)
+    // Requires an accompanying DD_APM_OBFUSCATION_MEMCACHED_KEEP_COMMAND=true in the agent
     env.memcachedCommandEnabled = isTrue(DD_TRACE_MEMCACHED_COMMAND_ENABLED)
     env.middlewareTracingEnabled = isTrue(DD_TRACE_MIDDLEWARE_TRACING_ENABLED)
     env.openAiLogsEnabled = isTrue(DD_OPENAI_LOGS_ENABLED)
@@ -1038,7 +1045,8 @@ class Config {
     opts.baggageMaxItems = options.baggageMaxItems
     opts.baggageTagKeys = options.baggageTagKeys
     opts['codeOriginForSpans.enabled'] = isTrue(options.codeOriginForSpans?.enabled)
-    opts['codeOriginForSpans.experimental.exit_spans.enabled'] = isTrue(options.codeOriginForSpans?.experimental?.exit_spans?.enabled)
+    opts['codeOriginForSpans.experimental.exit_spans.enabled'] =
+      isTrue(options.codeOriginForSpans?.experimental?.exit_spans?.enabled)
     opts.dbmPropagationMode = options.dbmPropagationMode
     if (options.dogstatsd) {
       opts['dogstatsd.hostname'] = options.dogstatsd.hostname
