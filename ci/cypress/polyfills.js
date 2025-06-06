@@ -1,6 +1,6 @@
 if (!Object.hasOwn) {
-  // eslint-disable-next-line prefer-object-has-own
   Object.defineProperty(Object, 'hasOwn', {
+    // eslint-disable-next-line prefer-object-has-own
     value: (obj, prop) => Object.prototype.hasOwnProperty.call(obj, prop),
     writable: true,
     configurable: true,
