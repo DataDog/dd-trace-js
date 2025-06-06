@@ -1548,13 +1548,11 @@ class Config {
 }
 
 function handleOtel (tagString) {
-  if (!tagString) return tagString
-
   return tagString
-    .replace(/(^|,)deployment\.environment=/g, '$1env:')
-    .replace(/(^|,)service\.name=/g, '$1service:')
-    .replace(/(^|,)service\.version=/g, '$1version:')
-    .replace(/=/g, ':')
+    ?.replace(/(^|,)deployment\.environment=/, '$1env:')
+    .replace(/(^|,)service\.name=/, '$1service:')
+    .replace(/(^|,)service\.version=/, '$1version:')
+    .replaceAll('=', ':')
 }
 
 function parseSpaceSeparatedTags (tagString) {
