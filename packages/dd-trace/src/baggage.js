@@ -13,7 +13,7 @@ function getBaggageItem (key) {
 }
 
 function getAllBaggageItems () {
-  return storage('baggage').getStore()
+  return storage('baggage').getStore() || {}
 }
 
 function removeBaggageItem (keyToRemove) {

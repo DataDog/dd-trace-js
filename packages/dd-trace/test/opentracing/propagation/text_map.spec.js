@@ -133,6 +133,7 @@ describe('TextMapPropagator', () => {
       expect(carrier.baggage).to.equal('raccoon=chunky')
     })
 
+
     it('should inject an existing sampling priority', () => {
       const carrier = {}
       const spanContext = createContext({
@@ -418,7 +419,7 @@ describe('TextMapPropagator', () => {
       expect(spanContext.toSpanId()).to.equal(carrier['x-datadog-parent-id'])
       expect(spanContext._baggageItems.foo).to.equal(carrier['ot-baggage-foo'])
       expect(spanContext._baggageItems).to.deep.equal({ foo: 'bar' })
-      expect(getAllBaggageItems()).to.be.undefined
+      expect(getAllBaggageItems()).to.deep.equal({})
       expect(spanContext._isRemote).to.equal(true)
     })
 
@@ -443,7 +444,7 @@ describe('TextMapPropagator', () => {
       }
       const spanContextA = propagator.extract(carrierA)
       expect(spanContextA._baggageItems).to.deep.equal({})
-      expect(getAllBaggageItems()).to.be.undefined
+      expect(getAllBaggageItems()).to.deep.equal({})
 
       const carrierB = {
         'x-datadog-trace-id': '123',
@@ -452,7 +453,7 @@ describe('TextMapPropagator', () => {
       }
       const spanContextB = propagator.extract(carrierB)
       expect(spanContextB._baggageItems).to.deep.equal({})
-      expect(getAllBaggageItems()).to.be.undefined
+      expect(getAllBaggageItems()).to.deep.equal({})
 
       const carrierC = {
         'x-datadog-trace-id': '123',
@@ -461,7 +462,7 @@ describe('TextMapPropagator', () => {
       }
       const spanContextC = propagator.extract(carrierC)
       expect(spanContextC._baggageItems).to.deep.equal({})
-      expect(getAllBaggageItems()).to.be.undefined
+      expect(getAllBaggageItems()).to.deep.equal({})
 
       const carrierD = {
         'x-datadog-trace-id': '123',
@@ -470,7 +471,7 @@ describe('TextMapPropagator', () => {
       }
       const spanContextD = propagator.extract(carrierD)
       expect(spanContextD._baggageItems).to.deep.equal({})
-      expect(getAllBaggageItems()).to.be.undefined
+      expect(getAllBaggageItems()).to.deep.equal({})
     })
 
     it('should add baggage items to span tags', () => {
