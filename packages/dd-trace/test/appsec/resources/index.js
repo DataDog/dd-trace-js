@@ -10,12 +10,11 @@ const body = require('body-parser')
 
 const app = express()
 app.use(body.json())
-const port = process.env.APP_PORT || 3000
 
 app.post('/', async (req, res) => {
   res.end('OK')
 })
 
-app.listen(port, () => {
-  process.send({ port })
+const server = app.listen(process.env.APP_PORT || 0, () => {
+  process.send?.({ port: server.address().port })
 })
