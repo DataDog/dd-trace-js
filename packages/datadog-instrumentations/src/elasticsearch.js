@@ -91,18 +91,17 @@ function createWrapRequest (name) {
               return cb.apply(null, arguments)
             }))
             return request.apply(this, arguments)
-          } else {
-            const promise = request.apply(this, arguments)
-            if (promise && typeof promise.then === 'function') {
-              const onResolve = asyncResource.bind(() => finish(params))
-              const onReject = asyncResource.bind(e => finish(params, e))
-
-              promise.then(onResolve, onReject)
-            } else {
-              finish(params)
-            }
-            return promise
           }
+          const promise = request.apply(this, arguments)
+          if (promise && typeof promise.then === 'function') {
+            const onResolve = asyncResource.bind(() => finish(params))
+            const onReject = asyncResource.bind(e => finish(params, e))
+
+            promise.then(onResolve, onReject)
+          } else {
+            finish(params)
+          }
+          return promise
         } catch (err) {
           err.stack // trigger getting the stack at the original throwing point
           errorCh.publish(err)

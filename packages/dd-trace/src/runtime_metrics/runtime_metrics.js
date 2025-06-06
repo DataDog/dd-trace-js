@@ -202,7 +202,7 @@ function captureGCMetrics () {
   const pause = {}
 
   for (const stat of profile.statistics) {
-    const type = stat.gcType.replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase()
+    const type = stat.gcType.replaceAll(/([a-z])([A-Z])/g, '$1_$2').toLowerCase()
 
     pause[type] = pause[type] || new Histogram()
     pause[type].record(stat.cost)
