@@ -75,7 +75,8 @@ class DatabasePlugin extends StoragePlugin {
 
     if (disableFullMode || mode === 'service') {
       return servicePropagation
-    } else if (mode === 'full') {
+    }
+    if (mode === 'full') {
       span.setTag('_dd.dbm_trace_injected', 'true')
       const traceparent = span._spanContext.toTraceparent()
       return `${servicePropagation},traceparent='${traceparent}'`

@@ -539,13 +539,14 @@ function getProtocol (req) {
 function getHeadersToRecord (config) {
   if (Array.isArray(config.headers)) {
     try {
-      return config.headers
-        .map(h => h.split(':'))
-        .map(([key, tag]) => [key.toLowerCase(), tag])
+      return config.headers.map(header => {
+        const [key, tag] = header.split(':')
+        return [key.toLowerCase(), tag]
+      })
     } catch (err) {
       log.error('Web plugin error getting headers', err)
     }
-  } else if (config.hasOwnProperty('headers')) {
+  } else if (Object.hasOwn(config, 'headers')) {
     log.error('Expected `headers` to be an array of strings.')
   }
   return []
@@ -554,7 +555,8 @@ function getHeadersToRecord (config) {
 function getStatusValidator (config) {
   if (typeof config.validateStatus === 'function') {
     return config.validateStatus
-  } else if (config.hasOwnProperty('validateStatus')) {
+  }
+  if (Object.hasOwn(config, 'validateStatus')) {
     log.error('Expected `validateStatus` to be a function.')
   }
   return code => code < 500
@@ -569,12 +571,14 @@ function getHooks (config) {
 }
 
 function getMiddlewareSetting (config) {
-  if (config && typeof config.middleware === 'boolean') {
-    return config.middleware
-  } else if (config && config.hasOwnProperty('middleware')) {
-    log.error('Expected `middleware` to be a boolean.')
+  if (config) {
+    if (typeof config.middleware === 'boolean') {
+      return config.middleware
+    }
+    if (Object.hasOwn(config, 'middleware')) {
+      log.error('Expected `middleware` to be a boolean.')
+    }
   }
-
   return true
 }
 

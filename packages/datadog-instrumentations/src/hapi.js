@@ -123,7 +123,8 @@ function reply (request, h) {
     return typeof h.continue === 'function'
       ? h.continue()
       : h.continue
-  } else if (typeof h === 'function') {
+  }
+  if (typeof h === 'function') {
     return h()
   }
 }

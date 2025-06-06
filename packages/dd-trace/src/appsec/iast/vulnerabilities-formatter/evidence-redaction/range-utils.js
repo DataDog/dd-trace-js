@@ -14,7 +14,8 @@ function intersects (rangeA, rangeB) {
 function remove (range, rangeToRemove) {
   if (!intersects(range, rangeToRemove)) {
     return [range]
-  } else if (contains(rangeToRemove, range)) {
+  }
+  if (contains(rangeToRemove, range)) {
     return []
   }
   const result = []

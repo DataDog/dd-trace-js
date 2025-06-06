@@ -119,9 +119,11 @@ class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
   getIntegrationName (type, provider = 'custom') {
     if (provider.startsWith(BEDROCK_PROVIDER_NAME)) {
       return 'bedrock'
-    } else if (provider.startsWith(OPENAI_PROVIDER_NAME)) {
+    }
+    if (provider.startsWith(OPENAI_PROVIDER_NAME)) {
       return 'openai'
-    } else if (type === 'chat_model' && provider.startsWith(ANTHROPIC_PROVIDER_NAME)) {
+    }
+    if (type === 'chat_model' && provider.startsWith(ANTHROPIC_PROVIDER_NAME)) {
       return 'anthropic'
     }
 

@@ -288,10 +288,12 @@ function createWrapFunction (prefix = '', override = '') {
           if (prefix === 'promises.') {
             finish(error)
             return Promise.reject(error)
-          } else if (name.includes('Sync') || !cb) {
+          }
+          if (name.includes('Sync') || !cb) {
             finish(error)
             throw error
-          } else if (cb) {
+          }
+          if (cb) {
             arguments[lastIndex](error)
             return
           }

@@ -131,14 +131,9 @@ function getSessionStatus (state) {
 
 // From https://github.com/vitest-dev/vitest/blob/51c04e2f44d91322b334f8ccbcdb368facc3f8ec/packages/runner/src/run.ts#L243-L250
 function getVitestTestStatus (test, retryCount) {
-  if (test.result.state !== 'fail') {
-    if (!test.repeats) {
-      return 'pass'
-    } else if (test.repeats && (test.retry ?? 0) === retryCount) {
-      return 'pass'
-    }
-  }
-  return 'fail'
+  return test.result.state !== 'fail' && (!test.repeats || (test.retry ?? 0) === retryCount)
+    ? 'pass'
+    : 'fail'
 }
 
 function getTypeTasks (fileTasks, type = 'test') {

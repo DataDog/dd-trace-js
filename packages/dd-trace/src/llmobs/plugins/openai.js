@@ -66,7 +66,8 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
   _getModelProviderAndClient (baseUrl = '') {
     if (baseUrl.includes('azure')) {
       return { modelProvider: 'azure_openai', client: 'AzureOpenAI' }
-    } else if (baseUrl.includes('deepseek')) {
+    }
+    if (baseUrl.includes('deepseek')) {
       return { modelProvider: 'deepseek', client: 'DeepSeek' }
     }
     return { modelProvider: 'openai', client: 'OpenAI' }

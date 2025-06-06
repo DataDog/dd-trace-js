@@ -577,7 +577,8 @@ class TextMapPropagator {
         [b3SampledKey]: '1',
         [b3FlagsKey]: '1'
       }
-    } else if (parts.length === 1) {
+    }
+    if (parts.length === 1) {
       return {
         [b3SampledKey]: parts[0]
       }
@@ -724,9 +725,11 @@ class TextMapPropagator {
   _getPriority (sampled, debug) {
     if (debug) {
       return USER_KEEP
-    } else if (sampled === '1') {
+    }
+    if (sampled === '1') {
       return AUTO_KEEP
-    } else if (sampled === '0') {
+    }
+    if (sampled === '0') {
       return AUTO_REJECT
     }
   }

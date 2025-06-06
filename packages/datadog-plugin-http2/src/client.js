@@ -163,7 +163,8 @@ function hasAmazonSignature (headers, path) {
 function getStatusValidator (config) {
   if (typeof config.validateStatus === 'function') {
     return config.validateStatus
-  } else if (config.hasOwnProperty('validateStatus')) {
+  }
+  if (Object.hasOwn(config, 'validateStatus')) {
     log.error('Expected `validateStatus` to be a function.')
   }
   return code => code < 400 || code >= 500
