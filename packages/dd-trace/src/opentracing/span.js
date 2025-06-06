@@ -13,18 +13,17 @@ const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
 const { channel } = require('dc-polyfill')
 const util = require('util')
+const { getEnvironmentVariable } = require('../config-helper')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
-const {
-  DD_TRACE_EXPERIMENTAL_STATE_TRACKING,
-  DD_TRACE_EXPERIMENTAL_SPAN_COUNTS
-} = process.env
+const DD_TRACE_EXPERIMENTAL_STATE_TRACKING = getEnvironmentVariable('DD_TRACE_EXPERIMENTAL_STATE_TRACKING')
+const DD_TRACE_EXPERIMENTAL_SPAN_COUNTS = getEnvironmentVariable('DD_TRACE_EXPERIMENTAL_SPAN_COUNTS')
 
 const unfinishedRegistry = createRegistry('unfinished')
 const finishedRegistry = createRegistry('finished')
 
-const OTEL_ENABLED = !!process.env.DD_TRACE_OTEL_ENABLED
+const OTEL_ENABLED = !!getEnvironmentVariable('DD_TRACE_OTEL_ENABLED')
 const ALLOWED = new Set(['string', 'number', 'boolean'])
 
 const integrationCounters = {
