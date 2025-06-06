@@ -166,8 +166,12 @@ module.exports = class CiPlugin extends Plugin {
       // only for vitest
       // These are added for the worker threads to use
       if (this.constructor.id === 'vitest') {
+        // TODO: Figure out alternative ways to pass this information to the worker threads
+        // eslint-disable-next-line eslint-rules/eslint-process-env
         process.env.DD_CIVISIBILITY_TEST_SESSION_ID = this.testSessionSpan.context().toTraceId()
+        // eslint-disable-next-line eslint-rules/eslint-process-env
         process.env.DD_CIVISIBILITY_TEST_MODULE_ID = this.testModuleSpan.context().toSpanId()
+        // eslint-disable-next-line eslint-rules/eslint-process-env
         process.env.DD_CIVISIBILITY_TEST_COMMAND = this.command
       }
 

@@ -6,6 +6,10 @@ const { expect } = require('chai')
 const { readFileSync } = require('fs')
 const sinon = require('sinon')
 const { GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('../src/constants')
+const { it, describe } = require('tap/lib/mocha.js')
+const assert = require('assert/strict')
+const { getEnvironmentVariable, getEnvironmentVariables } = require('../src/config-helper')
+const { once } = require('events')
 
 describe('Config', () => {
   let Config
@@ -75,6 +79,47 @@ describe('Config', () => {
     updateConfig.reset()
     process.env = env
     existsSyncParam = undefined
+  })
+
+  describe('config-helper', () => {
+    it('should throw when accessing unknown configuration', () => {
+      assert.throws(
+        () => getEnvironmentVariable('DD_UNKNOWN_CONFIG'),
+        /Missing DD_UNKNOWN_CONFIG env\/configuration in "supported-configurations.json" file./
+      )
+    })
+
+    it('should return aliased value', () => {
+      process.env.DATADOG_API_KEY = '12345'
+      assert.throws(() => getEnvironmentVariable('DATADOG_API_KEY'), {
+        message: /Missing DATADOG_API_KEY env\/configuration in "supported-configurations.json" file./
+      })
+      assert.strictEqual(getEnvironmentVariable('DD_API_KEY'), '12345')
+      const { DD_API_KEY, DATADOG_API_KEY } = getEnvironmentVariables()
+      assert.strictEqual(DATADOG_API_KEY, undefined)
+      assert.strictEqual(DD_API_KEY, getEnvironmentVariable('DD_API_KEY'))
+      delete process.env.DATADOG_API_KEY
+    })
+
+    it('should log deprecation warning for deprecated configurations', async () => {
+      process.env.DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED = 'true'
+      getEnvironmentVariables()
+      const [warning] = await once(process, 'warning')
+      assert.strictEqual(warning.name, 'DeprecationWarning')
+      assert.match(
+        warning.message,
+        /variable DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED .+ DD_PROFILING_ENDPOINT_COLLECTION_ENABLED instead/
+      )
+      assert.strictEqual(warning.code, 'DATADOG_DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED')
+    })
+
+    it('should pass through random envs', async () => {
+      process.env.FOOBAR = 'true'
+      const { FOOBAR } = getEnvironmentVariables()
+      assert.strictEqual(FOOBAR, 'true')
+      assert.strictEqual(getEnvironmentVariable('FOOBAR'), FOOBAR)
+      delete process.env.FOOBAR
+    })
   })
 
   it('should initialize its own logging config based off the loggers config', () => {
@@ -1303,14 +1348,12 @@ describe('Config', () => {
     process.env.DD_TRACE_CLIENT_IP_HEADER = 'foo-bar-header'
     process.env.DD_TRACE_GLOBAL_TAGS = 'foo:bar,baz:qux'
     process.env.DD_TRACE_EXPERIMENTAL_B3_ENABLED = 'true'
-    process.env.DD_TRACE_EXPERIMENTAL_TRACEPARENT_ENABLED = 'true'
     process.env.DD_TRACE_PROPAGATION_STYLE_INJECT = 'datadog'
     process.env.DD_TRACE_PROPAGATION_STYLE_EXTRACT = 'datadog'
     process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'restart'
     process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_EXPORTER = 'log'
     process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = 'true'
-    process.env.DD_TRACE_EXPERIMENTAL_INTERNAL_ERRORS_ENABLED = 'true'
     process.env.DD_TRACE_MIDDLEWARE_TRACING_ENABLED = 'false'
     process.env.DD_APM_TRACING_ENABLED = 'false'
     process.env.DD_APPSEC_ENABLED = 'false'
