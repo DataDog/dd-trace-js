@@ -133,7 +133,6 @@ describe('TextMapPropagator', () => {
       expect(carrier.baggage).to.equal('raccoon=chunky')
     })
 
-
     it('should inject an existing sampling priority', () => {
       const carrier = {}
       const spanContext = createContext({
