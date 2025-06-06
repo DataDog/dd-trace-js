@@ -2709,4 +2709,38 @@ apm_configuration_default:
       expect(stableConfig).to.not.have.property('stableConfig')
     })
   })
+
+  context('getOrigin', () => {
+    let originalAppsecEnabled
+
+    beforeEach(() => {
+      originalAppsecEnabled = process.env.DD_APPSEC_ENABLED
+    })
+
+    afterEach(() => {
+      process.env.DD_APPSEC_ENABLED = originalAppsecEnabled
+    })
+
+    it('should return default value', () => {
+      const config = new Config()
+
+      expect(config.getOrigin('appsec.enabled')).to.be.equal('default')
+    })
+
+    it('should return env_var', () => {
+      process.env.DD_APPSEC_ENABLED = 'true'
+
+      const config = new Config()
+
+      expect(config.getOrigin('appsec.enabled')).to.be.equal('env_var')
+    })
+
+    it('should return code', () => {
+      const config = new Config({
+        appsec: true
+      })
+
+      expect(config.getOrigin('appsec.enabled')).to.be.equal('code')
+    })
+  })
 })
