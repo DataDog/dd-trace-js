@@ -65,13 +65,11 @@ function patch (http, methodName) {
         let finished = false
         let callback = args.callback
 
-        if (callback) {
-          callback = shimmer.wrapFunction(args.callback, cb => function () {
-            return asyncStartChannel.runStores(ctx, () => {
-              return cb.apply(this, arguments)
-            })
+        callback &&= shimmer.wrapFunction(args.callback, cb => function () {
+          return asyncStartChannel.runStores(ctx, () => {
+            return cb.apply(this, arguments)
           })
-        }
+        })
 
         const options = args.options
 

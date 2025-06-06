@@ -394,8 +394,8 @@ class Config {
         }
         if (gitPropertiesString) {
           const { commitSHA, repositoryUrl } = getGitMetadataFromGitProperties(gitPropertiesString)
-          this.commitSHA = this.commitSHA || commitSHA
-          this.repositoryUrl = this.repositoryUrl || repositoryUrl
+          this.commitSHA ||= commitSHA
+          this.repositoryUrl ||= repositoryUrl
         }
       }
     }
@@ -1301,8 +1301,8 @@ class Config {
       this._optionsArg.tracePropagationStyle
     ))
     if (defaultPropagationStyle.length > 2) {
-      calc['tracePropagationStyle.inject'] = calc['tracePropagationStyle.inject'] || defaultPropagationStyle
-      calc['tracePropagationStyle.extract'] = calc['tracePropagationStyle.extract'] || defaultPropagationStyle
+      calc['tracePropagationStyle.inject'] ||= defaultPropagationStyle
+      calc['tracePropagationStyle.extract'] ||= defaultPropagationStyle
     }
   }
 

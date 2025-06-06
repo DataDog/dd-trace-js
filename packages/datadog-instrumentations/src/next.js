@@ -284,9 +284,7 @@ addHook({
       if (queryParsedChannel.hasSubscribers) {
         const query = {}
         for (const key of nextUrl.searchParams.keys()) {
-          if (!query[key]) {
-            query[key] = nextUrl.searchParams.getAll(key)
-          }
+          query[key] ||= nextUrl.searchParams.getAll(key)
         }
 
         queryParsedChannel.publish({ query })

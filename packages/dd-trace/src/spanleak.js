@@ -60,7 +60,7 @@ module.exports.startScrubber = function () {
       if (!span) continue // span has already been garbage collected
 
       // TODO: Should we also do things like record the route to help users debug leaks?
-      if (!expirationsByType[span._name]) expirationsByType[span._name] = 0
+      expirationsByType[span._name] ??= 0
       expirationsByType[span._name]++
 
       if (!gc) continue // everything after this point is related to manual GC

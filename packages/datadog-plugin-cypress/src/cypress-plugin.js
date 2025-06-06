@@ -701,9 +701,7 @@ class CypressPlugin {
     let latestError
 
     const finishedTestsByTestName = finishedTests.reduce((acc, finishedTest) => {
-      if (!acc[finishedTest.testName]) {
-        acc[finishedTest.testName] = []
-      }
+      acc[finishedTest.testName] ??= []
       acc[finishedTest.testName].push(finishedTest)
       return acc
     }, {})
@@ -820,16 +818,14 @@ class CypressPlugin {
           return { shouldSkip: true }
         }
 
-        if (!this.activeTestSpan) {
-          this.activeTestSpan = this.getTestSpan({
-            testName,
-            testSuite,
-            isUnskippable,
-            isForcedToRun,
-            isDisabled,
-            isQuarantined
-          })
-        }
+        this.activeTestSpan ||= this.getTestSpan({
+          testName,
+          testSuite,
+          isUnskippable,
+          isForcedToRun,
+          isDisabled,
+          isQuarantined
+        })
 
         return this.activeTestSpan ? { traceId: this.activeTestSpan.context().toTraceId() } : {}
       },

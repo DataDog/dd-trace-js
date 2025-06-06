@@ -134,7 +134,7 @@ class PrioritySampler {
     for (const [key, rate] of Object.entries(rates)) {
       samplers[key] = new Sampler(rate)
     }
-    samplers[DEFAULT_KEY] = samplers[DEFAULT_KEY] || defaultSampler
+    samplers[DEFAULT_KEY] ||= defaultSampler
 
     this._samplers = samplers
 
@@ -291,9 +291,7 @@ class PrioritySampler {
     const mechanism = context._sampling.mechanism
 
     if (priority >= AUTO_KEEP) {
-      if (!trace.tags[DECISION_MAKER_KEY]) {
-        trace.tags[DECISION_MAKER_KEY] = `-${mechanism}`
-      }
+      trace.tags[DECISION_MAKER_KEY] ||= `-${mechanism}`
     } else {
       delete trace.tags[DECISION_MAKER_KEY]
     }

@@ -68,7 +68,7 @@ class LangChainLLMObsHandler {
     const runIdBase = runId ? runId.split('-').slice(0, -1).join('-') : ''
 
     const responseMetadata = message.response_metadata || {}
-    usage = usage || responseMetadata.usage || responseMetadata.tokenUsage || {}
+    usage ||= responseMetadata.usage || responseMetadata.tokenUsage || {}
 
     const inputTokens = usage.promptTokens || usage.inputTokens || usage.prompt_tokens || usage.input_tokens || 0
     const outputTokens =

@@ -71,7 +71,7 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
 
         for (const message of messages) {
           if (message !== null && typeof message === 'object' && !ctx.disableHeaderInjection) {
-            message.headers = message.headers || {}
+            message.headers ||= {}
           }
         }
 

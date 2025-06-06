@@ -64,7 +64,7 @@ module.exports = class Plugin {
   }
 
   enter (span, store) {
-    store = store || storage('legacy').getStore()
+    store ||= storage('legacy').getStore()
     storage('legacy').enterWith({ ...store, span })
   }
 

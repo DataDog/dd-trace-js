@@ -61,9 +61,7 @@ function normalizeSpan (span) {
   if (span.name.length > MAX_NAME_LENGTH) {
     span.name = span.name.slice(0, MAX_NAME_LENGTH)
   }
-  if (!span.resource) {
-    span.resource = span.name
-  }
+  span.resource ||= span.name
   if (span.type?.length > MAX_TYPE_LENGTH) {
     span.type = span.type.slice(0, MAX_TYPE_LENGTH)
   }

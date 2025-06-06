@@ -3,18 +3,14 @@ const IAST_TRANSACTION_ID = Symbol('_dd.iast.transactionId')
 
 function getIastContext (store, topContext) {
   let iastContext = store && store[IAST_CONTEXT_KEY]
-  if (!iastContext) {
-    iastContext = topContext && topContext[IAST_CONTEXT_KEY]
-  }
+  iastContext ||= topContext && topContext[IAST_CONTEXT_KEY]
   return iastContext
 }
 
 function getIastStackTraceId (iastContext) {
   if (!iastContext) return '0'
 
-  if (!iastContext.stackTraceId) {
-    iastContext.stackTraceId = 0
-  }
+  iastContext.stackTraceId ||= 0
 
   iastContext.stackTraceId += 1
   return String(iastContext.stackTraceId)
@@ -40,15 +36,11 @@ function saveIastContext (store, topContext, context) {
 */
 function cleanIastContext (store, context, iastContext) {
   if (store) {
-    if (!iastContext) {
-      iastContext = store[IAST_CONTEXT_KEY]
-    }
+    iastContext ||= store[IAST_CONTEXT_KEY]
     store[IAST_CONTEXT_KEY] = null
   }
   if (context) {
-    if (!iastContext) {
-      iastContext = context[IAST_CONTEXT_KEY]
-    }
+    iastContext ||= context[IAST_CONTEXT_KEY]
     context[IAST_CONTEXT_KEY] = null
   }
   if (iastContext) {

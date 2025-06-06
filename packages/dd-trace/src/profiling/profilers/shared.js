@@ -25,9 +25,7 @@ function getThreadLabels () {
 function cacheThreadLabels () {
   let labels
   return () => {
-    if (!labels) {
-      labels = getThreadLabels()
-    }
+    labels ||= getThreadLabels()
     return labels
   }
 }

@@ -91,11 +91,9 @@ class Sns extends BaseAwsSdkPlugin {
     }
 
     if (this.config.dsmEnabled) {
-      if (!params.MessageAttributes._datadog) {
-        params.MessageAttributes._datadog = {
-          DataType: 'Binary',
-          BinaryValue: ddInfo
-        }
+      params.MessageAttributes._datadog ||= {
+        DataType: 'Binary',
+        BinaryValue: ddInfo
       }
 
       const dataStreamsContext = this.setDSMCheckpoint(span, params, topicArn)

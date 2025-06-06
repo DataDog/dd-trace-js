@@ -35,8 +35,8 @@ function blockRequest (tracer, req, res) {
   if (!req || !res) {
     const store = storage('legacy').getStore()
     if (store) {
-      req = req || store.req
-      res = res || store.res
+      req ||= store.req
+      res ||= store.res
     }
   }
 

@@ -238,9 +238,7 @@ class Sqs extends BaseAwsSdkPlugin {
   }
 
   injectToMessage (span, params, queueUrl, injectTraceContext) {
-    if (!params) {
-      params = {}
-    }
+    params ||= {}
     if (!params.MessageAttributes) {
       params.MessageAttributes = {}
     } else if (Object.keys(params.MessageAttributes).length >= 10) { // SQS quota
@@ -258,11 +256,9 @@ class Sqs extends BaseAwsSdkPlugin {
     }
 
     if (this.config.dsmEnabled) {
-      if (!params.MessageAttributes._datadog) {
-        params.MessageAttributes._datadog = {
-          DataType: 'String',
-          StringValue: JSON.stringify(ddInfo)
-        }
+      params.MessageAttributes._datadog ||= {
+        DataType: 'String',
+        StringValue: JSON.stringify(ddInfo)
       }
 
       const dataStreamsContext = this.setDSMCheckpoint(span, params, queueUrl)

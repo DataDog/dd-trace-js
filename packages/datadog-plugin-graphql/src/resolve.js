@@ -70,7 +70,7 @@ class GraphQLResolvePlugin extends TracingPlugin {
 
       const span = this.activeSpan
       field.finishTime = span._getTime ? span._getTime() : 0
-      field.error = field.error || err
+      field.error ||= err
     })
 
     this.resolverStartCh = dc.channel('datadog:graphql:resolver:start')

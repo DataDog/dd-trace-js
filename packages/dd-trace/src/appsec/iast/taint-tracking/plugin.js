@@ -163,10 +163,8 @@ class TaintTrackingPlugin extends SourceIastPlugin {
   }
 
   _taintTrackingHandler (type, target, property, iastContext = getIastContext(storage('legacy').getStore())) {
-    if (!property) {
+    if (property) { target[property] &&= taintObject(iastContext, target[property], type) } else {
       taintObject(iastContext, target, type)
-    } else if (target[property]) {
-      target[property] = taintObject(iastContext, target[property], type)
     }
   }
 

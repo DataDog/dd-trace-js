@@ -34,16 +34,14 @@ function parseUrl (urlObjOrString) {
 }
 
 function request (data, options, callback) {
-  if (!options.headers) {
-    options.headers = {}
-  }
+  options.headers ||= {}
 
   if (options.url) {
     const url = parseUrl(options.url)
     if (url.protocol === 'unix:') {
       options.socketPath = url.pathname
     } else {
-      if (!options.path) options.path = url.path
+      options.path ||= url.path
       options.protocol = url.protocol
       options.hostname = url.hostname // for IPv6 this should be '::1' and not '[::1]'
       options.port = url.port

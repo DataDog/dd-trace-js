@@ -51,9 +51,7 @@ class DatadogStorage extends AsyncLocalStorage {
    * @returns {T | undefined}
    */
   getStore (handle) {
-    if (!handle) {
-      handle = super.getStore()
-    }
+    handle ||= super.getStore()
     if (handle) {
       return stores.get(handle)
     }
@@ -104,9 +102,7 @@ const storages = Object.create(null)
  * @returns {DatadogStorage}
  */
 function storage (namespace) {
-  if (!storages[namespace]) {
-    storages[namespace] = new DatadogStorage()
-  }
+  storages[namespace] ||= new DatadogStorage()
   return storages[namespace]
 }
 

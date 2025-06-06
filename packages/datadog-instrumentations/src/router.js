@@ -26,7 +26,7 @@ function createWrapRouterMethod (name) {
   const regexpCache = Object.create(null)
 
   function wrapLayerHandle (layer, original) {
-    original._name = original._name || layer.name
+    original._name ||= layer.name
 
     return shimmer.wrapFunction(original, original => function () {
       if (!enterChannel.hasSubscribers) return original.apply(this, arguments)

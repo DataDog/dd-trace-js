@@ -347,9 +347,7 @@ function updateConfig (changes, config) {
     if (namesNeedFormatting.has(entry.name)) {
       entry.value = formatMapForTelemetry(entry.value)
     } else if (entry.name === 'url') {
-      if (entry.value) {
-        entry.value = entry.value.toString()
-      }
+      entry.value &&= entry.value.toString()
     } else if (entry.name === 'DD_TRACE_SAMPLING_RULES') {
       entry.value = JSON.stringify(entry.value)
     } else if (Array.isArray(entry.value)) {

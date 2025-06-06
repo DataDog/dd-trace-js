@@ -224,9 +224,7 @@ class MetricsAggregationClient {
   histogram (name, value, tags) {
     const node = this._ensureTree(this._histograms, name, tags, null)
 
-    if (!node.value) {
-      node.value = new Histogram()
-    }
+    node.value ||= new Histogram()
 
     node.value.record(value)
   }

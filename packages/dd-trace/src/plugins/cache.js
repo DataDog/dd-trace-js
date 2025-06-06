@@ -6,9 +6,7 @@ class CachePlugin extends StoragePlugin {
   static get operation () { return 'command' }
 
   startSpan (options) {
-    if (!options.kind) {
-      options.kind = this.constructor.kind
-    }
+    options.kind ||= this.constructor.kind
     return super.startSpan(this.operationName(), options)
   }
 }

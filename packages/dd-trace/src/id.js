@@ -121,7 +121,7 @@ function toNumberString (buffer, radix) {
   let low = readInt32(buffer, buffer.length - 4)
   let str = ''
 
-  radix = radix || 10
+  radix ||= 10
 
   while (1) {
     const mod = (high % radix) * UINT_MAX + low

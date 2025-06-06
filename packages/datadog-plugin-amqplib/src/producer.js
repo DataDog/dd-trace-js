@@ -30,7 +30,7 @@ class AmqplibProducerPlugin extends ProducerPlugin {
       }
     }, ctx)
 
-    fields.headers = fields.headers || {}
+    fields.headers ||= {}
 
     this.tracer.inject(span, TEXT_MAP, fields.headers)
 

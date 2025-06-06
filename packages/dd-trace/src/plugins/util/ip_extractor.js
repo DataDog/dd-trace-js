@@ -83,7 +83,7 @@ function findFirstIp (str) {
     }
 
     // it's private, only save the first one found
-    if (!result.private) result.private = chunk
+    result.private ||= chunk
   }
 
   return result

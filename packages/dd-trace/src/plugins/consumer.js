@@ -8,12 +8,8 @@ class ConsumerPlugin extends InboundPlugin {
   static get type () { return 'messaging' }
 
   startSpan (options, enterOrCtx) {
-    if (!options.service) {
-      options.service = this.config.service || this.serviceName()
-    }
-    if (!options.kind) {
-      options.kind = this.constructor.kind
-    }
+    options.service ||= this.config.service || this.serviceName()
+    options.kind ||= this.constructor.kind
     return super.startSpan(this.operationName(), options, enterOrCtx)
   }
 }

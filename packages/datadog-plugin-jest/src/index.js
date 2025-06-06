@@ -71,16 +71,12 @@ class JestPlugin extends CiPlugin {
 
   // The lists are the same for every test suite, so we can cache them
   getUnskippableSuites (unskippableSuitesList) {
-    if (!this.unskippableSuites) {
-      this.unskippableSuites = JSON.parse(unskippableSuitesList)
-    }
+    this.unskippableSuites ||= JSON.parse(unskippableSuitesList)
     return this.unskippableSuites
   }
 
   getForcedToRunSuites (forcedToRunSuitesList) {
-    if (!this.forcedToRunSuites) {
-      this.forcedToRunSuites = JSON.parse(forcedToRunSuitesList)
-    }
+    this.forcedToRunSuites ||= JSON.parse(forcedToRunSuitesList)
     return this.forcedToRunSuites
   }
 

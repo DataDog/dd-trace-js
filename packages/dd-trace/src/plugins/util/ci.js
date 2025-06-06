@@ -59,9 +59,7 @@ function removeEmptyValues (tags) {
 }
 
 function normalizeTag (targetTags, tagKey, normalize) {
-  if (targetTags[tagKey]) {
-    targetTags[tagKey] = normalize(targetTags[tagKey])
-  }
+  targetTags[tagKey] &&= normalize(targetTags[tagKey])
 }
 
 function normalizeRef (ref) {

@@ -142,9 +142,7 @@ function wrapFileHandle (fh) {
 }
 
 function getFileHandlePrototype (fh) {
-  if (!kHandle) {
-    kHandle = Reflect.ownKeys(fh).find(key => typeof key === 'symbol' && key.toString().includes('kHandle'))
-  }
+  kHandle ||= Reflect.ownKeys(fh).find(key => typeof key === 'symbol' && key.toString().includes('kHandle'))
   return Object.getPrototypeOf(fh)
 }
 

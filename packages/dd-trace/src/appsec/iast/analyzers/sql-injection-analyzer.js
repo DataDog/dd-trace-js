@@ -59,7 +59,7 @@ class SqlInjectionAnalyzer extends StoredInjectionAnalyzer {
   }
 
   analyze (value, store, dialect) {
-    store = store || storage('legacy').getStore()
+    store ||= storage('legacy').getStore()
     if (!(store && store.sqlAnalyzed)) {
       super.analyze(value, store, dialect)
     }

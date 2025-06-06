@@ -16,9 +16,7 @@ function setAgentStrategy (config, setWritersAgentlessValue) {
     return
   }
 
-  if (!agentInfoExporter) {
-    agentInfoExporter = new AgentInfoExporter(config)
-  }
+  agentInfoExporter ||= new AgentInfoExporter(config)
 
   agentInfoExporter.getAgentInfo((err, agentInfo) => {
     if (err) {

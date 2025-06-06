@@ -180,9 +180,7 @@ class SensitiveHandler {
         sources[sourceIndex].redacted = true
       }
 
-      if (!redactedSourcesContext[sourceIndex]) {
-        redactedSourcesContext[sourceIndex] = []
-      }
+      redactedSourcesContext[sourceIndex] ||= []
       redactedSourcesContext[sourceIndex].push({
         start,
         end

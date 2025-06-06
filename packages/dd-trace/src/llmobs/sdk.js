@@ -205,9 +205,7 @@ class LLMObs extends NoopLLMObs {
   annotate (span, options, autoinstrumented = false) {
     if (!this.enabled) return
 
-    if (!span) {
-      span = this._active()
-    }
+    span ||= this._active()
 
     if ((span && !options) && !(span instanceof Span)) {
       options = span
@@ -277,7 +275,7 @@ class LLMObs extends NoopLLMObs {
   }
 
   exportSpan (span) {
-    span = span || this._active()
+    span ||= this._active()
     let err = ''
     try {
       if (!span) {

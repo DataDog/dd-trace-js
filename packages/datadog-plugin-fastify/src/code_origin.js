@@ -22,7 +22,7 @@ class FastifyCodeOriginForSpansPlugin extends Plugin {
     })
 
     this.addSub('apm:fastify:route:added', ({ routeOptions, onRoute }) => {
-      if (!routeOptions.config) routeOptions.config = {}
+      routeOptions.config ||= {}
       routeOptions.config[kCodeOriginForSpansTagsSym] = entryTags(onRoute)
     })
   }

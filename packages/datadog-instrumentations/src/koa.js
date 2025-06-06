@@ -66,16 +66,17 @@ function wrapRouterUse (use) {
 }
 
 function wrapStack (layer) {
-  layer.stack = layer.stack.map(middleware => {
+  const newStack = []
+  for (const middleware of layer.stack) {
     if (typeof middleware === 'function') {
       const original = originals.get(middleware) || middleware
 
       const handler = shimmer.wrapFunction(original, middleware => wrapMiddleware(middleware, layer))
       originals.set(handler, original)
-
-      return handler
+      newStack.push(handler)
     }
-  })
+  }
+  layer.stack = newStack
 }
 
 function wrapMiddleware (fn, layer) {
