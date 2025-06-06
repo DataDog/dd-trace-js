@@ -1388,7 +1388,7 @@ class Config {
     value = value.split(',')
     const result = []
 
-    value.forEach(val => {
+    for (const val of value) {
       if (val.includes('-')) {
         const [start, end] = val.split('-').map(Number)
         for (let i = start; i <= end; i++) {
@@ -1397,7 +1397,7 @@ class Config {
       } else {
         result.push(Number(val))
       }
-    })
+    }
     this._setValue(obj, name, result)
   }
 

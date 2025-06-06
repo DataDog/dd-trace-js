@@ -229,9 +229,9 @@ function copyRulesData (rulesData) {
   const copy = { ...rulesData }
   if (copy.data) {
     const data = []
-    copy.data.forEach(item => {
+    for (const item of copy.data) {
       data.push({ ...item })
-    })
+    }
     copy.data = data
   }
   return copy

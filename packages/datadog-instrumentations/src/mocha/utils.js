@@ -69,11 +69,11 @@ function retryTest (test, numRetries, modifyTestName, tags) {
     const clonedTest = test.clone()
     clonedTest.title = modifyTestName(originalTestName, retryIndex + 1)
     suite.addTest(clonedTest)
-    tags.forEach(tag => {
+    for (const tag of tags) {
       if (tag) {
         clonedTest[tag] = true
       }
-    })
+    }
   }
 }
 
@@ -431,7 +431,7 @@ function getOnPendingHandler () {
 function getRunTestsWrapper (runTests, config) {
   return function (suite) {
     if (config.isTestManagementTestsEnabled) {
-      suite.tests.forEach((test) => {
+      for (const test of suite.tests) {
         const { isAttemptToFix, isDisabled, isQuarantined } = getTestProperties(test, config.testManagementTests)
         if (isAttemptToFix && !test.isPending()) {
           test._ddIsAttemptToFix = true
@@ -451,11 +451,11 @@ function getRunTestsWrapper (runTests, config) {
           testsQuarantined.add(test)
           test._ddIsQuarantined = true
         }
-      })
+      }
     }
 
     if (config.isImpactedTestsEnabled) {
-      suite.tests.forEach((test) => {
+      for (const test of suite.tests) {
         isModifiedCh.publish({
           modifiedTests: config.modifiedTests,
           file: suite.file,
@@ -473,12 +473,12 @@ function getRunTestsWrapper (runTests, config) {
             }
           }
         })
-      })
+      }
     }
 
     if (config.isKnownTestsEnabled) {
       // by the time we reach `this.on('test')`, it is too late. We need to add retries here
-      suite.tests.forEach(test => {
+      for (const test of suite.tests) {
         if (!test.isPending() && isNewTest(test, config.knownTests)) {
           test._ddIsNew = true
           if (config.isEarlyFlakeDetectionEnabled && !test._ddIsAttemptToFix && !test._ddIsModified) {
@@ -490,7 +490,7 @@ function getRunTestsWrapper (runTests, config) {
             )
           }
         }
-      })
+      }
     }
 
     return runTests.apply(this, arguments)

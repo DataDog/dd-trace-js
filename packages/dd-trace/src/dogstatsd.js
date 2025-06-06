@@ -107,10 +107,10 @@ class DogStatsDClient {
   _sendUdpFromQueue (queue, address, family) {
     const socket = family === 6 ? this._udp6 : this._udp4
 
-    queue.forEach((buffer) => {
+    for (const buffer of queue) {
       log.debug(`Sending to DogStatsD: ${buffer}`)
       socket.send(buffer, 0, buffer.length, this._port, address)
-    })
+    }
   }
 
   _add (stat, value, type, tags) {
@@ -160,19 +160,18 @@ class DogStatsDClient {
     const tags = []
 
     if (config.tags) {
-      Object.keys(config.tags)
+      for (const key of Object.keys(config.tags)
         .filter(key => typeof config.tags[key] === 'string')
         .filter(key => {
           // Skip runtime-id unless enabled as cardinality may be too high
           if (key !== 'runtime-id') return true
           return (config.experimental && config.experimental.runtimeId)
-        })
-        .forEach(key => {
-          // https://docs.datadoghq.com/tagging/#defining-tags
-          const value = config.tags[key].replaceAll(/[^a-z0-9_:./-]/ig, '_')
+        })) {
+        // https://docs.datadoghq.com/tagging/#defining-tags
+        const value = config.tags[key].replaceAll(/[^a-z0-9_:./-]/ig, '_')
 
-          tags.push(`${key}:${value}`)
-        })
+        tags.push(`${key}:${value}`)
+      }
     }
 
     const clientConfig = {

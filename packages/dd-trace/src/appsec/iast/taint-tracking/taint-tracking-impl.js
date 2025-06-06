@@ -89,14 +89,14 @@ function getCsiFn (cb, getContext, ...protos) {
 
 function csiMethodsDefaults (names, excluded, getContext) {
   const impl = {}
-  names.forEach(name => {
-    if (excluded.includes(name)) return
+  for (const name of names) {
+    if (excluded.includes(name)) continue
     impl[name] = getCsiFn(
       (transactionId, res, target, ...rest) => TaintedUtils[name](transactionId, res, target, ...rest),
       getContext,
       String.prototype[name]
     )
-  })
+  }
   return impl
 }
 

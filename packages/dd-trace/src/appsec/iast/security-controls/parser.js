@@ -15,16 +15,15 @@ const validTypes = new Set([INPUT_VALIDATOR_TYPE, SANITIZER_TYPE])
 function parse (securityControlsConfiguration) {
   const controls = new Map()
 
-  securityControlsConfiguration?.replace(/[\r\n\t\v\f]*/g, '')
+  for (const control of securityControlsConfiguration?.replace(/[\r\n\t\v\f]*/g, '')
     .split(SECURITY_CONTROL_DELIMITER)
     .map(parseControl)
-    .filter(control => !!control)
-    .forEach(control => {
-      if (!controls.has(control.file)) {
-        controls.set(control.file, [])
-      }
-      controls.get(control.file).push(control)
-    })
+    .filter(control => !!control)) {
+    if (!controls.has(control.file)) {
+      controls.set(control.file, [])
+    }
+    controls.get(control.file).push(control)
+  }
 
   return controls
 }
@@ -48,7 +47,7 @@ function parseControl (control) {
   }
 
   let secureMarks = CUSTOM_SECURE_MARK
-  getSecureMarks(marks).forEach(mark => { secureMarks |= mark })
+  for (const mark of getSecureMarks(marks)) { secureMarks |= mark }
   if (secureMarks === CUSTOM_SECURE_MARK) {
     log.warn('[ASM] Invalid security control mark: %s', marks)
     return

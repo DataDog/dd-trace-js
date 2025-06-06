@@ -21,7 +21,7 @@ function getQueryResource (q) {
 }
 
 function wrapAllNames (names, action) {
-  names.forEach(name => action(name))
+  for (const name of names) action(name)
 }
 
 // semver >=2 <3

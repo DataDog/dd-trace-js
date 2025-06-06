@@ -81,13 +81,13 @@ function createWrapRouterMethod (name) {
       layerMatchers.set(layer, matchers)
 
       if (layer.route) {
-        METHODS.forEach(method => {
+        for (const method of METHODS) {
           if (typeof layer.route.stack === 'function') {
             layer.route.stack = [{ handle: layer.route.stack }]
           }
 
           layer.route[method] = wrapMethod(layer.route[method])
-        })
+        }
       }
     }
   }

@@ -119,16 +119,16 @@ function consolidateVulnerabilities (iastContext) {
   const reserved = context.tokens?.[REPORT_VULNERABILITY] > 0
 
   if (reserved) { // still a bit of budget available
-    Object.keys(context.localMaps).forEach(route => {
+    for (const route of Object.keys(context.localMaps)) {
       globalRouteMap.set(route, newCountersArray())
-    })
+    }
   } else {
-    Object.keys(context.localMaps).forEach(route => {
+    for (const route of Object.keys(context.localMaps)) {
       const localMap = context.localMaps[route]
       const globalMap = globalRouteMap.get(route)
       if (!globalMap) {
         globalRouteMap.set(route, localMap)
-        return
+        continue
       }
 
       for (let i = 0; i < vulnerabilitiesSize; i++) {
@@ -136,7 +136,7 @@ function consolidateVulnerabilities (iastContext) {
           globalMap[i] = localMap[i]
         }
       }
-    })
+    }
   }
 }
 

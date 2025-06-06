@@ -282,10 +282,10 @@ class DatadogSpan {
       }
     }
 
-    Object.entries(attributes).forEach(entry => {
+    for (const entry of Object.entries(attributes)) {
       const [key, value] = entry
       addArrayOrScalarAttributes(key, value)
-    })
+    }
     return sanitizedAttributes
   }
 

@@ -263,13 +263,13 @@ function captureNativeMetrics () {
 
   histogram('runtime.node.event_loop.delay', stats.eventLoop)
 
-  Object.keys(stats.gc).forEach(type => {
+  for (const type of Object.keys(stats.gc)) {
     if (type === 'all') {
       histogram('runtime.node.gc.pause', stats.gc[type])
     } else {
       histogram('runtime.node.gc.pause.by.type', stats.gc[type], `gc_type:${type}`)
     }
-  })
+  }
 
   for (let i = 0, l = spaces.length; i < l; i++) {
     const tag = `heap_space:${spaces[i].space_name}`

@@ -94,11 +94,11 @@ function deepCloneSuite (suite, filterTest, tags = []) {
     } else {
       if (filterTest(entry)) {
         const copiedTest = entry._clone()
-        tags.forEach(tag => {
+        for (const tag of tags) {
           if (tag) {
             copiedTest[tag] = true
           }
-        })
+        }
         copy._addTest(copiedTest)
       }
     }
@@ -585,25 +585,25 @@ function runnerHook (runnerExport, playwrightVersion) {
       flakyTestRetriesCount > 0 &&
       !isTestManagementTestsEnabled
     if (shouldSetRetries) {
-      projects.forEach(project => {
+      for (const project of projects) {
         if (project.retries === 0) { // Only if it hasn't been set by the user
           project.retries = flakyTestRetriesCount
         }
-      })
+      }
     }
 
     let runAllTestsReturn = await runAllTests.apply(this, arguments)
 
-    Object.values(remainingTestsByFile).forEach(tests => {
+    for (const tests of Object.values(remainingTestsByFile)) {
       // `tests` should normally be empty, but if it isn't,
       // there were tests that did not go through `testBegin` or `testEnd`,
       // because they were skipped
-      tests.forEach(test => {
+      for (const test of tests) {
         const browser = getBrowserNameFromProjects(projects, test)
         testBeginHandler(test, browser, true)
         testEndHandler(test, [], 'skip', null, false, true)
-      })
-    })
+      }
+    }
 
     const sessionStatus = runAllTestsReturn.status || runAllTestsReturn
 

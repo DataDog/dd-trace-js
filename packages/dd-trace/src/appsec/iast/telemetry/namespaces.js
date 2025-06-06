@@ -45,7 +45,7 @@ function merge (namespace) {
 
       if (points?.length && type === 'count') {
         const gMetric = globalNamespace.getMetric(metricName, tags)
-        points.forEach(point => gMetric.inc(point[1]))
+        for (const point of points) gMetric.inc(point[1])
       }
     }
   }

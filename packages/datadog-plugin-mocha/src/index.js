@@ -463,9 +463,9 @@ class MochaPlugin extends CiPlugin {
         })
       )
 
-      formattedTraces.forEach(trace => {
+      for (const trace of formattedTraces) {
         this.tracer._exporter.export(trace)
-      })
+      }
     })
 
     this.addBind('ci:mocha:global:run', (ctx) => {

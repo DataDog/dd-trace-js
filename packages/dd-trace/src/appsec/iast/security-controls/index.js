@@ -67,11 +67,11 @@ function getControls (filename) {
 
 function hookModule (filename, module, controlsByFile) {
   try {
-    controlsByFile.forEach(({ type, method, parameters, secureMarks }) => {
+    for (const { type, method, parameters, secureMarks } of controlsByFile) {
       const { target, parent, methodName } = resolve(method, module)
       if (!target) {
         log.error('[ASM] Unable to resolve IAST security control %s:%s', filename, method)
-        return
+        continue
       }
 
       const wrapper = type === SANITIZER_TYPE
@@ -83,7 +83,7 @@ function hookModule (filename, module, controlsByFile) {
       } else {
         module = wrapper
       }
-    })
+    }
   } catch (e) {
     log.error('[ASM] Error initializing IAST security control for %', filename, e)
   }
@@ -129,11 +129,11 @@ function wrapInputValidator (target, parameters, secureMarks) {
 
   return shimmer.wrapFunction(target, orig => function () {
     try {
-      [...arguments].forEach((arg, index) => {
+      for (const [index, arg] of [...arguments].entries()) {
         if (allParameters || parameters.includes(index)) {
           addSecureMarks(arg, secureMarks, false)
         }
-      })
+      }
     } catch (e) {
       log.error('[ASM] Error adding Secure mark for input validator', e)
     }
