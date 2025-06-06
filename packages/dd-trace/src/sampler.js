@@ -16,7 +16,8 @@ const SAMPLING_KNUTH_FACTOR = 1_111_111_111_111_111_111n
  * This class uses a deterministic sampling algorithm that is consistent across all languages.
  */
 class Sampler {
-  #threshold = BigInt(0)
+  #threshold = 0n
+
   /**
    * @param {number} rate
    */

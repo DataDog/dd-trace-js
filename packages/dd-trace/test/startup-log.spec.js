@@ -2,11 +2,12 @@
 
 require('./setup/tap')
 
-const os = require('os')
-const tracerVersion = require('../../../package.json').version
+const assert = require('node:assert')
+const os = require('node:os')
+
 const Config = require('../src/config')
 const SamplingRule = require('../src/sampling_rule')
-const assert = require('node:assert')
+const tracerVersion = require('../../../package.json').version
 
 describe('startup logging', () => {
   let firstStderrCall
