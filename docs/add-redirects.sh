@@ -55,6 +55,7 @@ declare -a plugins=(
   "oracledb"
   "pino"
   "pg"
+  "prisma"
   "promise"
   "promise_js"
   "protobufjs"
