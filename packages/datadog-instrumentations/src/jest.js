@@ -730,7 +730,7 @@ function cliWrapper (cli, jestVersion) {
       searchSource => searchSourceWrapper(searchSource, jestVersion),
       { replaceGetter: true }
     )
-    // TODO: THIS IS NEVER EXECUTED MUST BE REVIEWED
+    // TODO: THIS IS NEVER EXECUTED MUST BE REMOVED
     cliWrapper = shimmer.wrap(
       cliWrapper,
       'createTestScheduler',
