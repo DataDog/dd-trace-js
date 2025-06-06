@@ -3,27 +3,26 @@
 const axios = require('axios')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { assertCodeOriginFromTraces } = require('../../datadog-code-origin/test/helpers')
 const { getNextLineNumber } = require('../../dd-trace/test/plugins/helpers')
 const { NODE_MAJOR } = require('../../../version')
 
 describe('Plugin', () => {
-  let fastify
-  let app
+  let fastify, app
 
   describe('fastify', () => {
     withVersions('fastify', 'fastify', (version, _, specificVersion) => {
       if (NODE_MAJOR <= 18 && semver.satisfies(specificVersion, '>=5')) return
-      afterEach(() => {
-        app.close()
-      })
+
+      afterEach(() => app.close())
 
       withExports('fastify', version, ['default', 'fastify'], '>=3', getExport => {
-        beforeEach(() => {
+        beforeEach(async () => {
           fastify = getExport()
           app = fastify()
 
           if (semver.intersects(version, '>=3')) {
-            return app.register(require('../../../versions/middie').get())
+            await app.register(require('../../../versions/middie').get())
           }
         })
 
@@ -65,142 +64,61 @@ describe('Plugin', () => {
 
               after(() => agent.close({ ritmReset: false, wipe: true }))
 
-              it('should add code_origin tag on entry spans when feature is enabled', async () => {
-                let routeRegisterLine
+              it('should add code_origin tag on entry spans when feature is enabled', async function testCase () {
+                let line
 
-                // Wrap in a named function to have at least one frame with a function name
-                function wrapperFunction () {
-                  routeRegisterLine = String(getNextLineNumber())
-                  app.get('/user', function userHandler (request, reply) {
+                // Wrap in a function to have a frame without a function or type name
+                (() => {
+                  line = getNextLineNumber()
+                  app.get('/user', (request, reply) => {
                     reply.send()
                   })
-                }
+                })()
 
-                const callWrapperLine = String(getNextLineNumber())
-                wrapperFunction()
-
-                await app.listen(getListenOptions())
-
-                await Promise.all([
-                  agent.assertSomeTraces(traces => {
-                    const spans = traces[0]
-                    const tags = spans[0].meta
-
-                    expect(tags).to.have.property('_dd.code_origin.type', 'entry')
-
-                    expect(tags).to.have.property('_dd.code_origin.frames.0.file', __filename)
-                    expect(tags).to.have.property('_dd.code_origin.frames.0.line', routeRegisterLine)
-                    expect(tags).to.have.property('_dd.code_origin.frames.0.column').to.match(/^\d+$/)
-                    expect(tags).to.have.property('_dd.code_origin.frames.0.method', 'wrapperFunction')
-                    expect(tags).to.not.have.property('_dd.code_origin.frames.0.type')
-
-                    expect(tags).to.have.property('_dd.code_origin.frames.1.file', __filename)
-                    expect(tags).to.have.property('_dd.code_origin.frames.1.line', callWrapperLine)
-                    expect(tags).to.have.property('_dd.code_origin.frames.1.column').to.match(/^\d+$/)
-                    expect(tags).to.not.have.property('_dd.code_origin.frames.1.method')
-                    expect(tags).to.have.property('_dd.code_origin.frames.1.type', 'Context')
-
-                    expect(tags).to.not.have.property('_dd.code_origin.frames.2.file')
-                  }),
-                  axios.get(`http://localhost:${app.server.address().port}/user`)
-                ])
+                await assertCodeOrigin('/user', { line })
               })
 
               it('should point to where actual route handler is configured, not the prefix', async () => {
-                let routeRegisterLine
+                let line
 
                 app.register(function v1Handler (app, opts, done) {
-                  routeRegisterLine = String(getNextLineNumber())
-                  app.get('/user', function userHandler (request, reply) {
+                  line = getNextLineNumber()
+                  app.get('/user', (request, reply) => {
                     reply.send()
                   })
                   done()
                 }, { prefix: '/v1' })
 
-                await app.listen(getListenOptions())
+                await app.ready()
 
-                await Promise.all([
-                  agent.assertSomeTraces(traces => {
-                    const spans = traces[0]
-                    const tags = spans[0].meta
-
-                    expect(tags).to.have.property('_dd.code_origin.type', 'entry')
-
-                    expect(tags).to.have.property('_dd.code_origin.frames.0.file', __filename)
-                    expect(tags).to.have.property('_dd.code_origin.frames.0.line', routeRegisterLine)
-                    expect(tags).to.have.property('_dd.code_origin.frames.0.column').to.match(/^\d+$/)
-                    expect(tags).to.have.property('_dd.code_origin.frames.0.method', 'v1Handler')
-                    expect(tags).to.not.have.property('_dd.code_origin.frames.0.type')
-
-                    expect(tags).to.not.have.property('_dd.code_origin.frames.1.file')
-                  }),
-                  axios.get(`http://localhost:${app.server.address().port}/v1/user`)
-                ])
+                await assertCodeOrigin('/v1/user', { line, method: 'v1Handler' })
               })
 
               it('should point to route handler even if passed through a middleware', async function testCase () {
-                app.use(function middleware (req, res, next) {
+                app.use((req, res, next) => {
                   next()
                 })
-
-                const routeRegisterLine = String(getNextLineNumber())
-                app.get('/user', function userHandler (request, reply) {
+                const line = getNextLineNumber()
+                app.get('/user', (request, reply) => {
                   reply.send()
                 })
 
-                await app.listen(getListenOptions())
-
-                await Promise.all([
-                  agent.assertSomeTraces(traces => {
-                    const spans = traces[0]
-                    const tags = spans[0].meta
-
-                    expect(tags).to.have.property('_dd.code_origin.type', 'entry')
-
-                    expect(tags).to.have.property('_dd.code_origin.frames.0.file', __filename)
-                    expect(tags).to.have.property('_dd.code_origin.frames.0.line', routeRegisterLine)
-                    expect(tags).to.have.property('_dd.code_origin.frames.0.column').to.match(/^\d+$/)
-                    expect(tags).to.have.property('_dd.code_origin.frames.0.method', 'testCase')
-                    expect(tags).to.have.property('_dd.code_origin.frames.0.type', 'Context')
-
-                    expect(tags).to.not.have.property('_dd.code_origin.frames.1.file')
-                  }),
-                  axios.get(`http://localhost:${app.server.address().port}/user`)
-                ])
+                await assertCodeOrigin('/user', { line, method: 'testCase', type: 'Context' })
               })
 
               // TODO: In Fastify, the route is resolved before the middleware is called, so we actually can get the
               // line number of where the route handler is defined. However, this might not be the right choice and it
               // might be better to point to the middleware.
               it.skip('should point to middleware if middleware responds early', async function testCase () {
-                const middlewareRegisterLine = String(getNextLineNumber())
-                app.use(function middleware (req, res, next) {
+                const line = getNextLineNumber()
+                app.use((req, res, next) => {
                   res.end()
                 })
-
-                app.get('/user', function userHandler (request, reply) {
+                app.get('/user', (request, reply) => {
                   reply.send()
                 })
 
-                await app.listen(getListenOptions())
-
-                await Promise.all([
-                  agent.assertSomeTraces(traces => {
-                    const spans = traces[0]
-                    const tags = spans[0].meta
-
-                    expect(tags).to.have.property('_dd.code_origin.type', 'entry')
-
-                    expect(tags).to.have.property('_dd.code_origin.frames.0.file', __filename)
-                    expect(tags).to.have.property('_dd.code_origin.frames.0.line', middlewareRegisterLine)
-                    expect(tags).to.have.property('_dd.code_origin.frames.0.column').to.match(/^\d+$/)
-                    expect(tags).to.have.property('_dd.code_origin.frames.0.method', 'testCase')
-                    expect(tags).to.have.property('_dd.code_origin.frames.0.type', 'Context')
-
-                    expect(tags).to.not.have.property('_dd.code_origin.frames.1.file')
-                  }),
-                  axios.get(`http://localhost:${app.server.address().port}/user`)
-                ])
+                await assertCodeOrigin('/user', { line, method: 'testCase', type: 'Context' })
               })
             })
           }
@@ -208,6 +126,16 @@ describe('Plugin', () => {
       })
     })
   })
+
+  async function assertCodeOrigin (path, frame) {
+    await app.listen(getListenOptions())
+    await Promise.all([
+      agent.assertSomeTraces(traces => {
+        assertCodeOriginFromTraces(traces, { file: __filename, ...frame })
+      }),
+      axios.get(`http://localhost:${app.server.address().port}${path}`)
+    ])
+  }
 })
 
 // Required by Fastify 1.0.0

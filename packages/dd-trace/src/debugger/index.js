@@ -9,6 +9,7 @@ let worker = null
 let configChannel = null
 let ackId = 0
 
+// eslint-disable-next-line eslint-rules/eslint-process-env
 const { NODE_OPTIONS, ...env } = process.env
 
 module.exports = {
