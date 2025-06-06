@@ -1,4 +1,4 @@
-const { addHook, channel, AsyncResource } = require('./helpers/instrument')
+const { addHook, channel } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
 
@@ -38,7 +38,6 @@ const modifiedTasks = new WeakSet()
 let isRetryReasonEfd = false
 let isRetryReasonAttemptToFix = false
 const switchedStatuses = new WeakSet()
-const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 400
 
@@ -116,9 +115,7 @@ function isBaseSequencer (vitestPackage) {
 
 function getChannelPromise (channelToPublishTo) {
   return new Promise(resolve => {
-    sessionAsyncResource.runInAsyncScope(() => {
-      channelToPublishTo.publish({ onDone: resolve })
-    })
+    channelToPublishTo.publish({ onDone: resolve })
   })
 }
 
@@ -331,16 +328,14 @@ function getSortWrapper (sort) {
         error = new Error(`Test suites failed: ${failedSuites.length}.`)
       }
 
-      sessionAsyncResource.runInAsyncScope(() => {
-        testSessionFinishCh.publish({
-          status: getSessionStatus(this.state),
-          testCodeCoverageLinesTotal,
-          error,
-          isEarlyFlakeDetectionEnabled,
-          isEarlyFlakeDetectionFaulty,
-          isTestManagementTestsEnabled,
-          onFinish
-        })
+      testSessionFinishCh.publish({
+        status: getSessionStatus(this.state),
+        testCodeCoverageLinesTotal,
+        error,
+        isEarlyFlakeDetectionEnabled,
+        isEarlyFlakeDetectionFaulty,
+        isTestManagementTestsEnabled,
+        onFinish
       })
 
       await flushPromise
@@ -357,10 +352,8 @@ function getCreateCliWrapper (vitestPackage, frameworkVersion) {
     if (!testSessionStartCh.hasSubscribers) {
       return oldCreateCli.apply(this, arguments)
     }
-    sessionAsyncResource.runInAsyncScope(() => {
-      const processArgv = process.argv.slice(2).join(' ')
-      testSessionStartCh.publish({ command: `vitest ${processArgv}`, frameworkVersion })
-    })
+    const processArgv = process.argv.slice(2).join(' ')
+    testSessionStartCh.publish({ command: `vitest ${processArgv}`, frameworkVersion })
     return oldCreateCli.apply(this, arguments)
   })
 
