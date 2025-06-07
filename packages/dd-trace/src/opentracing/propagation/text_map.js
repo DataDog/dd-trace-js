@@ -126,10 +126,10 @@ class TextMapPropagator {
   }
 
   _injectBaggageItems (spanContext, carrier) {
-    if (this._config.legacyBaggageEnabled) {
-      spanContext?._baggageItems && Object.keys(spanContext._baggageItems).forEach(key => {
+    if (this._config.legacyBaggageEnabled && spanContext?._baggageItems) {
+      for (const key of Object.keys(spanContext._baggageItems)) {
         carrier[baggagePrefix + key] = String(spanContext._baggageItems[key])
-      })
+      }
     }
     if (this._hasPropagationStyle('inject', 'baggage')) {
       let baggage = ''
@@ -161,14 +161,14 @@ class TextMapPropagator {
 
     const tags = []
 
-    for (const key in trace.tags) {
-      if (!trace.tags[key] || !key.startsWith('_dd.p.')) continue
-      if (!this._validateTagKey(key) || !this._validateTagValue(trace.tags[key])) {
+    for (const [key, value] of Object.entries(trace.tags)) {
+      if (!value || !key.startsWith('_dd.p.')) continue
+      if (!this._validateTagKey(key) || !this._validateTagValue(value)) {
         log.error('Trace tags from span are invalid, skipping injection.')
         return
       }
 
-      tags.push(`${key}=${trace.tags[key]}`)
+      tags.push(`${key}=${value}`)
     }
 
     const header = tags.join(',')
@@ -245,7 +245,7 @@ class TextMapPropagator {
         state.set('o', originValue)
       }
 
-      for (const key in tags) {
+      for (const key of Object.keys(tags)) {
         if (!tags[key] || !key.startsWith('_dd.p.')) continue
 
         const tagKey = 't.' + key.slice(6)
@@ -274,7 +274,7 @@ class TextMapPropagator {
   }
 
   _hasParentIdInTags (spanContext) {
-    return tags.DD_PARENT_ID in spanContext._trace.tags
+    return spanContext._trace.tags[tags.DD_PARENT_ID] !== undefined
   }
 
   _updateParentIdFromDdHeaders (carrier, firstSpanContext) {
@@ -577,7 +577,8 @@ class TextMapPropagator {
         [b3SampledKey]: '1',
         [b3FlagsKey]: '1'
       }
-    } else if (parts.length === 1) {
+    }
+    if (parts.length === 1) {
       return {
         [b3SampledKey]: parts[0]
       }
@@ -615,13 +616,13 @@ class TextMapPropagator {
 
   _extractLegacyBaggageItems (carrier, spanContext) {
     if (this._config.legacyBaggageEnabled) {
-      Object.keys(carrier).forEach(key => {
+      for (const key of Object.keys(carrier)) {
         const match = key.match(baggageExpr)
 
         if (match) {
           spanContext._baggageItems[match[1]] = carrier[key]
         }
-      })
+      }
     }
   }
 
@@ -717,9 +718,11 @@ class TextMapPropagator {
   _getPriority (sampled, debug) {
     if (debug) {
       return USER_KEEP
-    } else if (sampled === '1') {
+    }
+    if (sampled === '1') {
       return AUTO_KEEP
-    } else if (sampled === '0') {
+    }
+    if (sampled === '0') {
       return AUTO_REJECT
     }
   }

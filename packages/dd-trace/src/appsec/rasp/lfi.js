@@ -53,7 +53,7 @@ function analyzeLfi (ctx) {
   const { req, fs, res } = store
   if (!req || !fs) return
 
-  getPaths(ctx, fs).forEach(path => {
+  for (const path of getPaths(ctx, fs)) {
     const ephemeral = {
       [FS_OPERATION_PATH]: path
     }
@@ -62,7 +62,7 @@ function analyzeLfi (ctx) {
 
     const result = waf.run({ ephemeral }, req, raspRule)
     handleResult(result, req, res, ctx.abortController, config, raspRule)
-  })
+  }
 }
 
 function getPaths (ctx, fs) {

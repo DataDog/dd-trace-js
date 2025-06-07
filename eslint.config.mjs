@@ -107,6 +107,7 @@ export default [
       'no-prototype-builtins': 'off', // Override (turned on by @eslint/js/recommended)
       'no-unused-expressions': 'off', // Override (turned on by standard)
       'no-var': 'error', // Override (set to warn in standard)
+      'prefer-object-has-own': 'error', // Override (set to warn in standard)
       'require-await': 'error'
     }
   },
@@ -136,8 +137,15 @@ export default [
       ]],
 
       'no-await-in-loop': 'error',
-      'no-else-return': ['error', { allowElseIf: true }],
+      'no-else-return': ['error', { allowElseIf: false }],
       'no-implicit-coercion': ['error', { boolean: true, number: true, string: true, allow: ['!!'] }],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'BinaryExpression[operator="in"]',
+          message: 'Using "in" operator is not allowed.'
+        }
+      ],
       'no-useless-assignment': 'error',
       'operator-assignment': 'error',
       'prefer-exponentiation-operator': 'error',
@@ -150,11 +158,9 @@ export default [
       ...eslintPluginUnicorn.configs.recommended.rules,
 
       // Overriding recommended unicorn rules
-      'unicorn/catch-error-name': ['off', { name: 'err' }], // 166 errors
       'unicorn/expiring-todo-comments': 'off',
       'unicorn/explicit-length-check': 'off', // 68 errors
       'unicorn/filename-case': ['off', { case: 'kebabCase' }], // 59 errors
-      'unicorn/no-array-for-each': 'off', // 122 errors
       'unicorn/prefer-at': 'off', // 17 errors | Difficult to fix
       'unicorn/prevent-abbreviations': 'off', // too strict
 

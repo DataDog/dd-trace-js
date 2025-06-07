@@ -7,7 +7,7 @@ class LangChainLLMHandler extends LangChainLanguageModelHandler {
     const tags = {}
 
     const prompts = ctx.args?.[0]
-    for (const promptIdx in prompts) {
+    for (let promptIdx = 0; promptIdx < prompts.length; promptIdx++) {
       if (!this.isPromptCompletionSampled(span)) continue
 
       const prompt = prompts[promptIdx]
@@ -30,15 +30,17 @@ class LangChainLLMHandler extends LangChainLanguageModelHandler {
     return tags
   }
 
-  getSpanEndTags (ctx, span) {
-    const { result } = ctx
+  getSpanEndTags ({ result, currentStore }, span) {
+    if (!result?.generations) {
+      return {}
+    }
 
     const tags = {}
     const sampled = this.isPromptCompletionSampled(span)
 
-    this.extractTokenMetrics(ctx.currentStore?.span, result)
+    this.extractTokenMetrics(currentStore?.span, result)
 
-    for (const completionIdx in result?.generations) {
+    for (let completionIdx = 0; completionIdx < result.generations.length; completionIdx++) {
       const completion = result.generations[completionIdx]
       if (sampled) {
         tags[`langchain.response.completions.${completionIdx}.text`] = this.normalize(completion[0].text) || ''

@@ -73,7 +73,8 @@ function compileSegments (segments) {
 function compile (node) {
   if (node === null || typeof node === 'number' || typeof node === 'boolean') {
     return node
-  } else if (typeof node === 'string') {
+  }
+  if (typeof node === 'string') {
     return JSON.stringify(node)
   }
 
@@ -81,11 +82,14 @@ function compile (node) {
 
   if (type === 'not') {
     return `!(${compile(value)})`
-  } else if (type === 'len' || type === 'count') {
+  }
+  if (type === 'len' || type === 'count') {
     return getSize(compile(value))
-  } else if (type === 'isEmpty') {
+  }
+  if (type === 'isEmpty') {
     return `${getSize(compile(value))} === 0`
-  } else if (type === 'isDefined') {
+  }
+  if (type === 'isDefined') {
     return `(() => {
       try {
         ${compile(value)}
@@ -94,20 +98,25 @@ function compile (node) {
         return false
       }
     })()`
-  } else if (type === 'instanceof') {
+  }
+  if (type === 'instanceof') {
     return isPrimitiveType(value[1])
       ? `(typeof ${compile(value[0])} === '${value[1]}')` // TODO: Is parenthesizing necessary?
       : `Function.prototype[Symbol.hasInstance].call(${assertIdentifier(value[1])}, ${compile(value[0])})`
-  } else if (type === 'ref') {
+  }
+  if (type === 'ref') {
     if (value === '@it') {
       return '$dd_it'
-    } else if (value === '@key') {
+    }
+    if (value === '@key') {
       return '$dd_key'
-    } else if (value === '@value') {
+    }
+    if (value === '@value') {
       return '$dd_value'
     }
     return assertIdentifier(value)
-  } else if (Array.isArray(value)) {
+  }
+  if (Array.isArray(value)) {
     const args = value.map(compile)
     switch (type) {
       case 'eq': return `(${args[0]}) === (${args[1]})`

@@ -139,8 +139,8 @@ function wrapQuery (query) {
 
       try {
         return retval
-      } catch (err) {
-        errorCh.publish(err)
+      } catch (error) {
+        errorCh.publish(error)
       }
     })
   }

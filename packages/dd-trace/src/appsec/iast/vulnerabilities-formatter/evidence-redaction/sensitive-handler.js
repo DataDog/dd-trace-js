@@ -222,7 +222,7 @@ class SensitiveHandler {
         let _value = partValue
         const dedupedSourceRedactionContexts = []
 
-        sourceRedactionContext.forEach(_sourceRedactionContext => {
+        for (const _sourceRedactionContext of sourceRedactionContext) {
           const isPresentInDeduped = dedupedSourceRedactionContexts.some(_dedupedSourceRedactionContext =>
             _dedupedSourceRedactionContext.start === _sourceRedactionContext.start &&
             _dedupedSourceRedactionContext.end === _sourceRedactionContext.end
@@ -231,10 +231,10 @@ class SensitiveHandler {
           if (!isPresentInDeduped) {
             dedupedSourceRedactionContexts.push(_sourceRedactionContext)
           }
-        })
+        }
 
         let offset = 0
-        dedupedSourceRedactionContexts.forEach((_sourceRedactionContext) => {
+        for (const _sourceRedactionContext of dedupedSourceRedactionContexts) {
           if (_sourceRedactionContext.start > 0) {
             valueParts.push({
               source: sourceIndex,
@@ -261,7 +261,7 @@ class SensitiveHandler {
 
           _value = _value.slice(pattern.length)
           offset += pattern.length
-        })
+        }
 
         if (_value.length) {
           valueParts.push({

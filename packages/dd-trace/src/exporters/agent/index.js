@@ -37,8 +37,8 @@ class AgentExporter {
       url = new URL(url)
       this._url = url
       this._writer.setUrl(url)
-    } catch (e) {
-      log.warn(e.stack)
+    } catch (error) {
+      log.warn(error.stack)
     }
   }
 

@@ -131,12 +131,9 @@ class PrioritySampler {
    */
   update (rates) {
     const samplers = {}
-
-    for (const key in rates) {
-      const rate = rates[key]
+    for (const [key, rate] of Object.entries(rates)) {
       samplers[key] = new Sampler(rate)
     }
-
     samplers[DEFAULT_KEY] = samplers[DEFAULT_KEY] || defaultSampler
 
     this._samplers = samplers
@@ -221,14 +218,16 @@ class PrioritySampler {
   _getPriorityFromTags (tags, _context) {
     if (Object.hasOwn(tags, MANUAL_KEEP) && tags[MANUAL_KEEP] !== false) {
       return USER_KEEP
-    } else if (Object.hasOwn(tags, MANUAL_DROP) && tags[MANUAL_DROP] !== false) {
+    }
+    if (Object.hasOwn(tags, MANUAL_DROP) && tags[MANUAL_DROP] !== false) {
       return USER_REJECT
     }
     const priority = Number.parseInt(tags[SAMPLING_PRIORITY], 10)
 
     if (priority === 1 || priority === 2) {
       return USER_KEEP
-    } else if (priority === 0 || priority === -1) {
+    }
+    if (priority === 0 || priority === -1) {
       return USER_REJECT
     }
   }

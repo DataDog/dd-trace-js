@@ -59,8 +59,8 @@ function getFilteredCsiFn (cb, filter, getContext) {
       if (transactionId) {
         return cb(transactionId, res, target, ...rest)
       }
-    } catch (e) {
-      log.error('[ASM] Error invoking CSI %s', target, e)
+    } catch (error) {
+      log.error('[ASM] Error invoking CSI %s', target, error)
     }
     return res
   }
@@ -89,14 +89,14 @@ function getCsiFn (cb, getContext, ...protos) {
 
 function csiMethodsDefaults (names, excluded, getContext) {
   const impl = {}
-  names.forEach(name => {
-    if (excluded.includes(name)) return
+  for (const name of names) {
+    if (excluded.includes(name)) continue
     impl[name] = getCsiFn(
       (transactionId, res, target, ...rest) => TaintedUtils[name](transactionId, res, target, ...rest),
       getContext,
       String.prototype[name]
     )
-  })
+  }
   return impl
 }
 
@@ -110,8 +110,8 @@ function csiMethodsOverrides (getContext) {
         if (transactionId) {
           return TaintedUtils.concat(transactionId, res, op1, op2)
         }
-      } catch (e) {
-        log.error('[ASM] Error invoking CSI plusOperator', e)
+      } catch (error) {
+        log.error('[ASM] Error invoking CSI plusOperator', error)
       }
       return res
     },
@@ -123,8 +123,8 @@ function csiMethodsOverrides (getContext) {
         if (transactionId) {
           return TaintedUtils.concat(transactionId, res, ...rest)
         }
-      } catch (e) {
-        log.error('[ASM] Error invoking CSI tplOperator', e)
+      } catch (error) {
+        log.error('[ASM] Error invoking CSI tplOperator', error)
       }
       return res
     },
@@ -174,8 +174,8 @@ function csiMethodsOverrides (getContext) {
               res = taintObject(iastContext, res, range?.iinfo.type || JSON_VALUE)
             }
           }
-        } catch (e) {
-          log.error('[ASM] Error invoking CSI JSON.parse', e)
+        } catch (error) {
+          log.error('[ASM] Error invoking CSI JSON.parse', error)
         }
       }
 
@@ -190,8 +190,8 @@ function csiMethodsOverrides (getContext) {
           if (transactionId) {
             res = TaintedUtils.arrayJoin(transactionId, res, target, separator)
           }
-        } catch (e) {
-          log.error('[ASM] Error invoking CSI join', e)
+        } catch (error) {
+          log.error('[ASM] Error invoking CSI join', error)
         }
       }
 
@@ -246,8 +246,8 @@ function lodashTaintTrackingHandler (message) {
     if (transactionId) {
       message.result = getLodashTaintedUtilFn(message.operation)(transactionId, message.result, ...message.arguments)
     }
-  } catch (e) {
-    log.error('[ASM] Error invoking CSI lodash %s', message.operation, e)
+  } catch (error) {
+    log.error('[ASM] Error invoking CSI lodash %s', message.operation, error)
   }
 }
 

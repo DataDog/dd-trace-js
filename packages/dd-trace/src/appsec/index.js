@@ -83,9 +83,9 @@ function enable (_config) {
 
     isEnabled = true
     config = _config
-  } catch (err) {
+  } catch (error) {
     if (!isInServerlessEnvironment()) {
-      log.error('[ASM] Unable to start AppSec', err)
+      log.error('[ASM] Unable to start AppSec', error)
     }
 
     disable()

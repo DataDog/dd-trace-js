@@ -60,7 +60,7 @@ class AgentEncoder extends BaseEncoder {
   }
 
   _cacheString (value) {
-    if (!(value in this._stringMap)) {
+    if (!this._stringMap[value]) {
       this._stringMap[value] = this._stringCount++
       this._stringBytes.write(value)
     }

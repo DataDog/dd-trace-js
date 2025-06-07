@@ -33,10 +33,10 @@ async function getLocalStateForCallFrame (
         { maxReferenceDepth, maxCollectionSize, maxFieldCount }
       ))
     }))
-  } catch (err) {
+  } catch (error) {
     // TODO: We might be able to get part of the scope chain.
     // Consider if we could set errors just for the part of the scope chain that throws during collection.
-    log.error('[debugger:devtools_client] Error getting local state for call frame', err)
+    log.error('[debugger:devtools_client] Error getting local state for call frame', error)
     return () => new Error('Error getting local state')
   }
 

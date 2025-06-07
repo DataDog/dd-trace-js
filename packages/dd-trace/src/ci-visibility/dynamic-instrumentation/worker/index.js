@@ -109,8 +109,8 @@ async function addBreakpoint (probe) {
   if (sourceMapURL) {
     try {
       ({ line: lineNumber, column: columnNumber } = await getGeneratedPosition(url, source, line, sourceMapURL))
-    } catch (err) {
-      log.error('Error processing script with source map', err)
+    } catch (error) {
+      log.error('Error processing script with source map', error)
     }
     if (lineNumber === null) {
       log.error('Could not find generated position for %s:%s', url, line)
@@ -130,8 +130,8 @@ async function addBreakpoint (probe) {
 
     breakpointIdToProbe.set(breakpointId, probe)
     probeIdToBreakpointId.set(probe.id, breakpointId)
-  } catch (e) {
-    log.error('Error setting breakpoint at %s:%s', url, line, e)
+  } catch (error) {
+    log.error('Error setting breakpoint at %s:%s', url, line, error)
   }
 }
 

@@ -38,9 +38,9 @@ function wrapGenerateStream (generateStream) {
       let streamingResult
       try {
         streamingResult = generateStream.apply(this, arguments)
-      } catch (e) {
-        finish(ctx, null, e, true)
-        throw e
+      } catch (error) {
+        finish(ctx, null, error, true)
+        throw error
       }
 
       vertexaiTracingChannel.end.publish(ctx)
@@ -48,15 +48,15 @@ function wrapGenerateStream (generateStream) {
       return streamingResult.then(stream => {
         stream.response.then(response => {
           finish(ctx, response, null)
-        }).catch(e => {
-          finish(ctx, null, e)
-          throw e
+        }).catch(error => {
+          finish(ctx, null, error)
+          throw error
         })
 
         return stream
-      }).catch(e => {
-        finish(ctx, null, e)
-        throw e
+      }).catch(error => {
+        finish(ctx, null, error)
+        throw error
       })
     })
   }

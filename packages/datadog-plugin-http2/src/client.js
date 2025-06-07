@@ -163,7 +163,8 @@ function hasAmazonSignature (headers, path) {
 function getStatusValidator (config) {
   if (typeof config.validateStatus === 'function') {
     return config.validateStatus
-  } else if (config.hasOwnProperty('validateStatus')) {
+  }
+  if (Object.hasOwn(config, 'validateStatus')) {
     log.error('Expected `validateStatus` to be a function.')
   }
   return code => code < 400 || code >= 500
@@ -191,13 +192,13 @@ function getFilter (config) {
 function addHeaderTags (span, headers, prefix, config) {
   if (!headers) return
 
-  config.headers.forEach(key => {
+  for (const key of config.headers) {
     const value = headers[key]
 
     if (value) {
       span.setTag(`${prefix}.${key}`, value)
     }
-  })
+  }
 }
 
 function getHeaders (config) {

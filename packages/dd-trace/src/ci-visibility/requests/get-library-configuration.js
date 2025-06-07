@@ -136,8 +136,8 @@ function getLibraryConfiguration ({
         incrementCountMetric(TELEMETRY_GIT_REQUESTS_SETTINGS_RESPONSE, settings)
 
         done(null, settings)
-      } catch (err) {
-        done(err)
+      } catch (error) {
+        done(error)
       }
     }
   })

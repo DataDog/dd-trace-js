@@ -109,8 +109,8 @@ function getSkippableSuites ({
         distributionMetric(TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_BYTES, {}, res.length)
         log.debug(() => `Number of received skippable ${testLevel}s: ${skippableSuites.length}`)
         done(null, skippableSuites, correlationId)
-      } catch (err) {
-        done(err)
+      } catch (error) {
+        done(error)
       }
     }
   })

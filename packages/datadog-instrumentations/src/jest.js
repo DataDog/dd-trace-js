@@ -183,8 +183,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           this.testManagementTestsForThisSuite = hasTestManagementTests
             ? this.getTestManagementTestsForSuite(testManagementTests?.jest?.suites?.[this.testSuite]?.tests)
             : this.getTestManagementTestsForSuite(this.testEnvironmentOptions._ddTestManagementTests)
-        } catch (e) {
-          log.error('Error parsing test management tests', e)
+        } catch (error) {
+          log.error('Error parsing test management tests', error)
           this.isTestManagementTestsEnabled = false
         }
       }
@@ -195,8 +195,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           this.modifiedTestsForThisSuite = hasImpactedTests
             ? this.getModifiedTestForThisSuite(modifiedTests)
             : this.getModifiedTestForThisSuite(this.testEnvironmentOptions._ddModifiedTests)
-        } catch (e) {
-          log.error('Error parsing impacted tests', e)
+        } catch (error) {
+          log.error('Error parsing impacted tests', error)
           this.isImpactedTestsEnabled = false
         }
       }
@@ -256,7 +256,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         quarantined: []
       }
 
-      Object.entries(testManagementTestsForSuite).forEach(([testName, { properties }]) => {
+      for (const [testName, { properties }] of Object.entries(testManagementTestsForSuite)) {
         if (properties?.attempt_to_fix) {
           result.attemptToFix.push(testName)
         }
@@ -266,7 +266,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         if (properties?.quarantined) {
           result.quarantined.push(testName)
         }
-      })
+      }
 
       return result
     }
@@ -721,8 +721,8 @@ function cliWrapper (cli, jestVersion) {
         testManagementAttemptToFixRetries = libraryConfig.testManagementAttemptToFixRetries
         isImpactedTestsEnabled = libraryConfig.isImpactedTestsEnabled
       }
-    } catch (err) {
-      log.error('Jest library configuration error', err)
+    } catch (error_) {
+      log.error('Jest library configuration error', error_)
     }
 
     if (isKnownTestsEnabled) {
@@ -741,8 +741,8 @@ function cliWrapper (cli, jestVersion) {
         } else {
           knownTests = receivedKnownTests
         }
-      } catch (err) {
-        log.error('Jest known tests error', err)
+      } catch (error_) {
+        log.error('Jest known tests error', error_)
       }
     }
 
@@ -758,8 +758,8 @@ function cliWrapper (cli, jestVersion) {
         if (!err) {
           skippableSuites = receivedSkippableSuites
         }
-      } catch (err) {
-        log.error('Jest test-suite skippable error', err)
+      } catch (error_) {
+        log.error('Jest test-suite skippable error', error_)
       }
     }
 
@@ -775,8 +775,8 @@ function cliWrapper (cli, jestVersion) {
         if (!err) {
           testManagementTests = receivedTestManagementTests
         }
-      } catch (err) {
-        log.error('Jest test management tests error', err)
+      } catch (error_) {
+        log.error('Jest test management tests error', error_)
       }
     }
 
@@ -792,8 +792,8 @@ function cliWrapper (cli, jestVersion) {
         if (!err) {
           modifiedTests = receivedModifiedTests
         }
-      } catch (err) {
-        log.error('Jest impacted tests error', err)
+      } catch (error_) {
+        log.error('Jest impacted tests error', error_)
       }
     }
 
@@ -1044,9 +1044,9 @@ function configureTestEnvironment (readConfigsResult) {
   testSessionConfigurationCh.publish(configs.map(config => config.testEnvironmentOptions))
   // We can't directly use isCodeCoverageEnabled when reporting coverage in `jestAdapterWrapper`
   // because `jestAdapterWrapper` runs in a different process. We have to go through `testEnvironmentOptions`
-  configs.forEach(config => {
+  for (const config of configs) {
     config.testEnvironmentOptions._ddTestCodeCoverageEnabled = isCodeCoverageEnabled
-  })
+  }
 
   isUserCodeCoverageEnabled = !!readConfigsResult.globalConfig.collectCoverage
 

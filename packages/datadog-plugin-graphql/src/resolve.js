@@ -47,12 +47,12 @@ class GraphQLResolvePlugin extends TracingPlugin {
     if (fieldNode && this.config.variables && fieldNode.arguments) {
       const variables = this.config.variables(info.variableValues)
 
-      fieldNode.arguments
-        .filter(arg => arg.value?.name && arg.value.kind === 'Variable' && variables[arg.value.name.value])
-        .forEach(arg => {
-          const name = arg.value.name.value
+      for (const arg of fieldNode.arguments) {
+        const name = arg.value?.name?.value
+        if (name && arg.value.kind === 'Variable' && variables[name]) {
           span.setTag(`graphql.variables.${name}`, variables[name])
-        })
+        }
+      }
     }
 
     if (this.resolverStartCh.hasSubscribers) {

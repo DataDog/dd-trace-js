@@ -169,9 +169,7 @@ const web = {
 
     analyticsSampler.sample(span, config.measured)
 
-    span.addTags({
-      [RESOURCE_NAME]: middleware._name || middleware.name || '<anonymous>'
-    })
+    span.setTag(RESOURCE_NAME, middleware._name || middleware.name || '<anonymous>')
 
     context.middleware.push(span)
 
@@ -182,9 +180,9 @@ const web = {
   bindAndWrapMiddlewareErrors (fn, req, tracer, activeSpan) {
     try {
       return tracer.scope().bind(fn, activeSpan).apply(this, arguments)
-    } catch (e) {
-      web.addError(req, e) // TODO: remove when error formatting is moved to Span
-      throw e
+    } catch (error) {
+      web.addError(req, error) // TODO: remove when error formatting is moved to Span
+      throw error
     }
   },
 
@@ -463,7 +461,7 @@ function addRequestTags (context, spanType) {
   })
 
   // if client ip has already been set by appsec, no need to run it again
-  if (extractIp && !span.context()._tags.hasOwnProperty(HTTP_CLIENT_IP)) {
+  if (extractIp && !Object.hasOwn(span.context()._tags, HTTP_CLIENT_IP)) {
     const clientIp = extractIp(config, req)
 
     if (clientIp) {
@@ -483,12 +481,8 @@ function addResponseTags (context) {
     span.setTag(HTTP_ROUTE, route)
   }
 
-  span.addTags({
-    [HTTP_STATUS_CODE]: res.statusCode
-  })
-  inferredProxySpan?.addTags({
-    [HTTP_STATUS_CODE]: res.statusCode
-  })
+  span.setTag(HTTP_STATUS_CODE, res.statusCode)
+  inferredProxySpan?.setTag(HTTP_STATUS_CODE, res.statusCode)
 
   web.addStatusError(req, res.statusCode)
 }
@@ -509,7 +503,7 @@ function addResourceTag (context) {
 function addHeaders (context) {
   const { req, res, config, span, inferredProxySpan } = context
 
-  config.headers.forEach(([key, tag]) => {
+  for (const [key, tag] of config.headers) {
     const reqHeader = req.headers[key]
     const resHeader = res.getHeader(key)
 
@@ -522,7 +516,7 @@ function addHeaders (context) {
       span.setTag(tag || `${HTTP_RESPONSE_HEADERS}.${key}`, resHeader)
       inferredProxySpan?.setTag(tag || `${HTTP_RESPONSE_HEADERS}.${key}`, resHeader)
     }
-  })
+  }
 }
 
 function extractURL (req) {
@@ -545,13 +539,14 @@ function getProtocol (req) {
 function getHeadersToRecord (config) {
   if (Array.isArray(config.headers)) {
     try {
-      return config.headers
-        .map(h => h.split(':'))
-        .map(([key, tag]) => [key.toLowerCase(), tag])
-    } catch (err) {
-      log.error('Web plugin error getting headers', err)
+      return config.headers.map(header => {
+        const [key, tag] = header.split(':')
+        return [key.toLowerCase(), tag]
+      })
+    } catch (error) {
+      log.error('Web plugin error getting headers', error)
     }
-  } else if (config.hasOwnProperty('headers')) {
+  } else if (Object.hasOwn(config, 'headers')) {
     log.error('Expected `headers` to be an array of strings.')
   }
   return []
@@ -560,7 +555,8 @@ function getHeadersToRecord (config) {
 function getStatusValidator (config) {
   if (typeof config.validateStatus === 'function') {
     return config.validateStatus
-  } else if (config.hasOwnProperty('validateStatus')) {
+  }
+  if (Object.hasOwn(config, 'validateStatus')) {
     log.error('Expected `validateStatus` to be a function.')
   }
   return code => code < 500
@@ -575,12 +571,14 @@ function getHooks (config) {
 }
 
 function getMiddlewareSetting (config) {
-  if (config && typeof config.middleware === 'boolean') {
-    return config.middleware
-  } else if (config && config.hasOwnProperty('middleware')) {
-    log.error('Expected `middleware` to be a boolean.')
+  if (config) {
+    if (typeof config.middleware === 'boolean') {
+      return config.middleware
+    }
+    if (Object.hasOwn(config, 'middleware')) {
+      log.error('Expected `middleware` to be a boolean.')
+    }
   }
-
   return true
 }
 
@@ -598,12 +596,12 @@ function getQsObfuscator (config) {
 
     try {
       return new RegExp(obfuscator, 'gi')
-    } catch (err) {
-      log.error('Web plugin error getting qs obfuscator', err)
+    } catch (error) {
+      log.error('Web plugin error getting qs obfuscator', error)
     }
   }
 
-  if (config.hasOwnProperty('queryStringObfuscation')) {
+  if (Object.hasOwn(config, 'queryStringObfuscation')) {
     log.error('Expected `queryStringObfuscation` to be a regex string or boolean.')
   }
 

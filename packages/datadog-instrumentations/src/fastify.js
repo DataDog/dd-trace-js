@@ -68,12 +68,12 @@ function wrapAddHook (addHook) {
         const promise = fn.apply(this, arguments)
 
         if (promise && typeof promise.catch === 'function') {
-          return promise.catch(err => publishError(err, req))
+          return promise.catch(error => publishError(error, req))
         }
 
         return promise
-      } catch (e) {
-        throw publishError(e, req)
+      } catch (error) {
+        throw publishError(error, req)
       }
     })
 

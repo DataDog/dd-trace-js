@@ -38,12 +38,12 @@ class IastPluginSubscription {
     if (!this.moduleInstrumented) {
       this.moduleInstrumented = true
 
-      this.tags.forEach(tag => this.instrumentedMetric.inc(undefined, tag))
+      for (const tag of this.tags) this.instrumentedMetric.inc(undefined, tag)
     }
   }
 
   increaseExecuted (iastContext) {
-    this.tags.forEach(tag => this.executedMetric.inc(iastContext, tag))
+    for (const tag of this.tags) this.executedMetric.inc(iastContext, tag)
   }
 
   matchesModuleInstrumented (name) {
@@ -72,14 +72,14 @@ class IastPlugin extends Plugin {
       const result = handler()
       if (iastTelemetry.isEnabled()) {
         if (Array.isArray(tags)) {
-          tags.forEach(tag => metric.inc(iastContext, tag))
+          for (const tag of tags) metric.inc(iastContext, tag)
         } else {
           metric.inc(iastContext, tags)
         }
       }
       return result
-    } catch (e) {
-      log.error('[ASM] Error executing handler or increasing metrics', e)
+    } catch (error) {
+      log.error('[ASM] Error executing handler or increasing metrics', error)
     }
   }
 
@@ -158,7 +158,7 @@ class IastPlugin extends Plugin {
     loadChannel.subscribe(this.onInstrumentationLoadedListener)
 
     // check for already instrumented modules
-    for (const name in instrumentations) {
+    for (const name of Object.keys(instrumentations)) {
       this._onInstrumentationLoaded(name)
     }
   }
@@ -174,9 +174,11 @@ class IastPlugin extends Plugin {
   }
 
   _onInstrumentationLoaded (name) {
-    this.pluginSubs
-      .filter(sub => sub.matchesModuleInstrumented(name))
-      .forEach(sub => sub.increaseInstrumented())
+    for (const sub of this.pluginSubs) {
+      if (sub.matchesModuleInstrumented(name)) {
+        sub.increaseInstrumented()
+      }
+    }
   }
 }
 

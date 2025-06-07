@@ -131,8 +131,7 @@ function findArgumentsBounds (str) {
 
 const memo = new WeakMap()
 function getFunctionArguments (fn, args = []) {
-  if (!fn) return
-  if (!args.length) return
+  if (!fn || !args.length) return
   if (args.length === 1) return args[0]
 
   try {
@@ -148,7 +147,7 @@ function getFunctionArguments (fn, args = []) {
 
     const argsObject = {}
 
-    for (const argIdx in args) {
+    for (let argIdx = 0; argIdx < args.length; argIdx++) {
       const name = names[argIdx]
       const arg = args[argIdx]
 

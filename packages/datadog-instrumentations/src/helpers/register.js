@@ -112,8 +112,8 @@ for (const packageName of names) {
         try {
           version = version || getVersion(moduleBaseDir)
           allInstrumentations[instrumentationFileName] = allInstrumentations[instrumentationFileName] || false
-        } catch (e) {
-          log.error('Error getting version for "%s": %s', name, e.message, e)
+        } catch (error) {
+          log.error('Error getting version for "%s": %s', name, error.message, error)
           continue
         }
         if (namesAndSuccesses[`${name}@${version}`] === undefined && !file) {
@@ -148,10 +148,10 @@ for (const packageName of names) {
             moduleExports = hook(moduleExports, version, name) ?? moduleExports
             // Set the moduleExports in the hooks WeakSet
             hook[HOOK_SYMBOL].add(moduleExports)
-          } catch (e) {
-            log.info('Error during ddtrace instrumentation of application, aborting.', e)
+          } catch (error) {
+            log.info('Error during ddtrace instrumentation of application, aborting.', error)
             telemetry('error', [
-              `error_type:${e.constructor.name}`,
+              `error_type:${error.constructor.name}`,
               `integration:${name}`,
               `integration_version:${version}`
             ])

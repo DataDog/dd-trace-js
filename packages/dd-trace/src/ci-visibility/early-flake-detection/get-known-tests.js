@@ -99,8 +99,8 @@ function getKnownTests ({
         log.debug(() => `Number of received known tests: ${numTests}`)
 
         done(null, knownTests)
-      } catch (err) {
-        done(err)
+      } catch (error) {
+        done(error)
       }
     }
   })

@@ -43,10 +43,10 @@ function createWrapRequest (authority, options) {
           shimmer.wrap(req, 'emit', createWrapEmit(ctx))
 
           return req
-        } catch (e) {
-          ctx.error = e
+        } catch (error) {
+          ctx.error = error
           errorChannel.publish(ctx)
-          throw e
+          throw error
         } finally {
           endChannel.publish(ctx)
         }

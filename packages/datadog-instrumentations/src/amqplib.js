@@ -130,11 +130,11 @@ function instrument (send, channel, args, method, fields, message, startCh, fini
   return startCh.runStores(ctx, () => {
     try {
       return send.apply(channel, args)
-    } catch (err) {
-      ctx.error = err
+    } catch (error) {
+      ctx.error = error
       errorCh.publish(ctx)
 
-      throw err
+      throw error
     } finally {
       finishCh.publish(ctx)
     }

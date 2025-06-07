@@ -75,9 +75,7 @@ class NextPlugin extends ServerPlugin {
       web.addError(req, true)
     }
 
-    span.addTags({
-      'http.status_code': res.statusCode
-    })
+    span.setTag('http.status_code', res.statusCode)
 
     this.config.hooks.request(span, req, res)
 

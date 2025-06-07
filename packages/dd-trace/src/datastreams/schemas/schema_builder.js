@@ -50,10 +50,7 @@ class SchemaBuilder {
   }
 
   shouldExtractSchema (schemaName, depth) {
-    if (depth > maxDepth) {
-      return false
-    }
-    if (schemaName in this.schema.components.schemas) {
+    if (depth > maxDepth || this.schema.components.schemas[schemaName]) {
       return false
     }
     this.schema.components.schemas[schemaName] = new OpenApiSchema.SCHEMA()
@@ -93,9 +90,16 @@ class OpenApiComponents {
 }
 
 function convertToJsonCompatible (obj) {
-  if (Array.isArray(obj)) {
-    return obj.filter(item => item !== null).map(item => convertToJsonCompatible(item))
-  } else if (obj && typeof obj === 'object') {
+  if (typeof obj === 'object' && obj !== null) {
+    if (Array.isArray(obj)) {
+      const filtered = []
+      for (const item of obj) {
+        if (item !== null) {
+          filtered.push(convertToJsonCompatible(item))
+        }
+      }
+      return filtered
+    }
     const jsonObj = {}
     for (const [key, value] of Object.entries(obj)) {
       if (value !== null) {
@@ -108,10 +112,7 @@ function convertToJsonCompatible (obj) {
 }
 
 function convertKey (key) {
-  if (key === 'enumValues') {
-    return 'enum'
-  }
-  return key
+  return key === 'enumValues' ? 'enum' : key
 }
 
 function jsonStringify (obj, indent = 2) {

@@ -81,9 +81,9 @@ function waitAndSend (config, application, host) {
 function loadAllTheLoadedModules () {
   if (require.cache) {
     const filenames = Object.keys(require.cache)
-    filenames.forEach(filename => {
+    for (const filename of filenames) {
       onModuleLoad({ filename })
-    })
+    }
   }
 }
 

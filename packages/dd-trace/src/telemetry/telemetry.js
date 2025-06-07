@@ -68,16 +68,19 @@ function updateRetryData (error, retryObj) {
 
 function getIntegrations () {
   const newIntegrations = []
-  for (const pluginName in pluginManager._pluginsByName) {
-    if (sentIntegrations.has(pluginName)) {
+  if (!pluginManager._pluginsByName) {
+    return newIntegrations
+  }
+  for (const [name, plugin] of Object.entries(pluginManager._pluginsByName)) {
+    if (sentIntegrations.has(name)) {
       continue
     }
     newIntegrations.push({
-      name: pluginName,
-      enabled: pluginManager._pluginsByName[pluginName]._enabled,
+      name,
+      enabled: plugin._enabled,
       auto_enabled: true
     })
-    sentIntegrations.add(pluginName)
+    sentIntegrations.add(name)
   }
   return newIntegrations
 }
@@ -230,7 +233,7 @@ function extendedHeartbeat (config) {
       ...extendedHeartbeatPayload
     }
     sendData(config, application, host, 'app-extended-heartbeat', payload)
-    Object.keys(extendedHeartbeatPayload).forEach(key => delete extendedHeartbeatPayload[key])
+    for (const key of Object.keys(extendedHeartbeatPayload)) delete extendedHeartbeatPayload[key]
   }, 1000 * 60 * 60 * 24).unref()
   return extendedInterval
 }

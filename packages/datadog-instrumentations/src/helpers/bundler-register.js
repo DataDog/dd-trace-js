@@ -29,9 +29,9 @@ if (!dc.unsubscribe) {
 dc.subscribe(CHANNEL, (payload) => {
   try {
     hooks[payload.package]()
-  } catch (err) {
+  } catch (error) {
     log.error('esbuild-wrapped %s missing in list of hooks', payload.package)
-    throw err
+    throw error
   }
 
   if (!instrumentations[payload.package]) {
@@ -46,8 +46,8 @@ dc.subscribe(CHANNEL, (payload) => {
     try {
       loadChannel.publish({ name, version: payload.version, file })
       payload.module = hook(payload.module, payload.version)
-    } catch (e) {
-      log.error('Error executing bundler hook', e)
+    } catch (error) {
+      log.error('Error executing bundler hook', error)
     }
   }
 })

@@ -20,7 +20,7 @@ class NycPlugin extends CiPlugin {
           .then((untestedCoverageMap) => {
             this.nyc = null
             onDone(untestedCoverageMap)
-          }).catch((e) => {
+          }).catch(() => {
             this.nyc = null
             onDone()
           })

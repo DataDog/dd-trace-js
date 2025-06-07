@@ -40,7 +40,7 @@ function onSpanInject ({ spanContext, carrier }) {
 
   // do not inject trace and sampling if there is no _dd.p.ts
   if (!hasTraceSourcePropagationTag(spanContext._trace.tags)) {
-    for (const key in carrier) {
+    for (const key of Object.keys(carrier)) {
       const lKey = key.toLowerCase()
       if (lKey.startsWith('x-datadog') || lKey.startsWith('x-b3') || lKey === 'traceparent') {
         delete carrier[key]

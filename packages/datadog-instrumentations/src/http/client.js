@@ -52,8 +52,8 @@ function patch (http, methodName) {
 
       try {
         args = normalizeArgs.apply(null, arguments)
-      } catch (e) {
-        log.error('Error normalising http req arguments', e)
+      } catch (error) {
+        log.error('Error normalising http req arguments', error)
         return request.apply(this, arguments)
       }
 
@@ -128,15 +128,15 @@ function patch (http, methodName) {
           }
 
           return req
-        } catch (e) {
-          ctx.error = e
+        } catch (error) {
+          ctx.error = error
           errorChannel.publish(ctx)
           // if the initial request failed, ctx.req will be unset, we must close the span here
           // fix for: https://github.com/DataDog/dd-trace-js/issues/5016
           if (!ctx.req) {
             finish()
           }
-          throw e
+          throw error
         } finally {
           endChannel.publish(ctx)
         }

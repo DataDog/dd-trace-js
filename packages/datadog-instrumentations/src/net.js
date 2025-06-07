@@ -68,10 +68,10 @@ addHook({ name: names }, (net, version, name) => {
 
       try {
         return connect.apply(this, arguments)
-      } catch (err) {
-        errorCh.publish(err)
+      } catch (error) {
+        errorCh.publish(error)
 
-        throw err
+        throw error
       }
     })
   })
@@ -118,18 +118,18 @@ function setupListeners (socket, protocol, ctx, finishCh, errorCh) {
 
   const cleanupListener = function () {
     socket.removeListener('connect', localListener)
-    events.forEach(event => {
+    for (const event of events) {
       socket.removeListener(event, wrapListener)
       socket.removeListener(event, cleanupListener)
-    })
+    }
   }
 
   if (protocol === 'tcp') {
     socket.once('connect', localListener)
   }
 
-  events.forEach(event => {
+  for (const event of events) {
     socket.once(event, wrapListener)
     socket.once(event, cleanupListener)
-  })
+  }
 }
