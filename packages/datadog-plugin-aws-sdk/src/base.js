@@ -8,7 +8,7 @@ const coalesce = require('koalas')
 const { tagsFromRequest, tagsFromResponse } = require('../../dd-trace/src/payload-tagging')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
-const filteredKeys = new Set(['request', 'requestId', 'error', '$metadata'])
+const filterKeys = new Set(['request', 'requestId', 'error', '$metadata'])
 
 class BaseAwsSdkPlugin extends ClientPlugin {
   static get id () { return 'aws' }
@@ -168,7 +168,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
     }
     const filteredResponse = {}
     for (const [key, value] of Object.entries(response)) {
-      if (!filteredKeys.has(key)) {
+      if (!filterKeys.has(key)) {
         filteredResponse[key] = value
       }
     }

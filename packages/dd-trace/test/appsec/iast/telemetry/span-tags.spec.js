@@ -30,9 +30,10 @@ describe('Telemetry Span tags', () => {
 
     addMetricsToSpan(rootSpan, metrics.series, tagPrefix)
 
-    expect(rootSpan.addTags).to.be.calledTwice
-    expect(rootSpan.addTags.firstCall.args[0]).to.deep.eq({ '_dd.test.executed.source.source_type_1': 42 })
-    expect(rootSpan.addTags.secondCall.args[0]).to.deep.eq({ '_dd.test.executed.sink.sink_type_1': 3 })
+    expect(rootSpan.addTags).to.be.calledOnceWithExactly({
+      '_dd.test.executed.source.source_type_1': 42,
+      '_dd.test.executed.sink.sink_type_1': 3
+    })
   })
 
   it('should add span tags with tag name like \'tagPrefix.metricName.tagKey\' for tagged metrics flattened', () => {
@@ -58,9 +59,10 @@ describe('Telemetry Span tags', () => {
 
     addMetricsToSpan(rootSpan, metrics.series, tagPrefix)
 
-    expect(rootSpan.addTags).to.be.calledTwice
-    expect(rootSpan.addTags.firstCall.args[0]).to.deep.eq({ '_dd.test.executed.source.source_type_1': 74 })
-    expect(rootSpan.addTags.secondCall.args[0]).to.deep.eq({ '_dd.test.executed.source.source_type_2': 2 })
+    expect(rootSpan.addTags).to.be.calledOnceWithExactly({
+      '_dd.test.executed.source.source_type_1': 74,
+      '_dd.test.executed.source.source_type_2': 2
+    })
   })
 
   it('should add span tags with tag name like \'tagPrefix.metricName\' for not tagged metrics', () => {

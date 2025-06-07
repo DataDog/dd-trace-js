@@ -694,7 +694,9 @@ function getCoveredFilenamesFromCoverage (coverage) {
 function resetCoverage (coverage) {
   const coverageMap = istanbul.createCoverageMap(coverage)
 
-  for (const filename of coverageMap.files()) {
+  const filenames = coverageMap.files()
+
+  for (const filename of filenames) {
     const fileCoverage = coverageMap.fileCoverageFor(filename)
     fileCoverage.resetHits()
   }
@@ -702,7 +704,10 @@ function resetCoverage (coverage) {
 
 function mergeCoverage (coverage, targetCoverage) {
   const coverageMap = istanbul.createCoverageMap(coverage)
-  for (const filename of coverageMap.files()) {
+
+  const filenames = coverageMap.files()
+
+  for (const filename of filenames) {
     const fileCoverage = coverageMap.fileCoverageFor(filename)
 
     // If the fileCoverage is not there for this filename,
