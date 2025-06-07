@@ -54,7 +54,7 @@ describe('Plugin', () => {
         })
 
         describe('code origin for spans enabled', () => {
-          if (semver.satisfies(specificVersion, '<4')) return // TODO: Why doesn't it work on older versions?
+          if (semver.satisfies(specificVersion, '<4.10.0')) return // TODO: Support older versions (DEBUG-3941)
 
           const configs = [{}, { codeOriginForSpans: { enabled: true } }]
 
