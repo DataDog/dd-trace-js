@@ -167,7 +167,8 @@ const IGNORED_WORKFLOWS = {
     'release-dev.yml',
     'release-latest.yml',
     'release-proposal.yml',
-    'release-validate.yml'
+    'release-validate.yml',
+    'retry.yml'
   ],
   trigger_pull_request: [
     'stale.yml'
