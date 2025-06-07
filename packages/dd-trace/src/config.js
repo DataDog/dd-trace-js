@@ -8,8 +8,6 @@ const log = require('./log')
 const pkg = require('./pkg')
 const coalesce = require('koalas')
 const tagger = require('./tagger')
-const get = require('../../datadog-core/src/utils/src/get')
-const has = require('../../datadog-core/src/utils/src/has')
 const set = require('../../datadog-core/src/utils/src/set')
 const { isTrue, isFalse, normalizeProfilingEnabledValue } = require('./util')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
@@ -22,6 +20,8 @@ const { appendRules } = require('./payload-tagging/config')
 const { getEnvironmentVariable, getEnvironmentVariables } = require('./config-helper')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
+
+const changeTracker = {}
 
 const telemetryCounters = {
   'otel.env.hiding': {},
@@ -1370,9 +1370,16 @@ class Config {
 
     if (typeof value === 'string') {
       value = value.split(',').map(item => {
-        // Trim each item and remove whitespace around the colon
-        const [key, val] = item.split(':').map(part => part.trim())
-        return val === undefined ? key : `${key}:${val}`
+        const trimmedItem = item.trim()
+        const colonIndex = trimmedItem.indexOf(':')
+
+        if (colonIndex === -1) {
+          return trimmedItem
+        }
+
+        const key = trimmedItem.slice(0, colonIndex).trim()
+        const val = trimmedItem.slice(colonIndex + 1).trim()
+        return `${key}:${val}`
       })
     }
 
@@ -1385,19 +1392,25 @@ class Config {
     if (value == null) {
       return this._setValue(obj, name, null)
     }
-    value = value.split(',')
-    const result = []
 
-    value.forEach(val => {
-      if (val.includes('-')) {
-        const [start, end] = val.split('-').map(Number)
+    const result = []
+    const values = value.split(',')
+
+    for (const val of values) {
+      const trimmedVal = val.trim()
+      const dashIndex = trimmedVal.indexOf('-')
+
+      if (dashIndex === -1) {
+        result.push(Number(trimmedVal))
+      } else {
+        const start = Number(trimmedVal.slice(0, dashIndex))
+        const end = Number(trimmedVal.slice(dashIndex + 1))
         for (let i = start; i <= end; i++) {
           result.push(i)
         }
-      } else {
-        result.push(Number(val))
       }
-    })
+    }
+
     this._setValue(obj, name, result)
   }
 
@@ -1425,7 +1438,20 @@ class Config {
   }
 
   _setTags (obj, name, value) {
-    if (!value || Object.keys(value).length === 0) {
+    if (!value) {
+      return this._setValue(obj, name, null)
+    }
+
+    // Check if object has any own enumerable properties (same behavior as Object.keys())
+    let hasKeys = false
+    for (const key in value) {
+      if (value.hasOwnProperty(key)) {
+        hasKeys = true
+        break
+      }
+    }
+
+    if (!hasKeys) {
       return this._setValue(obj, name, null)
     }
 
@@ -1436,27 +1462,24 @@ class Config {
     obj[name] = value
   }
 
-  _getContainersAndOriginsOrdered () {
-    const containers = [
-      this._remote,
-      this._options,
-      this._fleetStableConfig,
-      this._env,
-      this._localStableConfig,
-      this._calculated,
-      this._defaults
-    ]
-    const origins = [
-      'remote_config',
-      'code',
-      'fleet_stable_config',
-      'env_var',
-      'local_stable_config',
-      'calculated',
-      'default'
-    ]
+  _setAndTrackChange ({ name, value, origin, unprocessedValue, changes }) {
+    set(this, name, value)
 
-    return { containers, origins }
+    if (!changeTracker[name]) {
+      changeTracker[name] = {}
+    }
+
+    const originExists = origin in changeTracker[name]
+    const oldValue = changeTracker[name][origin]
+
+    if (!originExists || oldValue !== value) {
+      changeTracker[name][origin] = value
+      changes.push({
+        name,
+        value: unprocessedValue || value,
+        origin
+      })
+    }
   }
 
   // TODO: Report origin changes and errors to telemetry.
@@ -1465,39 +1488,32 @@ class Config {
   // for telemetry reporting, `name`s in `containers` need to be keys from:
   // https://github.com/DataDog/dd-go/blob/prod/trace/apps/tracer-telemetry-intake/telemetry-payload/static/config_norm_rules.json
   _merge () {
-    const { containers, origins } = this._getContainersAndOriginsOrdered()
-    const unprocessedValues = [
-      this._remoteUnprocessed,
-      this._optsUnprocessed,
-      {},
-      this._envUnprocessed,
-      {},
-      {},
-      {}
+    const sources = [
+      { container: this._defaults, origin: 'default', unprocessed: {} },
+      { container: this._calculated, origin: 'calculated', unprocessed: {} },
+      { container: this._localStableConfig, origin: 'local_stable_config', unprocessed: {} },
+      { container: this._env, origin: 'env_var', unprocessed: this._envUnprocessed },
+      { container: this._fleetStableConfig, origin: 'fleet_stable_config', unprocessed: {} },
+      { container: this._options, origin: 'code', unprocessed: this._optsUnprocessed },
+      { container: this._remote, origin: 'remote_config', unprocessed: this._remoteUnprocessed }
     ]
+
     const changes = []
 
     for (const name in this._defaults) {
-      for (let i = 0; i < containers.length; i++) {
-        const container = containers[i]
+      for (const { container, origin, unprocessed } of sources) {
         const value = container[name]
-
         if ((value !== null && value !== undefined) || container === this._defaults) {
-          if (get(this, name) === value && has(this, name)) break
-
-          set(this, name, value)
-
-          changes.push({
+          this._setAndTrackChange({
             name,
-            value: unprocessedValues[i][name] || value,
-            origin: origins[i]
+            value,
+            origin,
+            unprocessedValue: unprocessed[name],
+            changes
           })
-
-          break
         }
       }
     }
-
     this.sampler.sampleRate = this.sampleRate
     updateConfig(changes, this)
   }

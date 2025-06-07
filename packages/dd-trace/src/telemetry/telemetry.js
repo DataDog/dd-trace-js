@@ -28,6 +28,8 @@ const extendedHeartbeatPayload = {}
 
 const sentIntegrations = new Set()
 
+let seqId = 0
+
 function getRetryData () {
   return retryData
 }
@@ -305,7 +307,7 @@ function formatMapForTelemetry (map) {
 
 const nameMapping = {
   sampleRate: 'DD_TRACE_SAMPLE_RATE',
-  logInjection: 'DD_LOG_INJECTION',
+  logInjection: 'DD_LOGS_INJECTION',
   headerTags: 'DD_TRACE_HEADER_TAGS',
   tags: 'DD_TAGS',
   'sampler.rules': 'DD_TRACE_SAMPLING_RULES',
@@ -333,13 +335,16 @@ function updateConfig (changes, config) {
   const application = createAppObject(config)
   const host = createHostObject()
 
-  const changed = configWithOrigin.size > 0
+  const namesNeedFormatting = new Set(['DD_TAGS', 'peerServiceMapping', 'serviceMapping'])
+  const configuration = []
+  const updatedTuples = new Set()
 
   for (const change of changes) {
     const name = nameMapping[change.name] || change.name
 
+    updatedTuples.add(`${name}|${change.origin}`)
     const { origin, value } = change
-    const entry = { name, value, origin }
+    const entry = { name, value, origin, seq_id: seqId++ }
 
     if (namesNeedFormatting.has(entry.name)) {
       entry.value = formatMapForTelemetry(entry.value)
@@ -355,7 +360,11 @@ function updateConfig (changes, config) {
     configWithOrigin.set(name, entry)
   }
 
-  if (changed) {
+  function isNotModified (oldEntry) {
+    return updatedTuples.get(oldEntry.name) !== oldEntry.origin
+  }
+
+  if (configWithOrigin.length) {
     // update configWithOrigin to contain up-to-date full list of config values for app-extended-heartbeat
     const { reqType, payload } = createPayload('app-client-configuration-change', {
       configuration: [...configWithOrigin.values()]
