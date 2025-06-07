@@ -1,7 +1,7 @@
 'use strict'
 
 const { createHash } = require('crypto')
-const EventEmitter = require('events')
+const { EventEmitter, once } = require('events')
 const http = require('http')
 const express = require('express')
 const bodyParser = require('body-parser')
@@ -17,11 +17,11 @@ module.exports = class FakeAgent extends EventEmitter {
     this._sockets = new Set()
   }
 
-  async start () {
+  start () {
     return new Promise((resolve, reject) => {
       const timeoutObj = setTimeout(() => {
         reject(new Error('agent timed out starting up'))
-      }, 10000)
+      }, 10_000)
       this.server = http.createServer(buildExpressServer(this))
       this.server.on('error', reject)
 
@@ -42,17 +42,15 @@ module.exports = class FakeAgent extends EventEmitter {
   }
 
   stop () {
-    if (!this.server) return Promise.resolve()
+    if (!this.server?.listening) return
 
-    return new Promise((resolve) => {
-      if (!this.server?.listening) return resolve()
-      for (const socket of this._sockets) {
-        socket.destroy()
-      }
-      this._sockets.clear()
-      this.server.on('close', resolve)
-      this.server.close()
-    })
+    for (const socket of this._sockets) {
+      socket.destroy()
+    }
+    this._sockets.clear()
+    this.server.close()
+
+    return once(this.server, 'close')
   }
 
   /**
