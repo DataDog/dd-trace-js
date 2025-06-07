@@ -324,6 +324,9 @@ describe('Config', () => {
     expect(config).to.have.nested.property('llmobs.mlApp', undefined)
     expect(config).to.have.nested.property('llmobs.agentlessEnabled', undefined)
     expect(config).to.have.nested.property('llmobs.enabled', false)
+    expect(config).to.have.nested.deep.property('injectionEnabled', [])
+    expect(config).to.have.nested.property('instrumentationSource', 'manual')
+    expect(config).to.have.nested.property('injectionForce', '')
 
     expect(updateConfig).to.be.calledOnce
 
@@ -389,7 +392,9 @@ describe('Config', () => {
       { name: 'iast.securityControlsConfiguration', value: null, origin: 'default' },
       { name: 'iast.telemetryVerbosity', value: 'INFORMATION', origin: 'default' },
       { name: 'iast.stackTrace.enabled', value: true, origin: 'default' },
+      { name: 'instrumentationSource', value: 'unknown', origin: 'default' },
       { name: 'injectionEnabled', value: [], origin: 'default' },
+      { name: 'injectionForce', value: '', origin: 'default' },
       { name: 'isCiVisibility', value: false, origin: 'default' },
       { name: 'isEarlyFlakeDetectionEnabled', value: false, origin: 'default' },
       { name: 'isFlakyTestRetriesEnabled', value: false, origin: 'default' },
@@ -582,6 +587,7 @@ describe('Config', () => {
     process.env.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = 'true'
     process.env.DD_PROFILING_ENABLED = 'true'
     process.env.DD_INJECTION_ENABLED = 'profiler'
+    process.env.DD_INJECT_FORCE = 'false'
     process.env.DD_API_SECURITY_ENABLED = 'true'
     process.env.DD_API_SECURITY_SAMPLE_DELAY = '25'
     process.env.DD_INSTRUMENTATION_INSTALL_ID = '68e75c48-57ca-4a12-adfc-575c4b05fcbe'
@@ -766,6 +772,7 @@ describe('Config', () => {
       { name: 'iast.stackTrace.enabled', value: false, origin: 'env_var' },
       { name: 'instrumentation_config_id', value: 'abcdef123', origin: 'env_var' },
       { name: 'injectionEnabled', value: ['profiler'], origin: 'env_var' },
+      { name: 'injectionForce', value: 'false', origin: 'env_var' },
       { name: 'isGCPFunction', value: false, origin: 'env_var' },
       { name: 'middlewareTracingEnabled', value: false, origin: 'env_var' },
       { name: 'peerServiceMapping', value: process.env.DD_TRACE_PEER_SERVICE_MAPPING, origin: 'env_var' },

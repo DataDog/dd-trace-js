@@ -13,8 +13,9 @@ const server = http.createServer((req, res) => {
     res.on('data', () => {})
     res.on('end', () => {
       server.close()
-      // eslint-disable-next-line no-console
+      /* eslint-disable no-console */
       console.log(gotEvent)
+      console.log('instrumentation source:', global._ddtrace._tracer._config.instrumentationSource)
       process.exit()
     })
   })

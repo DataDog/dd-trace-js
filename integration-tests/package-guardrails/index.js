@@ -13,3 +13,6 @@ try {
 
   console.log(fastify.toString().startsWith('function fastifyWithTrace'))
 }
+if (global._ddtrace) {
+  console.log('instrumentation source:', global._ddtrace._tracer._config.instrumentationSource)
+}
