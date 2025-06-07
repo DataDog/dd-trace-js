@@ -14,6 +14,7 @@ module.exports = class FakeAgent extends EventEmitter {
     super({ captureRejections: true })
     this.port = port
     this.resetRemoteConfig()
+    this._sockets = new Set()
   }
 
   async start () {
@@ -23,6 +24,15 @@ module.exports = class FakeAgent extends EventEmitter {
       }, 10000)
       this.server = http.createServer(buildExpressServer(this))
       this.server.on('error', reject)
+
+      // Track connections to force close them later
+      this.server.on('connection', (socket) => {
+        this._sockets.add(socket)
+        socket.on('close', () => {
+          this._sockets.delete(socket)
+        })
+      })
+
       this.server.listen(this.port, () => {
         this.port = this.server.address().port
         clearTimeout(timeoutObj)
@@ -32,7 +42,14 @@ module.exports = class FakeAgent extends EventEmitter {
   }
 
   stop () {
+    if (!this.server) return Promise.resolve()
+
     return new Promise((resolve) => {
+      if (!this.server?.listening) return resolve()
+      for (const socket of this._sockets) {
+        socket.destroy()
+      }
+      this._sockets.clear()
       this.server.on('close', resolve)
       this.server.close()
     })
