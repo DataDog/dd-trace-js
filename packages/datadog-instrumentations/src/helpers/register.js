@@ -179,6 +179,13 @@ for (const packageName of names) {
 }
 
 function matchVersion (version, ranges) {
+  // TODO: THIS CHECK MUST BE REMOVED BEFORE MERGING
+  if (version) {
+    const versionAux = version.split('-')
+    if (versionAux[0] === '30.0.0') {
+      version = versionAux[0]
+    }
+  }
   return !version || !ranges || ranges.some(range => satisfies(version, range))
 }
 
