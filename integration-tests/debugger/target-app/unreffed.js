@@ -10,6 +10,6 @@ const server = http.createServer((req, res) => {
   })
 })
 
-server.listen(process.env.APP_PORT, () => {
-  process.send({ port: process.env.APP_PORT })
+server.listen(process.env.APP_PORT || 0, () => {
+  process.send?.({ port: server.address().port })
 })

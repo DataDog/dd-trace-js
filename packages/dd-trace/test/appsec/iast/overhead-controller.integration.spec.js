@@ -1,13 +1,12 @@
 'use strict'
 
-const getPort = require('get-port')
 const path = require('path')
 const Axios = require('axios')
 const { assert } = require('chai')
 const { createSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
 
 describe('IAST - overhead-controller - integration', () => {
-  let axios, sandbox, cwd, appPort, agent, proc
+  let axios, sandbox, cwd, agent, proc
 
   before(async function () {
     this.timeout(process.platform === 'win32' ? 300000 : 30000)
@@ -18,11 +17,7 @@ describe('IAST - overhead-controller - integration', () => {
       [path.join(__dirname, 'resources')]
     )
 
-    appPort = await getPort()
     cwd = sandbox.folder
-    axios = Axios.create({
-      baseURL: `http://localhost:${appPort}`
-    })
   })
 
   after(async function () {
@@ -45,13 +40,13 @@ describe('IAST - overhead-controller - integration', () => {
         cwd,
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
-          APP_PORT: appPort,
           DD_IAST_ENABLED: 'true',
           DD_IAST_REQUEST_SAMPLING: '100',
           DD_TELEMETRY_HEARTBEAT_INTERVAL: 1,
           NODE_OPTIONS: '--require ./resources/init.js'
         }
       })
+      axios = Axios.create({ baseURL: proc.url })
     })
 
     async function checkVulnerabilitiesInEndpoint (path, vulnerabilitiesAndCount, method = 'GET') {

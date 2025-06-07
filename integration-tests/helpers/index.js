@@ -19,7 +19,7 @@ const hookFile = 'dd-trace/loader-hook.mjs'
 let shouldKill
 
 async function runAndCheckOutput (filename, cwd, expectedOut) {
-  const proc = spawn('node', [filename], { cwd, stdio: 'pipe' })
+  const proc = spawn(process.execPath, [filename], { cwd, stdio: 'pipe' })
   const pid = proc.pid
   let out = await new Promise((resolve, reject) => {
     proc.on('error', reject)
@@ -109,18 +109,35 @@ async function runAndCheckWithTelemetry (filename, expectedOut, ...expectedTelem
   }
 }
 
+/**
+ * Spawns a Node.js script in a child process and returns a promise that resolves when the process is ready.
+ *
+ * @param {string|URL} filename - The filename of the Node.js script to spawn in a child process.
+ * @param {childProcess.ForkOptions} [options] - The options to pass to the child process.
+ * @param {(data: Buffer) => void} [stdioHandler] - A function that's called with one data argument to handle the
+ *   standard output of the child process. If not provided, the output will be logged to the console.
+ * @param {(data: Buffer) => void} [stderrHandler] - A function that's called with one data argument to handle the
+ *   standard error of the child process. If not provided, the error will be logged to the console.
+ * @returns {Promise<childProcess.ChildProcess & { url?: string }|undefined>} A promise that resolves when the process
+ *   is either ready or terminated without an error. If the process is terminated without an error, the promise will
+ *   resolve with `undefined`.The returned process will have a `url` property if the process didn't terminate.
+ */
 function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
   const proc = fork(filename, { ...options, stdio: 'pipe' })
+
   return new Promise((resolve, reject) => {
     proc
       .on('message', ({ port }) => {
+        if (typeof port !== 'number' && typeof port !== 'string') {
+          return reject(new Error(`${filename} sent invalid port: ${port}. Expected a number or string.`))
+        }
         proc.url = `http://localhost:${port}`
         resolve(proc)
       })
       .on('error', reject)
       .on('exit', code => {
         if (code !== 0) {
-          reject(new Error(`Process exited with status code ${code}.`))
+          return reject(new Error(`Process exited with status code ${code}.`))
         }
         resolve()
       })

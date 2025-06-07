@@ -1,6 +1,5 @@
 'use strict'
 
-const getPort = require('get-port')
 const path = require('path')
 const Axios = require('axios')
 const { assert } = require('chai')
@@ -8,7 +7,7 @@ const msgpack = require('@msgpack/msgpack')
 const { createSandbox, FakeAgent, spawnProc } = require('../helpers')
 
 describe('RASP', () => {
-  let axios, sandbox, cwd, appPort, appFile, agent, proc, stdioHandler
+  let axios, sandbox, cwd, appFile, agent, proc, stdioHandler
 
   function stdOutputHandler (data) {
     stdioHandler && stdioHandler(data)
@@ -16,12 +15,8 @@ describe('RASP', () => {
 
   before(async () => {
     sandbox = await createSandbox(['express', 'axios'])
-    appPort = await getPort()
     cwd = sandbox.folder
     appFile = path.join(cwd, 'appsec/rasp/index.js')
-    axios = Axios.create({
-      baseURL: `http://localhost:${appPort}`
-    })
   })
 
   after(async () => {
@@ -40,13 +35,13 @@ describe('RASP', () => {
         execArgv,
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
-          APP_PORT: appPort,
           DD_APPSEC_ENABLED: true,
           DD_APPSEC_RASP_ENABLED: true,
           DD_APPSEC_RULES: path.join(cwd, 'appsec/rasp/rasp_rules.json'),
           DD_APPSEC_RASP_COLLECT_REQUEST_BODY: collectRequestBody
         }
       }, stdOutputHandler, stdOutputHandler)
+      axios = Axios.create({ baseURL: proc.url })
     })
 
     afterEach(async () => {

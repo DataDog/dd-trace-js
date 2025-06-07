@@ -4,7 +4,6 @@ const express = require('express')
 const crypto = require('crypto')
 
 const app = express()
-const port = process.env.APP_PORT || 3000
 
 app.get('/one-vulnerability', (req, res) => {
   crypto.createHash('sha1').update('abccc').digest('hex')
@@ -61,6 +60,6 @@ app.get('/route2/:param', (req, res) => {
   res.end('OK')
 })
 
-app.listen(port, () => {
-  process.send({ port })
+const server = app.listen(process.env.APP_PORT || 0, () => {
+  process.send?.({ port: server.address().port })
 })

@@ -19,7 +19,6 @@ const connectionData = {
 const pool = new pg.Pool(connectionData)
 
 const app = express()
-const port = process.env.APP_PORT || 3000
 
 app.get('/sqli/client/uncaught-promise', async (req, res) => {
   const client = new pg.Client(connectionData)
@@ -50,6 +49,6 @@ app.get('/sqli/pool/uncaught-promise', async (req, res) => {
   res.end('OK')
 })
 
-app.listen(port, () => {
-  process.send({ port })
+const server = app.listen(process.env.APP_PORT || 0, () => {
+  process.send?.({ port: server.address().port })
 })

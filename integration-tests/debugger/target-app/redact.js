@@ -17,10 +17,10 @@ fastify.get('/', function () {
   return { hello: 'world' } // BREAKPOINT: /
 })
 
-fastify.listen({ port: process.env.APP_PORT }, (err) => {
+fastify.listen({ port: process.env.APP_PORT || 0 }, (err) => {
   if (err) {
     fastify.log.error(err)
     process.exit(1)
   }
-  process.send({ port: process.env.APP_PORT })
+  process.send?.({ port: fastify.server.address().port })
 })
