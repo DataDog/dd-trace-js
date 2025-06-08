@@ -4,8 +4,6 @@
 
 import { Octokit } from 'octokit'
 
-const { DAYS = '1' } = process.env
-
 const ONE_DAY = 24 * 60 * 60 * 1000
 
 const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN })
@@ -41,7 +39,7 @@ const runResponses = await Promise.all(runPromises)
 
 for (const runResponse of runResponses) {
   for (const run of runResponse.data.workflow_runs) {
-    if (Date.parse(run.created_at) < Date.now() - DAYS * ONE_DAY) break
+    if (Date.parse(run.created_at) < Date.now() - ONE_DAY) break
     if (run.run_attempt === 1) continue
 
     const jobPromise = octokit.rest.actions.listJobsForWorkflowRunAttempt({
