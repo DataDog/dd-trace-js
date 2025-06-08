@@ -4,6 +4,8 @@
 
 import { Octokit } from 'octokit'
 
+const { DAYS = '1' } = process.env
+
 const ONE_DAY = 24 * 60 * 60 * 1000
 
 const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN })
@@ -20,44 +22,50 @@ const workflows = [
 ]
 
 const flaky = {}
-const runPromises = []
-const jobPromises = []
 
-for (const workflow of workflows) {
-  const runPromise = octokit.rest.actions.listWorkflowRuns({
+async function checkWorkflowRuns (id, page = 1) {
+  const response = await octokit.rest.actions.listWorkflowRuns({
     owner: 'DataDog',
     repo: 'dd-trace-js',
-    per_page: 100, // max is 100 which is enough data for our purpose
+    page,
+    per_page: 100, // max is 100
     status: 'success',
-    workflow_id: workflow
+    workflow_id: id
   })
 
-  runPromises.push(runPromise)
-}
+  const runs = response.data.workflow_runs
 
-const runResponses = await Promise.all(runPromises)
+  if (runs.length === 0) return
 
-for (const runResponse of runResponses) {
-  for (const run of runResponse.data.workflow_runs) {
-    if (Date.parse(run.created_at) < Date.now() - ONE_DAY) break
+  const promises = []
+
+  for (const run of runs) {
     if (run.run_attempt === 1) continue
+    if (Date.parse(run.created_at) < Date.now() - DAYS * ONE_DAY) {
+      return Promise.all(promises)
+    }
 
-    const jobPromise = octokit.rest.actions.listJobsForWorkflowRunAttempt({
-      attempt_number: 1, // ignore other attempts to keep things simple
-      owner: 'DataDog',
-      repo: 'dd-trace-js',
-      run_id: run.id,
-      per_page: 100 // max is 100 which covers our biggest workflow
-    })
-
-    jobPromises.push(jobPromise)
+    promises.push(checkWorkflowJobs(run.id))
   }
+
+  promises.push(checkWorkflowRuns(id, page + 1))
+
+  return Promise.all(promises)
 }
 
-const jobResponses = await Promise.all(jobPromises)
+async function checkWorkflowJobs (id, page = 1) {
+  const response = await octokit.rest.actions.listJobsForWorkflowRunAttempt({
+    attempt_number: 1, // ignore other attempts to keep things simple
+    owner: 'DataDog',
+    repo: 'dd-trace-js',
+    run_id: id,
+    page,
+    per_page: 100 // max is 100
+  })
 
-for (const jobResponse of jobResponses) {
-  const { jobs } = jobResponse.data
+  const { jobs } = response.data
+
+  if (jobs.length === 0) return
 
   for (const job of jobs) {
     if (job.conclusion !== 'failure') continue
@@ -68,18 +76,22 @@ for (const jobResponse of jobResponses) {
     flaky[workflow][job.name] = flaky[workflow][job.name] || []
     flaky[workflow][job.name].push(job.html_url)
   }
+
+  return checkWorkflowJobs(id, page + 1)
 }
+
+await Promise.all(workflows.map(w => checkWorkflowRuns(w)))
 
 // TODO: Report this somewhere useful instead.
 if (Object.keys(flaky).length === 0) {
-  console.log('*No flaky jobs seen in the last 24h*')
+  console.log(`*No flaky jobs seen in the last ${DAYS > 1 ? `${DAYS} days` : 'day'}*`)
 } else {
-  console.log('*Flaky jobs seen in the last 24h*')
-  for (const workflow in flaky) {
+  console.log(`*Flaky jobs seen in the last ${DAYS > 1 ? `${DAYS} days` : 'day'}*`)
+  for (const [workflow, jobs] of Object.entries(flaky).sort()) {
     console.log(`* ${workflow}`)
-    for (const job in flaky[workflow]) {
+    for (const [job, urls] of Object.entries(jobs).sort()) {
       console.log(`    * ${job}`)
-      for (const url of flaky[workflow][job]) {
+      for (const url of urls.sort()) {
         console.log(`        * ${url}`)
       }
     }
