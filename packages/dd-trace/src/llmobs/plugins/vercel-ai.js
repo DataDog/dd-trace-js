@@ -67,6 +67,16 @@ function getSpanTag (span, tag) {
 }
 
 /**
+ * Get the operation name from the span name
+ *
+ * @example
+ * span._name = 'ai.generateText'
+ * getOperation(span) // 'generateText'
+ *
+ * @example
+ * span._name = 'ai.generateText.doGenerate'
+ * getOperation(span) // 'doGenerate'
+ *
  * @param {import('../../../../dd-trace/src/opentracing/span')} span
  * @returns {string}
  */
@@ -77,6 +87,11 @@ function getOperation (span) {
   return name.split('.').pop()
 }
 
+/**
+ * Get the LLM token usage from the span tags
+ * @param {import('../../../../dd-trace/src/opentracing/span')} span
+ * @returns {{inputTokens: number, outputTokens: number, totalTokens: number}}
+ */
 function getUsage (span) {
   const inputTokens = getSpanTag(span, 'ai.usage.promptTokens')
   const outputTokens = getSpanTag(span, 'ai.usage.completionTokens')
@@ -89,6 +104,9 @@ function getUsage (span) {
 }
 
 /**
+ * Get the model provider from the span tags.
+ * This is normalized to LLM Observability model provider standards.
+ *
  * @param {import('../../../../dd-trace/src/opentracing/span')} span
  * @returns {string}
  */
@@ -106,6 +124,12 @@ function getModelProvider (span) {
   }
 }
 
+/**
+ * Safely JSON parses a string value with a default fallback
+ * @param {string} str
+ * @param {any} defaultValue
+ * @returns {Record<string, any> | string | Array<any>}
+ */
 function getJsonStringValue (str, defaultValue) {
   let maybeValue = defaultValue
   try {
@@ -117,6 +141,11 @@ function getJsonStringValue (str, defaultValue) {
   return maybeValue
 }
 
+/**
+ * Get the model metadata from the span tags (top_p, top_k, temperature, etc.)
+ * @param {import('../../../../dd-trace/src/opentracing/span')} span
+ * @returns {Record<string, string>}
+ */
 function getModelMetadata (span) {
   const modelMetadata = {}
   for (const metadata of MODEL_METADATA_KEYS) {
@@ -130,6 +159,11 @@ function getModelMetadata (span) {
   return modelMetadata
 }
 
+/**
+ * Get the generation metadata from the span tags (maxSteps, maxRetries, etc.)
+ * @param {import('../../../../dd-trace/src/opentracing/span')} span
+ * @returns {Record<string, string>}
+ */
 function getGenerationMetadata (span) {
   const metadata = {}
   for (const tag of Object.keys(span.context()._tags)) {
@@ -150,10 +184,18 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
   static get id () { return 'vercel-ai' }
   static get integration () { return 'vercel-ai' }
 
-  /** @type {Set<Record<string, any>>} */
+  /**
+   * The available tools within the runtime scope of this integration.
+   * This essentially acts as a global registry for all tools made through the Vercel AI SDK.
+   * @type {Set<Record<string, any>>}
+   */
   #availableTools
 
-  /** @type {Record<string, string>} */
+  /**
+   * A mapping of tool call IDs to tool names.
+   * This is used to map the tool call ID to the tool name for the output message.
+   * @type {Record<string, string>}
+   */
   #toolCallIdsToName
 
   constructor (...args) {
@@ -193,6 +235,16 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
     })
   }
 
+  /**
+   * Does a best-effort attempt to find the right tool name for the given tool description.
+   * This is because the Vercel AI SDK does not tag tools by name properly, but
+   * rather by the index they were passed in. Tool names appear nowhere in the span tags.
+   *
+   * We use the tool description as the next best identifier for a tool.
+   *
+   * @param {string} toolDescription
+   * @returns {string}
+   */
   findToolName (toolDescription) {
     for (const availableTool of this.#availableTools) {
       const description = availableTool.description
