@@ -360,10 +360,6 @@ function updateConfig (changes, config) {
     configWithOrigin.set(`${name}|${origin}`, entry)
   }
 
-  function isNotModified (oldEntry) {
-    return updatedTuples.get(oldEntry.name) !== oldEntry.origin
-  }
-
   if (changed) {
     // update configWithOrigin to contain up-to-date full list of config values for app-extended-heartbeat
     const { reqType, payload } = createPayload('app-client-configuration-change', {

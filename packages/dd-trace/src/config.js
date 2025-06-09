@@ -8,8 +8,6 @@ const log = require('./log')
 const pkg = require('./pkg')
 const coalesce = require('koalas')
 const tagger = require('./tagger')
-const get = require('../../datadog-core/src/utils/src/get')
-const has = require('../../datadog-core/src/utils/src/has')
 const set = require('../../datadog-core/src/utils/src/set')
 const { isTrue, isFalse, normalizeProfilingEnabledValue } = require('./util')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
@@ -1465,7 +1463,7 @@ class Config {
   // https://github.com/DataDog/dd-go/blob/prod/trace/apps/tracer-telemetry-intake/telemetry-payload/static/config_norm_rules.json
   _merge () {
     // Use reverse order for merge (lowest priority first)
-    const sources = this._getAllSources().slice().reverse()
+    const sources = [...this._getAllSources()].reverse()
 
     const changes = []
 
