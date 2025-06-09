@@ -2389,25 +2389,35 @@ describe('jest CommonJS', () => {
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
           const newTests = tests.filter(test =>
-            test.meta[TEST_SUITE] === 'ci-visibility/test/failing-test.js'
+            test.meta[TEST_SUITE] === 'ci-visibility/jest/failing-test.js'
           )
           newTests.forEach(test => {
             assert.notProperty(test.meta, TEST_IS_NEW)
           })
-          assert.equal(newTests.length, 1)
+          assert.equal(newTests.length, 2)
+
+          const passingTests = tests.filter(test =>
+            test.meta[TEST_NAME] === 'failing can report failed tests'
+          )
+          const failingTests = tests.filter(test =>
+            test.meta[TEST_NAME] === 'failing can report failing tests as failures'
+          )
+          passingTests.forEach(test => {
+            assert.equal(test.meta[TEST_STATUS], 'pass')
+          })
+          failingTests.forEach(test => {
+            assert.equal(test.meta[TEST_STATUS], 'fail')
+          })
 
           const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
           assert.equal(retriedTests.length, 0)
-          newTests.forEach(test => {
-            assert.equal(test.meta[TEST_NAME], 'failing can report failed tests')
-          })
         })
 
       childProcess = exec(
         runTestsWithCoverageCommand,
         {
           cwd,
-          env: { ...getCiVisEvpProxyConfig(receiver.port), TESTS_TO_RUN: 'test/failing-test' },
+          env: { ...getCiVisEvpProxyConfig(receiver.port), TESTS_TO_RUN: 'jest/failing-test' },
           stdio: 'inherit'
         }
       )
