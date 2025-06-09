@@ -1,13 +1,12 @@
 'use strict'
 
 const { createSandbox, FakeAgent, spawnProc } = require('../../../../integration-tests/helpers')
-const getPort = require('get-port')
 const path = require('path')
 const Axios = require('axios')
 const { assert } = require('chai')
 
 describe('WAF Metrics', () => {
-  let axios, sandbox, cwd, appPort, appFile
+  let axios, sandbox, cwd, appFile
 
   before(async function () {
     this.timeout(process.platform === 'win32' ? 90000 : 30000)
@@ -18,13 +17,8 @@ describe('WAF Metrics', () => {
       [path.join(__dirname, 'resources')]
     )
 
-    appPort = await getPort()
     cwd = sandbox.folder
     appFile = path.join(cwd, 'resources', 'index.js')
-
-    axios = Axios.create({
-      baseURL: `http://localhost:${appPort}`
-    })
   })
 
   after(async function () {
@@ -41,12 +35,12 @@ describe('WAF Metrics', () => {
         cwd,
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
-          APP_PORT: appPort,
           DD_APPSEC_ENABLED: 'true',
           DD_TELEMETRY_HEARTBEAT_INTERVAL: 1,
           DD_APPSEC_WAF_TIMEOUT: 0.1
         }
       })
+      axios = Axios.create({ baseURL: proc.url })
     })
 
     afterEach(async () => {
@@ -105,12 +99,12 @@ describe('WAF Metrics', () => {
         cwd,
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
-          APP_PORT: appPort,
           DD_APPSEC_ENABLED: 'true',
           DD_TELEMETRY_HEARTBEAT_INTERVAL: 1,
           DD_APPSEC_WAF_TIMEOUT: 1
         }
       })
+      axios = Axios.create({ baseURL: proc.url })
     })
 
     afterEach(async () => {
@@ -160,11 +154,11 @@ describe('WAF Metrics', () => {
         cwd,
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
-          APP_PORT: appPort,
           DD_APPSEC_ENABLED: 'true',
           DD_TELEMETRY_HEARTBEAT_INTERVAL: 1
         }
       })
+      axios = Axios.create({ baseURL: proc.url })
     })
 
     afterEach(async () => {
