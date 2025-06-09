@@ -25,7 +25,7 @@ class AzureFunctionsPlugin extends TracingPlugin {
     const { functionName, methodName, httpRequest } = ctx
     const store = storage('legacy').getStore()
     const ddTraceContext = Object.fromEntries(httpRequest.headers.entries())
-    const childOf = this._tracer.extract('http_headers', ddTraceContext) || null
+    const childOf = this._tracer.extract('http_headers', ddTraceContext) ?? null
     const span = this.startSpan(this.operationName(), {
       childOf,
       service: this.serviceName(),
