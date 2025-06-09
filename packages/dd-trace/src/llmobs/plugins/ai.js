@@ -8,7 +8,7 @@ const otelSpanStartCh = channel('dd-trace:otel:span:start')
 const otelSpanFinishCh = channel('dd-trace:otel:span:finish')
 const toolCreationCh = channel('dd-trace:vercel-ai:tool')
 
-const { isVercelAISpan } = require('../../../../datadog-plugin-vercel-ai/src/util')
+const { isVercelAISpan } = require('../../../../datadog-plugin-ai/src/util')
 const { MODEL_NAME, MODEL_PROVIDER, NAME } = require('../constants/tags')
 
 const SPANS_TO_USE_LLMOBS_PARENT = new Set([
@@ -55,7 +55,7 @@ const MODEL_METADATA_KEYS = new Set([
 ])
 
 /**
- * @param {import('../../../../dd-trace/src/opentracing/span')} span
+ * @param {import('../../opentracing/span')} span
  * @param {string} tag
  * @returns {string}
  */
@@ -77,7 +77,7 @@ function getSpanTag (span, tag) {
  * span._name = 'ai.generateText.doGenerate'
  * getOperation(span) // 'doGenerate'
  *
- * @param {import('../../../../dd-trace/src/opentracing/span')} span
+ * @param {import('../../opentracing/span')} span
  * @returns {string}
  */
 function getOperation (span) {
@@ -89,7 +89,7 @@ function getOperation (span) {
 
 /**
  * Get the LLM token usage from the span tags
- * @param {import('../../../../dd-trace/src/opentracing/span')} span
+ * @param {import('../../opentracing/span')} span
  * @returns {{inputTokens: number, outputTokens: number, totalTokens: number}}
  */
 function getUsage (span) {
@@ -107,7 +107,7 @@ function getUsage (span) {
  * Get the model provider from the span tags.
  * This is normalized to LLM Observability model provider standards.
  *
- * @param {import('../../../../dd-trace/src/opentracing/span')} span
+ * @param {import('../../opentracing/span')} span
  * @returns {string}
  */
 function getModelProvider (span) {
@@ -143,7 +143,7 @@ function getJsonStringValue (str, defaultValue) {
 
 /**
  * Get the model metadata from the span tags (top_p, top_k, temperature, etc.)
- * @param {import('../../../../dd-trace/src/opentracing/span')} span
+ * @param {import('../../opentracing/span')} span
  * @returns {Record<string, string>}
  */
 function getModelMetadata (span) {
@@ -161,7 +161,7 @@ function getModelMetadata (span) {
 
 /**
  * Get the generation metadata from the span tags (maxSteps, maxRetries, etc.)
- * @param {import('../../../../dd-trace/src/opentracing/span')} span
+ * @param {import('../../opentracing/span')} span
  * @returns {Record<string, string>}
  */
 function getGenerationMetadata (span) {
@@ -181,8 +181,8 @@ function getGenerationMetadata (span) {
 }
 
 class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
-  static get id () { return 'vercel-ai' }
-  static get integration () { return 'vercel-ai' }
+  static get id () { return 'ai' }
+  static get integration () { return 'vercel-ai' } // for LLMObs telemetry - "vercel-ai" makes more sense than "ai"
 
   /**
    * The available tools within the runtime scope of this integration.
