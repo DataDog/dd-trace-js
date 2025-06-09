@@ -3,7 +3,7 @@
 require('../setup/tap')
 
 const LogPlugin = require('../../src/plugins/log_plugin')
-// const bunyanPlugin = require('../../../datadog-plugin-bunyan')
+const BunyanPlugin = require('../../../datadog-plugin-bunyan/src/index')
 const Tracer = require('../../src/tracer')
 const Config = require('../../src/config')
 
@@ -67,7 +67,7 @@ describe('LogPlugin', () => {
     })
   })
 
-  it('should inject logs for structured loggers when logInjection is structured', () => {
+  it('should inject logs for only structured loggers when logInjection is structured', () => {
     plugin.configure({
       logInjection: 'structured',
       enabled: true
@@ -79,20 +79,29 @@ describe('LogPlugin', () => {
       testLogChannel.publish(data)
       const { message } = data
 
-      console.log(message)
-    // const structuredLoggerSpan = tracer.startSpan('structured logger')
-    // const structuredLogChannel = channel('apm:bunyan:log')
+      expect(message.dd).to.be.undefined
+    })
 
-    // tracer.scope().activate(structuredLoggerSpan, () => {
-    //   const data = { message: {} }
-    //   testLogChannel.publish(data)
-    //   const { message } = data
+    plugin = new BunyanPlugin({
+      _tracer: tracer
+    })
+    plugin.configure({
+      logInjection: 'structured',
+      enabled: true
+    })
 
-    //   expect(message.dd).to.contain(config)
+    const structuredLoggerSpan = tracer.startSpan('structured logger')
+    const structuredLogChannel = channel('apm:bunyan:log')
 
-    //   // Should have trace/span data when none is active
-    //   expect(message.dd).to.have.property('trace_id', span.context().toTraceId(true))
-    //   expect(message.dd).to.have.property('span_id', span.context().toSpanId())
+    tracer.scope().activate(structuredLoggerSpan, () => {
+      const data = { message: {} }
+      structuredLogChannel.publish(data)
+      const { message } = data
+
+      expect(message.dd).to.contain(config)
+
+      expect(message.dd).to.have.property('trace_id', structuredLoggerSpan.context().toTraceId(true))
+      expect(message.dd).to.have.property('span_id', structuredLoggerSpan.context().toSpanId())
     })
   })
 })
