@@ -31,7 +31,7 @@ class PrismaClientPlugin extends DatabasePlugin {
 
   end (ctx) {
     // Only synchronous operations would have `result` on `end`.
-    if (!ctx.hasOwnProperty('result')) return
+    if (!Object.hasOwn(ctx, 'result')) return
     this.finish(ctx)
   }
 

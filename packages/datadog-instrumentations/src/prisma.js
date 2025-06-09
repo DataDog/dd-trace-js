@@ -65,8 +65,13 @@ class TracingHelper {
 
 // Tracing support GA in  v6.1.0+
 // https://github.com/prisma/prisma/releases/tag/6.1.0
-addHook({ name: '@prisma/client', versions: ['>=6.1.0'] }, prisma => {
+let majorVersion
+
+addHook({ name: '@prisma/client', versions: ['>=6.1.0'] }, (prisma, version) => {
   const tracingHelper = new TracingHelper()
+
+  majorVersion = version.split('')[0]
+  console.log('major in instrumentation', majorVersion)
   /*
     * This is a custom PrismaClient that extends the original PrismaClient
     * This allows us to grab additional information from the PrismaClient such as DB connection strings
@@ -85,16 +90,13 @@ addHook({ name: '@prisma/client', versions: ['>=6.1.0'] }, prisma => {
 
   prisma.PrismaClient = PrismaClient
   /*
-    * This is taking advantage of the built in tracing support in Prisma.
-    * This is done by setting a global tacing helper that Prisma uses
-    * throuthout the Prisma codebase
+    * This is taking advantage of the built in tracing support from Prisma.
+    * The below variable is setting a global tracing helper that Prisma uses
+    * to enable OpenTelemetry.
   */
   // https://github.com/prisma/prisma/blob/478293bbfce91e41ceff02f2a0b03bb8acbca03e/packages/instrumentation/src/PrismaInstrumentation.ts#L42
-  global.PRISMA_INSTRUMENTATION = {
-    helper: tracingHelper
-  }
 
-  global.V0_PRISMA_INSTRUMENTATION = {
+  global[`V${majorVersion}_PRISMA_INSTRUMENTATION`] = {
     helper: tracingHelper
   }
 

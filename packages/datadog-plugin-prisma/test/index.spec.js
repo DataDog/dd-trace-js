@@ -114,7 +114,8 @@ describe('Plugin', () => {
         beforeEach(() => {
           prisma = require(`../../../versions/@prisma/client@${version}`).get()
           prismaClient = new prisma.PrismaClient()
-          tracingHelper = global.PRISMA_INSTRUMENTATION.helper || global.V0_PRISMA_INSTRUMENTATION.helper
+          const majorVersion = version.split('')[2]
+          tracingHelper = global[`V${majorVersion}_PRISMA_INSTRUMENTATION`].helper
         })
 
         after(() => { return agent.close({ ritmReset: false }) })
