@@ -8,6 +8,8 @@ const log = require('./log')
 const pkg = require('./pkg')
 const coalesce = require('koalas')
 const tagger = require('./tagger')
+const get = require('../../datadog-core/src/utils/src/get')
+const has = require('../../datadog-core/src/utils/src/has')
 const set = require('../../datadog-core/src/utils/src/set')
 const { isTrue, isFalse, normalizeProfilingEnabledValue } = require('./util')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
@@ -1370,16 +1372,9 @@ class Config {
 
     if (typeof value === 'string') {
       value = value.split(',').map(item => {
-        const trimmedItem = item.trim()
-        const colonIndex = trimmedItem.indexOf(':')
-
-        if (colonIndex === -1) {
-          return trimmedItem
-        }
-
-        const key = trimmedItem.slice(0, colonIndex).trim()
-        const val = trimmedItem.slice(colonIndex + 1).trim()
-        return `${key}:${val}`
+        // Trim each item and remove whitespace around the colon
+        const [key, val] = item.split(':').map(part => part.trim())
+        return val === undefined ? key : `${key}:${val}`
       })
     }
 
@@ -1392,25 +1387,19 @@ class Config {
     if (value == null) {
       return this._setValue(obj, name, null)
     }
-
+    value = value.split(',')
     const result = []
-    const values = value.split(',')
 
-    for (const val of values) {
-      const trimmedVal = val.trim()
-      const dashIndex = trimmedVal.indexOf('-')
-
-      if (dashIndex === -1) {
-        result.push(Number(trimmedVal))
-      } else {
-        const start = Number(trimmedVal.slice(0, dashIndex))
-        const end = Number(trimmedVal.slice(dashIndex + 1))
+    value.forEach(val => {
+      if (val.includes('-')) {
+        const [start, end] = val.split('-').map(Number)
         for (let i = start; i <= end; i++) {
           result.push(i)
         }
+      } else {
+        result.push(Number(val))
       }
-    }
-
+    })
     this._setValue(obj, name, result)
   }
 
@@ -1438,20 +1427,7 @@ class Config {
   }
 
   _setTags (obj, name, value) {
-    if (!value) {
-      return this._setValue(obj, name, null)
-    }
-
-    // Check if object has any own enumerable properties (same behavior as Object.keys())
-    let hasKeys = false
-    for (const key in value) {
-      if (value.hasOwnProperty(key)) {
-        hasKeys = true
-        break
-      }
-    }
-
-    if (!hasKeys) {
+    if (!value || Object.keys(value).length === 0) {
       return this._setValue(obj, name, null)
     }
 
@@ -1516,6 +1492,29 @@ class Config {
     }
     this.sampler.sampleRate = this.sampleRate
     updateConfig(changes, this)
+  }
+
+  _getContainersAndOriginsOrdered () {
+    const containers = [
+      this._remote,
+      this._options,
+      this._fleetStableConfig,
+      this._env,
+      this._localStableConfig,
+      this._calculated,
+      this._defaults
+    ]
+    const origins = [
+      'remote_config',
+      'code',
+      'fleet_stable_config',
+      'env_var',
+      'local_stable_config',
+      'calculated',
+      'default'
+    ]
+
+    return { containers, origins }
   }
 
   getOrigin (name) {

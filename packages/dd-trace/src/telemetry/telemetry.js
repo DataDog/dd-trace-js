@@ -335,14 +335,11 @@ function updateConfig (changes, config) {
   const application = createAppObject(config)
   const host = createHostObject()
 
-  const namesNeedFormatting = new Set(['DD_TAGS', 'peerServiceMapping', 'serviceMapping'])
+  const changed = configWithOrigin.size > 0
   const configuration = []
-  const updatedTuples = new Set()
 
   for (const change of changes) {
     const name = nameMapping[change.name] || change.name
-
-    updatedTuples.add(`${name}|${change.origin}`)
     const { origin, value } = change
     const entry = { name, value, origin, seq_id: seqId++ }
 
@@ -357,14 +354,17 @@ function updateConfig (changes, config) {
     } else if (Array.isArray(entry.value)) {
       entry.value = value.join(',')
     }
-    configWithOrigin.set(name, entry)
+
+    configuration.push(entry)
+    // Use composite key to support multiple origins for same config name
+    configWithOrigin.set(`${name}|${origin}`, entry)
   }
 
   function isNotModified (oldEntry) {
     return updatedTuples.get(oldEntry.name) !== oldEntry.origin
   }
 
-  if (configWithOrigin.length) {
+  if (changed) {
     // update configWithOrigin to contain up-to-date full list of config values for app-extended-heartbeat
     const { reqType, payload } = createPayload('app-client-configuration-change', {
       configuration: [...configWithOrigin.values()]
