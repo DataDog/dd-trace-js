@@ -4,8 +4,7 @@ const {
   FakeAgent,
   hookFile,
   createSandbox,
-  curlAndAssertMessage,
-  curl
+  curlAndAssertMessage
 } = require('../../../../integration-tests/helpers')
 const { spawn } = require('child_process')
 const { assert } = require('chai')
