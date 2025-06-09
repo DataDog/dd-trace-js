@@ -534,7 +534,7 @@ class Config {
     this._setValue(defaults, 'testManagementAttemptToFixRetries', 20)
     this._setValue(defaults, 'isTestManagementEnabled', false)
     this._setValue(defaults, 'isImpactedTestsEnabled', false)
-    this._setValue(defaults, 'logInjection', false)
+    this._setValue(defaults, 'logInjection', 'structured')
     this._setValue(defaults, 'lookup')
     this._setValue(defaults, 'inferredProxyServicesEnabled', false)
     this._setValue(defaults, 'memcachedCommandEnabled', false)
