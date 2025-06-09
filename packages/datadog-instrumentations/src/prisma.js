@@ -70,7 +70,7 @@ let majorVersion
 addHook({ name: '@prisma/client', versions: ['>=6.1.0'] }, (prisma, version) => {
   const tracingHelper = new TracingHelper()
 
-  majorVersion = version.split('')[0]
+  majorVersion = [...version][0]
   /*
     * This is a custom PrismaClient that extends the original PrismaClient
     * This allows us to grab additional information from the PrismaClient such as DB connection strings
