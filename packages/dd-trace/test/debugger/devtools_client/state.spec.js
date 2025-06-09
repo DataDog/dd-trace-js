@@ -18,7 +18,10 @@ describe('findScriptFromPartialPath', function () {
         fs: {
           // Mock reading the source map file
           readFileSync: () => JSON.stringify({
-            sources: ['index.ts']
+            sources: [
+              'index.ts',
+              'folder/./file.ts'
+            ]
           })
         }
       }),
@@ -170,6 +173,16 @@ describe('findScriptFromPartialPath', function () {
         scriptId: 'should-match-source-mapped',
         sourceMapURL: 'index.js.map',
         source: 'index.ts'
+      })
+    })
+
+    it('should normalize relative source paths', function () {
+      const result = state.findScriptFromPartialPath('source-mapped/folder/./file.ts')
+      expect(result).to.deep.equal({
+        url: 'file:///source-mapped/index.js',
+        scriptId: 'should-match-source-mapped',
+        sourceMapURL: 'index.js.map',
+        source: 'folder/file.ts'
       })
     })
   })

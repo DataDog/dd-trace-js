@@ -7,7 +7,7 @@ const truncated = 'truncated'
 const redacted = 'redacted'
 
 function escapeKey (key) {
-  return key.replaceAll('.', '\\.')
+  return key.replaceAll('.', String.raw`\.`)
 }
 
 /**

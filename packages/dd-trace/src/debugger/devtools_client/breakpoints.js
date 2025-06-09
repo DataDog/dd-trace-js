@@ -167,16 +167,16 @@ async function modifyBreakpoint (probe) {
 
 async function updateBreakpointInternal (breakpoint, probe) {
   const probesAtLocation = breakpointToProbes.get(breakpoint.id)
-  const conditionBeforeNewProbe = compileCompoundCondition(Array.from(probesAtLocation.values()))
+  const conditionBeforeNewProbe = compileCompoundCondition([...probesAtLocation.values()])
 
   // If a probe is provided, add it to the breakpoint. If not, it's because we're removing a probe, but potentially
-  // need to update the condtion of the breakpoint.
+  // need to update the condition of the breakpoint.
   if (probe) {
     probesAtLocation.set(probe.id, probe)
     probeToLocation.set(probe.id, breakpoint.locationKey)
   }
 
-  const condition = compileCompoundCondition(Array.from(probesAtLocation.values()))
+  const condition = compileCompoundCondition([...probesAtLocation.values()])
 
   if (condition || conditionBeforeNewProbe !== condition) {
     try {
@@ -194,7 +194,6 @@ async function updateBreakpointInternal (breakpoint, probe) {
     } catch (err) {
       throw new Error(`Error setting breakpoint for probe ${probe.id}`, { cause: err })
     }
-    breakpoint.id = result.breakpointId
     breakpointToProbes.set(result.breakpointId, probesAtLocation)
   }
 }

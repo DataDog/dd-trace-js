@@ -1,15 +1,16 @@
 'use strict'
 
 const fs = require('fs')
+const { getEnvironmentVariable } = require('../../config-helper')
 
-const { DD_EXTERNAL_ENV } = process.env
+const DD_EXTERNAL_ENV = getEnvironmentVariable('DD_EXTERNAL_ENV')
 
 // The second part is the PCF / Garden regexp. We currently assume no suffix($) to avoid matching pod UIDs
 // See https://github.com/DataDog/datadog-agent/blob/7.40.x/pkg/util/cgroups/reader.go#L50
 const uuidSource =
 '[0-9a-f]{8}[-_][0-9a-f]{4}[-_][0-9a-f]{4}[-_][0-9a-f]{4}[-_][0-9a-f]{12}|[0-9a-f]{8}(?:-[0-9a-f]{4}){4}$'
 const containerSource = '[0-9a-f]{64}'
-const taskSource = '[0-9a-f]{32}-\\d+'
+const taskSource = String.raw`[0-9a-f]{32}-\d+`
 const lineReg = /^(\d+):([^:]*):(.+)$/m
 const entityReg = new RegExp(`.*(${uuidSource}|${containerSource}|${taskSource})(?:\\.scope)?$`, 'm')
 
@@ -24,7 +25,7 @@ try {
 
 const inodePath = cgroup.match(lineReg)?.[3]
 if (inodePath) {
-  const strippedPath = inodePath.replace(/^\/|\/$/g, '')
+  const strippedPath = inodePath.replaceAll(/^\/|\/$/g, '')
 
   try {
     inode = fs.statSync(`/sys/fs/cgroup/${strippedPath}`).ino

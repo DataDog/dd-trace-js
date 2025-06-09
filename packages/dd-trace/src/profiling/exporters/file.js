@@ -6,8 +6,9 @@ const { threadId } = require('worker_threads')
 const writeFile = promisify(fs.writeFile)
 const { EventSerializer } = require('./event_serializer')
 
+const pad = (n) => String(n).padStart(2, '0')
+
 function formatDateTime (t) {
-  const pad = (n) => String(n).padStart(2, '0')
   return `${t.getUTCFullYear()}${pad(t.getUTCMonth() + 1)}${pad(t.getUTCDate())}` +
          `T${pad(t.getUTCHours())}${pad(t.getUTCMinutes())}${pad(t.getUTCSeconds())}Z`
 }

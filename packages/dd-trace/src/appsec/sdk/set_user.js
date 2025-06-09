@@ -7,7 +7,7 @@ const addresses = require('../addresses')
 
 function setUserTags (user, rootSpan) {
   for (const k of Object.keys(user)) {
-    rootSpan.setTag(`usr.${k}`, '' + user[k])
+    rootSpan.setTag(`usr.${k}`, String(user[k]))
   }
 
   rootSpan.setTag('_dd.appsec.user.collection_mode', 'sdk')
@@ -28,7 +28,7 @@ function setUser (tracer, user) {
   setUserTags(user, rootSpan)
 
   const persistent = {
-    [addresses.USER_ID]: '' + user.id
+    [addresses.USER_ID]: String(user.id)
   }
 
   if (user.session_id && typeof user.session_id === 'string') {

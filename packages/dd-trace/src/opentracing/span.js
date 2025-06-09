@@ -13,18 +13,17 @@ const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
 const { channel } = require('dc-polyfill')
 const util = require('util')
+const { getEnvironmentVariable } = require('../config-helper')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
-const {
-  DD_TRACE_EXPERIMENTAL_STATE_TRACKING,
-  DD_TRACE_EXPERIMENTAL_SPAN_COUNTS
-} = process.env
+const DD_TRACE_EXPERIMENTAL_STATE_TRACKING = getEnvironmentVariable('DD_TRACE_EXPERIMENTAL_STATE_TRACKING')
+const DD_TRACE_EXPERIMENTAL_SPAN_COUNTS = getEnvironmentVariable('DD_TRACE_EXPERIMENTAL_SPAN_COUNTS')
 
 const unfinishedRegistry = createRegistry('unfinished')
 const finishedRegistry = createRegistry('finished')
 
-const OTEL_ENABLED = !!process.env.DD_TRACE_OTEL_ENABLED
+const OTEL_ENABLED = !!getEnvironmentVariable('DD_TRACE_OTEL_ENABLED')
 const ALLOWED = new Set(['string', 'number', 'boolean'])
 
 const integrationCounters = {
@@ -56,6 +55,8 @@ class DatadogSpan {
   constructor (tracer, processor, prioritySampler, fields, debug) {
     const operationName = fields.operationName
     const parent = fields.parent || null
+    // TODO(BridgeAR): Investigate why this is causing a performance regression
+    // eslint-disable-next-line prefer-object-spread
     const tags = Object.assign({}, fields.tags)
     const hostname = fields.hostname
 
@@ -197,7 +198,7 @@ class DatadogSpan {
 
   addLink (context, attributes) {
     this._links.push({
-      context: context._ddContext ? context._ddContext : context,
+      context: context._ddContext ?? context,
       attributes: this._sanitizeAttributes(attributes)
     })
   }
@@ -333,7 +334,7 @@ class DatadogSpan {
         spanId: id(),
         parentId: parent._spanId,
         sampling: parent._sampling,
-        baggageItems: Object.assign({}, parent._baggageItems),
+        baggageItems: { ...parent._baggageItems },
         trace: parent._trace,
         tracestate: parent._tracestate
       })

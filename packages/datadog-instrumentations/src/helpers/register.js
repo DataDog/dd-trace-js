@@ -9,11 +9,14 @@ const log = require('../../../dd-trace/src/log')
 const checkRequireCache = require('./check-require-cache')
 const telemetry = require('../../../dd-trace/src/guardrails/telemetry')
 const { isInServerlessEnvironment } = require('../../../dd-trace/src/serverless')
+const { getEnvironmentVariables } = require('../../../dd-trace/src/config-helper')
+
+const envs = getEnvironmentVariables()
 
 const {
   DD_TRACE_DISABLED_INSTRUMENTATIONS = '',
   DD_TRACE_DEBUG = ''
-} = process.env
+} = envs
 
 const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
@@ -24,7 +27,7 @@ const disabledInstrumentations = new Set(
 )
 
 // Check for DD_TRACE_<INTEGRATION>_ENABLED environment variables
-for (const [key, value] of Object.entries(process.env)) {
+for (const [key, value] of Object.entries(envs)) {
   const match = key.match(/^DD_TRACE_(.+)_ENABLED$/)
   if (match && (value?.toLowerCase() === 'false' || value === '0')) {
     const integration = match[1].toLowerCase()
@@ -96,9 +99,7 @@ for (const packageName of names) {
       // That way it would also not be duplicated. The actual name being used has to be identified else wise.
       // Maybe it is also not important to know what name was actually used?
       hook[HOOK_SYMBOL] ??= new WeakSet()
-      let matchesFile = false
-
-      matchesFile = moduleName === fullFilename
+      let matchesFile = moduleName === fullFilename
 
       if (fullFilePattern) {
         // Some libraries include a hash in their filenames when installed,
@@ -115,7 +116,7 @@ for (const packageName of names) {
           log.error('Error getting version for "%s": %s', name, e.message, e)
           continue
         }
-        if (namesAndSuccesses[`${name}@${version}`] === undefined) {
+        if (namesAndSuccesses[`${name}@${version}`] === undefined && !file) {
           // TODO If `file` is present, we might elsewhere instrument the result of the module
           // for a version range that actually matches, so we can't assume that we're _not_
           // going to instrument that. However, the way the data model around instrumentation
@@ -123,9 +124,7 @@ for (const packageName of names) {
           // ignore this if there is a `file` in the hook. The thing to do here is rework
           // everything so that we can be sure that there are _no_ instrumentations that it
           // could match.
-          if (!file) {
-            namesAndSuccesses[`${name}@${version}`] = false
-          }
+          namesAndSuccesses[`${name}@${version}`] = false
         }
 
         if (matchVersion(version, versions)) {
@@ -217,7 +216,7 @@ function parseHookInstrumentationFileName (packageName) {
     let moduleName = match[1]
     // Remove leading '../' if present
     if (moduleName.startsWith('../')) {
-      moduleName = moduleName.substring(3)
+      moduleName = moduleName.slice(3)
     }
     return moduleName
   }

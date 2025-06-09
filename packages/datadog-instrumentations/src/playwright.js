@@ -1,6 +1,6 @@
 const satisfies = require('semifies')
 
-const { addHook, channel, AsyncResource } = require('./helpers/instrument')
+const { addHook, channel } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const {
   parseAnnotations,
@@ -19,6 +19,8 @@ const testSessionFinishCh = channel('ci:playwright:session:finish')
 const libraryConfigurationCh = channel('ci:playwright:library-configuration')
 const knownTestsCh = channel('ci:playwright:known-tests')
 const testManagementTestsCh = channel('ci:playwright:test-management-tests')
+const impactedTestsCh = channel('ci:playwright:modified-tests')
+const isModifiedCh = channel('ci:playwright:test:is-modified')
 
 const testSuiteStartCh = channel('ci:playwright:test-suite:start')
 const testSuiteFinishCh = channel('ci:playwright:test-suite:finish')
@@ -31,7 +33,6 @@ const testSuiteToCtx = new Map()
 const testSuiteToTestStatuses = new Map()
 const testSuiteToErrors = new Map()
 const testsToTestStatuses = new Map()
-const testSessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
 let applyRepeatEachIndex = null
 
@@ -54,6 +55,8 @@ let knownTests = {}
 let isTestManagementTestsEnabled = false
 let testManagementAttemptToFixRetries = 0
 let testManagementTests = {}
+let isImpactedTestsEnabled = false
+let modifiedTests = {}
 const quarantinedOrDisabledTestsAttemptToFix = []
 let rootDir = ''
 const MINIMUM_SUPPORTED_VERSION_RANGE_EFD = '>=1.38.0' // TODO: remove this once we drop support for v5
@@ -105,7 +108,12 @@ function deepCloneSuite (suite, filterTest, tags = []) {
 
 function getTestsBySuiteFromTestGroups (testGroups) {
   return testGroups.reduce((acc, { requireFile, tests }) => {
-    acc[requireFile] = acc[requireFile] ? acc[requireFile].concat(tests) : tests
+    if (acc[requireFile]) {
+      acc[requireFile].push(...tests)
+    } else {
+      // Copy the tests, otherwise we modify the original tests
+      acc[requireFile] = [...tests]
+    }
     return acc
   }, {})
 }
@@ -232,11 +240,9 @@ function getTestByTestId (dispatcher, testId) {
   }
 }
 
-function getChannelPromise (channelToPublishTo) {
+function getChannelPromise (channelToPublishTo, params) {
   return new Promise(resolve => {
-    testSessionAsyncResource.runInAsyncScope(() => {
-      channelToPublishTo.publish({ onDone: resolve })
-    })
+    channelToPublishTo.publish({ onDone: resolve, ...params })
   })
 }
 
@@ -330,7 +336,7 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout, isMain
   }
 
   if (testStatuses.length === testManagementAttemptToFixRetries + 1) {
-    if (testStatuses.some(status => status === 'fail')) {
+    if (testStatuses.includes('fail')) {
       test._ddHasFailedAttemptToFixRetries = true
     }
     if (testStatuses.every(status => status === 'fail')) {
@@ -363,6 +369,7 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout, isMain
       hasPassedAttemptToFixRetries: test._ddHasPassedAttemptToFixRetries,
       hasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
       isAtrRetry,
+      isModified: test._ddIsModified,
       ...testCtx.currentStore
     })
   }
@@ -412,7 +419,7 @@ function dispatcherRunWrapperNew (run) {
       // Not available from >=1.44.0
       this._ddAllTests = testGroups.flatMap(g => g.tests)
     }
-    remainingTestsByFile = getTestsBySuiteFromTestGroups(arguments[0])
+    remainingTestsByFile = getTestsBySuiteFromTestGroups(testGroups)
     return run.apply(this, arguments)
   }
 }
@@ -468,7 +475,7 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
 
       const isTimeout = status === 'timedOut'
       testEndHandler(test, annotations, STATUS_TO_TEST_STATUS[status], errors && errors[0], isTimeout, false)
-      const testResult = test.results[test.results.length - 1]
+      const testResult = test.results.at(-1)
       const isAtrRetry = testResult?.retry > 0 &&
         isFlakyTestRetriesEnabled &&
         !test._ddIsAttemptToFix &&
@@ -487,7 +494,8 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
           _ddHasFailedAllRetries: test._ddHasFailedAllRetries,
           _ddHasPassedAttemptToFixRetries: test._ddHasPassedAttemptToFixRetries,
           _ddHasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
-          _ddIsAtrRetry: isAtrRetry
+          _ddIsAtrRetry: isAtrRetry,
+          _ddIsModified: test._ddIsModified
         }
       })
     })
@@ -505,9 +513,7 @@ function runnerHook (runnerExport, playwrightVersion) {
 
     const processArgv = process.argv.slice(2).join(' ')
     const command = `playwright ${processArgv}`
-    testSessionAsyncResource.runInAsyncScope(() => {
-      testSessionStartCh.publish({ command, frameworkVersion: playwrightVersion, rootDir })
-    })
+    testSessionStartCh.publish({ command, frameworkVersion: playwrightVersion, rootDir })
 
     try {
       const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh)
@@ -519,22 +525,24 @@ function runnerHook (runnerExport, playwrightVersion) {
         flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
         isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
         testManagementAttemptToFixRetries = libraryConfig.testManagementAttemptToFixRetries
+        isImpactedTestsEnabled = libraryConfig.isImpactedTestsEnabled
       }
     } catch (e) {
       isEarlyFlakeDetectionEnabled = false
       isKnownTestsEnabled = false
       isTestManagementTestsEnabled = false
+      isImpactedTestsEnabled = false
       log.error('Playwright session start error', e)
     }
 
     if (isKnownTestsEnabled && satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)) {
       try {
         const { err, knownTests: receivedKnownTests } = await getChannelPromise(knownTestsCh)
-        if (!err) {
-          knownTests = receivedKnownTests
-        } else {
+        if (err) {
           isEarlyFlakeDetectionEnabled = false
           isKnownTestsEnabled = false
+        } else {
+          knownTests = receivedKnownTests
         }
       } catch (err) {
         isEarlyFlakeDetectionEnabled = false
@@ -546,14 +554,28 @@ function runnerHook (runnerExport, playwrightVersion) {
     if (isTestManagementTestsEnabled && satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)) {
       try {
         const { err, testManagementTests: receivedTestManagementTests } = await getChannelPromise(testManagementTestsCh)
-        if (!err) {
-          testManagementTests = receivedTestManagementTests
-        } else {
+        if (err) {
           isTestManagementTestsEnabled = false
+        } else {
+          testManagementTests = receivedTestManagementTests
         }
       } catch (err) {
         isTestManagementTestsEnabled = false
         log.error('Playwright test management tests error', err)
+      }
+    }
+
+    if (isImpactedTestsEnabled && satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)) {
+      try {
+        const { err, modifiedTests: receivedModifiedTests } = await getChannelPromise(impactedTestsCh)
+        if (err) {
+          isImpactedTestsEnabled = false
+        } else {
+          modifiedTests = receivedModifiedTests
+        }
+      } catch (err) {
+        isImpactedTestsEnabled = false
+        log.error('Playwright impacted tests error', err)
       }
     }
 
@@ -608,13 +630,11 @@ function runnerHook (runnerExport, playwrightVersion) {
     const flushWait = new Promise(resolve => {
       onDone = resolve
     })
-    testSessionAsyncResource.runInAsyncScope(() => {
-      testSessionFinishCh.publish({
-        status: STATUS_TO_TEST_STATUS[sessionStatus],
-        isEarlyFlakeDetectionEnabled,
-        isTestManagementTestsEnabled,
-        onDone
-      })
+    testSessionFinishCh.publish({
+      status: STATUS_TO_TEST_STATUS[sessionStatus],
+      isEarlyFlakeDetectionEnabled,
+      isTestManagementTestsEnabled,
+      onDone
     })
     await flushWait
 
@@ -692,7 +712,7 @@ addHook({
   const oldCreateRootSuite = loadUtilsPackage.createRootSuite
 
   async function newCreateRootSuite () {
-    if (!isKnownTestsEnabled && !isTestManagementTestsEnabled) {
+    if (!isKnownTestsEnabled && !isTestManagementTestsEnabled && !isImpactedTestsEnabled) {
       return oldCreateRootSuite.apply(this, arguments)
     }
     const rootSuite = await oldCreateRootSuite.apply(this, arguments)
@@ -731,13 +751,41 @@ addHook({
       }
     }
 
+    if (isImpactedTestsEnabled) {
+      await Promise.all(allTests.map(async (test) => {
+        const { isModified } = await getChannelPromise(isModifiedCh, {
+          filePath: test._requireFile,
+          modifiedTests
+        })
+        if (isModified) {
+          test._ddIsModified = true
+        }
+        if (isEarlyFlakeDetectionEnabled && test.expectedStatus !== 'skipped') {
+          const isNew = isKnownTestsEnabled && isNewTest(test)
+          const fileSuite = getSuiteType(test, 'file')
+          const projectSuite = getSuiteType(test, 'project')
+          // If something change in the file, all tests in the file are impacted
+          const isModifiedTest = () => isModified
+          for (let repeatEachIndex = 1; repeatEachIndex <= earlyFlakeDetectionNumRetries; repeatEachIndex++) {
+            const copyFileSuite = deepCloneSuite(fileSuite, isModifiedTest, [
+              isNew && '_ddIsNew',
+              '_ddIsModified',
+              '_ddIsEfdRetry'
+            ])
+            applyRepeatEachIndex(projectSuite._fullProject, copyFileSuite, repeatEachIndex + 1)
+            projectSuite._addSuite(copyFileSuite)
+          }
+        }
+      }))
+    }
+
     if (isKnownTestsEnabled) {
       const newTests = allTests.filter(isNewTest)
 
       for (const newTest of newTests) {
         // No need to filter out attempt to fix tests here because attempt to fix tests are never new
         newTest._ddIsNew = true
-        if (isEarlyFlakeDetectionEnabled && newTest.expectedStatus !== 'skipped') {
+        if (isEarlyFlakeDetectionEnabled && newTest.expectedStatus !== 'skipped' && !newTest._ddIsModified) {
           const fileSuite = getSuiteType(newTest, 'file')
           const projectSuite = getSuiteType(newTest, 'project')
           for (let repeatEachIndex = 1; repeatEachIndex <= earlyFlakeDetectionNumRetries; repeatEachIndex++) {
@@ -810,11 +858,7 @@ addHook({
     try {
       if (page) {
         const isRumActive = await page.evaluate(() => {
-          if (window.DD_RUM && window.DD_RUM.getInternalContext) {
-            return !!window.DD_RUM.getInternalContext()
-          } else {
-            return false
-          }
+          return window.DD_RUM && window.DD_RUM.getInternalContext ? !!window.DD_RUM.getInternalContext() : false
         })
 
         if (isRumActive) {
@@ -824,7 +868,7 @@ addHook({
           })
         }
       }
-    } catch (e) {
+    } catch {
       // ignore errors such as redirects, context destroyed, etc
     }
 
@@ -893,9 +937,8 @@ addHook({
                   if (window.DD_RUM && window.DD_RUM.stopSession) {
                     window.DD_RUM.stopSession()
                     return true
-                  } else {
-                    return false
                   }
+                  return false
                 })
 
                 if (isRumActive) {
@@ -912,7 +955,7 @@ addHook({
                   }
                 }
               }
-            } catch (e) {
+            } catch {
               // ignore errors
             }
           },
@@ -980,6 +1023,7 @@ addHook({
       hasPassedAttemptToFixRetries: test._ddHasPassedAttemptToFixRetries,
       hasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
       isAtrRetry: test._ddIsAtrRetry,
+      isModified: test._ddIsModified,
       onDone,
       ...testCtx.currentStore
     })

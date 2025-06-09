@@ -128,8 +128,7 @@ function getContext (spanContext) {
 function getParent (references = []) {
   let parent = null
 
-  for (let i = 0; i < references.length; i++) {
-    const ref = references[i]
+  for (const ref of references) {
     const type = ref.type()
 
     if (type === REFERENCE_CHILD_OF) {

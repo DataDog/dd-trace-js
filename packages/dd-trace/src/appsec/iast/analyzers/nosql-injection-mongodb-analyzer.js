@@ -24,6 +24,8 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
   onConfigure () {
     this.configureSanitizers()
 
+    // Anything that accesses the storage is context dependent
+    // eslint-disable-next-line unicorn/consistent-function-scoping
     const onStart = ({ filters }) => {
       const store = storage('legacy').getStore()
       if (store && !store.nosqlAnalyzed && filters?.length) {
@@ -42,6 +44,8 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
       }
     }
 
+    // Anything that accesses the storage is context dependent
+    // eslint-disable-next-line unicorn/consistent-function-scoping
     const onFinish = () => {
       const store = storage('legacy').getStore()
       if (store?.nosqlParentStore) {

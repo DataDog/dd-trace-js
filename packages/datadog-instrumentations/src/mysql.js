@@ -1,10 +1,6 @@
 'use strict'
 
-const {
-  channel,
-  addHook,
-  AsyncResource
-} = require('./helpers/instrument')
+const { channel, addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
 addHook({ name: 'mysql', file: 'lib/Connection.js', versions: ['>=2'] }, Connection => {
@@ -19,43 +15,38 @@ addHook({ name: 'mysql', file: 'lib/Connection.js', versions: ['>=2'] }, Connect
 
     const sql = arguments[0].sql || arguments[0]
     const conf = this.config
-    const payload = { sql, conf }
+    const ctx = { sql, conf }
 
-    const callbackResource = new AsyncResource('bound-anonymous-fn')
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-
-    return asyncResource.runInAsyncScope(() => {
-      startCh.publish(payload)
-
+    return startCh.runStores(ctx, () => {
       if (arguments[0].sql) {
-        arguments[0].sql = payload.sql
+        arguments[0].sql = ctx.sql
       } else {
-        arguments[0] = payload.sql
+        arguments[0] = ctx.sql
       }
+
       try {
         const res = query.apply(this, arguments)
 
         if (res._callback) {
-          const cb = callbackResource.bind(res._callback)
-          res._callback = shimmer.wrapFunction(cb, cb => asyncResource.bind(function (error, result) {
+          const cb = res._callback
+          res._callback = shimmer.wrapFunction(cb, cb => function (error, result) {
             if (error) {
-              errorCh.publish(error)
+              ctx.error = error
+              errorCh.publish(ctx)
             }
-            finishCh.publish(result)
+            ctx.result = result
 
-            return cb.apply(this, arguments)
-          }))
-        } else {
-          const cb = asyncResource.bind(function () {
-            finishCh.publish(undefined)
+            return finishCh.runStores(ctx, cb, this, error, result)
           })
-          res.on('end', cb)
+        } else {
+          res.on('end', () => finishCh.publish(ctx))
         }
 
         return res
       } catch (err) {
         err.stack // trigger getting the stack at the original throwing point
-        errorCh.publish(err)
+        ctx.error = err
+        errorCh.publish(ctx)
 
         throw err
       }
@@ -66,11 +57,20 @@ addHook({ name: 'mysql', file: 'lib/Connection.js', versions: ['>=2'] }, Connect
 })
 
 addHook({ name: 'mysql', file: 'lib/Pool.js', versions: ['>=2'] }, Pool => {
+  const connectionStartCh = channel('apm:mysql:connection:start')
+  const connectionFinishCh = channel('apm:mysql:connection:finish')
   const startPoolQueryCh = channel('datadog:mysql:pool:query:start')
   const finishPoolQueryCh = channel('datadog:mysql:pool:query:finish')
 
   shimmer.wrap(Pool.prototype, 'getConnection', getConnection => function (cb) {
-    arguments[0] = AsyncResource.bind(cb)
+    arguments[0] = function () {
+      return connectionFinishCh.runStores(ctx, cb, this, ...arguments)
+    }
+
+    const ctx = {}
+
+    connectionStartCh.publish(ctx)
+
     return getConnection.apply(this, arguments)
   })
 
@@ -79,22 +79,15 @@ addHook({ name: 'mysql', file: 'lib/Pool.js', versions: ['>=2'] }, Pool => {
       return query.apply(this, arguments)
     }
 
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-
     const sql = arguments[0].sql || arguments[0]
+    const ctx = { sql }
+    const finish = () => finishPoolQueryCh.publish(ctx)
 
-    return asyncResource.runInAsyncScope(() => {
-      startPoolQueryCh.publish({ sql })
-
-      const finish = asyncResource.bind(function () {
-        finishPoolQueryCh.publish()
-      })
-
+    return startPoolQueryCh.runStores(ctx, () => {
       const cb = arguments[arguments.length - 1]
       if (typeof cb === 'function') {
         arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => function () {
-          finish()
-          return cb.apply(this, arguments)
+          return finishPoolQueryCh.runStores(ctx, cb, this, ...arguments)
         })
       }
 

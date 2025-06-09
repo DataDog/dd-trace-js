@@ -49,8 +49,10 @@ class WAFContextWrapper {
     if (persistent !== null && typeof persistent === 'object') {
       const persistentInputs = {}
 
+      let hasPersistentInputs = false
       for (const key of Object.keys(persistent)) {
         if (!this.addressesToSkip.has(key) && this.knownAddresses.has(key)) {
+          hasPersistentInputs = true
           persistentInputs[key] = persistent[key]
           if (preventDuplicateAddresses.has(key)) {
             newAddressesToSkip.add(key)
@@ -58,7 +60,7 @@ class WAFContextWrapper {
         }
       }
 
-      if (Object.keys(persistentInputs).length) {
+      if (hasPersistentInputs) {
         payload.persistent = persistentInputs
         payloadHasData = true
       }
@@ -67,13 +69,15 @@ class WAFContextWrapper {
     if (ephemeral !== null && typeof ephemeral === 'object') {
       const ephemeralInputs = {}
 
+      let hasEphemeral = false
       for (const key of Object.keys(ephemeral)) {
         if (this.knownAddresses.has(key)) {
+          hasEphemeral = true
           ephemeralInputs[key] = ephemeral[key]
         }
       }
 
-      if (Object.keys(ephemeralInputs).length) {
+      if (hasEphemeral) {
         payload.ephemeral = ephemeralInputs
         payloadHasData = true
       }
@@ -102,7 +106,7 @@ class WAFContextWrapper {
 
       const end = process.hrtime.bigint()
 
-      metrics.durationExt = parseInt(end - start) / 1e3
+      metrics.durationExt = Number.parseInt(end - start) / 1e3
 
       if (typeof result.errorCode === 'number' && result.errorCode < 0) {
         const error = new Error('WAF code error')

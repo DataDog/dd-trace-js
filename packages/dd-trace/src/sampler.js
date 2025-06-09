@@ -8,7 +8,7 @@ const MAX_TRACE_ID = 2 ** 64 - 1
 const UINT64_MODULO = 2n ** 64n
 
 // Knuth's factor for the sampling algorithm
-const SAMPLING_KNUTH_FACTOR = 1111111111111111111n
+const SAMPLING_KNUTH_FACTOR = 1_111_111_111_111_111_111n
 
 /**
  * `Sampler` determines whether or not to sample a trace/span based on the trace ID.
@@ -16,12 +16,16 @@ const SAMPLING_KNUTH_FACTOR = 1111111111111111111n
  * This class uses a deterministic sampling algorithm that is consistent across all languages.
  */
 class Sampler {
+  #threshold = 0n
+
   /**
    * @param {number} rate
    */
   constructor (rate) {
+    // TODO: Should this be moved up to the calling parts?
+    rate = Math.min(Math.max(rate, 0), 1)
     this._rate = rate
-    this._threshold = BigInt(Math.floor(rate * MAX_TRACE_ID))
+    this.#threshold = BigInt(Math.floor(rate * MAX_TRACE_ID))
   }
 
   /**
@@ -29,6 +33,10 @@ class Sampler {
    */
   rate () {
     return this._rate
+  }
+
+  get threshold () {
+    return this.#threshold
   }
 
   /**
@@ -48,7 +56,7 @@ class Sampler {
 
     span = typeof span.context === 'function' ? span.context() : span
 
-    return (span._traceId.toBigInt() * SAMPLING_KNUTH_FACTOR) % UINT64_MODULO <= this._threshold
+    return (span._traceId.toBigInt() * SAMPLING_KNUTH_FACTOR) % UINT64_MODULO <= this.#threshold
   }
 }
 

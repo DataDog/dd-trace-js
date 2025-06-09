@@ -1,7 +1,8 @@
 'use strict'
 
-const { fork, exec } = require('child_process')
+const { fork, exec, execSync } = require('child_process')
 const path = require('path')
+const fs = require('fs')
 
 const { assert } = require('chai')
 
@@ -53,7 +54,9 @@ const {
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
-  TEST_RETRY_REASON_TYPES
+  TEST_IS_MODIFIED,
+  TEST_RETRY_REASON_TYPES,
+  DD_CAPABILITIES_IMPACTED_TESTS
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -2362,6 +2365,68 @@ describe('jest CommonJS', () => {
         }).catch(done)
       })
     })
+
+    it('does not retry when it.failing is used', (done) => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      const NUM_RETRIES_EFD = 3
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': NUM_RETRIES_EFD
+          },
+          faulty_session_threshold: 100
+        },
+        known_tests_enabled: true
+      })
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
+
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          const newTests = tests.filter(test =>
+            test.meta[TEST_SUITE] === 'ci-visibility/jest/failing-test.js'
+          )
+          newTests.forEach(test => {
+            assert.notProperty(test.meta, TEST_IS_NEW)
+          })
+          assert.equal(newTests.length, 2)
+
+          const passingTests = tests.filter(test =>
+            test.meta[TEST_NAME] === 'failing can report failed tests'
+          )
+          const failingTests = tests.filter(test =>
+            test.meta[TEST_NAME] === 'failing can report failing tests as failures'
+          )
+          passingTests.forEach(test => {
+            assert.equal(test.meta[TEST_STATUS], 'pass')
+          })
+          failingTests.forEach(test => {
+            assert.equal(test.meta[TEST_STATUS], 'fail')
+          })
+
+          const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.equal(retriedTests.length, 0)
+        })
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: { ...getCiVisEvpProxyConfig(receiver.port), TESTS_TO_RUN: 'jest/failing-test' },
+          stdio: 'inherit'
+        }
+      )
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
   })
 
   context('flaky test retries', () => {
@@ -3490,6 +3555,7 @@ describe('jest CommonJS', () => {
             assert.equal(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], '1')
             assert.equal(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')
             assert.equal(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
+            assert.equal(metadata.test[DD_CAPABILITIES_IMPACTED_TESTS], '1')
             assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
             assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
             assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '4')
@@ -3547,6 +3613,201 @@ describe('jest CommonJS', () => {
         eventsPromise.then(() => {
           done()
         }).catch(done)
+      })
+    })
+  })
+
+  context('impacted tests', () => {
+    const NUM_RETRIES = 3
+
+    beforeEach(() => {
+      receiver.setKnownTests({
+        jest: {
+          'ci-visibility/test-impacted-test/test-impacted-1.js': [
+            'impacted tests can pass normally'
+          ],
+          'ci-visibility/test-impacted-test/test-impacted-2.js': [
+            'impacted tests 2 can pass normally'
+          ]
+        }
+      })
+    })
+
+    // Modify test file to mark it as impacted
+    before(() => {
+      execSync('git checkout -b feature-branch', { cwd, stdio: 'ignore' })
+
+      fs.writeFileSync(
+        path.join(cwd, 'ci-visibility/test-impacted-test/test-impacted-1.js'),
+        `const { expect } = require('chai')
+
+         describe('impacted tests', () => {
+          it('can pass normally', () => {
+            expect(1 + 2).to.equal(4)
+          })
+          it('can fail', () => {
+            expect(1 + 2).to.equal(4)
+          })
+         })`
+      )
+      execSync('git add ci-visibility/test-impacted-test/test-impacted-1.js', { cwd, stdio: 'ignore' })
+      execSync('git commit -m "modify test-impacted-1.js"', { cwd, stdio: 'ignore' })
+    })
+
+    after(() => {
+      execSync('git checkout -', { cwd, stdio: 'ignore' })
+      execSync('git branch -D feature-branch', { cwd, stdio: 'ignore' })
+    })
+
+    const getTestAssertions = ({ isModified, isEfd, isNew, isParallel }) =>
+      receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+
+          if (isEfd) {
+            assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
+          } else {
+            assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
+          }
+
+          const resourceNames = tests.map(span => span.resource)
+
+          assert.includeMembers(resourceNames,
+            [
+              'ci-visibility/test-impacted-test/test-impacted-1.js.impacted tests can pass normally',
+              'ci-visibility/test-impacted-test/test-impacted-1.js.impacted tests can fail'
+            ]
+          )
+
+          if (isParallel) {
+            // Parallel mode in jest requires more than a single test suite
+            // Here we check that the second test suite is actually running,
+            // so we can be sure that parallel mode is on
+            assert.includeMembers(resourceNames, [
+              'ci-visibility/test-impacted-test/test-impacted-2.js.impacted tests 2 can pass normally',
+              'ci-visibility/test-impacted-test/test-impacted-2.js.impacted tests 2 can fail'
+            ])
+          }
+
+          const impactedTests = tests.filter(test =>
+            test.meta[TEST_SOURCE_FILE] === 'ci-visibility/test-impacted-test/test-impacted-1.js' &&
+            test.meta[TEST_NAME] === 'impacted tests can pass normally')
+
+          if (isEfd) {
+            assert.equal(impactedTests.length, NUM_RETRIES + 1) // Retries + original test
+          } else {
+            assert.equal(impactedTests.length, 1)
+          }
+
+          for (const impactedTest of impactedTests) {
+            if (isModified) {
+              assert.propertyVal(impactedTest.meta, TEST_IS_MODIFIED, 'true')
+            } else {
+              assert.notProperty(impactedTest.meta, TEST_IS_MODIFIED)
+            }
+            if (isNew) {
+              assert.propertyVal(impactedTest.meta, TEST_IS_NEW, 'true')
+            } else {
+              assert.notProperty(impactedTest.meta, TEST_IS_NEW)
+            }
+          }
+
+          if (isEfd) {
+            const retriedTests = tests.filter(test =>
+              test.meta[TEST_IS_RETRY] === 'true' &&
+              test.meta[TEST_NAME] !== 'impacted tests can pass normally'
+            )
+            assert.equal(retriedTests.length, NUM_RETRIES)
+            let retriedTestNew = 0
+            let retriedTestsWithReason = 0
+            retriedTests.forEach(test => {
+              if (test.meta[TEST_IS_NEW] === 'true') {
+                retriedTestNew++
+              }
+              if (test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd) {
+                retriedTestsWithReason++
+              }
+            })
+            assert.equal(retriedTestNew, isNew ? NUM_RETRIES : 0)
+            assert.equal(retriedTestsWithReason, NUM_RETRIES)
+          }
+        })
+
+    const runImpactedTest = (
+      done,
+      { isModified, isEfd = false, isParallel = false, isNew = false },
+      extraEnvVars = {}
+    ) => {
+      const testAssertionsPromise = getTestAssertions({ isModified, isEfd, isParallel, isNew })
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'test-impacted-test/test-impacted-1',
+            GITHUB_BASE_REF: '',
+            ...extraEnvVars
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        testAssertionsPromise.then(done).catch(done)
+      })
+    }
+
+    context('test is not new', () => {
+      it('should be detected as impacted', (done) => {
+        receiver.setSettings({ impacted_tests_enabled: true })
+
+        runImpactedTest(done, { isModified: true })
+      })
+
+      it('should not be detected as impacted if disabled', (done) => {
+        receiver.setSettings({ impacted_tests_enabled: false })
+
+        runImpactedTest(done, { isModified: false })
+      })
+
+      it('should not be detected as impacted if DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED is false',
+        (done) => {
+          receiver.setSettings({ impacted_tests_enabled: true })
+
+          runImpactedTest(done,
+            { isModified: false },
+            { DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0' }
+          )
+        })
+
+      it('should be detected as impacted in parallel mode', (done) => {
+        receiver.setSettings({ impacted_tests_enabled: true })
+
+        runImpactedTest(done, { isModified: true, isParallel: true }, {
+          TESTS_TO_RUN: 'test-impacted-test/test-impacted',
+          RUN_IN_PARALLEL: true
+        })
+      })
+    })
+
+    context('test is new', () => {
+      it('should be retried and marked both as new and modified', (done) => {
+        receiver.setKnownTests({})
+        receiver.setSettings({
+          impacted_tests_enabled: true,
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES
+            }
+          },
+          known_tests_enabled: true
+        })
+        runImpactedTest(done, { isModified: true, isEfd: true, isNew: true })
       })
     })
   })

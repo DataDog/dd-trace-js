@@ -4,11 +4,11 @@ require('../setup/tap')
 
 const expect = require('chai').expect
 const sinon = require('sinon')
-const satisfies = require('semifies')
 
 const SpaceProfiler = require('../../src/profiling/profilers/space')
 const WallProfiler = require('../../src/profiling/profilers/wall')
 const EventsProfiler = require('../../src/profiling/profilers/events')
+const { setTimeout } = require('node:timers/promises')
 
 const samplingContextsAvailable = process.platform !== 'win32'
 
@@ -205,6 +205,7 @@ describe('profiler', function () {
       clock.tick(interval)
 
       await rejected.catch(() => {})
+      await setTimeout(1)
 
       sinon.assert.notCalled(wallProfiler.stop)
       sinon.assert.notCalled(spaceProfiler.stop)
@@ -221,6 +222,7 @@ describe('profiler', function () {
       clock.tick(interval)
 
       await rejected.catch(() => {})
+      await setTimeout(1)
 
       sinon.assert.notCalled(wallProfiler.stop)
       sinon.assert.notCalled(spaceProfiler.stop)
@@ -294,11 +296,7 @@ describe('profiler', function () {
     })
 
     it('should export zstd profiles', async function () {
-      if (!satisfies(process.versions.node, '>=23.8.0')) {
-        this.skip()
-      } else {
-        await shouldExportProfiles('zstd', Buffer.from([0x28, 0xb5, 0x2f, 0xfd]))
-      }
+      await shouldExportProfiles('zstd', Buffer.from([0x28, 0xb5, 0x2f, 0xfd]))
     })
 
     it('should export gzip profiles with a level', async () => {
@@ -306,11 +304,7 @@ describe('profiler', function () {
     })
 
     it('should export zstd profiles with a level', async function () {
-      if (!satisfies(process.versions.node, '>=23.8.0')) {
-        this.skip()
-      } else {
-        await shouldExportProfiles('zstd-4', Buffer.from([0x28, 0xb5, 0x2f, 0xfd]))
-      }
+      await shouldExportProfiles('zstd-4', Buffer.from([0x28, 0xb5, 0x2f, 0xfd]))
     })
 
     it('should log exporter errors', async () => {
@@ -333,6 +327,7 @@ describe('profiler', function () {
       clock.tick(interval)
 
       await waitForExport()
+      await setTimeout(1)
 
       const [
         startWall,

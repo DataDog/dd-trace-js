@@ -27,12 +27,13 @@ class GraphQLPlugin extends CompositePlugin {
 // config validator helpers
 
 function validateConfig (config) {
-  return Object.assign({}, config, {
+  return {
+    ...config,
     depth: getDepth(config),
     variables: getVariablesFilter(config),
     collapse: config.collapse === undefined || !!config.collapse,
     hooks: getHooks(config)
-  })
+  }
 }
 
 function getDepth (config) {
@@ -55,11 +56,12 @@ function getVariablesFilter (config) {
   return null
 }
 
-function getHooks (config) {
-  const noop = () => {}
-  const execute = config.hooks?.execute || noop
-  const parse = config.hooks?.parse || noop
-  const validate = config.hooks?.validate || noop
+const noop = () => {}
+
+function getHooks ({ hooks }) {
+  const execute = hooks?.execute ?? noop
+  const parse = hooks?.parse ?? noop
+  const validate = hooks?.validate ?? noop
 
   return { execute, parse, validate }
 }

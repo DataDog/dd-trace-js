@@ -20,25 +20,21 @@ function wrapSetupRequest (setupRequest) {
 }
 
 function wrapMethod (method) {
-  return function (path) {
-    const middleware = wrapMiddleware(Array.prototype.slice.call(arguments, 1))
+  return function (path, ...middlewares) {
+    const wrappedMiddlewares = middlewares.map(wrapFn)
 
-    return method.apply(this, [path].concat(middleware))
+    return method.apply(this, [path, ...wrappedMiddlewares])
   }
 }
 
 function wrapHandler (method) {
-  return function () {
-    return method.apply(this, wrapMiddleware(arguments))
+  return function (...middlewares) {
+    return method.apply(this, middlewares.map(wrapFn))
   }
 }
 
-function wrapMiddleware (middleware) {
-  return Array.prototype.map.call(middleware, wrapFn)
-}
-
 function wrapFn (fn) {
-  if (Array.isArray(fn)) return wrapMiddleware(fn)
+  if (Array.isArray(fn)) return fn.map(wrapFn)
 
   return shimmer.wrapFunction(fn, fn => function (req, res, next) {
     if (typeof next === 'function') {
@@ -51,11 +47,11 @@ function wrapFn (fn) {
 
     try {
       const result = fn.apply(this, arguments)
-      if (result !== null && typeof result === 'object' && typeof result.then === 'function') {
-        return result.then(function () {
+      if (typeof result?.then === 'function') {
+        return result.then(function (result) {
           nextChannel.publish({ req })
           finishChannel.publish({ req })
-          return arguments[0]
+          return result
         }).catch(function (error) {
           errorChannel.publish({ req, error })
           nextChannel.publish({ req })

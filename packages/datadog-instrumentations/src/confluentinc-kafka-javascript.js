@@ -2,8 +2,7 @@
 
 const {
   addHook,
-  channel,
-  AsyncResource
+  channel
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
@@ -32,7 +31,6 @@ const disabledHeaderWeakSet = new WeakSet()
 // we need to store the offset per partition per topic for the consumer to track offsets for DSM
 const latestConsumerOffsets = new Map()
 
-// Customize the instrumentation for Confluent Kafka JavaScript
 addHook({ name: '@confluentinc/kafka-javascript', versions: ['>=1.0.0'] }, (module) => {
   // Hook native module classes first
   instrumentBaseModule(module)
@@ -55,30 +53,32 @@ function instrumentBaseModule (module) {
         // Hook the produce method
         if (typeof producer?.produce === 'function') {
           shimmer.wrap(producer, 'produce', function wrapProduce (produce) {
-            return function wrappedProduce (topic, partition, message, key, timestamp, opaque) {
+            return function wrappedProduce (topic, partition, message, key, timestamp, opaque, headers) {
               if (!channels.producerStart.hasSubscribers) {
                 return produce.apply(this, arguments)
               }
 
               const brokers = this.globalConfig?.['bootstrap.servers']
 
-              const asyncResource = new AsyncResource('bound-anonymous-fn')
-              return asyncResource.runInAsyncScope(() => {
+              const ctx = {
+                topic,
+                messages: [{ key, value: message }],
+                bootstrapServers: brokers
+              }
+
+              return channels.producerStart.runStores(ctx, () => {
                 try {
-                  channels.producerStart.publish({
-                    topic,
-                    messages: [{ key, value: message }],
-                    bootstrapServers: brokers
-                  })
+                  const headers = convertHeaders(ctx.messages[0].headers)
+                  const result = produce.apply(this, [topic, partition, message, key, timestamp, opaque, headers])
 
-                  const result = produce.apply(this, arguments)
-
-                  channels.producerCommit.publish(undefined)
-                  channels.producerFinish.publish(undefined)
+                  ctx.result = result
+                  channels.producerCommit.publish(ctx)
+                  channels.producerFinish.publish(ctx)
                   return result
                 } catch (error) {
-                  channels.producerError.publish(error)
-                  channels.producerFinish.publish(undefined)
+                  ctx.error = error
+                  channels.producerError.publish(ctx)
+                  channels.producerFinish.publish(ctx)
                   throw error
                 }
               })
@@ -110,32 +110,39 @@ function instrumentBaseModule (module) {
                 callback = numMessages
               }
 
+              const ctx = {
+                groupId
+              }
               // Handle callback-based consumption
               if (typeof callback === 'function') {
                 return consume.call(this, numMessages, function wrappedCallback (err, messages) {
                   if (messages && messages.length > 0) {
                     messages.forEach(message => {
-                      channels.consumerStart.publish({
-                        topic: message?.topic,
-                        partition: message?.partition,
-                        message,
-                        groupId
-                      })
+                      ctx.topic = message?.topic
+                      ctx.partition = message?.partition
+                      ctx.message = message
+
+                      // TODO: We should be using publish here instead of runStores but we need bindStart to be called
+                      channels.consumerStart.runStores(ctx, () => {})
                       updateLatestOffset(message?.topic, message?.partition, message?.offset, groupId)
                     })
                   }
 
                   if (err) {
-                    channels.consumerError.publish(err)
+                    ctx.error = err
+                    channels.consumerError.publish(ctx)
                   }
 
                   try {
                     const result = callback.apply(this, arguments)
-                    channels.consumerFinish.publish(undefined)
+                    if (messages && messages.length > 0) {
+                      channels.consumerFinish.publish(ctx)
+                    }
                     return result
                   } catch (error) {
-                    channels.consumerError.publish(error)
-                    channels.consumerFinish.publish(undefined)
+                    ctx.error = error
+                    channels.consumerError.publish(ctx)
+                    channels.consumerFinish.publish(ctx)
                     throw error
                   }
                 })
@@ -204,45 +211,44 @@ function instrumentKafkaJS (kafkaJS) {
                       return send.apply(this, arguments)
                     }
 
-                    const asyncResource = new AsyncResource('bound-anonymous-fn')
-                    return asyncResource.runInAsyncScope(() => {
-                      try {
-                        channels.producerStart.publish({
-                          topic: payload?.topic,
-                          messages: payload?.messages || [],
-                          bootstrapServers: kafka._ddBrokers,
-                          disableHeaderInjection: disabledHeaderWeakSet.has(producer)
-                        })
+                    const ctx = {
+                      topic: payload?.topic,
+                      messages: payload?.messages || [],
+                      bootstrapServers: kafka._ddBrokers,
+                      disableHeaderInjection: disabledHeaderWeakSet.has(producer)
+                    }
 
+                    return channels.producerStart.runStores(ctx, () => {
+                      try {
                         const result = send.apply(this, arguments)
 
-                        result.then(
-                          asyncResource.bind(res => {
-                            channels.producerCommit.publish(res)
-                            channels.producerFinish.publish(undefined)
-                          }),
-                          asyncResource.bind(err => {
-                            if (err) {
-                              // Fixes bug where we would inject message headers for kafka brokers
-                              // that don't support headers (version <0.11). On the error, we disable
-                              // header injection. Tnfortunately the error name / type is not more specific.
-                              // This approach is implemented by other tracers as well.
-                              if (err.name === 'KafkaJSError' && err.type === 'ERR_UNKNOWN') {
-                                disabledHeaderWeakSet.add(producer)
-                                log.error('Kafka Broker responded with UNKNOWN_SERVER_ERROR (-1). ' +
-                                  'Please look at broker logs for more information. ' +
-                                  'Tracer message header injection for Kafka is disabled.')
-                              }
-                              channels.producerError.publish(err)
+                        result.then((res) => {
+                          ctx.result = res
+                          channels.producerCommit.publish(ctx)
+                          channels.producerFinish.publish(ctx)
+                        }, (err) => {
+                          if (err) {
+                            // Fixes bug where we would inject message headers for kafka brokers
+                            // that don't support headers (version <0.11). On the error, we disable
+                            // header injection. Tnfortunately the error name / type is not more specific.
+                            // This approach is implemented by other tracers as well.
+                            if (err.name === 'KafkaJSError' && err.type === 'ERR_UNKNOWN') {
+                              disabledHeaderWeakSet.add(producer)
+                              log.error('Kafka Broker responded with UNKNOWN_SERVER_ERROR (-1). ' +
+                                'Please look at broker logs for more information. ' +
+                                'Tracer message header injection for Kafka is disabled.')
                             }
-                            channels.producerFinish.publish(undefined)
-                          })
-                        )
+                            ctx.error = err
+                            channels.producerError.publish(ctx)
+                          }
+                          channels.producerFinish.publish(ctx)
+                        })
 
                         return result
                       } catch (e) {
-                        channels.producerError.publish(e)
-                        channels.producerFinish.publish(undefined)
+                        ctx.error = e
+                        channels.producerError.publish(ctx)
+                        channels.producerFinish.publish(ctx)
                         throw e
                       }
                     })
@@ -350,10 +356,11 @@ function wrapKafkaCallback (callback, { startCh, commitCh, finishCh, errorCh }, 
   return function wrappedKafkaCallback (payload) {
     const commitPayload = getPayload(payload)
 
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-    return asyncResource.runInAsyncScope(() => {
-      startCh.publish(commitPayload)
+    const ctx = {
+      extractedArgs: commitPayload
+    }
 
+    return startCh.runStores(ctx, () => {
       updateLatestOffset(commitPayload?.topic, commitPayload?.partition, commitPayload?.offset, commitPayload?.groupId)
 
       try {
@@ -361,22 +368,24 @@ function wrapKafkaCallback (callback, { startCh, commitCh, finishCh, errorCh }, 
 
         if (result && typeof result.then === 'function') {
           return result
-            .then(asyncResource.bind(res => {
-              finishCh.publish(undefined)
+            .then((res) => {
+              ctx.result = res
+              finishCh.publish(ctx)
               return res
-            }))
-            .catch(asyncResource.bind(err => {
-              errorCh.publish(err)
-              finishCh.publish(undefined)
+            })
+            .catch((err) => {
+              ctx.error = err
+              errorCh.publish(ctx)
+              finishCh.publish(ctx)
               throw err
-            }))
-        } else {
-          finishCh.publish(undefined)
-          return result
+            })
         }
+        finishCh.publish(ctx)
+        return result
       } catch (error) {
-        errorCh.publish(error)
-        finishCh.publish(undefined)
+        ctx.error = error
+        errorCh.publish(ctx)
+        finishCh.publish(ctx)
         throw error
       }
     })
@@ -402,5 +411,10 @@ function updateLatestOffset (topic, partition, offset, groupId) {
 }
 
 function getLatestOffsets () {
-  return Array.from(latestConsumerOffsets.values())
+  return [...latestConsumerOffsets.values()]
+}
+
+function convertHeaders (headers) {
+  // convert headers from object to array of objects with 1 key and value per array entry
+  return Object.entries(headers).map(([key, value]) => ({ [key.toString()]: value.toString() }))
 }

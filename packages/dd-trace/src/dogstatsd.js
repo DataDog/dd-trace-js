@@ -94,13 +94,13 @@ class DogStatsDClient {
   }
 
   _sendUdp (queue) {
-    if (this._family !== 0) {
-      this._sendUdpFromQueue(queue, this._host, this._family)
-    } else {
+    if (this._family === 0) {
       lookup(this._host, (err, address, family) => {
         if (err) return log.error('DogStatsDClient: Host not found', err)
         this._sendUdpFromQueue(queue, address, family)
       })
+    } else {
+      this._sendUdpFromQueue(queue, this._host, this._family)
     }
   }
 
@@ -116,7 +116,8 @@ class DogStatsDClient {
   _add (stat, value, type, tags) {
     const message = `${this._prefix + stat}:${value}|${type}`
 
-    tags = tags ? this._tags.concat(tags) : this._tags
+    // Don't manipulate this._tags as it is still used
+    tags = tags ? [...this._tags, ...tags] : this._tags
 
     if (tags.length > 0) {
       this._write(`${message}|#${tags.join(',')}\n`)
@@ -168,7 +169,7 @@ class DogStatsDClient {
         })
         .forEach(key => {
           // https://docs.datadoghq.com/tagging/#defining-tags
-          const value = config.tags[key].replace(/[^a-z0-9_:./-]/ig, '_')
+          const value = config.tags[key].replaceAll(/[^a-z0-9_:./-]/ig, '_')
 
           tags.push(`${key}:${value}`)
         })
@@ -243,7 +244,7 @@ class MetricsAggregationClient {
     const container = monotonic ? this._counters : this._gauges
     const node = this._ensureTree(container, name, tags, 0)
 
-    node.value = node.value + count
+    node.value += count
   }
 
   gauge (name, value, tags) {

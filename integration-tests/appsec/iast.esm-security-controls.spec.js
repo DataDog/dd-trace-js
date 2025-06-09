@@ -2,23 +2,17 @@
 
 const { createSandbox, spawnProc, FakeAgent } = require('../helpers')
 const path = require('path')
-const getPort = require('get-port')
 const Axios = require('axios')
 const { assert } = require('chai')
 
 describe('ESM Security controls', () => {
-  let axios, sandbox, cwd, appPort, appFile, agent, proc
+  let axios, sandbox, cwd, appFile, agent, proc
 
   before(async function () {
     this.timeout(process.platform === 'win32' ? 90000 : 30000)
     sandbox = await createSandbox(['express@4']) // TODO: Remove pinning once our tests support Express v5
-    appPort = await getPort()
     cwd = sandbox.folder
     appFile = path.join(cwd, 'appsec', 'esm-security-controls', 'index.mjs')
-
-    axios = Axios.create({
-      baseURL: `http://localhost:${appPort}`
-    })
   })
 
   after(async function () {
@@ -34,7 +28,6 @@ describe('ESM Security controls', () => {
       cwd,
       env: {
         DD_TRACE_AGENT_PORT: agent.port,
-        APP_PORT: appPort,
         DD_IAST_ENABLED: 'true',
         DD_IAST_REQUEST_SAMPLING: '100',
         // eslint-disable-next-line no-multi-str
@@ -45,6 +38,8 @@ describe('ESM Security controls', () => {
         NODE_OPTIONS: nodeOptions
       }
     })
+
+    axios = Axios.create({ baseURL: proc.url })
   })
 
   afterEach(async () => {

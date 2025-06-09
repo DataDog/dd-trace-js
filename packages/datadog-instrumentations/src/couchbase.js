@@ -43,14 +43,11 @@ function wrapMaybeInvoke (_maybeInvoke) {
 
 function wrapQuery (query) {
   const wrapped = function (q, params, callback) {
-    callback = AsyncResource.bind(arguments[arguments.length - 1])
-
-    if (typeof callback === 'function') {
-      arguments[arguments.length - 1] = callback
+    if (typeof arguments[arguments.length - 1] === 'function') {
+      arguments[arguments.length - 1] = AsyncResource.bind(arguments[arguments.length - 1])
     }
 
-    const res = query.apply(this, arguments)
-    return res
+    return query.apply(this, arguments)
   }
   return wrapped
 }
@@ -184,12 +181,12 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.12'] }, Buc
       startCh.publish({ resource: n1qlQuery, bucket: { name: this.name || this._name }, seedNodes: this._dd_hosts })
 
       emitter.once('rows', asyncResource.bind(() => {
-        finishCh.publish(undefined)
+        finishCh.publish()
       }))
 
       emitter.once(errorMonitor, asyncResource.bind((error) => {
         errorCh.publish(error)
-        finishCh.publish(undefined)
+        finishCh.publish()
       }))
 
       try {

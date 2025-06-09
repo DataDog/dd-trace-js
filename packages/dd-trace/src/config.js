@@ -19,6 +19,7 @@ const telemetryMetrics = require('./telemetry/metrics')
 const { isInServerlessEnvironment, getIsGCPFunction, getIsAzureFunction } = require('./serverless')
 const { ORIGIN_KEY, GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('./constants')
 const { appendRules } = require('./payload-tagging/config')
+const { getEnvironmentVariable, getEnvironmentVariables } = require('./config-helper')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -80,10 +81,10 @@ function getFromOtelSamplerMap (otelTracesSampler, otelTracesSamplerArg) {
 }
 
 function validateOtelPropagators (propagators) {
-  if (!process.env.PROPAGATION_STYLE_EXTRACT &&
-    !process.env.PROPAGATION_STYLE_INJECT &&
-    !process.env.DD_TRACE_PROPAGATION_STYLE &&
-    process.env.OTEL_PROPAGATORS) {
+  if (!getEnvironmentVariable('PROPAGATION_STYLE_EXTRACT') &&
+    !getEnvironmentVariable('PROPAGATION_STYLE_INJECT') &&
+    !getEnvironmentVariable('DD_TRACE_PROPAGATION_STYLE') &&
+    getEnvironmentVariable('OTEL_PROPAGATORS')) {
     for (const style in propagators) {
       if (!VALID_PROPAGATION_STYLES.has(style)) {
         log.warn('unexpected value for OTEL_PROPAGATORS environment variable')
@@ -94,7 +95,7 @@ function validateOtelPropagators (propagators) {
 }
 
 function validateEnvVarType (envVar) {
-  const value = process.env[envVar]
+  const value = getEnvironmentVariable(envVar)
   switch (envVar) {
     case 'OTEL_LOG_LEVEL':
       return VALID_LOG_LEVELS.has(value)
@@ -103,9 +104,9 @@ function validateEnvVarType (envVar) {
     case 'OTEL_SERVICE_NAME':
       return typeof value === 'string'
     case 'OTEL_TRACES_SAMPLER':
-      return getFromOtelSamplerMap(value, process.env.OTEL_TRACES_SAMPLER_ARG) !== undefined
+      return getFromOtelSamplerMap(value, getEnvironmentVariable('OTEL_TRACES_SAMPLER_ARG')) !== undefined
     case 'OTEL_TRACES_SAMPLER_ARG':
-      return !isNaN(Number.parseFloat(value))
+      return !Number.isNaN(Number.parseFloat(value))
     case 'OTEL_SDK_DISABLED':
       return value.toLowerCase() === 'true' || value.toLowerCase() === 'false'
     case 'OTEL_TRACES_EXPORTER':
@@ -119,27 +120,24 @@ function validateEnvVarType (envVar) {
 
 function checkIfBothOtelAndDdEnvVarSet () {
   for (const [otelEnvVar, ddEnvVar] of Object.entries(otelDdEnvMapping)) {
-    if (ddEnvVar && process.env[ddEnvVar] && process.env[otelEnvVar]) {
+    if (ddEnvVar && getEnvironmentVariable(ddEnvVar) && getEnvironmentVariable(otelEnvVar)) {
       log.warn(`both ${ddEnvVar} and ${otelEnvVar} environment variables are set`)
       getCounter('otel.env.hiding', ddEnvVar, otelEnvVar).inc()
     }
 
-    if (process.env[otelEnvVar] && !validateEnvVarType(otelEnvVar)) {
+    if (getEnvironmentVariable(otelEnvVar) && !validateEnvVarType(otelEnvVar)) {
       log.warn(`unexpected value for ${otelEnvVar} environment variable`)
       getCounter('otel.env.invalid', ddEnvVar, otelEnvVar).inc()
     }
   }
 }
 
-const fromEntries = Object.fromEntries || (entries =>
-  entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
-
 // eslint-disable-next-line @stylistic/max-len
-const qsRegex = '(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\\s|%20)*(?:=|%3D)[^&]+|(?:"|%22)(?:\\s|%20)*(?::|%3A)(?:\\s|%20)*(?:"|%22)(?:%2[^2]|%[^2]|[^"%])+(?:"|%22))|bearer(?:\\s|%20)+[a-z0-9\\._\\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\\w=-]|%3D)+\\.ey[I-L](?:[\\w=-]|%3D)+(?:\\.(?:[\\w.+\\/=-]|%3D|%2F|%2B)+)?|[\\-]{5}BEGIN(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY[\\-]{5}[^\\-]+[\\-]{5}END(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY|ssh-rsa(?:\\s|%20)*(?:[a-z0-9\\/\\.+]|%2F|%5C|%2B){100,}'
+const qsRegex = String.raw`(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\s|%20)*(?:=|%3D)[^&]+|(?:"|%22)(?:\s|%20)*(?::|%3A)(?:\s|%20)*(?:"|%22)(?:%2[^2]|%[^2]|[^"%])+(?:"|%22))|bearer(?:\s|%20)+[a-z0-9\._\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\w=-]|%3D)+\.ey[I-L](?:[\w=-]|%3D)+(?:\.(?:[\w.+\/=-]|%3D|%2F|%2B)+)?|[\-]{5}BEGIN(?:[a-z\s]|%20)+PRIVATE(?:\s|%20)KEY[\-]{5}[^\-]+[\-]{5}END(?:[a-z\s]|%20)+PRIVATE(?:\s|%20)KEY|ssh-rsa(?:\s|%20)*(?:[a-z0-9\/\.+]|%2F|%5C|%2B){100,}`
 // eslint-disable-next-line @stylistic/max-len
-const defaultWafObfuscatorKeyRegex = '(?i)pass|pw(?:or)?d|secret|(?:api|private|public|access)[_-]?key|token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)|bearer|authorization|jsessionid|phpsessid|asp\\.net[_-]sessionid|sid|jwt'
+const defaultWafObfuscatorKeyRegex = String.raw`(?i)pass|pw(?:or)?d|secret|(?:api|private|public|access)[_-]?key|token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)|bearer|authorization|jsessionid|phpsessid|asp\.net[_-]sessionid|sid|jwt`
 // eslint-disable-next-line @stylistic/max-len
-const defaultWafObfuscatorValueRegex = '(?i)(?:p(?:ass)?w(?:or)?d|pass(?:[_-]?phrase)?|secret(?:[_-]?key)?|(?:(?:api|private|public|access)[_-]?)key(?:[_-]?id)?|(?:(?:auth|access|id|refresh)[_-]?)?token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?|jsessionid|phpsessid|asp\\.net(?:[_-]|-)sessionid|sid|jwt)(?:\\s*=([^;&]+)|"\\s*:\\s*("[^"]+"|\\d+))|bearer\\s+([a-z0-9\\._\\-]+)|token\\s*:\\s*([a-z0-9]{13})|gh[opsu]_([0-9a-zA-Z]{36})|ey[I-L][\\w=-]+\\.(ey[I-L][\\w=-]+(?:\\.[\\w.+\\/=-]+)?)|[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}([^\\-]+)[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*([a-z0-9\\/\\.+]{100,})'
+const defaultWafObfuscatorValueRegex = String.raw`(?i)(?:p(?:ass)?w(?:or)?d|pass(?:[_-]?phrase)?|secret(?:[_-]?key)?|(?:(?:api|private|public|access)[_-]?)key(?:[_-]?id)?|(?:(?:auth|access|id|refresh)[_-]?)?token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?|jsessionid|phpsessid|asp\.net(?:[_-]|-)sessionid|sid|jwt)(?:\s*=([^;&]+)|"\s*:\s*("[^"]+"|\d+))|bearer\s+([a-z0-9\._\-]+)|token\s*:\s*([a-z0-9]{13})|gh[opsu]_([0-9a-zA-Z]{36})|ey[I-L][\w=-]+\.(ey[I-L][\w=-]+(?:\.[\w.+\/=-]+)?)|[\-]{5}BEGIN[a-z\s]+PRIVATE\sKEY[\-]{5}([^\-]+)[\-]{5}END[a-z\s]+PRIVATE\sKEY|ssh-rsa\s*([a-z0-9\/\.+]{100,})`
 const runtimeId = uuid()
 
 function maybeFile (filepath) {
@@ -181,7 +179,7 @@ function validateNamingVersion (versionString) {
  * @param {string | string[]} input
  */
 function splitJSONPathRules (input) {
-  if (!input) return null
+  if (!input) return
   if (Array.isArray(input)) return input
   if (input === 'all') return []
   return input.split(',')
@@ -214,7 +212,8 @@ function propagationStyle (key, option) {
   // Otherwise, fallback to env var parsing
   const envKey = `DD_TRACE_PROPAGATION_STYLE_${key.toUpperCase()}`
 
-  const envVar = coalesce(process.env[envKey], process.env.DD_TRACE_PROPAGATION_STYLE, process.env.OTEL_PROPAGATORS)
+  const envVar = coalesce(getEnvironmentVariable(envKey),
+    getEnvironmentVariable('DD_TRACE_PROPAGATION_STYLE'), getEnvironmentVariable('OTEL_PROPAGATORS'))
   if (envVar !== undefined) {
     return envVar.split(',')
       .filter(v => v !== '')
@@ -242,8 +241,8 @@ class Config {
 
     options = {
       ...options,
-      appsec: options.appsec != null ? options.appsec : options.experimental?.appsec,
-      iast: options.iast != null ? options.iast : options.experimental?.iast
+      appsec: options.appsec == null ? options.experimental?.appsec : options.appsec,
+      iast: options.iast == null ? options.experimental?.iast : options.iast
     }
 
     // Configure the logger first so it can be used to warn about other configs
@@ -268,14 +267,11 @@ class Config {
 
     checkIfBothOtelAndDdEnvVarSet()
 
-    const DD_API_KEY = coalesce(
-      process.env.DATADOG_API_KEY,
-      process.env.DD_API_KEY
-    )
+    const DD_API_KEY = getEnvironmentVariable('DD_API_KEY')
 
-    if (process.env.DD_TRACE_PROPAGATION_STYLE && (
-      process.env.DD_TRACE_PROPAGATION_STYLE_INJECT ||
-      process.env.DD_TRACE_PROPAGATION_STYLE_EXTRACT
+    if (getEnvironmentVariable('DD_TRACE_PROPAGATION_STYLE') && (
+      getEnvironmentVariable('DD_TRACE_PROPAGATION_STYLE_INJECT') ||
+      getEnvironmentVariable('DD_TRACE_PROPAGATION_STYLE_EXTRACT')
     )) {
       log.warn(
         'Use either the DD_TRACE_PROPAGATION_STYLE environment variable or separate ' +
@@ -297,34 +293,34 @@ class Config {
     }
 
     const DD_INSTRUMENTATION_INSTALL_ID = coalesce(
-      process.env.DD_INSTRUMENTATION_INSTALL_ID,
+      getEnvironmentVariable('DD_INSTRUMENTATION_INSTALL_ID'),
       null
     )
     const DD_INSTRUMENTATION_INSTALL_TIME = coalesce(
-      process.env.DD_INSTRUMENTATION_INSTALL_TIME,
+      getEnvironmentVariable('DD_INSTRUMENTATION_INSTALL_TIME'),
       null
     )
     const DD_INSTRUMENTATION_INSTALL_TYPE = coalesce(
-      process.env.DD_INSTRUMENTATION_INSTALL_TYPE,
+      getEnvironmentVariable('DD_INSTRUMENTATION_INSTALL_TYPE'),
       null
     )
 
     const DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING = splitJSONPathRules(
       coalesce(
-        process.env.DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING,
+        getEnvironmentVariable('DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING'),
         options.cloudPayloadTagging?.request,
         ''
       ))
 
     const DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING = splitJSONPathRules(
       coalesce(
-        process.env.DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING,
+        getEnvironmentVariable('DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING'),
         options.cloudPayloadTagging?.response,
         ''
       ))
 
     const DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH = coalesce(
-      process.env.DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH,
+      getEnvironmentVariable('DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH'),
       options.cloudPayloadTagging?.maxDepth,
       10
     )
@@ -373,17 +369,17 @@ class Config {
     if (this.gitMetadataEnabled) {
       this.repositoryUrl = removeUserSensitiveInfo(
         coalesce(
-          process.env.DD_GIT_REPOSITORY_URL,
+          getEnvironmentVariable('DD_GIT_REPOSITORY_URL'),
           this.tags[GIT_REPOSITORY_URL]
         )
       )
       this.commitSHA = coalesce(
-        process.env.DD_GIT_COMMIT_SHA,
+        getEnvironmentVariable('DD_GIT_COMMIT_SHA'),
         this.tags[GIT_COMMIT_SHA]
       )
       if (!this.repositoryUrl || !this.commitSHA) {
         const DD_GIT_PROPERTIES_FILE = coalesce(
-          process.env.DD_GIT_PROPERTIES_FILE,
+          getEnvironmentVariable('DD_GIT_PROPERTIES_FILE'),
           `${process.cwd()}/git.properties`
         )
         let gitPropertiesString
@@ -391,7 +387,7 @@ class Config {
           gitPropertiesString = fs.readFileSync(DD_GIT_PROPERTIES_FILE, 'utf8')
         } catch (e) {
           // Only log error if the user has set a git.properties path
-          if (process.env.DD_GIT_PROPERTIES_FILE) {
+          if (getEnvironmentVariable('DD_GIT_PROPERTIES_FILE')) {
             log.error('Error reading DD_GIT_PROPERTIES_FILE: %s', DD_GIT_PROPERTIES_FILE, e)
           }
         }
@@ -421,7 +417,7 @@ class Config {
     // TODO: Remove the experimental env vars as a major?
     const DD_TRACE_B3_ENABLED = coalesce(
       options.experimental && options.experimental.b3,
-      process.env.DD_TRACE_EXPERIMENTAL_B3_ENABLED,
+      getEnvironmentVariable('DD_TRACE_EXPERIMENTAL_B3_ENABLED'),
       false
     )
     const defaultPropagationStyle = ['datadog', 'tracecontext']
@@ -442,7 +438,7 @@ class Config {
       FUNCTION_NAME,
       K_SERVICE,
       WEBSITE_SITE_NAME
-    } = process.env
+    } = getEnvironmentVariables()
 
     const service = AWS_LAMBDA_FUNCTION_NAME ||
       FUNCTION_NAME || // Google Cloud Function Name set by deprecated runtimes
@@ -456,10 +452,10 @@ class Config {
     this._setBoolean(defaults, 'apmTracingEnabled', true)
     this._setValue(defaults, 'appsec.apiSecurity.enabled', true)
     this._setValue(defaults, 'appsec.apiSecurity.sampleDelay', 30)
-    this._setValue(defaults, 'appsec.blockedTemplateGraphql', undefined)
-    this._setValue(defaults, 'appsec.blockedTemplateHtml', undefined)
-    this._setValue(defaults, 'appsec.blockedTemplateJson', undefined)
-    this._setValue(defaults, 'appsec.enabled', undefined)
+    this._setValue(defaults, 'appsec.blockedTemplateGraphql')
+    this._setValue(defaults, 'appsec.blockedTemplateHtml')
+    this._setValue(defaults, 'appsec.blockedTemplateJson')
+    this._setValue(defaults, 'appsec.enabled')
     this._setValue(defaults, 'appsec.eventTracking.mode', 'identification')
     this._setValue(defaults, 'appsec.extendedHeadersCollection.enabled', false)
     this._setValue(defaults, 'appsec.extendedHeadersCollection.redaction', true)
@@ -469,7 +465,7 @@ class Config {
     this._setValue(defaults, 'appsec.rasp.enabled', true)
     this._setValue(defaults, 'appsec.rasp.bodyCollection', false)
     this._setValue(defaults, 'appsec.rateLimit', 100)
-    this._setValue(defaults, 'appsec.rules', undefined)
+    this._setValue(defaults, 'appsec.rules')
     this._setValue(defaults, 'appsec.sca.enabled', null)
     this._setValue(defaults, 'appsec.stackTrace.enabled', true)
     this._setValue(defaults, 'appsec.stackTrace.maxDepth', 32)
@@ -491,9 +487,9 @@ class Config {
     this._setValue(defaults, 'dynamicInstrumentation.enabled', false)
     this._setValue(defaults, 'dynamicInstrumentation.redactedIdentifiers', [])
     this._setValue(defaults, 'dynamicInstrumentation.redactionExcludedIdentifiers', [])
-    this._setValue(defaults, 'env', undefined)
+    this._setValue(defaults, 'env')
     this._setValue(defaults, 'experimental.enableGetRumData', false)
-    this._setValue(defaults, 'experimental.exporter', undefined)
+    this._setValue(defaults, 'experimental.exporter')
     this._setValue(defaults, 'experimental.runtimeId', false)
     this._setValue(defaults, 'flushInterval', 2000)
     this._setValue(defaults, 'flushMinSpans', 1000)
@@ -527,9 +523,9 @@ class Config {
     this._setValue(defaults, 'isManualApiEnabled', false)
     this._setValue(defaults, 'langchain.spanCharLimit', 128)
     this._setValue(defaults, 'langchain.spanPromptCompletionSampleRate', 1)
-    this._setValue(defaults, 'llmobs.agentlessEnabled', undefined)
+    this._setValue(defaults, 'llmobs.agentlessEnabled')
     this._setValue(defaults, 'llmobs.enabled', false)
-    this._setValue(defaults, 'llmobs.mlApp', undefined)
+    this._setValue(defaults, 'llmobs.mlApp')
     this._setValue(defaults, 'ciVisibilityTestSessionName', '')
     this._setValue(defaults, 'ciVisAgentlessLogSubmissionEnabled', false)
     this._setValue(defaults, 'legacyBaggageEnabled', true)
@@ -537,8 +533,9 @@ class Config {
     this._setValue(defaults, 'isServiceUserProvided', false)
     this._setValue(defaults, 'testManagementAttemptToFixRetries', 20)
     this._setValue(defaults, 'isTestManagementEnabled', false)
+    this._setValue(defaults, 'isImpactedTestsEnabled', false)
     this._setValue(defaults, 'logInjection', false)
-    this._setValue(defaults, 'lookup', undefined)
+    this._setValue(defaults, 'lookup')
     this._setValue(defaults, 'inferredProxyServicesEnabled', false)
     this._setValue(defaults, 'memcachedCommandEnabled', false)
     this._setValue(defaults, 'middlewareTracingEnabled', true)
@@ -547,21 +544,21 @@ class Config {
     this._setValue(defaults, 'peerServiceMapping', {})
     this._setValue(defaults, 'plugins', true)
     this._setValue(defaults, 'port', '8126')
-    this._setValue(defaults, 'profiling.enabled', undefined)
+    this._setValue(defaults, 'profiling.enabled')
     this._setValue(defaults, 'profiling.exporters', 'agent')
     this._setValue(defaults, 'profiling.sourceMap', true)
-    this._setValue(defaults, 'profiling.longLivedThreshold', undefined)
+    this._setValue(defaults, 'profiling.longLivedThreshold')
     this._setValue(defaults, 'protocolVersion', '0.4')
     this._setValue(defaults, 'queryStringObfuscation', qsRegex)
     this._setValue(defaults, 'remoteConfig.enabled', true)
     this._setValue(defaults, 'remoteConfig.pollInterval', 5) // seconds
     this._setValue(defaults, 'reportHostname', false)
     this._setValue(defaults, 'runtimeMetrics', false)
-    this._setValue(defaults, 'sampleRate', undefined)
+    this._setValue(defaults, 'sampleRate')
     this._setValue(defaults, 'sampler.rateLimit', 100)
     this._setValue(defaults, 'sampler.rules', [])
     this._setValue(defaults, 'sampler.spanSamplingRules', [])
-    this._setValue(defaults, 'scope', undefined)
+    this._setValue(defaults, 'scope')
     this._setValue(defaults, 'service', service)
     this._setValue(defaults, 'serviceMapping', {})
     this._setValue(defaults, 'site', 'datadoghq.com')
@@ -588,13 +585,13 @@ class Config {
     this._setValue(defaults, 'tracePropagationStyle.extract', ['datadog', 'tracecontext', 'baggage'])
     this._setValue(defaults, 'tracePropagationStyle.otelPropagators', false)
     this._setValue(defaults, 'tracing', true)
-    this._setValue(defaults, 'url', undefined)
+    this._setValue(defaults, 'url')
     this._setValue(defaults, 'version', pkg.version)
-    this._setValue(defaults, 'instrumentation_config_id', undefined)
+    this._setValue(defaults, 'instrumentation_config_id')
     this._setValue(defaults, 'vertexai.spanCharLimit', 128)
     this._setValue(defaults, 'vertexai.spanPromptCompletionSampleRate', 1)
     this._setValue(defaults, 'trace.aws.addSpanPointers', true)
-    this._setValue(defaults, 'trace.dynamoDb.tablePrimaryKeys', undefined)
+    this._setValue(defaults, 'trace.dynamoDb.tablePrimaryKeys')
     this._setValue(defaults, 'trace.nativeSpanEvents', false)
   }
 
@@ -645,7 +642,6 @@ class Config {
       DD_API_SECURITY_SAMPLE_DELAY,
       DD_APM_TRACING_ENABLED,
       DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE,
-      DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING,
       DD_APPSEC_COLLECT_ALL_HEADERS,
       DD_APPSEC_ENABLED,
       DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON,
@@ -669,16 +665,14 @@ class Config {
       DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED,
       DD_DATA_STREAMS_ENABLED,
       DD_DBM_PROPAGATION_MODE,
-      DD_DOGSTATSD_HOSTNAME,
       DD_DOGSTATSD_HOST,
       DD_DOGSTATSD_PORT,
       DD_DYNAMIC_INSTRUMENTATION_ENABLED,
       DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS,
       DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS,
       DD_ENV,
-      DD_EXPERIMENTAL_API_SECURITY_ENABLED,
       DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED,
-      DD_EXPERIMENTAL_PROFILING_ENABLED,
+      DD_PROFILING_ENABLED,
       DD_GRPC_CLIENT_ERROR_STATUSES,
       DD_GRPC_SERVER_ERROR_STATUSES,
       JEST_WORKER_ID,
@@ -705,7 +699,6 @@ class Config {
       DD_LLMOBS_ML_APP,
       DD_OPENAI_LOGS_ENABLED,
       DD_OPENAI_SPAN_CHAR_LIMIT,
-      DD_PROFILING_ENABLED,
       DD_PROFILING_EXPORTERS,
       DD_PROFILING_SOURCE_MAP,
       DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD,
@@ -714,7 +707,6 @@ class Config {
       DD_RUNTIME_METRICS_ENABLED,
       DD_SERVICE,
       DD_SERVICE_MAPPING,
-      DD_SERVICE_NAME,
       DD_SITE,
       DD_SPAN_SAMPLING_RULES,
       DD_SPAN_SAMPLING_RULES_FILE,
@@ -726,7 +718,6 @@ class Config {
       DD_TELEMETRY_METRICS_ENABLED,
       DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED,
       DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED,
-      DD_TRACE_AGENT_HOSTNAME,
       DD_TRACE_AGENT_PORT,
       DD_TRACE_AGENT_PROTOCOL_VERSION,
       DD_TRACE_AWS_ADD_SPAN_POINTERS,
@@ -765,7 +756,6 @@ class Config {
       DD_TRACE_SPAN_LEAK_DEBUG,
       DD_TRACE_STARTUP_LOGS,
       DD_TRACE_TAGS,
-      DD_TRACE_TELEMETRY_ENABLED,
       DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH,
       DD_TRACING_ENABLED,
       DD_VERSION,
@@ -779,7 +769,7 @@ class Config {
       OTEL_SERVICE_NAME,
       OTEL_TRACES_SAMPLER,
       OTEL_TRACES_SAMPLER_ARG
-    } = process.env
+    } = getEnvironmentVariables()
 
     const tags = {}
     const env = setHiddenProperty(this, '_env', {})
@@ -794,10 +784,7 @@ class Config {
       DD_APM_TRACING_ENABLED,
       DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED && isFalse(DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED)
     ))
-    this._setBoolean(env, 'appsec.apiSecurity.enabled', coalesce(
-      DD_API_SECURITY_ENABLED && isTrue(DD_API_SECURITY_ENABLED),
-      DD_EXPERIMENTAL_API_SECURITY_ENABLED && isTrue(DD_EXPERIMENTAL_API_SECURITY_ENABLED)
-    ))
+    this._setBoolean(env, 'appsec.apiSecurity.enabled', DD_API_SECURITY_ENABLED && isTrue(DD_API_SECURITY_ENABLED))
     this._setValue(env, 'appsec.apiSecurity.sampleDelay', maybeFloat(DD_API_SECURITY_SAMPLE_DELAY))
     this._setValue(env, 'appsec.blockedTemplateGraphql', maybeFile(DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON))
     this._setValue(env, 'appsec.blockedTemplateHtml', maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML))
@@ -805,10 +792,7 @@ class Config {
     this._setValue(env, 'appsec.blockedTemplateJson', maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON))
     this._envUnprocessed['appsec.blockedTemplateJson'] = DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON
     this._setBoolean(env, 'appsec.enabled', DD_APPSEC_ENABLED)
-    this._setString(env, 'appsec.eventTracking.mode', coalesce(
-      DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE,
-      DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING // TODO: remove in next major
-    ))
+    this._setString(env, 'appsec.eventTracking.mode', DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE)
     this._setBoolean(env, 'appsec.extendedHeadersCollection.enabled', DD_APPSEC_COLLECT_ALL_HEADERS)
     this._setBoolean(
       env,
@@ -849,7 +833,7 @@ class Config {
       DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED
     )
     this._setString(env, 'dbmPropagationMode', DD_DBM_PROPAGATION_MODE)
-    this._setString(env, 'dogstatsd.hostname', DD_DOGSTATSD_HOST || DD_DOGSTATSD_HOSTNAME)
+    this._setString(env, 'dogstatsd.hostname', DD_DOGSTATSD_HOST)
     this._setString(env, 'dogstatsd.port', DD_DOGSTATSD_PORT)
     this._setBoolean(env, 'dsmEnabled', DD_DATA_STREAMS_ENABLED)
     this._setBoolean(env, 'dynamicInstrumentation.enabled', DD_DYNAMIC_INSTRUMENTATION_ENABLED)
@@ -871,7 +855,7 @@ class Config {
     this._setIntegerRangeSet(env, 'grpc.client.error.statuses', DD_GRPC_CLIENT_ERROR_STATUSES)
     this._setIntegerRangeSet(env, 'grpc.server.error.statuses', DD_GRPC_SERVER_ERROR_STATUSES)
     this._setArray(env, 'headerTags', DD_TRACE_HEADER_TAGS)
-    this._setString(env, 'hostname', coalesce(DD_AGENT_HOST, DD_TRACE_AGENT_HOSTNAME))
+    this._setString(env, 'hostname', DD_AGENT_HOST)
     this._setValue(env, 'iast.dbRowsToTaint', maybeInt(DD_IAST_DB_ROWS_TO_TAINT))
     this._setBoolean(env, 'iast.deduplicationEnabled', DD_IAST_DEDUPLICATION_ENABLED)
     this._setBoolean(env, 'iast.enabled', DD_IAST_ENABLED)
@@ -909,7 +893,7 @@ class Config {
     this._setValue(env, 'openai.spanCharLimit', maybeInt(DD_OPENAI_SPAN_CHAR_LIMIT))
     this._envUnprocessed.openaiSpanCharLimit = DD_OPENAI_SPAN_CHAR_LIMIT
     if (DD_TRACE_PEER_SERVICE_MAPPING) {
-      this._setValue(env, 'peerServiceMapping', fromEntries(
+      this._setValue(env, 'peerServiceMapping', Object.fromEntries(
         DD_TRACE_PEER_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
       ))
       this._envUnprocessed.peerServiceMapping = DD_TRACE_PEER_SERVICE_MAPPING
@@ -917,7 +901,6 @@ class Config {
     this._setString(env, 'port', DD_TRACE_AGENT_PORT)
     const profilingEnabled = normalizeProfilingEnabledValue(
       coalesce(
-        DD_EXPERIMENTAL_PROFILING_ENABLED,
         DD_PROFILING_ENABLED,
         this._isInServerlessEnvironment() ? 'false' : undefined
       )
@@ -955,10 +938,10 @@ class Config {
     this._setSamplingRule(env, 'sampler.rules', safeJsonParse(DD_TRACE_SAMPLING_RULES))
     this._envUnprocessed['sampler.rules'] = DD_TRACE_SAMPLING_RULES
     this._setString(env, 'scope', DD_TRACE_SCOPE)
-    this._setString(env, 'service', DD_SERVICE || DD_SERVICE_NAME || tags.service || OTEL_SERVICE_NAME)
+    this._setString(env, 'service', DD_SERVICE || tags.service || OTEL_SERVICE_NAME)
     if (DD_SERVICE_MAPPING) {
-      this._setValue(env, 'serviceMapping', fromEntries(
-        process.env.DD_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
+      this._setValue(env, 'serviceMapping', Object.fromEntries(
+        DD_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
       ))
     }
     this._setString(env, 'site', DD_SITE)
@@ -973,8 +956,7 @@ class Config {
     this._setTags(env, 'tags', tags)
     this._setValue(env, 'tagsHeaderMaxLength', DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH)
     this._setBoolean(env, 'telemetry.enabled', coalesce(
-      DD_TRACE_TELEMETRY_ENABLED, // for backward compatibility
-      DD_INSTRUMENTATION_TELEMETRY_ENABLED, // to comply with instrumentation telemetry specs
+      DD_INSTRUMENTATION_TELEMETRY_ENABLED,
       !(this._isInServerlessEnvironment() || JEST_WORKER_ID)
     ))
     this._setString(env, 'instrumentation_config_id', DD_INSTRUMENTATION_CONFIG_ID)
@@ -1018,7 +1000,7 @@ class Config {
     const tags = {}
     setHiddenProperty(this, '_optsUnprocessed', {})
 
-    options = setHiddenProperty(this, '_optionsArg', Object.assign({ ingestion: {} }, options, opts))
+    options = setHiddenProperty(this, '_optionsArg', { ingestion: {}, ...options, ...opts })
 
     tagger.add(tags, options.tags)
 
@@ -1183,20 +1165,19 @@ class Config {
 
   _isCiVisibilityItrEnabled () {
     return coalesce(
-      process.env.DD_CIVISIBILITY_ITR_ENABLED,
+      getEnvironmentVariable('DD_CIVISIBILITY_ITR_ENABLED'),
       true
     )
   }
 
   _getHostname () {
-    const DD_CIVISIBILITY_AGENTLESS_URL = process.env.DD_CIVISIBILITY_AGENTLESS_URL
+    const DD_CIVISIBILITY_AGENTLESS_URL = getEnvironmentVariable('DD_CIVISIBILITY_AGENTLESS_URL')
     const url = DD_CIVISIBILITY_AGENTLESS_URL
       ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
       : getAgentUrl(this._getTraceAgentUrl(), this._optionsArg)
     const DD_AGENT_HOST = coalesce(
       this._optionsArg.hostname,
-      process.env.DD_AGENT_HOST,
-      process.env.DD_TRACE_AGENT_HOSTNAME,
+      getEnvironmentVariable('DD_AGENT_HOST'),
       '127.0.0.1'
     )
     return DD_AGENT_HOST || (url && url.hostname)
@@ -1206,17 +1187,17 @@ class Config {
     const DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = validateNamingVersion(
       coalesce(
         this._optionsArg.spanAttributeSchema,
-        process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
+        getEnvironmentVariable('DD_TRACE_SPAN_ATTRIBUTE_SCHEMA')
       )
     )
 
     const peerServiceSet = (
       this._optionsArg.hasOwnProperty('spanComputePeerService') ||
-      process.env.hasOwnProperty('DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED')
+      getEnvironmentVariables().hasOwnProperty('DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED')
     )
     const peerServiceValue = coalesce(
       this._optionsArg.spanComputePeerService,
-      process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
+      getEnvironmentVariable('DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED')
     )
 
     const spanComputePeerService = (
@@ -1232,14 +1213,14 @@ class Config {
 
   _isCiVisibilityGitUploadEnabled () {
     return coalesce(
-      process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED,
+      getEnvironmentVariable('DD_CIVISIBILITY_GIT_UPLOAD_ENABLED'),
       true
     )
   }
 
   _isCiVisibilityManualApiEnabled () {
     return coalesce(
-      process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED,
+      getEnvironmentVariable('DD_CIVISIBILITY_MANUAL_API_ENABLED'),
       true
     )
   }
@@ -1250,7 +1231,7 @@ class Config {
 
     return apmTracingEnabled && coalesce(
       this._optionsArg.stats,
-      process.env.DD_TRACE_STATS_COMPUTATION_ENABLED,
+      getEnvironmentVariable('DD_TRACE_STATS_COMPUTATION_ENABLED'),
       getIsGCPFunction() || getIsAzureFunction()
     )
   }
@@ -1258,8 +1239,7 @@ class Config {
   _getTraceAgentUrl () {
     return coalesce(
       this._optionsArg.url,
-      process.env.DD_TRACE_AGENT_URL,
-      process.env.DD_TRACE_URL,
+      getEnvironmentVariable('DD_TRACE_AGENT_URL'),
       null
     )
   }
@@ -1277,8 +1257,9 @@ class Config {
       DD_AGENTLESS_LOG_SUBMISSION_ENABLED,
       DD_TEST_FAILED_TEST_REPLAY_ENABLED,
       DD_TEST_MANAGEMENT_ENABLED,
-      DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES
-    } = process.env
+      DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES,
+      DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED
+    } = getEnvironmentVariables()
 
     if (DD_CIVISIBILITY_AGENTLESS_URL) {
       this._setValue(calc, 'url', new URL(DD_CIVISIBILITY_AGENTLESS_URL))
@@ -1302,6 +1283,7 @@ class Config {
         'testManagementAttemptToFixRetries',
         coalesce(maybeInt(DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES), 20)
       )
+      this._setBoolean(calc, 'isImpactedTestsEnabled', !isFalse(DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED))
     }
     this._setString(calc, 'dogstatsd.hostname', this._getHostname())
     this._setBoolean(calc, 'isGitUploadEnabled',
@@ -1375,7 +1357,7 @@ class Config {
 
     value = Number.parseFloat(value)
 
-    if (!isNaN(value)) {
+    if (!Number.isNaN(value)) {
       // TODO: Ignore out of range values instead of normalizing them.
       this._setValue(obj, name, Math.min(Math.max(value, 0), 1))
     }
@@ -1390,7 +1372,7 @@ class Config {
       value = value.split(',').map(item => {
         // Trim each item and remove whitespace around the colon
         const [key, val] = item.split(':').map(part => part.trim())
-        return val !== undefined ? `${key}:${val}` : key
+        return val === undefined ? key : `${key}:${val}`
       })
     }
 
@@ -1454,12 +1436,7 @@ class Config {
     obj[name] = value
   }
 
-  // TODO: Report origin changes and errors to telemetry.
-  // TODO: Deeply merge configurations.
-  // TODO: Move change tracking to telemetry.
-  // for telemetry reporting, `name`s in `containers` need to be keys from:
-  // https://github.com/DataDog/dd-go/blob/prod/trace/apps/tracer-telemetry-intake/telemetry-payload/static/config_norm_rules.json
-  _merge () {
+  _getContainersAndOriginsOrdered () {
     const containers = [
       this._remote,
       this._options,
@@ -1478,6 +1455,17 @@ class Config {
       'calculated',
       'default'
     ]
+
+    return { containers, origins }
+  }
+
+  // TODO: Report origin changes and errors to telemetry.
+  // TODO: Deeply merge configurations.
+  // TODO: Move change tracking to telemetry.
+  // for telemetry reporting, `name`s in `containers` need to be keys from:
+  // https://github.com/DataDog/dd-go/blob/prod/trace/apps/tracer-telemetry-intake/telemetry-payload/static/config_norm_rules.json
+  _merge () {
+    const { containers, origins } = this._getContainersAndOriginsOrdered()
     const unprocessedValues = [
       this._remoteUnprocessed,
       this._optsUnprocessed,
@@ -1514,6 +1502,18 @@ class Config {
     updateConfig(changes, this)
   }
 
+  getOrigin (name) {
+    const { containers, origins } = this._getContainersAndOriginsOrdered()
+
+    for (let i = 0; i < containers.length; i++) {
+      const container = containers[i]
+      const value = container[name]
+      if (value != null || container === this._defaults) {
+        return origins[i]
+      }
+    }
+  }
+
   // TODO: Refactor the Config class so it never produces any config objects that are incompatible with MessageChannel
   /**
    * Serializes the config object so it can be passed over a Worker Thread MessageChannel.
@@ -1536,24 +1536,24 @@ function handleOtel (tagString) {
     ?.replace(/(^|,)deployment\.environment=/, '$1env:')
     .replace(/(^|,)service\.name=/, '$1service:')
     .replace(/(^|,)service\.version=/, '$1version:')
-    .replace(/=/g, ':')
+    .replaceAll('=', ':')
 }
 
 function parseSpaceSeparatedTags (tagString) {
   if (tagString && !tagString.includes(',')) {
-    tagString = tagString.replace(/\s+/g, ',')
+    tagString = tagString.replaceAll(/\s+/g, ',')
   }
   return tagString
 }
 
 function maybeInt (number) {
   const parsed = Number.parseInt(number)
-  return isNaN(parsed) ? undefined : parsed
+  return Number.isNaN(parsed) ? undefined : parsed
 }
 
 function maybeFloat (number) {
   const parsed = Number.parseFloat(number)
-  return isNaN(parsed) ? undefined : parsed
+  return Number.isNaN(parsed) ? undefined : parsed
 }
 
 function getAgentUrl (url, options) {
@@ -1564,9 +1564,8 @@ function getAgentUrl (url, options) {
   if (
     !options.hostname &&
     !options.port &&
-    !process.env.DD_AGENT_HOST &&
-    !process.env.DD_TRACE_AGENT_HOSTNAME &&
-    !process.env.DD_TRACE_AGENT_PORT &&
+    !getEnvironmentVariable('DD_AGENT_HOST') &&
+    !getEnvironmentVariable('DD_TRACE_AGENT_PORT') &&
     fs.existsSync('/var/run/datadog/apm.socket')
   ) {
     return new URL('unix:///var/run/datadog/apm.socket')

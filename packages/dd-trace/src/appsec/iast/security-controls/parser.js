@@ -80,7 +80,7 @@ function getParameters (parameters) {
       const parsedParam = Number.parseInt(param, 10)
 
       // discard the securityControl if there is an incorrect parameter
-      if (isNaN(parsedParam)) {
+      if (Number.isNaN(parsedParam)) {
         throw new TypeError('Invalid non-numeric security control parameter')
       }
 

@@ -37,7 +37,7 @@ addHook({ name: 'tedious', versions: ['>=1.0.0'] }, tedious => {
         if (error) {
           errorCh.publish(error)
         }
-        finishCh.publish(undefined)
+        finishCh.publish()
 
         return cb.apply(this, arguments)
       }, null, request)
@@ -63,7 +63,6 @@ function getQueryOrProcedure (request) {
     return [request.parametersByName.statement.value, request.parametersByName.statement, 'value']
   } else if (request.parametersByName.stmt) {
     return [request.parametersByName.stmt.value, request.parametersByName.stmt, 'value']
-  } else {
-    return [request.sqlTextOrProcedure, request, 'sqlTextOrProcedure']
   }
+  return [request.sqlTextOrProcedure, request, 'sqlTextOrProcedure']
 }

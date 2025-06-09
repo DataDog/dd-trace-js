@@ -2,23 +2,17 @@
 
 const { createSandbox, spawnProc, FakeAgent } = require('../helpers')
 const path = require('path')
-const getPort = require('get-port')
 const Axios = require('axios')
 const { assert } = require('chai')
 
 describe('ESM', () => {
-  let axios, sandbox, cwd, appPort, appFile, agent, proc
+  let axios, sandbox, cwd, appFile, agent, proc
 
   before(async function () {
     this.timeout(process.platform === 'win32' ? 90000 : 30000)
     sandbox = await createSandbox(['express'])
-    appPort = await getPort()
     cwd = sandbox.folder
     appFile = path.join(cwd, 'appsec', 'esm-app', 'index.mjs')
-
-    axios = Axios.create({
-      baseURL: `http://localhost:${appPort}`
-    })
   })
 
   after(async function () {
@@ -39,12 +33,13 @@ describe('ESM', () => {
           cwd,
           env: {
             DD_TRACE_AGENT_PORT: agent.port,
-            APP_PORT: appPort,
             DD_IAST_ENABLED: 'true',
             DD_IAST_REQUEST_SAMPLING: '100',
             NODE_OPTIONS: nodeOptions
           }
         })
+
+        axios = Axios.create({ baseURL: proc.url })
       })
 
       afterEach(async () => {

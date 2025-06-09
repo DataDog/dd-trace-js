@@ -13,13 +13,9 @@ let samplingRules = []
 let alreadyRan = false
 
 function getIntegrationsAndAnalytics () {
-  const integrations = new Set()
-  const extras = {}
-  for (const pluginName in pluginManager._pluginsByName) {
-    integrations.add(pluginName)
+  return {
+    integrations_loaded: Object.keys(pluginManager._pluginsByName)
   }
-  extras.integrations_loaded = Array.from(integrations)
-  return extras
 }
 
 function startupLog ({ agentError } = {}) {
@@ -47,7 +43,7 @@ function startupLog ({ agentError } = {}) {
   if (agentError) {
     warn('DATADOG TRACER DIAGNOSTIC - Agent Error: ' + agentError.message)
     errors.agentError = {
-      code: agentError.code ? agentError.code : '',
+      code: agentError.code ?? '',
       message: `Agent Error:${agentError.message}`
     }
   }
@@ -61,7 +57,9 @@ function tracerInfo () {
       return String(this)
     },
     toString () {
-      return JSON.stringify(this)
+      return JSON.stringify(this, (_key_, value) => {
+        return typeof value === 'bigint' || typeof value === 'symbol' ? String(value) : value
+      })
     }
   }
 
@@ -91,16 +89,6 @@ function tracerInfo () {
   Object.assign(out, getIntegrationsAndAnalytics())
 
   out.appsec_enabled = !!config.appsec.enabled
-
-  // // This next bunch is for features supported by other tracers, but not this
-  // // one. They may be implemented in the future.
-
-  // out.enabled_cli
-  // out.sampling_rules_error
-  // out.integration_XXX_analytics_enabled
-  // out.integration_XXX_sample_rate
-  // out.service_mapping
-  // out.service_mapping_error
 
   return out
 }

@@ -8,10 +8,11 @@ const { DogStatsDClient, MetricsAggregationClient } = require('../dogstatsd')
 const log = require('../log')
 const Histogram = require('../histogram')
 const { performance, PerformanceObserver } = require('perf_hooks')
+const { getEnvironmentVariable } = require('../config-helper')
 
 const { NODE_MAJOR, NODE_MINOR } = require('../../../../version')
-const { DD_RUNTIME_METRICS_FLUSH_INTERVAL = '10000' } = process.env
-const INTERVAL = parseInt(DD_RUNTIME_METRICS_FLUSH_INTERVAL, 10)
+const DD_RUNTIME_METRICS_FLUSH_INTERVAL = getEnvironmentVariable('DD_RUNTIME_METRICS_FLUSH_INTERVAL') ?? '10000'
+const INTERVAL = Number.parseInt(DD_RUNTIME_METRICS_FLUSH_INTERVAL, 10)
 
 // Node >=16 has PerformanceObserver with `gc` type, but <16.7 had a critical bug.
 // See: https://github.com/nodejs/node/issues/39548
@@ -202,7 +203,7 @@ function captureGCMetrics () {
   const pause = {}
 
   for (const stat of profile.statistics) {
-    const type = stat.gcType.replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase()
+    const type = stat.gcType.replaceAll(/([a-z])([A-Z])/g, '$1_$2').toLowerCase()
 
     pause[type] = pause[type] || new Histogram()
     pause[type].record(stat.cost)
