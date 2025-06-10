@@ -188,7 +188,7 @@ function incomingHttpEndTranslator ({ req, res }) {
 
   waf.disposeContext(req)
 
-  const storedHeaders = storedResponseHeaders.get(req)
+  const storedHeaders = storedResponseHeaders.get(req) || {}
 
   Reporter.finishRequest(req, res, storedHeaders)
 
