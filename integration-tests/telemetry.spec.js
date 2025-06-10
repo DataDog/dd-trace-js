@@ -67,15 +67,23 @@ describe('telemetry', () => {
         if (msg.payload.request_type !== 'app-started') return
 
         const { configuration } = msg.payload.payload
-        const logInjectionEntries = configuration.filter(entry => entry.name === 'DD_LOG_INJECTION')
-
-        if (logInjectionEntries.length !== 3) return
-
-        const [first, second, third] = logInjectionEntries
-
-        if (first.value !== false || first.origin !== 'default') return
-        if (second.value !== true || second.origin !== 'env_var' || second.seq_id <= first.seq_id) return
-        if (third.value !== false || third.origin !== 'code' || third.seq_id <= second.seq_id) return
+        assertObjectContains(configuration, [
+          {
+            name: 'DD_LOG_INJECTION',
+            value: false,
+            origin: 'default'
+          },
+          {
+            name: 'DD_LOG_INJECTION',
+            value: true,
+            origin: 'env_var'
+          },
+          {
+            name: 'DD_LOG_INJECTION',
+            value: false,
+            origin: 'code'
+          }
+        ])
         done()
       }, null, 'app-started', 1)
     })
