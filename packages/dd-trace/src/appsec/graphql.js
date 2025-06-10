@@ -105,9 +105,9 @@ function beforeWriteApolloGraphqlResponse ({ abortController, abortData }) {
       rootSpan.setTag('appsec.blocked', 'true')
 
       abortController?.abort()
-    } catch (err) {
+    } catch (error) {
       rootSpan.setTag('_dd.appsec.block.failed', 1)
-      log.error('[ASM] Blocking error', err)
+      log.error('[ASM] Blocking error', error)
 
       updateBlockFailureMetric(req)
     }

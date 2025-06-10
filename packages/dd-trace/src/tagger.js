@@ -44,7 +44,7 @@ function add (carrier, keyValuePairs) {
         )
       }
     } else if (Array.isArray(keyValuePairs)) {
-      return keyValuePairs.forEach(tags => add(carrier, tags))
+      for (const tags of keyValuePairs) add(carrier, tags)
     } else {
       Object.assign(carrier, keyValuePairs)
     }

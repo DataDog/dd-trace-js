@@ -372,10 +372,10 @@ function wrapRun (pl, isLatestVersion) {
         })
       })
       return promise
-    } catch (err) {
-      ctx.err = err
+    } catch (error) {
+      ctx.err = error
       errorCh.runStores(ctx, () => {
-        throw err
+        throw error
       })
     }
   })
@@ -405,10 +405,10 @@ function wrapRun (pl, isLatestVersion) {
           testFinishCh.publish({ isStep: true, status, skipReason, errorMessage, ...ctx.currentStore })
         })
         return promise
-      } catch (err) {
-        ctx.err = err
+      } catch (error) {
+        ctx.err = error
         errorCh.runStores(ctx, () => {
-          throw err
+          throw error
         })
       }
     })

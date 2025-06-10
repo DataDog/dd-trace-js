@@ -101,9 +101,9 @@ function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy, ev
     let alreadySeenCommits
     try {
       alreadySeenCommits = validateCommits(JSON.parse(response).data)
-    } catch (e) {
+    } catch (error) {
       incrementCountMetric(TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS_ERRORS, { errorType: 'network' })
-      return callback(new Error(`Can't parse commits to exclude response: ${e.message}`))
+      return callback(new Error(`Can't parse commits to exclude response: ${error.message}`))
     }
     log.debug(`There are ${alreadySeenCommits.length} commits to exclude.`)
     const commitsToInclude = latestCommits.filter((commit) => !alreadySeenCommits.includes(commit))

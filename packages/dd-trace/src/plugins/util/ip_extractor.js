@@ -52,7 +52,8 @@ function extractIp (config, req) {
 
       if (firstIp.public) {
         return firstIp.public
-      } else if (!firstPrivateIp && firstIp.private) {
+      }
+      if (!firstPrivateIp && firstIp.private) {
         firstPrivateIp = firstIp.private
       }
     }

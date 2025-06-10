@@ -94,11 +94,11 @@ function deepCloneSuite (suite, filterTest, tags = []) {
     } else {
       if (filterTest(entry)) {
         const copiedTest = entry._clone()
-        tags.forEach(tag => {
+        for (const tag of tags) {
           if (tag) {
             copiedTest[tag] = true
           }
-        })
+        }
         copy._addTest(copiedTest)
       }
     }
@@ -527,12 +527,12 @@ function runnerHook (runnerExport, playwrightVersion) {
         testManagementAttemptToFixRetries = libraryConfig.testManagementAttemptToFixRetries
         isImpactedTestsEnabled = libraryConfig.isImpactedTestsEnabled
       }
-    } catch (e) {
+    } catch (error) {
       isEarlyFlakeDetectionEnabled = false
       isKnownTestsEnabled = false
       isTestManagementTestsEnabled = false
       isImpactedTestsEnabled = false
-      log.error('Playwright session start error', e)
+      log.error('Playwright session start error', error)
     }
 
     if (isKnownTestsEnabled && satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)) {
@@ -544,10 +544,10 @@ function runnerHook (runnerExport, playwrightVersion) {
         } else {
           knownTests = receivedKnownTests
         }
-      } catch (err) {
+      } catch (error) {
         isEarlyFlakeDetectionEnabled = false
         isKnownTestsEnabled = false
-        log.error('Playwright known tests error', err)
+        log.error('Playwright known tests error', error)
       }
     }
 
@@ -559,9 +559,9 @@ function runnerHook (runnerExport, playwrightVersion) {
         } else {
           testManagementTests = receivedTestManagementTests
         }
-      } catch (err) {
+      } catch (error) {
         isTestManagementTestsEnabled = false
-        log.error('Playwright test management tests error', err)
+        log.error('Playwright test management tests error', error)
       }
     }
 
@@ -573,9 +573,9 @@ function runnerHook (runnerExport, playwrightVersion) {
         } else {
           modifiedTests = receivedModifiedTests
         }
-      } catch (err) {
+      } catch (error) {
         isImpactedTestsEnabled = false
-        log.error('Playwright impacted tests error', err)
+        log.error('Playwright impacted tests error', error)
       }
     }
 
@@ -585,25 +585,25 @@ function runnerHook (runnerExport, playwrightVersion) {
       flakyTestRetriesCount > 0 &&
       !isTestManagementTestsEnabled
     if (shouldSetRetries) {
-      projects.forEach(project => {
+      for (const project of projects) {
         if (project.retries === 0) { // Only if it hasn't been set by the user
           project.retries = flakyTestRetriesCount
         }
-      })
+      }
     }
 
     let runAllTestsReturn = await runAllTests.apply(this, arguments)
 
-    Object.values(remainingTestsByFile).forEach(tests => {
+    for (const tests of Object.values(remainingTestsByFile)) {
       // `tests` should normally be empty, but if it isn't,
       // there were tests that did not go through `testBegin` or `testEnd`,
       // because they were skipped
-      tests.forEach(test => {
+      for (const test of tests) {
         const browser = getBrowserNameFromProjects(projects, test)
         testBeginHandler(test, browser, true)
         testEndHandler(test, [], 'skip', null, false, true)
-      })
-    })
+      }
+    }
 
     const sessionStatus = runAllTestsReturn.status || runAllTestsReturn
 

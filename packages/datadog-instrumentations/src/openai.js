@@ -254,10 +254,10 @@ function wrapStreamIterator (response, options, n, ctx) {
 
             return res
           })
-          .catch(err => {
-            finish(ctx, undefined, err)
+          .catch(error => {
+            finish(ctx, undefined, error)
 
-            throw err
+            throw error
           })
       })
       return iterator

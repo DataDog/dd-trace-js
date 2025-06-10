@@ -180,7 +180,7 @@ module.exports = class CiPlugin extends Plugin {
 
     this.addSub(`ci:${this.constructor.id}:itr:skipped-suites`, ({ skippedSuites, frameworkVersion }) => {
       const testCommand = this.testSessionSpan.context()._tags[TEST_COMMAND]
-      skippedSuites.forEach((testSuite) => {
+      for (const testSuite of skippedSuites) {
         const testSuiteMetadata = getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, this.constructor.id)
         if (this.itrCorrelationId) {
           testSuiteMetadata[ITR_CORRELATION_ID] = this.itrCorrelationId
@@ -196,7 +196,7 @@ module.exports = class CiPlugin extends Plugin {
             [TEST_SKIPPED_BY_ITR]: 'true'
           }
         }).finish()
-      })
+      }
       this.telemetry.count(TELEMETRY_ITR_SKIPPED, { testLevel: 'suite' }, skippedSuites.length)
     })
 

@@ -9,7 +9,8 @@ function getFormattedHostString ({ host, port }) {
 function httpPluginClientService ({ tracerService, pluginConfig, sessionDetails }) {
   if (pluginConfig.splitByDomain) {
     return getFormattedHostString(sessionDetails)
-  } else if (pluginConfig.service) {
+  }
+  if (pluginConfig.service) {
     return pluginConfig.service
   }
 

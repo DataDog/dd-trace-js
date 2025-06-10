@@ -45,24 +45,24 @@ class StableConfig {
       // eslint-disable-next-line eslint-rules/eslint-process-env
       configurator.set_envp(Object.entries(process.env).map(([key, value]) => `${key}=${value}`))
       configurator.set_args(process.argv)
-      configurator.get_configuration(localConfig.toString(), fleetConfig.toString()).forEach((entry) => {
+      for (const entry of configurator.get_configuration(localConfig.toString(), fleetConfig.toString())) {
         if (entry.source === 'local_stable_config') {
           this.localEntries[entry.name] = entry.value
         } else if (entry.source === 'fleet_stable_config') {
           this.fleetEntries[entry.name] = entry.value
         }
-      })
-    } catch (e) {
-      this.warnings.push(`Error parsing configuration from file: ${e.message}`)
+      }
+    } catch (error) {
+      this.warnings.push(`Error parsing configuration from file: ${error.message}`)
     }
   }
 
   _readConfigFromPath (path) {
     try {
       return fs.readFileSync(path, 'utf8')
-    } catch (err) {
-      if (err.code !== 'ENOENT') {
-        this.warnings.push(`Error reading config file at ${path}. ${err.code}: ${err.message}`)
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        this.warnings.push(`Error reading config file at ${path}. ${error.code}: ${error.message}`)
       }
       return '' // Always return a string to avoid undefined.toString() errors
     }

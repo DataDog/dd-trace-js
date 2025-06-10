@@ -33,10 +33,10 @@ addHook({ name: 'ioredis', versions: ['>=2'] }, Redis => {
 
       try {
         return sendCommand.apply(this, arguments)
-      } catch (err) {
-        errorCh.publish(err)
+      } catch (error) {
+        errorCh.publish(error)
 
-        throw err
+        throw error
       }
     })
   })

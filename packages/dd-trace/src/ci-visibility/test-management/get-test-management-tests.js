@@ -57,8 +57,8 @@ function getTestManagementTests ({
         const { data: { attributes: { modules: testManagementTests } } } = JSON.parse(res)
 
         done(null, testManagementTests)
-      } catch (err) {
-        done(err)
+      } catch (error) {
+        done(error)
       }
     }
   })

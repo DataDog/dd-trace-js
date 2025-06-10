@@ -57,15 +57,15 @@ function sanitizedExec (
       distributionMetric(durationMetric.name, durationMetric.tags, Date.now() - startTime)
     }
     return result
-  } catch (err) {
+  } catch (error) {
     if (errorMetric) {
       incrementCountMetric(errorMetric.name, {
         ...errorMetric.tags,
-        errorType: err.code,
-        exitCode: err.status || err.errno
+        errorType: error.code,
+        exitCode: error.status || error.errno
       })
     }
-    log.error('Git plugin error executing command', err)
+    log.error('Git plugin error executing command', error)
     return ''
   } finally {
     storage('legacy').enterWith(store)
@@ -146,12 +146,12 @@ function unshallowRepository () {
       ...baseGitOptions,
       revParseHead
     ], { stdio: 'pipe' })
-  } catch (err) {
+  } catch (error) {
     // If the local HEAD is a commit that has not been pushed to the remote, the above command will fail.
-    log.error('Git plugin error executing git command', err)
+    log.error('Git plugin error executing git command', error)
     incrementCountMetric(
       TELEMETRY_GIT_COMMAND_ERRORS,
-      { command: 'unshallow', errorType: err.code, exitCode: err.status || err.errno }
+      { command: 'unshallow', errorType: error.code, exitCode: error.status || error.errno }
     )
     const upstreamRemote = sanitizedExec('git', ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'])
     try {
@@ -159,12 +159,12 @@ function unshallowRepository () {
         ...baseGitOptions,
         upstreamRemote
       ], { stdio: 'pipe' })
-    } catch (err) {
+    } catch (error) {
       // If the CI is working on a detached HEAD or branch tracking hasn’t been set up, the above command will fail.
-      log.error('Git plugin error executing fallback git command', err)
+      log.error('Git plugin error executing fallback git command', error)
       incrementCountMetric(
         TELEMETRY_GIT_COMMAND_ERRORS,
-        { command: 'unshallow', errorType: err.code, exitCode: err.status || err.errno }
+        { command: 'unshallow', errorType: error.code, exitCode: error.status || error.errno }
       )
       // We use sanitizedExec here because if this last option fails, we'll give up.
       sanitizedExec(
@@ -199,11 +199,11 @@ function getLatestCommits () {
       .filter(Boolean)
     distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'get_local_commits' }, Date.now() - startTime)
     return result
-  } catch (err) {
-    log.error('Get latest commits failed: %s', err.message)
+  } catch (error) {
+    log.error('Get latest commits failed: %s', error.message)
     incrementCountMetric(
       TELEMETRY_GIT_COMMAND_ERRORS,
-      { command: 'get_local_commits', errorType: err.status }
+      { command: 'get_local_commits', errorType: error.status }
     )
     return []
   }
@@ -289,9 +289,9 @@ function checkAndFetchBranch (branch, remoteName) {
           { stdio: 'pipe', timeout: 5000 }
         )
       }
-    } catch (e) {
+    } catch (error) {
       // branch does not exist or couldn't be fetched, so we can't do anything
-      log.error('Git plugin error checking and fetching branch', e)
+      log.error('Git plugin error checking and fetching branch', error)
     }
   }
 }
@@ -364,11 +364,11 @@ function getCommitsRevList (commitsToExclude, commitsToInclude) {
       .toString()
       .split('\n')
       .filter(Boolean)
-  } catch (err) {
-    log.error('Get commits to upload failed: %s', err.message)
+  } catch (error) {
+    log.error('Get commits to upload failed: %s', error.message)
     incrementCountMetric(
       TELEMETRY_GIT_COMMAND_ERRORS,
-      { command: 'get_objects', errorType: err.code, exitCode: err.status || err.errno } // err.status might be null
+      { command: 'get_objects', errorType: error.code, exitCode: error.status || error.errno }
     )
   }
   distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'get_objects' }, Date.now() - startTime)
@@ -407,11 +407,11 @@ function generatePackFilesForCommits (commitsToUpload) {
 
   try {
     result = execGitPackObjects(temporaryPath)
-  } catch (err) {
-    log.error('Git plugin error executing git pack-objects command', err)
+  } catch (error) {
+    log.error('Git plugin error executing git pack-objects command', error)
     incrementCountMetric(
       TELEMETRY_GIT_COMMAND_ERRORS,
-      { command: 'pack_objects', exitCode: err.status || err.errno, errorType: err.code }
+      { command: 'pack_objects', exitCode: error.status || error.errno, errorType: error.code }
     )
     /**
      * The generation of pack files in the temporary folder (from `os.tmpdir()`)
@@ -427,11 +427,11 @@ function generatePackFilesForCommits (commitsToUpload) {
      */
     try {
       result = execGitPackObjects(cwdPath)
-    } catch (err) {
-      log.error('Git plugin error executing fallback git pack-objects command', err)
+    } catch (error) {
+      log.error('Git plugin error executing fallback git pack-objects command', error)
       incrementCountMetric(
         TELEMETRY_GIT_COMMAND_ERRORS,
-        { command: 'pack_objects', exitCode: err.status || err.errno, errorType: err.code }
+        { command: 'pack_objects', exitCode: error.status || error.errno, errorType: error.code }
       )
     }
   }

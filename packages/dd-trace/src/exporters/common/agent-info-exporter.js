@@ -14,8 +14,8 @@ function fetchAgentInfo (url, callback) {
     try {
       const response = JSON.parse(res)
       return callback(null, response)
-    } catch (e) {
-      return callback(e)
+    } catch (error) {
+      return callback(error)
     }
   })
 }
@@ -72,9 +72,9 @@ class AgentInfoExporter {
   }
 
   exportUncodedTraces () {
-    this.getUncodedTraces().forEach(uncodedTrace => {
+    for (const uncodedTrace of this.getUncodedTraces()) {
       this.export(uncodedTrace)
-    })
+    }
     this.resetUncodedTraces()
   }
 

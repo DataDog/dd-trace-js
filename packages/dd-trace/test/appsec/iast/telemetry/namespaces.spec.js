@@ -59,16 +59,10 @@ describe('IAST metric namespaces', () => {
 
     finalizeRequestNamespace(context, rootSpan)
 
-    expect(rootSpan.addTags).to.be.called
-
-    const calls = rootSpan.addTags.getCalls()
-    const reqTaintedTag = calls[0].args[0]
-    expect(reqTaintedTag).to.has.property(`${TAG_PREFIX}.${REQUEST_TAINTED}`)
-    expect(reqTaintedTag[`${TAG_PREFIX}.${REQUEST_TAINTED}`]).to.be.equal(15)
-
-    const execSinkTag = calls[1].args[0]
-    expect(execSinkTag).to.has.property(`${TAG_PREFIX}.${EXECUTED_SINK}`)
-    expect(execSinkTag[`${TAG_PREFIX}.${EXECUTED_SINK}`]).to.be.equal(1)
+    expect(rootSpan.addTags).to.be.calledOnceWithExactly({
+      [`${TAG_PREFIX}.${REQUEST_TAINTED}`]: 15,
+      [`${TAG_PREFIX}.${EXECUTED_SINK}`]: 1
+    })
   })
 
   it('should merge all kind of metrics in global Namespace as gauges', () => {

@@ -57,10 +57,10 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
   if (isCiVisibilityAgentlessMode) {
     try {
       url = url || new URL(getAgentlessTelemetryEndpoint(config.site))
-    } catch (err) {
-      log.error('Telemetry endpoint url is invalid', err)
+    } catch (error) {
+      log.error('Telemetry endpoint url is invalid', error)
       // No point to do the request if the URL is invalid
-      return cb(err, { payload, reqType })
+      return cb(error, { payload, reqType })
     }
   }
 

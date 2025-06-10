@@ -844,7 +844,7 @@ function tagChatCompletionRequestContent (contents, messageIdx, tags) {
   } else if (Array.isArray(contents)) {
     // content can also be an array of objects
     // which represent text input or image url
-    for (const contentIdx in contents) {
+    for (let contentIdx = 0; contentIdx < contents.length; contentIdx++) {
       const content = contents[contentIdx]
       const type = content.type
       tags[`openai.request.messages.${messageIdx}.content.${contentIdx}.type`] = content.type

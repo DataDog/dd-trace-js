@@ -152,8 +152,8 @@ function wrapConnection (Connection, version) {
 
         try {
           return execute.apply(this, arguments)
-        } catch (err) {
-          ctx.error = err
+        } catch (error) {
+          ctx.error = error
           errorCh.publish(ctx)
         }
       })

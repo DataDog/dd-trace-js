@@ -29,23 +29,24 @@ const telemetryCounters = {
 }
 
 function getCounter (event, ddVar, otelVar) {
-  const counters = telemetryCounters[event]
   const tags = []
-  const ddVarPrefix = 'config_datadog:'
-  const otelVarPrefix = 'config_opentelemetry:'
   if (ddVar) {
+    const ddVarPrefix = 'config_datadog:'
     ddVar = ddVarPrefix + ddVar.toLowerCase()
     tags.push(ddVar)
   }
   if (otelVar) {
+    const otelVarPrefix = 'config_opentelemetry:'
     otelVar = otelVarPrefix + otelVar.toLowerCase()
     tags.push(otelVar)
   }
 
-  if (!(otelVar in counters)) counters[otelVar] = {}
-
   const counter = tracerMetrics.count(event, tags)
+
+  const counters = telemetryCounters[event]
+  counters[otelVar] ??= {}
   counters[otelVar][ddVar] = counter
+
   return counter
 }
 
@@ -85,7 +86,7 @@ function validateOtelPropagators (propagators) {
     !getEnvironmentVariable('PROPAGATION_STYLE_INJECT') &&
     !getEnvironmentVariable('DD_TRACE_PROPAGATION_STYLE') &&
     getEnvironmentVariable('OTEL_PROPAGATORS')) {
-    for (const style in propagators) {
+    for (const style of Object.keys(propagators)) {
       if (!VALID_PROPAGATION_STYLES.has(style)) {
         log.warn('unexpected value for OTEL_PROPAGATORS environment variable')
         getCounter('otel.env.invalid', 'DD_TRACE_PROPAGATION_STYLE', 'OTEL_PROPAGATORS').inc()
@@ -144,8 +145,8 @@ function maybeFile (filepath) {
   if (!filepath) return
   try {
     return fs.readFileSync(filepath, 'utf8')
-  } catch (e) {
-    log.error('Error reading file %s', filepath, e)
+  } catch (error) {
+    log.error('Error reading file %s', filepath, error)
   }
 }
 
@@ -190,7 +191,7 @@ function remapify (input, mappings) {
   if (!input) return
   const output = {}
   for (const [key, value] of Object.entries(input)) {
-    output[key in mappings ? mappings[key] : key] = value
+    output[mappings[key] ?? key] = value
   }
   return output
 }
@@ -385,10 +386,10 @@ class Config {
         let gitPropertiesString
         try {
           gitPropertiesString = fs.readFileSync(DD_GIT_PROPERTIES_FILE, 'utf8')
-        } catch (e) {
+        } catch (error) {
           // Only log error if the user has set a git.properties path
           if (getEnvironmentVariable('DD_GIT_PROPERTIES_FILE')) {
-            log.error('Error reading DD_GIT_PROPERTIES_FILE: %s', DD_GIT_PROPERTIES_FILE, e)
+            log.error('Error reading DD_GIT_PROPERTIES_FILE: %s', DD_GIT_PROPERTIES_FILE, error)
           }
         }
         if (gitPropertiesString) {
@@ -1207,8 +1208,8 @@ class Config {
     )
 
     const peerServiceSet = (
-      this._optionsArg.hasOwnProperty('spanComputePeerService') ||
-      getEnvironmentVariables().hasOwnProperty('DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED')
+      Object.hasOwn(this._optionsArg, 'spanComputePeerService') ||
+      Object.hasOwn(getEnvironmentVariables(), 'DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED')
     )
     const peerServiceValue = coalesce(
       this._optionsArg.spanComputePeerService,
@@ -1403,7 +1404,7 @@ class Config {
     value = value.split(',')
     const result = []
 
-    value.forEach(val => {
+    for (const val of value) {
       if (val.includes('-')) {
         const [start, end] = val.split('-').map(Number)
         for (let i = start; i <= end; i++) {
@@ -1412,7 +1413,7 @@ class Config {
       } else {
         result.push(Number(val))
       }
-    })
+    }
     this._setValue(obj, name, result)
   }
 
@@ -1492,7 +1493,7 @@ class Config {
     ]
     const changes = []
 
-    for (const name in this._defaults) {
+    for (const name of Object.keys(this._defaults)) {
       for (let i = 0; i < containers.length; i++) {
         const container = containers[i]
         const value = container[name]

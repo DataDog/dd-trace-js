@@ -96,8 +96,8 @@ const registerLambdaHook = () => {
       for (const { hook } of instrumentations[name]) {
         try {
           moduleExports = hook(moduleExports)
-        } catch (e) {
-          log.error('Error executing lambda hook', e)
+        } catch (error) {
+          log.error('Error executing lambda hook', error)
         }
       }
 
@@ -115,8 +115,8 @@ const registerLambdaHook = () => {
         if (moduleName === fullFilename) {
           try {
             moduleExports = hook(moduleExports)
-          } catch (e) {
-            log.error('Error executing lambda hook for datadog-lambda-js', e)
+          } catch (error) {
+            log.error('Error executing lambda hook for datadog-lambda-js', error)
           }
         }
       }

@@ -19,8 +19,8 @@ class Crashtracker {
     try {
       binding.updateConfig(this._getConfig(config))
       binding.updateMetadata(this._getMetadata(config))
-    } catch (e) {
-      log.error('Error configuring crashtracker', e)
+    } catch (error) {
+      log.error('Error configuring crashtracker', error)
     }
   }
 
@@ -35,8 +35,8 @@ class Crashtracker {
         this._getReceiverConfig(config),
         this._getMetadata(config)
       )
-    } catch (e) {
-      log.error('Error initialising crashtracker', e)
+    } catch (error) {
+      log.error('Error initialising crashtracker', error)
     }
   }
 

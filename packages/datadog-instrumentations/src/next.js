@@ -148,12 +148,12 @@ function instrument (req, res, handler, error) {
       // https://github.com/vercel/next.js/blob/cee656238a/packages/next/server/api-utils/node.ts#L547
       return promise.then(
         result => finish(ctx, result),
-        err => finish(ctx, null, err)
+        error_ => finish(ctx, null, error_)
       )
-    } catch (e) {
+    } catch (error_) {
       // this will probably never happen as the handler caller is an async function:
       // https://github.com/vercel/next.js/blob/cee656238a/packages/next/server/api-utils/node.ts#L420
-      return finish(ctx, null, e)
+      return finish(ctx, null, error_)
     }
   })
 }

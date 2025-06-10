@@ -109,7 +109,7 @@ describe('IastContextPlugin', () => {
           toSpanId: () => 'span-id'
         }
       },
-
+      setTag: () => {},
       addTags: () => {}
     }
 
@@ -141,10 +141,10 @@ describe('IastContextPlugin', () => {
     })
 
     it('should add _dd.iast.enabled:0 tag in the rootSpan', () => {
-      const addTags = sinon.stub(rootSpan, 'addTags')
+      const setTag = sinon.stub(rootSpan, 'setTag')
       plugin.startContext()
 
-      expect(addTags).to.be.calledOnceWith({ [IAST_ENABLED_TAG_KEY]: 0 })
+      expect(setTag).to.be.calledOnceWith(IAST_ENABLED_TAG_KEY, 0)
     })
 
     it('should not fail if store does not contain span', () => {
@@ -168,10 +168,10 @@ describe('IastContextPlugin', () => {
       })
 
       it('should add _dd.iast.enabled: 1 tag in the rootSpan', () => {
-        const addTags = sinon.stub(rootSpan, 'addTags')
+        const setTag = sinon.stub(rootSpan, 'setTag')
         plugin.startContext()
 
-        expect(addTags).to.be.calledOnceWith({ [IAST_ENABLED_TAG_KEY]: 1 })
+        expect(setTag).to.be.calledOnceWith(IAST_ENABLED_TAG_KEY, 1)
       })
 
       it('should create and save new IAST context and store it', () => {

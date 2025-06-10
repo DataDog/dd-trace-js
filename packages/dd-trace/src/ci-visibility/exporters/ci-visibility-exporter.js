@@ -353,13 +353,13 @@ class CiVisibilityExporter extends AgentInfoExporter {
       }
     }
 
-    writers.forEach(writer => writer.flush(onFlushComplete))
+    for (const writer of writers) writer.flush(onFlushComplete)
   }
 
   exportUncodedCoverages () {
-    this._coverageBuffer.forEach(oldCoveragePayload => {
+    for (const oldCoveragePayload of this._coverageBuffer) {
       this.exportCoverage(oldCoveragePayload)
-    })
+    }
     this._coverageBuffer = []
   }
 
@@ -371,8 +371,8 @@ class CiVisibilityExporter extends AgentInfoExporter {
       this._coverageUrl = coverageUrl
       this._writer.setUrl(url)
       this._coverageWriter.setUrl(coverageUrl)
-    } catch (e) {
-      log.error('Error setting CI exporter url', e)
+    } catch (error) {
+      log.error('Error setting CI exporter url', error)
     }
   }
 

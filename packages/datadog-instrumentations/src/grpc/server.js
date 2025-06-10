@@ -57,8 +57,8 @@ function wrapHandler (func, name) {
         })
 
         return func.apply(this, arguments)
-      } catch (e) {
-        ctx.error = e
+      } catch (error) {
+        ctx.error = error
         errorChannel.publish(ctx)
       }
       // No end channel needed

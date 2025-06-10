@@ -177,9 +177,9 @@ class LLMObs extends NoopLLMObs {
               }
               return value
             },
-            err => {
+            error => {
               llmobs._autoAnnotate(span, kind, getFunctionArguments(fn, fnArgs))
-              throw err
+              throw error
             }
           )
         }
@@ -193,9 +193,9 @@ class LLMObs extends NoopLLMObs {
         }
 
         return result
-      } catch (e) {
+      } catch (error) {
         llmobs._autoAnnotate(span, kind, getFunctionArguments(fn, fnArgs))
-        throw e
+        throw error
       }
     }
 
@@ -264,11 +264,11 @@ class LLMObs extends NoopLLMObs {
       if (tags) {
         this._tagger.tagSpanTags(span, tags)
       }
-    } catch (e) {
-      if (e.ddErrorTag) {
-        err = e.ddErrorTag
+    } catch (error) {
+      if (error.ddErrorTag) {
+        err = error.ddErrorTag
       }
-      throw e
+      throw error
     } finally {
       if (autoinstrumented === false) {
         telemetry.recordLLMObsAnnotate(span, err)
@@ -292,9 +292,9 @@ class LLMObs extends NoopLLMObs {
         err = 'invalid_span'
         throw new Error('Span must be an LLMObs-generated span')
       }
-    } catch (e) {
+    } catch (error) {
       telemetry.recordExportSpan(span, err)
-      throw e
+      throw error
     }
     try {
       return {
@@ -360,14 +360,14 @@ class LLMObs extends NoopLLMObs {
       }
 
       if (tags) {
-        for (const key in tags) {
-          const tag = tags[key]
+        for (const [key, tag] of Object.entries(tags)) {
           if (typeof tag === 'string') {
             evaluationTags[key] = tag
           } else if (typeof tag.toString === 'function') {
             evaluationTags[key] = tag.toString()
           } else if (tag == null) {
-            evaluationTags[key] = Object.prototype.toString.call(tag)
+            // TODO(BridgeAR): should these not just be `null` and `undefined`?
+            evaluationTags[key] = tag === null ? '[object Null]' : '[object Undefined]'
           } else {
             // should be a rare case
             // every object in JS has a toString, otherwise every primitive has its own toString

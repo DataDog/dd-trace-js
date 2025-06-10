@@ -38,7 +38,7 @@ function returnSpawnSyncError (error, context) {
   return context.result
 }
 
-names.forEach(name => {
+for (const name of names) {
   addHook({ name }, childProcess => {
     if (!patched) {
       patched = true
@@ -50,7 +50,7 @@ names.forEach(name => {
 
     return childProcess
   })
-})
+}
 
 function normalizeArgs (args, shell) {
   const childProcessInfo = {
@@ -117,11 +117,11 @@ function wrapChildProcessSyncMethod (returnError, shell = false) {
           context.result = result
 
           return result
-        } catch (err) {
-          context.error = err
+        } catch (error) {
+          context.error = error
           childProcessChannel.error.publish(context)
 
-          throw err
+          throw error
         } finally {
           childProcessChannel.end.publish(context)
         }

@@ -59,10 +59,10 @@ function wrapEmit (emit) {
 
         try {
           return emit.apply(this, arguments)
-        } catch (err) {
-          errorServerCh.publish(err)
+        } catch (error) {
+          errorServerCh.publish(error)
 
-          throw err
+          throw error
         }
       })
     }

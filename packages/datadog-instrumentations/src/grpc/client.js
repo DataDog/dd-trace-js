@@ -48,12 +48,13 @@ function createWrapMakeClientConstructor (hasPeer = false) {
 }
 
 function wrapPackageDefinition (def, hasPeer = false) {
-  for (const name in def) {
-    if (def[name].format) continue
-    if (def[name].service && def[name].prototype) {
-      wrapClientConstructor(def[name], def[name].service, hasPeer)
-    } else {
-      wrapPackageDefinition(def[name], hasPeer)
+  for (const pkg of Object.values(def)) {
+    if (!pkg.format) {
+      if (pkg.service && pkg.prototype) {
+        wrapClientConstructor(pkg, pkg.service, hasPeer)
+      } else {
+        wrapPackageDefinition(pkg, hasPeer)
+      }
     }
   }
 }
@@ -61,24 +62,23 @@ function wrapPackageDefinition (def, hasPeer = false) {
 function wrapClientConstructor (ServiceClient, methods, hasPeer = false) {
   const proto = ServiceClient.prototype
 
-  if (typeof methods !== 'object' || 'format' in methods) return
+  if (typeof methods !== 'object' || methods.format !== undefined) return
 
-  Object.keys(methods)
-    .forEach(name => {
-      if (!methods[name]) return
+  for (const name of Object.keys(methods)) {
+    if (!methods[name]) continue
 
-      const originalName = methods[name].originalName
-      const path = methods[name].path
-      const type = getType(methods[name])
+    const originalName = methods[name].originalName
+    const path = methods[name].path
+    const type = getType(methods[name])
 
-      if (methods[name]) {
-        proto[name] = wrapMethod(proto[name], path, type, hasPeer)
-      }
+    if (methods[name]) {
+      proto[name] = wrapMethod(proto[name], path, type, hasPeer)
+    }
 
-      if (originalName) {
-        proto[originalName] = wrapMethod(proto[originalName], path, type, hasPeer)
-      }
-    })
+    if (originalName) {
+      proto[originalName] = wrapMethod(proto[originalName], path, type, hasPeer)
+    }
+  }
 }
 
 function wrapMethod (method, path, type, hasPeer) {
@@ -168,8 +168,8 @@ function callMethod (client, method, args, path, metadata, type, hasPeer = false
       }
 
       return call
-    } catch (e) {
-      ctx.error = e
+    } catch (error) {
+      ctx.error = error
       errorChannel.publish(ctx)
     }
     // No end channel needed

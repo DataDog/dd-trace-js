@@ -56,11 +56,11 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
       addToInFlightDeliveries(this.connection, delivery)
       try {
         return delivery
-      } catch (err) {
-        ctx.error = err
+      } catch (error) {
+        ctx.error = error
         errorSendCh.publish(ctx)
 
-        throw err
+        throw error
       }
     })
   })
@@ -81,11 +81,11 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
         }
         try {
           return dispatch.apply(this, arguments)
-        } catch (err) {
-          ctx.error = err
+        } catch (error) {
+          ctx.error = error
           errorReceiveCh.publish(ctx)
 
-          throw err
+          throw error
         }
       })
     }
@@ -100,16 +100,16 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/connection.js' }, Connecti
     if (eventName === 'disconnected') {
       const error = obj.error || this.saved_error
       if (this[inFlightDeliveries]) {
-        this[inFlightDeliveries].forEach(delivery => {
+        for (const delivery of this[inFlightDeliveries]) {
           const ctx = contexts.get(delivery)
 
-          if (!ctx) return
+          if (!ctx) continue
 
           ctx.error = error
           errorReceiveCh.publish(ctx)
           exports.beforeFinish(delivery, null)
           finishReceiveCh.publish(ctx)
-        })
+        }
       }
     }
     return dispatch.apply(this, arguments)

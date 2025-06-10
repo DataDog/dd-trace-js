@@ -156,7 +156,7 @@ class FilesystemDecorator {
   decorateSample (sampleInput, item) {
     const labels = sampleInput.label
     const stringTable = this.stringTable
-    Object.entries(item.detail).forEach(([k, v]) => {
+    for (const [k, v] of Object.entries(item.detail)) {
       switch (typeof v) {
         case 'string':
           labels.push(labelFromStrStr(stringTable, k, v))
@@ -164,7 +164,7 @@ class FilesystemDecorator {
         case 'number':
           labels.push(new Label({ key: stringTable.dedup(k), num: v }))
       }
-    })
+    }
   }
 }
 
@@ -301,14 +301,14 @@ class DatadogInstrumentationEventSource {
 
   start () {
     if (!this.started) {
-      this.plugins.forEach(p => p.configure({ enabled: true }))
+      for (const p of this.plugins) p.configure({ enabled: true })
       this.started = true
     }
   }
 
   stop () {
     if (this.started) {
-      this.plugins.forEach(p => p.configure({ enabled: false }))
+      for (const p of this.plugins) p.configure({ enabled: false })
       this.started = false
     }
   }
@@ -320,11 +320,11 @@ class CompositeEventSource {
   }
 
   start () {
-    this.sources.forEach(s => s.start())
+    for (const s of this.sources) s.start()
   }
 
   stop () {
-    this.sources.forEach(s => s.stop())
+    for (const s of this.sources) s.stop()
   }
 }
 

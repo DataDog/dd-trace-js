@@ -92,8 +92,8 @@ class Kinesis extends BaseAwsSdkPlugin {
         maybeChildOf: this.tracer.extract('text_map', decodedData._datadog),
         parsedAttributes: decodedData._datadog
       }
-    } catch (e) {
-      log.error('Kinesis error extracting response', e)
+    } catch (error) {
+      log.error('Kinesis error extracting response', error)
     }
   }
 
@@ -106,7 +106,7 @@ class Kinesis extends BaseAwsSdkPlugin {
     // we only want to set the payloadSize on the span if we have one message, not repeatedly
     span = response.Records.length > 1 ? null : span
 
-    response.Records.forEach(record => {
+    for (const record of response.Records) {
       const parsedAttributes = JSON.parse(Buffer.from(record.Data).toString())
 
       const payloadSize = getSizeOrZero(record.Data)
@@ -118,7 +118,7 @@ class Kinesis extends BaseAwsSdkPlugin {
         : ['direction:in', 'type:kinesis']
       this.tracer
         .setCheckpoint(tags, span, payloadSize)
-    })
+    }
   }
 
   // AWS-SDK will b64 kinesis payloads

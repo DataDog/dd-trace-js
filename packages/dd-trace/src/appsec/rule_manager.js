@@ -148,9 +148,9 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
 
         blocking.setDefaultBlockingActionParameters(concatArrays(newActions))
       }
-    } catch (err) {
+    } catch (error) {
       newApplyState = ERROR
-      newApplyError = err.toString()
+      newApplyError = error.toString()
     }
   }
 
@@ -214,12 +214,18 @@ function mergeRulesData (files) {
 
 function rulesReducer (existingEntries, rulesDataEntry) {
   const existingEntry = existingEntries.find((entry) => entry.value === rulesDataEntry.value)
-  if (existingEntry && !('expiration' in existingEntry)) return existingEntries
-  if (existingEntry && 'expiration' in rulesDataEntry && rulesDataEntry.expiration > existingEntry.expiration) {
-    existingEntry.expiration = rulesDataEntry.expiration
-  } else if (existingEntry && !('expiration' in rulesDataEntry)) {
-    delete existingEntry.expiration
-  } else if (!existingEntry) {
+  if (existingEntry) {
+    if (existingEntry.expiration === undefined) {
+      return existingEntries
+    }
+    if (rulesDataEntry.expiration === undefined) {
+      delete existingEntry.expiration
+    } else {
+      if (rulesDataEntry.expiration > existingEntry.expiration) {
+        existingEntry.expiration = rulesDataEntry.expiration
+      }
+    }
+  } else {
     existingEntries.push({ ...rulesDataEntry })
   }
   return existingEntries
@@ -229,9 +235,9 @@ function copyRulesData (rulesData) {
   const copy = { ...rulesData }
   if (copy.data) {
     const data = []
-    copy.data.forEach(item => {
+    for (const item of copy.data) {
       data.push({ ...item })
-    })
+    }
     copy.data = data
   }
   return copy

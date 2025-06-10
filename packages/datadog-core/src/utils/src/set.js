@@ -6,7 +6,7 @@ module.exports = function set (object, path, value) {
   let i
   for (i = 0; i < pathArr.length - 1; i++) {
     const n = pathArr[i]
-    if (property.hasOwnProperty(n)) {
+    if (Object.hasOwn(property, n)) {
       property = property[n]
     } else {
       property[n] = property = {}

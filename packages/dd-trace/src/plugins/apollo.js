@@ -26,7 +26,7 @@ class ApolloBasePlugin extends TracingPlugin {
 
   end (ctx) {
     // Only synchronous operations would have `result` or `error` on `end`.
-    if (!ctx.hasOwnProperty('result') && !ctx.hasOwnProperty('error')) return
+    if (!Object.hasOwn(ctx, 'result') && !Object.hasOwn(ctx, 'error')) return
     ctx?.currentStore?.span?.finish()
   }
 

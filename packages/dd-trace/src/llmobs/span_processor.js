@@ -53,13 +53,13 @@ class LLMObsSpanProcessor {
       const formattedEvent = this.format(span)
       telemetry.incrementLLMObsSpanFinishedCount(span)
       this._writer.append(formattedEvent)
-    } catch (e) {
+    } catch (error) {
       // this should be a rare case
       // we protect against unserializable properties in the format function, and in
       // safeguards in the tagger
       logger.warn(`
         Failed to append span to LLM Observability writer, likely due to an unserializable property.
-        Span won't be sent to LLM Observability: ${e.message}
+        Span won't be sent to LLM Observability: ${error.message}
       `)
     }
   }
@@ -156,16 +156,12 @@ class LLMObsSpanProcessor {
     }
 
     const add = (obj, carrier) => {
-      for (const key in obj) {
-        const value = obj[key]
-        if (!Object.hasOwn(obj, key)) continue
+      for (const [key, value] of Object.entries(obj)) {
         if (typeof value === 'bigint' || isCircular(value)) {
           // mark as unserializable instead of dropping
           logger.warn(`Unserializable property found in metadata: ${key}`)
           carrier[key] = UNSERIALIZABLE_VALUE_TEXT
-          continue
-        }
-        if (typeof value === 'object') {
+        } else if (typeof value === 'object' && value !== null) {
           add(value, carrier[key] = {})
         } else {
           carrier[key] = value

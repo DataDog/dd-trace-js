@@ -59,9 +59,7 @@ function wrapMethod (method, logCh) {
     const result = method.apply(this, arguments)
 
     if (logCh.hasSubscribers) {
-      for (const name in this.transports) {
-        const transport = this.transports[name]
-
+      for (const transport of Object.values(this.transports)) {
         if (patched.has(transport) || typeof transport.log !== 'function') continue
 
         shimmer.wrap(transport, 'log', log => function wrappedLog (level, msg, meta, callback) {

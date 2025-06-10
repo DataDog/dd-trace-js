@@ -59,10 +59,12 @@ addHook({ name: 'tedious', versions: ['>=1.0.0'] }, tedious => {
 function getQueryOrProcedure (request) {
   if (!request.parameters) return [null]
 
-  if (request.parametersByName.statement) {
-    return [request.parametersByName.statement.value, request.parametersByName.statement, 'value']
-  } else if (request.parametersByName.stmt) {
-    return [request.parametersByName.stmt.value, request.parametersByName.stmt, 'value']
+  const { parametersByName } = request
+  if (parametersByName.statement) {
+    return [parametersByName.statement.value, parametersByName.statement, 'value']
+  }
+  if (parametersByName.stmt) {
+    return [parametersByName.stmt.value, parametersByName.stmt, 'value']
   }
   return [request.sqlTextOrProcedure, request, 'sqlTextOrProcedure']
 }

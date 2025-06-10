@@ -11,7 +11,7 @@ class LangChainChainHandler extends LangChainHandler {
     let inputs = ctx.args?.[0]
     inputs = Array.isArray(inputs) ? inputs : [inputs]
 
-    for (const idx in inputs) {
+    for (let idx = 0; idx < inputs.length; idx++) {
       const input = inputs[idx]
       if (typeof input === 'object') {
         for (const [key, value] of Object.entries(input)) {
@@ -36,7 +36,7 @@ class LangChainChainHandler extends LangChainHandler {
     let outputs = ctx.result
     outputs = Array.isArray(outputs) ? outputs : [outputs]
 
-    for (const idx in outputs) {
+    for (let idx = 0; idx < outputs.length; idx++) {
       const output = outputs[idx]
       tags[`langchain.response.outputs.${idx}`] = this.normalize(
         typeof output === 'string' ? output : JSON.stringify(output)

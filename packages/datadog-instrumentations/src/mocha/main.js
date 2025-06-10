@@ -356,12 +356,12 @@ addHook({
 
     const runner = run.apply(this, arguments)
 
-    this.files.forEach(path => {
+    for (const path of this.files) {
       const isUnskippable = isMarkedAsUnskippable({ path })
       if (isUnskippable) {
         unskippableSuites.push(path)
       }
-    })
+    }
 
     getExecutionConfiguration(runner, false, () => {
       if (config.isKnownTestsEnabled) {
@@ -495,13 +495,13 @@ addHook({
         status = 'skip'
       } else {
         // has to check every test in the test file
-        suitesInTestFile.forEach(suite => {
+        for (const suite of suitesInTestFile) {
           suite.eachTest(test => {
             if (test.state === 'failed' || test.timedOut) {
               status = 'fail'
             }
           })
-        })
+        }
       }
 
       if (global.__coverage__) {
@@ -581,20 +581,20 @@ addHook({
           testSuiteFinishCh.publish({ status, ...testSuiteContext.currentStore }, () => {})
           this.worker.off('message', onMessage)
         },
-        (err) => {
-          testSuiteContext.error = err
+        (error) => {
+          testSuiteContext.error = error
           testSuiteErrorCh.runStores(testSuiteContext, () => {})
           testSuiteFinishCh.publish({ status: 'fail', ...testSuiteContext.currentStore }, () => {})
           this.worker.off('message', onMessage)
         }
       )
       return promise
-    } catch (err) {
-      testSuiteContext.error = err
+    } catch (error) {
+      testSuiteContext.error = error
       testSuiteErrorCh.runStores(testSuiteContext, () => {})
       testSuiteFinishCh.publish({ status: 'fail', ...testSuiteContext.currentStore }, () => {})
       this.worker.off('message', onMessage)
-      throw err
+      throw error
     }
   })
 

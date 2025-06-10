@@ -123,9 +123,9 @@ function block (req, res, rootSpan, abortController, actionParameters = defaultB
     abortController?.abort()
 
     return true
-  } catch (err) {
+  } catch (error) {
     rootSpan?.setTag('_dd.appsec.block.failed', 1)
-    log.error('[ASM] Blocking error', err)
+    log.error('[ASM] Blocking error', error)
 
     updateBlockFailureMetric(req)
     return false

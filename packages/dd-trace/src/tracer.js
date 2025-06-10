@@ -68,20 +68,20 @@ class DatadogTracer extends Tracer {
             span.finish()
             return value
           },
-          err => {
-            addError(span, err)
+          error => {
+            addError(span, error)
             span.finish()
-            throw err
+            throw error
           }
         )
       }
       span.finish()
 
       return result
-    } catch (e) {
-      addError(span, e)
+    } catch (error) {
+      addError(span, error)
       span.finish()
-      throw e
+      throw error
     }
   }
 

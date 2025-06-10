@@ -83,8 +83,8 @@ const logCollector = {
         logs.set(hash, logEntry)
         return true
       }
-    } catch (e) {
-      log.error('Unable to add log to logCollector: %s', e.message)
+    } catch (error) {
+      log.error('Unable to add log to logCollector: %s', error.message)
     }
     return false
   },

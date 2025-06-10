@@ -38,7 +38,7 @@ function getPropertyValue (prop, maxLength) {
 
 function getPropertyValueRaw (prop, maxLength) {
   // Special case for getters and setters which does not have a value property
-  if (Object.hasOwn(prop, 'get')) {
+  if (!Object.hasOwn(prop, 'value')) {
     const hasGet = prop.get.type !== 'undefined'
     const hasSet = prop.set.type !== 'undefined'
     if (hasGet) {
@@ -158,7 +158,7 @@ function toObject (type, props, maxLength) {
     fields: processProperties(props, maxLength)
   }
 
-  if (Object.hasOwn(props, fieldCountSym)) {
+  if (props[fieldCountSym]) {
     result.notCapturedReason = 'fieldCount'
     result.size = props[fieldCountSym]
   }
@@ -275,7 +275,7 @@ function getNormalizedNameFromProp (prop) {
 }
 
 function setNotCaptureReasonOnCollection (result, collection) {
-  if (Object.hasOwn(collection, collectionSizeSym)) {
+  if (collection[collectionSizeSym]) {
     result.notCapturedReason = 'collectionSize'
     result.size = collection[collectionSizeSym]
   }

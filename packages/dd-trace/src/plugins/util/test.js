@@ -481,11 +481,11 @@ function getTestTypeFromFramework (testFramework) {
 }
 
 function finishAllTraceSpans (span) {
-  span.context()._trace.started.forEach(traceSpan => {
+  for (const traceSpan of span.context()._trace.started) {
     if (traceSpan !== span) {
       traceSpan.finish()
     }
-  })
+  }
 }
 
 function getTestParentSpan (tracer) {
@@ -694,35 +694,36 @@ function getCoveredFilenamesFromCoverage (coverage) {
 function resetCoverage (coverage) {
   const coverageMap = istanbul.createCoverageMap(coverage)
 
-  return coverageMap
-    .files()
-    .forEach(filename => {
-      const fileCoverage = coverageMap.fileCoverageFor(filename)
-      fileCoverage.resetHits()
-    })
+  const filenames = coverageMap.files()
+
+  for (const filename of filenames) {
+    const fileCoverage = coverageMap.fileCoverageFor(filename)
+    fileCoverage.resetHits()
+  }
 }
 
 function mergeCoverage (coverage, targetCoverage) {
   const coverageMap = istanbul.createCoverageMap(coverage)
-  return coverageMap
-    .files()
-    .forEach(filename => {
-      const fileCoverage = coverageMap.fileCoverageFor(filename)
 
-      // If the fileCoverage is not there for this filename,
-      // we create it to force a merge between the fileCoverages
-      // instead of a reference assignment (which would not work if the coverage is reset later on)
-      if (!targetCoverage.data[filename]) {
-        targetCoverage.addFileCoverage(istanbul.createFileCoverage(filename))
-      }
-      targetCoverage.addFileCoverage(fileCoverage)
-      const targetFileCoverage = targetCoverage.fileCoverageFor(filename)
+  const filenames = coverageMap.files()
 
-      // branches (.b) are copied by reference, so `resetHits` affects the copy, so we need to copy it manually
-      Object.entries(targetFileCoverage.data.b).forEach(([key, value]) => {
-        targetFileCoverage.data.b[key] = [...value]
-      })
-    })
+  for (const filename of filenames) {
+    const fileCoverage = coverageMap.fileCoverageFor(filename)
+
+    // If the fileCoverage is not there for this filename,
+    // we create it to force a merge between the fileCoverages
+    // instead of a reference assignment (which would not work if the coverage is reset later on)
+    if (!targetCoverage.data[filename]) {
+      targetCoverage.addFileCoverage(istanbul.createFileCoverage(filename))
+    }
+    targetCoverage.addFileCoverage(fileCoverage)
+    const targetFileCoverage = targetCoverage.fileCoverageFor(filename)
+
+    // branches (.b) are copied by reference, so `resetHits` affects the copy, so we need to copy it manually
+    for (const [key, value] of Object.entries(targetFileCoverage.data.b)) {
+      targetFileCoverage.data.b[key] = [...value]
+    }
+  }
 }
 
 function fromCoverageMapToCoverage (coverageMap) {

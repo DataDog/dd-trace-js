@@ -51,11 +51,11 @@ class Writer extends BaseWriter {
 
       try {
         this._prioritySampler.update(JSON.parse(res).rate_by_service)
-      } catch (e) {
-        log.error('Error updating prioritySampler rates', e)
+      } catch (error) {
+        log.error('Error updating prioritySampler rates', error)
 
         runtimeMetrics.increment(`${METRIC_PREFIX}.errors`, true)
-        runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.name`, `name:${e.name}`, true)
+        runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.name`, `name:${error.name}`, true)
       }
       done()
     })

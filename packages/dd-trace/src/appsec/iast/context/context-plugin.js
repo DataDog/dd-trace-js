@@ -37,11 +37,7 @@ class IastContextPlugin extends IastPlugin {
   }
 
   addIastEnabledTag (isRequestAcquired, rootSpan) {
-    if (rootSpan?.addTags) {
-      rootSpan.addTags({
-        [IAST_ENABLED_TAG_KEY]: isRequestAcquired ? 1 : 0
-      })
-    }
+    rootSpan?.setTag?.(IAST_ENABLED_TAG_KEY, isRequestAcquired ? 1 : 0)
   }
 
   startContext (store = storage('legacy').getStore()) {

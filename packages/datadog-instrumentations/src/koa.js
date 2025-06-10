@@ -57,26 +57,26 @@ function wrapRouterUse (use) {
   return function useWithTrace () {
     const router = use.apply(this, arguments)
 
-    router.stack.forEach(wrapStack)
+    for (const layer of router.stack) {
+      wrapStack(layer)
+    }
 
     return router
   }
 }
 
 function wrapStack (layer) {
-  layer.stack = layer.stack.map(middleware => {
-    if (typeof middleware !== 'function') return middleware
+  const newStack = []
+  for (const middleware of layer.stack) {
+    if (typeof middleware === 'function') {
+      const original = originals.get(middleware) || middleware
 
-    const original = originals.get(middleware)
-
-    middleware = original || middleware
-
-    const handler = shimmer.wrapFunction(middleware, middleware => wrapMiddleware(middleware, layer))
-
-    originals.set(handler, middleware)
-
-    return handler
-  })
+      const handler = shimmer.wrapFunction(original, middleware => wrapMiddleware(middleware, layer))
+      originals.set(handler, original)
+      newStack.push(handler)
+    }
+  }
+  layer.stack = newStack
 }
 
 function wrapMiddleware (fn, layer) {
@@ -107,17 +107,17 @@ function wrapMiddleware (fn, layer) {
             fulfill(ctx)
             return result
           },
-          err => {
-            fulfill(ctx, err)
-            throw err
+          error => {
+            fulfill(ctx, error)
+            throw error
           }
         )
       }
       fulfill(ctx)
       return result
-    } catch (e) {
-      fulfill(ctx, e)
-      throw e
+    } catch (error) {
+      fulfill(ctx, error)
+      throw error
     } finally {
       exitChannel.publish({ req })
     }

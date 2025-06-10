@@ -39,7 +39,8 @@ function validateConfig (config) {
 function getDepth (config) {
   if (typeof config.depth === 'number') {
     return config.depth
-  } else if (config.hasOwnProperty('depth')) {
+  }
+  if (Object.hasOwn(config, 'depth')) {
     log.error('Expected `depth` to be a integer.')
   }
   return -1
@@ -48,9 +49,11 @@ function getDepth (config) {
 function getVariablesFilter (config) {
   if (typeof config.variables === 'function') {
     return config.variables
-  } else if (Array.isArray(config.variables)) {
+  }
+  if (Array.isArray(config.variables)) {
     return variables => pick(variables, config.variables)
-  } else if (config.hasOwnProperty('variables')) {
+  }
+  if (Object.hasOwn(config, 'variables')) {
     log.error('Expected `variables` to be an array or function.')
   }
   return null

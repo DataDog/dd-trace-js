@@ -71,12 +71,12 @@ function wrapReflection (protobuf) {
     }
   ]
 
-  reflectionMethods.forEach(method => {
+  for (const method of reflectionMethods) {
     shimmer.wrap(method.target, method.name, original => function () {
       const result = original.apply(this, arguments)
       if (result.nested) {
-        for (const type in result.nested) {
-          wrapSetup(result.nested[type])
+        for (const nestedType of Object.values(result.nested)) {
+          wrapSetup(nestedType)
         }
       }
       if (result.$type) {
@@ -84,7 +84,7 @@ function wrapReflection (protobuf) {
       }
       return result
     })
-  })
+  }
 }
 
 function isPromise (obj) {

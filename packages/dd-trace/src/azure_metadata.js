@@ -28,9 +28,11 @@ function buildResourceID (subscriptionID, siteName, resourceGroup) {
 }
 
 function trimObject (obj) {
-  Object.entries(obj)
-    .filter(([_, value]) => value === undefined)
-    .forEach(([key, _]) => { delete obj[key] })
+  for (const [key, value] of Object.entries(obj)) {
+    if (value === undefined) {
+      delete obj[key]
+    }
+  }
   return obj
 }
 

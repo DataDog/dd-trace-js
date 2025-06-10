@@ -17,10 +17,8 @@ class FetchPlugin extends HttpClientPlugin {
 
     const store = super.bindStart(ctx)
 
-    for (const name in options.headers) {
-      if (!req.headers.has(name)) {
-        req.headers.set(name, options.headers[name])
-      }
+    for (const [name, header] of Object.entries(options.headers)) {
+      req.headers.set(name, header)
     }
 
     return store

@@ -37,7 +37,7 @@ const finishCh = channel('dd-trace:span:finish')
 function getIntegrationCounter (event, integration) {
   const counters = integrationCounters[event]
 
-  if (integration in counters) {
+  if (counters[integration] !== undefined) {
     return counters[integration]
   }
 
@@ -87,7 +87,9 @@ class DatadogSpan {
     this._startTime = fields.startTime || this._getTime()
 
     this._links = []
-    fields.links && fields.links.forEach(link => this.addLink(link.context, link.attributes))
+    if (fields.links) {
+      for (const link of fields.links) this.addLink(link.context, link.attributes)
+    }
 
     if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
       runtimeMetrics.increment('runtime.node.spans.unfinished')
@@ -181,7 +183,9 @@ class DatadogSpan {
   }
 
   setTag (key, value) {
-    this._addTags({ [key]: value })
+    this._spanContext._tags[key] = value
+
+    this._prioritySampler.sample(this, false)
     return this
   }
 
@@ -268,8 +272,8 @@ class DatadogSpan {
 
     const addArrayOrScalarAttributes = (key, maybeArray) => {
       if (Array.isArray(maybeArray)) {
-        for (const subkey in maybeArray) {
-          addArrayOrScalarAttributes(`${key}.${subkey}`, maybeArray[subkey])
+        for (let index = 0; index < maybeArray.length; index++) {
+          addArrayOrScalarAttributes(`${key}.${index}`, maybeArray[index])
         }
       } else {
         const maybeScalar = maybeArray
@@ -282,23 +286,22 @@ class DatadogSpan {
       }
     }
 
-    Object.entries(attributes).forEach(entry => {
+    for (const entry of Object.entries(attributes)) {
       const [key, value] = entry
       addArrayOrScalarAttributes(key, value)
-    })
+    }
     return sanitizedAttributes
   }
 
   _sanitizeEventAttributes (attributes = {}) {
     const sanitizedAttributes = {}
 
-    for (const key in attributes) {
-      const value = attributes[key]
+    for (const [key, value] of Object.entries(attributes)) {
       if (Array.isArray(value)) {
         const newArray = []
-        for (const subkey in value) {
-          if (ALLOWED.has(typeof value[subkey])) {
-            newArray.push(value[subkey])
+        for (let index = 0; index < value.length; index++) {
+          if (ALLOWED.has(typeof value[index])) {
+            newArray.push(value[index])
           } else {
             log.warn('Dropping span event attribute. It is not of an allowed type')
           }
