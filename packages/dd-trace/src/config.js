@@ -487,6 +487,7 @@ class Config {
     this._setValue(defaults, 'dynamicInstrumentation.enabled', false)
     this._setValue(defaults, 'dynamicInstrumentation.redactedIdentifiers', [])
     this._setValue(defaults, 'dynamicInstrumentation.redactionExcludedIdentifiers', [])
+    this._setValue(defaults, 'dynamicInstrumentation.uploadIntervalSeconds', 1)
     this._setValue(defaults, 'env')
     this._setValue(defaults, 'experimental.enableGetRumData', false)
     this._setValue(defaults, 'experimental.exporter')
@@ -670,6 +671,7 @@ class Config {
       DD_DYNAMIC_INSTRUMENTATION_ENABLED,
       DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS,
       DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS,
+      DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS,
       DD_ENV,
       DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED,
       DD_PROFILING_ENABLED,
@@ -843,6 +845,12 @@ class Config {
       'dynamicInstrumentation.redactionExcludedIdentifiers',
       DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS
     )
+    this._setValue(
+      env,
+      'dynamicInstrumentation.uploadIntervalSeconds',
+      maybeFloat(DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS)
+    )
+    this._envUnprocessed['dynamicInstrumentation.uploadInterval'] = DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS
     this._setString(env, 'env', DD_ENV || tags.env)
     this._setBoolean(env, 'traceEnabled', DD_TRACE_ENABLED)
     this._setBoolean(env, 'experimental.enableGetRumData', DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED)
@@ -1072,6 +1080,13 @@ class Config {
       'dynamicInstrumentation.redactionExcludedIdentifiers',
       options.dynamicInstrumentation?.redactionExcludedIdentifiers
     )
+    this._setValue(
+      opts,
+      'dynamicInstrumentation.uploadIntervalSeconds',
+      maybeFloat(options.dynamicInstrumentation?.uploadIntervalSeconds)
+    )
+    this._optsUnprocessed['dynamicInstrumentation.uploadIntervalSeconds'] =
+      options.dynamicInstrumentation?.uploadIntervalSeconds
     this._setString(opts, 'env', options.env || tags.env)
     this._setBoolean(opts, 'experimental.enableGetRumData', options.experimental?.enableGetRumData)
     this._setString(opts, 'experimental.exporter', options.experimental?.exporter)
