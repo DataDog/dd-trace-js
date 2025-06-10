@@ -3,11 +3,12 @@
 const { format } = require('util')
 
 class Log {
-  constructor (message, args, cause, delegate) {
+  constructor (message, args, cause, delegate, sendViaTelemetry = true) {
     this.message = message
     this.args = args
     this.cause = cause
     this.delegate = delegate
+    this.sendViaTelemetry = sendViaTelemetry
   }
 
   get formatted () {
@@ -22,10 +23,21 @@ class Log {
 
   static parse (...args) {
     let message, cause, delegate
+    let sendViaTelemetry = true
 
-    const lastArg = args.at(-1)
-    if (lastArg && typeof lastArg === 'object' && lastArg.stack) { // lastArg instanceof Error?
-      cause = args.pop()
+    {
+      const lastArg = args.at(-1)
+      if (lastArg && typeof lastArg === 'object' && lastArg.stack) { // lastArg instanceof Error?
+        cause = args.pop()
+      }
+    }
+
+    if (args.length >= 2) {
+      const meta = args.at(-1)
+      if (meta && typeof meta === 'object') {
+        args.pop()
+        sendViaTelemetry = meta.transmit !== false
+      }
     }
 
     const firstArg = args.shift()
@@ -43,7 +55,7 @@ class Log {
       message = String(firstArg)
     }
 
-    return new Log(message, args, cause, delegate)
+    return new Log(message, args, cause, delegate, sendViaTelemetry)
   }
 }
 
