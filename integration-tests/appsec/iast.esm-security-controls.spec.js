@@ -2,12 +2,11 @@
 
 const { createSandbox, spawnProc, FakeAgent } = require('../helpers')
 const path = require('path')
-const getPort = require('get-port')
 const Axios = require('axios')
 const { assert } = require('chai')
 
 describe('ESM Security controls', () => {
-  let axios, sandbox, cwd, appPort, appFile, agent, proc
+  let axios, sandbox, cwd, appFile, agent, proc
 
   ['4', '5'].forEach(version => {
     describe(`With express v${version}`, () => {
@@ -126,5 +125,7 @@ describe('ESM Security controls', () => {
         }, null, 1, true)
       })
     })
+
+    axios = Axios.create({ baseURL: proc.url })
   })
 })

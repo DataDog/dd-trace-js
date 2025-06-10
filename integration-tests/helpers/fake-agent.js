@@ -1,7 +1,7 @@
 'use strict'
 
 const { createHash } = require('crypto')
-const EventEmitter = require('events')
+const { EventEmitter, once } = require('events')
 const http = require('http')
 const express = require('express')
 const bodyParser = require('body-parser')
@@ -14,15 +14,25 @@ module.exports = class FakeAgent extends EventEmitter {
     super({ captureRejections: true })
     this.port = port
     this.resetRemoteConfig()
+    this._sockets = new Set()
   }
 
-  async start () {
+  start () {
     return new Promise((resolve, reject) => {
       const timeoutObj = setTimeout(() => {
         reject(new Error('agent timed out starting up'))
-      }, 10000)
+      }, 10_000)
       this.server = http.createServer(buildExpressServer(this))
       this.server.on('error', reject)
+
+      // Track connections to force close them later
+      this.server.on('connection', (socket) => {
+        this._sockets.add(socket)
+        socket.on('close', () => {
+          this._sockets.delete(socket)
+        })
+      })
+
       this.server.listen(this.port, () => {
         this.port = this.server.address().port
         clearTimeout(timeoutObj)
@@ -32,10 +42,15 @@ module.exports = class FakeAgent extends EventEmitter {
   }
 
   stop () {
-    return new Promise((resolve) => {
-      this.server.on('close', resolve)
-      this.server.close()
-    })
+    if (!this.server?.listening) return
+
+    for (const socket of this._sockets) {
+      socket.destroy()
+    }
+    this._sockets.clear()
+    this.server.close()
+
+    return once(this.server, 'close')
   }
 
   /**

@@ -51,7 +51,7 @@ function sanitizedExec (
   try {
     let result = cp.execFileSync(cmd, flags, { stdio: 'pipe' }).toString()
     if (shouldTrim) {
-      result = result.replace(/(\r\n|\n|\r)/gm, '')
+      result = result.replaceAll(/(\r\n|\n|\r)/gm, '')
     }
     if (durationMetric) {
       distributionMetric(durationMetric.name, durationMetric.tags, Date.now() - startTime)
@@ -209,6 +209,138 @@ function getLatestCommits () {
   }
 }
 
+function getGitDiff (baseCommit, targetCommit) {
+  const flags = ['diff', '-U0', '--word-diff=porcelain', baseCommit]
+  if (targetCommit) {
+    flags.push(targetCommit)
+  }
+  return sanitizedExec(
+    'git',
+    flags,
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'diff' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'diff' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'diff' } },
+    false // important not to trim or we'll lose the line breaks which we need to detect impacted tests
+  )
+}
+
+function getGitRemoteName () {
+  const upstreamRemote = sanitizedExec(
+    'git',
+    ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_remote_name' } }
+  )
+
+  if (upstreamRemote) {
+    return upstreamRemote.split('/')[0]
+  }
+
+  const remotes = sanitizedExec(
+    'git',
+    ['remote'],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_remote_name' } },
+    false
+  )
+
+  return remotes.split('\n')[0] || 'origin'
+}
+
+function getSourceBranch () {
+  return sanitizedExec(
+    'git',
+    ['rev-parse', '--abbrev-ref', 'HEAD'],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_source_branch' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_source_branch' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_source_branch' } }
+  )
+}
+
+function checkAndFetchBranch (branch, remoteName) {
+  try {
+    // `git show-ref --verify --quiet refs/remotes/${remoteName}/${branch}` will exit 0 if the branch exists
+    // Otherwise it will exit 1
+    cp.execFileSync(
+      'git',
+      ['show-ref', '--verify', '--quiet', `refs/remotes/${remoteName}/${branch}`],
+      { stdio: 'pipe' }
+    )
+    // branch exists locally, so we finish
+  } catch {
+    // branch does not exist locally, so we will check the remote
+    try {
+      // IMPORTANT: we use timeouts because these commands hang if the branch can't be found
+      // `git ls-remote --heads origin my-branch` will exit 0 even if the branch doesn't exist.
+      // The piece of information we need is whether the command outputs anything.
+      // `git ls-remote --heads origin my-branch` could exit an error code if the remote does not exist.
+      const remoteHeads = cp.execFileSync(
+        'git',
+        ['ls-remote', '--heads', remoteName, branch],
+        { stdio: 'pipe', timeout: 2000 }
+      )
+      if (remoteHeads) {
+        // branch exists, so we'll fetch it
+        cp.execFileSync(
+          'git',
+          ['fetch', '--depth', '1', remoteName, branch],
+          { stdio: 'pipe', timeout: 5000 }
+        )
+      }
+    } catch (e) {
+      // branch does not exist or couldn't be fetched, so we can't do anything
+      log.error('Git plugin error checking and fetching branch', e)
+    }
+  }
+}
+
+function getLocalBranches (remoteName) {
+  const localBranches = sanitizedExec(
+    'git',
+    ['for-each-ref', '--format=%(refname:short)', `refs/remotes/${remoteName}`],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_local_branches' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_local_branches' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_local_branches' } },
+    false
+  )
+  try {
+    return localBranches.split('\n').filter(Boolean)
+  } catch {
+    return []
+  }
+}
+
+function getMergeBase (baseBranch, sourceBranch) {
+  return sanitizedExec(
+    'git',
+    ['merge-base', baseBranch, sourceBranch],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_merge_base' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_merge_base' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_merge_base' } }
+  )
+}
+
+function getCounts (sourceBranch, candidateBranch) {
+  const counts = sanitizedExec(
+    'git',
+    ['rev-list', '--left-right', '--count', `${candidateBranch}...${sourceBranch}`],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_counts' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_counts' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_counts' } }
+  )
+  try {
+    if (!counts) {
+      return { behind: null, ahead: null }
+    }
+    const [behind, ahead] = counts.split(/\s+/).map(Number)
+    return { behind, ahead }
+  } catch {
+    return { behind: null, ahead: null }
+  }
+}
+
 function getCommitsRevList (commitsToExclude, commitsToInclude) {
   let result = null
 
@@ -362,6 +494,20 @@ function getGitMetadata (ciMetadata) {
   return tags
 }
 
+function getGitInformationDiscrepancy () {
+  const gitRepositoryUrl = getRepositoryUrl()
+
+  const gitCommitSHA = sanitizedExec(
+    'git',
+    ['rev-parse', 'HEAD'],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_commit_sha' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_commit_sha' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_commit_sha' } }
+  )
+
+  return { gitRepositoryUrl, gitCommitSHA }
+}
+
 module.exports = {
   getGitMetadata,
   getLatestCommits,
@@ -371,5 +517,13 @@ module.exports = {
   GIT_REV_LIST_MAX_BUFFER,
   isShallowRepository,
   unshallowRepository,
-  isGitAvailable
+  isGitAvailable,
+  getGitInformationDiscrepancy,
+  getGitDiff,
+  getGitRemoteName,
+  getSourceBranch,
+  checkAndFetchBranch,
+  getLocalBranches,
+  getMergeBase,
+  getCounts
 }

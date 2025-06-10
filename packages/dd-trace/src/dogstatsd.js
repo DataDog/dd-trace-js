@@ -169,7 +169,7 @@ class DogStatsDClient {
         })
         .forEach(key => {
           // https://docs.datadoghq.com/tagging/#defining-tags
-          const value = config.tags[key].replace(/[^a-z0-9_:./-]/ig, '_')
+          const value = config.tags[key].replaceAll(/[^a-z0-9_:./-]/ig, '_')
 
           tags.push(`${key}:${value}`)
         })
@@ -244,7 +244,7 @@ class MetricsAggregationClient {
     const container = monotonic ? this._counters : this._gauges
     const node = this._ensureTree(container, name, tags, 0)
 
-    node.value = node.value + count
+    node.value += count
   }
 
   gauge (name, value, tags) {

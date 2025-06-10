@@ -65,6 +65,6 @@ app.get('/cmdi-iv-secure', (req, res) => {
   res.end()
 })
 
-app.listen(port, () => {
-  process.send({ port })
+const server = app.listen(process.env.APP_PORT || 0, () => {
+  process.send?.({ port: server.address().port })
 })

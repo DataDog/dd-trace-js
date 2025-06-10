@@ -1,3 +1,4 @@
+const { storage } = require('../../../datadog-core')
 const {
   getTestEnvironmentMetadata,
   getTestSessionName,
@@ -28,7 +29,10 @@ const {
   DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
   DI_DEBUG_ERROR_FILE_SUFFIX,
   DI_DEBUG_ERROR_LINE_SUFFIX,
-  getLibraryCapabilitiesTags
+  getLibraryCapabilitiesTags,
+  getPullRequestDiff,
+  getModifiedTestsFromDiff,
+  getPullRequestBaseBranch
 } = require('./util/test')
 const Plugin = require('./plugin')
 const { COMPONENT } = require('../constants')
@@ -46,7 +50,10 @@ const {
   GIT_BRANCH,
   CI_WORKSPACE_PATH,
   GIT_COMMIT_MESSAGE,
-  GIT_TAG
+  GIT_TAG,
+  GIT_PULL_REQUEST_BASE_BRANCH_SHA,
+  GIT_COMMIT_HEAD_SHA,
+  GIT_PULL_REQUEST_BASE_BRANCH
 } = require('./util/tags')
 const { OS_VERSION, OS_PLATFORM, OS_ARCHITECTURE, RUNTIME_NAME, RUNTIME_VERSION } = require('./util/env')
 const getDiClient = require('../ci-visibility/dynamic-instrumentation')
@@ -67,7 +74,10 @@ module.exports = class CiPlugin extends Plugin {
     this.fileLineToProbeId = new Map()
     this.rootDir = process.cwd() // fallback in case :session:start events are not emitted
 
-    this.addSub(`ci:${this.constructor.id}:library-configuration`, ({ onDone, isParallel }) => {
+    this.addSub(`ci:${this.constructor.id}:library-configuration`, (ctx) => {
+      const { onDone, isParallel } = ctx
+      ctx.currentStore = storage('legacy').getStore()
+
       if (!this.tracer._exporter || !this.tracer._exporter.getLibraryConfiguration) {
         return onDone({ err: new Error('Test optimization was not initialized correctly') })
       }
@@ -87,6 +97,10 @@ module.exports = class CiPlugin extends Plugin {
         this.tracer._exporter.addMetadataTags(metadataTags)
         onDone({ err, libraryConfig })
       })
+    })
+
+    this.addBind(`ci:${this.constructor.id}:test-suite:skippable`, (ctx) => {
+      return ctx.currentStore
     })
 
     this.addSub(`ci:${this.constructor.id}:test-suite:skippable`, ({ onDone }) => {
@@ -152,8 +166,12 @@ module.exports = class CiPlugin extends Plugin {
       // only for vitest
       // These are added for the worker threads to use
       if (this.constructor.id === 'vitest') {
+        // TODO: Figure out alternative ways to pass this information to the worker threads
+        // eslint-disable-next-line eslint-rules/eslint-process-env
         process.env.DD_CIVISIBILITY_TEST_SESSION_ID = this.testSessionSpan.context().toTraceId()
+        // eslint-disable-next-line eslint-rules/eslint-process-env
         process.env.DD_CIVISIBILITY_TEST_MODULE_ID = this.testModuleSpan.context().toSpanId()
+        // eslint-disable-next-line eslint-rules/eslint-process-env
         process.env.DD_CIVISIBILITY_TEST_COMMAND = this.command
       }
 
@@ -182,6 +200,10 @@ module.exports = class CiPlugin extends Plugin {
       this.telemetry.count(TELEMETRY_ITR_SKIPPED, { testLevel: 'suite' }, skippedSuites.length)
     })
 
+    this.addBind(`ci:${this.constructor.id}:known-tests`, (ctx) => {
+      return ctx.currentStore
+    })
+
     this.addSub(`ci:${this.constructor.id}:known-tests`, ({ onDone }) => {
       if (!this.tracer._exporter?.getKnownTests) {
         return onDone({ err: new Error('Test optimization was not initialized correctly') })
@@ -196,6 +218,10 @@ module.exports = class CiPlugin extends Plugin {
       })
     })
 
+    this.addBind(`ci:${this.constructor.id}:test-management-tests`, (ctx) => {
+      return ctx.currentStore
+    })
+
     this.addSub(`ci:${this.constructor.id}:test-management-tests`, ({ onDone }) => {
       if (!this.tracer._exporter?.getTestManagementTests) {
         return onDone({ err: new Error('Test optimization was not initialized correctly') })
@@ -207,6 +233,31 @@ module.exports = class CiPlugin extends Plugin {
         }
         onDone({ err, testManagementTests })
       })
+    })
+
+    this.addBind(`ci:${this.constructor.id}:modified-tests`, (ctx) => {
+      return ctx.currentStore
+    })
+
+    this.addSub(`ci:${this.constructor.id}:modified-tests`, ({ onDone }) => {
+      const {
+        [GIT_PULL_REQUEST_BASE_BRANCH]: pullRequestBaseBranch,
+        [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseBranchSha,
+        [GIT_COMMIT_HEAD_SHA]: commitHeadSha
+      } = this.testEnvironmentMetadata
+
+      const baseBranchSha = pullRequestBaseBranchSha || getPullRequestBaseBranch(pullRequestBaseBranch)
+
+      if (baseBranchSha) {
+        const diff = getPullRequestDiff(baseBranchSha, commitHeadSha)
+        const modifiedTests = getModifiedTestsFromDiff(diff)
+        if (modifiedTests) {
+          return onDone({ err: null, modifiedTests })
+        }
+      }
+
+      // TODO: Add telemetry for this type of error
+      return onDone({ err: new Error('No modified tests could have been retrieved') })
     })
   }
 
@@ -255,7 +306,9 @@ module.exports = class CiPlugin extends Plugin {
       [CI_PROVIDER_NAME]: ciProviderName,
       [CI_WORKSPACE_PATH]: repositoryRoot,
       [GIT_COMMIT_MESSAGE]: commitMessage,
-      [GIT_TAG]: tag
+      [GIT_TAG]: tag,
+      [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseSha,
+      [GIT_COMMIT_HEAD_SHA]: commitHeadSha
     } = this.testEnvironmentMetadata
 
     this.repositoryRoot = repositoryRoot || process.cwd()
@@ -275,7 +328,9 @@ module.exports = class CiPlugin extends Plugin {
       branch,
       testLevel: 'suite',
       commitMessage,
-      tag
+      tag,
+      pullRequestBaseSha,
+      commitHeadSha
     }
   }
 
@@ -404,6 +459,10 @@ module.exports = class CiPlugin extends Plugin {
   }
 
   addDiProbe (err) {
+    if (!err?.stack) {
+      log.warn('Can not add breakpoint if the test error does not have a stack')
+      return
+    }
     const [file, line, stackIndex] = getFileAndLineNumberFromError(err, this.repositoryRoot)
 
     if (!file || !Number.isInteger(line)) {

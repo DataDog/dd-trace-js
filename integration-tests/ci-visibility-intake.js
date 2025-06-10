@@ -24,7 +24,8 @@ const DEFAULT_SETTINGS = {
   known_tests_enabled: false,
   test_management: {
     enabled: false
-  }
+  },
+  impacted_tests_enabled: false
 }
 
 const DEFAULT_SUITES_TO_SKIP = []
