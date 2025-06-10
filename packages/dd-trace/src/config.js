@@ -231,6 +231,16 @@ function reformatSpanSamplingRules (rules) {
   })
 }
 
+const sourcesOrder = [
+  { containerProperty: '_remote', origin: 'remote_config', unprocessedProperty: '_remoteUnprocessed' },
+  { containerProperty: '_options', origin: 'code', unprocessedProperty: '_optsUnprocessed' },
+  { containerProperty: '_fleetStableConfig', origin: 'fleet_stable_config' },
+  { containerProperty: '_env', origin: 'env_var', unprocessedProperty: '_envUnprocessed' },
+  { containerProperty: '_localStableConfig', origin: 'local_stable_config' },
+  { containerProperty: '_calculated', origin: 'calculated' },
+  { containerProperty: '_defaults', origin: 'default' }
+]
+
 class Config {
   constructor (options = {}) {
     if (!isInServerlessEnvironment()) {
@@ -1462,20 +1472,20 @@ class Config {
   // for telemetry reporting, `name`s in `containers` need to be keys from:
   // https://github.com/DataDog/dd-go/blob/prod/trace/apps/tracer-telemetry-intake/telemetry-payload/static/config_norm_rules.json
   _merge () {
-    // Use reverse order for merge (lowest priority first)
-    const sources = [...this._getAllSources()].reverse()
-
     const changes = []
 
     for (const name in this._defaults) {
-      for (const { container, origin, unprocessed } of sources) {
+      // Use reverse order for merge (lowest priority first)
+      for (let i = sourcesOrder.length - 1; i >= 0; i--) {
+        const { containerProperty, origin, unprocessedProperty } = sourcesOrder[i]
+        const container = this[containerProperty]
         const value = container[name]
-        if ((value !== null && value !== undefined) || container === this._defaults) {
+        if (value != null || container === this._defaults) {
           this._setAndTrackChange({
             name,
             value,
             origin,
-            unprocessedValue: unprocessed[name],
+            unprocessedValue: unprocessedProperty === undefined ? undefined : this[unprocessedProperty][name],
             changes
           })
         }
@@ -1485,35 +1495,12 @@ class Config {
     updateConfig(changes, this)
   }
 
-  // Single source of truth for all config sources (highest priority first)
-  _getAllSources () {
-    return [
-      { container: this._remote, origin: 'remote_config', unprocessed: this._remoteUnprocessed },
-      { container: this._options, origin: 'code', unprocessed: this._optsUnprocessed },
-      { container: this._fleetStableConfig, origin: 'fleet_stable_config', unprocessed: {} },
-      { container: this._env, origin: 'env_var', unprocessed: this._envUnprocessed },
-      { container: this._localStableConfig, origin: 'local_stable_config', unprocessed: {} },
-      { container: this._calculated, origin: 'calculated', unprocessed: {} },
-      { container: this._defaults, origin: 'default', unprocessed: {} }
-    ]
-  }
-
-  _getContainersAndOriginsOrdered () {
-    const sources = this._getAllSources()
-    const containers = sources.map(s => s.container)
-    const origins = sources.map(s => s.origin)
-
-    return { containers, origins }
-  }
-
   getOrigin (name) {
-    const { containers, origins } = this._getContainersAndOriginsOrdered()
-
-    for (let i = 0; i < containers.length; i++) {
-      const container = containers[i]
+    for (const { containerProperty, origin } of sourcesOrder) {
+      const container = this[containerProperty]
       const value = container[name]
       if (value != null || container === this._defaults) {
-        return origins[i]
+        return origin
       }
     }
   }
