@@ -35,11 +35,16 @@ async function checkWorkflowRuns (id, page = 1) {
 
   const runs = response.data.workflow_runs
 
+  // Either there were no runs for the period or we've reached the last page and
+  // there are no more results.
   if (runs.length === 0) return
 
   const promises = []
 
   for (const run of runs) {
+    // Filter out first attempts to get only reruns. The idea is that if a rerun
+    // is successful it means any failed jobs in the previous run were flaky
+    // since a rerun without any change made them pass.
     if (run.run_attempt === 1) continue
     if (Date.parse(run.created_at) < Date.now() - DAYS * ONE_DAY) {
       return Promise.all(promises)
@@ -65,6 +70,7 @@ async function checkWorkflowJobs (id, page = 1) {
 
   const { jobs } = response.data
 
+  // We've reached the last page and there are no more results.
   if (jobs.length === 0) return
 
   for (const job of jobs) {
