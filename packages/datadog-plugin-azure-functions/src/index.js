@@ -19,13 +19,13 @@ class AzureFunctionsPlugin extends TracingPlugin {
   static get operation () { return 'invoke' }
   static get kind () { return 'server' }
   static get type () { return 'serverless' }
-
   static get prefix () { return 'tracing:datadog:azure:functions:invoke' }
+
   bindStart (ctx) {
     const { functionName, methodName, httpRequest } = ctx
     const store = storage('legacy').getStore()
-    const ddTraceContext = Object.fromEntries(httpRequest.headers.entries())
-    const childOf = this._tracer.extract('http_headers', ddTraceContext) ?? null
+    // httpRequest.headers is a map
+    const childOf = this._tracer.extract('http_headers', Object.fromEntries(httpRequest.headers))
     const span = this.startSpan(this.operationName(), {
       childOf,
       service: this.serviceName(),
@@ -53,7 +53,7 @@ class AzureFunctionsPlugin extends TracingPlugin {
     const path = (new URL(httpRequest.url)).pathname
     const req = {
       method: httpRequest.method,
-      headers: Object.fromEntries(httpRequest.headers.entries()),
+      headers: Object.fromEntries(httpRequest.headers),
       url: path
     }
 
