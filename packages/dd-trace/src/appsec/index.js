@@ -46,7 +46,7 @@ function enable (_config) {
   if (isEnabled) return
 
   try {
-    appsecTelemetry.enable(_config.telemetry)
+    appsecTelemetry.enable(_config)
     graphql.enable()
 
     if (_config.appsec.rasp.enabled) {
@@ -140,7 +140,7 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
     [HTTP_CLIENT_IP]: clientIp
   })
 
-  const requestHeaders = Object.assign({}, req.headers)
+  const requestHeaders = { ...req.headers }
   delete requestHeaders.cookie
 
   const persistent = {
@@ -310,12 +310,12 @@ function onResponseWriteHead ({ req, res, abortController, statusCode, responseH
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
-  responseHeaders = Object.assign({}, responseHeaders)
+  responseHeaders = { ...responseHeaders }
   delete responseHeaders['set-cookie']
 
   const results = waf.run({
     persistent: {
-      [addresses.HTTP_INCOMING_RESPONSE_CODE]: '' + statusCode,
+      [addresses.HTTP_INCOMING_RESPONSE_CODE]: String(statusCode),
       [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: responseHeaders
     }
   }, req)
