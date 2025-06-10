@@ -147,7 +147,9 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders, storedRespons
   // Basic collection
   if (!shouldCollectEventHeaders) return mandatoryCollectedHeaders
 
-  const responseHeaders = { ...storedResponseHeaders, ...res.getHeaders() }
+  const responseHeaders = Object.keys(storedResponseHeaders).length === 0 
+    ? res.getHeaders() 
+    : { ...storedResponseHeaders, ...res.getHeaders() }
 
   const requestEventCollectedHeaders = filterHeaders(req.headers, EVENT_HEADERS_MAP)
   const responseEventCollectedHeaders = filterHeaders(responseHeaders, RESPONSE_HEADERS_MAP)
