@@ -96,6 +96,7 @@ function setup ({ env, testApp, testAppSource, dependencies } = {}) {
       cwd,
       env: {
         DD_DYNAMIC_INSTRUMENTATION_ENABLED: 'true',
+        DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS: '0',
         DD_TRACE_AGENT_PORT: t.agent.port,
         DD_TRACE_DEBUG: process.env.DD_TRACE_DEBUG, // inherit to make debugging the sandbox easier
         DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: pollInterval,
