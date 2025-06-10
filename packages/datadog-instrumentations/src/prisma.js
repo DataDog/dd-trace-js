@@ -63,14 +63,9 @@ class TracingHelper {
   }
 }
 
-// Tracing support GA in  v6.1.0+
-// https://github.com/prisma/prisma/releases/tag/6.1.0
-let majorVersion
-
 addHook({ name: '@prisma/client', versions: ['>=6.1.0'] }, (prisma, version) => {
   const tracingHelper = new TracingHelper()
 
-  majorVersion = [...version][0]
   /*
     * This is a custom PrismaClient that extends the original PrismaClient
     * This allows us to grab additional information from the PrismaClient such as DB connection strings
@@ -94,7 +89,7 @@ addHook({ name: '@prisma/client', versions: ['>=6.1.0'] }, (prisma, version) => 
     * to enable OpenTelemetry.
   */
   // https://github.com/prisma/prisma/blob/478293bbfce91e41ceff02f2a0b03bb8acbca03e/packages/instrumentation/src/PrismaInstrumentation.ts#L42
-
+  const majorVersion = version.slice(0, version.indexOf('.'))
   global[`V${majorVersion}_PRISMA_INSTRUMENTATION`] = {
     helper: tracingHelper
   }

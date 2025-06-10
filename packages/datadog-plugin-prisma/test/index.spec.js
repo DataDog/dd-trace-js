@@ -6,6 +6,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { execSync } = require('node:child_process')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const os = require('os')
 
 /*
@@ -22,12 +23,11 @@ async function createTempProject (version) {
   return tempDir
 }
 
-// Ensure a fake @prisma/client installed in temporary directoy path otherwise prisma generate
-// will automaticaly install a version of @prisma/client in the root node_modules
+// Ensure a fake @prisma/client installed in temporary directory path otherwise prisma generate
+// will automatically install a version of @prisma/client in the root node_modules
 async function createMockPrismaClient (targetPath, version) {
-  if (version.match(/^>=\s*/)) {
-    version = version.replace(/^>=\s*/, '^')
-  }
+  const matched = version.match(/(\d+\.\d+\.\d+)$/)
+  version = matched[1]
 
   // trick the prisma CLI to think that the client is installed in this directory
   execSync(`npm install @prisma/client@${version} --no-save --legacy-peer-deps`, {
@@ -70,7 +70,7 @@ async function generatePrismaClient (version) {
       name  String?
     }
   `
-  await fs.writeFile(generatedSchemaPath, schema) /
+  await fs.writeFile(generatedSchemaPath, schema)
   execSync(`${prismaBin} generate --schema="${generatedSchemaPath}"`, {
     cwd: tempDir, // Ensure the current working directory is where the schema is located
     stdio: 'inherit'
@@ -96,14 +96,16 @@ describe('Plugin', () => {
   let tracingHelper
 
   describe('prisma', () => {
-    let tempDir
-
-    after(async () => {
-      await cleanupMockPrismaClient(tempDir)
-    })
     withVersions('prisma', ['@prisma/client'], version => {
+      let tempDir
+
       before(async () => {
         tempDir = await generatePrismaClient(version)
+      })
+      after(async () => {
+        if (tempDir) {
+          await cleanupMockPrismaClient(tempDir)
+        }
       })
 
       describe('without configuration', () => {
@@ -114,7 +116,8 @@ describe('Plugin', () => {
         beforeEach(() => {
           prisma = require(`../../../versions/@prisma/client@${version}`).get()
           prismaClient = new prisma.PrismaClient()
-          const majorVersion = version.split('')[2]
+          const matched = version.match(/(\d+)\.\d+\.\d+$/)
+          const majorVersion = matched[1]
           tracingHelper = global[`V${majorVersion}_PRISMA_INSTRUMENTATION`].helper
         })
 
@@ -145,10 +148,14 @@ describe('Plugin', () => {
 
         it('should handle errors', async () => {
           let error
-          const tracingPromise = agent.assertSomeTraces(traces => {
-            expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
-            expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
-            expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
+          const tracingPromise = agent.assertFirstTraceSpan((trace) => {
+            assertObjectContains(trace, {
+              meta: {
+                [ERROR_TYPE]: error.name,
+                [ERROR_MESSAGE]: error.message,
+                [ERROR_STACK]: error.stack,
+              }
+            })
           })
           await Promise.all([
             // This will throw an error because no data object is provided
@@ -160,12 +167,14 @@ describe('Plugin', () => {
         })
 
         it('should create client spans from callback', async () => {
-          const tracingPromise = agent.assertSomeTraces(traces => {
-            expect(traces[0][0].name).to.equal('prisma.client')
-            expect(traces[0][0].resource).to.equal('users.findMany')
-            expect(traces[0][0].meta).to.have.property('prisma.type', 'client')
-            expect(traces[0][0].meta).to.have.property('prisma.method', 'findMany')
-            expect(traces[0][0].meta).to.have.property('prisma.model', 'users')
+          const tracingPromise = agent.assertFirstTraceSpan({
+            name: 'prisma.client',
+            resource: 'users.findMany',
+            meta: {
+              'prisma.type': 'client',
+              'prisma.method': 'findMany',
+              'prisma.model': 'users',
+            }
           })
 
           tracingHelper.runInChildSpan(
@@ -245,8 +254,8 @@ describe('Plugin', () => {
           })
 
           it('should be configured with the correct values', async () => {
-            const tracingPromise = agent.assertSomeTraces(traces => {
-              expect(traces[0][0].service).to.equal('custom')
+            const tracingPromise = agent.assertFirstTraceSpan({
+              service: 'custom'
             })
 
             await Promise.all([
