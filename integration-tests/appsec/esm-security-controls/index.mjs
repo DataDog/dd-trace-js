@@ -7,8 +7,6 @@ import sanitizeDefault from './sanitizer-default.mjs'
 import { validate, validateNotConfigured } from './validator.mjs'
 
 const app = express()
-app.set('query parser', 'extended')
-const port = process.env.APP_PORT || 3000
 
 app.get('/cmdi-s-secure', (req, res) => {
   const command = sanitize(req.query.command)
