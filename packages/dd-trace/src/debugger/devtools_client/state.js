@@ -4,9 +4,14 @@ const { join, dirname } = require('path')
 const { normalize } = require('source-map/lib/util')
 const { loadSourceMapSync } = require('./source-maps')
 const session = require('./session')
+const { getEnvironmentVariable } = require('../../config-helper')
 const log = require('../../log')
 
 const WINDOWS_DRIVE_LETTER_REGEX = /[a-zA-Z]/
+const SCRIPT_LOADING_STABILIZATION_DELAY =
+  getEnvironmentVariable('_DD_INTERNAL_DYNAMIC_INSTRUMENTATION_SCRIPT_LOADING_STABILIZATION_DELAY_MS') === undefined
+    ? 500
+    : Number(getEnvironmentVariable('_DD_INTERNAL_DYNAMIC_INSTRUMENTATION_SCRIPT_LOADING_STABILIZATION_DELAY_MS'))
 
 const loadedScripts = []
 const scriptUrls = new Map()
@@ -168,6 +173,6 @@ session.on('Debugger.scriptParsed', ({ params }) => {
     clearTimeout(reEvaluateProbesTimer)
     reEvaluateProbesTimer = setTimeout(() => {
       session.emit('scriptLoadingStabilized')
-    }, 500)
+    }, SCRIPT_LOADING_STABILIZATION_DELAY)
   }
 })
