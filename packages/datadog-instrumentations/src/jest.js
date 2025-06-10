@@ -1339,10 +1339,11 @@ const onMessageWrapper = _onMessage => function () {
 const enqueueWrapper = enqueue => function (...args) {
   const originalOnStart = args[0].onStart
   args[0].onStart = (worker) => {
-    if (worker) {
+    if (worker && !worker._ddWorker) {
       worker._child.send = sendWrapper(worker._child.send)
       worker._onMessage = onMessageWrapper(worker._onMessage)
       worker._child.on('message', worker._onMessage.bind(worker))
+      worker._ddWorker = true
     }
     originalOnStart(worker)
   }
