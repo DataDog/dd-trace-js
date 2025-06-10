@@ -140,14 +140,16 @@ function filterExtendedHeaders (headers, excludedHeaderNames, tagPrefix, limit =
   return result
 }
 
-function getCollectedHeaders (req, res, shouldCollectEventHeaders) {
+function getCollectedHeaders (req, res, shouldCollectEventHeaders, storedResponseHeaders = {}) {
   // Mandatory
   const mandatoryCollectedHeaders = filterHeaders(req.headers, REQUEST_HEADERS_MAP)
 
   // Basic collection
   if (!shouldCollectEventHeaders) return mandatoryCollectedHeaders
 
-  const responseHeaders = res.getHeaders()
+  const responseHeaders = Object.keys(storedResponseHeaders).length === 0
+    ? res.getHeaders()
+    : { ...storedResponseHeaders, ...res.getHeaders() }
 
   const requestEventCollectedHeaders = filterHeaders(req.headers, EVENT_HEADERS_MAP)
   const responseEventCollectedHeaders = filterHeaders(responseHeaders, RESPONSE_HEADERS_MAP)
@@ -399,7 +401,7 @@ function reportDerivatives (derivatives) {
   rootSpan.addTags(tags)
 }
 
-function finishRequest (req, res) {
+function finishRequest (req, res, storedResponseHeaders) {
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
@@ -453,7 +455,7 @@ function finishRequest (req, res) {
 
   const tags = rootSpan.context()._tags
 
-  const newTags = getCollectedHeaders(req, res, shouldCollectEventHeaders(tags))
+  const newTags = getCollectedHeaders(req, res, shouldCollectEventHeaders(tags), storedResponseHeaders)
 
   if (tags['appsec.event'] === 'true' && typeof req.route?.path === 'string') {
     newTags['http.endpoint'] = req.route.path
