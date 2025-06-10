@@ -3,7 +3,6 @@
 const { LOG } = require('../../../../ext/formats')
 const Plugin = require('./plugin')
 const { storage } = require('../../../datadog-core')
-const structuredLoggers = new Set(['bunyan', 'pino', 'winston'])
 
 function messageProxy (message, holder) {
   return new Proxy(message, {
@@ -44,10 +43,11 @@ module.exports = class LogPlugin extends Plugin {
       this.tracer.inject(span, LOG, holder)
       arg.message = messageProxy(arg.message, holder)
     })
+    this.structured = false // default unstructured logger
   }
 
   _injectLogs (config) {
-    if (structuredLoggers.has(this.constructor.id)) {
+    if (this.structured) {
       return (config.logInjection === true || config.logInjection === 'structured')
     }
 
