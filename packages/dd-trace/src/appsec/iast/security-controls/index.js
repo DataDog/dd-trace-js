@@ -85,7 +85,7 @@ function hookModule (filename, module, controlsByFile) {
       }
     }
   } catch (error) {
-    log.error('[ASM] Error initializing IAST security control for %', filename, error)
+    log.error('[ASM] Error initializing IAST security control for %s', filename, error)
   }
 
   return module
