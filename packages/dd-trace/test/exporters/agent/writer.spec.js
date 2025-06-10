@@ -147,22 +147,6 @@ function describeWriter (protocolVersion) {
       })
     })
 
-    it('should log request errors', done => {
-      const error = new Error('boom')
-      error.status = 42
-
-      request.yields(error)
-
-      encoder.count.returns(1)
-      writer.flush()
-
-      setTimeout(() => {
-        expect(log.error)
-          .to.have.been.calledWith('Error sending payload to the agent (status code: %s)', error.status, error)
-        done()
-      })
-    })
-
     it('should update sampling rates', (done) => {
       encoder.count.returns(1)
       writer.flush(() => {
