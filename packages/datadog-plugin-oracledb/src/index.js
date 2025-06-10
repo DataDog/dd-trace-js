@@ -11,7 +11,8 @@ class OracledbPlugin extends DatabasePlugin {
 
   start ({ query, connAttrs }) {
     const service = this.serviceName({ pluginConfig: this.config, params: connAttrs })
-    const url = getUrl(connAttrs.connectString)
+    // Users can pass either connectString or connectionString
+    const url = getUrl(connAttrs.connectString || connAttrs.connectionString)
 
     this.startSpan(this.operationName(), {
       service,
