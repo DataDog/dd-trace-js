@@ -307,7 +307,7 @@ function formatMapForTelemetry (map) {
 
 const nameMapping = {
   sampleRate: 'DD_TRACE_SAMPLE_RATE',
-  logInjection: 'DD_LOGS_INJECTION',
+  logInjection: 'DD_LOG_INJECTION', // changed to DD_LOGS_INJECTION in subsequent PR
   headerTags: 'DD_TRACE_HEADER_TAGS',
   tags: 'DD_TAGS',
   'sampler.rules': 'DD_TRACE_SAMPLING_RULES',
