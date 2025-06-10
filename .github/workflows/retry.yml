@@ -16,6 +16,7 @@ on:
       - LLMObs
       - Project
       - Platform
+      - System Tests
       - Test Optimization
 
 jobs:
