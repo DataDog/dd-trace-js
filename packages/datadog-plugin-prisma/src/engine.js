@@ -33,6 +33,7 @@ class PrismaEngine extends DatabasePlugin {
     const spanName = engineSpan.name.slice(14) // remove 'prisma:engine:' prefix
     const options = {
       childOf,
+      resource: spanName,
       service,
       kind: engineSpan.kind,
       meta: {
@@ -43,27 +44,19 @@ class PrismaEngine extends DatabasePlugin {
       }
     }
 
-    switch (spanName) {
-      case 'db_query':{
-        const query = engineSpan.attributes['db.query.text']
-        const originalStatement = this.maybeTruncate(query)
-        const type = databaseDriverMapper[engineSpan.attributes['db.system']]?.type
-        const dbType = databaseDriverMapper[engineSpan.attributes['db.system']]?.['db.type']
+    if (spanName === 'db_query') {
+      const query = engineSpan.attributes['db.query.text']
+      const originalStatement = this.maybeTruncate(query)
+      const type = databaseDriverMapper[engineSpan.attributes['db.system']]?.type
+      const dbType = databaseDriverMapper[engineSpan.attributes['db.system']]?.['db.type']
 
-        options.resource = originalStatement
-        options.type = type || engineSpan.attributes['db.system']
-        options.meta['db.type'] = dbType || engineSpan.attributes['db.system']
-        options.meta['db.instance'] = dbConfig?.database
-        options.meta['db.name'] = dbConfig?.user
-        options.meta['out.host'] = dbConfig?.host
-        options.meta[CLIENT_PORT_KEY] = dbConfig?.port
-        options.childOf = childOf
-        break
-      }
-      default:
-        options.resource = spanName
-        options.childOf = childOf
-        break
+      options.resource = originalStatement
+      options.type = type || engineSpan.attributes['db.system']
+      options.meta['db.type'] = dbType || engineSpan.attributes['db.system']
+      options.meta['db.instance'] = dbConfig?.database
+      options.meta['db.name'] = dbConfig?.user
+      options.meta['out.host'] = dbConfig?.host
+      options.meta[CLIENT_PORT_KEY] = dbConfig?.port
     }
 
     const activeSpan = this.startSpan(this.operationName({ operation: this.operation }), options)
@@ -79,7 +72,7 @@ class PrismaEngine extends DatabasePlugin {
   }
 }
 
-// Opentelmetry time format is defined here
+// Opentelemetry time format is defined here
 // https://github.com/open-telemetry/opentelemetry-js/blob/cbc912d/api/src/common/Time.ts#L19-L30.
 function hrTimeToUnixTimeMs ([seconds, nanoseconds]) {
   return seconds * 1000 + nanoseconds / 1e6
