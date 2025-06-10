@@ -343,10 +343,11 @@ describe('Plugin', () => {
           })
         })
 
-
         describe('with connectionString fallback', () => {
           before(async () => {
-            await agent.load('oracledb', { service: connAttrs => connAttrs.connectString || connAttrs.connectionString })
+            await agent.load('oracledb', {
+              service: connAttrs => connAttrs.connectString || connAttrs.connectionString
+            })
             oracledb = require(`../../../versions/oracledb@${version}`).get()
             tracer = require('../../dd-trace')
           })
