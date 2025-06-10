@@ -6,9 +6,7 @@ tracer.init({
 })
 
 const fastify = require('fastify')
-
 const app = fastify()
-const port = parseInt(process.env.APP_PORT) || 3000
 
 app.get('/', (request, reply) => {
   reply.headers({
@@ -19,6 +17,7 @@ app.get('/', (request, reply) => {
   return 'end'
 })
 
-app.listen({ port }, () => {
-  process.send({ port })
+const port = process.env.APP_PORT ? Number(process.env.APP_PORT) : 0
+app.listen({ port }, (err) => {
+  process.send?.({ port: app.server.address().port })
 })
