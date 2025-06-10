@@ -7,8 +7,6 @@ on:
   workflow_dispatch: {}
   schedule:
     - cron: 0 4 * * *
-    - cron: 20 4 * * *
-    - cron: 40 4 * * *
 
 jobs:
   build-artifacts:
