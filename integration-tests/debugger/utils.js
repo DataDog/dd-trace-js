@@ -10,7 +10,7 @@ const { createSandbox, FakeAgent, spawnProc } = require('../helpers')
 const { generateProbeConfig } = require('../../packages/dd-trace/test/debugger/devtools_client/utils')
 
 const BREAKPOINT_TOKEN = '// BREAKPOINT'
-const pollInterval = 1
+const pollInterval = 0.1
 
 module.exports = {
   pollInterval,
