@@ -35,7 +35,7 @@ function taggedMetricName (data) {
         processedTag += '_'
       }
       const colonIndex = tag.indexOf(':')
-      processedTag += colonIndex !== -1 ? tag.slice(colonIndex + 1) : tag
+      processedTag += colonIndex === -1 ? tag : tag.slice(colonIndex + 1)
     }
   }
   if (processedTag !== '') {
