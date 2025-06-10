@@ -8,7 +8,8 @@ class TediousPlugin extends DatabasePlugin {
   static get operation () { return 'request' } // TODO: change to match other database plugins
   static get system () { return 'mssql' }
 
-  start (payload) {
+  bindStart (ctx) {
+    const { payload } = ctx
     const service = this.serviceName({ pluginConfig: this.config, system: this.system })
     const span = this.startSpan(this.operationName(), {
       service,
@@ -24,7 +25,7 @@ class TediousPlugin extends DatabasePlugin {
         'db.name': payload.connectionConfig.options.database,
         'db.instance': payload.connectionConfig.options.instanceName
       }
-    })
+    }, ctx)
 
     // SQL Server includes comments when caching queries
     // For that reason we allow service mode but not full mode
