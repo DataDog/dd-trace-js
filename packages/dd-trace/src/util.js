@@ -77,11 +77,12 @@ function normalizeProfilingEnabledValue (configValue) {
       : configValue === 'auto' ? 'auto' : undefined
 }
 
-function normalizePluginEnvName (envPluginName) {
+function normalizePluginEnvName (envPluginName, makeLowercase = false) {
   if (envPluginName.startsWith('@')) {
     envPluginName = envPluginName.slice(1)
   }
-  return envPluginName.replaceAll(/[^a-z0-9_]/ig, '_').toLowerCase()
+  envPluginName = envPluginName.replaceAll(/[^a-z0-9_]/ig, '_')
+  return makeLowercase ? envPluginName.toLowerCase() : envPluginName
 }
 
 module.exports = {

@@ -26,7 +26,7 @@ const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
 
 const disabledInstrumentations = new Set(
   DD_TRACE_DISABLED_INSTRUMENTATIONS
-    ? DD_TRACE_DISABLED_INSTRUMENTATIONS.split(',').map(normalizePluginEnvName)
+    ? DD_TRACE_DISABLED_INSTRUMENTATIONS.split(',').map(name => normalizePluginEnvName(name, true))
     : []
 )
 const reenabledInstrumentations = new Set()
@@ -35,7 +35,7 @@ const reenabledInstrumentations = new Set()
 for (const [key, value] of Object.entries(envs)) {
   const match = key.match(/^DD_TRACE_(.+)_ENABLED$/)
   if (match && value) {
-    const integration = normalizePluginEnvName(match[1])
+    const integration = normalizePluginEnvName(match[1], true)
     if (isFalse(value)) {
       disabledInstrumentations.add(integration)
     } else if (isTrue(value)) {
@@ -67,7 +67,7 @@ const allInstrumentations = {}
 
 // TODO: make this more efficient
 for (const packageName of names) {
-  const normalizedPackageName = normalizePluginEnvName(packageName)
+  const normalizedPackageName = normalizePluginEnvName(packageName, true)
   if (disabledInstrumentations.has(normalizedPackageName)) continue
 
   const hookOptions = {}
