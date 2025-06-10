@@ -43,7 +43,7 @@ async function checkWorkflowRuns (id, page = 1) {
 
   for (const run of runs) {
     // Filter out first attempts to get only reruns. The idea is that if a rerun
-    // is successful it means any failed job in the previous run were flaky
+    // is successful it means any failed jobs in the previous run were flaky
     // since a rerun without any change made them pass.
     if (run.run_attempt === 1) continue
     if (Date.parse(run.created_at) < Date.now() - DAYS * ONE_DAY) {
