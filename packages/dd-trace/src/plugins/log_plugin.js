@@ -46,18 +46,14 @@ module.exports = class LogPlugin extends Plugin {
     this.structured = false // default unstructured logger
   }
 
-  _injectLogs (config) {
-    if (this.structured) {
-      return (config.logInjection === true || config.logInjection === 'structured')
-    }
-
-    return config.logInjection === true
+  _shouldInjectLogs (config) {
+    return config.logInjection === true || (this.structured && config.logInjection === 'structured')
   }
 
   configure (config) {
     return super.configure({
       ...config,
-      enabled: config.enabled && (this._injectLogs(config) || config.ciVisAgentlessLogSubmissionEnabled)
+      enabled: config.enabled && (this._shouldInjectLogs(config) || config.ciVisAgentlessLogSubmissionEnabled)
     })
   }
 }
