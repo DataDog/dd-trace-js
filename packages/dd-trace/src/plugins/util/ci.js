@@ -27,6 +27,7 @@ const {
   CI_NODE_NAME
 } = require('./tags')
 const { filterSensitiveInfoFromRepository } = require('./url')
+const { getEnvironmentVariable } = require('../../config-helper')
 
 // Receives a string with the form 'John Doe <john.doe@gmail.com>'
 // and returns { name: 'John Doe', email: 'john.doe@gmail.com' }
@@ -67,7 +68,7 @@ function normalizeRef (ref) {
   if (!ref) {
     return ref
   }
-  return ref.replace(/origin\/|refs\/heads\/|tags\//gm, '')
+  return ref.replaceAll(/origin\/|refs\/heads\/|tags\//gm, '')
 }
 
 function resolveTilde (filePath) {
@@ -76,16 +77,16 @@ function resolveTilde (filePath) {
   }
   // '~/folder/path' or '~'
   if (filePath[0] === '~' && (filePath[1] === '/' || filePath.length === 1)) {
-    return filePath.replace('~', process.env.HOME)
+    return filePath.replace('~', getEnvironmentVariable('HOME'))
   }
   return filePath
 }
 
 function getGitHubEventPayload () {
-  if (!process.env.GITHUB_EVENT_PATH) {
+  if (!getEnvironmentVariable('GITHUB_EVENT_PATH')) {
     return
   }
-  return JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'))
+  return JSON.parse(readFileSync(getEnvironmentVariable('GITHUB_EVENT_PATH'), 'utf8'))
 }
 
 module.exports = {
@@ -128,7 +129,7 @@ module.exports = {
         try {
           nodeLabels = JSON.stringify(NODE_LABELS.split(' '))
           tags[CI_NODE_LABELS] = nodeLabels
-        } catch (e) {
+        } catch {
           // ignore errors
         }
       }
@@ -139,15 +140,12 @@ module.exports = {
 
       tags[refKey] = ref
 
-      let finalPipelineName = ''
       if (JOB_NAME) {
         // Job names can contain parameters, e.g. jobName/KEY1=VALUE1,KEY2=VALUE2/branchName
         const jobNameAndParams = JOB_NAME.split('/')
-        if (jobNameAndParams.length > 1 && jobNameAndParams[1].includes('=')) {
-          finalPipelineName = jobNameAndParams[0]
-        } else {
-          finalPipelineName = JOB_NAME.replace(`/${ref}`, '')
-        }
+        const finalPipelineName = jobNameAndParams.length > 1 && jobNameAndParams[1].includes('=')
+          ? jobNameAndParams[0]
+          : JOB_NAME.replace(`/${ref}`, '')
         tags[CI_PIPELINE_NAME] = finalPipelineName
       }
     }
@@ -172,7 +170,9 @@ module.exports = {
         CI_PROJECT_URL: GITLAB_PROJECT_URL,
         CI_JOB_ID: GITLAB_CI_JOB_ID,
         CI_RUNNER_ID,
-        CI_RUNNER_TAGS
+        CI_RUNNER_TAGS,
+        CI_MERGE_REQUEST_TARGET_BRANCH_NAME,
+        CI_MERGE_REQUEST_TARGET_BRANCH_SHA
       } = env
 
       const { name, email } = parseEmailAndName(CI_COMMIT_AUTHOR)
@@ -201,7 +201,9 @@ module.exports = {
           CI_JOB_ID: GITLAB_CI_JOB_ID
         }),
         [CI_NODE_LABELS]: CI_RUNNER_TAGS,
-        [CI_NODE_NAME]: CI_RUNNER_ID
+        [CI_NODE_NAME]: CI_RUNNER_ID,
+        [GIT_PULL_REQUEST_BASE_BRANCH]: CI_MERGE_REQUEST_TARGET_BRANCH_NAME,
+        [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: CI_MERGE_REQUEST_TARGET_BRANCH_SHA
       }
     }
 
@@ -295,7 +297,7 @@ module.exports = {
           const eventContent = getGitHubEventPayload()
           tags[GIT_PULL_REQUEST_BASE_BRANCH_SHA] = eventContent.pull_request.base.sha
           tags[GIT_COMMIT_HEAD_SHA] = eventContent.pull_request.head.sha
-        } catch (e) {
+        } catch {
           // ignore malformed event content
         }
       }
@@ -330,7 +332,8 @@ module.exports = {
         [CI_WORKSPACE_PATH]: APPVEYOR_BUILD_FOLDER,
         [GIT_COMMIT_AUTHOR_NAME]: APPVEYOR_REPO_COMMIT_AUTHOR,
         [GIT_COMMIT_AUTHOR_EMAIL]: APPVEYOR_REPO_COMMIT_AUTHOR_EMAIL,
-        [GIT_COMMIT_MESSAGE]: APPVEYOR_REPO_COMMIT_MESSAGE + '\n' + APPVEYOR_REPO_COMMIT_MESSAGE_EXTENDED
+        [GIT_COMMIT_MESSAGE]: APPVEYOR_REPO_COMMIT_MESSAGE + '\n' + APPVEYOR_REPO_COMMIT_MESSAGE_EXTENDED,
+        [GIT_PULL_REQUEST_BASE_BRANCH]: APPVEYOR_REPO_BRANCH
       }
 
       if (APPVEYOR_REPO_PROVIDER === 'github') {
@@ -411,7 +414,8 @@ module.exports = {
         BITBUCKET_GIT_HTTP_ORIGIN,
         BITBUCKET_TAG,
         BITBUCKET_PIPELINE_UUID,
-        BITBUCKET_CLONE_DIR
+        BITBUCKET_CLONE_DIR,
+        BITBUCKET_PR_DESTINATION_BRANCH
       } = env
 
       const url =
@@ -428,7 +432,8 @@ module.exports = {
         [GIT_TAG]: BITBUCKET_TAG,
         [GIT_REPOSITORY_URL]: BITBUCKET_GIT_SSH_ORIGIN || BITBUCKET_GIT_HTTP_ORIGIN,
         [CI_WORKSPACE_PATH]: BITBUCKET_CLONE_DIR,
-        [CI_PIPELINE_ID]: BITBUCKET_PIPELINE_UUID && BITBUCKET_PIPELINE_UUID.replace(/{|}/gm, '')
+        [CI_PIPELINE_ID]: BITBUCKET_PIPELINE_UUID && BITBUCKET_PIPELINE_UUID.replaceAll(/{|}/gm, ''),
+        [GIT_PULL_REQUEST_BASE_BRANCH]: BITBUCKET_PR_DESTINATION_BRANCH
       }
     }
 
@@ -459,7 +464,8 @@ module.exports = {
         [CI_WORKSPACE_PATH]: BITRISE_SOURCE_DIR,
         [GIT_TAG]: BITRISE_GIT_TAG,
         [GIT_BRANCH]: BITRISEIO_GIT_BRANCH_DEST || BITRISE_GIT_BRANCH,
-        [GIT_COMMIT_MESSAGE]: BITRISE_GIT_MESSAGE
+        [GIT_COMMIT_MESSAGE]: BITRISE_GIT_MESSAGE,
+        [GIT_PULL_REQUEST_BASE_BRANCH]: BITRISEIO_GIT_BRANCH_DEST
       }
     }
 
@@ -555,7 +561,8 @@ module.exports = {
         BUDDY_EXECUTION_URL,
         BUDDY_PIPELINE_ID,
         BUDDY_PIPELINE_NAME,
-        BUDDY_SCM_URL
+        BUDDY_SCM_URL,
+        BUDDY_RUN_PR_BASE_BRANCH
       } = env
       tags = {
         [CI_PROVIDER_NAME]: 'buddy',
@@ -569,7 +576,8 @@ module.exports = {
         [GIT_TAG]: BUDDY_EXECUTION_TAG,
         [GIT_COMMIT_MESSAGE]: BUDDY_EXECUTION_REVISION_MESSAGE,
         [GIT_COMMIT_COMMITTER_NAME]: BUDDY_EXECUTION_REVISION_COMMITTER_NAME,
-        [GIT_COMMIT_COMMITTER_EMAIL]: BUDDY_EXECUTION_REVISION_COMMITTER_EMAIL
+        [GIT_COMMIT_COMMITTER_EMAIL]: BUDDY_EXECUTION_REVISION_COMMITTER_EMAIL,
+        [GIT_PULL_REQUEST_BASE_BRANCH]: BUDDY_RUN_PR_BASE_BRANCH
       }
     }
 

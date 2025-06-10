@@ -1,10 +1,10 @@
 'use strict'
 
-// eslint-disable-next-line @stylistic/js/max-len
 // Modeled after https://github.com/DataDog/libdatadog/blob/f3994857a59bb5679a65967138c5a3aec418a65f/ddcommon/src/azure_app_services.rs
 
 const os = require('os')
 const { getIsAzureFunction } = require('./serverless')
+const { getEnvironmentVariable, getEnvironmentVariables } = require('../../dd-trace/src/config-helper')
 
 function extractSubscriptionID (ownerName) {
   if (ownerName !== undefined) {
@@ -13,7 +13,6 @@ function extractSubscriptionID (ownerName) {
       return subId
     }
   }
-  return undefined
 }
 
 function extractResourceGroup (ownerName) {
@@ -22,7 +21,7 @@ function extractResourceGroup (ownerName) {
 
 function buildResourceID (subscriptionID, siteName, resourceGroup) {
   if (subscriptionID === undefined || siteName === undefined || resourceGroup === undefined) {
-    return undefined
+    return
   }
   return `/subscriptions/${subscriptionID}/resourcegroups/${resourceGroup}/providers/microsoft.web/sites/${siteName}`
     .toLowerCase()
@@ -47,7 +46,7 @@ function buildMetadata () {
     WEBSITE_OS,
     WEBSITE_RESOURCE_GROUP,
     WEBSITE_SITE_NAME
-  } = process.env
+  } = getEnvironmentVariables()
 
   const subscriptionID = extractSubscriptionID(WEBSITE_OWNER_NAME)
 
@@ -79,18 +78,19 @@ function buildMetadata () {
 function getAzureAppMetadata () {
   // DD_AZURE_APP_SERVICES is an environment variable introduced by the .NET APM team and is set automatically for
   // anyone using the Datadog APM Extensions (.NET, Java, or Node) for Windows Azure App Services
-  // eslint-disable-next-line @stylistic/js/max-len
   // See: https://github.com/DataDog/datadog-aas-extension/blob/01f94b5c28b7fa7a9ab264ca28bd4e03be603900/node/src/applicationHost.xdt#L20-L21
-  return process.env.DD_AZURE_APP_SERVICES !== undefined ? buildMetadata() : undefined
+  if (getEnvironmentVariable('DD_AZURE_APP_SERVICES') !== undefined) {
+    return buildMetadata()
+  }
 }
 
 function getAzureFunctionMetadata () {
-  return getIsAzureFunction() ? buildMetadata() : undefined
+  if (getIsAzureFunction()) {
+    return buildMetadata()
+  }
 }
 
-// eslint-disable-next-line @stylistic/js/max-len
 // Modeled after https://github.com/DataDog/libdatadog/blob/92272e90a7919f07178f3246ef8f82295513cfed/profiling/src/exporter/mod.rs#L187
-// eslint-disable-next-line @stylistic/js/max-len
 // and https://github.com/DataDog/libdatadog/blob/f3994857a59bb5679a65967138c5a3aec418a65f/trace-utils/src/trace_utils.rs#L533
 function getAzureTagsFromMetadata (metadata) {
   if (metadata === undefined) {

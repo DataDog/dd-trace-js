@@ -158,6 +158,34 @@ describe('tagger', () => {
 
         expect(Tagger.tagMap.get(span)).to.be.undefined
       })
+
+      it('uses the propagated mlApp over the global mlApp if both are provided', () => {
+        spanContext._trace.tags['_dd.p.llmobs_ml_app'] = 'my-propagated-ml-app'
+
+        tagger.registerLLMObsSpan(span, { kind: 'llm' })
+
+        const tags = Tagger.tagMap.get(span)
+        expect(tags['_ml_obs.meta.ml_app']).to.equal('my-propagated-ml-app')
+      })
+
+      describe('with no global mlApp configured', () => {
+        beforeEach(() => {
+          tagger = new Tagger({ llmobs: { enabled: true } })
+        })
+
+        it('uses the mlApp from the propagated mlApp if no mlApp is provided', () => {
+          spanContext._trace.tags['_dd.p.llmobs_ml_app'] = 'my-propagated-ml-app'
+
+          tagger.registerLLMObsSpan(span, { kind: 'llm' })
+
+          const tags = Tagger.tagMap.get(span)
+          expect(tags['_ml_obs.meta.ml_app']).to.equal('my-propagated-ml-app')
+        })
+
+        it('throws an error if no mlApp is provided and no propagated mlApp is provided', () => {
+          expect(() => tagger.registerLLMObsSpan(span, { kind: 'llm' })).to.throw()
+        })
+      })
     })
 
     describe('tagMetadata', () => {
@@ -230,12 +258,12 @@ describe('tagger', () => {
         })
       })
 
-      it('merges tags so they do not overwrite', () => {
+      it('merges tags so they update', () => {
         Tagger.tagMap.set(span, { '_ml_obs.tags': { a: 1 } })
         const tags = { a: 2, b: 1 }
         tagger.tagSpanTags(span, tags)
         expect(Tagger.tagMap.get(span)).to.deep.equal({
-          '_ml_obs.tags': { a: 1, b: 1 }
+          '_ml_obs.tags': { a: 2, b: 1 }
         })
       })
     })

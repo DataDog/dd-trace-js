@@ -34,7 +34,14 @@ function getCallSites (constructorOpt) {
  *
  * @param {Function} constructorOpt - Function to pass along to Error.captureStackTrace
  * @param {number} [limit=Infinity] - The maximum number of frames to return
- * @returns {{ file: string, line: number, method: (string|undefined), type: (string|undefined) }[]} - A
+ * @returns {StackFrame[]} - A list of stack frames from user-land code
+ *
+ * @typedef {Object} StackFrame
+ * @property {string} file - The file path of the frame
+ * @property {number} line - The line number in the file
+ * @property {number} column - The column number in the file
+ * @property {string} [method] - The function name, if available
+ * @property {string} [type] - The type name, if available
  */
 function getUserLandFrames (constructorOpt, limit = Infinity) {
   const callsites = getCallSites(constructorOpt)
@@ -72,7 +79,7 @@ function getUserLandFrames (constructorOpt, limit = Infinity) {
     // However, the tests in `packages/dd-trace/test/plugins/util/stacktrace.spec.js` will fail on my machine
     // because I have the source code in a parent folder called `node_modules`. So the code below thinks that
     // it's not in user-land
-    const relativePath = relative(cwd, containsFileProtocol ? filename.substring(7) : filename)
+    const relativePath = relative(cwd, containsFileProtocol ? filename.slice(7) : filename)
     if (relativePath.startsWith('node_modules' + sep) || relativePath.includes(sep + 'node_modules' + sep)) {
       continue
     }

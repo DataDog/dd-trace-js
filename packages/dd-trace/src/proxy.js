@@ -10,6 +10,14 @@ const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
+const {
+  setBaggageItem,
+  getBaggageItem,
+  getAllBaggageItems,
+  removeBaggageItem,
+  removeAllBaggageItems
+} = require('./baggage')
 
 class LazyModule {
   constructor (provider) {
@@ -65,6 +73,11 @@ class Tracer extends NoopProxy {
     this.dogstatsd = new NoopDogStatsDClient()
     this._tracingInitialized = false
     this._flare = new LazyModule(() => require('./flare'))
+    this.setBaggageItem = setBaggageItem
+    this.getBaggageItem = getBaggageItem
+    this.getAllBaggageItems = getAllBaggageItems
+    this.removeBaggageItem = removeBaggageItem
+    this.removeAllBaggageItems = removeAllBaggageItems
 
     // these requires must work with esm bundler
     this._modules = {
@@ -140,10 +153,6 @@ class Tracer extends NoopProxy {
         }
       }
 
-      if (config.isGCPFunction || config.isAzureFunction) {
-        require('./serverless').maybeStartServerlessMiniAgent(config)
-      }
-
       if (config.profiling.enabled !== 'false') {
         const { SSIHeuristics } = require('./profiling/ssi-heuristics')
         const ssiHeuristics = new SSIHeuristics(config)
@@ -181,18 +190,16 @@ class Tracer extends NoopProxy {
 
       this._modules.rewriter.enable(config)
 
-      if (config.tracing) {
-        if (config.isManualApiEnabled) {
-          const TestApiManualPlugin = require('./ci-visibility/test-api-manual/test-api-manual-plugin')
-          this._testApiManualPlugin = new TestApiManualPlugin(this)
-          // `shouldGetEnvironmentData` is passed as false so that we only lazily calculate it
-          // This is the only place where we need to do this because the rest of the plugins
-          // are lazily configured when the library is imported.
-          this._testApiManualPlugin.configure({ ...config, enabled: true }, false)
-        }
+      if (config.tracing && config.isManualApiEnabled) {
+        const TestApiManualPlugin = require('./ci-visibility/test-api-manual/test-api-manual-plugin')
+        this._testApiManualPlugin = new TestApiManualPlugin(this)
+        // `shouldGetEnvironmentData` is passed as false so that we only lazily calculate it
+        // This is the only place where we need to do this because the rest of the plugins
+        // are lazily configured when the library is imported.
+        this._testApiManualPlugin.configure({ ...config, enabled: true }, false)
       }
       if (config.ciVisAgentlessLogSubmissionEnabled) {
-        if (process.env.DD_API_KEY) {
+        if (getEnvironmentVariable('DD_API_KEY')) {
           const LogSubmissionPlugin = require('./ci-visibility/log-submission/log-submission-plugin')
           const automaticLogPlugin = new LogSubmissionPlugin(this)
           automaticLogPlugin.configure({ ...config, enabled: true })

@@ -54,7 +54,7 @@ function wrapDeserialize (deserialize, channelSuffix) {
 
 function wrapSmithySend (send) {
   return function (command, ...args) {
-    const cb = args[args.length - 1]
+    const cb = args.at(-1)
     const innerAr = new AsyncResource('apm:aws:request:inner')
     const outerAr = new AsyncResource('apm:aws:request:outer')
     const serviceIdentifier = this.config.serviceId.toLowerCase()

@@ -20,7 +20,7 @@ function errorMsg (title, ...message) {
 }
 
 /// /
-/// / Verifying plugins.yml and appsec.yml that plugins are consistently tested
+/// / Verifying that plugins are consistently tested in at least one GH workflow
 /// /
 
 if (!Module.isBuiltin) {
@@ -94,13 +94,9 @@ function getRangesFromYaml (job) {
     if (job.strategy.matrix.include) {
       possibilities.push(...job.strategy.matrix.include)
     }
-    return possibilities.map(possibility => {
-      if (possibility.range) {
-        return [possibility.range].flat()
-      } else {
-        return undefined
-      }
-    }).flat()
+    return possibilities.flatMap(possibility => {
+      return [possibility.range]?.flat()
+    })
   }
 
   return null
@@ -131,9 +127,12 @@ function pluginErrorMsg (pluginName, title, message) {
   errorMsg(title + ' for ' + pluginName, message)
 }
 
-checkPlugins(path.join(__dirname, '..', '.github', 'workflows', 'plugins.yml'))
-checkPlugins(path.join(__dirname, '..', '.github', 'workflows', 'instrumentations.yml'))
+// TODO: Check all YAML files instead of having to list them here.
+checkPlugins(path.join(__dirname, '..', '.github', 'workflows', 'apm-integrations.yml'))
 checkPlugins(path.join(__dirname, '..', '.github', 'workflows', 'appsec.yml'))
+checkPlugins(path.join(__dirname, '..', '.github', 'workflows', 'llmobs.yml'))
+checkPlugins(path.join(__dirname, '..', '.github', 'workflows', 'platform.yml'))
+checkPlugins(path.join(__dirname, '..', '.github', 'workflows', 'test-optimization.yml'))
 {
   const testDir = path.join(__dirname, '..', 'packages', 'datadog-instrumentations', 'test')
   const testedInstrumentations = fs.readdirSync(testDir)
@@ -141,7 +140,7 @@ checkPlugins(path.join(__dirname, '..', '.github', 'workflows', 'appsec.yml'))
     .map(file => file.replace('.spec.js', ''))
   for (const instrumentation of testedInstrumentations) {
     if (!allTestedPlugins.has(instrumentation)) {
-      pluginErrorMsg(instrumentation, 'ERROR', 'Instrumentation is tested but not in plugins.yml')
+      pluginErrorMsg(instrumentation, 'ERROR', 'Instrumentation is tested but not in at least one GitHub workflow')
     }
   }
   const allPlugins = fs.readdirSync(path.join(__dirname, '..', 'packages'))
@@ -149,8 +148,8 @@ checkPlugins(path.join(__dirname, '..', '.github', 'workflows', 'appsec.yml'))
     .filter(file => fs.existsSync(path.join(__dirname, '..', 'packages', file, 'test')))
     .map(file => file.replace('datadog-plugin-', ''))
   for (const plugin of allPlugins) {
-    if (!allTestedPlugins.has(plugin)) {
-      pluginErrorMsg(plugin, 'ERROR', 'Plugin is tested but not in plugins.yml')
+    if (!allTestedPlugins.has(plugin) && plugin !== 'jest') {
+      pluginErrorMsg(plugin, 'ERROR', 'Plugin is tested but not in at least one GitHub workflow')
     }
   }
 }
@@ -161,22 +160,26 @@ checkPlugins(path.join(__dirname, '..', '.github', 'workflows', 'appsec.yml'))
 
 const IGNORED_WORKFLOWS = {
   all: [
+    'codeql-analysis.yml',
+    'flakiness.yml',
+    'pr-labels.yml',
     'release-3.yml',
     'release-4.yml',
     'release-dev.yml',
     'release-latest.yml',
     'release-proposal.yml',
-    'codeql-analysis.yml',
-    'pr-labels.yml'
+    'release-validate.yml',
+    'retry.yml'
   ],
   trigger_pull_request: [
     'stale.yml'
   ],
   trigger_push: [
-    'package-size.yml',
     'stale.yml'
   ],
-  trigger_schedule: []
+  trigger_schedule: [
+    'project.yml'
+  ]
 }
 
 const workflows = fs.readdirSync(path.join(__dirname, '..', '.github', 'workflows'))

@@ -11,7 +11,8 @@ class OracledbPlugin extends DatabasePlugin {
 
   start ({ query, connAttrs }) {
     const service = this.serviceName({ pluginConfig: this.config, params: connAttrs })
-    const url = getUrl(connAttrs.connectString)
+    // Users can pass either connectString or connectionString
+    const url = getUrl(connAttrs.connectString || connAttrs.connectionString)
 
     this.startSpan(this.operationName(), {
       service,
@@ -20,7 +21,7 @@ class OracledbPlugin extends DatabasePlugin {
       kind: 'client',
       meta: {
         'db.user': this.config.user,
-        'db.instance': url.pathname && url.pathname.substring(1),
+        'db.instance': url.pathname && url.pathname.slice(1),
         'db.hostname': url.hostname,
         [CLIENT_PORT_KEY]: url.port
       }

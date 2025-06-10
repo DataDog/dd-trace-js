@@ -3,7 +3,7 @@
 const dc = require('dc-polyfill')
 const { getMessageSize } = require('../../dd-trace/src/datastreams')
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
-
+const { convertToTextMap } = require('./utils')
 const afterStartCh = dc.channel('dd-trace:kafkajs:consumer:afterStart')
 const beforeFinishCh = dc.channel('dd-trace:kafkajs:consumer:beforeFinish')
 
@@ -15,7 +15,7 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
 
   constructor () {
     super(...arguments)
-    this.addSub('apm:kafkajs:consume:commit', message => this.commit(message))
+    this.addSub(`apm:${this.constructor.id}:consume:commit`, message => this.commit(message))
   }
 
   /**
@@ -64,26 +64,33 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
     }
   }
 
-  start ({ topic, partition, message, groupId, clusterId }) {
-    const childOf = extract(this.tracer, message.headers)
+  bindStart (ctx) {
+    const { topic, partition, message, groupId, clusterId } = ctx.extractedArgs || ctx
+
+    let childOf
+    const headers = convertToTextMap(message?.headers)
+    if (headers) {
+      childOf = this.tracer.extract('text_map', headers)
+    }
     const span = this.startSpan({
       childOf,
       resource: topic,
       type: 'worker',
       meta: {
-        component: 'kafkajs',
+        component: this.constructor.id,
         'kafka.topic': topic,
-        'kafka.message.offset': message.offset,
         'kafka.cluster_id': clusterId,
         [MESSAGING_DESTINATION_KEY]: topic
       },
       metrics: {
         'kafka.partition': partition
       }
-    })
-    if (this.config.dsmEnabled && message?.headers) {
+    }, ctx)
+    if (message?.offset) span.setTag('kafka.message.offset', message?.offset)
+
+    if (this.config.dsmEnabled && headers) {
       const payloadSize = getMessageSize(message)
-      this.tracer.decodeDataStreamsContext(message.headers)
+      this.tracer.decodeDataStreamsContext(headers)
       const edgeTags = ['direction:in', `group:${groupId}`, `topic:${topic}`, 'type:kafka']
       if (clusterId) {
         edgeTags.push(`kafka_cluster_id:${clusterId}`)
@@ -92,31 +99,19 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
     }
 
     if (afterStartCh.hasSubscribers) {
-      afterStartCh.publish({ topic, partition, message, groupId })
+      afterStartCh.publish({ topic, partition, message, groupId, currentStore: ctx.currentStore })
     }
+
+    return ctx.currentStore
   }
 
-  finish () {
+  finish (ctx) {
     if (beforeFinishCh.hasSubscribers) {
       beforeFinishCh.publish()
     }
 
-    super.finish()
+    super.finish(ctx)
   }
-}
-
-function extract (tracer, bufferMap) {
-  if (!bufferMap) return null
-
-  const textMap = {}
-
-  for (const key of Object.keys(bufferMap)) {
-    if (bufferMap[key] === null || bufferMap[key] === undefined) continue
-
-    textMap[key] = bufferMap[key].toString()
-  }
-
-  return tracer.extract('text_map', textMap)
 }
 
 module.exports = KafkajsConsumerPlugin

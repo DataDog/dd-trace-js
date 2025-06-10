@@ -3,7 +3,7 @@
 const { SourceIastPlugin } = require('../iast-plugin')
 const { getIastContext } = require('../iast-context')
 const { storage } = require('../../../../../datadog-core')
-const { taintObject, newTaintedString, getRanges } = require('./operations')
+const { taintObject, newTaintedString, getRanges, taintQueryWithCache } = require('./operations')
 const {
   HTTP_REQUEST_BODY,
   HTTP_REQUEST_COOKIE_VALUE,
@@ -63,7 +63,12 @@ class TaintTrackingPlugin extends SourceIastPlugin {
 
     this.addSub(
       { channelName: 'datadog:express:query:finish', tag: HTTP_REQUEST_PARAMETER },
-      ({ query }) => this._taintTrackingHandler(HTTP_REQUEST_PARAMETER, query)
+      ({ query }) => {
+        const iastContext = getIastContext(storage('legacy').getStore())
+        if (!iastContext || !query) return
+
+        taintQueryWithCache(iastContext, query)
+      }
     )
 
     this.addSub(
@@ -129,13 +134,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
       { channelName: 'datadog:url:parse:finish' },
       ({ input, base, parsed, isURL }) => {
         const iastContext = getIastContext(storage('legacy').getStore())
-        let ranges
-
-        if (base) {
-          ranges = getRanges(iastContext, base)
-        } else {
-          ranges = getRanges(iastContext, input)
-        }
+        const ranges = getRanges(iastContext, base || input)
 
         if (ranges?.length) {
           if (isURL) {
@@ -213,7 +212,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
 
     if (Array.isArray(result)) {
       for (let i = 0; i < result.length && i < this._rowsToTaint; i++) {
-        const nextName = name ? `${name}.${i}` : '' + i
+        const nextName = name ? `${name}.${i}` : String(i)
         result[i] = this._taintDatabaseResult(result[i], dbOrigin, iastContext, nextName)
       }
     } else if (result && typeof result === 'object') {

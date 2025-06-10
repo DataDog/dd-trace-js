@@ -6,8 +6,6 @@ on:
       - master
   schedule:
     - cron: 0 4 * * *
-    - cron: 20 4 * * *
-    - cron: 40 4 * * *
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
@@ -21,7 +19,8 @@ jobs:
       checks: read
       contents: read
     steps:
-      - uses: wechuli/allcheckspassed@2e5e8bbc775f5680ed5d02e3a22e2fc7219792ac # v1.1.0
+      - uses: wechuli/allcheckspassed@e22f45a4f25f4cf821d1273705ac233355400db1 # v1.2.0
         with:
-          retries: 20 # once per minute, some checks take up to 15 min
+          retries: 30 # once per minute, some checks take up to 15 min, retries are possible
           checks_exclude: devflow.*
+          fail_fast: false

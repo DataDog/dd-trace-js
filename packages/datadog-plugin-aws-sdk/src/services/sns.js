@@ -19,7 +19,7 @@ class Sns extends BaseAwsSdkPlugin {
     const arnParts = TopicArn.split(':')
 
     // Get the topic name from the last part of the ARN
-    const topicName = arnParts[arnParts.length - 1]
+    const topicName = arnParts.at(-1)
 
     return {
       'resource.name': `${operation} ${params.TopicArn || response.data.TopicArn}`,
@@ -74,8 +74,7 @@ class Sns extends BaseAwsSdkPlugin {
   injectToMessage (span, params, topicArn, injectTraceContext) {
     if (!params.MessageAttributes) {
       params.MessageAttributes = {}
-    }
-    if (Object.keys(params.MessageAttributes).length >= 10) { // SNS quota
+    } else if (Object.keys(params.MessageAttributes).length >= 10) { // SNS quota
       log.info('Message attributes full, skipping trace context injection')
       return
     }

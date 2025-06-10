@@ -14,6 +14,7 @@ const Span = require('../opentracing/span')
 
 const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
+const { getEnvironmentVariable } = require('../config-helper')
 const telemetry = require('./telemetry')
 
 const LLMObsTagger = require('./tagger')
@@ -47,7 +48,7 @@ class LLMObs extends NoopLLMObs {
 
     const { mlApp, agentlessEnabled } = options
 
-    const { DD_LLMOBS_ENABLED } = process.env
+    const DD_LLMOBS_ENABLED = getEnvironmentVariable('DD_LLMOBS_ENABLED')
 
     const llmobsConfig = {
       mlApp,
@@ -121,7 +122,7 @@ class LLMObs extends NoopLLMObs {
     }
 
     const kind = validateKind(options.kind) // will throw if kind is undefined or not an expected kind
-    let name = options.name || (fn?.name ? fn.name : undefined) || kind
+    let name = options.name || fn?.name || kind
 
     if (!name) {
       logger.warn('No span name provided for `wrap`. Defaulting to "unnamed-anonymous-function".')
@@ -285,7 +286,7 @@ class LLMObs extends NoopLLMObs {
       }
       if (!(span instanceof Span)) {
         err = 'invalid_span'
-        throw new Error('Span must be a valid Span object.')
+        throw new TypeError('Span must be a valid Span object.')
       }
       if (!LLMObsTagger.tagMap.has(span)) {
         err = 'invalid_span'

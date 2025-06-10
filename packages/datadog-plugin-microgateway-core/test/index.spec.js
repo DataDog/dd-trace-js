@@ -75,7 +75,7 @@ describe('Plugin', () => {
 
         it('should do automatic instrumentation', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = traces[0]
 
               expect(spans[0]).to.have.property('name', 'microgateway.request')
@@ -127,7 +127,7 @@ describe('Plugin', () => {
           }
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = traces[0]
 
               expect(spans[0]).to.have.property('name', 'microgateway.request')
@@ -156,7 +156,7 @@ describe('Plugin', () => {
           }
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = traces[0]
 
               expect(spans[0]).to.have.property('name', 'microgateway.request')

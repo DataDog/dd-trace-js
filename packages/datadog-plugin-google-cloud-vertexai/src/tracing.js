@@ -25,17 +25,17 @@ class GoogleCloudVertexAITracingPlugin extends TracingPlugin {
   bindStart (ctx) {
     const { instance, request, resource, stream } = ctx
 
-    const tags = this.tagRequest(request, instance, stream)
-
     const span = this.startSpan('vertexai.request', {
       service: this.config.service,
       resource,
       kind: 'client',
       meta: {
-        [MEASURED]: 1,
-        ...tags
+        [MEASURED]: 1
       }
     }, false)
+
+    const tags = this.tagRequest(request, instance, stream, span)
+    span.addTags(tags)
 
     const store = storage('legacy').getStore() || {}
     ctx.currentStore = { ...store, span }
@@ -51,14 +51,23 @@ class GoogleCloudVertexAITracingPlugin extends TracingPlugin {
 
     const response = result?.response
     if (response) {
-      const tags = this.tagResponse(response)
+      const tags = this.tagResponse(response, span)
       span.addTags(tags)
     }
 
     span.finish()
   }
 
-  tagRequest (request, instance, stream) {
+  /**
+   * Generate the request tags.
+   *
+   * @param {Object} request
+   * @param {Object} instance
+   * @param {boolean} stream
+   * @param {Span} span
+   * @returns {Object}
+   */
+  tagRequest (request, instance, stream, span) {
     const model = extractModel(instance)
     const tags = {
       'vertexai.request.model': model
@@ -73,7 +82,7 @@ class GoogleCloudVertexAITracingPlugin extends TracingPlugin {
 
     const generationConfig = instance.generationConfig || {}
     for (const key of Object.keys(generationConfig)) {
-      const transformedKey = key.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase()
+      const transformedKey = key.replaceAll(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase()
       tags[`vertexai.request.generation_config.${transformedKey}`] = JSON.stringify(generationConfig[key])
     }
 
@@ -81,7 +90,7 @@ class GoogleCloudVertexAITracingPlugin extends TracingPlugin {
       tags['vertexai.request.stream'] = true
     }
 
-    if (!this.isPromptCompletionSampled()) return tags
+    if (!this.isPromptCompletionSampled(span)) return tags
 
     const systemInstructions = extractSystemInstructions(instance)
 
@@ -141,8 +150,16 @@ class GoogleCloudVertexAITracingPlugin extends TracingPlugin {
     }
   }
 
-  tagResponse (response) {
+  /**
+   * Generate the response tags.
+   *
+   * @param {Object} response
+   * @param {Span} span
+   * @returns {Object}
+   */
+  tagResponse (response, span) {
     const tags = {}
+    const isSampled = this.isPromptCompletionSampled(span)
 
     const candidates = response.candidates
     for (const [candidateIdx, candidate] of candidates.entries()) {
@@ -154,7 +171,7 @@ class GoogleCloudVertexAITracingPlugin extends TracingPlugin {
       const role = candidateContent.role
       tags[`vertexai.response.candidates.${candidateIdx}.content.role`] = role
 
-      if (!this.isPromptCompletionSampled()) continue
+      if (!isSampled) continue
 
       const parts = candidateContent.parts
       for (const [partIdx, part] of parts.entries()) {

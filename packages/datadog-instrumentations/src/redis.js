@@ -45,9 +45,9 @@ function wrapCommandQueueClass (cls) {
         try {
           const parsed = new URL(createClientUrl)
           if (parsed) {
-            this._url = { host: parsed.hostname, port: +parsed.port || 6379 }
+            this._url = { host: parsed.hostname, port: Number(parsed.port) || 6379 }
           }
-        } catch (error) {
+        } catch {
           // ignore
         }
       }
@@ -130,8 +130,8 @@ addHook({ name: 'redis', versions: ['>=0.12 <2.6'] }, redis => {
       if (typeof callback === 'function') {
         const cb = callbackResource.bind(callback)
         arguments[2] = asyncResource.bind(wrapCallback(finishCh, errorCh, cb))
-      } else if (Array.isArray(args) && typeof args[args.length - 1] === 'function') {
-        const cb = callbackResource.bind(args[args.length - 1])
+      } else if (Array.isArray(args) && typeof args.at(-1) === 'function') {
+        const cb = callbackResource.bind(args.at(-1))
         args[args.length - 1] = asyncResource.bind(wrapCallback(finishCh, errorCh, cb))
       } else {
         arguments[2] = asyncResource.bind(wrapCallback(finishCh, errorCh))

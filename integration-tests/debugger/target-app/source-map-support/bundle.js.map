@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": ["hello/./world.ts", "typescript.ts"],
+  "mappings": ";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;AAAA,IAAAA,SAAA,WAAAC;AAAA,aAAgBA,YAAQ;AACtB,aAAO;IACT;;;;;ACAA,uBAA6B;AAE7B,mBAAyB;AAJzB,QAAQ,eAAe;AAMvB,IAAM,aAAS,+BAAa,CAAC,KAAK,QAAQ;AAIxC,MAAI,QAAI,uBAAS,CAAC;AACpB,CAAC;AAED,OAAO,OAAO,QAAQ,IAAI,YAAY,GAAG,MAAM;AAC7C,UAAQ,OAAO,EAAE,MAAO,OAAO,QAAQ,EAAkB,KAAK,CAAC;AACjE,CAAC;",
+  "names": ["exports", "sayHello"]
+}

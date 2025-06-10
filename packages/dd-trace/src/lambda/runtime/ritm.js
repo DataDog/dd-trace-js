@@ -10,6 +10,7 @@
 const path = require('path')
 
 const log = require('../../log')
+const { getEnvironmentVariable } = require('../../config-helper')
 const Hook = require('../../../../datadog-instrumentations/src/helpers/hook')
 const instrumentations = require('../../../../datadog-instrumentations/src/helpers/instrumentations')
 const {
@@ -31,7 +32,7 @@ const {
  */
 function _extractModuleRootAndHandler (fullHandler) {
   const handlerString = path.basename(fullHandler)
-  const moduleRoot = fullHandler.substring(0, fullHandler.indexOf(handlerString))
+  const moduleRoot = fullHandler.slice(0, Math.max(0, fullHandler.indexOf(handlerString)))
 
   return [moduleRoot, handlerString]
 }
@@ -78,8 +79,8 @@ function _getLambdaFilePaths (lambdaStylePath) {
  * the file is required.
  */
 const registerLambdaHook = () => {
-  const lambdaTaskRoot = process.env.LAMBDA_TASK_ROOT
-  const originalLambdaHandler = process.env.DD_LAMBDA_HANDLER
+  const lambdaTaskRoot = getEnvironmentVariable('LAMBDA_TASK_ROOT')
+  const originalLambdaHandler = getEnvironmentVariable('DD_LAMBDA_HANDLER')
 
   if (originalLambdaHandler !== undefined && lambdaTaskRoot !== undefined) {
     const [moduleRoot, moduleAndHandler] = _extractModuleRootAndHandler(originalLambdaHandler)

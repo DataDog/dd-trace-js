@@ -17,7 +17,7 @@ const {
   start,
   run
 } = require('./helpers/terminal')
-const { checkBranchDiff, checkGitHub, checkGit } = require('./helpers/requirements')
+const { checkAll } = require('./helpers/requirements')
 
 const tmpdir = process.env.RUNNER_TEMP || os.tmpdir()
 const main = 'master'
@@ -42,9 +42,7 @@ if (!releaseLine || releaseLine === 'help' || flags.help) {
 try {
   start('Check for requirements')
 
-  checkGit()
-  checkBranchDiff()
-  checkGitHub()
+  checkAll()
 
   pass()
 
@@ -68,12 +66,7 @@ try {
 
   pass(`v${releaseLine}.x`)
 
-  const diffCmd = [
-    'branch-diff',
-    '--user DataDog',
-    '--repo dd-trace-js',
-    `--exclude-label=semver-major,dont-land-on-v${releaseLine}.x`
-  ].join(' ')
+  const diffCmd = 'branch-diff --user DataDog --repo dd-trace-js --exclude-label=semver-major'
 
   start('Determine version increment')
 
@@ -219,7 +212,7 @@ try {
   // Close PR and delete branch for any patch proposal if new proposal is minor.
   if (isMinor) {
     try {
-      run(`gh pr close v${newPatch} --delete-branch --comment "Superseded by #${pullRequest.number}."`)
+      run(`gh pr close v${newPatch}-proposal --delete-branch --comment "Superseded by #${pullRequest.number}."`)
     } catch (e) {
       // PR didn't exist so nothing to close.
     }

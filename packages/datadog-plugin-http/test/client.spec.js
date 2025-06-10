@@ -9,14 +9,13 @@ const { storage } = require('../../datadog-core')
 const key = fs.readFileSync(path.join(__dirname, './ssl/test.key'))
 const cert = fs.readFileSync(path.join(__dirname, './ssl/test.crt'))
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const { DD_MAJOR } = require('../../../version')
 const { rawExpectedSchema } = require('./naming')
 const { satisfies } = require('semver')
 
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 const NODE_MAJOR = parseInt(process.versions.node.split('.')[0])
-const SERVICE_NAME = DD_MAJOR < 3 ? 'test-http-client' : 'test'
+const SERVICE_NAME = 'test'
 
 describe('Plugin', () => {
   let express
@@ -102,7 +101,7 @@ describe('Plugin', () => {
 
           appListener = server(app, port => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0]).to.have.property('service', SERVICE_NAME)
                 expect(traces[0][0]).to.have.property('type', 'http')
                 expect(traces[0][0]).to.have.property('resource', 'GET')
@@ -132,7 +131,7 @@ describe('Plugin', () => {
           })
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0].meta).to.have.property('http.status_code', '200')
               expect(traces[0][0]).to.not.be.undefined
             })
@@ -156,7 +155,7 @@ describe('Plugin', () => {
 
           appListener = server(app, port => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0]).to.have.property('service', SERVICE_NAME)
                 expect(traces[0][0]).to.have.property('type', 'http')
                 expect(traces[0][0]).to.have.property('resource', 'CONNECT')
@@ -200,7 +199,7 @@ describe('Plugin', () => {
 
           appListener = server(app, port => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0]).to.have.property('service', SERVICE_NAME)
                 expect(traces[0][0]).to.have.property('type', 'http')
                 expect(traces[0][0]).to.have.property('resource', 'GET')
@@ -246,7 +245,7 @@ describe('Plugin', () => {
 
           appListener = server(app, port => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
               })
               .then(done)
@@ -273,7 +272,7 @@ describe('Plugin', () => {
 
           appListener = server(app, port => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0].meta).to.have.property('http.status_code', '200')
                 expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
               })
@@ -299,7 +298,7 @@ describe('Plugin', () => {
 
             appListener = server(app, port => {
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   expect(traces[0][0].meta).to.have.property('http.status_code', '200')
                   expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
                 })
@@ -322,7 +321,7 @@ describe('Plugin', () => {
 
           appListener = server(app, port => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0].meta).to.have.property('http.status_code', '200')
                 expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
               })
@@ -349,7 +348,7 @@ describe('Plugin', () => {
 
             app.get('/user', (req, res) => res.status(200).send())
 
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               expect(traces[0][0].meta).to.have.property('http.status_code', '200')
               expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
             }).then(done, done)
@@ -368,7 +367,7 @@ describe('Plugin', () => {
 
           appListener = server(app, port => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/`)
               })
               .then(done)
@@ -391,7 +390,7 @@ describe('Plugin', () => {
           })
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.not.be.undefined
             })
             .then(done)
@@ -414,6 +413,7 @@ describe('Plugin', () => {
           appListener = server(app, port => {
             const req = http.request(`${protocol}://localhost:${port}/user`, res => {
               setTimeout(() => {
+                expect(res.listenerCount('error')).to.equal(0)
                 res.on('data', () => done())
               })
             })
@@ -433,7 +433,7 @@ describe('Plugin', () => {
           })
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0].meta).to.have.property('http.status_code', '200')
             })
             .then(done)
@@ -545,7 +545,7 @@ describe('Plugin', () => {
           let error
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
               expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message || error.code)
               expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
@@ -571,7 +571,7 @@ describe('Plugin', () => {
           })
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('error', 0)
             })
             .then(done)
@@ -594,7 +594,7 @@ describe('Plugin', () => {
           })
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('error', 1)
             })
             .then(done)
@@ -617,7 +617,7 @@ describe('Plugin', () => {
           let error
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('error', 1)
               expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
               expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
@@ -647,7 +647,7 @@ describe('Plugin', () => {
           app.get('/user', (req, res) => {})
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].meta).to.not.have.property('http.status_code')
             })
@@ -671,7 +671,7 @@ describe('Plugin', () => {
           app.get('/user', (req, res) => {})
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('error', 1)
               expect(traces[0][0].meta).to.not.have.property('http.status_code')
             })
@@ -702,7 +702,7 @@ describe('Plugin', () => {
             })
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0]).to.have.property('error', 0)
               })
               .then(done)
@@ -730,7 +730,7 @@ describe('Plugin', () => {
             })
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0]).to.have.property('error', 1)
               })
               .then(done)
@@ -762,7 +762,7 @@ describe('Plugin', () => {
             })
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0]).to.have.property('error', 1)
               })
               .then(done)
@@ -798,7 +798,7 @@ describe('Plugin', () => {
           })
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = traces[0]
               expect(spans.length).to.equal(3)
             })
@@ -834,7 +834,7 @@ describe('Plugin', () => {
           })
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('service', SERVICE_NAME)
             })
             .then(done)
@@ -856,7 +856,7 @@ describe('Plugin', () => {
 
           appListener = server(app, port => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0].meta).to.have.property('http.status_code', '200')
                 expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
               })
@@ -884,7 +884,7 @@ describe('Plugin', () => {
 
           appListener = server(app, port => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][1]).to.have.property('error', 0)
                 expect(traces[0][1].meta).to.have.property('http.status_code', '200')
                 expect(traces[0][1].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
@@ -916,7 +916,7 @@ describe('Plugin', () => {
             const timer = setTimeout(done, 100)
 
             agent
-              .use(() => {
+              .assertSomeTraces(() => {
                 done(new Error('Noop request was traced.'))
                 clearTimeout(timer)
               })
@@ -937,7 +937,7 @@ describe('Plugin', () => {
 
         it('should record unfinished http requests as error spans', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('error', 1)
               expect(traces[0][0].meta).to.not.have.property('http.status_code')
             })
@@ -1022,7 +1022,7 @@ describe('Plugin', () => {
           })
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('service', 'custom')
             })
             .then(done)
@@ -1064,7 +1064,7 @@ describe('Plugin', () => {
           })
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('error', 1)
             })
             .then(done)
@@ -1134,7 +1134,7 @@ describe('Plugin', () => {
 
           appListener = server(app, port => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0]).to.have.property('service', `localhost:${port}`)
               })
               .then(done)
@@ -1178,7 +1178,7 @@ describe('Plugin', () => {
 
           appListener = server(app, port => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const meta = traces[0][0].meta
 
                 expect(meta).to.have.property(`${HTTP_REQUEST_HEADERS}.host`, `localhost:${port}`)
@@ -1207,7 +1207,7 @@ describe('Plugin', () => {
           })
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const meta = traces[0][0].meta
 
               expect(meta).to.have.property(`${HTTP_REQUEST_HEADERS}.x-foo`, 'bar')
@@ -1233,7 +1233,7 @@ describe('Plugin', () => {
           })
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const meta = traces[0][0].meta
 
               expect(meta).to.have.property(`${HTTP_REQUEST_HEADERS}.x-foo`, 'bar1,bar2')
@@ -1282,7 +1282,7 @@ describe('Plugin', () => {
           })
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('resource', 'GET /user')
             })
             .then(done)
@@ -1373,7 +1373,7 @@ describe('Plugin', () => {
           const timer = setTimeout(done, 100)
 
           agent
-            .use(() => {
+            .assertSomeTraces(() => {
               clearTimeout(timer)
               done(new Error('Blocklisted requests should not be recorded.'))
             })
