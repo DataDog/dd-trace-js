@@ -67,7 +67,7 @@ describe('telemetry', () => {
         if (msg.payload.request_type !== 'app-started') return
 
         const { configuration } = msg.payload.payload
-        const logInjectionEntries = configuration.filter(entry => entry.name === 'DD_LOGS_INJECTION')
+        const logInjectionEntries = configuration.filter(entry => entry.name === 'DD_LOG_INJECTION')
 
         if (logInjectionEntries.length !== 3) return
 
