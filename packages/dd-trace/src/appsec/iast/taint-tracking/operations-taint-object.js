@@ -57,12 +57,15 @@ function traverseAndTaint (node, path, cache, transactionId) {
   if (node == null) return node
 
   if (typeof node === 'string') {
-    if (cache.get(path) === node) {
-      return cache.get(path)
+    const cachedValue = cache.get(path)
+
+    if (cachedValue === node) {
+      return cachedValue
     }
 
     const tainted = TaintedUtils.newTaintedString(transactionId, node, path, HTTP_REQUEST_PARAMETER)
     cache.set(path, tainted)
+    
     return tainted
   }
 
