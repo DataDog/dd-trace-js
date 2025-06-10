@@ -2310,6 +2310,68 @@ describe('jest CommonJS', () => {
         }).catch(done)
       })
     })
+
+    it('does not retry when it.failing is used', (done) => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      const NUM_RETRIES_EFD = 3
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': NUM_RETRIES_EFD
+          },
+          faulty_session_threshold: 100
+        },
+        known_tests_enabled: true
+      })
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
+
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          const newTests = tests.filter(test =>
+            test.meta[TEST_SUITE] === 'ci-visibility/jest/failing-test.js'
+          )
+          newTests.forEach(test => {
+            assert.notProperty(test.meta, TEST_IS_NEW)
+          })
+          assert.equal(newTests.length, 2)
+
+          const passingTests = tests.filter(test =>
+            test.meta[TEST_NAME] === 'failing can report failed tests'
+          )
+          const failingTests = tests.filter(test =>
+            test.meta[TEST_NAME] === 'failing can report failing tests as failures'
+          )
+          passingTests.forEach(test => {
+            assert.equal(test.meta[TEST_STATUS], 'pass')
+          })
+          failingTests.forEach(test => {
+            assert.equal(test.meta[TEST_STATUS], 'fail')
+          })
+
+          const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.equal(retriedTests.length, 0)
+        })
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: { ...getCiVisEvpProxyConfig(receiver.port), TESTS_TO_RUN: 'jest/failing-test' },
+          stdio: 'inherit'
+        }
+      )
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
   })
 
   context('flaky test retries', () => {

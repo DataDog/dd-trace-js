@@ -426,6 +426,10 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       if (event.name === 'add_test') {
         const originalTestName = this.getTestNameFromAddTestEvent(event, state)
 
+        if (event.failing) {
+          return
+        }
+
         const isSkipped = event.mode === 'todo' || event.mode === 'skip'
         if (this.isTestManagementTestsEnabled) {
           const isAttemptToFix = this.testManagementTestsForThisSuite?.attemptToFix?.includes(originalTestName)
