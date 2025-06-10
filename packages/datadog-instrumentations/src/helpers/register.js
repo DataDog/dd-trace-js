@@ -9,7 +9,7 @@ const log = require('../../../dd-trace/src/log')
 const checkRequireCache = require('./check-require-cache')
 const telemetry = require('../../../dd-trace/src/guardrails/telemetry')
 const { isInServerlessEnvironment } = require('../../../dd-trace/src/serverless')
-const { isFalse, isTrue } = require('../../../dd-trace/src/util')
+const { isFalse, isTrue, normalizePluginEnvName } = require('../../../dd-trace/src/util')
 const { getEnvironmentVariables } = require('../../../dd-trace/src/config-helper')
 
 const envs = getEnvironmentVariables()
@@ -24,13 +24,9 @@ const instrumentations = require('./instrumentations')
 const names = Object.keys(hooks)
 const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
 
-const convertInstrumentationName = (name) => {
-  return name.replaceAll(/[-@_/]/g, '').toLowerCase()
-}
-
 const disabledInstrumentations = new Set(
   DD_TRACE_DISABLED_INSTRUMENTATIONS
-    ? DD_TRACE_DISABLED_INSTRUMENTATIONS.split(',').map(convertInstrumentationName)
+    ? DD_TRACE_DISABLED_INSTRUMENTATIONS.split(',').map(normalizePluginEnvName)
     : []
 )
 const reenabledInstrumentations = new Set()
@@ -39,7 +35,7 @@ const reenabledInstrumentations = new Set()
 for (const [key, value] of Object.entries(envs)) {
   const match = key.match(/^DD_TRACE_(.+)_ENABLED$/)
   if (match && value) {
-    const integration = convertInstrumentationName(match[1])
+    const integration = normalizePluginEnvName(match[1])
     if (isFalse(value)) {
       disabledInstrumentations.add(integration)
     } else if (isTrue(value)) {
@@ -71,7 +67,7 @@ const allInstrumentations = {}
 
 // TODO: make this more efficient
 for (const packageName of names) {
-  const normalizedPackageName = convertInstrumentationName(packageName)
+  const normalizedPackageName = normalizePluginEnvName(packageName)
   if (disabledInstrumentations.has(normalizedPackageName)) continue
 
   const hookOptions = {}

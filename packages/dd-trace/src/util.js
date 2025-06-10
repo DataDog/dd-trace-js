@@ -77,11 +77,19 @@ function normalizeProfilingEnabledValue (configValue) {
       : configValue === 'auto' ? 'auto' : undefined
 }
 
+function normalizePluginEnvName (envPluginName) {
+  if (envPluginName.startsWith('@')) {
+    envPluginName = envPluginName.slice(1)
+  }
+  return envPluginName.replaceAll(/[^a-z0-9_]/ig, '_').toLowerCase()
+}
+
 module.exports = {
   isTrue,
   isFalse,
   isError,
   globMatch,
   ddBasePath: calculateDDBasePath(__dirname),
-  normalizeProfilingEnabledValue
+  normalizeProfilingEnabledValue,
+  normalizePluginEnvName
 }
