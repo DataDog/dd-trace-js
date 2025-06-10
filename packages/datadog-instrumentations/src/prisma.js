@@ -63,7 +63,7 @@ class TracingHelper {
   }
 }
 
-addHook({ name: '@prisma/client', versions: ['>=6.1.0'] }, (prisma, version) => {
+addHook({ name: '@prisma/client', versions: ['>=6.1.0 <=6.8.0'] }, (prisma, version) => {
   const tracingHelper = new TracingHelper()
 
   /*
@@ -89,9 +89,15 @@ addHook({ name: '@prisma/client', versions: ['>=6.1.0'] }, (prisma, version) => 
     * to enable OpenTelemetry.
   */
   // https://github.com/prisma/prisma/blob/478293bbfce91e41ceff02f2a0b03bb8acbca03e/packages/instrumentation/src/PrismaInstrumentation.ts#L42
-  const majorVersion = version.slice(0, version.indexOf('.'))
-  global[`V${majorVersion}_PRISMA_INSTRUMENTATION`] = {
-    helper: tracingHelper
+  const versions = version.split('.')
+  if (versions[0] === '6' && versions[1] < 4) {
+    global.PRISMA_INSTRUMENTATION = {
+      helper: tracingHelper
+    }
+  } else {
+    global[`V${versions[0]}_PRISMA_INSTRUMENTATION`] = {
+      helper: tracingHelper
+    }
   }
 
   return prisma

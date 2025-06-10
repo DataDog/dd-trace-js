@@ -118,7 +118,8 @@ describe('Plugin', () => {
           prismaClient = new prisma.PrismaClient()
           const matched = version.match(/(\d+)\.\d+\.\d+$/)
           const majorVersion = matched[1]
-          tracingHelper = global[`V${majorVersion}_PRISMA_INSTRUMENTATION`].helper
+          tracingHelper = global.PRISMA_INSTRUMENTATION.helper ||
+            [`V${majorVersion}_PRISMA_INSTRUMENTATION`].helper
         })
 
         after(() => { return agent.close({ ritmReset: false }) })
