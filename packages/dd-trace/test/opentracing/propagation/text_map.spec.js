@@ -1309,6 +1309,25 @@ describe('TextMapPropagator', () => {
         expect(extractedContext._links[0].attributes.reason).to.equal('propagation_behavior_extract')
         expect(extractedContext._links[0].attributes.context_headers).to.equal('tracecontext')
       })
+
+      it('should not extract baggage when Trace_Propagation_Behavior_Extract is set to ignore', () => {
+        process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'ignore'
+        config = new Config({
+          tracePropagationStyle: {
+            extract: ['tracecontext', 'datadog', 'baggage']
+          }
+        })
+        textMap = {
+          'x-datadog-trace-id': '123',
+          'x-datadog-parent-id': '456',
+          traceparent: `00-${traceId}-${spanId}-01`,
+          baggage: 'foo=bar'
+        }
+        propagator = new TextMapPropagator(config)
+        propagator.extract(textMap)
+
+        expect(getAllBaggageItems()).to.deep.equal({})
+      })
     })
   })
 })
