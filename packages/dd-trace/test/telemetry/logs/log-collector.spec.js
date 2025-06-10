@@ -52,6 +52,12 @@ describe('telemetry log collector', () => {
       ).to.be.false
     })
 
+    it('should not store logs with transmit flag set to false', () => {
+      expect(logCollector.add({ message: 'Error 1', level: 'ERROR' })).to.be.true
+      expect(logCollector.add({ message: 'Error 2', level: 'ERROR', transmit: true })).to.be.true
+      expect(logCollector.add({ message: 'Error 3', level: 'ERROR', transmit: false })).to.be.false
+    })
+
     it('should include original message and dd frames', () => {
       const ddFrame = `at T (${ddBasePath}path/to/dd/file.js:1:2)`
       const stack = new TypeError('Error 1')
