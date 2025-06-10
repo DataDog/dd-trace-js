@@ -70,8 +70,7 @@ async function checkWorkflowJobs (id, page = 1) {
 
   const { jobs } = response.data
 
-  // No failed jobs means that the rerun was for an already successful workflow,
-  // so no flakiness to report.
+  // We've reached the last page and there are no more results.
   if (jobs.length === 0) return
 
   for (const job of jobs) {
