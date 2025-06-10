@@ -140,7 +140,7 @@ function filterExtendedHeaders (headers, excludedHeaderNames, tagPrefix, limit =
   return result
 }
 
-function getCollectedHeaders (req, res, shouldCollectEventHeaders, storedResponseHeaders) {
+function getCollectedHeaders (req, res, shouldCollectEventHeaders, storedResponseHeaders = {}) {
   // Mandatory
   const mandatoryCollectedHeaders = filterHeaders(req.headers, REQUEST_HEADERS_MAP)
 
