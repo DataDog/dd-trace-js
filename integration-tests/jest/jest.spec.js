@@ -80,10 +80,8 @@ describe('jest CommonJS', () => {
   let testOutput = ''
 
   before(async function () {
-    // TODO: THIS CHANGE MUST BE MODIFIED BEFORE MERGING
     sandbox = await createSandbox([
-      'jest@v30.0.0-beta.4',
-      // 'jest',
+      'jest',
       'chai@v4',
       'jest-jasmine2',
       'jest-environment-jsdom',

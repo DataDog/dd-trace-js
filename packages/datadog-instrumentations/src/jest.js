@@ -595,8 +595,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     }
 
     async teardown () {
-      const jestVersionSplitted = jestVersion.split('-')[0] // TODO: REMOVE THIS BEFORE MERGING IS ONLY FOR TESTING
-      if (satisfies(jestVersionSplitted, '>=30.0.0')) {
+      if (satisfies(jestVersion, '>=30.0.0')) {
         for (const [key] of this._globalProxy.propertyToValue) {
           if (typeof key === 'string' && key.startsWith('_dd')) {
             this._globalProxy.propertyToValue.delete(key)
@@ -660,8 +659,12 @@ function getWrappedScheduleTests (scheduleTests, frameworkVersion) {
   }
 }
 
-function getWrappedTestScheduler (testSchedulerPackage, frameworkVersion) {
-  const oldCreateTestScheduler = testSchedulerPackage.createTestScheduler ?? testSchedulerPackage
+addHook({
+  name: '@jest/core',
+  file: 'build/TestScheduler.js',
+  versions: ['>=27.0.0']
+}, (testSchedulerPackage, frameworkVersion) => {
+  const oldCreateTestScheduler = testSchedulerPackage.createTestScheduler
   const newCreateTestScheduler = async function () {
     if (!isSuitesSkippingEnabled || hasFilteredSkippableSuites) {
       return oldCreateTestScheduler.apply(this, arguments)
@@ -671,19 +674,9 @@ function getWrappedTestScheduler (testSchedulerPackage, frameworkVersion) {
     shimmer.wrap(scheduler, 'scheduleTests', scheduleTests => getWrappedScheduleTests(scheduleTests, frameworkVersion))
     return scheduler
   }
-  frameworkVersion = frameworkVersion.split('-')[0] // TODO: REMOVE THIS BEFORE MERGING IS ONLY FOR TESTING
-  if (satisfies(frameworkVersion, '>=30.0.0')) {
-    return newCreateTestScheduler
-  }
   testSchedulerPackage.createTestScheduler = newCreateTestScheduler
   return testSchedulerPackage
-}
-
-addHook({
-  name: '@jest/core',
-  file: 'build/TestScheduler.js',
-  versions: ['>=27.0.0']
-}, getWrappedTestScheduler)
+})
 
 addHook({
   name: '@jest/core',
@@ -717,19 +710,11 @@ addHook({
 
 function cliWrapper (cli, jestVersion) {
   let cliWrapper = cli
-  jestVersion = jestVersion.split('-')[0] // TODO: REMOVE THIS BEFORE MERGING IS ONLY FOR TESTING
   if (satisfies(jestVersion, '>=30.0.0')) {
     cliWrapper = shimmer.wrap(
       cliWrapper,
       'SearchSource',
       searchSource => searchSourceWrapper(searchSource, jestVersion),
-      { replaceGetter: true }
-    )
-    // TODO: THIS IS NEVER EXECUTED MUST BE REMOVED
-    cliWrapper = shimmer.wrap(
-      cliWrapper,
-      'createTestScheduler',
-      createTestScheduler => getWrappedTestScheduler(createTestScheduler, jestVersion),
       { replaceGetter: true }
     )
   }
