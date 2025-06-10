@@ -599,7 +599,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     }
 
     async teardown () {
-      if (satisfies(jestVersion, '>=30.0.0')) {
+      if (satisfies(jestVersion, '>=30.0.0') && this._globalProxy) {
         for (const [key] of this._globalProxy.propertyToValue) {
           if (typeof key === 'string' && key.startsWith('_dd')) {
             this._globalProxy.propertyToValue.delete(key)
