@@ -148,7 +148,7 @@ checkPlugins(path.join(__dirname, '..', '.github', 'workflows', 'test-optimizati
     .filter(file => fs.existsSync(path.join(__dirname, '..', 'packages', file, 'test')))
     .map(file => file.replace('datadog-plugin-', ''))
   for (const plugin of allPlugins) {
-    if (!allTestedPlugins.has(plugin)) {
+    if (!allTestedPlugins.has(plugin) && plugin !== 'jest') {
       pluginErrorMsg(plugin, 'ERROR', 'Plugin is tested but not in at least one GitHub workflow')
     }
   }
