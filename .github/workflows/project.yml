@@ -44,7 +44,7 @@ jobs:
           exit ${{ steps.actionlint.outputs.exit-code }}
 
   audit:
-    if: ${{ !github.event.pull_request || contains(github.event.pull_request.changed_files, 'package.json') }}
+    # if: ${{ !github.event.pull_request || contains(github.event.pull_request.changed_files, 'package.json') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
