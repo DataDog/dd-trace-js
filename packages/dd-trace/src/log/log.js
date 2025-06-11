@@ -27,16 +27,16 @@ class Log {
 
     {
       const lastArg = args.at(-1)
-      if (lastArg && typeof lastArg === 'object' && lastArg.stack) { // lastArg instanceof Error?
-        cause = args.pop()
+      if (lastArg instanceof LogConfig) {
+        args.pop()
+        sendViaTelemetry = lastArg.transmit
       }
     }
 
-    if (args.length >= 2) {
-      const meta = args.at(-1)
-      if (meta && typeof meta === 'object') {
-        args.pop()
-        sendViaTelemetry = meta.transmit !== false
+    {
+      const lastArg = args.at(-1)
+      if (lastArg && typeof lastArg === 'object' && lastArg.stack) { // lastArg instanceof Error?
+        cause = args.pop()
       }
     }
 
@@ -59,6 +59,17 @@ class Log {
   }
 }
 
+/**
+ * Pass instances of this class to logger methods when fine-grain control is needed
+ * @property {boolean} transmit - Whether to send the log via telemetry.
+ */
+class LogConfig {
+  constructor (transmit = true) {
+    this.transmit = transmit
+  }
+}
+
 module.exports = {
-  Log
+  Log,
+  LogConfig
 }
