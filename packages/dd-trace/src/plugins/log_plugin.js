@@ -43,11 +43,11 @@ module.exports = class LogPlugin extends Plugin {
       this.tracer.inject(span, LOG, holder)
       arg.message = messageProxy(arg.message, holder)
     })
-    this.structured = false // default unstructured logger
+    this._structured = false // default unstructured logger
   }
 
   _shouldInjectLogs (config) {
-    return config.logInjection === true || (this.structured && config.logInjection === 'structured')
+    return config.logInjection === true || (this._structured && config.logInjection === 'structured')
   }
 
   configure (config) {
