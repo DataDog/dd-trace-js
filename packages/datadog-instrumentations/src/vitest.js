@@ -369,7 +369,6 @@ function getCreateCliWrapper (vitestPackage, frameworkVersion) {
   return vitestPackage
 }
 
-
 // UNUSED RIGHT NOW, but we can use it to bind the async resource to the test fn
 // getFn is what's used to get the test fn to run it with vitest:
 // https://github.com/vitest-dev/vitest/blob/0cbad1b0d0d56f1ec60f8496678d1435f8bb8977/packages/runner/src/run.ts#L315-L321
@@ -386,29 +385,31 @@ addHook({
   return suitePackage
 })
 
-const processToHandler = new WeakMap()
+const processToHandler = new WeakSet()
+
+function threadHandler (thread) {
+  if (processToHandler.has(thread.process)) {
+    return
+  }
+  processToHandler.add(thread.process)
+  thread.process.on('message', (message) => {
+    if (message.__tinypool_worker_message__ && message.data) {
+      workerReporterCh.publish(message.data)
+    }
+  })
+}
 
 addHook({
   name: 'tinypool',
   versions: ['>=1.0.0'],
   file: 'dist/index.js'
 }, (TinyPool) => {
-  // we can pass handle here to the worker, and then use it to send messages to the main process
-  shimmer.wrap(TinyPool.prototype, 'run', run => function (_, { channel }) {
-    const res = run.apply(this, arguments)
-
-    this.threads.forEach(thread => {
-      if (processToHandler.has(thread.process)) {
-        return
-      }
-      processToHandler.set(thread.process, true)
-      thread.process.on('message', (message) => {
-        if (message.__tinypool_worker_message__ && message.data) {
-          workerReporterCh.publish(message.data)
-        }
-      })
-    })
-
+  shimmer.wrap(TinyPool.prototype, 'run', run => async function () {
+    // we need to do this before and after because the threads list gets recycled
+    // (the processes are re-created)
+    this.threads.forEach(threadHandler)
+    const res = await run.apply(this, arguments)
+    this.threads.forEach(threadHandler)
     return res
   })
 

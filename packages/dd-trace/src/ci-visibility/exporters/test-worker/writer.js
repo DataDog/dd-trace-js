@@ -1,5 +1,8 @@
 'use strict'
 const { JSONEncoder } = require('../../encode/json-encoder')
+const { getEnvironmentVariable } = require('../../../config-helper')
+
+const isVitestWorker = !!getEnvironmentVariable('TINYPOOL_WORKER_ID')
 
 class Writer {
   constructor (interprocessCode) {
@@ -34,7 +37,7 @@ class Writer {
     // See cucumber code:
     // https://github.com/cucumber/cucumber-js/blob/5ce371870b677fe3d1a14915dc535688946f734c/src/runtime/parallel/run_worker.ts#L13
     if (process.send) { // it only works if process.send is available
-      if (process.env.TINYPOOL_WORKER_ID) {
+      if (isVitestWorker) {
         // in vitest we have to trick the main process into thinking these are messages from
         // tinypool so they are not rejected
         process.send({ __tinypool_worker_message__: true, data }, () => {
@@ -45,8 +48,9 @@ class Writer {
           onDone()
         })
       }
+    } else {
+      onDone()
     }
-    // onDone()
   }
 }
 
