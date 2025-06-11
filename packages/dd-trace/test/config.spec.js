@@ -273,6 +273,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('dynamicInstrumentation.enabled', false)
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactedIdentifiers', [])
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactionExcludedIdentifiers', [])
+    expect(config).to.have.nested.property('dynamicInstrumentation.uploadIntervalSeconds', 1)
     expect(config).to.have.property('traceId128BitGenerationEnabled', true)
     expect(config).to.have.property('traceId128BitLoggingEnabled', true)
     expect(config).to.have.property('spanAttributeSchema', 'v0')
@@ -368,6 +369,7 @@ describe('Config', () => {
       { name: 'dynamicInstrumentation.enabled', value: false, origin: 'default' },
       { name: 'dynamicInstrumentation.redactedIdentifiers', value: [], origin: 'default' },
       { name: 'dynamicInstrumentation.redactionExcludedIdentifiers', value: [], origin: 'default' },
+      { name: 'dynamicInstrumentation.uploadIntervalSeconds', value: 1, origin: 'default' },
       { name: 'env', value: undefined, origin: 'default' },
       { name: 'experimental.enableGetRumData', value: false, origin: 'default' },
       { name: 'experimental.exporter', value: undefined, origin: 'default' },
@@ -518,6 +520,7 @@ describe('Config', () => {
     process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS = 'foo,bar'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS = 'a,b,c'
+    process.env.DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS = '0.1'
     process.env.DD_TRACE_GLOBAL_TAGS = 'foo:bar,baz:qux'
     process.env.DD_TRACE_SAMPLE_RATE = '0.5'
     process.env.DD_TRACE_RATE_LIMIT = '-1'
@@ -625,6 +628,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('dynamicInstrumentation.enabled', true)
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactedIdentifiers', ['foo', 'bar'])
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactionExcludedIdentifiers', ['a', 'b', 'c'])
+    expect(config).to.have.nested.property('dynamicInstrumentation.uploadIntervalSeconds', 0.1)
     expect(config).to.have.property('env', 'test')
     expect(config).to.have.property('sampleRate', 0.5)
     expect(config).to.have.property('traceEnabled', true)
@@ -743,6 +747,7 @@ describe('Config', () => {
       { name: 'dynamicInstrumentation.enabled', value: true, origin: 'env_var' },
       { name: 'dynamicInstrumentation.redactedIdentifiers', value: ['foo', 'bar'], origin: 'env_var' },
       { name: 'dynamicInstrumentation.redactionExcludedIdentifiers', value: ['a', 'b', 'c'], origin: 'env_var' },
+      { name: 'dynamicInstrumentation.uploadIntervalSeconds', value: 0.1, origin: 'env_var' },
       { name: 'env', value: 'test', origin: 'env_var' },
       { name: 'experimental.enableGetRumData', value: true, origin: 'env_var' },
       { name: 'experimental.exporter', value: 'log', origin: 'env_var' },
@@ -997,7 +1002,8 @@ describe('Config', () => {
       dynamicInstrumentation: {
         enabled: true,
         redactedIdentifiers: ['foo', 'bar'],
-        redactionExcludedIdentifiers: ['a', 'b', 'c']
+        redactionExcludedIdentifiers: ['a', 'b', 'c'],
+        uploadIntervalSeconds: 0.1
       },
       experimental: {
         b3: true,
@@ -1046,6 +1052,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('dynamicInstrumentation.enabled', true)
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactedIdentifiers', ['foo', 'bar'])
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactionExcludedIdentifiers', ['a', 'b', 'c'])
+    expect(config).to.have.nested.property('dynamicInstrumentation.uploadIntervalSeconds', 0.1)
     expect(config).to.have.property('env', 'test')
     expect(config).to.have.property('sampleRate', 0.5)
     expect(config).to.have.property('logger', logger)
@@ -1129,6 +1136,7 @@ describe('Config', () => {
       { name: 'dynamicInstrumentation.enabled', value: true, origin: 'code' },
       { name: 'dynamicInstrumentation.redactedIdentifiers', value: ['foo', 'bar'], origin: 'code' },
       { name: 'dynamicInstrumentation.redactionExcludedIdentifiers', value: ['a', 'b', 'c'], origin: 'code' },
+      { name: 'dynamicInstrumentation.uploadIntervalSeconds', value: 0.1, origin: 'code' },
       { name: 'env', value: 'test', origin: 'code' },
       { name: 'experimental.enableGetRumData', value: true, origin: 'code' },
       { name: 'experimental.exporter', value: 'log', origin: 'code' },
@@ -1340,6 +1348,7 @@ describe('Config', () => {
     process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS = 'foo,bar'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS = 'a,b,c'
+    process.env.DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS = '0.1'
     process.env.DD_API_KEY = '123'
     process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'v0'
     process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'false'
@@ -1425,7 +1434,8 @@ describe('Config', () => {
       dynamicInstrumentation: {
         enabled: false,
         redactedIdentifiers: ['foo2', 'bar2'],
-        redactionExcludedIdentifiers: ['a2', 'b2']
+        redactionExcludedIdentifiers: ['a2', 'b2'],
+        uploadIntervalSeconds: 0.2
       },
       experimental: {
         b3: false,
@@ -1513,6 +1523,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('dynamicInstrumentation.enabled', false)
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactedIdentifiers', ['foo2', 'bar2'])
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactionExcludedIdentifiers', ['a2', 'b2'])
+    expect(config).to.have.nested.property('dynamicInstrumentation.uploadIntervalSeconds', 0.2)
     expect(config).to.have.property('env', 'development')
     expect(config).to.have.property('clientIpEnabled', true)
     expect(config).to.have.property('clientIpHeader', 'x-true-client-ip')
