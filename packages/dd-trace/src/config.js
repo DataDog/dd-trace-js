@@ -730,7 +730,7 @@ class Config {
       DD_TRACE_ENABLED,
       DD_TRACE_EXPERIMENTAL_EXPORTER,
       DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED,
-      DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED,
+      DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED,
       DD_TRACE_GIT_METADATA_ENABLED,
       DD_TRACE_GLOBAL_TAGS,
       DD_TRACE_GRAPHQL_ERROR_EXTENSIONS,
@@ -847,7 +847,7 @@ class Config {
     this._setBoolean(env, 'traceEnabled', DD_TRACE_ENABLED)
     this._setBoolean(env, 'experimental.enableGetRumData', DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED)
     this._setString(env, 'experimental.exporter', DD_TRACE_EXPERIMENTAL_EXPORTER)
-    this._setBoolean(env, 'experimental.runtimeId', DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED)
+    this._setBoolean(env, 'runtimeId', DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED)
     if (AWS_LAMBDA_FUNCTION_NAME) this._setValue(env, 'flushInterval', 0)
     this._setValue(env, 'flushMinSpans', maybeInt(DD_TRACE_PARTIAL_FLUSH_MIN_SPANS))
     this._envUnprocessed.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
