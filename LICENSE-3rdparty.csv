@@ -59,6 +59,7 @@ dev,mocha,MIT,Copyright 2011-2018 JS Foundation and contributors https://js.foun
 dev,multer,MIT,Copyright 2014 Hage Yaapa
 dev,nock,MIT,Copyright 2017 Pedro Teixeira and other contributors
 dev,nyc,ISC,Copyright 2015 Contributors
+dev,octokit,MIT,Copyright 2023 Octokit contributors
 dev,proxyquire,MIT,Copyright 2013 Thorsten Lorenz
 dev,rimraf,ISC,Copyright Isaac Z. Schlueter and Contributors
 dev,semver,ISC,Copyright Isaac Z. Schlueter and Contributors
