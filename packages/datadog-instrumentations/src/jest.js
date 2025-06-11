@@ -90,6 +90,7 @@ const retriedTestsToNumAttempts = new Map()
 const newTestsTestStatuses = new Map()
 const attemptToFixRetriedTestsStatuses = new Map()
 const wrappedWorkers = new WeakSet()
+const testSuiteMockedFiles = new Map()
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
 
@@ -1095,10 +1096,12 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
       if (environment.testEnvironmentOptions?._ddTestCodeCoverageEnabled) {
         const root = environment.repositoryRoot || environment.rootDir
 
-        const coverageFiles = getCoveredFilenamesFromCoverage(environment.global.__coverage__)
-          .map(filename => getTestSuitePath(filename, root))
+        const getFilesWithPath = (files) => files.map(file => getTestSuitePath(file, root))
 
-        testSuiteCodeCoverageCh.publish({ coverageFiles, testSuite: environment.testSourceFile })
+        const coverageFiles = getFilesWithPath(getCoveredFilenamesFromCoverage(environment.global.__coverage__))
+        const mockedFiles = getFilesWithPath(testSuiteMockedFiles.get(environment.testSuite) || [])
+
+        testSuiteCodeCoverageCh.publish({ coverageFiles, testSuite: environment.testSourceFile, mockedFiles })
       }
       testSuiteFinishCh.publish({ status, errorMessage })
       return suiteResults
@@ -1273,7 +1276,21 @@ addHook({
       // To bypass jest's own require engine
       return this._requireCoreModule(moduleName)
     }
-    return requireModuleOrMock.apply(this, arguments)
+    const result = requireModuleOrMock.apply(this, arguments)
+
+    const suiteFileName = this._mainModule?.filename
+    if (suiteFileName) {
+      const testSuite = getTestSuitePath(suiteFileName, process.cwd())
+      for (const [key] of this._mockRegistry?.entries() || []) {
+        const path = key?.match(/^user:(.*?):/)?.[1]
+        if (path) {
+          const existingMockedFiles = testSuiteMockedFiles.get(testSuite) || []
+          testSuiteMockedFiles.set(testSuite, [...existingMockedFiles, path])
+        }
+      }
+    }
+
+    return result
   })
 
   return runtimePackage
