@@ -17,7 +17,7 @@ const {
   nextBodyParsed,
   nextQueryParsed,
   expressProcessParams,
-  fastifyQueryParamsStart,
+  fastifyQueryParams,
   responseBody,
   responseWriteHead,
   responseSetHeader,
@@ -80,7 +80,7 @@ function enable (_config) {
     nextBodyParsed.subscribe(onRequestBodyParsed)
     nextQueryParsed.subscribe(onRequestQueryParsed)
     expressProcessParams.subscribe(onRequestProcessParams)
-    fastifyQueryParamsStart.subscribe(onRequestQueryParsed)
+    fastifyQueryParams.subscribe(onRequestQueryParsed)
     routerParam.subscribe(onRequestProcessParams)
     responseBody.subscribe(onResponseBody)
     responseWriteHead.subscribe(onResponseWriteHead)
@@ -372,7 +372,7 @@ function disable () {
   if (nextBodyParsed.hasSubscribers) nextBodyParsed.unsubscribe(onRequestBodyParsed)
   if (nextQueryParsed.hasSubscribers) nextQueryParsed.unsubscribe(onRequestQueryParsed)
   if (expressProcessParams.hasSubscribers) expressProcessParams.unsubscribe(onRequestProcessParams)
-  if (fastifyQueryParamsStart.hasSubscribers) fastifyQueryParamsStart.unsubscribe(onRequestQueryParsed)
+  if (fastifyQueryParams.hasSubscribers) fastifyQueryParams.unsubscribe(onRequestQueryParsed)
   if (routerParam.hasSubscribers) routerParam.unsubscribe(onRequestProcessParams)
   if (responseBody.hasSubscribers) responseBody.unsubscribe(onResponseBody)
   if (responseWriteHead.hasSubscribers) responseWriteHead.unsubscribe(onResponseWriteHead)

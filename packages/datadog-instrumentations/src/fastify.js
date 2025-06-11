@@ -7,7 +7,7 @@ const errorChannel = channel('apm:fastify:middleware:error')
 const handleChannel = channel('apm:fastify:request:handle')
 const routeAddedChannel = channel('apm:fastify:route:added')
 const fastifyBodyParserChannel = channel('datadog:fastify:body-parser:finish')
-const processQueryParamsStartCh = channel('datadog:fastify:query-params:start')
+const processQueryParams = channel('datadog:fastify:query-params:finish')
 
 const parsingResources = new WeakMap()
 
@@ -112,10 +112,10 @@ function preValidation (request, reply, done) {
   const parsingResource = parsingResources.get(req)
 
   const processInContext = () => {
-    if (request.query && processQueryParamsStartCh.hasSubscribers) {
+    if (request.query && processQueryParams.hasSubscribers) {
       const abortController = new AbortController()
 
-      processQueryParamsStartCh.publish({
+      processQueryParams.publish({
         req,
         res,
         abortController,

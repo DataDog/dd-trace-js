@@ -35,5 +35,5 @@ module.exports = {
   fsOperationStart: dc.channel('apm:fs:operation:start'),
   expressMiddlewareError: dc.channel('apm:express:middleware:error'),
   childProcessExecutionTracingChannel: dc.tracingChannel('datadog:child_process:execution'),
-  fastifyQueryParamsStart: dc.channel('datadog:fastify:query-params:start')
+  fastifyQueryParams: dc.channel('datadog:fastify:query-params:finish')
 }
