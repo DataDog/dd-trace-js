@@ -4,22 +4,10 @@ const BaseLLMObsPlugin = require('./base')
 
 const { channel } = require('dc-polyfill')
 
-// const otelSpanStartCh = channel('dd-trace:otel:span:start')
-// const otelSpanFinishCh = channel('dd-trace:otel:span:finish')
 const toolCreationCh = channel('dd-trace:vercel-ai:tool')
 const setAttributesCh = channel('dd-trace:vercel-ai:span:setAttributes')
 
-// const { isVercelAISpan } = require('../../../../datadog-plugin-ai/src/util')
 const { MODEL_NAME, MODEL_PROVIDER, NAME } = require('../constants/tags')
-
-// const SPANS_TO_USE_LLMOBS_PARENT = new Set([
-//   'generateText',
-//   'streamText',
-//   'embed',
-//   'embedMany',
-//   'generateObject',
-//   'streamObject'
-// ])
 
 const SPAN_NAME_TO_KIND_MAPPING = {
   // embeddings
@@ -198,33 +186,6 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
 
   constructor (...args) {
     super(...args)
-
-    // otelSpanStartCh.subscribe(({ ddSpan }) => {
-    //   if (!isVercelAISpan(ddSpan)) return
-
-    //   // holding context for llmobs parentage
-    //   const ctx = {
-    //     currentStore: { span: ddSpan }
-    //   }
-
-    //   const operation = getOperation(ddSpan)
-    //   const useLlmObsParent = SPANS_TO_USE_LLMOBS_PARENT.has(operation)
-
-    //   this.start(ctx, {
-    //     useLlmObsParent,
-    //     enterIntoLlmObsStorage: false
-    //   }) // triggers the getLLMObsSpanRegisterOptions
-    // })
-
-    // otelSpanFinishCh.subscribe(({ ddSpan }) => {
-    //   if (!isVercelAISpan(ddSpan)) return
-
-    //   const ctx = {
-    //     currentStore: { span: ddSpan }
-    //   }
-
-    //   this.asyncEnd(ctx) // triggers the setLLMObsTags
-    // })
 
     this.#toolCallIdsToName = {}
     this.#availableTools = new Set()

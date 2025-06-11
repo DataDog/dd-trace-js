@@ -19,56 +19,73 @@ const TRACED_FUNCTIONS = {
 const vercelAiTracingChannel = tracingChannel('dd-trace:vercel-ai')
 const vercelAiSpanSetAttributesChannel = channel('dd-trace:vercel-ai:span:setAttributes')
 
-function createTracer () {
-  const tracer = {
-    startActiveSpan (name, options, fn) { // although this can take 4 args, vercel-ai only uses 3
+const noopTracer = {
+  startActiveSpan () {
+    const fn = arguments[arguments.length - 1]
+
+    const span = {
+      end () {},
+      setAttributes () { return this },
+      addEvent () { return this },
+      recordException () { return this },
+      setStatus () { return this }
+    }
+
+    return fn(span)
+  }
+}
+
+function wrapTracer (tracer) {
+  shimmer.wrap(tracer, 'startActiveSpan', function (startActiveSpan) {
+    return function (name, options, cb) {
       const ctx = {
         name,
         attributes: options.attributes ?? {}
       }
 
-      const span = {
-        end () {
-          vercelAiTracingChannel.asyncEnd.publish(ctx)
-        },
-        setAttributes (attributes) {
-          vercelAiSpanSetAttributesChannel.publish({ ctx, attributes })
-          return this
-        },
-        addEvent () { return this },
-        recordException (exception) {
-          ctx.error = exception
-          vercelAiTracingChannel.error.publish(ctx)
-        },
-        setStatus ({ code, message }) {
-          if (code === 2) {
-            ctx.error = new Error(message)
-          }
-          vercelAiTracingChannel.error.publish(ctx)
-          return this
+      arguments[arguments.length - 1] = shimmer.wrapFunction(cb, function (originalCb) {
+        return function (span) {
+          shimmer.wrap(span, 'end', function (spanEnd) {
+            return function () {
+              vercelAiTracingChannel.asyncEnd.publish(ctx)
+              return spanEnd.apply(this, arguments)
+            }
+          })
+
+          shimmer.wrap(span, 'setAttributes', function (setAttributes) {
+            return function (attributes) {
+              vercelAiSpanSetAttributesChannel.publish({ ctx, attributes })
+              return setAttributes.apply(this, arguments)
+            }
+          })
+
+          shimmer.wrap(span, 'recordException', function (recordException) {
+            return function (exception) {
+              ctx.error = exception
+              vercelAiTracingChannel.error.publish(ctx)
+              return recordException.apply(this, arguments)
+            }
+          })
+
+          return originalCb.apply(this, arguments)
         }
-      }
+      })
 
       return vercelAiTracingChannel.start.runStores(ctx, () => {
-        const result = fn(span)
+        const result = startActiveSpan.apply(this, arguments)
         vercelAiTracingChannel.end.publish(ctx)
         return result
       })
     }
-  }
-
-  return tracer
+  })
 }
 
 function wrapWithTracer (fn) {
   return function () {
     const options = arguments[0]
-    if (options.experimental_telemetry != null) return fn.apply(this, arguments)
 
-    options.experimental_telemetry = {
-      isEnabled: true,
-      tracer: createTracer()
-    }
+    options.experimental_telemetry ??= { isEnabled: true, tracer: noopTracer }
+    wrapTracer(options.experimental_telemetry.tracer)
 
     return fn.apply(this, arguments)
   }
