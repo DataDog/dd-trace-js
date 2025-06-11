@@ -6,6 +6,7 @@ const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const errorChannel = channel('apm:fastify:middleware:error')
 const handleChannel = channel('apm:fastify:request:handle')
 const routeAddedChannel = channel('apm:fastify:route:added')
+const processPathParams = channel('datadog:fastify:path-params:finish')
 
 const parsingResources = new WeakMap()
 
@@ -106,11 +107,28 @@ function preHandler (request, reply, done) {
 
 function preValidation (request, reply, done) {
   const req = getReq(request)
+  const res = getRes(reply)
   const parsingResource = parsingResources.get(req)
 
-  if (!parsingResource) return done()
+  const processInContext = () => {
+    if (request.params && processPathParams.hasSubscribers) {
+      const abortController = new AbortController()
+      processPathParams.publish({
+        req,
+        res,
+        abortController,
+        params: request.params
+      })
 
-  parsingResource.runInAsyncScope(() => done())
+      if (abortController.signal.aborted) return
+    }
+
+    done()
+  }
+
+  if (!parsingResource) return processInContext()
+
+  parsingResource.runInAsyncScope(processInContext)
 }
 
 function preParsing (request, reply, payload, done) {
