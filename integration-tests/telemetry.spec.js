@@ -1,6 +1,6 @@
 'use strict'
 
-const { createSandbox, FakeAgent, spawnProc } = require('./helpers')
+const { createSandbox, FakeAgent, spawnProc, assertObjectContains } = require('./helpers')
 const path = require('path')
 
 describe('telemetry', () => {
