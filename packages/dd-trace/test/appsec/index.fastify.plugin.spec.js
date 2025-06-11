@@ -46,7 +46,7 @@ withVersions('fastify', 'fastify', version => {
       appsec.enable(new Config({
         appsec: {
           enabled: true,
-          rules: path.join(__dirname, 'express-rules.json')
+          rules: path.join(__dirname, 'rules-example.json')
         }
       }))
     })
