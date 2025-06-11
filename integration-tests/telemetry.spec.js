@@ -1,6 +1,7 @@
 'use strict'
 
-const { createSandbox, FakeAgent, spawnProc, assertObjectContains } = require('./helpers')
+const { createSandbox, FakeAgent, spawnProc } = require('./helpers')
+const assert = require('assert')
 const path = require('path')
 
 describe('telemetry', () => {
@@ -67,23 +68,24 @@ describe('telemetry', () => {
         if (msg.payload.request_type !== 'app-started') return
 
         const { configuration } = msg.payload.payload
-        assertObjectContains(configuration, [
-          {
-            name: 'DD_LOG_INJECTION',
-            value: false,
-            origin: 'default'
-          },
-          {
-            name: 'DD_LOG_INJECTION',
-            value: true,
-            origin: 'env_var'
-          },
-          {
-            name: 'DD_LOG_INJECTION',
-            value: false,
-            origin: 'code'
-          }
-        ])
+
+        // Check that we have the expected configurations
+        assert.strictEqual(configuration.length, 3, 'Expected 3 configuration entries')
+
+        const expectedConfigs = [
+          { name: 'DD_LOG_INJECTION', value: false, origin: 'default' },
+          { name: 'DD_LOG_INJECTION', value: true, origin: 'env_var' },
+          { name: 'DD_LOG_INJECTION', value: false, origin: 'code' }
+        ]
+
+        expectedConfigs.forEach(expected => {
+          const found = configuration.find(config =>
+            config.name === expected.name &&
+            config.origin === expected.origin &&
+            config.value === expected.value
+          )
+          assert.ok(found, `Expected to find config: ${JSON.stringify(expected)}`)
+        })
         done()
       }, null, 'app-started', 1)
     })
