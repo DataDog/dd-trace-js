@@ -113,6 +113,14 @@ describe('Config', () => {
       assert.strictEqual(warning.code, 'DATADOG_DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED')
     })
 
+    it('should set new runtimeMetricsRuntimeId from deprecated DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED', () => {
+      process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED = 'true'
+      const config = new Config()
+      expect(config).to.have.property('runtimeMetricsRuntimeId', true)
+      assert.strictEqual(getEnvironmentVariable('DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED'), 'true')
+      delete process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED
+    })
+
     it('should pass through random envs', async () => {
       process.env.FOOBAR = 'true'
       const { FOOBAR } = getEnvironmentVariables()
@@ -261,6 +269,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('crashtracking.enabled', true)
     expect(config).to.have.property('sampleRate', undefined)
     expect(config).to.have.property('runtimeMetrics', false)
+    expect(config).to.have.property('runtimeMetricsRuntimeId', false)
     expect(config.tags).to.have.property('service', 'node')
     expect(config).to.have.property('plugins', true)
     expect(config).to.have.property('traceEnabled', true)
@@ -285,7 +294,6 @@ describe('Config', () => {
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['datadog', 'tracecontext', 'baggage'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['datadog', 'tracecontext', 'baggage'])
     expect(config).to.have.nested.property('tracePropagationBehaviorExtract', 'continue')
-    expect(config).to.have.nested.property('experimental.runtimeId', false)
     expect(config).to.have.nested.property('experimental.exporter', undefined)
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
     expect(config).to.have.nested.property('apmTracingEnabled', true)
@@ -371,7 +379,6 @@ describe('Config', () => {
       { name: 'env', value: undefined, origin: 'default' },
       { name: 'experimental.enableGetRumData', value: false, origin: 'default' },
       { name: 'experimental.exporter', value: undefined, origin: 'default' },
-      { name: 'experimental.runtimeId', value: false, origin: 'default' },
       { name: 'flushInterval', value: 2000, origin: 'default' },
       { name: 'flushMinSpans', value: 1000, origin: 'default' },
       { name: 'gitMetadataEnabled', value: true, origin: 'default' },
@@ -428,6 +435,7 @@ describe('Config', () => {
       { name: 'reportHostname', value: false, origin: 'default' },
       { name: 'reportHostname', value: false, origin: 'default' },
       { name: 'runtimeMetrics', value: false, origin: 'default' },
+      { name: 'runtimeMetricsRuntimeId', value: false, origin: 'default' },
       { name: 'sampleRate', value: undefined, origin: 'default' },
       { name: 'sampler.rateLimit', value: 100, origin: 'default' },
       { name: 'traceEnabled', value: true, origin: 'default' },
@@ -619,6 +627,7 @@ describe('Config', () => {
     expect(config.grpc.server.error.statuses).to.deep.equal([3, 13, 400, 401, 402, 403])
     expect(config).to.have.property('middlewareTracingEnabled', false)
     expect(config).to.have.property('runtimeMetrics', true)
+    expect(config).to.have.property('runtimeMetricsRuntimeId', true)
     expect(config).to.have.property('reportHostname', true)
     expect(config).to.have.nested.property('codeOriginForSpans.enabled', false)
     expect(config).to.have.nested.property('codeOriginForSpans.experimental.exit_spans.enabled', true)
@@ -663,7 +672,6 @@ describe('Config', () => {
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['b3', 'tracecontext'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['b3', 'tracecontext'])
     expect(config).to.have.nested.property('tracePropagationBehaviorExtract', 'restart')
-    expect(config).to.have.nested.property('experimental.runtimeId', true)
     expect(config).to.have.nested.property('experimental.exporter', 'log')
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
     expect(config).to.have.nested.property('apmTracingEnabled', false)
@@ -746,7 +754,7 @@ describe('Config', () => {
       { name: 'env', value: 'test', origin: 'env_var' },
       { name: 'experimental.enableGetRumData', value: true, origin: 'env_var' },
       { name: 'experimental.exporter', value: 'log', origin: 'env_var' },
-      { name: 'experimental.runtimeId', value: true, origin: 'env_var' },
+      { name: 'runtimeMetricsRuntimeId', value: true, origin: 'env_var' },
       { name: 'hostname', value: 'agent', origin: 'env_var' },
       { name: 'iast.dbRowsToTaint', value: 2, origin: 'env_var' },
       { name: 'iast.deduplicationEnabled', value: false, origin: 'env_var' },
@@ -987,6 +995,7 @@ describe('Config', () => {
       flushMinSpans: 500,
       middlewareTracingEnabled: false,
       runtimeMetrics: true,
+      runtimeMetricsRuntimeId: true,
       reportHostname: true,
       plugins: false,
       logLevel,
@@ -1002,7 +1011,6 @@ describe('Config', () => {
       experimental: {
         b3: true,
         traceparent: true,
-        runtimeId: true,
         exporter: 'log',
         enableGetRumData: true,
         iast: {
@@ -1059,6 +1067,7 @@ describe('Config', () => {
     expect(config).to.have.property('flushMinSpans', 500)
     expect(config).to.have.property('middlewareTracingEnabled', false)
     expect(config).to.have.property('runtimeMetrics', true)
+    expect(config).to.have.property('runtimeMetricsRuntimeId', true)
     expect(config).to.have.property('reportHostname', true)
     expect(config).to.have.property('plugins', false)
     expect(config).to.have.property('logLevel', logLevel)
@@ -1075,7 +1084,6 @@ describe('Config', () => {
     expect(config.tags['runtime-id']).to.match(/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/)
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['datadog'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['datadog'])
-    expect(config).to.have.nested.property('experimental.runtimeId', true)
     expect(config).to.have.nested.property('experimental.exporter', 'log')
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
     expect(config).to.have.nested.property('appsec.enabled', false)
@@ -1132,7 +1140,7 @@ describe('Config', () => {
       { name: 'env', value: 'test', origin: 'code' },
       { name: 'experimental.enableGetRumData', value: true, origin: 'code' },
       { name: 'experimental.exporter', value: 'log', origin: 'code' },
-      { name: 'experimental.runtimeId', value: true, origin: 'code' },
+      { name: 'runtimeMetricsRuntimeId', value: true, origin: 'code' },
       { name: 'flushInterval', value: 5000, origin: 'code' },
       { name: 'flushMinSpans', value: 500, origin: 'code' },
       { name: 'hostname', value: 'agent', origin: 'code' },
@@ -1398,6 +1406,7 @@ describe('Config', () => {
         port: 8888
       },
       runtimeMetrics: false,
+      runtimeMetricsRuntimeId: false,
       reportHostname: false,
       flushMinSpans: 500,
       service: 'test',
@@ -1430,7 +1439,6 @@ describe('Config', () => {
       experimental: {
         b3: false,
         traceparent: false,
-        runtimeId: false,
         exporter: 'agent',
         enableGetRumData: false
       },
@@ -1504,6 +1512,7 @@ describe('Config', () => {
     expect(config).to.have.property('site', 'datadoghq.com')
     expect(config).to.have.property('middlewareTracingEnabled', true)
     expect(config).to.have.property('runtimeMetrics', false)
+    expect(config).to.have.property('runtimeMetricsRuntimeId', false)
     expect(config).to.have.property('reportHostname', false)
     expect(config).to.have.property('flushMinSpans', 500)
     expect(config).to.have.property('service', 'test')
@@ -1527,7 +1536,6 @@ describe('Config', () => {
     expect(config).to.have.deep.property('peerServiceMapping', { d: 'dd' })
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', [])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', [])
-    expect(config).to.have.nested.property('experimental.runtimeId', false)
     expect(config).to.have.nested.property('experimental.exporter', 'agent')
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
     expect(config).to.have.nested.property('apmTracingEnabled', true)
