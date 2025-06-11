@@ -6,6 +6,8 @@ on:
       - package.json
   push:
     branches: [master]
+  schedule:
+    - cron: 0 4 * * *
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
