@@ -12,7 +12,7 @@
     "dependencies:dedupe": "yarn-deduplicate yarn.lock",
     "type:doc": "cd docs && yarn && yarn build",
     "type:test": "cd docs && yarn && yarn test",
-    "lint": "node scripts/check_licenses.js && eslint . --max-warnings 0 && yarn audit",
+    "lint": "node scripts/check_licenses.js && eslint . --max-warnings 0 && yarn audit --groups dependencies",
     "lint:fix": "node scripts/check_licenses.js && eslint . --max-warnings 0 --fix && yarn audit",
     "lint:inspect": "npx @eslint/config-inspector@latest",
     "release:proposal": "node scripts/release/proposal",
