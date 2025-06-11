@@ -2,6 +2,23 @@ name: Profiling
 
 on:
   pull_request:
+    paths:
+      # Paths for whole project (should be same in all workflows)
+      - '**'
+      - '!.github/workflows/**'
+      - '!.gitlab/**'
+      - '!.vscode/**'
+      - '!devdocs/**'
+      - '!examples/**'
+      - '!*.md'
+      - '!.gitlab-ci.yml'
+      - '!LICENSE'
+      - '!LICENSE.Apache'
+      - '!LICENSE.BSD3'
+      - '!LICENSE'
+      - '!NOTICE'
+      # Paths for this workflow only
+      - '.github/workflows/profiling.yml'
   push:
     branches: [master]
   schedule:
