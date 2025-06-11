@@ -22,16 +22,11 @@ class LLMObsPlugin extends TracingPlugin {
     throw new Error('getLLMObsSPanRegisterOptions must be implemented by the subclass')
   }
 
-  start (ctx, options = {}) {
+  start (ctx) {
     // even though llmobs span events won't be enqueued if llmobs is disabled
     // we should avoid doing any computations here (these listeners aren't disabled)
     const enabled = this._tracerConfig.llmobs.enabled
     if (!enabled) return
-
-    const {
-      useLlmObsParent = true,
-      enterIntoLlmObsStorage = true
-    } = options
 
     const parent = this.getLLMObsParent(ctx)
     const apmStore = ctx.currentStore
@@ -47,16 +42,13 @@ class LLMObsPlugin extends TracingPlugin {
       ctx.llmobs = {} // initialize context-based namespace
       ctx.llmobs.parent = parent
 
-      if (enterIntoLlmObsStorage) {
-        llmobsStorage.enterWith({ span })
-      }
+      llmobsStorage.enterWith({ span })
 
       const coalescedRegisterOptions = {
+        parent,
         integration: this.constructor.integration,
         ...registerOptions
       }
-
-      coalescedRegisterOptions.parent = useLlmObsParent ? parent : span.context()._parentId
 
       this._tagger.registerLLMObsSpan(span, coalescedRegisterOptions)
     }

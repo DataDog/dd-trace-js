@@ -1,14 +1,9 @@
 'use strict'
 
 const { addHook } = require('./helpers/instrument')
-const tracer = require('../../dd-trace')
 const shimmer = require('../../datadog-shimmer')
 
-const { TracerProvider } = tracer
-const provider = new TracerProvider()
-provider.register()
-
-const { channel } = require('dc-polyfill')
+const { channel, tracingChannel } = require('dc-polyfill')
 const toolCreationChannel = channel('dd-trace:vercel-ai:tool')
 
 const TRACED_FUNCTIONS = {
@@ -21,6 +16,50 @@ const TRACED_FUNCTIONS = {
   tool: wrapTool
 }
 
+const vercelAiTracingChannel = tracingChannel('dd-trace:vercel-ai')
+const vercelAiSpanSetAttributesChannel = channel('dd-trace:vercel-ai:span:setAttributes')
+
+function createTracer () {
+  const tracer = {
+    startActiveSpan (name, options, fn) { // although this can take 4 args, vercel-ai only uses 3
+      const ctx = {
+        name,
+        attributes: options.attributes ?? {}
+      }
+
+      const span = {
+        end () {
+          vercelAiTracingChannel.asyncEnd.publish(ctx)
+        },
+        setAttributes (attributes) {
+          vercelAiSpanSetAttributesChannel.publish({ ctx, attributes })
+          return this
+        },
+        addEvent () { return this },
+        recordException (exception) {
+          ctx.error = exception
+          vercelAiTracingChannel.error.publish(ctx)
+        },
+        setStatus ({ code, message }) {
+          if (code === 2) {
+            ctx.error = new Error(message)
+          }
+          vercelAiTracingChannel.error.publish(ctx)
+          return this
+        }
+      }
+
+      return vercelAiTracingChannel.start.runStores(ctx, () => {
+        const result = fn(span)
+        vercelAiTracingChannel.end.publish(ctx)
+        return result
+      })
+    }
+  }
+
+  return tracer
+}
+
 function wrapWithTracer (fn) {
   return function () {
     const options = arguments[0]
@@ -28,9 +67,7 @@ function wrapWithTracer (fn) {
 
     options.experimental_telemetry = {
       isEnabled: true,
-      // TODO(sabrenner): need to figure out how a user can configure this tracer
-      // maybe we advise they do this manually?
-      tracer: provider.getTracer()
+      tracer: createTracer()
     }
 
     return fn.apply(this, arguments)
