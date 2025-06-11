@@ -89,6 +89,7 @@ const originalHookFns = new WeakMap()
 const retriedTestsToNumAttempts = new Map()
 const newTestsTestStatuses = new Map()
 const attemptToFixRetriedTestsStatuses = new Map()
+const wrappedWorkers = new WeakSet()
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
 
@@ -596,6 +597,17 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         })
       }
     }
+
+    teardown () {
+      if (this._globalProxy?.propertyToValue) {
+        for (const [key] of this._globalProxy.propertyToValue) {
+          if (typeof key === 'string' && key.startsWith('_dd')) {
+            this._globalProxy.propertyToValue.delete(key)
+          }
+        }
+      }
+      return super.teardown()
+    }
   }
 }
 
@@ -651,6 +663,328 @@ function getWrappedScheduleTests (scheduleTests, frameworkVersion) {
   }
 }
 
+function searchSourceWrapper (searchSourcePackage, frameworkVersion) {
+  const SearchSource = searchSourcePackage.default ?? searchSourcePackage
+
+  shimmer.wrap(SearchSource.prototype, 'getTestPaths', getTestPaths => async function () {
+    const testPaths = await getTestPaths.apply(this, arguments)
+    const [{ rootDir, shard }] = arguments
+
+    if (isKnownTestsEnabled) {
+      const projectSuites = testPaths.tests.map(test => getTestSuitePath(test.path, test.context.config.rootDir))
+      const isFaulty =
+        getIsFaultyEarlyFlakeDetection(projectSuites, knownTests?.jest || {}, earlyFlakeDetectionFaultyThreshold)
+      if (isFaulty) {
+        log.error('Early flake detection is disabled because the number of new suites is too high.')
+        isEarlyFlakeDetectionEnabled = false
+        isKnownTestsEnabled = false
+        const testEnvironmentOptions = testPaths.tests[0]?.context?.config?.testEnvironmentOptions
+        // Project config is shared among all tests, so we can modify it here
+        if (testEnvironmentOptions) {
+          testEnvironmentOptions._ddIsEarlyFlakeDetectionEnabled = false
+          testEnvironmentOptions._ddIsKnownTestsEnabled = false
+        }
+        isEarlyFlakeDetectionFaulty = true
+      }
+    }
+
+    if (shard?.shardCount > 1 || !isSuitesSkippingEnabled || !skippableSuites.length) {
+      // If the user is using jest sharding, we want to apply the filtering of tests in the shard process.
+      // The reason for this is the following:
+      // The tests for different shards are likely being run in different CI jobs so
+      // the requests to the skippable endpoint might be done at different times and their responses might be different.
+      // If the skippable endpoint is returning different suites and we filter the list of tests here,
+      // the base list of tests that is used for sharding might be different,
+      // causing the shards to potentially run the same suite.
+      return testPaths
+    }
+    const { tests } = testPaths
+
+    const suitesToRun = applySuiteSkipping(tests, rootDir, frameworkVersion)
+    return { ...testPaths, tests: suitesToRun }
+  })
+
+  return searchSourcePackage
+}
+
+function getCliWrapper (isNewJestVersion) {
+  return function cliWrapper (cli, jestVersion) {
+    if (isNewJestVersion) {
+      cli = shimmer.wrap(
+        cli,
+        'SearchSource',
+        searchSource => searchSourceWrapper(searchSource, jestVersion),
+        { replaceGetter: true }
+      )
+    }
+    return shimmer.wrap(cli, 'runCLI', runCLI => async function () {
+      let onDone
+      const configurationPromise = new Promise((resolve) => {
+        onDone = resolve
+      })
+      if (!libraryConfigurationCh.hasSubscribers) {
+        return runCLI.apply(this, arguments)
+      }
+
+      libraryConfigurationCh.publish({ onDone })
+
+      try {
+        const { err, libraryConfig } = await configurationPromise
+        if (!err) {
+          isCodeCoverageEnabled = libraryConfig.isCodeCoverageEnabled
+          isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
+          isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
+          earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
+          earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
+          isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
+          isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
+          testManagementAttemptToFixRetries = libraryConfig.testManagementAttemptToFixRetries
+          isImpactedTestsEnabled = libraryConfig.isImpactedTestsEnabled
+        }
+      } catch (err) {
+        log.error('Jest library configuration error', err)
+      }
+
+      if (isKnownTestsEnabled) {
+        const knownTestsPromise = new Promise((resolve) => {
+          onDone = resolve
+        })
+
+        knownTestsCh.publish({ onDone })
+
+        try {
+          const { err, knownTests: receivedKnownTests } = await knownTestsPromise
+          if (err) {
+            // We disable EFD if there has been an error in the known tests request
+            isEarlyFlakeDetectionEnabled = false
+            isKnownTestsEnabled = false
+          } else {
+            knownTests = receivedKnownTests
+          }
+        } catch (err) {
+          log.error('Jest known tests error', err)
+        }
+      }
+
+      if (isSuitesSkippingEnabled) {
+        const skippableSuitesPromise = new Promise((resolve) => {
+          onDone = resolve
+        })
+
+        skippableSuitesCh.publish({ onDone })
+
+        try {
+          const { err, skippableSuites: receivedSkippableSuites } = await skippableSuitesPromise
+          if (!err) {
+            skippableSuites = receivedSkippableSuites
+          }
+        } catch (err) {
+          log.error('Jest test-suite skippable error', err)
+        }
+      }
+
+      if (isTestManagementTestsEnabled) {
+        const testManagementTestsPromise = new Promise((resolve) => {
+          onDone = resolve
+        })
+
+        testManagementTestsCh.publish({ onDone })
+
+        try {
+          const { err, testManagementTests: receivedTestManagementTests } = await testManagementTestsPromise
+          if (!err) {
+            testManagementTests = receivedTestManagementTests
+          }
+        } catch (err) {
+          log.error('Jest test management tests error', err)
+        }
+      }
+
+      if (isImpactedTestsEnabled) {
+        const impactedTestsPromise = new Promise((resolve) => {
+          onDone = resolve
+        })
+
+        impactedTestsCh.publish({ onDone })
+
+        try {
+          const { err, modifiedTests: receivedModifiedTests } = await impactedTestsPromise
+          if (!err) {
+            modifiedTests = receivedModifiedTests
+          }
+        } catch (err) {
+          log.error('Jest impacted tests error', err)
+        }
+      }
+
+      const processArgv = process.argv.slice(2).join(' ')
+      testSessionStartCh.publish({ command: `jest ${processArgv}`, frameworkVersion: jestVersion })
+
+      const result = await runCLI.apply(this, arguments)
+
+      const {
+        results: {
+          success,
+          coverageMap,
+          numFailedTestSuites,
+          numFailedTests,
+          numTotalTests,
+          numTotalTestSuites
+        }
+      } = result
+
+      let testCodeCoverageLinesTotal
+
+      if (isUserCodeCoverageEnabled) {
+        try {
+          const { pct, total } = coverageMap.getCoverageSummary().lines
+          testCodeCoverageLinesTotal = total === 0 ? 0 : pct
+        } catch {
+          // ignore errors
+        }
+      }
+      let status, error
+
+      if (success) {
+        status = numTotalTests === 0 && numTotalTestSuites === 0 ? 'skip' : 'pass'
+      } else {
+        status = 'fail'
+        error = new Error(`Failed test suites: ${numFailedTestSuites}. Failed tests: ${numFailedTests}`)
+      }
+      let timeoutId
+
+      // Pass the resolve callback to defer it to DC listener
+      const flushPromise = new Promise((resolve) => {
+        onDone = () => {
+          clearTimeout(timeoutId)
+          resolve()
+        }
+      })
+
+      const timeoutPromise = new Promise((resolve) => {
+        timeoutId = setTimeout(() => {
+          resolve('timeout')
+        }, FLUSH_TIMEOUT).unref()
+      })
+
+      testSessionFinishCh.publish({
+        status,
+        isSuitesSkipped,
+        isSuitesSkippingEnabled,
+        isCodeCoverageEnabled,
+        testCodeCoverageLinesTotal,
+        numSkippedSuites,
+        hasUnskippableSuites,
+        hasForcedToRunSuites,
+        error,
+        isEarlyFlakeDetectionEnabled,
+        isEarlyFlakeDetectionFaulty,
+        isTestManagementTestsEnabled,
+        onDone
+      })
+
+      const waitingResult = await Promise.race([flushPromise, timeoutPromise])
+
+      if (waitingResult === 'timeout') {
+        log.error('Timeout waiting for the tracer to flush')
+      }
+
+      numSkippedSuites = 0
+
+      /**
+       * If Early Flake Detection (EFD) is enabled the logic is as follows:
+       * - If all attempts for a test are failing, the test has failed and we will let the test process fail.
+       * - If just a single attempt passes, we will prevent the test process from failing.
+       * The rationale behind is the following: you may still be able to block your CI pipeline by gating
+       * on flakiness (the test will be considered flaky), but you may choose to unblock the pipeline too.
+       */
+
+      if (isEarlyFlakeDetectionEnabled) {
+        let numFailedTestsToIgnore = 0
+        for (const testStatuses of newTestsTestStatuses.values()) {
+          const { pass, fail } = getTestStats(testStatuses)
+          if (pass > 0) { // as long as one passes, we'll consider the test passed
+            numFailedTestsToIgnore += fail
+          }
+        }
+        // If every test that failed was an EFD retry, we'll consider the suite passed
+        if (numFailedTestsToIgnore !== 0 && result.results.numFailedTests === numFailedTestsToIgnore) {
+          result.results.success = true
+        }
+      }
+
+      if (isTestManagementTestsEnabled) {
+        const failedTests = result
+          .results
+          .testResults.flatMap(({ testResults, testFilePath: testSuiteAbsolutePath }) => (
+            testResults.map(({ fullName: testName, status }) => (
+              { testName, testSuiteAbsolutePath, status }
+            ))
+          ))
+          .filter(({ status }) => status === 'failed')
+
+        let numFailedQuarantinedTests = 0
+        let numFailedQuarantinedOrDisabledAttemptedToFixTests = 0
+
+        for (const { testName, testSuiteAbsolutePath } of failedTests) {
+          const testSuite = getTestSuitePath(testSuiteAbsolutePath, result.globalConfig.rootDir)
+          const originalName = removeAttemptToFixStringFromTestName(testName)
+          const testManagementTest = testManagementTests
+            ?.jest
+            ?.suites
+            ?.[testSuite]
+            ?.tests
+            ?.[originalName]
+            ?.properties
+          // This uses `attempt_to_fix` because this is always the main process and it's not formatted in camelCase
+          if (testManagementTest?.attempt_to_fix && (testManagementTest?.quarantined || testManagementTest?.disabled)) {
+            numFailedQuarantinedOrDisabledAttemptedToFixTests++
+          } else if (testManagementTest?.quarantined) {
+            numFailedQuarantinedTests++
+          }
+        }
+
+        // If every test that failed was quarantined, we'll consider the suite passed
+        // Note that if a test is attempted to fix,
+        // it's considered quarantined both if it's disabled and if it's quarantined
+        // (it'll run but its status is ignored)
+        if (
+          (numFailedQuarantinedOrDisabledAttemptedToFixTests !== 0 || numFailedQuarantinedTests !== 0) &&
+          result.results.numFailedTests ===
+            numFailedQuarantinedTests + numFailedQuarantinedOrDisabledAttemptedToFixTests
+        ) {
+          result.results.success = true
+        }
+      }
+
+      return result
+    }, {
+      replaceGetter: true
+    })
+  }
+}
+
+function coverageReporterWrapper (coverageReporter) {
+  const CoverageReporter = coverageReporter.default ?? coverageReporter
+
+  /**
+   * If ITR is active, we're running fewer tests, so of course the total code coverage is reduced.
+   * This calculation adds no value, so we'll skip it, as long as the user has not manually opted in to code coverage,
+   * in which case we'll leave it.
+   */
+  // `_addUntestedFiles` is an async function
+  shimmer.wrap(CoverageReporter.prototype, '_addUntestedFiles', addUntestedFiles => function () {
+    // If the user has added coverage manually, they're willing to pay the price of this execution, so
+    // we will not skip it.
+    if (isSuitesSkippingEnabled && !isUserCodeCoverageEnabled) {
+      return Promise.resolve()
+    }
+    return addUntestedFiles.apply(this, arguments)
+  })
+
+  return coverageReporter
+}
+
 addHook({
   name: '@jest/core',
   file: 'build/TestScheduler.js',
@@ -700,273 +1034,6 @@ addHook({
   return sequencerPackage
 })
 
-function cliWrapper (cli, jestVersion) {
-  shimmer.wrap(cli, 'runCLI', runCLI => async function () {
-    let onDone
-    const configurationPromise = new Promise((resolve) => {
-      onDone = resolve
-    })
-    if (!libraryConfigurationCh.hasSubscribers) {
-      return runCLI.apply(this, arguments)
-    }
-
-    libraryConfigurationCh.publish({ onDone })
-
-    try {
-      const { err, libraryConfig } = await configurationPromise
-      if (!err) {
-        isCodeCoverageEnabled = libraryConfig.isCodeCoverageEnabled
-        isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
-        isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
-        earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
-        earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
-        isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
-        isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
-        testManagementAttemptToFixRetries = libraryConfig.testManagementAttemptToFixRetries
-        isImpactedTestsEnabled = libraryConfig.isImpactedTestsEnabled
-      }
-    } catch (err) {
-      log.error('Jest library configuration error', err)
-    }
-
-    if (isKnownTestsEnabled) {
-      const knownTestsPromise = new Promise((resolve) => {
-        onDone = resolve
-      })
-
-      knownTestsCh.publish({ onDone })
-
-      try {
-        const { err, knownTests: receivedKnownTests } = await knownTestsPromise
-        if (err) {
-          // We disable EFD if there has been an error in the known tests request
-          isEarlyFlakeDetectionEnabled = false
-          isKnownTestsEnabled = false
-        } else {
-          knownTests = receivedKnownTests
-        }
-      } catch (err) {
-        log.error('Jest known tests error', err)
-      }
-    }
-
-    if (isSuitesSkippingEnabled) {
-      const skippableSuitesPromise = new Promise((resolve) => {
-        onDone = resolve
-      })
-
-      skippableSuitesCh.publish({ onDone })
-
-      try {
-        const { err, skippableSuites: receivedSkippableSuites } = await skippableSuitesPromise
-        if (!err) {
-          skippableSuites = receivedSkippableSuites
-        }
-      } catch (err) {
-        log.error('Jest test-suite skippable error', err)
-      }
-    }
-
-    if (isTestManagementTestsEnabled) {
-      const testManagementTestsPromise = new Promise((resolve) => {
-        onDone = resolve
-      })
-
-      testManagementTestsCh.publish({ onDone })
-
-      try {
-        const { err, testManagementTests: receivedTestManagementTests } = await testManagementTestsPromise
-        if (!err) {
-          testManagementTests = receivedTestManagementTests
-        }
-      } catch (err) {
-        log.error('Jest test management tests error', err)
-      }
-    }
-
-    if (isImpactedTestsEnabled) {
-      const impactedTestsPromise = new Promise((resolve) => {
-        onDone = resolve
-      })
-
-      impactedTestsCh.publish({ onDone })
-
-      try {
-        const { err, modifiedTests: receivedModifiedTests } = await impactedTestsPromise
-        if (!err) {
-          modifiedTests = receivedModifiedTests
-        }
-      } catch (err) {
-        log.error('Jest impacted tests error', err)
-      }
-    }
-
-    const processArgv = process.argv.slice(2).join(' ')
-    testSessionStartCh.publish({ command: `jest ${processArgv}`, frameworkVersion: jestVersion })
-
-    const result = await runCLI.apply(this, arguments)
-
-    const {
-      results: {
-        success,
-        coverageMap,
-        numFailedTestSuites,
-        numFailedTests,
-        numTotalTests,
-        numTotalTestSuites
-      }
-    } = result
-
-    let testCodeCoverageLinesTotal
-
-    if (isUserCodeCoverageEnabled) {
-      try {
-        const { pct, total } = coverageMap.getCoverageSummary().lines
-        testCodeCoverageLinesTotal = total === 0 ? 0 : pct
-      } catch {
-        // ignore errors
-      }
-    }
-    let status, error
-
-    if (success) {
-      status = numTotalTests === 0 && numTotalTestSuites === 0 ? 'skip' : 'pass'
-    } else {
-      status = 'fail'
-      error = new Error(`Failed test suites: ${numFailedTestSuites}. Failed tests: ${numFailedTests}`)
-    }
-    let timeoutId
-
-    // Pass the resolve callback to defer it to DC listener
-    const flushPromise = new Promise((resolve) => {
-      onDone = () => {
-        clearTimeout(timeoutId)
-        resolve()
-      }
-    })
-
-    const timeoutPromise = new Promise((resolve) => {
-      timeoutId = setTimeout(() => {
-        resolve('timeout')
-      }, FLUSH_TIMEOUT).unref()
-    })
-
-    testSessionFinishCh.publish({
-      status,
-      isSuitesSkipped,
-      isSuitesSkippingEnabled,
-      isCodeCoverageEnabled,
-      testCodeCoverageLinesTotal,
-      numSkippedSuites,
-      hasUnskippableSuites,
-      hasForcedToRunSuites,
-      error,
-      isEarlyFlakeDetectionEnabled,
-      isEarlyFlakeDetectionFaulty,
-      isTestManagementTestsEnabled,
-      onDone
-    })
-
-    const waitingResult = await Promise.race([flushPromise, timeoutPromise])
-
-    if (waitingResult === 'timeout') {
-      log.error('Timeout waiting for the tracer to flush')
-    }
-
-    numSkippedSuites = 0
-
-    /**
-     * If Early Flake Detection (EFD) is enabled the logic is as follows:
-     * - If all attempts for a test are failing, the test has failed and we will let the test process fail.
-     * - If just a single attempt passes, we will prevent the test process from failing.
-     * The rationale behind is the following: you may still be able to block your CI pipeline by gating
-     * on flakiness (the test will be considered flaky), but you may choose to unblock the pipeline too.
-     */
-
-    if (isEarlyFlakeDetectionEnabled) {
-      let numFailedTestsToIgnore = 0
-      for (const testStatuses of newTestsTestStatuses.values()) {
-        const { pass, fail } = getTestStats(testStatuses)
-        if (pass > 0) { // as long as one passes, we'll consider the test passed
-          numFailedTestsToIgnore += fail
-        }
-      }
-      // If every test that failed was an EFD retry, we'll consider the suite passed
-      if (numFailedTestsToIgnore !== 0 && result.results.numFailedTests === numFailedTestsToIgnore) {
-        result.results.success = true
-      }
-    }
-
-    if (isTestManagementTestsEnabled) {
-      const failedTests = result
-        .results
-        .testResults.flatMap(({ testResults, testFilePath: testSuiteAbsolutePath }) => (
-          testResults.map(({ fullName: testName, status }) => (
-            { testName, testSuiteAbsolutePath, status }
-          ))
-        ))
-        .filter(({ status }) => status === 'failed')
-
-      let numFailedQuarantinedTests = 0
-      let numFailedQuarantinedOrDisabledAttemptedToFixTests = 0
-
-      for (const { testName, testSuiteAbsolutePath } of failedTests) {
-        const testSuite = getTestSuitePath(testSuiteAbsolutePath, result.globalConfig.rootDir)
-        const originalName = removeAttemptToFixStringFromTestName(testName)
-        const testManagementTest = testManagementTests
-          ?.jest
-          ?.suites
-          ?.[testSuite]
-          ?.tests
-          ?.[originalName]
-          ?.properties
-        // This uses `attempt_to_fix` because this is always the main process and it's not formatted in camelCase
-        if (testManagementTest?.attempt_to_fix && (testManagementTest?.quarantined || testManagementTest?.disabled)) {
-          numFailedQuarantinedOrDisabledAttemptedToFixTests++
-        } else if (testManagementTest?.quarantined) {
-          numFailedQuarantinedTests++
-        }
-      }
-
-      // If every test that failed was quarantined, we'll consider the suite passed
-      // Note that if a test is attempted to fix,
-      // it's considered quarantined both if it's disabled and if it's quarantined (it'll run but its status is ignored)
-      if (
-        (numFailedQuarantinedOrDisabledAttemptedToFixTests !== 0 || numFailedQuarantinedTests !== 0) &&
-        result.results.numFailedTests ===
-          numFailedQuarantinedTests + numFailedQuarantinedOrDisabledAttemptedToFixTests
-      ) {
-        result.results.success = true
-      }
-    }
-
-    return result
-  })
-
-  return cli
-}
-
-function coverageReporterWrapper (coverageReporter) {
-  const CoverageReporter = coverageReporter.default ?? coverageReporter
-
-  /**
-   * If ITR is active, we're running fewer tests, so of course the total code coverage is reduced.
-   * This calculation adds no value, so we'll skip it, as long as the user has not manually opted in to code coverage,
-   * in which case we'll leave it.
-   */
-  // `_addUntestedFiles` is an async function
-  shimmer.wrap(CoverageReporter.prototype, '_addUntestedFiles', addUntestedFiles => function () {
-    // If the user has added coverage manually, they're willing to pay the price of this execution, so
-    // we will not skip it.
-    if (isSuitesSkippingEnabled && !isUserCodeCoverageEnabled) {
-      return Promise.resolve()
-    }
-    return addUntestedFiles.apply(this, arguments)
-  })
-
-  return coverageReporter
-}
-
 addHook({
   name: '@jest/reporters',
   file: 'build/coverage_reporter.js',
@@ -980,10 +1047,22 @@ addHook({
 }, coverageReporterWrapper)
 
 addHook({
+  name: '@jest/reporters',
+  versions: ['>=30.0.0']
+}, (reporters) => {
+  return shimmer.wrap(reporters, 'CoverageReporter', coverageReporterWrapper, { replaceGetter: true })
+})
+
+addHook({
   name: '@jest/core',
   file: 'build/cli/index.js',
-  versions: ['>=24.8.0']
-}, cliWrapper)
+  versions: ['>=24.8.0 <30.0.0']
+}, getCliWrapper(false))
+
+addHook({
+  name: '@jest/core',
+  versions: ['>=30.0.0']
+}, getCliWrapper(true))
 
 function jestAdapterWrapper (jestAdapter, jestVersion) {
   const adapter = jestAdapter.default ?? jestAdapter
@@ -1039,6 +1118,12 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
 
 addHook({
   name: 'jest-circus',
+  file: 'build/runner.js',
+  versions: ['>=30.0.0']
+}, jestAdapterWrapper)
+
+addHook({
+  name: 'jest-circus',
   file: 'build/legacy-code-todo-rewrite/jestAdapter.js',
   versions: ['>=24.8.0']
 }, jestAdapterWrapper)
@@ -1081,21 +1166,19 @@ function configureTestEnvironment (readConfigsResult) {
 }
 
 function jestConfigAsyncWrapper (jestConfig) {
-  shimmer.wrap(jestConfig, 'readConfigs', readConfigs => async function () {
+  return shimmer.wrap(jestConfig, 'readConfigs', readConfigs => async function () {
     const readConfigsResult = await readConfigs.apply(this, arguments)
     configureTestEnvironment(readConfigsResult)
     return readConfigsResult
   })
-  return jestConfig
 }
 
 function jestConfigSyncWrapper (jestConfig) {
-  shimmer.wrap(jestConfig, 'readConfigs', readConfigs => function () {
+  return shimmer.wrap(jestConfig, 'readConfigs', readConfigs => function () {
     const readConfigsResult = readConfigs.apply(this, arguments)
     configureTestEnvironment(readConfigsResult)
     return readConfigsResult
   })
-  return jestConfig
 }
 
 addHook({
@@ -1146,51 +1229,9 @@ addHook({
  */
 addHook({
   name: '@jest/core',
-  versions: ['>=24.8.0'],
+  versions: ['>=24.8.0 <30.0.0'],
   file: 'build/SearchSource.js'
-}, (searchSourcePackage, frameworkVersion) => {
-  const SearchSource = searchSourcePackage.default ?? searchSourcePackage
-
-  shimmer.wrap(SearchSource.prototype, 'getTestPaths', getTestPaths => async function () {
-    const testPaths = await getTestPaths.apply(this, arguments)
-    const [{ rootDir, shard }] = arguments
-
-    if (isKnownTestsEnabled) {
-      const projectSuites = testPaths.tests.map(test => getTestSuitePath(test.path, test.context.config.rootDir))
-      const isFaulty =
-        getIsFaultyEarlyFlakeDetection(projectSuites, knownTests?.jest || {}, earlyFlakeDetectionFaultyThreshold)
-      if (isFaulty) {
-        log.error('Early flake detection is disabled because the number of new suites is too high.')
-        isEarlyFlakeDetectionEnabled = false
-        isKnownTestsEnabled = false
-        const testEnvironmentOptions = testPaths.tests[0]?.context?.config?.testEnvironmentOptions
-        // Project config is shared among all tests, so we can modify it here
-        if (testEnvironmentOptions) {
-          testEnvironmentOptions._ddIsEarlyFlakeDetectionEnabled = false
-          testEnvironmentOptions._ddIsKnownTestsEnabled = false
-        }
-        isEarlyFlakeDetectionFaulty = true
-      }
-    }
-
-    if (shard?.shardCount > 1 || !isSuitesSkippingEnabled || !skippableSuites.length) {
-      // If the user is using jest sharding, we want to apply the filtering of tests in the shard process.
-      // The reason for this is the following:
-      // The tests for different shards are likely being run in different CI jobs so
-      // the requests to the skippable endpoint might be done at different times and their responses might be different.
-      // If the skippable endpoint is returning different suites and we filter the list of tests here,
-      // the base list of tests that is used for sharding might be different,
-      // causing the shards to potentially run the same suite.
-      return testPaths
-    }
-    const { tests } = testPaths
-
-    const suitesToRun = applySuiteSkipping(tests, rootDir, frameworkVersion)
-    return { ...testPaths, tests: suitesToRun }
-  })
-
-  return searchSourcePackage
-})
+}, searchSourceWrapper)
 
 // from 25.1.0 on, readConfigs becomes async
 addHook({
@@ -1238,19 +1279,27 @@ addHook({
   return runtimePackage
 })
 
-/*
-* This hook does three things:
-* - Pass known tests to the workers.
-* - Pass test management tests to the workers.
-* - Receive trace, coverage and logs payloads from the workers.
-*/
-addHook({
-  name: 'jest-worker',
-  versions: ['>=24.9.0'],
-  file: 'build/workers/ChildProcessWorker.js'
-}, (childProcessWorker) => {
-  const ChildProcessWorker = childProcessWorker.default
-  shimmer.wrap(ChildProcessWorker.prototype, 'send', send => function (request) {
+function onMessageWrapper (onMessage) {
+  return function () {
+    const [code, data] = arguments[0]
+    if (code === JEST_WORKER_TRACE_PAYLOAD_CODE) { // datadog trace payload
+      workerReportTraceCh.publish(data)
+      return
+    }
+    if (code === JEST_WORKER_COVERAGE_PAYLOAD_CODE) { // datadog coverage payload
+      workerReportCoverageCh.publish(data)
+      return
+    }
+    if (code === JEST_WORKER_LOGS_PAYLOAD_CODE) { // datadog logs payload
+      workerReportLogsCh.publish(data)
+      return
+    }
+    return onMessage.apply(this, arguments)
+  }
+}
+
+function sendWrapper (send) {
+  return function (request) {
     if (!isKnownTestsEnabled && !isTestManagementTestsEnabled && !isImpactedTestsEnabled) {
       return send.apply(this, arguments)
     }
@@ -1288,24 +1337,47 @@ addHook({
         }
       }
     }
-
     return send.apply(this, arguments)
-  })
-  shimmer.wrap(ChildProcessWorker.prototype, '_onMessage', _onMessage => function () {
-    const [code, data] = arguments[0]
-    if (code === JEST_WORKER_TRACE_PAYLOAD_CODE) { // datadog trace payload
-      workerReportTraceCh.publish(data)
-      return
-    }
-    if (code === JEST_WORKER_COVERAGE_PAYLOAD_CODE) { // datadog coverage payload
-      workerReportCoverageCh.publish(data)
-      return
-    }
-    if (code === JEST_WORKER_LOGS_PAYLOAD_CODE) { // datadog logs payload
-      workerReportLogsCh.publish(data)
-      return
-    }
-    return _onMessage.apply(this, arguments)
-  })
+  }
+}
+
+function enqueueWrapper (enqueue) {
+  return function () {
+    shimmer.wrap(arguments[0], 'onStart', onStart => function (worker) {
+      if (worker && !wrappedWorkers.has(worker)) {
+        shimmer.wrap(worker._child, 'send', sendWrapper)
+        shimmer.wrap(worker, '_onMessage', onMessageWrapper)
+        worker._child.on('message', worker._onMessage.bind(worker))
+        wrappedWorkers.add(worker)
+      }
+      return onStart.apply(this, arguments)
+    })
+    return enqueue.apply(this, arguments)
+  }
+}
+
+/*
+* This hook does three things:
+* - Pass known tests to the workers.
+* - Pass test management tests to the workers.
+* - Receive trace, coverage and logs payloads from the workers.
+*/
+addHook({
+  name: 'jest-worker',
+  versions: ['>=24.9.0 <30.0.0'],
+  file: 'build/workers/ChildProcessWorker.js'
+}, (childProcessWorker) => {
+  const ChildProcessWorker = childProcessWorker.default
+  shimmer.wrap(ChildProcessWorker.prototype, 'send', sendWrapper)
+  shimmer.wrap(ChildProcessWorker.prototype, '_onMessage', onMessageWrapper)
   return childProcessWorker
+})
+
+addHook({
+  name: 'jest-worker',
+  versions: ['>=30.0.0']
+}, (jestWorkerPackage) => {
+  shimmer.wrap(jestWorkerPackage.FifoQueue.prototype, 'enqueue', enqueueWrapper)
+  shimmer.wrap(jestWorkerPackage.PriorityQueue.prototype, 'enqueue', enqueueWrapper)
+  return jestWorkerPackage
 })

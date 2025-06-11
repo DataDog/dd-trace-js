@@ -342,6 +342,36 @@ describe('Plugin', () => {
             connection.execute(dbQuery)
           })
         })
+
+        describe('with connectionString fallback', () => {
+          before(async () => {
+            await agent.load('oracledb', {
+              service: connAttrs => connAttrs.connectString || connAttrs.connectionString
+            })
+            oracledb = require(`../../../versions/oracledb@${version}`).get()
+            tracer = require('../../dd-trace')
+          })
+
+          after(async () => {
+            await agent.close({ ritmReset: false })
+          })
+
+          it('should fallback to connectionString when connectString is not available', async () => {
+            const connection = await oracledb.getConnection({
+              user: config.user,
+              password: config.password,
+              connectionString: config.connectString // Use valid connection string
+            })
+
+            const promise = agent.assertSomeTraces(traces => {
+              expect(traces[0][0]).to.have.property('service', config.connectString)
+            })
+
+            connection.execute(dbQuery)
+            await connection.close()
+            return promise
+          })
+        })
       })
     })
   })

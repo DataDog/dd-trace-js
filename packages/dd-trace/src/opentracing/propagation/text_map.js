@@ -355,19 +355,20 @@ class TextMapPropagator {
       }
     }
 
-    this._extractBaggageItems(carrier, context)
-
     if (this._config.tracePropagationBehaviorExtract === 'ignore') {
       context._links = []
-    } else if (this._config.tracePropagationBehaviorExtract === 'restart') {
-      context._links = []
-      context._links.push({
-        context,
-        attributes:
-        {
-          reason: 'propagation_behavior_extract', context_headers: style
-        }
-      })
+    } else {
+      if (this._config.tracePropagationBehaviorExtract === 'restart') {
+        context._links = []
+        context._links.push({
+          context,
+          attributes:
+          {
+            reason: 'propagation_behavior_extract', context_headers: style
+          }
+        })
+      }
+      this._extractBaggageItems(carrier, context)
     }
 
     return context || this._extractSqsdContext(carrier)
