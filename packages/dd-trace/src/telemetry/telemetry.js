@@ -363,7 +363,7 @@ function updateConfig (changes, config) {
   if (changed) {
     // update configWithOrigin to contain up-to-date full list of config values for app-extended-heartbeat
     const { reqType, payload } = createPayload('app-client-configuration-change', {
-      configuration
+      configuration: [...configWithOrigin.values()]
     })
     sendData(config, application, host, reqType, payload, updateRetryData)
   }
