@@ -14,29 +14,23 @@ class DynamoDb extends BaseAwsSdkPlugin {
     const tags = {}
 
     if (params) {
-      if (params.TableName) {
-        Object.assign(tags, {
-          'resource.name': `${operation} ${params.TableName}`,
-          'aws.dynamodb.table_name': params.TableName,
-          tablename: params.TableName
-        })
-      }
+      let tableName = params.TableName
 
-      // batch operations have different format, collect table name for batch
+      // Collect table name for batch operations which have different format
       // https://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/DynamoDB.html#batchGetItem-property`
       // dynamoDB batch TableName
       if (params.RequestItems !== null && typeof params.RequestItems === 'object') {
         const requestItemsKeys = Object.keys(params.RequestItems)
         if (requestItemsKeys.length === 1) {
-          const tableName = requestItemsKeys[0]
-
-          // also add span type to match serverless convention
-          Object.assign(tags, {
-            'resource.name': `${operation} ${tableName}`,
-            'aws.dynamodb.table_name': tableName,
-            tablename: tableName
-          })
+          tableName = requestItemsKeys[0]
         }
+      }
+
+      if (tableName) {
+        // Also add span type to match serverless convention
+        tags['resource.name'] = `${operation} ${tableName}`
+        tags['aws.dynamodb.table_name'] = tableName
+        tags.tablename = tableName
       }
 
       // TODO: DynamoDB.DocumentClient does batches on multiple tables
@@ -44,10 +38,8 @@ class DynamoDb extends BaseAwsSdkPlugin {
       // it may be useful to have a different resource naming convention here to show all table names
     }
 
-    // also add span type to match serverless convention
-    Object.assign(tags, {
-      'span.type': 'dynamodb'
-    })
+    // Also add span type to match serverless convention
+    tags['span.type'] = 'dynamodb'
 
     return tags
   }

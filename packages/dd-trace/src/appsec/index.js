@@ -39,6 +39,7 @@ const rasp = require('./rasp')
 const { isInServerlessEnvironment } = require('../serverless')
 
 const responseAnalyzedSet = new WeakSet()
+const storedResponseHeaders = new WeakMap()
 
 let isEnabled = false
 let config
@@ -47,7 +48,7 @@ function enable (_config) {
   if (isEnabled) return
 
   try {
-    appsecTelemetry.enable(_config.telemetry)
+    appsecTelemetry.enable(_config)
     graphql.enable()
 
     if (_config.appsec.rasp.enabled) {
@@ -143,7 +144,7 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
     [HTTP_CLIENT_IP]: clientIp
   })
 
-  const requestHeaders = Object.assign({}, req.headers)
+  const requestHeaders = { ...req.headers }
   delete requestHeaders.cookie
 
   const persistent = {
@@ -191,7 +192,13 @@ function incomingHttpEndTranslator ({ req, res }) {
 
   waf.disposeContext(req)
 
-  Reporter.finishRequest(req, res)
+  const storedHeaders = storedResponseHeaders.get(req) || {}
+
+  Reporter.finishRequest(req, res, storedHeaders)
+
+  if (storedHeaders) {
+    storedResponseHeaders.delete(req)
+  }
 }
 
 function onPassportVerify ({ framework, login, user, success, abortController }) {
@@ -289,6 +296,10 @@ function onResponseBody ({ req, res, body }) {
 }
 
 function onResponseWriteHead ({ req, res, abortController, statusCode, responseHeaders }) {
+  if (Object.keys(responseHeaders).length) {
+    storedResponseHeaders.set(req, responseHeaders)
+  }
+
   // avoid "write after end" error
   if (isBlocked(res)) {
     abortController?.abort()
@@ -303,12 +314,12 @@ function onResponseWriteHead ({ req, res, abortController, statusCode, responseH
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
-  responseHeaders = Object.assign({}, responseHeaders)
+  responseHeaders = { ...responseHeaders }
   delete responseHeaders['set-cookie']
 
   const results = waf.run({
     persistent: {
-      [addresses.HTTP_INCOMING_RESPONSE_CODE]: '' + statusCode,
+      [addresses.HTTP_INCOMING_RESPONSE_CODE]: String(statusCode),
       [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: responseHeaders
     }
   }, req)

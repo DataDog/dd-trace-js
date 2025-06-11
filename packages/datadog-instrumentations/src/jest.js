@@ -1,6 +1,6 @@
 'use strict'
 
-const { addHook, channel, AsyncResource } = require('./helpers/instrument')
+const { addHook, channel } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
 const {
@@ -82,8 +82,6 @@ let testManagementTests = {}
 let testManagementAttemptToFixRetries = 0
 let isImpactedTestsEnabled = false
 let modifiedTests = {}
-
-const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
 const testContexts = new WeakMap()
 const originalTestFns = new WeakMap()
@@ -427,6 +425,10 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       if (event.name === 'add_test') {
         const originalTestName = this.getTestNameFromAddTestEvent(event, state)
 
+        if (event.failing) {
+          return
+        }
+
         const isSkipped = event.mode === 'todo' || event.mode === 'skip'
         if (this.isTestManagementTestsEnabled) {
           const isAttemptToFix = this.testManagementTestsForThisSuite?.attemptToFix?.includes(originalTestName)
@@ -581,19 +583,16 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
       }
       if (event.name === 'test_skip' || event.name === 'test_todo') {
-        const asyncResource = new AsyncResource('bound-anonymous-fn')
-        asyncResource.runInAsyncScope(() => {
-          testSkippedCh.publish({
-            test: {
-              name: getJestTestName(event.test),
-              suite: this.testSuite,
-              testSourceFile: this.testSourceFile,
-              displayName: this.displayName,
-              frameworkVersion: jestVersion,
-              testStartLine: getTestLineStart(event.test.asyncError, this.testSuite)
-            },
-            isDisabled: this.testManagementTestsForThisSuite?.disabled?.includes(getJestTestName(event.test))
-          })
+        testSkippedCh.publish({
+          test: {
+            name: getJestTestName(event.test),
+            suite: this.testSuite,
+            testSourceFile: this.testSourceFile,
+            displayName: this.displayName,
+            frameworkVersion: jestVersion,
+            testStartLine: getTestLineStart(event.test.asyncError, this.testSuite)
+          },
+          isDisabled: this.testManagementTestsForThisSuite?.disabled?.includes(getJestTestName(event.test))
         })
       }
     }
@@ -711,9 +710,7 @@ function cliWrapper (cli, jestVersion) {
       return runCLI.apply(this, arguments)
     }
 
-    sessionAsyncResource.runInAsyncScope(() => {
-      libraryConfigurationCh.publish({ onDone })
-    })
+    libraryConfigurationCh.publish({ onDone })
 
     try {
       const { err, libraryConfig } = await configurationPromise
@@ -737,9 +734,7 @@ function cliWrapper (cli, jestVersion) {
         onDone = resolve
       })
 
-      sessionAsyncResource.runInAsyncScope(() => {
-        knownTestsCh.publish({ onDone })
-      })
+      knownTestsCh.publish({ onDone })
 
       try {
         const { err, knownTests: receivedKnownTests } = await knownTestsPromise
@@ -760,9 +755,7 @@ function cliWrapper (cli, jestVersion) {
         onDone = resolve
       })
 
-      sessionAsyncResource.runInAsyncScope(() => {
-        skippableSuitesCh.publish({ onDone })
-      })
+      skippableSuitesCh.publish({ onDone })
 
       try {
         const { err, skippableSuites: receivedSkippableSuites } = await skippableSuitesPromise
@@ -779,9 +772,7 @@ function cliWrapper (cli, jestVersion) {
         onDone = resolve
       })
 
-      sessionAsyncResource.runInAsyncScope(() => {
-        testManagementTestsCh.publish({ onDone })
-      })
+      testManagementTestsCh.publish({ onDone })
 
       try {
         const { err, testManagementTests: receivedTestManagementTests } = await testManagementTestsPromise
@@ -798,9 +789,7 @@ function cliWrapper (cli, jestVersion) {
         onDone = resolve
       })
 
-      sessionAsyncResource.runInAsyncScope(() => {
-        impactedTestsCh.publish({ onDone })
-      })
+      impactedTestsCh.publish({ onDone })
 
       try {
         const { err, modifiedTests: receivedModifiedTests } = await impactedTestsPromise
@@ -813,9 +802,7 @@ function cliWrapper (cli, jestVersion) {
     }
 
     const processArgv = process.argv.slice(2).join(' ')
-    sessionAsyncResource.runInAsyncScope(() => {
-      testSessionStartCh.publish({ command: `jest ${processArgv}`, frameworkVersion: jestVersion })
-    })
+    testSessionStartCh.publish({ command: `jest ${processArgv}`, frameworkVersion: jestVersion })
 
     const result = await runCLI.apply(this, arguments)
 
@@ -864,23 +851,22 @@ function cliWrapper (cli, jestVersion) {
       }, FLUSH_TIMEOUT).unref()
     })
 
-    sessionAsyncResource.runInAsyncScope(() => {
-      testSessionFinishCh.publish({
-        status,
-        isSuitesSkipped,
-        isSuitesSkippingEnabled,
-        isCodeCoverageEnabled,
-        testCodeCoverageLinesTotal,
-        numSkippedSuites,
-        hasUnskippableSuites,
-        hasForcedToRunSuites,
-        error,
-        isEarlyFlakeDetectionEnabled,
-        isEarlyFlakeDetectionFaulty,
-        isTestManagementTestsEnabled,
-        onDone
-      })
+    testSessionFinishCh.publish({
+      status,
+      isSuitesSkipped,
+      isSuitesSkippingEnabled,
+      isCodeCoverageEnabled,
+      testCodeCoverageLinesTotal,
+      numSkippedSuites,
+      hasUnskippableSuites,
+      hasForcedToRunSuites,
+      error,
+      isEarlyFlakeDetectionEnabled,
+      isEarlyFlakeDetectionFaulty,
+      isTestManagementTestsEnabled,
+      onDone
     })
+
     const waitingResult = await Promise.race([flushPromise, timeoutPromise])
 
     if (waitingResult === 'timeout') {
@@ -1006,45 +992,40 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
     if (!environment) {
       return adapter.apply(this, arguments)
     }
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-    return asyncResource.runInAsyncScope(() => {
-      testSuiteStartCh.publish({
-        testSuite: environment.testSuite,
-        testEnvironmentOptions: environment.testEnvironmentOptions,
-        testSourceFile: environment.testSourceFile,
-        displayName: environment.displayName,
-        frameworkVersion: jestVersion
-      })
-      return adapter.apply(this, arguments).then(suiteResults => {
-        const { numFailingTests, skipped, failureMessage: errorMessage } = suiteResults
-        let status = 'pass'
-        if (skipped) {
-          status = 'skipped'
-        } else if (numFailingTests !== 0) {
-          status = 'fail'
-        }
+    testSuiteStartCh.publish({
+      testSuite: environment.testSuite,
+      testEnvironmentOptions: environment.testEnvironmentOptions,
+      testSourceFile: environment.testSourceFile,
+      displayName: environment.displayName,
+      frameworkVersion: jestVersion
+    })
+    return adapter.apply(this, arguments).then(suiteResults => {
+      const { numFailingTests, skipped, failureMessage: errorMessage } = suiteResults
+      let status = 'pass'
+      if (skipped) {
+        status = 'skipped'
+      } else if (numFailingTests !== 0) {
+        status = 'fail'
+      }
 
-        /**
-         * Child processes do not each request ITR configuration, so the jest's parent process
-         * needs to pass them the configuration. This is done via _ddTestCodeCoverageEnabled, which
-         * controls whether coverage is reported.
-        */
-        if (environment.testEnvironmentOptions?._ddTestCodeCoverageEnabled) {
-          const root = environment.repositoryRoot || environment.rootDir
+      /**
+       * Child processes do not each request ITR configuration, so the jest's parent process
+       * needs to pass them the configuration. This is done via _ddTestCodeCoverageEnabled, which
+       * controls whether coverage is reported.
+      */
+      if (environment.testEnvironmentOptions?._ddTestCodeCoverageEnabled) {
+        const root = environment.repositoryRoot || environment.rootDir
 
-          const coverageFiles = getCoveredFilenamesFromCoverage(environment.global.__coverage__)
-            .map(filename => getTestSuitePath(filename, root))
+        const coverageFiles = getCoveredFilenamesFromCoverage(environment.global.__coverage__)
+          .map(filename => getTestSuitePath(filename, root))
 
-          asyncResource.runInAsyncScope(() => {
-            testSuiteCodeCoverageCh.publish({ coverageFiles, testSuite: environment.testSourceFile })
-          })
-        }
-        testSuiteFinishCh.publish({ status, errorMessage })
-        return suiteResults
-      }).catch(error => {
-        testSuiteFinishCh.publish({ status: 'fail', error })
-        throw error
-      })
+        testSuiteCodeCoverageCh.publish({ coverageFiles, testSuite: environment.testSourceFile })
+      }
+      testSuiteFinishCh.publish({ status, errorMessage })
+      return suiteResults
+    }).catch(error => {
+      testSuiteFinishCh.publish({ status: 'fail', error })
+      throw error
     })
   })
   if (jestAdapter.default) {
@@ -1064,9 +1045,7 @@ addHook({
 
 function configureTestEnvironment (readConfigsResult) {
   const { configs } = readConfigsResult
-  sessionAsyncResource.runInAsyncScope(() => {
-    testSessionConfigurationCh.publish(configs.map(config => config.testEnvironmentOptions))
-  })
+  testSessionConfigurationCh.publish(configs.map(config => config.testEnvironmentOptions))
   // We can't directly use isCodeCoverageEnabled when reporting coverage in `jestAdapterWrapper`
   // because `jestAdapterWrapper` runs in a different process. We have to go through `testEnvironmentOptions`
   configs.forEach(config => {
@@ -1315,21 +1294,15 @@ addHook({
   shimmer.wrap(ChildProcessWorker.prototype, '_onMessage', _onMessage => function () {
     const [code, data] = arguments[0]
     if (code === JEST_WORKER_TRACE_PAYLOAD_CODE) { // datadog trace payload
-      sessionAsyncResource.runInAsyncScope(() => {
-        workerReportTraceCh.publish(data)
-      })
+      workerReportTraceCh.publish(data)
       return
     }
     if (code === JEST_WORKER_COVERAGE_PAYLOAD_CODE) { // datadog coverage payload
-      sessionAsyncResource.runInAsyncScope(() => {
-        workerReportCoverageCh.publish(data)
-      })
+      workerReportCoverageCh.publish(data)
       return
     }
     if (code === JEST_WORKER_LOGS_PAYLOAD_CODE) { // datadog logs payload
-      sessionAsyncResource.runInAsyncScope(() => {
-        workerReportLogsCh.publish(data)
-      })
+      workerReportLogsCh.publish(data)
       return
     }
     return _onMessage.apply(this, arguments)

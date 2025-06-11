@@ -232,11 +232,18 @@ versions.forEach(version => {
                     assert.propertyVal(meta, CUCUMBER_IS_PARALLEL, 'true')
                   }
                   assert.exists(metrics[DD_HOST_CPU_COUNT])
+                  if (!meta[TEST_NAME].includes('Say skip')) {
+                    assert.propertyVal(meta, 'custom_tag.before', 'hello before')
+                    assert.propertyVal(meta, 'custom_tag.after', 'hello after')
+                  }
                 })
 
                 stepEvents.forEach(stepEvent => {
                   assert.equal(stepEvent.content.name, 'cucumber.step')
                   assert.property(stepEvent.content.meta, 'cucumber.step')
+                  if (stepEvent.content.meta['cucumber.step'] === 'the greeter says greetings') {
+                    assert.propertyVal(stepEvent.content.meta, 'custom_tag.when', 'hello when')
+                  }
                 })
               }, 5000)
 

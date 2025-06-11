@@ -257,6 +257,41 @@ describe('mocha CommonJS', function () {
     })
   })
 
+  context('custom tagging', () => {
+    it('can add custom tags to the tests', (done) => {
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const test = events.find(event => event.type === 'test').content
+
+          assert.isNotEmpty(test.meta)
+          assert.equal(test.meta['custom_tag.beforeEach'], 'true')
+          assert.equal(test.meta['custom_tag.it'], 'true')
+          assert.equal(test.meta['custom_tag.afterEach'], 'true')
+        })
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './test-custom-tags/custom-tags.js'
+            ])
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
+  })
+
   context('when no ci visibility init is used', () => {
     it('does not crash', (done) => {
       childProcess = fork(startupTestFile, {

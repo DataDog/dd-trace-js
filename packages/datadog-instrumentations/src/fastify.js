@@ -61,21 +61,19 @@ function wrapAddHook (addHook) {
               return parsingResource.runInAsyncScope(() => {
                 return done.apply(this, arguments)
               })
-            } else {
-              return done.apply(this, arguments)
             }
+            return done.apply(this, arguments)
           }
 
           return fn.apply(this, arguments)
-        } else {
-          const promise = fn.apply(this, arguments)
-
-          if (promise && typeof promise.catch === 'function') {
-            return promise.catch(err => publishError(err, req))
-          }
-
-          return promise
         }
+        const promise = fn.apply(this, arguments)
+
+        if (promise && typeof promise.catch === 'function') {
+          return promise.catch(err => publishError(err, req))
+        }
+
+        return promise
       } catch (e) {
         throw publishError(e, req)
       }

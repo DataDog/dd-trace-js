@@ -3,6 +3,7 @@ const path = require('path')
 
 const FormData = require('../../../exporters/common/form-data')
 const request = require('../../../exporters/common/request')
+const { getEnvironmentVariable } = require('../../../config-helper')
 
 const log = require('../../../log')
 const { isFalse } = require('../../../util')
@@ -38,7 +39,7 @@ function validateCommits (commits) {
       throw new Error('Invalid commit type response')
     }
     if (isValidSha1(commitSha) || isValidSha256(commitSha)) {
-      return commitSha.replace(/[^0-9a-f]+/g, '')
+      return commitSha.replaceAll(/[^0-9a-f]+/g, '')
     }
     throw new Error('Invalid commit format')
   })
@@ -48,7 +49,7 @@ function getCommonRequestOptions (url) {
   return {
     method: 'POST',
     headers: {
-      'dd-api-key': process.env.DATADOG_API_KEY || process.env.DD_API_KEY
+      'dd-api-key': getEnvironmentVariable('DD_API_KEY')
     },
     timeout: 15_000,
     url
@@ -285,7 +286,7 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
     }
     // Otherwise we unshallow and get commits to upload again
     log.debug('It is shallow clone, unshallowing...')
-    if (!isFalse(process.env.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED)) {
+    if (!isFalse(getEnvironmentVariable('DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED'))) {
       unshallowRepository()
     }
 

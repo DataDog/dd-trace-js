@@ -4,6 +4,7 @@
 
 const os = require('os')
 const { getIsAzureFunction } = require('./serverless')
+const { getEnvironmentVariable, getEnvironmentVariables } = require('../../dd-trace/src/config-helper')
 
 function extractSubscriptionID (ownerName) {
   if (ownerName !== undefined) {
@@ -45,7 +46,7 @@ function buildMetadata () {
     WEBSITE_OS,
     WEBSITE_RESOURCE_GROUP,
     WEBSITE_SITE_NAME
-  } = process.env
+  } = getEnvironmentVariables()
 
   const subscriptionID = extractSubscriptionID(WEBSITE_OWNER_NAME)
 
@@ -78,11 +79,15 @@ function getAzureAppMetadata () {
   // DD_AZURE_APP_SERVICES is an environment variable introduced by the .NET APM team and is set automatically for
   // anyone using the Datadog APM Extensions (.NET, Java, or Node) for Windows Azure App Services
   // See: https://github.com/DataDog/datadog-aas-extension/blob/01f94b5c28b7fa7a9ab264ca28bd4e03be603900/node/src/applicationHost.xdt#L20-L21
-  return process.env.DD_AZURE_APP_SERVICES === undefined ? undefined : buildMetadata()
+  if (getEnvironmentVariable('DD_AZURE_APP_SERVICES') !== undefined) {
+    return buildMetadata()
+  }
 }
 
 function getAzureFunctionMetadata () {
-  return getIsAzureFunction() ? buildMetadata() : undefined
+  if (getIsAzureFunction()) {
+    return buildMetadata()
+  }
 }
 
 // Modeled after https://github.com/DataDog/libdatadog/blob/92272e90a7919f07178f3246ef8f82295513cfed/profiling/src/exporter/mod.rs#L187

@@ -6,6 +6,10 @@ const { expect } = require('chai')
 const { readFileSync } = require('fs')
 const sinon = require('sinon')
 const { GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('../src/constants')
+const { it, describe } = require('tap/lib/mocha.js')
+const assert = require('assert/strict')
+const { getEnvironmentVariable, getEnvironmentVariables } = require('../src/config-helper')
+const { once } = require('events')
 
 describe('Config', () => {
   let Config
@@ -75,6 +79,47 @@ describe('Config', () => {
     updateConfig.reset()
     process.env = env
     existsSyncParam = undefined
+  })
+
+  describe('config-helper', () => {
+    it('should throw when accessing unknown configuration', () => {
+      assert.throws(
+        () => getEnvironmentVariable('DD_UNKNOWN_CONFIG'),
+        /Missing DD_UNKNOWN_CONFIG env\/configuration in "supported-configurations.json" file./
+      )
+    })
+
+    it('should return aliased value', () => {
+      process.env.DATADOG_API_KEY = '12345'
+      assert.throws(() => getEnvironmentVariable('DATADOG_API_KEY'), {
+        message: /Missing DATADOG_API_KEY env\/configuration in "supported-configurations.json" file./
+      })
+      assert.strictEqual(getEnvironmentVariable('DD_API_KEY'), '12345')
+      const { DD_API_KEY, DATADOG_API_KEY } = getEnvironmentVariables()
+      assert.strictEqual(DATADOG_API_KEY, undefined)
+      assert.strictEqual(DD_API_KEY, getEnvironmentVariable('DD_API_KEY'))
+      delete process.env.DATADOG_API_KEY
+    })
+
+    it('should log deprecation warning for deprecated configurations', async () => {
+      process.env.DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED = 'true'
+      getEnvironmentVariables()
+      const [warning] = await once(process, 'warning')
+      assert.strictEqual(warning.name, 'DeprecationWarning')
+      assert.match(
+        warning.message,
+        /variable DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED .+ DD_PROFILING_ENDPOINT_COLLECTION_ENABLED instead/
+      )
+      assert.strictEqual(warning.code, 'DATADOG_DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED')
+    })
+
+    it('should pass through random envs', async () => {
+      process.env.FOOBAR = 'true'
+      const { FOOBAR } = getEnvironmentVariables()
+      assert.strictEqual(FOOBAR, 'true')
+      assert.strictEqual(getEnvironmentVariable('FOOBAR'), FOOBAR)
+      delete process.env.FOOBAR
+    })
   })
 
   it('should initialize its own logging config based off the loggers config', () => {
@@ -228,6 +273,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('dynamicInstrumentation.enabled', false)
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactedIdentifiers', [])
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactionExcludedIdentifiers', [])
+    expect(config).to.have.nested.property('dynamicInstrumentation.uploadIntervalSeconds', 1)
     expect(config).to.have.property('traceId128BitGenerationEnabled', true)
     expect(config).to.have.property('traceId128BitLoggingEnabled', true)
     expect(config).to.have.property('spanAttributeSchema', 'v0')
@@ -323,6 +369,7 @@ describe('Config', () => {
       { name: 'dynamicInstrumentation.enabled', value: false, origin: 'default' },
       { name: 'dynamicInstrumentation.redactedIdentifiers', value: [], origin: 'default' },
       { name: 'dynamicInstrumentation.redactionExcludedIdentifiers', value: [], origin: 'default' },
+      { name: 'dynamicInstrumentation.uploadIntervalSeconds', value: 1, origin: 'default' },
       { name: 'env', value: undefined, origin: 'default' },
       { name: 'experimental.enableGetRumData', value: false, origin: 'default' },
       { name: 'experimental.exporter', value: undefined, origin: 'default' },
@@ -473,6 +520,7 @@ describe('Config', () => {
     process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS = 'foo,bar'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS = 'a,b,c'
+    process.env.DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS = '0.1'
     process.env.DD_TRACE_GLOBAL_TAGS = 'foo:bar,baz:qux'
     process.env.DD_TRACE_SAMPLE_RATE = '0.5'
     process.env.DD_TRACE_RATE_LIMIT = '-1'
@@ -580,6 +628,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('dynamicInstrumentation.enabled', true)
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactedIdentifiers', ['foo', 'bar'])
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactionExcludedIdentifiers', ['a', 'b', 'c'])
+    expect(config).to.have.nested.property('dynamicInstrumentation.uploadIntervalSeconds', 0.1)
     expect(config).to.have.property('env', 'test')
     expect(config).to.have.property('sampleRate', 0.5)
     expect(config).to.have.property('traceEnabled', true)
@@ -698,6 +747,7 @@ describe('Config', () => {
       { name: 'dynamicInstrumentation.enabled', value: true, origin: 'env_var' },
       { name: 'dynamicInstrumentation.redactedIdentifiers', value: ['foo', 'bar'], origin: 'env_var' },
       { name: 'dynamicInstrumentation.redactionExcludedIdentifiers', value: ['a', 'b', 'c'], origin: 'env_var' },
+      { name: 'dynamicInstrumentation.uploadIntervalSeconds', value: 0.1, origin: 'env_var' },
       { name: 'env', value: 'test', origin: 'env_var' },
       { name: 'experimental.enableGetRumData', value: true, origin: 'env_var' },
       { name: 'experimental.exporter', value: 'log', origin: 'env_var' },
@@ -952,7 +1002,8 @@ describe('Config', () => {
       dynamicInstrumentation: {
         enabled: true,
         redactedIdentifiers: ['foo', 'bar'],
-        redactionExcludedIdentifiers: ['a', 'b', 'c']
+        redactionExcludedIdentifiers: ['a', 'b', 'c'],
+        uploadIntervalSeconds: 0.1
       },
       experimental: {
         b3: true,
@@ -1001,6 +1052,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('dynamicInstrumentation.enabled', true)
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactedIdentifiers', ['foo', 'bar'])
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactionExcludedIdentifiers', ['a', 'b', 'c'])
+    expect(config).to.have.nested.property('dynamicInstrumentation.uploadIntervalSeconds', 0.1)
     expect(config).to.have.property('env', 'test')
     expect(config).to.have.property('sampleRate', 0.5)
     expect(config).to.have.property('logger', logger)
@@ -1084,6 +1136,7 @@ describe('Config', () => {
       { name: 'dynamicInstrumentation.enabled', value: true, origin: 'code' },
       { name: 'dynamicInstrumentation.redactedIdentifiers', value: ['foo', 'bar'], origin: 'code' },
       { name: 'dynamicInstrumentation.redactionExcludedIdentifiers', value: ['a', 'b', 'c'], origin: 'code' },
+      { name: 'dynamicInstrumentation.uploadIntervalSeconds', value: 0.1, origin: 'code' },
       { name: 'env', value: 'test', origin: 'code' },
       { name: 'experimental.enableGetRumData', value: true, origin: 'code' },
       { name: 'experimental.exporter', value: 'log', origin: 'code' },
@@ -1295,6 +1348,7 @@ describe('Config', () => {
     process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS = 'foo,bar'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS = 'a,b,c'
+    process.env.DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS = '0.1'
     process.env.DD_API_KEY = '123'
     process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'v0'
     process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'false'
@@ -1303,14 +1357,12 @@ describe('Config', () => {
     process.env.DD_TRACE_CLIENT_IP_HEADER = 'foo-bar-header'
     process.env.DD_TRACE_GLOBAL_TAGS = 'foo:bar,baz:qux'
     process.env.DD_TRACE_EXPERIMENTAL_B3_ENABLED = 'true'
-    process.env.DD_TRACE_EXPERIMENTAL_TRACEPARENT_ENABLED = 'true'
     process.env.DD_TRACE_PROPAGATION_STYLE_INJECT = 'datadog'
     process.env.DD_TRACE_PROPAGATION_STYLE_EXTRACT = 'datadog'
     process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'restart'
     process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_EXPORTER = 'log'
     process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = 'true'
-    process.env.DD_TRACE_EXPERIMENTAL_INTERNAL_ERRORS_ENABLED = 'true'
     process.env.DD_TRACE_MIDDLEWARE_TRACING_ENABLED = 'false'
     process.env.DD_APM_TRACING_ENABLED = 'false'
     process.env.DD_APPSEC_ENABLED = 'false'
@@ -1382,7 +1434,8 @@ describe('Config', () => {
       dynamicInstrumentation: {
         enabled: false,
         redactedIdentifiers: ['foo2', 'bar2'],
-        redactionExcludedIdentifiers: ['a2', 'b2']
+        redactionExcludedIdentifiers: ['a2', 'b2'],
+        uploadIntervalSeconds: 0.2
       },
       experimental: {
         b3: false,
@@ -1470,6 +1523,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('dynamicInstrumentation.enabled', false)
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactedIdentifiers', ['foo2', 'bar2'])
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactionExcludedIdentifiers', ['a2', 'b2'])
+    expect(config).to.have.nested.property('dynamicInstrumentation.uploadIntervalSeconds', 0.2)
     expect(config).to.have.property('env', 'development')
     expect(config).to.have.property('clientIpEnabled', true)
     expect(config).to.have.property('clientIpHeader', 'x-true-client-ip')
@@ -2707,6 +2761,40 @@ apm_configuration_default:
       process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-great-lambda-function'
       const stableConfig = new Config()
       expect(stableConfig).to.not.have.property('stableConfig')
+    })
+  })
+
+  context('getOrigin', () => {
+    let originalAppsecEnabled
+
+    beforeEach(() => {
+      originalAppsecEnabled = process.env.DD_APPSEC_ENABLED
+    })
+
+    afterEach(() => {
+      process.env.DD_APPSEC_ENABLED = originalAppsecEnabled
+    })
+
+    it('should return default value', () => {
+      const config = new Config()
+
+      expect(config.getOrigin('appsec.enabled')).to.be.equal('default')
+    })
+
+    it('should return env_var', () => {
+      process.env.DD_APPSEC_ENABLED = 'true'
+
+      const config = new Config()
+
+      expect(config.getOrigin('appsec.enabled')).to.be.equal('env_var')
+    })
+
+    it('should return code', () => {
+      const config = new Config({
+        appsec: true
+      })
+
+      expect(config.getOrigin('appsec.enabled')).to.be.equal('code')
     })
   })
 })
