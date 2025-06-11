@@ -113,12 +113,20 @@ describe('Config', () => {
       assert.strictEqual(warning.code, 'DATADOG_DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED')
     })
 
-    it('should set new runtimeMetricsRuntimeId from deprecated DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED', () => {
+    it('should set new runtimeMetricsRuntimeId from deprecated DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED', async () => {
       process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED = 'true'
+      assert.strictEqual(process.env.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED, undefined)
       const config = new Config()
       expect(config).to.have.property('runtimeMetricsRuntimeId', true)
       assert.strictEqual(getEnvironmentVariable('DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED'), 'true')
       delete process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED
+
+      const [warning] = await once(process, 'warning')
+      assert.strictEqual(warning.name, 'DeprecationWarning')
+      assert.match(
+        warning.message,
+        /variable DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED .+ DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED instead/
+      )
     })
 
     it('should pass through random envs', async () => {
