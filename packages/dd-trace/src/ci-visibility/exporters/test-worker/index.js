@@ -7,8 +7,7 @@ const {
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   JEST_WORKER_LOGS_PAYLOAD_CODE,
-  PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
-  VITEST_WORKER_TRACE_PAYLOAD_CODE
+  PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE
 } = require('../../../plugins/util/test')
 const { getEnvironmentVariable } = require('../../../config-helper')
 
@@ -24,9 +23,6 @@ function getInterprocessTraceCode () {
   }
   if (getEnvironmentVariable('DD_PLAYWRIGHT_WORKER')) {
     return PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE
-  }
-  if (process.env.VITEST_WORKER_ID) {
-    return VITEST_WORKER_TRACE_PAYLOAD_CODE
   }
   return null
 }
