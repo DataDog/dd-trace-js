@@ -3,7 +3,7 @@ name: Audit
 on:
   pull_request:
     paths:
-      - package.json
+      - yarn.lock
   push:
     branches: [master]
   schedule:
