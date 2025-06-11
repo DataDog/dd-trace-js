@@ -3,7 +3,7 @@
 const LogPlugin = require('./log_plugin')
 
 module.exports = class StructuredLogPlugin extends LogPlugin {
-  static get structured () {
+  static get _structured () {
     return true
   }
 
