@@ -336,7 +336,6 @@ function updateConfig (changes, config) {
   const host = createHostObject()
 
   const changed = configWithOrigin.size > 0
-  const configuration = []
 
   for (const change of changes) {
     const name = nameMapping[change.name] || change.name
@@ -355,7 +354,6 @@ function updateConfig (changes, config) {
       entry.value = value.join(',')
     }
 
-    configuration.push(entry)
     // Use composite key to support multiple origins for same config name
     configWithOrigin.set(`${name}|${origin}`, entry)
   }
