@@ -9,6 +9,10 @@ const blocking = require('./blocking')
 
 const ASM_PRODUCTS = new Set(['ASM', 'ASM_DD', 'ASM_DATA'])
 
+/*
+  ASM Actions must be tracked in order to update the defaultBlockingActions in blocking. These actions are used
+  by blockRequest method exposed in the user blocking SDK (see packages/dd-trace/src/appsec/sdk/user_blocking.js)
+ */
 let appliedActions = new Map()
 
 function loadRules (config) {
@@ -62,7 +66,7 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
         Reporter.reportWafConfigError(waf.wafManager.ddwafVersion, waf.wafManager.rulesVersion)
       }
 
-      // check asm actions
+      // check ASM actions
       if (updateResult.success && item.product === 'ASM' && item.file?.actions?.length) {
         newActions.set(item.id, item.file.actions)
       }
