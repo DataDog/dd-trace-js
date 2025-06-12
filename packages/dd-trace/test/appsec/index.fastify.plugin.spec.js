@@ -4,6 +4,7 @@ const Axios = require('axios')
 const { assert } = require('chai')
 const getPort = require('get-port')
 const path = require('path')
+const semver = require('semver')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
@@ -172,6 +173,92 @@ withVersions('fastify', 'fastify', version => {
           assert.equal(span.metrics['_dd.appsec.truncated.container_size'], 300)
           assert.equal(span.metrics['_dd.appsec.truncated.container_depth'], 20)
         })
+      }
+    })
+  })
+
+  describe('Appsec blocking with schema validation', () => {
+    let server, axios
+
+    before(() => {
+      return agent.load(['fastify', 'http'], { client: false })
+    })
+
+    before((done) => {
+      const fastify = require(`../../../../versions/fastify@${version}`).get()
+
+      const app = fastify()
+
+      app.post('/schema-validated', {
+        schema: {
+          body: {
+            type: 'object',
+            required: ['validField'],
+            properties: {
+              validField: { type: 'string'}
+            }
+          }
+        }
+      }, (request, reply) => {
+        reply.send('DONE')
+      })
+
+      getPort().then((port) => {
+        app.listen({ port }, () => {
+          axios = Axios.create({ baseURL: `http://localhost:${port}` })
+          done()
+        })
+        server = app.server
+      })
+    })
+
+    after(() => {
+      server.close()
+      return agent.close({ ritmReset: false })
+    })
+
+    beforeEach(async () => {
+      appsec.enable(new Config({
+        appsec: {
+          enabled: true,
+          rules: path.join(__dirname, 'body-parser-rules.json')
+        }
+      }))
+    })
+
+    afterEach(() => {
+      appsec.disable()
+    })
+
+    it('should return 403 for dangerous payloads', async () => {
+      // Skip Fastify v1 - different behavior where schema validation takes precedence
+      if (semver.lt(semver.coerce(version), '2.0.0')) {
+        return
+      }
+
+      try {
+        await axios.post('/schema-validated', { key: 'testattack' })
+
+        return Promise.reject(new Error('Request should not return 200'))
+      } catch (e) {
+        assert.equal(e.response.status, 403)
+        assert.deepEqual(e.response.data, JSON.parse(json))
+      }
+    })
+
+    it('should return 403 for valid schema with attack content', async () => {
+      // Skip Fastify v1 - different behavior where schema validation takes precedence
+      if (semver.lt(semver.coerce(version), '2.0.0')) {
+        return
+      }
+
+      try {
+        await axios.post('/schema-validated', { validField: 'testattack' })
+
+        return Promise.reject(new Error('Request should not return 200'))
+      } catch (e) {
+        assert.equal(e.response.status, 403)
+        assert.deepEqual(e.response.data, JSON.parse(json))
       }
     })
   })
