@@ -195,7 +195,7 @@ withVersions('fastify', 'fastify', version => {
             type: 'object',
             required: ['validField'],
             properties: {
-              validField: { type: 'string'}
+              validField: { type: 'string' }
             }
           }
         }
