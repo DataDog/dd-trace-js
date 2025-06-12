@@ -8,6 +8,16 @@ const Reporter = require('./reporter')
 const blocking = require('./blocking')
 
 const ASM_PRODUCTS = new Set(['ASM', 'ASM_DD', 'ASM_DATA'])
+const DIAGNOSTIC_KEYS = [
+  'exclusions',
+  'rules',
+  'processors',
+  'rules_override',
+  'rules_data',
+  'custom_rules',
+  'actions',
+  'scanners'
+]
 
 /*
   ASM Actions must be tracked in order to update the defaultBlockingActions in blocking. These actions are used
@@ -117,22 +127,23 @@ function concatArrays (files) {
   return [...files.values()].flat()
 }
 
-function extractErrors (obj) {
-  if (typeof obj !== 'object' || obj === null) return null
+function extractErrors (diagnostics) {
+  if (!diagnostics) return
+
+  if (diagnostics.error) return diagnostics
 
   const result = {}
   let isResultPopulated = false
 
-  for (const [key, value] of Object.entries(obj)) {
-    if (key === 'error' || key === 'errors') {
-      result[key] = value
+  for (const diagnosticKey of DIAGNOSTIC_KEYS) {
+    if (diagnostics[diagnosticKey]?.error) {
+      (result[diagnosticKey] ??= {}).error = diagnostics[diagnosticKey]?.error
       isResultPopulated = true
-    } else if (typeof value === 'object' && value !== null) {
-      const child = extractErrors(value)
-      if (child) {
-        isResultPopulated = true
-        result[key] = child
-      }
+    }
+
+    if (diagnostics[diagnosticKey]?.errors) {
+      (result[diagnosticKey] ??= {}).errors = diagnostics[diagnosticKey]?.errors
+      isResultPopulated = true
     }
   }
 
