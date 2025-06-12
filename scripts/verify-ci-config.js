@@ -172,6 +172,7 @@ const IGNORED_WORKFLOWS = {
     'retry.yml'
   ],
   trigger_pull_request: [
+    'audit.yml',
     'stale.yml'
   ],
   trigger_push: [
