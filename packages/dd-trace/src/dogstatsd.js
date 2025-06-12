@@ -165,7 +165,7 @@ class DogStatsDClient {
         .filter(key => {
           // Skip runtime-id unless enabled as cardinality may be too high
           if (key !== 'runtime-id') return true
-          return (config.experimental && config.experimental.runtimeId)
+          return config.runtimeMetricsRuntimeId
         })
         .forEach(key => {
           // https://docs.datadoghq.com/tagging/#defining-tags
