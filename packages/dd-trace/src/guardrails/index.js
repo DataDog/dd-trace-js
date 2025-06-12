@@ -54,6 +54,8 @@ function guard (fn) {
   }
 
   if (!clobberBailout && (!initBailout || forced)) {
+    // Ensure the instrumentation source is set for the current process and potential 
+    // child processes.
     var result = fn()
     telemetry('complete', ['injection_forced:' + (forced && initBailout ? 'true' : 'false')])
     log.info('Application instrumentation bootstrapping complete')
