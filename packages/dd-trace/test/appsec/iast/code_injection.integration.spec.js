@@ -67,11 +67,9 @@ describe('IAST - code_injection - integration', () => {
       assert.isTrue(vulnerabilities.has('CODE_INJECTION'))
     })
 
-    return Promise.all([checkMessages, checkTelemetry]).then(() => {
-      assert.equal(iastTelemetryReceived, true)
+    await Promise.all([checkMessages, checkTelemetry])
 
-      return true
-    })
+    assert.equal(iastTelemetryReceived, true)
   }
 
   describe('SourceTextModule', () => {

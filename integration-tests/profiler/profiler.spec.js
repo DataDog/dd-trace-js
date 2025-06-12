@@ -539,7 +539,7 @@ describe('profiler', () => {
       proc.kill()
     })
 
-    it('records profile on process exit', () => {
+    it('records profile on process exit', async () => {
       proc = fork(profilerTestFile, {
         cwd,
         env: {
@@ -547,13 +547,13 @@ describe('profiler', () => {
           DD_PROFILING_ENABLED: 1
         }
       })
-      const checkTelemetry = agent.assertTelemetryReceived(_ => {}, 1000, 'generate-metrics')
+      const checkTelemetry = agent.assertTelemetryReceived(null, 1000, 'generate-metrics')
       // SSI telemetry is not supposed to have been emitted when DD_INJECTION_ENABLED is absent,
       // so expect telemetry callback to time out
-      return Promise.all([checkProfiles(agent, proc, timeout), expectTimeout(checkTelemetry)])
+      await Promise.all([checkProfiles(agent, proc, timeout), expectTimeout(checkTelemetry)])
     })
 
-    it('records SSI telemetry on process exit', () => {
+    it('records SSI telemetry on process exit', async () => {
       proc = fork(profilerTestFile, {
         cwd,
         env: {
@@ -589,7 +589,8 @@ describe('profiler', () => {
         checkTags(series[1].tags)
         assert.equal(series[1].points[0][1], 1)
       }, timeout, 'generate-metrics')
-      return Promise.all([checkProfiles(agent, proc, timeout), checkTelemetry])
+
+      await Promise.all([checkProfiles(agent, proc, timeout), checkTelemetry])
     })
 
     if (process.platform !== 'win32') { // PROF-8905
@@ -706,7 +707,7 @@ describe('profiler', () => {
       await agent.stop()
     })
 
-    it('sends profiler API telemetry', () => {
+    it('sends profiler API telemetry', async () => {
       proc = fork(profilerTestFile, {
         cwd,
         env: {
@@ -754,10 +755,10 @@ describe('profiler', () => {
         assert.equal(pointsCount, series[1].points.length)
       }, timeout, 'distributions')
 
-      return Promise.all([checkProfiles(agent, proc, timeout), checkMetrics, checkDistributions]).then(() => {
-        // Same number of requests and points
-        assert.equal(requestCount, pointsCount)
-      })
+      await Promise.all([checkProfiles(agent, proc, timeout), checkMetrics, checkDistributions])
+
+      // Same number of requests and points
+      assert.equal(requestCount, pointsCount)
     })
   })
 

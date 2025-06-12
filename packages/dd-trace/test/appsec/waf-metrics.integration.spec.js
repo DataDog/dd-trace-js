@@ -82,11 +82,9 @@ describe('WAF Metrics', () => {
         }
       }, 30_000, 'generate-metrics', 2)
 
-      return Promise.all([checkMessages, checkTelemetryMetrics]).then(() => {
-        assert.equal(appsecTelemetryMetricsReceived, true)
+      await Promise.all([checkMessages, checkTelemetryMetrics])
 
-        return true
-      })
+      assert.equal(appsecTelemetryMetricsReceived, true)
     })
   })
 
@@ -137,11 +135,9 @@ describe('WAF Metrics', () => {
         }
       }, 30_000, 'generate-metrics', 2)
 
-      return Promise.all([checkMessages, checkTelemetryMetrics]).then(() => {
-        assert.equal(appsecTelemetryMetricsReceived, true)
+      await Promise.all([checkMessages, checkTelemetryMetrics])
 
-        return true
-      })
+      assert.equal(appsecTelemetryMetricsReceived, true)
     })
   })
 
@@ -197,11 +193,9 @@ describe('WAF Metrics', () => {
         }
       }, 30_000, 'generate-metrics', 2)
 
-      return Promise.all([checkMessages, checkTelemetryMetrics]).then(() => {
-        assert.equal(appsecTelemetryMetricsReceived, true)
+      await Promise.all([checkMessages, checkTelemetryMetrics])
 
-        return true
-      })
+      assert.equal(appsecTelemetryMetricsReceived, true)
     })
   })
 })

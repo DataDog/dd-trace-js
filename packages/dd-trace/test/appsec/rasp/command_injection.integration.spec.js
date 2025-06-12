@@ -86,11 +86,10 @@ describe('RASP - command_injection - integration', () => {
         }
       }, 30_000, 'generate-metrics', 2)
 
-      return Promise.all([checkMessages, checkTelemetry]).then(() => {
-        assert.equal(appsecTelemetryReceived, true)
+      await Promise.all([checkMessages, checkTelemetry])
 
-        return true
-      })
+      assert.equal(appsecTelemetryReceived, true)
+      return
     }
 
     throw new Error('Request should be blocked')

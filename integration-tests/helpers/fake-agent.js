@@ -188,7 +188,7 @@ module.exports = class FakeAgent extends EventEmitter {
       if (msg.payload.request_type !== requestType) return
       msgCount += 1
       try {
-        fn(msg)
+        fn?.(msg)
         if (msgCount === expectedMessageCount) {
           resultResolve()
         }
