@@ -51,7 +51,7 @@ describe('IAST - code_injection - integration', () => {
         })
         assert.isNotNull(instrumentedSink)
       }
-    }, 30_000, 'generate-metrics', 2)
+    }, 'generate-metrics', 30_000, 2)
 
     const checkMessages = agent.assertMessageReceived(({ headers, payload }) => {
       assert.strictEqual(payload[0][0].metrics['_dd.iast.enabled'], 1)

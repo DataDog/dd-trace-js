@@ -392,19 +392,24 @@ function setShouldKill (value) {
 const assertObjectContains = assert.partialDeepStrictEqual || function assertObjectContains (actual, expected) {
   if (Array.isArray(expected)) {
     assert.ok(Array.isArray(actual), `Expected array but got ${typeof actual}`)
+    let startIndex = 0
     for (const expectedItem of expected) {
-      const found = actual.some(actualItem => {
+      let found = false
+      for (let i = startIndex; i < actual.length; i++) {
+        const actualItem = actual[i]
         try {
           if (expectedItem !== null && typeof expectedItem === 'object') {
             assertObjectContains(actualItem, expectedItem)
           } else {
             assert.strictEqual(actualItem, expectedItem)
           }
-          return true
+          startIndex = i + 1
+          found = true
+          break
         } catch {
-          return false
+          continue
         }
-      })
+      }
       assert.ok(found, `Expected array to contain ${JSON.stringify(expectedItem)}`)
     }
     return

@@ -56,7 +56,7 @@ describe('telemetry', () => {
             })
           }
         }
-      }, 5_000, 'app-dependencies-loaded', 1)
+      }, 'app-dependencies-loaded', 5_000, 1)
 
       expect(ddTraceFound).to.be.true
       expect(importInTheMiddleFound).to.be.true
@@ -70,7 +70,7 @@ describe('telemetry', () => {
           { name: 'DD_LOG_INJECTION', value: true, origin: 'env_var' },
           { name: 'DD_LOG_INJECTION', value: false, origin: 'code' }
         ])
-      }, 5_000, 'app-started', 1)
+      }, 'app-started', 5_000, 1)
     })
   })
 })

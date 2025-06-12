@@ -8,7 +8,7 @@ const axios = require('axios')
 
 async function check (agent, proc, timeout, onMessage = () => { }, isMetrics) {
   const messageReceiver = isMetrics
-    ? agent.assertTelemetryReceived(onMessage, timeout, 'generate-metrics')
+    ? agent.assertTelemetryReceived(onMessage, 'generate-metrics', timeout)
     : agent.assertMessageReceived(onMessage, timeout)
 
   const [res] = await Promise.all([

@@ -547,7 +547,7 @@ describe('profiler', () => {
           DD_PROFILING_ENABLED: 1
         }
       })
-      const checkTelemetry = agent.assertTelemetryReceived(null, 1000, 'generate-metrics')
+      const checkTelemetry = agent.assertTelemetryReceived('generate-metrics', 1000)
       // SSI telemetry is not supposed to have been emitted when DD_INJECTION_ENABLED is absent,
       // so expect telemetry callback to time out
       await Promise.all([checkProfiles(agent, proc, timeout), expectTimeout(checkTelemetry)])
@@ -588,7 +588,7 @@ describe('profiler', () => {
         assert.equal(series[1].type, 'count')
         checkTags(series[1].tags)
         assert.equal(series[1].points[0][1], 1)
-      }, timeout, 'generate-metrics')
+      }, 'generate-metrics', timeout)
 
       await Promise.all([checkProfiles(agent, proc, timeout), checkTelemetry])
     })
@@ -740,7 +740,7 @@ describe('profiler', () => {
 
         // Same number of requests and responses
         assert.equal(series[1].points[0][1], requestCount)
-      }, timeout, 'generate-metrics')
+      }, 'generate-metrics', timeout)
 
       const checkDistributions = agent.assertTelemetryReceived(({ _, payload }) => {
         const pp = payload.payload
@@ -753,7 +753,7 @@ describe('profiler', () => {
         // Same number of points
         pointsCount = series[0].points.length
         assert.equal(pointsCount, series[1].points.length)
-      }, timeout, 'distributions')
+      }, 'distributions', timeout)
 
       await Promise.all([checkProfiles(agent, proc, timeout), checkMetrics, checkDistributions])
 

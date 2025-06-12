@@ -73,7 +73,7 @@ describe('RASP metrics', () => {
           assert.include(errorSerie.tags, 'waf_error:-127')
           assert.strictEqual(errorSerie.type, 'count')
         }
-      }, 30_000, 'generate-metrics', 2)
+      }, 'generate-metrics', 30_000, 2)
 
       assert.equal(appsecTelemetryMetricsReceived, true)
     })
@@ -124,7 +124,7 @@ describe('RASP metrics', () => {
           assert.include(timeoutSerie.tags, 'rule_variant:shell')
           assert.strictEqual(timeoutSerie.type, 'count')
         }
-      }, 30_000, 'generate-metrics', 2)
+      }, 'generate-metrics', 30_000, 2)
 
       await Promise.all([checkMessages, checkTelemetry])
 

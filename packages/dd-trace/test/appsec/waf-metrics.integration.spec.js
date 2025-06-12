@@ -80,7 +80,7 @@ describe('WAF Metrics', () => {
           assert.strictEqual(wafError.type, 'count')
           assert.include(wafError.tags, 'waf_error:-127')
         }
-      }, 30_000, 'generate-metrics', 2)
+      }, 'generate-metrics', 30_000, 2)
 
       await Promise.all([checkMessages, checkTelemetryMetrics])
 
@@ -133,7 +133,7 @@ describe('WAF Metrics', () => {
           assert.strictEqual(wafRequests.type, 'count')
           assert.include(wafRequests.tags, 'waf_timeout:true')
         }
-      }, 30_000, 'generate-metrics', 2)
+      }, 'generate-metrics', 30_000, 2)
 
       await Promise.all([checkMessages, checkTelemetryMetrics])
 
@@ -191,7 +191,7 @@ describe('WAF Metrics', () => {
           assert.exists(wafRequests, 'waf requests serie should exist')
           assert.include(wafRequests.tags, 'input_truncated:true')
         }
-      }, 30_000, 'generate-metrics', 2)
+      }, 'generate-metrics', 30_000, 2)
 
       await Promise.all([checkMessages, checkTelemetryMetrics])
 

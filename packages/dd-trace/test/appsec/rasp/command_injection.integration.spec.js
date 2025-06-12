@@ -84,7 +84,7 @@ describe('RASP - command_injection - integration', () => {
           assert.include(matchSerie.tags, `rule_variant:${variant}`)
           assert.strictEqual(matchSerie.type, 'count')
         }
-      }, 30_000, 'generate-metrics', 2)
+      }, 'generate-metrics', 30_000, 2)
 
       await Promise.all([checkMessages, checkTelemetry])
 
