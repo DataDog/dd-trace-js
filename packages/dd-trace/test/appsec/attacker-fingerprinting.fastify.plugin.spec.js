@@ -58,6 +58,9 @@ withVersions('fastify', 'fastify', fastifyVersion => {
     it('should report http fingerprints', async () => {
       await axios.post('/?key=testattack',
         {
+          bodyParam: 'bodyValue'
+        },
+        {
           headers: {
             'User-Agent': 'test-user-agent',
             headerName: 'headerValue',
@@ -69,11 +72,11 @@ withVersions('fastify', 'fastify', fastifyVersion => {
       await agent.assertSomeTraces((traces) => {
         const span = traces[0][0]
         assert.property(span.meta, '_dd.appsec.fp.http.header')
-        assert.equal(span.meta['_dd.appsec.fp.http.header'], 'hdr-0110000110-53e9b2ab-4-c348f529')
+        assert.equal(span.meta['_dd.appsec.fp.http.header'], 'hdr-0110000110-74c2908f-5-55682ec1')
         assert.property(span.meta, '_dd.appsec.fp.http.network')
-        assert.equal(span.meta['_dd.appsec.fp.http.network'], 'net-0-0000000000')
+        assert.equal(span.meta['_dd.appsec.fp.http.network'], 'net-1-0100000000')
         assert.property(span.meta, '_dd.appsec.fp.http.endpoint')
-        assert.equal(span.meta['_dd.appsec.fp.http.endpoint'], 'http-post-8a5edab2-2c70e12b-378f37b1')
+        assert.equal(span.meta['_dd.appsec.fp.http.endpoint'], 'http-post-8a5edab2-2c70e12b-be31090f')
       })
     })
   })
