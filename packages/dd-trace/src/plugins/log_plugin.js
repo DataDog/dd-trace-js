@@ -40,13 +40,13 @@ module.exports = class LogPlugin extends Plugin {
       // NOTE: This needs to run whether or not there is a span
       // so service, version, and env will always get injected.
       const holder = {}
-      if (this._structured === 'mixed'
-        && (this.config.logInjection === 'structured' || this._tracerConfig.logInjection === 'structured')) {
+      if (this._structured === 'mixed' &&
+        (this.config.logInjection === 'structured' || this._tracerConfig.logInjection === 'structured')) {
         // when message is in JSON format, inject trace/span IDs
         try {
           JSON.parse(arg.message)
           this.tracer.inject(span, LOG, holder)
-        } catch (error) {
+        } catch {
           this.tracer.inject(undefined, LOG, holder)
         }
       } else {
