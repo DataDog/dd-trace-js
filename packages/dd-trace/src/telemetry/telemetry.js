@@ -28,6 +28,8 @@ const extendedHeartbeatPayload = {}
 
 const sentIntegrations = new Set()
 
+let seqId = 0
+
 function getRetryData () {
   return retryData
 }
@@ -337,9 +339,8 @@ function updateConfig (changes, config) {
 
   for (const change of changes) {
     const name = nameMapping[change.name] || change.name
-
     const { origin, value } = change
-    const entry = { name, value, origin }
+    const entry = { name, value, origin, seq_id: seqId++ }
 
     if (namesNeedFormatting.has(entry.name)) {
       entry.value = formatMapForTelemetry(entry.value)
@@ -352,7 +353,9 @@ function updateConfig (changes, config) {
     } else if (Array.isArray(entry.value)) {
       entry.value = value.join(',')
     }
-    configWithOrigin.set(name, entry)
+
+    // Use composite key to support multiple origins for same config name
+    configWithOrigin.set(`${name}|${origin}`, entry)
   }
 
   if (changed) {

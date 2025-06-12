@@ -10,6 +10,8 @@ if (process.env.AGENT_URL) {
   options.url = process.env.AGENT_URL
 }
 
+options.logInjection = false
+
 require('dd-trace').init(options)
 
 // https://www.npmjs.com/package/stealthy-require
