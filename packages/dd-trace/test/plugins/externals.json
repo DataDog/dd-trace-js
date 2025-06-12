@@ -451,7 +451,7 @@
   "prisma": [  
     {
       "name": "prisma",
-      "versions": ["6.8.0"]
+      "versions": ["6.9.0"]
     }
   ],
   "q": [

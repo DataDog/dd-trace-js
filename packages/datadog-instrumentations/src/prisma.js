@@ -63,7 +63,7 @@ class TracingHelper {
   }
 }
 
-addHook({ name: '@prisma/client', versions: ['>=6.1.0 <=6.8.0'] }, (prisma, version) => {
+addHook({ name: '@prisma/client', versions: ['>=6.1.0 <=6.9.0'] }, (prisma, version) => {
   const tracingHelper = new TracingHelper()
 
   /*
