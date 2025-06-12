@@ -62,6 +62,20 @@ describe('Unvalidated Redirect vulnerability', () => {
           axios.get(`http://localhost:${config.port}/?location=http://user@app.com/`).catch(done)
         })
 
+        testThatRequestHasVulnerability((req, res) => {
+          redirectFunctions.insecureWithResLocationMethod(req.body.location, res)
+        }, UNVALIDATED_REDIRECT, {
+          occurrences: 1,
+          location: {
+            path: redirectFunctionsFilename,
+            line: 12
+          }
+        }, null, (done, config) => {
+          axios.post(`http://localhost:${config.port}/`, {
+            location: 'http://user@app.com/'
+          }).catch(done)
+        })
+
         testThatRequestHasNoVulnerability((req, res) => {
           res.header('X-test', req.query.location)
         }, UNVALIDATED_REDIRECT, (done, config) => {
