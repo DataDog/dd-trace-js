@@ -501,7 +501,6 @@ class Config {
     this._setValue(defaults, 'env')
     this._setValue(defaults, 'experimental.enableGetRumData', false)
     this._setValue(defaults, 'experimental.exporter')
-    this._setValue(defaults, 'experimental.runtimeId', false)
     this._setValue(defaults, 'flushInterval', 2000)
     this._setValue(defaults, 'flushMinSpans', 1000)
     this._setValue(defaults, 'gitMetadataEnabled', true)
@@ -565,6 +564,7 @@ class Config {
     this._setValue(defaults, 'remoteConfig.pollInterval', 5) // seconds
     this._setValue(defaults, 'reportHostname', false)
     this._setValue(defaults, 'runtimeMetrics', false)
+    this._setValue(defaults, 'runtimeMetricsRuntimeId', false)
     this._setValue(defaults, 'sampleRate')
     this._setValue(defaults, 'sampler.rateLimit', 100)
     this._setValue(defaults, 'sampler.rules', [])
@@ -742,7 +742,7 @@ class Config {
       DD_TRACE_ENABLED,
       DD_TRACE_EXPERIMENTAL_EXPORTER,
       DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED,
-      DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED,
+      DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED,
       DD_TRACE_GIT_METADATA_ENABLED,
       DD_TRACE_GLOBAL_TAGS,
       DD_TRACE_GRAPHQL_ERROR_EXTENSIONS,
@@ -865,7 +865,6 @@ class Config {
     this._setBoolean(env, 'traceEnabled', DD_TRACE_ENABLED)
     this._setBoolean(env, 'experimental.enableGetRumData', DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED)
     this._setString(env, 'experimental.exporter', DD_TRACE_EXPERIMENTAL_EXPORTER)
-    this._setBoolean(env, 'experimental.runtimeId', DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED)
     if (AWS_LAMBDA_FUNCTION_NAME) this._setValue(env, 'flushInterval', 0)
     this._setValue(env, 'flushMinSpans', maybeInt(DD_TRACE_PARTIAL_FLUSH_MIN_SPANS))
     this._envUnprocessed.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
@@ -946,6 +945,7 @@ class Config {
       : undefined
     this._setBoolean(env, 'runtimeMetrics', DD_RUNTIME_METRICS_ENABLED ||
     otelSetRuntimeMetrics)
+    this._setBoolean(env, 'runtimeMetricsRuntimeId', DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED)
     this._setArray(env, 'sampler.spanSamplingRules', reformatSpanSamplingRules(coalesce(
       safeJsonParse(maybeFile(DD_SPAN_SAMPLING_RULES_FILE)),
       safeJsonParse(DD_SPAN_SAMPLING_RULES)
@@ -1100,7 +1100,7 @@ class Config {
     this._setString(opts, 'env', options.env || tags.env)
     this._setBoolean(opts, 'experimental.enableGetRumData', options.experimental?.enableGetRumData)
     this._setString(opts, 'experimental.exporter', options.experimental?.exporter)
-    this._setBoolean(opts, 'experimental.runtimeId', options.experimental?.runtimeId)
+    this._setBoolean(opts, 'runtimeMetricsRuntimeId', options.runtimeMetricsRuntimeId)
     this._setValue(opts, 'flushInterval', maybeInt(options.flushInterval))
     this._optsUnprocessed.flushInterval = options.flushInterval
     this._setValue(opts, 'flushMinSpans', maybeInt(options.flushMinSpans))
@@ -1149,6 +1149,7 @@ class Config {
     }
     this._setBoolean(opts, 'reportHostname', options.reportHostname)
     this._setBoolean(opts, 'runtimeMetrics', options.runtimeMetrics)
+    this._setBoolean(opts, 'runtimeMetricsRuntimeId', options.runtimeMetricsRuntimeId)
     this._setArray(opts, 'sampler.spanSamplingRules', reformatSpanSamplingRules(options.spanSamplingRules))
     this._setUnit(opts, 'sampleRate', coalesce(options.sampleRate, options.ingestion.sampleRate))
     const ingestion = options.ingestion || {}
