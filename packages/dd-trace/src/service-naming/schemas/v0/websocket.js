@@ -2,14 +2,14 @@ const { identityService } = require('../util')
 
 const websocket = {
   consumer: {
-    ws: {
-      opName: () => 'ws.request',
+    websocket: {
+      opName: () => 'websocket.request',
       serviceName: identityService
     }
   },
   producer: {
-    ws: {
-      opName: () => 'ws.request',
+    websocket: {
+      opName: () => 'websocket.send',
       serviceName: identityService
     }
   }
