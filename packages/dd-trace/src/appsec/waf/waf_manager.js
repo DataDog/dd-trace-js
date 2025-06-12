@@ -60,14 +60,15 @@ class WAFManager {
     }
 
     const success = this.ddwaf.createOrUpdateConfig(rules, path)
+
+    if (product === 'ASM_DD' && !success && !this.ddwaf.configPaths.some(cp => cp.includes('ASM_DD'))) {
+      this.ddwaf.createOrUpdateConfig(this.defaultRules, DEFAULT_WAF_CONFIG_PATH)
+    }
+
     const diagnostics = this.ddwaf.diagnostics
 
     if (diagnostics.ruleset_version) {
       this.rulesVersion = diagnostics.ruleset_version
-    }
-
-    if (product === 'ASM_DD' && !success && !this.ddwaf.configPaths.some(cp => cp.includes('ASM_DD'))) {
-      this.ddwaf.createOrUpdateConfig(this.defaultRules, DEFAULT_WAF_CONFIG_PATH)
     }
 
     return { success, diagnostics }
