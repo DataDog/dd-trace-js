@@ -77,7 +77,7 @@ describe('Unvalidated Redirect vulnerability', () => {
             line: 12
           }
         }, null, (done, config) => {
-          getAxiosInstance(config).post({
+          getAxiosInstance(config).post('', {
             location: 'http://user@app.com/'
           }).catch(done)
         })
@@ -95,7 +95,7 @@ describe('Unvalidated Redirect vulnerability', () => {
         testThatRequestHasNoVulnerability((req, res) => {
           redirectFunctions.insecureWithResLocationMethod(req.headers.redirectlocation, res)
         }, UNVALIDATED_REDIRECT, (done, config) => {
-          getAxiosInstance(config).get({
+          getAxiosInstance(config).get('', {
             headers: {
               redirectlocation: 'http://user@app.com/'
             }
