@@ -18,7 +18,7 @@ const hookFile = 'dd-trace/loader-hook.mjs'
 // This is set by the setShouldKill function
 let shouldKill
 
-async function runAndCheckOutput (filename, cwd, expectedOut) {
+async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
   const proc = spawn(process.execPath, [filename], { cwd, stdio: 'pipe' })
   const pid = proc.pid
   let out = await new Promise((resolve, reject) => {
@@ -42,7 +42,12 @@ async function runAndCheckOutput (filename, cwd, expectedOut) {
       // Debug adds this, which we don't care about in these tests
       out = out.replace('Flushing 0 metrics via HTTP\n', '')
     }
-    assert.strictEqual(out, expectedOut)
+    assert.match(out, new RegExp(expectedOut), `output "${out} does not contain expected output "${expectedOut}"`)
+  }
+
+  if (expectedSource) {
+    assert.match(out, new RegExp(`instrumentation source: ${expectedSource}`),
+    `Expected the process to output "${expectedSource}", but logs only contain: "${out}"`)
   }
   return pid
 }
@@ -51,10 +56,10 @@ async function runAndCheckOutput (filename, cwd, expectedOut) {
 let sandbox
 
 // This _must_ be used with the useSandbox function
-async function runAndCheckWithTelemetry (filename, expectedOut, ...expectedTelemetryPoints) {
+async function runAndCheckWithTelemetry (filename, expectedOut, expectedTelemetryPoints, expectedSource) {
   const cwd = sandbox.folder
   const cleanup = telemetryForwarder(expectedTelemetryPoints)
-  const pid = await runAndCheckOutput(filename, cwd, expectedOut)
+  const pid = await runAndCheckOutput(filename, cwd, expectedOut, expectedSource)
   const msgs = await cleanup()
   if (expectedTelemetryPoints.length === 0) {
     // assert no telemetry sent
