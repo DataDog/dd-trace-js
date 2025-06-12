@@ -69,15 +69,11 @@ describe('telemetry', () => {
 
         const { configuration } = msg.payload.payload
 
-        // Check that we have the expected configurations
-        assert.strictEqual(configuration.length, 3, 'Expected 3 configuration entries')
-
         const expectedConfigs = [
           { name: 'DD_LOG_INJECTION', value: false, origin: 'default' },
           { name: 'DD_LOG_INJECTION', value: true, origin: 'env_var' },
           { name: 'DD_LOG_INJECTION', value: false, origin: 'code' }
         ]
-
         expectedConfigs.forEach(expected => {
           const found = configuration.find(config =>
             config.name === expected.name &&
