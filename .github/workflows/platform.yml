@@ -281,6 +281,7 @@ jobs:
       - uses: ./.github/actions/install
       - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
       - run: yarn test:integration
+      - run: yarn test:integration:esbuild
 
   # We'll run these separately for earlier (i.e. unsupported) versions
   integration-guardrails:
