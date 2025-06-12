@@ -6,7 +6,9 @@ const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const errorChannel = channel('apm:fastify:middleware:error')
 const handleChannel = channel('apm:fastify:request:handle')
 const routeAddedChannel = channel('apm:fastify:route:added')
-const processPathParams = channel('datadog:fastify:path-params:finish')
+const bodyParserReadCh = channel('datadog:fastify:body-parser:finish')
+const queryParamsReadCh = channel('datadog:fastify:query-params:finish')
+const pathParamsReadCh = channel('datadog:fastify:path-params:finish')
 
 const parsingResources = new WeakMap()
 
@@ -111,16 +113,36 @@ function preValidation (request, reply, done) {
   const parsingResource = parsingResources.get(req)
 
   const processInContext = () => {
-    if (request.params && processPathParams.hasSubscribers) {
+    if (queryParamsReadCh.hasSubscribers && request.query) {
       const abortController = new AbortController()
-      processPathParams.publish({
+
+      queryParamsReadCh.publish({
+        req,
+        res,
+        abortController,
+        query: request.query
+      })
+
+      if (abortController.signal.aborted) return
+    }
+
+    if (bodyParserReadCh.hasSubscribers && request.body) {
+      const abortController = new AbortController()
+
+      bodyParserReadCh.publish({ req, res, body: request.body, abortController })
+
+      if (abortController.signal.aborted) return
+    }
+
+    if (pathParamsReadCh.hasSubscribers && request.params) {
+      const abortController = new AbortController()
+
+      pathParamsReadCh.publish({
         req,
         res,
         abortController,
         params: request.params
       })
-
-      if (abortController.signal.aborted) return
     }
 
     done()
