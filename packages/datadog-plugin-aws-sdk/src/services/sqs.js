@@ -34,7 +34,7 @@ class Sqs extends BaseAwsSdkPlugin {
           }
         }
         parsedMessageAttributes = contextExtraction.parsedAttributes
-        this.startSpan('aws.response', options, ctx)
+        span = this.startSpan('aws.response', options, ctx)
         store = ctx.currentStore
       }
 
