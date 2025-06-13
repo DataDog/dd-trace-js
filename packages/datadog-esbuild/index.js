@@ -42,7 +42,6 @@ for (const builtin of RAW_BUILTINS) {
 }
 
 const DEBUG = !!process.env.DD_TRACE_DEBUG
-const DD_BUILD_ESM = process.env.DD_BUILD_ESM?.toLowerCase() === 'true' || process.env.DD_BUILD_ESM === '1'
 
 // We don't want to handle any built-in packages
 // Those packages will still be handled via RITM
@@ -54,18 +53,27 @@ for (const pkg of INSTRUMENTED) {
 
 module.exports.name = 'datadog-esbuild'
 
+function isESMBuild (build) {
+  // check toLowerCase? to be safe if unexpected object is there instead of a string
+  const format = build.initialOptions.format?.toLowerCase?.()
+  const outputFile = build.initialOptions.outfile?.toLowerCase?.()
+  const outExtension = build.initialOptions.outExtension?.['.js']
+  return format === 'esm' || outputFile?.endsWith('.mjs') || outExtension === '.mjs'
+}
+
 module.exports.setup = function (build) {
   const externalModules = new Set(build.initialOptions.external || [])
-
-  if (DD_BUILD_ESM) {
+  if (isESMBuild(build)) {
     build.initialOptions.banner ??= {}
     build.initialOptions.banner.js ??= ''
-    build.initialOptions.banner.js += `import { createRequire as $dd_createRequire } from 'module';
+    build.initialOptions.banner.js = `import { createRequire as $dd_createRequire } from 'module';
 import { fileURLToPath as $dd_fileURLToPath } from 'url';
 import { dirname as $dd_dirname } from 'path';
-const require = $dd_createRequire(import.meta.url);
-const __filename = $dd_fileURLToPath(import.meta.url);
-const __dirname = $dd_dirname(__filename);`
+(function(globals) {
+  globals.require ??= $dd_createRequire(import.meta.url);
+  globals.__filename ??= $dd_fileURLToPath(import.meta.url);
+  globals.__dirname ??= $dd_dirname(__filename);
+}((1, eval)('this')));${build.initialOptions.banner.js}`
   }
 
   build.onResolve({ filter: /.*/ }, args => {
