@@ -4,7 +4,7 @@ const ddPlugin = require('../../esbuild') // dd-trace/esbuild
 const esbuild = require('esbuild')
 
 esbuild.build({
-  format: "esm",
+  format: 'esm',
   entryPoints: ['basic-test.js'],
   bundle: true,
   outfile: 'out.mjs',
