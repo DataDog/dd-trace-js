@@ -3,7 +3,6 @@
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 const { DsmPathwayCodec, getHeadersSize } = require('../../../dd-trace/src/datastreams')
-const { storage } = require('../../../datadog-core')
 
 class Sqs extends BaseAwsSdkPlugin {
   static get id () { return 'sqs' }
@@ -21,7 +20,7 @@ class Sqs extends BaseAwsSdkPlugin {
       const { request, response } = ctx
       const contextExtraction = this.responseExtract(request.params, request.operation, response)
 
-      let store = storage('legacy').getStore()
+      const store = ctx.parentStore
       let span
       let parsedMessageAttributes = null
       if (contextExtraction && contextExtraction.datadogContext) {
@@ -35,18 +34,12 @@ class Sqs extends BaseAwsSdkPlugin {
         }
         parsedMessageAttributes = contextExtraction.parsedAttributes
         span = this.startSpan('aws.response', options, ctx)
-        store = ctx.currentStore
       }
 
-      storage('legacy').run(store, () => {
-        if (!store) return
-
-        // extract DSM context after as we might not have a parent-child but may have a DSM context
-
-        this.responseExtractDSMContext(
-          request.operation, request.params, response, span || null, { parsedAttributes: parsedMessageAttributes }
-        )
-      })
+      // extract DSM context after as we might not have a parent-child but may have a DSM context
+      this.responseExtractDSMContext(
+        request.operation, request.params, response, span || null, { parsedAttributes: parsedMessageAttributes }
+      )
 
       return store
     })

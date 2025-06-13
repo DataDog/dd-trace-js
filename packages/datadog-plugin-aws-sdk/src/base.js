@@ -110,6 +110,8 @@ class BaseAwsSdkPlugin extends ClientPlugin {
 
       this.finish(ctx)
     })
+
+    this.addBind('apm:aws:response:start:kinesis', ctx => ctx.parentStore)
   }
 
   requestInject (span, request) {

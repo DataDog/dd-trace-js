@@ -103,7 +103,7 @@ class TracingPlugin extends Plugin {
   }
 
   startSpan (name, { childOf, kind, meta, metrics, service, resource, type } = {}, enterOrCtx = true) {
-    const store = storage('legacy').getStore()
+    const store = enterOrCtx?.parentStore || storage('legacy').getStore()
     if (store && childOf === undefined) {
       childOf = store.span
     }

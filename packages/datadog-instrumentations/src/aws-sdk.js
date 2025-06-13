@@ -12,27 +12,23 @@ function wrapRequest (send) {
     const startCh = channel(`apm:aws:request:start:${channelSuffix}`)
     if (!startCh.hasSubscribers) return send.apply(this, arguments)
 
-    this.on('complete', response => {
-      ctx.response = response
-    })
-
     const ctx = {
       serviceIdentifier,
       operation: this.operation,
       awsRegion: this.service.config && this.service.config.region,
       awsService: this.service.api && this.service.api.className,
-      request: this
+      request: this,
+      cbExists: typeof cb === 'function'
     }
 
-    return startCh.runStores(ctx, () => {
-      ctx.cbExists = typeof cb === 'function'
+    this.on('complete', response => {
+      ctx.response = response
+      channel(`apm:aws:request:complete:${channelSuffix}`).publish(ctx)
+    })
 
+    return startCh.runStores(ctx, () => {
       if (ctx.cbExists) {
         arguments[0] = wrapCb(cb, channelSuffix, ctx)
-      } else {
-        this.on('complete', response => {
-          channel(`apm:aws:request:complete:${channelSuffix}`).publish(ctx)
-        })
       }
 
       return send.apply(this, arguments)
@@ -127,31 +123,29 @@ function wrapSmithySend (send) {
 function wrapCb (cb, serviceName, ctx) {
   // eslint-disable-next-line n/handle-callback-err
   return shimmer.wrapFunction(cb, cb => function wrappedCb (err, response) {
-    return channel(`apm:aws:request:complete:${serviceName}`).runStores(ctx, () => {
-      ctx = { request: ctx.request, response }
-      return channel(`apm:aws:response:start:${serviceName}`).runStores(ctx, () => {
-        const finishChannel = channel(`apm:aws:response:finish:${serviceName}`)
-        try {
-          let result = cb.apply(this, arguments)
-          if (result && result.then) {
-            result = result.then(x => {
-              finishChannel.publish(ctx)
-              return x
-            }, e => {
-              ctx.error = e
-              finishChannel.publish(ctx)
-              throw e
-            })
-          } else {
+    ctx = { parentStore: ctx.parentStore, request: ctx.request, response }
+    return channel(`apm:aws:response:start:${serviceName}`).runStores(ctx, () => {
+      const finishChannel = channel(`apm:aws:response:finish:${serviceName}`)
+      try {
+        let result = cb.apply(this, arguments)
+        if (result && result.then) {
+          result = result.then(x => {
             finishChannel.publish(ctx)
-          }
-          return result
-        } catch (e) {
-          ctx.error = e
+            return x
+          }, e => {
+            ctx.error = e
+            finishChannel.publish(ctx)
+            throw e
+          })
+        } else {
           finishChannel.publish(ctx)
-          throw e
         }
-      })
+        return result
+      } catch (e) {
+        ctx.error = e
+        finishChannel.publish(ctx)
+        throw e
+      }
     })
   })
 }

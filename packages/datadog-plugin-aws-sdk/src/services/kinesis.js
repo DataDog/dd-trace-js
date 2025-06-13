@@ -2,7 +2,6 @@
 const { DsmPathwayCodec, getSizeOrZero } = require('../../../dd-trace/src/datastreams')
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
-const { storage } = require('../../../datadog-core')
 
 class Kinesis extends BaseAwsSdkPlugin {
   static get id () { return 'kinesis' }
@@ -20,7 +19,7 @@ class Kinesis extends BaseAwsSdkPlugin {
       const { request, response } = ctx
       const plugin = this
 
-      let store = storage('legacy').getStore()
+      const store = ctx.parentStore
 
       // if we have either of these operations, we want to store the streamName param
       // since it is not typically available during get/put records requests
@@ -41,20 +40,15 @@ class Kinesis extends BaseAwsSdkPlugin {
             }
           }
           span = plugin.startSpan('aws.response', options, ctx)
-          store = ctx.currentStore
         }
 
-        storage('legacy').run(store, () => {
-          if (!store) return
+        // get the stream name that should have been stored previously
+        const { streamName } = store
 
-          // get the stream name that should have been stored previously
-          const { streamName } = store
-
-          // extract DSM context after as we might not have a parent-child but may have a DSM context
-          this.responseExtractDSMContext(
-            request.operation, request.params, response, span || null, { streamName }
-          )
-        })
+        // extract DSM context after as we might not have a parent-child but may have a DSM context
+        this.responseExtractDSMContext(
+          request.operation, request.params, response, span || null, { streamName }
+        )
       }
 
       return store
