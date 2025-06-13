@@ -5,18 +5,18 @@ stages:
   - single-step-instrumentation-tests
   - macrobenchmarks
 
-# Config Inversion CI Tests
+
 check_config_inversion_local_file:
   extends: .check_config_inversion_local_file
   variables:
     LOCAL_JSON_PATH: "packages/dd-trace/src/supported-configurations.json"
 
-config_inversion_update_central:
+config-inversion-update-supported-range:
   extends: .config_inversion_update_central
   variables:
+    LOCAL_REPO_NAME: "dd-trace-js"
     LOCAL_JSON_PATH: "packages/dd-trace/src/supported-configurations.json"
     LANGUAGE_NAME: "nodejs"
-    MULTIPLE_RELEASE_LINES: "true"
 
 include:
   # See: https://gitlab.ddbuild.io/DataDog/apm-reliability/libdatadog-build
