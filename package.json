@@ -84,7 +84,7 @@
     "node": ">=18"
   },
   "dependencies": {
-    "@datadog/libdatadog": "git+https://github.com/DataDog/libdatadog-nodejs.git#a7b36c913f4fa48c19d46a488a4e46c153f5d4b4",
+    "@datadog/libdatadog": "^0.7.0",
     "@datadog/native-appsec": "8.5.2",
     "@datadog/native-iast-taint-tracking": "4.0.0",
     "@datadog/native-metrics": "^3.1.1",
