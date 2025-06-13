@@ -101,9 +101,8 @@ function preHandler (request, reply, done) {
   if (!reply || typeof reply.send !== 'function') return done()
 
   const req = getReq(request)
-  const res = getRes(reply)
 
-  reply.send = wrapSend(reply.send, req, res)
+  reply.send = wrapSend(reply.send, req)
 
   done()
 }
@@ -155,14 +154,13 @@ function preParsing (request, reply, payload, done) {
   parsingResource.runInAsyncScope(() => done())
 }
 
-function wrapSend (send, req, res) {
+function wrapSend (send, req) {
   return function sendWithTrace (payload) {
     if (payload instanceof Error) {
       errorChannel.publish({ req, error: payload })
-    } else {
-      if (responseJsonReadCh.hasSubscribers) {
-        responseJsonReadCh.publish({ req, res, body: payload })
-      }
+    } else if (responseJsonReadCh.hasSubscribers) {
+      const res = getRes(this)
+      responseJsonReadCh.publish({ req, res, body: payload })
     }
 
     return send.apply(this, arguments)
