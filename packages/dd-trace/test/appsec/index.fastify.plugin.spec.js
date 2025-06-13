@@ -9,6 +9,7 @@ const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
 const { json } = require('../../src/appsec/blocked_templates')
+const zlib = require('zlib')
 
 withVersions('fastify', 'fastify', version => {
   describe('Suspicious request blocking - query', () => {
@@ -260,6 +261,95 @@ withVersions('fastify', 'fastify', version => {
         assert.equal(e.response.status, 403)
         assert.deepEqual(e.response.data, JSON.parse(json))
       }
+    })
+  })
+})
+
+describe('Api Security - Fastify', () => {
+  withVersions('fastify', 'fastify', version => {
+    let config, server, axios
+
+    before(() => {
+      return agent.load(['fastify', 'http'], { client: false })
+    })
+
+    before((done) => {
+      const fastify = require(`../../../../versions/fastify@${version}`).get()
+
+      const app = fastify()
+
+      app.post('/', (request, reply) => {
+        reply.send('DONE')
+      })
+
+      app.post('/sendjson', (request, reply) => {
+        reply.send({ sendResKey: 'sendResValue' })
+      })
+
+      app.post('/return-object', async (request, reply) => {
+        return { returnResKey: 'returnResValue' }
+      })
+
+      getPort().then((port) => {
+        app.listen({ port }, () => {
+          axios = Axios.create({ baseURL: `http://localhost:${port}` })
+          done()
+        })
+        server = app.server
+      })
+    })
+
+    after(() => {
+      server.close()
+      return agent.close({ ritmReset: false })
+    })
+
+    beforeEach(() => {
+      config = new Config({
+        appsec: {
+          enabled: true,
+          rules: path.join(__dirname, 'api_security_rules.json'),
+          apiSecurity: {
+            enabled: true,
+            sampleDelay: 10
+          }
+        }
+      })
+      appsec.enable(config)
+    })
+
+    afterEach(() => {
+      appsec.disable()
+    })
+
+    function formatSchema (body) {
+      return zlib.gzipSync(JSON.stringify(body)).toString('base64')
+    }
+
+    it('should get the response body schema with reply.send method with object', async () => {
+      const expectedResponseBodySchema = formatSchema([{ sendResKey: [8] }])
+      const res = await axios.post('/sendjson', { key: 'value' })
+
+      await agent.assertSomeTraces((traces) => {
+        const span = traces[0][0]
+        assert.equal(span.meta['_dd.appsec.s.res.body'], expectedResponseBodySchema)
+      })
+
+      assert.equal(res.status, 200)
+      assert.deepEqual(res.data, { sendResKey: 'sendResValue' })
+    })
+
+    it('should get the response body schema with return statement', async () => {
+      const expectedResponseBodySchema = formatSchema([{ returnResKey: [8] }])
+      const res = await axios.post('/return-object', { key: 'value' })
+
+      await agent.assertSomeTraces((traces) => {
+        const span = traces[0][0]
+        assert.equal(span.meta['_dd.appsec.s.res.body'], expectedResponseBodySchema)
+      })
+
+      assert.equal(res.status, 200)
+      assert.deepEqual(res.data, { returnResKey: 'returnResValue' })
     })
   })
 })

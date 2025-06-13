@@ -8,6 +8,7 @@ const handleChannel = channel('apm:fastify:request:handle')
 const routeAddedChannel = channel('apm:fastify:route:added')
 const bodyParserReadCh = channel('datadog:fastify:body-parser:finish')
 const queryParamsReadCh = channel('datadog:fastify:query-params:finish')
+const responseJsonReadCh = channel('datadog:fastify:response:finish')
 
 const parsingResources = new WeakMap()
 
@@ -100,8 +101,9 @@ function preHandler (request, reply, done) {
   if (!reply || typeof reply.send !== 'function') return done()
 
   const req = getReq(request)
+  const res = getRes(reply)
 
-  reply.send = wrapSend(reply.send, req)
+  reply.send = wrapSend(reply.send, req, res)
 
   done()
 }
@@ -153,10 +155,14 @@ function preParsing (request, reply, payload, done) {
   parsingResource.runInAsyncScope(() => done())
 }
 
-function wrapSend (send, req) {
-  return function sendWithTrace (error) {
-    if (error instanceof Error) {
-      errorChannel.publish({ req, error })
+function wrapSend (send, req, res) {
+  return function sendWithTrace (payload) {
+    if (payload instanceof Error) {
+      errorChannel.publish({ req, error: payload })
+    } else {
+      if (responseJsonReadCh.hasSubscribers) {
+        responseJsonReadCh.publish({ req, res, body: payload })
+      }
     }
 
     return send.apply(this, arguments)
