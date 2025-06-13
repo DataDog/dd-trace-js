@@ -161,15 +161,18 @@ checkPlugins(path.join(__dirname, '..', '.github', 'workflows', 'test-optimizati
 const IGNORED_WORKFLOWS = {
   all: [
     'codeql-analysis.yml',
+    'flakiness.yml',
     'pr-labels.yml',
     'release-3.yml',
     'release-4.yml',
     'release-dev.yml',
     'release-latest.yml',
     'release-proposal.yml',
-    'release-validate.yml'
+    'release-validate.yml',
+    'retry.yml'
   ],
   trigger_pull_request: [
+    'audit.yml',
     'stale.yml'
   ],
   trigger_push: [

@@ -6,8 +6,6 @@ on:
     branches: [master]
   schedule:
     - cron: 0 4 * * *
-    - cron: 20 4 * * *
-    - cron: 40 4 * * *
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
@@ -283,6 +281,7 @@ jobs:
       - uses: ./.github/actions/install
       - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
       - run: yarn test:integration
+      - run: yarn test:integration:esbuild
 
   # We'll run these separately for earlier (i.e. unsupported) versions
   integration-guardrails:

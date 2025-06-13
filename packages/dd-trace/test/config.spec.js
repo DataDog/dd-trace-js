@@ -113,6 +113,22 @@ describe('Config', () => {
       assert.strictEqual(warning.code, 'DATADOG_DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED')
     })
 
+    it('should set new runtimeMetricsRuntimeId from deprecated DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED', async () => {
+      process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED = 'true'
+      assert.strictEqual(process.env.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED, undefined)
+      const config = new Config()
+      expect(config).to.have.property('runtimeMetricsRuntimeId', true)
+      assert.strictEqual(getEnvironmentVariable('DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED'), 'true')
+      delete process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED
+
+      const [warning] = await once(process, 'warning')
+      assert.strictEqual(warning.name, 'DeprecationWarning')
+      assert.match(
+        warning.message,
+        /variable DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED .+ DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED instead/
+      )
+    })
+
     it('should pass through random envs', async () => {
       process.env.FOOBAR = 'true'
       const { FOOBAR } = getEnvironmentVariables()
@@ -261,6 +277,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('crashtracking.enabled', true)
     expect(config).to.have.property('sampleRate', undefined)
     expect(config).to.have.property('runtimeMetrics', false)
+    expect(config).to.have.property('runtimeMetricsRuntimeId', false)
     expect(config.tags).to.have.property('service', 'node')
     expect(config).to.have.property('plugins', true)
     expect(config).to.have.property('traceEnabled', true)
@@ -273,6 +290,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('dynamicInstrumentation.enabled', false)
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactedIdentifiers', [])
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactionExcludedIdentifiers', [])
+    expect(config).to.have.nested.property('dynamicInstrumentation.uploadIntervalSeconds', 1)
     expect(config).to.have.property('traceId128BitGenerationEnabled', true)
     expect(config).to.have.property('traceId128BitLoggingEnabled', true)
     expect(config).to.have.property('spanAttributeSchema', 'v0')
@@ -285,7 +303,6 @@ describe('Config', () => {
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['datadog', 'tracecontext', 'baggage'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['datadog', 'tracecontext', 'baggage'])
     expect(config).to.have.nested.property('tracePropagationBehaviorExtract', 'continue')
-    expect(config).to.have.nested.property('experimental.runtimeId', false)
     expect(config).to.have.nested.property('experimental.exporter', undefined)
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
     expect(config).to.have.nested.property('apmTracingEnabled', true)
@@ -324,6 +341,9 @@ describe('Config', () => {
     expect(config).to.have.nested.property('llmobs.mlApp', undefined)
     expect(config).to.have.nested.property('llmobs.agentlessEnabled', undefined)
     expect(config).to.have.nested.property('llmobs.enabled', false)
+    expect(config).to.have.nested.deep.property('injectionEnabled', [])
+    expect(config).to.have.nested.property('instrumentationSource', 'manual')
+    expect(config).to.have.nested.property('injectForce', null)
 
     expect(updateConfig).to.be.calledOnce
 
@@ -368,10 +388,10 @@ describe('Config', () => {
       { name: 'dynamicInstrumentation.enabled', value: false, origin: 'default' },
       { name: 'dynamicInstrumentation.redactedIdentifiers', value: [], origin: 'default' },
       { name: 'dynamicInstrumentation.redactionExcludedIdentifiers', value: [], origin: 'default' },
+      { name: 'dynamicInstrumentation.uploadIntervalSeconds', value: 1, origin: 'default' },
       { name: 'env', value: undefined, origin: 'default' },
       { name: 'experimental.enableGetRumData', value: false, origin: 'default' },
       { name: 'experimental.exporter', value: undefined, origin: 'default' },
-      { name: 'experimental.runtimeId', value: false, origin: 'default' },
       { name: 'flushInterval', value: 2000, origin: 'default' },
       { name: 'flushMinSpans', value: 1000, origin: 'default' },
       { name: 'gitMetadataEnabled', value: true, origin: 'default' },
@@ -389,7 +409,9 @@ describe('Config', () => {
       { name: 'iast.securityControlsConfiguration', value: null, origin: 'default' },
       { name: 'iast.telemetryVerbosity', value: 'INFORMATION', origin: 'default' },
       { name: 'iast.stackTrace.enabled', value: true, origin: 'default' },
+      { name: 'instrumentationSource', value: 'manual', origin: 'default' },
       { name: 'injectionEnabled', value: [], origin: 'default' },
+      { name: 'injectForce', value: null, origin: 'default' },
       { name: 'isCiVisibility', value: false, origin: 'default' },
       { name: 'isEarlyFlakeDetectionEnabled', value: false, origin: 'default' },
       { name: 'isFlakyTestRetriesEnabled', value: false, origin: 'default' },
@@ -428,6 +450,7 @@ describe('Config', () => {
       { name: 'reportHostname', value: false, origin: 'default' },
       { name: 'reportHostname', value: false, origin: 'default' },
       { name: 'runtimeMetrics', value: false, origin: 'default' },
+      { name: 'runtimeMetricsRuntimeId', value: false, origin: 'default' },
       { name: 'sampleRate', value: undefined, origin: 'default' },
       { name: 'sampler.rateLimit', value: 100, origin: 'default' },
       { name: 'traceEnabled', value: true, origin: 'default' },
@@ -518,6 +541,7 @@ describe('Config', () => {
     process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS = 'foo,bar'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS = 'a,b,c'
+    process.env.DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS = '0.1'
     process.env.DD_TRACE_GLOBAL_TAGS = 'foo:bar,baz:qux'
     process.env.DD_TRACE_SAMPLE_RATE = '0.5'
     process.env.DD_TRACE_RATE_LIMIT = '-1'
@@ -536,7 +560,7 @@ describe('Config', () => {
     process.env.DD_TRACE_PROPAGATION_STYLE_INJECT = 'b3,tracecontext'
     process.env.DD_TRACE_PROPAGATION_STYLE_EXTRACT = 'b3,tracecontext'
     process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'restart'
-    process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED = 'true'
+    process.env.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_EXPORTER = 'log'
     process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_INTERNAL_ERRORS_ENABLED = 'true'
@@ -582,6 +606,7 @@ describe('Config', () => {
     process.env.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = 'true'
     process.env.DD_PROFILING_ENABLED = 'true'
     process.env.DD_INJECTION_ENABLED = 'profiler'
+    process.env.DD_INJECT_FORCE = 'false'
     process.env.DD_API_SECURITY_ENABLED = 'true'
     process.env.DD_API_SECURITY_SAMPLE_DELAY = '25'
     process.env.DD_INSTRUMENTATION_INSTALL_ID = '68e75c48-57ca-4a12-adfc-575c4b05fcbe'
@@ -619,12 +644,14 @@ describe('Config', () => {
     expect(config.grpc.server.error.statuses).to.deep.equal([3, 13, 400, 401, 402, 403])
     expect(config).to.have.property('middlewareTracingEnabled', false)
     expect(config).to.have.property('runtimeMetrics', true)
+    expect(config).to.have.property('runtimeMetricsRuntimeId', true)
     expect(config).to.have.property('reportHostname', true)
     expect(config).to.have.nested.property('codeOriginForSpans.enabled', false)
     expect(config).to.have.nested.property('codeOriginForSpans.experimental.exit_spans.enabled', true)
     expect(config).to.have.nested.property('dynamicInstrumentation.enabled', true)
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactedIdentifiers', ['foo', 'bar'])
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactionExcludedIdentifiers', ['a', 'b', 'c'])
+    expect(config).to.have.nested.property('dynamicInstrumentation.uploadIntervalSeconds', 0.1)
     expect(config).to.have.property('env', 'test')
     expect(config).to.have.property('sampleRate', 0.5)
     expect(config).to.have.property('traceEnabled', true)
@@ -663,7 +690,6 @@ describe('Config', () => {
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['b3', 'tracecontext'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['b3', 'tracecontext'])
     expect(config).to.have.nested.property('tracePropagationBehaviorExtract', 'restart')
-    expect(config).to.have.nested.property('experimental.runtimeId', true)
     expect(config).to.have.nested.property('experimental.exporter', 'log')
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
     expect(config).to.have.nested.property('apmTracingEnabled', false)
@@ -743,10 +769,11 @@ describe('Config', () => {
       { name: 'dynamicInstrumentation.enabled', value: true, origin: 'env_var' },
       { name: 'dynamicInstrumentation.redactedIdentifiers', value: ['foo', 'bar'], origin: 'env_var' },
       { name: 'dynamicInstrumentation.redactionExcludedIdentifiers', value: ['a', 'b', 'c'], origin: 'env_var' },
+      { name: 'dynamicInstrumentation.uploadIntervalSeconds', value: 0.1, origin: 'env_var' },
       { name: 'env', value: 'test', origin: 'env_var' },
       { name: 'experimental.enableGetRumData', value: true, origin: 'env_var' },
       { name: 'experimental.exporter', value: 'log', origin: 'env_var' },
-      { name: 'experimental.runtimeId', value: true, origin: 'env_var' },
+      { name: 'runtimeMetricsRuntimeId', value: true, origin: 'env_var' },
       { name: 'hostname', value: 'agent', origin: 'env_var' },
       { name: 'iast.dbRowsToTaint', value: 2, origin: 'env_var' },
       { name: 'iast.deduplicationEnabled', value: false, origin: 'env_var' },
@@ -766,6 +793,7 @@ describe('Config', () => {
       { name: 'iast.stackTrace.enabled', value: false, origin: 'env_var' },
       { name: 'instrumentation_config_id', value: 'abcdef123', origin: 'env_var' },
       { name: 'injectionEnabled', value: ['profiler'], origin: 'env_var' },
+      { name: 'injectForce', value: false, origin: 'env_var' },
       { name: 'isGCPFunction', value: false, origin: 'env_var' },
       { name: 'middlewareTracingEnabled', value: false, origin: 'env_var' },
       { name: 'peerServiceMapping', value: process.env.DD_TRACE_PEER_SERVICE_MAPPING, origin: 'env_var' },
@@ -987,6 +1015,7 @@ describe('Config', () => {
       flushMinSpans: 500,
       middlewareTracingEnabled: false,
       runtimeMetrics: true,
+      runtimeMetricsRuntimeId: true,
       reportHostname: true,
       plugins: false,
       logLevel,
@@ -997,12 +1026,12 @@ describe('Config', () => {
       dynamicInstrumentation: {
         enabled: true,
         redactedIdentifiers: ['foo', 'bar'],
-        redactionExcludedIdentifiers: ['a', 'b', 'c']
+        redactionExcludedIdentifiers: ['a', 'b', 'c'],
+        uploadIntervalSeconds: 0.1
       },
       experimental: {
         b3: true,
         traceparent: true,
-        runtimeId: true,
         exporter: 'log',
         enableGetRumData: true,
         iast: {
@@ -1046,6 +1075,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('dynamicInstrumentation.enabled', true)
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactedIdentifiers', ['foo', 'bar'])
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactionExcludedIdentifiers', ['a', 'b', 'c'])
+    expect(config).to.have.nested.property('dynamicInstrumentation.uploadIntervalSeconds', 0.1)
     expect(config).to.have.property('env', 'test')
     expect(config).to.have.property('sampleRate', 0.5)
     expect(config).to.have.property('logger', logger)
@@ -1059,6 +1089,7 @@ describe('Config', () => {
     expect(config).to.have.property('flushMinSpans', 500)
     expect(config).to.have.property('middlewareTracingEnabled', false)
     expect(config).to.have.property('runtimeMetrics', true)
+    expect(config).to.have.property('runtimeMetricsRuntimeId', true)
     expect(config).to.have.property('reportHostname', true)
     expect(config).to.have.property('plugins', false)
     expect(config).to.have.property('logLevel', logLevel)
@@ -1075,7 +1106,6 @@ describe('Config', () => {
     expect(config.tags['runtime-id']).to.match(/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/)
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['datadog'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['datadog'])
-    expect(config).to.have.nested.property('experimental.runtimeId', true)
     expect(config).to.have.nested.property('experimental.exporter', 'log')
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
     expect(config).to.have.nested.property('appsec.enabled', false)
@@ -1129,10 +1159,11 @@ describe('Config', () => {
       { name: 'dynamicInstrumentation.enabled', value: true, origin: 'code' },
       { name: 'dynamicInstrumentation.redactedIdentifiers', value: ['foo', 'bar'], origin: 'code' },
       { name: 'dynamicInstrumentation.redactionExcludedIdentifiers', value: ['a', 'b', 'c'], origin: 'code' },
+      { name: 'dynamicInstrumentation.uploadIntervalSeconds', value: 0.1, origin: 'code' },
       { name: 'env', value: 'test', origin: 'code' },
       { name: 'experimental.enableGetRumData', value: true, origin: 'code' },
       { name: 'experimental.exporter', value: 'log', origin: 'code' },
-      { name: 'experimental.runtimeId', value: true, origin: 'code' },
+      { name: 'runtimeMetricsRuntimeId', value: true, origin: 'code' },
       { name: 'flushInterval', value: 5000, origin: 'code' },
       { name: 'flushMinSpans', value: 500, origin: 'code' },
       { name: 'hostname', value: 'agent', origin: 'code' },
@@ -1340,6 +1371,7 @@ describe('Config', () => {
     process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS = 'foo,bar'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS = 'a,b,c'
+    process.env.DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS = '0.1'
     process.env.DD_API_KEY = '123'
     process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'v0'
     process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'false'
@@ -1351,7 +1383,7 @@ describe('Config', () => {
     process.env.DD_TRACE_PROPAGATION_STYLE_INJECT = 'datadog'
     process.env.DD_TRACE_PROPAGATION_STYLE_EXTRACT = 'datadog'
     process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'restart'
-    process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED = 'true'
+    process.env.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_EXPORTER = 'log'
     process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = 'true'
     process.env.DD_TRACE_MIDDLEWARE_TRACING_ENABLED = 'false'
@@ -1398,6 +1430,7 @@ describe('Config', () => {
         port: 8888
       },
       runtimeMetrics: false,
+      runtimeMetricsRuntimeId: false,
       reportHostname: false,
       flushMinSpans: 500,
       service: 'test',
@@ -1425,12 +1458,12 @@ describe('Config', () => {
       dynamicInstrumentation: {
         enabled: false,
         redactedIdentifiers: ['foo2', 'bar2'],
-        redactionExcludedIdentifiers: ['a2', 'b2']
+        redactionExcludedIdentifiers: ['a2', 'b2'],
+        uploadIntervalSeconds: 0.2
       },
       experimental: {
         b3: false,
         traceparent: false,
-        runtimeId: false,
         exporter: 'agent',
         enableGetRumData: false
       },
@@ -1504,6 +1537,7 @@ describe('Config', () => {
     expect(config).to.have.property('site', 'datadoghq.com')
     expect(config).to.have.property('middlewareTracingEnabled', true)
     expect(config).to.have.property('runtimeMetrics', false)
+    expect(config).to.have.property('runtimeMetricsRuntimeId', false)
     expect(config).to.have.property('reportHostname', false)
     expect(config).to.have.property('flushMinSpans', 500)
     expect(config).to.have.property('service', 'test')
@@ -1513,6 +1547,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('dynamicInstrumentation.enabled', false)
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactedIdentifiers', ['foo2', 'bar2'])
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactionExcludedIdentifiers', ['a2', 'b2'])
+    expect(config).to.have.nested.property('dynamicInstrumentation.uploadIntervalSeconds', 0.2)
     expect(config).to.have.property('env', 'development')
     expect(config).to.have.property('clientIpEnabled', true)
     expect(config).to.have.property('clientIpHeader', 'x-true-client-ip')
@@ -1527,7 +1562,6 @@ describe('Config', () => {
     expect(config).to.have.deep.property('peerServiceMapping', { d: 'dd' })
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', [])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', [])
-    expect(config).to.have.nested.property('experimental.runtimeId', false)
     expect(config).to.have.nested.property('experimental.exporter', 'agent')
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
     expect(config).to.have.nested.property('apmTracingEnabled', true)

@@ -8,8 +8,6 @@ const log = require('./log')
 const pkg = require('./pkg')
 const coalesce = require('koalas')
 const tagger = require('./tagger')
-const get = require('../../datadog-core/src/utils/src/get')
-const has = require('../../datadog-core/src/utils/src/has')
 const set = require('../../datadog-core/src/utils/src/set')
 const { isTrue, isFalse, normalizeProfilingEnabledValue } = require('./util')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
@@ -17,11 +15,15 @@ const { getGitMetadataFromGitProperties, removeUserSensitiveInfo } = require('./
 const { updateConfig } = require('./telemetry')
 const telemetryMetrics = require('./telemetry/metrics')
 const { isInServerlessEnvironment, getIsGCPFunction, getIsAzureFunction } = require('./serverless')
-const { ORIGIN_KEY, GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('./constants')
+const {
+  ORIGIN_KEY, GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES, INSTRUMENTED_BY_SSI
+} = require('./constants')
 const { appendRules } = require('./payload-tagging/config')
 const { getEnvironmentVariable, getEnvironmentVariables } = require('./config-helper')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
+
+const changeTracker = {}
 
 const telemetryCounters = {
   'otel.env.hiding': {},
@@ -230,6 +232,16 @@ function reformatSpanSamplingRules (rules) {
     })
   })
 }
+
+const sourcesOrder = [
+  { containerProperty: '_remote', origin: 'remote_config', unprocessedProperty: '_remoteUnprocessed' },
+  { containerProperty: '_options', origin: 'code', unprocessedProperty: '_optsUnprocessed' },
+  { containerProperty: '_fleetStableConfig', origin: 'fleet_stable_config' },
+  { containerProperty: '_env', origin: 'env_var', unprocessedProperty: '_envUnprocessed' },
+  { containerProperty: '_localStableConfig', origin: 'local_stable_config' },
+  { containerProperty: '_calculated', origin: 'calculated' },
+  { containerProperty: '_defaults', origin: 'default' }
+]
 
 class Config {
   constructor (options = {}) {
@@ -487,10 +499,10 @@ class Config {
     this._setValue(defaults, 'dynamicInstrumentation.enabled', false)
     this._setValue(defaults, 'dynamicInstrumentation.redactedIdentifiers', [])
     this._setValue(defaults, 'dynamicInstrumentation.redactionExcludedIdentifiers', [])
+    this._setValue(defaults, 'dynamicInstrumentation.uploadIntervalSeconds', 1)
     this._setValue(defaults, 'env')
     this._setValue(defaults, 'experimental.enableGetRumData', false)
     this._setValue(defaults, 'experimental.exporter')
-    this._setValue(defaults, 'experimental.runtimeId', false)
     this._setValue(defaults, 'flushInterval', 2000)
     this._setValue(defaults, 'flushMinSpans', 1000)
     this._setValue(defaults, 'gitMetadataEnabled', true)
@@ -512,6 +524,8 @@ class Config {
     this._setValue(defaults, 'iast.telemetryVerbosity', 'INFORMATION')
     this._setValue(defaults, 'iast.stackTrace.enabled', true)
     this._setValue(defaults, 'injectionEnabled', [])
+    this._setValue(defaults, 'instrumentationSource', 'manual')
+    this._setValue(defaults, 'injectForce', null)
     this._setValue(defaults, 'isAzureFunction', false)
     this._setValue(defaults, 'isCiVisibility', false)
     this._setValue(defaults, 'isEarlyFlakeDetectionEnabled', false)
@@ -554,6 +568,7 @@ class Config {
     this._setValue(defaults, 'remoteConfig.pollInterval', 5) // seconds
     this._setValue(defaults, 'reportHostname', false)
     this._setValue(defaults, 'runtimeMetrics', false)
+    this._setValue(defaults, 'runtimeMetricsRuntimeId', false)
     this._setValue(defaults, 'sampleRate')
     this._setValue(defaults, 'sampler.rateLimit', 100)
     this._setValue(defaults, 'sampler.rules', [])
@@ -670,6 +685,7 @@ class Config {
       DD_DYNAMIC_INSTRUMENTATION_ENABLED,
       DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS,
       DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS,
+      DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS,
       DD_ENV,
       DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED,
       DD_PROFILING_ENABLED,
@@ -689,6 +705,7 @@ class Config {
       DD_IAST_TELEMETRY_VERBOSITY,
       DD_IAST_STACK_TRACE_ENABLED,
       DD_INJECTION_ENABLED,
+      DD_INJECT_FORCE,
       DD_INSTRUMENTATION_TELEMETRY_ENABLED,
       DD_INSTRUMENTATION_CONFIG_ID,
       DD_LOGS_INJECTION,
@@ -730,7 +747,7 @@ class Config {
       DD_TRACE_ENABLED,
       DD_TRACE_EXPERIMENTAL_EXPORTER,
       DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED,
-      DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED,
+      DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED,
       DD_TRACE_GIT_METADATA_ENABLED,
       DD_TRACE_GLOBAL_TAGS,
       DD_TRACE_GRAPHQL_ERROR_EXTENSIONS,
@@ -843,11 +860,16 @@ class Config {
       'dynamicInstrumentation.redactionExcludedIdentifiers',
       DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS
     )
+    this._setValue(
+      env,
+      'dynamicInstrumentation.uploadIntervalSeconds',
+      maybeFloat(DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS)
+    )
+    this._envUnprocessed['dynamicInstrumentation.uploadInterval'] = DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS
     this._setString(env, 'env', DD_ENV || tags.env)
     this._setBoolean(env, 'traceEnabled', DD_TRACE_ENABLED)
     this._setBoolean(env, 'experimental.enableGetRumData', DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED)
     this._setString(env, 'experimental.exporter', DD_TRACE_EXPERIMENTAL_EXPORTER)
-    this._setBoolean(env, 'experimental.runtimeId', DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED)
     if (AWS_LAMBDA_FUNCTION_NAME) this._setValue(env, 'flushInterval', 0)
     this._setValue(env, 'flushMinSpans', maybeInt(DD_TRACE_PARTIAL_FLUSH_MIN_SPANS))
     this._envUnprocessed.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
@@ -875,6 +897,7 @@ class Config {
     this._setString(env, 'iast.telemetryVerbosity', DD_IAST_TELEMETRY_VERBOSITY)
     this._setBoolean(env, 'iast.stackTrace.enabled', DD_IAST_STACK_TRACE_ENABLED)
     this._setArray(env, 'injectionEnabled', DD_INJECTION_ENABLED)
+    this._setBoolean(env, 'injectForce', DD_INJECT_FORCE)
     this._setBoolean(env, 'isAzureFunction', getIsAzureFunction())
     this._setBoolean(env, 'isGCPFunction', getIsGCPFunction())
     this._setValue(env, 'langchain.spanCharLimit', maybeInt(DD_LANGCHAIN_SPAN_CHAR_LIMIT))
@@ -928,6 +951,7 @@ class Config {
       : undefined
     this._setBoolean(env, 'runtimeMetrics', DD_RUNTIME_METRICS_ENABLED ||
     otelSetRuntimeMetrics)
+    this._setBoolean(env, 'runtimeMetricsRuntimeId', DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED)
     this._setArray(env, 'sampler.spanSamplingRules', reformatSpanSamplingRules(coalesce(
       safeJsonParse(maybeFile(DD_SPAN_SAMPLING_RULES_FILE)),
       safeJsonParse(DD_SPAN_SAMPLING_RULES)
@@ -1072,10 +1096,17 @@ class Config {
       'dynamicInstrumentation.redactionExcludedIdentifiers',
       options.dynamicInstrumentation?.redactionExcludedIdentifiers
     )
+    this._setValue(
+      opts,
+      'dynamicInstrumentation.uploadIntervalSeconds',
+      maybeFloat(options.dynamicInstrumentation?.uploadIntervalSeconds)
+    )
+    this._optsUnprocessed['dynamicInstrumentation.uploadIntervalSeconds'] =
+      options.dynamicInstrumentation?.uploadIntervalSeconds
     this._setString(opts, 'env', options.env || tags.env)
     this._setBoolean(opts, 'experimental.enableGetRumData', options.experimental?.enableGetRumData)
     this._setString(opts, 'experimental.exporter', options.experimental?.exporter)
-    this._setBoolean(opts, 'experimental.runtimeId', options.experimental?.runtimeId)
+    this._setBoolean(opts, 'runtimeMetricsRuntimeId', options.runtimeMetricsRuntimeId)
     this._setValue(opts, 'flushInterval', maybeInt(options.flushInterval))
     this._optsUnprocessed.flushInterval = options.flushInterval
     this._setValue(opts, 'flushMinSpans', maybeInt(options.flushMinSpans))
@@ -1102,6 +1133,9 @@ class Config {
     this._setValue(opts, 'iast.securityControlsConfiguration', options.iast?.securityControlsConfiguration)
     this._setBoolean(opts, 'iast.stackTrace.enabled', options.iast?.stackTrace?.enabled)
     this._setString(opts, 'iast.telemetryVerbosity', options.iast && options.iast.telemetryVerbosity)
+    if (options[INSTRUMENTED_BY_SSI]) {
+      this._setString(opts, 'instrumentationSource', options[INSTRUMENTED_BY_SSI])
+    }
     this._setBoolean(opts, 'isCiVisibility', options.isCiVisibility)
     this._setBoolean(opts, 'legacyBaggageEnabled', options.legacyBaggageEnabled)
     this._setBoolean(opts, 'llmobs.agentlessEnabled', options.llmobs?.agentlessEnabled)
@@ -1124,6 +1158,7 @@ class Config {
     }
     this._setBoolean(opts, 'reportHostname', options.reportHostname)
     this._setBoolean(opts, 'runtimeMetrics', options.runtimeMetrics)
+    this._setBoolean(opts, 'runtimeMetricsRuntimeId', options.runtimeMetricsRuntimeId)
     this._setArray(opts, 'sampler.spanSamplingRules', reformatSpanSamplingRules(options.spanSamplingRules))
     this._setUnit(opts, 'sampleRate', coalesce(options.sampleRate, options.ingestion.sampleRate))
     const ingestion = options.ingestion || {}
@@ -1436,27 +1471,24 @@ class Config {
     obj[name] = value
   }
 
-  _getContainersAndOriginsOrdered () {
-    const containers = [
-      this._remote,
-      this._options,
-      this._fleetStableConfig,
-      this._env,
-      this._localStableConfig,
-      this._calculated,
-      this._defaults
-    ]
-    const origins = [
-      'remote_config',
-      'code',
-      'fleet_stable_config',
-      'env_var',
-      'local_stable_config',
-      'calculated',
-      'default'
-    ]
+  _setAndTrackChange ({ name, value, origin, unprocessedValue, changes }) {
+    set(this, name, value)
 
-    return { containers, origins }
+    if (!changeTracker[name]) {
+      changeTracker[name] = {}
+    }
+
+    const originExists = origin in changeTracker[name]
+    const oldValue = changeTracker[name][origin]
+
+    if (!originExists || oldValue !== value) {
+      changeTracker[name][origin] = value
+      changes.push({
+        name,
+        value: unprocessedValue || value,
+        origin
+      })
+    }
   }
 
   // TODO: Report origin changes and errors to telemetry.
@@ -1465,51 +1497,35 @@ class Config {
   // for telemetry reporting, `name`s in `containers` need to be keys from:
   // https://github.com/DataDog/dd-go/blob/prod/trace/apps/tracer-telemetry-intake/telemetry-payload/static/config_norm_rules.json
   _merge () {
-    const { containers, origins } = this._getContainersAndOriginsOrdered()
-    const unprocessedValues = [
-      this._remoteUnprocessed,
-      this._optsUnprocessed,
-      {},
-      this._envUnprocessed,
-      {},
-      {},
-      {}
-    ]
     const changes = []
 
     for (const name in this._defaults) {
-      for (let i = 0; i < containers.length; i++) {
-        const container = containers[i]
+      // Use reverse order for merge (lowest priority first)
+      for (let i = sourcesOrder.length - 1; i >= 0; i--) {
+        const { containerProperty, origin, unprocessedProperty } = sourcesOrder[i]
+        const container = this[containerProperty]
         const value = container[name]
-
-        if ((value !== null && value !== undefined) || container === this._defaults) {
-          if (get(this, name) === value && has(this, name)) break
-
-          set(this, name, value)
-
-          changes.push({
+        if (value != null || container === this._defaults) {
+          this._setAndTrackChange({
             name,
-            value: unprocessedValues[i][name] || value,
-            origin: origins[i]
+            value,
+            origin,
+            unprocessedValue: unprocessedProperty === undefined ? undefined : this[unprocessedProperty][name],
+            changes
           })
-
-          break
         }
       }
     }
-
     this.sampler.sampleRate = this.sampleRate
     updateConfig(changes, this)
   }
 
   getOrigin (name) {
-    const { containers, origins } = this._getContainersAndOriginsOrdered()
-
-    for (let i = 0; i < containers.length; i++) {
-      const container = containers[i]
+    for (const { containerProperty, origin } of sourcesOrder) {
+      const container = this[containerProperty]
       const value = container[name]
       if (value != null || container === this._defaults) {
-        return origins[i]
+        return origin
       }
     }
   }

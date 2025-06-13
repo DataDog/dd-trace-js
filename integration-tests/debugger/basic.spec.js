@@ -5,7 +5,7 @@ const os = require('os')
 const { assert } = require('chai')
 const { pollInterval, setup } = require('./utils')
 const { assertObjectContains, assertUUID } = require('../helpers')
-const { ACKNOWLEDGED, ERROR } = require('../../packages/dd-trace/src/remote_config/apply_states')
+const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('../../packages/dd-trace/src/remote_config/apply_states')
 const { version } = require('../../package.json')
 
 describe('Dynamic Instrumentation', function () {
@@ -37,6 +37,10 @@ describe('Dynamic Instrumentation', function () {
         }]
 
         t.agent.on('remote-config-ack-update', (id, version, state, error) => {
+          // Due to the very short DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS, there's a race condition in which we might
+          // get an UNACKNOWLEDGED state first before the ACKNOWLEDGED state.
+          if (state === UNACKNOWLEDGED) return
+
           assert.strictEqual(id, t.rcConfig.id)
           assert.strictEqual(version, 1)
           assert.strictEqual(state, ACKNOWLEDGED)
@@ -101,6 +105,10 @@ describe('Dynamic Instrumentation', function () {
         ]
 
         t.agent.on('remote-config-ack-update', (id, version, state, error) => {
+          // Due to the very short DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS, there's a race condition in which we might
+          // get an UNACKNOWLEDGED state first before the ACKNOWLEDGED state.
+          if (state === UNACKNOWLEDGED) return
+
           assert.strictEqual(id, t.rcConfig.id)
           assert.strictEqual(version, ++receivedAckUpdates)
           assert.strictEqual(state, ACKNOWLEDGED)
@@ -141,6 +149,10 @@ describe('Dynamic Instrumentation', function () {
         }]
 
         t.agent.on('remote-config-ack-update', (id, version, state, error) => {
+          // Due to the very short DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS, there's a race condition in which we might
+          // get an UNACKNOWLEDGED state first before the ACKNOWLEDGED state.
+          if (state === UNACKNOWLEDGED) return
+
           assert.strictEqual(id, t.rcConfig.id)
           assert.strictEqual(version, 1)
           assert.strictEqual(state, ACKNOWLEDGED)
