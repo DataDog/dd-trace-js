@@ -1,15 +1,10 @@
 'use strict'
 
-const StructuredLogPlugin = require('../../dd-trace/src/plugins/structured_log_plugin')
+const LogPlugin = require('../../dd-trace/src/plugins/log_plugin')
 
-class WinstonPlugin extends StructuredLogPlugin {
+class WinstonPlugin extends LogPlugin {
   static get id () {
     return 'winston'
-  }
-
-  // winston can send both structured (i.e. JSON) and unstructured logs
-  static get _structured () {
-    return 'mixed'
   }
 }
 module.exports = WinstonPlugin

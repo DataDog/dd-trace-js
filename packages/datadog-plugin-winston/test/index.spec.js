@@ -131,7 +131,7 @@ describe('Plugin', () => {
           tracer.scope().activate(span, () => {
             winston.info('message')
 
-            expect(spy).to.have.been.calledWithMatch(meta.dd)
+            expect(spy).to.not.have.been.calledWithMatch(meta.dd)
           })
         })
       })
