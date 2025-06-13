@@ -61,7 +61,7 @@ describe('RASP metrics', () => {
 
       let appsecTelemetryMetricsReceived = false
 
-      return agent.assertTelemetryReceived(({ payload }) => {
+      await agent.assertTelemetryReceived(({ payload }) => {
         const namespace = payload.payload.namespace
 
         if (namespace === 'appsec') {
@@ -73,10 +73,9 @@ describe('RASP metrics', () => {
           assert.include(errorSerie.tags, 'waf_error:-127')
           assert.strictEqual(errorSerie.type, 'count')
         }
-      }, 30_000, 'generate-metrics', 2).then(() => {
-        assert.equal(appsecTelemetryMetricsReceived, true)
-        return true
-      })
+      }, 'generate-metrics', 30_000, 2)
+
+      assert.equal(appsecTelemetryMetricsReceived, true)
     })
   })
 
@@ -125,13 +124,11 @@ describe('RASP metrics', () => {
           assert.include(timeoutSerie.tags, 'rule_variant:shell')
           assert.strictEqual(timeoutSerie.type, 'count')
         }
-      }, 30_000, 'generate-metrics', 2)
+      }, 'generate-metrics', 30_000, 2)
 
-      return Promise.all([checkMessages, checkTelemetry]).then(() => {
-        assert.equal(appsecTelemetryReceived, true)
+      await Promise.all([checkMessages, checkTelemetry])
 
-        return true
-      })
+      assert.equal(appsecTelemetryReceived, true)
     })
   })
 })

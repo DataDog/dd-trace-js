@@ -8,6 +8,8 @@ const bodyParser = require('body-parser')
 const msgpack = require('@msgpack/msgpack')
 const upload = require('multer')()
 
+const noop = () => {}
+
 module.exports = class FakeAgent extends EventEmitter {
   constructor (port = 0) {
     // Redirect rejections to the error event
@@ -161,8 +163,32 @@ module.exports = class FakeAgent extends EventEmitter {
     return resultPromise
   }
 
-  assertTelemetryReceived (fn, timeout, requestType, expectedMessageCount = 1) {
-    timeout = timeout || 30000
+  /**
+   * Assert that a telemetry message is received.
+   *
+   * @overload
+   * @param {string} requestType - The request type to assert.
+   * @param {number} [timeout=30_000] - The timeout in milliseconds.
+   * @param {number} [expectedMessageCount=1] - The number of messages to expect.
+   * @returns {Promise<void>} A promise that resolves when the telemetry message of type `requestType` is received.
+   *
+   * @overload
+   * @param {Function} fn - The function to call with the telemetry message of type `requestType`.
+   * @param {string} requestType - The request type to assert.
+   * @param {number} [timeout=30_000] - The timeout in milliseconds.
+   * @param {number} [expectedMessageCount=1] - The number of messages to expect.
+   * @returns {Promise<void>} A promise that resolves when the telemetry message of type `requestType` is received and
+   *     the function `fn` has finished running. If `fn` throws an error, the promise will be rejected once `timeout`
+   *     is reached.
+   */
+  assertTelemetryReceived (fn, requestType, timeout = 30_000, expectedMessageCount = 1) {
+    if (typeof fn !== 'function') {
+      expectedMessageCount = timeout
+      timeout = requestType
+      requestType = fn
+      fn = noop
+    }
+
     let resultResolve
     let resultReject
     let msgCount = 0
