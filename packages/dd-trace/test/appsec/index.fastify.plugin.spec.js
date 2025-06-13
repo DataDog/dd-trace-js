@@ -278,15 +278,11 @@ describe('Api Security - Fastify', () => {
 
       const app = fastify()
 
-      app.post('/', (request, reply) => {
-        reply.send('DONE')
-      })
-
-      app.post('/sendjson', (request, reply) => {
+      app.post('/send', (request, reply) => {
         reply.send({ sendResKey: 'sendResValue' })
       })
 
-      app.post('/return-object', async (request, reply) => {
+      app.post('/return', async (request, reply) => {
         return { returnResKey: 'returnResValue' }
       })
 
@@ -326,9 +322,9 @@ describe('Api Security - Fastify', () => {
       return zlib.gzipSync(JSON.stringify(body)).toString('base64')
     }
 
-    it('should get the response body schema with reply.send method with object', async () => {
+    it('should get the response body schema with reply.send', async () => {
       const expectedResponseBodySchema = formatSchema([{ sendResKey: [8] }])
-      const res = await axios.post('/sendjson', { key: 'value' })
+      const res = await axios.post('/send', { key: 'value' })
 
       await agent.assertSomeTraces((traces) => {
         const span = traces[0][0]
@@ -339,9 +335,9 @@ describe('Api Security - Fastify', () => {
       assert.deepEqual(res.data, { sendResKey: 'sendResValue' })
     })
 
-    it('should get the response body schema with return statement', async () => {
+    it('should get the response body schema with return', async () => {
       const expectedResponseBodySchema = formatSchema([{ returnResKey: [8] }])
-      const res = await axios.post('/return-object', { key: 'value' })
+      const res = await axios.post('/return', { key: 'value' })
 
       await agent.assertSomeTraces((traces) => {
         const span = traces[0][0]
