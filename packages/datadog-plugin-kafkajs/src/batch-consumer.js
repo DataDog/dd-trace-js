@@ -6,7 +6,9 @@ class KafkajsBatchConsumerPlugin extends ConsumerPlugin {
   static get id () { return 'kafkajs' }
   static get operation () { return 'consume-batch' }
 
-  start ({ topic, partition, messages, groupId, clusterId }) {
+  start (ctx) {
+    const { topic, messages, groupId, clusterId } = ctx.extractedArgs || ctx
+
     if (!this.config.dsmEnabled) return
     for (const message of messages) {
       if (!message || !message.headers) continue

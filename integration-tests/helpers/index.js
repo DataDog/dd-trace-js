@@ -18,8 +18,8 @@ const hookFile = 'dd-trace/loader-hook.mjs'
 // This is set by the setShouldKill function
 let shouldKill
 
-async function runAndCheckOutput (filename, cwd, expectedOut) {
-  const proc = spawn('node', [filename], { cwd, stdio: 'pipe' })
+async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
+  const proc = spawn(process.execPath, [filename], { cwd, stdio: 'pipe' })
   const pid = proc.pid
   let out = await new Promise((resolve, reject) => {
     proc.on('error', reject)
@@ -42,7 +42,12 @@ async function runAndCheckOutput (filename, cwd, expectedOut) {
       // Debug adds this, which we don't care about in these tests
       out = out.replace('Flushing 0 metrics via HTTP\n', '')
     }
-    assert.strictEqual(out, expectedOut)
+    assert.match(out, new RegExp(expectedOut), `output "${out} does not contain expected output "${expectedOut}"`)
+  }
+
+  if (expectedSource) {
+    assert.match(out, new RegExp(`instrumentation source: ${expectedSource}`),
+    `Expected the process to output "${expectedSource}", but logs only contain: "${out}"`)
   }
   return pid
 }
@@ -51,10 +56,10 @@ async function runAndCheckOutput (filename, cwd, expectedOut) {
 let sandbox
 
 // This _must_ be used with the useSandbox function
-async function runAndCheckWithTelemetry (filename, expectedOut, ...expectedTelemetryPoints) {
+async function runAndCheckWithTelemetry (filename, expectedOut, expectedTelemetryPoints, expectedSource) {
   const cwd = sandbox.folder
   const cleanup = telemetryForwarder(expectedTelemetryPoints)
-  const pid = await runAndCheckOutput(filename, cwd, expectedOut)
+  const pid = await runAndCheckOutput(filename, cwd, expectedOut, expectedSource)
   const msgs = await cleanup()
   if (expectedTelemetryPoints.length === 0) {
     // assert no telemetry sent
@@ -109,18 +114,35 @@ async function runAndCheckWithTelemetry (filename, expectedOut, ...expectedTelem
   }
 }
 
+/**
+ * Spawns a Node.js script in a child process and returns a promise that resolves when the process is ready.
+ *
+ * @param {string|URL} filename - The filename of the Node.js script to spawn in a child process.
+ * @param {childProcess.ForkOptions} [options] - The options to pass to the child process.
+ * @param {(data: Buffer) => void} [stdioHandler] - A function that's called with one data argument to handle the
+ *   standard output of the child process. If not provided, the output will be logged to the console.
+ * @param {(data: Buffer) => void} [stderrHandler] - A function that's called with one data argument to handle the
+ *   standard error of the child process. If not provided, the error will be logged to the console.
+ * @returns {Promise<childProcess.ChildProcess & { url?: string }|undefined>} A promise that resolves when the process
+ *   is either ready or terminated without an error. If the process is terminated without an error, the promise will
+ *   resolve with `undefined`.The returned process will have a `url` property if the process didn't terminate.
+ */
 function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
   const proc = fork(filename, { ...options, stdio: 'pipe' })
+
   return new Promise((resolve, reject) => {
     proc
       .on('message', ({ port }) => {
+        if (typeof port !== 'number' && typeof port !== 'string') {
+          return reject(new Error(`${filename} sent invalid port: ${port}. Expected a number or string.`))
+        }
         proc.url = `http://localhost:${port}`
         resolve(proc)
       })
       .on('error', reject)
       .on('exit', code => {
         if (code !== 0) {
-          reject(new Error(`Process exited with status code ${code}.`))
+          return reject(new Error(`Process exited with status code ${code}.`))
         }
         resolve()
       })
@@ -147,7 +169,7 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   integrationTestsPaths = ['./integration-tests/*'], followUpCommand) {
   // We might use NODE_OPTIONS to init the tracer. We don't want this to affect this operations
   const { NODE_OPTIONS, ...restOfEnv } = process.env
-  const noSandbox = String(process.env.DD_NO_INTEGRATION_TESTS_SANDBOX)
+  const noSandbox = String(process.env.TESTING_NO_INTEGRATION_SANDBOX)
   if (noSandbox === '1' || noSandbox.toLowerCase() === 'true') {
     // Execute integration tests without a sandbox. This is useful when you have other components
     // yarn-linked into dd-trace and want to run the integration tests against them.
@@ -368,6 +390,31 @@ function setShouldKill (value) {
 }
 
 const assertObjectContains = assert.partialDeepStrictEqual || function assertObjectContains (actual, expected) {
+  if (Array.isArray(expected)) {
+    assert.ok(Array.isArray(actual), `Expected array but got ${typeof actual}`)
+    let startIndex = 0
+    for (const expectedItem of expected) {
+      let found = false
+      for (let i = startIndex; i < actual.length; i++) {
+        const actualItem = actual[i]
+        try {
+          if (expectedItem !== null && typeof expectedItem === 'object') {
+            assertObjectContains(actualItem, expectedItem)
+          } else {
+            assert.strictEqual(actualItem, expectedItem)
+          }
+          startIndex = i + 1
+          found = true
+          break
+        } catch {
+          continue
+        }
+      }
+      assert.ok(found, `Expected array to contain ${JSON.stringify(expectedItem)}`)
+    }
+    return
+  }
+
   for (const [key, val] of Object.entries(expected)) {
     if (val !== null && typeof val === 'object') {
       assert.ok(Object.hasOwn(actual, key))

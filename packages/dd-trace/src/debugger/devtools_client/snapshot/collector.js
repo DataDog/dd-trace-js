@@ -77,9 +77,8 @@ function getObjectProperties (subtype, objectId, opts, depth) {
     return getProxy(objectId, opts, depth)
   } else if (subtype === 'arraybuffer') {
     return getArrayBuffer(objectId, opts, depth)
-  } else {
-    return getObject(objectId, opts, depth + 1, subtype === 'array' || subtype === 'typedarray')
   }
+  return getObject(objectId, opts, depth + 1, subtype === 'array' || subtype === 'typedarray')
 }
 
 // TODO: The following extra information from `internalProperties` might be relevant to include for functions:

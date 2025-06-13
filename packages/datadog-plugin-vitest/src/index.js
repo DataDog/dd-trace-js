@@ -1,5 +1,6 @@
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
 const {
   TEST_STATUS,
@@ -218,37 +219,38 @@ class VitestPlugin extends CiPlugin {
       hasFailedAllRetries,
       attemptToFixFailed
     }) => {
-      if (span) {
-        if (shouldSetProbe && this.di) {
-          const probeInformation = this.addDiProbe(error)
-          if (probeInformation) {
-            const { file, line, stackIndex, setProbePromise } = probeInformation
-            this.runningTestProbe = { file, line }
-            this.testErrorStackIndex = stackIndex
-            promises.setProbePromise = setProbePromise
-          }
-        }
-        this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
-          hasCodeowners: !!span.context()._tags[TEST_CODE_OWNERS]
-        })
-        span.setTag(TEST_STATUS, 'fail')
-
-        if (error) {
-          span.setTag('error', error)
-        }
-        if (hasFailedAllRetries) {
-          span.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
-        }
-        if (attemptToFixFailed) {
-          span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
-        }
-        if (duration) {
-          span.finish(span._startTime + duration - MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION) // milliseconds
-        } else {
-          span.finish() // `duration` is empty for retries, so we'll use clock time
-        }
-        finishAllTraceSpans(span)
+      if (!span) {
+        return
       }
+      if (shouldSetProbe && this.di && error?.stack) {
+        const probeInformation = this.addDiProbe(error)
+        if (probeInformation) {
+          const { file, line, stackIndex, setProbePromise } = probeInformation
+          this.runningTestProbe = { file, line }
+          this.testErrorStackIndex = stackIndex
+          promises.setProbePromise = setProbePromise
+        }
+      }
+      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
+        hasCodeowners: !!span.context()._tags[TEST_CODE_OWNERS]
+      })
+      span.setTag(TEST_STATUS, 'fail')
+
+      if (error) {
+        span.setTag('error', error)
+      }
+      if (hasFailedAllRetries) {
+        span.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
+      }
+      if (attemptToFixFailed) {
+        span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
+      }
+      if (duration) {
+        span.finish(span._startTime + duration - MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION) // milliseconds
+      } else {
+        span.finish() // `duration` is empty for retries, so we'll use clock time
+      }
+      finishAllTraceSpans(span)
     })
 
     this.addSub('ci:vitest:test:skip', ({ testName, testSuiteAbsolutePath, isNew, isDisabled }) => {
@@ -274,11 +276,11 @@ class VitestPlugin extends CiPlugin {
     this.addBind('ci:vitest:test-suite:start', (ctx) => {
       const { testSuiteAbsolutePath, frameworkVersion } = ctx
 
-      this.command = process.env.DD_CIVISIBILITY_TEST_COMMAND
+      this.command = getEnvironmentVariable('DD_CIVISIBILITY_TEST_COMMAND')
       this.frameworkVersion = frameworkVersion
       const testSessionSpanContext = this.tracer.extract('text_map', {
-        'x-datadog-trace-id': process.env.DD_CIVISIBILITY_TEST_SESSION_ID,
-        'x-datadog-parent-id': process.env.DD_CIVISIBILITY_TEST_MODULE_ID
+        'x-datadog-trace-id': getEnvironmentVariable('DD_CIVISIBILITY_TEST_SESSION_ID'),
+        'x-datadog-parent-id': getEnvironmentVariable('DD_CIVISIBILITY_TEST_MODULE_ID')
       })
 
       const trimmedCommand = DD_MAJOR < 6 ? this.command : 'vitest run'
@@ -395,7 +397,7 @@ class VitestPlugin extends CiPlugin {
       finishAllTraceSpans(this.testSessionSpan)
       this.telemetry.count(TELEMETRY_TEST_SESSION, {
         provider: this.ciProviderName,
-        autoInjected: !!process.env.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER
+        autoInjected: !!getEnvironmentVariable('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER')
       })
       this.tracer._exporter.flush(onFinish)
     })

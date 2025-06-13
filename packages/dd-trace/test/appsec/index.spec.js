@@ -257,7 +257,7 @@ describe('AppSec Index', function () {
       }
       AppSec.enable(config)
 
-      expect(appsecTelemetry.enable).to.be.calledOnceWithExactly(config.telemetry)
+      expect(appsecTelemetry.enable).to.be.calledOnceWithExactly(config)
     })
 
     it('should call rasp enable', () => {
@@ -424,7 +424,52 @@ describe('AppSec Index', function () {
 
       expect(waf.run).to.have.not.been.called
 
-      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
+      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res, {})
+    })
+
+    it('should pass stored response headers to Reporter.finishRequest', () => {
+      const req = {
+        url: '/path',
+        headers: {
+          'user-agent': 'Arachni',
+          host: 'localhost'
+        },
+        method: 'POST',
+        socket: {
+          remoteAddress: '127.0.0.1',
+          remotePort: 8080
+        }
+      }
+      const res = {
+        getHeaders: () => ({
+          'content-type': 'application/json',
+          'content-length': 42
+        }),
+        statusCode: 200
+      }
+
+      const storedHeaders = {
+        'content-type': 'text/plain',
+        'content-language': 'en-US',
+        'content-length': '15'
+      }
+
+      web.patch(req)
+
+      sinon.stub(Reporter, 'finishRequest')
+      sinon.stub(waf, 'disposeContext')
+
+      responseWriteHead.publish({
+        req,
+        res,
+        abortController: { abort: sinon.stub() },
+        statusCode: 200,
+        responseHeaders: storedHeaders
+      })
+
+      AppSec.incomingHttpEndTranslator({ req, res })
+
+      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res, storedHeaders)
     })
 
     it('should not propagate incoming http end data with invalid framework properties', () => {
@@ -462,7 +507,7 @@ describe('AppSec Index', function () {
 
       expect(waf.run).to.have.not.been.called
 
-      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
+      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res, {})
     })
 
     it('should propagate incoming http end data with express', () => {
@@ -512,7 +557,7 @@ describe('AppSec Index', function () {
           'server.request.query': { b: '2' }
         }
       }, req)
-      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
+      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res, {})
     })
   })
 
@@ -1220,8 +1265,9 @@ describe('AppSec Index', function () {
 
       const metrics = appsecNamespace.metrics.toJSON()
 
-      expect(metrics.series.length).to.equal(1)
-      expect(metrics.series[0].metric).to.equal('waf.init')
+      expect(metrics.series.length).to.equal(2)
+      expect(metrics.series[0].metric).to.equal('enabled')
+      expect(metrics.series[1].metric).to.equal('waf.init')
     })
 
     it('should not increment waf.init metric if metrics are not enabled', () => {

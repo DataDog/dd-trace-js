@@ -43,8 +43,11 @@ function expectProfileMessagePromise (agent, timeout,
       assert.propertyVal(event, 'family', 'node')
       assert.isString(event.info.profiler.activation)
       assert.isString(event.info.profiler.ssi.mechanism)
-      assert.deepPropertyVal(event, 'attachments', fileNames)
-      for (const [index, fileName] of fileNames.entries()) {
+      const attachments = event.attachments
+      assert.isArray(attachments)
+      // Profiler encodes the files with Promise.all, so their ordering is not guaranteed
+      assert.sameMembers(attachments, fileNames)
+      for (const [index, fileName] of attachments.entries()) {
         assert.propertyVal(files[index + 1], 'originalname', fileName)
       }
     } catch (e) {
@@ -536,7 +539,7 @@ describe('profiler', () => {
       proc.kill()
     })
 
-    it('records profile on process exit', () => {
+    it('records profile on process exit', async () => {
       proc = fork(profilerTestFile, {
         cwd,
         env: {
@@ -544,13 +547,13 @@ describe('profiler', () => {
           DD_PROFILING_ENABLED: 1
         }
       })
-      const checkTelemetry = agent.assertTelemetryReceived(_ => {}, 1000, 'generate-metrics')
+      const checkTelemetry = agent.assertTelemetryReceived('generate-metrics', 1000)
       // SSI telemetry is not supposed to have been emitted when DD_INJECTION_ENABLED is absent,
       // so expect telemetry callback to time out
-      return Promise.all([checkProfiles(agent, proc, timeout), expectTimeout(checkTelemetry)])
+      await Promise.all([checkProfiles(agent, proc, timeout), expectTimeout(checkTelemetry)])
     })
 
-    it('records SSI telemetry on process exit', () => {
+    it('records SSI telemetry on process exit', async () => {
       proc = fork(profilerTestFile, {
         cwd,
         env: {
@@ -585,8 +588,9 @@ describe('profiler', () => {
         assert.equal(series[1].type, 'count')
         checkTags(series[1].tags)
         assert.equal(series[1].points[0][1], 1)
-      }, timeout, 'generate-metrics')
-      return Promise.all([checkProfiles(agent, proc, timeout), checkTelemetry])
+      }, 'generate-metrics', timeout)
+
+      await Promise.all([checkProfiles(agent, proc, timeout), checkTelemetry])
     })
 
     if (process.platform !== 'win32') { // PROF-8905
@@ -703,7 +707,7 @@ describe('profiler', () => {
       await agent.stop()
     })
 
-    it('sends profiler API telemetry', () => {
+    it('sends profiler API telemetry', async () => {
       proc = fork(profilerTestFile, {
         cwd,
         env: {
@@ -736,7 +740,7 @@ describe('profiler', () => {
 
         // Same number of requests and responses
         assert.equal(series[1].points[0][1], requestCount)
-      }, timeout, 'generate-metrics')
+      }, 'generate-metrics', timeout)
 
       const checkDistributions = agent.assertTelemetryReceived(({ _, payload }) => {
         const pp = payload.payload
@@ -749,12 +753,12 @@ describe('profiler', () => {
         // Same number of points
         pointsCount = series[0].points.length
         assert.equal(pointsCount, series[1].points.length)
-      }, timeout, 'distributions')
+      }, 'distributions', timeout)
 
-      return Promise.all([checkProfiles(agent, proc, timeout), checkMetrics, checkDistributions]).then(() => {
-        // Same number of requests and points
-        assert.equal(requestCount, pointsCount)
-      })
+      await Promise.all([checkProfiles(agent, proc, timeout), checkMetrics, checkDistributions])
+
+      // Same number of requests and points
+      assert.equal(requestCount, pointsCount)
     })
   })
 

@@ -1,6 +1,5 @@
 'use strict'
 
-const getPort = require('get-port')
 const { assert } = require('chai')
 const path = require('path')
 const axios = require('axios')
@@ -9,16 +8,15 @@ const {
   FakeAgent,
   createSandbox,
   spawnProc
-} = require('./helpers')
+} = require('../helpers')
 
 describe('graphql', () => {
-  let sandbox, cwd, agent, webFile, proc, appPort
+  let sandbox, cwd, agent, webFile, proc
 
   before(async function () {
     sandbox = await createSandbox(['@apollo/server', 'graphql', 'koalas'])
     cwd = sandbox.folder
     webFile = path.join(cwd, 'graphql/index.js')
-    appPort = await getPort()
   })
 
   beforeEach(async () => {
@@ -26,8 +24,7 @@ describe('graphql', () => {
     proc = await spawnProc(webFile, {
       cwd,
       env: {
-        AGENT_PORT: agent.port,
-        APP_PORT: appPort
+        AGENT_PORT: agent.port
       }
     })
   })
@@ -54,7 +51,7 @@ describe('graphql', () => {
     })
 
     await axios({
-      url: `http://localhost:${appPort}/graphql`,
+      url: `${proc.url}/graphql`,
       method: 'post',
       headers: {
         'Content-type': 'application/json'
@@ -116,7 +113,7 @@ describe('graphql', () => {
     })
 
     await axios({
-      url: `http://localhost:${appPort}/graphql`,
+      url: `${proc.url}/graphql`,
       method: 'post',
       headers: {
         'Content-type': 'application/json'

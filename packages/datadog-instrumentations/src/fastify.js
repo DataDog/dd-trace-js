@@ -6,6 +6,8 @@ const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const errorChannel = channel('apm:fastify:middleware:error')
 const handleChannel = channel('apm:fastify:request:handle')
 const routeAddedChannel = channel('apm:fastify:route:added')
+const bodyParserReadCh = channel('datadog:fastify:body-parser:finish')
+const queryParamsReadCh = channel('datadog:fastify:query-params:finish')
 
 const parsingResources = new WeakMap()
 
@@ -59,21 +61,19 @@ function wrapAddHook (addHook) {
               return parsingResource.runInAsyncScope(() => {
                 return done.apply(this, arguments)
               })
-            } else {
-              return done.apply(this, arguments)
             }
+            return done.apply(this, arguments)
           }
 
           return fn.apply(this, arguments)
-        } else {
-          const promise = fn.apply(this, arguments)
-
-          if (promise && typeof promise.catch === 'function') {
-            return promise.catch(err => publishError(err, req))
-          }
-
-          return promise
         }
+        const promise = fn.apply(this, arguments)
+
+        if (promise && typeof promise.catch === 'function') {
+          return promise.catch(err => publishError(err, req))
+        }
+
+        return promise
       } catch (e) {
         throw publishError(e, req)
       }
@@ -108,11 +108,37 @@ function preHandler (request, reply, done) {
 
 function preValidation (request, reply, done) {
   const req = getReq(request)
+  const res = getRes(reply)
   const parsingResource = parsingResources.get(req)
 
-  if (!parsingResource) return done()
+  const processInContext = () => {
+    if (queryParamsReadCh.hasSubscribers && request.query) {
+      const abortController = new AbortController()
 
-  parsingResource.runInAsyncScope(() => done())
+      queryParamsReadCh.publish({
+        req,
+        res,
+        abortController,
+        query: request.query
+      })
+
+      if (abortController.signal.aborted) return
+    }
+
+    if (bodyParserReadCh.hasSubscribers && request.body) {
+      const abortController = new AbortController()
+
+      bodyParserReadCh.publish({ req, res, body: request.body, abortController })
+
+      if (abortController.signal.aborted) return
+    }
+
+    done()
+  }
+
+  if (!parsingResource) return processInContext()
+
+  parsingResource.runInAsyncScope(processInContext)
 }
 
 function preParsing (request, reply, payload, done) {

@@ -1,4 +1,3 @@
-/* eslint-disable comma-dangle */
 'use strict'
 
 const { FakeAgent, spawnProc, createSandbox, curl } = require('./helpers')
