@@ -1,5 +1,6 @@
 {
   "supportedConfigurations": {
+    "DD_TESTING_MATT": ["A"], 
     "DD_AAS_DOTNET_EXTENSION_VERSION": ["A"],
     "DD_AGENT_HOST": ["A"],
     "DD_AGENTLESS_LOG_SUBMISSION_ENABLED": ["A"],
