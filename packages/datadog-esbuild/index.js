@@ -42,7 +42,7 @@ for (const builtin of RAW_BUILTINS) {
 }
 
 const DEBUG = !!process.env.DD_TRACE_DEBUG
-const DD_BUILD_ESM = !!process.env.DD_BUILD_ESM
+const DD_BUILD_ESM = process.env.DD_BUILD_ESM?.toLowerCase() === 'true' || process.env.DD_BUILD_ESM === '1'
 
 // We don't want to handle any built-in packages
 // Those packages will still be handled via RITM
