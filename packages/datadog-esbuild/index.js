@@ -60,12 +60,12 @@ module.exports.setup = function (build) {
   if (DD_BUILD_ESM) {
     build.initialOptions.banner ??= {}
     build.initialOptions.banner.js ??= ''
-    build.initialOptions.banner.js += `import { createRequire } from 'module';
-import { fileURLToPath } from 'url';
-import path from 'path';
-const require = createRequire(import.meta.url);
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);`
+    build.initialOptions.banner.js += `import { createRequire as $dd_createRequire } from 'module';
+import { fileURLToPath as $dd_fileURLToPath } from 'url';
+import { dirname as $dd_dirname } from 'path';
+const require = $dd_createRequire(import.meta.url);
+const __filename = $dd_fileURLToPath(import.meta.url);
+const __dirname = $dd_dirname(__filename);`
   }
 
   build.onResolve({ filter: /.*/ }, args => {
