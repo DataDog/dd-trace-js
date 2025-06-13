@@ -329,6 +329,7 @@ describe('Sns', function () {
       })
 
       before(done => {
+        process.env.DD_DATA_STREAMS_ENABLED = 'true'
         tracer = require('../../dd-trace')
         tracer.use('aws-sdk', { sns: { dsmEnabled: false, batchPropagationEnabled: true } })
 
@@ -503,6 +504,7 @@ describe('Sns', function () {
       })
 
       before(done => {
+        process.env.DD_DATA_STREAMS_ENABLED = 'true'
         tracer = require('../../dd-trace')
         tracer.use('aws-sdk', { sns: { dsmEnabled: true }, sqs: { dsmEnabled: true } })
 
