@@ -279,7 +279,7 @@ withVersions('fastify', 'fastify', version => {
       })
 
       app.register(async function (nested) {
-        nested.get('/:nestedDuplicatedParameter', async (request, reply) => {
+        nested.get('/:nestedParam', async (request, reply) => {
           reply.send('DONE')
         })
       }, { prefix: '/nested/:parentParam' })
@@ -293,7 +293,7 @@ withVersions('fastify', 'fastify', version => {
 
       app.addHook('preHandler', paramHookSpy)
 
-      app.get('/callback-path-param/:callbackedParameter', (request, reply) => {
+      app.get('/callback-path-param/:pathParameter', (request, reply) => {
         reply.send('DONE')
       })
 
