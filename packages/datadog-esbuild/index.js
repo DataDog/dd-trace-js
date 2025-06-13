@@ -42,6 +42,7 @@ for (const builtin of RAW_BUILTINS) {
 }
 
 const DEBUG = !!process.env.DD_TRACE_DEBUG
+const DD_BUILD_ESM = !!process.env.DD_BUILD_ESM
 
 // We don't want to handle any built-in packages
 // Those packages will still be handled via RITM
@@ -55,6 +56,18 @@ module.exports.name = 'datadog-esbuild'
 
 module.exports.setup = function (build) {
   const externalModules = new Set(build.initialOptions.external || [])
+
+  if (DD_BUILD_ESM) {
+    build.initialOptions.banner ??= {}
+    build.initialOptions.banner.js ??= ''
+    build.initialOptions.banner.js += `import { createRequire } from 'module';
+import { fileURLToPath } from 'url';
+import path from 'path';
+const require = createRequire(import.meta.url);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);`
+  }
+
   build.onResolve({ filter: /.*/ }, args => {
     if (externalModules.has(args.path)) {
       // Internal Node.js packages will still be instrumented via require()

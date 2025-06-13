@@ -21,10 +21,7 @@ esbuild.build({
     'oracledb',
     'pg-query-stream',
     'tedious'
-  ],
-  banner: {
-    js: `import { createRequire } from 'module';const require = createRequire(import.meta.url);`,
-  }
+  ]
 }).catch((err) => {
   console.error(err) // eslint-disable-line no-console
   process.exit(1)
