@@ -30,10 +30,10 @@ async function createMockPrismaClient (targetPath, version) {
   version = matched[1]
 
   // trick the prisma CLI to think that the client is installed in this directory
-  // execSync(`npm install @prisma/client@${version} --no-save --legacy-peer-deps`, {
-  //   cwd: path.dirname(targetPath),
-  //   stdio: 'inherit'
-  // })
+  execSync(`npm install @prisma/client@${version} --no-save --legacy-peer-deps`, {
+    cwd: path.dirname(targetPath),
+    stdio: 'inherit'
+  })
 }
 
 /*
