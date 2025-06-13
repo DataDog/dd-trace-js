@@ -20,7 +20,7 @@ class Sqs extends BaseAwsSdkPlugin {
       const { request, response } = ctx
       const contextExtraction = this.responseExtract(request.params, request.operation, response)
 
-      const store = ctx.parentStore
+      let store = this._parentMap.get(request)
       let span
       let parsedMessageAttributes = null
       if (contextExtraction && contextExtraction.datadogContext) {
@@ -34,6 +34,7 @@ class Sqs extends BaseAwsSdkPlugin {
         }
         parsedMessageAttributes = contextExtraction.parsedAttributes
         span = this.startSpan('aws.response', options, ctx)
+        store = ctx.currentStore
       }
 
       // extract DSM context after as we might not have a parent-child but may have a DSM context

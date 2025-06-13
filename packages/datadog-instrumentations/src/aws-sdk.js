@@ -26,13 +26,11 @@ function wrapRequest (send) {
       channel(`apm:aws:request:complete:${channelSuffix}`).publish(ctx)
     })
 
-    return startCh.runStores(ctx, () => {
-      if (ctx.cbExists) {
-        arguments[0] = wrapCb(cb, channelSuffix, ctx)
-      }
+    if (ctx.cbExists) {
+      arguments[0] = wrapCb(cb, channelSuffix, ctx)
+    }
 
-      return send.apply(this, arguments)
-    })
+    return startCh.runStores(ctx, send, this, ...arguments)
   }
 }
 
@@ -89,14 +87,14 @@ function wrapSmithySend (send) {
         args[args.length - 1] = shimmer.wrapFunction(cb, cb => function (err, result) {
           addResponse(ctx, err, result)
 
-          completeChannel.runStores(ctx, () => {
-            const responseCtx = { request, response: ctx.response }
+          completeChannel.publish(ctx)
 
-            responseStartChannel.runStores(responseCtx, () => {
-              cb.apply(this, arguments)
+          const responseCtx = { request, response: ctx.response }
 
-              responseFinishChannel.publish(responseCtx)
-            })
+          responseStartChannel.runStores(responseCtx, () => {
+            cb.apply(this, arguments)
+
+            responseFinishChannel.publish(responseCtx)
           })
         })
       } else { // always a promise
@@ -123,7 +121,7 @@ function wrapSmithySend (send) {
 function wrapCb (cb, serviceName, ctx) {
   // eslint-disable-next-line n/handle-callback-err
   return shimmer.wrapFunction(cb, cb => function wrappedCb (err, response) {
-    ctx = { parentStore: ctx.parentStore, request: ctx.request, response }
+    ctx = { request: ctx.request, response }
     return channel(`apm:aws:response:start:${serviceName}`).runStores(ctx, () => {
       const finishChannel = channel(`apm:aws:response:finish:${serviceName}`)
       try {

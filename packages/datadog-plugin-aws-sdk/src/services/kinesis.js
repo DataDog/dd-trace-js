@@ -19,7 +19,7 @@ class Kinesis extends BaseAwsSdkPlugin {
       const { request, response } = ctx
       const plugin = this
 
-      const store = ctx.parentStore
+      let store = this._parentMap.get(request)
 
       // if we have either of these operations, we want to store the streamName param
       // since it is not typically available during get/put records requests
@@ -40,6 +40,7 @@ class Kinesis extends BaseAwsSdkPlugin {
             }
           }
           span = plugin.startSpan('aws.response', options, ctx)
+          store = ctx.currentStore
         }
 
         // get the stream name that should have been stored previously

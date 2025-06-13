@@ -34,6 +34,8 @@ class BaseAwsSdkPlugin extends ClientPlugin {
   constructor (...args) {
     super(...args)
 
+    this._parentMap = new WeakMap()
+
     this.addBind(`apm:aws:request:start:${this.serviceIdentifier}`, (ctx) => {
       const {
         request,
@@ -43,6 +45,8 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       } = ctx
 
       const childOf = ctx.parentStore = this.tracer.scope().active()
+
+      this._parentMap.set(request, childOf)
 
       if (!this.isEnabled(request)) {
         return childOf
@@ -86,8 +90,6 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       span.setTag('region', region)
     })
 
-    this.addBind(`apm:aws:request:complete:${this.serviceIdentifier}`, ctx => ctx.parentStore)
-
     this.addSub(`apm:aws:request:complete:${this.serviceIdentifier}`, ctx => {
       const { response, cbExists = false, currentStore } = ctx
       if (!currentStore) return
@@ -111,7 +113,9 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       this.finish(ctx)
     })
 
-    this.addBind('apm:aws:response:start:kinesis', ctx => ctx.parentStore)
+    this.addBind(`apm:aws:response:start:${this.serviceIdentifier}`, ctx => {
+      return this._parentMap.get(ctx.request)
+    })
   }
 
   requestInject (span, request) {
