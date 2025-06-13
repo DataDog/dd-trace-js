@@ -32,6 +32,27 @@ describe('pino test', () => {
       await agent.stop()
     })
 
+    it('Log injection enabled by default', async () => {
+      proc = await spawnProc(startupTestFile, {
+        cwd,
+        env: {
+          AGENT_PORT: agent.port
+        },
+        stdio: 'pipe',
+      })
+      const [data] = await Promise.all([once(proc.stdout, 'data'), curl(proc)])
+      const stdoutData = JSON.parse(data.toString())
+      assert.containsAllKeys(stdoutData, ['dd'])
+      assert.containsAllKeys(stdoutData.dd, ['trace_id', 'span_id'])
+      assert.strictEqual(
+        stdoutData.dd.trace_id,
+        stdoutData.custom.trace_id
+      )
+      assert.strictEqual(
+        stdoutData.dd.span_id,
+        stdoutData.custom.span_id
+      )
+    })
     it('Log injection enabled', async () => {
       proc = await spawnProc(startupTestFile, {
         cwd,
@@ -60,6 +81,7 @@ describe('pino test', () => {
         cwd,
         env: {
           AGENT_PORT: agent.port,
+          lOG_INJECTION: false
         },
         stdio: 'pipe',
       })

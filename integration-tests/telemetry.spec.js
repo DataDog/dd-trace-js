@@ -66,7 +66,7 @@ describe('telemetry', () => {
       await agent.assertTelemetryReceived(msg => {
         const { configuration } = msg.payload.payload
         assertObjectContains(configuration, [
-          { name: 'DD_LOG_INJECTION', value: false, origin: 'default' },
+          { name: 'DD_LOG_INJECTION', value: 'structured', origin: 'default' },
           { name: 'DD_LOG_INJECTION', value: true, origin: 'env_var' },
           { name: 'DD_LOG_INJECTION', value: false, origin: 'code' }
         ])
