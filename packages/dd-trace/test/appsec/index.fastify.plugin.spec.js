@@ -412,6 +412,7 @@ withVersions('fastify', 'fastify', version => {
     describe('path parameter with hook', () => {
       it('should not block the request when attack is not detected', async () => {
         const res = await axios.get('/callback-path-param/safe_param')
+
         assert.equal(res.status, 200)
         assert.equal(res.data, 'DONE')
         sinon.assert.calledOnce(paramHookSpy)
