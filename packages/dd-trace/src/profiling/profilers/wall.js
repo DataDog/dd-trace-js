@@ -16,54 +16,109 @@ const {
 
 const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('../webspan-utils')
 
-const beforeCh = dc.channel('dd-trace:storage:before')
+let beforeCh
+let lastInstance
 const enterCh = dc.channel('dd-trace:storage:enter')
 const spanFinishCh = dc.channel('dd-trace:span:finish')
 const profilerTelemetryMetrics = telemetryMetrics.manager.namespace('profilers')
 
 const ProfilingContext = Symbol('NativeWallProfiler.ProfilingContext')
 
-let kSampleCount
+let kSampleCount, kCPEDContextCount
 
 function getActiveSpan () {
   const store = storage('legacy').getStore()
   return store && store.span
 }
 
+function updateContext (context) {
+  // Converting spanIDs to strings is not necessary as generateLabels will do it
+  // too. When we don't use async context frame, we can convert them when the
+  // sample is taken though so we amortize the latency of operations. It is an
+  // optimization.
+  if (typeof context.spanId === 'object') {
+    context.spanId = context.spanId.toString(10)
+  }
+  if (typeof context.rootSpanId === 'object') {
+    context.rootSpanId = context.rootSpanId.toString(10)
+  }
+  if (context.webTags !== undefined && context.endpoint === undefined) {
+    // endpoint may not be determined yet, but keep it as fallback
+    // if tags are not available anymore during serialization
+    context.endpoint = endpointNameFromTags(context.webTags)
+  }
+}
+
 let channelsActivated = false
-function ensureChannelsActivated () {
+function ensureChannelsActivated (useAsyncContextFrame) {
   if (channelsActivated) return
 
-  const { AsyncLocalStorage, createHook } = require('async_hooks')
   const shimmer = require('../../../../datadog-shimmer')
 
-  createHook({ before: () => beforeCh.publish() }).enable()
-
-  let inRun = false
-  shimmer.wrap(AsyncLocalStorage.prototype, 'enterWith', function (original) {
-    return function (...args) {
-      const retVal = original.apply(this, args)
-      if (!inRun) enterCh.publish()
-      return retVal
-    }
-  })
-
-  shimmer.wrap(AsyncLocalStorage.prototype, 'run', function (original) {
-    return function (store, callback, ...args) {
-      const wrappedCb = shimmer.wrapFunction(callback, cb => function (...args) {
-        inRun = false
+  let interceptingAsyncContextFrameSet = false
+  // When using the async context frame to store sample context (available with
+  // Node 24), we do not need to use the async hooks anymore.
+  if (!useAsyncContextFrame) {
+    const { createHook } = require('async_hooks')
+    beforeCh = dc.channel('dd-trace:storage:before')
+    createHook({ before: () => beforeCh.publish() }).enable()
+  } else if (process.execArgv.includes('--expose-internals')) {
+    const AsyncContextFrame = require('internal/async_context_frame')
+    shimmer.wrap(AsyncContextFrame, 'set', function (original) {
+      return function (frame) {
+        original.call(this, frame)
         enterCh.publish()
-        const retVal = cb.apply(this, args)
-        inRun = true
+      }
+    })
+    interceptingAsyncContextFrameSet = true
+  }
+
+  if (!interceptingAsyncContextFrameSet) {
+    const { AsyncLocalStorage, AsyncResource } = require('async_hooks')
+
+    let inRun = false
+    shimmer.wrap(AsyncLocalStorage.prototype, 'enterWith', function (original) {
+      return function (...args) {
+        const retVal = original.apply(this, args)
+        if (!inRun) enterCh.publish()
         return retVal
-      })
-      inRun = true
-      const retVal = original.call(this, store, wrappedCb, ...args)
-      enterCh.publish()
-      inRun = false
-      return retVal
-    }
-  })
+      }
+    })
+
+    shimmer.wrap(AsyncLocalStorage.prototype, 'run', function (original) {
+      return function (store, callback, ...args) {
+        const wrappedCb = shimmer.wrapFunction(callback, cb => function (...args) {
+          inRun = false
+          enterCh.publish()
+          const retVal = cb.apply(this, args)
+          inRun = true
+          return retVal
+        })
+        inRun = true
+        const retVal = original.call(this, store, wrappedCb, ...args)
+        enterCh.publish()
+        inRun = false
+        return retVal
+      }
+    })
+
+    shimmer.wrap(AsyncResource.prototype, 'runInAsyncScope', function (original) {
+      return function (callback, thisArg, ...args) {
+        const wrappedCb = shimmer.wrapFunction(callback, cb => function (...args) {
+          inRun = false
+          enterCh.publish()
+          const retVal = cb.apply(this, args)
+          inRun = true
+          return retVal
+        })
+        inRun = true
+        const retVal = original.call(this, wrappedCb, thisArg, ...args)
+        enterCh.publish()
+        inRun = false
+        return retVal
+      }
+    })
+  }
 
   channelsActivated = true
 }
@@ -77,6 +132,8 @@ class NativeWallProfiler {
     this._endpointCollectionEnabled = !!options.endpointCollectionEnabled
     this._timelineEnabled = !!options.timelineEnabled
     this._cpuProfilingEnabled = !!options.cpuProfilingEnabled
+    this._useAsyncContextFrame = !!options.useAsyncContextFrame
+
     // We need to capture span data into the sample context for either code hotspots
     // or endpoint collection.
     this._captureSpanData = this._codeHotspotsEnabled || this._endpointCollectionEnabled
@@ -98,6 +155,7 @@ class NativeWallProfiler {
 
     this._logger = options.logger
     this._started = false
+    lastInstance = this
   }
 
   codeHotspotsEnabled () {
@@ -114,6 +172,7 @@ class NativeWallProfiler {
     this._mapper = mapper
     this._pprof = require('@datadog/pprof')
     kSampleCount = this._pprof.time.constants.kSampleCount
+    kCPEDContextCount = this._pprof.time.constants.kCPEDContextCount
 
     // pprof otherwise crashes in worker threads
     if (!process._startProfilerIdleNotifier) {
@@ -130,19 +189,24 @@ class NativeWallProfiler {
       withContexts: this._withContexts,
       lineNumbers: false,
       workaroundV8Bug: this._v8ProfilerBugWorkaroundEnabled,
-      collectCpuTime: this._cpuProfilingEnabled
+      collectCpuTime: this._cpuProfilingEnabled,
+      useCPED: this._useAsyncContextFrame
     })
 
     if (this._withContexts) {
-      this._setNewContext()
+      if (!this._useAsyncContextFrame) {
+        this._setNewContext()
+      }
 
       if (this._captureSpanData) {
         this._profilerState = this._pprof.time.getState()
         this._lastSampleCount = 0
 
-        ensureChannelsActivated()
+        ensureChannelsActivated(this._useAsyncContextFrame)
 
-        beforeCh.subscribe(this._enter)
+        if (!this._useAsyncContextFrame) {
+          beforeCh.subscribe(this._enter)
+        }
         enterCh.subscribe(this._enter)
         spanFinishCh.subscribe(this._spanFinished)
       }
@@ -154,17 +218,37 @@ class NativeWallProfiler {
   _enter () {
     if (!this._started) return
 
-    const sampleCount = this._profilerState[kSampleCount]
-    if (sampleCount !== this._lastSampleCount) {
-      this._lastSampleCount = sampleCount
-      const context = this._currentContext.ref
-      this._setNewContext()
-
-      this._updateContext(context)
-    }
-
     const span = getActiveSpan()
-    this._currentContext.ref = span ? this._getProfilingContext(span) : {}
+    const sampleContext = span ? this._getProfilingContext(span) : {}
+
+    // Note that we store the sample context differently with and without the
+    // async context frame. With the async context frame, we tell the profiler
+    // to store the sample context directly in the frame on each enterWith.
+    // Without the async context frame, we store one holder object as the
+    // profiler's single sample context, and reassign its "ref" property on
+    // every async context change. Then when we detect that the profiler took a
+    // sample (and thus bound the holder as that sample's context), we create a
+    // new holder object so that we no longer mutate the old one. This is really
+    // an optimization to avoid going to profiler's native SetContext every
+    // time. With async context frame however, we can't have that optimization,
+    // as we can't tell from which async context frame was the sampling context
+    // taken. For the same reason we can't call updateContext() on the old
+    // context -- we simply can't tell which one it might've been across all
+    // possible async context frames.
+    if (this._useAsyncContextFrame) {
+      this._pprof.time.setContext(sampleContext)
+    } else {
+      const sampleCount = this._profilerState[kSampleCount]
+      if (sampleCount !== this._lastSampleCount) {
+        this._lastSampleCount = sampleCount
+        const context = this._currentContext.ref
+        this._setNewContext()
+
+        updateContext(context)
+      }
+
+      this._currentContext.ref = sampleContext
+    }
   }
 
   _getProfilingContext (span) {
@@ -202,6 +286,15 @@ class NativeWallProfiler {
       span[ProfilingContext] = profilingContext
     }
     return profilingContext
+  }
+
+  _getSampleContext () {
+    const context = this._pprof.time.getContext()
+    return this._useAsyncContextFrame ? context : context.ref
+  }
+
+  _getCPEDContextCount () {
+    return this._profilerState[kCPEDContextCount]
   }
 
   _setNewContext () {
@@ -245,7 +338,7 @@ class NativeWallProfiler {
   _stop (restart) {
     if (!this._started) return
 
-    if (this._captureSpanData) {
+    if (this._captureSpanData && !this._useAsyncContextFrame) {
       // update last sample context if needed
       this._enter()
       this._lastSampleCount = 0
@@ -259,7 +352,9 @@ class NativeWallProfiler {
       }
     } else {
       if (this._captureSpanData) {
-        beforeCh.unsubscribe(this._enter)
+        if (!this._useAsyncContextFrame) {
+          beforeCh.unsubscribe(this._enter)
+        }
         enterCh.unsubscribe(this._enter)
         spanFinishCh.unsubscribe(this._spanFinished)
         this._profilerState = undefined
@@ -296,8 +391,9 @@ class NativeWallProfiler {
     }
 
     // Native profiler doesn't set context.context for some samples, such as idle samples or when
-    // the context was otherwise unavailable when the sample was taken.
-    const ref = context.context?.ref
+    // the context was otherwise unavailable when the sample was taken. Note that with async context
+    // frame, we don't use the "ref" indirection.
+    const ref = this._useAsyncContextFrame ? context.context : context.context?.ref
     if (typeof ref !== 'object') {
       return labels
     }
@@ -305,10 +401,10 @@ class NativeWallProfiler {
     const { spanId, rootSpanId, webTags, endpoint } = ref
 
     if (spanId !== undefined) {
-      labels[SPAN_ID_LABEL] = spanId
+      labels[SPAN_ID_LABEL] = typeof spanId === 'object' ? spanId.toString(10) : spanId
     }
     if (rootSpanId !== undefined) {
-      labels[LOCAL_ROOT_SPAN_ID_LABEL] = rootSpanId
+      labels[LOCAL_ROOT_SPAN_ID_LABEL] = typeof rootSpanId === 'object' ? rootSpanId.toString(10) : rootSpanId
     }
     if (webTags !== undefined && Object.keys(webTags).length !== 0) {
       labels['trace endpoint'] = endpointNameFromTags(webTags)
@@ -337,4 +433,24 @@ class NativeWallProfiler {
   }
 }
 
+NativeWallProfiler.prototype.getActiveSpan = function () {
+  const span = getActiveSpan()
+  if (span === undefined) {
+    return {}
+  }
+  const spanData = lastInstance._getProfilingContext(span)
+  updateContext(spanData)
+  return { spanId: spanData.spanId, rootSpanId: spanData.rootSpanId }
+}
+NativeWallProfiler.prototype.getSampleContext = function () {
+  const ctx = lastInstance._getSampleContext()
+  if (ctx === undefined) {
+    return {}
+  }
+  updateContext(ctx)
+  return { spanId: ctx.spanId, rootSpanId: ctx.rootSpanId }
+}
+NativeWallProfiler.prototype.getCPEDContextCount = function () {
+  return lastInstance._getCPEDContextCount()
+}
 module.exports = NativeWallProfiler
