@@ -64,7 +64,7 @@ describe('Plugin', () => {
 
               const record = JSON.parse(stream.write.firstCall.args[0].toString())
 
-              expect(record).to.not.have.property('dd')
+              expect(record).to.have.property('dd')
               expect(record).to.have.deep.property('msg', 'message')
             })
           })
@@ -80,8 +80,8 @@ describe('Plugin', () => {
 
                 const record = stream.write.firstCall.args[0].toString()
 
-                expect(record).to.not.include('trace_id')
-                expect(record).to.not.include('span_id')
+                expect(record).to.include('trace_id')
+                expect(record).to.include('span_id')
                 expect(record).to.include('message')
               })
             })
