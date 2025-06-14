@@ -44,6 +44,23 @@ esbuildVersions.forEach((version) => {
       }
     })
 
+    it('works ESM', () => {
+      console.log('npm run build:esm')
+      chproc.execSync('npm run build:esm')
+
+      console.log('npm run built')
+      try {
+        chproc.execSync('npm run built:esm', {
+          timeout: 1000 * 30
+        })
+      } catch (err) {
+        console.error(err)
+        process.exit(1)
+      } finally {
+        fs.rmSync('./out.mjs', { force: true })
+      }
+    })
+
     it('does not bundle modules listed in .external', () => {
       const command = 'node ./build-and-test-skip-external.js'
       console.log(command)

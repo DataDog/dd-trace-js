@@ -53,8 +53,29 @@ for (const pkg of INSTRUMENTED) {
 
 module.exports.name = 'datadog-esbuild'
 
+function isESMBuild (build) {
+  // check toLowerCase? to be safe if unexpected object is there instead of a string
+  const format = build.initialOptions.format?.toLowerCase?.()
+  const outputFile = build.initialOptions.outfile?.toLowerCase?.()
+  const outExtension = build.initialOptions.outExtension?.['.js']
+  return format === 'esm' || outputFile?.endsWith('.mjs') || outExtension === '.mjs'
+}
+
 module.exports.setup = function (build) {
   const externalModules = new Set(build.initialOptions.external || [])
+  if (isESMBuild(build)) {
+    build.initialOptions.banner ??= {}
+    build.initialOptions.banner.js ??= ''
+    build.initialOptions.banner.js = `import { createRequire as $dd_createRequire } from 'module';
+import { fileURLToPath as $dd_fileURLToPath } from 'url';
+import { dirname as $dd_dirname } from 'path';
+(function(globals) {
+  globals.require ??= $dd_createRequire(import.meta.url);
+  globals.__filename ??= $dd_fileURLToPath(import.meta.url);
+  globals.__dirname ??= $dd_dirname(__filename);
+}((1, eval)('this')));${build.initialOptions.banner.js}`
+  }
+
   build.onResolve({ filter: /.*/ }, args => {
     if (externalModules.has(args.path)) {
       // Internal Node.js packages will still be instrumented via require()
