@@ -726,7 +726,7 @@ function getCliWrapper (isNewJestVersion) {
         return runCLI.apply(this, arguments)
       }
 
-      libraryConfigurationCh.publish({ onDone })
+      libraryConfigurationCh.publish({ onDone, frameworkVersion: jestVersion })
 
       try {
         const { err, libraryConfig } = await configurationPromise
