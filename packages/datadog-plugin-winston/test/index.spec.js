@@ -19,7 +19,6 @@ function createLogServer () {
       req.on('data', d => data.push(d))
       req.on('end', () => {
         server.log(JSON.parse(Buffer.concat(data)))
-        console.log(JSON.parse(Buffer.concat(data)))
         res.end()
       })
     })
