@@ -240,6 +240,7 @@ class DatadogSpan {
     }
 
     getIntegrationCounter('spans_finished', this._integrationName).inc()
+    this.setTag('_dd.integration', this._integrationName)
 
     if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
       runtimeMetrics.decrement('runtime.node.spans.unfinished')
