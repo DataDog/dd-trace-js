@@ -336,6 +336,35 @@ describe('Plugin', () => {
             expect(await logServer.logPromise).to.include(meta.dd)
           })
         })
+
+        describe('with simple formatting', () => {
+          beforeEach(() => {
+            if (semver.intersects(version, '>=3')) {
+              return setupTest(version, { format: winston.format.simple() })
+            } else {
+              return setupTest(version)
+            }
+          })
+
+          afterEach(() => logServer.close())
+
+          it('should add the trace identifiers to the default logger', async () => {
+            const meta = {
+              dd: {
+                trace_id: span.context().toTraceId(true),
+                span_id: span.context().toSpanId()
+              }
+            }
+
+            tracer.scope().activate(span, async () => {
+              winston.info('message')
+
+              expect(spy).to.have.been.calledWithMatch(meta.dd)
+            })
+            expect(await logServer.logPromise).to.include(meta.dd)
+          })
+        })
+
         // Only run this test with Winston v3.17.0+ since it uses newer format functions
         if (semver.intersects(version, '>=3.17.0')) {
           describe('with error formatting matching temp.js example', () => {

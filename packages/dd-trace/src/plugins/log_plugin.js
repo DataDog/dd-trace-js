@@ -46,7 +46,7 @@ module.exports = class LogPlugin extends Plugin {
   }
 
   _shouldInjectLogs (config) {
-    return config.logInjection === true || (this._structured && config.logInjection === 'structured')
+    return config.logInjection === true
   }
 
   configure (config) {
