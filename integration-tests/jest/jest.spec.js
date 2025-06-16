@@ -1561,7 +1561,7 @@ describe('jest CommonJS', () => {
       })
     })
 
-    it('report code coverage when a mocked fail does not exist', (done) => {
+    it('report code coverage with all mocked files', (done) => {
       const libraryConfigRequestPromise = receiver.payloadReceived(
         ({ url }) => url === '/api/v2/libraries/tests/services/setting'
       )
