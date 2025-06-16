@@ -104,6 +104,10 @@ esbuildVersions.forEach((version) => {
       it('should not override existing js banner', () => {
         const builtFile = fs.readFileSync('./out-with-unrelated-js-banner.mjs').toString()
         assert.include(builtFile, '/* js test */')
+
+        chproc.execSync('DD_TRACE_DEBUG=true node out-with-unrelated-js-banner.mjs', {
+          timeout: 1000 * 30
+        })
       })
 
       it('should contain the definitions when format is inferred from outfile', () => {
