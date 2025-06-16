@@ -95,7 +95,7 @@ esbuildVersions.forEach((version) => {
       })
 
       it('works', () => {
-        console.log('npm run built')
+        console.log('npm run built:esm')
         chproc.execSync('npm run built:esm', {
           timeout: 1000 * 30
         })
