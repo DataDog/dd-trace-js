@@ -27,6 +27,7 @@ function createHash (logEntry) {
 }
 
 function isValid (logEntry) {
+  console.log('isValid', logEntry)
   return logEntry?.level && logEntry.message && logEntry.transmit !== false
 }
 

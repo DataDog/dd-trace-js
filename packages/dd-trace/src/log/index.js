@@ -15,11 +15,11 @@ const config = {
   logLevel: 'debug'
 }
 
-const mute = new LogConfig(false)
+const NO_TRANSMIT = new LogConfig(false)
 
 const log = {
   LogConfig,
-  MUTE: mute,
+  NO_TRANSMIT,
 
   /**
    * @returns Read-only version of logging config. To modify config, call `log.use` and `log.toggle`
@@ -91,6 +91,7 @@ const log = {
   },
 
   error (...args) {
+    console.log('log.error', ...args)
     if (errorChannel.hasSubscribers) {
       errorChannel.publish(Log.parse(...args))
     }
