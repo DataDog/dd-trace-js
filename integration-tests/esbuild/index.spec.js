@@ -7,6 +7,7 @@
 const chproc = require('child_process')
 const path = require('path')
 const fs = require('fs')
+const { assert } = require('chai')
 
 const TEST_DIR = path.join(__dirname, '.')
 process.chdir(TEST_DIR)
@@ -44,23 +45,6 @@ esbuildVersions.forEach((version) => {
       }
     })
 
-    it('works ESM', () => {
-      console.log('npm run build:esm')
-      chproc.execSync('npm run build:esm')
-
-      console.log('npm run built')
-      try {
-        chproc.execSync('npm run built:esm', {
-          timeout: 1000 * 30
-        })
-      } catch (err) {
-        console.error(err)
-        process.exit(1)
-      } finally {
-        fs.rmSync('./out.mjs', { force: true })
-      }
-    })
-
     it('does not bundle modules listed in .external', () => {
       const command = 'node ./build-and-test-skip-external.js'
       console.log(command)
@@ -90,6 +74,44 @@ esbuildVersions.forEach((version) => {
       console.log(command)
       chproc.execSync(command, {
         timeout: 1000 * 30
+      })
+    })
+
+    describe('ESM', () => {
+      before(() => {
+        console.log('npm run build:esm')
+        chproc.execSync('npm run build:esm')
+      })
+
+      after(() => {
+        fs.rmSync('./out.mjs', { force: true })
+        fs.rmSync('./out-with-unrelated-js-banner.mjs', { force: true })
+        fs.rmSync('./out-with-patched-global-banner.mjs', { force: true })
+        fs.rmSync('./out-with-patched-const-banner.mjs', { force: true })
+      })
+
+      it('works', () => {
+        console.log('npm run built')
+        chproc.execSync('npm run built:esm', {
+          timeout: 1000 * 30
+        })
+      })
+
+      it('should not override existing js banner', () => {
+        const builtFile = fs.readFileSync('./out-with-unrelated-js-banner.mjs').toString()
+        assert.include(builtFile, '/* js test */')
+      })
+
+      it('should not crash when it is already patched using global', () => {
+        chproc.execSync('DD_TRACE_DEBUG=true node out-with-patched-global-banner.mjs', {
+          timeout: 1000 * 30
+        })
+      })
+
+      it('should not crash when it is already patched using const', () => {
+        chproc.execSync('DD_TRACE_DEBUG=true node out-with-patched-const-banner.mjs', {
+          timeout: 1000 * 30
+        })
       })
     })
   })

@@ -3,7 +3,7 @@
 const ddPlugin = require('../../esbuild') // dd-trace/esbuild
 const esbuild = require('esbuild')
 
-esbuild.build({
+const commonConfig = {
   format: 'esm',
   entryPoints: ['basic-test.js'],
   bundle: true,
@@ -22,6 +22,54 @@ esbuild.build({
     'pg-query-stream',
     'tedious'
   ]
+}
+
+esbuild.build({
+  ...commonConfig,
+  outfile: 'out.mjs'
+}).catch((err) => {
+  console.error(err) // eslint-disable-line no-console
+  process.exit(1)
+})
+
+esbuild.build({
+  ...commonConfig,
+  banner: {
+    js: '/* js test */'
+  },
+  outfile: 'out-with-unrelated-js-banner.mjs'
+}).catch((err) => {
+  console.error(err) // eslint-disable-line no-console
+  process.exit(1)
+})
+
+esbuild.build({
+  ...commonConfig,
+  banner: {
+    js: `import { createRequire } from 'module';
+import { fileURLToPath  } from 'url';
+import { dirname } from 'path';
+globalThis.require ??= createRequire(import.meta.url);
+globalThis.__filename ??= fileURLToPath(import.meta.url);
+globalThis.__dirname ??= dirname(globalThis.__filename);`
+  },
+  outfile: 'out-with-patched-global-banner.mjs'
+}).catch((err) => {
+  console.error(err) // eslint-disable-line no-console
+  process.exit(1)
+})
+
+esbuild.build({
+  ...commonConfig,
+  banner: {
+    js: `import { createRequire } from 'module';
+import { fileURLToPath  } from 'url';
+import { dirname } from 'path';
+const require = createRequire(import.meta.url);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);`
+  },
+  outfile: 'out-with-patched-const-banner.mjs'
 }).catch((err) => {
   console.error(err) // eslint-disable-line no-console
   process.exit(1)
