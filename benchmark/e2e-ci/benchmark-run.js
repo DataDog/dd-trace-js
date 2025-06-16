@@ -148,22 +148,27 @@ async function main () {
   // Poll every 5 seconds until we have a finished status
   await new Promise((resolve, reject) => {
     const intervalId = setInterval(async () => {
-      const currentWorkflow = await getCurrentWorkflowJobs(runId)
-      const { jobs } = currentWorkflow
-      const hasAnyJobFailed = jobs.some(({ status, conclusion }) => status === 'completed' && conclusion !== 'success')
-      const hasEveryJobPassed = jobs.every(
-        ({ status, conclusion }) => status === 'completed' && conclusion === 'success'
-      )
-      if (hasAnyJobFailed) {
-        reject(new Error(`Performance overhead test failed.
-Check https://github.com/DataDog/test-environment/actions/runs/${runId} for more details.`))
-        clearInterval(intervalId)
-      } else if (hasEveryJobPassed) {
-        console.log('Performance overhead test successful.')
-        resolve()
-        clearInterval(intervalId)
-      } else {
-        console.log(`Workflow https://github.com/DataDog/test-environment/actions/runs/${runId} is not finished yet.`)
+      try {
+        const currentWorkflow = await getCurrentWorkflowJobs(runId)
+        const { jobs } = currentWorkflow
+        const hasAnyJobFailed = jobs
+          .some(({ status, conclusion }) => status === 'completed' && conclusion !== 'success')
+        const hasEveryJobPassed = jobs.every(
+          ({ status, conclusion }) => status === 'completed' && conclusion === 'success'
+        )
+        if (hasAnyJobFailed) {
+          reject(new Error(`Performance overhead test failed.
+  Check https://github.com/DataDog/test-environment/actions/runs/${runId} for more details.`))
+          clearInterval(intervalId)
+        } else if (hasEveryJobPassed) {
+          console.log('Performance overhead test successful.')
+          resolve()
+          clearInterval(intervalId)
+        } else {
+          console.log(`Workflow https://github.com/DataDog/test-environment/actions/runs/${runId} is not finished yet.`)
+        }
+      } catch (e) {
+        console.error(`Error checking the workflow status: ${e.message}. We'll try again in 5 seconds.`)
       }
     }, 5000)
   })
