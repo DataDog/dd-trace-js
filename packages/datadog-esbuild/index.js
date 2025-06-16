@@ -69,11 +69,10 @@ module.exports.setup = function (build) {
     build.initialOptions.banner.js = `import { createRequire as $dd_createRequire } from 'module';
 import { fileURLToPath as $dd_fileURLToPath } from 'url';
 import { dirname as $dd_dirname } from 'path';
-(function(globals) {
-  globals.require ??= $dd_createRequire(import.meta.url);
-  globals.__filename ??= $dd_fileURLToPath(import.meta.url);
-  globals.__dirname ??= $dd_dirname(__filename);
-}((1, eval)('this')));${build.initialOptions.banner.js}`
+globalThis.require ??= $dd_createRequire(import.meta.url);
+globalThis.__filename ??= $dd_fileURLToPath(import.meta.url);
+globalThis.__dirname ??= $dd_dirname(__filename);
+${build.initialOptions.banner.js}`
   }
 
   build.onResolve({ filter: /.*/ }, args => {
