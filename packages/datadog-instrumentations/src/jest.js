@@ -3,6 +3,7 @@
 const { addHook, channel } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
+const path = require('path')
 const {
   getCoveredFilenamesFromCoverage,
   JEST_WORKER_TRACE_PAYLOAD_CODE,
@@ -1270,27 +1271,31 @@ addHook({
 }, (runtimePackage) => {
   const Runtime = runtimePackage.default ?? runtimePackage
 
+  shimmer.wrap(Runtime.prototype, '_createJestObjectFor', _createJestObjectFor => function (from) {
+    const result = _createJestObjectFor.apply(this, arguments)
+    const suiteFilePath = this._testPath
+
+    shimmer.wrap(result, 'mock', mock => function (moduleName, mockFactory, options) {
+      if (suiteFilePath) {
+        const testSuite = getTestSuitePath(suiteFilePath, process.cwd())
+        const existingMockedFiles = testSuiteMockedFiles.get(testSuite) || []
+        const suiteDir = path.dirname(suiteFilePath)
+        const mockPath = path.resolve(suiteDir, moduleName)
+        const relativeMockPath = path.relative(process.cwd(), mockPath)
+        testSuiteMockedFiles.set(testSuite, [...existingMockedFiles, relativeMockPath])
+      }
+      return mock.apply(this, arguments)
+    })
+    return result
+  })
+
   shimmer.wrap(Runtime.prototype, 'requireModuleOrMock', requireModuleOrMock => function (from, moduleName) {
     // TODO: do this for every library that we instrument
     if (shouldBypassJestRequireEngine(moduleName)) {
       // To bypass jest's own require engine
       return this._requireCoreModule(moduleName)
     }
-    const result = requireModuleOrMock.apply(this, arguments)
-
-    const suiteFileName = this._mainModule?.filename
-    if (suiteFileName) {
-      const testSuite = getTestSuitePath(suiteFileName, process.cwd())
-      for (const [key] of this._mockRegistry?.entries() || []) {
-        const path = key?.match(/^user:(.*?):/)?.[1]
-        if (path) {
-          const existingMockedFiles = testSuiteMockedFiles.get(testSuite) || []
-          testSuiteMockedFiles.set(testSuite, [...existingMockedFiles, path])
-        }
-      }
-    }
-
-    return result
+    return requireModuleOrMock.apply(this, arguments)
   })
 
   return runtimePackage

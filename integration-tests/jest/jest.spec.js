@@ -1560,6 +1560,71 @@ describe('jest CommonJS', () => {
         }).catch(done)
       })
     })
+
+    it('report code coverage when a mocked fail does not exist', (done) => {
+      const libraryConfigRequestPromise = receiver.payloadReceived(
+        ({ url }) => url === '/api/v2/libraries/tests/services/setting'
+      )
+      const codeCovRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/citestcov')
+      const eventsRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/citestcycle')
+
+      Promise.all([
+        libraryConfigRequestPromise,
+        codeCovRequestPromise,
+        eventsRequestPromise
+      ]).then(([libraryConfigRequest, codeCovRequest, eventsRequest]) => {
+        assert.propertyVal(libraryConfigRequest.headers, 'dd-api-key', '1')
+
+        const [coveragePayload] = codeCovRequest.payload
+        assert.propertyVal(codeCovRequest.headers, 'dd-api-key', '1')
+
+        assert.propertyVal(coveragePayload, 'name', 'coverage1')
+        assert.propertyVal(coveragePayload, 'filename', 'coverage1.msgpack')
+        assert.propertyVal(coveragePayload, 'type', 'application/msgpack')
+        assert.include(coveragePayload.content, {
+          version: 2
+        })
+        const allCoverageFiles = codeCovRequest.payload
+          .flatMap(coverage => coverage.content.coverages)
+          .flatMap(file => file.files)
+          .map(file => file.filename)
+
+        assert.includeMembers(allCoverageFiles, [
+          'ci-visibility/test/sum.js',
+          'ci-visibility/jest/mocked-test.js'
+        ])
+        assert.exists(coveragePayload.content.coverages[0].test_session_id)
+        assert.exists(coveragePayload.content.coverages[0].test_suite_id)
+
+        const testSession = eventsRequest.payload.events.find(event => event.type === 'test_session_end').content
+        assert.exists(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
+
+        const eventTypes = eventsRequest.payload.events.map(event => event.type)
+        assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
+        const numSuites = eventTypes.reduce(
+          (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
+        )
+        assert.equal(numSuites, 1)
+      }).catch(done)
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'jest/mocked-test.js',
+          },
+          stdio: 'pipe'
+        }
+      )
+      childProcess.stdout.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.on('exit', () => {
+        done()
+      })
+    })
   })
 
   context('early flake detection', () => {
