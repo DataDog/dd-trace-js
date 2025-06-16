@@ -168,11 +168,12 @@ withVersions('fastify', 'fastify', version => {
         assert.deepEqual(e.response.data, JSON.parse(json))
         sinon.assert.notCalled(requestBody)
 
-        await agent.assertSomeTraces((traces) => {
-          const span = traces[0][0]
-          assert.equal(span.metrics['_dd.appsec.truncated.string_length'], 5000)
-          assert.equal(span.metrics['_dd.appsec.truncated.container_size'], 300)
-          assert.equal(span.metrics['_dd.appsec.truncated.container_depth'], 20)
+        await agent.assertFirstTraceSpan({
+          metrics: {
+            '_dd.appsec.truncated.string_length': 5000,
+            '_dd.appsec.truncated.container_size': 300,
+            '_dd.appsec.truncated.container_depth': 20
+          }
         })
       }
     })
@@ -326,9 +327,10 @@ describe('Api Security - Fastify', () => {
       const expectedResponseBodySchema = formatSchema([{ sendResKey: [8] }])
       const res = await axios.post('/send', { key: 'value' })
 
-      await agent.assertSomeTraces((traces) => {
-        const span = traces[0][0]
-        assert.equal(span.meta['_dd.appsec.s.res.body'], expectedResponseBodySchema)
+      await agent.assertFirstTraceSpan({
+        meta: {
+          '_dd.appsec.s.res.body': expectedResponseBodySchema
+        }
       })
 
       assert.equal(res.status, 200)
@@ -339,9 +341,10 @@ describe('Api Security - Fastify', () => {
       const expectedResponseBodySchema = formatSchema([{ returnResKey: [8] }])
       const res = await axios.post('/return', { key: 'value' })
 
-      await agent.assertSomeTraces((traces) => {
-        const span = traces[0][0]
-        assert.equal(span.meta['_dd.appsec.s.res.body'], expectedResponseBodySchema)
+      await agent.assertFirstTraceSpan({
+        meta: {
+          '_dd.appsec.s.res.body': expectedResponseBodySchema
+        }
       })
 
       assert.equal(res.status, 200)
