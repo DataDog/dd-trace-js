@@ -88,6 +88,10 @@ esbuildVersions.forEach((version) => {
         fs.rmSync('./out-with-unrelated-js-banner.mjs', { force: true })
         fs.rmSync('./out-with-patched-global-banner.mjs', { force: true })
         fs.rmSync('./out-with-patched-const-banner.mjs', { force: true })
+        fs.rmSync('./out-relying-in-extension.mjs', { force: true })
+        fs.rmSync('./out.js', { force: true })
+        fs.rmSync('./basic-test.mjs', { force: true })
+        fs.rmSync('./out-non-esm.js', { force: true })
       })
 
       it('works', () => {
@@ -100,6 +104,26 @@ esbuildVersions.forEach((version) => {
       it('should not override existing js banner', () => {
         const builtFile = fs.readFileSync('./out-with-unrelated-js-banner.mjs').toString()
         assert.include(builtFile, '/* js test */')
+      })
+
+      it('should contain the definitions when format is inferred from outfile', () => {
+        const builtFile = fs.readFileSync('./out-relying-in-extension.mjs').toString()
+        assert.include(builtFile, 'globalThis.__filename ??= $dd_fileURLToPath(import.meta.url);')
+      })
+
+      it('should contain the definitions when format is inferred from format', () => {
+        const builtFile = fs.readFileSync('./out.js').toString()
+        assert.include(builtFile, 'globalThis.__filename ??= $dd_fileURLToPath(import.meta.url);')
+      })
+
+      it('should contain the definitions when format is inferred from out extension', () => {
+        const builtFile = fs.readFileSync('./basic-test.mjs').toString()
+        assert.include(builtFile, 'globalThis.__filename ??= $dd_fileURLToPath(import.meta.url);')
+      })
+
+      it('should not contain the definitions when no esm is specified', () => {
+        const builtFile = fs.readFileSync('./out-non-esm.js').toString()
+        assert.notInclude(builtFile, 'globalThis.__filename ??= $dd_fileURLToPath(import.meta.url);')
       })
 
       it('should not crash when it is already patched using global', () => {

@@ -24,10 +24,7 @@ const commonConfig = {
   ]
 }
 
-esbuild.build({
-  ...commonConfig,
-  outfile: 'out.mjs'
-}).catch((err) => {
+esbuild.build(commonConfig).catch((err) => {
   console.error(err) // eslint-disable-line no-console
   process.exit(1)
 })
@@ -70,6 +67,44 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);`
   },
   outfile: 'out-with-patched-const-banner.mjs'
+}).catch((err) => {
+  console.error(err) // eslint-disable-line no-console
+  process.exit(1)
+})
+
+esbuild.build({
+  ...commonConfig,
+  outfile: 'out-relying-in-extension.mjs',
+  format: undefined
+}).catch((err) => {
+  console.error(err) // eslint-disable-line no-console
+  process.exit(1)
+})
+
+esbuild.build({
+  ...commonConfig,
+  outfile: 'out.js'
+}).catch((err) => {
+  console.error(err) // eslint-disable-line no-console
+  process.exit(1)
+})
+
+// output => basic-test.mjs
+esbuild.build({
+  ...commonConfig,
+  outfile: undefined,
+  format: undefined,
+  outdir: './',
+  outExtension: { '.js': '.mjs' }
+}).catch((err) => {
+  console.error(err) // eslint-disable-line no-console
+  process.exit(1)
+})
+
+esbuild.build({
+  ...commonConfig,
+  outfile: 'out-non-esm.js',
+  format: undefined
 }).catch((err) => {
   console.error(err) // eslint-disable-line no-console
   process.exit(1)
