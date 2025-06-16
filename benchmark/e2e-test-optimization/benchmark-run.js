@@ -116,7 +116,7 @@ const wait = (timeToWaitMs) => {
 
 async function main () {
   // Trigger JS GHA
-  console.log('Triggering CI Visibility test environment workflow.')
+  console.log('Triggering Test Optimization test environment workflow.')
   const httpResponseCode = await triggerWorkflow()
   console.log('GitHub API response code:', httpResponseCode)
 
