@@ -113,9 +113,9 @@ function preValidation (request, reply, done) {
   const parsingResource = parsingResources.get(req)
 
   const processInContext = () => {
-    if (queryParamsReadCh.hasSubscribers && request.query) {
-      const abortController = new AbortController()
+    const abortController = new AbortController()
 
+    if (queryParamsReadCh.hasSubscribers && request.query) {
       queryParamsReadCh.publish({
         req,
         res,
@@ -127,22 +127,20 @@ function preValidation (request, reply, done) {
     }
 
     if (bodyParserReadCh.hasSubscribers && request.body) {
-      const abortController = new AbortController()
-
       bodyParserReadCh.publish({ req, res, body: request.body, abortController })
 
       if (abortController.signal.aborted) return
     }
 
     if (pathParamsReadCh.hasSubscribers && request.params) {
-      const abortController = new AbortController()
-
       pathParamsReadCh.publish({
         req,
         res,
         abortController,
         params: request.params
       })
+
+      if (abortController.signal.aborted) return
     }
 
     done()

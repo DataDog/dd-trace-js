@@ -264,7 +264,11 @@ withVersions('fastify', 'fastify', version => {
   })
 
   describe('Suspicious request blocking - path parameters', () => {
-    let server, paramHookSpy, axios
+    // Skip Fastify v1 - preValidation hook is not supported
+    if (semver.lt(semver.coerce(version), '2.0.0')) {
+      return
+    }
+    let server, preHandlerHookSpy, preValidationHookSpy, axios
 
     before(() => {
       return agent.load(['fastify', 'http'], { client: false })
@@ -284,14 +288,20 @@ withVersions('fastify', 'fastify', version => {
         })
       }, { prefix: '/nested/:parentParam' })
 
-      // Route with hook for path parameters
       const paramHook = (request, reply, done) => {
         done()
       }
 
-      paramHookSpy = sinon.spy(paramHook)
+      preHandlerHookSpy = sinon.spy(paramHook)
 
-      app.addHook('preHandler', paramHookSpy)
+      app.addHook('preHandler', preHandlerHookSpy)
+
+      const validationHook = (request, reply, done) => {
+        done()
+      }
+
+      preValidationHookSpy = sinon.spy(validationHook)
+      app.addHook('preValidation', preValidationHookSpy)
 
       app.get('/callback-path-param/:pathParameter', (request, reply) => {
         reply.send('DONE')
@@ -415,7 +425,8 @@ withVersions('fastify', 'fastify', version => {
 
         assert.equal(res.status, 200)
         assert.equal(res.data, 'DONE')
-        sinon.assert.calledOnce(paramHookSpy)
+        sinon.assert.calledOnce(preHandlerHookSpy)
+        sinon.assert.calledOnce(preValidationHookSpy)
       })
 
       it('should block the request when attack is detected', async () => {
@@ -426,7 +437,8 @@ withVersions('fastify', 'fastify', version => {
         } catch (e) {
           assert.equal(e.response.status, 403)
           assert.deepEqual(e.response.data, JSON.parse(json))
-          sinon.assert.notCalled(paramHookSpy)
+          sinon.assert.notCalled(preHandlerHookSpy)
+          sinon.assert.notCalled(preValidationHookSpy)
         }
       })
     })
