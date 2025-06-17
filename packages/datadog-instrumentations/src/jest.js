@@ -3,6 +3,7 @@
 const { addHook, channel } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
+const path = require('path')
 const {
   getCoveredFilenamesFromCoverage,
   JEST_WORKER_TRACE_PAYLOAD_CODE,
@@ -90,6 +91,7 @@ const retriedTestsToNumAttempts = new Map()
 const newTestsTestStatuses = new Map()
 const attemptToFixRetriedTestsStatuses = new Map()
 const wrappedWorkers = new WeakSet()
+const testSuiteMockedFiles = new Map()
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
 
@@ -137,6 +139,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.nameToParams = {}
       this.global._ddtrace = global._ddtrace
       this.hasSnapshotTests = undefined
+      this.testSuiteAbsolutePath = context.testPath
 
       this.displayName = config.projectConfig?.displayName?.name
       this.testEnvironmentOptions = getTestEnvironmentOptions(config)
@@ -1095,10 +1098,12 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
       if (environment.testEnvironmentOptions?._ddTestCodeCoverageEnabled) {
         const root = environment.repositoryRoot || environment.rootDir
 
-        const coverageFiles = getCoveredFilenamesFromCoverage(environment.global.__coverage__)
-          .map(filename => getTestSuitePath(filename, root))
+        const getFilesWithPath = (files) => files.map(file => getTestSuitePath(file, root))
 
-        testSuiteCodeCoverageCh.publish({ coverageFiles, testSuite: environment.testSourceFile })
+        const coverageFiles = getFilesWithPath(getCoveredFilenamesFromCoverage(environment.global.__coverage__))
+        const mockedFiles = getFilesWithPath(testSuiteMockedFiles.get(environment.testSuiteAbsolutePath) || [])
+
+        testSuiteCodeCoverageCh.publish({ coverageFiles, testSuite: environment.testSourceFile, mockedFiles })
       }
       testSuiteFinishCh.publish({ status, errorMessage })
       return suiteResults
@@ -1266,6 +1271,23 @@ addHook({
   versions: ['>=24.8.0']
 }, (runtimePackage) => {
   const Runtime = runtimePackage.default ?? runtimePackage
+
+  shimmer.wrap(Runtime.prototype, '_createJestObjectFor', _createJestObjectFor => function (from) {
+    const result = _createJestObjectFor.apply(this, arguments)
+    const suiteFilePath = this._testPath
+
+    shimmer.wrap(result, 'mock', mock => function (moduleName) {
+      if (suiteFilePath) {
+        const existingMockedFiles = testSuiteMockedFiles.get(suiteFilePath) || []
+        const suiteDir = path.dirname(suiteFilePath)
+        const mockPath = path.resolve(suiteDir, moduleName)
+        existingMockedFiles.push(mockPath)
+        testSuiteMockedFiles.set(suiteFilePath, existingMockedFiles)
+      }
+      return mock.apply(this, arguments)
+    })
+    return result
+  })
 
   shimmer.wrap(Runtime.prototype, 'requireModuleOrMock', requireModuleOrMock => function (from, moduleName) {
     // TODO: do this for every library that we instrument
