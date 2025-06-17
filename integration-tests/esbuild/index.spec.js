@@ -94,7 +94,7 @@ esbuildVersions.forEach((version) => {
       })
 
       it('should not override existing js banner', () => {
-        const command = 'node ./build-and-run.esm-unrelated-js-banner.js'
+        const command = 'node ./build-and-run.esm-unrelated-js-banner.mjs'
         console.log(command)
         chproc.execSync(command, {
           timeout: 1000 * 30
@@ -105,7 +105,7 @@ esbuildVersions.forEach((version) => {
       })
 
       it('should contain the definitions when esm is inferred from outfile', () => {
-        const command = 'node ./build-and-run.esm-relying-in-extension.js'
+        const command = 'node ./build-and-run.esm-relying-in-extension.mjs'
         console.log(command)
         chproc.execSync(command, {
           timeout: 1000 * 30
@@ -116,7 +116,7 @@ esbuildVersions.forEach((version) => {
       })
 
       it('should contain the definitions when esm is inferred from format', () => {
-        const command = 'node ./build-and-run.esm-relying-in-format.js'
+        const command = 'node ./build-and-run.esm-relying-in-format.mjs'
         console.log(command)
         chproc.execSync(command, {
           timeout: 1000 * 30
@@ -127,7 +127,7 @@ esbuildVersions.forEach((version) => {
       })
 
       it('should contain the definitions when format is inferred from out extension', () => {
-        const command = 'node ./build-and-run.esm-relying-in-out-extension.js'
+        const command = 'node ./build-and-run.esm-relying-in-out-extension.mjs'
         console.log(command)
         chproc.execSync(command, {
           timeout: 1000 * 30
@@ -149,7 +149,7 @@ esbuildVersions.forEach((version) => {
       })
 
       it('should not crash when it is already patched using global', () => {
-        const command = 'node ./build-and-run.esm-patched-global-banner.js'
+        const command = 'node ./build-and-run.esm-patched-global-banner.mjs'
         console.log(command)
         chproc.execSync(command, {
           timeout: 1000 * 30
@@ -157,7 +157,7 @@ esbuildVersions.forEach((version) => {
       })
 
       it('should not crash when it is already patched using const', () => {
-        const command = 'node ./build-and-run.esm-patched-const-banner.js'
+        const command = 'node ./build-and-run.esm-patched-const-banner.mjs'
         console.log(command)
         chproc.execSync(command, {
           timeout: 1000 * 30
