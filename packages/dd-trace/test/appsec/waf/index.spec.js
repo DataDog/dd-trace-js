@@ -1,5 +1,6 @@
 'use strict'
 
+const assert = require('node:assert')
 const proxyquire = require('proxyquire')
 const Config = require('../../../src/config')
 const rules = require('../../../src/appsec/recommended.json')
@@ -33,6 +34,8 @@ describe('WAF Manager', () => {
         loaded: ['rule_1'], failed: []
       }
     }
+    DDWAF.prototype.createOrUpdateConfig = sinon.stub().returns(true)
+    DDWAF.prototype.removeConfig = sinon.stub()
     DDWAF.prototype.knownAddresses = knownAddresses
 
     WAFManager = proxyquire('../../../src/appsec/waf/waf_manager', {
@@ -48,6 +51,7 @@ describe('WAF Manager', () => {
     sinon.stub(Reporter, 'reportAttack')
     sinon.stub(Reporter, 'reportDerivatives')
     sinon.spy(Reporter, 'reportWafInit')
+    sinon.spy(Reporter, 'reportWafConfigError')
 
     webContext = {}
     sinon.stub(web, 'getContext').returns(webContext)
@@ -142,6 +146,204 @@ describe('WAF Manager', () => {
       waf.run(payload, req)
 
       expect(run).to.be.calledOnceWithExactly(payload, undefined)
+    })
+  })
+
+  describe('waf disabled check', () => {
+    it('should fail when updating configs on disabled waf', () => {
+      assert.throws(
+        () => {
+          waf.updateConfig('path', {})
+        },
+        {
+          name: 'Error',
+          message: 'Cannot update disabled WAF'
+        }
+      )
+    })
+
+    it('should fail when updating ASM_DD configs on disabled waf', () => {
+      assert.throws(
+        () => {
+          waf.updateAsmDdConfig('path', {})
+        },
+        {
+          name: 'Error',
+          message: 'Cannot update disabled WAF'
+        }
+      )
+    })
+
+    it('should fail when removing configs on disabled waf', () => {
+      assert.throws(
+        () => {
+          waf.updateAsmDdConfig('path', {})
+        },
+        {
+          name: 'Error',
+          message: 'Cannot update disabled WAF'
+        }
+      )
+    })
+  })
+
+  describe('configurations handling', () => {
+    const ASM_CONFIG = {
+      rules_override: [],
+      actions: [],
+      exclusions: [],
+      custom_rules: []
+    }
+
+    const ASM_DATA_CONFIG = {
+      rules_data: [
+        {
+          data: [
+            {
+              expiration: 1661848350,
+              value: '188.243.182.156'
+            },
+            {
+              expiration: 1661848350,
+              value: '51.222.158.205'
+            }
+          ],
+          id: 'blocked_ips',
+          type: 'ip_with_expiration'
+        }
+      ]
+    }
+
+    const ASM_DD_CONFIG = {
+      version: '2.2',
+      metadata: {
+        rules_version: '1.42.11'
+      },
+      rules: []
+    }
+
+    beforeEach(() => {
+      waf.init(rules, config.appsec)
+    })
+
+    afterEach(() => {
+      sinon.restore()
+    })
+
+    describe('update config', () => {
+      it('should update WAF config - ASM / ASM_DATA', () => {
+        DDWAF.prototype.configPaths = ['datadog/00/ASM_DD/default/config']
+
+        waf.updateConfig('datadog/00/ASM/test/update_config', ASM_CONFIG)
+        waf.updateConfig('datadog/00/ASM_DATA/test/update_config', ASM_DATA_CONFIG)
+
+        sinon.assert.calledWithExactly(
+          DDWAF.prototype.createOrUpdateConfig.getCall(0),
+          ASM_CONFIG,
+          'datadog/00/ASM/test/update_config'
+        )
+        sinon.assert.calledWithExactly(
+          DDWAF.prototype.createOrUpdateConfig.getCall(1),
+          ASM_DATA_CONFIG,
+          'datadog/00/ASM_DATA/test/update_config'
+        )
+      })
+
+      it('should remove default rules on ASM_DD update', () => {
+        DDWAF.prototype.configPaths = ['datadog/00/ASM_DD/default/config']
+
+        waf.updateAsmDdConfig('datadog/00/ASM_DD/test/update_config', ASM_DD_CONFIG)
+
+        sinon.assert.calledOnceWithExactly(
+          DDWAF.prototype.removeConfig,
+          'datadog/00/ASM_DD/default/config'
+        )
+        sinon.assert.calledOnceWithExactly(
+          DDWAF.prototype.createOrUpdateConfig,
+          ASM_DD_CONFIG,
+          'datadog/00/ASM_DD/test/update_config'
+        )
+      })
+
+      it('should apply default rules when no ASM config is present after config update fail', () => {
+        DDWAF.prototype.configPaths = []
+        DDWAF.prototype.createOrUpdateConfig.returns(false)
+
+        assert.throws(
+          () => {
+            waf.updateAsmDdConfig('datadog/00/ASM_DD/test/update_config', ASM_DD_CONFIG)
+          },
+          {
+            name: 'WafUpdateError'
+          }
+        )
+
+        sinon.assert.calledWithExactly(
+          DDWAF.prototype.createOrUpdateConfig.getCall(1),
+          rules,
+          'datadog/00/ASM_DD/default/config'
+        )
+      })
+    })
+
+    describe('remove config', () => {
+      it('should remove WAF config', () => {
+        DDWAF.prototype.configPaths = ['datadog/00/ASM_DD/default/config']
+
+        waf.removeConfig('path/to/remove')
+
+        sinon.assert.calledOnceWithExactly(DDWAF.prototype.removeConfig, 'path/to/remove')
+      })
+
+      it('should apply default rules when no ASM config is present after config removal', () => {
+        DDWAF.prototype.configPaths = []
+
+        waf.removeConfig('path/to/remove')
+
+        sinon.assert.calledOnceWithExactly(
+          DDWAF.prototype.createOrUpdateConfig,
+          rules,
+          'datadog/00/ASM_DD/default/config'
+        )
+      })
+    })
+
+    it('should report waf config error on config update fail', () => {
+      DDWAF.prototype.configPaths = []
+      DDWAF.prototype.createOrUpdateConfig.returns(false)
+      assert.throws(
+        () => {
+          waf.updateConfig('path', {})
+        },
+        {
+          name: 'WafUpdateError'
+        }
+      )
+
+      sinon.assert.calledOnceWithExactly(
+        Reporter.reportWafConfigError,
+        '1.2.3',
+        '1.0.0'
+      )
+    })
+
+    it('should report waf config error on config remove fail', () => {
+      DDWAF.prototype.configPaths = []
+      DDWAF.prototype.removeConfig.throws(new Error('Error removing WAF config'))
+      assert.throws(
+        () => {
+          waf.removeConfig('path')
+        },
+        {
+          name: 'Error'
+        }
+      )
+
+      sinon.assert.calledOnceWithExactly(
+        Reporter.reportWafConfigError,
+        '1.2.3',
+        '1.0.0'
+      )
     })
   })
 
