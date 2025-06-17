@@ -45,14 +45,14 @@ module.exports = class LogPlugin extends Plugin {
     })
   }
 
-  _shouldInjectLogs (config) {
-    return config.logInjection === true
+  _isEnabled (config) {
+    return config.enabled && (config.logInjection === true || config.ciVisAgentlessLogSubmissionEnabled)
   }
 
   configure (config) {
     return super.configure({
       ...config,
-      enabled: config.enabled && (this._shouldInjectLogs(config) || config.ciVisAgentlessLogSubmissionEnabled)
+      enabled: this._isEnabled(config)
     })
   }
 }

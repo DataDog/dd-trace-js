@@ -3,11 +3,7 @@
 const LogPlugin = require('./log_plugin')
 
 module.exports = class StructuredLogPlugin extends LogPlugin {
-  static get _structured () {
-    return true
-  }
-
-  _shouldInjectLogs (config) {
-    return config.logInjection === true || config.logInjection === 'structured'
+  _isEnabled (config) {
+    return super._isEnabled(config) || (config.enabled && config.logInjection === 'structured')
   }
 }
