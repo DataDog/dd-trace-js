@@ -23,35 +23,28 @@ export default {
     return {
       // Handle direct member expressions: process.env.FOO
       MemberExpression (node) {
-        // direct `process.env`
-        if (isProcessEnvObject(node)) {
-          report(node)
-        }
-        // nested `process.env.FOO`
-        else if (
-          node.object?.type === 'MemberExpression' &&
-          isProcessEnvObject(node.object)
-        ) {
+        // direct `process.env` or nested `process.env.FOO`
+        if (isProcessEnvObject(node) ||
+            node.object?.type === 'MemberExpression' && isProcessEnvObject(node.object)) {
           report(node)
         }
       },
 
       // Handle destructuring: const { FOO } = process.env
       VariableDeclarator (node) {
-        // const env = process.env
         if (
           node.init?.type === 'MemberExpression' &&
           isProcessEnvObject(node.init) &&
           node.id.type === 'Identifier'
         ) {
+          // const env = process.env
           report(node)
-        }
-        // const { env } = process
-        else if (
+        } else if (
           node.init?.type === 'Identifier' &&
           node.init.name === 'process' &&
           node.id.type === 'ObjectPattern'
         ) {
+          // const { env } = process
           for (const prop of node.id.properties) {
             if (prop.type === 'Property' && prop.key.name === 'env') {
               report(node)
