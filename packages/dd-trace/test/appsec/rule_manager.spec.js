@@ -9,7 +9,6 @@ const { ACKNOWLEDGED, UNACKNOWLEDGED, ERROR } = require('../../src/remote_config
 
 const rules = require('../../src/appsec/recommended.json')
 const waf = require('../../src/appsec/waf')
-const WAFManager = require('../../src/appsec/waf/waf_manager')
 const blocking = require('../../src/appsec/blocking')
 
 describe('AppSec Rule Manager', () => {
@@ -118,20 +117,18 @@ describe('AppSec Rule Manager', () => {
     }
 
     let RuleManager
-    let reportWafConfigError, reportSuccessfulWafUpdate, reportWafUpdate
+    let reportSuccessfulWafUpdate, reportWafUpdate
     let setDefaultBlockingActionParameters
 
     beforeEach(() => {
       reportWafUpdate = sinon.stub()
       reportSuccessfulWafUpdate = sinon.stub()
-      reportWafConfigError = sinon.stub()
       setDefaultBlockingActionParameters = sinon.stub()
 
       RuleManager = proxyquire.noCallThru()('../src/appsec/rule_manager', {
         './reporter': {
           reportWafUpdate,
-          reportSuccessfulWafUpdate,
-          reportWafConfigError
+          reportSuccessfulWafUpdate
         },
         './blocking': {
           setDefaultBlockingActionParameters
@@ -140,8 +137,8 @@ describe('AppSec Rule Manager', () => {
 
       waf.init.callThrough()
 
-      WAFManager.prototype.update = sinon.stub()
-      WAFManager.prototype.remove = sinon.stub()
+      sinon.stub(waf, 'updateConfig')
+      sinon.stub(waf, 'removeConfig')
 
       RuleManager.clearAllRules()
       config = new Config()
@@ -178,8 +175,8 @@ describe('AppSec Rule Manager', () => {
         RuleManager.updateWafFromRC(rcConfigsForNonAsmProducts)
       })
 
-      sinon.assert.notCalled(waf.wafManager.update)
-      sinon.assert.notCalled(waf.wafManager.remove)
+      sinon.assert.notCalled(waf.updateConfig)
+      sinon.assert.notCalled(waf.removeConfig)
       assert.strictEqual(rcConfigsForNonAsmProducts.toUnapply[0].apply_state, UNACKNOWLEDGED)
       assert.notProperty(rcConfigsForNonAsmProducts.toUnapply[0], 'apply_error')
       assert.strictEqual(rcConfigsForNonAsmProducts.toModify[0].apply_state, UNACKNOWLEDGED)
@@ -193,24 +190,22 @@ describe('AppSec Rule Manager', () => {
 
       RuleManager.updateWafFromRC(rcConfigs)
 
-      sinon.assert.calledOnceWithExactly(waf.wafManager.remove, rcConfigs.toUnapply[0].path)
-      sinon.assert.calledTwice(waf.wafManager.update)
+      sinon.assert.calledOnceWithExactly(waf.removeConfig, rcConfigs.toUnapply[0].path)
+      sinon.assert.calledTwice(waf.updateConfig)
       sinon.assert.calledWith(
-        waf.wafManager.update.getCall(0),
-        rcConfigs.toApply[0].product,
-        rcConfigs.toApply[0].file,
-        rcConfigs.toApply[0].path
+        waf.updateConfig,
+        rcConfigs.toApply[0].path,
+        rcConfigs.toApply[0].file
       )
       sinon.assert.calledWith(
-        waf.wafManager.update.getCall(1),
-        rcConfigs.toModify[0].product,
-        rcConfigs.toModify[0].file,
-        rcConfigs.toModify[0].path
+        waf.updateConfig,
+        rcConfigs.toModify[0].path,
+        rcConfigs.toModify[0].file
       )
     })
 
     it('should update apply_state and apply_error on successful apply', () => {
-      WAFManager.prototype.update.returns({ success: true })
+      waf.updateConfig.returns({})
 
       const rcConfigs = getRcConfigs()
 
@@ -226,7 +221,7 @@ describe('AppSec Rule Manager', () => {
 
     it('should update apply_state and apply_error on failed config remove', () => {
       const removeConfigError = new Error('Error remove config')
-      WAFManager.prototype.remove.throws(removeConfigError)
+      waf.removeConfig.throws(removeConfigError)
 
       const { toUnapply } = getRcConfigs()
 
@@ -285,7 +280,7 @@ describe('AppSec Rule Manager', () => {
         }
       }
 
-      WAFManager.prototype.update.returns({ success: false, diagnostics })
+      waf.updateConfig.throws(new waf.WafUpdateError(diagnostics))
 
       const { toModify, toApply } = getRcConfigs()
 
@@ -298,7 +293,7 @@ describe('AppSec Rule Manager', () => {
     })
 
     it('should report successful waf update', () => {
-      WAFManager.prototype.update.returns({ success: true, diagnostics: {} })
+      waf.updateConfig.returns({})
 
       const rcConfigs = getRcConfigs()
 
@@ -315,25 +310,9 @@ describe('AppSec Rule Manager', () => {
       sinon.assert.calledWith(reportSuccessfulWafUpdate, rcConfigs.toApply[0].product, rcConfigs.toApply[0].id, {})
     })
 
-    it('should report waf config error', () => {
-      WAFManager.prototype.remove.throws(new Error('Error removing config'))
-      WAFManager.prototype.update.returns({ success: false, diagnostics: {} })
-
-      const rcConfigs = getRcConfigs()
-
-      RuleManager.updateWafFromRC(rcConfigs)
-      sinon.assert.notCalled(reportWafUpdate)
-      sinon.assert.calledThrice(reportWafConfigError)
-      sinon.assert.alwaysCalledWithExactly(
-        reportWafConfigError,
-        waf.wafManager.ddwafVersion,
-        waf.wafManager.rulesVersion
-      )
-    })
-
     it('should report waf update', () => {
-      WAFManager.prototype.update.onFirstCall().returns({ success: false, diagnostics: {} })
-      WAFManager.prototype.update.onSecondCall().returns({ success: true, diagnostics: {} })
+      waf.updateConfig.onFirstCall().throws(new waf.WafUpdateError({ error: 'Waf update error' }))
+      waf.updateConfig.onSecondCall().returns({})
 
       const rcConfigs = getRcConfigs()
 
@@ -349,7 +328,7 @@ describe('AppSec Rule Manager', () => {
 
     describe('ASM', () => {
       it('should apply blocking actions', () => {
-        WAFManager.prototype.update.returns({ success: true })
+        waf.updateConfig.returns({})
 
         const toApply = [
           {
@@ -407,7 +386,7 @@ describe('AppSec Rule Manager', () => {
       })
 
       it('should unapply blocking actions', () => {
-        WAFManager.prototype.update.returns({ success: true })
+        waf.updateConfig.returns({})
 
         const asm = {
           actions: [

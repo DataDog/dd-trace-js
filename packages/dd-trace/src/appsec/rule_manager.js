@@ -45,18 +45,19 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
     if (!ASM_PRODUCTS.has(item.product)) continue
 
     try {
-      waf.wafManager.remove(item.path)
+      waf.removeConfig(item.path)
+
       item.apply_state = ACKNOWLEDGED
       wafUpdated = true
 
+      // ASM actions
       if (item.product === 'ASM') {
         newActions.delete(item.id)
       }
     } catch (e) {
-      wafUpdatedFailed = true
       item.apply_state = ERROR
       item.apply_error = e.toString()
-      Reporter.reportWafConfigError(waf.wafManager.ddwafVersion, waf.wafManager.rulesVersion)
+      wafUpdatedFailed = true
     }
   }
 
@@ -64,27 +65,25 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
     if (!ASM_PRODUCTS.has(item.product)) continue
 
     try {
-      const updateResult = waf.wafManager.update(item.product, item.file, item.path)
-      item.apply_state = updateResult.success ? ACKNOWLEDGED : ERROR
+      const resultDiagnostics = item.product === 'ASM_DD'
+        ? waf.updateAsmDdConfig(item.path, item.file)
+        : waf.updateConfig(item.path, item.file)
 
-      if (updateResult.success) {
-        wafUpdated = true
-        Reporter.reportSuccessfulWafUpdate(item.product, item.id, updateResult.diagnostics)
-      } else {
-        wafUpdatedFailed = true
-        item.apply_error = JSON.stringify(extractErrors(updateResult.diagnostics))
-        Reporter.reportWafConfigError(waf.wafManager.ddwafVersion, waf.wafManager.rulesVersion)
-      }
+      item.apply_state = ACKNOWLEDGED
+      wafUpdated = true
 
-      // check ASM actions
-      if (updateResult.success && item.product === 'ASM' && item.file?.actions?.length) {
+      Reporter.reportSuccessfulWafUpdate(item.product, item.id, resultDiagnostics)
+
+      // ASM actions
+      if (item.product === 'ASM' && item.file?.actions?.length) {
         newActions.set(item.id, item.file.actions)
       }
     } catch (e) {
-      wafUpdatedFailed = true
       item.apply_state = ERROR
-      item.apply_error = e.toString()
-      Reporter.reportWafConfigError(waf.wafManager.ddwafVersion, waf.wafManager.rulesVersion)
+      item.apply_error = e instanceof waf.WafUpdateError
+        ? JSON.stringify(extractErrors(e.diagnosticErrors))
+        : e.toString()
+      wafUpdatedFailed = true
     }
   }
 
