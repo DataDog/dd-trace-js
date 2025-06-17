@@ -9,7 +9,6 @@ const dc = require('dc-polyfill')
 const crashtracker = require('../crashtracking')
 
 const { promisify } = require('util')
-const zlib = require('zlib')
 
 const profileSubmittedChannel = dc.channel('datadog:profiling:profile-submitted')
 const spanFinishedChannel = dc.channel('dd-trace:span:finish')
@@ -102,38 +101,6 @@ class Profiler extends EventEmitter {
 
     if (this._sourceMapsLoaded === undefined) {
       this._sourceMapsLoaded = Promise.resolve()
-    }
-
-    try {
-      const clevel = config.uploadCompression.level
-      switch (config.uploadCompression.method) {
-        case 'gzip':
-          this._compressionFn = promisify(zlib.gzip)
-          if (clevel !== undefined) {
-            this._compressionOptions = {
-              level: clevel
-            }
-          }
-          break
-        case 'zstd':
-          if (typeof zlib.zstdCompress === 'function') {
-            this._compressionFn = promisify(zlib.zstdCompress)
-            if (clevel !== undefined) {
-              this._compressionOptions = {
-                params: {
-                  [zlib.constants.ZSTD_c_compressionLevel]: clevel
-                }
-              }
-            }
-          } else {
-            const zstdCompress = require('@datadog/libdatadog').load('datadog-js-zstd').zstd_compress
-            const level = clevel ?? 0 // 0 is zstd default compression level
-            this._compressionFn = (buffer) => Promise.resolve(Buffer.from(zstdCompress(buffer, level)))
-          }
-          break
-      }
-    } catch (err) {
-      this._logError(err)
     }
 
     try {
@@ -232,6 +199,45 @@ class Profiler extends EventEmitter {
     }
   }
 
+  _getCompressionFn () {
+    if (this._compressionFn === undefined) {
+      try {
+        const method = this._config.uploadCompression.method
+        if (method === 'off') {
+          return
+        }
+        const zlib = require('zlib')
+        const clevel = this._config.uploadCompression.level
+        if (method === 'gzip') {
+          this._compressionFn = promisify(zlib.gzip)
+          if (clevel !== undefined) {
+            this._compressionOptions = {
+              level: clevel
+            }
+          }
+        } else if (method === 'zstd') {
+          if (typeof zlib.zstdCompress === 'function') {
+            this._compressionFn = promisify(zlib.zstdCompress)
+            if (clevel !== undefined) {
+              this._compressionOptions = {
+                params: {
+                  [zlib.constants.ZSTD_c_compressionLevel]: clevel
+                }
+              }
+            }
+          } else {
+            const zstdCompress = require('@datadog/libdatadog').load('datadog-js-zstd').zstd_compress
+            const level = clevel ?? 0 // 0 is zstd default compression level
+            this._compressionFn = (buffer) => Promise.resolve(Buffer.from(zstdCompress(buffer, level)))
+          }
+        }
+      } catch (err) {
+        this._logError(err)
+      }
+    }
+    return this._compressionFn
+  }
+
   async _collect (snapshotKind, restart = true) {
     if (!this._enabled) return
 
@@ -267,9 +273,13 @@ class Profiler extends EventEmitter {
       await Promise.all(profiles.map(async ({ profiler, profile }) => {
         try {
           const encoded = await profiler.encode(profile)
-          const compressed = encoded instanceof Buffer && this._compressionFn !== undefined
-            ? await this._compressionFn(encoded, this._compressionOptions)
-            : encoded
+          let compressed = encoded
+          if (encoded instanceof Buffer) {
+            const compressionFn = this._getCompressionFn()
+            if (compressionFn !== undefined) {
+              compressed = await compressionFn(encoded, this._compressionOptions)
+            }
+          }
           encodedProfiles[profiler.type] = compressed
           this._logger.debug(() => {
             const profileJson = JSON.stringify(profile, (key, value) => {
