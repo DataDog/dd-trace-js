@@ -4,12 +4,16 @@
 const esbuild = require('esbuild')
 const commonConfig = require('./build.esm.common-config')
 const { spawnSync } = require('child_process')
+const { renameSync } = require('fs')
 
 esbuild.build({
   ...commonConfig,
   outfile: 'out.js'
 }).then(() => {
-  const { status, stdout, stderr } = spawnSync('node', ['out.js'])
+  // to force being executed as module
+  renameSync(__dirname + '/out.js', __dirname + '/out.mjs')
+
+  const { status, stdout, stderr } = spawnSync('node', ['out.mjs'])
   if (stdout.length) {
     console.log(stdout.toString())
   }
@@ -24,3 +28,4 @@ esbuild.build({
   console.error(err)
   process.exit(1)
 })
+//

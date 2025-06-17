@@ -122,7 +122,7 @@ esbuildVersions.forEach((version) => {
           timeout: 1000 * 30
         })
 
-        const builtFile = fs.readFileSync('./out.js').toString()
+        const builtFile = fs.readFileSync('./out.mjs').toString()
         assert.include(builtFile, 'globalThis.__filename ??= $dd_fileURLToPath(import.meta.url);')
       })
 
