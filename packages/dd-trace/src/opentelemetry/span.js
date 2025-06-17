@@ -16,10 +16,6 @@ const kinds = require('../../../../ext/kinds')
 const SpanContext = require('./span_context')
 const id = require('../id')
 
-const { channel } = require('dc-polyfill')
-const otelSpanStartCh = channel('dd-trace:otel:span:start')
-const otelSpanFinishCh = channel('dd-trace:otel:span:finish')
-
 // The one built into OTel rounds so we lose sub-millisecond precision.
 function hrTimeToMilliseconds (time) {
   return time[0] * 1e3 + time[1] / 1e6
@@ -169,8 +165,6 @@ class Span {
     this.startTime = hrStartTime
     this.kind = kind
     this._spanProcessor.onStart(this, context)
-
-    otelSpanStartCh.publish({ span: this, ddSpan: this._ddSpan })
   }
 
   get parentSpanId () {
@@ -263,9 +257,6 @@ class Span {
       api.diag.error('You can only call end() on a span once.')
       return
     }
-
-    // publish before span finishes and tags are potentially removed
-    otelSpanFinishCh.publish({ span: this, ddSpan: this._ddSpan })
 
     const hrEndTime = timeInputToHrTime(timeInput || (performance.now() + timeOrigin))
     const endTime = hrTimeToMilliseconds(hrEndTime)
