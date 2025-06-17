@@ -811,19 +811,17 @@ function usageExtraction (tags, body, methodName, openaiStore) {
   } else if (body.model && ['createChatCompletion', 'createCompletion'].includes(methodName)) {
     // estimate tokens based on method name for completions and chat completions
     const { model } = body
-    let promptEstimated = false
-    let completionEstimated = false
 
     // prompt tokens
     const payload = openaiStore
     const promptTokensCount = countPromptTokens(methodName, payload, model)
     promptTokens = promptTokensCount.promptTokens
-    promptEstimated = promptTokensCount.promptEstimated
+    const promptEstimated = promptTokensCount.promptEstimated
 
     // completion tokens
     const completionTokensCount = countCompletionTokens(body, model)
     completionTokens = completionTokensCount.completionTokens
-    completionEstimated = completionTokensCount.completionEstimated
+    const completionEstimated = completionTokensCount.completionEstimated
 
     // total tokens
     totalTokens = promptTokens + completionTokens
@@ -1034,12 +1032,8 @@ function normalizeStringOrTokenArray (input, truncate) {
 
 function defensiveArrayLength (maybeArray) {
   if (maybeArray) {
-    if (Array.isArray(maybeArray)) {
-      return maybeArray.length
-    } else {
-      // case of a singular item (ie body.training_file vs body.training_files)
-      return 1
-    }
+    // Detect singular item (ie body.training_file vs body.training_files)
+    return Array.isArray(maybeArray) ? maybeArray.length : 1
   }
 }
 

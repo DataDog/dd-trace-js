@@ -9,6 +9,9 @@ import eslintPluginN from 'eslint-plugin-n'
 import eslintPluginUnicorn from 'eslint-plugin-unicorn'
 import globals from 'globals'
 
+import eslintProcessEnv from './eslint-rules/eslint-process-env.mjs'
+import eslintEnvAliases from './eslint-rules/eslint-env-aliases.mjs'
+
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const compat = new FlatCompat({ baseDirectory: __dirname })
@@ -18,6 +21,8 @@ const SRC_FILES = [
   '*.mjs',
   'ext/**/*.js',
   'ext/**/*.mjs',
+  'ci/**/*.js',
+  'ci/**/*.mjs',
   'packages/*/src/**/*.js',
   'packages/*/src/**/*.mjs'
 ]
@@ -42,6 +47,8 @@ export default [
       '**/versions', // This is effectively a node_modules tree.
       '**/acmeair-nodejs', // We don't own this.
       '**/vendor', // Generally, we didn't author this code.
+      'integration-tests/debugger/target-app/source-map-support/bundle.js', // Generated
+      'integration-tests/debugger/target-app/source-map-support/hello/world.js', // Generated
       'integration-tests/debugger/target-app/source-map-support/minify.min.js', // Generated
       'integration-tests/debugger/target-app/source-map-support/typescript.js', // Generated
       'integration-tests/esbuild/out.js', // Generated
@@ -80,13 +87,24 @@ export default [
     },
 
     rules: {
-      '@stylistic/max-len': ['error', { code: 120, tabWidth: 2, ignoreUrls: true }],
+      '@stylistic/max-len': ['error', { code: 120, tabWidth: 2, ignoreUrls: true, ignoreRegExpLiterals: true }],
       '@stylistic/object-curly-newline': ['error', { multiline: true, consistent: true }],
       '@stylistic/object-curly-spacing': ['error', 'always'],
+      '@stylistic/comma-dangle': ['error', {
+        arrays: 'only-multiline',
+        objects: 'only-multiline',
+        imports: 'always-multiline',
+        exports: 'always-multiline',
+        functions: 'only-multiline',
+        importAttributes: 'always-multiline',
+        dynamicImports: 'always-multiline'
+      }],
+      'comma-dangle': 'off', // Override (turned on by @eslint/js/recommended)
       'import/no-extraneous-dependencies': 'error',
       'n/no-restricted-require': ['error', ['diagnostics_channel']],
       'no-console': 'error',
-      'no-prototype-builtins': 'off', // Override (turned on by @eslint/js/recommnded)
+      'no-mixed-operators': 'off', // Override (turned on by standard)
+      'no-prototype-builtins': 'off', // Override (turned on by @eslint/js/recommended)
       'no-unused-expressions': 'off', // Override (turned on by standard)
       'no-var': 'error', // Override (set to warn in standard)
       'require-await': 'error'
@@ -95,7 +113,17 @@ export default [
   {
     name: 'dd-trace/src/all',
     files: SRC_FILES,
+    plugins: {
+      'eslint-rules': {
+        rules: {
+          'eslint-process-env': eslintProcessEnv,
+          'eslint-env-aliases': eslintEnvAliases
+        }
+      }
+    },
     rules: {
+      'eslint-rules/eslint-process-env': 'error',
+      'eslint-rules/eslint-env-aliases': 'error',
       'n/no-restricted-require': ['error', [
         {
           name: 'diagnostics_channel',
@@ -107,45 +135,51 @@ export default [
         }
       ]],
 
+      'no-await-in-loop': 'error',
+      'no-else-return': ['error', { allowElseIf: true }],
+      'no-implicit-coercion': ['error', { boolean: true, number: true, string: true, allow: ['!!'] }],
+      'no-useless-assignment': 'error',
+      'operator-assignment': 'error',
+      'prefer-exponentiation-operator': 'error',
+      'prefer-object-has-own': 'error',
+      'prefer-object-spread': 'error',
+
+      // Too strict for now. Slowly migrate to this rule by using rest parameters.
+      // 'prefer-rest-params': 'error',
+
       ...eslintPluginUnicorn.configs.recommended.rules,
 
       // Overriding recommended unicorn rules
       'unicorn/catch-error-name': ['off', { name: 'err' }], // 166 errors
-      'unicorn/consistent-function-scoping': 'off', // 21 errors
       'unicorn/expiring-todo-comments': 'off',
       'unicorn/explicit-length-check': 'off', // 68 errors
       'unicorn/filename-case': ['off', { case: 'kebabCase' }], // 59 errors
-      'unicorn/no-anonymous-default-export': 'off', // only makes a difference for ESM
       'unicorn/no-array-for-each': 'off', // 122 errors
-      'unicorn/no-for-loop': 'off', // 15 errors
-      'unicorn/no-null': 'off', // too strict
-      'unicorn/prefer-array-flat': 'off', // 9 errors
       'unicorn/prefer-at': 'off', // 17 errors | Difficult to fix
-      'unicorn/prefer-spread': 'off', // 36 errors
-      'unicorn/prefer-string-replace-all': 'off', // 33 errors
-      'unicorn/prefer-switch': 'off', // 8 errors
-      'unicorn/prefer-ternary': 'off', // 48 errors
-      'unicorn/prefer-top-level-await': 'off', // too strict
       'unicorn/prevent-abbreviations': 'off', // too strict
-      'unicorn/switch-case-braces': 'off', // too strict
 
       // These rules could potentially evaluated again at a much later point
       'unicorn/no-array-callback-reference': 'off',
+      'unicorn/no-for-loop': 'off', // Activate if this is resolved https://github.com/sindresorhus/eslint-plugin-unicorn/issues/2664
       'unicorn/no-nested-ternary': 'off', // Not really an issue in the code and the benefit is small
       'unicorn/no-this-assignment': 'off', // This would need some further refactoring and the benefit is small
       'unicorn/prefer-code-point': 'off', // Should be activated, but needs a refactor of some code
 
       // The following rules should not be activated!
-      'unicorn/prefer-math-trunc': 'off', // Math.trunc is not a 1-to-1 replacement for most of our usage
       'unicorn/import-style': 'off', // Questionable benefit
       'unicorn/no-array-reduce': 'off', // Questionable benefit
       'unicorn/no-hex-escape': 'off', // Questionable benefit
       'unicorn/no-new-array': 'off', // new Array is often used for performance reasons
+      'unicorn/no-null': 'off', // We do not control external APIs and it is hard to differentiate these
       'unicorn/prefer-event-target': 'off', // Benefit only outside of Node.js
       'unicorn/prefer-global-this': 'off', // Questionable benefit in Node.js alone
+      'unicorn/prefer-math-trunc': 'off', // Math.trunc is not a 1-to-1 replacement for most of our usage
       'unicorn/prefer-module': 'off', // We use CJS
       'unicorn/prefer-node-protocol': 'off', // May not be used due to guardrails
-      'unicorn/prefer-reflect-apply': 'off' // Questionable benefit and more than 500 matches
+      'unicorn/prefer-reflect-apply': 'off', // Questionable benefit and more than 500 matches
+      'unicorn/prefer-switch': 'off', // Questionable benefit
+      'unicorn/prefer-top-level-await': 'off', // Only useful when using ESM
+      'unicorn/switch-case-braces': 'off', // Questionable benefit
     }
   },
   {

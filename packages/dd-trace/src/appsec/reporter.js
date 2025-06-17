@@ -81,7 +81,7 @@ const EVENT_HEADERS_MAP = mapHeaderAndTags(eventHeadersList, REQUEST_HEADER_TAG_
 
 const RESPONSE_HEADERS_MAP = mapHeaderAndTags(contentHeaderList, RESPONSE_HEADER_TAG_PREFIX)
 
-const NON_EXTENDED_REQUEST_HEADERS = new Set(requestHeadersList.concat(eventHeadersList))
+const NON_EXTENDED_REQUEST_HEADERS = new Set([...requestHeadersList, ...eventHeadersList])
 const NON_EXTENDED_RESPONSE_HEADERS = new Set(contentHeaderList)
 
 function init (_config) {
@@ -96,7 +96,7 @@ function formatHeaderName (name) {
   return name
     .trim()
     .slice(0, 200)
-    .replace(/[^a-zA-Z0-9_\-:/]/g, '_')
+    .replaceAll(/[^a-zA-Z0-9_\-:/]/g, '_')
     .toLowerCase()
 }
 
@@ -116,7 +116,7 @@ function filterHeaders (headers, map) {
   for (const [headerName, tagName] of map) {
     const headerValue = headers[headerName]
     if (headerValue) {
-      result[tagName] = '' + headerValue
+      result[tagName] = String(headerValue)
     }
   }
 
@@ -132,7 +132,7 @@ function filterExtendedHeaders (headers, excludedHeaderNames, tagPrefix, limit =
   for (const [headerName, headerValue] of Object.entries(headers)) {
     if (counter >= limit) break
     if (!excludedHeaderNames.has(headerName)) {
-      result[getHeaderTag(tagPrefix, headerName)] = '' + headerValue
+      result[getHeaderTag(tagPrefix, headerName)] = String(headerValue)
       counter++
     }
   }
@@ -140,14 +140,16 @@ function filterExtendedHeaders (headers, excludedHeaderNames, tagPrefix, limit =
   return result
 }
 
-function getCollectedHeaders (req, res, shouldCollectEventHeaders) {
+function getCollectedHeaders (req, res, shouldCollectEventHeaders, storedResponseHeaders = {}) {
   // Mandatory
   const mandatoryCollectedHeaders = filterHeaders(req.headers, REQUEST_HEADERS_MAP)
 
   // Basic collection
   if (!shouldCollectEventHeaders) return mandatoryCollectedHeaders
 
-  const responseHeaders = res.getHeaders()
+  const responseHeaders = Object.keys(storedResponseHeaders).length === 0
+    ? res.getHeaders()
+    : { ...storedResponseHeaders, ...res.getHeaders() }
 
   const requestEventCollectedHeaders = filterHeaders(req.headers, EVENT_HEADERS_MAP)
   const responseEventCollectedHeaders = filterHeaders(responseHeaders, RESPONSE_HEADERS_MAP)
@@ -301,8 +303,6 @@ function reportAttack (attackData) {
 }
 
 function truncateRequestBody (target, depth = 0) {
-  let wasTruncated = false
-
   switch (typeof target) {
     case 'string':
       if (target.length > COLLECTED_REQUEST_BODY_MAX_STRING_LENGTH) {
@@ -328,7 +328,7 @@ function truncateRequestBody (target, depth = 0) {
 
       if (Array.isArray(target)) {
         const maxArrayLength = Math.min(target.length, COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE)
-        wasTruncated = target.length > COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE
+        let wasTruncated = target.length > COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE
         const truncatedArray = new Array(maxArrayLength)
         for (let i = 0; i < maxArrayLength; i++) {
           const { value, truncated } = truncateRequestBody(target[i], depth + 1)
@@ -341,7 +341,7 @@ function truncateRequestBody (target, depth = 0) {
 
       const keys = Object.keys(target)
       const maxKeysLength = Math.min(keys.length, COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE)
-      wasTruncated = keys.length > COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE
+      let wasTruncated = keys.length > COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE
 
       const truncatedObject = {}
       for (let i = 0; i < maxKeysLength; i++) {
@@ -401,7 +401,7 @@ function reportDerivatives (derivatives) {
   rootSpan.addTags(tags)
 }
 
-function finishRequest (req, res) {
+function finishRequest (req, res, storedResponseHeaders) {
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
@@ -455,7 +455,7 @@ function finishRequest (req, res) {
 
   const tags = rootSpan.context()._tags
 
-  const newTags = getCollectedHeaders(req, res, shouldCollectEventHeaders(tags))
+  const newTags = getCollectedHeaders(req, res, shouldCollectEventHeaders(tags), storedResponseHeaders)
 
   if (tags['appsec.event'] === 'true' && typeof req.route?.path === 'string') {
     newTags['http.endpoint'] = req.route.path

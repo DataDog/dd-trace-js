@@ -6,8 +6,6 @@ on:
     branches: [master]
   schedule:
     - cron: 0 4 * * *
-    - cron: 20 4 * * *
-    - cron: 40 4 * * *
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
@@ -42,9 +40,11 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
+      - run: yarn test:plugins:ci
       - run: yarn test:llmobs:plugins:ci
         shell: bash
       - uses: ./.github/actions/node/active-lts
+      - run: yarn test:plugins:ci
       - run: yarn test:llmobs:plugins:ci
         shell: bash
       - uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d # v5.4.2
@@ -62,9 +62,11 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
+      - run: yarn test:plugins:ci
       - run: yarn test:llmobs:plugins:ci
         shell: bash
       - uses: ./.github/actions/node/active-lts
+      - run: yarn test:plugins:ci
       - run: yarn test:llmobs:plugins:ci
         shell: bash
       - uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d # v5.4.2
@@ -102,9 +104,11 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
+      - run: yarn test:plugins:ci
       - run: yarn test:llmobs:plugins:ci
         shell: bash
       - uses: ./.github/actions/node/active-lts
+      - run: yarn test:plugins:ci
       - run: yarn test:llmobs:plugins:ci
         shell: bash
       - uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d # v5.4.2

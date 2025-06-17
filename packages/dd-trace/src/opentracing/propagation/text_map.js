@@ -136,7 +136,7 @@ class TextMapPropagator {
       let itemCounter = 0
       let byteCounter = 0
 
-      const baggageItems = spanContext ? spanContext._baggageItems : getAllBaggageItems()
+      const baggageItems = getAllBaggageItems()
       if (!baggageItems) return
       for (const [key, value] of Object.entries(baggageItems)) {
         const item = `${this._encodeOtelBaggageKey(String(key).trim())}=${encodeURIComponent(String(value).trim())},`
@@ -239,8 +239,8 @@ class TextMapPropagator {
 
       if (typeof origin === 'string') {
         const originValue = origin
-          .replace(tracestateOriginFilter, '_')
-          .replace(/[\x3D]/g, '~')
+          .replaceAll(tracestateOriginFilter, '_')
+          .replaceAll(/[\x3D]/g, '~')
 
         state.set('o', originValue)
       }
@@ -249,12 +249,12 @@ class TextMapPropagator {
         if (!tags[key] || !key.startsWith('_dd.p.')) continue
 
         const tagKey = 't.' + key.slice(6)
-          .replace(tracestateTagKeyFilter, '_')
+          .replaceAll(tracestateTagKeyFilter, '_')
 
         const tagValue = tags[key]
           .toString()
-          .replace(tracestateTagValueFilter, '_')
-          .replace(/[\x3D]/g, '~')
+          .replaceAll(tracestateTagValueFilter, '_')
+          .replaceAll(/[\x3D]/g, '~')
 
         state.set(tagKey, tagValue)
       }
@@ -316,12 +316,10 @@ class TextMapPropagator {
           extractedContext = this._extractB3SingleContext(carrier)
           break
         case 'b3':
-          if (this._config.tracePropagationStyle.otelPropagators) {
+          extractedContext = this._config.tracePropagationStyle.otelPropagators
             // TODO: should match "b3 single header" in next major
-            extractedContext = this._extractB3SingleContext(carrier)
-          } else {
-            extractedContext = this._extractB3MultiContext(carrier)
-          }
+            ? this._extractB3SingleContext(carrier)
+            : this._extractB3MultiContext(carrier)
           break
         case 'b3multi':
           extractedContext = this._extractB3MultiContext(carrier)
@@ -357,19 +355,20 @@ class TextMapPropagator {
       }
     }
 
-    this._extractBaggageItems(carrier, context)
-
     if (this._config.tracePropagationBehaviorExtract === 'ignore') {
       context._links = []
-    } else if (this._config.tracePropagationBehaviorExtract === 'restart') {
-      context._links = []
-      context._links.push({
-        context,
-        attributes:
-        {
-          reason: 'propagation_behavior_extract', context_headers: style
-        }
-      })
+    } else {
+      if (this._config.tracePropagationBehaviorExtract === 'restart') {
+        context._links = []
+        context._links.push({
+          context,
+          attributes:
+          {
+            reason: 'propagation_behavior_extract', context_headers: style
+          }
+        })
+      }
+      this._extractBaggageItems(carrier, context)
     }
 
     return context || this._extractSqsdContext(carrier)
@@ -510,7 +509,7 @@ class TextMapPropagator {
             default: {
               if (!key.startsWith('t.')) continue
               const subKey = key.slice(2) // e.g. t.tid -> tid
-              const transformedValue = value.replace(/[\x7E]/gm, '=')
+              const transformedValue = value.replaceAll(/[\x7E]/gm, '=')
 
               // If subkey is tid  then do nothing because trace header tid should always be preserved
               if (subKey === 'tid') {
@@ -583,22 +582,21 @@ class TextMapPropagator {
       return {
         [b3SampledKey]: parts[0]
       }
-    } else {
-      const b3 = {
-        [b3TraceKey]: parts[0],
-        [b3SpanKey]: parts[1]
-      }
-
-      if (parts[2]) {
-        b3[b3SampledKey] = parts[2] === '0' ? '0' : '1'
-
-        if (parts[2] === 'd') {
-          b3[b3FlagsKey] = '1'
-        }
-      }
-
-      return b3
     }
+    const b3 = {
+      [b3TraceKey]: parts[0],
+      [b3SpanKey]: parts[1]
+    }
+
+    if (parts[2]) {
+      b3[b3SampledKey] = parts[2] === '0' ? '0' : '1'
+
+      if (parts[2] === 'd') {
+        b3[b3FlagsKey] = '1'
+      }
+    }
+
+    return b3
   }
 
   _extractOrigin (carrier, spanContext) {
@@ -631,33 +629,26 @@ class TextMapPropagator {
   _extractBaggageItems (carrier, spanContext) {
     if (!this._hasPropagationStyle('extract', 'baggage')) return
     if (!carrier || !carrier.baggage) return
-    if (!spanContext) removeAllBaggageItems()
     const baggages = carrier.baggage.split(',')
     const keysToSpanTag = this._config.baggageTagKeys === '*'
       ? undefined
       : new Set(this._config.baggageTagKeys.split(','))
     for (const keyValue of baggages) {
       if (!keyValue.includes('=')) {
-        if (spanContext) spanContext._baggageItems = {}
+        removeAllBaggageItems()
         return
       }
       let [key, value] = keyValue.split('=')
       key = this._decodeOtelBaggageKey(key.trim())
       value = decodeURIComponent(value.trim())
       if (!key || !value) {
-        if (spanContext) spanContext._baggageItems = {}
+        removeAllBaggageItems()
         return
       }
-      // the current code assumes precedence of ot-baggage- (legacy opentracing baggage) over baggage
-      if (spanContext) {
-        if (Object.hasOwn(spanContext._baggageItems, key)) continue
-        spanContext._baggageItems[key] = value
-        if (this._config.baggageTagKeys === '*' || keysToSpanTag.has(key)) {
-          spanContext._trace.tags['baggage.' + key] = value
-        }
-      } else {
-        setBaggageItem(key, value)
+      if (spanContext && (this._config.baggageTagKeys === '*' || keysToSpanTag.has(key))) {
+        spanContext._trace.tags['baggage.' + key] = value
       }
+      setBaggageItem(key, value)
     }
   }
 

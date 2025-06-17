@@ -1,14 +1,11 @@
 'use strict'
 
-const { EOL } = require('node:os')
-const { spawn } = require('node:child_process')
 const { randomUUID } = require('node:crypto')
 const assert = require('node:assert')
 
-const getPort = require('get-port')
 const Axios = require('axios')
 
-const { createSandbox, FakeAgent, assertObjectContains } = require('../helpers')
+const { createSandbox, FakeAgent, assertObjectContains, spawnProc } = require('../helpers')
 const { generateProbeConfig } = require('../../packages/dd-trace/test/debugger/devtools_client/utils')
 
 // A race condition exists where the tracer receives a probe via RC, before Node.js has had a chance to load all the JS
@@ -50,7 +47,7 @@ describe('Dynamic Instrumentation Probe Re-Evaluation', function () {
 
   function genTestsForSourceFile (sourceFile) {
     return function () {
-      let rcConfig, appPort, agent, proc, axios
+      let rcConfig, agent, proc, axios
 
       beforeEach(async function () {
         rcConfig = {
@@ -58,40 +55,14 @@ describe('Dynamic Instrumentation Probe Re-Evaluation', function () {
           id: `logProbe_${randomUUID()}`,
           config: generateProbeConfig({ sourceFile, line: 4 })
         }
-        appPort = await getPort()
         agent = await new FakeAgent().start()
-        proc = spawn(
-          process.execPath,
-          ['--import', 'dd-trace/initialize.mjs', sourceFile],
-          {
-            cwd: sandbox.folder,
-            env: {
-              APP_PORT: appPort,
-              DD_DYNAMIC_INSTRUMENTATION_ENABLED: true,
-              DD_TRACE_AGENT_PORT: agent.port,
-              DD_TRACE_DEBUG: process.env.DD_TRACE_DEBUG // inherit to make debugging the sandbox easier
-            }
-          }
-        )
-        proc
-          .on('exit', (code) => {
-            if (code !== 0) {
-              throw new Error(`Child process exited with code ${code}`)
-            }
-          })
-          .on('error', (error) => {
-            throw error
-          })
-        proc.stdout.on('data', log.bind(null, '[child process stdout]'))
-        proc.stderr.on('data', log.bind(null, '[child process stderr]'))
-        axios = Axios.create({
-          baseURL: `http://localhost:${appPort}`
-        })
+        proc = undefined
       })
 
       afterEach(async function () {
         proc?.kill(0)
         await agent?.stop()
+        axios = undefined
       })
 
       for (let attempt = 1; attempt <= 5; attempt++) {
@@ -102,6 +73,7 @@ describe('Dynamic Instrumentation Probe Re-Evaluation', function () {
         it(testName, function (done) {
           this.timeout(5000)
 
+          let doneCalled = false
           const probeId = rcConfig.config.id
           const expectedPayloads = [{
             ddsource: 'dd_debugger',
@@ -134,17 +106,32 @@ describe('Dynamic Instrumentation Probe Re-Evaluation', function () {
               }
             }))
 
-            if (expectedPayloads.length === 0) done()
+            if (expectedPayloads.length === 0 && doneCalled === false) {
+              doneCalled = true
+              done()
+            }
           })
 
           agent.addRemoteConfig(rcConfig)
+
+          spawnProc(sourceFile, {
+            cwd: sandbox.folder,
+            env: {
+              NODE_OPTIONS: '--import dd-trace/initialize.mjs',
+              DD_DYNAMIC_INSTRUMENTATION_ENABLED: 'true',
+              DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS: '0',
+              DD_TRACE_AGENT_PORT: agent.port,
+              DD_TRACE_DEBUG: process.env.DD_TRACE_DEBUG, // inherit to make debugging the sandbox easier
+              DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: 0.1
+            }
+          }).then(_proc => {
+            proc = _proc
+            // Possible race condition, in case axios.get() is called in the test before it's created here. But we have
+            // to start the test quickly in order to test the re-evaluation of the probe.
+            axios = Axios.create({ baseURL: proc.url })
+          })
         })
       }
     }
   }
 })
-
-function log (prefix, data) {
-  const msg = data.toString().trim().split(EOL).map((line) => `${prefix} ${line}`).join(EOL)
-  console.log(msg) // eslint-disable-line no-console
-}

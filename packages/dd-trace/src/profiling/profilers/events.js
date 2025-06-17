@@ -257,6 +257,12 @@ class EventSerializer {
   }
 }
 
+function add (items) {
+  for (const item of items.getEntries()) {
+    this.eventHandler(item)
+  }
+}
+
 /**
  * Class that sources timeline events through Node.js performance measurement APIs.
  */
@@ -270,12 +276,6 @@ class NodeApiEventSource {
   start () {
     // if already started, do nothing
     if (this.observer) return
-
-    function add (items) {
-      for (const item of items.getEntries()) {
-        this.eventHandler(item)
-      }
-    }
 
     this.observer = new PerformanceObserver(add.bind(this))
     this.observer.observe({ entryTypes: this.entryTypes })
@@ -291,8 +291,16 @@ class NodeApiEventSource {
 
 class DatadogInstrumentationEventSource {
   constructor (eventHandler, eventFilter) {
-    this.plugins = ['dns_lookup', 'dns_lookupservice', 'dns_resolve', 'dns_reverse', 'fs', 'net'].map(m => {
-      const Plugin = require(`./event_plugins/${m}`)
+    // List all entries explicitly for bundlers to pick up the require calls correctly.
+    const plugins = [
+      require('./event_plugins/dns_lookup'),
+      require('./event_plugins/dns_lookupservice'),
+      require('./event_plugins/dns_resolve'),
+      require('./event_plugins/dns_reverse'),
+      require('./event_plugins/fs'),
+      require('./event_plugins/net')
+    ]
+    this.plugins = plugins.map((Plugin) => {
       return new Plugin(eventHandler, eventFilter)
     })
 
@@ -380,17 +388,15 @@ class EventsProfiler {
       }
     }
 
-    if (options.codeHotspotsEnabled) {
+    this.eventSource = options.codeHotspotsEnabled
       // Use Datadog instrumentation to collect events with span IDs. Still use
       // Node API for GC events.
-      this.eventSource = new CompositeEventSource([
+      ? new CompositeEventSource([
         new DatadogInstrumentationEventSource(eventHandler, eventFilter),
         new NodeApiEventSource(filteringEventHandler, ['gc'])
       ])
-    } else {
       // Use Node API instrumentation to collect events without span IDs
-      this.eventSource = new NodeApiEventSource(filteringEventHandler)
-    }
+      : new NodeApiEventSource(filteringEventHandler)
   }
 
   start () {

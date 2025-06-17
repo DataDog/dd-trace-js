@@ -95,11 +95,9 @@ function compile (node) {
       }
     })()`
   } else if (type === 'instanceof') {
-    if (isPrimitiveType(value[1])) {
-      return `(typeof ${compile(value[0])} === '${value[1]}')` // TODO: Is parenthesizing necessary?
-    } else {
-      return `Function.prototype[Symbol.hasInstance].call(${assertIdentifier(value[1])}, ${compile(value[0])})`
-    }
+    return isPrimitiveType(value[1])
+      ? `(typeof ${compile(value[0])} === '${value[1]}')` // TODO: Is parenthesizing necessary?
+      : `Function.prototype[Symbol.hasInstance].call(${assertIdentifier(value[1])}, ${compile(value[0])})`
   } else if (type === 'ref') {
     if (value === '@it') {
       return '$dd_it'
@@ -107,9 +105,8 @@ function compile (node) {
       return '$dd_key'
     } else if (value === '@value') {
       return '$dd_value'
-    } else {
-      return assertIdentifier(value)
     }
+    return assertIdentifier(value)
   } else if (Array.isArray(value)) {
     const args = value.map(compile)
     switch (type) {

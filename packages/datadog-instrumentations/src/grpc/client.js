@@ -110,18 +110,18 @@ function wrapCallback (ctx, callback = () => {}) {
   })
 }
 
+const onStatusWithPeer = function (ctx, arg1, thisArg) {
+  ctx.result = arg1
+  ctx.peer = thisArg.getPeer()
+  finishChannel.publish(ctx)
+}
+
+const onStatusWithoutPeer = function (ctx, arg1) {
+  ctx.result = arg1
+  finishChannel.publish(ctx)
+}
+
 function createWrapEmit (ctx, hasPeer = false) {
-  const onStatusWithPeer = function (ctx, arg1, thisArg) {
-    ctx.result = arg1
-    ctx.peer = thisArg.getPeer()
-    finishChannel.publish(ctx)
-  }
-
-  const onStatusWithoutPeer = function (ctx, arg1, thisArg) {
-    ctx.result = arg1
-    finishChannel.publish(ctx)
-  }
-
   const onStatus = hasPeer ? onStatusWithPeer : onStatusWithoutPeer
 
   return function wrapEmit (emit) {

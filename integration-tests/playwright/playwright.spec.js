@@ -2,6 +2,8 @@
 
 const { exec, execSync } = require('child_process')
 const satisfies = require('semifies')
+const path = require('path')
+const fs = require('fs')
 
 const getPort = require('get-port')
 const { assert } = require('chai')
@@ -45,17 +47,26 @@ const {
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_IS_RUM_ACTIVE,
   TEST_BROWSER_VERSION,
-  TEST_RETRY_REASON_TYPES
+  TEST_RETRY_REASON_TYPES,
+  TEST_IS_MODIFIED,
+  DD_CAPABILITIES_IMPACTED_TESTS
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 const { DD_MAJOR } = require('../../version')
 
+const { PLAYWRIGHT_VERSION } = process.env
+
 const NUM_RETRIES_EFD = 3
 
-const versions = [DD_MAJOR >= 6 ? '1.38.0' : '1.18.0', 'latest']
+const latest = 'latest'
+const oldest = DD_MAJOR >= 6 ? '1.38.0' : '1.18.0'
+const versions = [oldest, latest]
 
 versions.forEach((version) => {
+  if (PLAYWRIGHT_VERSION === 'oldest' && version !== oldest) return
+  if (PLAYWRIGHT_VERSION === 'latest' && version !== latest) return
+
   // TODO: Remove this once we drop suppport for v5
   const contextNewVersions = (...args) => {
     if (satisfies(version, '>=1.38.0') || version === 'latest') {
@@ -190,6 +201,16 @@ versions.forEach((version) => {
                 JSON.stringify({ arguments: { browser: 'chromium' }, metadata: {} })
               )
               assert.exists(testEvent.content.metrics[DD_HOST_CPU_COUNT])
+              if (version === 'latest' || satisfies(version, '>=1.38.0')) {
+                if (testEvent.content.meta[TEST_STATUS] !== 'skip' &&
+                  testEvent.content.meta[TEST_SUITE].includes('landing-page-test.js')) {
+                  assert.propertyVal(testEvent.content.meta, 'custom_tag.beforeEach', 'hello beforeEach')
+                  assert.propertyVal(testEvent.content.meta, 'custom_tag.afterEach', 'hello afterEach')
+                }
+                if (testEvent.content.meta[TEST_NAME].includes('should work with passing tests')) {
+                  assert.propertyVal(testEvent.content.meta, 'custom_tag.it', 'hello it')
+                }
+              }
             })
 
             stepEvents.forEach(stepEvent => {
@@ -1342,11 +1363,20 @@ versions.forEach((version) => {
             assert.isNotEmpty(metadataDicts)
             metadataDicts.forEach(metadata => {
               assert.equal(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], undefined)
-              assert.equal(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')
               assert.equal(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
-              assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
-              assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
-              assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '4')
+              if (satisfies(version, '>=1.38.0') || version === 'latest') {
+                assert.equal(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')
+                assert.equal(metadata.test[DD_CAPABILITIES_IMPACTED_TESTS], '1')
+                assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
+                assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
+                assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '4')
+              } else {
+                assert.equal(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], undefined)
+                assert.equal(metadata.test[DD_CAPABILITIES_IMPACTED_TESTS], undefined)
+                assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], undefined)
+                assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], undefined)
+                assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], undefined)
+              }
               // capabilities logic does not overwrite test session name
               assert.equal(metadata.test[TEST_SESSION_NAME], 'my-test-session-name')
             })
@@ -1517,6 +1547,180 @@ versions.forEach((version) => {
         childProcess.on('exit', (exitCode) => {
           assert.equal(exitCode, 1)
           receiverPromise.then(() => done()).catch(done)
+        })
+      })
+    })
+
+    contextNewVersions('impacted tests', () => {
+      beforeEach(() => {
+        receiver.setKnownTests({
+          playwright: {
+            'ci-visibility/playwright-tests-impacted-tests/impacted-test.js': ['impacted test should be impacted']
+          }
+        })
+      })
+
+      // Add git setup before running impacted tests
+      before(function () {
+        execSync('git checkout -b feature-branch', { cwd, stdio: 'ignore' })
+        fs.writeFileSync(
+          path.join(cwd, 'ci-visibility/playwright-tests-impacted-tests/impacted-test.js'),
+          `const { test, expect } = require('@playwright/test')
+
+           test.beforeEach(async ({ page }) => {
+             await page.goto(process.env.PW_BASE_URL)
+           })
+
+           test.describe('impacted test', () => {
+             test('should be impacted', async ({ page }) => {
+               await expect(page.locator('.hello-world')).toHaveText([
+                 'Hello Worldd'
+               ])
+             })
+           })`
+        )
+        execSync('git add ci-visibility/playwright-tests-impacted-tests/impacted-test.js', { cwd, stdio: 'ignore' })
+        execSync('git commit -m "modify impacted-test.js" --no-verify', { cwd, stdio: 'ignore' })
+      })
+
+      after(function () {
+        execSync('git checkout -', { cwd, stdio: 'ignore' })
+        execSync('git branch -D feature-branch', { cwd, stdio: 'ignore' })
+      })
+
+      const getTestAssertions = ({ isModified, isEfd, isNew }) =>
+        receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+
+            if (isEfd) {
+              assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
+            } else {
+              assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
+            }
+
+            const resourceNames = tests.map(span => span.resource)
+
+            assert.includeMembers(resourceNames,
+              [
+                'impacted-test.js.impacted test should be impacted'
+              ]
+            )
+
+            const impactedTests = tests.filter(test =>
+              test.meta[TEST_SOURCE_FILE] === 'ci-visibility/playwright-tests-impacted-tests/impacted-test.js' &&
+              test.meta[TEST_NAME] === 'impacted test should be impacted')
+
+            if (isEfd) {
+              assert.equal(impactedTests.length, NUM_RETRIES_EFD + 1) // Retries + original test
+            } else {
+              assert.equal(impactedTests.length, 1)
+            }
+
+            for (const impactedTest of impactedTests) {
+              if (isModified) {
+                assert.propertyVal(impactedTest.meta, TEST_IS_MODIFIED, 'true')
+              } else {
+                assert.notProperty(impactedTest.meta, TEST_IS_MODIFIED)
+              }
+              if (isNew) {
+                assert.propertyVal(impactedTest.meta, TEST_IS_NEW, 'true')
+              } else {
+                assert.notProperty(impactedTest.meta, TEST_IS_NEW)
+              }
+            }
+
+            if (isEfd) {
+              const retriedTests = tests.filter(
+                test => test.meta[TEST_IS_RETRY] === 'true' &&
+                test.meta[TEST_NAME] === 'impacted test should be impacted'
+              )
+              assert.equal(retriedTests.length, NUM_RETRIES_EFD)
+              let retriedTestNew = 0
+              let retriedTestsWithReason = 0
+              retriedTests.forEach(test => {
+                if (test.meta[TEST_IS_NEW] === 'true') {
+                  retriedTestNew++
+                }
+                if (test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd) {
+                  retriedTestsWithReason++
+                }
+              })
+              assert.equal(retriedTestNew, isNew ? NUM_RETRIES_EFD : 0)
+              assert.equal(retriedTestsWithReason, NUM_RETRIES_EFD)
+            }
+          }, 25000)
+
+      const runImpactedTest = (
+        done,
+        { isModified, isEfd = false, isNew = false },
+        extraEnvVars = {}
+      ) => {
+        const testAssertionsPromise = getTestAssertions({ isModified, isEfd, isNew })
+
+        childProcess = exec(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-tests-impacted-tests',
+              GITHUB_BASE_REF: '',
+              ...extraEnvVars
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          testAssertionsPromise.then(done).catch(done)
+        })
+      }
+
+      context('test is not new', () => {
+        it('should be detected as impacted', (done) => {
+          receiver.setSettings({ impacted_tests_enabled: true })
+
+          runImpactedTest(done, { isModified: true })
+        })
+
+        it('should not be detected as impacted if disabled', (done) => {
+          receiver.setSettings({ impacted_tests_enabled: false })
+
+          runImpactedTest(done, { isModified: false })
+        })
+
+        it('should not be detected as impacted if DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED is false',
+          (done) => {
+            receiver.setSettings({ impacted_tests_enabled: true })
+
+            runImpactedTest(done,
+              { isModified: false },
+              { DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0' }
+            )
+          })
+      })
+
+      context('test is new', () => {
+        it('should be retried and marked both as new and modified', (done) => {
+          receiver.setKnownTests({})
+          receiver.setSettings({
+            impacted_tests_enabled: true,
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': NUM_RETRIES_EFD
+              }
+            },
+            known_tests_enabled: true
+          })
+          runImpactedTest(
+            done,
+            { isModified: true, isEfd: true, isNew: true }
+          )
         })
       })
     })

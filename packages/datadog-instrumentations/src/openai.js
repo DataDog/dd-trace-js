@@ -187,12 +187,12 @@ function addStreamedChunk (content, chunk) {
   }
 }
 
-function convertBufferstoObjects (chunks = []) {
+function convertBufferstoObjects (chunks) {
   return Buffer
     .concat(chunks) // combine the buffers
     .toString() // stringify
     .split(/(?=data:)/) // split on "data:"
-    .map(chunk => chunk.replace(/\n/g, '').slice(6)) // remove newlines and 'data: ' from the front
+    .map(chunk => chunk.replaceAll('\n', '').slice(6)) // remove newlines and 'data: ' from the front
     .slice(0, -1) // remove the last [DONE] message
     .map(JSON.parse) // parse all of the returned objects
 }
@@ -215,6 +215,10 @@ function wrapStreamIterator (response, options, n, ctx) {
 
             if (chunk) {
               chunks.push(chunk)
+              // TODO(BridgeAR): It likely depends on the options being passed
+              // through if the stream returns buffers or not. By reading that,
+              // we don't have to do the instanceof check anymore, which is
+              // relatively expensive.
               if (chunk instanceof Buffer) {
                 // this operation should be safe
                 // if one chunk is a buffer (versus a plain object), the rest should be as well
@@ -224,21 +228,17 @@ function wrapStreamIterator (response, options, n, ctx) {
 
             if (done) {
               let body = {}
-              chunks = chunks.filter(chunk => chunk != null) // filter null or undefined values
+              if (processChunksAsBuffers) {
+                chunks = convertBufferstoObjects(chunks)
+              }
 
-              if (chunks) {
-                if (processChunksAsBuffers) {
-                  chunks = convertBufferstoObjects(chunks)
-                }
-
-                if (chunks.length) {
-                  // define the initial body having all the content outside of choices from the first chunk
-                  // this will include import data like created, id, model, etc.
-                  body = { ...chunks[0], choices: Array.from({ length: n }) }
-                  // start from the first chunk, and add its choices into the body
-                  for (let i = 0; i < chunks.length; i++) {
-                    addStreamedChunk(body, chunks[i])
-                  }
+              if (chunks.length) {
+                // Define the initial body having all the content outside of choices from the first chunk
+                // this will include import data like created, id, model, etc.
+                body = { ...chunks[0], choices: Array.from({ length: n }) }
+                // Start from the first chunk, and add its choices into the body
+                for (const chunk_ of chunks) {
+                  addStreamedChunk(body, chunk_)
                 }
               }
 

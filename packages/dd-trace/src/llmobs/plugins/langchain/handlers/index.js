@@ -28,26 +28,24 @@ class LangChainLLMObsHandler {
       return formatted
     } else if (Array.isArray(messages)) {
       return messages.map(message => this.formatIO(message))
-    } else {
-      return this.getContentFromMessage(messages)
-    }
+    } // either a BaseMesage type or a string
+    return this.getContentFromMessage(messages)
   }
 
   getContentFromMessage (message) {
-    if (typeof message === 'object') {
-      try {
-        const messageContent = {}
-        messageContent.content = message.content || ''
-
-        const role = this.getRole(message)
-        if (role) messageContent.role = role
-
-        return messageContent
-      } catch {
-        return JSON.stringify(message)
-      }
-    } else {
+    if (typeof message === 'string') {
       return message
+    }
+    try {
+      const messageContent = {}
+      messageContent.content = message.content || ''
+
+      const role = this.getRole(message)
+      if (role) messageContent.role = role
+
+      return messageContent
+    } catch {
+      return JSON.stringify(message)
     }
   }
 

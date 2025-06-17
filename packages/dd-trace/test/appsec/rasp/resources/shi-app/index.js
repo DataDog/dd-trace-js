@@ -9,7 +9,6 @@ const express = require('express')
 const childProcess = require('child_process')
 
 const app = express()
-const port = process.env.APP_PORT || 3000
 
 app.get('/shi/execFileSync', async (req, res) => {
   childProcess.execFileSync('ls', [req.query.dir], { shell: true })
@@ -53,6 +52,6 @@ app.get('/cmdi/execFileSync/out-of-express-scope', async (req, res) => {
   })
 })
 
-app.listen(port, () => {
-  process.send({ port })
+const server = app.listen(process.env.APP_PORT || 0, () => {
+  process.send?.({ port: server.address().port })
 })

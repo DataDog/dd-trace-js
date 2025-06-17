@@ -116,7 +116,8 @@ class DogStatsDClient {
   _add (stat, value, type, tags) {
     const message = `${this._prefix + stat}:${value}|${type}`
 
-    tags = tags ? this._tags.concat(tags) : this._tags
+    // Don't manipulate this._tags as it is still used
+    tags = tags ? [...this._tags, ...tags] : this._tags
 
     if (tags.length > 0) {
       this._write(`${message}|#${tags.join(',')}\n`)
@@ -164,11 +165,11 @@ class DogStatsDClient {
         .filter(key => {
           // Skip runtime-id unless enabled as cardinality may be too high
           if (key !== 'runtime-id') return true
-          return (config.experimental && config.experimental.runtimeId)
+          return config.runtimeMetricsRuntimeId
         })
         .forEach(key => {
           // https://docs.datadoghq.com/tagging/#defining-tags
-          const value = config.tags[key].replace(/[^a-z0-9_:./-]/ig, '_')
+          const value = config.tags[key].replaceAll(/[^a-z0-9_:./-]/ig, '_')
 
           tags.push(`${key}:${value}`)
         })
@@ -243,7 +244,7 @@ class MetricsAggregationClient {
     const container = monotonic ? this._counters : this._gauges
     const node = this._ensureTree(container, name, tags, 0)
 
-    node.value = node.value + count
+    node.value += count
   }
 
   gauge (name, value, tags) {
