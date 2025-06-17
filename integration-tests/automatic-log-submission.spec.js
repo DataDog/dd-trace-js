@@ -174,7 +174,7 @@ describe('test visibility automatic log submission', () => {
         )
         childProcess.on('exit', () => {
           assert.include(testOutput, 'Hello simple log!')
-          assert.notInclude(testOutput, 'span_id')
+          assert.include(testOutput, 'span_id')
           done()
         })
 
