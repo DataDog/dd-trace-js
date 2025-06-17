@@ -139,6 +139,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.nameToParams = {}
       this.global._ddtrace = global._ddtrace
       this.hasSnapshotTests = undefined
+      this.testSuiteAbsolutePath = context.testPath
 
       this.displayName = config.projectConfig?.displayName?.name
       this.testEnvironmentOptions = getTestEnvironmentOptions(config)
@@ -1100,7 +1101,7 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
         const getFilesWithPath = (files) => files.map(file => getTestSuitePath(file, root))
 
         const coverageFiles = getFilesWithPath(getCoveredFilenamesFromCoverage(environment.global.__coverage__))
-        const mockedFiles = getFilesWithPath(testSuiteMockedFiles.get(environment.testSuite) || [])
+        const mockedFiles = getFilesWithPath(testSuiteMockedFiles.get(environment.testSuiteAbsolutePath) || [])
 
         testSuiteCodeCoverageCh.publish({ coverageFiles, testSuite: environment.testSourceFile, mockedFiles })
       }
@@ -1275,14 +1276,13 @@ addHook({
     const result = _createJestObjectFor.apply(this, arguments)
     const suiteFilePath = this._testPath
 
-    shimmer.wrap(result, 'mock', mock => function (moduleName, mockFactory, options) {
+    shimmer.wrap(result, 'mock', mock => function (moduleName) {
       if (suiteFilePath) {
-        const testSuite = getTestSuitePath(suiteFilePath, process.cwd())
-        const existingMockedFiles = testSuiteMockedFiles.get(testSuite) || []
+        const existingMockedFiles = testSuiteMockedFiles.get(suiteFilePath) || []
         const suiteDir = path.dirname(suiteFilePath)
         const mockPath = path.resolve(suiteDir, moduleName)
-        const relativeMockPath = path.relative(process.cwd(), mockPath)
-        testSuiteMockedFiles.set(testSuite, [...existingMockedFiles, relativeMockPath])
+        existingMockedFiles.push(mockPath)
+        testSuiteMockedFiles.set(suiteFilePath, existingMockedFiles)
       }
       return mock.apply(this, arguments)
     })
