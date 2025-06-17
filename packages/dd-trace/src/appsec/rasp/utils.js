@@ -58,11 +58,6 @@ function handleResult (result, req, res, abortController, config, raspRule) {
       const abortError = new DatadogRaspAbortError(req, res, blockingAction, raspRule, ruleTriggered)
       abortController.abort(abortError)
 
-      // TODO Delete this when support for node 16 is removed
-      if (!abortController.signal.reason) {
-        abortController.signal.reason = abortError
-      }
-
       return
     }
   }
