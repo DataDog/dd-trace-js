@@ -8,7 +8,7 @@
     "env": "bash ./plugin-env",
     "preinstall": "node scripts/preinstall.js",
     "bench": "node benchmark/index.js",
-    "bench:e2e:ci-visibility": "node benchmark/e2e-ci/benchmark-run.js",
+    "bench:e2e:test-optimization": "node benchmark/e2e-test-optimization/benchmark-run.js",
     "dependencies:dedupe": "yarn-deduplicate yarn.lock",
     "type:doc": "cd docs && yarn && yarn build",
     "type:test": "cd docs && yarn && yarn test",

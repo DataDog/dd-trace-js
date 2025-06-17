@@ -29,8 +29,8 @@ jobs:
         with:
           token: ${{ steps.app-token.outputs.token }}
       - uses: ./.github/actions/node/oldest-maintenance-lts
-      - name: CI Visibility Performance Overhead Test
-        run: yarn bench:e2e:ci-visibility
+      - name: Test Optimization Performance Overhead Test
+        run: yarn bench:e2e:test-optimization
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
 
