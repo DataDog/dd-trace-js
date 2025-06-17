@@ -1,7 +1,6 @@
 'use strict'
 
 const { expect } = require('chai')
-const Span = require('../../../dd-trace/src/opentracing/span')
 const proxyquire = require('proxyquire')
 
 function unserializbleObject () {
@@ -109,7 +108,13 @@ describe('tagger', () => {
       })
 
       it('uses the parent span if provided to populate fields', () => {
-        const parentSpan = new Span(null, null, null, { operationName: 'test' })
+        const parentSpan = {
+          context () {
+            return {
+              toSpanId () { return '5678' }
+            }
+          }
+        }
 
         Tagger.tagMap.set(parentSpan, {
           '_ml_obs.meta.ml_app': 'my-ml-app',
@@ -122,7 +127,7 @@ describe('tagger', () => {
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'my-ml-app',
           '_ml_obs.session_id': 'my-session',
-          '_ml_obs.llmobs_parent_id': parentSpan.context().toSpanId()
+          '_ml_obs.llmobs_parent_id': '5678'
         })
       })
 
