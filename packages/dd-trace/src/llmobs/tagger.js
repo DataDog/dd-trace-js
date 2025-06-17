@@ -1,8 +1,6 @@
 'use strict'
 
 const log = require('../log')
-const { Identifier } = require('../id')
-const Span = require('../opentracing/span')
 const {
   MODEL_NAME,
   MODEL_PROVIDER,
@@ -91,15 +89,10 @@ class LLMObsTagger {
 
     this._setTag(span, ML_APP, spanMlApp)
 
-    let parentId
-    if (parent instanceof Identifier) {
-      parentId = parent.toString(10)
-    } else if (parent instanceof Span) {
-      parentId = parent.context().toSpanId()
-    } else {
-      parentId = span.context()._trace.tags[PROPAGATED_PARENT_ID_KEY] ?? ROOT_PARENT_ID
-    }
-
+    const parentId =
+      parent?.context().toSpanId() ??
+      span.context()._trace.tags[PROPAGATED_PARENT_ID_KEY] ??
+      ROOT_PARENT_ID
     this._setTag(span, PARENT_ID_KEY, parentId)
   }
 

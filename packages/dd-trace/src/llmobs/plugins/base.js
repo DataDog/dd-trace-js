@@ -40,17 +40,10 @@ class LLMObsPlugin extends TracingPlugin {
       telemetry.incrementLLMObsSpanStartCount({ autoinstrumented: true, integration: this.constructor.integration })
 
       ctx.llmobs = {} // initialize context-based namespace
+      llmobsStorage.enterWith({ span })
       ctx.llmobs.parent = parent
 
-      llmobsStorage.enterWith({ span })
-
-      const coalescedRegisterOptions = {
-        parent,
-        integration: this.constructor.integration,
-        ...registerOptions
-      }
-
-      this._tagger.registerLLMObsSpan(span, coalescedRegisterOptions)
+      this._tagger.registerLLMObsSpan(span, { parent, integration: this.constructor.integration, ...registerOptions })
     }
   }
 

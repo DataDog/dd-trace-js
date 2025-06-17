@@ -182,6 +182,6 @@ function writeUInt32BE (buffer, value, offset) {
   buffer[0 + offset] = value & 255
 }
 
-module.exports = Object.assign(function createIdentifier (value, radix) {
+module.exports = function createIdentifier (value, radix) {
   return new Identifier(value, radix)
-}, { Identifier })
+}
