@@ -78,23 +78,15 @@ esbuildVersions.forEach((version) => {
     })
 
     describe('ESM', () => {
-      before(() => {
-        console.log('npm run build:esm')
-        chproc.execSync('npm run build:esm')
-      })
-
-      after(() => {
+      afterEach(() => {
         fs.rmSync('./out.mjs', { force: true })
-        fs.rmSync('./out-with-unrelated-js-banner.mjs', { force: true })
-        fs.rmSync('./out-with-patched-global-banner.mjs', { force: true })
-        fs.rmSync('./out-with-patched-const-banner.mjs', { force: true })
-        fs.rmSync('./out-relying-in-extension.mjs', { force: true })
         fs.rmSync('./out.js', { force: true })
         fs.rmSync('./basic-test.mjs', { force: true })
-        fs.rmSync('./out-non-esm.js', { force: true })
       })
 
       it('works', () => {
+        console.log('npm run build:esm')
+        chproc.execSync('npm run build:esm')
         console.log('npm run built:esm')
         chproc.execSync('npm run built:esm', {
           timeout: 1000 * 30
@@ -102,42 +94,72 @@ esbuildVersions.forEach((version) => {
       })
 
       it('should not override existing js banner', () => {
-        const builtFile = fs.readFileSync('./out-with-unrelated-js-banner.mjs').toString()
-        assert.include(builtFile, '/* js test */')
-
-        chproc.execSync('DD_TRACE_DEBUG=true node out-with-unrelated-js-banner.mjs', {
+        const command = 'node ./build-and-run.esm-unrelated-js-banner.js'
+        console.log(command)
+        chproc.execSync(command, {
           timeout: 1000 * 30
         })
+
+        const builtFile = fs.readFileSync('./out.mjs').toString()
+        assert.include(builtFile, '/* js test */')
       })
 
-      it('should contain the definitions when format is inferred from outfile', () => {
-        const builtFile = fs.readFileSync('./out-relying-in-extension.mjs').toString()
+      it('should contain the definitions when esm is inferred from outfile', () => {
+        const command = 'node ./build-and-run.esm-relying-in-extension.js'
+        console.log(command)
+        chproc.execSync(command, {
+          timeout: 1000 * 30
+        })
+
+        const builtFile = fs.readFileSync('./out.mjs').toString()
         assert.include(builtFile, 'globalThis.__filename ??= $dd_fileURLToPath(import.meta.url);')
       })
 
-      it('should contain the definitions when format is inferred from format', () => {
+      it('should contain the definitions when esm is inferred from format', () => {
+        const command = 'node ./build-and-run.esm-relying-in-format.js'
+        console.log(command)
+        chproc.execSync(command, {
+          timeout: 1000 * 30
+        })
+
         const builtFile = fs.readFileSync('./out.js').toString()
         assert.include(builtFile, 'globalThis.__filename ??= $dd_fileURLToPath(import.meta.url);')
       })
 
       it('should contain the definitions when format is inferred from out extension', () => {
+        const command = 'node ./build-and-run.esm-relying-in-out-extension.js'
+        console.log(command)
+        chproc.execSync(command, {
+          timeout: 1000 * 30
+        })
+
         const builtFile = fs.readFileSync('./basic-test.mjs').toString()
         assert.include(builtFile, 'globalThis.__filename ??= $dd_fileURLToPath(import.meta.url);')
       })
 
       it('should not contain the definitions when no esm is specified', () => {
-        const builtFile = fs.readFileSync('./out-non-esm.js').toString()
+        const command = 'node ./build.js'
+        console.log(command)
+        chproc.execSync(command, {
+          timeout: 1000 * 30
+        })
+
+        const builtFile = fs.readFileSync('./out.js').toString()
         assert.notInclude(builtFile, 'globalThis.__filename ??= $dd_fileURLToPath(import.meta.url);')
       })
 
       it('should not crash when it is already patched using global', () => {
-        chproc.execSync('DD_TRACE_DEBUG=true node out-with-patched-global-banner.mjs', {
+        const command = 'node ./build-and-run.esm-patched-global-banner.js'
+        console.log(command)
+        chproc.execSync(command, {
           timeout: 1000 * 30
         })
       })
 
       it('should not crash when it is already patched using const', () => {
-        chproc.execSync('DD_TRACE_DEBUG=true node out-with-patched-const-banner.mjs', {
+        const command = 'node ./build-and-run.esm-patched-const-banner.js'
+        console.log(command)
+        chproc.execSync(command, {
           timeout: 1000 * 30
         })
       })
