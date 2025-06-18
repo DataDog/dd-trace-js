@@ -860,17 +860,13 @@ class Config {
       'dynamicInstrumentation.redactionExcludedIdentifiers',
       DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS
     )
-    this._setValue(
-      env,
-      'dynamicInstrumentation.uploadIntervalSeconds',
-      maybeFloat(DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS)
-    )
+    env.dynamicInstrumentation.uploadIntervalSeconds = maybeFloat(DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS)
     this._envUnprocessed['dynamicInstrumentation.uploadInterval'] = DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS
     this._setString(env, 'env', DD_ENV || tags.env)
     this._setBoolean(env, 'traceEnabled', DD_TRACE_ENABLED)
     this._setBoolean(env, 'experimental.enableGetRumData', DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED)
     this._setString(env, 'experimental.exporter', DD_TRACE_EXPERIMENTAL_EXPORTER)
-    if (AWS_LAMBDA_FUNCTION_NAME) this._setValue(env, 'flushInterval', 0)
+    if (AWS_LAMBDA_FUNCTION_NAME) env.flushInterval = 0
     env.flushMinSpans = maybeInt(DD_TRACE_PARTIAL_FLUSH_MIN_SPANS)
     this._envUnprocessed.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
     this._setBoolean(env, 'gitMetadataEnabled', DD_TRACE_GIT_METADATA_ENABLED)
@@ -1087,11 +1083,7 @@ class Config {
       'dynamicInstrumentation.redactionExcludedIdentifiers',
       options.dynamicInstrumentation?.redactionExcludedIdentifiers
     )
-    this._setValue(
-      opts,
-      'dynamicInstrumentation.uploadIntervalSeconds',
-      maybeFloat(options.dynamicInstrumentation?.uploadIntervalSeconds)
-    )
+    opts.dynamicInstrumentation.uploadIntervalSeconds = maybeFloat(options.dynamicInstrumentation?.uploadIntervalSeconds)
     this._optsUnprocessed['dynamicInstrumentation.uploadIntervalSeconds'] =
       options.dynamicInstrumentation?.uploadIntervalSeconds
     this._setString(opts, 'env', options.env || tags.env)
