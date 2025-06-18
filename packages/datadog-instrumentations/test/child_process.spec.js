@@ -345,10 +345,6 @@ describe('child process', () => {
           const abortError = new Error('AbortError')
           function abort ({ abortController }) {
             abortController.abort(abortError)
-
-            if (!abortController.signal.reason) {
-              abortController.signal.reason = abortError
-            }
           }
 
           beforeEach(() => {
