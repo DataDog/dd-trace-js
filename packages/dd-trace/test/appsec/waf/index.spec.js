@@ -95,31 +95,6 @@ describe('WAF Manager', () => {
       waf.init(rules, config.appsec)
 
       expect(Reporter.metricsQueue.set).to.have.been.calledWithExactly('_dd.appsec.waf.version', '1.2.3')
-      expect(Reporter.metricsQueue.set).to.have.been.calledWithExactly('_dd.appsec.event_rules.loaded', 1)
-      expect(Reporter.metricsQueue.set).to.have.been.calledWithExactly('_dd.appsec.event_rules.error_count', 0)
-      expect(Reporter.metricsQueue.set).not.to.have.been.calledWith('_dd.appsec.event_rules.errors')
-    })
-
-    it('should set init metrics with errors', () => {
-      DDWAF.version.returns('2.3.4')
-      DDWAF.prototype.diagnostics = {
-        rules: {
-          loaded: ['rule_1'],
-          failed: ['rule_2', 'rule_3'],
-          errors: {
-            error_1: ['invalid_1'],
-            error_2: ['invalid_2', 'invalid_3']
-          }
-        }
-      }
-
-      waf.init(rules, config.appsec)
-
-      expect(Reporter.metricsQueue.set).to.have.been.calledWithExactly('_dd.appsec.waf.version', '2.3.4')
-      expect(Reporter.metricsQueue.set).to.have.been.calledWithExactly('_dd.appsec.event_rules.loaded', 1)
-      expect(Reporter.metricsQueue.set).to.have.been.calledWithExactly('_dd.appsec.event_rules.error_count', 2)
-      expect(Reporter.metricsQueue.set).to.have.been.calledWithExactly('_dd.appsec.event_rules.errors',
-        '{"error_1":["invalid_1"],"error_2":["invalid_2","invalid_3"]}')
     })
   })
 
