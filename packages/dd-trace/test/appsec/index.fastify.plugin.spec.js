@@ -5,11 +5,14 @@ const { assert } = require('chai')
 const getPort = require('get-port')
 const path = require('path')
 const semver = require('semver')
+const zlib = require('zlib')
+const fs = require('node:fs')
+const { ReadableStream } = require('node:stream/web')
+
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
 const { json } = require('../../src/appsec/blocked_templates')
-const zlib = require('zlib')
 
 withVersions('fastify', 'fastify', version => {
   describe('Suspicious request blocking - query', () => {
@@ -469,6 +472,34 @@ describe('Api Security - Fastify', () => {
         return { returnResKey: 'returnResValue' }
       })
 
+      app.get('/', (request, reply) => {
+        reply.send('DONE')
+      })
+
+      app.get('/buffer', (request, reply) => {
+        reply.send(Buffer.from('DONE'))
+      })
+
+      app.get('/stream', (request, reply) => {
+        const stream = fs.createReadStream(__filename)
+        reply.header('Content-Type', 'application/octet-stream')
+        reply.send(stream)
+      })
+
+      app.get('/typedarray', (request, reply) => {
+        reply.send(new Uint16Array(10))
+      })
+
+      app.get('/response-stream', (request, reply) => {
+        const stream = fs.createReadStream(__filename)
+        const readableStream = ReadableStream.from(stream)
+        const response = new Response(readableStream, {
+          status: 200,
+          headers: { 'content-type': 'application/octet-stream' }
+        })
+        reply.send(response)
+      })
+
       getPort().then((port) => {
         app.listen({ port }, () => {
           axios = Axios.create({ baseURL: `http://localhost:${port}` })
@@ -531,6 +562,66 @@ describe('Api Security - Fastify', () => {
 
       assert.equal(res.status, 200)
       assert.deepEqual(res.data, { returnResKey: 'returnResValue' })
+    })
+
+    it('should not get the schema for string', async () => {
+      const res = await axios.get('/')
+
+      await agent.assertFirstTraceSpan(span => {
+        assert.notProperty(span.meta, '_dd.appsec.s.res.body')
+      })
+
+      assert.equal(res.status, 200)
+      assert.equal(res.data, 'DONE')
+    })
+
+    it('should not get the schema for Buffer', async () => {
+      const res = await axios.get('/buffer')
+
+      await agent.assertFirstTraceSpan(span => {
+        if (span.meta) {
+          assert.notProperty(span.meta, '_dd.appsec.s.res.body')
+        }
+      })
+
+      assert.equal(res.status, 200)
+      assert.equal(res.data, 'DONE')
+    })
+
+    it('should not get the schema for stream', async () => {
+      const res = await axios.get('/stream', { responseType: 'arraybuffer' })
+
+      await agent.assertFirstTraceSpan(span => {
+        if (span.meta) {
+          assert.notProperty(span.meta, '_dd.appsec.s.res.body')
+        }
+      })
+
+      assert.equal(res.status, 200)
+    })
+
+    it('should not get the schema for TypedArray', async () => {
+      const res = await axios.get('/typedarray', { responseType: 'arraybuffer' })
+
+      await agent.assertFirstTraceSpan(span => {
+        if (span.meta) {
+          assert.notProperty(span.meta, '_dd.appsec.s.res.body')
+        }
+      })
+
+      assert.equal(res.status, 200)
+    })
+
+    it('should not get the schema for Response stream', async () => {
+      const res = await axios.get('/response-stream', { responseType: 'arraybuffer' })
+
+      await agent.assertFirstTraceSpan(span => {
+        if (span.meta) {
+          assert.notProperty(span.meta, '_dd.appsec.s.res.body')
+        }
+      })
+
+      assert.equal(res.status, 200)
     })
   })
 })

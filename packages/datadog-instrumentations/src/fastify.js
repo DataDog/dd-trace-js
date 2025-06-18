@@ -171,7 +171,7 @@ function wrapSend (send, req) {
   return function sendWithTrace (payload) {
     if (payload instanceof Error) {
       errorChannel.publish({ req, error: payload })
-    } else if (responseJsonReadCh.hasSubscribers) {
+    } else if (shouldPublishJsonSchema(payload)) {
       const res = getRes(this)
       responseJsonReadCh.publish({ req, res, body: payload })
     }
@@ -202,6 +202,24 @@ function publishError (error, req) {
 
 function onRoute (routeOptions) {
   routeAddedChannel.publish({ routeOptions, onRoute })
+}
+
+// send() payload types: https://fastify.dev/docs/v5.3.x/Reference/Reply/#senddata
+function shouldPublishJsonSchema (payload) {
+  if (!responseJsonReadCh.hasSubscribers) return false
+
+  switch (true) {
+    case payload == null:
+    case typeof payload !== 'object':
+    case Buffer.isBuffer(payload):
+    case typeof payload.pipe === 'function': // Node streams (.pipe)
+    case payload.body && typeof payload.body.pipe === 'function': // Response with body stream
+    case payload instanceof ArrayBuffer: // ArrayBuffer
+    case ArrayBuffer.isView(payload): // TypedArray
+      return false
+    default:
+      return true
+  }
 }
 
 addHook({ name: 'fastify', versions: ['>=3'] }, fastify => {
