@@ -71,8 +71,6 @@ function enable (_config) {
 
     bodyParser.subscribe(onRequestBodyParsed)
     multerParser.subscribe(onRequestBodyParsed)
-    fastifyBodyParser.subscribe(onRequestBodyParsed)
-    fastifyCookieParser.subscribe(onRequestCookieParser)
     cookieParser.subscribe(onRequestCookieParser)
     incomingHttpRequestStart.subscribe(incomingHttpStartTranslator)
     incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
@@ -85,6 +83,7 @@ function enable (_config) {
     expressProcessParams.subscribe(onRequestProcessParams)
     fastifyBodyParser.subscribe(onRequestBodyParsed)
     fastifyQueryParams.subscribe(onRequestQueryParsed)
+    fastifyCookieParser.subscribe(onRequestCookieParser)
     fastifyPathParams.subscribe(onRequestProcessParams)
     routerParam.subscribe(onRequestProcessParams)
     responseBody.subscribe(onResponseBody)
@@ -366,8 +365,6 @@ function disable () {
   // Channel#unsubscribe() is undefined for non active channels
   if (bodyParser.hasSubscribers) bodyParser.unsubscribe(onRequestBodyParsed)
   if (multerParser.hasSubscribers) multerParser.unsubscribe(onRequestBodyParsed)
-  if (fastifyBodyParser.hasSubscribers) fastifyBodyParser.unsubscribe(onRequestBodyParsed)
-  if (fastifyCookieParser.hasSubscribers) fastifyCookieParser.unsubscribe(onRequestCookieParser)
   if (cookieParser.hasSubscribers) cookieParser.unsubscribe(onRequestCookieParser)
   if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(incomingHttpStartTranslator)
   if (incomingHttpRequestEnd.hasSubscribers) incomingHttpRequestEnd.unsubscribe(incomingHttpEndTranslator)
@@ -380,6 +377,7 @@ function disable () {
   if (expressProcessParams.hasSubscribers) expressProcessParams.unsubscribe(onRequestProcessParams)
   if (fastifyBodyParser.hasSubscribers) fastifyBodyParser.unsubscribe(onRequestBodyParsed)
   if (fastifyQueryParams.hasSubscribers) fastifyQueryParams.unsubscribe(onRequestQueryParsed)
+  if (fastifyCookieParser.hasSubscribers) fastifyCookieParser.unsubscribe(onRequestCookieParser)
   if (fastifyPathParams.hasSubscribers) fastifyPathParams.unsubscribe(onRequestProcessParams)
   if (routerParam.hasSubscribers) routerParam.unsubscribe(onRequestProcessParams)
   if (responseBody.hasSubscribers) responseBody.unsubscribe(onResponseBody)
