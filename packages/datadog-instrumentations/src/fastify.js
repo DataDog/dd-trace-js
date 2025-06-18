@@ -9,6 +9,7 @@ const routeAddedChannel = channel('apm:fastify:route:added')
 const bodyParserReadCh = channel('datadog:fastify:body-parser:finish')
 const queryParamsReadCh = channel('datadog:fastify:query-params:finish')
 const cookieParserReadCh = channel('datadog:fastify-cookie:read:finish')
+const pathParamsReadCh = channel('datadog:fastify:path-params:finish')
 
 const parsingResources = new WeakMap()
 
@@ -132,6 +133,19 @@ function preValidation (request, reply, done) {
       abortController ??= new AbortController()
 
       bodyParserReadCh.publish({ req, res, body: request.body, abortController })
+
+      if (abortController.signal.aborted) return
+    }
+
+    if (pathParamsReadCh.hasSubscribers && request.params) {
+      abortController ??= new AbortController()
+
+      pathParamsReadCh.publish({
+        req,
+        res,
+        abortController,
+        params: request.params
+      })
 
       if (abortController.signal.aborted) return
     }
