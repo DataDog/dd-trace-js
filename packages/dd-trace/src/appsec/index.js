@@ -22,6 +22,7 @@ const {
   responseWriteHead,
   responseSetHeader,
   routerParam,
+  fastifyResponseChannel,
   fastifyPathParams
 } = require('./channels')
 const waf = require('./waf')
@@ -85,6 +86,7 @@ function enable (_config) {
     fastifyPathParams.subscribe(onRequestProcessParams)
     routerParam.subscribe(onRequestProcessParams)
     responseBody.subscribe(onResponseBody)
+    fastifyResponseChannel.subscribe(onResponseBody)
     responseWriteHead.subscribe(onResponseWriteHead)
     responseSetHeader.subscribe(onResponseSetHeader)
 
@@ -378,6 +380,7 @@ function disable () {
   if (fastifyPathParams.hasSubscribers) fastifyPathParams.unsubscribe(onRequestProcessParams)
   if (routerParam.hasSubscribers) routerParam.unsubscribe(onRequestProcessParams)
   if (responseBody.hasSubscribers) responseBody.unsubscribe(onResponseBody)
+  if (fastifyResponseChannel.hasSubscribers) fastifyResponseChannel.unsubscribe(onResponseBody)
   if (responseWriteHead.hasSubscribers) responseWriteHead.unsubscribe(onResponseWriteHead)
   if (responseSetHeader.hasSubscribers) responseSetHeader.unsubscribe(onResponseSetHeader)
 }

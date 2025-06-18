@@ -5,6 +5,8 @@ const { assert } = require('chai')
 const getPort = require('get-port')
 const path = require('path')
 const semver = require('semver')
+const zlib = require('zlib')
+const fs = require('node:fs')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
@@ -167,11 +169,12 @@ withVersions('fastify', 'fastify', version => {
         assert.deepEqual(e.response.data, JSON.parse(json))
         sinon.assert.notCalled(requestBody)
 
-        await agent.assertSomeTraces((traces) => {
-          const span = traces[0][0]
-          assert.equal(span.metrics['_dd.appsec.truncated.string_length'], 5000)
-          assert.equal(span.metrics['_dd.appsec.truncated.container_size'], 300)
-          assert.equal(span.metrics['_dd.appsec.truncated.container_depth'], 20)
+        await agent.assertFirstTraceSpan({
+          metrics: {
+            '_dd.appsec.truncated.string_length': 5000,
+            '_dd.appsec.truncated.container_size': 300,
+            '_dd.appsec.truncated.container_depth': 20
+          }
         })
       }
     })
@@ -442,6 +445,159 @@ withVersions('fastify', 'fastify', version => {
           sinon.assert.notCalled(preValidationHookSpy)
         }
       })
+    })
+  })
+})
+
+describe('Api Security - Fastify', () => {
+  withVersions('fastify', 'fastify', version => {
+    let config, server, axios
+
+    before(() => {
+      return agent.load(['fastify', 'http'], { client: false })
+    })
+
+    before((done) => {
+      const fastify = require(`../../../../versions/fastify@${version}`).get()
+
+      const app = fastify()
+
+      app.post('/send', (request, reply) => {
+        reply.send({ sendResKey: 'sendResValue' })
+      })
+
+      app.post('/return', async (request, reply) => {
+        return { returnResKey: 'returnResValue' }
+      })
+
+      app.get('/', (request, reply) => {
+        reply.send('DONE')
+      })
+
+      app.get('/buffer', (request, reply) => {
+        reply.send(Buffer.from('DONE'))
+      })
+
+      app.get('/stream', (request, reply) => {
+        const stream = fs.createReadStream(__filename)
+        reply.header('Content-Type', 'application/octet-stream')
+        reply.send(stream)
+      })
+
+      app.get('/typedarray', (request, reply) => {
+        reply.send(new Uint16Array(10))
+      })
+
+      getPort().then((port) => {
+        app.listen({ port }, () => {
+          axios = Axios.create({ baseURL: `http://localhost:${port}` })
+          done()
+        })
+        server = app.server
+      })
+    })
+
+    after(() => {
+      server.close()
+      return agent.close({ ritmReset: false })
+    })
+
+    beforeEach(() => {
+      config = new Config({
+        appsec: {
+          enabled: true,
+          rules: path.join(__dirname, 'api_security_rules.json'),
+          apiSecurity: {
+            enabled: true,
+            sampleDelay: 10
+          }
+        }
+      })
+      appsec.enable(config)
+    })
+
+    afterEach(() => {
+      appsec.disable()
+    })
+
+    function formatSchema (body) {
+      return zlib.gzipSync(JSON.stringify(body)).toString('base64')
+    }
+
+    it('should get the response body schema with reply.send', async () => {
+      const expectedResponseBodySchema = formatSchema([{ sendResKey: [8] }])
+      const res = await axios.post('/send', { key: 'value' })
+
+      await agent.assertFirstTraceSpan({
+        meta: {
+          '_dd.appsec.s.res.body': expectedResponseBodySchema
+        }
+      })
+
+      assert.equal(res.status, 200)
+      assert.deepEqual(res.data, { sendResKey: 'sendResValue' })
+    })
+
+    it('should get the response body schema with return', async () => {
+      const expectedResponseBodySchema = formatSchema([{ returnResKey: [8] }])
+      const res = await axios.post('/return', { key: 'value' })
+
+      await agent.assertFirstTraceSpan({
+        meta: {
+          '_dd.appsec.s.res.body': expectedResponseBodySchema
+        }
+      })
+
+      assert.equal(res.status, 200)
+      assert.deepEqual(res.data, { returnResKey: 'returnResValue' })
+    })
+
+    it('should not get the schema for string', async () => {
+      const res = await axios.get('/')
+
+      await agent.assertFirstTraceSpan(span => {
+        assert.notProperty(span.meta, '_dd.appsec.s.res.body')
+      })
+
+      assert.equal(res.status, 200)
+      assert.equal(res.data, 'DONE')
+    })
+
+    it('should not get the schema for Buffer', async () => {
+      const res = await axios.get('/buffer')
+
+      await agent.assertFirstTraceSpan(span => {
+        if (span.meta) {
+          assert.notProperty(span.meta, '_dd.appsec.s.res.body')
+        }
+      })
+
+      assert.equal(res.status, 200)
+      assert.equal(res.data, 'DONE')
+    })
+
+    it('should not get the schema for stream', async () => {
+      const res = await axios.get('/stream', { responseType: 'arraybuffer' })
+
+      await agent.assertFirstTraceSpan(span => {
+        if (span.meta) {
+          assert.notProperty(span.meta, '_dd.appsec.s.res.body')
+        }
+      })
+
+      assert.equal(res.status, 200)
+    })
+
+    it('should not get the schema for TypedArray', async () => {
+      const res = await axios.get('/typedarray', { responseType: 'arraybuffer' })
+
+      await agent.assertFirstTraceSpan(span => {
+        if (span.meta) {
+          assert.notProperty(span.meta, '_dd.appsec.s.res.body')
+        }
+      })
+
+      assert.equal(res.status, 200)
     })
   })
 })
