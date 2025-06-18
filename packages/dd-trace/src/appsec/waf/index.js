@@ -51,12 +51,14 @@ function updateAsmDdConfig (configPath, asmDdConfig) {
 
   try {
     waf.wafManager.removeConfig(waf.wafManager.constructor.defaultWafConfigPath)
-    if (waf.wafManager.updateConfig(configPath, asmDdConfig)) {
-      return waf.wafManager.ddwaf.diagnostics
-    } else {
+    const updateSucceed = waf.wafManager.updateConfig(configPath, asmDdConfig)
+
+    if (!updateSucceed) {
       waf.wafManager.setAsmDdFallbackConfig()
       throw new WafUpdateError(waf.wafManager.ddwaf.diagnostics)
     }
+
+    return waf.wafManager.ddwaf.diagnostics
   } catch (err) {
     Reporter.reportWafConfigError(waf.wafManager.ddwafVersion, waf.wafManager.rulesVersion)
     log.error('[ASM] Could not update ASM DD config from RC')
@@ -68,12 +70,14 @@ function updateConfig (configPath, config) {
   if (!waf.wafManager) throw new Error('Cannot update disabled WAF')
 
   try {
-    if (waf.wafManager.updateConfig(configPath, config)) {
-      return waf.wafManager.ddwaf.diagnostics
-    } else {
+    const updateSucceed = waf.wafManager.updateConfig(configPath, config)
+
+    if (!updateSucceed) {
       waf.wafManager.setAsmDdFallbackConfig()
       throw new WafUpdateError(waf.wafManager.ddwaf.diagnostics)
     }
+
+    return waf.wafManager.ddwaf.diagnostics
   } catch (err) {
     Reporter.reportWafConfigError(waf.wafManager.ddwafVersion, waf.wafManager.rulesVersion)
     log.error('[ASM] Could not update config from RC')
