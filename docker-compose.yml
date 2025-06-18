@@ -152,6 +152,14 @@ services:
       - LDAP_ADMIN_PASSWORD=adminpassword
       - LDAP_USERS=user01,user02
       - LDAP_PASSWORDS=password1,password2
+  snapshot-server:
+    image: ghcr.io/datadog/llm-obs/snapshot-server:latest
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      - PORT=8000
+    volumes:
+      - /Users/${USER}/dd/llm-obs/test/proxy-server/cassettes:/cassettes:delegated
 
   testagent:
     image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.21.1

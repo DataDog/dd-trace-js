@@ -33,6 +33,13 @@ jobs:
 
   openai:
     runs-on: ubuntu-latest
+    services:
+      snapshot-server:
+        image: ghcr.io/datadog/llm-obs/snapshot-server:latest
+        ports:
+          - 8000:8000
+        env:
+          PORT: 8000
     env:
       PLUGINS: openai
     steps:
