@@ -268,6 +268,7 @@ withVersions('fastify', 'fastify', version => {
     if (semver.lt(semver.coerce(version), '2.0.0')) {
       return
     }
+
     let server, preHandlerHookSpy, preValidationHookSpy, axios
 
     before(() => {
