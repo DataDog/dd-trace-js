@@ -131,7 +131,7 @@ describe('Plugin', () => {
           tracer.scope().activate(span, () => {
             winston.info('message')
 
-            expect(spy).to.not.have.been.calledWithMatch(meta.dd)
+            expect(spy).to.have.been.calledWithMatch(meta.dd)
           })
         })
       })
@@ -336,6 +336,7 @@ describe('Plugin', () => {
             expect(await logServer.logPromise).to.include(meta.dd)
           })
         })
+
         // Only run this test with Winston v3.17.0+ since it uses newer format functions
         if (semver.intersects(version, '>=3.17.0')) {
           describe('with error formatting matching temp.js example', () => {

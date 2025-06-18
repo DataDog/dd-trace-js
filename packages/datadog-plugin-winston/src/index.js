@@ -1,8 +1,8 @@
 'use strict'
 
-const LogPlugin = require('../../dd-trace/src/plugins/log_plugin')
+const StructuredLogPlugin = require('../../dd-trace/src/plugins/structured_log_plugin')
 
-class WinstonPlugin extends LogPlugin {
+class WinstonPlugin extends StructuredLogPlugin {
   static get id () {
     return 'winston'
   }
