@@ -9,7 +9,6 @@ const { ERROR_MESSAGE, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 describe('Plugin', () => {
-
   describe('redis', () => {
     withVersions('redis', ['@node-redis/client', '@redis/client'], (version, moduleName) => {
       let redis
