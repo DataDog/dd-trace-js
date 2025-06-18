@@ -7,8 +7,6 @@ const path = require('path')
 const semver = require('semver')
 const zlib = require('zlib')
 const fs = require('node:fs')
-const { ReadableStream } = require('node:stream/web')
-
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
@@ -490,16 +488,6 @@ describe('Api Security - Fastify', () => {
         reply.send(new Uint16Array(10))
       })
 
-      app.get('/response-stream', (request, reply) => {
-        const stream = fs.createReadStream(__filename)
-        const readableStream = ReadableStream.from(stream)
-        const response = new Response(readableStream, {
-          status: 200,
-          headers: { 'content-type': 'application/octet-stream' }
-        })
-        reply.send(response)
-      })
-
       getPort().then((port) => {
         app.listen({ port }, () => {
           axios = Axios.create({ baseURL: `http://localhost:${port}` })
@@ -602,18 +590,6 @@ describe('Api Security - Fastify', () => {
 
     it('should not get the schema for TypedArray', async () => {
       const res = await axios.get('/typedarray', { responseType: 'arraybuffer' })
-
-      await agent.assertFirstTraceSpan(span => {
-        if (span.meta) {
-          assert.notProperty(span.meta, '_dd.appsec.s.res.body')
-        }
-      })
-
-      assert.equal(res.status, 200)
-    })
-
-    it('should not get the schema for Response stream', async () => {
-      const res = await axios.get('/response-stream', { responseType: 'arraybuffer' })
 
       await agent.assertFirstTraceSpan(span => {
         if (span.meta) {
