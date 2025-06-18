@@ -1083,7 +1083,8 @@ class Config {
       'dynamicInstrumentation.redactionExcludedIdentifiers',
       options.dynamicInstrumentation?.redactionExcludedIdentifiers
     )
-    opts.dynamicInstrumentation.uploadIntervalSeconds = maybeFloat(options.dynamicInstrumentation?.uploadIntervalSeconds)
+    opts['dynamicInstrumentation.uploadIntervalSeconds'] =
+      maybeFloat(options.dynamicInstrumentation?.uploadIntervalSeconds)
     this._optsUnprocessed['dynamicInstrumentation.uploadIntervalSeconds'] =
       options.dynamicInstrumentation?.uploadIntervalSeconds
     this._setString(opts, 'env', options.env || tags.env)
