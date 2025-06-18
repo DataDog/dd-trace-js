@@ -182,7 +182,7 @@ class Tracer extends NoopProxy {
         }
       }
 
-      if (config.runtimeMetrics) {
+      if (config.runtimeMetrics.enabled) {
         runtimeMetrics.start(config)
       }
 
