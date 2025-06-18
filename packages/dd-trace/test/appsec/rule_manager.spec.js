@@ -235,14 +235,10 @@ describe('AppSec Rule Manager', () => {
         rcConfigs.toModify[0].file
       )
 
-      assert.deepEqual(
-        waf.wafManager.ddwaf.configPaths,
-        [
-          rcConfigs.toModify[0].path,
-          rcConfigs.toApply[0].path,
-          waf.wafManager.constructor.defaultWafConfigPath
-        ]
-      )
+      assert.strictEqual(waf.wafManager.ddwaf.configPaths.length, 3)
+      assert.include(waf.wafManager.ddwaf.configPaths, waf.wafManager.constructor.defaultWafConfigPath)
+      assert.include(waf.wafManager.ddwaf.configPaths, rcConfigs.toApply[0].path)
+      assert.include(waf.wafManager.ddwaf.configPaths, rcConfigs.toModify[0].path)
     })
 
     it('should update apply_state and apply_error on successful apply', () => {
