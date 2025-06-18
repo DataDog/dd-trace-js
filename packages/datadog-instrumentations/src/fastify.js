@@ -8,7 +8,7 @@ const handleChannel = channel('apm:fastify:request:handle')
 const routeAddedChannel = channel('apm:fastify:route:added')
 const bodyParserReadCh = channel('datadog:fastify:body-parser:finish')
 const queryParamsReadCh = channel('datadog:fastify:query-params:finish')
-const responseJsonReadCh = channel('datadog:fastify:response:finish')
+const responsePayloadReadCh = channel('datadog:fastify:response:finish')
 const pathParamsReadCh = channel('datadog:fastify:path-params:finish')
 
 const parsingResources = new WeakMap()
@@ -171,9 +171,9 @@ function wrapSend (send, req) {
   return function sendWithTrace (payload) {
     if (payload instanceof Error) {
       errorChannel.publish({ req, error: payload })
-    } else if (shouldPublishJsonSchema(payload)) {
+    } else if (canPublishResponsePayload(payload)) {
       const res = getRes(this)
-      responseJsonReadCh.publish({ req, res, body: payload })
+      responsePayloadReadCh.publish({ req, res, body: payload })
     }
 
     return send.apply(this, arguments)
@@ -205,8 +205,8 @@ function onRoute (routeOptions) {
 }
 
 // send() payload types: https://fastify.dev/docs/latest/Reference/Reply/#senddata
-function shouldPublishJsonSchema (payload) {
-  if (!responseJsonReadCh.hasSubscribers) return false
+function canPublishResponsePayload (payload) {
+  if (!responsePayloadReadCh.hasSubscribers) return false
 
   switch (true) {
     case payload == null:
