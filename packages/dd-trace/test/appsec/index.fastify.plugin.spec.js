@@ -262,6 +262,188 @@ withVersions('fastify', 'fastify', version => {
       }
     })
   })
+
+  describe('Suspicious request blocking - path parameters', () => {
+    // Skip Fastify v1 - preValidation hook is not supported
+    if (semver.lt(semver.coerce(version), '2.0.0')) {
+      return
+    }
+
+    let server, preHandlerHookSpy, preValidationHookSpy, axios
+
+    before(() => {
+      return agent.load(['fastify', 'http'], { client: false })
+    })
+
+    before((done) => {
+      const fastify = require(`../../../../versions/fastify@${version}`).get()
+
+      const app = fastify()
+      app.get('/multiple-path-params/:parameter1/:parameter2', (request, reply) => {
+        reply.send('DONE')
+      })
+
+      app.register(async function (nested) {
+        nested.get('/:nestedParam', async (request, reply) => {
+          reply.send('DONE')
+        })
+      }, { prefix: '/nested/:parentParam' })
+
+      const paramHook = (request, reply, done) => {
+        done()
+      }
+
+      preHandlerHookSpy = sinon.spy(paramHook)
+
+      app.addHook('preHandler', preHandlerHookSpy)
+
+      const validationHook = (request, reply, done) => {
+        done()
+      }
+
+      preValidationHookSpy = sinon.spy(validationHook)
+      app.addHook('preValidation', preValidationHookSpy)
+
+      app.get('/callback-path-param/:pathParameter', (request, reply) => {
+        reply.send('DONE')
+      })
+
+      getPort().then((port) => {
+        app.listen({ port }, () => {
+          axios = Axios.create({ baseURL: `http://localhost:${port}` })
+          done()
+        })
+        server = app.server
+      })
+    })
+
+    after(() => {
+      server.close()
+      return agent.close({ ritmReset: false })
+    })
+
+    beforeEach(async () => {
+      appsec.enable(new Config({
+        appsec: {
+          enabled: true,
+          rules: path.join(__dirname, 'rules-example.json')
+        }
+      }))
+    })
+
+    afterEach(() => {
+      appsec.disable()
+      sinon.reset()
+    })
+
+    describe('route with multiple path parameters', () => {
+      it('should not block the request when attack is not detected', async () => {
+        const res = await axios.get('/multiple-path-params/safe_param/safe_param')
+
+        assert.equal(res.status, 200)
+        assert.equal(res.data, 'DONE')
+      })
+
+      it('should block the request when attack is detected in both parameters', async () => {
+        try {
+          await axios.get('/multiple-path-params/testattack/testattack')
+
+          return Promise.reject(new Error('Request should not return 200'))
+        } catch (e) {
+          assert.equal(e.response.status, 403)
+          assert.deepEqual(e.response.data, JSON.parse(json))
+        }
+      })
+
+      it('should block the request when attack is detected in the first parameter', async () => {
+        try {
+          await axios.get('/multiple-path-params/testattack/safe_param')
+
+          return Promise.reject(new Error('Request should not return 200'))
+        } catch (e) {
+          assert.equal(e.response.status, 403)
+          assert.deepEqual(e.response.data, JSON.parse(json))
+        }
+      })
+
+      it('should block the request when attack is detected in the second parameter', async () => {
+        try {
+          await axios.get('/multiple-path-params/safe_param/testattack')
+
+          return Promise.reject(new Error('Request should not return 200'))
+        } catch (e) {
+          assert.equal(e.response.status, 403)
+          assert.deepEqual(e.response.data, JSON.parse(json))
+        }
+      })
+    })
+
+    describe('nested routes', () => {
+      it('should not block the request when attack is not detected', async () => {
+        const res = await axios.get('/nested/safe_param/safe_param')
+
+        assert.equal(res.status, 200)
+        assert.equal(res.data, 'DONE')
+      })
+
+      it('should block the request when attack is detected in the nested parameter', async () => {
+        try {
+          await axios.get('/nested/safe_param/testattack')
+
+          return Promise.reject(new Error('Request should not return 200'))
+        } catch (e) {
+          assert.equal(e.response.status, 403)
+          assert.deepEqual(e.response.data, JSON.parse(json))
+        }
+      })
+
+      it('should block the request when attack is detected in the parent parameter', async () => {
+        try {
+          await axios.get('/nested/testattack/safe_param')
+
+          return Promise.reject(new Error('Request should not return 200'))
+        } catch (e) {
+          assert.equal(e.response.status, 403)
+          assert.deepEqual(e.response.data, JSON.parse(json))
+        }
+      })
+
+      it('should block the request when attack is detected in both parameters', async () => {
+        try {
+          await axios.get('/nested/testattack/testattack')
+
+          return Promise.reject(new Error('Request should not return 200'))
+        } catch (e) {
+          assert.equal(e.response.status, 403)
+          assert.deepEqual(e.response.data, JSON.parse(json))
+        }
+      })
+    })
+
+    describe('path parameter with hook', () => {
+      it('should not block the request when attack is not detected', async () => {
+        const res = await axios.get('/callback-path-param/safe_param')
+
+        assert.equal(res.status, 200)
+        assert.equal(res.data, 'DONE')
+        sinon.assert.calledOnce(preHandlerHookSpy)
+        sinon.assert.calledOnce(preValidationHookSpy)
+      })
+
+      it('should block the request when attack is detected', async () => {
+        try {
+          await axios.get('/callback-path-param/testattack')
+
+          return Promise.reject(new Error('Request should not return 200'))
+        } catch (e) {
+          assert.equal(e.response.status, 403)
+          assert.deepEqual(e.response.data, JSON.parse(json))
+          sinon.assert.notCalled(preHandlerHookSpy)
+          sinon.assert.notCalled(preValidationHookSpy)
+        }
+      })
+    })
+  })
 })
 
 const createNestedObject = (n, obj) => {
