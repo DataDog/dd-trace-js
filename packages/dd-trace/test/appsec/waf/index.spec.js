@@ -51,7 +51,7 @@ describe('WAF Manager', () => {
     sinon.stub(Reporter, 'reportAttack')
     sinon.stub(Reporter, 'reportDerivatives')
     sinon.spy(Reporter, 'reportWafInit')
-    sinon.spy(Reporter, 'reportWafConfigError')
+    sinon.spy(Reporter, 'reportWafConfigUpdate')
 
     webContext = {}
     sinon.stub(web, 'getContext').returns(webContext)
@@ -162,22 +162,10 @@ describe('WAF Manager', () => {
       )
     })
 
-    it('should fail when updating ASM_DD configs on disabled waf', () => {
-      assert.throws(
-        () => {
-          waf.updateAsmDdConfig('path', {})
-        },
-        {
-          name: 'Error',
-          message: 'Cannot update disabled WAF'
-        }
-      )
-    })
-
     it('should fail when removing configs on disabled waf', () => {
       assert.throws(
         () => {
-          waf.updateAsmDdConfig('path', {})
+          waf.removeConfig('path', {})
         },
         {
           name: 'Error',
@@ -234,8 +222,8 @@ describe('WAF Manager', () => {
       it('should update WAF config - ASM / ASM_DATA', () => {
         DDWAF.prototype.configPaths = ['datadog/00/ASM_DD/default/config']
 
-        waf.updateConfig('datadog/00/ASM/test/update_config', ASM_CONFIG)
-        waf.updateConfig('datadog/00/ASM_DATA/test/update_config', ASM_DATA_CONFIG)
+        waf.updateConfig('ASM', 'config_id_1', 'datadog/00/ASM/test/update_config', ASM_CONFIG)
+        waf.updateConfig('ASM_DATA', 'config_id_2', 'datadog/00/ASM_DATA/test/update_config', ASM_DATA_CONFIG)
 
         sinon.assert.calledWithExactly(
           DDWAF.prototype.createOrUpdateConfig.getCall(0),
@@ -252,7 +240,7 @@ describe('WAF Manager', () => {
       it('should remove default rules on ASM_DD update', () => {
         DDWAF.prototype.configPaths = ['datadog/00/ASM_DD/default/config']
 
-        waf.updateAsmDdConfig('datadog/00/ASM_DD/test/update_config', ASM_DD_CONFIG)
+        waf.updateConfig('ASM_DD', 'config_id_1', 'datadog/00/ASM_DD/test/update_config', ASM_DD_CONFIG)
 
         sinon.assert.calledOnceWithExactly(
           DDWAF.prototype.removeConfig,
@@ -262,26 +250,6 @@ describe('WAF Manager', () => {
           DDWAF.prototype.createOrUpdateConfig,
           ASM_DD_CONFIG,
           'datadog/00/ASM_DD/test/update_config'
-        )
-      })
-
-      it('should apply default rules when no ASM config is present after config update fail', () => {
-        DDWAF.prototype.configPaths = []
-        DDWAF.prototype.createOrUpdateConfig.returns(false)
-
-        assert.throws(
-          () => {
-            waf.updateAsmDdConfig('datadog/00/ASM_DD/test/update_config', ASM_DD_CONFIG)
-          },
-          {
-            name: 'WafUpdateError'
-          }
-        )
-
-        sinon.assert.calledWithExactly(
-          DDWAF.prototype.createOrUpdateConfig.getCall(1),
-          rules,
-          'datadog/00/ASM_DD/default/config'
         )
       })
     })
@@ -294,23 +262,12 @@ describe('WAF Manager', () => {
 
         sinon.assert.calledOnceWithExactly(DDWAF.prototype.removeConfig, 'path/to/remove')
       })
-
-      it('should apply default rules when no ASM config is present after config removal', () => {
-        DDWAF.prototype.configPaths = []
-
-        waf.removeConfig('path/to/remove')
-
-        sinon.assert.calledOnceWithExactly(
-          DDWAF.prototype.createOrUpdateConfig,
-          rules,
-          'datadog/00/ASM_DD/default/config'
-        )
-      })
     })
 
-    it('should report waf config error on config update fail', () => {
+    it('should throw WafUpdateError on failed update', () => {
       DDWAF.prototype.configPaths = []
       DDWAF.prototype.createOrUpdateConfig.returns(false)
+
       assert.throws(
         () => {
           waf.updateConfig('path', {})
@@ -319,30 +276,20 @@ describe('WAF Manager', () => {
           name: 'WafUpdateError'
         }
       )
-
-      sinon.assert.calledOnceWithExactly(
-        Reporter.reportWafConfigError,
-        '1.2.3',
-        '1.0.0'
-      )
     })
 
-    it('should report waf config error on config remove fail', () => {
+    it('should report waf config update', () => {
       DDWAF.prototype.configPaths = []
-      DDWAF.prototype.removeConfig.throws(new Error('Error removing WAF config'))
-      assert.throws(
-        () => {
-          waf.removeConfig('path')
-        },
-        {
-          name: 'Error'
-        }
-      )
+      DDWAF.prototype.createOrUpdateConfig.returns(true)
+
+      waf.updateConfig('ASM', 'configId', 'path', {})
 
       sinon.assert.calledOnceWithExactly(
-        Reporter.reportWafConfigError,
-        '1.2.3',
-        '1.0.0'
+        Reporter.reportWafConfigUpdate,
+        'ASM',
+        'configId',
+        DDWAF.prototype.diagnostics,
+        '1.2.3'
       )
     })
   })
