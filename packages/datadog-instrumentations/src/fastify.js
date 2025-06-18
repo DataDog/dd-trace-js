@@ -208,18 +208,17 @@ function onRoute (routeOptions) {
 function canPublishResponsePayload (payload) {
   if (!responsePayloadReadCh.hasSubscribers) return false
 
-  switch (true) {
-    case payload == null:
-    case typeof payload !== 'object':
-    case Buffer.isBuffer(payload):
-    case typeof payload.pipe === 'function': // Node streams (.pipe)
-    case payload.body && typeof payload.body.pipe === 'function': // Response with body stream
-    case payload instanceof ArrayBuffer: // ArrayBuffer
-    case ArrayBuffer.isView(payload): // TypedArray
-      return false
-    default:
-      return true
-  }
+  if (
+    payload &&
+    typeof payload === 'object' &&
+    typeof payload.pipe !== 'function' && // Node streams
+    typeof payload.body?.pipe !== 'function' && // Response with body stream
+    !Buffer.isBuffer(payload) && // Buffer
+    !(payload instanceof ArrayBuffer) && // ArrayBuffer
+    !ArrayBuffer.isView(payload) // TypedArray
+  ) return true
+
+  return false
 }
 
 addHook({ name: 'fastify', versions: ['>=3'] }, fastify => {
