@@ -290,12 +290,12 @@ describe('Appsec Waf Telemetry metrics', () => {
         appsecTelemetry.incrementWafConfigErrorsMetric(wafVersion, rulesVersion, true)
 
         const { metrics } = appsecNamespace.toJSON()
-        expect(metrics.series.length).to.be.eq(1)
-        expect(metrics.series[0].metric).to.be.eq('waf.config_errors')
-        expect(metrics.series[0].points.length).to.be.eq(1)
-        expect(metrics.series[0].points[0][1]).to.be.eq(3)
-        expect(metrics.series[0].tags).to.include('waf_version:0.0.1')
-        expect(metrics.series[0].tags).to.include('event_rules_version:0.0.2')
+        expect(metrics.series.length).to.be.eq(2)
+        expect(metrics.series[1].metric).to.be.eq('waf.config_errors')
+        expect(metrics.series[1].points.length).to.be.eq(1)
+        expect(metrics.series[1].points[0][1]).to.be.eq(3)
+        expect(metrics.series[1].tags).to.include('waf_version:0.0.1')
+        expect(metrics.series[1].tags).to.include('event_rules_version:0.0.2')
       })
     })
 
