@@ -151,6 +151,10 @@
     {
       "name": "middie",
       "versions": ["5.1.0"]
+    },
+    {
+      "name": "@fastify/cookie",
+      "versions": [">=6"]
     }
   ],
   "generic-pool": [

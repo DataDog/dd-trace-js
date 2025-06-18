@@ -8,6 +8,7 @@ const handleChannel = channel('apm:fastify:request:handle')
 const routeAddedChannel = channel('apm:fastify:route:added')
 const bodyParserReadCh = channel('datadog:fastify:body-parser:finish')
 const queryParamsReadCh = channel('datadog:fastify:query-params:finish')
+const cookieParserReadCh = channel('datadog:fastify-cookie:read:finish')
 
 const parsingResources = new WeakMap()
 
@@ -112,8 +113,10 @@ function preValidation (request, reply, done) {
   const parsingResource = parsingResources.get(req)
 
   const processInContext = () => {
+    let abortController
+
     if (queryParamsReadCh.hasSubscribers && request.query) {
-      const abortController = new AbortController()
+      abortController ??= new AbortController()
 
       queryParamsReadCh.publish({
         req,
@@ -126,9 +129,17 @@ function preValidation (request, reply, done) {
     }
 
     if (bodyParserReadCh.hasSubscribers && request.body) {
-      const abortController = new AbortController()
+      abortController ??= new AbortController()
 
       bodyParserReadCh.publish({ req, res, body: request.body, abortController })
+
+      if (abortController.signal.aborted) return
+    }
+
+    if (cookieParserReadCh.hasSubscribers && request.cookies) {
+      abortController ??= new AbortController()
+
+      cookieParserReadCh.publish({ req, res, abortController, cookies: request.cookies })
 
       if (abortController.signal.aborted) return
     }
