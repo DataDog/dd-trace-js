@@ -204,7 +204,7 @@ function onRoute (routeOptions) {
   routeAddedChannel.publish({ routeOptions, onRoute })
 }
 
-// send() payload types: https://fastify.dev/docs/v5.3.x/Reference/Reply/#senddata
+// send() payload types: https://fastify.dev/docs/latest/Reference/Reply/#senddata
 function shouldPublishJsonSchema (payload) {
   if (!responseJsonReadCh.hasSubscribers) return false
 
