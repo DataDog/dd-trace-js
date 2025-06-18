@@ -206,9 +206,7 @@ function onRoute (routeOptions) {
 
 // send() payload types: https://fastify.dev/docs/latest/Reference/Reply/#senddata
 function canPublishResponsePayload (payload) {
-  if (!responsePayloadReadCh.hasSubscribers) return false
-
-  if (
+  return responsePayloadReadCh.hasSubscribers &&
     payload &&
     typeof payload === 'object' &&
     typeof payload.pipe !== 'function' && // Node streams
@@ -216,9 +214,6 @@ function canPublishResponsePayload (payload) {
     !Buffer.isBuffer(payload) && // Buffer
     !(payload instanceof ArrayBuffer) && // ArrayBuffer
     !ArrayBuffer.isView(payload) // TypedArray
-  ) return true
-
-  return false
 }
 
 addHook({ name: 'fastify', versions: ['>=3'] }, fastify => {
