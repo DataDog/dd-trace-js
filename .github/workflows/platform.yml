@@ -295,7 +295,7 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: yarn install --ignore-scripts mocha@10 # Use older mocha to support old Node.js versions
+      - run: yarn add --ignore-scripts mocha@10 # Use older mocha to support old Node.js versions
       - run: node node_modules/.bin/mocha --colors --timeout 30000 integration-tests/init.spec.js
 
   integration-guardrails-unsupported:
