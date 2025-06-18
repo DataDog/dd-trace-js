@@ -1,6 +1,6 @@
 'use strict'
 
-const { FakeAgent, spawnProc, createSandbox, curl } = require('./helpers')
+const { FakeAgent, spawnProc, createSandbox, curl, assertObjectContains } = require('./helpers')
 const path = require('path')
 const { assert } = require('chai')
 const { once } = require('events')
@@ -42,16 +42,16 @@ describe('pino test', () => {
       })
       const [data] = await Promise.all([once(proc.stdout, 'data'), curl(proc)])
       const stdoutData = JSON.parse(data.toString())
-      assert.containsAllKeys(stdoutData, ['dd'])
-      assert.containsAllKeys(stdoutData.dd, ['trace_id', 'span_id'])
-      assert.strictEqual(
-        stdoutData.dd.trace_id,
-        stdoutData.custom.trace_id
-      )
-      assert.strictEqual(
-        stdoutData.dd.span_id,
-        stdoutData.custom.span_id
-      )
+      assertObjectContains(stdoutData, {
+        dd: {
+          trace_id: stdoutData.custom.trace_id,
+          span_id: stdoutData.custom.span_id
+        },
+        custom: {
+          trace_id: stdoutData.dd.trace_id,
+          span_id: stdoutData.dd.span_id
+        }
+      })
     })
     it('Log injection enabled', async () => {
       proc = await spawnProc(startupTestFile, {
