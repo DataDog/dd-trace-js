@@ -34,15 +34,27 @@ reset()
 const runtimeMetrics = module.exports = {
   start (config) {
     const clientConfig = DogStatsDClient.generateClientConfig(config)
+    const watchers = []
+
+    if (config.runtimeMetrics.gc !== false) {
+      const gcCollector = config.runtimeMetrics.gcCollector || 'default'
+
+      if (hasGCProfiler && (gcCollector === 'profiler' || gcCollector === 'default')) {
+        startGCProfiler()
+      } else if (hasGCObserver && (gcCollector === 'observer' || gcCollector === 'default')) {
+        startGCObserver()
+      } else {
+        watchers.push('gc')
+      }
+    }
+
+    if (config.runtimeMetrics.eventLoop !== false) {
+      watchers.push('loop')
+    }
 
     try {
       nativeMetrics = require('@datadog/native-metrics')
-
-      if (hasGCObserver) {
-        nativeMetrics.start('loop') // Only add event loop watcher and not GC.
-      } else {
-        nativeMetrics.start()
-      }
+      nativeMetrics.start(...watchers)
     } catch (e) {
       log.error('Error starting native metrics', e)
       nativeMetrics = null
@@ -51,9 +63,6 @@ const runtimeMetrics = module.exports = {
     client = new MetricsAggregationClient(new DogStatsDClient(clientConfig))
 
     time = process.hrtime()
-
-    startGCObserver()
-    startGCProfiler()
 
     if (nativeMetrics) {
       interval = setInterval(() => {
@@ -293,7 +302,7 @@ function histogram (name, stats, tag) {
 }
 
 function startGCObserver () {
-  if (gcObserver || hasGCProfiler || !hasGCObserver) return
+  if (gcObserver) return
 
   gcObserver = new PerformanceObserver(list => {
     for (const entry of list.getEntries()) {
@@ -308,7 +317,7 @@ function startGCObserver () {
 }
 
 function startGCProfiler () {
-  if (gcProfiler || !hasGCProfiler) return
+  if (gcProfiler) return
 
   gcProfiler = new v8.GCProfiler()
   gcProfiler.start()

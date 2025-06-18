@@ -301,6 +301,12 @@ class Config {
       }
     }
 
+    if (typeof options.runtimeMetrics === 'boolean') {
+      options.runtimeMetrics = {
+        enabled: options.runtimeMetrics
+      }
+    }
+
     const DD_INSTRUMENTATION_INSTALL_ID = coalesce(
       getEnvironmentVariable('DD_INSTRUMENTATION_INSTALL_ID'),
       null
@@ -564,7 +570,10 @@ class Config {
     defaults['remoteConfig.enabled'] = true
     defaults['remoteConfig.pollInterval'] = 5 // seconds
     defaults.reportHostname = false
-    defaults.runtimeMetrics = false
+    defaults['runtimeMetrics.enabled'] = false
+    defaults['runtimeMetrics.eventLoop'] = true
+    defaults['runtimeMetrics.gc'] = true
+    defaults['runtimeMetrics.gcCollector'] = 'default'
     defaults.runtimeMetricsRuntimeId = false
     defaults.sampleRate = undefined
     defaults['sampler.rateLimit'] = 100
@@ -641,7 +650,7 @@ class Config {
     this._setBoolean(obj, 'logInjection', DD_LOGS_INJECTION)
     const profilingEnabled = normalizeProfilingEnabledValue(DD_PROFILING_ENABLED)
     this._setString(obj, 'profiling.enabled', profilingEnabled)
-    this._setBoolean(obj, 'runtimeMetrics', DD_RUNTIME_METRICS_ENABLED)
+    this._setBoolean(obj, 'runtimeMetrics.enabled', DD_RUNTIME_METRICS_ENABLED)
     this._setString(obj, 'service', DD_SERVICE)
     this._setString(obj, 'version', DD_VERSION)
   }
@@ -719,6 +728,9 @@ class Config {
       DD_REMOTE_CONFIGURATION_ENABLED,
       DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS,
       DD_RUNTIME_METRICS_ENABLED,
+      DD_RUNTIME_METRICS_EVENT_LOOP,
+      DD_RUNTIME_METRICS_GC,
+      DD_RUNTIME_METRICS_GC_COLLECTOR,
       DD_SERVICE,
       DD_SERVICE_MAPPING,
       DD_SITE,
@@ -940,8 +952,11 @@ class Config {
     const otelSetRuntimeMetrics = String(OTEL_METRICS_EXPORTER).toLowerCase() === 'none'
       ? false
       : undefined
-    this._setBoolean(env, 'runtimeMetrics', DD_RUNTIME_METRICS_ENABLED ||
+    this._setBoolean(env, 'runtimeMetrics.enabled', DD_RUNTIME_METRICS_ENABLED ||
     otelSetRuntimeMetrics)
+    this._setBoolean(env, 'runtimeMetrics.eventLoop', DD_RUNTIME_METRICS_EVENT_LOOP)
+    this._setBoolean(env, 'runtimeMetrics.gc', DD_RUNTIME_METRICS_GC)
+    this._setString(env, 'runtimeMetrics.gcCollector', DD_RUNTIME_METRICS_GC_COLLECTOR)
     this._setBoolean(env, 'runtimeMetricsRuntimeId', DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED)
     this._setArray(env, 'sampler.spanSamplingRules', reformatSpanSamplingRules(coalesce(
       safeJsonParse(maybeFile(DD_SPAN_SAMPLING_RULES_FILE)),
@@ -1137,7 +1152,10 @@ class Config {
       this._optsUnprocessed['remoteConfig.pollInterval'] = options.remoteConfig.pollInterval
     }
     this._setBoolean(opts, 'reportHostname', options.reportHostname)
-    this._setBoolean(opts, 'runtimeMetrics', options.runtimeMetrics)
+    this._setBoolean(opts, 'runtimeMetrics.enabled', options.runtimeMetrics?.enabled)
+    this._setBoolean(opts, 'runtimeMetrics.eventLoop', options.runtimeMetrics?.eventLoop)
+    this._setBoolean(opts, 'runtimeMetrics.gc', options.runtimeMetrics?.gc)
+    this._setString(opts, 'runtimeMetrics.gcCollector', options.runtimeMetrics?.gcCollector)
     this._setBoolean(opts, 'runtimeMetricsRuntimeId', options.runtimeMetricsRuntimeId)
     this._setArray(opts, 'sampler.spanSamplingRules', reformatSpanSamplingRules(options.spanSamplingRules))
     this._setUnit(opts, 'sampleRate', coalesce(options.sampleRate, options.ingestion.sampleRate))
