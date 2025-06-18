@@ -108,7 +108,28 @@ describe('AppSec Rule Manager', () => {
               roKey: 'roValue'
             }],
             custom_rules: [{
-              piKey: 'piValue'
+              id: 'custom_rule1',
+              name: 'custom_rule1',
+              tags: {
+                tag1: 'flow1',
+                type: 'type1'
+              },
+              conditions: [
+                {
+                  operator: 'match_regex',
+                  parameters: {
+                    inputs: [
+                      {
+                        address: 'server.request.headers.no_cookies'
+                      },
+                      {
+                        address: 'server.request.query'
+                      }
+                    ],
+                    regex: 'custom_rule1'
+                  }
+                }
+              ]
             }]
           },
           apply_state: UNACKNOWLEDGED
@@ -125,7 +146,7 @@ describe('AppSec Rule Manager', () => {
       reportSuccessfulWafUpdate = sinon.stub()
       setDefaultBlockingActionParameters = sinon.stub()
 
-      RuleManager = proxyquire.noCallThru()('../src/appsec/rule_manager', {
+      RuleManager = proxyquire('../src/appsec/rule_manager', {
         './reporter': {
           reportWafUpdate,
           reportSuccessfulWafUpdate
@@ -141,6 +162,7 @@ describe('AppSec Rule Manager', () => {
       sinon.stub(waf, 'removeConfig')
 
       RuleManager.clearAllRules()
+
       config = new Config()
       RuleManager.loadRules(config.appsec)
       sinon.resetHistory()
@@ -175,17 +197,23 @@ describe('AppSec Rule Manager', () => {
         RuleManager.updateWafFromRC(rcConfigsForNonAsmProducts)
       })
 
-      sinon.assert.notCalled(waf.updateConfig)
-      sinon.assert.notCalled(waf.removeConfig)
       assert.strictEqual(rcConfigsForNonAsmProducts.toUnapply[0].apply_state, UNACKNOWLEDGED)
       assert.notProperty(rcConfigsForNonAsmProducts.toUnapply[0], 'apply_error')
       assert.strictEqual(rcConfigsForNonAsmProducts.toModify[0].apply_state, UNACKNOWLEDGED)
       assert.notProperty(rcConfigsForNonAsmProducts.toModify[0], 'apply_error')
       assert.strictEqual(rcConfigsForNonAsmProducts.toApply[0].apply_state, UNACKNOWLEDGED)
       assert.notProperty(rcConfigsForNonAsmProducts.toApply[0], 'apply_error')
+
+      sinon.assert.notCalled(waf.updateConfig)
+      sinon.assert.notCalled(waf.removeConfig)
+
+      assert.deepEqual(waf.wafManager.ddwaf.configPaths, [waf.wafManager.constructor.defaultWafConfigPath])
     })
 
     it('should apply configs from ASM products', () => {
+      waf.updateConfig.callThrough()
+      waf.removeConfig.callThrough()
+
       const rcConfigs = getRcConfigs()
 
       RuleManager.updateWafFromRC(rcConfigs)
@@ -194,18 +222,32 @@ describe('AppSec Rule Manager', () => {
       sinon.assert.calledTwice(waf.updateConfig)
       sinon.assert.calledWith(
         waf.updateConfig,
+        rcConfigs.toApply[0].product,
+        rcConfigs.toApply[0].id,
         rcConfigs.toApply[0].path,
         rcConfigs.toApply[0].file
       )
       sinon.assert.calledWith(
         waf.updateConfig,
+        rcConfigs.toModify[0].product,
+        rcConfigs.toModify[0].id,
         rcConfigs.toModify[0].path,
         rcConfigs.toModify[0].file
+      )
+
+      assert.deepEqual(
+        waf.wafManager.ddwaf.configPaths,
+        [
+          rcConfigs.toModify[0].path,
+          rcConfigs.toApply[0].path,
+          waf.wafManager.constructor.defaultWafConfigPath
+        ]
       )
     })
 
     it('should update apply_state and apply_error on successful apply', () => {
-      waf.updateConfig.returns({})
+      waf.updateConfig.callThrough()
+      waf.removeConfig.callThrough()
 
       const rcConfigs = getRcConfigs()
 
@@ -293,8 +335,6 @@ describe('AppSec Rule Manager', () => {
     })
 
     it('should report successful waf update', () => {
-      waf.updateConfig.returns({})
-
       const rcConfigs = getRcConfigs()
 
       RuleManager.updateWafFromRC(rcConfigs)
@@ -305,14 +345,10 @@ describe('AppSec Rule Manager', () => {
         waf.wafManager.rulesVersion,
         true
       )
-      sinon.assert.calledTwice(reportSuccessfulWafUpdate)
-      sinon.assert.calledWith(reportSuccessfulWafUpdate, rcConfigs.toModify[0].product, rcConfigs.toModify[0].id, {})
-      sinon.assert.calledWith(reportSuccessfulWafUpdate, rcConfigs.toApply[0].product, rcConfigs.toApply[0].id, {})
     })
 
-    it('should report waf update', () => {
-      waf.updateConfig.onFirstCall().throws(new waf.WafUpdateError({ error: 'Waf update error' }))
-      waf.updateConfig.onSecondCall().returns({})
+    it('should report failed waf update', () => {
+      waf.updateConfig.throws(new waf.WafUpdateError({ error: 'Update failed' }))
 
       const rcConfigs = getRcConfigs()
 
@@ -324,6 +360,35 @@ describe('AppSec Rule Manager', () => {
         waf.wafManager.rulesVersion,
         false
       )
+    })
+
+    describe('ASM_DD Fallback', () => {
+      it('should fallback to default ruleset if no ASM_DD has been loaded successfully', () => {
+        waf.updateConfig.callThrough()
+        waf.removeConfig.callThrough()
+
+        const rcConfigs = {
+          toApply: [
+            {
+              id: 'asm_dd.test.failed',
+              product: 'ASM_DD',
+              path: 'test/rule_manager/updateWafFromRC/ASM_DD/01',
+              file: {}
+            }
+          ],
+          toModify: [],
+          toUnapply: []
+        }
+
+        RuleManager.updateWafFromRC(rcConfigs)
+
+        assert.strictEqual(rcConfigs.toApply[0].apply_state, ERROR)
+
+        assert.deepEqual(
+          waf.wafManager.ddwaf.configPaths,
+          [waf.wafManager.constructor.defaultWafConfigPath]
+        )
+      })
     })
 
     describe('ASM', () => {

@@ -65,14 +65,10 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
     if (!ASM_PRODUCTS.has(item.product)) continue
 
     try {
-      const resultDiagnostics = item.product === 'ASM_DD'
-        ? waf.updateAsmDdConfig(item.path, item.file)
-        : waf.updateConfig(item.path, item.file)
+      waf.updateConfig(item.product, item.id, item.path, item.file)
 
       item.apply_state = ACKNOWLEDGED
       wafUpdated = true
-
-      Reporter.reportSuccessfulWafUpdate(item.product, item.id, resultDiagnostics)
 
       // ASM actions
       if (item.product === 'ASM' && item.file?.actions?.length) {
@@ -86,6 +82,8 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
       wafUpdatedFailed = true
     }
   }
+
+  waf.checkAsmDdFallback()
 
   if (wafUpdated) {
     Reporter.reportWafUpdate(waf.wafManager.ddwafVersion, waf.wafManager.rulesVersion, !wafUpdatedFailed)

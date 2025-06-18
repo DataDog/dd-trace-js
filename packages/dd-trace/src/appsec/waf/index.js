@@ -16,9 +16,9 @@ const waf = {
   wafManager: null,
   init,
   destroy,
-  updateAsmDdConfig,
   updateConfig,
   removeConfig,
+  checkAsmDdFallback,
   run: noop,
   disposeContext: noop,
   WafUpdateError
@@ -46,40 +46,31 @@ function destroy () {
   waf.disposeContext = noop
 }
 
-function updateAsmDdConfig (configPath, asmDdConfig) {
+function checkAsmDdFallback () {
   if (!waf.wafManager) throw new Error('Cannot update disabled WAF')
 
   try {
-    waf.wafManager.removeConfig(waf.wafManager.constructor.defaultWafConfigPath)
-    const updateSucceed = waf.wafManager.updateConfig(configPath, asmDdConfig)
-
-    if (!updateSucceed) {
-      waf.wafManager.setAsmDdFallbackConfig()
-      throw new WafUpdateError(waf.wafManager.ddwaf.diagnostics)
-    }
-
-    return waf.wafManager.ddwaf.diagnostics
-  } catch (err) {
-    Reporter.reportWafConfigError(waf.wafManager.ddwafVersion, waf.wafManager.rulesVersion)
-    log.error('[ASM] Could not update ASM DD config from RC')
-    throw err
+    waf.wafManager.setAsmDdFallbackConfig()
+  } catch {
+    log.error('[ASM] Could not apply default ruleset back as fallback')
   }
 }
 
-function updateConfig (configPath, config) {
+function updateConfig (product, configId, configPath, config) {
   if (!waf.wafManager) throw new Error('Cannot update disabled WAF')
 
   try {
-    const updateSucceed = waf.wafManager.updateConfig(configPath, config)
-
-    if (!updateSucceed) {
-      waf.wafManager.setAsmDdFallbackConfig()
-      throw new WafUpdateError(waf.wafManager.ddwaf.diagnostics)
+    if (product === 'ASM_DD') {
+      waf.wafManager.removeConfig(waf.wafManager.constructor.defaultWafConfigPath)
     }
 
-    return waf.wafManager.ddwaf.diagnostics
+    const updateSucceed = waf.wafManager.updateConfig(configPath, config)
+    Reporter.reportWafConfigUpdate(product, configId, waf.wafManager.ddwaf.diagnostics, waf.wafManager.ddwafVersion)
+
+    if (!updateSucceed) {
+      throw new WafUpdateError(waf.wafManager.ddwaf.diagnostics)
+    }
   } catch (err) {
-    Reporter.reportWafConfigError(waf.wafManager.ddwafVersion, waf.wafManager.rulesVersion)
     log.error('[ASM] Could not update config from RC')
     throw err
   }
@@ -90,9 +81,7 @@ function removeConfig (configPath) {
 
   try {
     waf.wafManager.removeConfig(configPath)
-    waf.wafManager.setAsmDdFallbackConfig()
   } catch (err) {
-    Reporter.reportWafConfigError(waf.wafManager.ddwafVersion, waf.wafManager.rulesVersion)
     log.error('[ASM] Could not remove config from RC')
     throw err
   }

@@ -245,24 +245,28 @@ function reportWafInit (wafVersion, rulesVersion, diagnosticsRules = {}, success
 }
 
 function logWafDiagnosticMessage (product, rcConfigId, configKey, message, level) {
+  const tags =
+    `log_type:rc::${product.toLowerCase()}::diagnostic,appsec_config_key:${configKey},rc_config_id:${rcConfigId}`
   telemetryLogCh.publish({
     message,
     level,
-    tags: {
-      log_type: `rc::${product.toLowerCase()}::diagnostic`,
-      appsec_config_key: configKey,
-      rc_config_id: rcConfigId
-    }
+    tags
   })
 }
 
-function reportSuccessfulWafUpdate (product, rcConfigId, diagnostics) {
+function reportWafConfigUpdate (product, rcConfigId, diagnostics, wafVersion) {
+  if (diagnostics.error) {
+    logWafDiagnosticMessage(product, rcConfigId, '', diagnostics.error, 'ERROR')
+    incrementWafConfigErrorsMetric(wafVersion, diagnostics.ruleset_version || 'unknown')
+  }
+
   for (const configKey of WAF_DIAGNOSTICS_CONFIG_KEYS_TO_REPORT) {
     const configDiagnostics = diagnostics[configKey]
     if (!configDiagnostics) continue
 
     if (configDiagnostics.error) {
       logWafDiagnosticMessage(product, rcConfigId, configKey, configDiagnostics.error, 'ERROR')
+      incrementWafConfigErrorsMetric(wafVersion, diagnostics.ruleset_version || 'unknown')
       continue
     }
 
@@ -275,6 +279,7 @@ function reportSuccessfulWafUpdate (product, rcConfigId, diagnostics) {
           `"${errorMessage}": ${JSON.stringify(errorIds)}`,
           'ERROR'
         )
+        incrementWafConfigErrorsMetric(wafVersion, diagnostics.ruleset_version || 'unknown')
       }
     }
 
@@ -550,11 +555,10 @@ module.exports = {
   filterExtendedHeaders,
   formatHeaderName,
   reportWafInit,
-  reportSuccessfulWafUpdate,
+  reportWafConfigUpdate,
   reportMetrics,
   reportAttack,
   reportWafUpdate: incrementWafUpdatesMetric,
-  reportWafConfigError: incrementWafConfigErrorsMetric,
   reportRaspRuleSkipped: updateRaspRuleSkippedMetricTags,
   reportDerivatives,
   finishRequest,

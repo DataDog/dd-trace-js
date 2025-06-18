@@ -48,11 +48,12 @@ describe('reporter', () => {
 
     telemetry = {
       incrementWafInitMetric: sinon.stub(),
+      incrementWafConfigErrorsMetric: sinon.stub(),
+      incrementWafUpdatesMetric: sinon.stub(),
+      incrementWafRequestsMetric: sinon.stub(),
       updateWafRequestsMetricTags: sinon.stub(),
       updateRaspRequestsMetricTags: sinon.stub(),
       updateRaspRuleSkippedMetricTags: sinon.stub(),
-      incrementWafUpdatesMetric: sinon.stub(),
-      incrementWafRequestsMetric: sinon.stub(),
       updateRateLimitedMetric: sinon.stub(),
       getRequestMetrics: sinon.stub()
     }
@@ -300,73 +301,69 @@ describe('reporter', () => {
     })
   })
 
-  describe('reportSuccessfulWafUpdate', () => {
+  describe('reportWafConfigUpdate', () => {
+    const product = 'ASM_DD'
+    const rcConfigId = '1'
+    const diagnostics = {
+      ruleset_version: '1.42.11',
+      rules: {
+        loaded: [],
+        failed: ['blk-001-001'],
+        skipped: [],
+        errors: {
+          'missing key operator': [
+            'blk-001-001'
+          ]
+        },
+        warnings: {
+          'invalid tag': [
+            'blk-001-001'
+          ]
+        }
+      },
+      processors: {
+        loaded: ['http-endpoint-fingerprint'],
+        failed: [],
+        skipped: [],
+        errors: {
+          'no mappings defined': [
+            'http-endpoint-fingerprint'
+          ]
+        }
+      }
+    }
+
     it('should send diagnostics using telemetry logs', () => {
       const telemetryLogHandlerAssert = sinon.stub()
 
       const telemetryLogCh = dc.channel('datadog:telemetry:log')
       telemetryLogCh.subscribe(telemetryLogHandlerAssert)
 
-      const product = 'ASM_DD'
-      const rcConfigId = '1'
-      const diagnostics = {
-        rules: {
-          loaded: [],
-          failed: ['blk-001-001'],
-          skipped: [],
-          errors: {
-            'missing key operator': [
-              'blk-001-001'
-            ]
-          },
-          warnings: {
-            'invalid tag': [
-              'blk-001-001'
-            ]
-          }
-        },
-        processors: {
-          loaded: ['http-endpoint-fingerprint'],
-          failed: [],
-          skipped: [],
-          warnings: {
-            'no mappings defined': [
-              'http-endpoint-fingerprint'
-            ]
-          }
-        }
-      }
-
-      Reporter.reportSuccessfulWafUpdate(product, rcConfigId, diagnostics)
+      Reporter.reportWafConfigUpdate(product, rcConfigId, diagnostics)
 
       expect(telemetryLogHandlerAssert).to.have.been.calledThrice
       expect(telemetryLogHandlerAssert.getCall(0)).to.have.been.calledWithExactly({
         message: '"missing key operator": ["blk-001-001"]',
         level: 'ERROR',
-        tags: {
-          log_type: 'rc::asm_dd::diagnostic',
-          appsec_config_key: 'rules',
-          rc_config_id: '1'
-        }
+        tags: 'log_type:rc::asm_dd::diagnostic,appsec_config_key:rules,rc_config_id:1'
       }, 'datadog:telemetry:log')
       expect(telemetryLogHandlerAssert.getCall(1)).to.have.been.calledWithExactly({
         message: '"invalid tag": ["blk-001-001"]',
         level: 'WARN',
-        tags: {
-          log_type: 'rc::asm_dd::diagnostic',
-          appsec_config_key: 'rules',
-          rc_config_id: '1'
-        }
+        tags: 'log_type:rc::asm_dd::diagnostic,appsec_config_key:rules,rc_config_id:1'
       }, 'datadog:telemetry:log')
       expect(telemetryLogHandlerAssert.getCall(2)).to.have.been.calledWithExactly({
         message: '"no mappings defined": ["http-endpoint-fingerprint"]',
-        level: 'WARN',
-        tags: {
-          log_type: 'rc::asm_dd::diagnostic',
-          appsec_config_key: 'processors',
-          rc_config_id: '1'
-        }
+        level: 'ERROR',
+        tags: 'log_type:rc::asm_dd::diagnostic,appsec_config_key:processors,rc_config_id:1'
       }, 'datadog:telemetry:log')
+    })
+
+    it('should increment waf.config_errors metric', () => {
+      Reporter.reportWafConfigUpdate(product, rcConfigId, diagnostics, '1.24.1')
+
+      expect(telemetry.incrementWafConfigErrorsMetric).to.have.been.calledTwice
+      expect(telemetry.incrementWafConfigErrorsMetric).to.always.have.been.calledWithExactly('1.24.1', '1.42.11')
     })
   })
 
