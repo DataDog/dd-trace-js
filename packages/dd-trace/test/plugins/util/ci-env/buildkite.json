@@ -728,7 +728,7 @@
       "BUILDKITE_PULL_REQUEST_BASE_BRANCH": "",
       "BUILDKITE_REPO": "https://github.com/DataDog/dogweb",
       "BUILDKITE_TAG": "",
-      "DD_TEST_CASE_NAME": "http-repository-url-no-git-suffix"
+      "TESTING_TEST_OPTIMIZATION_TEST_CASE_NAME": "http-repository-url-no-git-suffix"
     },
     {
       "_dd.ci.env_vars": "{\"BUILDKITE_BUILD_ID\":\"buildkite-pipeline-id\",\"BUILDKITE_JOB_ID\":\"buildkite-job-id\"}",
@@ -762,7 +762,7 @@
       "BUILDKITE_PULL_REQUEST_BASE_BRANCH": "",
       "BUILDKITE_REPO": "ssh://host.xz:54321/path/to/repo/",
       "BUILDKITE_TAG": "",
-      "DD_TEST_CASE_NAME": "ssh-repository-url-no-git-suffix"
+      "TESTING_TEST_OPTIMIZATION_TEST_CASE_NAME": "ssh-repository-url-no-git-suffix"
     },
     {
       "_dd.ci.env_vars": "{\"BUILDKITE_BUILD_ID\":\"buildkite-pipeline-id\",\"BUILDKITE_JOB_ID\":\"buildkite-job-id\"}",
