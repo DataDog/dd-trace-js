@@ -24,11 +24,39 @@ const noopTracer = {
     const fn = arguments[arguments.length - 1]
 
     const span = {
-      end () {},
-      setAttributes () { return this },
-      addEvent () { return this },
-      recordException () { return this },
-      setStatus () { return this }
+      spanContext () {
+        return { traceId: '', spanId: '', traceFlags: 0 }
+      },
+      setAttribute () {
+        return this
+      },
+      setAttributes () {
+        return this
+      },
+      addEvent () {
+        return this
+      },
+      addLink () {
+        return this
+      },
+      addLinks () {
+        return this
+      },
+      setStatus () {
+        return this
+      },
+      updateName () {
+        return this
+      },
+      end () {
+        return this
+      },
+      isRecording () {
+        return false
+      },
+      recordException () {
+        return this
+      }
     }
 
     return fn(span)
@@ -37,7 +65,17 @@ const noopTracer = {
 
 function wrapTracer (tracer) {
   shimmer.wrap(tracer, 'startActiveSpan', function (startActiveSpan) {
-    return function (name, options, cb) {
+    return function () {
+      const name = arguments[0]
+      const cb = arguments[arguments.length - 1]
+
+      let options = {}
+      if (arguments.length === 3) {
+        options = arguments[1]
+      } else if (arguments.length === 4) {
+        options = arguments[2]
+      }
+
       const ctx = {
         name,
         attributes: options.attributes ?? {}
@@ -100,6 +138,7 @@ function wrapTool (tool) {
   }
 }
 
+// CJS exports
 addHook({
   name: 'ai',
   versions: ['>=4.0.0'],
@@ -121,4 +160,18 @@ addHook({
   })
 
   return wrappedExports
+})
+
+// ESM exports
+addHook({
+  name: 'ai',
+  versions: ['>=4.0.0'],
+  file: 'dist/index.mjs'
+}, exports => {
+  for (const [fnName, patchingFn] of Object.entries(TRACED_FUNCTIONS)) {
+    const original = exports[fnName]
+    exports[fnName] = shimmer.wrapFunction(original, patchingFn)
+  }
+
+  return exports
 })
