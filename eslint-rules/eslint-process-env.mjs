@@ -2,7 +2,7 @@ export default {
   meta: {
     type: 'problem',
     docs: {
-      description: 'Disallow usage of process.env outside config.js'
+      description: 'Disallow usage of process.env outside config-helper.js'
     },
     schema: []
   },
@@ -23,27 +23,52 @@ export default {
     return {
       // Handle direct member expressions: process.env.FOO
       MemberExpression (node) {
-        if (node.object?.type === 'MemberExpression' &&
-            isProcessEnvObject(node.object)) {
+        // direct `process.env` or nested `process.env.FOO`
+        if (isProcessEnvObject(node) ||
+            node.object?.type === 'MemberExpression' && isProcessEnvObject(node.object)) {
           report(node)
         }
       },
 
       // Handle destructuring: const { FOO } = process.env
       VariableDeclarator (node) {
-        if (isProcessEnvObject(node.init)) {
+        if (
+          node.init?.type === 'MemberExpression' &&
+          isProcessEnvObject(node.init) &&
+          node.id.type === 'Identifier'
+        ) {
+          // const env = process.env
+          report(node)
+        } else if (
+          node.init?.type === 'Identifier' &&
+          node.init.name === 'process' &&
+          node.id.type === 'ObjectPattern'
+        ) {
+          // const { env } = process
+          for (const prop of node.id.properties) {
+            if (prop.type === 'Property' && prop.key.name === 'env') {
+              report(node)
+              break
+            }
+          }
+        }
+        // const { FOO } = process.env
+        if (
+          node.init?.type === 'MemberExpression' &&
+          isProcessEnvObject(node.init)
+        ) {
           report(node)
         }
       },
 
-      // Handle spread operator: { ...process.env }
+      // Spread usage: { ...process.env } or { ...envAlias }
       SpreadElement (node) {
         if (isProcessEnvObject(node.argument)) {
           report(node)
         }
       },
 
-      // Handle any function call with process.env as an argument
+      // Any function call receiving process.env
       CallExpression (node) {
         for (const arg of node.arguments) {
           if (isProcessEnvObject(arg)) {

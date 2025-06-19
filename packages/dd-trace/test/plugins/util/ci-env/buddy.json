@@ -192,7 +192,7 @@
       "BUDDY_PIPELINE_ID": "456",
       "BUDDY_PIPELINE_NAME": "Deploy to Production",
       "BUDDY_SCM_URL": "https://github.com/buddyworks/my-project",
-      "DD_TEST_CASE_NAME": "http-repository-url-no-git-suffix"
+      "TESTING_TEST_OPTIMIZATION_TEST_CASE_NAME": "http-repository-url-no-git-suffix"
     },
     {
       "ci.pipeline.id": "456/buddy-execution-id",
@@ -223,7 +223,7 @@
       "BUDDY_PIPELINE_ID": "456",
       "BUDDY_PIPELINE_NAME": "Deploy to Production",
       "BUDDY_SCM_URL": "ssh://host.xz:54321/path/to/repo/",
-      "DD_TEST_CASE_NAME": "ssh-repository-url-no-git-suffix"
+      "TESTING_TEST_OPTIMIZATION_TEST_CASE_NAME": "ssh-repository-url-no-git-suffix"
     },
     {
       "ci.pipeline.id": "456/buddy-execution-id",
