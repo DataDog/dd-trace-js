@@ -1821,6 +1821,13 @@ declare namespace tracer {
      */
     interface mongodb_core extends Instrumentation {
       /**
+       * Whether to enable mongo heartbeats spans.
+       *
+       * @default true
+       */
+      heartbeatEnabled?: boolean;
+
+      /**
        * Whether to include the query contents in the resource name.
        */
       queryInResourceName?: boolean;

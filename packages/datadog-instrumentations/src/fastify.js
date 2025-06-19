@@ -9,6 +9,7 @@ const routeAddedChannel = channel('apm:fastify:route:added')
 const bodyParserReadCh = channel('datadog:fastify:body-parser:finish')
 const queryParamsReadCh = channel('datadog:fastify:query-params:finish')
 const cookieParserReadCh = channel('datadog:fastify-cookie:read:finish')
+const responsePayloadReadCh = channel('datadog:fastify:response:finish')
 const pathParamsReadCh = channel('datadog:fastify:path-params:finish')
 
 const parsingResources = new WeakMap()
@@ -179,9 +180,12 @@ function preParsing (request, reply, payload, done) {
 }
 
 function wrapSend (send, req) {
-  return function sendWithTrace (error) {
-    if (error instanceof Error) {
-      errorChannel.publish({ req, error })
+  return function sendWithTrace (payload) {
+    if (payload instanceof Error) {
+      errorChannel.publish({ req, error: payload })
+    } else if (canPublishResponsePayload(payload)) {
+      const res = getRes(this)
+      responsePayloadReadCh.publish({ req, res, body: payload })
     }
 
     return send.apply(this, arguments)
@@ -210,6 +214,18 @@ function publishError (error, req) {
 
 function onRoute (routeOptions) {
   routeAddedChannel.publish({ routeOptions, onRoute })
+}
+
+// send() payload types: https://fastify.dev/docs/latest/Reference/Reply/#senddata
+function canPublishResponsePayload (payload) {
+  return responsePayloadReadCh.hasSubscribers &&
+    payload &&
+    typeof payload === 'object' &&
+    typeof payload.pipe !== 'function' && // Node streams
+    typeof payload.body?.pipe !== 'function' && // Response with body stream
+    !Buffer.isBuffer(payload) && // Buffer
+    !(payload instanceof ArrayBuffer) && // ArrayBuffer
+    !ArrayBuffer.isView(payload) // TypedArray
 }
 
 addHook({ name: 'fastify', versions: ['>=3'] }, fastify => {
