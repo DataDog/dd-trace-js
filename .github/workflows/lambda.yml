@@ -12,10 +12,8 @@ on:
       - '!examples/**'
       - '!*.md'
       - '!.gitlab-ci.yml'
-      - '!LICENSE'
-      - '!LICENSE.Apache'
-      - '!LICENSE.BSD3'
-      - '!LICENSE'
+      - '!LICENSE*'
+      - 'LICENSE-3rdparty.csv'
       - '!NOTICE'
       # Paths for this workflow only
       - '.github/workflows/lambda.yml'
