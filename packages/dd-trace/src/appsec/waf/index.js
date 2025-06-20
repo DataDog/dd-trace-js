@@ -64,7 +64,7 @@ function updateConfig (product, configId, configPath, config) {
       waf.wafManager.removeConfig(waf.wafManager.constructor.defaultWafConfigPath)
     }
 
-    const updateSucceed = waf.wafManager.updateConfig(configPath, config)
+    const updateSucceeded = waf.wafManager.updateConfig(configPath, config)
     Reporter.reportWafConfigUpdate(product, configId, waf.wafManager.ddwaf.diagnostics, waf.wafManager.ddwafVersion)
 
     if (!updateSucceed) {
