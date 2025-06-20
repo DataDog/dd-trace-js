@@ -507,6 +507,9 @@ class Config {
     defaults['grpc.client.error.statuses'] = GRPC_CLIENT_ERROR_STATUSES
     defaults['grpc.server.error.statuses'] = GRPC_SERVER_ERROR_STATUSES
     defaults.headerTags = []
+    defaults['heapSnapshot.count'] = 0
+    defaults['heapSnapshot.folder'] = undefined
+    defaults['heapSnapshot.interval'] = 3600
     defaults.hostname = '127.0.0.1'
     defaults['iast.dbRowsToTaint'] = 1
     defaults['iast.deduplicationEnabled'] = true
@@ -689,6 +692,9 @@ class Config {
       DD_GRPC_CLIENT_ERROR_STATUSES,
       DD_GRPC_SERVER_ERROR_STATUSES,
       JEST_WORKER_ID,
+      DD_HEAP_SNAPSHOT_COUNT,
+      DD_HEAP_SNAPSHOT_FOLDER,
+      DD_HEAP_SNAPSHOT_INTERVAL,
       DD_IAST_DB_ROWS_TO_TAINT,
       DD_IAST_DEDUPLICATION_ENABLED,
       DD_IAST_ENABLED,
@@ -870,6 +876,9 @@ class Config {
     this._setIntegerRangeSet(env, 'grpc.client.error.statuses', DD_GRPC_CLIENT_ERROR_STATUSES)
     this._setIntegerRangeSet(env, 'grpc.server.error.statuses', DD_GRPC_SERVER_ERROR_STATUSES)
     this._setArray(env, 'headerTags', DD_TRACE_HEADER_TAGS)
+    env['heapSnapshot.count'] = maybeInt(DD_HEAP_SNAPSHOT_COUNT)
+    this._setString(env, 'heapSnapshot.folder', DD_HEAP_SNAPSHOT_FOLDER)
+    env['heapSnapshot.interval'] = maybeInt(DD_HEAP_SNAPSHOT_INTERVAL)
     this._setString(env, 'hostname', DD_AGENT_HOST)
     env['iast.dbRowsToTaint'] = maybeInt(DD_IAST_DB_ROWS_TO_TAINT)
     this._setBoolean(env, 'iast.deduplicationEnabled', DD_IAST_DEDUPLICATION_ENABLED)
