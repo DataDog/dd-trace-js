@@ -1252,7 +1252,7 @@ describe('Config', () => {
 
     const config = new Config()
 
-    expect(log.warn).to.have.been.calledWith('Unexpected input for config.spanAttributeSchema, picked default v0')
+    expect(log.warn).to.have.been.calledWith('Unexpected input for config.spanAttributeSchema, picked default', 'v0')
     expect(config).to.have.property('spanAttributeSchema', 'v0')
   })
 

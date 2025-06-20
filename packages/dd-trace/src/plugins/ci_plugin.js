@@ -453,7 +453,7 @@ module.exports = class CiPlugin extends Plugin {
 
   removeDiProbe ({ file, line }) {
     const probeId = this.fileLineToProbeId.get(`${file}:${line}`)
-    log.warn(`Removing probe from ${file}:${line}, with id: ${probeId}`)
+    log.warn('Removing probe from %s:%s, with id: %s', file, line, probeId)
     this.fileLineToProbeId.delete(probeId)
     return this.di.removeProbe(probeId)
   }

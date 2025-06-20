@@ -37,7 +37,7 @@ function maybeEnable (Plugin) {
 
     // TODO: remove the need to load the plugin class in order to disable the plugin
     if (isFalse(enabled) || disabledPlugins.has(Plugin.id)) {
-      log.debug(`Plugin "${Plugin.id}" was disabled via configuration option.`)
+      log.debug('Plugin "%s" was disabled via configuration option.', Plugin.id)
 
       pluginClasses[Plugin.id] = null
     } else {

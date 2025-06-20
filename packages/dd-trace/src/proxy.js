@@ -205,8 +205,8 @@ class Tracer extends NoopProxy {
           automaticLogPlugin.configure({ ...config, enabled: true })
         } else {
           log.warn(
-            'DD_AGENTLESS_LOG_SUBMISSION_ENABLED is set, ' +
-            'but DD_API_KEY is undefined, so no automatic log submission will be performed.'
+            // eslint-disable-next-line @stylistic/max-len
+            'DD_AGENTLESS_LOG_SUBMISSION_ENABLED is set, but DD_API_KEY is undefined, so no automatic log submission will be performed.'
           )
         }
       }
@@ -229,8 +229,7 @@ class Tracer extends NoopProxy {
       return require('./profiler').start(config)
     } catch (e) {
       log.error(
-        'Error starting profiler. For troubleshooting tips, see ' +
-        '<https://dtdg.co/nodejs-profiler-troubleshooting>',
+        'Error starting profiler. For troubleshooting tips, see <https://dtdg.co/nodejs-profiler-troubleshooting>',
         e
       )
     }

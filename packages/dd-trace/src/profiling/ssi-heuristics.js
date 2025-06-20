@@ -43,8 +43,9 @@ class SSIHeuristics {
     if (typeof longLivedThreshold !== 'number' || longLivedThreshold <= 0) {
       this.longLivedThreshold = DEFAULT_LONG_LIVED_THRESHOLD
       log.warn(
-        `Invalid SSIHeuristics.longLivedThreshold value: ${config.profiling.longLivedThreshold}. ` +
-        `Using default value: ${DEFAULT_LONG_LIVED_THRESHOLD}`
+        'Invalid SSIHeuristics.longLivedThreshold value: %s. Using default value:',
+        config.profiling.longLivedThreshold,
+        DEFAULT_LONG_LIVED_THRESHOLD
       )
     } else {
       this.longLivedThreshold = longLivedThreshold
