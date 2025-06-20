@@ -3,11 +3,12 @@
 const { format } = require('util')
 
 class Log {
-  constructor (message, args, cause, delegate) {
+  constructor (message, args, cause, delegate, sendViaTelemetry = true) {
     this.message = message
     this.args = args
     this.cause = cause
     this.delegate = delegate
+    this.sendViaTelemetry = sendViaTelemetry
   }
 
   get formatted () {
@@ -22,10 +23,21 @@ class Log {
 
   static parse (...args) {
     let message, cause, delegate
+    let sendViaTelemetry = true
 
-    const lastArg = args.at(-1)
-    if (lastArg && typeof lastArg === 'object' && lastArg.stack) { // lastArg instanceof Error?
-      cause = args.pop()
+    {
+      const lastArg = args.at(-1)
+      if (lastArg instanceof LogConfig) {
+        args.pop()
+        sendViaTelemetry = lastArg.transmit
+      }
+    }
+
+    {
+      const lastArg = args.at(-1)
+      if (lastArg && typeof lastArg === 'object' && lastArg.stack) { // lastArg instanceof Error?
+        cause = args.pop()
+      }
     }
 
     const firstArg = args.shift()
@@ -43,10 +55,21 @@ class Log {
       message = String(firstArg)
     }
 
-    return new Log(message, args, cause, delegate)
+    return new Log(message, args, cause, delegate, sendViaTelemetry)
+  }
+}
+
+/**
+ * Pass instances of this class to logger methods when fine-grain control is needed
+ * @property {boolean} transmit - Whether to send the log via telemetry.
+ */
+class LogConfig {
+  constructor (transmit = true) {
+    this.transmit = transmit
   }
 }
 
 module.exports = {
-  Log
+  Log,
+  LogConfig
 }

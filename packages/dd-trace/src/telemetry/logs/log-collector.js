@@ -27,7 +27,7 @@ function createHash (logEntry) {
 }
 
 function isValid (logEntry) {
-  return logEntry?.level && logEntry.message
+  return logEntry?.level && logEntry.message && logEntry.transmit !== false
 }
 
 const EOL = '\n'
