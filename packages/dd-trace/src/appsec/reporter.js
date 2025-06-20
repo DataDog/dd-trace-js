@@ -251,7 +251,7 @@ function logWafDiagnosticMessage (product, rcConfigId, configKey, message, level
 function reportWafConfigUpdate (product, rcConfigId, diagnostics, wafVersion) {
   if (diagnostics.error) {
     logWafDiagnosticMessage(product, rcConfigId, '', diagnostics.error, 'ERROR')
-    incrementWafConfigErrorsMetric(wafVersion, diagnostics.ruleset_version || 'unknown')
+    incrementWafConfigErrorsMetric(wafVersion, diagnostics.ruleset_version)
   }
 
   for (const configKey of WAF_DIAGNOSTICS_CONFIG_KEYS_TO_REPORT) {
@@ -260,7 +260,7 @@ function reportWafConfigUpdate (product, rcConfigId, diagnostics, wafVersion) {
 
     if (configDiagnostics.error) {
       logWafDiagnosticMessage(product, rcConfigId, configKey, configDiagnostics.error, 'ERROR')
-      incrementWafConfigErrorsMetric(wafVersion, diagnostics.ruleset_version || 'unknown')
+      incrementWafConfigErrorsMetric(wafVersion, diagnostics.ruleset_version)
       continue
     }
 
@@ -273,7 +273,7 @@ function reportWafConfigUpdate (product, rcConfigId, diagnostics, wafVersion) {
           `"${errorMessage}": ${JSON.stringify(errorIds)}`,
           'ERROR'
         )
-        incrementWafConfigErrorsMetric(wafVersion, diagnostics.ruleset_version || 'unknown')
+        incrementWafConfigErrorsMetric(wafVersion, diagnostics.ruleset_version)
       }
     }
 
