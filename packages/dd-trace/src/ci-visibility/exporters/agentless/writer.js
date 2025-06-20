@@ -69,7 +69,7 @@ class Writer extends BaseWriter {
         done()
         return
       }
-      log.debug(`Response from the intake: ${res}`)
+      log.debug('Response from the intake:', res)
       done()
     })
   }

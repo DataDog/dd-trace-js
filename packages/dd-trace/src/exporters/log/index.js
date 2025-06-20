@@ -9,7 +9,7 @@ const MAX_SIZE = 64 * 1024 // 64kb
 
 class LogExporter {
   export (spans) {
-    log.debug(() => `Adding trace to queue: ${JSON.stringify(spans)}`)
+    log.debug('Adding trace to queue: %j', spans)
 
     let size = TRACE_FORMAT_OVERHEAD
     let queue = []

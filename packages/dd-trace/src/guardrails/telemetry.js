@@ -65,7 +65,7 @@ function sendTelemetry (name, tags) {
   })
   proc.on('exit', function (code) {
     if (code !== 0) {
-      log.error('Telemetry forwarder exited with code ' + code)
+      log.error('Telemetry forwarder exited with code', code)
     }
   })
   proc.stdin.on('error', function () {

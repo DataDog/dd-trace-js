@@ -123,12 +123,12 @@ function validateEnvVarType (envVar) {
 function checkIfBothOtelAndDdEnvVarSet () {
   for (const [otelEnvVar, ddEnvVar] of Object.entries(otelDdEnvMapping)) {
     if (ddEnvVar && getEnvironmentVariable(ddEnvVar) && getEnvironmentVariable(otelEnvVar)) {
-      log.warn(`both ${ddEnvVar} and ${otelEnvVar} environment variables are set`)
+      log.warn('both %s and %s environment variables are set', ddEnvVar, otelEnvVar)
       getCounter('otel.env.hiding', ddEnvVar, otelEnvVar).inc()
     }
 
     if (getEnvironmentVariable(otelEnvVar) && !validateEnvVarType(otelEnvVar)) {
-      log.warn(`unexpected value for ${otelEnvVar} environment variable`)
+      log.warn('unexpected value for %s environment variable', otelEnvVar)
       getCounter('otel.env.invalid', ddEnvVar, otelEnvVar).inc()
     }
   }
@@ -165,9 +165,7 @@ function validateNamingVersion (versionString) {
     return defaultNamingVersion
   }
   if (!namingVersions.has(versionString)) {
-    log.warn(
-      `Unexpected input for config.spanAttributeSchema, picked default ${defaultNamingVersion}`
-    )
+    log.warn('Unexpected input for config.spanAttributeSchema, picked default', defaultNamingVersion)
     return defaultNamingVersion
   }
   return versionString
@@ -286,9 +284,8 @@ class Config {
       getEnvironmentVariable('DD_TRACE_PROPAGATION_STYLE_EXTRACT')
     )) {
       log.warn(
-        'Use either the DD_TRACE_PROPAGATION_STYLE environment variable or separate ' +
-        'DD_TRACE_PROPAGATION_STYLE_INJECT and DD_TRACE_PROPAGATION_STYLE_EXTRACT ' +
-        'environment variables'
+        // eslint-disable-next-line @stylistic/max-len
+        'Use either the DD_TRACE_PROPAGATION_STYLE environment variable or separate DD_TRACE_PROPAGATION_STYLE_INJECT and DD_TRACE_PROPAGATION_STYLE_EXTRACT environment variables'
       )
     }
     const PROPAGATION_STYLE_INJECT = propagationStyle(

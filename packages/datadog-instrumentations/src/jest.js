@@ -294,7 +294,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       // We'll still detect new tests, but we won't retry them.
       // TODO: do not bail out of retrying tests for the whole test suite
       if (this.getHasSnapshotTests()) {
-        log.warn(`${retryType} is disabled for suites with snapshots`)
+        log.warn('%s is disabled for suites with snapshots', retryType)
         return
       }
 
@@ -302,7 +302,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         if (this.global.test) {
           this.global.test(addRetryStringToTestName(testName, retryIndex), event.fn, event.timeout)
         } else {
-          log.error(`${retryType} could not retry test because global.test is undefined`)
+          log.error('%s could not retry test because global.test is undefined', retryType)
         }
       }
     }

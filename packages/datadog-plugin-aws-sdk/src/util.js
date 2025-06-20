@@ -43,10 +43,10 @@ function encodeValue (valueObject) {
       case 'B':
         return Buffer.isBuffer(value) ? value : Buffer.from(value)
       default:
-        log.debug(`Found unknown type while trying to create DynamoDB span pointer: ${type}`)
+        log.debug('Found unknown type while trying to create DynamoDB span pointer:', type)
     }
   } catch (err) {
-    log.debug(`Failed to encode value while trying to create DynamoDB span pointer: ${err.message}`)
+    log.debug('Failed to encode value while trying to create DynamoDB span pointer:', err.message)
   }
 }
 
