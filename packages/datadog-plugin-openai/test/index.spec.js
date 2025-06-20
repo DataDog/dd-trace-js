@@ -522,7 +522,7 @@ describe('Plugin', () => {
         await checkTraces
       })
 
-      it.skip('delete model', async () => {
+      it('delete model', async () => {
         const checkTraces = agent
           .assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('name', 'openai.request')
@@ -536,17 +536,21 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.have.property('openai.request.method', 'DELETE')
             expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/models/*')
 
-            expect(traces[0][0].meta).to.have.property('openai.request.fine_tune_id', 'ft-10RCfqSvgyEcauomw7VpiYco')
+            expect(traces[0][0].meta).to.have.property(
+              'openai.request.fine_tune_id', 'ft:gpt-4.1-mini-2025-04-14:datadog-staging::BkaILRSh'
+            )
             expect(traces[0][0].metrics).to.have.property('openai.response.deleted', 1)
-            expect(traces[0][0].meta).to.have.property('openai.response.id', 'ft-10RCfqSvgyEcauomw7VpiYco')
+            expect(traces[0][0].meta).to.have.property(
+              'openai.response.id', 'ft:gpt-4.1-mini-2025-04-14:datadog-staging::BkaILRSh'
+            )
           })
 
         if (semver.satisfies(realVersion, '>=4.0.0')) {
-          const result = await openai.models.del('ft-10RCfqSvgyEcauomw7VpiYco')
+          const result = await openai.models.del('ft:gpt-4.1-mini-2025-04-14:datadog-staging::BkaILRSh')
 
           expect(result.deleted).to.eql(true)
         } else {
-          const result = await openai.deleteModel('ft-10RCfqSvgyEcauomw7VpiYco')
+          const result = await openai.deleteModel('ft:gpt-4.1-mini-2025-04-14:datadog-staging::BkaILRSh')
 
           expect(result.data.deleted).to.eql(true)
         }
