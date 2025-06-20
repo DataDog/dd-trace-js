@@ -9,31 +9,29 @@ const { URL } = require('url')
 const pkg = require('../../../../package.json')
 
 class Crashtracker {
-  constructor () {
-    this._started = false
-  }
+  #started = false
 
   configure (config) {
-    if (!this._started) return
+    if (!this.#started) return
 
     try {
-      binding.updateConfig(this._getConfig(config))
-      binding.updateMetadata(this._getMetadata(config))
+      binding.updateConfig(this.#getConfig(config))
+      binding.updateMetadata(this.#getMetadata(config))
     } catch (e) {
       log.error('Error configuring crashtracker', e)
     }
   }
 
   start (config) {
-    if (this._started) return this.configure(config)
+    if (this.#started) return this.configure(config)
 
-    this._started = true
+    this.#started = true
 
     try {
       binding.init(
-        this._getConfig(config),
-        this._getReceiverConfig(config),
-        this._getMetadata(config)
+        this.#getConfig(config),
+        this.#getReceiverConfig(),
+        this.#getMetadata(config)
       )
     } catch (e) {
       log.error('Error initialising crashtracker', e)
@@ -50,7 +48,7 @@ class Crashtracker {
   }
 
   // TODO: Send only configured values when defaults are fixed.
-  _getConfig (config) {
+  #getConfig (config) {
     const { hostname = '127.0.0.1', port = 8126 } = config
     const url = config.url || new URL(`http://${hostname}:${port}`)
 
@@ -75,7 +73,7 @@ class Crashtracker {
     }
   }
 
-  _getMetadata (config) {
+  #getMetadata (config) {
     const tags = Object.keys(config.tags).map(key => `${key}:${config.tags[key]}`)
 
     return {
@@ -94,7 +92,7 @@ class Crashtracker {
     }
   }
 
-  _getReceiverConfig () {
+  #getReceiverConfig () {
     return {
       args: [],
       env: [],
