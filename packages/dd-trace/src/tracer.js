@@ -9,7 +9,6 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/c
 const { DataStreamsCheckpointer, DataStreamsManager, DataStreamsProcessor } = require('./datastreams')
 const { flushStartupLogs } = require('../../datadog-instrumentations/src/helpers/check-require-cache')
 const log = require('./log/writer')
-const storeConfig = require('./tracer_metadata')
 
 const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
@@ -26,10 +25,15 @@ class DatadogTracer extends Tracer {
     setStartupLogConfig(config)
     flushStartupLogs(log)
 
-    try {
-      this._inmem_cfg = storeConfig(config)
-    } catch (error) {
-      log.warn(`Warning: Could not store tracer configuration for service discovery (Reason: ${error})`)
+    if (!config._isInServerlessEnvironment()) {
+      try {
+        const storeConfig = require('./tracer_metadata')
+        // Keep a reference to the handle, to keep the memfd alive in memory.
+        // It is read by the service discovery feature.
+        this._inmem_cfg = storeConfig(config)
+      } catch (error) {
+        log.warn('Could not store tracer configuration for service discovery', error)
+      }
     }
   }
 

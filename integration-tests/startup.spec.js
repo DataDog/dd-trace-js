@@ -9,6 +9,7 @@ const {
 const path = require('path')
 const { assert } = require('chai')
 const semver = require('semver')
+const { inspect } = require('util')
 const fs = require('fs')
 
 const execArgvs = [
@@ -73,7 +74,8 @@ execArgvs.forEach(({ execArgv, skip }) => {
         })
       })
 
-      it('saves tracer configuration on disk', async () => {
+
+      (process.platform === 'linux' ? it : it.skip)('saves tracer configuration on disk', async () => {
         proc = await spawnProc(startupTestFile, {
           cwd,
           execArgv,
@@ -83,23 +85,23 @@ execArgvs.forEach(({ execArgv, skip }) => {
         })
 
         const containsDatadogMemfd = (fds) => {
-          for (const fd in fds) {
+          for (const fd of fds) {
             try {
-              const fdName = fs.readlinkSync(`/proc/${process.pid}/fd/${fd}`)
-              if (fdName.indexOf('datadog-tracer-info-') !== -1) {
+              const fdName = fs.readlinkSync(`/proc/${proc.pid}/fd/${fd}`)
+              if (fdName.includes('datadog-tracer-info-')) {
                 return true
               }
-            } catch {
-              continue
-            }
+            } catch {}
           }
-          return false
+          return false 
         }
 
-        if (process.platform === 'linux') {
-          const fds = fs.readdirSync(`/proc/${proc.pid}/fd`)
-          assert(containsDatadogMemfd(fds))
-        }
+        const fds = fs.readdirSync(`/proc/${proc.pid}/fd`)
+
+        assert(
+          containsDatadogMemfd(fds),
+          `FDs ${inspect(fds)} of PID ${proc.pid} did not contain the datadog tracer configuration in memfd`
+        )
       })
 
       it('works for options.url', async () => {

@@ -2,7 +2,7 @@
 
 // Load binding first to not import other modules if it throws
 const libdatadog = require('@datadog/libdatadog')
-const tracerVersion = require('../../../package.json').version
+const tracerVersion = require('../../../version').VERSION
 
 function storeConfig (config) {
   const processDiscovery = libdatadog.maybeLoad('process-discovery')
@@ -11,7 +11,7 @@ function storeConfig (config) {
   }
 
   const metadata = new processDiscovery.TracerMetadata(
-    'runtimeid',
+    config.tags['runtime-id'],
     tracerVersion,
     config.hostname,
     config.server || null,
