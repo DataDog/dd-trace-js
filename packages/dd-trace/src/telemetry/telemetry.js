@@ -324,7 +324,8 @@ const nameMapping = {
   traceId128BitLoggingEnabled: 'DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED',
   instrumentationSource: 'instrumentation_source',
   injectionEnabled: 'ssi_injection_enabled',
-  injectForce: 'ssi_forced_injection_enabled'
+  injectForce: 'ssi_forced_injection_enabled',
+  'runtimeMetrics.enabled': 'runtimeMetrics'
 }
 
 const namesNeedFormatting = new Set(['DD_TAGS', 'peerServiceMapping', 'serviceMapping'])
