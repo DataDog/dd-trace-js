@@ -67,7 +67,7 @@ function updateConfig (product, configId, configPath, config) {
     const updateSucceeded = waf.wafManager.updateConfig(configPath, config)
     Reporter.reportWafConfigUpdate(product, configId, waf.wafManager.ddwaf.diagnostics, waf.wafManager.ddwafVersion)
 
-    if (!updateSucceed) {
+    if (!updateSucceeded) {
       throw new WafUpdateError(waf.wafManager.ddwaf.diagnostics)
     }
   } catch (err) {
