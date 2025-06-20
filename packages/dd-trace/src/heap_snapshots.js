@@ -1,7 +1,5 @@
 'use strict'
 
-const { format } = require('util')
-
 async function scheduleSnapshot (config, total) {
   if (total > config.heapSnapshot.count) return
 
@@ -27,10 +25,11 @@ function pad (value) {
 }
 
 function getName (folder) {
-  const { threadId } = require('worker_threads')
   const { join } = require('path')
-  const date = new Date()
+  const { format } = require('util')
+  const { threadId } = require('worker_threads')
 
+  const date = new Date()
   const filename = format(
     'Heap-%s%s%s-%s%s%s-%s-%s.heapsnapshot',
     date.getFullYear(),
@@ -49,7 +48,15 @@ function getName (folder) {
 module.exports = {
   async start (config) {
     if (config.heapSnapshot.count > 0 && globalThis.gc) {
-      await scheduleSnapshot(config, 1)
+      const log = require('./log')
+      const folder = config.heapSnapshot.folder
+
+      try {
+        await scheduleSnapshot(config, 1)
+        log.debug('Wrote heap snapshots to %s.', folder)
+      } catch (e) {
+        log.error('Failed to write heap snapshots to %s.', folder, e)
+      }
     }
   }
 }
