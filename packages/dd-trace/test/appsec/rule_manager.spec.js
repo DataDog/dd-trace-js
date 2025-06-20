@@ -138,18 +138,16 @@ describe('AppSec Rule Manager', () => {
     }
 
     let RuleManager
-    let reportSuccessfulWafUpdate, reportWafUpdate
+    let reportWafUpdate
     let setDefaultBlockingActionParameters
 
     beforeEach(() => {
       reportWafUpdate = sinon.stub()
-      reportSuccessfulWafUpdate = sinon.stub()
       setDefaultBlockingActionParameters = sinon.stub()
 
       RuleManager = proxyquire('../src/appsec/rule_manager', {
         './reporter': {
-          reportWafUpdate,
-          reportSuccessfulWafUpdate
+          reportWafUpdate
         },
         './blocking': {
           setDefaultBlockingActionParameters
