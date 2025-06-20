@@ -74,7 +74,11 @@ execArgvs.forEach(({ execArgv, skip }) => {
         })
       })
 
-      it('saves tracer configuration on disk', { skip: process.platform !== 'linux' }, async () => {
+      it('saves tracer configuration on disk', async () => {
+        if (process.platform !== 'linux') {
+          return
+        }
+
         proc = await spawnProc(startupTestFile, {
           cwd,
           execArgv,
