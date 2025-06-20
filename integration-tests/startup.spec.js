@@ -74,8 +74,7 @@ execArgvs.forEach(({ execArgv, skip }) => {
         })
       })
 
-
-      (process.platform === 'linux' ? it : it.skip)('saves tracer configuration on disk', async () => {
+      it('saves tracer configuration on disk', { skip: process.platform !== 'linux' }, async () => {
         proc = await spawnProc(startupTestFile, {
           cwd,
           execArgv,
@@ -93,7 +92,7 @@ execArgvs.forEach(({ execArgv, skip }) => {
               }
             } catch {}
           }
-          return false 
+          return false
         }
 
         const fds = fs.readdirSync(`/proc/${proc.pid}/fd`)
