@@ -291,8 +291,16 @@ class NodeApiEventSource {
 
 class DatadogInstrumentationEventSource {
   constructor (eventHandler, eventFilter) {
-    this.plugins = ['dns_lookup', 'dns_lookupservice', 'dns_resolve', 'dns_reverse', 'fs', 'net'].map(m => {
-      const Plugin = require(`./event_plugins/${m}`)
+    // List all entries explicitly for bundlers to pick up the require calls correctly.
+    const plugins = [
+      require('./event_plugins/dns_lookup'),
+      require('./event_plugins/dns_lookupservice'),
+      require('./event_plugins/dns_resolve'),
+      require('./event_plugins/dns_reverse'),
+      require('./event_plugins/fs'),
+      require('./event_plugins/net')
+    ]
+    this.plugins = plugins.map((Plugin) => {
       return new Plugin(eventHandler, eventFilter)
     })
 
