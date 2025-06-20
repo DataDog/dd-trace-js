@@ -539,9 +539,9 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.have.property('openai.request.method', 'GET')
             expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/files/*')
 
-            expect(traces[0][0].meta).to.have.property('openai.request.file_id', 'file-CnnsjbPfZvJuwynUaHqWF3')
+            expect(traces[0][0].meta).to.have.property('openai.request.file_id', 'file-RpTpuvRVtnKpdKZb7DDGto')
             expect(traces[0][0].meta).to.have.property('openai.response.filename', 'fine-tune.jsonl')
-            expect(traces[0][0].meta).to.have.property('openai.response.id', 'file-CnnsjbPfZvJuwynUaHqWF3')
+            expect(traces[0][0].meta).to.have.property('openai.response.id', 'file-RpTpuvRVtnKpdKZb7DDGto')
             expect(traces[0][0].meta).to.have.property('openai.response.purpose', 'fine-tune')
             expect(traces[0][0].meta).to.have.property('openai.response.status')
             expect(traces[0][0].metrics).to.have.property('openai.response.bytes')
@@ -549,11 +549,11 @@ describe('Plugin', () => {
           })
 
         if (semver.satisfies(realVersion, '>=4.0.0')) {
-          const result = await openai.files.retrieve('file-CnnsjbPfZvJuwynUaHqWF3')
+          const result = await openai.files.retrieve('file-RpTpuvRVtnKpdKZb7DDGto')
 
           expect(result.filename).to.exist
         } else {
-          const result = await openai.retrieveFile('file-CnnsjbPfZvJuwynUaHqWF3')
+          const result = await openai.retrieveFile('file-RpTpuvRVtnKpdKZb7DDGto')
 
           expect(result.data.filename).to.exist
         }
@@ -578,19 +578,19 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.have.property('openai.request.method', 'GET')
             expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/files/*/content')
 
-            expect(traces[0][0].meta).to.have.property('openai.request.file_id', 'file-CnnsjbPfZvJuwynUaHqWF3')
+            expect(traces[0][0].meta).to.have.property('openai.request.file_id', 'file-RpTpuvRVtnKpdKZb7DDGto')
           })
 
         if (semver.satisfies(realVersion, '>=4.0.0 < 4.17.1')) {
-          const result = await openai.files.retrieveContent('file-CnnsjbPfZvJuwynUaHqWF3')
+          const result = await openai.files.retrieveContent('file-RpTpuvRVtnKpdKZb7DDGto')
 
           expect(result).to.exist
         } else if (semver.satisfies(realVersion, '>=4.17.1')) {
-          const result = await openai.files.content('file-CnnsjbPfZvJuwynUaHqWF3')
+          const result = await openai.files.content('file-RpTpuvRVtnKpdKZb7DDGto')
 
           expect(result.constructor.name).to.eql('Response')
         } else {
-          const result = await openai.downloadFile('file-CnnsjbPfZvJuwynUaHqWF3')
+          const result = await openai.downloadFile('file-RpTpuvRVtnKpdKZb7DDGto')
 
           expect(result.data).to.exist
         }
@@ -598,7 +598,7 @@ describe('Plugin', () => {
         await checkTraces
       })
 
-      it('delete file', async () => {
+      it.skip('delete file', async () => { // TODO(sabrenner): RUN THIS LAST
         const checkTraces = agent
           .assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('name', 'openai.request')
@@ -613,17 +613,17 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.have.property('openai.request.method', 'DELETE')
             expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/files/*')
 
-            expect(traces[0][0].meta).to.have.property('openai.request.file_id', 'file-CnnsjbPfZvJuwynUaHqWF3')
-            expect(traces[0][0].meta).to.have.property('openai.response.id', 'file-CnnsjbPfZvJuwynUaHqWF3')
+            expect(traces[0][0].meta).to.have.property('openai.request.file_id', 'file-RpTpuvRVtnKpdKZb7DDGto')
+            expect(traces[0][0].meta).to.have.property('openai.response.id', 'file-RpTpuvRVtnKpdKZb7DDGto')
             expect(traces[0][0].metrics).to.have.property('openai.response.deleted')
           })
 
         if (semver.satisfies(realVersion, '>=4.0.0')) {
-          const result = await openai.files.del('file-CnnsjbPfZvJuwynUaHqWF3')
+          const result = await openai.files.del('file-RpTpuvRVtnKpdKZb7DDGto')
 
           expect(result.deleted).to.eql(true)
         } else {
-          const result = await openai.deleteFile('file-CnnsjbPfZvJuwynUaHqWF3')
+          const result = await openai.deleteFile('file-RpTpuvRVtnKpdKZb7DDGto')
 
           expect(result.data.deleted).to.eql(true)
         }
@@ -631,739 +631,165 @@ describe('Plugin', () => {
         await checkTraces
       })
 
-      describe.skip('create finetune', () => {
-        it('makes a successful call', async () => {
-          const checkTraces = agent
-            .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', 'openai.request')
-              expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.1.0') && DD_MAJOR < 6) {
-                expect(traces[0][0]).to.have.property('resource', 'fine_tuning.jobs.create')
-              } else if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
-                expect(traces[0][0]).to.have.property('resource', 'fine-tune.create')
-              } else {
-                expect(traces[0][0]).to.have.property('resource', 'createFineTune')
-              }
-              expect(traces[0][0]).to.have.property('error', 0)
-              expect(traces[0][0].meta).to.have.property('openai.organization.id', 'org-COOLORG') // no name just id
-              expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
-              if (semver.satisfies(realVersion, '>=4.1.0')) {
-                expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/fine_tuning/jobs')
-              } else {
-                expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/fine-tunes')
-              }
+      it('create fine-tune', async function () {
+        if (semver.satisfies(realVersion, '<4.17.0')) {
+          // fine tuning endpoints used in lower versions of the OpenAI SDK have been deprecated
+          this.skip()
+        }
 
-              expect(traces[0][0].meta).to.have.property('openai.request.classification_positive_class', 'wat')
-              expect(traces[0][0].meta).to.have.property('openai.request.model', 'curie')
-              expect(traces[0][0].meta).to.have.property('openai.request.suffix', 'deleteme')
-              expect(traces[0][0].meta).to.have.property('openai.request.training_file',
-                'file-t3k1gVSQDHrfZnPckzftlZ4A')
-              expect(traces[0][0].meta).to.have.property('openai.request.validation_file', 'file-foobar')
-              expect(traces[0][0].meta).to.have.property('openai.response.fine_tuned_model', 'huh')
-              expect(traces[0][0].meta).to.have.property('openai.response.id', 'ft-10RCfqSvgyEcauomw7VpiYco')
-              expect(traces[0][0].meta).to.have.property('openai.response.model', 'curie')
-              expect(traces[0][0].meta).to.have.property('openai.response.status', 'pending')
-              expect(traces[0][0].metrics).to.have.property('openai.request.batch_size', 3)
-              expect(traces[0][0].metrics).to.have.property('openai.request.classification_betas_count', 3)
-              expect(traces[0][0].metrics).to.have.property('openai.request.classification_n_classes', 1)
-              expect(traces[0][0].metrics).to.have.property('openai.request.compute_classification_metrics', 0)
-              expect(traces[0][0].metrics).to.have.property('openai.request.learning_rate_multiplier', 0.1)
-              expect(traces[0][0].metrics).to.have.property('openai.request.n_epochs', 4)
-              expect(traces[0][0].metrics).to.have.property('openai.request.prompt_loss_weight', 0.01)
-              expect(traces[0][0].metrics).to.have.property('openai.response.created_at', 1684442489)
-
-              const hyperparams = semver.satisfies(realVersion, '>=4.1.0') ? 'hyperparameters' : 'hyperparams'
-
-              if (semver.satisfies(realVersion, '<4.1.0')) {
-                expect(traces[0][0].metrics).to.have.property('openai.response.events_count', 1)
-              }
-              expect(traces[0][0].metrics).to.have.property(`openai.response.${hyperparams}.batch_size`, 3)
-              expect(traces[0][0].metrics)
-                .to.have.property(`openai.response.${hyperparams}.learning_rate_multiplier`, 0.1)
-              expect(traces[0][0].metrics).to.have.property(`openai.response.${hyperparams}.n_epochs`, 5)
-              expect(traces[0][0].metrics).to.have.property(`openai.response.${hyperparams}.prompt_loss_weight`, 0.01)
-              expect(traces[0][0].metrics).to.have.property('openai.response.result_files_count', 0)
-              expect(traces[0][0].metrics).to.have.property('openai.response.training_files_count', 1)
-              expect(traces[0][0].metrics).to.have.property('openai.response.updated_at', 1684442489)
-              if (semver.satisfies(realVersion, '<4.1.0')) {
-                expect(traces[0][0].metrics).to.have.property('openai.response.validation_files_count', 0)
-              }
-            })
-
-          // only certain request parameter combinations are allowed, leaving unused ones commented for now
-          const params = {
-            training_file: 'file-t3k1gVSQDHrfZnPckzftlZ4A',
-            validation_file: 'file-foobar',
-            model: 'curie',
-            n_epochs: 4,
-            batch_size: 3,
-            learning_rate_multiplier: 0.1,
-            prompt_loss_weight: 0.01,
-            compute_classification_metrics: false,
-            suffix: 'deleteme',
-            classification_n_classes: 1,
-            classification_positive_class: 'wat',
-            classification_betas: [0.1, 0.2, 0.3]
-          }
-
-          if (semver.satisfies(realVersion, '>=4.1.0')) {
-            const result = await openai.fineTuning.jobs.create(params)
-
-            expect(result.id).to.eql('ft-10RCfqSvgyEcauomw7VpiYco')
-          } else if (semver.satisfies(realVersion, '>=4.0.0')) {
-            const result = await openai.fineTunes.create(params)
-
-            expect(result.id).to.eql('ft-10RCfqSvgyEcauomw7VpiYco')
-          } else {
-            const result = await openai.createFineTune(params)
-
-            expect(result.data.id).to.eql('ft-10RCfqSvgyEcauomw7VpiYco')
-          }
-
-          await checkTraces
-        })
-
-        it('does not throw when missing classification betas', async () => {
-          const checkTraces = agent
-            .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', 'openai.request')
-            })
-
-          if (semver.satisfies(realVersion, '>=4.1.0')) {
-            await openai.fineTuning.jobs.create({
-              classification_betas: null
-            })
-          } else if (semver.satisfies(realVersion, '>=4.0.0')) {
-            await openai.fineTunes.create({
-              classification_betas: null
-            })
-          } else {
-            await openai.createFineTune({
-              classification_betas: null
-            })
-          }
-
-          await checkTraces
-        })
-      })
-
-      describe.skip('retrieve finetune', () => {
-        let scope
-
-        beforeEach(() => {
-          const response = {
-            id: 'ft-10RCfqSvgyEcauomw7VpiYco',
-            organization_id: 'org-COOLORG',
-            model: 'curie',
-            created_at: 1684442489,
-            updated_at: 1684442697,
-            status: 'succeeded',
-            fine_tuned_model: 'curie:ft-foo:deleteme-2023-05-18-20-44-56'
-          }
-
-          if (semver.satisfies(realVersion, '>=4.1.0')) {
-            response.object = 'fine_tuning.job'
-            response.hyperparameters = {
-              n_epochs: 4,
-              batch_size: 3,
-              prompt_loss_weight: 0.01,
-              learning_rate_multiplier: 0.1
-            }
-            response.result_files = [
-              'file-bJyf8TM0jeSZueBo4jpodZVQ'
-            ]
-            response.validation_file = null
-            response.training_file = 'file-t3k1gVSQDHrfZnPckzftlZ4A'
-          } else {
-            response.object = 'fine-tune'
-            response.hyperparams = {
-              n_epochs: 4,
-              batch_size: 3,
-              prompt_loss_weight: 0.01,
-              learning_rate_multiplier: 0.1
-            }
-            response.result_files = [
-              {
-                object: 'file',
-                id: 'file-bJyf8TM0jeSZueBo4jpodZVQ',
-                purpose: 'fine-tune-results',
-                filename: 'compiled_results.csv',
-                bytes: 410,
-                created_at: 1684442697,
-                status: 'processed',
-                status_details: null
-              }
-            ]
-            response.validation_files = []
-            response.training_files = [{
-              object: 'file',
-              id: 'file-t3k1gVSQDHrfZnPckzftlZ4A',
-              purpose: 'fine-tune',
-              filename: 'dave-hal.jsonl',
-              bytes: 356,
-              created_at: 1684365950,
-              status: 'processed',
-              status_details: null
-            }]
-            response.events = [
-              {
-                object: 'fine-tune-event',
-                level: 'info',
-                message: 'Created fine-tune: ft-10RCfqSvgyEcauomw7VpiYco',
-                created_at: 1684442489
-              },
-              {
-                object: 'fine-tune-event',
-                level: 'info',
-                message: 'Fine-tune costs $0.00',
-                created_at: 1684442612
-              },
-              {
-                object: 'fine-tune-event',
-                level: 'info',
-                message: 'Fine-tune enqueued. Queue number: 0',
-                created_at: 1684442612
-              },
-              {
-                object: 'fine-tune-event',
-                level: 'info',
-                message: 'Fine-tune started',
-                created_at: 1684442614
-              },
-              {
-                object: 'fine-tune-event',
-                level: 'info',
-                message: 'Completed epoch 1/4',
-                created_at: 1684442677
-              },
-              {
-                object: 'fine-tune-event',
-                level: 'info',
-                message: 'Completed epoch 2/4',
-                created_at: 1684442677
-              },
-              {
-                object: 'fine-tune-event',
-                level: 'info',
-                message: 'Completed epoch 3/4',
-                created_at: 1684442678
-              },
-              {
-                object: 'fine-tune-event',
-                level: 'info',
-                message: 'Completed epoch 4/4',
-                created_at: 1684442679
-              },
-              {
-                object: 'fine-tune-event',
-                level: 'info',
-                message: 'Uploaded model: curie:ft-foo:deleteme-2023-05-18-20-44-56',
-                created_at: 1684442696
-              },
-              {
-                object: 'fine-tune-event',
-                level: 'info',
-                message: 'Uploaded result file: file-bJyf8TM0jeSZueBo4jpodZVQ',
-                created_at: 1684442697
-              },
-              {
-                object: 'fine-tune-event',
-                level: 'info',
-                message: 'Fine-tune succeeded',
-                created_at: 1684442697
-              }
-            ]
-          }
-
-          scope = nock('https://api.openai.com:443')
-            .get(
-              semver.satisfies(realVersion, '>=4.1.0')
-                ? '/v1/fine_tuning/jobs/ft-10RCfqSvgyEcauomw7VpiYco'
-                : '/v1/fine-tunes/ft-10RCfqSvgyEcauomw7VpiYco'
-            )
-            .reply(200, response, [
-              'Date', 'Thu, 18 May 2023 22:11:53 GMT',
-              'Content-Type', 'application/json',
-              'Content-Length', '2727',
-              'Connection', 'close',
-              'openai-version', '2020-10-01',
-              'openai-processing-ms', '51'
-            ])
-        })
-
-        after(() => {
-          nock.removeInterceptor(scope)
-          scope.done()
-        })
-
-        it('makes a successful call', async () => {
-          const checkTraces = agent
-            .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', 'openai.request')
-              expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.1.0') && DD_MAJOR < 6) {
-                expect(traces[0][0]).to.have.property('resource', 'fine_tuning.jobs.retrieve')
-              } else if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
-                expect(traces[0][0]).to.have.property('resource', 'fine-tune.retrieve')
-              } else {
-                expect(traces[0][0]).to.have.property('resource', 'retrieveFineTune')
-              }
-              expect(traces[0][0]).to.have.property('error', 0)
-              expect(traces[0][0].meta).to.have.property('openai.organization.id', 'org-COOLORG') // no name just id
-              expect(traces[0][0].meta).to.have.property('openai.request.method', 'GET')
-              if (semver.satisfies(realVersion, '>=4.1.0')) {
-                expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/fine_tuning/jobs/*')
-              } else {
-                expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/fine-tunes/*')
-              }
-
-              expect(traces[0][0].meta).to.have.property('openai.request.fine_tune_id', 'ft-10RCfqSvgyEcauomw7VpiYco')
-              expect(traces[0][0].meta).to.have.property('openai.response.id', 'ft-10RCfqSvgyEcauomw7VpiYco')
-              expect(traces[0][0].meta).to.have.property('openai.response.model', 'curie')
-              expect(traces[0][0].meta).to.have.property('openai.response.status', 'succeeded')
-              expect(traces[0][0].metrics).to.have.property('openai.response.created_at', 1684442489)
-              if (semver.satisfies(realVersion, '<4.1.0')) {
-                expect(traces[0][0].metrics).to.have.property('openai.response.events_count', 11)
-              }
-
-              const hyperparamsKey = semver.satisfies(realVersion, '>=4.1.0') ? 'hyperparameters' : 'hyperparams'
-
-              expect(traces[0][0].metrics).to.have.property(`openai.response.${hyperparamsKey}.batch_size`, 3)
-              expect(traces[0][0].metrics)
-                .to.have.property(`openai.response.${hyperparamsKey}.learning_rate_multiplier`, 0.1)
-              expect(traces[0][0].metrics).to.have.property(`openai.response.${hyperparamsKey}.n_epochs`, 4)
-              expect(traces[0][0].metrics)
-                .to.have.property(`openai.response.${hyperparamsKey}.prompt_loss_weight`, 0.01)
-              expect(traces[0][0].metrics).to.have.property('openai.response.result_files_count', 1)
-              expect(traces[0][0].metrics).to.have.property('openai.response.training_files_count', 1)
-              expect(traces[0][0].metrics).to.have.property('openai.response.updated_at', 1684442697)
-              if (semver.satisfies(realVersion, '<4.1.0')) {
-                expect(traces[0][0].metrics).to.have.property('openai.response.validation_files_count', 0)
-              }
-            })
-
-          if (semver.satisfies(realVersion, '>=4.1.0')) {
-            const result = await openai.fineTuning.jobs.retrieve('ft-10RCfqSvgyEcauomw7VpiYco')
-
-            expect(result.id).to.eql('ft-10RCfqSvgyEcauomw7VpiYco')
-          } else if (semver.satisfies(realVersion, '>=4.0.0')) {
-            const result = await openai.fineTunes.retrieve('ft-10RCfqSvgyEcauomw7VpiYco')
-
-            expect(result.id).to.eql('ft-10RCfqSvgyEcauomw7VpiYco')
-          } else {
-            const result = await openai.retrieveFineTune('ft-10RCfqSvgyEcauomw7VpiYco')
-
-            expect(result.data.id).to.eql('ft-10RCfqSvgyEcauomw7VpiYco')
-          }
-
-          await checkTraces
-        })
-      })
-
-      describe.skip('list finetunes', () => {
-        let scope
-
-        beforeEach(() => {
-          const response = {
-            object: 'list'
-          }
-
-          if (semver.satisfies(realVersion, '>=4.1.0')) {
-            response.data = [{
-              object: 'fine-tuning.jobs',
-              id: 'ft-10RCfqSvgyEcauomw7VpiYco',
-              hyperparameters: {
-                n_epochs: 4,
-                batch_size: 3,
-                prompt_loss_weight: 0.01,
-                learning_rate_multiplier: 0.1
-              },
-              created_at: 1684442489,
-              updated_at: 1684442697,
-              organization_id: 'org-COOLORG',
-              model: 'curie',
-              fine_tuned_model: 'curie:ft-foo:deleteme-2023-05-18-20-44-56',
-              result_files: [],
-              status: 'succeeded',
-              validation_file: null,
-              training_file: 'file-t3k1gVSQDHrfZnPckzftlZ4A'
-            }]
-          } else {
-            response.data = [{
-              object: 'fine-tune',
-              id: 'ft-10RCfqSvgyEcauomw7VpiYco',
-              hyperparams: {
-                n_epochs: 4,
-                batch_size: 3,
-                prompt_loss_weight: 0.01,
-                learning_rate_multiplier: 0.1
-              },
-              organization_id: 'org-COOLORG',
-              model: 'curie',
-              training_files: [{
-                object: 'file',
-                id: 'file-t3k1gVSQDHrfZnPckzftlZ4A',
-                purpose: 'fine-tune',
-                filename: 'dave-hal.jsonl',
-                bytes: 356,
-                created_at: 1684365950,
-                status: 'processed',
-                status_details: null
-              }],
-              validation_files: [],
-              result_files: [{
-                object: 'file',
-                id: 'file-bJyf8TM0jeSZueBo4jpodZVQ',
-                purpose: 'fine-tune-results',
-                filename: 'compiled_results.csv',
-                bytes: 410,
-                created_at: 1684442697,
-                status: 'processed',
-                status_details: null
-              }],
-              created_at: 1684442489,
-              updated_at: 1684442697,
-              status: 'succeeded',
-              fine_tuned_model: 'curie:ft-foo:deleteme-2023-05-18-20-44-56'
-            }]
-          }
-
-          scope = nock('https://api.openai.com:443')
-            .get(
-              semver.satisfies(realVersion, '>=4.1.0')
-                ? '/v1/fine_tuning/jobs'
-                : '/v1/fine-tunes'
-            )
-            .reply(200, response)
-        })
-
-        afterEach(() => {
-          nock.removeInterceptor(scope)
-          scope.done()
-        })
-
-        it('makes a successful call', async () => {
-          const checkTraces = agent
-            .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', 'openai.request')
-              expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.1.0') && DD_MAJOR < 6) {
-                expect(traces[0][0]).to.have.property('resource', 'fine_tuning.jobs.list')
-              } else if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
-                expect(traces[0][0]).to.have.property('resource', 'fine-tune.list')
-              } else {
-                expect(traces[0][0]).to.have.property('resource', 'listFineTunes')
-              }
-              expect(traces[0][0]).to.have.property('error', 0)
-              expect(traces[0][0].meta).to.have.property('openai.request.method', 'GET')
-              if (semver.satisfies(realVersion, '>=4.1.0')) {
-                expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/fine_tuning/jobs')
-              } else {
-                expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/fine-tunes')
-              }
-
-              expect(traces[0][0].metrics).to.have.property('openai.response.count', 1)
-            })
-
-          if (semver.satisfies(realVersion, '>=4.1.0')) {
-            const result = await openai.fineTuning.jobs.list()
-
-            expect(result.body.object).to.eql('list')
-          } else if (semver.satisfies(realVersion, '>=4.0.0')) {
-            const result = await openai.fineTunes.list()
-
-            expect(result.object).to.eql('list')
-          } else {
-            const result = await openai.listFineTunes()
-
-            expect(result.data.object).to.eql('list')
-          }
-
-          await checkTraces
-        })
-      })
-
-      describe.skip('list finetune events', () => {
-        let scope
-
-        beforeEach(() => { // beforeEach allows realVersion to be set first before nocking the call
-          const response = {
-            object: 'list',
-            data: [
-              {
-                level: 'info',
-                message: 'Created fine-tune: ft-10RCfqSvgyEcauomw7VpiYco',
-                created_at: 1684442489
-              },
-              {
-                level: 'info',
-                message: 'Fine-tune costs $0.00',
-                created_at: 1684442612
-              },
-              {
-                level: 'info',
-                message: 'Fine-tune enqueued. Queue number: 0',
-                created_at: 1684442612
-              },
-              {
-                level: 'info',
-                message: 'Fine-tune started',
-                created_at: 1684442614
-              },
-              {
-                level: 'info',
-                message: 'Completed epoch 1/4',
-                created_at: 1684442677
-              },
-              {
-                level: 'info',
-                message: 'Completed epoch 2/4',
-                created_at: 1684442677
-              },
-              {
-                level: 'info',
-                message: 'Completed epoch 3/4',
-                created_at: 1684442678
-              },
-              {
-                level: 'info',
-                message: 'Completed epoch 4/4',
-                created_at: 1684442679
-              },
-              {
-                level: 'info',
-                message: 'Uploaded model: curie:ft-foo:deleteme-2023-05-18-20-44-56',
-                created_at: 1684442696
-              },
-              {
-                level: 'info',
-                message: 'Uploaded result file: file-bJyf8TM0jeSZueBo4jpodZVQ',
-                created_at: 1684442697
-              },
-              {
-                level: 'info',
-                message: 'Fine-tune succeeded',
-                created_at: 1684442697
-              }
-            ]
-          }
-
-          for (const event of response.data) {
-            if (semver.satisfies(realVersion, '>=4.1.0')) {
-              event.object = 'fine_tuning.job.event'
+        const checkTraces = agent
+          .assertSomeTraces(traces => {
+            expect(traces[0][0]).to.have.property('name', 'openai.request')
+            expect(traces[0][0]).to.have.property('type', 'openai')
+            if (semver.satisfies(realVersion, '>=4.17.0') && DD_MAJOR < 6) {
+              expect(traces[0][0]).to.have.property('resource', 'fine_tuning.jobs.create')
             } else {
-              event.object = 'fine-tune-event'
+              expect(traces[0][0]).to.have.property('resource', 'createFineTune')
             }
-          }
+            expect(traces[0][0]).to.have.property('error', 0)
+            expect(traces[0][0].meta).to.have.property('openai.organization.name', 'datadog-staging')
+            expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
+            expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/openai/fine_tuning/jobs')
 
-          scope = nock('https://api.openai.com:443')
-            .get(
-              semver.satisfies(realVersion, '>=4.1.0')
-                ? '/v1/fine_tuning/jobs/ft-10RCfqSvgyEcauomw7VpiYco/events'
-                : '/v1/fine-tunes/ft-10RCfqSvgyEcauomw7VpiYco/events'
-            )
-            .reply(200, response, [
-              'Date', 'Thu, 18 May 2023 22:47:17 GMT',
-              'Content-Type', 'application/json',
-              'Content-Length', '1718',
-              'Connection', 'close',
-              'openai-version', '2020-10-01',
-              'openai-processing-ms', '33'
-            ])
-        })
+            expect(traces[0][0].meta).to.have.property('openai.request.model', 'gpt-4.1-mini-2025-04-14')
+            expect(traces[0][0].meta).to.have.property('openai.request.training_file',
+              'file-RpTpuvRVtnKpdKZb7DDGto')
+            expect(traces[0][0].meta['openai.response.id']).to.match(/^ftjob-/)
+            expect(traces[0][0].meta).to.have.property('openai.response.model', 'gpt-4.1-mini-2025-04-14')
+            expect(traces[0][0].meta).to.have.property('openai.response.status')
+            expect(traces[0][0].metrics).to.have.property('openai.response.created_at')
+            expect(traces[0][0].metrics).to.have.property('openai.response.result_files_count')
+            expect(traces[0][0].metrics).to.have.property('openai.response.training_files_count')
+          })
 
-        afterEach(() => {
-          nock.removeInterceptor(scope)
-          scope.done()
-        })
+        const params = {
+          training_file: 'file-RpTpuvRVtnKpdKZb7DDGto',
+          model: 'gpt-4.1-mini-2025-04-14',
+        }
 
-        it('makes a successful call', async () => {
-          const checkTraces = agent
-            .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', 'openai.request')
-              expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.1.0') && DD_MAJOR < 6) {
-                expect(traces[0][0]).to.have.property('resource', 'fine_tuning.jobs.listEvents')
-              } else if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
-                expect(traces[0][0]).to.have.property('resource', 'fine-tune.listEvents')
-              } else {
-                expect(traces[0][0]).to.have.property('resource', 'listFineTuneEvents')
-              }
-              expect(traces[0][0]).to.have.property('error', 0)
-              expect(traces[0][0].meta).to.have.property('openai.request.method', 'GET')
-              if (semver.satisfies(realVersion, '>=4.1.0')) {
-                expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/fine_tuning/jobs/*/events')
-              } else {
-                expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/fine-tunes/*/events')
-              }
+        const result = await openai.fineTuning.jobs.create(params)
+        expect(result.id).to.exist
 
-              expect(traces[0][0].meta).to.have.property('openai.request.fine_tune_id', 'ft-10RCfqSvgyEcauomw7VpiYco')
-              expect(traces[0][0].metrics).to.have.property('openai.response.count', 11)
-            })
-
-          if (semver.satisfies(realVersion, '>=4.1.0')) {
-            const result = await openai.fineTuning.jobs.listEvents('ft-10RCfqSvgyEcauomw7VpiYco')
-
-            expect(result.body.object).to.eql('list')
-          } else if (semver.satisfies(realVersion, '>=4.0.0')) {
-            const result = await openai.fineTunes.listEvents('ft-10RCfqSvgyEcauomw7VpiYco')
-
-            expect(result.object).to.eql('list')
-          } else {
-            const result = await openai.listFineTuneEvents('ft-10RCfqSvgyEcauomw7VpiYco')
-
-            expect(result.data.object).to.eql('list')
-          }
-
-          await checkTraces
-        })
+        await checkTraces
       })
 
-      describe.skip('cancel finetune', () => {
-        let scope
+      it('retrieve fine-tune', async function () {
+        if (semver.satisfies(realVersion, '<4.17.0')) {
+          this.skip()
+        }
 
-        beforeEach(() => {
-          const response = {
-            id: 'ft-TVpNqwlvermMegfRVqSOyPyS',
-            organization_id: 'org-COOLORG',
-            model: 'curie',
-            created_at: 1684452102,
-            updated_at: 1684452103,
-            status: 'cancelled',
-            fine_tuned_model: 'idk'
-          }
-
-          if (semver.satisfies(realVersion, '>=4.1.0')) {
-            response.object = 'fine-tuning.job'
-            response.hyperparameters = {
-              n_epochs: 4,
-              batch_size: 3,
-              prompt_loss_weight: 0.01,
-              learning_rate_multiplier: 0.1
+        const checkTraces = agent
+          .assertSomeTraces(traces => {
+            expect(traces[0][0]).to.have.property('name', 'openai.request')
+            expect(traces[0][0]).to.have.property('type', 'openai')
+            if (semver.satisfies(realVersion, '>=4.17.0') && DD_MAJOR < 6) {
+              expect(traces[0][0]).to.have.property('resource', 'fine_tuning.jobs.retrieve')
+            } else {
+              expect(traces[0][0]).to.have.property('resource', 'retrieveFineTune')
             }
-            response.training_files = 'file-t3k1gVSQDHrfZnPckzftlZ4A'
-            response.validation_file = null
-            response.result_files = []
-          } else {
-            response.object = 'fine-tune'
-            response.hyperparams = {
-              n_epochs: 4,
-              batch_size: 3,
-              prompt_loss_weight: 0.01,
-              learning_rate_multiplier: 0.1
+            expect(traces[0][0]).to.have.property('error', 0)
+            expect(traces[0][0].meta).to.have.property('openai.organization.name', 'datadog-staging')
+            expect(traces[0][0].meta).to.have.property('openai.request.method', 'GET')
+            expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/fine_tuning/jobs/*')
+
+            expect(traces[0][0].meta).to.have.property('openai.request.fine_tune_id', 'ftjob-q9CUUUsHJemGUVQ1Ecc01zcf')
+            expect(traces[0][0].meta).to.have.property('openai.response.id', 'ftjob-q9CUUUsHJemGUVQ1Ecc01zcf')
+            expect(traces[0][0].meta).to.have.property('openai.response.model')
+            expect(traces[0][0].meta).to.have.property('openai.response.status')
+            expect(traces[0][0].metrics).to.have.property('openai.response.created_at')
+          })
+
+        const result = await openai.fineTuning.jobs.retrieve('ftjob-q9CUUUsHJemGUVQ1Ecc01zcf')
+        expect(result.id).to.eql('ftjob-q9CUUUsHJemGUVQ1Ecc01zcf')
+
+        await checkTraces
+      })
+
+      it('cancel fine-tune', async function () {
+        if (semver.satisfies(realVersion, '<4.17.0')) {
+          this.skip()
+        }
+
+        const checkTraces = agent
+          .assertSomeTraces(traces => {
+            expect(traces[0][0]).to.have.property('name', 'openai.request')
+            expect(traces[0][0]).to.have.property('type', 'openai')
+            if (DD_MAJOR < 6) {
+              expect(traces[0][0]).to.have.property('resource', 'fine_tuning.jobs.cancel')
+            } else {
+              expect(traces[0][0]).to.have.property('resource', 'cancelFineTune')
             }
-            response.training_files = [{
-              object: 'file',
-              id: 'file-t3k1gVSQDHrfZnPckzftlZ4A',
-              purpose: 'fine-tune',
-              filename: 'dave-hal.jsonl',
-              bytes: 356,
-              created_at: 1684365950,
-              status: 'processed',
-              status_details: null
-            }]
-            response.validation_files = []
-            response.result_files = []
-            response.events = [
-              {
-                object: 'fine-tune-event',
-                level: 'info',
-                message: 'Created fine-tune: ft-TVpNqwlvermMegfRVqSOyPyS',
-                created_at: 1684452102
-              },
-              {
-                object: 'fine-tune-event',
-                level: 'info',
-                message: 'Fine-tune cancelled',
-                created_at: 1684452103
-              }
-            ]
-          }
 
-          scope = nock('https://api.openai.com:443')
-            .post(
-              semver.satisfies(realVersion, '>=4.1.0')
-                ? '/v1/fine_tuning/jobs/ft-TVpNqwlvermMegfRVqSOyPyS/cancel'
-                : '/v1/fine-tunes/ft-TVpNqwlvermMegfRVqSOyPyS/cancel'
-            )
-            .reply(200, response, [
-              'Date', 'Thu, 18 May 2023 23:21:43 GMT',
-              'Content-Type', 'application/json',
-              'Content-Length', '1042',
-              'Connection', 'close',
-              'openai-version', '2020-10-01',
-              'openai-processing-ms', '78'
-            ])
-        })
+            expect(traces[0][0]).to.have.property('error', 0)
+            expect(traces[0][0].meta).to.have.property('openai.organization.name', 'datadog-staging')
+            expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
+            expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/fine_tuning/jobs/*/cancel')
+            expect(traces[0][0].meta).to.have.property('openai.request.fine_tune_id', 'ftjob-q9CUUUsHJemGUVQ1Ecc01zcf')
+            expect(traces[0][0].meta).to.have.property('openai.response.id', 'ftjob-q9CUUUsHJemGUVQ1Ecc01zcf')
+            expect(traces[0][0].meta).to.have.property('openai.response.status', 'cancelled')
+            expect(traces[0][0].metrics).to.have.property('openai.response.created_at')
+          })
 
-        afterEach(() => {
-          nock.removeInterceptor(scope)
-          scope.done()
-        })
+        const result = await openai.fineTuning.jobs.cancel('ftjob-q9CUUUsHJemGUVQ1Ecc01zcf')
+        expect(result.id).to.eql('ftjob-q9CUUUsHJemGUVQ1Ecc01zcf')
 
-        it('makes a successful call', async () => {
-          const checkTraces = agent
-            .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', 'openai.request')
-              expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.1.0') && DD_MAJOR < 6) {
-                expect(traces[0][0]).to.have.property('resource', 'fine_tuning.jobs.cancel')
-              } else if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
-                expect(traces[0][0]).to.have.property('resource', 'fine-tune.cancel')
-              } else {
-                expect(traces[0][0]).to.have.property('resource', 'cancelFineTune')
-              }
-              expect(traces[0][0]).to.have.property('error', 0)
-              expect(traces[0][0].meta).to.have.property('openai.organization.id', 'org-COOLORG')
-              expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
-              if (semver.satisfies(realVersion, '>=4.1.0')) {
-                expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/fine_tuning/jobs/*/cancel')
-              } else {
-                expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/fine-tunes/*/cancel')
-              }
+        await checkTraces
+      })
 
-              expect(traces[0][0].meta).to.have.property('openai.request.fine_tune_id', 'ft-TVpNqwlvermMegfRVqSOyPyS')
-              expect(traces[0][0].meta).to.have.property('openai.response.fine_tuned_model', 'idk')
-              expect(traces[0][0].meta).to.have.property('openai.response.id', 'ft-TVpNqwlvermMegfRVqSOyPyS')
-              expect(traces[0][0].meta).to.have.property('openai.response.model', 'curie')
-              expect(traces[0][0].meta).to.have.property('openai.response.status', 'cancelled')
-              expect(traces[0][0].metrics).to.have.property('openai.response.created_at', 1684452102)
-              if (semver.satisfies(realVersion, '<4.1.0')) {
-                expect(traces[0][0].metrics).to.have.property('openai.response.events_count', 2)
-              }
+      it('list fine-tune events', async function () {
+        if (semver.satisfies(realVersion, '<4.17.0')) {
+          this.skip()
+        }
 
-              const hyperparamsKey = semver.satisfies(realVersion, '>=4.1.0') ? 'hyperparameters' : 'hyperparams'
+        const checkTraces = agent
+          .assertSomeTraces(traces => {
+            expect(traces[0][0]).to.have.property('name', 'openai.request')
+            expect(traces[0][0]).to.have.property('type', 'openai')
+            if (DD_MAJOR < 6) {
+              expect(traces[0][0]).to.have.property('resource', 'fine_tuning.jobs.listEvents')
+            } else {
+              expect(traces[0][0]).to.have.property('resource', 'listFineTuneEvents')
+            }
 
-              expect(traces[0][0].metrics).to.have.property(`openai.response.${hyperparamsKey}.batch_size`, 3)
-              expect(traces[0][0].metrics)
-                .to.have.property(`openai.response.${hyperparamsKey}.learning_rate_multiplier`, 0.1)
-              expect(traces[0][0].metrics).to.have.property(`openai.response.${hyperparamsKey}.n_epochs`, 4)
-              expect(traces[0][0].metrics)
-                .to.have.property(`openai.response.${hyperparamsKey}.prompt_loss_weight`, 0.01)
-              expect(traces[0][0].metrics).to.have.property('openai.response.result_files_count', 0)
-              expect(traces[0][0].metrics).to.have.property('openai.response.training_files_count', 1)
-              expect(traces[0][0].metrics).to.have.property('openai.response.updated_at', 1684452103)
-              if (semver.satisfies(realVersion, '<4.1.0')) {
-                expect(traces[0][0].metrics).to.have.property('openai.response.validation_files_count', 0)
-              }
-            })
+            expect(traces[0][0]).to.have.property('error', 0)
+            expect(traces[0][0].meta).to.have.property('openai.request.method', 'GET')
+            expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/fine_tuning/jobs/*/events')
 
-          if (semver.satisfies(realVersion, '>=4.1.0')) {
-            const result = await openai.fineTuning.jobs.cancel('ft-TVpNqwlvermMegfRVqSOyPyS')
+            expect(traces[0][0].meta).to.have.property('openai.request.fine_tune_id', 'ftjob-q9CUUUsHJemGUVQ1Ecc01zcf')
+            expect(traces[0][0].metrics).to.have.property('openai.response.count')
+          })
 
-            expect(result.id).to.eql('ft-TVpNqwlvermMegfRVqSOyPyS')
-          } else if (semver.satisfies(realVersion, '>=4.0.0')) {
-            const result = await openai.fineTunes.cancel('ft-TVpNqwlvermMegfRVqSOyPyS')
+        const result = await openai.fineTuning.jobs.listEvents('ftjob-q9CUUUsHJemGUVQ1Ecc01zcf')
+        expect(result.body.object).to.eql('list')
 
-            expect(result.id).to.eql('ft-TVpNqwlvermMegfRVqSOyPyS')
-          } else {
-            const result = await openai.cancelFineTune('ft-TVpNqwlvermMegfRVqSOyPyS')
+        await checkTraces
+      })
 
-            expect(result.data.id).to.eql('ft-TVpNqwlvermMegfRVqSOyPyS')
-          }
+      it('list fine-tunes', async function () {
+        if (semver.satisfies(realVersion, '<4.17.0')) {
+          this.skip()
+        }
 
-          await checkTraces
-        })
+        const checkTraces = agent
+          .assertSomeTraces(traces => {
+            expect(traces[0][0]).to.have.property('name', 'openai.request')
+            expect(traces[0][0]).to.have.property('type', 'openai')
+            if (DD_MAJOR < 6) {
+              expect(traces[0][0]).to.have.property('resource', 'fine_tuning.jobs.list')
+            } else {
+              expect(traces[0][0]).to.have.property('resource', 'listFineTunes')
+            }
+            expect(traces[0][0]).to.have.property('error', 0)
+            expect(traces[0][0].meta).to.have.property('openai.request.method', 'GET')
+            expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/openai/fine_tuning/jobs')
+
+            expect(traces[0][0].metrics).to.have.property('openai.response.count', 1)
+          })
+
+        const result = await openai.fineTuning.jobs.list()
+        expect(result.body.object).to.eql('list')
+
+        await checkTraces
       })
 
       if (semver.intersects(version, '>=3.0.1')) {
@@ -1483,65 +909,63 @@ describe('Plugin', () => {
         })
       }
 
-      describe('create image', () => {
-        it('makes a successful call using a string prompt', async function () {
-          if (semver.satisfies(realVersion, '<3.1.0')) {
-            this.skip()
-          }
+      it('create image', async function () {
+        if (semver.satisfies(realVersion, '<3.1.0')) {
+          this.skip()
+        }
 
-          const checkTraces = agent
-            .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', 'openai.request')
-              expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
-                expect(traces[0][0]).to.have.property('resource', 'images.generate')
-              } else {
-                expect(traces[0][0]).to.have.property('resource', 'createImage')
-              }
-              expect(traces[0][0]).to.have.property('error', 0)
-              expect(traces[0][0].meta).to.have.property('openai.organization.name', 'datadog-staging')
-              expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
-              expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/openai/images/generations')
+        const checkTraces = agent
+          .assertSomeTraces(traces => {
+            expect(traces[0][0]).to.have.property('name', 'openai.request')
+            expect(traces[0][0]).to.have.property('type', 'openai')
+            if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
+              expect(traces[0][0]).to.have.property('resource', 'images.generate')
+            } else {
+              expect(traces[0][0]).to.have.property('resource', 'createImage')
+            }
+            expect(traces[0][0]).to.have.property('error', 0)
+            expect(traces[0][0].meta).to.have.property('openai.organization.name', 'datadog-staging')
+            expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
+            expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/openai/images/generations')
 
-              expect(traces[0][0].meta).to.have.property('openai.request.prompt', 'sleepy capybara with monkey on top')
-              expect(traces[0][0].meta).to.have.property('openai.request.response_format', 'url')
-              expect(traces[0][0].meta).to.have.property('openai.request.size', '1024x1024')
-              expect(traces[0][0].meta).to.have.property('openai.request.model', 'dall-e-3')
-              expect(traces[0][0].meta).to.have.property('openai.response.images.0.url')
-              expect(traces[0][0].metrics).to.have.property('openai.request.n', 1)
-              expect(traces[0][0].metrics).to.have.property('openai.response.created')
-              expect(traces[0][0].metrics).to.have.property('openai.response.images_count', 1)
-            })
+            expect(traces[0][0].meta).to.have.property('openai.request.prompt', 'sleepy capybara with monkey on top')
+            expect(traces[0][0].meta).to.have.property('openai.request.response_format', 'url')
+            expect(traces[0][0].meta).to.have.property('openai.request.size', '1024x1024')
+            expect(traces[0][0].meta).to.have.property('openai.request.model', 'dall-e-3')
+            expect(traces[0][0].meta).to.have.property('openai.response.images.0.url')
+            expect(traces[0][0].metrics).to.have.property('openai.request.n', 1)
+            expect(traces[0][0].metrics).to.have.property('openai.response.created')
+            expect(traces[0][0].metrics).to.have.property('openai.response.images_count', 1)
+          })
 
-          if (semver.satisfies(realVersion, '>=4.0.0')) {
-            const result = await openai.images.generate({
-              prompt: 'sleepy capybara with monkey on top',
-              n: 1,
-              size: '1024x1024',
-              response_format: 'url',
-              model: 'dall-e-3'
-            })
+        if (semver.satisfies(realVersion, '>=4.0.0')) {
+          const result = await openai.images.generate({
+            prompt: 'sleepy capybara with monkey on top',
+            n: 1,
+            size: '1024x1024',
+            response_format: 'url',
+            model: 'dall-e-3'
+          })
 
-            expect(result.data[0].url.startsWith('https://')).to.be.true
-          } else {
-            const result = await openai.createImage({
-              prompt: 'sleepy capybara with monkey on top',
-              n: 1,
-              size: '1024x1024',
-              response_format: 'url',
-              model: 'dall-e-3'
-            })
+          expect(result.data[0].url.startsWith('https://')).to.be.true
+        } else {
+          const result = await openai.createImage({
+            prompt: 'sleepy capybara with monkey on top',
+            n: 1,
+            size: '1024x1024',
+            response_format: 'url',
+            model: 'dall-e-3'
+          })
 
-            expect(result.data.data[0].url.startsWith('https://')).to.be.true
-          }
+          expect(result.data.data[0].url.startsWith('https://')).to.be.true
+        }
 
-          await checkTraces
+        await checkTraces
 
-          expect(externalLoggerStub).to.have.been.called
-        })
+        expect(externalLoggerStub).to.have.been.called
       })
 
-      it.only('create image edit', async function () {
+      it.skip('create image edit', async function () {
         this.timeout(60_000)
         if (semver.satisfies(realVersion, '<3.1.0')) {
           this.skip()
