@@ -21,6 +21,11 @@ const missingPlugins = [
   'datadog-plugin-mongoose' // mongoose tracing is done through mongodb-core instrumentation
 ]
 
+// instrumentations that do not have a hook, but are still instrumented
+const missingInstrumentationHooks = [
+  'fetch' // fetch is provided by Node.js, and is automatically instrumented if it exists
+]
+
 describe('Plugin Structure Validation', () => {
   const packagesDir = path.join(__dirname, '..', '..', '..')
   const instrumentationsDir = path.join(packagesDir, 'datadog-instrumentations', 'src')
@@ -94,6 +99,16 @@ describe('Plugin Structure Validation', () => {
       }
     })
 
-    expect(missingHooks).to.be.empty
+    // some hooks are for submodules, so we should see if the pluginId is a submodule of the hook
+    // e.g: '@jest/core' is a submodule of 'jest'. 'jest' is our plugin id
+    normalizedInstrumentationHooks.forEach(hook => {
+      missingHooks.forEach(pluginId => {
+        if (hook.includes(pluginId)) {
+          missingHooks.splice(missingHooks.indexOf(pluginId), 1)
+        }
+      })
+    })
+
+    expect(missingHooks).to.deep.equal(missingInstrumentationHooks)
   })
 })
