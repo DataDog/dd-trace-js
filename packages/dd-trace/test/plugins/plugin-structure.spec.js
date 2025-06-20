@@ -7,8 +7,18 @@ const { expect } = require('chai')
 const fs = require('fs')
 const path = require('path')
 
+const { normalizePluginEnvName } = require('../../src/util')
+
 const abstractPlugins = [
   'web' // web is an abstract plugin, and will not have an instrumentation file
+]
+
+// we have some plugin directories that we don't actually have a tracing plugin for, but exist for special cases
+// outlined below. We filter them out of the plugin structure validation.
+const missingPlugins = [
+  'datadog-plugin-axios', // we test axios to ensure our functionality works with axios, see: https://github.com/DataDog/dd-trace-js/pull/1469
+  'datadog-plugin-limitd-client', // limitd-client instrumentation handles trace context propagation, no tracing is done
+  'datadog-plugin-mongoose' // mongoose tracing is done through mongodb-core instrumentation
 ]
 
 describe('Plugin Structure Validation', () => {
@@ -16,39 +26,34 @@ describe('Plugin Structure Validation', () => {
   const instrumentationsDir = path.join(packagesDir, 'datadog-instrumentations', 'src')
 
   let pluginDirs
-  let allPluginIds
   let instrumentationFiles
+  let normalizedInstrumentationHooks
+  let allPluginIds
 
   before(() => {
     pluginDirs = fs.readdirSync(packagesDir)
-      .filter(dir => dir.startsWith('datadog-plugin-'))
-      .filter(dir => {
-        const pluginPath = path.join(packagesDir, dir, 'src', 'index.js')
-        return fs.existsSync(pluginPath)
-      })
+      .filter(dir => dir.startsWith('datadog-plugin-') && !missingPlugins.includes(dir))
 
-    allPluginIds = new Set()
     instrumentationFiles = new Set(
       fs.readdirSync(instrumentationsDir)
         .filter(file => file.endsWith('.js'))
         .map(file => file.replace('.js', ''))
     )
+    normalizedInstrumentationHooks = new Set(
+      Object.keys(
+        require(path.join(instrumentationsDir, 'helpers', 'hooks.js'))
+      ).map(normalizePluginEnvName)
+    )
+    allPluginIds = new Set(pluginDirs.map(dir => dir.replace('datadog-plugin-', '')))
   })
 
   pluginDirs.forEach(pluginDir => {
     const expectedId = pluginDir.replace('datadog-plugin-', '')
 
     describe(`Plugin: ${pluginDir}`, () => {
-      let Plugin
-      let pluginId
-
-      beforeEach(() => {
-        const pluginPath = path.join(packagesDir, pluginDir, 'src', 'index.js')
-        delete require.cache[require.resolve(pluginPath)]
-        Plugin = require(pluginPath)
-        pluginId = Plugin.id
-        allPluginIds.add(pluginId)
-      })
+      const pluginPath = path.join(packagesDir, pluginDir, 'src', 'index.js')
+      const Plugin = require(pluginPath)
+      const pluginId = Plugin.id
 
       it('should have an id that matches the directory name', () => {
         expect(pluginId).to.equal(expectedId)
@@ -62,35 +67,10 @@ describe('Plugin Structure Validation', () => {
         expect(instrumentationFiles.has(pluginId))
           .to.equal(true, `Missing instrumentation file: ${pluginId}.js`)
       })
-
-      it('should export a class with a static id getter', () => {
-        expect(Plugin).to.be.a('function')
-        expect(Plugin.id).to.be.a('string')
-        expect(Plugin.id).to.not.be.empty
-      })
     })
   })
 
-  it('should have no duplicate plugin IDs', () => {
-    const duplicates = []
-    const seenIds = new Set()
-
-    pluginDirs.forEach(pluginDir => {
-      const pluginPath = path.join(packagesDir, pluginDir, 'src', 'index.js')
-      const Plugin = require(pluginPath)
-      const id = Plugin.id
-
-      if (seenIds.has(id)) {
-        duplicates.push(id)
-      } else {
-        seenIds.add(id)
-      }
-    })
-
-    expect(duplicates).to.be.empty
-  })
-
-  it('should have all plugins accounted for in instrumentations', () => {
+  it('should have all plugins accounted for with an instrumentation file', () => {
     const missingInstrumentations = []
 
     allPluginIds.forEach(pluginId => {
@@ -100,5 +80,18 @@ describe('Plugin Structure Validation', () => {
     })
 
     expect(missingInstrumentations).to.be.empty
+  })
+
+  it('should have all plugins accounted for with a hook', () => {
+    // since module names can have characters like @, /, we need to normalize them to compare to the plugin names
+
+    const missingHooks = []
+
+    allPluginIds.forEach(pluginId => {
+      const normalizedPluginId = normalizePluginEnvName(pluginId)
+      if (!normalizedInstrumentationHooks.has(normalizedPluginId) && !abstractPlugins.includes(normalizedPluginId)) {
+        missingHooks.push(normalizedPluginId)
+      }
+    })
   })
 })

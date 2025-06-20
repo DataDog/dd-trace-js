@@ -25,9 +25,7 @@ const names = Object.keys(hooks)
 const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
 
 const disabledInstrumentations = new Set(
-  DD_TRACE_DISABLED_INSTRUMENTATIONS
-    ? DD_TRACE_DISABLED_INSTRUMENTATIONS.split(',').map(name => normalizePluginEnvName(name, true))
-    : []
+  DD_TRACE_DISABLED_INSTRUMENTATIONS?.split(',').map(name => normalizePluginEnvName(name, true)) ?? []
 )
 const reenabledInstrumentations = new Set()
 
@@ -81,7 +79,7 @@ for (const packageName of names) {
 
     // some integrations are disabled by default, but can be enabled by setting
     // the DD_TRACE_<INTEGRATION>_ENABLED environment variable to true
-    if (hook.disabled === true && !reenabledInstrumentations.has(normalizedPackageName)) {
+    if (hook.disabled && !reenabledInstrumentations.has(normalizedPackageName)) {
       continue
     }
 
