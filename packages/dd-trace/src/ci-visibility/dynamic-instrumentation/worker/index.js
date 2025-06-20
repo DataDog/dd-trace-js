@@ -30,7 +30,7 @@ const probeIdToBreakpointId = new Map()
 session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint], callFrames } }) => {
   const probe = breakpointIdToProbe.get(hitBreakpoint)
   if (!probe) {
-    log.warn(`No probe found for breakpoint ${hitBreakpoint}`)
+    log.warn('No probe found for breakpoint', hitBreakpoint)
     return session.post('Debugger.resume')
   }
 
@@ -95,13 +95,13 @@ async function addBreakpoint (probe) {
 
   const script = findScriptFromPartialPath(file)
   if (!script) {
-    log.error(`No loaded script found for ${file}`)
+    log.error('No loaded script found for', file)
     throw new Error(`No loaded script found for ${file}`)
   }
 
   const { url, scriptId, sourceMapURL, source } = script
 
-  log.warn(`Adding breakpoint at ${url}:${line}`)
+  log.warn('Adding breakpoint at %s:%s', url, line)
 
   let lineNumber = line
   let columnNumber = 0

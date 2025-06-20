@@ -4,7 +4,7 @@
 
 import { Octokit } from 'octokit'
 
-const { DAYS = '1' } = process.env
+const { DAYS = '1', OCCURRENCES = '1' } = process.env
 
 const ONE_DAY = 24 * 60 * 60 * 1000
 
@@ -24,6 +24,7 @@ const workflows = [
 ]
 
 const flaky = {}
+const reported = new Set()
 
 async function checkWorkflowRuns (id, page = 1) {
   const response = await octokit.rest.actions.listWorkflowRuns({
@@ -79,10 +80,15 @@ async function checkWorkflowJobs (id, page = 1) {
     if (job.conclusion !== 'failure') continue
 
     const workflow = job.workflow_name
+    const name = job.name.split(' ')[0] // Merge matrix runs of same job together.
 
-    flaky[workflow] = flaky[workflow] || {}
-    flaky[workflow][job.name] = flaky[workflow][job.name] || []
-    flaky[workflow][job.name].push(job.html_url)
+    flaky[workflow] ??= {}
+    flaky[workflow][name] ??= []
+    flaky[workflow][name].push(job.html_url)
+
+    if (flaky[workflow][name].length >= OCCURRENCES) {
+      reported.add(workflow)
+    }
   }
 
   return checkWorkflowJobs(id, page + 1)
@@ -92,15 +98,21 @@ await Promise.all(workflows.map(w => checkWorkflowRuns(w)))
 
 // TODO: Report this somewhere useful instead.
 if (Object.keys(flaky).length === 0) {
-  console.log(`*No flaky jobs seen in the last ${DAYS > 1 ? `${DAYS} days` : 'day'}*`)
+  console.log(
+    `*No flaky jobs with at least ${OCCURRENCES} occurrences seen in the last ${DAYS > 1 ? `${DAYS} days` : 'day'}*`
+  )
 } else {
-  console.log(`*Flaky jobs seen in the last ${DAYS > 1 ? `${DAYS} days` : 'day'}*`)
+  console.log(
+    `*Flaky jobs with at least ${OCCURRENCES} occurrences seen in the last ${DAYS > 1 ? `${DAYS} days` : 'day'}*`
+  )
   for (const [workflow, jobs] of Object.entries(flaky).sort()) {
+    if (!reported.has(workflow)) continue
     console.log(`* ${workflow}`)
     for (const [job, urls] of Object.entries(jobs).sort()) {
+      if (urls.length < OCCURRENCES) continue
       console.log(`    * ${job}`)
       for (const url of urls.sort()) {
-        console.log(`        * ${url}`)
+        console.log(`        * [${url.replace('https://github.com/DataDog/', '')}](${url})`)
       }
     }
   }

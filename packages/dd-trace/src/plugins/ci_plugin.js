@@ -75,7 +75,7 @@ module.exports = class CiPlugin extends Plugin {
     this.rootDir = process.cwd() // fallback in case :session:start events are not emitted
 
     this.addSub(`ci:${this.constructor.id}:library-configuration`, (ctx) => {
-      const { onDone, isParallel } = ctx
+      const { onDone, isParallel, frameworkVersion } = ctx
       ctx.currentStore = storage('legacy').getStore()
 
       if (!this.tracer._exporter || !this.tracer._exporter.getLibraryConfiguration) {
@@ -88,7 +88,7 @@ module.exports = class CiPlugin extends Plugin {
           this.libraryConfig = libraryConfig
         }
 
-        const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id, isParallel)
+        const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id, isParallel, frameworkVersion)
         const metadataTags = {
           test: {
             ...libraryCapabilitiesTags
@@ -453,7 +453,7 @@ module.exports = class CiPlugin extends Plugin {
 
   removeDiProbe ({ file, line }) {
     const probeId = this.fileLineToProbeId.get(`${file}:${line}`)
-    log.warn(`Removing probe from ${file}:${line}, with id: ${probeId}`)
+    log.warn('Removing probe from %s:%s, with id: %s', file, line, probeId)
     this.fileLineToProbeId.delete(probeId)
     return this.di.removeProbe(probeId)
   }
