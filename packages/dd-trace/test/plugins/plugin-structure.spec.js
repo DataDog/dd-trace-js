@@ -93,5 +93,7 @@ describe('Plugin Structure Validation', () => {
         missingHooks.push(normalizedPluginId)
       }
     })
+
+    expect(missingHooks).to.be.empty
   })
 })
