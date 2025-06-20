@@ -12,7 +12,7 @@ const folder = mkdtempSync(join(tmpdir(), 'dd-trace-heap-snapshot-'))
 describe('Heap Snapshots', () => {
   it('should take heap snapshots over time', async () => {
     // Keep process alive since `start` uses an unref timer.
-    const interval = setInterval(() => {}, 100)
+    const interval = setInterval(() => {}, 1000)
 
     await start({
       heapSnapshot: {
