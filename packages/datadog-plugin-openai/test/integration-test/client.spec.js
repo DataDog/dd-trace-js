@@ -8,8 +8,7 @@ const {
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
 
-// TODO(sabrenner): re-enable once issues with mocking OpenAI calls are resolved
-describe.only('esm', () => {
+describe('esm', () => {
   let agent
   let proc
   let sandbox
