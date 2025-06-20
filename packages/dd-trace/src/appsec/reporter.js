@@ -20,6 +20,7 @@ const {
 } = require('./telemetry')
 const { keepTrace } = require('../priority_sampler')
 const { ASM } = require('../standalone/product')
+const { DIAGNOSTIC_KEYS } = require('./waf/diagnostics')
 
 const REQUEST_HEADER_TAG_PREFIX = 'http.request.headers.'
 const RESPONSE_HEADER_TAG_PREFIX = 'http.response.headers.'
@@ -29,18 +30,6 @@ const COLLECTED_REQUEST_BODY_MAX_DEPTH = 20
 const COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE = 256
 
 const telemetryLogCh = dc.channel('datadog:telemetry:log')
-
-const WAF_DIAGNOSTICS_CONFIG_KEYS_TO_REPORT = [
-  'rules',
-  'custom_rules',
-  'exclusions',
-  'actions',
-  'processors',
-  'scanners',
-  'rules_override',
-  'rules_data',
-  'exclusion_data'
-]
 
 // default limiter, configurable with setRateLimit()
 let limiter = new Limiter(100)
@@ -254,7 +243,7 @@ function reportWafConfigUpdate (product, rcConfigId, diagnostics, wafVersion) {
     incrementWafConfigErrorsMetric(wafVersion, diagnostics.ruleset_version)
   }
 
-  for (const configKey of WAF_DIAGNOSTICS_CONFIG_KEYS_TO_REPORT) {
+  for (const configKey of DIAGNOSTIC_KEYS) {
     const configDiagnostics = diagnostics[configKey]
     if (!configDiagnostics) continue
 

@@ -2,22 +2,13 @@
 
 const fs = require('fs')
 const waf = require('./waf')
+const { DIAGNOSTIC_KEYS } = require('./waf/diagnostics')
 const { ACKNOWLEDGED, ERROR } = require('../remote_config/apply_states')
 const Reporter = require('./reporter')
 
 const blocking = require('./blocking')
 
 const ASM_PRODUCTS = new Set(['ASM', 'ASM_DD', 'ASM_DATA'])
-const DIAGNOSTIC_KEYS = [
-  'exclusions',
-  'rules',
-  'processors',
-  'rules_override',
-  'rules_data',
-  'custom_rules',
-  'actions',
-  'scanners'
-]
 
 /*
   ASM Actions must be tracked in order to update the defaultBlockingActions in blocking. These actions are used
