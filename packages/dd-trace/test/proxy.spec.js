@@ -136,7 +136,8 @@ describe('TracerProxy', () => {
         enabled: true
       },
       configure: sinon.spy(),
-      llmobs: {}
+      llmobs: {},
+      heapSnapshot: {}
     }
     Config = sinon.stub().returns(config)
 
