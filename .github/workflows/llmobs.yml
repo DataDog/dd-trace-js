@@ -35,11 +35,11 @@ jobs:
     runs-on: ubuntu-latest
     services:
       snapshot-server:
-        image: ghcr.io/datadog/llm-obs/snapshot-server:latest
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.21.1
         ports:
-          - 8000:8000
+          - 9126:9126
         env:
-          PORT: 8000
+          PORT: 9126
     env:
       PLUGINS: openai
     steps:

@@ -65,7 +65,7 @@ describe('integrations', () => {
 
         openai = new OpenAI({
           apiKey: process.env.OPENAI_API_KEY ?? 'test',
-          baseURL: 'http://127.0.0.1:8000/openai'
+          baseURL: 'http://127.0.0.1:9126/snapshot-server/openai'
         })
 
         const AzureOpenAI = OpenAI.AzureOpenAI ?? OpenAI
@@ -84,7 +84,7 @@ describe('integrations', () => {
         }
 
         deepseekOpenai = new OpenAI({
-          baseURL: 'http://127.0.0.1:8000/deepseek',
+          baseURL: 'http://127.0.0.1:9126/snapshot-server/deepseek',
           apiKey: process.env.DEEPSEEK_API_KEY ?? 'test'
         })
       })

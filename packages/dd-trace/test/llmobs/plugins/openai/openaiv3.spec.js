@@ -61,7 +61,7 @@ describe('integrations', () => {
 
         const configuration = new Configuration({
           apiKey: process.env.OPENAI_API_KEY ?? 'sk-DATADOG-ACCEPTANCE-TESTS',
-          basePath: 'http://127.0.0.1:8000/openai'
+          basePath: 'http://127.0.0.1:9126/snapshot-server/openai'
         })
 
         openai = new OpenAIApi(configuration)

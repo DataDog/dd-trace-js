@@ -152,21 +152,15 @@ services:
       - LDAP_ADMIN_PASSWORD=adminpassword
       - LDAP_USERS=user01,user02
       - LDAP_PASSWORDS=password1,password2
-  snapshot-server:
-    image: ghcr.io/datadog/llm-obs/snapshot-server:latest
-    ports:
-      - "127.0.0.1:8000:8000"
-    environment:
-      - PORT=8000
-    volumes:
-      - /Users/${USER}/dd/llm-obs/test/proxy-server/cassettes:/cassettes:delegated
 
   testagent:
-    image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.21.1
+    image: testagent-dev
     ports:
-        - "127.0.0.1:9126:9126"
+      - "127.0.0.1:9126:9126"
     environment:
-        - LOG_LEVEL=DEBUG
-        - TRACE_LANGUAGE=javascript
-        - ENABLED_CHECKS=trace_stall,meta_tracer_version_header,trace_count_header,trace_peer_service
-        - PORT=9126
+      - LOG_LEVEL=DEBUG
+      - TRACE_LANGUAGE=javascript
+      - ENABLED_CHECKS=trace_stall,meta_tracer_version_header,trace_count_header,trace_peer_service
+      - PORT=9126
+    volumes:
+      - /Users/${USER}/dd/dd-apm-test-agent/snapshot-server-cassettes:/snapshot-server-cassettes:delegated
