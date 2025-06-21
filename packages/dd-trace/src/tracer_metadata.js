@@ -7,7 +7,7 @@ const tracerVersion = require('../../../version').VERSION
 function storeConfig (config) {
   const processDiscovery = libdatadog.maybeLoad('process-discovery')
   if (processDiscovery === undefined) {
-    throw new Error('Can\'t load process-discovery library')
+    return
   }
 
   const metadata = new processDiscovery.TracerMetadata(

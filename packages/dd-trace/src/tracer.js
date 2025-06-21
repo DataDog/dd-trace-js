@@ -26,14 +26,14 @@ class DatadogTracer extends Tracer {
     flushStartupLogs(log)
 
     if (!config._isInServerlessEnvironment()) {
-      try {
-        const storeConfig = require('./tracer_metadata')
-        // Keep a reference to the handle, to keep the memfd alive in memory.
-        // It is read by the service discovery feature.
-        this._inmem_cfg = storeConfig(config)
-      } catch (error) {
-        log.warn('Could not store tracer configuration for service discovery', error)
+      const storeConfig = require('./tracer_metadata')
+      // Keep a reference to the handle, to keep the memfd alive in memory.
+      // It is read by the service discovery feature.
+      const metadata = storeConfig(config)
+      if (metadata === undefined) {
+        log.warn('Could not store tracer configuration for service discovery')
       }
+      this._inmem_cfg = metadata
     }
   }
 
