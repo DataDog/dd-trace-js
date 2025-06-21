@@ -47,13 +47,15 @@ function guard (fn) {
       { name: 'abort.runtime', tags: [] }
     ])
     log.info('Aborting application instrumentation due to incompatible_runtime.')
-    log.info('Found incompatible runtime nodejs ' + version + ', Supported runtimes: nodejs ' + engines.node + '.')
+    log.info('Found incompatible runtime nodejs %s, Supported runtimes: nodejs %s.', version, engines.node)
     if (forced) {
       log.info('DD_INJECT_FORCE enabled, allowing unsupported runtimes and continuing.')
     }
   }
 
   if (!clobberBailout && (!initBailout || forced)) {
+    // Ensure the instrumentation source is set for the current process and potential 
+    // child processes.
     var result = fn()
     telemetry('complete', ['injection_forced:' + (forced && initBailout ? 'true' : 'false')])
     log.info('Application instrumentation bootstrapping complete')

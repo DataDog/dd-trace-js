@@ -1560,6 +1560,37 @@ describe('jest CommonJS', () => {
         }).catch(done)
       })
     })
+
+    it('report code coverage with all mocked files', (done) => {
+      const codeCovRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/citestcov')
+
+      codeCovRequestPromise.then((codeCovRequest) => {
+        const allCoverageFiles = codeCovRequest.payload
+          .flatMap(coverage => coverage.content.coverages)
+          .flatMap(file => file.files)
+          .map(file => file.filename)
+
+        assert.includeMembers(allCoverageFiles, [
+          'ci-visibility/test/sum.js',
+          'ci-visibility/jest/mocked-test.js'
+        ])
+      }).catch(done)
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'jest/mocked-test.js',
+          },
+          stdio: 'pipe'
+        }
+      )
+      childProcess.on('exit', () => {
+        done()
+      })
+    })
   })
 
   context('early flake detection', () => {

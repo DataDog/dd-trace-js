@@ -7,7 +7,7 @@ function getDataStreamsContext () {
 }
 
 function setDataStreamsContext (dataStreamsContext) {
-  log.debug(() => `Setting new DSM Context: ${JSON.stringify(dataStreamsContext)}.`)
+  log.debug('Setting new DSM Context: %j.', dataStreamsContext)
 
   if (dataStreamsContext) storage('legacy').enterWith({ ...(storage('legacy').getStore()), dataStreamsContext })
 }

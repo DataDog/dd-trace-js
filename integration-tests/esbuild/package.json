@@ -6,7 +6,9 @@
   "main": "app.js",
   "scripts": {
     "build": "DD_TRACE_DEBUG=true node ./build.js",
+    "build:esm": "DD_TRACE_DEBUG=true node ./build.esm.mjs",
     "built": "DD_TRACE_DEBUG=true node ./out.js",
+    "built:esm": "DD_TRACE_DEBUG=true node ./out.mjs",
     "raw": "DD_TRACE_DEBUG=true node ./app.js",
     "link": "pushd ../.. && yarn link && popd && yarn link dd-trace",
     "request": "curl http://localhost:3000 | jq"

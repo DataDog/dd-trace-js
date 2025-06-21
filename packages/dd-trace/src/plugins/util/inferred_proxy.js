@@ -37,7 +37,7 @@ function createInferredProxySpan (headers, childOf, tracer, context) {
 
   const proxySpanInfo = supportedProxies[proxyContext.proxySystemName]
 
-  log.debug(`Successfully extracted inferred span info ${proxyContext} for proxy: ${proxyContext.proxySystemName}`)
+  log.debug('Successfully extracted inferred span info %s for proxy:', proxyContext, proxyContext.proxySystemName)
 
   const span = tracer.startSpan(
     proxySpanInfo.spanName,
@@ -79,7 +79,7 @@ function extractInferredProxyContext (headers) {
   }
 
   if (!(PROXY_HEADER_SYSTEM in headers && headers[PROXY_HEADER_SYSTEM] in supportedProxies)) {
-    log.debug(`Received headers to create inferred proxy span but headers include an unsupported proxy type ${headers}`)
+    log.debug('Received headers to create inferred proxy span but headers include an unsupported proxy type', headers)
     return null
   }
 

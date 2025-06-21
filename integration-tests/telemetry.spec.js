@@ -1,7 +1,6 @@
 'use strict'
 
-const { createSandbox, FakeAgent, spawnProc } = require('./helpers')
-const assert = require('assert')
+const { createSandbox, FakeAgent, spawnProc, assertObjectContains } = require('./helpers')
 const path = require('path')
 
 describe('telemetry', () => {
@@ -38,11 +37,11 @@ describe('telemetry', () => {
       await agent.stop()
     })
 
-    it('Test that tracer and iitm are sent as dependencies', (done) => {
+    it('Test that tracer and iitm are sent as dependencies', async () => {
       let ddTraceFound = false
       let importInTheMiddleFound = false
 
-      agent.assertTelemetryReceived(msg => {
+      await agent.assertTelemetryReceived(msg => {
         const { payload } = msg
 
         if (payload.request_type === 'app-dependencies-loaded') {
@@ -55,35 +54,23 @@ describe('telemetry', () => {
                 importInTheMiddleFound = true
               }
             })
-            if (ddTraceFound && importInTheMiddleFound) {
-              done()
-            }
           }
         }
-      }, null, 'app-dependencies-loaded', 1)
+      }, 'app-dependencies-loaded', 5_000, 1)
+
+      expect(ddTraceFound).to.be.true
+      expect(importInTheMiddleFound).to.be.true
     })
 
-    it('Assert configuration chaining data is sent', (done) => {
-      agent.assertTelemetryReceived(msg => {
-        if (msg.payload.request_type !== 'app-started') return
-
+    it('Assert configuration chaining data is sent', async () => {
+      await agent.assertTelemetryReceived(msg => {
         const { configuration } = msg.payload.payload
-
-        const expectedConfigs = [
+        assertObjectContains(configuration, [
           { name: 'DD_LOG_INJECTION', value: false, origin: 'default' },
           { name: 'DD_LOG_INJECTION', value: true, origin: 'env_var' },
           { name: 'DD_LOG_INJECTION', value: false, origin: 'code' }
-        ]
-        expectedConfigs.forEach(expected => {
-          const found = configuration.find(config =>
-            config.name === expected.name &&
-            config.origin === expected.origin &&
-            config.value === expected.value
-          )
-          assert.ok(found, `Expected to find config: ${JSON.stringify(expected)}`)
-        })
-        done()
-      }, null, 'app-started', 1)
+        ])
+      }, 'app-started', 5_000, 1)
     })
   })
 })

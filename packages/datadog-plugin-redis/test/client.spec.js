@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('assert')
+
 const agent = require('../../dd-trace/test/plugins/agent')
 const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE } = require('../../dd-trace/src/constants')
@@ -7,12 +9,35 @@ const { ERROR_MESSAGE, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 describe('Plugin', () => {
-  let redis
-  let client
-  let tracer
-
   describe('redis', () => {
     withVersions('redis', ['@node-redis/client', '@redis/client'], (version, moduleName) => {
+      let redis
+      let client
+      let tracer
+      describe('client basics', () => {
+        beforeEach(async () => {
+          tracer = require('../../dd-trace')
+          redis = require(`../../../versions/${moduleName}@${version}`).get()
+        })
+
+        it('should support queue options', async () => {
+          tracer = require('../../dd-trace')
+          redis = require(`../../../versions/${moduleName}@${version}`).get()
+          const client = redis.createClient({ url: 'redis://127.0.0.1:6379', commandsQueueMaxLength: 1 })
+          const connectPromise = client.connect()
+          const passingPromise = client.get('foo')
+          await assert.rejects(Promise.all([
+            passingPromise,
+            client.get('bar'),
+            connectPromise,
+          ]), {
+            message: /queue/
+          })
+          await passingPromise
+          await client.quit()
+        })
+      })
+
       describe('without configuration', () => {
         before(() => {
           return agent.load('redis')

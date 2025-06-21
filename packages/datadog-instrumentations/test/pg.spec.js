@@ -23,10 +23,6 @@ describe('pg instrumentation', () => {
     function abortQuery ({ abortController }) {
       const error = new Error('Test')
       abortController.abort(error)
-
-      if (!abortController.signal.reason) {
-        abortController.signal.reason = error
-      }
     }
 
     before(() => {

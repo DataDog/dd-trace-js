@@ -55,7 +55,7 @@ module.exports.checkForRequiredModules = function () {
     if (naughties.has(pkg)) continue
     if (!(pkg in packages)) continue
 
-    warnings.push(`Warning: Package '${pkg}' was loaded before dd-trace! This may break instrumentation.`)
+    warnings.push(() => `Warning: Package '${pkg}' was loaded before dd-trace! This may break instrumentation.`)
 
     naughties.add(pkg)
     didWarn = true
@@ -87,7 +87,7 @@ module.exports.checkForPotentialConflicts = function () {
     if (naughties.has(pkg)) continue
     if (!potentialConflicts.has(pkg)) continue
 
-    warnings.push(`Warning: Package '${pkg}' may cause conflicts with dd-trace.`)
+    warnings.push(() => `Warning: Package '${pkg}' may cause conflicts with dd-trace.`)
 
     naughties.add(pkg)
     didWarn = true

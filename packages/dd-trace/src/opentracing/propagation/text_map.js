@@ -325,7 +325,7 @@ class TextMapPropagator {
           extractedContext = this._extractB3MultiContext(carrier)
           break
         default:
-          if (extractor !== 'baggage') log.warn(`Unknown propagation style: ${extractor}`)
+          if (extractor !== 'baggage') log.warn('Unknown propagation style:', extractor)
       }
 
       if (extractedContext === null) { // If the current extractor was invalid, continue to the next extractor
@@ -514,7 +514,7 @@ class TextMapPropagator {
               // If subkey is tid  then do nothing because trace header tid should always be preserved
               if (subKey === 'tid') {
                 if (!hex16.test(value) || spanContext._trace.tags['_dd.p.tid'] !== transformedValue) {
-                  log.error(`Invalid trace id ${value} in tracestate, skipping`)
+                  log.error('Invalid trace id %s in tracestate, skipping', value)
                 }
                 continue
               }
@@ -683,7 +683,7 @@ class TextMapPropagator {
         }
         // Check if value is a valid 16 character lower-case hexadecimal encoded number as per spec
         if (key === '_dd.p.tid' && !(hex16.test(value))) {
-          log.error(`Invalid _dd.p.tid tag ${value}, skipping`)
+          log.error('Invalid _dd.p.tid tag %s, skipping', value)
           continue
         }
         tags[key] = value
