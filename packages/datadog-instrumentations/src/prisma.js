@@ -49,7 +49,7 @@ class TracingHelper {
         attributes: options.attributes || {}
       }
 
-      if (options.name === 'operation' || options.name === 'transaction') {
+      if (options.name !== 'serialize') {
         return clientCH.tracePromise(callback, ctx, this, ...arguments)
       }
 
@@ -63,7 +63,7 @@ class TracingHelper {
   }
 }
 
-addHook({ name: '@prisma/client', versions: ['>=6.1.0 <=6.9.0'] }, (prisma, version) => {
+addHook({ name: '@prisma/client', versions: ['>=6.1.0'] }, (prisma, version) => {
   const tracingHelper = new TracingHelper()
 
   /*

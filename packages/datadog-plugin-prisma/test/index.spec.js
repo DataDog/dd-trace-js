@@ -7,88 +7,6 @@ const { execSync } = require('node:child_process')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
-const os = require('os')
-
-/*
- * Creates a temporary project directory for the Prisma client
- * This is necessary because Prisma CLI expects a package.json and node_modules
- * otherwise it will try to install @prisma/client in the root node_modules
-*/
-async function createTempProject (version) {
-  const tempDir = await fs.mkdtemp((path.join(os.tmpdir(), `prisma-test-@${version}-`)))
-  await fs.writeFile(
-    path.join(tempDir, 'package.json'),
-    JSON.stringify({}, null, 2)
-  )
-  return tempDir
-}
-
-// Ensure a fake @prisma/client installed in temporary directory path otherwise prisma generate
-// will automatically install a version of @prisma/client in the root node_modules
-async function createMockPrismaClient (targetPath, version) {
-  const matched = version.match(/(\d+\.\d+\.\d+)$/)
-  version = matched[1]
-
-  // trick the prisma CLI to think that the client is installed in this directory
-  execSync(`npm install @prisma/client@${version} --no-save --legacy-peer-deps`, {
-    cwd: path.dirname(targetPath),
-    stdio: 'inherit'
-  })
-}
-
-/*
-  * Generates the Prisma client in the specified version
-  * This function creates a temporary project directory, writes a Prisma schema,
-  * and runs the Prisma CLI to generate the client.
-*/
-async function generatePrismaClient (version) {
-  const tempDir = await createTempProject(version)
-  await createMockPrismaClient(tempDir, version)
-
-  const generatedClientPath = path.join(
-    __dirname,
-    `../../../versions/@prisma/client@${version}/node_modules/.prisma/client`
-  )
-
-  const generatedSchemaPath = path.join(tempDir, 'schema.prisma')
-  const prismaBin = path.join(__dirname, '/../../../versions/prisma/node_modules/.bin/prisma')
-
-  const schema = `
-      generator client {
-        provider = "prisma-client-js"
-        output   = "${generatedClientPath}"
-      }
-      
-      datasource db {
-        provider = "postgresql"
-        url      = "postgres://postgres:postgres@localhost:5432/postgres"
-      }
-
-      model User {
-      id    Int     @id @default(autoincrement())
-      email String  @unique
-      name  String?
-    }
-  `
-  await fs.writeFile(generatedSchemaPath, schema)
-  execSync(`${prismaBin} generate --schema="${generatedSchemaPath}"`, {
-    cwd: tempDir, // Ensure the current working directory is where the schema is located
-    stdio: 'inherit'
-  })
-  return tempDir
-}
-// Cleanup function to remove the mock Prisma client and its dependencies
-// from the temporary directory after tests are done
-async function cleanupMockPrismaClient (directory) {
-  const nodeModulesPath = path.join(directory, 'node_modules')
-  const packageJsonPath = path.join(directory, 'package.json')
-  const prismaSchemaPath = path.join(directory, 'schema.prisma')
-
-  await fs.rm(nodeModulesPath, { recursive: true, force: true })
-  await fs.rm(packageJsonPath, { force: true })
-
-  await fs.rm(prismaSchemaPath, { force: true })
-}
 
 describe('Plugin', () => {
   let prisma
@@ -96,33 +14,30 @@ describe('Plugin', () => {
   let tracingHelper
 
   describe('prisma', () => {
-    withVersions('prisma', ['@prisma/client'], version => {
-      let tempDir
-
-      before(async () => {
-        tempDir = await generatePrismaClient(version)
-      })
-      after(async () => {
-        if (tempDir) {
-          await cleanupMockPrismaClient(tempDir)
-        }
-      })
-
+    withVersions('prisma', ['@prisma/client'], async (range, _moduleName_, version) => {
       describe('without configuration', () => {
-        before(() => {
-          return agent.load('prisma')
-        })
-
-        beforeEach(() => {
-          prisma = require(`../../../versions/@prisma/client@${version}`).get()
+        before(async () => {
+          const cwd = path.resolve(__dirname, `../../../versions/@prisma/client@${range}`)
+          await fs.cp(
+            path.resolve(__dirname, './schema.prisma'),
+            cwd + '/schema.prisma',
+          )
+          await agent.load('prisma')
+          execSync('./node_modules/.bin/prisma generate', {
+            cwd, // Ensure the current working directory is where the schema is located
+            stdio: 'inherit'
+          })
+          prisma = require(`../../../versions/@prisma/client@${range}`).get()
           prismaClient = new prisma.PrismaClient()
           const matched = version.match(/(\d+)\.\d+\.\d+$/)
           const majorVersion = matched[1]
           tracingHelper = global.PRISMA_INSTRUMENTATION?.helper ||
-            global[`V${majorVersion}_PRISMA_INSTRUMENTATION`].helper
+            global[`V${majorVersion}_PRISMA_INSTRUMENTATION`]?.helper
         })
 
-        after(() => { return agent.close({ ritmReset: false }) })
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
 
         it('should do automatic instrumentation', async () => {
           const tracingPromise = agent.assertSomeTraces(traces => {
@@ -250,7 +165,7 @@ describe('Plugin', () => {
           after(() => { return agent.close({ ritmReset: false }) })
 
           beforeEach(() => {
-            prisma = require(`../../../versions/@prisma/client@${version}`).get()
+            prisma = require(`../../../versions/@prisma/client@${range}`).get()
             prismaClient = new prisma.PrismaClient()
           })
 
@@ -277,7 +192,7 @@ describe('Plugin', () => {
           after(() => { return agent.close({ ritmReset: false }) })
 
           beforeEach(() => {
-            prisma = require(`../../../versions/@prisma/client@${version}`).get()
+            prisma = require(`../../../versions/@prisma/client@${range}`).get()
             prismaClient = new prisma.PrismaClient()
           })
 
@@ -311,7 +226,7 @@ describe('Plugin', () => {
           after(() => { return agent.close({ ritmReset: false }) })
 
           beforeEach(() => {
-            prisma = require(`../../../versions/@prisma/client@${version}`).get()
+            prisma = require(`../../../versions/@prisma/client@${range}`).get()
             prismaClient = new prisma.PrismaClient()
           })
 
