@@ -153,7 +153,6 @@ async function addDependencies (dependencies, externalName, versionRange) {
   const version = semver.maxSatisfying(versionList, versionRange)
   const pkgJson = await npmView(`${externalName}@${version}`)
   for (const { dep, name } of externalDeps.get(externalName)) {
-    // do stuff with dep
     for (const section of ['devDependencies', 'peerDependencies']) {
       if (pkgJson[section] && name in pkgJson[section]) {
         if (dep === externalName) {
