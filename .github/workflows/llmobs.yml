@@ -35,7 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       snapshot-server:
-        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.21.1
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
         ports:
           - 9126:9126
         env:
