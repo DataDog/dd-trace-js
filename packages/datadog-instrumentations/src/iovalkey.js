@@ -23,7 +23,7 @@ addHook({ name: 'iovalkey', versions: ['>=0.0.1'] }, Valkey => {
 
     const ctx = { db, command: command.name, args: command.args, connectionOptions, connectionName }
     return startCh.runStores(ctx, () => {
-      command.promise.then(finish(finishCh, errorCh, ctx), err => finish(finishCh, errorCh, ctx, err))
+      command.promise.then(() => finish(finishCh, errorCh, ctx), err => finish(finishCh, errorCh, ctx, err))
 
       try {
         return sendCommand.apply(this, arguments)
