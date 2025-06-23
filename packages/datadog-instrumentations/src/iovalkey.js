@@ -2,7 +2,8 @@
 
 const {
   channel,
-  addHook
+  addHook,
+  AsyncResource
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
@@ -21,15 +22,19 @@ addHook({ name: 'iovalkey', versions: ['>=0.0.1'] }, Valkey => {
     const db = options.db
     const connectionOptions = { host: options.host, port: options.port }
 
-    const ctx = { db, command: command.name, args: command.args, connectionOptions, connectionName }
-    return startCh.runStores(ctx, () => {
-      command.promise.then(finish(finishCh, errorCh, ctx), err => finish(finishCh, errorCh, ctx, err))
+    const asyncResource = new AsyncResource('bound-anonymous-fn')
+    return asyncResource.runInAsyncScope(() => {
+      startCh.publish({ db, command: command.name, args: command.args, connectionOptions, connectionName })
+
+      const onResolve = asyncResource.bind(() => finishCh.publish())
+      const onReject = asyncResource.bind(err => finish(finishCh, errorCh, err))
+
+      command.promise.then(onResolve, onReject)
 
       try {
         return sendCommand.apply(this, arguments)
       } catch (err) {
-        ctx.error = err
-        errorCh.publish(ctx)
+        errorCh.publish(err)
 
         throw err
       }
@@ -38,10 +43,9 @@ addHook({ name: 'iovalkey', versions: ['>=0.0.1'] }, Valkey => {
   return Valkey
 })
 
-function finish (finishCh, errorCh, ctx, error) {
+function finish (finishCh, errorCh, error) {
   if (error) {
-    ctx.error = error
-    errorCh.publish(ctx)
+    errorCh.publish(error)
   }
-  finishCh.publish(ctx)
+  finishCh.publish()
 }
