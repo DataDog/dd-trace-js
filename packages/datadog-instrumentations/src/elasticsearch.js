@@ -113,7 +113,7 @@ function createWrapRequest (name) {
       ctx.error = error
       errorCh.publish(error)
     }
-    finishCh.publish(ctx)
+    return finishCh.runStores(ctx, () => {})
   }
 }
 
