@@ -154,7 +154,7 @@ services:
       - LDAP_PASSWORDS=password1,password2
 
   testagent:
-    image: testagent-dev
+    image: ghcr.io/datadog/llm-obs/snapshot-server:latest
     ports:
       - "127.0.0.1:9126:9126"
     environment:
