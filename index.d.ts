@@ -212,6 +212,7 @@ interface Plugins {
   "playwright": tracer.plugins.playwright;
   "pg": tracer.plugins.pg;
   "pino": tracer.plugins.pino;
+  "prisma": tracer.plugins.prisma;
   "protobufjs": tracer.plugins.protobufjs;
   "redis": tracer.plugins.redis;
   "restify": tracer.plugins.restify;
@@ -1271,6 +1272,15 @@ declare namespace tracer {
       meta?: boolean;
     }
 
+    /** @hidden */
+    interface Prisma extends Instrumentation {}
+
+    /** @hidden */
+    interface PrismaClient extends Prisma {}
+
+    /** @hidden */
+    interface PrismaEngine extends Prisma {}
+
     /**
      * This plugin automatically instruments the
      * [aerospike](https://github.com/aerospike/aerospike-client-nodejs) for module versions >= v3.16.2.
@@ -1934,6 +1944,23 @@ declare namespace tracer {
      * on the tracer.
      */
     interface pino extends Integration {}
+
+    /**
+     * This plugin automatically instruments the
+     * [@prisma/client](https://www.prisma.io/docs/orm/prisma-client) module.
+     */
+    interface prisma extends PrismaClient, PrismaEngine {
+      /**
+       * Configuration for prisma client.
+       */
+      client?: PrismaClient | boolean,
+
+      /**
+       * Configuration for Prisma engine.
+       */
+      engine?: PrismaEngine | boolean
+    }
+
     /**
      * This plugin automatically patches the [protobufjs](https://protobufjs.github.io/protobuf.js/)
      * to collect protobuf message schemas when Datastreams Monitoring is enabled.
