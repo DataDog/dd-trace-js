@@ -30,7 +30,7 @@ addHook({ name: 'memcached', versions: ['>=2.2'] }, Memcached => {
           }
           finishCh.publish(ctx)
 
-          return callback.apply(this, arguments)
+          return finishCh.runStores(ctx, callback, this, ...arguments)
         })
       })
       return query
