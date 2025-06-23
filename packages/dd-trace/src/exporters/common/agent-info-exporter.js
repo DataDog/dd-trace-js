@@ -59,7 +59,7 @@ class AgentInfoExporter {
 
     if (flushInterval === 0) {
       writer.flush()
-    } else if (flushInterval > 0 && this[timerKey] === undefined) {
+    } else if (this[timerKey] === undefined) {
       this[timerKey] = setTimeout(() => {
         writer.flush()
         this[timerKey] = undefined
