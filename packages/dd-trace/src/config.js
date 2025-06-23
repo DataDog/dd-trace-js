@@ -545,7 +545,7 @@ class Config {
     defaults.testManagementAttemptToFixRetries = 20
     defaults.isTestManagementEnabled = false
     defaults.isImpactedTestsEnabled = false
-    defaults.logInjection = false
+    defaults.logInjection = 'structured'
     defaults.lookup = undefined
     defaults.inferredProxyServicesEnabled = false
     defaults.memcachedCommandEnabled = false
