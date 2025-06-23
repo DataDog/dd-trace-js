@@ -79,11 +79,9 @@ for (const packageName of names) {
 
     // some integrations are disabled by default, but can be enabled by setting
     // the DD_TRACE_<INTEGRATION>_ENABLED environment variable to true
-    if (hook.disabled && !reenabledInstrumentations.has(normalizedPackageName)) {
-      continue
+    if (!hook.disabled || reenabledInstrumentations.has(normalizedPackageName)) {
+      hook = hook.fn
     }
-
-    hook = hook.fn
   }
 
   // get the instrumentation file name to save all hooked versions
