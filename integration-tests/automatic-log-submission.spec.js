@@ -175,7 +175,9 @@ describe('test visibility automatic log submission', () => {
         childProcess.on('exit', () => {
           assert.include(testOutput, 'Hello simple log!')
           assert.include(testOutput, 'span_id')
-          done()
+          logsPromise.then(() => {
+            done()
+          }).catch(done)
         })
 
         childProcess.stdout.on('data', (chunk) => {
@@ -185,11 +187,12 @@ describe('test visibility automatic log submission', () => {
           testOutput += chunk.toString()
         })
 
-        receiver.gatherPayloadsMaxTimeout(({ url }) => url.includes('/api/v2/logs'), payloads => {
-          if (payloads.length > 0) {
-            throw new Error('Unexpected logs')
-          }
-        }, 5000)
+        const logsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.includes('/api/v2/logs'), payloads => {
+            if (payloads.length > 0) {
+              throw new Error('Unexpected logs')
+            }
+          }, 5000)
       })
 
       it('does not submit logs when DD_AGENTLESS_LOG_SUBMISSION_ENABLED is set but DD_API_KEY is not', (done) => {
