@@ -11,7 +11,7 @@ const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
 const { json } = require('../../src/appsec/blocked_templates')
 
-withVersions('fastify', 'fastify', '>2', version => {
+withVersions('fastify', 'fastify', '>=2', version => {
   describe('Suspicious request blocking - query', () => {
     let server, requestBody, axios
 
@@ -448,6 +448,11 @@ withVersions('fastify', 'fastify', '>2', version => {
           before(function () {
             if (version === '3.9.2') {
               // Fastify 3.9.2 is incompatible with @fastify/cookie >=6
+              this.skip()
+            }
+            
+            // Skip preParsing hook for Fastify 2.x - has compatibility issues
+            if (hook === 'preParsing' && version.startsWith('2')) {
               this.skip()
             }
 
