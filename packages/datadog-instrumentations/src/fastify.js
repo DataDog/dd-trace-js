@@ -46,15 +46,34 @@ function wrapAddHook (addHook) {
 
     if (typeof fn !== 'function') return addHook.apply(this, arguments)
 
-    arguments[arguments.length - 1] = shimmer.wrapFunction(fn, fn => function (request, reply, done) {
+    arguments[arguments.length - 1] = shimmer.wrapFunction(fn, fn => function () {
+      const request = arguments[0]
+      const reply = arguments[1]
       const req = getReq(request)
 
       try {
+        // done callback is always the last argument
+        const done = arguments[arguments.length - 1]
+        
         if (typeof done === 'function') {
-          done = arguments[arguments.length - 1]
-
           arguments[arguments.length - 1] = function (err) {
             publishError(err, req)
+
+            const hasCookies = request.cookies && Object.keys(request.cookies).length > 0
+            
+            if (cookieParserReadCh.hasSubscribers && hasCookies) {
+              const res = getRes(reply)
+              const abortController = new AbortController()
+              
+              cookieParserReadCh.publish({ 
+                req, 
+                res, 
+                abortController, 
+                cookies: request.cookies 
+              })
+              
+              if (abortController.signal.aborted) return
+            }
 
             if (name === 'onRequest' || name === 'preParsing') {
               const parsingResource = new AsyncResource('bound-anonymous-fn')
@@ -147,14 +166,6 @@ function preValidation (request, reply, done) {
         abortController,
         params: request.params
       })
-
-      if (abortController.signal.aborted) return
-    }
-
-    if (cookieParserReadCh.hasSubscribers && request.cookies) {
-      abortController ??= new AbortController()
-
-      cookieParserReadCh.publish({ req, res, abortController, cookies: request.cookies })
 
       if (abortController.signal.aborted) return
     }
