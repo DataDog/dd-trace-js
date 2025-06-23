@@ -5,35 +5,39 @@ const { Writable } = require('stream')
 const INITIAL_SIZE = 64 * 1024
 
 class FlareFile extends Writable {
-  constructor () {
-    super()
-
-    this.length = 0
-
-    this._buffer = Buffer.alloc(INITIAL_SIZE)
-  }
+  #buffer = Buffer.alloc(INITIAL_SIZE)
+  #length = 0
 
   get data () {
-    return this._buffer.subarray(0, this.length)
+    return this.#buffer.subarray(0, this.#length)
   }
 
+  // Method needed for Writable stream interface
   _write (chunk, encoding, callback) {
     const length = Buffer.byteLength(chunk)
 
-    this._reserve(length)
+    this.#reserve(length)
 
-    this.length += Buffer.isBuffer(chunk) ? chunk.copy(this._buffer, this.length) : this._buffer.write(chunk, encoding)
+    this.#length += Buffer.isBuffer(chunk) ? chunk.copy(this.#buffer, this.#length) : this.#buffer.write(chunk, encoding)
 
     callback()
   }
 
-  _reserve (length) {
-    while (this.length + length > this._buffer.length) {
-      const buffer = Buffer.alloc(this.length * 2)
-
-      this._buffer.copy(buffer)
-      this._buffer = buffer
+  #reserve (length) {
+    const needed = this.#length + length
+    if (needed <= this.#buffer.length) {
+      return
     }
+
+    // Double capacity until it's >= needed
+    let newCap = this.#buffer.length * 2
+    while (newCap < needed) {
+      newCap *= 2
+    }
+
+    const newBuffer = Buffer.allocUnsafe(newCap)
+    this.#buffer.copy(newBuffer, 0, 0, this.#length)
+    this.#buffer = newBuffer
   }
 }
 

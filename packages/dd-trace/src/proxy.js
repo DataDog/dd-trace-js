@@ -64,6 +64,8 @@ function defineLazily (obj, property, getClass, ...args) {
 }
 
 class Tracer extends NoopProxy {
+  #flare = new LazyModule(() => require('./flare'))
+
   constructor () {
     super()
 
@@ -72,7 +74,6 @@ class Tracer extends NoopProxy {
     this._pluginManager = new PluginManager(this)
     this.dogstatsd = new NoopDogStatsDClient()
     this._tracingInitialized = false
-    this._flare = new LazyModule(() => require('./flare'))
     this.setBaggageItem = setBaggageItem
     this.getBaggageItem = getBaggageItem
     this.getAllBaggageItems = getAllBaggageItems
@@ -130,13 +131,13 @@ class Tracer extends NoopProxy {
         })
 
         rc.setProductHandler('AGENT_CONFIG', (action, conf) => {
-          if (!conf?.name?.startsWith('flare-log-level.')) return
-
-          if (action === 'unapply') {
-            this._flare.disable()
-          } else if (conf.config?.log_level) {
-            this._flare.enable(config)
-            this._flare.module.prepare(conf.config.log_level)
+          if (conf.config?.log_level) {
+            if (action === 'unapply') {
+              this.#flare.disable()
+            } else {
+              this.#flare.enable(config)
+              this.#flare.module.prepare(conf.config.log_level)
+            }
           }
         })
 
@@ -144,8 +145,8 @@ class Tracer extends NoopProxy {
           if (action === 'unapply' || !conf) return
           if (conf.task_type !== 'tracer_flare' || !conf.args) return
 
-          this._flare.enable(config)
-          this._flare.module.send(conf.args)
+          this.#flare.enable(config)
+          this.#flare.module.send(conf.args)
         })
 
         if (config.dynamicInstrumentation.enabled) {

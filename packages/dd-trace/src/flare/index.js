@@ -8,7 +8,7 @@ const request = require('../exporters/common/request')
 const FormData = require('../exporters/common/form-data')
 
 const MAX_LOG_SIZE = 12 * 1024 * 1024 // 12MB soft limit
-const TIMEOUT = 20 * 1000 * 60
+const TIMEOUT = 20 * 60 * 1000 // 20 Minutes
 
 let logChannel = null
 let tracerLogs = null
@@ -39,8 +39,8 @@ const flare = {
     logChannel?.unsubscribe(logger)
     logChannel = new LogChannel(logLevel)
     logChannel.subscribe(logger)
-    tracerLogs = tracerLogs || new FlareFile()
-    timer = timer || setTimeout(flare.cleanup, TIMEOUT)
+    tracerLogs ||= new FlareFile()
+    timer ||= setTimeout(flare.cleanup, TIMEOUT)
   },
 
   send (task) {
@@ -95,7 +95,7 @@ function recordLog (msg) {
   if (msg && typeof msg === 'object') {
     msg = JSON.stringify(msg)
   }
-  tracerLogs.write(`${msg}\n`) // TODO: gzip
+  tracerLogs.write(`${msg}\n`)
 }
 
 module.exports = flare
