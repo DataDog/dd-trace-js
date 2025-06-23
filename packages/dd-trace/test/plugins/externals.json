@@ -448,6 +448,12 @@
       "versions": ["8.0.0"]
     }
   ],
+  "@prisma/client": [
+    {
+      "name": "prisma",
+      "dep": "@prisma/client"
+    }
+  ],
   "q": [
     {
       "name": "collections",
