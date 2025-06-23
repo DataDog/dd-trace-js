@@ -7,7 +7,7 @@ const { expect } = require('chai')
 const fs = require('fs')
 const path = require('path')
 
-const { normalizePluginEnvName } = require('../../src/util')
+const hooks = require('../../../datadog-instrumentations/src/helpers/hooks')
 
 const abstractPlugins = [
   'web' // web is an abstract plugin, and will not have an instrumentation file
@@ -32,7 +32,6 @@ describe('Plugin Structure Validation', () => {
 
   let pluginDirs
   let instrumentationFiles
-  let normalizedInstrumentationHooks
   let allPluginIds
 
   before(() => {
@@ -44,11 +43,7 @@ describe('Plugin Structure Validation', () => {
         .filter(file => file.endsWith('.js'))
         .map(file => file.replace('.js', ''))
     )
-    normalizedInstrumentationHooks = new Set(
-      Object.keys(
-        require(path.join(instrumentationsDir, 'helpers', 'hooks.js'))
-      ).map(normalizePluginEnvName)
-    )
+
     allPluginIds = new Set(pluginDirs.map(dir => dir.replace('datadog-plugin-', '')))
   })
 
@@ -88,25 +83,26 @@ describe('Plugin Structure Validation', () => {
   })
 
   it('should have all plugins accounted for with a hook', () => {
-    // since module names can have characters like @, /, we need to normalize them to compare to the plugin names
+    const instrumentationsRequired = new Set()
+
+    for (const hook of Object.values(hooks)) {
+      let hookFn = hook
+      if (typeof hook === 'object' && hook.fn) {
+        hookFn = hook.fn
+      }
+      const hookString = hookFn.toString()
+      const match = hookString.match(/require\('([^']*)'\)/)
+      if (match && match[1]) {
+        const instrumentationName = match[1].replace('../', '')
+        instrumentationsRequired.add(instrumentationName)
+      }
+    }
 
     const missingHooks = []
-
     allPluginIds.forEach(pluginId => {
-      const normalizedPluginId = normalizePluginEnvName(pluginId)
-      if (!normalizedInstrumentationHooks.has(normalizedPluginId) && !abstractPlugins.includes(normalizedPluginId)) {
-        missingHooks.push(normalizedPluginId)
+      if (!instrumentationsRequired.has(pluginId) && !abstractPlugins.includes(pluginId)) {
+        missingHooks.push(pluginId)
       }
-    })
-
-    // some hooks are for submodules, so we should see if the pluginId is a submodule of the hook
-    // e.g: '@jest/core' is a submodule of 'jest'. 'jest' is our plugin id
-    normalizedInstrumentationHooks.forEach(hook => {
-      missingHooks.forEach(pluginId => {
-        if (hook.includes(pluginId)) {
-          missingHooks.splice(missingHooks.indexOf(pluginId), 1)
-        }
-      })
     })
 
     expect(missingHooks).to.deep.equal(missingInstrumentationHooks)
