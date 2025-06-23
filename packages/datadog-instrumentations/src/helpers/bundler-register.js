@@ -28,7 +28,13 @@ if (!dc.unsubscribe) {
 
 dc.subscribe(CHANNEL, (payload) => {
   try {
-    hooks[payload.package]()
+    const hook = hooks[payload.package]
+
+    if (typeof hook === 'object') {
+      hook.fn()
+    } else {
+      hook()
+    }
   } catch (err) {
     log.error('esbuild-wrapped %s missing in list of hooks', payload.package)
     throw err
