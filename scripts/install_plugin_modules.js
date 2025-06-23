@@ -22,7 +22,7 @@ const externalDeps = new Map()
 Object.keys(externals).forEach(external => externals[external].forEach(thing => {
   if (thing.dep) {
     const depsArr = externalDeps.get(external)
-    depsArr ? depsArr.push(thing.name) : externalDeps.set(external, [thing.name])
+    depsArr ? depsArr.push(thing) : externalDeps.set(external, [thing])
   }
 }))
 
@@ -145,22 +145,25 @@ async function assertPackage (name, version, dependencyVersionRange, external) {
 
 /**
  * @param {object} dependencies
- * @param {string} name
+ * @param {string} externalName
  * @param {string} versionRange
  */
-async function addDependencies (dependencies, name, versionRange) {
-  const versionList = await getVersionList(name)
+async function addDependencies (dependencies, externalName, versionRange) {
+  const versionList = await getVersionList(externalName)
   const version = semver.maxSatisfying(versionList, versionRange)
-  const pkgJson = await npmView(`${name}@${version}`)
-  for (const dep of externalDeps.get(name)) {
+  const pkgJson = await npmView(`${externalName}@${version}`)
+  for (const { dep, name } of externalDeps.get(externalName)) {
+    // do stuff with dep
     for (const section of ['devDependencies', 'peerDependencies']) {
-      if (pkgJson[section] && dep in pkgJson[section]) {
-        if (pkgJson[section][dep].includes('||')) {
+      if (pkgJson[section] && name in pkgJson[section]) {
+        if (dep === externalName) {
+          dependencies[name] = version
+        } else if (pkgJson[section][name].includes('||')) {
           // Use the first version in the list (as npm does by default)
-          dependencies[dep] = pkgJson[section][dep].split('||')[0].trim()
+          dependencies[name] = pkgJson[section][name].split('||')[0].trim()
         } else {
           // Only one version available so use that.
-          dependencies[dep] = pkgJson[section][dep]
+          dependencies[name] = pkgJson[section][name]
         }
         break
       }

@@ -98,9 +98,13 @@ await Promise.all(workflows.map(w => checkWorkflowRuns(w)))
 
 // TODO: Report this somewhere useful instead.
 if (Object.keys(flaky).length === 0) {
-  console.log(`*No flaky jobs with at least ${OCCURRENCES} seen in the last ${DAYS > 1 ? `${DAYS} days` : 'day'}*`)
+  console.log(
+    `*No flaky jobs with at least ${OCCURRENCES} occurrences seen in the last ${DAYS > 1 ? `${DAYS} days` : 'day'}*`
+  )
 } else {
-  console.log(`*Flaky jobs with at least ${OCCURRENCES} seen in the last ${DAYS > 1 ? `${DAYS} days` : 'day'}*`)
+  console.log(
+    `*Flaky jobs with at least ${OCCURRENCES} occurrences seen in the last ${DAYS > 1 ? `${DAYS} days` : 'day'}*`
+  )
   for (const [workflow, jobs] of Object.entries(flaky).sort()) {
     if (!reported.has(workflow)) continue
     console.log(`* ${workflow}`)

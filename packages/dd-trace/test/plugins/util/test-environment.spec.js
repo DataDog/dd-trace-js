@@ -84,7 +84,7 @@ describe('test environment data', () => {
     assertions.forEach(([env, expectedSpanTags], index) => {
       it(`reads env info for spec ${index} from ${ciProvider}`, () => {
         process.env = env
-        const { DD_TEST_CASE_NAME: testCaseName } = env
+        const { TESTING_TEST_OPTIMIZATION_TEST_CASE_NAME: testCaseName } = env
         const { [CI_ENV_VARS]: envVars, [CI_NODE_LABELS]: nodeLabels, ...restOfTags } = getTestEnvironmentMetadata()
         const {
           [CI_ENV_VARS]: expectedEnvVars,

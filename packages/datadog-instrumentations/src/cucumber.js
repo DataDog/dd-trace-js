@@ -490,9 +490,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
 
         isSuitesSkipped = picklesToRun.length !== oldPickles.length
 
-        log.debug(
-          () => `${picklesToRun.length} out of ${oldPickles.length} suites are going to run.`
-        )
+        log.debug('%s out of %s suites are going to run.', picklesToRun.length, oldPickles.length)
 
         if (isCoordinator) {
           this.sourcedPickles = picklesToRun

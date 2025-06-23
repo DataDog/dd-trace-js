@@ -522,7 +522,7 @@ addHook({
       if (ctx) {
         testSuiteFinishCh.publish({ status, ...ctx.currentStore }, () => {})
       } else {
-        log.warn(() => `No ctx found for suite ${suite.file}`)
+        log.warn('No ctx found for suite', suite.file)
       }
     })
 
