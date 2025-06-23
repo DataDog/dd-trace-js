@@ -450,7 +450,7 @@ withVersions('fastify', 'fastify', '>=2', version => {
               // Fastify 3.9.2 is incompatible with @fastify/cookie >=6
               this.skip()
             }
-            
+
             // Skip preParsing hook for Fastify 2.x - has compatibility issues
             if (hook === 'preParsing' && version.startsWith('2')) {
               this.skip()
