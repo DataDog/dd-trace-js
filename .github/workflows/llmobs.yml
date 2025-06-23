@@ -34,7 +34,7 @@ jobs:
   openai:
     runs-on: ubuntu-latest
     services:
-      snapshot-server:
+      testagent:
         image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
         ports:
           - 9126:9126
