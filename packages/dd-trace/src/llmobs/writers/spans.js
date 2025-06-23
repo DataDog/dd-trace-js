@@ -35,7 +35,7 @@ class LLMObsSpanWriter extends BaseWriter {
     if (shouldTruncate) {
       logger.warn(`Dropping event input/output because its size (${eventSizeBytes}) exceeds the 1MB event size limit`)
       event = this._truncateSpanEvent(event)
-      processedEventSizeBytes = Buffer.from(JSON.stringify(event)).byteLength
+      processedEventSizeBytes = Buffer.byteLength(JSON.stringify(event))
     }
 
     telemetry.recordLLMObsSpanSize(event, processedEventSizeBytes, shouldTruncate)
