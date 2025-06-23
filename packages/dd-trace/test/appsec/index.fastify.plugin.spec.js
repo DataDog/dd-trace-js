@@ -462,7 +462,7 @@ withVersions('fastify', 'fastify', '>2', version => {
 
             app.register(fastifyCookie, {
               secret: 'my-secret',
-              hook: hook
+              hook
             })
 
             app.post('/', (request, reply) => {

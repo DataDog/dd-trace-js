@@ -54,24 +54,24 @@ function wrapAddHook (addHook) {
       try {
         // done callback is always the last argument
         const done = arguments[arguments.length - 1]
-        
+
         if (typeof done === 'function') {
           arguments[arguments.length - 1] = function (err) {
             publishError(err, req)
 
             const hasCookies = request.cookies && Object.keys(request.cookies).length > 0
-            
+
             if (cookieParserReadCh.hasSubscribers && hasCookies) {
               const res = getRes(reply)
               const abortController = new AbortController()
-              
-              cookieParserReadCh.publish({ 
-                req, 
-                res, 
-                abortController, 
-                cookies: request.cookies 
+
+              cookieParserReadCh.publish({
+                req,
+                res,
+                abortController,
+                cookies: request.cookies
               })
-              
+
               if (abortController.signal.aborted) return
             }
 
