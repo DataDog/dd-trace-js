@@ -30,7 +30,11 @@ class AgentExporter {
       config
     })
 
-    process.once('beforeExit', () => this._writer.flush())
+    process.once('beforeExit', () => {
+      clearTimeout(this.#timer)
+      this.#timer = undefined
+      this._writer.flush()
+    })
   }
 
   setUrl (url) {
