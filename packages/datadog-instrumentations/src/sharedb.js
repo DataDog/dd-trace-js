@@ -47,9 +47,7 @@ addHook({ name: 'sharedb', versions: ['>=1'], file: 'lib/agent.js' }, Agent => {
           errorCh.publish(error)
         }
         ctx.res = res
-        finishCh.publish(ctx)
-
-        return callback.apply(this, arguments)
+        return finishCh.runStores(ctx, callback, this, ...arguments)
       })
 
       try {
