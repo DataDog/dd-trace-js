@@ -4,6 +4,7 @@ const { createCoverageMap } = require('istanbul-lib-coverage')
 const { addHook, channel } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
 const testStartCh = channel('ci:cucumber:test:start')
 const testRetryCh = channel('ci:cucumber:test:retry')
@@ -156,9 +157,9 @@ function getErrorFromCucumberResult (cucumberResult) {
   return error
 }
 
-function getChannelPromise (channelToPublishTo, isParallel = false) {
+function getChannelPromise (channelToPublishTo, isParallel = false, frameworkVersion = null) {
   return new Promise(resolve => {
-    channelToPublishTo.publish({ onDone: resolve, isParallel })
+    channelToPublishTo.publish({ onDone: resolve, isParallel, frameworkVersion })
   })
 }
 
@@ -243,7 +244,7 @@ function wrapRun (pl, isLatestVersion) {
       testName: this.pickle.name,
       testFileAbsolutePath,
       testSourceLine,
-      isParallel: !!process.env.CUCUMBER_WORKER_ID
+      isParallel: !!getEnvironmentVariable('CUCUMBER_WORKER_ID')
     }
     const ctx = testStartPayload
     numAttemptToCtx.set(numAttempt, ctx)
@@ -450,7 +451,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     }
     let errorSkippableRequest
 
-    const configurationResponse = await getChannelPromise(libraryConfigurationCh, isParallel)
+    const configurationResponse = await getChannelPromise(libraryConfigurationCh, isParallel, frameworkVersion)
 
     isEarlyFlakeDetectionEnabled = configurationResponse.libraryConfig?.isEarlyFlakeDetectionEnabled
     earlyFlakeDetectionNumRetries = configurationResponse.libraryConfig?.earlyFlakeDetectionNumRetries
@@ -489,9 +490,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
 
         isSuitesSkipped = picklesToRun.length !== oldPickles.length
 
-        log.debug(
-          () => `${picklesToRun.length} out of ${oldPickles.length} suites are going to run.`
-        )
+        log.debug('%s out of %s suites are going to run.', picklesToRun.length, oldPickles.length)
 
         if (isCoordinator) {
           this.sourcedPickles = picklesToRun
@@ -536,7 +535,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     }
 
     const processArgv = process.argv.slice(2).join(' ')
-    const command = process.env.npm_lifecycle_script || `cucumber-js ${processArgv}`
+    const command = getEnvironmentVariable('npm_lifecycle_script') || `cucumber-js ${processArgv}`
 
     if (isFlakyTestRetriesEnabled && !options.retry && numTestRetries > 0) {
       options.retry = numTestRetries
@@ -924,7 +923,7 @@ addHook({
   shimmer.wrap(
     workerPackage.Worker.prototype,
     'runTestCase',
-    runTestCase => getWrappedRunTestCase(runTestCase, true, !!process.env.CUCUMBER_WORKER_ID)
+    runTestCase => getWrappedRunTestCase(runTestCase, true, !!getEnvironmentVariable('CUCUMBER_WORKER_ID'))
   )
   return workerPackage
 })

@@ -136,7 +136,7 @@ class TextMapPropagator {
       let itemCounter = 0
       let byteCounter = 0
 
-      const baggageItems = spanContext ? spanContext._baggageItems : getAllBaggageItems()
+      const baggageItems = getAllBaggageItems()
       if (!baggageItems) return
       for (const [key, value] of Object.entries(baggageItems)) {
         const item = `${this._encodeOtelBaggageKey(String(key).trim())}=${encodeURIComponent(String(value).trim())},`
@@ -325,7 +325,7 @@ class TextMapPropagator {
           extractedContext = this._extractB3MultiContext(carrier)
           break
         default:
-          if (extractor !== 'baggage') log.warn(`Unknown propagation style: ${extractor}`)
+          if (extractor !== 'baggage') log.warn('Unknown propagation style:', extractor)
       }
 
       if (extractedContext === null) { // If the current extractor was invalid, continue to the next extractor
@@ -355,19 +355,20 @@ class TextMapPropagator {
       }
     }
 
-    this._extractBaggageItems(carrier, context)
-
     if (this._config.tracePropagationBehaviorExtract === 'ignore') {
       context._links = []
-    } else if (this._config.tracePropagationBehaviorExtract === 'restart') {
-      context._links = []
-      context._links.push({
-        context,
-        attributes:
-        {
-          reason: 'propagation_behavior_extract', context_headers: style
-        }
-      })
+    } else {
+      if (this._config.tracePropagationBehaviorExtract === 'restart') {
+        context._links = []
+        context._links.push({
+          context,
+          attributes:
+          {
+            reason: 'propagation_behavior_extract', context_headers: style
+          }
+        })
+      }
+      this._extractBaggageItems(carrier, context)
     }
 
     return context || this._extractSqsdContext(carrier)
@@ -513,7 +514,7 @@ class TextMapPropagator {
               // If subkey is tid  then do nothing because trace header tid should always be preserved
               if (subKey === 'tid') {
                 if (!hex16.test(value) || spanContext._trace.tags['_dd.p.tid'] !== transformedValue) {
-                  log.error(`Invalid trace id ${value} in tracestate, skipping`)
+                  log.error('Invalid trace id %s in tracestate, skipping', value)
                 }
                 continue
               }
@@ -628,33 +629,26 @@ class TextMapPropagator {
   _extractBaggageItems (carrier, spanContext) {
     if (!this._hasPropagationStyle('extract', 'baggage')) return
     if (!carrier || !carrier.baggage) return
-    if (!spanContext) removeAllBaggageItems()
     const baggages = carrier.baggage.split(',')
     const keysToSpanTag = this._config.baggageTagKeys === '*'
       ? undefined
       : new Set(this._config.baggageTagKeys.split(','))
     for (const keyValue of baggages) {
       if (!keyValue.includes('=')) {
-        if (spanContext) spanContext._baggageItems = {}
+        removeAllBaggageItems()
         return
       }
       let [key, value] = keyValue.split('=')
       key = this._decodeOtelBaggageKey(key.trim())
       value = decodeURIComponent(value.trim())
       if (!key || !value) {
-        if (spanContext) spanContext._baggageItems = {}
+        removeAllBaggageItems()
         return
       }
-      // the current code assumes precedence of ot-baggage- (legacy opentracing baggage) over baggage
-      if (spanContext) {
-        if (Object.hasOwn(spanContext._baggageItems, key)) continue
-        spanContext._baggageItems[key] = value
-        if (this._config.baggageTagKeys === '*' || keysToSpanTag.has(key)) {
-          spanContext._trace.tags['baggage.' + key] = value
-        }
-      } else {
-        setBaggageItem(key, value)
+      if (spanContext && (this._config.baggageTagKeys === '*' || keysToSpanTag.has(key))) {
+        spanContext._trace.tags['baggage.' + key] = value
       }
+      setBaggageItem(key, value)
     }
   }
 
@@ -689,7 +683,7 @@ class TextMapPropagator {
         }
         // Check if value is a valid 16 character lower-case hexadecimal encoded number as per spec
         if (key === '_dd.p.tid' && !(hex16.test(value))) {
-          log.error(`Invalid _dd.p.tid tag ${value}, skipping`)
+          log.error('Invalid _dd.p.tid tag %s, skipping', value)
           continue
         }
         tags[key] = value

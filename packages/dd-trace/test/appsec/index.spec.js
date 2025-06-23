@@ -424,7 +424,52 @@ describe('AppSec Index', function () {
 
       expect(waf.run).to.have.not.been.called
 
-      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
+      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res, {})
+    })
+
+    it('should pass stored response headers to Reporter.finishRequest', () => {
+      const req = {
+        url: '/path',
+        headers: {
+          'user-agent': 'Arachni',
+          host: 'localhost'
+        },
+        method: 'POST',
+        socket: {
+          remoteAddress: '127.0.0.1',
+          remotePort: 8080
+        }
+      }
+      const res = {
+        getHeaders: () => ({
+          'content-type': 'application/json',
+          'content-length': 42
+        }),
+        statusCode: 200
+      }
+
+      const storedHeaders = {
+        'content-type': 'text/plain',
+        'content-language': 'en-US',
+        'content-length': '15'
+      }
+
+      web.patch(req)
+
+      sinon.stub(Reporter, 'finishRequest')
+      sinon.stub(waf, 'disposeContext')
+
+      responseWriteHead.publish({
+        req,
+        res,
+        abortController: { abort: sinon.stub() },
+        statusCode: 200,
+        responseHeaders: storedHeaders
+      })
+
+      AppSec.incomingHttpEndTranslator({ req, res })
+
+      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res, storedHeaders)
     })
 
     it('should not propagate incoming http end data with invalid framework properties', () => {
@@ -462,7 +507,7 @@ describe('AppSec Index', function () {
 
       expect(waf.run).to.have.not.been.called
 
-      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
+      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res, {})
     })
 
     it('should propagate incoming http end data with express', () => {
@@ -512,7 +557,7 @@ describe('AppSec Index', function () {
           'server.request.query': { b: '2' }
         }
       }, req)
-      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
+      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res, {})
     })
   })
 

@@ -2,6 +2,7 @@
 
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
 const {
   TEST_STATUS,
@@ -429,7 +430,7 @@ class MochaPlugin extends CiPlugin {
         finishAllTraceSpans(this.testSessionSpan)
         this.telemetry.count(TELEMETRY_TEST_SESSION, {
           provider: this.ciProviderName,
-          autoInjected: !!process.env.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER
+          autoInjected: !!getEnvironmentVariable('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER')
         })
       }
       this.libraryConfig = null
@@ -449,7 +450,7 @@ class MochaPlugin extends CiPlugin {
             const testSuite = span.meta[TEST_SUITE]
             const testSuiteSpan = this._testSuites.get(testSuite)
             if (!testSuiteSpan) {
-              log.warn(`Test suite span not found for test span with test suite ${testSuite}`)
+              log.warn('Test suite span not found for test span with test suite', testSuite)
               return formattedSpan
             }
             const suiteTags = getTestSuiteLevelVisibilityTags(testSuiteSpan)

@@ -7,7 +7,6 @@ import sanitizeDefault from './sanitizer-default.mjs'
 import { validate, validateNotConfigured } from './validator.mjs'
 
 const app = express()
-const port = process.env.APP_PORT || 3000
 
 app.get('/cmdi-s-secure', (req, res) => {
   const command = sanitize(req.query.command)
@@ -64,6 +63,6 @@ app.get('/cmdi-iv-secure', (req, res) => {
   res.end()
 })
 
-app.listen(port, () => {
-  process.send({ port })
+const server = app.listen(process.env.APP_PORT || 0, () => {
+  process.send?.({ port: server.address().port })
 })

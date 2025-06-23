@@ -4,14 +4,13 @@ const { basename, join } = require('path')
 const { readFileSync } = require('fs')
 const { randomUUID } = require('crypto')
 
-const getPort = require('get-port')
 const Axios = require('axios')
 
 const { createSandbox, FakeAgent, spawnProc } = require('../helpers')
 const { generateProbeConfig } = require('../../packages/dd-trace/test/debugger/devtools_client/utils')
 
 const BREAKPOINT_TOKEN = '// BREAKPOINT'
-const pollInterval = 1
+const pollInterval = 0.1
 
 module.exports = {
   pollInterval,
@@ -19,12 +18,14 @@ module.exports = {
 }
 
 function setup ({ env, testApp, testAppSource, dependencies } = {}) {
-  let sandbox, cwd, appPort
+  let sandbox, cwd
+
   const breakpoints = getBreakpointInfo({
     deployedFile: testApp,
     sourceFile: testAppSource,
     stackIndex: 1 // `1` to disregard the `setup` function
   })
+
   const t = {
     breakpoint: breakpoints[0],
     breakpoints,
@@ -90,22 +91,19 @@ function setup ({ env, testApp, testAppSource, dependencies } = {}) {
     // Allow specific access to each breakpoint
     t.breakpoints.forEach((breakpoint) => { breakpoint.rcConfig = generateRemoteConfig(breakpoint) })
 
-    appPort = await getPort()
     t.agent = await new FakeAgent().start()
     t.proc = await spawnProc(t.appFile, {
       cwd,
       env: {
-        APP_PORT: appPort,
-        DD_DYNAMIC_INSTRUMENTATION_ENABLED: true,
+        DD_DYNAMIC_INSTRUMENTATION_ENABLED: 'true',
+        DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS: '0',
         DD_TRACE_AGENT_PORT: t.agent.port,
         DD_TRACE_DEBUG: process.env.DD_TRACE_DEBUG, // inherit to make debugging the sandbox easier
         DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: pollInterval,
         ...env
       }
     })
-    t.axios = Axios.create({
-      baseURL: `http://localhost:${appPort}`
-    })
+    t.axios = Axios.create({ baseURL: t.proc.url })
   })
 
   afterEach(async function () {

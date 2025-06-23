@@ -7,6 +7,7 @@ const {
   bodyParser,
   cookieParser,
   multerParser,
+  fastifyBodyParser,
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
   passportVerify,
@@ -16,10 +17,13 @@ const {
   nextBodyParsed,
   nextQueryParsed,
   expressProcessParams,
+  fastifyQueryParams,
   responseBody,
   responseWriteHead,
   responseSetHeader,
-  routerParam
+  routerParam,
+  fastifyResponseChannel,
+  fastifyPathParams
 } = require('./channels')
 const waf = require('./waf')
 const addresses = require('./addresses')
@@ -37,6 +41,7 @@ const rasp = require('./rasp')
 const { isInServerlessEnvironment } = require('../serverless')
 
 const responseAnalyzedSet = new WeakSet()
+const storedResponseHeaders = new WeakMap()
 
 let isEnabled = false
 let config
@@ -76,8 +81,12 @@ function enable (_config) {
     nextBodyParsed.subscribe(onRequestBodyParsed)
     nextQueryParsed.subscribe(onRequestQueryParsed)
     expressProcessParams.subscribe(onRequestProcessParams)
+    fastifyBodyParser.subscribe(onRequestBodyParsed)
+    fastifyQueryParams.subscribe(onRequestQueryParsed)
+    fastifyPathParams.subscribe(onRequestProcessParams)
     routerParam.subscribe(onRequestProcessParams)
     responseBody.subscribe(onResponseBody)
+    fastifyResponseChannel.subscribe(onResponseBody)
     responseWriteHead.subscribe(onResponseWriteHead)
     responseSetHeader.subscribe(onResponseSetHeader)
 
@@ -187,7 +196,13 @@ function incomingHttpEndTranslator ({ req, res }) {
 
   waf.disposeContext(req)
 
-  Reporter.finishRequest(req, res)
+  const storedHeaders = storedResponseHeaders.get(req) || {}
+
+  Reporter.finishRequest(req, res, storedHeaders)
+
+  if (storedHeaders) {
+    storedResponseHeaders.delete(req)
+  }
 }
 
 function onPassportVerify ({ framework, login, user, success, abortController }) {
@@ -285,6 +300,10 @@ function onResponseBody ({ req, res, body }) {
 }
 
 function onResponseWriteHead ({ req, res, abortController, statusCode, responseHeaders }) {
+  if (Object.keys(responseHeaders).length) {
+    storedResponseHeaders.set(req, responseHeaders)
+  }
+
   // avoid "write after end" error
   if (isBlocked(res)) {
     abortController?.abort()
@@ -356,8 +375,12 @@ function disable () {
   if (nextBodyParsed.hasSubscribers) nextBodyParsed.unsubscribe(onRequestBodyParsed)
   if (nextQueryParsed.hasSubscribers) nextQueryParsed.unsubscribe(onRequestQueryParsed)
   if (expressProcessParams.hasSubscribers) expressProcessParams.unsubscribe(onRequestProcessParams)
+  if (fastifyBodyParser.hasSubscribers) fastifyBodyParser.unsubscribe(onRequestBodyParsed)
+  if (fastifyQueryParams.hasSubscribers) fastifyQueryParams.unsubscribe(onRequestQueryParsed)
+  if (fastifyPathParams.hasSubscribers) fastifyPathParams.unsubscribe(onRequestProcessParams)
   if (routerParam.hasSubscribers) routerParam.unsubscribe(onRequestProcessParams)
   if (responseBody.hasSubscribers) responseBody.unsubscribe(onResponseBody)
+  if (fastifyResponseChannel.hasSubscribers) fastifyResponseChannel.unsubscribe(onResponseBody)
   if (responseWriteHead.hasSubscribers) responseWriteHead.unsubscribe(onResponseWriteHead)
   if (responseSetHeader.hasSubscribers) responseSetHeader.unsubscribe(onResponseSetHeader)
 }

@@ -6,8 +6,6 @@ on:
     branches: [master]
   schedule:
     - cron: 0 4 * * *
-    - cron: 20 4 * * *
-    - cron: 40 4 * * *
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
@@ -283,12 +281,13 @@ jobs:
       - uses: ./.github/actions/install
       - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
       - run: yarn test:integration
+      - run: yarn test:integration:esbuild
 
   # We'll run these separately for earlier (i.e. unsupported) versions
   integration-guardrails:
     strategy:
       matrix:
-        version: [14.0.0, 14, 16.0.0, eol, 18.0.0, 18.1.0, 20.0.0, 22.0.0]
+        version: [14.0.0, 14, 16.0.0, 18.0.0, 20.0.0, 22.0.0, 24.0.0]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -296,6 +295,7 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
+      - run: yarn add --ignore-scripts mocha@10 # Use older mocha to support old Node.js versions
       - run: node node_modules/.bin/mocha --colors --timeout 30000 integration-tests/init.spec.js
 
   integration-guardrails-unsupported:

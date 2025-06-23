@@ -5,6 +5,7 @@ const { addHook, channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 const { isMarkedAsUnskippable } = require('../../../datadog-plugin-jest/src/util')
 const log = require('../../../dd-trace/src/log')
+const { getEnvironmentVariable } = require('../../../dd-trace/src/config-helper')
 const {
   getTestSuitePath,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
@@ -200,9 +201,10 @@ function getOnEndHandler (isParallel) {
   }
 }
 
-function getExecutionConfiguration (runner, isParallel, onFinishRequest) {
+function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFinishRequest) {
   const ctx = {
-    isParallel
+    isParallel,
+    frameworkVersion
   }
 
   const onReceivedSkippableSuites = ({ err, skippableSuites, itrCorrelationId: responseItrCorrelationId }) => {
@@ -342,10 +344,10 @@ addHook({
   name: 'mocha',
   versions: ['>=5.2.0'],
   file: 'lib/mocha.js'
-}, (Mocha) => {
+}, (Mocha, frameworkVersion) => {
   shimmer.wrap(Mocha.prototype, 'run', run => function () {
     // Workers do not need to request any data, just run the tests
-    if (!testFinishCh.hasSubscribers || process.env.MOCHA_WORKER_ID || this.options.parallel) {
+    if (!testFinishCh.hasSubscribers || getEnvironmentVariable('MOCHA_WORKER_ID') || this.options.parallel) {
       return run.apply(this, arguments)
     }
 
@@ -362,7 +364,7 @@ addHook({
       }
     })
 
-    getExecutionConfiguration(runner, false, () => {
+    getExecutionConfiguration(runner, false, frameworkVersion, () => {
       if (config.isKnownTestsEnabled) {
         const testSuites = this.files.map(file => getTestSuitePath(file, process.cwd()))
         const isFaulty = getIsFaultyEarlyFlakeDetection(
@@ -520,7 +522,7 @@ addHook({
       if (ctx) {
         testSuiteFinishCh.publish({ status, ...ctx.currentStore }, () => {})
       } else {
-        log.warn(() => `No ctx found for suite ${suite.file}`)
+        log.warn('No ctx found for suite', suite.file)
       }
     })
 
@@ -615,7 +617,7 @@ addHook({
     this.once('start', getOnStartHandler(true, frameworkVersion))
     this.once('end', getOnEndHandler(true))
 
-    getExecutionConfiguration(this, true, () => {
+    getExecutionConfiguration(this, true, frameworkVersion, () => {
       if (config.isKnownTestsEnabled) {
         const testSuites = files.map(file => getTestSuitePath(file, process.cwd()))
         const isFaulty = getIsFaultyEarlyFlakeDetection(
