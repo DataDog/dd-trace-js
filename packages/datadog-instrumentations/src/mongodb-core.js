@@ -153,11 +153,7 @@ function instrument (operation, command, mongoCtx, args, server, ns, ops, option
         errorCh.publish(ctx)
       }
 
-      finishCh.publish(ctx)
-
-      if (callback) {
-        return callback.apply(this, arguments)
-      }
+      return callback ? finishCh.runStores(ctx, callback, this, ...arguments) : finishCh.publish(ctx)
     })
 
     try {
@@ -188,8 +184,9 @@ function instrumentPromise (operation, command, mongoCtx, args, server, ns, ops,
 
     return promise.then(function (res) {
       ctx.result = res
-      finishCh.publish(ctx)
-      return res
+      return finishCh.runStores(ctx, () => {
+        return res
+      })
     }, function (err) {
       ctx.error = err
       errorCh.publish(ctx)
