@@ -6,9 +6,7 @@ const CachePlugin = require('../../dd-trace/src/plugins/cache')
 class MemcachedPlugin extends CachePlugin {
   static get id () { return 'memcached' }
 
-  bindStart (ctx) {
-    const { client, server, query } = ctx
-
+  start ({ client, server, query }) {
     const address = getAddress(client, server, query)
 
     const meta = {
@@ -25,9 +23,7 @@ class MemcachedPlugin extends CachePlugin {
       resource: query.type,
       type: 'memcached',
       meta
-    }, ctx)
-
-    return ctx.currentStore
+    })
   }
 }
 
