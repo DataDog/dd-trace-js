@@ -11,8 +11,28 @@ updates:
       - "/.github/actions/*"
       - "/.github/actions/*/*"
     schedule:
-      interval: "monthly"
+      interval: "weekly"
     groups:
       gh-actions-packages:
         patterns:
           - "*"
+  - package-ecosystem: "npm"
+    directories:
+      - "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      dev-minor-and-patch-dependencies:
+        dependency-type: "development"
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      runtime-minor-and-patch-dependencies:
+        dependency-type: "production"
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
