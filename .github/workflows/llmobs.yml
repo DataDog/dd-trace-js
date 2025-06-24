@@ -33,13 +33,6 @@ jobs:
 
   openai:
     runs-on: ubuntu-latest
-    services:
-      testagent:
-        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
-        ports:
-          - 9126:9126
-        env:
-          PORT: 9126
     env:
       PLUGINS: openai
     steps:
