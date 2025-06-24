@@ -16,7 +16,13 @@ class Http2ServerPlugin extends ServerPlugin {
     this.addSub(`apm:${this.constructor.id}:server:${this.operation}:${eventName}`, handler)
   }
 
-  start ({ req, res }) {
+  addTraceBind (eventName, handler) {
+    this.addBind(`apm:${this.constructor.id}:server:${this.operation}:${eventName}`, handler)
+  }
+
+  bindStart (ctx) {
+    const { req, res } = ctx
+
     const store = storage('legacy').getStore()
     const span = web.startSpan(
       this.tracer,
@@ -39,14 +45,20 @@ class Http2ServerPlugin extends ServerPlugin {
       context.res.writeHead = web.wrapWriteHead(context)
       context.instrumented = true
     }
+
+    return ctx.currentStore
   }
 
-  finish ({ req }) {
+  bindFinish (ctx) {
+    const { req } = ctx
+
     const context = web.getContext(req)
 
     if (!context || !context.res) return // Not created by a http.Server instance.
 
     web.finishAll(context)
+
+    return ctx.parentStore
   }
 
   error (error) {

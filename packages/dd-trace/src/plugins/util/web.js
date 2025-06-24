@@ -10,6 +10,7 @@ const kinds = require('../../../../../ext/kinds')
 const urlFilter = require('./urlfilter')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../constants')
 const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred_proxy')
+const { storage } = require('../../../../datadog-core')
 
 let extractIp
 
@@ -92,7 +93,7 @@ const web = {
     analyticsSampler.sample(span, config.measured, true)
   },
 
-  startSpan (tracer, config, req, res, name) {
+  startSpan (tracer, config, req, res, name, traceCtx) {
     const context = this.patch(req)
 
     let span
@@ -101,7 +102,7 @@ const web = {
       context.span.context()._name = name
       span = context.span
     } else {
-      span = web.startChildSpan(tracer, name, req)
+      span = web.startChildSpan(tracer, name, req, traceCtx)
     }
 
     context.tracer = tracer
@@ -257,20 +258,27 @@ const web = {
   },
 
   // Extract the parent span from the headers and start a new span as its child
-  startChildSpan (tracer, name, req) {
+  startChildSpan (tracer, name, req, traceCtx) {
     const headers = req.headers
-    const context = contexts.get(req)
+    const reqCtx = contexts.get(req)
     let childOf = tracer.extract(FORMAT_HTTP_HEADERS, headers)
+
+    const store = storage('legacy').getStore()
 
     // we may have headers signaling a router proxy span should be created (such as for AWS API Gateway)
     if (tracer._config?.inferredProxyServicesEnabled) {
-      const proxySpan = createInferredProxySpan(headers, childOf, tracer, context)
+      const proxySpan = createInferredProxySpan(headers, childOf, tracer, reqCtx, store, traceCtx)
       if (proxySpan) {
         childOf = proxySpan
       }
     }
 
     const span = tracer.startSpan(name, { childOf, links: childOf?._links })
+
+    if (traceCtx) {
+      traceCtx.parentStore = store
+      traceCtx.currentStore = { ...store, span }
+    }
 
     return span
   },

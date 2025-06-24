@@ -20,7 +20,7 @@ const supportedProxies = {
   }
 }
 
-function createInferredProxySpan (headers, childOf, tracer, context) {
+function createInferredProxySpan (headers, childOf, tracer, reqCtx, store, traceCtx) {
   if (!headers) {
     return null
   }
@@ -57,12 +57,17 @@ function createInferredProxySpan (headers, childOf, tracer, context) {
   )
 
   tracer.scope().activate(span)
-  context.inferredProxySpan = span
+  reqCtx.inferredProxySpan = span
   childOf = span
 
   log.debug('Successfully created inferred proxy span.')
 
   setInferredProxySpanTags(span, proxyContext)
+
+  if (traceCtx) {
+    traceCtx.parentStore = store
+    traceCtx.currentStore = { ...store, span }
+  }
 
   return childOf
 }
