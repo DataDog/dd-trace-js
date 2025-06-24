@@ -2,8 +2,7 @@
 
 const {
   channel,
-  addHook,
-  AsyncResource
+  addHook
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
@@ -37,30 +36,25 @@ addHook({ name: 'sharedb', versions: ['>=1'], file: 'lib/agent.js' }, Agent => {
   const errorCh = channel('apm:sharedb:request:error')
 
   shimmer.wrap(Agent.prototype, '_handleMessage', origHandleMessageFn => function (request, callback) {
-    const callbackResource = new AsyncResource('bound-anonymous-fn')
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-
     const action = request.a
     const actionName = getReadableActionName(action)
 
-    return asyncResource.runInAsyncScope(() => {
-      startCh.publish({ actionName, request })
-
-      callback = callbackResource.bind(callback)
-
-      arguments[1] = shimmer.wrapFunction(callback, callback => asyncResource.bind(function (error, res) {
+    const ctx = { actionName, request }
+    return startCh.runStores(ctx, () => {
+      arguments[1] = shimmer.wrapFunction(callback, callback => function (error, res) {
         if (error) {
+          ctx.error = error
           errorCh.publish(error)
         }
-        finishCh.publish({ request, res })
-
-        return callback.apply(this, arguments)
-      }))
+        ctx.res = res
+        return finishCh.runStores(ctx, callback, this, ...arguments)
+      })
 
       try {
         return origHandleMessageFn.apply(this, arguments)
       } catch (error) {
-        errorCh.publish(error)
+        ctx.error = error
+        errorCh.publish(ctx)
 
         throw error
       }
