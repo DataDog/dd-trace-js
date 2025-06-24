@@ -163,4 +163,4 @@ services:
       - ENABLED_CHECKS=trace_stall,meta_tracer_version_header,trace_count_header,trace_peer_service
       - PORT=9126
     volumes:
-      - /Users/${USER}/dd/dd-apm-test-agent/vcr-cassettes:/vcr-cassettes:delegated
+      - ${VCR_CASSETTES_PATH:-/dev/null}:/vcr-cassettes:delegated
