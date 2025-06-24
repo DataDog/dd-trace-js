@@ -27,7 +27,7 @@ const getDsmPathwayHash = (isProducer, parentHash) => {
 describe('Plugin', () => {
   const module = '@confluentinc/kafka-javascript'
 
-  describe('@confluentinc/kafka-javascript', function () {
+  describe('confluentinc-kafka-javascript', function () {
     this.timeout(30000)
 
     afterEach(() => {
@@ -48,7 +48,7 @@ describe('Plugin', () => {
 
           process.env.DD_DATA_STREAMS_ENABLED = 'true'
           tracer = require('../../dd-trace')
-          await agent.load('@confluentinc/kafka-javascript')
+          await agent.load('confluentinc-kafka-javascript')
           const lib = require(`../../../versions/${module}@${version}`).get()
 
           // Store the module for later use
@@ -73,7 +73,7 @@ describe('Plugin', () => {
                 service: expectedSchema.send.serviceName,
                 meta: {
                   'span.kind': 'producer',
-                  component: '@confluentinc/kafka-javascript',
+                  component: 'confluentinc-kafka-javascript',
                   'messaging.destination.name': 'test-topic',
                   'messaging.kafka.bootstrap.servers': '127.0.0.1:9092'
                 },
@@ -106,7 +106,7 @@ describe('Plugin', () => {
                   [ERROR_TYPE]: error.name,
                   [ERROR_MESSAGE]: error.message,
                   [ERROR_STACK]: error.stack,
-                  component: '@confluentinc/kafka-javascript'
+                  component: 'confluentinc-kafka-javascript'
                 })
               }, { timeoutMs: 10000 })
 
@@ -141,7 +141,7 @@ describe('Plugin', () => {
                 service: expectedSchema.receive.serviceName,
                 meta: {
                   'span.kind': 'consumer',
-                  component: '@confluentinc/kafka-javascript',
+                  component: 'confluentinc-kafka-javascript',
                   'messaging.destination.name': 'test-topic'
                 },
                 resource: testTopic,
@@ -220,7 +220,7 @@ describe('Plugin', () => {
                   [ERROR_MESSAGE]: fakeError.message,
                   [ERROR_STACK]: fakeError.stack,
                   'span.kind': 'consumer',
-                  component: '@confluentinc/kafka-javascript',
+                  component: 'confluentinc-kafka-javascript',
                   'messaging.destination.name': 'test-topic'
                 },
                 resource: testTopic,
@@ -256,7 +256,7 @@ describe('Plugin', () => {
             const lib = require(`../../../versions/${module}@${version}`).get()
             nativeApi = lib
 
-            await agent.load('@confluentinc/kafka-javascript')
+            await agent.load('confluentinc-kafka-javascript')
 
             // Get the producer/consumer classes directly from the module
             Producer = nativeApi.Producer
@@ -295,7 +295,7 @@ describe('Plugin', () => {
                 service: expectedSchema.send.serviceName,
                 meta: {
                   'span.kind': 'producer',
-                  component: '@confluentinc/kafka-javascript',
+                  component: 'confluentinc-kafka-javascript',
                   'messaging.destination.name': testTopic,
                   'messaging.kafka.bootstrap.servers': '127.0.0.1:9092'
                 },
@@ -322,7 +322,7 @@ describe('Plugin', () => {
                 })
 
                 expect(span.meta).to.include({
-                  component: '@confluentinc/kafka-javascript'
+                  component: 'confluentinc-kafka-javascript'
                 })
 
                 expect(span.meta[ERROR_TYPE]).to.exist
@@ -410,7 +410,7 @@ describe('Plugin', () => {
                 service: expectedSchema.receive.serviceName,
                 meta: {
                   'span.kind': 'consumer',
-                  component: '@confluentinc/kafka-javascript',
+                  component: 'confluentinc-kafka-javascript',
                   'messaging.destination.name': testTopic
                 },
                 resource: testTopic,
@@ -464,7 +464,7 @@ describe('Plugin', () => {
             //     expect(errorSpan).to.exist
             //     expect(errorSpan.name).to.equal(expectedSchema.receive.opName)
             //     expect(errorSpan.meta).to.include({
-            //       component: '@confluentinc/kafka-javascript'
+            //       component: 'confluentinc-kafka-javascript'
             //     })
 
             //     expect(errorSpan.meta[ERROR_TYPE]).to.equal(fakeError.name)
@@ -488,7 +488,7 @@ describe('Plugin', () => {
 
           beforeEach(async () => {
             tracer.init()
-            tracer.use('@confluentinc/kafka-javascript', { dsmEnabled: true })
+            tracer.use('confluentinc-kafka-javascript', { dsmEnabled: true })
             messages = [{ key: 'key1', value: 'test2' }]
             consumer = kafka.consumer({
               kafkaJS: { groupId: 'test-group', fromBeginning: false }
