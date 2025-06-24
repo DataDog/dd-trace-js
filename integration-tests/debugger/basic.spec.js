@@ -749,9 +749,7 @@ describe('Dynamic Instrumentation', function () {
       dependencies: ['fastify']
     })
     const probe = t.generateProbeConfig()
-    writeFileSync(probeFile, JSON.stringify({
-      logProbes: [probe]
-    }))
+    writeFileSync(probeFile, JSON.stringify([probe]))
 
     it('should install probes from a probe file', testBasicInputWithoutRC.bind(null, t, probe))
 
