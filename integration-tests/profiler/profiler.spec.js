@@ -22,16 +22,16 @@ if (process.platform !== 'win32') {
 const TIMEOUT = 30000
 
 function checkProfiles (agent, proc, timeout,
-  expectedProfileTypes = DEFAULT_PROFILE_TYPES, expectBadExit = false, multiplicity = 1
+  expectedProfileTypes = DEFAULT_PROFILE_TYPES, expectBadExit = false
 ) {
   return Promise.all([
     processExitPromise(proc, timeout, expectBadExit),
-    expectProfileMessagePromise(agent, timeout, expectedProfileTypes, multiplicity)
+    expectProfileMessagePromise(agent, timeout, expectedProfileTypes)
   ])
 }
 
 function expectProfileMessagePromise (agent, timeout,
-  expectedProfileTypes = DEFAULT_PROFILE_TYPES, multiplicity = 1
+  expectedProfileTypes = DEFAULT_PROFILE_TYPES
 ) {
   const fileNames = expectedProfileTypes.map(type => `${type}.pprof`)
   return agent.assertMessageReceived(({ headers, _, files }) => {
@@ -54,7 +54,7 @@ function expectProfileMessagePromise (agent, timeout,
       e.message += ` ${JSON.stringify({ headers, files, event })}`
       throw e
     }
-  }, timeout, multiplicity)
+  }, timeout, 1, true)
 }
 
 function processExitPromise (proc, timeout, expectBadExit = false) {
@@ -608,7 +608,7 @@ describe('profiler', () => {
           cwd,
           env: { ...oomEnv, DD_PROFILING_WALLTIME_ENABLED: 0 }
         })
-        return checkProfiles(agent, proc, timeout, ['space'], false, 2)
+        return checkProfiles(agent, proc, timeout, ['space'], false)
       })
 
       // Following tests are flaky because they use unreliable strategies to export profiles
@@ -624,7 +624,7 @@ describe('profiler', () => {
             DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: 3
           }
         })
-        return checkProfiles(agent, proc, timeout, ['space'], false, 2)
+        return checkProfiles(agent, proc, timeout, ['space'], false)
       }).retries(3)
 
       it('sends a heap profile on OOM with async callback', () => {
@@ -652,7 +652,7 @@ describe('profiler', () => {
             DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'async,process'
           }
         })
-        return checkProfiles(agent, proc, timeout, ['space'], true, 2)
+        return checkProfiles(agent, proc, timeout, ['space'], true)
       }).retries(3)
     }
   })
@@ -779,10 +779,7 @@ describe('profiler', () => {
       forkSsi(['create-span', 'long-lived'], whichEnv),
       timeout,
       DEFAULT_PROFILE_TYPES,
-      false,
-      // Will receive 2 messages: first one is for the trace, second one is for the profile. We
-      // only need the assertions in checkProfiles to succeed for the one with the profile.
-      2)
+      false)
   }
 
   function heuristicsDoesNotTriggerFor (args, allowTraceMessage, whichEnv) {
