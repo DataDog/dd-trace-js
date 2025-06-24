@@ -26,13 +26,28 @@ if (!dc.unsubscribe) {
   }
 }
 
-dc.subscribe(CHANNEL, (payload) => {
-  try {
-    hooks[payload.package]()
-  } catch (err) {
+function doHook (payload) {
+  const hook = hooks[payload.package]
+  if (!hook) {
     log.error('esbuild-wrapped %s missing in list of hooks', payload.package)
-    throw err
+    return
   }
+
+  const hookFn = hook.fn ?? hook
+  if (typeof hookFn !== 'function') {
+    log.error('esbuild-wrapped hook %s is not a function', payload.package)
+    return
+  }
+
+  try {
+    hookFn()
+  } catch {
+    log.error('esbuild-wrapped %s hook failed', payload.package)
+  }
+}
+
+dc.subscribe(CHANNEL, (payload) => {
+  doHook(payload)
 
   if (!instrumentations[payload.package]) {
     log.error('esbuild-wrapped %s missing in list of instrumentations', payload.package)
