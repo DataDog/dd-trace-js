@@ -75,13 +75,12 @@ for (const packageName of names) {
   if (typeof hook === 'object') {
     if (hook.serverless === false && isInServerlessEnvironment()) continue
 
-    hookOptions.internals = hook.esmFirst
-
     // some integrations are disabled by default, but can be enabled by setting
     // the DD_TRACE_<INTEGRATION>_ENABLED environment variable to true
-    if (!hook.disabled || reenabledInstrumentations.has(normalizedPackageName)) {
-      hook = hook.fn
-    }
+    if (hook.disabled && !reenabledInstrumentations.has(normalizedPackageName)) continue
+
+    hookOptions.internals = hook.esmFirst
+    hook = hook.fn
   }
 
   // get the instrumentation file name to save all hooked versions
