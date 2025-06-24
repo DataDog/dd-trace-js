@@ -49,7 +49,7 @@ describe('Plugin', () => {
 
             const record = JSON.parse(stream.write.firstCall.args[0].toString())
 
-            expect(record).to.not.have.property('dd')
+            expect(record).to.have.property('dd')
           })
         })
       })
