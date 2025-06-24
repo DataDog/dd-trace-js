@@ -51,7 +51,7 @@ function sanitizedExec (
   try {
     let result = cp.execFileSync(cmd, flags, { stdio: 'pipe' }).toString()
     if (shouldTrim) {
-      result = result.replace(/(\r\n|\n|\r)/gm, '')
+      result = result.replaceAll(/(\r\n|\n|\r)/gm, '')
     }
     if (durationMetric) {
       distributionMetric(durationMetric.name, durationMetric.tags, Date.now() - startTime)
@@ -380,6 +380,7 @@ function generatePackFilesForCommits (commitsToUpload) {
   const tmpFolder = os.tmpdir()
 
   if (!isDirectory(tmpFolder)) {
+    // TODO: Do we need the stack trace for this error? If not, just log the string
     log.error(new Error('Provided path to generate packfiles is not a directory'))
     return []
   }

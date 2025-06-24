@@ -22,16 +22,16 @@ if (process.platform !== 'win32') {
 const TIMEOUT = 30000
 
 function checkProfiles (agent, proc, timeout,
-  expectedProfileTypes = DEFAULT_PROFILE_TYPES, expectBadExit = false, multiplicity = 1
+  expectedProfileTypes = DEFAULT_PROFILE_TYPES, expectBadExit = false
 ) {
   return Promise.all([
     processExitPromise(proc, timeout, expectBadExit),
-    expectProfileMessagePromise(agent, timeout, expectedProfileTypes, multiplicity)
+    expectProfileMessagePromise(agent, timeout, expectedProfileTypes)
   ])
 }
 
 function expectProfileMessagePromise (agent, timeout,
-  expectedProfileTypes = DEFAULT_PROFILE_TYPES, multiplicity = 1
+  expectedProfileTypes = DEFAULT_PROFILE_TYPES
 ) {
   const fileNames = expectedProfileTypes.map(type => `${type}.pprof`)
   return agent.assertMessageReceived(({ headers, _, files }) => {
@@ -43,15 +43,18 @@ function expectProfileMessagePromise (agent, timeout,
       assert.propertyVal(event, 'family', 'node')
       assert.isString(event.info.profiler.activation)
       assert.isString(event.info.profiler.ssi.mechanism)
-      assert.deepPropertyVal(event, 'attachments', fileNames)
-      for (const [index, fileName] of fileNames.entries()) {
+      const attachments = event.attachments
+      assert.isArray(attachments)
+      // Profiler encodes the files with Promise.all, so their ordering is not guaranteed
+      assert.sameMembers(attachments, fileNames)
+      for (const [index, fileName] of attachments.entries()) {
         assert.propertyVal(files[index + 1], 'originalname', fileName)
       }
     } catch (e) {
       e.message += ` ${JSON.stringify({ headers, files, event })}`
       throw e
     }
-  }, timeout, multiplicity)
+  }, timeout, 1, true)
 }
 
 function processExitPromise (proc, timeout, expectBadExit = false) {
@@ -536,7 +539,7 @@ describe('profiler', () => {
       proc.kill()
     })
 
-    it('records profile on process exit', () => {
+    it('records profile on process exit', async () => {
       proc = fork(profilerTestFile, {
         cwd,
         env: {
@@ -544,13 +547,13 @@ describe('profiler', () => {
           DD_PROFILING_ENABLED: 1
         }
       })
-      const checkTelemetry = agent.assertTelemetryReceived(_ => {}, 1000, 'generate-metrics')
+      const checkTelemetry = agent.assertTelemetryReceived('generate-metrics', 1000)
       // SSI telemetry is not supposed to have been emitted when DD_INJECTION_ENABLED is absent,
       // so expect telemetry callback to time out
-      return Promise.all([checkProfiles(agent, proc, timeout), expectTimeout(checkTelemetry)])
+      await Promise.all([checkProfiles(agent, proc, timeout), expectTimeout(checkTelemetry)])
     })
 
-    it('records SSI telemetry on process exit', () => {
+    it('records SSI telemetry on process exit', async () => {
       proc = fork(profilerTestFile, {
         cwd,
         env: {
@@ -585,8 +588,9 @@ describe('profiler', () => {
         assert.equal(series[1].type, 'count')
         checkTags(series[1].tags)
         assert.equal(series[1].points[0][1], 1)
-      }, timeout, 'generate-metrics')
-      return Promise.all([checkProfiles(agent, proc, timeout), checkTelemetry])
+      }, 'generate-metrics', timeout)
+
+      await Promise.all([checkProfiles(agent, proc, timeout), checkTelemetry])
     })
 
     if (process.platform !== 'win32') { // PROF-8905
@@ -604,7 +608,7 @@ describe('profiler', () => {
           cwd,
           env: { ...oomEnv, DD_PROFILING_WALLTIME_ENABLED: 0 }
         })
-        return checkProfiles(agent, proc, timeout, ['space'], false, 2)
+        return checkProfiles(agent, proc, timeout, ['space'], false)
       })
 
       // Following tests are flaky because they use unreliable strategies to export profiles
@@ -620,7 +624,7 @@ describe('profiler', () => {
             DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: 3
           }
         })
-        return checkProfiles(agent, proc, timeout, ['space'], false, 2)
+        return checkProfiles(agent, proc, timeout, ['space'], false)
       }).retries(3)
 
       it('sends a heap profile on OOM with async callback', () => {
@@ -648,7 +652,7 @@ describe('profiler', () => {
             DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'async,process'
           }
         })
-        return checkProfiles(agent, proc, timeout, ['space'], true, 2)
+        return checkProfiles(agent, proc, timeout, ['space'], true)
       }).retries(3)
     }
   })
@@ -703,7 +707,7 @@ describe('profiler', () => {
       await agent.stop()
     })
 
-    it('sends profiler API telemetry', () => {
+    it('sends profiler API telemetry', async () => {
       proc = fork(profilerTestFile, {
         cwd,
         env: {
@@ -736,7 +740,7 @@ describe('profiler', () => {
 
         // Same number of requests and responses
         assert.equal(series[1].points[0][1], requestCount)
-      }, timeout, 'generate-metrics')
+      }, 'generate-metrics', timeout)
 
       const checkDistributions = agent.assertTelemetryReceived(({ _, payload }) => {
         const pp = payload.payload
@@ -749,12 +753,12 @@ describe('profiler', () => {
         // Same number of points
         pointsCount = series[0].points.length
         assert.equal(pointsCount, series[1].points.length)
-      }, timeout, 'distributions')
+      }, 'distributions', timeout)
 
-      return Promise.all([checkProfiles(agent, proc, timeout), checkMetrics, checkDistributions]).then(() => {
-        // Same number of requests and points
-        assert.equal(requestCount, pointsCount)
-      })
+      await Promise.all([checkProfiles(agent, proc, timeout), checkMetrics, checkDistributions])
+
+      // Same number of requests and points
+      assert.equal(requestCount, pointsCount)
     })
   })
 
@@ -775,10 +779,7 @@ describe('profiler', () => {
       forkSsi(['create-span', 'long-lived'], whichEnv),
       timeout,
       DEFAULT_PROFILE_TYPES,
-      false,
-      // Will receive 2 messages: first one is for the trace, second one is for the profile. We
-      // only need the assertions in checkProfiles to succeed for the one with the profile.
-      2)
+      false)
   }
 
   function heuristicsDoesNotTriggerFor (args, allowTraceMessage, whichEnv) {

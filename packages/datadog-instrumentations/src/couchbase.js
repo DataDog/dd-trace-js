@@ -43,14 +43,11 @@ function wrapMaybeInvoke (_maybeInvoke) {
 
 function wrapQuery (query) {
   const wrapped = function (q, params, callback) {
-    callback = AsyncResource.bind(arguments[arguments.length - 1])
-
-    if (typeof callback === 'function') {
-      arguments[arguments.length - 1] = callback
+    if (typeof arguments[arguments.length - 1] === 'function') {
+      arguments[arguments.length - 1] = AsyncResource.bind(arguments[arguments.length - 1])
     }
 
-    const res = query.apply(this, arguments)
-    return res
+    return query.apply(this, arguments)
   }
   return wrapped
 }

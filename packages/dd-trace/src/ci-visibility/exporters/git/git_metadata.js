@@ -3,6 +3,7 @@ const path = require('path')
 
 const FormData = require('../../../exporters/common/form-data')
 const request = require('../../../exporters/common/request')
+const { getEnvironmentVariable } = require('../../../config-helper')
 
 const log = require('../../../log')
 const { isFalse } = require('../../../util')
@@ -38,7 +39,7 @@ function validateCommits (commits) {
       throw new Error('Invalid commit type response')
     }
     if (isValidSha1(commitSha) || isValidSha256(commitSha)) {
-      return commitSha.replace(/[^0-9a-f]+/g, '')
+      return commitSha.replaceAll(/[^0-9a-f]+/g, '')
     }
     throw new Error('Invalid commit format')
   })
@@ -48,7 +49,7 @@ function getCommonRequestOptions (url) {
   return {
     method: 'POST',
     headers: {
-      'dd-api-key': process.env.DATADOG_API_KEY || process.env.DD_API_KEY
+      'dd-api-key': getEnvironmentVariable('DD_API_KEY')
     },
     timeout: 15_000,
     url
@@ -104,9 +105,9 @@ function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy, ev
       incrementCountMetric(TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS_ERRORS, { errorType: 'network' })
       return callback(new Error(`Can't parse commits to exclude response: ${e.message}`))
     }
-    log.debug(`There are ${alreadySeenCommits.length} commits to exclude.`)
+    log.debug('There are %s commits to exclude.', alreadySeenCommits.length)
     const commitsToInclude = latestCommits.filter((commit) => !alreadySeenCommits.includes(commit))
-    log.debug(`There are ${commitsToInclude.length} commits to include.`)
+    log.debug('There are %s commits to include.', commitsToInclude.length)
 
     if (!commitsToInclude.length) {
       return callback(null, [])
@@ -194,11 +195,11 @@ function generateAndUploadPackFiles ({
   repositoryUrl,
   headCommit
 }, callback) {
-  log.debug(`There are ${commitsToUpload.length} commits to upload`)
+  log.debug('There are %s commits to upload', commitsToUpload.length)
 
   const packFilesToUpload = generatePackFilesForCommits(commitsToUpload)
 
-  log.debug(`Uploading ${packFilesToUpload.length} packfiles.`)
+  log.debug('Uploading %s packfiles.', packFilesToUpload.length)
 
   if (!packFilesToUpload.length) {
     return callback(new Error('Failed to generate packfiles'))
@@ -252,14 +253,14 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
     repositoryUrl = getRepositoryUrl()
   }
 
-  log.debug(`Uploading git history for repository ${repositoryUrl}`)
+  log.debug('Uploading git history for repository', repositoryUrl)
 
   if (!repositoryUrl) {
     return callback(new Error('Repository URL is empty'))
   }
 
   let latestCommits = getLatestCommits()
-  log.debug(`There were ${latestCommits.length} commits since last month.`)
+  log.debug('There were %s commits since last month.', latestCommits.length)
 
   const getOnFinishGetCommitsToUpload = (hasCheckedShallow) => (err, commitsToUpload) => {
     if (err) {
@@ -285,7 +286,7 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
     }
     // Otherwise we unshallow and get commits to upload again
     log.debug('It is shallow clone, unshallowing...')
-    if (!isFalse(process.env.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED)) {
+    if (!isFalse(getEnvironmentVariable('DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED'))) {
       unshallowRepository()
     }
 

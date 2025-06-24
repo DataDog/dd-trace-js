@@ -1,3 +1,4 @@
+const { storage } = require('../../../datadog-core')
 const {
   getTestEnvironmentMetadata,
   getTestSessionName,
@@ -73,7 +74,10 @@ module.exports = class CiPlugin extends Plugin {
     this.fileLineToProbeId = new Map()
     this.rootDir = process.cwd() // fallback in case :session:start events are not emitted
 
-    this.addSub(`ci:${this.constructor.id}:library-configuration`, ({ onDone, isParallel }) => {
+    this.addSub(`ci:${this.constructor.id}:library-configuration`, (ctx) => {
+      const { onDone, isParallel, frameworkVersion } = ctx
+      ctx.currentStore = storage('legacy').getStore()
+
       if (!this.tracer._exporter || !this.tracer._exporter.getLibraryConfiguration) {
         return onDone({ err: new Error('Test optimization was not initialized correctly') })
       }
@@ -84,7 +88,7 @@ module.exports = class CiPlugin extends Plugin {
           this.libraryConfig = libraryConfig
         }
 
-        const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id, isParallel)
+        const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id, isParallel, frameworkVersion)
         const metadataTags = {
           test: {
             ...libraryCapabilitiesTags
@@ -93,6 +97,10 @@ module.exports = class CiPlugin extends Plugin {
         this.tracer._exporter.addMetadataTags(metadataTags)
         onDone({ err, libraryConfig })
       })
+    })
+
+    this.addBind(`ci:${this.constructor.id}:test-suite:skippable`, (ctx) => {
+      return ctx.currentStore
     })
 
     this.addSub(`ci:${this.constructor.id}:test-suite:skippable`, ({ onDone }) => {
@@ -158,8 +166,12 @@ module.exports = class CiPlugin extends Plugin {
       // only for vitest
       // These are added for the worker threads to use
       if (this.constructor.id === 'vitest') {
+        // TODO: Figure out alternative ways to pass this information to the worker threads
+        // eslint-disable-next-line eslint-rules/eslint-process-env
         process.env.DD_CIVISIBILITY_TEST_SESSION_ID = this.testSessionSpan.context().toTraceId()
+        // eslint-disable-next-line eslint-rules/eslint-process-env
         process.env.DD_CIVISIBILITY_TEST_MODULE_ID = this.testModuleSpan.context().toSpanId()
+        // eslint-disable-next-line eslint-rules/eslint-process-env
         process.env.DD_CIVISIBILITY_TEST_COMMAND = this.command
       }
 
@@ -188,6 +200,10 @@ module.exports = class CiPlugin extends Plugin {
       this.telemetry.count(TELEMETRY_ITR_SKIPPED, { testLevel: 'suite' }, skippedSuites.length)
     })
 
+    this.addBind(`ci:${this.constructor.id}:known-tests`, (ctx) => {
+      return ctx.currentStore
+    })
+
     this.addSub(`ci:${this.constructor.id}:known-tests`, ({ onDone }) => {
       if (!this.tracer._exporter?.getKnownTests) {
         return onDone({ err: new Error('Test optimization was not initialized correctly') })
@@ -202,6 +218,10 @@ module.exports = class CiPlugin extends Plugin {
       })
     })
 
+    this.addBind(`ci:${this.constructor.id}:test-management-tests`, (ctx) => {
+      return ctx.currentStore
+    })
+
     this.addSub(`ci:${this.constructor.id}:test-management-tests`, ({ onDone }) => {
       if (!this.tracer._exporter?.getTestManagementTests) {
         return onDone({ err: new Error('Test optimization was not initialized correctly') })
@@ -213,6 +233,10 @@ module.exports = class CiPlugin extends Plugin {
         }
         onDone({ err, testManagementTests })
       })
+    })
+
+    this.addBind(`ci:${this.constructor.id}:modified-tests`, (ctx) => {
+      return ctx.currentStore
     })
 
     this.addSub(`ci:${this.constructor.id}:modified-tests`, ({ onDone }) => {
@@ -429,7 +453,7 @@ module.exports = class CiPlugin extends Plugin {
 
   removeDiProbe ({ file, line }) {
     const probeId = this.fileLineToProbeId.get(`${file}:${line}`)
-    log.warn(`Removing probe from ${file}:${line}, with id: ${probeId}`)
+    log.warn('Removing probe from %s:%s, with id: %s', file, line, probeId)
     this.fileLineToProbeId.delete(probeId)
     return this.di.removeProbe(probeId)
   }

@@ -1,6 +1,6 @@
 const satisfies = require('semifies')
 
-const { addHook, channel, AsyncResource } = require('./helpers/instrument')
+const { addHook, channel } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const {
   parseAnnotations,
@@ -33,7 +33,6 @@ const testSuiteToCtx = new Map()
 const testSuiteToTestStatuses = new Map()
 const testSuiteToErrors = new Map()
 const testsToTestStatuses = new Map()
-const testSessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
 let applyRepeatEachIndex = null
 
@@ -109,7 +108,12 @@ function deepCloneSuite (suite, filterTest, tags = []) {
 
 function getTestsBySuiteFromTestGroups (testGroups) {
   return testGroups.reduce((acc, { requireFile, tests }) => {
-    acc[requireFile] = acc[requireFile] ? acc[requireFile].concat(tests) : tests
+    if (acc[requireFile]) {
+      acc[requireFile].push(...tests)
+    } else {
+      // Copy the tests, otherwise we modify the original tests
+      acc[requireFile] = [...tests]
+    }
     return acc
   }, {})
 }
@@ -238,9 +242,7 @@ function getTestByTestId (dispatcher, testId) {
 
 function getChannelPromise (channelToPublishTo, params) {
   return new Promise(resolve => {
-    testSessionAsyncResource.runInAsyncScope(() => {
-      channelToPublishTo.publish({ onDone: resolve, ...params })
-    })
+    channelToPublishTo.publish({ onDone: resolve, ...params })
   })
 }
 
@@ -417,7 +419,7 @@ function dispatcherRunWrapperNew (run) {
       // Not available from >=1.44.0
       this._ddAllTests = testGroups.flatMap(g => g.tests)
     }
-    remainingTestsByFile = getTestsBySuiteFromTestGroups(arguments[0])
+    remainingTestsByFile = getTestsBySuiteFromTestGroups(testGroups)
     return run.apply(this, arguments)
   }
 }
@@ -511,12 +513,13 @@ function runnerHook (runnerExport, playwrightVersion) {
 
     const processArgv = process.argv.slice(2).join(' ')
     const command = `playwright ${processArgv}`
-    testSessionAsyncResource.runInAsyncScope(() => {
-      testSessionStartCh.publish({ command, frameworkVersion: playwrightVersion, rootDir })
-    })
+    testSessionStartCh.publish({ command, frameworkVersion: playwrightVersion, rootDir })
 
     try {
-      const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh)
+      const { err, libraryConfig } = await getChannelPromise(
+        libraryConfigurationCh,
+        { frameworkVersion: playwrightVersion }
+      )
       if (!err) {
         isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
         isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
@@ -630,13 +633,11 @@ function runnerHook (runnerExport, playwrightVersion) {
     const flushWait = new Promise(resolve => {
       onDone = resolve
     })
-    testSessionAsyncResource.runInAsyncScope(() => {
-      testSessionFinishCh.publish({
-        status: STATUS_TO_TEST_STATUS[sessionStatus],
-        isEarlyFlakeDetectionEnabled,
-        isTestManagementTestsEnabled,
-        onDone
-      })
+    testSessionFinishCh.publish({
+      status: STATUS_TO_TEST_STATUS[sessionStatus],
+      isEarlyFlakeDetectionEnabled,
+      isTestManagementTestsEnabled,
+      onDone
     })
     await flushWait
 
@@ -754,8 +755,7 @@ addHook({
     }
 
     if (isImpactedTestsEnabled) {
-      for (const test of allTests) {
-        const isNew = isKnownTestsEnabled && isNewTest(test)
+      await Promise.all(allTests.map(async (test) => {
         const { isModified } = await getChannelPromise(isModifiedCh, {
           filePath: test._requireFile,
           modifiedTests
@@ -764,6 +764,7 @@ addHook({
           test._ddIsModified = true
         }
         if (isEarlyFlakeDetectionEnabled && test.expectedStatus !== 'skipped') {
+          const isNew = isKnownTestsEnabled && isNewTest(test)
           const fileSuite = getSuiteType(test, 'file')
           const projectSuite = getSuiteType(test, 'project')
           // If something change in the file, all tests in the file are impacted
@@ -778,7 +779,7 @@ addHook({
             projectSuite._addSuite(copyFileSuite)
           }
         }
-      }
+      }))
     }
 
     if (isKnownTestsEnabled) {
@@ -939,9 +940,8 @@ addHook({
                   if (window.DD_RUM && window.DD_RUM.stopSession) {
                     window.DD_RUM.stopSession()
                     return true
-                  } else {
-                    return false
                   }
+                  return false
                 })
 
                 if (isRumActive) {

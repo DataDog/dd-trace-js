@@ -10,20 +10,20 @@ const log = require('../../dd-trace/src/log')
 
 // Create channels for Confluent Kafka JavaScript
 const channels = {
-  producerStart: channel('apm:@confluentinc/kafka-javascript:produce:start'),
-  producerFinish: channel('apm:@confluentinc/kafka-javascript:produce:finish'),
-  producerError: channel('apm:@confluentinc/kafka-javascript:produce:error'),
-  producerCommit: channel('apm:@confluentinc/kafka-javascript:produce:commit'),
-  consumerStart: channel('apm:@confluentinc/kafka-javascript:consume:start'),
-  consumerFinish: channel('apm:@confluentinc/kafka-javascript:consume:finish'),
-  consumerError: channel('apm:@confluentinc/kafka-javascript:consume:error'),
-  consumerCommit: channel('apm:@confluentinc/kafka-javascript:consume:commit'),
+  producerStart: channel('apm:confluentinc-kafka-javascript:produce:start'),
+  producerFinish: channel('apm:confluentinc-kafka-javascript:produce:finish'),
+  producerError: channel('apm:confluentinc-kafka-javascript:produce:error'),
+  producerCommit: channel('apm:confluentinc-kafka-javascript:produce:commit'),
+  consumerStart: channel('apm:confluentinc-kafka-javascript:consume:start'),
+  consumerFinish: channel('apm:confluentinc-kafka-javascript:consume:finish'),
+  consumerError: channel('apm:confluentinc-kafka-javascript:consume:error'),
+  consumerCommit: channel('apm:confluentinc-kafka-javascript:consume:commit'),
 
   // batch operations
-  batchConsumerStart: channel('apm:@confluentinc/kafka-javascript:consume-batch:start'),
-  batchConsumerFinish: channel('apm:@confluentinc/kafka-javascript:consume-batch:finish'),
-  batchConsumerError: channel('apm:@confluentinc/kafka-javascript:consume-batch:error'),
-  batchConsumerCommit: channel('apm:@confluentinc/kafka-javascript:consume-batch:commit')
+  batchConsumerStart: channel('apm:confluentinc-kafka-javascript:consume-batch:start'),
+  batchConsumerFinish: channel('apm:confluentinc-kafka-javascript:consume-batch:finish'),
+  batchConsumerError: channel('apm:confluentinc-kafka-javascript:consume-batch:error'),
+  batchConsumerCommit: channel('apm:confluentinc-kafka-javascript:consume-batch:commit')
 }
 
 const disabledHeaderWeakSet = new WeakSet()
@@ -379,10 +379,9 @@ function wrapKafkaCallback (callback, { startCh, commitCh, finishCh, errorCh }, 
               finishCh.publish(ctx)
               throw err
             })
-        } else {
-          finishCh.publish(ctx)
-          return result
         }
+        finishCh.publish(ctx)
+        return result
       } catch (error) {
         ctx.error = error
         errorCh.publish(ctx)

@@ -1427,61 +1427,6 @@ describe('jest CommonJS', () => {
       })
     })
 
-    it('can skip when using a custom test sequencer', (done) => {
-      receiver.setSettings({
-        itr_enabled: true,
-        tests_skipping: true
-      })
-      receiver.setSuitesToSkip([{
-        type: 'suite',
-        attributes: {
-          suite: 'ci-visibility/test/ci-visibility-test.js'
-        }
-      }])
-
-      const eventsPromise = receiver
-        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-          const events = payloads.flatMap(({ payload }) => payload.events)
-          const testEvents = events.filter(event => event.type === 'test')
-          // no tests end up running (suite is skipped)
-          assert.equal(testEvents.length, 0)
-
-          const testSession = events.find(event => event.type === 'test_session_end').content
-          assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'true')
-
-          const skippedSuite = events.find(event =>
-            event.content.resource === 'test_suite.ci-visibility/test/ci-visibility-test.js'
-          ).content
-          assert.propertyVal(skippedSuite.meta, TEST_STATUS, 'skip')
-          assert.propertyVal(skippedSuite.meta, TEST_SKIPPED_BY_ITR, 'true')
-        })
-      childProcess = exec(
-        runTestsWithCoverageCommand,
-        {
-          cwd,
-          env: {
-            ...getCiVisAgentlessConfig(receiver.port),
-            CUSTOM_TEST_SEQUENCER: './ci-visibility/jest-custom-test-sequencer.js',
-            TEST_SHARD: '2/2'
-          },
-          stdio: 'inherit'
-        }
-      )
-      childProcess.stdout.on('data', (chunk) => {
-        testOutput += chunk.toString()
-      })
-      childProcess.stderr.on('data', (chunk) => {
-        testOutput += chunk.toString()
-      })
-
-      childProcess.on('exit', () => {
-        assert.include(testOutput, 'Running shard with a custom sequencer')
-        eventsPromise.then(() => {
-          done()
-        }).catch(done)
-      })
-    })
-
     it('works with multi project setup and test skipping', (done) => {
       receiver.setSettings({
         itr_enabled: true,
@@ -1613,6 +1558,37 @@ describe('jest CommonJS', () => {
         codeCoveragesPromise.then(() => {
           done()
         }).catch(done)
+      })
+    })
+
+    it('report code coverage with all mocked files', (done) => {
+      const codeCovRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/citestcov')
+
+      codeCovRequestPromise.then((codeCovRequest) => {
+        const allCoverageFiles = codeCovRequest.payload
+          .flatMap(coverage => coverage.content.coverages)
+          .flatMap(file => file.files)
+          .map(file => file.filename)
+
+        assert.includeMembers(allCoverageFiles, [
+          'ci-visibility/test/sum.js',
+          'ci-visibility/jest/mocked-test.js'
+        ])
+      }).catch(done)
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'jest/mocked-test.js',
+          },
+          stdio: 'pipe'
+        }
+      )
+      childProcess.on('exit', () => {
+        done()
       })
     })
   })
@@ -2356,6 +2332,68 @@ describe('jest CommonJS', () => {
         {
           cwd,
           env: { ...getCiVisEvpProxyConfig(receiver.port), TESTS_TO_RUN: 'test/ci-visibility-test' },
+          stdio: 'inherit'
+        }
+      )
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
+
+    it('does not retry when it.failing is used', (done) => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      const NUM_RETRIES_EFD = 3
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': NUM_RETRIES_EFD
+          },
+          faulty_session_threshold: 100
+        },
+        known_tests_enabled: true
+      })
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
+
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          const newTests = tests.filter(test =>
+            test.meta[TEST_SUITE] === 'ci-visibility/jest/failing-test.js'
+          )
+          newTests.forEach(test => {
+            assert.notProperty(test.meta, TEST_IS_NEW)
+          })
+          assert.equal(newTests.length, 2)
+
+          const passingTests = tests.filter(test =>
+            test.meta[TEST_NAME] === 'failing can report failed tests'
+          )
+          const failingTests = tests.filter(test =>
+            test.meta[TEST_NAME] === 'failing can report failing tests as failures'
+          )
+          passingTests.forEach(test => {
+            assert.equal(test.meta[TEST_STATUS], 'pass')
+          })
+          failingTests.forEach(test => {
+            assert.equal(test.meta[TEST_STATUS], 'fail')
+          })
+
+          const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.equal(retriedTests.length, 0)
+        })
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: { ...getCiVisEvpProxyConfig(receiver.port), TESTS_TO_RUN: 'jest/failing-test' },
           stdio: 'inherit'
         }
       )

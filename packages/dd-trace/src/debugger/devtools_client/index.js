@@ -109,6 +109,7 @@ session.on('Debugger.paused', async ({ params }) => {
       if (probe.condition !== undefined) {
         // TODO: Bundle all conditions and evaluate them in a single call
         // TODO: Handle errors
+        // eslint-disable-next-line no-await-in-loop
         const { result } = await session.post('Debugger.evaluateOnCallFrame', {
           callFrameId: params.callFrames[0].callFrameId,
           expression: probe.condition,
@@ -134,7 +135,7 @@ session.on('Debugger.paused', async ({ params }) => {
 
   const timestamp = Date.now()
 
-  let evalResults = null
+  let evalResults
   const { result } = await session.post('Debugger.evaluateOnCallFrame', {
     callFrameId: params.callFrames[0].callFrameId,
     expression: templateExpressions.length === 0
@@ -159,10 +160,9 @@ session.on('Debugger.paused', async ({ params }) => {
   await session.post('Debugger.resume')
   const diff = process.hrtime.bigint() - start // TODO: Recored as telemetry (DEBUG-2858)
 
-  log.debug(
-    '[debugger:devtools_client] Finished processing breakpoints - main thread paused for: %d ms',
+  log.debug(() => `[debugger:devtools_client] Finished processing breakpoints - main thread paused for: ${
     Number(diff) / 1_000_000
-  )
+  } ms`)
 
   const logger = {
     // We can safely use `location.file` from the first probe in the array, since all probes hit by `hitBreakpoints`

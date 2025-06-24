@@ -1,4 +1,4 @@
-const { addHook, channel, AsyncResource } = require('./helpers/instrument')
+const { addHook, channel } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
 
@@ -38,7 +38,6 @@ const modifiedTasks = new WeakSet()
 let isRetryReasonEfd = false
 let isRetryReasonAttemptToFix = false
 const switchedStatuses = new WeakSet()
-const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 400
 
@@ -114,11 +113,9 @@ function isBaseSequencer (vitestPackage) {
   return vitestPackage.b?.name === 'BaseSequencer'
 }
 
-function getChannelPromise (channelToPublishTo) {
+function getChannelPromise (channelToPublishTo, frameworkVersion) {
   return new Promise(resolve => {
-    sessionAsyncResource.runInAsyncScope(() => {
-      channelToPublishTo.publish({ onDone: resolve })
-    })
+    channelToPublishTo.publish({ onDone: resolve, frameworkVersion })
   })
 }
 
@@ -176,7 +173,7 @@ function getTestName (task) {
   return testName
 }
 
-function getSortWrapper (sort) {
+function getSortWrapper (sort, frameworkVersion) {
   return async function () {
     if (!testSessionFinishCh.hasSubscribers) {
       return sort.apply(this, arguments)
@@ -194,12 +191,9 @@ function getSortWrapper (sort) {
     let isImpactedTestsEnabled = false
     let testManagementAttemptToFixRetries = 0
     let isDiEnabled = false
-    let knownTests = {}
-    let testManagementTests = {}
-    let modifiedTests = {}
 
     try {
-      const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh)
+      const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh, frameworkVersion)
       if (!err) {
         isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
         flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
@@ -233,9 +227,8 @@ function getSortWrapper (sort) {
       const knownTestsResponse = await getChannelPromise(knownTestsCh)
       if (knownTestsResponse.err) {
         isEarlyFlakeDetectionEnabled = false
-        isKnownTestsEnabled = false
       } else {
-        knownTests = knownTestsResponse.knownTests
+        const knownTests = knownTestsResponse.knownTests
         const getFilePaths = this.ctx.getTestFilepaths || this.ctx._globTestFilepaths
 
         const testFilepaths = await getFilePaths.call(this.ctx)
@@ -249,7 +242,6 @@ function getSortWrapper (sort) {
         })
         if (isEarlyFlakeDetectionFaulty) {
           isEarlyFlakeDetectionEnabled = false
-          isKnownTestsEnabled = false
           log.warn('New test detection is disabled because the number of new tests is too high.')
         } else {
           // TODO: use this to pass session and module IDs to the worker, instead of polluting process.env
@@ -282,7 +274,7 @@ function getSortWrapper (sort) {
         isTestManagementTestsEnabled = false
         log.error('Could not get test management tests.')
       } else {
-        testManagementTests = receivedTestManagementTests
+        const testManagementTests = receivedTestManagementTests
         try {
           const workspaceProject = this.ctx.getCoreWorkspaceProject()
           workspaceProject._provided._ddIsTestManagementTestsEnabled = isTestManagementTestsEnabled
@@ -295,12 +287,10 @@ function getSortWrapper (sort) {
     }
 
     if (isImpactedTestsEnabled) {
-      const { err, modifiedTests: receivedModifiedTests } = await getChannelPromise(impactedTestsCh)
+      const { err, modifiedTests } = await getChannelPromise(impactedTestsCh)
       if (err) {
-        isImpactedTestsEnabled = false
         log.error('Could not get modified tests.')
       } else {
-        modifiedTests = receivedModifiedTests
         try {
           const workspaceProject = this.ctx.getCoreWorkspaceProject()
           workspaceProject._provided._ddIsImpactedTestsEnabled = isImpactedTestsEnabled
@@ -338,16 +328,14 @@ function getSortWrapper (sort) {
         error = new Error(`Test suites failed: ${failedSuites.length}.`)
       }
 
-      sessionAsyncResource.runInAsyncScope(() => {
-        testSessionFinishCh.publish({
-          status: getSessionStatus(this.state),
-          testCodeCoverageLinesTotal,
-          error,
-          isEarlyFlakeDetectionEnabled,
-          isEarlyFlakeDetectionFaulty,
-          isTestManagementTestsEnabled,
-          onFinish
-        })
+      testSessionFinishCh.publish({
+        status: getSessionStatus(this.state),
+        testCodeCoverageLinesTotal,
+        error,
+        isEarlyFlakeDetectionEnabled,
+        isEarlyFlakeDetectionFaulty,
+        isTestManagementTestsEnabled,
+        onFinish
       })
 
       await flushPromise
@@ -364,10 +352,8 @@ function getCreateCliWrapper (vitestPackage, frameworkVersion) {
     if (!testSessionStartCh.hasSubscribers) {
       return oldCreateCli.apply(this, arguments)
     }
-    sessionAsyncResource.runInAsyncScope(() => {
-      const processArgv = process.argv.slice(2).join(' ')
-      testSessionStartCh.publish({ command: `vitest ${processArgv}`, frameworkVersion })
-    })
+    const processArgv = process.argv.slice(2).join(' ')
+    testSessionStartCh.publish({ command: `vitest ${processArgv}`, frameworkVersion })
     return oldCreateCli.apply(this, arguments)
   })
 

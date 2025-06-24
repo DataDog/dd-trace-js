@@ -13,10 +13,6 @@ function isFastSlash (layer, matchers) {
   return layer.regexp?.fast_slash ?? matchers.some(matcher => matcher.path === '/')
 }
 
-function flatten (arr) {
-  return arr.reduce((acc, val) => Array.isArray(val) ? acc.concat(flatten(val)) : acc.concat(val), [])
-}
-
 // TODO: Move this function to a shared file between Express and Router
 function createWrapRouterMethod (name) {
   const enterChannel = channel(`apm:${name}:middleware:enter`)
@@ -74,8 +70,8 @@ function createWrapRouterMethod (name) {
     })
   }
 
-  function wrapStack (stack, offset, matchers) {
-    [].concat(stack).slice(offset).forEach(layer => {
+  function wrapStack (layers, matchers) {
+    for (const layer of layers) {
       if (layer.__handle) { // express-async-errors
         layer.__handle = wrapLayerHandle(layer, layer.__handle)
       } else {
@@ -93,7 +89,7 @@ function createWrapRouterMethod (name) {
           layer.route[method] = wrapMethod(layer.route[method])
         })
       }
-    })
+    }
   }
 
   function wrapNext (req, next) {
@@ -110,7 +106,7 @@ function createWrapRouterMethod (name) {
   }
 
   function extractMatchers (fn) {
-    const arg = flatten([].concat(fn))
+    const arg = Array.isArray(fn) ? fn.flat(Infinity) : [fn]
 
     if (typeof arg[0] === 'function') {
       return []
@@ -139,7 +135,10 @@ function createWrapRouterMethod (name) {
 
   function wrapMethod (original) {
     return shimmer.wrapFunction(original, original => function methodWithTrace (fn) {
-      const offset = this.stack ? [].concat(this.stack).length : 0
+      let offset = 0
+      if (this.stack) {
+        offset = Array.isArray(this.stack) ? this.stack.length : 1
+      }
       const router = original.apply(this, arguments)
 
       if (typeof this.stack === 'function') {
@@ -150,7 +149,9 @@ function createWrapRouterMethod (name) {
         routeAddedChannel.publish({ topOfStackFunc: methodWithTrace, layer: this.stack[0] })
       }
 
-      wrapStack(this.stack, offset, extractMatchers(fn))
+      if (this.stack.length > offset) {
+        wrapStack(this.stack.slice(offset), extractMatchers(fn))
+      }
 
       return router
     })
@@ -204,7 +205,7 @@ const visitedParams = new WeakSet()
 
 function wrapHandleRequest (original) {
   return function wrappedHandleRequest (req, res, next) {
-    if (routerParamStartCh.hasSubscribers && Object.keys(req.params).length && !visitedParams.has(req.params)) {
+    if (routerParamStartCh.hasSubscribers && !visitedParams.has(req.params) && Object.keys(req.params).length) {
       visitedParams.add(req.params)
 
       const abortController = new AbortController()

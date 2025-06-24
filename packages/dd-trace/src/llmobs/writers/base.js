@@ -76,7 +76,7 @@ class BaseLLMObsWriter {
     this._bufferSize = 0
     const payload = this._encode(this.makePayload(events))
 
-    log.debug(`Encoded LLMObs payload: ${payload}`)
+    log.debug('Encoded LLMObs payload:', payload)
 
     const options = this._getOptions()
 
@@ -157,7 +157,7 @@ class BaseLLMObsWriter {
         return encodeUnicode(value) // serialize unicode characters
       }
       return value
-    }).replace(/\\\\u/g, String.raw`\u`) // remove double escaping
+    }).replaceAll(String.raw`\\u`, String.raw`\u`) // remove double escaping
   }
 }
 

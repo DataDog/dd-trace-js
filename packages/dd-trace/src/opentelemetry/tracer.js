@@ -32,7 +32,7 @@ class Tracer {
       spanId: id(),
       parentId: parentSpanContext._spanId,
       sampling: parentSpanContext._sampling,
-      baggageItems: Object.assign({}, parentSpanContext._baggageItems),
+      baggageItems: { ...parentSpanContext._baggageItems },
       trace: parentSpanContext._trace,
       tracestate: parentSpanContext._tracestate
     })
@@ -77,7 +77,7 @@ class Tracer {
           origin
         )
       } else {
-        log.debug(`no dd list member in tracestate from incoming request: ${ts}`)
+        log.debug('no dd list member in tracestate from incoming request:', ts)
       }
     }
 

@@ -10,6 +10,7 @@ const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 const {
   setBaggageItem,
   getBaggageItem,
@@ -198,14 +199,14 @@ class Tracer extends NoopProxy {
         this._testApiManualPlugin.configure({ ...config, enabled: true }, false)
       }
       if (config.ciVisAgentlessLogSubmissionEnabled) {
-        if (process.env.DD_API_KEY) {
+        if (getEnvironmentVariable('DD_API_KEY')) {
           const LogSubmissionPlugin = require('./ci-visibility/log-submission/log-submission-plugin')
           const automaticLogPlugin = new LogSubmissionPlugin(this)
           automaticLogPlugin.configure({ ...config, enabled: true })
         } else {
           log.warn(
-            'DD_AGENTLESS_LOG_SUBMISSION_ENABLED is set, ' +
-            'but DD_API_KEY is undefined, so no automatic log submission will be performed.'
+            // eslint-disable-next-line @stylistic/max-len
+            'DD_AGENTLESS_LOG_SUBMISSION_ENABLED is set, but DD_API_KEY is undefined, so no automatic log submission will be performed.'
           )
         }
       }
@@ -228,8 +229,7 @@ class Tracer extends NoopProxy {
       return require('./profiler').start(config)
     } catch (e) {
       log.error(
-        'Error starting profiler. For troubleshooting tips, see ' +
-        '<https://dtdg.co/nodejs-profiler-troubleshooting>',
+        'Error starting profiler. For troubleshooting tips, see <https://dtdg.co/nodejs-profiler-troubleshooting>',
         e
       )
     }

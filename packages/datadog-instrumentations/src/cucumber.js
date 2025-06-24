@@ -1,9 +1,10 @@
 'use strict'
 const { createCoverageMap } = require('istanbul-lib-coverage')
 
-const { addHook, channel, AsyncResource } = require('./helpers/instrument')
+const { addHook, channel } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
 const testStartCh = channel('ci:cucumber:test:start')
 const testRetryCh = channel('ci:cucumber:test:retry')
@@ -62,8 +63,6 @@ const modifiedTestsByPickleId = new Map()
 let eventDataCollector = null
 let pickleByFile = {}
 const pickleResultByFile = {}
-
-const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
 let skippableSuites = []
 let itrCorrelationId = ''
@@ -158,11 +157,9 @@ function getErrorFromCucumberResult (cucumberResult) {
   return error
 }
 
-function getChannelPromise (channelToPublishTo, isParallel = false) {
+function getChannelPromise (channelToPublishTo, isParallel = false, frameworkVersion = null) {
   return new Promise(resolve => {
-    sessionAsyncResource.runInAsyncScope(() => {
-      channelToPublishTo.publish({ onDone: resolve, isParallel })
-    })
+    channelToPublishTo.publish({ onDone: resolve, isParallel, frameworkVersion })
   })
 }
 
@@ -247,7 +244,7 @@ function wrapRun (pl, isLatestVersion) {
       testName: this.pickle.name,
       testFileAbsolutePath,
       testSourceLine,
-      isParallel: !!process.env.CUCUMBER_WORKER_ID
+      isParallel: !!getEnvironmentVariable('CUCUMBER_WORKER_ID')
     }
     const ctx = testStartPayload
     numAttemptToCtx.set(numAttempt, ctx)
@@ -454,7 +451,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     }
     let errorSkippableRequest
 
-    const configurationResponse = await getChannelPromise(libraryConfigurationCh, isParallel)
+    const configurationResponse = await getChannelPromise(libraryConfigurationCh, isParallel, frameworkVersion)
 
     isEarlyFlakeDetectionEnabled = configurationResponse.libraryConfig?.isEarlyFlakeDetectionEnabled
     earlyFlakeDetectionNumRetries = configurationResponse.libraryConfig?.earlyFlakeDetectionNumRetries
@@ -493,9 +490,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
 
         isSuitesSkipped = picklesToRun.length !== oldPickles.length
 
-        log.debug(
-          () => `${picklesToRun.length} out of ${oldPickles.length} suites are going to run.`
-        )
+        log.debug('%s out of %s suites are going to run.', picklesToRun.length, oldPickles.length)
 
         if (isCoordinator) {
           this.sourcedPickles = picklesToRun
@@ -540,15 +535,13 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     }
 
     const processArgv = process.argv.slice(2).join(' ')
-    const command = process.env.npm_lifecycle_script || `cucumber-js ${processArgv}`
+    const command = getEnvironmentVariable('npm_lifecycle_script') || `cucumber-js ${processArgv}`
 
     if (isFlakyTestRetriesEnabled && !options.retry && numTestRetries > 0) {
       options.retry = numTestRetries
     }
 
-    sessionAsyncResource.runInAsyncScope(() => {
-      sessionStartCh.publish({ command, frameworkVersion })
-    })
+    sessionStartCh.publish({ command, frameworkVersion })
 
     if (!errorSkippableRequest && skippedSuites.length) {
       itrSkippedSuitesCh.publish({ skippedSuites, frameworkVersion })
@@ -576,19 +569,17 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       global.__coverage__ = fromCoverageMapToCoverage(originalCoverageMap)
     }
 
-    sessionAsyncResource.runInAsyncScope(() => {
-      sessionFinishCh.publish({
-        status: success ? 'pass' : 'fail',
-        isSuitesSkipped,
-        testCodeCoverageLinesTotal,
-        numSkippedSuites: skippedSuites.length,
-        hasUnskippableSuites: isUnskippable,
-        hasForcedToRunSuites: isForcedToRun,
-        isEarlyFlakeDetectionEnabled,
-        isEarlyFlakeDetectionFaulty,
-        isTestManagementTestsEnabled,
-        isParallel
-      })
+    sessionFinishCh.publish({
+      status: success ? 'pass' : 'fail',
+      isSuitesSkipped,
+      testCodeCoverageLinesTotal,
+      numSkippedSuites: skippedSuites.length,
+      hasUnskippableSuites: isUnskippable,
+      hasForcedToRunSuites: isForcedToRun,
+      isEarlyFlakeDetectionEnabled,
+      isEarlyFlakeDetectionFaulty,
+      isTestManagementTestsEnabled,
+      isParallel
     })
     eventDataCollector = null
     return success
@@ -676,6 +667,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     if (isAttemptToFix && lastTestStatus !== 'skip') {
       for (let retryIndex = 0; retryIndex < testManagementAttemptToFixRetries; retryIndex++) {
         numRetriesByPickleId.set(pickle.id, retryIndex + 1)
+        // eslint-disable-next-line no-await-in-loop
         runTestCaseResult = await runTestCaseFunction.apply(this, arguments)
       }
     }
@@ -684,6 +676,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     if (isEarlyFlakeDetectionEnabled && lastTestStatus !== 'skip' && (isNew || isModified)) {
       for (let retryIndex = 0; retryIndex < earlyFlakeDetectionNumRetries; retryIndex++) {
         numRetriesByPickleId.set(pickle.id, retryIndex + 1)
+        // eslint-disable-next-line no-await-in-loop
         runTestCaseResult = await runTestCaseFunction.apply(this, arguments)
       }
     }
@@ -758,9 +751,7 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
     if (Array.isArray(message)) {
       const [messageCode, payload] = message
       if (messageCode === CUCUMBER_WORKER_TRACE_PAYLOAD_CODE) {
-        sessionAsyncResource.runInAsyncScope(() => {
-          workerReportTraceCh.publish(payload)
-        })
+        workerReportTraceCh.publish(payload)
         return
       }
     }
@@ -932,7 +923,7 @@ addHook({
   shimmer.wrap(
     workerPackage.Worker.prototype,
     'runTestCase',
-    runTestCase => getWrappedRunTestCase(runTestCase, true, !!process.env.CUCUMBER_WORKER_ID)
+    runTestCase => getWrappedRunTestCase(runTestCase, true, !!getEnvironmentVariable('CUCUMBER_WORKER_ID'))
   )
   return workerPackage
 })

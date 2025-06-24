@@ -74,8 +74,7 @@ class Sns extends BaseAwsSdkPlugin {
   injectToMessage (span, params, topicArn, injectTraceContext) {
     if (!params.MessageAttributes) {
       params.MessageAttributes = {}
-    }
-    if (Object.keys(params.MessageAttributes).length >= 10) { // SNS quota
+    } else if (Object.keys(params.MessageAttributes).length >= 10) { // SNS quota
       log.info('Message attributes full, skipping trace context injection')
       return
     }

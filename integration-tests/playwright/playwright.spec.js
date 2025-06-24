@@ -55,11 +55,18 @@ const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 const { DD_MAJOR } = require('../../version')
 
+const { PLAYWRIGHT_VERSION } = process.env
+
 const NUM_RETRIES_EFD = 3
 
-const versions = [DD_MAJOR >= 6 ? '1.38.0' : '1.18.0', 'latest']
+const latest = 'latest'
+const oldest = DD_MAJOR >= 6 ? '1.38.0' : '1.18.0'
+const versions = [oldest, latest]
 
 versions.forEach((version) => {
+  if (PLAYWRIGHT_VERSION === 'oldest' && version !== oldest) return
+  if (PLAYWRIGHT_VERSION === 'latest' && version !== latest) return
+
   // TODO: Remove this once we drop suppport for v5
   const contextNewVersions = (...args) => {
     if (satisfies(version, '>=1.38.0') || version === 'latest') {
@@ -194,6 +201,16 @@ versions.forEach((version) => {
                 JSON.stringify({ arguments: { browser: 'chromium' }, metadata: {} })
               )
               assert.exists(testEvent.content.metrics[DD_HOST_CPU_COUNT])
+              if (version === 'latest' || satisfies(version, '>=1.38.0')) {
+                if (testEvent.content.meta[TEST_STATUS] !== 'skip' &&
+                  testEvent.content.meta[TEST_SUITE].includes('landing-page-test.js')) {
+                  assert.propertyVal(testEvent.content.meta, 'custom_tag.beforeEach', 'hello beforeEach')
+                  assert.propertyVal(testEvent.content.meta, 'custom_tag.afterEach', 'hello afterEach')
+                }
+                if (testEvent.content.meta[TEST_NAME].includes('should work with passing tests')) {
+                  assert.propertyVal(testEvent.content.meta, 'custom_tag.it', 'hello it')
+                }
+              }
             })
 
             stepEvents.forEach(stepEvent => {
@@ -1346,12 +1363,20 @@ versions.forEach((version) => {
             assert.isNotEmpty(metadataDicts)
             metadataDicts.forEach(metadata => {
               assert.equal(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], undefined)
-              assert.equal(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')
               assert.equal(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
-              assert.equal(metadata.test[DD_CAPABILITIES_IMPACTED_TESTS], '1')
-              assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
-              assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
-              assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '4')
+              if (satisfies(version, '>=1.38.0') || version === 'latest') {
+                assert.equal(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')
+                assert.equal(metadata.test[DD_CAPABILITIES_IMPACTED_TESTS], '1')
+                assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
+                assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
+                assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '4')
+              } else {
+                assert.equal(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], undefined)
+                assert.equal(metadata.test[DD_CAPABILITIES_IMPACTED_TESTS], undefined)
+                assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], undefined)
+                assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], undefined)
+                assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], undefined)
+              }
               // capabilities logic does not overwrite test session name
               assert.equal(metadata.test[TEST_SESSION_NAME], 'my-test-session-name')
             })
