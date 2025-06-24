@@ -16,6 +16,8 @@ const packageManagers = [
   'pnpm'
 ]
 
+console.log('init!')
+
 const isPackageManager = () => {
   return packageManagers.some(packageManager => process.argv[1]?.includes(`bin/${packageManager}`))
 }

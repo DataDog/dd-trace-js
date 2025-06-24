@@ -54,6 +54,20 @@ class VitestPlugin extends CiPlugin {
 
     this.taskToFinishTime = new WeakMap()
 
+    const tracingChannel = require('dc-polyfill').tracingChannel
+
+    tracingChannel('orchestrion:@vitest/runner:Vitest_startTests').subscribe({
+      end (ctx) {
+        console.log('Vitest_startTests yo!!!')
+      }
+    })
+
+    tracingChannel('orchestrion:vitest:Vitest_createCLI').subscribe({
+      end (ctx) {
+        console.log('Vitest_createCLI yo!!!')
+      }
+    })
+
     this.addSub('ci:vitest:test:is-new', ({ knownTests, testSuiteAbsolutePath, testName, onDone }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
       const testsForThisTestSuite = knownTests[testSuite] || []

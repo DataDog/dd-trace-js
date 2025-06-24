@@ -747,119 +747,121 @@ addHook({
 
 // test suite start and finish
 // only relevant for workers
-addHook({
-  name: '@vitest/runner',
-  versions: ['>=1.6.0'],
-  file: 'dist/index.js'
-}, (vitestPackage, frameworkVersion) => {
-  shimmer.wrap(vitestPackage, 'startTests', startTests => async function (testPaths) {
-    let testSuiteError = null
-    if (!testSuiteFinishCh.hasSubscribers) {
-      return startTests.apply(this, arguments)
-    }
-    // From >=3.0.1, the first arguments changes from a string to an object containing the filepath
-    const testSuiteAbsolutePath = testPaths[0]?.filepath || testPaths[0]
+// addHook({
+//   name: '@vitest/runner',
+//   versions: ['>=1.6.0'],
+//   file: 'dist/index.js'
+// }, (vitestPackage, frameworkVersion) => {
+//   console.log('starting test')
+//   shimmer.wrap(vitestPackage, 'startTests', startTests => async function (testPaths) {
+//     console.log('starting test 2')
+//     let testSuiteError = null
+//     if (!testSuiteFinishCh.hasSubscribers) {
+//       return startTests.apply(this, arguments)
+//     }
+//     // From >=3.0.1, the first arguments changes from a string to an object containing the filepath
+//     const testSuiteAbsolutePath = testPaths[0]?.filepath || testPaths[0]
 
-    const testSuiteCtx = { testSuiteAbsolutePath, frameworkVersion }
-    testSuiteStartCh.runStores(testSuiteCtx, () => {})
-    const startTestsResponse = await startTests.apply(this, arguments)
+//     const testSuiteCtx = { testSuiteAbsolutePath, frameworkVersion }
+//     testSuiteStartCh.runStores(testSuiteCtx, () => {})
+//     const startTestsResponse = await startTests.apply(this, arguments)
 
-    let onFinish = null
-    const onFinishPromise = new Promise(resolve => {
-      onFinish = resolve
-    })
+//     let onFinish = null
+//     const onFinishPromise = new Promise(resolve => {
+//       onFinish = resolve
+//     })
 
-    const testTasks = getTypeTasks(startTestsResponse[0].tasks)
+//     const testTasks = getTypeTasks(startTestsResponse[0].tasks)
 
-    // Only one test task per test, even if there are retries
-    testTasks.forEach(task => {
-      const testCtx = taskToCtx.get(task)
-      const { result } = task
-      // We have to trick vitest into thinking that the test has passed
-      // but we want to report it as failed if it did fail
-      const isSwitchedStatus = switchedStatuses.has(task)
+//     // Only one test task per test, even if there are retries
+//     testTasks.forEach(task => {
+//       const testCtx = taskToCtx.get(task)
+//       const { result } = task
+//       // We have to trick vitest into thinking that the test has passed
+//       // but we want to report it as failed if it did fail
+//       const isSwitchedStatus = switchedStatuses.has(task)
 
-      if (result) {
-        const { state, duration, errors } = result
-        if (state === 'skip') { // programmatic skip
-          testSkipCh.publish({
-            testName: getTestName(task),
-            testSuiteAbsolutePath: task.file.filepath,
-            isNew: newTasks.has(task),
-            isDisabled: disabledTasks.has(task)
-          })
-        } else if (state === 'pass' && !isSwitchedStatus) {
-          if (testCtx) {
-            testPassCh.publish({ task, ...testCtx.currentStore })
-          }
-        } else if (state === 'fail' || isSwitchedStatus) {
-          let testError
+//       if (result) {
+//         const { state, duration, errors } = result
+//         if (state === 'skip') { // programmatic skip
+//           testSkipCh.publish({
+//             testName: getTestName(task),
+//             testSuiteAbsolutePath: task.file.filepath,
+//             isNew: newTasks.has(task),
+//             isDisabled: disabledTasks.has(task)
+//           })
+//         } else if (state === 'pass' && !isSwitchedStatus) {
+//           if (testCtx) {
+//             testPassCh.publish({ task, ...testCtx.currentStore })
+//           }
+//         } else if (state === 'fail' || isSwitchedStatus) {
+//           let testError
 
-          if (errors?.length) {
-            testError = errors[0]
-          }
+//           if (errors?.length) {
+//             testError = errors[0]
+//           }
 
-          let hasFailedAllRetries = false
-          let attemptToFixFailed = false
-          if (attemptToFixTasks.has(task)) {
-            const statuses = taskToStatuses.get(task)
-            if (statuses.includes('fail')) {
-              attemptToFixFailed = true
-            }
-            if (statuses.every(status => status === 'fail')) {
-              hasFailedAllRetries = true
-            }
-          }
+//           let hasFailedAllRetries = false
+//           let attemptToFixFailed = false
+//           if (attemptToFixTasks.has(task)) {
+//             const statuses = taskToStatuses.get(task)
+//             if (statuses.includes('fail')) {
+//               attemptToFixFailed = true
+//             }
+//             if (statuses.every(status => status === 'fail')) {
+//               hasFailedAllRetries = true
+//             }
+//           }
 
-          if (testCtx) {
-            const isRetry = task.result?.retryCount > 0
-            // `duration` is the duration of all the retries, so it can't be used if there are retries
-            testErrorCh.publish({
-              duration: isRetry ? undefined : duration,
-              error: testError,
-              hasFailedAllRetries,
-              attemptToFixFailed,
-              ...testCtx.currentStore
-            })
-          }
-          if (errors?.length) {
-            testSuiteError = testError // we store the error to bubble it up to the suite
-          }
-        }
-      } else { // test.skip or test.todo
-        testSkipCh.publish({
-          testName: getTestName(task),
-          testSuiteAbsolutePath: task.file.filepath,
-          isNew: newTasks.has(task),
-          isDisabled: disabledTasks.has(task)
-        })
-      }
-    })
+//           if (testCtx) {
+//             const isRetry = task.result?.retryCount > 0
+//             // `duration` is the duration of all the retries, so it can't be used if there are retries
+//             testErrorCh.publish({
+//               duration: isRetry ? undefined : duration,
+//               error: testError,
+//               hasFailedAllRetries,
+//               attemptToFixFailed,
+//               ...testCtx.currentStore
+//             })
+//           }
+//           if (errors?.length) {
+//             testSuiteError = testError // we store the error to bubble it up to the suite
+//           }
+//         }
+//       } else { // test.skip or test.todo
+//         testSkipCh.publish({
+//           testName: getTestName(task),
+//           testSuiteAbsolutePath: task.file.filepath,
+//           isNew: newTasks.has(task),
+//           isDisabled: disabledTasks.has(task)
+//         })
+//       }
+//     })
 
-    const testSuiteResult = startTestsResponse[0].result
+//     const testSuiteResult = startTestsResponse[0].result
 
-    if (testSuiteResult.errors?.length) { // Errors from root level hooks
-      testSuiteError = testSuiteResult.errors[0]
-    } else if (testSuiteResult.state === 'fail') { // Errors from `describe` level hooks
-      const suiteTasks = getTypeTasks(startTestsResponse[0].tasks, 'suite')
-      const failedSuites = suiteTasks.filter(task => task.result?.state === 'fail')
-      if (failedSuites.length && failedSuites[0].result?.errors?.length) {
-        testSuiteError = failedSuites[0].result.errors[0]
-      }
-    }
+//     if (testSuiteResult.errors?.length) { // Errors from root level hooks
+//       testSuiteError = testSuiteResult.errors[0]
+//     } else if (testSuiteResult.state === 'fail') { // Errors from `describe` level hooks
+//       const suiteTasks = getTypeTasks(startTestsResponse[0].tasks, 'suite')
+//       const failedSuites = suiteTasks.filter(task => task.result?.state === 'fail')
+//       if (failedSuites.length && failedSuites[0].result?.errors?.length) {
+//         testSuiteError = failedSuites[0].result.errors[0]
+//       }
+//     }
 
-    if (testSuiteError) {
-      testSuiteCtx.error = testSuiteError
-      testSuiteErrorCh.runStores(testSuiteCtx, () => {})
-    }
+//     if (testSuiteError) {
+//       testSuiteCtx.error = testSuiteError
+//       testSuiteErrorCh.runStores(testSuiteCtx, () => {})
+//     }
 
-    testSuiteFinishCh.publish({ status: testSuiteResult.state, onFinish, ...testSuiteCtx.currentStore })
+//     testSuiteFinishCh.publish({ status: testSuiteResult.state, onFinish, ...testSuiteCtx.currentStore })
 
-    // TODO: fix too frequent flushes
-    await onFinishPromise
+//     // TODO: fix too frequent flushes
+//     await onFinishPromise
 
-    return startTestsResponse
-  })
+//     return startTestsResponse
+//   })
 
-  return vitestPackage
-})
+//   return vitestPackage
+// })

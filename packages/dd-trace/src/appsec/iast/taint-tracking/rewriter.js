@@ -179,6 +179,8 @@ function enableRewriter (telemetryVerbosity) {
 }
 
 function isEsmConfigured () {
+  console.log('isEsmConfigured 1')
+  return true
   const hasLoaderArg = isFlagPresent('--loader') || isFlagPresent('--experimental-loader')
   if (hasLoaderArg) return true
 

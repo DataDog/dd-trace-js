@@ -51,4 +51,22 @@ instrumentations:
       class: Embeddings
     operator: traceSync
     channel_name: "Embeddings_constructor"
+  - module_name: "@vitest/runner"
+    version_range: ">=3.0.0"
+    file_path: dist/index.js
+    function_query:
+      name: startTests
+      type: method
+      kind: async
+    operator: tracePromise
+    channel_name: "Vitest_startTests"
+  - module_name: "vitest"
+    version_range: ">=3.0.0"
+    file_path: dist/chunks/cac.CeVHgzve.js
+    function_query:
+      name: createCLI
+      type: method
+      kind: sync
+    operator: traceSync
+    channel_name: "Vitest_createCLI"
 `
