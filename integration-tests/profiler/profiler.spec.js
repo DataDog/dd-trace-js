@@ -54,7 +54,7 @@ function expectProfileMessagePromise (agent, timeout,
       e.message += ` ${JSON.stringify({ headers, files, event })}`
       throw e
     }
-  }, timeout, multiplicity)
+  }, timeout, multiplicity, true)
 }
 
 function processExitPromise (proc, timeout, expectBadExit = false) {
