@@ -142,6 +142,10 @@ const MINIMUM_FRAMEWORK_VERSION_FOR_QUARANTINE = {
 const MINIMUM_FRAMEWORK_VERSION_FOR_DISABLE = {
   playwright: '>=1.38.0'
 }
+const MINIMUM_FRAMEWORK_VERSION_FOR_ATTEMPT_TO_FIX = {
+  playwright: '>=1.38.0'
+}
+
 const UNSUPPORTED_ATTEMPT_TO_FIX_FRAMEWORKS_PARALLEL_MODE = new Set(['mocha'])
 const NOT_SUPPORTED_GRANULARITY_IMPACTED_TESTS_FRAMEWORKS = new Set(['mocha', 'playwright', 'vitest'])
 
@@ -932,7 +936,11 @@ function isDisableSupported (testFramework, frameworkVersion) {
     : true
 }
 
-function isAttemptToFixSupported (testFramework, isParallel) {
+function isAttemptToFixSupported (testFramework, isParallel, frameworkVersion) {
+  if (testFramework === 'playwright') {
+    return satisfies(frameworkVersion, MINIMUM_FRAMEWORK_VERSION_FOR_ATTEMPT_TO_FIX[testFramework])
+  }
+
   return !(isParallel && UNSUPPORTED_ATTEMPT_TO_FIX_FRAMEWORKS_PARALLEL_MODE.has(testFramework))
 }
 
@@ -954,9 +962,10 @@ function getLibraryCapabilitiesTags (testFramework, isParallel, frameworkVersion
     [DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE]: isDisableSupported(testFramework, frameworkVersion)
       ? '1'
       : undefined,
-    [DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX]: isAttemptToFixSupported(testFramework, isParallel)
-      ? '4'
-      : undefined
+    [DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX]:
+      isAttemptToFixSupported(testFramework, isParallel, frameworkVersion)
+        ? '4'
+        : undefined
   }
 }
 
