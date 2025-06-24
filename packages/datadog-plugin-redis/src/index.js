@@ -19,7 +19,7 @@ class RedisPlugin extends CachePlugin {
     const resource = command
     const normalizedCommand = command.toUpperCase()
     if (!this.config.filter(normalizedCommand)) {
-      return this.skip(ctx)
+      return
     }
 
     this.startSpan({
