@@ -58,7 +58,9 @@ function wrapAddHook (addHook) {
           arguments[arguments.length - 1] = function (err) {
             publishError(err, req)
 
-            if (cookieParserReadCh.hasSubscribers && !cookiesPublished.has(req)) {
+            const hasCookies = request.cookies && Object.keys(request.cookies).length > 0
+
+            if (cookieParserReadCh.hasSubscribers && hasCookies && !cookiesPublished.has(req)) {
               const res = getRes(reply)
               const abortController = new AbortController()
 

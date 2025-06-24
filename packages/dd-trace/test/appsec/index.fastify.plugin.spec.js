@@ -470,6 +470,9 @@ withVersions('fastify', 'fastify', '>=2', version => {
               hook
             })
 
+            // Dummy hook
+            app.addHook('onRequest', (req, reply, done) => done())
+
             app.post('/', (request, reply) => {
               requestCookie()
               reply.send('DONE')
