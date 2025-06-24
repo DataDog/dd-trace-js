@@ -65,6 +65,7 @@ function testInRequest (app, tests) {
 
 function testOutsideRequestHasVulnerability (fnToTest, vulnerability, plugins, timeout) {
   beforeEach(async () => {
+    vulnerabilityReporter.clearCache()
     await agent.load(plugins)
   })
   afterEach(() => {

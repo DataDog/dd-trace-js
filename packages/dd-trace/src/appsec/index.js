@@ -21,7 +21,9 @@ const {
   responseBody,
   responseWriteHead,
   responseSetHeader,
-  routerParam
+  routerParam,
+  fastifyResponseChannel,
+  fastifyPathParams
 } = require('./channels')
 const waf = require('./waf')
 const addresses = require('./addresses')
@@ -69,7 +71,6 @@ function enable (_config) {
 
     bodyParser.subscribe(onRequestBodyParsed)
     multerParser.subscribe(onRequestBodyParsed)
-    fastifyBodyParser.subscribe(onRequestBodyParsed)
     cookieParser.subscribe(onRequestCookieParser)
     incomingHttpRequestStart.subscribe(incomingHttpStartTranslator)
     incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
@@ -80,9 +81,12 @@ function enable (_config) {
     nextBodyParsed.subscribe(onRequestBodyParsed)
     nextQueryParsed.subscribe(onRequestQueryParsed)
     expressProcessParams.subscribe(onRequestProcessParams)
+    fastifyBodyParser.subscribe(onRequestBodyParsed)
     fastifyQueryParams.subscribe(onRequestQueryParsed)
+    fastifyPathParams.subscribe(onRequestProcessParams)
     routerParam.subscribe(onRequestProcessParams)
     responseBody.subscribe(onResponseBody)
+    fastifyResponseChannel.subscribe(onResponseBody)
     responseWriteHead.subscribe(onResponseWriteHead)
     responseSetHeader.subscribe(onResponseSetHeader)
 
@@ -361,7 +365,6 @@ function disable () {
   // Channel#unsubscribe() is undefined for non active channels
   if (bodyParser.hasSubscribers) bodyParser.unsubscribe(onRequestBodyParsed)
   if (multerParser.hasSubscribers) multerParser.unsubscribe(onRequestBodyParsed)
-  if (fastifyBodyParser.hasSubscribers) fastifyBodyParser.unsubscribe(onRequestBodyParsed)
   if (cookieParser.hasSubscribers) cookieParser.unsubscribe(onRequestCookieParser)
   if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(incomingHttpStartTranslator)
   if (incomingHttpRequestEnd.hasSubscribers) incomingHttpRequestEnd.unsubscribe(incomingHttpEndTranslator)
@@ -372,9 +375,12 @@ function disable () {
   if (nextBodyParsed.hasSubscribers) nextBodyParsed.unsubscribe(onRequestBodyParsed)
   if (nextQueryParsed.hasSubscribers) nextQueryParsed.unsubscribe(onRequestQueryParsed)
   if (expressProcessParams.hasSubscribers) expressProcessParams.unsubscribe(onRequestProcessParams)
+  if (fastifyBodyParser.hasSubscribers) fastifyBodyParser.unsubscribe(onRequestBodyParsed)
   if (fastifyQueryParams.hasSubscribers) fastifyQueryParams.unsubscribe(onRequestQueryParsed)
+  if (fastifyPathParams.hasSubscribers) fastifyPathParams.unsubscribe(onRequestProcessParams)
   if (routerParam.hasSubscribers) routerParam.unsubscribe(onRequestProcessParams)
   if (responseBody.hasSubscribers) responseBody.unsubscribe(onResponseBody)
+  if (fastifyResponseChannel.hasSubscribers) fastifyResponseChannel.unsubscribe(onResponseBody)
   if (responseWriteHead.hasSubscribers) responseWriteHead.unsubscribe(onResponseWriteHead)
   if (responseSetHeader.hasSubscribers) responseSetHeader.unsubscribe(onResponseSetHeader)
 }

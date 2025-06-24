@@ -8,6 +8,8 @@ const handleChannel = channel('apm:fastify:request:handle')
 const routeAddedChannel = channel('apm:fastify:route:added')
 const bodyParserReadCh = channel('datadog:fastify:body-parser:finish')
 const queryParamsReadCh = channel('datadog:fastify:query-params:finish')
+const responsePayloadReadCh = channel('datadog:fastify:response:finish')
+const pathParamsReadCh = channel('datadog:fastify:path-params:finish')
 
 const parsingResources = new WeakMap()
 
@@ -112,9 +114,10 @@ function preValidation (request, reply, done) {
   const parsingResource = parsingResources.get(req)
 
   const processInContext = () => {
-    if (queryParamsReadCh.hasSubscribers && request.query) {
-      const abortController = new AbortController()
+    let abortController
 
+    if (queryParamsReadCh.hasSubscribers && request.query) {
+      abortController ??= new AbortController()
       queryParamsReadCh.publish({
         req,
         res,
@@ -126,9 +129,20 @@ function preValidation (request, reply, done) {
     }
 
     if (bodyParserReadCh.hasSubscribers && request.body) {
-      const abortController = new AbortController()
-
+      abortController ??= new AbortController()
       bodyParserReadCh.publish({ req, res, body: request.body, abortController })
+
+      if (abortController.signal.aborted) return
+    }
+
+    if (pathParamsReadCh.hasSubscribers && request.params) {
+      abortController ??= new AbortController()
+      pathParamsReadCh.publish({
+        req,
+        res,
+        abortController,
+        params: request.params
+      })
 
       if (abortController.signal.aborted) return
     }
@@ -154,9 +168,12 @@ function preParsing (request, reply, payload, done) {
 }
 
 function wrapSend (send, req) {
-  return function sendWithTrace (error) {
-    if (error instanceof Error) {
-      errorChannel.publish({ req, error })
+  return function sendWithTrace (payload) {
+    if (payload instanceof Error) {
+      errorChannel.publish({ req, error: payload })
+    } else if (canPublishResponsePayload(payload)) {
+      const res = getRes(this)
+      responsePayloadReadCh.publish({ req, res, body: payload })
     }
 
     return send.apply(this, arguments)
@@ -185,6 +202,18 @@ function publishError (error, req) {
 
 function onRoute (routeOptions) {
   routeAddedChannel.publish({ routeOptions, onRoute })
+}
+
+// send() payload types: https://fastify.dev/docs/latest/Reference/Reply/#senddata
+function canPublishResponsePayload (payload) {
+  return responsePayloadReadCh.hasSubscribers &&
+    payload &&
+    typeof payload === 'object' &&
+    typeof payload.pipe !== 'function' && // Node streams
+    typeof payload.body?.pipe !== 'function' && // Response with body stream
+    !Buffer.isBuffer(payload) && // Buffer
+    !(payload instanceof ArrayBuffer) && // ArrayBuffer
+    !ArrayBuffer.isView(payload) // TypedArray
 }
 
 addHook({ name: 'fastify', versions: ['>=3'] }, fastify => {

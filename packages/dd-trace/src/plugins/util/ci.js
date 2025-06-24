@@ -28,7 +28,7 @@ const {
   PR_NUMBER
 } = require('./tags')
 const { filterSensitiveInfoFromRepository } = require('./url')
-const { getEnvironmentVariable } = require('../../config-helper')
+const { getEnvironmentVariable, getEnvironmentVariables } = require('../../config-helper')
 
 // Receives a string with the form 'John Doe <john.doe@gmail.com>'
 // and returns { name: 'John Doe', email: 'john.doe@gmail.com' }
@@ -93,7 +93,7 @@ function getGitHubEventPayload () {
 module.exports = {
   normalizeRef,
   getCIMetadata () {
-    const { env } = process
+    const env = getEnvironmentVariables()
 
     let tags = {}
 
