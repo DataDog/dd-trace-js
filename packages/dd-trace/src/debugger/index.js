@@ -29,9 +29,9 @@ function start (config, rc) {
 
   process[Symbol.for('datadog:node:util:types')] = types
 
-  readProbeFile(config.dynamicInstrumentation.probeFile, ({ logProbes }) => {
+  readProbeFile(config.dynamicInstrumentation.probeFile, (probes) => {
     const action = 'apply'
-    for (const probe of logProbes) {
+    for (const probe of probes) {
       probe.shouldAcknowledge = false
       probeChannel.port2.postMessage({ action, probe })
     }
