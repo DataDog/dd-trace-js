@@ -13,6 +13,7 @@ const responsePayloadReadCh = channel('datadog:fastify:response:finish')
 const pathParamsReadCh = channel('datadog:fastify:path-params:finish')
 
 const parsingResources = new WeakMap()
+const cookiesPublished = new WeakSet()
 
 function wrapFastify (fastify, hasParsingEvents) {
   if (typeof fastify !== 'function') return fastify
@@ -46,22 +47,18 @@ function wrapAddHook (addHook) {
 
     if (typeof fn !== 'function') return addHook.apply(this, arguments)
 
-    arguments[arguments.length - 1] = shimmer.wrapFunction(fn, fn => function () {
-      const request = arguments[0]
-      const reply = arguments[1]
+    arguments[arguments.length - 1] = shimmer.wrapFunction(fn, fn => function (request, reply, done) {
       const req = getReq(request)
 
       try {
         // done callback is always the last argument
-        const done = arguments[arguments.length - 1]
+        const doneCallback = arguments[arguments.length - 1]
 
-        if (typeof done === 'function') {
+        if (typeof doneCallback === 'function') {
           arguments[arguments.length - 1] = function (err) {
             publishError(err, req)
 
-            const hasCookies = request.cookies && Object.keys(request.cookies).length > 0
-
-            if (cookieParserReadCh.hasSubscribers && hasCookies) {
+            if (cookieParserReadCh.hasSubscribers && !cookiesPublished.has(req)) {
               const res = getRes(reply)
               const abortController = new AbortController()
 
@@ -72,6 +69,8 @@ function wrapAddHook (addHook) {
                 cookies: request.cookies
               })
 
+              cookiesPublished.add(req)
+
               if (abortController.signal.aborted) return
             }
 
@@ -81,14 +80,15 @@ function wrapAddHook (addHook) {
               parsingResources.set(req, parsingResource)
 
               return parsingResource.runInAsyncScope(() => {
-                return done.apply(this, arguments)
+                return doneCallback.apply(this, arguments)
               })
             }
-            return done.apply(this, arguments)
+            return doneCallback.apply(this, arguments)
           }
 
           return fn.apply(this, arguments)
         }
+
         const promise = fn.apply(this, arguments)
 
         if (promise && typeof promise.catch === 'function') {
