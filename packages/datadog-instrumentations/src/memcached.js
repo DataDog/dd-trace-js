@@ -38,9 +38,7 @@ addHook({ name: 'memcached', versions: ['>=2.2'] }, Memcached => {
 
     arguments[0] = wrappedQueryCompiler
 
-    const result = command.apply(this, arguments)
-
-    return result
+    return command.apply(this, arguments)
   })
 
   return Memcached
