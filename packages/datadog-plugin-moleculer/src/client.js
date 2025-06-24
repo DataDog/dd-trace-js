@@ -24,7 +24,7 @@ class MoleculerClientPlugin extends ClientPlugin {
       const endpoint = ctx.endpoint || {}
       const node = endpoint.node || {}
 
-      this.addHost(node.hostname, node.port)
+      this.addHost({ hostname: node.hostname, port: node.port })
 
       span.addTags(moleculerTags(broker, ctx, this.config))
     }

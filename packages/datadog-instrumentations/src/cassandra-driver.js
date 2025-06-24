@@ -11,6 +11,8 @@ const finishCh = channel('apm:cassandra-driver:query:finish')
 const errorCh = channel('apm:cassandra-driver:query:error')
 const connectCh = channel('apm:cassandra-driver:query:connect')
 
+let startCtx = {}
+
 addHook({ name: 'cassandra-driver', versions: ['>=3.0.0'] }, cassandra => {
   shimmer.wrap(cassandra.Client.prototype, 'batch', batch => function (queries, options, callback) {
     if (!startCh.hasSubscribers) {
@@ -19,23 +21,23 @@ addHook({ name: 'cassandra-driver', versions: ['>=3.0.0'] }, cassandra => {
     const lastIndex = arguments.length - 1
     const cb = arguments[lastIndex]
 
-    const ctx = { keyspace: this.keyspace, query: queries, contactPoints: this.options && this.options.contactPoints }
-    return startCh.runStores(ctx, () => {
+    startCtx = { keyspace: this.keyspace, query: queries, contactPoints: this.options && this.options.contactPoints }
+    return startCh.runStores(startCtx, () => {
       if (typeof cb === 'function') {
-        arguments[lastIndex] = wrapCallback(finishCh, errorCh, ctx, cb)
+        arguments[lastIndex] = wrapCallback(finishCh, errorCh, startCtx, cb)
       }
 
       try {
         const res = batch.apply(this, arguments)
         if (typeof res === 'function' || !res) {
-          return wrapCallback(finishCh, errorCh, ctx, res)
+          return wrapCallback(finishCh, errorCh, startCtx, res)
         }
         return res.then(
-          () => finish(finishCh, errorCh, ctx),
-          err => finish(finishCh, errorCh, ctx, err)
+          () => finish(finishCh, errorCh, startCtx),
+          err => finish(finishCh, errorCh, startCtx, err)
         )
       } catch (e) {
-        finish(finishCh, errorCh, ctx, e)
+        finish(finishCh, errorCh, startCtx, e)
         throw e
       }
     })
@@ -48,13 +50,13 @@ addHook({ name: 'cassandra-driver', versions: ['>=4.4'] }, cassandra => {
     if (!startCh.hasSubscribers) {
       return _execute.apply(this, arguments)
     }
-    const ctx = { keyspace: this.keyspace, query, contactPoints: this.options && this.options.contactPoints }
-    return startCh.runStores(ctx, () => {
+    startCtx = { keyspace: this.keyspace, query, contactPoints: this.options && this.options.contactPoints }
+    return startCh.runStores(startCtx, () => {
       const promise = _execute.apply(this, arguments)
 
       promise.then(
-        () => finish(finishCh, errorCh, ctx),
-        err => finish(finishCh, errorCh, ctx, err)
+        () => finish(finishCh, errorCh, startCtx),
+        err => finish(finishCh, errorCh, startCtx, err)
       )
       return promise
     })
@@ -76,19 +78,19 @@ addHook({ name: 'cassandra-driver', versions: ['3 - 4.3'] }, cassandra => {
         return _innerExecute.apply(this, arguments)
       }
 
-      const ctx = { keyspace: this.keyspace, query, contactPoints: this.options && this.options.contactPoints }
-      return startCh.runStores(ctx, () => {
+      startCtx = { keyspace: this.keyspace, query, contactPoints: this.options && this.options.contactPoints }
+      return startCh.runStores(startCtx, () => {
         const lastIndex = arguments.length - 1
         const cb = arguments[lastIndex]
 
         if (typeof cb === 'function') {
-          arguments[lastIndex] = wrapCallback(finishCh, errorCh, ctx, cb)
+          arguments[lastIndex] = wrapCallback(finishCh, errorCh, startCtx, cb)
         }
 
         try {
           return _innerExecute.apply(this, arguments)
         } catch (e) {
-          finish(finishCh, errorCh, ctx, e)
+          finish(finishCh, errorCh, startCtx, e)
           throw e
         }
       })
@@ -102,7 +104,8 @@ addHook({ name: 'cassandra-driver', versions: ['>=3.3'], file: 'lib/request-exec
     if (!startCh.hasSubscribers) {
       return _sendOnConnection.apply(this, arguments)
     }
-    connectCh.publish({ hostname: this._connection.address, port: this._connection.port })
+    startCtx = { hostname: this._connection.address, port: this._connection.port, ...startCtx }
+    connectCh.publish(startCtx)
     return _sendOnConnection.apply(this, arguments)
   })
   return RequestExecution
@@ -120,8 +123,8 @@ addHook({ name: 'cassandra-driver', versions: ['3.3 - 4.3'], file: 'lib/request-
     }
 
     arguments[0] = function () {
-      const ctx = { hostname: execution._connection.address, port: execution._connection.port }
-      return connectCh.runStores(ctx, getHostCallback, this, ...arguments)
+      startCtx = { hostname: execution._connection.address, port: execution._connection.port, ...startCtx }
+      return connectCh.runStores(startCtx, getHostCallback, this, ...arguments)
     }
 
     return start.apply(this, arguments)
@@ -141,8 +144,8 @@ addHook({ name: 'cassandra-driver', versions: ['3 - 3.2'], file: 'lib/request-ha
     }
 
     arguments[2] = function () {
-      const ctx = { hostname: handler.connection.address, port: handler.connection.port }
-      return connectCh.runStores(ctx, callback, this, ...arguments)
+      startCtx = { hostname: handler.connection.address, port: handler.connection.port, ...startCtx }
+      return connectCh.runStores(startCtx, callback, this, ...arguments)
     }
 
     return send.apply(this, arguments)
