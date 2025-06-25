@@ -1,7 +1,7 @@
 'use strict'
 
 const shimmer = require('../../datadog-shimmer')
-const { addHook, channel, AsyncResource } = require('./helpers/instrument')
+const { addHook, channel } = require('./helpers/instrument')
 
 const handleChannel = channel('apm:microgateway-core:request:handle')
 const routeChannel = channel('apm:microgateway-core:request:route')
@@ -11,20 +11,18 @@ const name = 'microgateway-core'
 
 // TODO Remove " <=3.0.0" when "volos-util-apigee" module is fixed
 const versions = ['>=2.1 <=3.0.0']
-const requestResources = new WeakMap()
+const requestContexts = new WeakMap()
 
 function wrapConfigProxyFactory (configProxyFactory) {
   return function () {
     const configProxy = configProxyFactory.apply(this, arguments)
 
     return function (req, res, next) {
-      const requestResource = new AsyncResource('bound-anonymous-fn')
+      const ctx = { req, res }
 
-      requestResources.set(req, requestResource)
+      requestContexts.set(req, ctx)
 
-      handleChannel.publish({ req, res })
-
-      return configProxy.apply(this, arguments)
+      return handleChannel.runStores(ctx, configProxy, this, ...arguments)
     }
   }
 }
@@ -43,18 +41,16 @@ function wrapPluginsFactory (pluginsFactory) {
 
 function wrapNext (req, res, next) {
   return shimmer.wrapFunction(next, next => function nextWithTrace (err) {
-    const requestResource = requestResources.get(req)
+    const ctx = requestContexts.get(req)
 
-    requestResource.runInAsyncScope(() => {
-      if (err) {
-        errorChannel.publish(err)
-      }
+    if (err) {
+      ctx.error = err
+      errorChannel.publish(ctx)
+    }
 
-      if (res.proxy && res.proxy.base_path) {
-        routeChannel.publish({ req, res, route: res.proxy.base_path })
-      }
-    })
-
+    if (res.proxy && res.proxy.base_path) {
+      return routeChannel.publish({ req, res, route: res.proxy.base_path, ...ctx }, next, this, ...arguments)
+    }
     return next.apply(this, arguments)
   })
 }
