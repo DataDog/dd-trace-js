@@ -73,6 +73,7 @@ describe('Plugin', () => {
             req.on('error', done)
 
             req.end()
+            setTimeout(done, 10)
           })
         }
 

@@ -132,7 +132,10 @@ describe('Plugin', () => {
             withPeerService(
               () => tracer,
               'rhea',
-              () => context.sender.send({ body: 'Hello World!' }),
+              (done) => {
+                context.sender.send({ body: 'Hello World!' })
+                done()
+              },
               'localhost',
               'out.host'
             )

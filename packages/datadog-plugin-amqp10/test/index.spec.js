@@ -65,7 +65,10 @@ describe('Plugin', () => {
           withPeerService(
             () => tracer,
             'amqp10',
-            () => sender.send({ key: 'value' }),
+            (done) => {
+              sender.send({ key: 'value' })
+              done()
+            },
             'localhost',
             'out.host'
           )

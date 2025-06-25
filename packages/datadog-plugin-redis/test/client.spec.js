@@ -85,7 +85,9 @@ describe('Plugin', () => {
           () => tracer,
           'redis',
           () => client.get('bar'),
-          '127.0.0.1', 'out.host')
+          '127.0.0.1',
+          'out.host'
+        )
 
         it('should handle errors', async () => {
           let error

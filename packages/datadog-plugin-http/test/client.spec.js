@@ -67,7 +67,7 @@ describe('Plugin', () => {
             })
         })
 
-        const spanProducerFn = () => {
+        const spanProducerFn = (done) => {
           const app = express()
           app.get('/user', (req, res) => {
             res.status(200).send()
@@ -78,6 +78,7 @@ describe('Plugin', () => {
               res.on('data', () => {})
             })
             req.end()
+            done()
           })
         }
 

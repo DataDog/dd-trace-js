@@ -59,7 +59,7 @@ describe('Plugin', () => {
         withPeerService(
           () => tracer,
           'elasticsearch',
-          () => client.search({
+          (done) => client.search({
             index: 'docs',
             sort: 'name',
             size: 100,
@@ -68,8 +68,9 @@ describe('Plugin', () => {
                 match_all: {}
               }
             }
-          }, hasCallbackSupport ? () => {} : undefined),
-          'localhost', 'out.host'
+          }, hasCallbackSupport ? done : undefined),
+          'localhost',
+          'out.host'
         )
 
         it('should set the correct tags', done => {

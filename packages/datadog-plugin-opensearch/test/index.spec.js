@@ -255,7 +255,9 @@ describe('Plugin', () => {
               }
             }
           }),
-          'localhost', 'out.host')
+          'localhost',
+          'out.host'
+        )
 
         it('should be configured with the correct values', done => {
           client.search({
