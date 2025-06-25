@@ -24,9 +24,7 @@ function exporterFromURL (url) {
     ? 'manual'
     : profilingEnabled === 'auto'
       ? 'auto'
-      : injectionEnabled.includes('profiling')
-        ? 'injection'
-        : 'unknown'
+      : 'unknown'
   return new AgentExporter({
     url,
     logger,
