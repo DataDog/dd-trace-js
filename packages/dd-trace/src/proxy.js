@@ -159,7 +159,8 @@ class Tracer extends NoopProxy {
         ssiHeuristics.start()
         let mockProfiler = null
         if (config.profiling.enabled === 'true') {
-          this._profilerStarted = this._startProfiler(config)
+          this._startProfiler(config)
+          this._profilerStarted = Promise.resolve(true)
         } else if (ssiHeuristics.emitsTelemetry) {
           // Start a mock profiler that emits mock profile-submitted events for the telemetry.
           // It will be stopped if the real profiler is started by the heuristics.

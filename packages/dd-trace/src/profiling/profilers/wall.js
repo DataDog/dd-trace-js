@@ -86,7 +86,6 @@ class NativeWallProfiler {
     // cpu profiling is enabled.
     this._withContexts = this._captureSpanData || this._timelineEnabled || this._cpuProfilingEnabled
     this._v8ProfilerBugWorkaroundEnabled = !!options.v8ProfilerBugWorkaroundEnabled
-    this._mapper = undefined
     this._pprof = undefined
 
     // Bind these to this so they can be used as callbacks
@@ -111,7 +110,6 @@ class NativeWallProfiler {
   start ({ mapper } = {}) {
     if (this._started) return
 
-    this._mapper = mapper
     this._pprof = require('@datadog/pprof')
     kSampleCount = this._pprof.time.constants.kSampleCount
 
@@ -126,7 +124,7 @@ class NativeWallProfiler {
     this._pprof.time.start({
       intervalMicros: this._samplingIntervalMicros,
       durationMillis: this._flushIntervalMillis,
-      sourceMapper: this._mapper,
+      sourceMapper: mapper,
       withContexts: this._withContexts,
       lineNumbers: false,
       workaroundV8Bug: this._v8ProfilerBugWorkaroundEnabled,

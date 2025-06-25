@@ -9,17 +9,9 @@ const dc = require('dc-polyfill')
 const crashtracker = require('../crashtracking')
 
 const { promisify } = require('util')
-const zlib = require('zlib')
 
 const profileSubmittedChannel = dc.channel('datadog:profiling:profile-submitted')
 const spanFinishedChannel = dc.channel('dd-trace:span:finish')
-
-function maybeSourceMap (sourceMap, SourceMapper, debug) {
-  if (!sourceMap) return
-  return SourceMapper.create([
-    process.cwd()
-  ], debug)
-}
 
 function logError (logger, ...args) {
   if (logger) {
@@ -50,22 +42,19 @@ class Profiler extends EventEmitter {
     this._timer = undefined
     this._lastStart = undefined
     this._timeoutInterval = undefined
+    this._sourceMapsLoaded = undefined
     this.endpointCounts = new Map()
-  }
-
-  start (options) {
-    return this._start(options).catch((err) => {
-      logError(options.logger, 'Error starting profiler. For troubleshooting tips, see ' +
-        '<https://dtdg.co/nodejs-profiler-troubleshooting>', err)
-      return false
-    })
   }
 
   _logError (err) {
     logError(this._logger, err)
   }
 
-  async _start (options) {
+  sourceMapsLoaded () {
+    return this._sourceMapsLoaded
+  }
+
+  start (options) {
     if (this._enabled) return true
 
     const config = this._config = new Config(options)
@@ -77,48 +66,41 @@ class Profiler extends EventEmitter {
     // Log errors if the source map finder fails, but don't prevent the rest
     // of the profiler from running without source maps.
     let mapper
-    try {
-      const { setLogger, SourceMapper } = require('@datadog/pprof')
-      setLogger(config.logger)
+    if (config.sourceMap) {
+      try {
+        const { setLogger, SourceMapper } = require('@datadog/pprof')
+        setLogger(config.logger)
 
-      mapper = await maybeSourceMap(config.sourceMap, SourceMapper, config.debugSourceMaps)
-      if (config.sourceMap && config.debugSourceMaps) {
-        this._logger.debug(() => {
-          return mapper.infoMap.size === 0
-            ? 'Found no source maps'
-            : `Found source maps for following files: [${[...mapper.infoMap.keys()].join(', ')}]`
-        })
+        const maybeMapperLoadingPromise = SourceMapper.create([process.cwd()], config.debugSourceMaps)
+        if (maybeMapperLoadingPromise instanceof Promise) {
+          mapper = {
+            hasMappingInfo: () => false,
+            mappingInfo: (l) => l
+          }
+          this._sourceMapsLoaded = maybeMapperLoadingPromise.then((sourceMap) => {
+            if (config.debugSourceMaps) {
+              this._logger.debug(() => {
+                return sourceMap.infoMap.size === 0
+                  ? 'Found no source maps'
+                  : `Found source maps for following files: [${[...mapper.infoMap.keys()].join(', ')}]`
+              })
+            }
+            mapper.hasMappingInfo = sourceMap.hasMappingInfo.bind(sourceMap)
+            mapper.mappingInfo = sourceMap.mappingInfo.bind(sourceMap)
+          }).catch((err) => {
+            this._logError(err)
+          })
+        } else {
+          // If the result of SourceMapper.create is not a promise, it is already loaded
+          mapper = maybeMapperLoadingPromise
+        }
+      } catch (err) {
+        this._logError(err)
       }
+    }
 
-      const clevel = config.uploadCompression.level
-      switch (config.uploadCompression.method) {
-        case 'gzip':
-          this._compressionFn = promisify(zlib.gzip)
-          if (clevel !== undefined) {
-            this._compressionOptions = {
-              level: clevel
-            }
-          }
-          break
-        case 'zstd':
-          if (typeof zlib.zstdCompress === 'function') {
-            this._compressionFn = promisify(zlib.zstdCompress)
-            if (clevel !== undefined) {
-              this._compressionOptions = {
-                params: {
-                  [zlib.constants.ZSTD_c_compressionLevel]: clevel
-                }
-              }
-            }
-          } else {
-            const zstdCompress = require('@datadog/libdatadog').load('datadog-js-zstd').zstd_compress
-            const level = clevel ?? 0 // 0 is zstd default compression level
-            this._compressionFn = (buffer) => Promise.resolve(Buffer.from(zstdCompress(buffer, level)))
-          }
-          break
-      }
-    } catch (err) {
-      this._logError(err)
+    if (this._sourceMapsLoaded === undefined) {
+      this._sourceMapsLoaded = Promise.resolve()
     }
 
     try {
@@ -217,6 +199,45 @@ class Profiler extends EventEmitter {
     }
   }
 
+  _getCompressionFn () {
+    if (this._compressionFn === undefined) {
+      try {
+        const method = this._config.uploadCompression.method
+        if (method === 'off') {
+          return
+        }
+        const zlib = require('zlib')
+        const clevel = this._config.uploadCompression.level
+        if (method === 'gzip') {
+          this._compressionFn = promisify(zlib.gzip)
+          if (clevel !== undefined) {
+            this._compressionOptions = {
+              level: clevel
+            }
+          }
+        } else if (method === 'zstd') {
+          if (typeof zlib.zstdCompress === 'function') {
+            this._compressionFn = promisify(zlib.zstdCompress)
+            if (clevel !== undefined) {
+              this._compressionOptions = {
+                params: {
+                  [zlib.constants.ZSTD_c_compressionLevel]: clevel
+                }
+              }
+            }
+          } else {
+            const zstdCompress = require('@datadog/libdatadog').load('datadog-js-zstd').zstd_compress
+            const level = clevel ?? 0 // 0 is zstd default compression level
+            this._compressionFn = (buffer) => Promise.resolve(Buffer.from(zstdCompress(buffer, level)))
+          }
+        }
+      } catch (err) {
+        this._logError(err)
+      }
+    }
+    return this._compressionFn
+  }
+
   async _collect (snapshotKind, restart = true) {
     if (!this._enabled) return
 
@@ -252,9 +273,13 @@ class Profiler extends EventEmitter {
       await Promise.all(profiles.map(async ({ profiler, profile }) => {
         try {
           const encoded = await profiler.encode(profile)
-          const compressed = encoded instanceof Buffer && this._compressionFn !== undefined
-            ? await this._compressionFn(encoded, this._compressionOptions)
-            : encoded
+          let compressed = encoded
+          if (encoded instanceof Buffer) {
+            const compressionFn = this._getCompressionFn()
+            if (compressionFn !== undefined) {
+              compressed = await compressionFn(encoded, this._compressionOptions)
+            }
+          }
           encodedProfiles[profiler.type] = compressed
           this._logger.debug(() => {
             const profileJson = JSON.stringify(profile, (key, value) => {
