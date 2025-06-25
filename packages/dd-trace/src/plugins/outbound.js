@@ -92,16 +92,20 @@ class OutboundPlugin extends TracingPlugin {
 
   finish (ctx) {
     const span = ctx?.currentStore?.span || this.activeSpan
-    this.tagPeerService(span)
-    super.finish(...arguments)
+    this.tagPeerService(span, () => {
+      super.finish(...arguments)
+    })
   }
 
-  tagPeerService (span) {
+  tagPeerService (span, done) {
     if (this._tracerConfig.spanComputePeerService) {
       const peerData = this.getPeerService(span.context()._tags)
       if (peerData !== undefined) {
         span.addTags(this.getPeerServiceRemap(peerData))
       }
+    }
+    if (done) {
+      done()
     }
   }
 
