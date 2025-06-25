@@ -24,6 +24,7 @@ class NextPlugin extends ServerPlugin {
     const childOf = store ? store.span : store
     const span = this.tracer.startSpan(this.operationName(), {
       childOf,
+      integrationName: this.constructor.id,
       tags: {
         [COMPONENT]: this.constructor.id,
         'service.name': this.config.service || this.serviceName(),

@@ -27,7 +27,8 @@ class HttpServerPlugin extends ServerPlugin {
       this.tracer,
       {
         ...this.config,
-        service: this.config.service || this.serviceName()
+        service: this.config.service || this.serviceName(),
+        componentName: this.constructor.id
       },
       req,
       res,
