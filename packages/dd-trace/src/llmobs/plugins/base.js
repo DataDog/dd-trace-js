@@ -102,7 +102,7 @@ class LLMObsPlugin extends TracingPlugin {
     if (llmobsEnabled === false) {
       config = typeof config === 'boolean' ? false : { ...config, enabled: false } // override to false
     }
-    log.info(`[LLMObs] Configured ${this.constructor.name} with config: ${config}`)
+    log.info(`[LLMObs] Configured ${this.constructor.name} with config: ${JSON.stringify(config)}`)
     super.configure(config)
   }
 
