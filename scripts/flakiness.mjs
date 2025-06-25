@@ -110,10 +110,9 @@ if (Object.keys(flaky).length === 0) {
     console.log(`* ${workflow}`)
     for (const [job, urls] of Object.entries(jobs).sort()) {
       if (urls.length < OCCURRENCES) continue
-      console.log(`    * ${job}`)
-      for (const url of urls.sort()) {
-        console.log(`        * [${url.replace('https://github.com/DataDog/', '')}](${url})`)
-      }
+      // Padding is needed because Slack doesn't show single digits as links.
+      const links = urls.map((url, idx) => `[${String(idx + 1).padStart(2, '0')}](${url})`)
+      console.log(`    * ${job} (${links.join(', ')})`)
     }
   }
 }
