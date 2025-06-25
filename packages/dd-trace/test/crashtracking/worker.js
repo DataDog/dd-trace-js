@@ -4,7 +4,7 @@ const { expect } = require('chai')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire').noCallThru()
 
-require('../setup/tap')
+require('../setup/core')
 
 const crashtracker = {
   start: sinon.stub(),
@@ -19,7 +19,6 @@ const noop = {
 const crashtracking = proxyquire('../../src/crashtracking', {
   './crashtracker': crashtracker,
   './noop': noop
-
 })
 
 crashtracking.start()
