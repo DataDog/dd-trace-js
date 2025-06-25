@@ -25,7 +25,11 @@ function createWrapEmit (ctx) {
     return function (title, headers, req) {
       ctx.resStatus = headers[0].split(' ')[1]
 
-      return serverCh.asyncStart.runStores(ctx, () => {
+      // return serverCh.tracePromise(() => {
+      //   // console.log('ctx in instrumentation', arguments)
+      //   return emit.apply(this, arguments)
+      // }, ctx)
+      serverCh.asyncStart.runStores(ctx, () => {
         try {
           return emit.apply(this, arguments)
         } finally {
@@ -41,7 +45,7 @@ function wrapHandleUpgrade (handleUpgrade) {
     if (!serverCh.start.hasSubscribers) return handleUpgrade.apply(this, arguments)
 
     const [req, socket, head, cb] = arguments
-    const ctx = { req }
+    const ctx = { req, socket }
 
     return serverCh.tracePromise(() => {
       shimmer.wrap(this, 'emit', createWrapEmit(ctx))
@@ -51,12 +55,11 @@ function wrapHandleUpgrade (handleUpgrade) {
 }
 
 function wrapHandleSend (send) {
-  return function () {
-    if (!serverCh.start.hasSubscribers) return send.apply(this, arguments)
+  return function wrappedSend (...args) {
+    if (!producerCh.start.hasSubscribers) return send.apply(this, arguments)
 
-    // console.log('argu,ent', arguments)
     const [data, options, cb] = arguments
-    const ctx = { data }
+    const ctx = { data, link: this._sender._socket }
 
     return producerCh.tracePromise(() => {
       send.call(this, data, options, cb)
@@ -77,7 +80,6 @@ addHook({
   name: 'ws',
   file: 'lib/websocket.js'
 }, ws => {
-  // console.log('ws prototyoe', ws.prototype.send)
   shimmer.wrap(ws.prototype, 'send', wrapHandleSend)
 
   return ws
