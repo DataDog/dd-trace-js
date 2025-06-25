@@ -129,16 +129,32 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
     })
 
     it('should compute peer service', done => {
-      agent
-        .assertSomeTraces(traces => {
-          const span = traces[0][0]
-          expect(span.meta).to.have.property('peer.service', typeof service === 'function' ? service() : service)
-          expect(span.meta).to.have.property('_dd.peer.service.source', serviceSource)
-        })
-        .then(done)
-        .catch(done)
+      const assertPeerService = traces => {
+        const span = traces[0][0]
+        expect(span.meta).to.have.property('peer.service', typeof service === 'function' ? service() : service)
+        expect(span.meta).to.have.property('_dd.peer.service.source', serviceSource)
+      }
 
-      spanGenerationFn(done)
+      // we were hitting race condition where the test was finishing (with error) before the span
+      // generation was complete, so add a wait for the span to be finished before asserting the peer service
+      if (opts.waitForFinish) {
+        const assertions = agent.assertSomeTraces(assertPeerService)
+
+        const spanGeneration = new Promise((resolve, reject) => {
+          spanGenerationFn(err => err ? reject(err) : resolve())
+        })
+
+        Promise.all([assertions, spanGeneration])
+          .then(() => done())
+          .catch(done)
+      } else {
+        agent
+          .assertSomeTraces(assertPeerService)
+          .then(done)
+          .catch(done)
+
+        spanGenerationFn(done)
+      }
     })
   })
 }

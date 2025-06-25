@@ -52,9 +52,13 @@ describe('Plugin', () => {
         'mongodb-core',
         (done) => {
           const PeerCat = mongoose.model('PeerCat', { name: String })
-          new PeerCat({ name: 'PeerCat' }).save().catch(done)
+          new PeerCat({ name: 'PeerCat' }).save()
+            .then(() => done())
+            .catch(done)
         },
-        () => dbName, 'peer.service')
+        () => dbName, 'peer.service',
+        { waitForFinish: true }
+      )
 
       it('should propagate context with write operations', () => {
         const Cat = mongoose.model('Cat1', { name: String })
