@@ -79,7 +79,7 @@ should always work.
 
 We use [yarn](https://yarnpkg.com/) 1.x for its workspace functionality, so make sure to install that as well. The easist way to install yarn 1.x with with npm:
 
-```sh  
+```sh
 $ npm install -g yarn
 ```
 
@@ -148,6 +148,12 @@ $ yarn test:instrumentations
 
 Several other components have test commands as well. See `package.json` for
 details.
+
+### Adding a Plugin Test to CI
+
+The plugin tests run on pull requests in Github Actions. Each plugin test suite has its own Github job, so adding a new suite to CI
+requires adding a new job to the Github Actions config. The file containing these configs is ``.github/workflows/apm-integrations.yml``.
+You can copypaste and modify an existing plugin job configuration in this file to create a new job config.
 
 ### Linting
 
