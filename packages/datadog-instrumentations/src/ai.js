@@ -64,6 +64,8 @@ const noopTracer = {
 }
 
 function wrapTracer (tracer) {
+  if (Object.hasOwn(tracer, Symbol.for('_dd.wrapped'))) return
+
   shimmer.wrap(tracer, 'startActiveSpan', function (startActiveSpan) {
     return function () {
       const name = arguments[0]
@@ -116,6 +118,8 @@ function wrapTracer (tracer) {
       })
     }
   })
+
+  Object.defineProperty(tracer, Symbol.for('_dd.wrapped'), { value: true })
 }
 
 function wrapWithTracer (fn) {
