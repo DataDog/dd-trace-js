@@ -14,6 +14,8 @@ class WSServerPlugin extends TracingPlugin {
   static get type () { return 'websocket' }
   static get kind () { return 'consumer' }
 
+  // create a context that only the add link needs, just keep ids
+  // for client side 921 req.on upgrade websocket.emit is emmited as an event
   bindStart (ctx) {
     const { http = {} } = ctx
     const req = ctx.req
@@ -52,36 +54,14 @@ class WSServerPlugin extends TracingPlugin {
     return ctx.currentStore
   }
 
-  // asyncStart (ctx) {
-
-  //   ctx?.currentStore?.span.finish()
-
-  //   ctx.res = ctx.resStatus
-
-  //   ctx.currentStore.span.setTag(HTTP_STATUS_CODE, ctx.res)
-
-  //   return ctx.currentStore
-  // }
-
   end (ctx) {
-    const store = storage('legacy').getStore()
-    const childOf = store ? store.span : null
-    console.log('store in server', store, childOf)
+    ctx.socket.spanContext = ctx.span._spanContext
     ctx.req.res = ctx.resStatus
 
     ctx.span.setTag(HTTP_STATUS_CODE, ctx.req.res)
-    if (!ctx.span) return
+
     ctx.span.finish()
   }
-
-  // asyncEnd (ctx) {
-  //   ctx.res = ctx.resStatus
-
-  //   ctx.currentStore.span.setTag(HTTP_STATUS_CODE, ctx.res)
-  //   ctx.span.setTag(HTTP_STATUS_CODE, ctx.res)
-
-  //   return this.finish(ctx)
-  // }
 }
 
 module.exports = WSServerPlugin
