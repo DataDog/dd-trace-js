@@ -148,7 +148,6 @@ class MochaPlugin extends CiPlugin {
 
       const testSuiteSpan = this.tracer.startSpan('mocha.test_suite', {
         childOf: this.testModuleSpan,
-        integrationName: this.constructor.id,
         tags: {
           [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,

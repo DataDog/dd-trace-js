@@ -106,8 +106,8 @@ class RouterPlugin extends WebPlugin {
 
     const span = this.tracer.startSpan(`${this.constructor.id}.middleware`, {
       childOf,
+      integrationName: this.constructor.id,
       tags: {
-        integrationName: this.constructor.id,
         [COMPONENT]: this.constructor.id,
         'resource.name': name || '<anonymous>'
       }

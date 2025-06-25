@@ -28,13 +28,13 @@ class HttpServerPlugin extends ServerPlugin {
       {
         ...this.config,
         service: this.config.service || this.serviceName(),
-        componentName: this.constructor.id
       },
       req,
       res,
       this.operationName()
     )
     span.setTag(COMPONENT, this.constructor.id)
+    span._integrationName = this.constructor.id
 
     this._parentStore = store
     this.enter(span, { ...store, req, res })

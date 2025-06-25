@@ -248,7 +248,6 @@ class JestPlugin extends CiPlugin {
 
       this.testSuiteSpan = this.tracer.startSpan('jest.test_suite', {
         childOf: testSessionSpanContext,
-        integrationName: this.constructor.id,
         tags: {
           [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,
