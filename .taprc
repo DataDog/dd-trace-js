@@ -2,7 +2,5 @@
 color: true
 node-arg:
   - --expose-gc
-plugin:
-  - "@tapjs/mocha-globals"
 allow-empty-coverage: true
 allow-incomplete-coverage: true
