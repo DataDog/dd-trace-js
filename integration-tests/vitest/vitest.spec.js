@@ -2054,5 +2054,13 @@ versions.forEach((version) => {
         })
       })
     })
+
+    it.skip('does not blow up when tinypool is used outside of a test', (done) => {
+      // childProcess = exec('node ./ci-visibility/run-workerpool.js', {
+      //   cwd,
+      //   env: getCiVisAgentlessConfig(receiver.port),
+      //   stdio: 'pipe'
+      // })
+    })
   })
 })

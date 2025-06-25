@@ -1,6 +1,13 @@
+'use strict'
+
 const { addHook, channel } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
+const {
+  VITEST_WORKER_TRACE_PAYLOAD_CODE,
+  VITEST_WORKER_LOGS_PAYLOAD_CODE
+} = require('../../dd-trace/src/plugins/util/test')
+
 // test hooks
 const testStartCh = channel('ci:vitest:test:start')
 const testFinishTimeCh = channel('ci:vitest:test:finish-time')
@@ -27,7 +34,8 @@ const isEarlyFlakeDetectionFaultyCh = channel('ci:vitest:is-early-flake-detectio
 const testManagementTestsCh = channel('ci:vitest:test-management-tests')
 const impactedTestsCh = channel('ci:vitest:modified-tests')
 
-const workerReporterCh = channel('ci:vitest:worker-report:trace')
+const workerReportTraceCh = channel('ci:vitest:worker-report:trace')
+const workerReportLogsCh = channel('ci:vitest:worker-report:logs')
 
 const taskToCtx = new WeakMap()
 const taskToStatuses = new WeakMap()
@@ -39,6 +47,7 @@ const modifiedTasks = new WeakSet()
 let isRetryReasonEfd = false
 let isRetryReasonAttemptToFix = false
 const switchedStatuses = new WeakSet()
+const workerProcesses = new WeakSet()
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 400
 
@@ -65,8 +74,6 @@ function getProvidedContext () {
       _ddIsImpactedTestsEnabled: isImpactedTestsEnabled,
       _ddModifiedTests: modifiedTests
     } = globalThis.__vitest_worker__.providedContext
-
-    // console.log('globalThis.__vitest_worker__', globalThis.__vitest_worker__)
 
     return {
       isDiEnabled: _ddIsDiEnabled,
@@ -195,11 +202,6 @@ function getSortWrapper (sort, frameworkVersion) {
     let testManagementAttemptToFixRetries = 0
     let isDiEnabled = false
 
-    // console.log('this.ctx.vitest', this.ctx.vitest)
-    // console.log('this.ctx.rpc', this.ctx.rpc)
-    console.log('__vitest_worker__', global.__vitest_worker__)
-    // console.log('this.ctx.getCoreWorkspaceProject()', this.ctx.getCoreWorkspaceProject())
-    // console.log('this.ctx', this)
     try {
       const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh, frameworkVersion)
       if (!err) {
@@ -275,7 +277,6 @@ function getSortWrapper (sort, frameworkVersion) {
         log.warn('Could not send Dynamic Instrumentation configuration to workers.')
       }
     }
-    debugger
 
     if (isTestManagementTestsEnabled) {
       const { err, testManagementTests: receivedTestManagementTests } = await getChannelPromise(testManagementTestsCh)
@@ -369,32 +370,18 @@ function getCreateCliWrapper (vitestPackage, frameworkVersion) {
   return vitestPackage
 }
 
-// UNUSED RIGHT NOW, but we can use it to bind the async resource to the test fn
-// getFn is what's used to get the test fn to run it with vitest:
-// https://github.com/vitest-dev/vitest/blob/0cbad1b0d0d56f1ec60f8496678d1435f8bb8977/packages/runner/src/run.ts#L315-L321
-let getFn = null
-
-// run in workers only
-addHook({
-  name: '@vitest/runner',
-  versions: ['>=1.6.0'],
-  file: 'dist/index.js'
-}, (suitePackage) => {
-  getFn = suitePackage.getFn
-
-  return suitePackage
-})
-
-const processToHandler = new WeakSet()
-
 function threadHandler (thread) {
-  if (processToHandler.has(thread.process)) {
+  if (workerProcesses.has(thread.process)) {
     return
   }
-  processToHandler.add(thread.process)
+  workerProcesses.add(thread.process)
   thread.process.on('message', (message) => {
     if (message.__tinypool_worker_message__ && message.data) {
-      workerReporterCh.publish(message.data)
+      if (message.interprocessCode === VITEST_WORKER_TRACE_PAYLOAD_CODE) {
+        workerReportTraceCh.publish(message.data)
+      } else if (message.interprocessCode === VITEST_WORKER_LOGS_PAYLOAD_CODE) {
+        workerReportLogsCh.publish(message.data)
+      }
     }
   })
 }
@@ -405,12 +392,11 @@ addHook({
   file: 'dist/index.js'
 }, (TinyPool) => {
   shimmer.wrap(TinyPool.prototype, 'run', run => async function () {
-    // we need to do this before and after because the threads list gets recycled
-    // (the processes are re-created)
+    // We have to do this before and after because the threads list gets recycled, that is, the processes are re-created
     this.threads.forEach(threadHandler)
-    const res = await run.apply(this, arguments)
+    const runResult = await run.apply(this, arguments)
     this.threads.forEach(threadHandler)
-    return res
+    return runResult
   })
 
   return TinyPool
@@ -426,7 +412,6 @@ addHook({
   // `onBeforeRunTask` is run before any repetition or attempt is run
   // `onBeforeRunTask` is an async function
   shimmer.wrap(VitestTestRunner.prototype, 'onBeforeRunTask', onBeforeRunTask => function (task) {
-    // console.log('on before run task', process.env)
     const testName = getTestName(task)
 
     const {
@@ -512,7 +497,6 @@ addHook({
   // `onAfterRunTask` is run after all repetitions or attempts are run
   // `onAfterRunTask` is an async function
   shimmer.wrap(VitestTestRunner.prototype, 'onAfterRunTask', onAfterRunTask => function (task) {
-    // console.log('task', task)
     const { isEarlyFlakeDetectionEnabled, isTestManagementTestsEnabled } = getProvidedContext()
 
     if (isTestManagementTestsEnabled) {
@@ -913,8 +897,6 @@ addHook({
 
     testSuiteFinishCh.publish({ status: testSuiteResult.state, onFinish, ...testSuiteCtx.currentStore })
 
-    // console.log('test usite finish!')
-    // TODO: fix too frequent flushes
     await onFinishPromise
 
     return startTestsResponse

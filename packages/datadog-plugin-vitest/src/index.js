@@ -404,7 +404,6 @@ class VitestPlugin extends CiPlugin {
     })
 
     this.addSub('ci:vitest:worker-report:trace', (traces) => {
-      // it has no test session or test module id so there are hanging
       const formattedTraces = JSON.parse(traces).map(trace => {
         return trace.map(span => ({
           ...span,
@@ -416,6 +415,12 @@ class VitestPlugin extends CiPlugin {
 
       formattedTraces.forEach(trace => {
         this.tracer._exporter.export(trace)
+      })
+    })
+
+    this.addSub('ci:vitest:worker-report:logs', (logsPayloads) => {
+      JSON.parse(logsPayloads).forEach(({ testConfiguration, logMessage }) => {
+        this.tracer._exporter.exportDiLogs(testConfiguration, logMessage)
       })
     })
   }
