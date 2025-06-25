@@ -686,8 +686,8 @@ function commonFineTuneResponseExtraction (tags, body) {
 
 // the OpenAI package appears to stream the content download then provide it all as a singular string
 function downloadFileResponseExtraction (tags, body) {
-  if (!body.file) return
-  tags['openai.response.total_bytes'] = body.file.length
+  if (typeof body.file !== 'string') return
+  tags['openai.response.total_bytes'] = Buffer.byteLength(body.file)
 }
 
 function deleteFileResponseExtraction (tags, body) {

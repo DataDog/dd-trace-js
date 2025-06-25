@@ -60,7 +60,7 @@ class BaseLLMObsWriter {
       return
     }
 
-    this._bufferSize += byteLength || Buffer.from(JSON.stringify(event)).byteLength
+    this._bufferSize += byteLength || Buffer.byteLength(JSON.stringify(event))
     this._buffer.push(event)
   }
 

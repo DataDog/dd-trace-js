@@ -201,7 +201,7 @@ class Kinesis extends BaseAwsSdkPlugin {
 
   setDSMCheckpoint (span, parsedData, stream) {
     // get payload size of request data
-    const payloadSize = Buffer.from(JSON.stringify(parsedData)).byteLength
+    const payloadSize = Buffer.byteLength(JSON.stringify(parsedData))
     const dataStreamsContext = this.tracer
       .setCheckpoint(['direction:out', `topic:${stream}`, 'type:kinesis'], span, payloadSize)
     return dataStreamsContext

@@ -141,7 +141,7 @@ class TextMapPropagator {
       for (const [key, value] of Object.entries(baggageItems)) {
         const item = `${this._encodeOtelBaggageKey(String(key).trim())}=${encodeURIComponent(String(value).trim())},`
         itemCounter += 1
-        byteCounter += item.length
+        byteCounter += Buffer.byteLength(item)
         if (itemCounter > this._config.baggageMaxItems || byteCounter > this._config.baggageMaxBytes) break
         baggage += item
       }
