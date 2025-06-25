@@ -8,6 +8,7 @@ const {
   cookieParser,
   multerParser,
   fastifyBodyParser,
+  fastifyCookieParser,
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
   passportVerify,
@@ -83,6 +84,7 @@ function enable (_config) {
     expressProcessParams.subscribe(onRequestProcessParams)
     fastifyBodyParser.subscribe(onRequestBodyParsed)
     fastifyQueryParams.subscribe(onRequestQueryParsed)
+    fastifyCookieParser.subscribe(onRequestCookieParser)
     fastifyPathParams.subscribe(onRequestProcessParams)
     routerParam.subscribe(onRequestProcessParams)
     responseBody.subscribe(onResponseBody)
@@ -377,6 +379,7 @@ function disable () {
   if (expressProcessParams.hasSubscribers) expressProcessParams.unsubscribe(onRequestProcessParams)
   if (fastifyBodyParser.hasSubscribers) fastifyBodyParser.unsubscribe(onRequestBodyParsed)
   if (fastifyQueryParams.hasSubscribers) fastifyQueryParams.unsubscribe(onRequestQueryParsed)
+  if (fastifyCookieParser.hasSubscribers) fastifyCookieParser.unsubscribe(onRequestCookieParser)
   if (fastifyPathParams.hasSubscribers) fastifyPathParams.unsubscribe(onRequestProcessParams)
   if (routerParam.hasSubscribers) routerParam.unsubscribe(onRequestProcessParams)
   if (responseBody.hasSubscribers) responseBody.unsubscribe(onResponseBody)

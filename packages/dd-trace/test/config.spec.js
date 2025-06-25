@@ -427,7 +427,10 @@ describe('Config', () => {
       { name: 'langchain.spanPromptCompletionSampleRate', value: 1.0, origin: 'default' },
       { name: 'llmobs.agentlessEnabled', value: undefined, origin: 'default' },
       { name: 'llmobs.mlApp', value: undefined, origin: 'default' },
-      { name: 'logInjection', value: false, origin: 'default' },
+      { name: 'ciVisibilityTestSessionName', value: '', origin: 'default' },
+      { name: 'ciVisAgentlessLogSubmissionEnabled', value: false, origin: 'default' },
+      { name: 'isTestDynamicInstrumentationEnabled', value: false, origin: 'default' },
+      { name: 'logInjection', value: 'structured', origin: 'default' },
       { name: 'lookup', value: undefined, origin: 'default' },
       { name: 'middlewareTracingEnabled', value: true, origin: 'default' },
       { name: 'openai.spanCharLimit', value: 128, origin: 'default' },
@@ -565,7 +568,7 @@ describe('Config', () => {
     process.env.DD_IAST_STACK_TRACE_ENABLED = 'false'
     process.env.DD_IAST_TELEMETRY_VERBOSITY = 'DEBUG'
     process.env.DD_INJECT_FORCE = 'false'
-    process.env.DD_INJECTION_ENABLED = 'profiler'
+    process.env.DD_INJECTION_ENABLED = 'tracer'
     process.env.DD_INSTRUMENTATION_CONFIG_ID = 'abcdef123'
     process.env.DD_INSTRUMENTATION_INSTALL_ID = '68e75c48-57ca-4a12-adfc-575c4b05fcbe'
     process.env.DD_INSTRUMENTATION_INSTALL_TIME = '1703188212'
@@ -782,7 +785,7 @@ describe('Config', () => {
       { name: 'iast.stackTrace.enabled', value: false, origin: 'env_var' },
       { name: 'iast.telemetryVerbosity', value: 'DEBUG', origin: 'env_var' },
       { name: 'injectForce', value: false, origin: 'env_var' },
-      { name: 'injectionEnabled', value: ['profiler'], origin: 'env_var' },
+      { name: 'injectionEnabled', value: ['tracer'], origin: 'env_var' },
       { name: 'instrumentation_config_id', value: 'abcdef123', origin: 'env_var' },
       { name: 'isGCPFunction', value: false, origin: 'env_var' },
       { name: 'langchain.spanCharLimit', value: 50, origin: 'env_var' },
