@@ -1,6 +1,6 @@
 # vim: set filetype=yaml :
-color: true
 node-arg:
   - --expose-gc
-allow-empty-coverage: true
-allow-incomplete-coverage: true
+disable-coverage: true
+# allow-empty-coverage: true
+# allow-incomplete-coverage: true
