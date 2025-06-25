@@ -4,8 +4,7 @@ const { errorMonitor } = require('events')
 const util = require('util')
 
 const {
-  addHook,
-  AsyncResource
+  addHook
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const dc = require('dc-polyfill')
@@ -98,14 +97,10 @@ function wrapChildProcessSyncMethod (returnError, shell = false) {
       }
 
       const childProcessInfo = normalizeArgs(arguments, shell)
+      const abortController = new AbortController()
 
-      const innerResource = new AsyncResource('bound-anonymous-fn')
-      return innerResource.runInAsyncScope(() => {
-        const context = createContextFromChildProcessInfo(childProcessInfo)
-        const abortController = new AbortController()
-
-        childProcessChannel.start.publish({ ...context, abortController })
-
+      const context = { ...createContextFromChildProcessInfo(childProcessInfo), abortController }
+      return childProcessChannel.start.runStores(context, () => {
         try {
           if (abortController.signal.aborted) {
             const error = abortController.signal.reason || new Error('Aborted')
@@ -192,19 +187,10 @@ function wrapChildProcessAsyncMethod (ChildProcess, shell = false) {
 
       const childProcessInfo = normalizeArgs(arguments, shell)
 
-      const cb = arguments[arguments.length - 1]
-      if (typeof cb === 'function') {
-        const callbackResource = new AsyncResource('bound-anonymous-fn')
-        arguments[arguments.length - 1] = callbackResource.bind(cb)
-      }
+      const context = createContextFromChildProcessInfo(childProcessInfo)
+      const abortController = new AbortController()
 
-      const innerResource = new AsyncResource('bound-anonymous-fn')
-      return innerResource.runInAsyncScope(() => {
-        const context = createContextFromChildProcessInfo(childProcessInfo)
-        const abortController = new AbortController()
-
-        childProcessChannel.start.publish({ ...context, abortController })
-
+      return childProcessChannel.start.runStores(context, () => {
         let childProcess
         if (abortController.signal.aborted) {
           childProcess = new ChildProcess()
@@ -230,12 +216,13 @@ function wrapChildProcessAsyncMethod (ChildProcess, shell = false) {
 
           childProcess.on(errorMonitor, (e) => {
             errorExecuted = true
-            childProcessChannel.error.publish(e)
+            context.error = e
+            childProcessChannel.error.publish(context)
           })
 
           childProcess.on('close', (code = 0) => {
             if (!errorExecuted && code !== 0) {
-              childProcessChannel.error.publish()
+              childProcessChannel.error.publish(context)
             }
             childProcessChannel.asyncEnd.publish({
               ...context,
