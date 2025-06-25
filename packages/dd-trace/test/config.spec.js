@@ -329,8 +329,8 @@ describe('Config', () => {
     expect(config).to.have.property('reportHostname', false)
     expect(config).to.have.nested.property('runtimeMetrics.enabled', false)
     expect(config).to.have.nested.property('runtimeMetrics.eventLoop', true)
-    expect(config).to.have.nested.property('runtimeMetrics.gc', true)
-    expect(config).to.have.nested.property('runtimeMetrics.gcCollector', 'default')
+    expect(config).to.have.nested.property('runtimeMetrics.gc.enabled', true)
+    expect(config).to.have.nested.property('runtimeMetrics.gc.collector', 'default')
     expect(config).to.have.property('runtimeMetricsRuntimeId', false)
     expect(config).to.have.property('sampleRate', undefined)
     expect(config).to.have.property('scope', undefined)
@@ -704,8 +704,8 @@ describe('Config', () => {
     expect(config).to.have.property('reportHostname', true)
     expect(config).to.have.nested.property('runtimeMetrics.enabled', true)
     expect(config).to.have.nested.property('runtimeMetrics.eventLoop', false)
-    expect(config).to.have.nested.property('runtimeMetrics.gc', false)
-    expect(config).to.have.nested.property('runtimeMetrics.gcCollector', 'native')
+    expect(config).to.have.nested.property('runtimeMetrics.gc.enabled', false)
+    expect(config).to.have.nested.property('runtimeMetrics.gc.collector', 'native')
     expect(config).to.have.property('runtimeMetricsRuntimeId', true)
     expect(config).to.have.property('sampleRate', 0.5)
     expect(config).to.have.deep.nested.property('sampler', {
@@ -1037,8 +1037,10 @@ describe('Config', () => {
       runtimeMetrics: {
         enabled: true,
         eventLoop: false,
-        gc: false,
-        gcCollector: 'native'
+        gc: {
+          enabled: false,
+          collector: 'native'
+        }
       },
       runtimeMetricsRuntimeId: true,
       sampleRate: 0.5,
@@ -1111,8 +1113,8 @@ describe('Config', () => {
     expect(config).to.have.property('reportHostname', true)
     expect(config).to.have.nested.property('runtimeMetrics.enabled', true)
     expect(config).to.have.nested.property('runtimeMetrics.eventLoop', false)
-    expect(config).to.have.nested.property('runtimeMetrics.gc', false)
-    expect(config).to.have.nested.property('runtimeMetrics.gcCollector', 'native')
+    expect(config).to.have.nested.property('runtimeMetrics.gc.enabled', false)
+    expect(config).to.have.nested.property('runtimeMetrics.gc.collector', 'native')
     expect(config).to.have.property('runtimeMetricsRuntimeId', true)
     expect(config).to.have.property('sampleRate', 0.5)
     expect(config).to.have.deep.nested.property('sampler', {

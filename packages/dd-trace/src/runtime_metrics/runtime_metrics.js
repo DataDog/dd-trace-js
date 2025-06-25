@@ -36,8 +36,8 @@ const runtimeMetrics = module.exports = {
     const clientConfig = DogStatsDClient.generateClientConfig(config)
     const watchers = []
 
-    if (config.runtimeMetrics.gc !== false) {
-      const gcCollector = config.runtimeMetrics.gcCollector || 'default'
+    if (config.runtimeMetrics.gc.enabled !== false) {
+      const gcCollector = config.runtimeMetrics.gc.collector || 'default'
 
       if (hasGCProfiler && (gcCollector === 'profiler' || gcCollector === 'default')) {
         startGCProfiler()
