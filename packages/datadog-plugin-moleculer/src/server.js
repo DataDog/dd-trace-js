@@ -7,19 +7,28 @@ class MoleculerServerPlugin extends ServerPlugin {
   static get id () { return 'moleculer' }
   static get operation () { return 'action' }
 
-  start ({ action, ctx, broker }) {
-    const followsFrom = this.tracer.extract('text_map', ctx.meta)
+  bindStart (ctx) {
+    const { action, middlewareCtx, broker } = ctx
+
+    const followsFrom = this.tracer.extract('text_map', middlewareCtx.meta)
     this.startSpan(this.operationName(), {
-      childOf: followsFrom || this.activeSpan,
+      childOf: followsFrom || ctx?.currentStore?.span || this.activeSpan,
       service: this.config.service || this.serviceName(),
       resource: action.name,
       kind: 'server',
       type: 'web',
       meta: {
         'resource.name': action.name,
-        ...moleculerTags(broker, ctx, this.config)
+        ...moleculerTags(broker, middlewareCtx, this.config)
       }
-    })
+    }, ctx)
+
+    return ctx.currentStore
+  }
+
+  bindFinish (ctx) {
+    super.finish(ctx)
+    return ctx.parentStore
   }
 }
 
