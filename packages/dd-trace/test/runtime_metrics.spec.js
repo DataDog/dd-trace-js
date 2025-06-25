@@ -1,6 +1,7 @@
 'use strict'
 
-require('./setup/tap')
+const t = require('tap')
+require('./setup/core')
 const { DogStatsDClient } = require('../src/dogstatsd')
 
 const os = require('os')
@@ -13,7 +14,7 @@ suiteDescribe('runtimeMetrics (proxy)', () => {
   let runtimeMetrics
   let proxy
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     runtimeMetrics = sinon.spy({
       start () {},
       stop () {},
@@ -31,7 +32,7 @@ suiteDescribe('runtimeMetrics (proxy)', () => {
     })
   })
 
-  it('should be noop when disabled', () => {
+  t.test('should be noop when disabled', t => {
     proxy.start()
     proxy.track()
     proxy.boolean()
@@ -51,9 +52,10 @@ suiteDescribe('runtimeMetrics (proxy)', () => {
     expect(runtimeMetrics.increment).to.not.have.been.called
     expect(runtimeMetrics.decrement).to.not.have.been.called
     expect(runtimeMetrics.stop).to.not.have.been.called
+    t.end()
   })
 
-  it('should proxy when enabled', () => {
+  t.test('should proxy when enabled', t => {
     const config = { runtimeMetrics: true }
 
     proxy.start(config)
@@ -75,9 +77,10 @@ suiteDescribe('runtimeMetrics (proxy)', () => {
     expect(runtimeMetrics.increment).to.have.been.called
     expect(runtimeMetrics.decrement).to.have.been.called
     expect(runtimeMetrics.stop).to.have.been.called
+    t.end()
   })
 
-  it('should be noop when disabled after being enabled', () => {
+  t.test('should be noop when disabled after being enabled', t => {
     const config = { runtimeMetrics: true }
 
     proxy.start(config)
@@ -101,6 +104,7 @@ suiteDescribe('runtimeMetrics (proxy)', () => {
     expect(runtimeMetrics.increment).to.not.have.been.called
     expect(runtimeMetrics.decrement).to.not.have.been.called
     expect(runtimeMetrics.stop).to.have.been.calledOnce
+    t.end()
   })
 })
 
@@ -112,7 +116,7 @@ suiteDescribe('runtimeMetrics', () => {
   let client
   let Client
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     // This is needed because sinon spies keep references to arguments which
     // breaks tests because the tags parameter is now mutated right after the
     // call.
@@ -166,13 +170,13 @@ suiteDescribe('runtimeMetrics', () => {
     runtimeMetrics.start(config)
   })
 
-  afterEach(() => {
+  t.afterEach(() => {
     clock.restore()
     runtimeMetrics.stop()
   })
 
-  describe('start', () => {
-    it('it should initialize the Dogstatsd client with the correct options', function () {
+  t.test('start', t => {
+    t.test('it should initialize the Dogstatsd client with the correct options', function (t) {
       runtimeMetrics.stop()
       runtimeMetrics.start(config)
 
@@ -184,9 +188,10 @@ suiteDescribe('runtimeMetrics', () => {
           'invalid:t_e_s_t5-:./'
         ]
       })
+      t.end()
     })
 
-    it('it should initialize the Dogstatsd client with an IPv6 URL', function () {
+    t.test('it should initialize the Dogstatsd client with an IPv6 URL', function (t) {
       config.hostname = '::1'
 
       runtimeMetrics.stop()
@@ -200,9 +205,10 @@ suiteDescribe('runtimeMetrics', () => {
           'invalid:t_e_s_t5-:./'
         ]
       })
+      t.end()
     })
 
-    it('should start collecting runtimeMetrics every 10 seconds', async () => {
+    t.test('should start collecting runtimeMetrics every 10 seconds', async t => {
       runtimeMetrics.stop()
       runtimeMetrics.start(config)
 
@@ -271,9 +277,10 @@ suiteDescribe('runtimeMetrics', () => {
       expect(client.gauge).to.have.been.calledWith('runtime.node.heap.physical_size.by.space')
 
       expect(client.flush).to.have.been.called
+      t.end()
     })
 
-    it('should collect individual metrics only once every 10 seconds', async () => {
+    t.test('should collect individual metrics only once every 10 seconds', async t => {
       runtimeMetrics.stop()
       runtimeMetrics.start(config)
 
@@ -293,22 +300,26 @@ suiteDescribe('runtimeMetrics', () => {
       // value is used here to be on the safer side.
       expect(client.gauge.callCount).to.be.lt(60000)
       expect(client.increment.callCount).to.be.lt(60000)
+      t.end()
     })
+    t.end()
   })
 
-  describe('when started', () => {
-    describe('stop', () => {
-      it('should stop collecting runtimeMetrics every 10 seconds', () => {
+  t.test('when started', t => {
+    t.test('stop', t => {
+      t.test('should stop collecting runtimeMetrics every 10 seconds', t => {
         runtimeMetrics.stop()
 
         clock.tick(10000)
 
         expect(client.gauge).to.not.have.been.called
+        t.end()
       })
+      t.end()
     })
 
-    describe('histogram', () => {
-      it('should add a record to a histogram', () => {
+    t.test('histogram', t => {
+      t.test('should add a record to a histogram', t => {
         runtimeMetrics.histogram('test', 0)
         runtimeMetrics.histogram('test', 1)
         runtimeMetrics.histogram('test', 2)
@@ -324,27 +335,31 @@ suiteDescribe('runtimeMetrics', () => {
         expect(client.gauge).to.have.been.calledWith('test.median', sinon.match.number)
         expect(client.gauge).to.have.been.calledWith('test.95percentile', sinon.match.number)
         expect(client.increment).to.have.been.calledWith('test.count', 4)
+        t.end()
       })
+      t.end()
     })
 
-    describe('increment', () => {
-      it('should increment a gauge', () => {
+    t.test('increment', t => {
+      t.test('should increment a gauge', t => {
         runtimeMetrics.increment('test')
 
         clock.tick(10000)
 
         expect(client.gauge).to.have.been.calledWith('test', 1)
+        t.end()
       })
 
-      it('should increment a gauge with a tag', () => {
+      t.test('should increment a gauge with a tag', t => {
         runtimeMetrics.increment('test', 'foo:bar')
 
         clock.tick(10000)
 
         expect(client.gauge).to.have.been.calledWith('test', 1, ['foo:bar'])
+        t.end()
       })
 
-      it('should increment a monotonic counter', () => {
+      t.test('should increment a monotonic counter', t => {
         runtimeMetrics.increment('test', true)
 
         clock.tick(10000)
@@ -356,9 +371,10 @@ suiteDescribe('runtimeMetrics', () => {
         clock.tick(10000)
 
         expect(client.increment).to.not.have.been.calledWith('test')
+        t.end()
       })
 
-      it('should increment a monotonic counter with a tag', () => {
+      t.test('should increment a monotonic counter with a tag', t => {
         runtimeMetrics.increment('test', 'foo:bar', true)
 
         clock.tick(10000)
@@ -370,72 +386,83 @@ suiteDescribe('runtimeMetrics', () => {
         clock.tick(10000)
 
         expect(client.increment).to.not.have.been.calledWith('test')
+        t.end()
       })
+      t.end()
     })
 
-    describe('decrement', () => {
-      it('should increment a gauge', () => {
+    t.test('decrement', t => {
+      t.test('should increment a gauge', t => {
         runtimeMetrics.decrement('test')
 
         clock.tick(10000)
 
         expect(client.gauge).to.have.been.calledWith('test', -1)
+        t.end()
       })
 
-      it('should decrement a gauge with a tag', () => {
+      t.test('should decrement a gauge with a tag', t => {
         runtimeMetrics.decrement('test', 'foo:bar')
 
         clock.tick(10000)
 
         expect(client.gauge).to.have.been.calledWith('test', -1, ['foo:bar'])
+        t.end()
       })
+      t.end()
     })
 
-    describe('gauge', () => {
-      it('should set a gauge', () => {
+    t.test('gauge', t => {
+      t.test('should set a gauge', t => {
         runtimeMetrics.gauge('test', 10)
 
         clock.tick(10000)
 
         expect(client.gauge).to.have.been.calledWith('test', 10)
+        t.end()
       })
 
-      it('should set a gauge with a tag', () => {
+      t.test('should set a gauge with a tag', t => {
         runtimeMetrics.gauge('test', 10, 'foo:bar')
 
         clock.tick(10000)
 
         expect(client.gauge).to.have.been.calledWith('test', 10, ['foo:bar'])
+        t.end()
       })
+      t.end()
     })
 
-    describe('boolean', () => {
-      it('should set a gauge', () => {
+    t.test('boolean', t => {
+      t.test('should set a gauge', t => {
         runtimeMetrics.boolean('test', true)
 
         clock.tick(10000)
 
         expect(client.gauge).to.have.been.calledWith('test', 1)
+        t.end()
       })
 
-      it('should set a gauge with a tag', () => {
+      t.test('should set a gauge with a tag', t => {
         runtimeMetrics.boolean('test', true, 'foo:bar')
 
         clock.tick(10000)
 
         expect(client.gauge).to.have.been.calledWith('test', 1, ['foo:bar'])
+        t.end()
       })
+      t.end()
     })
 
-    describe('without native runtimeMetrics', () => {
-      beforeEach(() => {
+    t.test('without native runtimeMetrics', t => {
+      t.beforeEach(() => {
         runtimeMetrics = proxyquire('../src/runtime_metrics/runtime_metrics', {
           '../dogstatsd': Client,
           'node-gyp-build': sinon.stub().returns(null)
         })
       })
 
-      it('should fallback to only runtimeMetrics available to JavaScript code', () => {
+      t.test('should fallback to only runtimeMetrics available to JavaScript code', t => {
         clock.tick(10000)
 
         expect(client.gauge).to.have.been.calledWith('runtime.node.cpu.user')
@@ -464,7 +491,10 @@ suiteDescribe('runtimeMetrics', () => {
         expect(client.gauge).to.have.been.calledWith('runtime.node.heap.physical_size.by.space')
 
         expect(client.flush).to.have.been.called
+        t.end()
       })
+      t.end()
     })
+    t.end()
   })
 })

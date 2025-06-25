@@ -1,46 +1,51 @@
 'use strict'
 
-require('./setup/tap')
+const t = require('tap')
+require('./setup/core')
 
-describe('RandomSampler', () => {
+t.test('RandomSampler', t => {
   let RandomSampler
   let sampler
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     sinon.stub(Math, 'random')
     RandomSampler = require('../src/random_sampler')
   })
 
-  afterEach(() => {
+  t.afterEach(() => {
     Math.random.restore()
   })
 
-  describe('rate', () => {
-    it('should return the sample rate', () => {
+  t.test('rate', t => {
+    t.test('should return the sample rate', t => {
       sampler = new RandomSampler(0.5)
 
       expect(sampler.rate()).to.equal(0.5)
+      t.end()
     })
+    t.end()
   })
 
-  describe('isSampled', () => {
-    it('should always sample when rate is 1', () => {
+  t.test('isSampled', t => {
+    t.test('should always sample when rate is 1', t => {
       sampler = new RandomSampler(1)
 
       Math.random.returns(0.9999999999999999)
 
       expect(sampler.isSampled()).to.be.true
+      t.end()
     })
 
-    it('should never sample when rate is 0', () => {
+    t.test('should never sample when rate is 0', t => {
       sampler = new RandomSampler(0)
 
       Math.random.returns(0)
 
       expect(sampler.isSampled()).to.be.false
+      t.end()
     })
 
-    it('should sample according to the rate', () => {
+    t.test('should sample according to the rate', t => {
       sampler = new RandomSampler(0.1234)
 
       Math.random.returns(0.1233999999999999)
@@ -50,6 +55,9 @@ describe('RandomSampler', () => {
       Math.random.returns(0.1234)
 
       expect(sampler.isSampled()).to.be.false
+      t.end()
     })
+    t.end()
   })
+  t.end()
 })

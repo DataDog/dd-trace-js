@@ -1,10 +1,11 @@
 'use strict'
 
-require('../setup/tap')
+const t = require('tap')
+require('../setup/core')
 
 const { expect } = require('chai')
 const proxyquire = require('proxyquire')
-describe('sendData', () => {
+t.test('sendData', t => {
   const application = {
     language_name: 'nodejs',
     tracer_version: 'version'
@@ -13,14 +14,14 @@ describe('sendData', () => {
   let sendDataModule
   let request
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     request = sinon.stub()
     sendDataModule = proxyquire('../../src/telemetry/send-data', {
       '../exporters/common/request': request
     })
   })
 
-  it('should call to request (TCP)', () => {
+  t.test('should call to request (TCP)', t => {
     sendDataModule.sendData({
       hostname: '',
       port: '12345',
@@ -44,9 +45,10 @@ describe('sendData', () => {
       hostname: '',
       port: '12345'
     })
+    t.end()
   })
 
-  it('should call to request (UDP)', () => {
+  t.test('should call to request (UDP)', t => {
     sendDataModule.sendData({
       url: 'unix:/foo/bar/baz',
       tags: { 'runtime-id': '123' }
@@ -69,9 +71,10 @@ describe('sendData', () => {
       hostname: undefined,
       port: undefined
     })
+    t.end()
   })
 
-  it('should add debug header if DD_TELEMETRY_DEBUG is present', () => {
+  t.test('should add debug header if DD_TELEMETRY_DEBUG is present', t => {
     sendDataModule.sendData({
       url: '/test',
       tags: { 'runtime-id': '123' },
@@ -96,9 +99,10 @@ describe('sendData', () => {
       hostname: undefined,
       port: undefined
     })
+    t.end()
   })
 
-  it('should remove not wanted properties from a payload with object type', () => {
+  t.test('should remove not wanted properties from a payload with object type', t => {
     const payload = {
       message: 'test',
       logger: {},
@@ -112,9 +116,10 @@ describe('sendData', () => {
 
     const { logger, tags, serviceMapping, ...trimmedPayload } = payload
     expect(data.payload).to.deep.equal(trimmedPayload)
+    t.end()
   })
 
-  it('should send batch request with retryPayload', () => {
+  t.test('should send batch request with retryPayload', t => {
     const retryObjData = { payload: { foo: 'bar' }, request_type: 'req-type-1' }
     const payload = [{
       request_type: 'req-type-2',
@@ -147,9 +152,10 @@ describe('sendData', () => {
     }]
     expect(data.request_type).to.equal('message-batch')
     expect(data.payload).to.deep.equal(expectedPayload)
+    t.end()
   })
 
-  it('should also work in CI Visibility agentless mode', () => {
+  t.test('should also work in CI Visibility agentless mode', t => {
     process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED = 1
     sendDataModule.sendData(
       {
@@ -170,5 +176,7 @@ describe('sendData', () => {
     const { url } = options
     expect(url).to.eql(new URL('https://instrumentation-telemetry-intake.datadoghq.eu'))
     delete process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED
+    t.end()
   })
+  t.end()
 })

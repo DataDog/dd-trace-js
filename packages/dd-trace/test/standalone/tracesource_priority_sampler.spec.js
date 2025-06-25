@@ -1,6 +1,7 @@
 'use strict'
 
-require('../setup/tap')
+const t = require('tap')
+require('../setup/core')
 
 const { assert } = require('chai')
 const proxyquire = require('proxyquire')
@@ -10,13 +11,13 @@ const TraceSourcePrioritySampler = require('../../src/standalone/tracesource_pri
 const { TRACE_SOURCE_PROPAGATION_KEY } = require('../../src/constants')
 const { ASM } = require('../../src/standalone/product')
 
-describe('Disabled APM Tracing or Standalone - TraceSourcePrioritySampler', () => {
+t.test('Disabled APM Tracing or Standalone - TraceSourcePrioritySampler', t => {
   let prioritySampler
   let tags
   let context
   let root
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     tags = { 'manual.keep': 'true' }
     prioritySampler = new TraceSourcePrioritySampler('test')
 
@@ -31,8 +32,8 @@ describe('Disabled APM Tracing or Standalone - TraceSourcePrioritySampler', () =
     sinon.stub(prioritySampler, '_getContext').returns(context)
   })
 
-  describe('sample', () => {
-    it('should provide the context when invoking _getPriorityFromTags', () => {
+  t.test('sample', t => {
+    t.test('should provide the context when invoking _getPriorityFromTags', t => {
       const span = new DatadogSpan({}, {}, prioritySampler, {
         operationName: 'operation'
       })
@@ -42,22 +43,27 @@ describe('Disabled APM Tracing or Standalone - TraceSourcePrioritySampler', () =
       prioritySampler.sample(span, false)
 
       sinon.assert.calledWithExactly(_getPriorityFromTags, context._tags, context)
+      t.end()
     })
+    t.end()
   })
 
-  describe('_getPriorityFromTags', () => {
-    it('should keep the trace if manual.keep and _dd.p.ts are present', () => {
+  t.test('_getPriorityFromTags', t => {
+    t.test('should keep the trace if manual.keep and _dd.p.ts are present', t => {
       context._trace.tags[TRACE_SOURCE_PROPAGATION_KEY] = '02'
       assert.strictEqual(prioritySampler._getPriorityFromTags(tags, context), USER_KEEP)
+      t.end()
     })
 
-    it('should return undefined if manual.keep or _dd.p.ts are not present', () => {
+    t.test('should return undefined if manual.keep or _dd.p.ts are not present', t => {
       assert.isUndefined(prioritySampler._getPriorityFromTags(tags, context))
+      t.end()
     })
+    t.end()
   })
 
-  describe('_getPriorityFromAuto', () => {
-    it('should keep trace if it contains _dd.p.ts tag', () => {
+  t.test('_getPriorityFromAuto', t => {
+    t.test('should keep trace if it contains _dd.p.ts tag', t => {
       const span = {
         _trace: {}
       }
@@ -65,9 +71,10 @@ describe('Disabled APM Tracing or Standalone - TraceSourcePrioritySampler', () =
       context._trace.tags[TRACE_SOURCE_PROPAGATION_KEY] = '02'
 
       assert.strictEqual(prioritySampler._getPriorityFromAuto(span), USER_KEEP)
+      t.end()
     })
 
-    it('should use rate limiter if it does not contain _dd.p.ts tag', () => {
+    t.test('should use rate limiter if it does not contain _dd.p.ts tag', t => {
       const span = {
         _trace: {}
       }
@@ -75,15 +82,17 @@ describe('Disabled APM Tracing or Standalone - TraceSourcePrioritySampler', () =
       sinon.stub(prioritySampler, '_isSampledByRateLimit').returns(true)
 
       assert.strictEqual(prioritySampler._getPriorityFromAuto(span), AUTO_KEEP)
+      t.end()
     })
+    t.end()
   })
 
-  describe('setPriority', () => {
+  t.test('setPriority', t => {
     let prioritySampler
     let setPriority
     let addTraceSourceTag
 
-    beforeEach(() => {
+    t.beforeEach(() => {
       setPriority = sinon.stub()
       addTraceSourceTag = sinon.stub()
 
@@ -104,7 +113,7 @@ describe('Disabled APM Tracing or Standalone - TraceSourcePrioritySampler', () =
       sinon.stub(prioritySampler, '_getContext').returns(context)
     })
 
-    it('should add tracesource tag for the corresponding product', () => {
+    t.test('should add tracesource tag for the corresponding product', t => {
       const span = {
         _trace: {}
       }
@@ -113,6 +122,9 @@ describe('Disabled APM Tracing or Standalone - TraceSourcePrioritySampler', () =
 
       sinon.assert.calledOnceWithExactly(setPriority, span, USER_KEEP, ASM)
       sinon.assert.calledOnceWithExactly(addTraceSourceTag, context._trace.tags, ASM)
+      t.end()
     })
+    t.end()
   })
+  t.end()
 })

@@ -1,6 +1,7 @@
 'use strict'
 
-require('../setup/tap')
+const t = require('tap')
+require('../setup/core')
 
 const { hostname } = require('os')
 
@@ -53,8 +54,8 @@ const anotherMockCheckpoint = {
   payloadSize: 100
 }
 
-describe('StatsPoint', () => {
-  it('should add latencies', () => {
+t.test('StatsPoint', t => {
+  t.test('should add latencies', t => {
     const aggStats = new StatsPoint(mockCheckpoint.hash, mockCheckpoint.parentHash, mockCheckpoint.edgeTags)
     aggStats.addLatencies(mockCheckpoint)
     const edgeLatency = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
@@ -71,20 +72,23 @@ describe('StatsPoint', () => {
     expect(encoded.EdgeLatency).to.deep.equal(edgeLatency.toProto())
     expect(encoded.PathwayLatency).to.deep.equal(pathwayLatency.toProto())
     expect(encoded.PayloadSize).to.deep.equal(payloadSize.toProto())
+    t.end()
   })
+  t.end()
 })
 
-describe('StatsBucket', () => {
-  describe('Checkpoints', () => {
+t.test('StatsBucket', t => {
+  t.test('Checkpoints', t => {
     let buckets
 
-    beforeEach(() => { buckets = new StatsBucket() })
+    t.beforeEach(() => { buckets = new StatsBucket() })
 
-    it('should start empty', () => {
+    t.test('should start empty', t => {
       expect(buckets.checkpoints.size).to.equal(0)
+      t.end()
     })
 
-    it('should add a new entry when no matching key is found', () => {
+    t.test('should add a new entry when no matching key is found', t => {
       const bucket = buckets.forCheckpoint(mockCheckpoint)
       const checkpoints = buckets.checkpoints
       expect(bucket).to.be.an.instanceOf(StatsPoint)
@@ -92,22 +96,26 @@ describe('StatsBucket', () => {
       const [key, value] = Array.from(checkpoints.entries())[0]
       expect(key.toString()).to.equal(mockCheckpoint.hash.toString())
       expect(value).to.be.instanceOf(StatsPoint)
+      t.end()
     })
 
-    it('should not add a new entry if matching key is found', () => {
+    t.test('should not add a new entry if matching key is found', t => {
       buckets.forCheckpoint(mockCheckpoint)
       buckets.forCheckpoint(mockCheckpoint)
       expect(buckets.checkpoints.size).to.equal(1)
+      t.end()
     })
 
-    it('should add a new entry when new checkpoint does not match existing agg keys', () => {
+    t.test('should add a new entry when new checkpoint does not match existing agg keys', t => {
       buckets.forCheckpoint(mockCheckpoint)
       buckets.forCheckpoint(anotherMockCheckpoint)
       expect(buckets.checkpoints.size).to.equal(2)
+      t.end()
     })
+    t.end()
   })
 
-  describe('Backlogs', () => {
+  t.test('Backlogs', t => {
     let backlogBuckets
     const mockBacklog = {
       offset: 12,
@@ -117,23 +125,25 @@ describe('StatsBucket', () => {
       topic: 'test-topic'
     }
 
-    beforeEach(() => {
+    t.beforeEach(() => {
       backlogBuckets = new StatsBucket()
     })
 
-    it('should start empty', () => {
+    t.test('should start empty', t => {
       expect(backlogBuckets.backlogs.size).to.equal(0)
+      t.end()
     })
 
-    it('should add a new entry when empty', () => {
+    t.test('should add a new entry when empty', t => {
       const bucket = backlogBuckets.forBacklog(mockBacklog)
       const backlogs = backlogBuckets.backlogs
       expect(bucket).to.be.an.instanceOf(Backlog)
       const [, value] = Array.from(backlogs.entries())[0]
       expect(value).to.be.instanceOf(Backlog)
+      t.end()
     })
 
-    it('should add a new entry when given different tags', () => {
+    t.test('should add a new entry when given different tags', t => {
       const otherMockBacklog = {
         offset: 1,
         type: 'kafka_consume',
@@ -145,9 +155,10 @@ describe('StatsBucket', () => {
       backlogBuckets.forBacklog(mockBacklog)
       backlogBuckets.forBacklog(otherMockBacklog)
       expect(backlogBuckets.backlogs.size).to.equal(2)
+      t.end()
     })
 
-    it('should update the existing entry if offset is higher', () => {
+    t.test('should update the existing entry if offset is higher', t => {
       const higherMockBacklog = {
         offset: 16,
         type: 'kafka_consume',
@@ -160,9 +171,10 @@ describe('StatsBucket', () => {
       const backlog = backlogBuckets.forBacklog(higherMockBacklog)
       expect(backlog.offset).to.equal(higherMockBacklog.offset)
       expect(backlogBuckets.backlogs.size).to.equal(1)
+      t.end()
     })
 
-    it('should discard the passed backlog if offset is lower', () => {
+    t.test('should discard the passed backlog if offset is lower', t => {
       const lowerMockBacklog = {
         offset: 2,
         type: 'kafka_consume',
@@ -175,21 +187,26 @@ describe('StatsBucket', () => {
       const backlog = backlogBuckets.forBacklog(lowerMockBacklog)
       expect(backlog.offset).to.equal(mockBacklog.offset)
       expect(backlogBuckets.backlogs.size).to.equal(1)
+      t.end()
     })
+    t.end()
   })
+  t.end()
 })
 
-describe('TimeBuckets', () => {
-  it('should acquire a span agg bucket for the given time', () => {
+t.test('TimeBuckets', t => {
+  t.test('should acquire a span agg bucket for the given time', t => {
     const buckets = new TimeBuckets()
     expect(buckets.size).to.equal(0)
     const bucket = buckets.forTime(12345)
     expect(buckets.size).to.equal(1)
     expect(bucket).to.be.an.instanceOf(StatsBucket)
+    t.end()
   })
+  t.end()
 })
 
-describe('DataStreamsProcessor', () => {
+t.test('DataStreamsProcessor', t => {
   let edgeLatency
   let pathwayLatency
   let processor
@@ -206,12 +223,12 @@ describe('DataStreamsProcessor', () => {
     tags: { foo: 'foovalue', bar: 'barvalue' }
   }
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     processor = new DataStreamsProcessor(config)
     clearTimeout(processor.timer)
   })
 
-  it('should construct', () => {
+  t.test('should construct', t => {
     processor = new DataStreamsProcessor(config)
     clearTimeout(processor.timer)
 
@@ -225,9 +242,10 @@ describe('DataStreamsProcessor', () => {
     expect(processor.enabled).to.equal(config.dsmEnabled)
     expect(processor.env).to.equal(config.env)
     expect(processor.tags).to.deep.equal(config.tags)
+    t.end()
   })
 
-  it('should track backlogs', () => {
+  t.test('should track backlogs', t => {
     const mockBacklog = {
       offset: 12,
       type: 'kafka_consume',
@@ -254,9 +272,10 @@ describe('DataStreamsProcessor', () => {
       ],
       Value: 12
     })
+    t.end()
   })
 
-  it('should track latency stats', () => {
+  t.test('should track latency stats', t => {
     expect(processor.buckets.size).to.equal(0)
     processor.recordCheckpoint(mockCheckpoint)
     expect(processor.buckets.size).to.equal(1)
@@ -283,9 +302,10 @@ describe('DataStreamsProcessor', () => {
     expect(encoded.EdgeLatency).to.deep.equal(edgeLatency.toProto())
     expect(encoded.PathwayLatency).to.deep.equal(pathwayLatency.toProto())
     expect(encoded.PayloadSize).to.deep.equal(payloadSize.toProto())
+    t.end()
   })
 
-  it('should export on interval', () => {
+  t.test('should export on interval', t => {
     processor.recordCheckpoint(mockCheckpoint)
     processor.onInterval()
     expect(writer.flush).to.be.calledWith({
@@ -309,47 +329,57 @@ describe('DataStreamsProcessor', () => {
       Lang: 'javascript',
       Tags: ['foo:foovalue', 'bar:barvalue']
     })
+    t.end()
   })
+  t.end()
 })
 
-describe('getSizeOrZero', () => {
-  it('should return the size of a string', () => {
+t.test('getSizeOrZero', t => {
+  t.test('should return the size of a string', t => {
     expect(getSizeOrZero('hello')).to.equal(5)
+    t.end()
   })
 
-  it('should handle unicode characters', () => {
+  t.test('should handle unicode characters', t => {
     // emoji is 4 bytes
     expect(getSizeOrZero('hello 😀')).to.equal(10)
+    t.end()
   })
 
-  it('should return the size of an ArrayBuffer', () => {
+  t.test('should return the size of an ArrayBuffer', t => {
     const buffer = new ArrayBuffer(10)
     expect(getSizeOrZero(buffer)).to.equal(10)
+    t.end()
   })
 
-  it('should return the size of a Buffer', () => {
+  t.test('should return the size of a Buffer', t => {
     const buffer = Buffer.from('hello', 'utf-8')
     expect(getSizeOrZero(buffer)).to.equal(5)
+    t.end()
   })
+  t.end()
 })
 
-describe('getHeadersSize', () => {
-  it('should return 0 for undefined/empty headers', () => {
+t.test('getHeadersSize', t => {
+  t.test('should return 0 for undefined/empty headers', t => {
     expect(getHeadersSize(undefined)).to.equal(0)
     expect(getHeadersSize({})).to.equal(0)
+    t.end()
   })
 
-  it('should return the total size of all headers', () => {
+  t.test('should return the total size of all headers', t => {
     const headers = {
       'Content-Type': 'application/json',
       'Content-Length': '100'
     }
     expect(getHeadersSize(headers)).to.equal(45)
+    t.end()
   })
+  t.end()
 })
 
-describe('getMessageSize', () => {
-  it('should return the size of a message', () => {
+t.test('getMessageSize', t => {
+  t.test('should return the size of a message', t => {
     const message = {
       key: 'key',
       value: 'value',
@@ -359,5 +389,7 @@ describe('getMessageSize', () => {
       }
     }
     expect(getMessageSize(message)).to.equal(53)
+    t.end()
   })
+  t.end()
 })

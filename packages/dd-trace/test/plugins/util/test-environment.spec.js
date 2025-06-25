@@ -1,6 +1,7 @@
 'use strict'
 
-require('../../setup/tap')
+const t = require('tap')
+require('../../setup/core')
 
 const fs = require('fs')
 const path = require('path')
@@ -28,15 +29,17 @@ const { getTestEnvironmentMetadata } = proxyquire('../../../src/plugins/util/tes
   }
 })
 
-describe('test environment data', () => {
-  it('getTestEnvironmentMetadata can include service name', () => {
+t.test('test environment data', t => {
+  t.test('getTestEnvironmentMetadata can include service name', t => {
     const tags = getTestEnvironmentMetadata('jest', { service: 'service-name' })
     expect(tags).to.contain({ 'service.name': 'service-name' })
+    t.end()
   })
 
-  it('getCIMetadata returns an empty object if the CI is not supported', () => {
+  t.test('getCIMetadata returns an empty object if the CI is not supported', t => {
     process.env = {}
     expect(getCIMetadata()).to.eql({})
+    t.end()
   })
 
   const ciProviders = fs.readdirSync(path.join(__dirname, 'ci-env'))
@@ -45,7 +48,7 @@ describe('test environment data', () => {
     if (ciProvider === 'github.json') {
       // We grab the first assertion because we only need to test one
       const [env] = assertions[0]
-      it('can read pull request data from GitHub Actions', () => {
+      t.test('can read pull request data from GitHub Actions', t => {
         process.env = env
         process.env.GITHUB_BASE_REF = 'datadog:main'
         process.env.GITHUB_EVENT_PATH = path.join(__dirname, 'fixtures', 'github_event_payload.json')
@@ -64,8 +67,9 @@ describe('test environment data', () => {
           pullRequestBaseBranchSha: '52e0974c74d41160a03d59ddc73bb9f5adab054b',
           headCommitSha: 'df289512a51123083a8e6931dd6f57bb3883d4c4'
         })
+        t.end()
       })
-      it('does not crash if GITHUB_EVENT_PATH is not a valid JSON file', () => {
+      t.test('does not crash if GITHUB_EVENT_PATH is not a valid JSON file', t => {
         process.env = env
         process.env.GITHUB_BASE_REF = 'datadog:main'
         process.env.GITHUB_EVENT_PATH = path.join(__dirname, 'fixtures', 'github_event_payload_malformed.json')
@@ -78,11 +82,12 @@ describe('test environment data', () => {
         expect(pullRequestBaseBranch).to.equal('datadog:main')
         expect(pullRequestBaseBranchSha).to.be.undefined
         expect(headCommitSha).to.be.undefined
+        t.end()
       })
     }
 
     assertions.forEach(([env, expectedSpanTags], index) => {
-      it(`reads env info for spec ${index} from ${ciProvider}`, () => {
+      t.test(`reads env info for spec ${index} from ${ciProvider}`, t => {
         process.env = env
         const { TESTING_TEST_OPTIMIZATION_TEST_CASE_NAME: testCaseName } = env
         const { [CI_ENV_VARS]: envVars, [CI_NODE_LABELS]: nodeLabels, ...restOfTags } = getTestEnvironmentMetadata()
@@ -101,7 +106,9 @@ describe('test environment data', () => {
         if (nodeLabels && expectedNodeLabels) {
           expect(JSON.parse(nodeLabels)).to.have.same.members(JSON.parse(expectedNodeLabels))
         }
+        t.end()
       })
     })
   })
+  t.end()
 })

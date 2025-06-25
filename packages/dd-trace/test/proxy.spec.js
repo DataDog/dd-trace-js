@@ -1,8 +1,9 @@
 'use strict'
 
-require('./setup/tap')
+const t = require('tap')
+require('./setup/core')
 
-describe('TracerProxy', () => {
+t.test('TracerProxy', t => {
   let Proxy
   let proxy
   let DatadogTracer
@@ -32,7 +33,7 @@ describe('TracerProxy', () => {
   let noopDogStatsDClient
   let NoopDogStatsDClient
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     process.env.DD_TRACE_MOCHA_ENABLED = false
 
     appsecSdk = {
@@ -209,13 +210,14 @@ describe('TracerProxy', () => {
     proxy = new Proxy()
   })
 
-  describe('uninitialized', () => {
-    describe('init', () => {
-      it('should return itself', () => {
+  t.test('uninitialized', t => {
+    t.test('init', t => {
+      t.test('should return itself', t => {
         expect(proxy.init()).to.equal(proxy)
+        t.end()
       })
 
-      it('should initialize and configure an instance of DatadogTracer', () => {
+      t.test('should initialize and configure an instance of DatadogTracer', t => {
         const options = {}
 
         proxy.init(options)
@@ -223,40 +225,45 @@ describe('TracerProxy', () => {
         expect(Config).to.have.been.calledWith(options)
         expect(DatadogTracer).to.have.been.calledWith(config)
         expect(remoteConfig.enable).to.have.been.calledOnceWith(config)
+        t.end()
       })
 
-      it('should not initialize twice', () => {
+      t.test('should not initialize twice', t => {
         proxy.init()
         proxy.init()
 
         expect(DatadogTracer).to.have.been.calledOnce
         expect(remoteConfig.enable).to.have.been.calledOnce
+        t.end()
       })
 
-      it('should not enable remote config when disabled', () => {
+      t.test('should not enable remote config when disabled', t => {
         config.remoteConfig.enabled = false
 
         proxy.init()
 
         expect(DatadogTracer).to.have.been.calledOnce
         expect(remoteConfig.enable).to.not.have.been.called
+        t.end()
       })
 
-      it('should not initialize when disabled', () => {
+      t.test('should not initialize when disabled', t => {
         config.tracing = false
 
         proxy.init()
 
         expect(DatadogTracer).to.not.have.been.called
+        t.end()
       })
 
-      it('should not capture runtimeMetrics by default', () => {
+      t.test('should not capture runtimeMetrics by default', t => {
         proxy.init()
 
         expect(runtimeMetrics.start).to.not.have.been.called
+        t.end()
       })
 
-      it('should support applying remote config', () => {
+      t.test('should support applying remote config', t => {
         const conf = {}
 
         proxy.init()
@@ -266,9 +273,10 @@ describe('TracerProxy', () => {
         expect(config.configure).to.have.been.calledWith(conf)
         expect(tracer.configure).to.have.been.calledWith(config)
         expect(pluginManager.configure).to.have.been.calledWith(config)
+        t.end()
       })
 
-      it('should support enabling debug logs for tracer flares', () => {
+      t.test('should support enabling debug logs for tracer flares', t => {
         const logLevel = 'debug'
 
         proxy.init()
@@ -282,9 +290,10 @@ describe('TracerProxy', () => {
 
         expect(flare.enable).to.have.been.calledWith(config)
         expect(flare.prepare).to.have.been.calledWith(logLevel)
+        t.end()
       })
 
-      it('should support sending tracer flares', () => {
+      t.test('should support sending tracer flares', t => {
         const task = {
           case_id: '111',
           hostname: 'myhostname',
@@ -301,9 +310,10 @@ describe('TracerProxy', () => {
 
         expect(flare.enable).to.have.been.calledWith(config)
         expect(flare.send).to.have.been.calledWith(task)
+        t.end()
       })
 
-      it('should cleanup flares when the config is removed', () => {
+      t.test('should cleanup flares when the config is removed', t => {
         const conf = {
           config: {
             log_level: 'debug'
@@ -317,9 +327,10 @@ describe('TracerProxy', () => {
         handlers.get('AGENT_CONFIG')('unapply', conf)
 
         expect(flare.disable).to.have.been.called
+        t.end()
       })
 
-      it('should support applying remote config', () => {
+      t.test('should support applying remote config', t => {
         const RemoteConfigProxy = proxyquire('../src/proxy', {
           './tracer': DatadogTracer,
           './appsec': appsec,
@@ -347,9 +358,10 @@ describe('TracerProxy', () => {
         expect(AppsecSdk).to.have.been.calledOnce
         expect(appsec.enable).to.not.have.been.called
         expect(iast.enable).to.not.have.been.called
+        t.end()
       })
 
-      it('should support applying remote config (only call disable if enabled before)', () => {
+      t.test('should support applying remote config (only call disable if enabled before)', t => {
         const RemoteConfigProxy = proxyquire('../src/proxy', {
           './tracer': DatadogTracer,
           './config': Config,
@@ -383,29 +395,33 @@ describe('TracerProxy', () => {
         expect(appsec.enable.secondCall).to.have.been.calledWithExactly(config)
         expect(iast.enable).to.have.been.calledTwice
         expect(iast.enable.secondCall).to.have.been.calledWithExactly(config, tracer)
+        t.end()
       })
 
-      it('should start capturing runtimeMetrics when configured', () => {
+      t.test('should start capturing runtimeMetrics when configured', t => {
         config.runtimeMetrics = true
 
         proxy.init()
 
         expect(runtimeMetrics.start).to.have.been.called
+        t.end()
       })
 
-      it('should expose noop metrics methods prior to initialization', () => {
+      t.test('should expose noop metrics methods prior to initialization', t => {
         proxy.dogstatsd.increment('foo')
+        t.end()
       })
 
-      it('should expose noop metrics methods after init when unconfigured', () => {
+      t.test('should expose noop metrics methods after init when unconfigured', t => {
         config.dogstatsd = null
 
         proxy.init()
 
         proxy.dogstatsd.increment('foo')
+        t.end()
       })
 
-      it('should expose real metrics methods after init when configured', () => {
+      t.test('should expose real metrics methods after init when configured', t => {
         config.dogstatsd = {
           hostname: 'localhost',
           port: 9876
@@ -426,65 +442,73 @@ describe('TracerProxy', () => {
         expect(incs[0][0]).to.equal('foo')
         expect(incs[0][1]).to.equal(10)
         expect(incs[0][2]).to.deep.equal({ alpha: 'bravo' })
+        t.end()
       })
 
-      it('should enable appsec when explicitly configured to true', () => {
+      t.test('should enable appsec when explicitly configured to true', t => {
         config.appsec = { enabled: true }
 
         proxy.init()
 
         expect(appsec.enable).to.have.been.called
+        t.end()
       })
 
-      it('should not enable appsec when explicitly configured to false', () => {
+      t.test('should not enable appsec when explicitly configured to false', t => {
         config.appsec = { enabled: false }
 
         proxy.init()
 
         expect(appsec.enable).to.not.have.been.called
+        t.end()
       })
 
-      it('should enable iast when configured', () => {
+      t.test('should enable iast when configured', t => {
         config.iast = { enabled: true }
 
         proxy.init()
 
         expect(iast.enable).to.have.been.calledOnce
+        t.end()
       })
 
-      it('should not enable iast when it is not configured', () => {
+      t.test('should not enable iast when it is not configured', t => {
         config.iast = {}
 
         proxy.init()
 
         expect(iast.enable).not.to.have.been.called
+        t.end()
       })
 
-      it('should not load the profiler when not configured', () => {
+      t.test('should not load the profiler when not configured', t => {
         config.profiling = { enabled: false }
 
         proxy.init()
 
         expect(profiler.start).to.not.have.been.called
+        t.end()
       })
 
-      it('should not load the profiler when profiling config does not exist', () => {
+      t.test('should not load the profiler when profiling config does not exist', t => {
         config.pro_fil_ing = 'invalidConfig'
 
         proxy.init()
 
         expect(profiler.start).to.not.have.been.called
+        t.end()
       })
 
-      it('should load profiler when configured', () => {
+      t.test('should load profiler when configured', t => {
         config.profiling = { enabled: 'true' }
 
         proxy.init()
 
         expect(profiler.start).to.have.been.called
+        t.end()
       })
 
-      it('should throw an error since profiler fails to be imported', () => {
+      t.test('should throw an error since profiler fails to be imported', t => {
         config.profiling = { enabled: 'true' }
 
         const ProfilerImportFailureProxy = proxyquire('../src/proxy', {
@@ -505,15 +529,17 @@ describe('TracerProxy', () => {
         sinon.assert.calledOnce(log.error)
         const expectedErr = sinon.match.instanceOf(Error).and(sinon.match.has('code', 'MODULE_NOT_FOUND'))
         sinon.assert.match(log.error.firstCall.lastArg, sinon.match(expectedErr))
+        t.end()
       })
 
-      it('should start telemetry', () => {
+      t.test('should start telemetry', t => {
         proxy.init()
 
         expect(telemetry.start).to.have.been.called
+        t.end()
       })
 
-      it('should configure standalone', () => {
+      t.test('should configure standalone', t => {
         const standalone = {
           configure: sinon.stub()
         }
@@ -536,192 +562,232 @@ describe('TracerProxy', () => {
 
         const config = AppsecSdk.firstCall.args[1]
         expect(standalone.configure).to.have.been.calledOnceWithExactly(config)
+        t.end()
       })
+      t.end()
     })
 
-    describe('trace', () => {
-      it('should call the underlying NoopTracer', () => {
+    t.test('trace', t => {
+      t.test('should call the underlying NoopTracer', t => {
         const callback = () => 'test'
         const returnValue = proxy.trace('a', 'b', callback)
 
         expect(noop.trace).to.have.been.calledWith('a', 'b', callback)
         expect(returnValue).to.equal('test')
+        t.end()
       })
 
-      it('should work without options', () => {
+      t.test('should work without options', t => {
         const callback = () => 'test'
         const returnValue = proxy.trace('a', callback)
 
         expect(noop.trace).to.have.been.calledWith('a', {}, callback)
         expect(returnValue).to.equal('test')
+        t.end()
       })
 
-      it('should ignore calls without an invalid callback', () => {
+      t.test('should ignore calls without an invalid callback', t => {
         proxy.wrap('a', 'b')
 
         expect(noop.trace).to.not.have.been.called
+        t.end()
       })
+      t.end()
     })
 
-    describe('wrap', () => {
-      it('should call the underlying NoopTracer', () => {
+    t.test('wrap', t => {
+      t.test('should call the underlying NoopTracer', t => {
         const callback = () => 'test'
         const returnValue = proxy.wrap('a', 'b', callback)
 
         expect(noop.wrap).to.have.been.calledWith('a', 'b', callback)
         expect(returnValue).to.equal('fn')
+        t.end()
       })
 
-      it('should work without options', () => {
+      t.test('should work without options', t => {
         const callback = () => 'test'
         const returnValue = proxy.wrap('a', callback)
 
         expect(noop.wrap).to.have.been.calledWith('a', {}, callback)
         expect(returnValue).to.equal('fn')
+        t.end()
       })
 
-      it('should ignore calls without an invalid callback', () => {
+      t.test('should ignore calls without an invalid callback', t => {
         const returnValue = proxy.wrap('a', 'b')
 
         expect(noop.wrap).to.not.have.been.called
         expect(returnValue).to.equal('b')
+        t.end()
       })
+      t.end()
     })
 
-    describe('startSpan', () => {
-      it('should call the underlying NoopTracer', () => {
+    t.test('startSpan', t => {
+      t.test('should call the underlying NoopTracer', t => {
         const returnValue = proxy.startSpan('a', 'b', 'c')
 
         expect(noop.startSpan).to.have.been.calledWith('a', 'b', 'c')
         expect(returnValue).to.equal('span')
+        t.end()
       })
+      t.end()
     })
 
-    describe('inject', () => {
-      it('should call the underlying NoopTracer', () => {
+    t.test('inject', t => {
+      t.test('should call the underlying NoopTracer', t => {
         const returnValue = proxy.inject('a', 'b', 'c')
 
         expect(noop.inject).to.have.been.calledWith('a', 'b', 'c')
         expect(returnValue).to.equal('noop')
+        t.end()
       })
+      t.end()
     })
 
-    describe('extract', () => {
-      it('should call the underlying NoopTracer', () => {
+    t.test('extract', t => {
+      t.test('should call the underlying NoopTracer', t => {
         const returnValue = proxy.extract('a', 'b', 'c')
 
         expect(noop.extract).to.have.been.calledWith('a', 'b', 'c')
         expect(returnValue).to.equal('spanContext')
+        t.end()
       })
+      t.end()
     })
 
-    describe('setUrl', () => {
-      it('should call the underlying DatadogTracer', () => {
+    t.test('setUrl', t => {
+      t.test('should call the underlying DatadogTracer', t => {
         const returnValue = proxy.setUrl('http://example.com')
 
         expect(noop.setUrl).to.have.been.calledWith('http://example.com')
         expect(returnValue).to.equal(proxy)
+        t.end()
       })
+      t.end()
     })
 
-    describe('baggage', () => {
-      afterEach(() => {
+    t.test('baggage', t => {
+      t.afterEach(() => {
         proxy.removeAllBaggageItems()
       })
 
-      describe('setBaggageItem', () => {
-        it('should set a baggage item', () => {
+      t.test('setBaggageItem', t => {
+        t.test('should set a baggage item', t => {
           const baggage = proxy.setBaggageItem('key', 'value')
           expect(baggage).to.deep.equal({ key: 'value' })
+          t.end()
         })
 
-        it('should merge with existing baggage items', () => {
+        t.test('should merge with existing baggage items', t => {
           proxy.setBaggageItem('key1', 'value1')
           const baggage = proxy.setBaggageItem('key2', 'value2')
           expect(baggage).to.deep.equal({ key1: 'value1', key2: 'value2' })
+          t.end()
         })
+        t.end()
       })
 
-      describe('getBaggageItem', () => {
-        it('should get a baggage item', () => {
+      t.test('getBaggageItem', t => {
+        t.test('should get a baggage item', t => {
           proxy.setBaggageItem('key', 'value')
           expect(proxy.getBaggageItem('key')).to.equal('value')
+          t.end()
         })
 
-        it('should return undefined for non-existent items', () => {
+        t.test('should return undefined for non-existent items', t => {
           expect(proxy.getBaggageItem('missing')).to.be.undefined
+          t.end()
         })
+        t.end()
       })
 
-      describe('getAllBaggageItems', () => {
-        it('should get all baggage items', () => {
+      t.test('getAllBaggageItems', t => {
+        t.test('should get all baggage items', t => {
           proxy.setBaggageItem('key1', 'value1')
           proxy.setBaggageItem('key2', 'value2')
           expect(proxy.getAllBaggageItems()).to.deep.equal({ key1: 'value1', key2: 'value2' })
+          t.end()
         })
 
-        it('should return empty object when no items exist', () => {
+        t.test('should return empty object when no items exist', t => {
           expect(proxy.getAllBaggageItems()).to.deep.equal({})
+          t.end()
         })
+        t.end()
       })
 
-      describe('removeBaggageItem', () => {
-        it('should remove a specific baggage item', () => {
+      t.test('removeBaggageItem', t => {
+        t.test('should remove a specific baggage item', t => {
           proxy.setBaggageItem('key1', 'value1')
           proxy.setBaggageItem('key2', 'value2')
           const baggage = proxy.removeBaggageItem('key1')
           expect(baggage).to.deep.equal({ key2: 'value2' })
+          t.end()
         })
 
-        it('should handle removing non-existent items', () => {
+        t.test('should handle removing non-existent items', t => {
           proxy.setBaggageItem('key', 'value')
           const baggage = proxy.removeBaggageItem('missing')
           expect(baggage).to.deep.equal({ key: 'value' })
+          t.end()
         })
+        t.end()
       })
 
-      describe('removeAllBaggageItems', () => {
-        it('should remove all baggage items', () => {
+      t.test('removeAllBaggageItems', t => {
+        t.test('should remove all baggage items', t => {
           proxy.setBaggageItem('key1', 'value1')
           proxy.setBaggageItem('key2', 'value2')
           const baggage = proxy.removeAllBaggageItems()
           expect(baggage).to.be.undefined
+          t.end()
         })
+        t.end()
       })
+      t.end()
     })
 
-    describe('appsec', () => {
-      describe('trackUserLoginSuccessEvent', () => {
-        it('should call the underlying NoopAppsecSdk method', () => {
+    t.test('appsec', t => {
+      t.test('trackUserLoginSuccessEvent', t => {
+        t.test('should call the underlying NoopAppsecSdk method', t => {
           const user = { id: 'user_id' }
           const metadata = { metakey1: 'metavalue1' }
           proxy.appsec.trackUserLoginSuccessEvent(user, metadata)
           expect(noopAppsecSdk.trackUserLoginSuccessEvent).to.have.been.calledOnceWithExactly(user, metadata)
+          t.end()
         })
+        t.end()
       })
 
-      describe('trackUserLoginFailureEvent', () => {
-        it('should call the underlying NoopAppsecSdk method', () => {
+      t.test('trackUserLoginFailureEvent', t => {
+        t.test('should call the underlying NoopAppsecSdk method', t => {
           const userId = 'user_id'
           const exists = true
           const metadata = { metakey1: 'metavalue1' }
           proxy.appsec.trackUserLoginFailureEvent(userId, exists, metadata)
           expect(noopAppsecSdk.trackUserLoginFailureEvent).to.have.been.calledOnceWithExactly(userId, exists, metadata)
+          t.end()
         })
+        t.end()
       })
 
-      describe('trackCustomEvent', () => {
-        it('should call the underlying NoopAppsecSdk method', () => {
+      t.test('trackCustomEvent', t => {
+        t.test('should call the underlying NoopAppsecSdk method', t => {
           const eventName = 'custom_event'
           const metadata = { metakey1: 'metavalue1' }
           proxy.appsec.trackCustomEvent(eventName, metadata)
           expect(noopAppsecSdk.trackCustomEvent).to.have.been.calledOnceWithExactly(eventName, metadata)
+          t.end()
         })
+        t.end()
       })
+      t.end()
     })
 
-    describe('dogstatsd', () => {
-      it('should not throw when calling noop methods', () => {
+    t.test('dogstatsd', t => {
+      t.test('should not throw when calling noop methods', t => {
         proxy.dogstatsd.increment('inc')
         expect(noopDogStatsDClient.increment).to.have.been.calledWith('inc')
         proxy.dogstatsd.decrement('dec')
@@ -732,115 +798,141 @@ describe('TracerProxy', () => {
         expect(noopDogStatsDClient.histogram).to.have.been.calledWith('hist')
         proxy.dogstatsd.flush()
         expect(noopDogStatsDClient.flush).to.have.been.called
+        t.end()
       })
+      t.end()
     })
+    t.end()
   })
 
-  describe('initialized', () => {
-    beforeEach(() => {
+  t.test('initialized', t => {
+    t.beforeEach(() => {
       proxy.init()
     })
 
-    describe('trace', () => {
-      it('should call the underlying DatadogTracer', () => {
+    t.test('trace', t => {
+      t.test('should call the underlying DatadogTracer', t => {
         const callback = () => 'test'
         const returnValue = proxy.trace('a', 'b', callback)
 
         expect(tracer.trace).to.have.been.calledWith('a', 'b', callback)
         expect(returnValue).to.equal('test')
+        t.end()
       })
 
-      it('should work without options', () => {
+      t.test('should work without options', t => {
         const callback = () => 'test'
         const returnValue = proxy.trace('a', callback)
 
         expect(tracer.trace).to.have.been.calledWith('a', {}, callback)
         expect(returnValue).to.equal('test')
+        t.end()
       })
+      t.end()
     })
 
-    describe('wrap', () => {
-      it('should call the underlying DatadogTracer', () => {
+    t.test('wrap', t => {
+      t.test('should call the underlying DatadogTracer', t => {
         const callback = () => 'test'
         const returnValue = proxy.wrap('a', 'b', callback)
 
         expect(tracer.wrap).to.have.been.calledWith('a', 'b', callback)
         expect(returnValue).to.equal('fn')
+        t.end()
       })
 
-      it('should work without options', () => {
+      t.test('should work without options', t => {
         const callback = () => 'test'
         const returnValue = proxy.wrap('a', callback)
 
         expect(tracer.wrap).to.have.been.calledWith('a', {}, callback)
         expect(returnValue).to.equal('fn')
+        t.end()
       })
+      t.end()
     })
 
-    describe('startSpan', () => {
-      it('should call the underlying DatadogTracer', () => {
+    t.test('startSpan', t => {
+      t.test('should call the underlying DatadogTracer', t => {
         const returnValue = proxy.startSpan('a', 'b', 'c')
 
         expect(tracer.startSpan).to.have.been.calledWith('a', 'b', 'c')
         expect(returnValue).to.equal('span')
+        t.end()
       })
+      t.end()
     })
 
-    describe('inject', () => {
-      it('should call the underlying DatadogTracer', () => {
+    t.test('inject', t => {
+      t.test('should call the underlying DatadogTracer', t => {
         const returnValue = proxy.inject('a', 'b', 'c')
 
         expect(tracer.inject).to.have.been.calledWith('a', 'b', 'c')
         expect(returnValue).to.equal('tracer')
+        t.end()
       })
+      t.end()
     })
 
-    describe('extract', () => {
-      it('should call the underlying DatadogTracer', () => {
+    t.test('extract', t => {
+      t.test('should call the underlying DatadogTracer', t => {
         const returnValue = proxy.extract('a', 'b', 'c')
 
         expect(tracer.extract).to.have.been.calledWith('a', 'b', 'c')
         expect(returnValue).to.equal('spanContext')
+        t.end()
       })
+      t.end()
     })
 
-    describe('setUrl', () => {
-      it('should call the underlying DatadogTracer', () => {
+    t.test('setUrl', t => {
+      t.test('should call the underlying DatadogTracer', t => {
         const returnValue = proxy.setUrl('http://example.com')
 
         expect(tracer.setUrl).to.have.been.calledWith('http://example.com')
         expect(returnValue).to.equal(proxy)
+        t.end()
       })
+      t.end()
     })
 
-    describe('appsec', () => {
-      describe('trackUserLoginSuccessEvent', () => {
-        it('should call the underlying AppsecSdk method', () => {
+    t.test('appsec', t => {
+      t.test('trackUserLoginSuccessEvent', t => {
+        t.test('should call the underlying AppsecSdk method', t => {
           const user = { id: 'user_id' }
           const metadata = { metakey1: 'metavalue1' }
           proxy.appsec.trackUserLoginSuccessEvent(user, metadata)
           expect(appsecSdk.trackUserLoginSuccessEvent).to.have.been.calledOnceWithExactly(user, metadata)
+          t.end()
         })
+        t.end()
       })
 
-      describe('trackUserLoginFailureEvent', () => {
-        it('should call the underlying AppsecSdk method', () => {
+      t.test('trackUserLoginFailureEvent', t => {
+        t.test('should call the underlying AppsecSdk method', t => {
           const userId = 'user_id'
           const exists = true
           const metadata = { metakey1: 'metavalue1' }
           proxy.appsec.trackUserLoginFailureEvent(userId, exists, metadata)
           expect(appsecSdk.trackUserLoginFailureEvent).to.have.been.calledOnceWithExactly(userId, exists, metadata)
+          t.end()
         })
+        t.end()
       })
 
-      describe('trackCustomEvent', () => {
-        it('should call the underlying AppsecSdk method', () => {
+      t.test('trackCustomEvent', t => {
+        t.test('should call the underlying AppsecSdk method', t => {
           const eventName = 'custom_event'
           const metadata = { metakey1: 'metavalue1' }
           proxy.appsec.trackCustomEvent(eventName, metadata)
           expect(appsecSdk.trackCustomEvent).to.have.been.calledOnceWithExactly(eventName, metadata)
+          t.end()
         })
+        t.end()
       })
+      t.end()
     })
+    t.end()
   })
+  t.end()
 })

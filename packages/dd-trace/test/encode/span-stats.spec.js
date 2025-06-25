@@ -1,6 +1,7 @@
 'use strict'
 
-require('../setup/tap')
+const t = require('tap')
+require('../setup/core')
 
 const { expect } = require('chai')
 const msgpack = require('@msgpack/msgpack')
@@ -14,7 +15,7 @@ const {
   DEFAULT_SERVICE_NAME
 } = require('../../src/encode/tags-processors')
 
-describe('span-stats-encode', () => {
+t.test('span-stats-encode', t => {
   let encoder
   let writer
   let logger
@@ -22,7 +23,7 @@ describe('span-stats-encode', () => {
   let bucket
   let stat
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     logger = {
       debug: sinon.stub()
     }
@@ -69,16 +70,17 @@ describe('span-stats-encode', () => {
     }
   })
 
-  it('should encode to msgpack', () => {
+  t.test('should encode to msgpack', t => {
     encoder.encode(stats)
 
     const buffer = encoder.makePayload()
     const decoded = msgpack.decode(buffer)
 
     expect(decoded).to.deep.equal(stats)
+    t.end()
   })
 
-  it('should report its count', () => {
+  t.test('should report its count', t => {
     expect(encoder.count()).to.equal(0)
 
     encoder.encode(stats)
@@ -88,16 +90,18 @@ describe('span-stats-encode', () => {
     encoder.encode(stats)
 
     expect(encoder.count()).to.equal(2)
+    t.end()
   })
 
-  it('should reset after making a payload', () => {
+  t.test('should reset after making a payload', t => {
     encoder.encode(stats)
     encoder.makePayload()
 
     expect(encoder.count()).to.equal(0)
+    t.end()
   })
 
-  it('should truncate name, service, type and resource when they are too long', () => {
+  t.test('should truncate name, service, type and resource when they are too long', t => {
     const tooLongString = new Array(500).fill('a').join('')
     const resourceTooLongString = new Array(10000).fill('a').join('')
     const statsToTruncate = {
@@ -129,9 +133,10 @@ describe('span-stats-encode', () => {
     expect(decodedStat.Service.length).to.equal(MAX_SERVICE_LENGTH)
     // ellipsis is added
     expect(decodedStat.Resource.length).to.equal(MAX_RESOURCE_NAME_LENGTH + 3)
+    t.end()
   })
 
-  it('should fallback to a default name and service if they are not present', () => {
+  t.test('should fallback to a default name and service if they are not present', t => {
     const statsToTruncate = {
       ...stats,
       Stats: [
@@ -157,5 +162,7 @@ describe('span-stats-encode', () => {
     expect(decodedStat)
     expect(decodedStat.Service).to.equal(DEFAULT_SERVICE_NAME)
     expect(decodedStat.Name).to.equal(DEFAULT_SPAN_NAME)
+    t.end()
   })
+  t.end()
 })

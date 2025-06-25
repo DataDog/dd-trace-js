@@ -1,6 +1,7 @@
 'use strict'
 
-require('./setup/tap')
+const t = require('tap')
+require('./setup/core')
 
 const { isTrue, isFalse, globMatch } = require('../src/util')
 
@@ -35,8 +36,8 @@ const NONMATCH_CASES = [
   { pattern: 'test?test', subject: 'test123test' }
 ]
 
-describe('util', () => {
-  it('isTrue works', () => {
+t.test('util', t => {
+  t.test('isTrue works', t => {
     TRUES.forEach((v) => {
       expect(isTrue(v)).to.equal(true)
       expect(isTrue(String(v))).to.equal(true)
@@ -45,9 +46,10 @@ describe('util', () => {
       expect(isTrue(v)).to.equal(false)
       expect(isTrue(String(v))).to.equal(false)
     })
+    t.end()
   })
 
-  it('isFalse works', () => {
+  t.test('isFalse works', t => {
     FALSES.forEach((v) => {
       expect(isFalse(v)).to.equal(true)
       expect(isFalse(String(v))).to.equal(true)
@@ -56,9 +58,10 @@ describe('util', () => {
       expect(isFalse(v)).to.equal(false)
       expect(isFalse(String(v))).to.equal(false)
     })
+    t.end()
   })
 
-  it('globMatch works', () => {
+  t.test('globMatch works', t => {
     MATCH_CASES.forEach(({ subject, pattern }) => {
       expect(globMatch(pattern, subject)).to.equal(true)
     })
@@ -66,5 +69,7 @@ describe('util', () => {
     NONMATCH_CASES.forEach(({ subject, pattern }) => {
       expect(globMatch(pattern, subject)).to.equal(false)
     })
+    t.end()
   })
+  t.end()
 })

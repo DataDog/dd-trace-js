@@ -1,33 +1,36 @@
 'use strict'
 
-require('./setup/tap')
+const t = require('tap')
+require('./setup/core')
 
 const SpanContext = require('../src/opentracing/span_context')
 const id = require('../src/id')
 
-describe('Sampler', () => {
+t.test('Sampler', t => {
   let Sampler
   let sampler
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     sinon.stub(Math, 'random')
     Sampler = require('../src/sampler')
   })
 
-  afterEach(() => {
+  t.afterEach(() => {
     Math.random.restore()
   })
 
-  describe('rate', () => {
-    it('should return the sample rate', () => {
+  t.test('rate', t => {
+    t.test('should return the sample rate', t => {
       sampler = new Sampler(0.5)
 
       expect(sampler.rate()).to.equal(0.5)
+      t.end()
     })
+    t.end()
   })
 
-  describe('threshold', () => {
-    it('should calculate the correct threshold for a given rate', () => {
+  t.test('threshold', t => {
+    t.test('should calculate the correct threshold for a given rate', t => {
       const rates = [
         [0.2, 3689348814741910528n],
         [0.25, 4611686018427387904n],
@@ -42,30 +45,35 @@ describe('Sampler', () => {
         sampler = new Sampler(rate)
         expect(sampler.threshold).to.equal(expected)
       })
+      t.end()
     })
+    t.end()
   })
 
-  describe('isSampled', () => {
-    it('should always sample when rate is 1', () => {
+  t.test('isSampled', t => {
+    t.test('should always sample when rate is 1', t => {
       sampler = new Sampler(1)
 
       expect(sampler.isSampled(new SpanContext({ traceId: id() }))).to.be.true
+      t.end()
     })
 
-    it('should never sample when rate is 0', () => {
+    t.test('should never sample when rate is 0', t => {
       sampler = new Sampler(0)
 
       expect(sampler.isSampled(new SpanContext({ traceId: id() }))).to.be.false
+      t.end()
     })
 
-    it('should sample according to the rate', () => {
+    t.test('should sample according to the rate', t => {
       sampler = new Sampler(0.1234)
 
       expect(sampler.isSampled(new SpanContext({ traceId: id('8135292307740797052', 10) }))).to.be.true
       expect(sampler.isSampled(new SpanContext({ traceId: id('2263640730249415707', 10) }))).to.be.false
+      t.end()
     })
 
-    it('should sample according to different rates', () => {
+    t.test('should sample according to different rates', t => {
       const idsAndRates = [
         [id('9223372036854775808', 10), 0.5, true],
         [id('9223372036854775808', 10), 0.25, false],
@@ -102,6 +110,9 @@ describe('Sampler', () => {
         const sampler = new Sampler(rate)
         expect(sampler.isSampled(new SpanContext({ traceId: id }))).to.equal(expected)
       })
+      t.end()
     })
+    t.end()
   })
+  t.end()
 })

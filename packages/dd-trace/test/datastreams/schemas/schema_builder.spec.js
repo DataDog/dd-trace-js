@@ -1,6 +1,7 @@
 'use strict'
 
-require('../../setup/tap')
+const t = require('tap')
+require('../../setup/core')
 
 const { SchemaBuilder } = require('../../../src/datastreams/schemas/schema_builder')
 const { expect } = require('chai')
@@ -16,8 +17,8 @@ class Iterator {
   }
 }
 
-describe('SchemaBuilder', () => {
-  it('should convert schema correctly to JSON', () => {
+t.test('SchemaBuilder', t => {
+  t.test('should convert schema correctly to JSON', t => {
     const builder = new SchemaBuilder(new Iterator())
 
     const shouldExtractPerson = builder.shouldExtractSchema('person', 0)
@@ -53,5 +54,7 @@ describe('SchemaBuilder', () => {
     expect(shouldExtractAddress).to.be.true
     expect(shouldExtractPerson2).to.be.false
     expect(shouldExtractTooDeep).to.be.false
+    t.end()
   })
+  t.end()
 })

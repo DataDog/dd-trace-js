@@ -2,20 +2,21 @@
 
 /* eslint-disable no-console */
 
-require('./setup/tap')
+const t = require('tap')
+require('./setup/core')
 
 const http = require('http')
 const path = require('path')
 const os = require('os')
 const { exec } = require('child_process')
 
-describe('Custom Metrics', () => {
+t.test('Custom Metrics', t => {
   let httpServer
   let httpPort
   let metricsData
   let sockets
 
-  beforeEach((done) => {
+  t.beforeEach(async () => {
     sockets = []
     httpServer = http.createServer((req, res) => {
       let httpData = ''
@@ -30,32 +31,33 @@ describe('Custom Metrics', () => {
     }).listen(0, () => {
       httpPort = httpServer.address().port
       if (os.platform() === 'win32') {
-        done()
+        t.end()
         return
       }
-      done()
+      t.end()
     })
     httpServer.on('connection', socket => sockets.push(socket))
   })
 
-  afterEach(() => {
+  t.afterEach(() => {
     httpServer.close()
     sockets.forEach(socket => socket.destroy())
   })
 
-  it('should send metrics before process exit', (done) => {
+  t.test('should send metrics before process exit', (t) => {
     exec(`${process.execPath} ${path.join(__dirname, 'custom-metrics-app.js')}`, {
       env: {
         DD_TRACE_AGENT_URL: `http://127.0.0.1:${httpPort}`
       }
     }, (err, stdout, stderr) => {
-      if (err) return done(err)
+      t.error(err)
       if (stdout) console.log(stdout)
       if (stderr) console.error(stderr)
 
       expect(metricsData.split('#')[0]).to.equal('page.views.data:1|c|')
 
-      done()
+      t.end()
     })
   })
+  t.end()
 })

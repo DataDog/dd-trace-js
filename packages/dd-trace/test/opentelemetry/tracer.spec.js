@@ -1,6 +1,7 @@
 'use strict'
 
-require('../setup/tap')
+const t = require('tap')
+require('../setup/core')
 
 const { expect } = require('chai')
 
@@ -27,17 +28,18 @@ function isChildOf (child, parent) {
   expect(childContext._parentId).to.eql(parentContext._spanId)
 }
 
-describe('OTel Tracer', () => {
-  it('should get resource', () => {
+t.test('OTel Tracer', t => {
+  t.test('should get resource', t => {
     const tracerProvider = new TracerProvider({
       resource: 'some resource'
     })
 
     const tracer = new Tracer({}, {}, tracerProvider)
     expect(tracer.resource).to.equal(tracerProvider.resource)
+    t.end()
   })
 
-  it('should get active span processor', () => {
+  t.test('should get active span processor', t => {
     const tracerProvider = new TracerProvider()
     tracerProvider.getActiveSpanProcessor = sinon.stub()
 
@@ -45,9 +47,10 @@ describe('OTel Tracer', () => {
     const processor = tracer.getActiveSpanProcessor()
     expect(tracerProvider.getActiveSpanProcessor).to.have.been.calledOnce
     expect(processor).to.equal(tracerProvider.getActiveSpanProcessor())
+    t.end()
   })
 
-  it('should create a span', () => {
+  t.test('should create a span', t => {
     const tracerProvider = new TracerProvider()
     const otelTracer = new Tracer({}, {}, tracerProvider)
 
@@ -57,9 +60,10 @@ describe('OTel Tracer', () => {
     const ddSpan = span._ddSpan
     expect(ddSpan).to.be.an.instanceOf(DatadogSpan)
     expect(ddSpan._name).to.be.equal('name')
+    t.end()
   })
 
-  it('should create a span with attributes (tags)', () => {
+  t.test('should create a span with attributes (tags)', t => {
     const tracerProvider = new TracerProvider()
     const otelTracer = new Tracer({}, {}, tracerProvider)
 
@@ -71,9 +75,10 @@ describe('OTel Tracer', () => {
 
     const ddSpanContext = span._ddSpan.context()
     expect(ddSpanContext._tags).to.have.property('foo', 'bar')
+    t.end()
   })
 
-  it('should pass through span kind', () => {
+  t.test('should pass through span kind', t => {
     const tracerProvider = new TracerProvider()
     const otelTracer = new Tracer({}, {}, tracerProvider)
 
@@ -93,9 +98,10 @@ describe('OTel Tracer', () => {
 
       expect(span.kind).to.equal(output)
     }
+    t.end()
   })
 
-  it('should use given start time', () => {
+  t.test('should use given start time', t => {
     const tracerProvider = new TracerProvider()
     const otelTracer = new Tracer({}, {}, tracerProvider)
 
@@ -118,9 +124,10 @@ describe('OTel Tracer', () => {
       })
       expect(span.startTime).to.eql(output)
     }
+    t.end()
   })
 
-  it('should create an active span', () => {
+  t.test('should create an active span', t => {
     const tracerProvider = new TracerProvider()
     tracerProvider.register()
     const otelTracer = new Tracer({}, {}, tracerProvider)
@@ -129,9 +136,10 @@ describe('OTel Tracer', () => {
       expect(span).to.be.an.instanceOf(Span)
       expect(span._ddSpan).to.equal(tracer.scope().active())
     })
+    t.end()
   })
 
-  it('should auto-nest otel spans in dd spans', () => {
+  t.test('should auto-nest otel spans in dd spans', t => {
     const tracerProvider = new TracerProvider()
     tracerProvider.register()
     const otelTracer = new Tracer({}, {}, tracerProvider)
@@ -140,9 +148,10 @@ describe('OTel Tracer', () => {
       const otelSpan = otelTracer.startSpan('name')
       isChildOf(otelSpan._ddSpan, ddSpan)
     })
+    t.end()
   })
 
-  it('should auto-nest dd spans in otel spans', () => {
+  t.test('should auto-nest dd spans in otel spans', t => {
     const tracerProvider = new TracerProvider()
     tracerProvider.register()
     const otelTracer = new Tracer({}, {}, tracerProvider)
@@ -153,9 +162,10 @@ describe('OTel Tracer', () => {
         isChildOf(ddSpan, otelSpan._ddSpan)
       })
     })
+    t.end()
   })
 
-  it('should auto-nest otel spans within other otel spans', () => {
+  t.test('should auto-nest otel spans within other otel spans', t => {
     const tracerProvider = new TracerProvider()
     tracerProvider.register()
     const otelTracer = new Tracer({}, {}, tracerProvider)
@@ -164,9 +174,10 @@ describe('OTel Tracer', () => {
       const inner = otelTracer.startSpan('name')
       isChildOf(inner._ddSpan, outer._ddSpan)
     })
+    t.end()
   })
 
-  it('should make manual root span', () => {
+  t.test('should make manual root span', t => {
     const tracerProvider = new TracerProvider()
     tracerProvider.register()
     const otelTracer = new Tracer({}, {}, tracerProvider)
@@ -182,9 +193,10 @@ describe('OTel Tracer', () => {
       expect(childContext.toTraceId()).to.not.equal(parentContext.toTraceId())
       expect(childContext._parentId).to.not.eql(parentContext._spanId)
     })
+    t.end()
   })
 
-  it('test otel context span parenting', () => {
+  t.test('test otel context span parenting', t => {
     const tracerProvider = new TracerProvider()
     tracerProvider.register()
     const otelTracer = new Tracer({}, {}, tracerProvider)
@@ -213,9 +225,10 @@ describe('OTel Tracer', () => {
       })
       orphan1.end()
     })
+    t.end()
   })
 
-  it('test otel context mixed span parenting', () => {
+  t.test('test otel context mixed span parenting', t => {
     const tracerProvider = new TracerProvider()
     tracerProvider.register()
     const otelTracer = new Tracer({}, {}, tracerProvider)
@@ -241,5 +254,7 @@ describe('OTel Tracer', () => {
         })
       })
     })
+    t.end()
   })
+  t.end()
 })

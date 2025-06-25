@@ -1,18 +1,19 @@
 'use strict'
 
-require('../../../../dd-trace/test/setup/tap')
+const t = require('tap')
+require('../../../../dd-trace/test/setup/core')
 const proxyquire = require('proxyquire')
 const { expect } = require('chai')
 const nock = require('nock')
 
 const tracerLogger = require('../../log')
 
-describe('External Logger', () => {
+t.test('External Logger', t => {
   let externalLogger
   let interceptor
   let errorLog
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     errorLog = sinon.spy(tracerLogger, 'error')
 
     const { ExternalLogger } = proxyquire('../src', {
@@ -31,12 +32,12 @@ describe('External Logger', () => {
     })
   })
 
-  afterEach(() => {
-    interceptor.done()
+  t.afterEach(() => {
+    interceptor.t.end()
     errorLog.restore()
   })
 
-  it('should properly encode the log message', (done) => {
+  t.test('should properly encode the log message', (t) => {
     let request
     const currentTime = Date.now()
 
@@ -78,15 +79,17 @@ describe('External Logger', () => {
         expect(request[0]).to.have.property('ddsource', 'logging_from_space')
         expect(request[0]).to.have.property('ddtags', 'env:external_logger,version:1.2.3,service:external')
       } catch (e) {
-        done(e)
+        t.error(e)
+        t.end()
         return
       }
 
-      done(err)
+      t.error(err)
+      t.end()
     })
   })
 
-  it('should empty the log queue when calling flush', (done) => {
+  t.test('should empty the log queue when calling flush', (t) => {
     interceptor = nock('https://http-intake.logs.datadoghq.com:443')
       .post('/api/v2/logs')
       .reply(202, {})
@@ -96,11 +99,12 @@ describe('External Logger', () => {
 
     externalLogger.flush((err) => {
       expect(externalLogger.queue.length).to.equal(0)
-      done(err)
+      t.error(err)
+      t.end()
     })
   })
 
-  it('tracer logger should handle error response codes from Logs API', (done) => {
+  t.test('tracer logger should handle error response codes from Logs API', (t) => {
     interceptor = nock('https://http-intake.logs.datadoghq.com:443')
       .post('/api/v2/logs')
       .reply(400, {})
@@ -111,11 +115,11 @@ describe('External Logger', () => {
       expect(errorLog.getCall(0).args[0]).to.be.equal(
         'failed to send 1 logs, received response code 400'
       )
-      done()
+      t.end()
     })
   })
 
-  it('tracer logger should handle simulated network error', (done) => {
+  t.test('tracer logger should handle simulated network error', (t) => {
     interceptor = nock('https://http-intake.logs.datadoghq.com:443')
       .post('/api/v2/logs')
       .replyWithError('missing API key')
@@ -126,11 +130,11 @@ describe('External Logger', () => {
       expect(errorLog.getCall(0).args[0]).to.be.equal(
         'failed to send 1 log(s), with error missing API key'
       )
-      done()
+      t.end()
     })
   })
 
-  it('causes a flush when exceeding log queue limit', (done) => {
+  t.test('causes a flush when exceeding log queue limit', (t) => {
     const flusher = sinon.stub(externalLogger, 'flush')
 
     for (let i = 0; i < 10; i++) {
@@ -142,6 +146,7 @@ describe('External Logger', () => {
     expect(flusher).to.have.been.called
 
     flusher.restore()
-    done()
+    t.end()
   })
+  t.end()
 })

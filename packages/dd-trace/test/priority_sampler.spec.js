@@ -1,6 +1,7 @@
 'use strict'
 
-require('./setup/tap')
+const t = require('tap')
+require('./setup/core')
 
 const ext = require('../../../ext')
 
@@ -25,7 +26,7 @@ const AUTO_REJECT = ext.priority.AUTO_REJECT
 const AUTO_KEEP = ext.priority.AUTO_KEEP
 const USER_KEEP = ext.priority.USER_KEEP
 
-describe('PrioritySampler', () => {
+t.test('PrioritySampler', t => {
   let PrioritySampler
   let prioritySampler
   let SamplingRule
@@ -34,7 +35,7 @@ describe('PrioritySampler', () => {
   let context
   let span
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     context = {
       _tags: {
         'service.name': 'test',
@@ -83,49 +84,57 @@ describe('PrioritySampler', () => {
     prioritySampler = new PrioritySampler('test')
   })
 
-  describe('validate', () => {
-    it('should accept valid values', () => {
+  t.test('validate', t => {
+    t.test('should accept valid values', t => {
       expect(prioritySampler.validate(USER_REJECT)).to.be.true
       expect(prioritySampler.validate(AUTO_REJECT)).to.be.true
       expect(prioritySampler.validate(AUTO_KEEP)).to.be.true
       expect(prioritySampler.validate(USER_KEEP)).to.be.true
+      t.end()
     })
 
-    it('should not accept invalid values', () => {
+    t.test('should not accept invalid values', t => {
       expect(prioritySampler.validate('foo')).to.be.false
       expect(prioritySampler.validate(0.5)).to.be.false
       expect(prioritySampler.validate({})).to.be.false
+      t.end()
     })
+    t.end()
   })
 
-  describe('isSampled', () => {
-    it('should sample by default', () => {
+  t.test('isSampled', t => {
+    t.test('should sample by default', t => {
       expect(prioritySampler.isSampled(span)).to.be.true
+      t.end()
     })
 
-    it('should accept a span context', () => {
+    t.test('should accept a span context', t => {
       expect(prioritySampler.isSampled(context)).to.be.true
+      t.end()
     })
+    t.end()
   })
 
-  describe('sample', () => {
-    it('should set the correct priority by default', () => {
+  t.test('sample', t => {
+    t.test('should set the correct priority by default', t => {
       prioritySampler.sample(span)
 
       expect(context._sampling.priority).to.equal(AUTO_KEEP)
       expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_DEFAULT)
+      t.end()
     })
 
-    it('should set the priority from the corresponding tag', () => {
+    t.test('should set the priority from the corresponding tag', t => {
       context._tags[SAMPLING_PRIORITY] = `${USER_KEEP}`
 
       prioritySampler.sample(span)
 
       expect(context._sampling.priority).to.equal(USER_KEEP)
       expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_MANUAL)
+      t.end()
     })
 
-    it('should freeze the sampling priority once set', () => {
+    t.test('should freeze the sampling priority once set', t => {
       prioritySampler.sample(span)
 
       context._tags[SAMPLING_PRIORITY] = `${USER_KEEP}`
@@ -134,52 +143,58 @@ describe('PrioritySampler', () => {
 
       expect(context._sampling.priority).to.equal(AUTO_KEEP)
       expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_DEFAULT)
+      t.end()
     })
 
-    it('should accept a span context', () => {
+    t.test('should accept a span context', t => {
       prioritySampler.sample(context)
 
       expect(context._sampling.priority).to.equal(AUTO_KEEP)
       expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_DEFAULT)
+      t.end()
     })
 
-    it('should support manual keep', () => {
+    t.test('should support manual keep', t => {
       context._tags[MANUAL_KEEP] = undefined
 
       prioritySampler.sample(context)
 
       expect(context._sampling.priority).to.equal(USER_KEEP)
       expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_MANUAL)
+      t.end()
     })
 
-    it('should support manual drop', () => {
+    t.test('should support manual drop', t => {
       context._tags[MANUAL_DROP] = undefined
 
       prioritySampler.sample(context)
 
       expect(context._sampling.priority).to.equal(USER_REJECT)
       expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_MANUAL)
+      t.end()
     })
 
-    it('should support opentracing keep', () => {
+    t.test('should support opentracing keep', t => {
       context._tags['sampling.priority'] = 1
 
       prioritySampler.sample(context)
 
       expect(context._sampling.priority).to.equal(USER_KEEP)
       expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_MANUAL)
+      t.end()
     })
 
-    it('should support opentracing drop', () => {
+    t.test('should support opentracing drop', t => {
       context._tags['sampling.priority'] = 0
 
       prioritySampler.sample(context)
 
       expect(context._sampling.priority).to.equal(USER_REJECT)
       expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_MANUAL)
+      t.end()
     })
 
-    it('should support a global sample rate', () => {
+    t.test('should support a global sample rate', t => {
       prioritySampler = new PrioritySampler('test', { sampleRate: 0.5 })
       prioritySampler.sample(context)
 
@@ -191,9 +206,10 @@ describe('PrioritySampler', () => {
 
       expect(context._sampling).to.have.property('priority', USER_REJECT)
       expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_RULE)
+      t.end()
     })
 
-    it('should support a rule-based sampling', () => {
+    t.test('should support a rule-based sampling', t => {
       prioritySampler = new PrioritySampler('test', {
         rules: [
           { sampleRate: 0, service: 'foo', resource: /res.*/ },
@@ -204,9 +220,10 @@ describe('PrioritySampler', () => {
 
       expect(context._sampling).to.have.property('priority', USER_KEEP)
       expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_RULE)
+      t.end()
     })
 
-    it('should support a customer-defined remote configuration sampling', () => {
+    t.test('should support a customer-defined remote configuration sampling', t => {
       prioritySampler = new PrioritySampler('test', {
         rules: [
           { sampleRate: 1, service: 'test', resource: /res.*/, provenance: 'customer' }
@@ -216,9 +233,10 @@ describe('PrioritySampler', () => {
 
       expect(context._sampling).to.have.property('priority', USER_KEEP)
       expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_REMOTE_USER)
+      t.end()
     })
 
-    it('should support a dynamic remote configuration sampling', () => {
+    t.test('should support a dynamic remote configuration sampling', t => {
       prioritySampler = new PrioritySampler('test', {
         rules: [
           { sampleRate: 0, service: 'test', resource: /res.*/, provenance: 'dynamic' }
@@ -228,9 +246,10 @@ describe('PrioritySampler', () => {
 
       expect(context._sampling).to.have.property('priority', USER_REJECT)
       expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_REMOTE_DYNAMIC)
+      t.end()
     })
 
-    it('should validate JSON rule into an array', () => {
+    t.test('should validate JSON rule into an array', t => {
       context._name = 'test'
       context._tags['service.name'] = 'test'
 
@@ -243,25 +262,28 @@ describe('PrioritySampler', () => {
 
       expect(prioritySampler.sample(context)).to.not.throw
       expect(context._sampling).to.have.property('priority', USER_REJECT)
+      t.end()
     })
 
-    it('should validate and ignore non-JSON sampling rules', () => {
+    t.test('should validate and ignore non-JSON sampling rules', t => {
       prioritySampler = new PrioritySampler('test', {
         rules: 5
       })
 
       expect(prioritySampler.sample(context)).to.not.throw
       expect(context._sampling).to.have.property('priority', AUTO_KEEP)
+      t.end()
     })
 
-    it('should default to no rules if rules are set to null', () => {
+    t.test('should default to no rules if rules are set to null', t => {
       prioritySampler = new PrioritySampler('test', { rules: null })
 
       prioritySampler.sample(context)
       expect(context._sampling).to.have.property('priority', AUTO_KEEP)
+      t.end()
     })
 
-    it('should fallback to the global sample rate', () => {
+    t.test('should fallback to the global sample rate', t => {
       context._name = 'foo'
 
       prioritySampler = new PrioritySampler('test', {
@@ -274,9 +296,10 @@ describe('PrioritySampler', () => {
 
       expect(context._sampling).to.have.property('priority', USER_KEEP)
       expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_RULE)
+      t.end()
     })
 
-    it('should support a rate limit', () => {
+    t.test('should support a rate limit', t => {
       prioritySampler = new PrioritySampler('test', {
         sampleRate: 1,
         rateLimit: 1
@@ -292,9 +315,10 @@ describe('PrioritySampler', () => {
 
       expect(context._sampling).to.have.property('priority', USER_REJECT)
       expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_RULE)
+      t.end()
     })
 
-    it('should support a global rate limit', () => {
+    t.test('should support a global rate limit', t => {
       prioritySampler = new PrioritySampler('test', {
         sampleRate: 1,
         rateLimit: 1,
@@ -315,9 +339,10 @@ describe('PrioritySampler', () => {
 
       expect(context._sampling).to.have.property('priority', USER_REJECT)
       expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_RULE)
+      t.end()
     })
 
-    it('should support disabling the rate limit', () => {
+    t.test('should support disabling the rate limit', t => {
       prioritySampler = new PrioritySampler('test', {
         sampleRate: 1,
         rateLimit: -1
@@ -333,15 +358,17 @@ describe('PrioritySampler', () => {
 
       expect(context._sampling).to.have.property('priority', USER_KEEP)
       expect(context._sampling.mechanism).to.equal(3)
+      t.end()
     })
 
-    it('should add metrics for agent sample rate', () => {
+    t.test('should add metrics for agent sample rate', t => {
       prioritySampler.sample(span)
 
       expect(context._trace).to.have.property('_dd.agent_psr', 1)
+      t.end()
     })
 
-    it('should add metrics for rule sample rate', () => {
+    t.test('should add metrics for rule sample rate', t => {
       prioritySampler = new PrioritySampler('test', {
         sampleRate: 0
       })
@@ -349,9 +376,10 @@ describe('PrioritySampler', () => {
 
       expect(context._trace).to.have.property('_dd.rule_psr', 0)
       expect(context._trace).to.not.have.property('_dd.limit_psr')
+      t.end()
     })
 
-    it('should add metrics for rate limiter sample rate', () => {
+    t.test('should add metrics for rate limiter sample rate', t => {
       prioritySampler = new PrioritySampler('test', {
         sampleRate: 0.5,
         rateLimit: 1
@@ -360,60 +388,70 @@ describe('PrioritySampler', () => {
 
       expect(context._trace).to.have.property('_dd.rule_psr', 0.5)
       expect(context._trace).to.have.property('_dd.limit_psr', 1)
+      t.end()
     })
 
-    it('should ignore empty span', () => {
+    t.test('should ignore empty span', t => {
       expect(() => {
         prioritySampler.sample()
       }).to.not.throw()
       prioritySampler.sample()
+      t.end()
     })
 
-    it('should support manual only sampling', () => {
+    t.test('should support manual only sampling', t => {
       prioritySampler.sample(span, false)
 
       expect(context._sampling.priority).to.be.undefined
       expect(context._sampling.mechanism).to.be.undefined
+      t.end()
     })
 
-    it('should support noop spans', () => {
+    t.test('should support noop spans', t => {
       context._trace.started.length = 0
 
       prioritySampler.sample(span)
 
       expect(context._sampling.priority).to.be.undefined
       expect(context._sampling.mechanism).to.be.undefined
+      t.end()
     })
 
-    it('should set the decision maker tag', () => {
+    t.test('should set the decision maker tag', t => {
       prioritySampler.sample(span)
 
       expect(context._trace.tags).to.have.property(DECISION_MAKER_KEY, '-0')
+      t.end()
     })
 
-    it('should not alter the decision maker tag', () => {
+    t.test('should not alter the decision maker tag', t => {
       context._trace.tags[DECISION_MAKER_KEY] = '-3'
       context._sampling.priority = 1
 
       prioritySampler.sample(span)
 
       expect(context._trace.tags).to.have.property(DECISION_MAKER_KEY, '-3')
+      t.end()
     })
 
-    it.skip('should remove the decision maker tag when dropping the trace', () => { })
+    t.skip('should remove the decision maker tag when dropping the trace', t => {
+      t.end()
+    })
 
-    it('should not crash on prototype-free tags objects', () => {
+    t.test('should not crash on prototype-free tags objects', t => {
       context._tags = Object.create(null)
 
       prioritySampler.sample(span)
+      t.end()
     })
+    t.end()
   })
 
-  describe('update', () => {
+  t.test('update', t => {
     let rootSpan
     let rootContext
 
-    beforeEach(() => {
+    t.beforeEach(() => {
       rootContext = {
         ...context,
         _tags: {
@@ -428,7 +466,7 @@ describe('PrioritySampler', () => {
       rootContext._trace.started.unshift(rootSpan)
     })
 
-    it('should update the default rate', () => {
+    t.test('should update the default rate', t => {
       prioritySampler.update({
         'service:,env:': AUTO_REJECT
       })
@@ -437,9 +475,10 @@ describe('PrioritySampler', () => {
 
       expect(context._sampling.priority).to.equal(AUTO_REJECT)
       expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_AGENT)
+      t.end()
     })
 
-    it('should update service rates', () => {
+    t.test('should update service rates', t => {
       rootContext._tags[SERVICE_NAME] = 'foo'
       context._tags[SERVICE_NAME] = 'bar'
 
@@ -451,45 +490,52 @@ describe('PrioritySampler', () => {
 
       expect(context._sampling.priority).to.equal(AUTO_REJECT)
       expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_AGENT)
+      t.end()
     })
+    t.end()
   })
 
-  describe('setPriority', () => {
-    it('should set sampling priority and default mechanism', () => {
+  t.test('setPriority', t => {
+    t.test('should set sampling priority and default mechanism', t => {
       prioritySampler.setPriority(span, USER_KEEP)
 
       expect(context._sampling.priority).to.equal(USER_KEEP)
       expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_MANUAL)
+      t.end()
     })
 
-    it('should set sampling priority and mechanism', () => {
+    t.test('should set sampling priority and mechanism', t => {
       prioritySampler.setPriority(span, USER_KEEP, ASM)
 
       expect(context._sampling.priority).to.equal(USER_KEEP)
       expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_APPSEC)
+      t.end()
     })
 
-    it('should filter out invalid priorities', () => {
+    t.test('should filter out invalid priorities', t => {
       prioritySampler.setPriority(span, 42)
 
       expect(context._sampling.priority).to.be.undefined
       expect(context._sampling.mechanism).to.be.undefined
+      t.end()
     })
 
-    it('should add decision maker tag if not set before', () => {
+    t.test('should add decision maker tag if not set before', t => {
       prioritySampler.setPriority(span, USER_KEEP, ASM)
 
       expect(context._trace.tags[DECISION_MAKER_KEY]).to.equal('-5')
+      t.end()
     })
 
-    it('should set sampling priority if no product is provided', () => {
+    t.test('should set sampling priority if no product is provided', t => {
       prioritySampler.setPriority(span, USER_KEEP)
 
       expect(context._sampling.priority).to.equal(USER_KEEP)
       expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_MANUAL)
+      t.end()
     })
 
-    it('should override previous priority but mantain previous decision maker tag', () => {
+    t.test('should override previous priority but mantain previous decision maker tag', t => {
       prioritySampler.sample(span)
 
       prioritySampler.setPriority(span, USER_KEEP, ASM)
@@ -497,9 +543,10 @@ describe('PrioritySampler', () => {
       expect(context._sampling.priority).to.equal(USER_KEEP)
       expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_APPSEC)
       expect(context._trace.tags[DECISION_MAKER_KEY]).to.equal('-0')
+      t.end()
     })
 
-    it('should ignore noop spans', () => {
+    t.test('should ignore noop spans', t => {
       context._trace.started[0] = undefined // noop
 
       prioritySampler.setPriority(span, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
@@ -507,17 +554,20 @@ describe('PrioritySampler', () => {
       expect(context._sampling.priority).to.undefined
       expect(context._sampling.mechanism).to.undefined
       expect(context._trace.tags[DECISION_MAKER_KEY]).to.undefined
+      t.end()
     })
+    t.end()
   })
 
-  describe('keepTrace', () => {
-    it('should not fail if no _prioritySampler', () => {
+  t.test('keepTrace', t => {
+    t.test('should not fail if no _prioritySampler', t => {
       expect(() => {
         PrioritySampler.keepTrace(span, SAMPLING_MECHANISM_APPSEC)
       }).to.not.throw()
+      t.end()
     })
 
-    it('should call setPriority with span USER_KEEP and mechanism', () => {
+    t.test('should call setPriority with span USER_KEEP and mechanism', t => {
       const setPriority = sinon.stub(prioritySampler, 'setPriority')
 
       span._prioritySampler = prioritySampler
@@ -525,6 +575,9 @@ describe('PrioritySampler', () => {
       PrioritySampler.keepTrace(span, SAMPLING_MECHANISM_APPSEC)
 
       expect(setPriority).to.be.calledOnceWithExactly(span, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
+      t.end()
     })
+    t.end()
   })
+  t.end()
 })

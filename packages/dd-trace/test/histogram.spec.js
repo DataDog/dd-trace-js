@@ -1,17 +1,18 @@
 'use strict'
 
-require('./setup/tap')
+const t = require('tap')
+require('./setup/core')
 
 const Histogram = require('../src/histogram')
 
-describe('Histogram', () => {
+t.test('Histogram', t => {
   let histogram
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     histogram = new Histogram()
   })
 
-  it('should record values', () => {
+  t.test('should record values', t => {
     for (let i = 1; i < 100; i++) {
       histogram.record(i)
     }
@@ -33,9 +34,10 @@ describe('Histogram', () => {
     expect(p50).to.be.lte(51)
     expect(p95).to.be.gte(94)
     expect(p95).to.be.lte(96)
+    t.end()
   })
 
-  it('should reset all stats', () => {
+  t.test('should reset all stats', t => {
     histogram.record(1)
     histogram.record(2)
     histogram.record(3)
@@ -50,5 +52,7 @@ describe('Histogram', () => {
     expect(histogram).to.have.property('count', 0)
     expect(histogram).to.have.property('p95', 0)
     expect(histogram.percentile(50)).to.equal(0)
+    t.end()
   })
+  t.end()
 })

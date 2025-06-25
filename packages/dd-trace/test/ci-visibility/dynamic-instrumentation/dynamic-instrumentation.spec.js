@@ -1,26 +1,27 @@
 'use strict'
 
-require('../../../../dd-trace/test/setup/tap')
+const t = require('tap')
+require('../../../../dd-trace/test/setup/core')
 
 const { fork } = require('child_process')
 const path = require('path')
 
 const { assert } = require('chai')
 
-describe('test visibility with dynamic instrumentation', () => {
+t.test('test visibility with dynamic instrumentation', t => {
   // Dynamic Instrumentation - Test Visibility not currently supported for windows
   if (process.platform === 'win32') {
     return
   }
   let childProcess
 
-  afterEach(() => {
+  t.afterEach(() => {
     if (childProcess) {
       childProcess.kill()
     }
   })
 
-  it('can grab local variables', (done) => {
+  t.test('can grab local variables', (t) => {
     childProcess = fork(path.join(__dirname, 'target-app', 'test-visibility-dynamic-instrumentation-script.js'))
 
     childProcess.on('message', ({ snapshot: { language, stack, probe, captures }, probeId }) => {
@@ -41,7 +42,8 @@ describe('test visibility with dynamic instrumentation', () => {
         }
       })
 
-      done()
+      t.end()
     })
   })
+  t.end()
 })

@@ -1,12 +1,13 @@
 'use strict'
 
-require('../setup/tap')
+const t = require('tap')
+require('../setup/core')
 
 const Plugin = require('../../src/plugins/plugin')
 const { storage } = require('../../../datadog-core')
 const { channel } = require('dc-polyfill')
 
-describe('Plugin', () => {
+t.test('Plugin', t => {
   let plugin
 
   class BadPlugin extends Plugin {
@@ -35,11 +36,11 @@ describe('Plugin', () => {
     }
   }
 
-  after(() => {
+  t.after(() => {
     plugin.configure({ enabled: false })
   })
 
-  it('should disable upon error', () => {
+  t.test('should disable upon error', t => {
     plugin = new BadPlugin()
     plugin.configure({ enabled: true })
 
@@ -48,9 +49,10 @@ describe('Plugin', () => {
     channel('apm:badPlugin:start').publish({ foo: 'bar' })
 
     expect(plugin._enabled).to.be.false
+    t.end()
   })
 
-  it('should not disable with no error', () => {
+  t.test('should not disable with no error', t => {
     plugin = new GoodPlugin()
     plugin.configure({ enabled: true })
 
@@ -59,9 +61,10 @@ describe('Plugin', () => {
     channel('apm:goodPlugin:start').publish({ foo: 'bar' })
 
     expect(plugin._enabled).to.be.true
+    t.end()
   })
 
-  it('should run binding transforms with an undefined current store', () => {
+  t.test('should run binding transforms with an undefined current store', t => {
     class TestPlugin extends Plugin {
       static get id () { return 'test' }
 
@@ -79,5 +82,7 @@ describe('Plugin', () => {
         expect(storage('legacy').getStore()).to.equal(undefined)
       })
     })
+    t.end()
   })
+  t.end()
 })

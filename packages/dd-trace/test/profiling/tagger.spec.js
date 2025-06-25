@@ -1,29 +1,32 @@
 'use strict'
 
-require('../setup/tap')
+const t = require('tap')
+require('../setup/core')
 
 const { expect } = require('chai')
 
-describe('tagger', () => {
+t.test('tagger', t => {
   let tagger
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     tagger = require('../../src/profiling/tagger').tagger
   })
 
-  it('should default to an empty object', () => {
+  t.test('should default to an empty object', t => {
     const parsed = tagger.parse()
 
     expect(parsed).to.deep.equal({})
+    t.end()
   })
 
-  it('should default to an empty object for invalid values', () => {
+  t.test('should default to an empty object for invalid values', t => {
     const parsed = tagger.parse(1234)
 
     expect(parsed).to.deep.equal({})
+    t.end()
   })
 
-  it('should support objects', () => {
+  t.test('should support objects', t => {
     const tags = {
       foo: 'bar',
       baz: 'qux',
@@ -37,9 +40,10 @@ describe('tagger', () => {
       foo: 'bar',
       baz: 'qux'
     })
+    t.end()
   })
 
-  it('should support strings', () => {
+  t.test('should support strings', t => {
     const tags = 'foo:bar,baz:qux'
     const parsed = tagger.parse(tags)
 
@@ -47,9 +51,10 @@ describe('tagger', () => {
       foo: 'bar',
       baz: 'qux'
     })
+    t.end()
   })
 
-  it('should support an array of strings', () => {
+  t.test('should support an array of strings', t => {
     const tags = ['foo:bar', 'baz:qux']
     const parsed = tagger.parse(tags)
 
@@ -57,39 +62,44 @@ describe('tagger', () => {
       foo: 'bar',
       baz: 'qux'
     })
+    t.end()
   })
 
-  it('should support values that include the delimiter', () => {
+  t.test('should support values that include the delimiter', t => {
     const tags = 'foo:bar:baz'
     const parsed = tagger.parse(tags)
 
     expect(parsed).to.deep.equal({
       foo: 'bar:baz'
     })
+    t.end()
   })
 
-  it('should ignore empty keys in strings', () => {
+  t.test('should ignore empty keys in strings', t => {
     const tags = ':bar'
     const parsed = tagger.parse(tags)
 
     expect(parsed).to.deep.equal({})
+    t.end()
   })
 
-  it('should ignore empty values in strings', () => {
+  t.test('should ignore empty values in strings', t => {
     const tags = 'foo:'
     const parsed = tagger.parse(tags)
 
     expect(parsed).to.deep.equal({})
+    t.end()
   })
 
-  it('should ignore empty values in strings', () => {
+  t.test('should ignore empty values in strings', t => {
     const tags = 'foo:'
     const parsed = tagger.parse(tags)
 
     expect(parsed).to.deep.equal({})
+    t.end()
   })
 
-  it('should trim whitespace around keys and values', () => {
+  t.test('should trim whitespace around keys and values', t => {
     const tags = 'foo:bar, fruit:banana'
     const parsed = tagger.parse(tags)
 
@@ -97,5 +107,7 @@ describe('tagger', () => {
       foo: 'bar',
       fruit: 'banana'
     })
+    t.end()
   })
+  t.end()
 })

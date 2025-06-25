@@ -6,15 +6,16 @@ const proxyquire = require('proxyquire').noCallThru()
 const path = require('node:path')
 const { Worker } = require('node:worker_threads')
 
-require('../setup/tap')
+const t = require('tap')
+require('../setup/core')
 
-describe('crashtracking', () => {
+t.test('crashtracking', t => {
   let crashtracking
   let crashtracker
   let noop
   let config
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     crashtracker = {
       start: sinon.stub(),
       configure: sinon.stub()
@@ -28,43 +29,47 @@ describe('crashtracking', () => {
     config = {}
   })
 
-  describe('with a working crashtracker', () => {
-    beforeEach(() => {
+  t.test('with a working crashtracker', t => {
+    t.beforeEach(() => {
       crashtracking = proxyquire('../../src/crashtracking', {
         './crashtracker': crashtracker
       })
     })
 
-    it('should proxy to the crashtracker', () => {
+    t.test('should proxy to the crashtracker', t => {
       crashtracking.start(config)
       crashtracking.configure(config)
 
       expect(crashtracker.start).to.have.been.calledWith(config)
       expect(crashtracker.configure).to.have.been.calledWith(config)
+      t.end()
     })
+    t.end()
   })
 
-  describe('with an erroring crashtracker', () => {
-    beforeEach(() => {
+  t.test('with an erroring crashtracker', t => {
+    t.beforeEach(() => {
       crashtracking = proxyquire('../../src/crashtracking', {
         './crashtracker': null,
         './noop': noop
       })
     })
 
-    it('should proxy to the noop', () => {
+    t.test('should proxy to the noop', t => {
       crashtracking.start(config)
       crashtracking.configure(config)
 
       expect(noop.start).to.have.been.calledWith(config)
       expect(noop.configure).to.have.been.calledWith(config)
+      t.end()
     })
+    t.end()
   })
 
-  describe('when in a worker thread', () => {
+  t.test('when in a worker thread', t => {
     let worker
 
-    beforeEach(() => {
+    t.beforeEach(() => {
       crashtracking = proxyquire('../../src/crashtracking', {
         './crashtracker': null,
         './noop': noop
@@ -73,15 +78,17 @@ describe('crashtracking', () => {
       worker = new Worker(path.join(__dirname, 'worker.js'))
     })
 
-    it('should proxy to the noop', done => {
-      worker.on('error', done)
+    t.test('should proxy to the noop', t => {
+      worker.on('error', t.error)
       worker.on('exit', code => {
         if (code === 0) {
-          done()
+          t.end()
         } else {
-          done(new Error(`Worker stopped with exit code ${code}`))
+          t.fail(`Worker stopped with exit code ${code}`)
         }
       })
     })
+    t.end()
   })
+  t.end()
 })

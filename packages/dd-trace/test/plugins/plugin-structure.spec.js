@@ -1,6 +1,7 @@
 'use strict'
 
-require('../setup/tap')
+const t = require('tap')
+require('../setup/core')
 
 const { expect } = require('chai')
 
@@ -26,7 +27,7 @@ const missingInstrumentationHooks = [
   'fetch' // fetch is provided by Node.js, and is automatically instrumented if it exists
 ]
 
-describe('Plugin Structure Validation', () => {
+t.test('Plugin Structure Validation', t => {
   const packagesDir = path.join(__dirname, '..', '..', '..')
   const instrumentationsDir = path.join(packagesDir, 'datadog-instrumentations', 'src')
 
@@ -34,7 +35,7 @@ describe('Plugin Structure Validation', () => {
   let instrumentationFiles
   let allPluginIds
 
-  before(() => {
+  t.before(() => {
     pluginDirs = fs.readdirSync(packagesDir)
       .filter(dir => dir.startsWith('datadog-plugin-') && !missingPlugins.includes(dir))
 
@@ -50,27 +51,30 @@ describe('Plugin Structure Validation', () => {
   pluginDirs.forEach(pluginDir => {
     const expectedId = pluginDir.replace('datadog-plugin-', '')
 
-    describe(`Plugin: ${pluginDir}`, () => {
+    t.test(`Plugin: ${pluginDir}`, t => {
       const pluginPath = path.join(packagesDir, pluginDir, 'src', 'index.js')
       const Plugin = require(pluginPath)
       const pluginId = Plugin.id
 
-      it('should have an id that matches the directory name', () => {
+      t.test('should have an id that matches the directory name', t => {
         expect(pluginId).to.equal(expectedId)
+        t.end()
       })
 
-      it('should have a corresponding instrumentation file', () => {
+      t.test('should have a corresponding instrumentation file', t => {
         if (abstractPlugins.includes(pluginId)) {
           return
         }
 
         expect(instrumentationFiles.has(pluginId))
           .to.equal(true, `Missing instrumentation file: ${pluginId}.js`)
+        t.end()
       })
+      t.end()
     })
   })
 
-  it('should have all plugins accounted for with an instrumentation file', () => {
+  t.test('should have all plugins accounted for with an instrumentation file', t => {
     const missingInstrumentations = []
 
     allPluginIds.forEach(pluginId => {
@@ -80,9 +84,10 @@ describe('Plugin Structure Validation', () => {
     })
 
     expect(missingInstrumentations).to.be.empty
+    t.end()
   })
 
-  it('should have all plugins accounted for with a hook', () => {
+  t.test('should have all plugins accounted for with a hook', t => {
     const instrumentationsRequired = new Set()
 
     for (const hook of Object.values(hooks)) {
@@ -106,5 +111,7 @@ describe('Plugin Structure Validation', () => {
     })
 
     expect(missingHooks).to.deep.equal(missingInstrumentationHooks)
+    t.end()
   })
+  t.end()
 })

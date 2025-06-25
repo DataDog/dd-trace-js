@@ -1,6 +1,7 @@
 'use strict'
 
-require('../../setup/tap')
+const t = require('tap')
+require('../../setup/core')
 
 const { execSync } = require('child_process')
 const os = require('os')
@@ -41,8 +42,8 @@ function getFakeDirectory () {
   return '/tmp'
 }
 
-describe('git', () => {
-  afterEach(() => {
+t.test('git', t => {
+  t.afterEach(() => {
     execFileSyncStub.reset()
     delete process.env.DD_GIT_COMMIT_SHA
     delete process.env.DD_GIT_REPOSITORY_URL
@@ -57,7 +58,7 @@ describe('git', () => {
     delete process.env.DD_GIT_COMMIT_COMMITTER_DATE
   })
 
-  it('returns ci metadata if it is present and does not call git for those parameters', () => {
+  t.test('returns ci metadata if it is present and does not call git for those parameters', t => {
     const ciMetadata = {
       commitSHA: 'ciSHA',
       branch: 'myBranch',
@@ -83,9 +84,10 @@ describe('git', () => {
     expect(execFileSyncStub).not.to.have.been.calledWith('git', ['rev-parse', 'HEAD'])
     expect(execFileSyncStub).not.to.have.been.calledWith('git', ['rev-parse', '--abbrev-ref', 'HEAD'])
     expect(execFileSyncStub).not.to.have.been.calledWith('git', ['rev-parse', '--show-toplevel'])
+    t.end()
   })
 
-  it('does not crash if git is not available', () => {
+  t.test('does not crash if git is not available', t => {
     execFileSyncStub.returns('')
     const ciMetadata = { repositoryUrl: 'https://github.com/datadog/safe-repository.git' }
     const metadata = getGitMetadata(ciMetadata)
@@ -97,9 +99,10 @@ describe('git', () => {
       [GIT_REPOSITORY_URL]: 'https://github.com/datadog/safe-repository.git',
       [CI_WORKSPACE_PATH]: ''
     })
+    t.end()
   })
 
-  it('returns all git metadata is git is available', () => {
+  t.test('returns all git metadata is git is available', t => {
     const commitMessage = `multi line
       commit message`
 
@@ -137,11 +140,13 @@ describe('git', () => {
     expect(execFileSyncStub).to.have.been.calledWith('git', ['rev-parse', '--abbrev-ref', 'HEAD'])
     expect(execFileSyncStub).to.have.been.calledWith('git', ['rev-parse', '--show-toplevel'])
     expect(execFileSyncStub).to.have.been.calledWith('git', ['ls-remote', '--get-url'])
+    t.end()
   })
+  t.end()
 })
 
-describe('getCommitsRevList', () => {
-  it('gets the commits to upload if the repository is smaller than the limit', () => {
+t.test('getCommitsRevList', t => {
+  t.test('gets the commits to upload if the repository is smaller than the limit', t => {
     const logErrorSpy = sinon.spy()
 
     const { getCommitsRevList } = proxyquire('../../../src/plugins/util/git',
@@ -157,9 +162,10 @@ describe('getCommitsRevList', () => {
     )
     getCommitsRevList([], [])
     expect(logErrorSpy).not.to.have.been.called
+    t.end()
   })
 
-  it('does not crash and logs the error if the repository is bigger than the limit', () => {
+  t.test('does not crash and logs the error if the repository is bigger than the limit', t => {
     const logErrorSpy = sinon.spy()
 
     const { getCommitsRevList } = proxyquire('../../../src/plugins/util/git',
@@ -175,9 +181,10 @@ describe('getCommitsRevList', () => {
     )
     getCommitsRevList([], [])
     expect(logErrorSpy).to.have.been.called
+    t.end()
   })
 
-  it('returns null if the repository is bigger than the limit', () => {
+  t.test('returns null if the repository is bigger than the limit', t => {
     const { getCommitsRevList } = proxyquire('../../../src/plugins/util/git',
       {
         child_process: {
@@ -188,9 +195,10 @@ describe('getCommitsRevList', () => {
     )
     const commitsToUpload = getCommitsRevList([], [])
     expect(commitsToUpload).to.be.null
+    t.end()
   })
 
-  it('returns null if execFileSync fails for whatever reason', () => {
+  t.test('returns null if execFileSync fails for whatever reason', t => {
     const { getCommitsRevList } = proxyquire('../../../src/plugins/util/git',
       {
         child_process: {
@@ -200,25 +208,27 @@ describe('getCommitsRevList', () => {
     )
     const commitsToUpload = getCommitsRevList([], [])
     expect(commitsToUpload).to.be.null
+    t.end()
   })
+  t.end()
 })
 
-describe('generatePackFilesForCommits', () => {
+t.test('generatePackFilesForCommits', t => {
   let tmpdirStub, statSyncStub
   const fakeDirectory = getFakeDirectory()
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     sinon.stub(Math, 'random').returns('0.1234')
     tmpdirStub = sinon.stub(os, 'tmpdir').returns(fakeDirectory)
     sinon.stub(process, 'cwd').returns('cwd')
     statSyncStub = sinon.stub(fs, 'statSync').returns({ isDirectory: () => true })
   })
 
-  afterEach(() => {
+  t.afterEach(() => {
     sinon.restore()
   })
 
-  it('creates pack files in temporary path', () => {
+  t.test('creates pack files in temporary path', t => {
     const execFileSyncSpy = sinon.stub().returns(['commitSHA'])
 
     const { generatePackFilesForCommits } = proxyquire('../../../src/plugins/util/git',
@@ -232,9 +242,10 @@ describe('generatePackFilesForCommits', () => {
     const temporaryPath = path.join(fakeDirectory, '1234')
     const packFilesToUpload = generatePackFilesForCommits(['commitSHA'])
     expect(packFilesToUpload).to.eql([`${temporaryPath}-commitSHA.pack`])
+    t.end()
   })
 
-  it('creates pack files in cwd if the temporary path fails', () => {
+  t.test('creates pack files in cwd if the temporary path fails', t => {
     const execFileSyncSpy = sinon.stub().onCall(0).throws().onCall(1).returns(['commitSHA'])
 
     const cwdPath = path.join('cwd', '1234')
@@ -249,9 +260,10 @@ describe('generatePackFilesForCommits', () => {
 
     const packFilesToUpload = generatePackFilesForCommits(['commitSHA'])
     expect(packFilesToUpload).to.eql([`${cwdPath}-commitSHA.pack`])
+    t.end()
   })
 
-  it('does not work if tmpdir does not return a folder', () => {
+  t.test('does not work if tmpdir does not return a folder', t => {
     tmpdirStub.restore()
     statSyncStub.restore()
     sinon.stub(os, 'tmpdir').returns('; echo hey')
@@ -266,15 +278,17 @@ describe('generatePackFilesForCommits', () => {
     )
     const packFilesToUpload = generatePackFilesForCommits(['commitSHA'])
     expect(packFilesToUpload).to.eql([])
+    t.end()
   })
+  t.end()
 })
 
-describe('unshallowRepository', () => {
-  afterEach(() => {
+t.test('unshallowRepository', t => {
+  t.afterEach(() => {
     execFileSyncStub.reset()
   })
 
-  it('works for the usual case', () => {
+  t.test('works for the usual case', t => {
     execFileSyncStub
       .onCall(0).returns(
         'git version 2.39.0'
@@ -294,9 +308,10 @@ describe('unshallowRepository', () => {
 
     unshallowRepository()
     expect(execFileSyncStub).to.have.been.calledWith('git', options)
+    t.end()
   })
 
-  it('works if the local HEAD is a commit that has not been pushed to the remote', () => {
+  t.test('works if the local HEAD is a commit that has not been pushed to the remote', t => {
     execFileSyncStub
       .onCall(0).returns(
         'git version 2.39.0'
@@ -318,9 +333,10 @@ describe('unshallowRepository', () => {
 
     unshallowRepository()
     expect(execFileSyncStub).to.have.been.calledWith('git', options)
+    t.end()
   })
 
-  it('works if the CI is working on a detached HEAD or branch tracking hasn’t been set up', () => {
+  t.test('works if the CI is working on a detached HEAD or branch tracking hasn’t been set up', t => {
     execFileSyncStub
       .onCall(0).returns(
         'git version 2.39.0'
@@ -342,16 +358,18 @@ describe('unshallowRepository', () => {
 
     unshallowRepository()
     expect(execFileSyncStub).to.have.been.calledWith('git', options)
+    t.end()
   })
+  t.end()
 })
 
-describe('user credentials', () => {
-  afterEach(() => {
+t.test('user credentials', t => {
+  t.afterEach(() => {
     execFileSyncStub.reset()
     execFileSyncStub.reset()
   })
 
-  it('scrubs https user credentials', () => {
+  t.test('scrubs https user credentials', t => {
     execFileSyncStub
       .onCall(0).returns(
         'git author,git.author@email.com,2022-02-14T16:22:03-05:00,' +
@@ -362,9 +380,10 @@ describe('user credentials', () => {
     const metadata = getGitMetadata({})
     expect(metadata[GIT_REPOSITORY_URL])
       .to.equal('https://github.com/datadog/safe-repository.git')
+    t.end()
   })
 
-  it('scrubs ssh user credentials', () => {
+  t.test('scrubs ssh user credentials', t => {
     execFileSyncStub
       .onCall(0).returns(
         'git author,git.author@email.com,2022-02-14T16:22:03-05:00,' +
@@ -375,37 +394,42 @@ describe('user credentials', () => {
     const metadata = getGitMetadata({})
     expect(metadata[GIT_REPOSITORY_URL])
       .to.equal('ssh://host.xz:port/path/to/repo.git/')
+    t.end()
   })
+  t.end()
 })
 
-describe('isGitAvailable', () => {
+t.test('isGitAvailable', t => {
   let originalPath
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     originalPath = process.env.PATH
   })
 
-  afterEach(() => {
+  t.afterEach(() => {
     process.env.PATH = originalPath
   })
 
-  it('returns true if git is available', () => {
+  t.test('returns true if git is available', t => {
     expect(isGitAvailable()).to.be.true
+    t.end()
   })
 
-  it('returns false if git is not available', () => {
+  t.test('returns false if git is not available', t => {
     process.env.PATH = ''
 
     expect(isGitAvailable()).to.be.false
+    t.end()
   })
+  t.end()
 })
 
-describe('getGitDiff', () => {
-  afterEach(() => {
+t.test('getGitDiff', t => {
+  t.afterEach(() => {
     execFileSyncStub.reset()
   })
 
-  it('returns the diff between two commits', () => {
+  t.test('returns the diff between two commits', t => {
     const expectedDiff = 'diff --git a/file.js b/file.js'
     execFileSyncStub.returns(expectedDiff)
 
@@ -419,17 +443,19 @@ describe('getGitDiff', () => {
       'base-commit',
       'target-commit'
     ])
+    t.end()
   })
 
-  it('returns the diff between a commit and the current HEAD', () => {
+  t.test('returns the diff between a commit and the current HEAD', t => {
     const expectedDiff = 'diff --git a/file.js b/file.js'
     execFileSyncStub.returns(expectedDiff)
     const diff = getGitDiff('base-commit')
     expect(diff).to.equal(expectedDiff)
     expect(execFileSyncStub).to.have.been.calledWith('git', ['diff', '-U0', '--word-diff=porcelain', 'base-commit'])
+    t.end()
   })
 
-  it('returns an empty string when git command fails because SHAs could not be found', () => {
+  t.test('returns an empty string when git command fails because SHAs could not be found', t => {
     const logErrorSpy = sinon.spy()
 
     const { getGitDiff } = proxyquire('../../../src/plugins/util/git',
@@ -448,15 +474,17 @@ describe('getGitDiff', () => {
 
     expect(logErrorSpy).to.have.been.called
     expect(diff).to.equal('')
+    t.end()
   })
+  t.end()
 })
 
-describe('getGitRemoteName', () => {
-  afterEach(() => {
+t.test('getGitRemoteName', t => {
+  t.afterEach(() => {
     execFileSyncStub.reset()
   })
 
-  it('returns upstream remote name when available', () => {
+  t.test('returns upstream remote name when available', t => {
     execFileSyncStub.returns('origin/main')
 
     const { getGitRemoteName } = proxyquire('../../../src/plugins/util/git',
@@ -471,9 +499,10 @@ describe('getGitRemoteName', () => {
     expect(remoteName).to.equal('origin')
     expect(execFileSyncStub).to.have.been.calledWith('git',
       ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'])
+    t.end()
   })
 
-  it('returns first remote when upstream is not available', () => {
+  t.test('returns first remote when upstream is not available', t => {
     execFileSyncStub
       .onCall(0).throws()
       .onCall(1).returns('upstream\norigin')
@@ -489,9 +518,10 @@ describe('getGitRemoteName', () => {
     const remoteName = getGitRemoteName()
     expect(remoteName).to.equal('upstream')
     expect(execFileSyncStub).to.have.been.calledWith('git', ['remote'])
+    t.end()
   })
 
-  it('returns origin when no remotes are available', () => {
+  t.test('returns origin when no remotes are available', t => {
     execFileSyncStub
       .onCall(0).throws()
       .onCall(1).returns('')
@@ -506,15 +536,17 @@ describe('getGitRemoteName', () => {
 
     const remoteName = getGitRemoteName()
     expect(remoteName).to.equal('origin')
+    t.end()
   })
+  t.end()
 })
 
-describe('getSourceBranch', () => {
-  afterEach(() => {
+t.test('getSourceBranch', t => {
+  t.afterEach(() => {
     execFileSyncStub.reset()
   })
 
-  it('returns the current branch name', () => {
+  t.test('returns the current branch name', t => {
     execFileSyncStub.returns('feature/my-branch')
 
     const { getSourceBranch } = proxyquire('../../../src/plugins/util/git',
@@ -528,9 +560,10 @@ describe('getSourceBranch', () => {
     const branch = getSourceBranch()
     expect(branch).to.equal('feature/my-branch')
     expect(execFileSyncStub).to.have.been.calledWith('git', ['rev-parse', '--abbrev-ref', 'HEAD'])
+    t.end()
   })
 
-  it('returns empty string when git command fails', () => {
+  t.test('returns empty string when git command fails', t => {
     execFileSyncStub.throws(new Error('git command failed'))
 
     const { getSourceBranch } = proxyquire('../../../src/plugins/util/git',
@@ -543,15 +576,17 @@ describe('getSourceBranch', () => {
 
     const branch = getSourceBranch()
     expect(branch).to.equal('')
+    t.end()
   })
+  t.end()
 })
 
-describe('checkAndFetchBranch', () => {
-  afterEach(() => {
+t.test('checkAndFetchBranch', t => {
+  t.afterEach(() => {
     execFileSyncStub.reset()
   })
 
-  it('does nothing if the branch exists locally', () => {
+  t.test('does nothing if the branch exists locally', t => {
     execFileSyncStub.returns('')
     const { checkAndFetchBranch } = proxyquire('../../../src/plugins/util/git', {
       child_process: { execFileSync: execFileSyncStub }
@@ -572,9 +607,10 @@ describe('checkAndFetchBranch', () => {
       ['fetch', '--depth', '1', 'origin', 'my-branch'],
       { stdio: 'pipe', timeout: 5000 }
     )
+    t.end()
   })
 
-  it('fetches the branch if it does not exist locally but exists on remote', () => {
+  t.test('fetches the branch if it does not exist locally but exists on remote', t => {
     execFileSyncStub
       .onCall(0).throws() // local check fails
       .onCall(1).returns('something') // remote check passes
@@ -593,9 +629,10 @@ describe('checkAndFetchBranch', () => {
       { stdio: 'pipe', timeout: 2000 }
     )
     expect(execFileSyncStub).to.have.been.calledWith('git', ['fetch', '--depth', '1', 'origin', 'my-branch'])
+    t.end()
   })
 
-  it('does nothing if the branch does not exist locally or on remote', () => {
+  t.test('does nothing if the branch does not exist locally or on remote', t => {
     execFileSyncStub
       .onCall(0).throws() // local check fails
       .onCall(1).returns('') // remote check fails
@@ -617,9 +654,10 @@ describe('checkAndFetchBranch', () => {
       ['fetch', '--depth', '1', 'origin', 'my-branch'],
       { stdio: 'pipe', timeout: 5000 }
     )
+    t.end()
   })
 
-  it('does nothing if the remote does not exist', () => {
+  t.test('does nothing if the remote does not exist', t => {
     execFileSyncStub
       .onCall(0).throws() // local check fails
       .onCall(1).throws('') // remote does not exist
@@ -641,9 +679,10 @@ describe('checkAndFetchBranch', () => {
       ['fetch', '--depth', '1', 'origin', 'my-branch'],
       { stdio: 'pipe', timeout: 5000 }
     )
+    t.end()
   })
 
-  it('logs error if a command throws', () => {
+  t.test('logs error if a command throws', t => {
     const logErrorSpy = sinon.spy()
     execFileSyncStub.throws(new Error('git command failed'))
     const { checkAndFetchBranch } = proxyquire('../../../src/plugins/util/git', {
@@ -652,15 +691,17 @@ describe('checkAndFetchBranch', () => {
     })
     checkAndFetchBranch('my-branch', 'origin')
     expect(logErrorSpy).to.have.been.called
+    t.end()
   })
+  t.end()
 })
 
-describe('getLocalBranches', () => {
-  afterEach(() => {
+t.test('getLocalBranches', t => {
+  t.afterEach(() => {
     execFileSyncStub.reset()
   })
 
-  it('returns a list of local branches', () => {
+  t.test('returns a list of local branches', t => {
     execFileSyncStub.returns('branch1\nbranch2\nbranch3')
     const { getLocalBranches } = proxyquire('../../../src/plugins/util/git', {
       child_process: { execFileSync: execFileSyncStub }
@@ -675,9 +716,10 @@ describe('getLocalBranches', () => {
         'refs/remotes/my-origin'
       ]
     )
+    t.end()
   })
 
-  it('returns empty array if command throws and logs an error', () => {
+  t.test('returns empty array if command throws and logs an error', t => {
     const logErrorSpy = sinon.spy()
     execFileSyncStub.throws(new Error('git command failed'))
     const { getLocalBranches } = proxyquire('../../../src/plugins/util/git', {
@@ -687,15 +729,17 @@ describe('getLocalBranches', () => {
     const branches = getLocalBranches('origin')
     expect(branches).to.deep.equal([])
     expect(logErrorSpy).to.have.been.called
+    t.end()
   })
+  t.end()
 })
 
-describe('getMergeBase', () => {
-  afterEach(() => {
+t.test('getMergeBase', t => {
+  t.afterEach(() => {
     execFileSyncStub.reset()
   })
 
-  it('returns the merge base commit', () => {
+  t.test('returns the merge base commit', t => {
     execFileSyncStub.returns('abc123')
     const { getMergeBase } = proxyquire('../../../src/plugins/util/git', {
       child_process: { execFileSync: execFileSyncStub }
@@ -703,9 +747,10 @@ describe('getMergeBase', () => {
     const mergeBase = getMergeBase('main', 'feature')
     expect(mergeBase).to.equal('abc123')
     expect(execFileSyncStub).to.have.been.calledWith('git', ['merge-base', 'main', 'feature'])
+    t.end()
   })
 
-  it('returns empty string if command throws', () => {
+  t.test('returns empty string if command throws', t => {
     const logErrorSpy = sinon.spy()
     execFileSyncStub.throws(new Error('git command failed'))
     const { getMergeBase } = proxyquire('../../../src/plugins/util/git', {
@@ -715,15 +760,17 @@ describe('getMergeBase', () => {
     const mergeBase = getMergeBase('main', 'feature')
     expect(mergeBase).to.equal('')
     expect(logErrorSpy).to.have.been.called
+    t.end()
   })
+  t.end()
 })
 
-describe('getCounts', () => {
-  afterEach(() => {
+t.test('getCounts', t => {
+  t.afterEach(() => {
     execFileSyncStub.reset()
   })
 
-  it('returns the counts of commits ahead and behind', () => {
+  t.test('returns the counts of commits ahead and behind', t => {
     execFileSyncStub.returns('38\t3')
     const { getCounts } = proxyquire('../../../src/plugins/util/git', {
       child_process: { execFileSync: execFileSyncStub }
@@ -731,9 +778,10 @@ describe('getCounts', () => {
     const counts = getCounts('feature', 'main')
     expect(counts).to.deep.equal({ behind: 38, ahead: 3 })
     expect(execFileSyncStub).to.have.been.calledWith('git', ['rev-list', '--left-right', '--count', 'main...feature'])
+    t.end()
   })
 
-  it('returns object with empty values if command throws', () => {
+  t.test('returns object with empty values if command throws', t => {
     const logErrorSpy = sinon.spy()
     execFileSyncStub.throws(new Error('git command failed'))
     const { getCounts } = proxyquire('../../../src/plugins/util/git', {
@@ -743,10 +791,12 @@ describe('getCounts', () => {
     const counts = getCounts('feature', 'main')
     expect(counts).to.deep.equal({ behind: null, ahead: null })
     expect(logErrorSpy).to.have.been.called
+    t.end()
   })
+  t.end()
 })
 
-describe('getGitInformationDiscrepancy', () => {
+t.test('getGitInformationDiscrepancy', t => {
   const { getGitInformationDiscrepancy } = proxyquire('../../../src/plugins/util/git',
     {
       child_process: {
@@ -755,7 +805,7 @@ describe('getGitInformationDiscrepancy', () => {
     }
   )
 
-  it('returns git repository URL and commit SHA', () => {
+  t.test('returns git repository URL and commit SHA', t => {
     execFileSyncStub
       .onCall(0).returns('https://github.com/datadog/safe-repository.git')
       .onCall(1).returns('abc123')
@@ -769,9 +819,10 @@ describe('getGitInformationDiscrepancy', () => {
 
     expect(execFileSyncStub).to.have.been.calledWith('git', ['config', '--get', 'remote.origin.url'], { stdio: 'pipe' })
     expect(execFileSyncStub).to.have.been.calledWith('git', ['rev-parse', 'HEAD'])
+    t.end()
   })
 
-  it('returns empty strings when git commands fail', () => {
+  t.test('returns empty strings when git commands fail', t => {
     execFileSyncStub.throws(new Error('git command failed'))
 
     const result = getGitInformationDiscrepancy()
@@ -780,5 +831,7 @@ describe('getGitInformationDiscrepancy', () => {
       gitRepositoryUrl: '',
       gitCommitSHA: ''
     })
+    t.end()
   })
+  t.end()
 })

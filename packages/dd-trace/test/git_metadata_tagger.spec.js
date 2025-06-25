@@ -1,6 +1,7 @@
 'use strict'
 
-require('./setup/tap')
+const t = require('tap')
+require('./setup/core')
 
 const agent = require('./plugins/agent')
 const { SCI_COMMIT_SHA, SCI_REPOSITORY_URL } = require('../src/constants')
@@ -10,10 +11,10 @@ const DUMMY_REPOSITORY_URL = 'git@github.com:DataDog/sci_git_example.git'
 
 const oldEnv = process.env
 
-describe('git metadata tagging', () => {
+t.test('git metadata tagging', t => {
   let tracer
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     process.env = {
       ...oldEnv,
       DD_GIT_COMMIT_SHA: DUMMY_GIT_SHA,
@@ -23,15 +24,15 @@ describe('git metadata tagging', () => {
     return agent.load()
   })
 
-  afterEach(() => {
+  t.afterEach(() => {
     agent.close()
   })
 
-  afterEach(() => {
+  t.afterEach(() => {
     process.env = oldEnv
   })
 
-  it('should include git metadata when using DD_GIT_* tags and DD_TAGS', async () => {
+  t.test('should include git metadata when using DD_GIT_* tags and DD_TAGS', () => {
     const span = tracer.startSpan('hello', {
       tags: {
         'resource.name': '/hello/:name'
@@ -55,4 +56,5 @@ describe('git metadata tagging', () => {
       expect(secondSpan.meta[SCI_REPOSITORY_URL]).not.to.exist
     })
   })
+  t.end()
 })

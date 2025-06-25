@@ -1,6 +1,7 @@
 'use strict'
 
-require('../../setup/tap')
+const t = require('tap')
+require('../../setup/core')
 
 const os = require('os')
 const {
@@ -13,8 +14,8 @@ const {
   DD_HOST_CPU_COUNT
 } = require('../../../src/plugins/util/env')
 
-describe('env', () => {
-  it('reads runtime and OS metadata', () => {
+t.test('env', t => {
+  t.test('reads runtime and OS metadata', t => {
     const envMetadata = getRuntimeAndOSMetadata()
 
     expect(envMetadata).to.eql(
@@ -27,5 +28,7 @@ describe('env', () => {
         [DD_HOST_CPU_COUNT]: os.cpus().length
       }
     )
+    t.end()
   })
+  t.end()
 })

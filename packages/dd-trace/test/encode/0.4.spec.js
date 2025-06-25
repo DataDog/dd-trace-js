@@ -1,6 +1,7 @@
 'use strict'
 
-require('../setup/tap')
+const t = require('tap')
+require('../setup/core')
 
 const { expect } = require('chai')
 const msgpack = require('@msgpack/msgpack')
@@ -14,14 +15,14 @@ function randString (length) {
   }).join('')
 }
 
-describe('encode', () => {
+t.test('encode', t => {
   let encoder
   let writer
   let logger
   let data
 
-  describe('without configuration', () => {
-    beforeEach(() => {
+  t.test('without configuration', t => {
+    t.beforeEach(() => {
       logger = {
         debug: sinon.stub()
       }
@@ -51,7 +52,7 @@ describe('encode', () => {
       }]
     })
 
-    it('should encode to msgpack', () => {
+    t.test('should encode to msgpack', t => {
       encoder.encode(data)
 
       const buffer = encoder.makePayload()
@@ -68,9 +69,10 @@ describe('encode', () => {
       expect(trace[0].name).to.equal(data[0].name)
       expect(trace[0].meta).to.deep.equal({ bar: 'baz' })
       expect(trace[0].metrics).to.deep.equal({ example: 1 })
+      t.end()
     })
 
-    it('should truncate long IDs', () => {
+    t.test('should truncate long IDs', t => {
       data[0].trace_id = id('ffffffffffffffff1234abcd1234abcd')
       data[0].span_id = id('ffffffffffffffff1234abcd1234abcd')
       data[0].arent_id = id('ffffffffffffffff1234abcd1234abcd')
@@ -84,9 +86,10 @@ describe('encode', () => {
       expect(trace[0].trace_id.toString(16)).to.equal('1234abcd1234abcd')
       expect(trace[0].span_id.toString(16)).to.equal('1234abcd1234abcd')
       expect(trace[0].parent_id.toString(16)).to.equal('1234abcd1234abcd')
+      t.end()
     })
 
-    it('should report its count', () => {
+    t.test('should report its count', t => {
       expect(encoder.count()).to.equal(0)
 
       encoder.encode(data)
@@ -96,9 +99,10 @@ describe('encode', () => {
       encoder.encode(data)
 
       expect(encoder.count()).to.equal(2)
+      t.end()
     })
 
-    it('should flush when the payload size limit is reached', function () {
+    t.test('should flush when the payload size limit is reached', function (t) {
       // Make 8mb of data
       for (let i = 0; i < 8 * 1024; i++) {
         data[0].meta[`foo${i}`] = randString(1024)
@@ -107,9 +111,10 @@ describe('encode', () => {
       encoder.encode(data)
 
       expect(writer.flush).to.have.been.called
+      t.end()
     })
 
-    it('should reset after making a payload', () => {
+    t.test('should reset after making a payload', t => {
       encoder.encode(data)
       encoder.makePayload()
 
@@ -122,24 +127,27 @@ describe('encode', () => {
       expect(payload[2]).to.equal(0)
       expect(payload[3]).to.equal(0)
       expect(payload[4]).to.equal(0)
+      t.end()
     })
 
-    it('should log adding an encoded trace to the buffer if enabled', () => {
+    t.test('should log adding an encoded trace to the buffer if enabled', t => {
       encoder._debugEncoding = true
       encoder.encode(data)
 
       const message = logger.debug.firstCall.args[0]()
 
       expect(message).to.match(/^Adding encoded trace to buffer:(\s[a-f\d]{2})+$/)
+      t.end()
     })
 
-    it('should not log adding an encoded trace to the buffer by default', () => {
+    t.test('should not log adding an encoded trace to the buffer by default', t => {
       encoder.encode(data)
 
       expect(logger.debug).to.not.have.been.called
+      t.end()
     })
 
-    it('should work when the buffer is resized', function () {
+    t.test('should work when the buffer is resized', function (t) {
       // big enough to trigger a resize
       const dataToEncode = Array(15000).fill({
         trace_id: id('1234abcd1234abcd'),
@@ -185,9 +193,10 @@ describe('encode', () => {
         expect(decodedData.span_id.toString(16)).to.equal('1234abcd1234abcd')
         expect(decodedData.parent_id.toString(16)).to.equal('1234abcd1234abcd')
       })
+      t.end()
     })
 
-    it('should encode span events within tags as a fallback to encoding as a top level field', () => {
+    t.test('should encode span events within tags as a fallback to encoding as a top level field', t => {
       const topLevelEvents = [
         { name: 'Something went so wrong', time_unix_nano: 1000000 },
         {
@@ -209,9 +218,10 @@ describe('encode', () => {
       const decoded = msgpack.decode(buffer, { useBigInt64: true })
       const trace = decoded[0]
       expect(trace[0].meta.events).to.deep.equal(encodedLink)
+      t.end()
     })
 
-    it('should encode spanLinks', () => {
+    t.test('should encode spanLinks', t => {
       const traceIdHigh = id('10')
       const traceId = id('1234abcd1234abcd')
       const rootTid = traceIdHigh.toString(16).padStart(16, '0')
@@ -238,9 +248,10 @@ describe('encode', () => {
       expect(trace[0].name).to.equal(data[0].name)
       expect(trace[0].meta).to.deep.equal({ bar: 'baz', '_dd.span_links': encodedLink })
       expect(trace[0].metrics).to.deep.equal({ example: 1 })
+      t.end()
     })
 
-    it('should encode spanLinks with just span and trace id', () => {
+    t.test('should encode spanLinks with just span and trace id', t => {
       const traceId = '00000000000000001234abcd1234abcd'
       const spanId = '1234abcd1234abcd'
       const encodedLink = `[{"trace_id":"${traceId}","span_id":"${spanId}"}]`
@@ -260,10 +271,11 @@ describe('encode', () => {
       expect(trace[0].name).to.equal(data[0].name)
       expect(trace[0].meta).to.deep.equal({ bar: 'baz', '_dd.span_links': encodedLink })
       expect(trace[0].metrics).to.deep.equal({ example: 1 })
+      t.end()
     })
 
-    describe('meta_struct', () => {
-      it('should encode meta_struct with simple key value object', () => {
+    t.test('meta_struct', t => {
+      t.test('should encode meta_struct with simple key value object', t => {
         const metaStruct = {
           foo: 'bar',
           baz: 123
@@ -278,9 +290,10 @@ describe('encode', () => {
 
         expect(msgpack.decode(trace[0].meta_struct.foo)).to.be.equal(metaStruct.foo)
         expect(msgpack.decode(trace[0].meta_struct.baz)).to.be.equal(metaStruct.baz)
+        t.end()
       })
 
-      it('should ignore array in meta_struct', () => {
+      t.test('should ignore array in meta_struct', t => {
         const metaStruct = ['one', 2, 'three', 4, 5, 'six']
         data[0].meta_struct = metaStruct
         encoder.encode(data)
@@ -290,9 +303,10 @@ describe('encode', () => {
         const decoded = msgpack.decode(buffer, { useBigInt64: true })
         const trace = decoded[0]
         expect(trace[0].meta_struct).to.deep.equal({})
+        t.end()
       })
 
-      it('should encode meta_struct with empty object and array', () => {
+      t.test('should encode meta_struct with empty object and array', t => {
         const metaStruct = {
           foo: {},
           bar: []
@@ -306,9 +320,10 @@ describe('encode', () => {
         const trace = decoded[0]
         expect(msgpack.decode(trace[0].meta_struct.foo)).to.deep.equal(metaStruct.foo)
         expect(msgpack.decode(trace[0].meta_struct.bar)).to.deep.equal(metaStruct.bar)
+        t.end()
       })
 
-      it('should encode meta_struct with possible real use case', () => {
+      t.test('should encode meta_struct with possible real use case', t => {
         const metaStruct = {
           '_dd.stack': {
             exploit: [
@@ -360,9 +375,10 @@ describe('encode', () => {
         const decoded = msgpack.decode(buffer, { useBigInt64: true })
         const trace = decoded[0]
         expect(msgpack.decode(trace[0].meta_struct['_dd.stack'])).to.deep.equal(metaStruct['_dd.stack'])
+        t.end()
       })
 
-      it('should encode meta_struct ignoring circular references in objects', () => {
+      t.test('should encode meta_struct ignoring circular references in objects', t => {
         const circular = {
           bar: 'baz',
           deeper: {
@@ -391,9 +407,10 @@ describe('encode', () => {
           }
         }
         expect(msgpack.decode(trace[0].meta_struct.foo)).to.deep.equal(expectedMetaStruct.foo)
+        t.end()
       })
 
-      it('should encode meta_struct ignoring circular references in arrays', () => {
+      t.test('should encode meta_struct ignoring circular references in arrays', t => {
         const circular = [{
           bar: 'baz'
         }]
@@ -416,9 +433,10 @@ describe('encode', () => {
           }]
         }
         expect(msgpack.decode(trace[0].meta_struct.foo)).to.deep.equal(expectedMetaStruct.foo)
+        t.end()
       })
 
-      it('should encode meta_struct ignoring undefined properties', () => {
+      t.test('should encode meta_struct ignoring undefined properties', t => {
         const metaStruct = {
           foo: 'bar',
           undefinedProperty: undefined
@@ -437,9 +455,10 @@ describe('encode', () => {
         }
         expect(msgpack.decode(trace[0].meta_struct.foo)).to.deep.equal(expectedMetaStruct.foo)
         expect(trace[0].meta_struct.undefinedProperty).to.be.undefined
+        t.end()
       })
 
-      it('should encode meta_struct ignoring null properties', () => {
+      t.test('should encode meta_struct ignoring null properties', t => {
         const metaStruct = {
           foo: 'bar',
           nullProperty: null
@@ -458,9 +477,10 @@ describe('encode', () => {
         }
         expect(msgpack.decode(trace[0].meta_struct.foo)).to.deep.equal(expectedMetaStruct.foo)
         expect(trace[0].meta_struct.nullProperty).to.be.undefined
+        t.end()
       })
 
-      it('should not encode null meta_struct', () => {
+      t.test('should not encode null meta_struct', t => {
         data[0].meta_struct = null
 
         encoder.encode(data)
@@ -471,14 +491,17 @@ describe('encode', () => {
         const trace = decoded[0]
 
         expect(trace[0].meta_struct).to.be.undefined
+        t.end()
       })
+      t.end()
     })
+    t.end()
   })
 
-  describe('with configuration', () => {
+  t.test('with configuration', t => {
     let logger
 
-    beforeEach(() => {
+    t.beforeEach(() => {
       // Create a sinon spy for log.debug
       logger = {
         debug: sinon.spy()
@@ -491,7 +514,7 @@ describe('encode', () => {
       encoder = new AgentEncoder(writer)
     })
 
-    it('should encode span events as a top-level field when the agent version supports this', () => {
+    t.test('should encode span events as a top-level field when the agent version supports this', t => {
       const topLevelEvents = [
         { name: 'Something went so wrong', time_unix_nano: 1000000 },
         {
@@ -536,10 +559,11 @@ describe('encode', () => {
       ]
 
       expect(trace[0].span_events).to.deep.equal(formattedTopLevelEvent)
+      t.end()
     })
 
-    it('should encode span events as a top-level field when agent supports it ' +
-      'but skips encoding unsupported field types', () => {
+    t.test('should encode span events as a top-level field when agent supports it ' +
+      'but skips encoding unsupported field types', t => {
       const topLevelEvents = [
         {
           name: 'I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx',
@@ -575,9 +599,10 @@ describe('encode', () => {
       ]
 
       expect(trace[0].span_events).to.deep.equal(formattedTopLevelEvent)
+      t.end()
     })
 
-    it('should call log.debug only once for the same unsupported key', () => {
+    t.test('should call log.debug only once for the same unsupported key', t => {
       const topLevelEvents = [
         {
           name: 'Event 1',
@@ -611,9 +636,10 @@ describe('encode', () => {
         logger.debug,
         sinon.match(/Encountered unsupported data type for span event v0\.4 encoding, key: unsupported_key/)
       )
+      t.end()
     })
 
-    it('should call log.debug once per unique unsupported key', () => {
+    t.test('should call log.debug once per unique unsupported key', t => {
       const topLevelEvents = [
         {
           name: 'Event 1',
@@ -641,6 +667,9 @@ describe('encode', () => {
       expect(logger.debug.getCall(0).args[0]).to.match(/unsupported_key1/)
       expect(logger.debug.getCall(1).args[0]).to.match(/unsupported_key2/)
       expect(logger.debug.getCall(2).args[0]).to.match(/unsupported_key3/)
+      t.end()
     })
+    t.end()
   })
+  t.end()
 })

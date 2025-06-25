@@ -1,12 +1,13 @@
 'use strict'
 
-require('./setup/tap')
+const t = require('tap')
+require('./setup/core')
 
 const http = require('http')
 const path = require('path')
 const os = require('os')
 
-describe('dogstatsd', () => {
+t.test('dogstatsd', t => {
   let client
   let DogStatsDClient
   let CustomMetrics
@@ -23,7 +24,7 @@ describe('dogstatsd', () => {
   let sockets
   let assertData
 
-  beforeEach((done) => {
+  t.beforeEach(async () => {
     udp6 = {
       send: sinon.spy(),
       on: sinon.stub().returns(udp6),
@@ -84,7 +85,7 @@ describe('dogstatsd', () => {
     }).listen(0, () => {
       httpPort = httpServer.address().port
       if (os.platform() === 'win32') {
-        done()
+        t.end()
         return
       }
       udsPath = path.join(os.tmpdir(), `test-dogstatsd-dd-trace-uds-${Math.random()}`)
@@ -96,14 +97,14 @@ describe('dogstatsd', () => {
           setTimeout(() => assertData && assertData(httpData))
         })
       }).listen(udsPath, () => {
-        done()
+        t.end()
       })
       httpUdsServer.on('connection', socket => sockets.push(socket))
     })
     httpServer.on('connection', socket => sockets.push(socket))
   })
 
-  afterEach(() => {
+  t.afterEach(() => {
     httpServer.close()
     if (httpUdsServer) {
       httpUdsServer.close()
@@ -111,7 +112,7 @@ describe('dogstatsd', () => {
     sockets.forEach(socket => socket.destroy())
   })
 
-  it('should send gauges', () => {
+  t.test('should send gauges', t => {
     client = new DogStatsDClient()
 
     client.gauge('test.avg', 10)
@@ -123,9 +124,10 @@ describe('dogstatsd', () => {
     expect(udp4.send.firstCall.args[2]).to.equal(14)
     expect(udp4.send.firstCall.args[3]).to.equal(8125)
     expect(udp4.send.firstCall.args[4]).to.equal('127.0.0.1')
+    t.end()
   })
 
-  it('should send histograms', () => {
+  t.test('should send histograms', t => {
     client = new DogStatsDClient()
 
     client.histogram('test.histogram', 10)
@@ -137,9 +139,10 @@ describe('dogstatsd', () => {
     expect(udp4.send.firstCall.args[2]).to.equal(20)
     expect(udp4.send.firstCall.args[3]).to.equal(8125)
     expect(udp4.send.firstCall.args[4]).to.equal('127.0.0.1')
+    t.end()
   })
 
-  it('should send counters', () => {
+  t.test('should send counters', t => {
     client = new DogStatsDClient()
 
     client.increment('test.count', 10)
@@ -148,9 +151,10 @@ describe('dogstatsd', () => {
     expect(udp4.send).to.have.been.called
     expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:10|c\n')
     expect(udp4.send.firstCall.args[2]).to.equal(16)
+    t.end()
   })
 
-  it('should send multiple metrics', () => {
+  t.test('should send multiple metrics', t => {
     client = new DogStatsDClient()
 
     client.gauge('test.avg', 10)
@@ -161,9 +165,10 @@ describe('dogstatsd', () => {
     expect(udp4.send).to.have.been.called
     expect(udp4.send.firstCall.args[0].toString()).to.equal('test.avg:10|g\ntest.count:10|c\ntest.count:-5|c\n')
     expect(udp4.send.firstCall.args[2]).to.equal(46)
+    t.end()
   })
 
-  it('should support tags', () => {
+  t.test('should support tags', t => {
     client = new DogStatsDClient()
 
     client.gauge('test.avg', 10, ['foo:bar', 'baz:qux'])
@@ -172,9 +177,10 @@ describe('dogstatsd', () => {
     expect(udp4.send).to.have.been.called
     expect(udp4.send.firstCall.args[0].toString()).to.equal('test.avg:10|g|#foo:bar,baz:qux\n')
     expect(udp4.send.firstCall.args[2]).to.equal(31)
+    t.end()
   })
 
-  it('should buffer metrics', () => {
+  t.test('should buffer metrics', t => {
     const value = new Array(1000).map(() => 'a').join()
     const tags = [`foo:${value}`]
 
@@ -185,9 +191,10 @@ describe('dogstatsd', () => {
     client.flush()
 
     expect(udp4.send).to.have.been.calledTwice
+    t.end()
   })
 
-  it('should not flush if the queue is empty', () => {
+  t.test('should not flush if the queue is empty', t => {
     client = new DogStatsDClient()
 
     client.flush()
@@ -195,9 +202,10 @@ describe('dogstatsd', () => {
     expect(udp4.send).to.not.have.been.called
     expect(udp6.send).to.not.have.been.called
     expect(dns.lookup).to.not.have.been.called
+    t.end()
   })
 
-  it('should not flush if the dns lookup fails', () => {
+  t.test('should not flush if the dns lookup fails', t => {
     client = new DogStatsDClient({
       host: 'invalid'
     })
@@ -208,9 +216,10 @@ describe('dogstatsd', () => {
     expect(dns.lookup).to.have.been.called
     expect(udp4.send).to.not.have.been.called
     expect(udp6.send).to.not.have.been.called
+    t.end()
   })
 
-  it('should not call DNS if the host is an IPv4 address', () => {
+  t.test('should not call DNS if the host is an IPv4 address', t => {
     client = new DogStatsDClient({
       host: '127.0.0.1'
     })
@@ -220,9 +229,10 @@ describe('dogstatsd', () => {
 
     expect(udp4.send).to.have.been.called
     expect(dns.lookup).to.not.have.been.called
+    t.end()
   })
 
-  it('should not call DNS if the host is an IPv6 address', () => {
+  t.test('should not call DNS if the host is an IPv6 address', t => {
     client = new DogStatsDClient({
       host: '2001:db8:3333:4444:5555:6666:7777:8888'
     })
@@ -232,9 +242,10 @@ describe('dogstatsd', () => {
 
     expect(udp6.send).to.have.been.called
     expect(dns.lookup).to.not.have.been.called
+    t.end()
   })
 
-  it('should support configuration', () => {
+  t.test('should support configuration', t => {
     client = new DogStatsDClient({
       host: '::1',
       port: 7777,
@@ -251,6 +262,7 @@ describe('dogstatsd', () => {
     expect(udp6.send.firstCall.args[2]).to.equal(37)
     expect(udp6.send.firstCall.args[3]).to.equal(7777)
     expect(udp6.send.firstCall.args[4]).to.equal('::1')
+    t.end()
   })
 
   const udsIt = os.platform() === 'win32' ? it.skip : it
@@ -258,9 +270,10 @@ describe('dogstatsd', () => {
     assertData = () => {
       try {
         expect(Buffer.concat(httpData).toString()).to.equal('test.avg:0|g\ntest.avg2:2|g\n')
-        done()
+        t.end()
       } catch (e) {
-        done(e)
+        t.error(e)
+        t.end()
       }
     }
 
@@ -273,13 +286,14 @@ describe('dogstatsd', () => {
     client.flush()
   })
 
-  it('should support HTTP via port', (done) => {
+  t.test('should support HTTP via port', (t) => {
     assertData = () => {
       try {
         expect(Buffer.concat(httpData).toString()).to.equal('test.avg:1|g\ntest.avg2:2|g\n')
-        done()
+        t.end()
       } catch (e) {
-        done(e)
+        t.error(e)
+        t.end()
       }
     }
 
@@ -292,13 +306,14 @@ describe('dogstatsd', () => {
     client.flush()
   })
 
-  it('should support HTTP via URL object', (done) => {
+  t.test('should support HTTP via URL object', (t) => {
     assertData = () => {
       try {
         expect(Buffer.concat(httpData).toString()).to.equal('test.avg:1|g\ntest.avg2:2|g\n')
-        done()
+        t.end()
       } catch (e) {
-        done(e)
+        t.error(e)
+        t.end()
       }
     }
 
@@ -311,16 +326,17 @@ describe('dogstatsd', () => {
     client.flush()
   })
 
-  it('should fail over to UDP when receiving HTTP 404 error from agent', (done) => {
+  t.test('should fail over to UDP when receiving HTTP 404 error from agent', (t) => {
     assertData = () => {
       setTimeout(() => {
         try {
           expect(udp4.send).to.have.been.called
           expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:10|c\n')
           expect(udp4.send.firstCall.args[2]).to.equal(16)
-          done()
+          t.end()
         } catch (e) {
-          done(e)
+          t.error(e)
+          t.end()
         }
       })
     }
@@ -336,15 +352,16 @@ describe('dogstatsd', () => {
     client.flush()
   })
 
-  it('should fail over to UDP when receiving network error from agent', (done) => {
+  t.test('should fail over to UDP when receiving network error from agent', (t) => {
     udp4.send = sinon.stub().callsFake(() => {
       try {
         expect(udp4.send).to.have.been.called
         expect(udp4.send.firstCall.args[0].toString()).to.equal('test.foo:10|c\n')
         expect(udp4.send.firstCall.args[2]).to.equal(14)
-        done()
+        t.end()
       } catch (e) {
-        done(e)
+        t.error(e)
+        t.end()
       }
     })
 
@@ -362,8 +379,8 @@ describe('dogstatsd', () => {
     client.flush()
   })
 
-  describe('CustomMetrics', () => {
-    it('.gauge()', () => {
+  t.test('CustomMetrics', t => {
+    t.test('.gauge()', t => {
       client = new CustomMetrics({ dogstatsd: {} })
 
       client.gauge('test.avg', 10, { foo: 'bar' })
@@ -372,9 +389,10 @@ describe('dogstatsd', () => {
 
       expect(udp4.send).to.have.been.called
       expect(udp4.send.firstCall.args[0].toString()).to.equal('test.avg:10|g|#foo:bar\n')
+      t.end()
     })
 
-    it('.gauge() with tags', () => {
+    t.test('.gauge() with tags', t => {
       client = new CustomMetrics({ dogstatsd: {} })
 
       client.gauge('test.avg', 10, { foo: 'bar' })
@@ -387,9 +405,10 @@ describe('dogstatsd', () => {
         'test.avg:10|g|#foo:bar',
         'test.avg:20|g|#foo:bar,baz:qux'
       ].join('\n') + '\n')
+      t.end()
     })
 
-    it('.increment()', () => {
+    t.test('.increment()', t => {
       client = new CustomMetrics({ dogstatsd: {} })
 
       client.increment('test.count', 10)
@@ -398,9 +417,10 @@ describe('dogstatsd', () => {
 
       expect(udp4.send).to.have.been.called
       expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:20|c\n')
+      t.end()
     })
 
-    it('.increment() with default', () => {
+    t.test('.increment() with default', t => {
       client = new CustomMetrics({ dogstatsd: {} })
 
       client.increment('test.count')
@@ -409,9 +429,10 @@ describe('dogstatsd', () => {
 
       expect(udp4.send).to.have.been.called
       expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:2|c\n')
+      t.end()
     })
 
-    it('.increment() with tags', () => {
+    t.test('.increment() with tags', t => {
       client = new CustomMetrics({ dogstatsd: {} })
 
       client.increment('test.count', 10, { foo: 'bar' })
@@ -424,9 +445,10 @@ describe('dogstatsd', () => {
         'test.count:10|c|#foo:bar',
         'test.count:20|c|#foo:bar,baz:qux'
       ].join('\n') + '\n')
+      t.end()
     })
 
-    it('.decrement()', () => {
+    t.test('.decrement()', t => {
       client = new CustomMetrics({ dogstatsd: {} })
 
       client.decrement('test.count', 10)
@@ -435,9 +457,10 @@ describe('dogstatsd', () => {
 
       expect(udp4.send).to.have.been.called
       expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:-20|c\n')
+      t.end()
     })
 
-    it('.decrement() with default', () => {
+    t.test('.decrement() with default', t => {
       client = new CustomMetrics({ dogstatsd: {} })
 
       client.decrement('test.count')
@@ -446,9 +469,10 @@ describe('dogstatsd', () => {
 
       expect(udp4.send).to.have.been.called
       expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:-2|c\n')
+      t.end()
     })
 
-    it('.distribution()', () => {
+    t.test('.distribution()', t => {
       client = new CustomMetrics({ dogstatsd: {} })
 
       client.distribution('test.dist', 10)
@@ -457,9 +481,10 @@ describe('dogstatsd', () => {
 
       expect(udp4.send).to.have.been.called
       expect(udp4.send.firstCall.args[0].toString()).to.equal('test.dist:10|d\ntest.dist:10|d\n')
+      t.end()
     })
 
-    it('.histogram()', () => {
+    t.test('.histogram()', t => {
       client = new CustomMetrics({ dogstatsd: {} })
 
       client.histogram('test.histogram', 10)
@@ -477,9 +502,10 @@ describe('dogstatsd', () => {
         'test.histogram.median:10.074696689511441|g',
         'test.histogram.95percentile:10.074696689511441|g'
       ].join('\n') + '\n')
+      t.end()
     })
 
-    it('.histogram() with tags', () => {
+    t.test('.histogram() with tags', t => {
       client = new CustomMetrics({ dogstatsd: {} })
 
       client.histogram('test.histogram', 10, { foo: 'bar' })
@@ -506,9 +532,10 @@ describe('dogstatsd', () => {
         'test.histogram.median:10.074696689511441|g|#foo:bar,baz:qux',
         'test.histogram.95percentile:10.074696689511441|g|#foo:bar,baz:qux'
       ].join('\n') + '\n')
+      t.end()
     })
 
-    it('should support array-based tags for gauge', () => {
+    t.test('should support array-based tags for gauge', t => {
       client = new CustomMetrics({ dogstatsd: {} })
 
       client.gauge('test.avg', 10, ['foo:bar', 'baz:qux'])
@@ -516,9 +543,10 @@ describe('dogstatsd', () => {
 
       expect(udp4.send).to.have.been.called
       expect(udp4.send.firstCall.args[0].toString()).to.equal('test.avg:10|g|#foo:bar,baz:qux\n')
+      t.end()
     })
 
-    it('should support array-based tags for increment', () => {
+    t.test('should support array-based tags for increment', t => {
       client = new CustomMetrics({ dogstatsd: {} })
 
       client.increment('test.count', 10, ['foo:bar', 'baz:qux'])
@@ -526,9 +554,10 @@ describe('dogstatsd', () => {
 
       expect(udp4.send).to.have.been.called
       expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:10|c|#foo:bar,baz:qux\n')
+      t.end()
     })
 
-    it('should support array-based tags for decrement', () => {
+    t.test('should support array-based tags for decrement', t => {
       client = new CustomMetrics({ dogstatsd: {} })
 
       client.decrement('test.count', 10, ['foo:bar', 'baz:qux'])
@@ -536,9 +565,10 @@ describe('dogstatsd', () => {
 
       expect(udp4.send).to.have.been.called
       expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:-10|c|#foo:bar,baz:qux\n')
+      t.end()
     })
 
-    it('should support array-based tags for distribution', () => {
+    t.test('should support array-based tags for distribution', t => {
       client = new CustomMetrics({ dogstatsd: {} })
 
       client.distribution('test.dist', 10, ['foo:bar', 'baz:qux'])
@@ -546,9 +576,10 @@ describe('dogstatsd', () => {
 
       expect(udp4.send).to.have.been.called
       expect(udp4.send.firstCall.args[0].toString()).to.equal('test.dist:10|d|#foo:bar,baz:qux\n')
+      t.end()
     })
 
-    it('should support array-based tags for histogram', () => {
+    t.test('should support array-based tags for histogram', t => {
       client = new CustomMetrics({ dogstatsd: {} })
 
       client.histogram('test.histogram', 10, ['foo:bar', 'baz:qux'])
@@ -565,9 +596,10 @@ describe('dogstatsd', () => {
         'test.histogram.median:10.074696689511441|g|#foo:bar,baz:qux',
         'test.histogram.95percentile:10.074696689511441|g|#foo:bar,baz:qux'
       ].join('\n') + '\n')
+      t.end()
     })
 
-    it('should handle empty array of tags', () => {
+    t.test('should handle empty array of tags', t => {
       client = new CustomMetrics({ dogstatsd: {} })
 
       client.gauge('test.avg', 10, [])
@@ -575,9 +607,10 @@ describe('dogstatsd', () => {
 
       expect(udp4.send).to.have.been.called
       expect(udp4.send.firstCall.args[0].toString()).to.equal('test.avg:10|g\n')
+      t.end()
     })
 
-    it('should handle mixed tag formats', () => {
+    t.test('should handle mixed tag formats', t => {
       client = new CustomMetrics({ dogstatsd: {} })
 
       client.gauge('test.avg', 10, { foo: 'bar' })
@@ -589,9 +622,10 @@ describe('dogstatsd', () => {
         'test.avg:10|g|#foo:bar',
         'test.avg:20|g|#baz:qux'
       ].join('\n') + '\n')
+      t.end()
     })
 
-    it('should flush via interval', () => {
+    t.test('should flush via interval', t => {
       const clock = sinon.useFakeTimers()
 
       client = new CustomMetrics({ dogstatsd: {} })
@@ -604,6 +638,9 @@ describe('dogstatsd', () => {
 
       expect(udp4.send).to.have.been.called
       expect(udp4.send.firstCall.args[0].toString()).to.equal('test.avg:10|g|#foo:bar\n')
+      t.end()
     })
+    t.end()
   })
+  t.end()
 })

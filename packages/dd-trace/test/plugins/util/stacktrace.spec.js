@@ -3,15 +3,16 @@
 const { isAbsolute } = require('path')
 const { getNextLineNumber } = require('../helpers')
 
-require('../../setup/tap')
+const t = require('tap')
+require('../../setup/core')
 
 const {
   getCallSites,
   getUserLandFrames
 } = require('../../../src/plugins/util/stacktrace')
 
-describe('stacktrace utils', () => {
-  it('should get callsites array from getCallsites', () => {
+t.test('stacktrace utils', t => {
+  t.test('should get callsites array from getCallsites', t => {
     const callsites = getCallSites()
     expect(callsites).to.be.an('array')
     expect(callsites.length).to.be.gt(0)
@@ -20,10 +21,11 @@ describe('stacktrace utils', () => {
       expect(callsite.constructor.name).to.equal('CallSite')
       expect(callsite.getFileName).to.be.an.instanceof(Function)
     })
+    t.end()
   })
 
-  describe('getUserLandFrames', () => {
-    it('should return array of frame objects', function helloWorld () {
+  t.test('getUserLandFrames', t => {
+    t.test('should return array of frame objects', function helloWorld (t) {
       function someFunction () {
         const frames = getUserLandFrames(someFunction)
 
@@ -49,9 +51,10 @@ describe('stacktrace utils', () => {
 
       const lineNumber = getNextLineNumber()
       someFunction()
+      t.end()
     })
 
-    it('should respect limit', function helloWorld () {
+    t.test('should respect limit', function helloWorld (t) {
       (function someFunction () {
         const frames = getUserLandFrames(someFunction, 1)
         expect(frames.length).to.equal(1)
@@ -60,6 +63,9 @@ describe('stacktrace utils', () => {
         expect(frame.method).to.equal('helloWorld')
         expect(frame.type).to.equal('Test')
       })()
+      t.end()
     })
+    t.end()
   })
+  t.end()
 })

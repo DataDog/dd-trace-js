@@ -1,12 +1,13 @@
 'use strict'
 
-require('../setup/tap')
+const t = require('tap')
+require('../setup/core')
 const { encodeVarint, decodeVarint } = require('../../src/datastreams/encoding')
 const { expect } = require('chai')
 
-describe('encoding', () => {
-  describe('encodeVarInt', () => {
-    it('encoding then decoding should be a no op for int32 numbers', () => {
+t.test('encoding', t => {
+  t.test('encodeVarInt', t => {
+    t.test('encoding then decoding should be a no op for int32 numbers', t => {
       const n = 1679672748
       const expectedEncoded = new Uint8Array([216, 150, 238, 193, 12])
       const encoded = encodeVarint(n)
@@ -15,9 +16,10 @@ describe('encoding', () => {
       const [decoded, bytes] = decodeVarint(encoded)
       expect(decoded).to.equal(n)
       expect(bytes).to.length(0)
+      t.end()
     })
 
-    it('encoding then decoding should be a no op for bigger than int32 numbers', () => {
+    t.test('encoding then decoding should be a no op for bigger than int32 numbers', t => {
       const n = 1679711644352
       const expectedEncoded = new Uint8Array([
         128, 171, 237, 233, 226, 97
@@ -32,12 +34,16 @@ describe('encoding', () => {
       const [decoded2, bytes2] = decodeVarint(bytes)
       expect(decoded2).to.equal(n)
       expect(bytes2).to.length(0)
+      t.end()
     })
 
-    it('encoding a number bigger than Max safe int fails.', () => {
+    t.test('encoding a number bigger than Max safe int fails.', t => {
       const n = Number.MAX_SAFE_INTEGER + 10
       const encoded = encodeVarint(n)
       expect(encoded).to.undefined
+      t.end()
     })
+    t.end()
   })
+  t.end()
 })

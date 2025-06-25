@@ -1,6 +1,7 @@
 'use strict'
 
-require('../setup/tap')
+const t = require('tap')
+require('../setup/core')
 
 const { expect } = require('chai')
 
@@ -20,8 +21,8 @@ class TestSpanProcessor extends NoopSpanProcessor {
   }
 }
 
-describe('OTel MultiSpanProcessor', () => {
-  it('should call onStart', () => {
+t.test('OTel MultiSpanProcessor', t => {
+  t.test('should call onStart', t => {
     const processors = [
       new TestSpanProcessor(),
       new TestSpanProcessor()
@@ -33,9 +34,10 @@ describe('OTel MultiSpanProcessor', () => {
     for (const processor of processors) {
       expect(processor.onStart).to.have.been.calledWith(1, 2)
     }
+    t.end()
   })
 
-  it('should call onEnd', () => {
+  t.test('should call onEnd', t => {
     const processors = [
       new TestSpanProcessor(),
       new TestSpanProcessor()
@@ -47,9 +49,10 @@ describe('OTel MultiSpanProcessor', () => {
     for (const processor of processors) {
       expect(processor.onEnd).to.have.been.calledWith(3)
     }
+    t.end()
   })
 
-  it('should call flush', () => {
+  t.test('should call flush', t => {
     const processors = [
       new TestSpanProcessor(),
       new TestSpanProcessor()
@@ -61,9 +64,10 @@ describe('OTel MultiSpanProcessor', () => {
     for (const processor of processors) {
       expect(processor.forceFlush).to.have.been.calledOnce
     }
+    t.end()
   })
 
-  it('should call onEnd', () => {
+  t.test('should call onEnd', t => {
     const processors = [
       new TestSpanProcessor(),
       new TestSpanProcessor()
@@ -75,5 +79,7 @@ describe('OTel MultiSpanProcessor', () => {
     for (const processor of processors) {
       expect(processor.shutdown).to.have.been.calledOnce
     }
+    t.end()
   })
+  t.end()
 })

@@ -1,6 +1,7 @@
 'use strict'
 
-require('../setup/tap')
+const t = require('tap')
+require('../setup/core')
 
 const LogPlugin = require('../../src/plugins/log_plugin')
 const BunyanPlugin = require('../../../datadog-plugin-bunyan/src/index')
@@ -38,8 +39,8 @@ plugin.configure({
   enabled: true
 })
 
-describe('LogPlugin', () => {
-  it('always adds service, version, and env', () => {
+t.test('LogPlugin', t => {
+  t.test('always adds service, version, and env', t => {
     const data = { message: {} }
     testLogChannel.publish(data)
     const { message } = data
@@ -49,9 +50,10 @@ describe('LogPlugin', () => {
     // Should not have trace/span data when none is active
     expect(message.dd).to.not.have.property('trace_id')
     expect(message.dd).to.not.have.property('span_id')
+    t.end()
   })
 
-  it('should include trace_id and span_id when a span is active', () => {
+  t.test('should include trace_id and span_id when a span is active', t => {
     const span = tracer.startSpan('test')
 
     tracer.scope().activate(span, () => {
@@ -65,9 +67,10 @@ describe('LogPlugin', () => {
       expect(message.dd).to.have.property('trace_id', span.context().toTraceId(true))
       expect(message.dd).to.have.property('span_id', span.context().toSpanId())
     })
+    t.end()
   })
 
-  it('should inject logs for only structured loggers when logInjection is structured', () => {
+  t.test('should inject logs for only structured loggers when logInjection is structured', t => {
     plugin.configure({
       logInjection: 'structured',
       enabled: true
@@ -103,5 +106,7 @@ describe('LogPlugin', () => {
       expect(message.dd).to.have.property('trace_id', structuredLoggerSpan.context().toTraceId(true))
       expect(message.dd).to.have.property('span_id', structuredLoggerSpan.context().toSpanId())
     })
+    t.end()
   })
+  t.end()
 })

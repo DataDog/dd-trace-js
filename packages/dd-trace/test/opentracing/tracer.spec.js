@@ -1,13 +1,14 @@
 'use strict'
 
-require('../setup/tap')
+const t = require('tap')
+require('../setup/core')
 
 const opentracing = require('opentracing')
 const os = require('os')
 const SpanContext = require('../../src/opentracing/span_context')
 const Reference = opentracing.Reference
 
-describe('Tracer', () => {
+t.test('Tracer', t => {
   let Tracer
   let tracer
   let Span
@@ -29,7 +30,7 @@ describe('Tracer', () => {
   let config
   let log
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     fields = {}
 
     span = {
@@ -95,24 +96,26 @@ describe('Tracer', () => {
     })
   })
 
-  it('should support recording', () => {
+  t.test('should support recording', t => {
     tracer = new Tracer(config)
 
     expect(AgentExporter).to.have.been.called
     expect(AgentExporter).to.have.been.calledWith(config, prioritySampler)
     expect(SpanProcessor).to.have.been.calledWith(agentExporter, prioritySampler, config)
+    t.end()
   })
 
-  it('should allow to configure an alternative prioritySampler', () => {
+  t.test('should allow to configure an alternative prioritySampler', t => {
     const sampler = {}
     tracer = new Tracer(config, sampler)
 
     expect(AgentExporter).to.have.been.calledWith(config, sampler)
     expect(SpanProcessor).to.have.been.calledWith(agentExporter, sampler, config)
+    t.end()
   })
 
-  describe('startSpan', () => {
-    it('should start a span', () => {
+  t.test('startSpan', t => {
+    t.test('should start a span', t => {
       fields.tags = { foo: 'bar' }
       fields.startTime = 1234567890000000000
 
@@ -137,9 +140,10 @@ describe('Tracer', () => {
       })
 
       expect(testSpan).to.equal(span)
+      t.end()
     })
 
-    it('should start a span that is the child of a span', () => {
+    t.test('should start a span that is the child of a span', t => {
       const parent = new SpanContext()
 
       fields.references = [
@@ -153,9 +157,10 @@ describe('Tracer', () => {
         operationName: 'name',
         parent
       })
+      t.end()
     })
 
-    it('should start a span that follows from a span', () => {
+    t.test('should start a span that follows from a span', t => {
       const parent = new SpanContext()
 
       fields.references = [
@@ -169,9 +174,10 @@ describe('Tracer', () => {
         operationName: 'name',
         parent
       })
+      t.end()
     })
 
-    it('should start a span with the system hostname if reportHostname is enabled', () => {
+    t.test('should start a span with the system hostname if reportHostname is enabled', t => {
       fields.tags = { foo: 'bar' }
       fields.startTime = 1234567890000000000
       config.reportHostname = true
@@ -192,9 +198,10 @@ describe('Tracer', () => {
       })
 
       expect(testSpan).to.equal(span)
+      t.end()
     })
 
-    it('should ignore additional follow references', () => {
+    t.test('should ignore additional follow references', t => {
       const parent = new SpanContext()
 
       fields.references = [
@@ -209,9 +216,10 @@ describe('Tracer', () => {
         operationName: 'name',
         parent
       })
+      t.end()
     })
 
-    it('should ignore unknown references', () => {
+    t.test('should ignore unknown references', t => {
       const parent = new SpanContext()
 
       fields.references = [
@@ -225,9 +233,10 @@ describe('Tracer', () => {
         operationName: 'name',
         parent: null
       })
+      t.end()
     })
 
-    it('should merge default tracer tags with span tags', () => {
+    t.test('should merge default tracer tags with span tags', t => {
       config.tags = {
         foo: 'tracer',
         bar: 'tracer'
@@ -243,10 +252,11 @@ describe('Tracer', () => {
 
       expect(span.addTags).to.have.been.calledWith(config.tags)
       expect(span.addTags).to.have.been.calledWith(fields.tags)
+      t.end()
     })
 
-    it('If span is granted a service name that differs from the global service name' +
-      'ensure spans `version` tag is undefined.', () => {
+    t.test('If span is granted a service name that differs from the global service name' +
+      'ensure spans `version` tag is undefined.', t => {
       config.tags = {
         foo: 'tracer',
         bar: 'tracer'
@@ -277,9 +287,10 @@ describe('Tracer', () => {
         links: undefined
       })
       expect(testSpan).to.equal(span)
+      t.end()
     })
 
-    it('should start a span with the trace ID generation configuration', () => {
+    t.test('should start a span with the trace ID generation configuration', t => {
       config.traceId128BitGenerationEnabled = true
       tracer = new Tracer(config)
       const testSpan = tracer.startSpan('name', fields)
@@ -298,9 +309,10 @@ describe('Tracer', () => {
       })
 
       expect(testSpan).to.equal(span)
+      t.end()
     })
 
-    it('should start a span with span links attached', () => {
+    t.test('should start a span with span links attached', t => {
       const context = new SpanContext()
       fields.links = [{ context }]
       tracer = new Tracer(config)
@@ -320,11 +332,13 @@ describe('Tracer', () => {
       })
 
       expect(testSpan).to.equal(span)
+      t.end()
     })
+    t.end()
   })
 
-  describe('inject', () => {
-    it('should support text map format', () => {
+  t.test('inject', t => {
+    t.test('should support text map format', t => {
       TextMapPropagator.returns(propagator)
 
       tracer = new Tracer(config)
@@ -332,9 +346,10 @@ describe('Tracer', () => {
 
       expect(TextMapPropagator).to.have.been.calledWith(config)
       expect(propagator.inject).to.have.been.calledWith(spanContext, carrier)
+      t.end()
     })
 
-    it('should support http headers format', () => {
+    t.test('should support http headers format', t => {
       HttpPropagator.returns(propagator)
 
       tracer = new Tracer(config)
@@ -342,36 +357,41 @@ describe('Tracer', () => {
 
       expect(HttpPropagator).to.have.been.calledWith(config)
       expect(propagator.inject).to.have.been.calledWith(spanContext, carrier)
+      t.end()
     })
 
-    it('should support binary format', () => {
+    t.test('should support binary format', t => {
       BinaryPropagator.returns(propagator)
 
       tracer = new Tracer(config)
       tracer.inject(spanContext, opentracing.FORMAT_BINARY, carrier)
 
       expect(propagator.inject).to.have.been.calledWith(spanContext, carrier)
+      t.end()
     })
 
-    it('should handle errors', () => {
+    t.test('should handle errors', t => {
       tracer = new Tracer(config)
 
       expect(() => tracer.inject({})).not.to.throw()
       expect(log.error).to.have.been.calledOnce
+      t.end()
     })
 
-    it('should generate the sampling priority', () => {
+    t.test('should generate the sampling priority', t => {
       TextMapPropagator.returns(propagator)
 
       tracer = new Tracer(config)
       tracer.inject(spanContext, opentracing.FORMAT_TEXT_MAP, carrier)
 
       expect(prioritySampler.sample).to.have.been.calledWith(spanContext)
+      t.end()
     })
+    t.end()
   })
 
-  describe('extract', () => {
-    it('should support text map format', () => {
+  t.test('extract', t => {
+    t.test('should support text map format', t => {
       TextMapPropagator.returns(propagator)
       propagator.extract.withArgs(carrier).returns('spanContext')
 
@@ -379,9 +399,10 @@ describe('Tracer', () => {
       const spanContext = tracer.extract(opentracing.FORMAT_TEXT_MAP, carrier)
 
       expect(spanContext).to.equal('spanContext')
+      t.end()
     })
 
-    it('should support http headers format', () => {
+    t.test('should support http headers format', t => {
       HttpPropagator.returns(propagator)
       propagator.extract.withArgs(carrier).returns('spanContext')
 
@@ -389,9 +410,10 @@ describe('Tracer', () => {
       const spanContext = tracer.extract(opentracing.FORMAT_HTTP_HEADERS, carrier)
 
       expect(spanContext).to.equal('spanContext')
+      t.end()
     })
 
-    it('should support binary format', () => {
+    t.test('should support binary format', t => {
       BinaryPropagator.returns(propagator)
       propagator.extract.withArgs(carrier).returns('spanContext')
 
@@ -399,12 +421,16 @@ describe('Tracer', () => {
       const spanContext = tracer.extract(opentracing.FORMAT_BINARY, carrier)
 
       expect(spanContext).to.equal('spanContext')
+      t.end()
     })
 
-    it('should handle errors', () => {
+    t.test('should handle errors', t => {
       tracer = new Tracer(config)
 
       expect(() => tracer.extract()).not.to.throw()
+      t.end()
     })
+    t.end()
   })
+  t.end()
 })

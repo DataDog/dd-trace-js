@@ -1,6 +1,7 @@
 'use strict'
 
-require('./setup/tap')
+const t = require('tap')
+require('./setup/core')
 
 const { channel } = require('dc-polyfill')
 const proxyquire = require('proxyquire')
@@ -8,7 +9,7 @@ const proxyquire = require('proxyquire')
 const loadChannel = channel('dd-trace:instrumentation:load')
 const nomenclature = require('../../dd-trace/src/service-naming')
 
-describe('Plugin Manager', () => {
+t.test('Plugin Manager', t => {
   let tracer
   let instantiated
   let PluginManager
@@ -18,7 +19,7 @@ describe('Plugin Manager', () => {
   let Six
   let pm
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     tracer = {
       _nomenclature: nomenclature
     }
@@ -81,24 +82,26 @@ describe('Plugin Manager', () => {
     pm = new PluginManager(tracer)
   })
 
-  afterEach(() => {
+  t.afterEach(() => {
     delete process.env.DD_TRACE_DISABLED_PLUGINS
     pm.destroy()
   })
 
-  describe('configurePlugin', () => {
-    it('does not throw for old-style plugins', () => {
+  t.test('configurePlugin', t => {
+    t.test('does not throw for old-style plugins', t => {
       expect(() => pm.configurePlugin('one', false)).to.not.throw()
+      t.end()
     })
 
-    describe('without configure', () => {
-      it('should not configure plugins', () => {
+    t.test('without configure', t => {
+      t.test('should not configure plugins', t => {
         pm.configurePlugin('two')
         loadChannel.publish({ name: 'two' })
         expect(Two.prototype.configure).to.not.have.been.called
+        t.end()
       })
 
-      it('should keep the config for future configure calls', () => {
+      t.test('should keep the config for future configure calls', t => {
         pm.configurePlugin('two', { foo: 'bar' })
         pm.configure()
         loadChannel.publish({ name: 'two' })
@@ -106,208 +109,241 @@ describe('Plugin Manager', () => {
           enabled: true,
           foo: 'bar'
         })
+        t.end()
       })
+      t.end()
     })
 
-    describe('without env vars', () => {
-      beforeEach(() => pm.configure())
+    t.test('without env vars', t => {
+      t.beforeEach(() => pm.configure())
 
-      it('works with no config param', () => {
+      t.test('works with no config param', t => {
         pm.configurePlugin('two')
         loadChannel.publish({ name: 'two' })
         expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: true })
+        t.end()
       })
 
-      it('works with empty object config', () => {
+      t.test('works with empty object config', t => {
         pm.configurePlugin('two', {})
         loadChannel.publish({ name: 'two' })
         expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: true })
+        t.end()
       })
 
-      it('works with "enabled: false" object config', () => {
+      t.test('works with "enabled: false" object config', t => {
         pm.configurePlugin('two', { enabled: false })
         loadChannel.publish({ name: 'two' })
         expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: false })
+        t.end()
       })
 
-      it('works with "enabled: true" object config', () => {
+      t.test('works with "enabled: true" object config', t => {
         pm.configurePlugin('two', { enabled: true })
         loadChannel.publish({ name: 'two' })
         expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: true })
+        t.end()
       })
 
-      it('works with boolean false', () => {
+      t.test('works with boolean false', t => {
         pm.configurePlugin('two', false)
         loadChannel.publish({ name: 'two' })
         expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: false })
+        t.end()
       })
 
-      it('works with boolean true', () => {
+      t.test('works with boolean true', t => {
         pm.configurePlugin('two', true)
         loadChannel.publish({ name: 'two' })
         expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: true })
+        t.end()
       })
+      t.end()
     })
 
-    describe('with disabled plugins', () => {
-      beforeEach(() => pm.configure())
+    t.test('with disabled plugins', t => {
+      t.beforeEach(() => pm.configure())
 
-      it('should not call configure on individual enable override', () => {
+      t.test('should not call configure on individual enable override', t => {
         pm.configurePlugin('five', { enabled: true })
         loadChannel.publish({ name: 'five' })
         expect(Five.prototype.configure).to.not.have.been.called
+        t.end()
       })
 
-      it('should not configure all disabled plugins', () => {
+      t.test('should not configure all disabled plugins', t => {
         pm.configure({})
         loadChannel.publish({ name: 'five' })
         expect(Five.prototype.configure).to.not.have.been.called
         expect(Six.prototype.configure).to.not.have.been.called
+        t.end()
       })
+      t.end()
     })
 
-    describe('with env var true', () => {
-      beforeEach(() => pm.configure())
+    t.test('with env var true', t => {
+      t.beforeEach(() => pm.configure())
 
-      beforeEach(() => {
+      t.beforeEach(() => {
         process.env.DD_TRACE_TWO_ENABLED = '1'
       })
 
-      afterEach(() => {
+      t.afterEach(() => {
         delete process.env.DD_TRACE_TWO_ENABLED
       })
 
-      it('works with no config param', () => {
+      t.test('works with no config param', t => {
         pm.configurePlugin('two')
         loadChannel.publish({ name: 'two' })
         expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: true })
+        t.end()
       })
 
-      it('works with empty object config', () => {
+      t.test('works with empty object config', t => {
         pm.configurePlugin('two', {})
         loadChannel.publish({ name: 'two' })
         expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: true })
+        t.end()
       })
 
-      it('works with "enabled: false" object config', () => {
+      t.test('works with "enabled: false" object config', t => {
         pm.configurePlugin('two', { enabled: false })
         loadChannel.publish({ name: 'two' })
         expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: false })
+        t.end()
       })
 
-      it('works with "enabled: true" object config', () => {
+      t.test('works with "enabled: true" object config', t => {
         pm.configurePlugin('two', { enabled: true })
         loadChannel.publish({ name: 'two' })
         expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: true })
+        t.end()
       })
 
-      it('works with boolean false', () => {
+      t.test('works with boolean false', t => {
         pm.configurePlugin('two', false)
         loadChannel.publish({ name: 'two' })
         expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: false })
+        t.end()
       })
 
-      it('works with boolean true', () => {
+      t.test('works with boolean true', t => {
         pm.configurePlugin('two', true)
         loadChannel.publish({ name: 'two' })
         expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: true })
+        t.end()
       })
+      t.end()
     })
 
-    describe('with env var false', () => {
-      beforeEach(() => pm.configure())
+    t.test('with env var false', t => {
+      t.beforeEach(() => pm.configure())
 
-      beforeEach(() => {
+      t.beforeEach(() => {
         process.env.DD_TRACE_TWO_ENABLED = '0'
       })
 
-      afterEach(() => {
+      t.afterEach(() => {
         delete process.env.DD_TRACE_TWO_ENABLED
       })
 
-      it('works with no config param', () => {
+      t.test('works with no config param', t => {
         pm.configurePlugin('two')
         loadChannel.publish({ name: 'two' })
         expect(Two.prototype.configure).to.not.have.been.called
+        t.end()
       })
 
-      it('works with empty object config', () => {
+      t.test('works with empty object config', t => {
         pm.configurePlugin('two', {})
         loadChannel.publish({ name: 'two' })
         expect(Two.prototype.configure).to.not.have.been.called
+        t.end()
       })
 
-      it('works with "enabled: false" object config', () => {
+      t.test('works with "enabled: false" object config', t => {
         pm.configurePlugin('two', { enabled: false })
         loadChannel.publish({ name: 'two' })
         expect(Two.prototype.configure).to.not.have.been.called
+        t.end()
       })
 
-      it('works with "enabled: true" object config', () => {
+      t.test('works with "enabled: true" object config', t => {
         pm.configurePlugin('two', { enabled: true })
         loadChannel.publish({ name: 'two' })
         expect(Two.prototype.configure).to.not.have.been.called
+        t.end()
       })
 
-      it('works with boolean false', () => {
+      t.test('works with boolean false', t => {
         pm.configurePlugin('two', false)
         loadChannel.publish({ name: 'two' })
         expect(Two.prototype.configure).to.not.have.been.called
+        t.end()
       })
 
-      it('works with boolean true', () => {
+      t.test('works with boolean true', t => {
         pm.configurePlugin('two', true)
         loadChannel.publish({ name: 'two' })
         expect(Two.prototype.configure).to.not.have.been.called
+        t.end()
       })
+      t.end()
     })
+    t.end()
   })
 
-  describe('configure', () => {
-    describe('without the load event', () => {
-      it('should not instantiate plugins', () => {
+  t.test('configure', t => {
+    t.test('without the load event', t => {
+      t.test('should not instantiate plugins', t => {
         pm.configure()
         pm.configurePlugin('two')
         expect(instantiated).to.be.empty
         expect(Two.prototype.configure).to.not.have.been.called
+        t.end()
       })
+      t.end()
     })
 
-    it('instantiates plugin classes', () => {
+    t.test('instantiates plugin classes', t => {
       pm.configure()
       loadChannel.publish({ name: 'two' })
       loadChannel.publish({ name: 'four' })
       expect(instantiated).to.deep.equal(['two', 'four'])
+      t.end()
     })
 
-    describe('service naming schema manager', () => {
+    t.test('service naming schema manager', t => {
       const config = {
         foo: { bar: 1 },
         baz: 2
       }
       let configureSpy
 
-      beforeEach(() => {
+      t.beforeEach(() => {
         configureSpy = sinon.spy(tracer._nomenclature, 'configure')
       })
 
-      afterEach(() => {
+      t.afterEach(() => {
         configureSpy.restore()
       })
 
-      it('is configured when plugin manager is configured', () => {
+      t.test('is configured when plugin manager is configured', t => {
         pm.configure(config)
         expect(configureSpy).to.have.been.calledWith(config)
+        t.end()
       })
+      t.end()
     })
 
-    it('skips configuring plugins entirely when plugins is false', () => {
+    t.test('skips configuring plugins entirely when plugins is false', t => {
       pm.configurePlugin = sinon.spy()
       pm.configure({ plugins: false })
       expect(pm.configurePlugin).not.to.have.been.called
+      t.end()
     })
 
-    it('observes configuration options', () => {
+    t.test('observes configuration options', t => {
       pm.configure({
         serviceMapping: { two: 'deux' },
         logInjection: true,
@@ -329,18 +365,23 @@ describe('Plugin Manager', () => {
         queryStringObfuscation: '.*',
         clientIpEnabled: true
       })
+      t.end()
     })
+    t.end()
   })
 
-  describe('destroy', () => {
-    beforeEach(() => pm.configure())
+  t.test('destroy', t => {
+    t.beforeEach(() => pm.configure())
 
-    it('should disable the plugins', () => {
+    t.test('should disable the plugins', t => {
       loadChannel.publish({ name: 'two' })
       loadChannel.publish({ name: 'four' })
       pm.destroy()
       expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: false })
       expect(Four.prototype.configure).to.have.been.calledWithMatch({ enabled: false })
+      t.end()
     })
+    t.end()
   })
+  t.end()
 })

@@ -1,6 +1,7 @@
 'use strict'
 
-require('../../setup/tap')
+const t = require('tap')
+require('../../setup/core')
 
 const nock = require('nock')
 const getPort = require('get-port')
@@ -32,12 +33,12 @@ const initHTTPServer = (port) => {
   })
 }
 
-describe('request', function () {
+t.test('request', function (t) {
   let request
   let log
   let docker
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     log = {
       error: sinon.spy(),
       debug: sinon.spy()
@@ -53,11 +54,11 @@ describe('request', function () {
     })
   })
 
-  afterEach(() => {
+  t.afterEach(() => {
     nock.cleanAll()
   })
 
-  it('should send an http request with a buffer', (done) => {
+  t.test('should send an http request with a buffer', (t) => {
     nock('http://test:123', {
       reqheaders: {
         'content-type': 'application/octet-stream',
@@ -80,11 +81,12 @@ describe('request', function () {
       },
       (err, res) => {
         expect(res).to.equal('OK')
-        done(err)
+        t.error(err)
+        t.end()
       })
   })
 
-  it('should handle an http error', done => {
+  t.test('should handle an http error', t => {
     nock('http://localhost:8080')
       .put('/path')
       .reply(400)
@@ -96,11 +98,11 @@ describe('request', function () {
     }, err => {
       expect(err).to.be.instanceof(Error)
       expect(err.message).to.equal('Error from http://localhost:8080/path: 400 Bad Request.')
-      done()
+      t.end()
     })
   })
 
-  it('should handle an http error when url is specified', done => {
+  t.test('should handle an http error when url is specified', t => {
     nock('http://api.datadog.com')
       .put('/path')
       .reply(400)
@@ -112,12 +114,12 @@ describe('request', function () {
     }, err => {
       expect(err).to.be.instanceof(Error)
       expect(err.message).to.equal('Error from http://api.datadog.com/path: 400 Bad Request.')
-      done()
+      t.end()
     })
   })
 
   // TODO: use fake timers to avoid delaying tests
-  it('should timeout after 2 seconds by default', function (done) {
+  t.test('should timeout after 2 seconds by default', function (t) {
     nock('http://localhost:80')
       .put('/path')
       .times(2)
@@ -130,11 +132,11 @@ describe('request', function () {
     }, err => {
       expect(err).to.be.instanceof(Error)
       expect(err.message).to.equal('socket hang up')
-      done()
+      t.end()
     })
   })
 
-  it('should have a configurable timeout', done => {
+  t.test('should have a configurable timeout', t => {
     nock('http://localhost:80')
       .put('/path')
       .times(2)
@@ -148,11 +150,11 @@ describe('request', function () {
     }, err => {
       expect(err).to.be.instanceof(Error)
       expect(err.message).to.equal('socket hang up')
-      done()
+      t.end()
     })
   })
 
-  it('should inject the container ID', () => {
+  t.test('should inject the container ID', () => {
     nock('http://test:123', {
       reqheaders: {
         'datadog-container-id': 'abcd'
@@ -170,7 +172,7 @@ describe('request', function () {
     })
   })
 
-  it('should retry', (done) => {
+  t.test('should retry', (t) => {
     nock('http://localhost:80')
       .put('/path')
       .replyWithError({ code: 'ECONNRESET' })
@@ -182,11 +184,11 @@ describe('request', function () {
       method: 'PUT'
     }, (err, res) => {
       expect(res).to.equal('OK')
-      done()
+      t.end()
     })
   })
 
-  it('should not retry more than once', (done) => {
+  t.test('should not retry more than once', (t) => {
     const error = new Error('Error ECONNRESET')
 
     nock('http://localhost:80')
@@ -200,11 +202,11 @@ describe('request', function () {
       method: 'PUT'
     }, (err, res) => {
       expect(err).to.equal(error)
-      done()
+      t.end()
     })
   })
 
-  it('should be able to send form data', (done) => {
+  t.test('should be able to send form data', (t) => {
     nock('http://localhost:80')
       .put('/path')
       .reply(200, 'OK')
@@ -218,11 +220,11 @@ describe('request', function () {
       method: 'PUT'
     }, (err, res) => {
       expect(res).to.equal('OK')
-      done()
+      t.end()
     })
   })
 
-  it('should be able to send concurrent requests to different hosts', function (done) {
+  t.test('should be able to send concurrent requests to different hosts', function (t) {
     // TODO: try to simplify the setup here. I haven't been able to reproduce the
     // concurrent socket issue using nock
     Promise.all([getPort(), getPort()]).then(([port1, port2]) => {
@@ -250,14 +252,14 @@ describe('request', function () {
             shutdownFirst()
             shutdownSecond()
             clearInterval(intervalId)
-            done()
+            t.end()
           })
         }, 2000)
       })
     })
   })
 
-  it('should support ipv6 with brackets', (done) => {
+  t.test('should support ipv6 with brackets', (t) => {
     nock('http://[2607:f0d0:1002:51::4]:123', {
       reqheaders: {
         'content-type': 'application/octet-stream',
@@ -277,11 +279,12 @@ describe('request', function () {
       },
       (err, res) => {
         expect(res).to.equal('OK')
-        done(err)
+        t.error(err)
+        t.end()
       })
   })
 
-  it('should parse unix domain sockets properly', (done) => {
+  t.test('should parse unix domain sockets properly', (t) => {
     const sock = '/tmp/unix_socket'
 
     request(
@@ -291,11 +294,11 @@ describe('request', function () {
       },
       (err, _) => {
         expect(err.address).to.equal(sock)
-        done()
+        t.end()
       })
   })
 
-  it('should parse windows named pipes properly', (done) => {
+  t.test('should parse windows named pipes properly', (t) => {
     const pipe = '//./pipe/datadogtrace'
 
     request(
@@ -305,11 +308,11 @@ describe('request', function () {
       },
       (err, _) => {
         expect(err.address).to.equal(pipe)
-        done()
+        t.end()
       })
   })
 
-  it('should calculate correct Content-Length header for multi-byte characters', (done) => {
+  t.test('should calculate correct Content-Length header for multi-byte characters', (t) => {
     const sandbox = sinon.createSandbox()
     sandbox.spy(http, 'request')
 
@@ -334,23 +337,24 @@ describe('request', function () {
         const { headers } = http.request.getCall(0).args[0]
         sandbox.restore()
         expect(headers['Content-Length']).to.equal(byteLength)
-        done(err)
+        t.error(err)
+        t.end()
       }
     )
   })
 
-  describe('when intercepting http', () => {
+  t.test('when intercepting http', t => {
     const sandbox = sinon.createSandbox()
 
-    beforeEach(() => {
+    t.beforeEach(() => {
       sandbox.spy(http, 'request')
     })
 
-    afterEach(() => {
+    t.afterEach(() => {
       sandbox.reset()
     })
 
-    it('should properly set request host with IPv6', (done) => {
+    t.test('should properly set request host with IPv6', (t) => {
       nock('http://[1337::cafe]:123', {
         reqheaders: {
           'content-type': 'application/octet-stream',
@@ -372,13 +376,15 @@ describe('request', function () {
           const options = http.request.getCall(0).args[0]
           expect(options.hostname).to.equal('1337::cafe') // no brackets
           expect(res).to.equal('OK')
-          done(err)
+          t.error(err)
+          t.end()
         })
     })
+    t.end()
   })
 
-  describe('with compressed responses', () => {
-    it('can decompress gzip responses', (done) => {
+  t.test('with compressed responses', t => {
+    t.test('can decompress gzip responses', (t) => {
       const compressedData = zlib.gzipSync(Buffer.from(JSON.stringify({ foo: 'bar' })))
       nock('http://test:123', {
         reqheaders: {
@@ -401,11 +407,12 @@ describe('request', function () {
         }
       }, (err, res) => {
         expect(res).to.equal(JSON.stringify({ foo: 'bar' }))
-        done(err)
+        t.error(err)
+        t.end()
       })
     })
 
-    it('should ignore badly compressed data and log an error', (done) => {
+    t.test('should ignore badly compressed data and log an error', (t) => {
       const badlyCompressedData = 'this is not actually compressed data'
       nock('http://test:123', {
         reqheaders: {
@@ -429,8 +436,11 @@ describe('request', function () {
       }, (err, res) => {
         expect(log.error).to.have.been.calledWith('Could not gunzip response: %s', 'unexpected end of file')
         expect(res).to.equal('')
-        done(err)
+        t.error(err)
+        t.end()
       })
     })
+    t.end()
   })
+  t.end()
 })

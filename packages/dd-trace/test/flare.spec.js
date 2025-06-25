@@ -8,11 +8,12 @@ const http = require('http')
 const upload = require('multer')()
 const proxyquire = require('proxyquire').noCallThru()
 
-require('./setup/tap')
+const t = require('tap')
+require('./setup/core')
 
 const debugChannel = channel('datadog:log:debug')
 
-describe('Flare', () => {
+t.test('Flare', t => {
   let flare
   let startupLog
   let tracerConfig
@@ -39,7 +40,7 @@ describe('Flare', () => {
     listener = server.listen(port)
   }
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     startupLog = {
       tracerInfo: () => ({
         lang: 'nodejs'
@@ -55,7 +56,7 @@ describe('Flare', () => {
     })
   })
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     tracerConfig = new Config({
       url: `http://127.0.0.1:${port}`
     })
@@ -69,7 +70,7 @@ describe('Flare', () => {
     createServer()
   })
 
-  afterEach(done => {
+  t.afterEach(async () => {
     handler = null
     flare.disable()
     listener.close()
@@ -79,11 +80,11 @@ describe('Flare', () => {
       listener = null
       socket = null
 
-      done()
+      t.end()
     })
   })
 
-  it('should send a flare', done => {
+  t.test('should send a flare', t => {
     handler = req => {
       try {
         expect(req.body).to.include({
@@ -93,9 +94,10 @@ describe('Flare', () => {
           source: 'tracer_nodejs'
         })
 
-        done()
+        t.end()
       } catch (e) {
-        done(e)
+        t.error(e)
+        t.end()
       }
     }
 
@@ -103,7 +105,7 @@ describe('Flare', () => {
     flare.send(task)
   })
 
-  it('should send the tracer info', done => {
+  t.test('should send the tracer info', t => {
     handler = req => {
       try {
         expect(req.files).to.have.length(1)
@@ -117,9 +119,10 @@ describe('Flare', () => {
 
         expect(content).to.have.property('lang', 'nodejs')
 
-        done()
+        t.end()
       } catch (e) {
-        done(e)
+        t.error(e)
+        t.end()
       }
     }
 
@@ -127,7 +130,7 @@ describe('Flare', () => {
     flare.send(task)
   })
 
-  it('should send the tracer logs', done => {
+  t.test('should send the tracer logs', t => {
     handler = req => {
       try {
         const file = req.files[0]
@@ -144,9 +147,10 @@ describe('Flare', () => {
 
         expect(content).to.equal('foo\nbar\n{"foo":"bar"}\n')
 
-        done()
+        t.end()
       } catch (e) {
-        done(e)
+        t.error(e)
+        t.end()
       }
     }
 
@@ -159,4 +163,5 @@ describe('Flare', () => {
 
     flare.send(task)
   })
+  t.end()
 })

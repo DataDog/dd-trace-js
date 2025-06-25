@@ -1,6 +1,7 @@
 'use strict'
 
-require('../setup/tap')
+const t = require('tap')
+require('../setup/core')
 
 const tracerVersion = require('../../../../package.json').version
 const proxyquire = require('proxyquire').noPreserveCache()
@@ -14,11 +15,11 @@ const DEFAULT_HEARTBEAT_INTERVAL = 60000
 
 let traceAgent
 
-describe('telemetry (proxy)', () => {
+t.test('telemetry (proxy)', t => {
   let telemetry
   let proxy
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     telemetry = sinon.spy({
       start () {},
       stop () {},
@@ -32,7 +33,7 @@ describe('telemetry (proxy)', () => {
     })
   })
 
-  it('should be noop when disabled', () => {
+  t.test('should be noop when disabled', t => {
     proxy.start()
     proxy.updateIntegrations()
     proxy.updateConfig([])
@@ -44,9 +45,10 @@ describe('telemetry (proxy)', () => {
     expect(telemetry.updateConfig).to.not.have.been.called
     expect(telemetry.appClosing).to.not.have.been.called
     expect(telemetry.stop).to.not.have.been.called
+    t.end()
   })
 
-  it('should proxy when enabled', () => {
+  t.test('should proxy when enabled', t => {
     const config = { telemetry: { enabled: true } }
 
     proxy.start(config)
@@ -60,9 +62,10 @@ describe('telemetry (proxy)', () => {
     expect(telemetry.updateConfig).to.have.been.called
     expect(telemetry.appClosing).to.have.been.called
     expect(telemetry.stop).to.have.been.called
+    t.end()
   })
 
-  it('should proxy when enabled from updateConfig', () => {
+  t.test('should proxy when enabled from updateConfig', t => {
     const config = { telemetry: { enabled: true } }
 
     proxy.updateConfig([], config)
@@ -74,86 +77,90 @@ describe('telemetry (proxy)', () => {
     expect(telemetry.updateConfig).to.have.been.calledWith([], config)
     expect(telemetry.appClosing).to.have.been.called
     expect(telemetry.stop).to.have.been.called
+    t.end()
   })
+  t.end()
 })
 
-describe('telemetry', () => {
+t.test('telemetry', t => {
   let telemetry
   let pluginsByName
 
-  before(done => {
+  t.before(async () => {
     // I'm not sure how, but some other test in some other file keeps context
     // alive after it's done, meaning this test here runs in its async context.
     // If we don't no-op the server inside it, it will trace it, which will
     // screw up this test file entirely. -- bengl
 
-    storage('legacy').run({ noop: true }, () => {
-      traceAgent = http.createServer(async (req, res) => {
-        const chunks = []
-        for await (const chunk of req) {
-          chunks.push(chunk)
+    return new Promise(resolve => {
+      storage('legacy').run({ noop: true }, () => {
+        traceAgent = http.createServer(async (req, res) => {
+          const chunks = []
+          for await (const chunk of req) {
+            chunks.push(chunk)
+          }
+          req.body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+          traceAgent.reqs.push(req)
+          traceAgent.emit('handled-req')
+          res.end()
+        }).listen(0, resolve)
+      })
+
+      traceAgent.reqs = []
+
+      telemetry = proxyquire('../../src/telemetry/telemetry', {
+        '../exporters/common/docker': {
+          id () {
+            return 'test docker id'
+          }
         }
-        req.body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
-        traceAgent.reqs.push(req)
-        traceAgent.emit('handled-req')
-        res.end()
-      }).listen(0, done)
-    })
+      })
 
-    traceAgent.reqs = []
+      pluginsByName = {
+        foo2: { _enabled: true },
+        bar2: { _enabled: false }
+      }
 
-    telemetry = proxyquire('../../src/telemetry/telemetry', {
-      '../exporters/common/docker': {
-        id () {
-          return 'test docker id'
+      const circularObject = {
+        child: { parent: null, field: 'child_value' },
+        field: 'parent_value'
+      }
+      circularObject.child.parent = circularObject
+
+      telemetry.start({
+        telemetry: { enabled: true, heartbeatInterval: DEFAULT_HEARTBEAT_INTERVAL },
+        hostname: 'localhost',
+        port: traceAgent.address().port,
+        service: 'test service',
+        version: '1.2.3-beta4',
+        env: 'preprod',
+        tags: {
+          'runtime-id': '1a2b3c'
+        },
+        circularObject,
+        appsec: { enabled: true },
+        profiling: { enabled: 'true' },
+        peerServiceMapping: {
+          service_1: 'remapped_service_1',
+          service_2: 'remapped_service_2'
+        },
+        installSignature: {
+          id: '68e75c48-57ca-4a12-adfc-575c4b05fcbe',
+          type: 'k8s_single_step',
+          time: '1703188212'
         }
-      }
-    })
-
-    pluginsByName = {
-      foo2: { _enabled: true },
-      bar2: { _enabled: false }
-    }
-
-    const circularObject = {
-      child: { parent: null, field: 'child_value' },
-      field: 'parent_value'
-    }
-    circularObject.child.parent = circularObject
-
-    telemetry.start({
-      telemetry: { enabled: true, heartbeatInterval: DEFAULT_HEARTBEAT_INTERVAL },
-      hostname: 'localhost',
-      port: traceAgent.address().port,
-      service: 'test service',
-      version: '1.2.3-beta4',
-      env: 'preprod',
-      tags: {
-        'runtime-id': '1a2b3c'
-      },
-      circularObject,
-      appsec: { enabled: true },
-      profiling: { enabled: 'true' },
-      peerServiceMapping: {
-        service_1: 'remapped_service_1',
-        service_2: 'remapped_service_2'
-      },
-      installSignature: {
-        id: '68e75c48-57ca-4a12-adfc-575c4b05fcbe',
-        type: 'k8s_single_step',
-        time: '1703188212'
-      }
-    }, {
-      _pluginsByName: pluginsByName
+      }, {
+        _pluginsByName: pluginsByName
+      })
     })
   })
 
-  after(() => {
+  t.after(() => {
     telemetry.stop()
     traceAgent.close()
   })
 
-  it('should send app-started', () => {
+  t.test('should send app-started', () => {
     return testSeq(1, 'app-started', payload => {
       expect(payload).to.have.property('products').that.deep.equal({
         appsec: { enabled: true },
@@ -167,7 +174,7 @@ describe('telemetry', () => {
     })
   })
 
-  it('should send app-integrations', () => {
+  t.test('should send app-integrations', () => {
     return testSeq(2, 'app-integrations-change', payload => {
       expect(payload).to.deep.equal({
         integrations: [
@@ -178,7 +185,7 @@ describe('telemetry', () => {
     })
   })
 
-  it('should send app-integrations-change', () => {
+  t.test('should send app-integrations-change', () => {
     pluginsByName.baz2 = { _enabled: true }
     telemetry.updateIntegrations()
 
@@ -191,7 +198,7 @@ describe('telemetry', () => {
     })
   })
 
-  it('should send app-integrations-change', () => {
+  t.test('should send app-integrations-change', () => {
     pluginsByName.boo2 = { _enabled: true }
     telemetry.updateIntegrations()
 
@@ -205,14 +212,14 @@ describe('telemetry', () => {
   })
 
   // TODO: test it's called on beforeExit instead of calling directly
-  it('should send app-closing', () => {
+  t.test('should send app-closing', () => {
     telemetry.appClosing()
     return testSeq(5, 'app-closing', payload => {
       expect(payload).to.deep.equal({})
     })
   })
 
-  it('should do nothing when not enabled', (done) => {
+  t.test('should do nothing when not enabled', (t) => {
     telemetry.stop()
 
     const server = http.createServer(() => {
@@ -226,13 +233,13 @@ describe('telemetry', () => {
 
       setTimeout(() => {
         server.close()
-        done()
+        t.end()
       }, 10)
       clearTimeout()
     })
   })
 
-  it('should not send app-closing if telemetry is not enabled', () => {
+  t.test('should not send app-closing if telemetry is not enabled', t => {
     const sendDataStub = sinon.stub()
     const notEnabledTelemetry = proxyquire('../../src/telemetry/telemetry', {
       './send-data': {
@@ -248,26 +255,28 @@ describe('telemetry', () => {
     })
     notEnabledTelemetry.appClosing()
     expect(sendDataStub.called).to.be.false
+    t.end()
   })
+  t.end()
 })
 
-describe('telemetry app-heartbeat', () => {
+t.test('telemetry app-heartbeat', t => {
   const HEARTBEAT_INTERVAL = 60000
   let telemetry
   let pluginsByName
   let clock
 
-  before(() => {
+  t.before(() => {
     clock = sinon.useFakeTimers()
   })
 
-  after(() => {
+  t.after(() => {
     clock.restore()
     telemetry.stop()
     traceAgent.close()
   })
 
-  it('should send heartbeat in uniform intervals', (done) => {
+  t.test('should send heartbeat in uniform intervals', (t) => {
     let beats = 0 // to keep track of the amont of times extendedHeartbeat is called
     const sendDataRequest = {
       sendData: (config, application, host, reqType, payload, cb = () => {}) => {
@@ -304,27 +313,28 @@ describe('telemetry app-heartbeat', () => {
     expect(beats).to.equal(1)
     clock.tick(HEARTBEAT_INTERVAL)
     expect(beats).to.equal(2)
-    done()
+    t.end()
   })
+  t.end()
 })
 
-describe('Telemetry extended heartbeat', () => {
+t.test('Telemetry extended heartbeat', t => {
   const HEARTBEAT_INTERVAL = 43200000
   let telemetry
   let pluginsByName
   let clock
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     clock = sinon.useFakeTimers()
   })
 
-  afterEach(() => {
+  t.afterEach(() => {
     clock.restore()
     telemetry.stop()
     traceAgent.close()
   })
 
-  it('should be sent every 24 hours', (done) => {
+  t.test('should be sent every 24 hours', (t) => {
     let extendedHeartbeatRequest
     let beats = 0 // to keep track of the amont of times extendedHeartbeat is called
     const sendDataRequest = {
@@ -370,10 +380,10 @@ describe('Telemetry extended heartbeat', () => {
     expect(beats).to.equal(1)
     clock.tick(86400000)
     expect(beats).to.equal(2)
-    done()
+    t.end()
   })
 
-  it('be sent with up-to-date configuration values', (done) => {
+  t.test('be sent with up-to-date configuration values', (t) => {
     let configuration
 
     const sendDataRequest = {
@@ -481,14 +491,15 @@ describe('Telemetry extended heartbeat', () => {
     clock.tick(86400000)
     expect(configuration).to.deep.equal(chainedChanges)
 
-    done()
+    t.end()
   })
+  t.end()
 })
 
 // deleted this test for now since the global interval is now used for app-extended heartbeat
 // which is not supposed to be configurable
 // will ask Bryan why being able to change the interval is important after he is back from parental leave
-describe('Telemetry retry', () => {
+t.test('Telemetry retry', t => {
   let telemetry
   let capturedRequestType
   let capturedPayload
@@ -497,7 +508,7 @@ describe('Telemetry retry', () => {
   let clock
   const HEARTBEAT_INTERVAL = 60000
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     clock = sinon.useFakeTimers()
     pluginsByName = {
       foo2: { _enabled: true },
@@ -505,11 +516,11 @@ describe('Telemetry retry', () => {
     }
   })
 
-  afterEach(() => {
+  t.afterEach(() => {
     clock.restore()
   })
 
-  it('should retry data on next app change', () => {
+  t.test('should retry data on next app change', t => {
     const sendDataError = {
       sendData: (config, application, host, reqType, payload, cb = () => {}) => {
         capturedRequestType = reqType
@@ -588,9 +599,10 @@ describe('Telemetry retry', () => {
 
     }]
     )
+    t.end()
   })
 
-  it('should retry data on next heartbeat', () => {
+  t.test('should retry data on next heartbeat', t => {
     const sendDataError = {
       sendData: (config, application, host, reqType, payload, cb = () => {}) => {
         // skipping startup command
@@ -660,9 +672,10 @@ describe('Telemetry retry', () => {
 
     }]
     )
+    t.end()
   })
 
-  it('should send regular request after completed batch request ', () => {
+  t.test('should send regular request after completed batch request ', t => {
     const sendDataError = {
       sendData: (config, application, host, reqType, payload, cb = () => {}) => {
         capturedRequestType = reqType
@@ -720,9 +733,10 @@ describe('Telemetry retry', () => {
         auto_enabled: true
       }]
     })
+    t.end()
   })
 
-  it('should updated batch request after previous fail', () => {
+  t.test('should updated batch request after previous fail', t => {
     const sendDataError = {
       sendData: (config, application, host, reqType, payload, cb = () => {}) => {
         capturedRequestType = reqType
@@ -797,9 +811,10 @@ describe('Telemetry retry', () => {
 
     }]
     )
+    t.end()
   })
 
-  it('should set extended heartbeat payload', async () => {
+  t.test('should set extended heartbeat payload', async t => {
     let extendedHeartbeatRequest
     let extendedHeartbeatPayload
     const sendDataError = {
@@ -862,11 +877,13 @@ describe('Telemetry retry', () => {
         { name: 'bar2', enabled: false, auto_enabled: true }
       ]
     })
+    t.end()
   })
+  t.end()
 })
 
-describe('AVM OSS', () => {
-  describe('SCA configuration in telemetry messages', () => {
+t.test('AVM OSS', t => {
+  t.test('SCA configuration in telemetry messages', t => {
     let telemetry
     let telemetryConfig
     let clock
@@ -892,45 +909,47 @@ describe('AVM OSS', () => {
     ]
 
     suite.forEach(({ scaValue, scaValueOrigin, testDescription }) => {
-      describe(testDescription, () => {
-        before((done) => {
-          clock = sinon.useFakeTimers()
+      t.test(testDescription, t => {
+        t.before(() => {
+          return new Promise(resolve => {
+            clock = sinon.useFakeTimers()
 
-          storage('legacy').run({ noop: true }, () => {
-            traceAgent = http.createServer(async (req, res) => {
-              const chunks = []
-              for await (const chunk of req) {
-                chunks.push(chunk)
-              }
-              req.body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
-              traceAgent.reqs.push(req)
-              traceAgent.emit('handled-req')
-              res.end()
-            }).listen(0, done)
+            storage('legacy').run({ noop: true }, () => {
+              traceAgent = http.createServer(async (req, res) => {
+                const chunks = []
+                for await (const chunk of req) {
+                  chunks.push(chunk)
+                }
+                req.body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+                traceAgent.reqs.push(req)
+                traceAgent.emit('handled-req')
+                res.end()
+              }).listen(0, resolve)
+            })
+
+            traceAgent.reqs = []
+
+            delete require.cache[require.resolve('../../src/telemetry/send-data')]
+            delete require.cache[require.resolve('../../src/telemetry/telemetry')]
+            telemetry = require('../../src/telemetry/telemetry')
+
+            telemetryConfig = {
+              telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
+              hostname: 'localhost',
+              port: traceAgent.address().port,
+              service: 'test service',
+              version: '1.2.3-beta4',
+              env: 'preprod',
+              tags: {
+                'runtime-id': '1a2b3c'
+              },
+              appsec: { enabled: false },
+              profiling: { enabled: false }
+            }
           })
-
-          traceAgent.reqs = []
-
-          delete require.cache[require.resolve('../../src/telemetry/send-data')]
-          delete require.cache[require.resolve('../../src/telemetry/telemetry')]
-          telemetry = require('../../src/telemetry/telemetry')
-
-          telemetryConfig = {
-            telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
-            hostname: 'localhost',
-            port: traceAgent.address().port,
-            service: 'test service',
-            version: '1.2.3-beta4',
-            env: 'preprod',
-            tags: {
-              'runtime-id': '1a2b3c'
-            },
-            appsec: { enabled: false },
-            profiling: { enabled: false }
-          }
         })
 
-        before(() => {
+        t.before(() => {
           telemetry.updateConfig(
             [{ name: 'appsec.sca.enabled', value: scaValue, origin: scaValueOrigin }],
             telemetryConfig
@@ -938,13 +957,15 @@ describe('AVM OSS', () => {
           telemetry.start(telemetryConfig, { _pluginsByName: {} })
         })
 
-        after((done) => {
-          clock.restore()
-          telemetry.stop()
-          traceAgent.close(done)
+        t.after(() => {
+          return new Promise(resolve => {
+            clock.restore()
+            telemetry.stop()
+            traceAgent.close(resolve)
+          })
         })
 
-        it('in app-started message', () => {
+        t.test('in app-started message', () => {
           return testSeq(1, 'app-started', payload => {
             expect(payload).to.have.property('configuration').that.deep.equal([
               { name: 'appsec.sca.enabled', value: scaValue, origin: scaValueOrigin, seq_id: 0 }
@@ -952,7 +973,7 @@ describe('AVM OSS', () => {
           }, true)
         })
 
-        it('in app-extended-heartbeat message', () => {
+        t.test('in app-extended-heartbeat message', () => {
           // Skip a full day
           clock.tick(86400000)
           return testSeq(2, 'app-extended-heartbeat', payload => {
@@ -961,29 +982,31 @@ describe('AVM OSS', () => {
             ])
           }, true)
         })
+        t.end()
       })
     })
+    t.end()
   })
 
-  describe('Telemetry and SCA misconfiguration', () => {
+  t.test('Telemetry and SCA misconfiguration', t => {
     let telemetry
 
     const logSpy = {
       warn: sinon.spy()
     }
 
-    before(() => {
+    t.before(() => {
       telemetry = proxyquire('../../src/telemetry/telemetry', {
         '../log': logSpy
       })
     })
 
-    after(() => {
+    t.after(() => {
       telemetry.stop()
       sinon.restore()
     })
 
-    it('should log a warning when sca is enabled and telemetry no', () => {
+    t.test('should log a warning when sca is enabled and telemetry no', t => {
       telemetry.start(
         {
           telemetry: { enabled: false },
@@ -992,8 +1015,11 @@ describe('AVM OSS', () => {
       )
 
       expect(logSpy.warn).to.have.been.calledOnceWith('DD_APPSEC_SCA_ENABLED requires enabling telemetry to work.')
+      t.end()
     })
+    t.end()
   })
+  t.end()
 })
 
 async function testSeq (seqId, reqType, validatePayload) {

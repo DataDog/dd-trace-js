@@ -1,11 +1,12 @@
 'use strict'
 
-require('../../setup/tap')
+const t = require('tap')
+require('../../setup/core')
 
 const AgentInfoExporter = require('../../../src/exporters/common/agent-info-exporter')
 const nock = require('nock')
 
-describe('AgentInfoExporter', () => {
+t.test('AgentInfoExporter', t => {
   const writer = {
     append: sinon.spy(),
     flush: sinon.spy(),
@@ -14,7 +15,7 @@ describe('AgentInfoExporter', () => {
   const flushInterval = 100
   const port = 8126
 
-  it('should query /info when getAgentInfo is called', (done) => {
+  t.test('should query /info when getAgentInfo is called', (t) => {
     const scope = nock('http://localhost:8126')
       .get('/info')
       .reply(200, JSON.stringify({
@@ -27,11 +28,11 @@ describe('AgentInfoExporter', () => {
       expect(err).to.be.null
       expect(endpoints).to.include('/evp_proxy/v2')
       expect(scope.isDone()).to.be.true
-      done()
+      t.end()
     })
   })
 
-  it('should store traces as is when export is called', (done) => {
+  t.test('should store traces as is when export is called', (t) => {
     nock('http://localhost:8126')
       .get('/info')
       .reply(200, JSON.stringify({
@@ -46,11 +47,11 @@ describe('AgentInfoExporter', () => {
 
     agentInfoExporter.getAgentInfo(() => {
       expect(agentInfoExporter.getUncodedTraces()).to.include(trace)
-      done()
+      t.end()
     })
   })
 
-  it('should export if a writer is initialized', (done) => {
+  t.test('should export if a writer is initialized', (t) => {
     nock('http://localhost:8126')
       .get('/info')
       .reply(200, JSON.stringify({
@@ -69,8 +70,9 @@ describe('AgentInfoExporter', () => {
       expect(agentInfoExporter.getUncodedTraces()).not.to.include(trace)
       setTimeout(() => {
         expect(writer.flush).to.have.been.called
-        done()
+        t.end()
       }, flushInterval)
     })
   })
+  t.end()
 })

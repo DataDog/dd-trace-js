@@ -1,37 +1,38 @@
 'use strict'
 
-require('../../dd-trace/test/setup/tap')
+const t = require('tap')
+require('../../dd-trace/test/setup/core')
 
 const { expect } = require('chai')
 const { executionAsyncResource } = require('async_hooks')
 const { storage } = require('../src/storage')
 
-describe('storage', () => {
+t.test('storage', t => {
   let testStorage
   let testStorage2
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     testStorage = storage('test')
     testStorage2 = storage('test2')
   })
 
-  afterEach(() => {
+  t.afterEach(() => {
     testStorage.enterWith(undefined)
     testStorage2.enterWith(undefined)
   })
 
-  it('should enter a store', done => {
+  t.test('should enter a store', t => {
     const store = 'foo'
 
     testStorage.enterWith(store)
 
     setImmediate(() => {
       expect(testStorage.getStore()).to.equal(store)
-      done()
+      t.end()
     })
   })
 
-  it('should enter stores by namespace', done => {
+  t.test('should enter stores by namespace', t => {
     const store = 'foo'
     const store2 = 'bar'
 
@@ -41,15 +42,16 @@ describe('storage', () => {
     setImmediate(() => {
       expect(testStorage.getStore()).to.equal(store)
       expect(testStorage2.getStore()).to.equal(store2)
-      done()
+      t.end()
     })
   })
 
-  it('should return the same storage for a namespace', () => {
+  t.test('should return the same storage for a namespace', t => {
     expect(storage('test')).to.equal(testStorage)
+    t.end()
   })
 
-  it('should not have its store referenced by the underlying async resource', () => {
+  t.test('should not have its store referenced by the underlying async resource', t => {
     const resource = executionAsyncResource()
 
     testStorage.enterWith({ internal: 'internal' })
@@ -59,5 +61,7 @@ describe('storage', () => {
         expect(resource[sym]).to.not.have.property('internal')
       }
     }
+    t.end()
   })
+  t.end()
 })

@@ -1,40 +1,43 @@
 'use strict'
 
-require('./setup/tap')
+const t = require('tap')
+require('./setup/core')
 
 const { expect } = require('chai')
 const { storage } = require('../../datadog-core')
 
 /* eslint-disable no-console */
 
-describe('log', () => {
-  describe('config', () => {
+t.test('log', t => {
+  t.test('config', t => {
     let env
 
-    beforeEach(() => {
+    t.beforeEach(() => {
       env = process.env
       process.env = {}
     })
 
-    afterEach(() => {
+    t.afterEach(() => {
       process.env = env
     })
 
-    it('should have getConfig function', () => {
+    t.test('should have getConfig function', t => {
       const log = require('../src/log')
       expect(log.getConfig).to.be.a('function')
+      t.end()
     })
 
-    it('should be configured with default config if no environment variables are set', () => {
+    t.test('should be configured with default config if no environment variables are set', t => {
       const log = require('../src/log')
       expect(log.getConfig()).to.deep.equal({
         enabled: false,
         logger: undefined,
         logLevel: 'debug'
       })
+      t.end()
     })
 
-    it('should not be possbile to mutate config object returned by getConfig', () => {
+    t.test('should not be possbile to mutate config object returned by getConfig', t => {
       const log = require('../src/log')
       const config = log.getConfig()
       config.enabled = 1
@@ -45,43 +48,49 @@ describe('log', () => {
         logger: undefined,
         logLevel: 'debug'
       })
+      t.end()
     })
 
-    it('should initialize from environment variables with DD env vars taking precedence OTEL env vars', () => {
+    t.test('should initialize from environment variables with DD env vars taking precedence OTEL env vars', t => {
       process.env.DD_TRACE_LOG_LEVEL = 'error'
       process.env.DD_TRACE_DEBUG = 'false'
       process.env.OTEL_LOG_LEVEL = 'debug'
       const config = proxyquire('../src/log', {}).getConfig()
       expect(config).to.have.property('enabled', false)
       expect(config).to.have.property('logLevel', 'error')
+      t.end()
     })
 
-    it('should initialize with OTEL environment variables when DD env vars are not set', () => {
+    t.test('should initialize with OTEL environment variables when DD env vars are not set', t => {
       process.env.OTEL_LOG_LEVEL = 'debug'
       const config = proxyquire('../src/log', {}).getConfig()
       expect(config).to.have.property('enabled', true)
       expect(config).to.have.property('logLevel', 'debug')
+      t.end()
     })
 
-    it('should initialize from environment variables', () => {
+    t.test('should initialize from environment variables', t => {
       process.env.DD_TRACE_DEBUG = 'true'
       const config = proxyquire('../src/log', {}).getConfig()
       expect(config).to.have.property('enabled', true)
+      t.end()
     })
 
-    it('should read case-insensitive booleans from environment variables', () => {
+    t.test('should read case-insensitive booleans from environment variables', t => {
       process.env.DD_TRACE_DEBUG = 'TRUE'
       const config = proxyquire('../src/log', {}).getConfig()
       expect(config).to.have.property('enabled', true)
+      t.end()
     })
+    t.end()
   })
 
-  describe('general usage', () => {
+  t.test('general usage', t => {
     let log
     let logger
     let error
 
-    beforeEach(() => {
+    t.beforeEach(() => {
       sinon.stub(console, 'info')
       sinon.stub(console, 'error')
       sinon.stub(console, 'warn')
@@ -98,7 +107,7 @@ describe('log', () => {
       log.toggle(true)
     })
 
-    afterEach(() => {
+    t.afterEach(() => {
       log.reset()
       console.info.restore()
       console.error.restore()
@@ -106,7 +115,7 @@ describe('log', () => {
       console.debug.restore()
     })
 
-    it('should support chaining', () => {
+    t.test('should support chaining', t => {
       expect(() => {
         log
           .use(logger)
@@ -115,38 +124,44 @@ describe('log', () => {
           .debug('debug')
           .reset()
       }).to.not.throw()
+      t.end()
     })
 
-    it('should call the logger in a noop context', () => {
+    t.test('should call the logger in a noop context', t => {
       logger.debug = () => {
         expect(storage('legacy').getStore()).to.have.property('noop', true)
       }
 
       log.use(logger).debug('debug')
+      t.end()
     })
 
-    describe('debug', () => {
-      it('should log to console by default', () => {
+    t.test('debug', t => {
+      t.test('should log to console by default', t => {
         log.debug('debug')
 
         expect(console.debug).to.have.been.calledWith('debug')
+        t.end()
       })
 
-      it('should support callbacks that return a message', () => {
+      t.test('should support callbacks that return a message', t => {
         log.debug(() => 'debug')
 
         expect(console.debug).to.have.been.calledWith('debug')
+        t.end()
       })
+      t.end()
     })
 
-    describe('trace', () => {
-      it('should not log to console by default', () => {
+    t.test('trace', t => {
+      t.test('should not log to console by default', t => {
         log.trace('trace')
 
         expect(console.debug).to.not.have.been.called
+        t.end()
       })
 
-      it('should log to console after setting log level to trace', function foo () {
+      t.test('should log to console after setting log level to trace', function foo (t) {
         class Foo {
           constructor () {
             this.bar = 'baz'
@@ -161,64 +176,73 @@ describe('log', () => {
           /^Trace: Test.foo\('argument', { hello: 'world' }, Foo { bar: 'baz' }\)/
         )
         expect(console.debug.firstCall.args[0].split('\n').length).to.be.gte(3)
+        t.end()
       })
+      t.end()
     })
 
-    describe('error', () => {
-      it('should log to console by default', () => {
+    t.test('error', t => {
+      t.test('should log to console by default', t => {
         log.error(error)
 
         expect(console.error).to.have.been.calledWith(error)
+        t.end()
       })
 
-      it('should support callbacks that return a error', () => {
+      t.test('should support callbacks that return a error', t => {
         log.error(() => error)
 
         expect(console.error).to.have.been.calledWith(error)
+        t.end()
       })
 
-      it('should convert strings to errors', () => {
+      t.test('should convert strings to errors', t => {
         log.error('error')
 
         expect(console.error).to.have.been.called
         expect(console.error.firstCall.args[0]).to.be.instanceof(Error)
         expect(console.error.firstCall.args[0]).to.have.property('message', 'error')
+        t.end()
       })
 
       // NOTE: There is no usage for this case. should we continue supporting it?
-      it('should convert empty values to errors', () => {
+      t.test('should convert empty values to errors', t => {
         log.error()
 
         expect(console.error).to.have.been.called
         expect(console.error.firstCall.args[0]).to.be.instanceof(Error)
         expect(console.error.firstCall.args[0]).to.have.property('message', 'undefined')
+        t.end()
       })
 
-      it('should convert invalid types to errors', () => {
+      t.test('should convert invalid types to errors', t => {
         log.error(123)
 
         expect(console.error).to.have.been.called
         expect(console.error.firstCall.args[0]).to.be.instanceof(Error)
         expect(console.error.firstCall.args[0]).to.have.property('message', '123')
+        t.end()
       })
 
-      it('should reuse error messages for non-errors', () => {
+      t.test('should reuse error messages for non-errors', t => {
         log.error({ message: 'test' })
 
         expect(console.error).to.have.been.called
         expect(console.error.firstCall.args[0]).to.be.instanceof(Error)
         expect(console.error.firstCall.args[0]).to.have.property('message', 'test')
+        t.end()
       })
 
-      it('should convert messages from callbacks to errors', () => {
+      t.test('should convert messages from callbacks to errors', t => {
         log.error(() => 'error')
 
         expect(console.error).to.have.been.called
         expect(console.error.firstCall.args[0]).to.be.instanceof(Error)
         expect(console.error.firstCall.args[0]).to.have.property('message', 'error')
+        t.end()
       })
 
-      it('should allow a message + Error', () => {
+      t.test('should allow a message + Error', t => {
         log.error('this is an error', new Error('cause'))
 
         expect(console.error).to.have.been.called
@@ -226,17 +250,19 @@ describe('log', () => {
         expect(console.error.firstCall.args[0]).to.have.property('message', 'this is an error')
         expect(console.error.secondCall.args[0]).to.be.instanceof(Error)
         expect(console.error.secondCall.args[0]).to.have.property('message', 'cause')
+        t.end()
       })
 
-      it('should allow a templated message', () => {
+      t.test('should allow a templated message', t => {
         log.error('this is an error of type: %s code: %i', 'ERR', 42)
 
         expect(console.error).to.have.been.called
         expect(console.error.firstCall.args[0]).to.be.instanceof(Error)
         expect(console.error.firstCall.args[0]).to.have.property('message', 'this is an error of type: ERR code: 42')
+        t.end()
       })
 
-      it('should allow a templated message + Error', () => {
+      t.test('should allow a templated message + Error', t => {
         log.error('this is an error of type: %s code: %i', 'ERR', 42, new Error('cause'))
 
         expect(console.error).to.have.been.called
@@ -244,20 +270,23 @@ describe('log', () => {
         expect(console.error.firstCall.args[0]).to.have.property('message', 'this is an error of type: ERR code: 42')
         expect(console.error.secondCall.args[0]).to.be.instanceof(Error)
         expect(console.error.secondCall.args[0]).to.have.property('message', 'cause')
+        t.end()
       })
+      t.end()
     })
 
-    describe('toggle', () => {
-      it('should disable the logger', () => {
+    t.test('toggle', t => {
+      t.test('should disable the logger', t => {
         log.toggle(false)
         log.debug('debug')
         log.error(error)
 
         expect(console.debug).to.not.have.been.called
         expect(console.error).to.not.have.been.called
+        t.end()
       })
 
-      it('should enable the logger', () => {
+      t.test('should enable the logger', t => {
         log.toggle(false)
         log.toggle(true)
         log.debug('debug')
@@ -265,94 +294,109 @@ describe('log', () => {
 
         expect(console.debug).to.have.been.calledWith('debug')
         expect(console.error).to.have.been.calledWith(error)
+        t.end()
       })
 
-      it('should set minimum log level when enabled with logLevel argument set to a valid string', () => {
+      t.test('should set minimum log level when enabled with logLevel argument set to a valid string', t => {
         log.toggle(true, 'error')
         log.debug('debug')
         log.error(error)
 
         expect(console.debug).to.not.have.been.called
         expect(console.error).to.have.been.calledWith(error)
+        t.end()
       })
 
-      it('should set default log level when enabled with logLevel argument set to an invalid string', () => {
+      t.test('should set default log level when enabled with logLevel argument set to an invalid string', t => {
         log.toggle(true, 'not a real log level')
         log.debug('debug')
         log.error(error)
 
         expect(console.debug).to.have.been.calledWith('debug')
         expect(console.error).to.have.been.calledWith(error)
+        t.end()
       })
 
-      it('should set min log level when enabled w/logLevel arg set to valid string w/wrong case or whitespace', () => {
-        log.toggle(true, ' ErRoR   ')
-        log.debug('debug')
-        log.error(error)
+      t.test(
+        'should set min log level when enabled w/logLevel arg set to valid string w/wrong case or whitespace',
+        t => {
+          log.toggle(true, ' ErRoR   ')
+          log.debug('debug')
+          log.error(error)
 
-        expect(console.debug).to.not.have.been.called
-        expect(console.error).to.have.been.calledWith(error)
-      })
+          expect(console.debug).to.not.have.been.called
+          expect(console.error).to.have.been.calledWith(error)
+          t.end()
+        }
+      )
 
-      it('should log all log levels greater than or equal to minimum log level', () => {
+      t.test('should log all log levels greater than or equal to minimum log level', t => {
         log.toggle(true, 'debug')
         log.debug('debug')
         log.error(error)
 
         expect(console.debug).to.have.been.calledWith('debug')
         expect(console.error).to.have.been.calledWith(error)
+        t.end()
       })
 
-      it('should enable default log level when enabled with logLevel argument set to invalid input', () => {
+      t.test('should enable default log level when enabled with logLevel argument set to invalid input', t => {
         log.toggle(true, ['trace', 'info', 'eror'])
         log.debug('debug')
         log.error(error)
 
         expect(console.debug).to.have.been.calledWith('debug')
         expect(console.error).to.have.been.calledWith(error)
+        t.end()
       })
 
-      it('should enable default log level when enabled without logLevel argument', () => {
+      t.test('should enable default log level when enabled without logLevel argument', t => {
         log.toggle(true)
         log.debug('debug')
         log.error(error)
 
         expect(console.debug).to.have.been.calledWith('debug')
         expect(console.error).to.have.been.calledWith(error)
+        t.end()
       })
+      t.end()
     })
 
-    describe('use', () => {
-      it('should set the underlying logger when valid', () => {
+    t.test('use', t => {
+      t.test('should set the underlying logger when valid', t => {
         log.use(logger)
         log.debug('debug')
         log.error(error)
 
         expect(logger.debug).to.have.been.calledWith('debug')
         expect(logger.error).to.have.been.calledWith(error)
+        t.end()
       })
 
-      it('be a no op with an empty logger', () => {
+      t.test('be a no op with an empty logger', t => {
         log.use(null)
         log.debug('debug')
         log.error(error)
 
         expect(console.debug).to.have.been.calledWith('debug')
         expect(console.error).to.have.been.calledWith(error)
+        t.end()
       })
 
-      it('be a no op with an invalid logger', () => {
+      t.test('be a no op with an invalid logger', t => {
         log.use('invalid')
         log.debug('debug')
         log.error(error)
 
         expect(console.debug).to.have.been.calledWith('debug')
         expect(console.error).to.have.been.calledWith(error)
+        t.end()
       })
+      t.end()
     })
 
-    describe('reset', () => {
-      it('should reset the logger', () => {
+    t.test('reset', t => {
+      t.test('should reset the logger', t => {
         log.use(logger)
         log.reset()
         log.toggle(true)
@@ -361,9 +405,10 @@ describe('log', () => {
 
         expect(console.debug).to.have.been.calledWith('debug')
         expect(console.error).to.have.been.calledWith(error)
+        t.end()
       })
 
-      it('should reset the toggle', () => {
+      t.test('should reset the toggle', t => {
         log.use(logger)
         log.reset()
         log.debug('debug')
@@ -371,9 +416,10 @@ describe('log', () => {
 
         expect(console.debug).to.not.have.been.called
         expect(console.error).to.not.have.been.called
+        t.end()
       })
 
-      it('should reset the minimum log level to defaults', () => {
+      t.test('should reset the minimum log level to defaults', t => {
         log.use(logger)
         log.toggle(true, 'error')
         log.reset()
@@ -383,111 +429,133 @@ describe('log', () => {
 
         expect(console.debug).to.have.been.calledWith('debug')
         expect(console.error).to.have.been.calledWith(error)
+        t.end()
       })
+      t.end()
     })
 
-    describe('deprecate', () => {
-      it('should log a deprecation warning', () => {
+    t.test('deprecate', t => {
+      t.test('should log a deprecation warning', t => {
         log.deprecate('test', 'message')
 
         expect(console.error).to.have.been.calledOnce
         const consoleErrorArg = console.error.getCall(0).args[0]
         expect(typeof consoleErrorArg).to.be.eq('object')
         expect(consoleErrorArg.message).to.be.eq('message')
+        t.end()
       })
 
-      it('should only log once for a given code', () => {
+      t.test('should only log once for a given code', t => {
         log.deprecate('test', 'message')
         log.deprecate('test', 'message')
 
         expect(console.error).to.have.been.calledOnce
+        t.end()
       })
+      t.end()
     })
 
-    describe('logWriter', () => {
+    t.test('logWriter', t => {
       let logWriter
 
-      beforeEach(() => {
+      t.beforeEach(() => {
         logWriter = require('../src/log/writer')
       })
 
-      afterEach(() => {
+      t.afterEach(() => {
         logWriter.reset()
       })
 
-      describe('error', () => {
-        it('should call logger error', () => {
+      t.test('error', t => {
+        t.test('should call logger error', t => {
           logWriter.error(error)
 
           expect(console.error).to.have.been.calledOnceWith(error)
+          t.end()
         })
 
-        it('should call console.error no matter enable flag value', () => {
+        t.test('should call console.error no matter enable flag value', t => {
           logWriter.toggle(false)
           logWriter.error(error)
 
           expect(console.error).to.have.been.calledOnceWith(error)
+          t.end()
         })
+        t.end()
       })
 
-      describe('warn', () => {
-        it('should call logger warn', () => {
+      t.test('warn', t => {
+        t.test('should call logger warn', t => {
           logWriter.warn('warn')
 
           expect(console.warn).to.have.been.calledOnceWith('warn')
+          t.end()
         })
 
-        it('should call logger debug if warn is not provided', () => {
+        t.test('should call logger debug if warn is not provided', t => {
           logWriter.use(logger)
           logWriter.warn('warn')
 
           expect(logger.debug).to.have.been.calledOnceWith('warn')
+          t.end()
         })
 
-        it('should call console.warn no matter enable flag value', () => {
+        t.test('should call console.warn no matter enable flag value', t => {
           logWriter.toggle(false)
           logWriter.warn('warn')
 
           expect(console.warn).to.have.been.calledOnceWith('warn')
+          t.end()
         })
+        t.end()
       })
 
-      describe('info', () => {
-        it('should call logger info', () => {
+      t.test('info', t => {
+        t.test('should call logger info', t => {
           logWriter.info('info')
 
           expect(console.info).to.have.been.calledOnceWith('info')
+          t.end()
         })
 
-        it('should call logger debug if info is not provided', () => {
+        t.test('should call logger debug if info is not provided', t => {
           logWriter.use(logger)
           logWriter.info('info')
 
           expect(logger.debug).to.have.been.calledOnceWith('info')
+          t.end()
         })
 
-        it('should call console.info no matter enable flag value', () => {
+        t.test('should call console.info no matter enable flag value', t => {
           logWriter.toggle(false)
           logWriter.info('info')
 
           expect(console.info).to.have.been.calledOnceWith('info')
+          t.end()
         })
+        t.end()
       })
 
-      describe('debug', () => {
-        it('should call logger debug', () => {
+      t.test('debug', t => {
+        t.test('should call logger debug', t => {
           logWriter.debug('debug')
 
           expect(console.debug).to.have.been.calledOnceWith('debug')
+          t.end()
         })
 
-        it('should call console.debug no matter enable flag value', () => {
+        t.test('should call console.debug no matter enable flag value', t => {
           logWriter.toggle(false)
           logWriter.debug('debug')
 
           expect(console.debug).to.have.been.calledOnceWith('debug')
+          t.end()
         })
+        t.end()
       })
+      t.end()
     })
+    t.end()
   })
+  t.end()
 })

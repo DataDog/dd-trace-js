@@ -1,6 +1,7 @@
 'use strict'
 
-require('../setup/tap')
+const t = require('tap')
+require('../setup/core')
 
 const expect = require('chai').expect
 const sinon = require('sinon')
@@ -11,69 +12,81 @@ telemetryManagerNamespace.returns()
 const dc = require('dc-polyfill')
 const Config = require('../../src/config')
 
-describe('Profiling for SSI', () => {
-  describe('When injection is not present', () => {
-    describe('Neither telemetry nor heuristics should work when', () => {
-      it('profiler enablement is unspecified', () => {
+t.test('Profiling for SSI', t => {
+  t.test('When injection is not present', t => {
+    t.test('Neither telemetry nor heuristics should work when', t => {
+      t.test('profiler enablement is unspecified', t => {
         delete process.env.DD_INJECTION_ENABLED
         testInactive('')
+        t.end()
       })
 
-      it('the profiler is explicitly enabled', () => {
+      t.test('the profiler is explicitly enabled', t => {
         delete process.env.DD_INJECTION_ENABLED
         testInactive('true')
+        t.end()
       })
 
-      it('the profiler is explicitly disabled', () => {
+      t.test('the profiler is explicitly disabled', t => {
         delete process.env.DD_INJECTION_ENABLED
         testInactive('false')
+        t.end()
       })
+      t.end()
     })
 
-    describe('Only telemetry should work when', () => {
-      it('the profiler is explicitly auto-enabled', () => {
+    t.test('Only telemetry should work when', t => {
+      t.test('the profiler is explicitly auto-enabled', () => {
         delete process.env.DD_INJECTION_ENABLED
         process.env.DD_PROFILING_ENABLED = 'auto'
         return testEnabledHeuristics(undefined, true)
       })
+      t.end()
     })
+    t.end()
   })
 
-  describe('When injection is present', () => {
-    describe('Neither telemetry nor heuristics should work when', () => {
-      it('the profiler is explicitly disabled', () => {
+  t.test('When injection is present', t => {
+    t.test('Neither telemetry nor heuristics should work when', t => {
+      t.test('the profiler is explicitly disabled', t => {
         process.env.DD_INJECTION_ENABLED = 'tracer'
-        return testInactive('false')
+        testInactive('false')
+        t.end()
       })
+      t.end()
     })
 
-    describe('Only telemetry should work when', () => {
-      it('profiler enablement is unspecified', () => {
+    t.test('Only telemetry should work when', t => {
+      t.test('profiler enablement is unspecified', () => {
         process.env.DD_INJECTION_ENABLED = 'tracer'
         delete process.env.DD_PROFILING_ENABLED
         return testEnabledHeuristics('ssi_not_enabled', false)
       })
 
-      it('the profiler is explicitly enabled', () => {
+      t.test('the profiler is explicitly enabled', () => {
         process.env.DD_INJECTION_ENABLED = 'tracer'
         process.env.DD_PROFILING_ENABLED = 'true'
         return testEnabledHeuristics('manually_enabled', false)
       })
+      t.end()
     })
 
-    describe('Both telemetry and heuristics should work when', () => {
-      it('the profiler is explicitly auto-enabled', () => {
+    t.test('Both telemetry and heuristics should work when', t => {
+      t.test('the profiler is explicitly auto-enabled', () => {
         process.env.DD_INJECTION_ENABLED = 'tracer'
         process.env.DD_PROFILING_ENABLED = 'auto'
         return testEnabledHeuristics('auto_enabled', true)
       })
 
-      it('\'profiler\' value is in DD_INJECTION_ENABLED', () => {
+      t.test('\'profiler\' value is in DD_INJECTION_ENABLED', () => {
         process.env.DD_INJECTION_ENABLED = 'tracer,service_name,profiler'
         return testEnabledHeuristics('ssi_enabled', true)
       })
+      t.end()
     })
+    t.end()
   })
+  t.end()
 })
 
 function setupHarness () {

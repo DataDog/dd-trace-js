@@ -1,17 +1,17 @@
 'use strict'
 
-require('./setup/tap')
+const t = require('tap')
+require('./setup/core')
 
 const { expect } = require('chai')
 const { readFileSync } = require('fs')
 const sinon = require('sinon')
 const { GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('../src/constants')
-const { it, describe } = require('tap/lib/mocha.js')
 const assert = require('assert/strict')
 const { getEnvironmentVariable, getEnvironmentVariables } = require('../src/config-helper')
 const { once } = require('events')
 
-describe('Config', () => {
+t.test('Config', t => {
   let Config
   let log
   let pkg
@@ -49,7 +49,7 @@ describe('Config', () => {
     })
   }
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     pkg = {
       name: '',
       version: ''
@@ -75,21 +75,22 @@ describe('Config', () => {
     reloadLoggerAndConfig()
   })
 
-  afterEach(() => {
+  t.afterEach(() => {
     updateConfig.reset()
     process.env = env
     existsSyncParam = undefined
   })
 
-  describe('config-helper', () => {
-    it('should throw when accessing unknown configuration', () => {
+  t.test('config-helper', t => {
+    t.test('should throw when accessing unknown configuration', t => {
       assert.throws(
         () => getEnvironmentVariable('DD_UNKNOWN_CONFIG'),
         /Missing DD_UNKNOWN_CONFIG env\/configuration in "supported-configurations.json" file./
       )
+      t.end()
     })
 
-    it('should return aliased value', () => {
+    t.test('should return aliased value', t => {
       process.env.DATADOG_API_KEY = '12345'
       assert.throws(() => getEnvironmentVariable('DATADOG_API_KEY'), {
         message: /Missing DATADOG_API_KEY env\/configuration in "supported-configurations.json" file./
@@ -99,9 +100,10 @@ describe('Config', () => {
       assert.strictEqual(DATADOG_API_KEY, undefined)
       assert.strictEqual(DD_API_KEY, getEnvironmentVariable('DD_API_KEY'))
       delete process.env.DATADOG_API_KEY
+      t.end()
     })
 
-    it('should log deprecation warning for deprecated configurations', async () => {
+    t.test('should log deprecation warning for deprecated configurations', async t => {
       process.env.DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED = 'true'
       getEnvironmentVariables()
       const [warning] = await once(process, 'warning')
@@ -111,34 +113,41 @@ describe('Config', () => {
         /variable DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED .+ DD_PROFILING_ENDPOINT_COLLECTION_ENABLED instead/
       )
       assert.strictEqual(warning.code, 'DATADOG_DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED')
+      t.end()
     })
 
-    it('should set new runtimeMetricsRuntimeId from deprecated DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED', async () => {
-      process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED = 'true'
-      assert.strictEqual(process.env.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED, undefined)
-      const config = new Config()
-      expect(config).to.have.property('runtimeMetricsRuntimeId', true)
-      assert.strictEqual(getEnvironmentVariable('DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED'), 'true')
-      delete process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED
+    t.test(
+      'should set new runtimeMetricsRuntimeId from deprecated DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED',
+      async t => {
+        process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED = 'true'
+        assert.strictEqual(process.env.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED, undefined)
+        const config = new Config()
+        expect(config).to.have.property('runtimeMetricsRuntimeId', true)
+        assert.strictEqual(getEnvironmentVariable('DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED'), 'true')
+        delete process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED
 
-      const [warning] = await once(process, 'warning')
-      assert.strictEqual(warning.name, 'DeprecationWarning')
-      assert.match(
-        warning.message,
-        /variable DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED .+ DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED instead/
-      )
-    })
+        const [warning] = await once(process, 'warning')
+        assert.strictEqual(warning.name, 'DeprecationWarning')
+        assert.match(
+          warning.message,
+          /variable DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED .+ DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED instead/
+        )
+        t.end()
+      }
+    )
 
-    it('should pass through random envs', async () => {
+    t.test('should pass through random envs', async t => {
       process.env.FOOBAR = 'true'
       const { FOOBAR } = getEnvironmentVariables()
       assert.strictEqual(FOOBAR, 'true')
       assert.strictEqual(getEnvironmentVariable('FOOBAR'), FOOBAR)
       delete process.env.FOOBAR
+      t.end()
     })
+    t.end()
   })
 
-  it('should initialize its own logging config based off the loggers config', () => {
+  t.test('should initialize its own logging config based off the loggers config', t => {
     process.env.DD_TRACE_DEBUG = 'true'
     process.env.DD_TRACE_LOG_LEVEL = 'error'
 
@@ -149,9 +158,10 @@ describe('Config', () => {
     expect(config).to.have.property('debug', true)
     expect(config).to.have.property('logger', undefined)
     expect(config).to.have.property('logLevel', 'error')
+    t.end()
   })
 
-  it('should initialize from environment variables with DD env vars taking precedence OTEL env vars', () => {
+  t.test('should initialize from environment variables with DD env vars taking precedence OTEL env vars', t => {
     process.env.DD_SERVICE = 'service'
     process.env.OTEL_SERVICE_NAME = 'otel_service'
     process.env.DD_TRACE_LOG_LEVEL = 'error'
@@ -188,9 +198,10 @@ describe('Config', () => {
     const indexFile = require('../src/index')
     const proxy = require('../src/proxy')
     expect(indexFile).to.equal(proxy)
+    t.end()
   })
 
-  it('should initialize with OTEL environment variables when DD env vars are not set', () => {
+  t.test('should initialize with OTEL environment variables when DD env vars are not set', t => {
     process.env.OTEL_SERVICE_NAME = 'otel_service'
     process.env.OTEL_LOG_LEVEL = 'debug'
     process.env.OTEL_TRACES_SAMPLER = 'traceidratio'
@@ -219,9 +230,10 @@ describe('Config', () => {
     const indexFile = require('../src/index')
     const noop = require('../src/noop/proxy')
     expect(indexFile).to.equal(noop)
+    t.end()
   })
 
-  it('should correctly map OTEL_RESOURCE_ATTRIBUTES', () => {
+  t.test('should correctly map OTEL_RESOURCE_ATTRIBUTES', t => {
     process.env.OTEL_RESOURCE_ATTRIBUTES =
       'deployment.environment=test1,service.name=test2,service.version=5,foo=bar1,baz=qux1'
     const config = new Config()
@@ -230,9 +242,10 @@ describe('Config', () => {
     expect(config).to.have.property('service', 'test2')
     expect(config).to.have.property('version', '5')
     expect(config.tags).to.include({ foo: 'bar1', baz: 'qux1' })
+    t.end()
   })
 
-  it('should correctly map OTEL_TRACES_SAMPLER and OTEL_TRACES_SAMPLER_ARG', () => {
+  t.test('should correctly map OTEL_TRACES_SAMPLER and OTEL_TRACES_SAMPLER_ARG', t => {
     process.env.OTEL_TRACES_SAMPLER = 'always_on'
     process.env.OTEL_TRACES_SAMPLER_ARG = '0.1'
     let config = new Config()
@@ -257,9 +270,10 @@ describe('Config', () => {
     process.env.OTEL_TRACES_SAMPLER = 'parentbased_traceidratio'
     config = new Config()
     expect(config).to.have.property('sampleRate', 0.1)
+    t.end()
   })
 
-  it('should initialize with the correct defaults', () => {
+  t.test('should initialize with the correct defaults', t => {
     const config = new Config()
 
     expect(config).to.have.nested.property('apmTracingEnabled', true)
@@ -481,9 +495,10 @@ describe('Config', () => {
       { name: 'vertexai.spanCharLimit', value: 128, origin: 'default' },
       { name: 'vertexai.spanPromptCompletionSampleRate', value: 1.0, origin: 'default' }
     ])
+    t.end()
   })
 
-  it('should support logging', () => {
+  t.test('should support logging', t => {
     const config = new Config({
       logger: {},
       debug: true
@@ -491,36 +506,40 @@ describe('Config', () => {
 
     expect(log.use).to.have.been.calledWith(config.logger)
     expect(log.toggle).to.have.been.calledWith(config.debug)
+    t.end()
   })
 
-  it('should not warn on undefined DD_TRACE_SPAN_ATTRIBUTE_SCHEMA', () => {
+  t.test('should not warn on undefined DD_TRACE_SPAN_ATTRIBUTE_SCHEMA', t => {
     const config = new Config({
       logger: {},
       debug: true
     })
     expect(log.warn).not.to.be.called
     expect(config).to.have.property('spanAttributeSchema', 'v0')
+    t.end()
   })
 
-  it('should initialize from the default service', () => {
+  t.test('should initialize from the default service', t => {
     pkg.name = 'test'
 
     const config = new Config()
 
     expect(config).to.have.property('service', 'test')
     expect(config.tags).to.have.property('service', 'test')
+    t.end()
   })
 
-  it('should initialize from the default version', () => {
+  t.test('should initialize from the default version', t => {
     pkg.version = '1.2.3'
 
     const config = new Config()
 
     expect(config).to.have.property('version', '1.2.3')
     expect(config.tags).to.have.property('version', '1.2.3')
+    t.end()
   })
 
-  it('should initialize from environment variables', () => {
+  t.test('should initialize from environment variables', t => {
     process.env.DD_API_SECURITY_ENABLED = 'true'
     process.env.DD_API_SECURITY_SAMPLE_DELAY = '25'
     process.env.DD_APM_TRACING_ENABLED = 'false'
@@ -817,9 +836,10 @@ describe('Config', () => {
       { name: 'vertexai.spanCharLimit', value: 50, origin: 'env_var' },
       { name: 'vertexai.spanPromptCompletionSampleRate', value: 0.5, origin: 'env_var' }
     ])
+    t.end()
   })
 
-  it('should ignore empty strings', () => {
+  t.test('should ignore empty strings', t => {
     process.env.DD_TAGS = 'service:,env:,version:'
 
     let config = new Config()
@@ -835,9 +855,10 @@ describe('Config', () => {
     expect(config).to.have.property('service', 'node')
     expect(config).to.have.property('env', undefined)
     expect(config).to.have.property('version', '')
+    t.end()
   })
 
-  it('should support space separated tags when experimental mode enabled', () => {
+  t.test('should support space separated tags when experimental mode enabled', t => {
     process.env.DD_TAGS = 'key1:value1 key2:value2'
 
     let config = new Config()
@@ -872,9 +893,10 @@ describe('Config', () => {
 
     expect(config.tags).to.have.property('a', '')
     expect(config.tags).to.have.property('1', '')
+    t.end()
   })
 
-  it('should read case-insensitive booleans from environment variables', () => {
+  t.test('should read case-insensitive booleans from environment variables', t => {
     process.env.DD_TRACING_ENABLED = 'False'
     process.env.DD_TRACE_PROPAGATION_EXTRACT_FIRST = 'TRUE'
     process.env.DD_RUNTIME_METRICS_ENABLED = '0'
@@ -884,9 +906,10 @@ describe('Config', () => {
     expect(config).to.have.property('tracing', false)
     expect(config).to.have.property('tracePropagationExtractFirst', true)
     expect(config).to.have.property('runtimeMetrics', false)
+    t.end()
   })
 
-  it('should initialize from environment variables with url taking precedence', () => {
+  t.test('should initialize from environment variables with url taking precedence', t => {
     process.env.DD_TRACE_AGENT_URL = 'https://agent2:7777'
     process.env.DD_SITE = 'datadoghq.eu'
     process.env.DD_TRACE_AGENT_HOSTNAME = 'agent'
@@ -905,9 +928,10 @@ describe('Config', () => {
     expect(config).to.have.property('site', 'datadoghq.eu')
     expect(config).to.have.property('service', 'service')
     expect(config).to.have.property('env', 'test')
+    t.end()
   })
 
-  it('should initialize from environment variables with inject/extract taking precedence', () => {
+  t.test('should initialize from environment variables with inject/extract taking precedence', t => {
     process.env.DD_TRACE_PROPAGATION_STYLE = 'datadog'
     process.env.DD_TRACE_PROPAGATION_STYLE_INJECT = 'tracecontext'
     process.env.DD_TRACE_PROPAGATION_STYLE_EXTRACT = 'tracecontext'
@@ -916,35 +940,42 @@ describe('Config', () => {
 
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['tracecontext'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['tracecontext'])
+    t.end()
   })
 
-  it('should enable crash tracking for SSI by default', () => {
+  t.test('should enable crash tracking for SSI by default', t => {
     process.env.DD_INJECTION_ENABLED = 'tracer'
 
     const config = new Config()
 
     expect(config).to.have.nested.deep.property('crashtracking.enabled', true)
+    t.end()
   })
 
-  it('should disable crash tracking for SSI when configured', () => {
+  t.test('should disable crash tracking for SSI when configured', t => {
     process.env.DD_CRASHTRACKING_ENABLED = 'false'
     process.env.DD_INJECTION_ENABLED = 'tracer'
 
     const config = new Config()
 
     expect(config).to.have.nested.deep.property('crashtracking.enabled', false)
+    t.end()
   })
 
-  it('should prioritize DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE over DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING', () => {
-    process.env.DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE = 'anonymous'
-    process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = 'extended'
+  t.test(
+    'should prioritize DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE over DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING',
+    t => {
+      process.env.DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE = 'anonymous'
+      process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = 'extended'
 
-    const config = new Config()
+      const config = new Config()
 
-    expect(config).to.have.nested.property('appsec.eventTracking.mode', 'anonymous')
-  })
+      expect(config).to.have.nested.property('appsec.eventTracking.mode', 'anonymous')
+      t.end()
+    }
+  )
 
-  it('should initialize from the options', () => {
+  t.test('should initialize from the options', t => {
     const logger = {}
     const tags = {
       foo: 'bar'
@@ -1192,9 +1223,10 @@ describe('Config', () => {
       { name: 'traceId128BitLoggingEnabled', value: true, origin: 'code' },
       { name: 'version', value: '0.1.0', origin: 'code' }
     ])
+    t.end()
   })
 
-  it('should initialize from the options with url taking precedence', () => {
+  t.test('should initialize from the options with url taking precedence', t => {
     const logger = {}
     const tags = { foo: 'bar' }
     const config = new Config({
@@ -1224,9 +1256,10 @@ describe('Config', () => {
     expect(config).to.have.property('flushInterval', 5000)
     expect(config).to.have.property('flushMinSpans', 500)
     expect(config).to.have.property('plugins', false)
+    t.end()
   })
 
-  it('should warn if mixing shared and extract propagation style env vars', () => {
+  t.test('should warn if mixing shared and extract propagation style env vars', t => {
     process.env.DD_TRACE_PROPAGATION_STYLE_EXTRACT = 'datadog'
     process.env.DD_TRACE_PROPAGATION_STYLE = 'datadog'
 
@@ -1236,9 +1269,10 @@ describe('Config', () => {
     expect(log.warn).to.have.been.calledWith('Use either the DD_TRACE_PROPAGATION_STYLE ' +
       'environment variable or separate DD_TRACE_PROPAGATION_STYLE_INJECT and ' +
       'DD_TRACE_PROPAGATION_STYLE_EXTRACT environment variables')
+    t.end()
   })
 
-  it('should warn if mixing shared and inject propagation style env vars', () => {
+  t.test('should warn if mixing shared and inject propagation style env vars', t => {
     process.env.DD_TRACE_PROPAGATION_STYLE_INJECT = 'datadog'
     process.env.DD_TRACE_PROPAGATION_STYLE = 'datadog'
 
@@ -1248,18 +1282,20 @@ describe('Config', () => {
     expect(log.warn).to.have.been.calledWith('Use either the DD_TRACE_PROPAGATION_STYLE ' +
       'environment variable or separate DD_TRACE_PROPAGATION_STYLE_INJECT and ' +
       'DD_TRACE_PROPAGATION_STYLE_EXTRACT environment variables')
+    t.end()
   })
 
-  it('should warn if defaulting to v0 span attribute schema', () => {
+  t.test('should warn if defaulting to v0 span attribute schema', t => {
     process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'foo'
 
     const config = new Config()
 
     expect(log.warn).to.have.been.calledWith('Unexpected input for config.spanAttributeSchema, picked default', 'v0')
     expect(config).to.have.property('spanAttributeSchema', 'v0')
+    t.end()
   })
 
-  it('should parse integer range sets', () => {
+  t.test('should parse integer range sets', t => {
     process.env.DD_GRPC_CLIENT_ERROR_STATUSES = '3,13,400-403'
     process.env.DD_GRPC_SERVER_ERROR_STATUSES = '3,13,400-403'
 
@@ -1283,10 +1319,11 @@ describe('Config', () => {
 
     expect(config.grpc.client.error.statuses).to.deep.equal([2, 10, 13, 14, 15])
     expect(config.grpc.server.error.statuses).to.deep.equal([2, 10, 13, 14, 15])
+    t.end()
   })
 
   context('peer service tagging', () => {
-    it('should activate peer service only if explicitly true in v0', () => {
+    t.test('should activate peer service only if explicitly true in v0', t => {
       process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'v0'
       process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'true'
       let config = new Config()
@@ -1303,9 +1340,10 @@ describe('Config', () => {
       delete process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
       config = new Config()
       expect(config).to.have.property('spanComputePeerService', false)
+      t.end()
     })
 
-    it('should activate peer service in v1 unless explicitly false', () => {
+    t.test('should activate peer service in v1 unless explicitly false', t => {
       process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'v1'
       process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'false'
       let config = new Config()
@@ -1322,10 +1360,11 @@ describe('Config', () => {
       delete process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
       config = new Config()
       expect(config).to.have.property('spanComputePeerService', true)
+      t.end()
     })
   })
 
-  it('should give priority to the common agent environment variable', () => {
+  t.test('should give priority to the common agent environment variable', t => {
     process.env.DD_TRACE_AGENT_HOSTNAME = 'trace-agent'
     process.env.DD_AGENT_HOST = 'agent'
     process.env.DD_TRACE_GLOBAL_TAGS = 'foo:foo'
@@ -1335,9 +1374,10 @@ describe('Config', () => {
 
     expect(config).to.have.property('hostname', 'agent')
     expect(config.tags).to.include({ foo: 'foo', baz: 'qux' })
+    t.end()
   })
 
-  it('should give priority to the options', () => {
+  t.test('should give priority to the options', t => {
     process.env.DD_API_KEY = '123'
     process.env.DD_API_SECURITY_ENABLED = 'false'
     process.env.DD_APM_TRACING_ENABLED = 'false'
@@ -1585,9 +1625,10 @@ describe('Config', () => {
     expect(config).to.have.nested.property('url.port', '6218')
     expect(config).to.have.nested.property('url.protocol', 'https:')
     expect(config).to.have.property('version', '1.0.0')
+    t.end()
   })
 
-  it('should give priority to non-experimental options', () => {
+  t.test('should give priority to non-experimental options', t => {
     const config = new Config({
       appsec: {
         apiSecurity: {
@@ -1727,9 +1768,10 @@ describe('Config', () => {
       },
       telemetryVerbosity: 'DEBUG'
     })
+    t.end()
   })
 
-  it('should give priority to the options especially url', () => {
+  t.test('should give priority to the options especially url', t => {
     process.env.DD_TRACE_AGENT_URL = 'http://agent2:6218'
     process.env.DD_TRACE_AGENT_HOSTNAME = 'agent'
     process.env.DD_TRACE_AGENT_PORT = '6218'
@@ -1750,9 +1792,10 @@ describe('Config', () => {
     expect(config).to.have.nested.property('url.port', '7778')
     expect(config).to.have.property('service', 'test')
     expect(config).to.have.property('env', 'development')
+    t.end()
   })
 
-  it('should give priority to individual options over tags', () => {
+  t.test('should give priority to individual options over tags', t => {
     process.env.DD_SERVICE = 'test'
     process.env.DD_ENV = 'dev'
     process.env.DD_VERSION = '1.0.0'
@@ -1765,15 +1808,17 @@ describe('Config', () => {
       env: 'dev',
       version: '1.0.0'
     })
+    t.end()
   })
 
-  it('should sanitize the sample rate to be between 0 and 1', () => {
+  t.test('should sanitize the sample rate to be between 0 and 1', t => {
     expect(new Config({ sampleRate: -1 })).to.have.property('sampleRate', 0)
     expect(new Config({ sampleRate: 2 })).to.have.property('sampleRate', 1)
     expect(new Config({ sampleRate: NaN })).to.have.property('sampleRate', undefined)
+    t.end()
   })
 
-  it('should ignore empty service names', () => {
+  t.test('should ignore empty service names', t => {
     process.env.DD_SERVICE = ''
 
     const config = new Config()
@@ -1781,9 +1826,10 @@ describe('Config', () => {
     expect(config.tags).to.include({
       service: 'node'
     })
+    t.end()
   })
 
-  it('should support tags for setting primary fields', () => {
+  t.test('should support tags for setting primary fields', t => {
     const config = new Config({
       tags: {
         service: 'service',
@@ -1795,32 +1841,36 @@ describe('Config', () => {
     expect(config).to.have.property('service', 'service')
     expect(config).to.have.property('version', '0.1.0')
     expect(config).to.have.property('env', 'test')
+    t.end()
   })
 
-  it('should trim whitespace characters around keys', () => {
+  t.test('should trim whitespace characters around keys', t => {
     process.env.DD_TAGS = 'foo:bar, baz:qux'
 
     const config = new Config()
 
     expect(config.tags).to.include({ foo: 'bar', baz: 'qux' })
+    t.end()
   })
 
-  it('should not transform the lookup parameter', () => {
+  t.test('should not transform the lookup parameter', t => {
     const lookup = () => 'test'
     const config = new Config({ lookup })
 
     expect(config.lookup).to.equal(lookup)
+    t.end()
   })
 
-  it('should not set DD_INSTRUMENTATION_TELEMETRY_ENABLED if AWS_LAMBDA_FUNCTION_NAME is present', () => {
+  t.test('should not set DD_INSTRUMENTATION_TELEMETRY_ENABLED if AWS_LAMBDA_FUNCTION_NAME is present', t => {
     process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-great-lambda-function'
 
     const config = new Config()
 
     expect(config.telemetry.enabled).to.be.false
+    t.end()
   })
 
-  it('should not set DD_INSTRUMENTATION_TELEMETRY_ENABLED if FUNCTION_NAME and GCP_PROJECT are present', () => {
+  t.test('should not set DD_INSTRUMENTATION_TELEMETRY_ENABLED if FUNCTION_NAME and GCP_PROJECT are present', t => {
     // FUNCTION_NAME and GCP_PROJECT env vars indicate a gcp function with a deprecated runtime
     process.env.FUNCTION_NAME = 'function_name'
     process.env.GCP_PROJECT = 'project_name'
@@ -1828,9 +1878,10 @@ describe('Config', () => {
     const config = new Config()
 
     expect(config.telemetry.enabled).to.be.false
+    t.end()
   })
 
-  it('should not set DD_INSTRUMENTATION_TELEMETRY_ENABLED if K_SERVICE and FUNCTION_TARGET are present', () => {
+  t.test('should not set DD_INSTRUMENTATION_TELEMETRY_ENABLED if K_SERVICE and FUNCTION_TARGET are present', t => {
     // K_SERVICE and FUNCTION_TARGET env vars indicate a gcp function with a newer runtime
     process.env.K_SERVICE = 'function_name'
     process.env.FUNCTION_TARGET = 'function_target'
@@ -1838,9 +1889,10 @@ describe('Config', () => {
     const config = new Config()
 
     expect(config.telemetry.enabled).to.be.false
+    t.end()
   })
 
-  it('should not set DD_INSTRUMENTATION_TELEMETRY_ENABLED if Azure Consumption Plan Function', () => {
+  t.test('should not set DD_INSTRUMENTATION_TELEMETRY_ENABLED if Azure Consumption Plan Function', t => {
     // AzureWebJobsScriptRoot and FUNCTIONS_EXTENSION_VERSION env vars indicate an azure function
     process.env.FUNCTIONS_WORKER_RUNTIME = 'node'
     process.env.FUNCTIONS_EXTENSION_VERSION = '4'
@@ -1849,9 +1901,10 @@ describe('Config', () => {
     const config = new Config()
 
     expect(config.telemetry.enabled).to.be.false
+    t.end()
   })
 
-  it('should set telemetry default values', () => {
+  t.test('should set telemetry default values', t => {
     const config = new Config()
 
     expect(config.telemetry).to.not.be.undefined
@@ -1860,9 +1913,10 @@ describe('Config', () => {
     expect(config.telemetry.logCollection).to.be.true
     expect(config.telemetry.debug).to.be.false
     expect(config.telemetry.metrics).to.be.true
+    t.end()
   })
 
-  it('should set DD_TELEMETRY_HEARTBEAT_INTERVAL', () => {
+  t.test('should set DD_TELEMETRY_HEARTBEAT_INTERVAL', t => {
     const origTelemetryHeartbeatIntervalValue = process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL
     process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL = '42'
 
@@ -1871,9 +1925,10 @@ describe('Config', () => {
     expect(config.telemetry.heartbeatInterval).to.eq(42000)
 
     process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL = origTelemetryHeartbeatIntervalValue
+    t.end()
   })
 
-  it('should not set DD_INSTRUMENTATION_TELEMETRY_ENABLED', () => {
+  t.test('should not set DD_INSTRUMENTATION_TELEMETRY_ENABLED', t => {
     const origTraceTelemetryValue = process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED
     process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'false'
 
@@ -1882,9 +1937,10 @@ describe('Config', () => {
     expect(config.telemetry.enabled).to.be.false
 
     process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = origTraceTelemetryValue
+    t.end()
   })
 
-  it('should not set DD_TELEMETRY_METRICS_ENABLED', () => {
+  t.test('should not set DD_TELEMETRY_METRICS_ENABLED', t => {
     const origTelemetryMetricsEnabledValue = process.env.DD_TELEMETRY_METRICS_ENABLED
     process.env.DD_TELEMETRY_METRICS_ENABLED = 'false'
 
@@ -1893,9 +1949,10 @@ describe('Config', () => {
     expect(config.telemetry.metrics).to.be.false
 
     process.env.DD_TELEMETRY_METRICS_ENABLED = origTelemetryMetricsEnabledValue
+    t.end()
   })
 
-  it('should disable log collection if DD_TELEMETRY_LOG_COLLECTION_ENABLED is false', () => {
+  t.test('should disable log collection if DD_TELEMETRY_LOG_COLLECTION_ENABLED is false', t => {
     const origLogsValue = process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED
     process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED = 'false'
 
@@ -1904,9 +1961,10 @@ describe('Config', () => {
     expect(config.telemetry.logCollection).to.be.false
 
     process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED = origLogsValue
+    t.end()
   })
 
-  it('should set DD_TELEMETRY_DEBUG', () => {
+  t.test('should set DD_TELEMETRY_DEBUG', t => {
     const origTelemetryDebugValue = process.env.DD_TELEMETRY_DEBUG
     process.env.DD_TELEMETRY_DEBUG = 'true'
 
@@ -1915,35 +1973,39 @@ describe('Config', () => {
     expect(config.telemetry.debug).to.be.true
 
     process.env.DD_TELEMETRY_DEBUG = origTelemetryDebugValue
+    t.end()
   })
 
-  it('should not set DD_REMOTE_CONFIGURATION_ENABLED if AWS_LAMBDA_FUNCTION_NAME is present', () => {
+  t.test('should not set DD_REMOTE_CONFIGURATION_ENABLED if AWS_LAMBDA_FUNCTION_NAME is present', t => {
     process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-great-lambda-function'
 
     const config = new Config()
 
     expect(config.remoteConfig.enabled).to.be.false
+    t.end()
   })
 
-  it('should not set DD_REMOTE_CONFIGURATION_ENABLED if FUNCTION_NAME and GCP_PROJECT are present', () => {
+  t.test('should not set DD_REMOTE_CONFIGURATION_ENABLED if FUNCTION_NAME and GCP_PROJECT are present', t => {
     process.env.FUNCTION_NAME = 'function_name'
     process.env.GCP_PROJECT = 'project_name'
 
     const config = new Config()
 
     expect(config.remoteConfig.enabled).to.be.false
+    t.end()
   })
 
-  it('should not set DD_REMOTE_CONFIGURATION_ENABLED if K_SERVICE and FUNCTION_TARGET are present', () => {
+  t.test('should not set DD_REMOTE_CONFIGURATION_ENABLED if K_SERVICE and FUNCTION_TARGET are present', t => {
     process.env.K_SERVICE = 'function_name'
     process.env.FUNCTION_TARGET = 'function_target'
 
     const config = new Config()
 
     expect(config.remoteConfig.enabled).to.be.false
+    t.end()
   })
 
-  it('should not set DD_REMOTE_CONFIGURATION_ENABLED if Azure Functions env vars are present', () => {
+  t.test('should not set DD_REMOTE_CONFIGURATION_ENABLED if Azure Functions env vars are present', t => {
     process.env.FUNCTIONS_WORKER_RUNTIME = 'node'
     process.env.FUNCTIONS_EXTENSION_VERSION = '4'
     process.env.WEBSITE_SKU = 'Dynamic'
@@ -1951,18 +2013,20 @@ describe('Config', () => {
     const config = new Config()
 
     expect(config.remoteConfig.enabled).to.be.false
+    t.end()
   })
 
-  it('should send empty array when remote config is called on empty options', () => {
+  t.test('should send empty array when remote config is called on empty options', t => {
     const config = new Config()
 
     config.configure({}, true)
 
     expect(updateConfig).to.be.calledTwice
     expect(updateConfig.getCall(1).args[0]).to.deep.equal([])
+    t.end()
   })
 
-  it('should send remote config changes to telemetry', () => {
+  t.test('should send remote config changes to telemetry', t => {
     const config = new Config()
 
     config.configure({
@@ -1972,9 +2036,10 @@ describe('Config', () => {
     expect(updateConfig.getCall(1).args[0]).to.deep.equal([
       { name: 'sampleRate', value: 0, origin: 'remote_config' }
     ])
+    t.end()
   })
 
-  it('should reformat tags from sampling rules when set through remote configuration', () => {
+  t.test('should reformat tags from sampling rules when set through remote configuration', t => {
     const config = new Config()
 
     config.configure({
@@ -2001,9 +2066,10 @@ describe('Config', () => {
       ],
       sampleRate: undefined
     })
+    t.end()
   })
 
-  it('should have consistent runtime-id after remote configuration updates tags', () => {
+  t.test('should have consistent runtime-id after remote configuration updates tags', t => {
     const config = new Config()
     const runtimeId = config.tags['runtime-id']
     config.configure({
@@ -2012,9 +2078,10 @@ describe('Config', () => {
 
     expect(config.tags).to.have.property('foo', 'bar')
     expect(config.tags).to.have.property('runtime-id', runtimeId)
+    t.end()
   })
 
-  it('should ignore invalid iast.requestSampling', () => {
+  t.test('should ignore invalid iast.requestSampling', t => {
     const config = new Config({
       experimental: {
         iast: {
@@ -2023,9 +2090,10 @@ describe('Config', () => {
       }
     })
     expect(config.iast.requestSampling).to.be.equals(30)
+    t.end()
   })
 
-  it('should load span sampling rules from json file', () => {
+  t.test('should load span sampling rules from json file', t => {
     const path = './fixtures/config/span-sampling-rules.json'
     process.env.DD_SPAN_SAMPLING_RULES_FILE = require.resolve(path)
 
@@ -2037,9 +2105,10 @@ describe('Config', () => {
       { service: 'mysql', sampleRate: 1.0 },
       { sampleRate: 0.1 }
     ])
+    t.end()
   })
 
-  it('should skip appsec config files if they do not exist', () => {
+  t.test('should skip appsec config files if they do not exist', t => {
     const error = new Error('file not found')
     fs.readFileSync = () => { throw error }
 
@@ -2073,133 +2142,149 @@ describe('Config', () => {
     expect(config.appsec.blockedTemplateHtml).to.be.undefined
     expect(config.appsec.blockedTemplateJson).to.be.undefined
     expect(config.appsec.blockedTemplateGraphql).to.be.undefined
+    t.end()
   })
 
-  it('should enable api security with DD_EXPERIMENTAL_API_SECURITY_ENABLED', () => {
+  t.test('should enable api security with DD_EXPERIMENTAL_API_SECURITY_ENABLED', t => {
     process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED = 'true'
 
     const config = new Config()
 
     expect(config.appsec.apiSecurity.enabled).to.be.true
+    t.end()
   })
 
-  it('should disable api security with DD_EXPERIMENTAL_API_SECURITY_ENABLED', () => {
+  t.test('should disable api security with DD_EXPERIMENTAL_API_SECURITY_ENABLED', t => {
     process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED = 'false'
 
     const config = new Config()
 
     expect(config.appsec.apiSecurity.enabled).to.be.false
+    t.end()
   })
 
-  it('should ignore DD_EXPERIMENTAL_API_SECURITY_ENABLED with DD_API_SECURITY_ENABLED=true', () => {
+  t.test('should ignore DD_EXPERIMENTAL_API_SECURITY_ENABLED with DD_API_SECURITY_ENABLED=true', t => {
     process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED = 'false'
     process.env.DD_API_SECURITY_ENABLED = 'true'
 
     const config = new Config()
 
     expect(config.appsec.apiSecurity.enabled).to.be.true
+    t.end()
   })
 
-  it('should prioritize DD_DOGSTATSD_HOST over DD_DOGSTATSD_HOSTNAME', () => {
+  t.test('should prioritize DD_DOGSTATSD_HOST over DD_DOGSTATSD_HOSTNAME', t => {
     process.env.DD_DOGSTATSD_HOSTNAME = 'dsd-agent'
     process.env.DD_DOGSTATSD_HOST = 'localhost'
 
     const config = new Config()
 
     expect(config).to.have.nested.property('dogstatsd.hostname', 'localhost')
+    t.end()
   })
 
   context('auto configuration w/ unix domain sockets', () => {
     context('on windows', () => {
-      it('should not be used', () => {
+      t.test('should not be used', t => {
         osType = 'Windows_NT'
         const config = new Config()
 
         expect(config.url).to.be.undefined
+        t.end()
       })
     })
     context('socket does not exist', () => {
-      it('should not be used', () => {
+      t.test('should not be used', t => {
         const config = new Config()
 
         expect(config.url).to.be.undefined
+        t.end()
       })
     })
     context('socket exists', () => {
-      beforeEach(() => {
+      t.beforeEach(() => {
         existsSyncReturn = true
       })
 
-      it('should be used when no options and no env vars', () => {
+      t.test('should be used when no options and no env vars', t => {
         const config = new Config()
 
         expect(existsSyncParam).to.equal('/var/run/datadog/apm.socket')
         expect(config.url.toString()).to.equal('unix:///var/run/datadog/apm.socket')
+        t.end()
       })
 
-      it('should not be used when DD_TRACE_AGENT_URL provided', () => {
+      t.test('should not be used when DD_TRACE_AGENT_URL provided', t => {
         process.env.DD_TRACE_AGENT_URL = 'https://example.com/'
 
         const config = new Config()
 
         expect(config.url.toString()).to.equal('https://example.com/')
+        t.end()
       })
 
-      it('should not be used when DD_TRACE_URL provided', () => {
+      t.test('should not be used when DD_TRACE_URL provided', t => {
         process.env.DD_TRACE_URL = 'https://example.com/'
 
         const config = new Config()
 
         expect(config.url.toString()).to.equal('https://example.com/')
+        t.end()
       })
 
-      it('should not be used when options.url provided', () => {
+      t.test('should not be used when options.url provided', t => {
         const config = new Config({ url: 'https://example.com/' })
 
         expect(config.url.toString()).to.equal('https://example.com/')
+        t.end()
       })
 
-      it('should not be used when DD_TRACE_AGENT_PORT provided', () => {
+      t.test('should not be used when DD_TRACE_AGENT_PORT provided', t => {
         process.env.DD_TRACE_AGENT_PORT = 12345
 
         const config = new Config()
 
         expect(config.url).to.be.undefined
+        t.end()
       })
 
-      it('should not be used when options.port provided', () => {
+      t.test('should not be used when options.port provided', t => {
         const config = new Config({ port: 12345 })
 
         expect(config.url).to.be.undefined
+        t.end()
       })
 
-      it('should not be used when DD_TRACE_AGENT_HOSTNAME provided', () => {
+      t.test('should not be used when DD_TRACE_AGENT_HOSTNAME provided', t => {
         process.env.DD_TRACE_AGENT_HOSTNAME = 'example.com'
 
         const config = new Config()
 
         expect(config.url).to.be.undefined
+        t.end()
       })
 
-      it('should not be used when DD_AGENT_HOST provided', () => {
+      t.test('should not be used when DD_AGENT_HOST provided', t => {
         process.env.DD_AGENT_HOST = 'example.com'
 
         const config = new Config()
 
         expect(config.url).to.be.undefined
+        t.end()
       })
 
-      it('should not be used when options.hostname provided', () => {
+      t.test('should not be used when options.hostname provided', t => {
         const config = new Config({ hostname: 'example.com' })
 
         expect(config.url).to.be.undefined
+        t.end()
       })
     })
   })
 
   context('ci visibility config', () => {
     let options = {}
-    beforeEach(() => {
+    t.beforeEach(() => {
       delete process.env.DD_CIVISIBILITY_ITR_ENABLED
       delete process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED
       delete process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED
@@ -2213,124 +2298,148 @@ describe('Config', () => {
       options = {}
     })
     context('ci visibility mode is enabled', () => {
-      beforeEach(() => {
+      t.beforeEach(() => {
         options = { isCiVisibility: true }
       })
-      it('should activate git upload by default', () => {
+      t.test('should activate git upload by default', t => {
         const config = new Config(options)
         expect(config).to.have.property('isGitUploadEnabled', true)
+        t.end()
       })
-      it('should disable git upload if the DD_CIVISIBILITY_GIT_UPLOAD_ENABLED is set to false', () => {
+      t.test('should disable git upload if the DD_CIVISIBILITY_GIT_UPLOAD_ENABLED is set to false', t => {
         process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = 'false'
         const config = new Config(options)
         expect(config).to.have.property('isGitUploadEnabled', false)
+        t.end()
       })
-      it('should activate ITR by default', () => {
+      t.test('should activate ITR by default', t => {
         const config = new Config(options)
         expect(config).to.have.property('isIntelligentTestRunnerEnabled', true)
+        t.end()
       })
-      it('should disable ITR if DD_CIVISIBILITY_ITR_ENABLED is set to false', () => {
+      t.test('should disable ITR if DD_CIVISIBILITY_ITR_ENABLED is set to false', t => {
         process.env.DD_CIVISIBILITY_ITR_ENABLED = 'false'
         const config = new Config(options)
         expect(config).to.have.property('isIntelligentTestRunnerEnabled', false)
+        t.end()
       })
-      it('should enable manual testing API by default', () => {
+      t.test('should enable manual testing API by default', t => {
         const config = new Config(options)
         expect(config).to.have.property('isManualApiEnabled', true)
+        t.end()
       })
-      it('should disable manual testing API if DD_CIVISIBILITY_MANUAL_API_ENABLED is set to false', () => {
+      t.test('should disable manual testing API if DD_CIVISIBILITY_MANUAL_API_ENABLED is set to false', t => {
         process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED = 'false'
         const config = new Config(options)
         expect(config).to.have.property('isManualApiEnabled', false)
+        t.end()
       })
-      it('should disable memcached command tagging by default', () => {
+      t.test('should disable memcached command tagging by default', t => {
         const config = new Config(options)
         expect(config).to.have.property('memcachedCommandEnabled', false)
+        t.end()
       })
-      it('should enable memcached command tagging if DD_TRACE_MEMCACHED_COMMAND_ENABLED is enabled', () => {
+      t.test('should enable memcached command tagging if DD_TRACE_MEMCACHED_COMMAND_ENABLED is enabled', t => {
         process.env.DD_TRACE_MEMCACHED_COMMAND_ENABLED = 'true'
         const config = new Config(options)
         expect(config).to.have.property('memcachedCommandEnabled', true)
+        t.end()
       })
-      it('should enable telemetry', () => {
+      t.test('should enable telemetry', t => {
         const config = new Config(options)
         expect(config).to.nested.property('telemetry.enabled', true)
+        t.end()
       })
-      it('should enable early flake detection by default', () => {
+      t.test('should enable early flake detection by default', t => {
         const config = new Config(options)
         expect(config).to.have.property('isEarlyFlakeDetectionEnabled', true)
+        t.end()
       })
-      it('should disable early flake detection if DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED is false', () => {
+      t.test('should disable early flake detection if DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED is false', t => {
         process.env.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED = 'false'
         const config = new Config(options)
         expect(config).to.have.property('isEarlyFlakeDetectionEnabled', false)
+        t.end()
       })
-      it('should enable flaky test retries by default', () => {
+      t.test('should enable flaky test retries by default', t => {
         const config = new Config(options)
         expect(config).to.have.property('isFlakyTestRetriesEnabled', true)
+        t.end()
       })
-      it('should disable flaky test retries if isFlakyTestRetriesEnabled is false', () => {
+      t.test('should disable flaky test retries if isFlakyTestRetriesEnabled is false', t => {
         process.env.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED = 'false'
         const config = new Config(options)
         expect(config).to.have.property('isFlakyTestRetriesEnabled', false)
+        t.end()
       })
-      it('should read DD_CIVISIBILITY_FLAKY_RETRY_COUNT if present', () => {
+      t.test('should read DD_CIVISIBILITY_FLAKY_RETRY_COUNT if present', t => {
         process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT = '4'
         const config = new Config(options)
         expect(config).to.have.property('flakyTestRetriesCount', 4)
+        t.end()
       })
-      it('should default DD_CIVISIBILITY_FLAKY_RETRY_COUNT to 5', () => {
+      t.test('should default DD_CIVISIBILITY_FLAKY_RETRY_COUNT to 5', t => {
         const config = new Config(options)
         expect(config).to.have.property('flakyTestRetriesCount', 5)
+        t.end()
       })
-      it('should round non integer values of DD_CIVISIBILITY_FLAKY_RETRY_COUNT', () => {
+      t.test('should round non integer values of DD_CIVISIBILITY_FLAKY_RETRY_COUNT', t => {
         process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT = '4.1'
         const config = new Config(options)
         expect(config).to.have.property('flakyTestRetriesCount', 4)
+        t.end()
       })
-      it('should set the default to DD_CIVISIBILITY_FLAKY_RETRY_COUNT if it is not a number', () => {
+      t.test('should set the default to DD_CIVISIBILITY_FLAKY_RETRY_COUNT if it is not a number', t => {
         process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT = 'a'
         const config = new Config(options)
         expect(config).to.have.property('flakyTestRetriesCount', 5)
+        t.end()
       })
-      it('should set the session name if DD_TEST_SESSION_NAME is set', () => {
+      t.test('should set the session name if DD_TEST_SESSION_NAME is set', t => {
         process.env.DD_TEST_SESSION_NAME = 'my-test-session'
         const config = new Config(options)
         expect(config).to.have.property('ciVisibilityTestSessionName', 'my-test-session')
+        t.end()
       })
-      it('should not enable agentless log submission by default', () => {
+      t.test('should not enable agentless log submission by default', t => {
         const config = new Config(options)
         expect(config).to.have.property('ciVisAgentlessLogSubmissionEnabled', false)
+        t.end()
       })
-      it('should enable agentless log submission if DD_AGENTLESS_LOG_SUBMISSION_ENABLED is true', () => {
+      t.test('should enable agentless log submission if DD_AGENTLESS_LOG_SUBMISSION_ENABLED is true', t => {
         process.env.DD_AGENTLESS_LOG_SUBMISSION_ENABLED = 'true'
         const config = new Config(options)
         expect(config).to.have.property('ciVisAgentlessLogSubmissionEnabled', true)
+        t.end()
       })
-      it('should set isTestDynamicInstrumentationEnabled by default', () => {
+      t.test('should set isTestDynamicInstrumentationEnabled by default', t => {
         const config = new Config(options)
         expect(config).to.have.property('isTestDynamicInstrumentationEnabled', true)
+        t.end()
       })
-      it('should set isTestDynamicInstrumentationEnabled to false if DD_TEST_FAILED_TEST_REPLAY_ENABLED is false',
-        () => {
+      t.test('should set isTestDynamicInstrumentationEnabled to false if DD_TEST_FAILED_TEST_REPLAY_ENABLED is false',
+        t => {
           process.env.DD_TEST_FAILED_TEST_REPLAY_ENABLED = 'false'
           const config = new Config(options)
           expect(config).to.have.property('isTestDynamicInstrumentationEnabled', false)
+          t.end()
         })
     })
     context('ci visibility mode is not enabled', () => {
-      it('should not activate intelligent test runner or git metadata upload', () => {
+      t.test('should not activate intelligent test runner or git metadata upload', t => {
         process.env.DD_CIVISIBILITY_ITR_ENABLED = 'true'
         process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = 'true'
         const config = new Config(options)
         expect(config).to.have.property('isIntelligentTestRunnerEnabled', false)
         expect(config).to.have.property('isGitUploadEnabled', false)
+        t.end()
       })
     })
-    it('disables telemetry if inside a jest worker', () => {
+    t.test('disables telemetry if inside a jest worker', t => {
       process.env.JEST_WORKER_ID = '1'
       const config = new Config(options)
       expect(config.telemetry.enabled).to.be.false
+      t.end()
     })
   })
 
@@ -2338,78 +2447,87 @@ describe('Config', () => {
     const DUMMY_COMMIT_SHA = 'b7b5dfa992008c77ab3f8a10eb8711e0092445b0'
     const DUMMY_REPOSITORY_URL = 'git@github.com:DataDog/dd-trace-js.git'
     let ddTags
-    beforeEach(() => {
+    t.beforeEach(() => {
       ddTags = process.env.DD_TAGS
     })
-    afterEach(() => {
+    t.afterEach(() => {
       delete process.env.DD_GIT_PROPERTIES_FILE
       delete process.env.DD_GIT_COMMIT_SHA
       delete process.env.DD_GIT_REPOSITORY_URL
       delete process.env.DD_TRACE_GIT_METADATA_ENABLED
       process.env.DD_TAGS = ddTags
     })
-    it('reads DD_GIT_* env vars', () => {
+    t.test('reads DD_GIT_* env vars', t => {
       process.env.DD_GIT_COMMIT_SHA = DUMMY_COMMIT_SHA
       process.env.DD_GIT_REPOSITORY_URL = DUMMY_REPOSITORY_URL
       const config = new Config({})
       expect(config).to.have.property('commitSHA', DUMMY_COMMIT_SHA)
       expect(config).to.have.property('repositoryUrl', DUMMY_REPOSITORY_URL)
+      t.end()
     })
-    it('reads DD_GIT_* env vars and filters out user data', () => {
+    t.test('reads DD_GIT_* env vars and filters out user data', t => {
       process.env.DD_GIT_REPOSITORY_URL = 'https://user:password@github.com/DataDog/dd-trace-js.git'
       const config = new Config({})
       expect(config).to.have.property('repositoryUrl', 'https://github.com/DataDog/dd-trace-js.git')
+      t.end()
     })
-    it('reads DD_TAGS env var', () => {
+    t.test('reads DD_TAGS env var', t => {
       process.env.DD_TAGS = `git.commit.sha:${DUMMY_COMMIT_SHA},git.repository_url:${DUMMY_REPOSITORY_URL}`
       process.env.DD_GIT_REPOSITORY_URL = DUMMY_REPOSITORY_URL
       const config = new Config({})
       expect(config).to.have.property('commitSHA', DUMMY_COMMIT_SHA)
       expect(config).to.have.property('repositoryUrl', DUMMY_REPOSITORY_URL)
+      t.end()
     })
-    it('reads git.properties if it is available', () => {
+    t.test('reads git.properties if it is available', t => {
       process.env.DD_GIT_PROPERTIES_FILE = DD_GIT_PROPERTIES_FILE
       const config = new Config({})
       expect(config).to.have.property('commitSHA', '4e7da8069bcf5ffc8023603b95653e2dc99d1c7d')
       expect(config).to.have.property('repositoryUrl', DUMMY_REPOSITORY_URL)
+      t.end()
     })
-    it('does not crash if git.properties is not available', () => {
+    t.test('does not crash if git.properties is not available', t => {
       process.env.DD_GIT_PROPERTIES_FILE = '/does/not/exist'
       const config = new Config({})
       expect(config).to.have.property('commitSHA', undefined)
       expect(config).to.have.property('repositoryUrl', undefined)
+      t.end()
     })
-    it('does not read git.properties if env vars are passed', () => {
+    t.test('does not read git.properties if env vars are passed', t => {
       process.env.DD_GIT_PROPERTIES_FILE = DD_GIT_PROPERTIES_FILE
       process.env.DD_GIT_COMMIT_SHA = DUMMY_COMMIT_SHA
       process.env.DD_GIT_REPOSITORY_URL = 'https://github.com:env-var/dd-trace-js.git'
       const config = new Config({})
       expect(config).to.have.property('commitSHA', DUMMY_COMMIT_SHA)
       expect(config).to.have.property('repositoryUrl', 'https://github.com:env-var/dd-trace-js.git')
+      t.end()
     })
-    it('still reads git.properties if one of the env vars is missing', () => {
+    t.test('still reads git.properties if one of the env vars is missing', t => {
       process.env.DD_GIT_PROPERTIES_FILE = DD_GIT_PROPERTIES_FILE
       process.env.DD_GIT_COMMIT_SHA = DUMMY_COMMIT_SHA
       const config = new Config({})
       expect(config).to.have.property('commitSHA', DUMMY_COMMIT_SHA)
       expect(config).to.have.property('repositoryUrl', DUMMY_REPOSITORY_URL)
+      t.end()
     })
-    it('reads git.properties and filters out credentials', () => {
+    t.test('reads git.properties and filters out credentials', t => {
       process.env.DD_GIT_PROPERTIES_FILE = require.resolve('./fixtures/config/git.properties.credentials')
       const config = new Config({})
       expect(config).to.have.property('commitSHA', '4e7da8069bcf5ffc8023603b95653e2dc99d1c7d')
       expect(config).to.have.property('repositoryUrl', 'https://github.com/datadog/dd-trace-js')
+      t.end()
     })
-    it('does not read git metadata if DD_TRACE_GIT_METADATA_ENABLED is false', () => {
+    t.test('does not read git metadata if DD_TRACE_GIT_METADATA_ENABLED is false', t => {
       process.env.DD_TRACE_GIT_METADATA_ENABLED = 'false'
       const config = new Config({})
       expect(config).not.to.have.property('commitSHA')
       expect(config).not.to.have.property('repositoryUrl')
+      t.end()
     })
   })
 
   context('llmobs config', () => {
-    it('should disable llmobs by default', () => {
+    t.test('should disable llmobs by default', t => {
       const config = new Config()
       expect(config.llmobs.enabled).to.be.false
 
@@ -2417,9 +2535,10 @@ describe('Config', () => {
       expect(updateConfig.getCall(0).args[0]).to.deep.include({
         name: 'llmobs.enabled', value: false, origin: 'default'
       })
+      t.end()
     })
 
-    it('should enable llmobs if DD_LLMOBS_ENABLED is set to true', () => {
+    t.test('should enable llmobs if DD_LLMOBS_ENABLED is set to true', t => {
       process.env.DD_LLMOBS_ENABLED = 'true'
       const config = new Config()
       expect(config.llmobs.enabled).to.be.true
@@ -2428,9 +2547,10 @@ describe('Config', () => {
       expect(updateConfig.getCall(0).args[0]).to.deep.include({
         name: 'llmobs.enabled', value: true, origin: 'env_var'
       })
+      t.end()
     })
 
-    it('should disable llmobs if DD_LLMOBS_ENABLED is set to false', () => {
+    t.test('should disable llmobs if DD_LLMOBS_ENABLED is set to false', t => {
       process.env.DD_LLMOBS_ENABLED = 'false'
       const config = new Config()
       expect(config.llmobs.enabled).to.be.false
@@ -2439,9 +2559,10 @@ describe('Config', () => {
       expect(updateConfig.getCall(0).args[0]).to.deep.include({
         name: 'llmobs.enabled', value: false, origin: 'env_var'
       })
+      t.end()
     })
 
-    it('should enable llmobs with options and DD_LLMOBS_ENABLED is not set', () => {
+    t.test('should enable llmobs with options and DD_LLMOBS_ENABLED is not set', t => {
       const config = new Config({ llmobs: {} })
       expect(config.llmobs.enabled).to.be.true
 
@@ -2449,9 +2570,10 @@ describe('Config', () => {
       expect(updateConfig.getCall(0).args[0]).to.deep.include({
         name: 'llmobs.enabled', value: true, origin: 'code'
       })
+      t.end()
     })
 
-    it('should have DD_LLMOBS_ENABLED take priority over options', () => {
+    t.test('should have DD_LLMOBS_ENABLED take priority over options', t => {
       process.env.DD_LLMOBS_ENABLED = 'false'
       const config = new Config({ llmobs: {} })
       expect(config.llmobs.enabled).to.be.false
@@ -2460,6 +2582,7 @@ describe('Config', () => {
       expect(updateConfig.getCall(0).args[0]).to.deep.include({
         name: 'llmobs.enabled', value: false, origin: 'env_var'
       })
+      t.end()
     })
   })
 
@@ -2468,22 +2591,23 @@ describe('Config', () => {
 
     const staticConfig = require('../src/payload-tagging/config/aws')
 
-    beforeEach(() => {
+    t.beforeEach(() => {
       env = process.env
     })
 
-    afterEach(() => {
+    t.afterEach(() => {
       process.env = env
     })
 
-    it('defaults', () => {
+    t.test('defaults', t => {
       const taggingConfig = new Config().cloudPayloadTagging
       expect(taggingConfig).to.have.property('requestsEnabled', false)
       expect(taggingConfig).to.have.property('responsesEnabled', false)
       expect(taggingConfig).to.have.property('maxDepth', 10)
+      t.end()
     })
 
-    it('enabling requests with no additional filter', () => {
+    t.test('enabling requests with no additional filter', t => {
       process.env.DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING = 'all'
       const taggingConfig = new Config().cloudPayloadTagging
       expect(taggingConfig).to.have.property('requestsEnabled', true)
@@ -2493,9 +2617,10 @@ describe('Config', () => {
       for (const [serviceName, service] of Object.entries(awsRules)) {
         expect(service.request).to.deep.equal(staticConfig[serviceName].request)
       }
+      t.end()
     })
 
-    it('enabling requests with an additional filter', () => {
+    t.test('enabling requests with an additional filter', t => {
       process.env.DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING = '$.foo.bar'
       const taggingConfig = new Config().cloudPayloadTagging
       expect(taggingConfig).to.have.property('requestsEnabled', true)
@@ -2505,9 +2630,10 @@ describe('Config', () => {
       for (const [, service] of Object.entries(awsRules)) {
         expect(service.request).to.include('$.foo.bar')
       }
+      t.end()
     })
 
-    it('enabling responses with no additional filter', () => {
+    t.test('enabling responses with no additional filter', t => {
       process.env.DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING = 'all'
       const taggingConfig = new Config().cloudPayloadTagging
       expect(taggingConfig).to.have.property('requestsEnabled', false)
@@ -2517,9 +2643,10 @@ describe('Config', () => {
       for (const [serviceName, service] of Object.entries(awsRules)) {
         expect(service.response).to.deep.equal(staticConfig[serviceName].response)
       }
+      t.end()
     })
 
-    it('enabling responses with an additional filter', () => {
+    t.test('enabling responses with an additional filter', t => {
       process.env.DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING = '$.foo.bar'
       const taggingConfig = new Config().cloudPayloadTagging
       expect(taggingConfig).to.have.property('requestsEnabled', false)
@@ -2529,9 +2656,10 @@ describe('Config', () => {
       for (const [, service] of Object.entries(awsRules)) {
         expect(service.response).to.include('$.foo.bar')
       }
+      t.end()
     })
 
-    it('overriding max depth', () => {
+    t.test('overriding max depth', t => {
       process.env.DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING = 'all'
       process.env.DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING = 'all'
       process.env.DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH = 7
@@ -2539,33 +2667,37 @@ describe('Config', () => {
       expect(taggingConfig).to.have.property('requestsEnabled', true)
       expect(taggingConfig).to.have.property('responsesEnabled', true)
       expect(taggingConfig).to.have.property('maxDepth', 7)
+      t.end()
     })
   })
 
   context('standalone', () => {
-    it('should disable apm tracing with legacy DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED', () => {
+    t.test('should disable apm tracing with legacy DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED', t => {
       process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = '1'
 
       const config = new Config()
       expect(config).to.have.property('apmTracingEnabled', false)
+      t.end()
     })
 
-    it('should win DD_APM_TRACING_ENABLED', () => {
+    t.test('should win DD_APM_TRACING_ENABLED', t => {
       process.env.DD_APM_TRACING_ENABLED = '1'
       process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = 'true'
 
       const config = new Config()
       expect(config).to.have.property('apmTracingEnabled', true)
+      t.end()
     })
 
-    it('should disable apm tracing with legacy experimental.appsec.standalone.enabled option', () => {
+    t.test('should disable apm tracing with legacy experimental.appsec.standalone.enabled option', t => {
       process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = '0'
 
       const config = new Config({ experimental: { appsec: { standalone: { enabled: true } } } })
       expect(config).to.have.property('apmTracingEnabled', false)
+      t.end()
     })
 
-    it('should win apmTracingEnabled option', () => {
+    t.test('should win apmTracingEnabled option', t => {
       process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = 'true'
 
       const config = new Config({
@@ -2573,9 +2705,10 @@ describe('Config', () => {
         experimental: { appsec: { standalone: { enabled: true } } }
       })
       expect(config).to.have.property('apmTracingEnabled', false)
+      t.end()
     })
 
-    it('should not affect stats', () => {
+    t.test('should not affect stats', t => {
       process.env.DD_TRACE_STATS_COMPUTATION_ENABLED = 'true'
 
       const config = new Config()
@@ -2585,9 +2718,10 @@ describe('Config', () => {
       expect(updateConfig.getCall(0).args[0]).to.deep.include.members([
         { name: 'stats.enabled', value: true, origin: 'calculated' }
       ])
+      t.end()
     })
 
-    it('should disable stats', () => {
+    t.test('should disable stats', t => {
       process.env.DD_APM_TRACING_ENABLED = 'false'
       process.env.DD_TRACE_STATS_COMPUTATION_ENABLED = 'true'
 
@@ -2598,14 +2732,16 @@ describe('Config', () => {
       expect(updateConfig.getCall(0).args[0]).to.deep.include.members([
         { name: 'stats.enabled', value: false, origin: 'calculated' }
       ])
+      t.end()
     })
 
-    it('should disable stats if config property is used', () => {
+    t.test('should disable stats if config property is used', t => {
       const config = new Config({
         apmTracingEnabled: false
       })
       expect(config).to.have.property('apmTracingEnabled', false)
       expect(config).to.have.nested.property('stats.enabled', false)
+      t.end()
     })
   })
 
@@ -2616,19 +2752,19 @@ describe('Config', () => {
     const baseTempDir = os.platform() !== 'win32' ? os.tmpdir() : 'C:\\Windows\\Temp'
     let env
     let tempDir
-    beforeEach(() => {
+    t.beforeEach(() => {
       env = process.env
       tempDir = fs.mkdtempSync(path.join(baseTempDir, 'config-test-'))
       process.env.DD_TEST_LOCAL_CONFIG_PATH = path.join(tempDir, 'local.yaml')
       process.env.DD_TEST_FLEET_CONFIG_PATH = path.join(tempDir, 'fleet.yaml')
     })
 
-    afterEach(() => {
+    t.afterEach(() => {
       process.env = env
       fs.rmdirSync(tempDir, { recursive: true })
     })
 
-    it('should apply host wide config', () => {
+    t.test('should apply host wide config', t => {
       fs.writeFileSync(
         process.env.DD_TEST_LOCAL_CONFIG_PATH,
         `
@@ -2637,9 +2773,10 @@ apm_configuration_default:
 `)
       const config = new Config()
       expect(config).to.have.property('runtimeMetrics', true)
+      t.end()
     })
 
-    it('should apply service specific config', () => {
+    t.test('should apply service specific config', t => {
       fs.writeFileSync(
         process.env.DD_TEST_LOCAL_CONFIG_PATH,
         `
@@ -2654,9 +2791,10 @@ rules:
 `)
       const config = new Config()
       expect(config).to.have.property('service', 'my-service')
+      t.end()
     })
 
-    it('should respect the priority sources', () => {
+    t.test('should respect the priority sources', t => {
       // 1. Default
       const config1 = new Config()
       expect(config1).to.have.property('service', 'node')
@@ -2717,9 +2855,10 @@ rules:
         'service_code',
         'default < local stable config < env var < fleet config < code'
       )
+      t.end()
     })
 
-    it('should ignore unknown keys', () => {
+    t.test('should ignore unknown keys', t => {
       fs.writeFileSync(
         process.env.DD_TEST_LOCAL_CONFIG_PATH,
         `
@@ -2732,9 +2871,10 @@ apm_configuration_default:
 
       const config = new Config()
       expect(config).to.have.property('runtimeMetrics', true)
+      t.end()
     })
 
-    it('should log a warning if the YAML files are malformed', () => {
+    t.test('should log a warning if the YAML files are malformed', t => {
       fs.writeFileSync(
         process.env.DD_TEST_LOCAL_CONFIG_PATH,
         `
@@ -2743,9 +2883,10 @@ DD_RUNTIME_METRICS_ENABLED true
 `)
       const stableConfig = new StableConfig()
       expect(stableConfig.warnings).to.have.lengthOf(1)
+      t.end()
     })
 
-    it('should only load the WASM module if the stable config files exist', () => {
+    t.test('should only load the WASM module if the stable config files exist', t => {
       const stableConfig1 = new StableConfig()
       expect(stableConfig1).to.have.property('wasm_loaded', false)
 
@@ -2757,9 +2898,10 @@ apm_configuration_default:
 `)
       const stableConfig2 = new StableConfig()
       expect(stableConfig2).to.have.property('wasm_loaded', true)
+      t.end()
     })
 
-    it('should not load the WASM module in a serverless environment', () => {
+    t.test('should not load the WASM module in a serverless environment', t => {
       fs.writeFileSync(
         process.env.DD_TEST_LOCAL_CONFIG_PATH,
         `
@@ -2770,40 +2912,45 @@ apm_configuration_default:
       process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-great-lambda-function'
       const stableConfig = new Config()
       expect(stableConfig).to.not.have.property('stableConfig')
+      t.end()
     })
   })
 
   context('getOrigin', () => {
     let originalAppsecEnabled
 
-    beforeEach(() => {
+    t.beforeEach(() => {
       originalAppsecEnabled = process.env.DD_APPSEC_ENABLED
     })
 
-    afterEach(() => {
+    t.afterEach(() => {
       process.env.DD_APPSEC_ENABLED = originalAppsecEnabled
     })
 
-    it('should return default value', () => {
+    t.test('should return default value', t => {
       const config = new Config()
 
       expect(config.getOrigin('appsec.enabled')).to.be.equal('default')
+      t.end()
     })
 
-    it('should return env_var', () => {
+    t.test('should return env_var', t => {
       process.env.DD_APPSEC_ENABLED = 'true'
 
       const config = new Config()
 
       expect(config.getOrigin('appsec.enabled')).to.be.equal('env_var')
+      t.end()
     })
 
-    it('should return code', () => {
+    t.test('should return code', t => {
       const config = new Config({
         appsec: true
       })
 
       expect(config.getOrigin('appsec.enabled')).to.be.equal('code')
+      t.end()
     })
   })
+  t.end()
 })

@@ -1,6 +1,7 @@
 'use strict'
 
-require('../setup/tap')
+const t = require('tap')
+require('../setup/core')
 
 const { expect } = require('chai')
 const msgpack = require('@msgpack/msgpack')
@@ -19,13 +20,13 @@ const {
 
 const { version: ddTraceVersion } = require('../../../../package.json')
 
-describe('agentless-ci-visibility-encode', () => {
+t.test('agentless-ci-visibility-encode', t => {
   let encoder
   let writer
   let logger
   let trace
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     logger = {
       debug: sinon.stub()
     }
@@ -60,7 +61,7 @@ describe('agentless-ci-visibility-encode', () => {
     }]
   })
 
-  it('should encode to msgpack', () => {
+  t.test('should encode to msgpack', t => {
     encoder.encode(trace)
 
     const buffer = encoder.makePayload()
@@ -99,9 +100,10 @@ describe('agentless-ci-visibility-encode', () => {
 
     expect(spanEvent.content.metrics.positive).to.equal(123456712345)
     expect(spanEvent.content.metrics.negative).to.equal(-123456712345)
+    t.end()
   })
 
-  it('should report its count', () => {
+  t.test('should report its count', t => {
     expect(encoder.count()).to.equal(0)
 
     encoder.encode(trace)
@@ -111,16 +113,18 @@ describe('agentless-ci-visibility-encode', () => {
     encoder.encode(trace)
 
     expect(encoder.count()).to.equal(2)
+    t.end()
   })
 
-  it('should reset after making a payload', () => {
+  t.test('should reset after making a payload', t => {
     encoder.encode(trace)
     encoder.makePayload()
 
     expect(encoder.count()).to.equal(0)
+    t.end()
   })
 
-  it('should truncate name, service, type and resource when they are too long', () => {
+  t.test('should truncate name, service, type and resource when they are too long', t => {
     const tooLongString = new Array(500).fill('a').join('')
     const resourceTooLongString = new Array(10000).fill('a').join('')
     const traceToTruncate = [{
@@ -151,9 +155,10 @@ describe('agentless-ci-visibility-encode', () => {
     expect(spanEvent.content.service.length).to.equal(MAX_SERVICE_LENGTH)
     // ellipsis is added
     expect(spanEvent.content.resource.length).to.equal(MAX_RESOURCE_NAME_LENGTH + 3)
+    t.end()
   })
 
-  it('should fallback to a default name and service if they are not present', () => {
+  t.test('should fallback to a default name and service if they are not present', t => {
     const traceToTruncate = [{
       trace_id: id('1234abcd1234abcd'),
       span_id: id('1234abcd1234abcd'),
@@ -176,9 +181,10 @@ describe('agentless-ci-visibility-encode', () => {
     const spanEvent = decodedTrace.events[0]
     expect(spanEvent.content.service).to.equal(DEFAULT_SERVICE_NAME)
     expect(spanEvent.content.name).to.equal(DEFAULT_SPAN_NAME)
+    t.end()
   })
 
-  it('should cut too long meta and metrics keys and meta values', () => {
+  t.test('should cut too long meta and metrics keys and meta values', t => {
     const tooLongKey = new Array(300).fill('a').join('')
     const tooLongValue = new Array(26000).fill('a').join('')
     const traceToTruncate = [{
@@ -210,9 +216,10 @@ describe('agentless-ci-visibility-encode', () => {
     expect(spanEvent.content.metrics).to.eql({
       [`${tooLongKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`]: 15
     })
+    t.end()
   })
 
-  it('should not encode events other than sessions and suites if the trace is a test session', () => {
+  t.test('should not encode events other than sessions and suites if the trace is a test session', t => {
     const traceToFilter = [
       {
         trace_id: id('1234abcd1234abcd'),
@@ -251,9 +258,10 @@ describe('agentless-ci-visibility-encode', () => {
     expect(decodedTrace.events.length).to.equal(1)
     expect(decodedTrace.events[0].type).to.equal('test_session_end')
     expect(decodedTrace.events[0].content.type).to.eql('test_session_end')
+    t.end()
   })
 
-  it('does not crash if test_session_id is in meta but not test_module_id', () => {
+  t.test('does not crash if test_session_id is in meta but not test_module_id', t => {
     const traceToTruncate = [{
       trace_id: id('1234abcd1234abcd'),
       span_id: id('1234abcd1234abcd'),
@@ -276,23 +284,25 @@ describe('agentless-ci-visibility-encode', () => {
     const spanEvent = decodedTrace.events[0]
     expect(spanEvent.type).to.equal('span')
     expect(spanEvent.version).to.equal(1)
+    t.end()
   })
 
-  describe('addMetadataTags', () => {
-    afterEach(() => {
+  t.test('addMetadataTags', t => {
+    t.afterEach(() => {
       encoder.metadataTags = {}
     })
 
-    it('should add simple metadata tags', () => {
+    t.test('should add simple metadata tags', t => {
       const tags = {
         test: { tag: 'value1' },
         test_session_end: { tag: 'value2' }
       }
       encoder.addMetadataTags(tags)
       expect(encoder.metadataTags).to.eql(tags)
+      t.end()
     })
 
-    it('should merge dictionaries if there are values already', () => {
+    t.test('should merge dictionaries if there are values already', t => {
       encoder.metadataTags = {
         test: { tag: 'value1' }
       }
@@ -305,12 +315,16 @@ describe('agentless-ci-visibility-encode', () => {
         test: { tag: 'value1', other: 'value2' },
         test_session_end: { tag: 'value3' }
       })
+      t.end()
     })
 
-    it('should handle empty tags', () => {
+    t.test('should handle empty tags', t => {
       encoder.metadataTags = { test: { tag: 'value1' } }
       encoder.addMetadataTags({})
       expect(encoder.metadataTags).to.eql({ test: { tag: 'value1' } })
+      t.end()
     })
+    t.end()
   })
+  t.end()
 })

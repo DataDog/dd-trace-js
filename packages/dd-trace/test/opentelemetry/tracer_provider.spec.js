@@ -1,6 +1,7 @@
 'use strict'
 
-require('../setup/tap')
+const t = require('tap')
+require('../setup/core')
 
 const { expect } = require('chai')
 
@@ -13,32 +14,35 @@ const { MultiSpanProcessor, NoopSpanProcessor } = require('../../src/opentelemet
 
 require('../../index').init()
 
-describe('OTel TracerProvider', () => {
-  it('should register with OTel API', () => {
+t.test('OTel TracerProvider', t => {
+  t.test('should register with OTel API', t => {
     const provider = new TracerProvider()
     provider.register()
 
     expect(trace.getTracerProvider().getDelegate()).to.equal(provider)
+    t.end()
   })
 
-  it('should get tracer', () => {
+  t.test('should get tracer', t => {
     const provider = new TracerProvider()
     const tracer = provider.getTracer()
 
     expect(tracer).to.be.an.instanceOf(Tracer)
     expect(tracer).to.equal(provider.getTracer())
+    t.end()
   })
 
-  it('should get unique tracers by name and version key', () => {
+  t.test('should get unique tracers by name and version key', t => {
     const provider = new TracerProvider()
     const tracer = provider.getTracer('a', '1')
 
     expect(tracer).to.equal(provider.getTracer('a', '1'))
     expect(tracer).to.not.equal(provider.getTracer('a', '2'))
     expect(tracer).to.not.equal(provider.getTracer('b', '1'))
+    t.end()
   })
 
-  it('should get active span processor', () => {
+  t.test('should get active span processor', t => {
     const provider = new TracerProvider()
 
     // Initially is a NoopSpanProcessor
@@ -54,9 +58,10 @@ describe('OTel TracerProvider', () => {
     expect(shutdown).to.have.been.calledOnce
     expect(provider._processors.length).to.equal(1)
     expect(provider.getActiveSpanProcessor()).to.be.an.instanceOf(MultiSpanProcessor)
+    t.end()
   })
 
-  it('should delegate shutdown to active span processor', () => {
+  t.test('should delegate shutdown to active span processor', t => {
     const provider = new TracerProvider()
     const processor = new NoopSpanProcessor()
     provider.addSpanProcessor(processor)
@@ -64,9 +69,10 @@ describe('OTel TracerProvider', () => {
 
     provider.shutdown()
     expect(processor.shutdown).to.have.been.calledOnce
+    t.end()
   })
 
-  it('should delegate forceFlush to active span processor', () => {
+  t.test('should delegate forceFlush to active span processor', t => {
     const provider = new TracerProvider()
     const processor = new NoopSpanProcessor()
     provider.addSpanProcessor(processor)
@@ -74,5 +80,7 @@ describe('OTel TracerProvider', () => {
 
     provider.forceFlush()
     expect(processor.forceFlush).to.have.been.calledOnce
+    t.end()
   })
+  t.end()
 })

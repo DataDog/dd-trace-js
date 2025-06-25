@@ -1,22 +1,23 @@
 'use strict'
 
-require('./setup/tap')
+const t = require('tap')
+require('./setup/core')
 
 const dc = require('dc-polyfill')
 const { assert } = require('chai')
 const Module = require('module')
 const Hook = require('../src/ritm')
 
-describe('Ritm', () => {
+t.test('Ritm', t => {
   let moduleLoadStartChannel, moduleLoadEndChannel, startListener, endListener
   let utilHook, aHook, bHook, httpHook
 
-  before(() => {
+  t.before(() => {
     moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
     moduleLoadEndChannel = dc.channel('dd-trace:moduleLoadEnd')
   })
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     startListener = sinon.fake()
     endListener = sinon.fake()
 
@@ -45,27 +46,29 @@ describe('Ritm', () => {
     })
   })
 
-  afterEach(() => {
+  t.afterEach(() => {
     utilHook.unhook()
     aHook.unhook()
     bHook.unhook()
     httpHook.unhook()
   })
 
-  it('should shim util', () => {
+  t.test('should shim util', t => {
     require('util')
     assert.equal(startListener.callCount, 1)
     assert.equal(endListener.callCount, 1)
+    t.end()
   })
 
-  it('should handle module load cycles', () => {
+  t.test('should handle module load cycles', t => {
     const { a } = require('./ritm-tests/module-a')
     assert.equal(startListener.callCount, 2)
     assert.equal(endListener.callCount, 2)
     assert.equal(a(), 'Called by AJ')
+    t.end()
   })
 
-  it('should allow override original module', () => {
+  t.test('should allow override original module', t => {
     const onModuleLoadEnd = (payload) => {
       if (payload.request === './ritm-tests/module-default') {
         payload.module = function () {
@@ -81,9 +84,10 @@ describe('Ritm', () => {
     } finally {
       moduleLoadEndChannel.unsubscribe(onModuleLoadEnd)
     }
+    t.end()
   })
 
-  it('should fall back to monkey patched module', () => {
+  t.test('should fall back to monkey patched module', t => {
     assert.equal(require('http').foo, 1, 'normal hooking still works')
 
     const fnCore = require('@azure/functions-core')
@@ -96,5 +100,7 @@ describe('Ritm', () => {
       'Cannot find module \'package-does-not-exist\'',
       'a failing `require(...)` can still throw as expected'
     )
+    t.end()
   })
+  t.end()
 })

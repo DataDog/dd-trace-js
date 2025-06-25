@@ -1,6 +1,7 @@
 'use strict'
 
-require('../setup/tap')
+const t = require('tap')
+require('../setup/core')
 
 const expect = require('chai').expect
 const sinon = require('sinon')
@@ -12,7 +13,7 @@ const { setTimeout } = require('node:timers/promises')
 
 const samplingContextsAvailable = process.platform !== 'win32'
 
-describe('profiler', function () {
+t.test('profiler', function (t) {
   let Profiler
   let profiler
   let wallProfiler
@@ -82,7 +83,7 @@ describe('profiler', function () {
     sourceMapCreate = sinon.stub()
   }
 
-  describe('not serverless', function () {
+  t.test('not serverless', function (t) {
     function initProfiler () {
       Profiler = proxyquire('../src/profiling/profiler', {
         '@datadog/pprof': {
@@ -95,32 +96,34 @@ describe('profiler', function () {
       profiler = new Profiler()
     }
 
-    beforeEach(() => {
+    t.beforeEach(() => {
       setUpProfiler()
       initProfiler()
     })
 
-    afterEach(() => {
+    t.afterEach(() => {
       profiler.stop()
       clock.restore()
     })
 
-    it('should start the internal time profilers', async () => {
+    t.test('should start the internal time profilers', async t => {
       await profiler._start({ profilers, exporters })
 
       sinon.assert.calledOnce(wallProfiler.start)
       sinon.assert.calledOnce(spaceProfiler.start)
+      t.end()
     })
 
-    it('should start only once', async () => {
+    t.test('should start only once', async t => {
       await profiler._start({ profilers, exporters })
       await profiler._start({ profilers, exporters })
 
       sinon.assert.calledOnce(wallProfiler.start)
       sinon.assert.calledOnce(spaceProfiler.start)
+      t.end()
     })
 
-    it('should allow configuring exporters by string or string array', async () => {
+    t.test('should allow configuring exporters by string or string array', async t => {
       const checks = [
         'agent',
         ['agent']
@@ -136,9 +139,10 @@ describe('profiler', function () {
 
         profiler.stop()
       }
+      t.end()
     })
 
-    it('should allow configuring profilers by string or string arrays', async () => {
+    t.test('should allow configuring profilers by string or string arrays', async t => {
       const checks = [
         ['space', SpaceProfiler],
         ['wall', WallProfiler, EventsProfiler],
@@ -161,17 +165,19 @@ describe('profiler', function () {
 
         profiler.stop()
       }
+      t.end()
     })
 
-    it('should stop the internal profilers', async () => {
+    t.test('should stop the internal profilers', async t => {
       await profiler._start({ profilers, exporters })
       profiler.stop()
 
       sinon.assert.calledOnce(wallProfiler.stop)
       sinon.assert.calledOnce(spaceProfiler.stop)
+      t.end()
     })
 
-    it('should stop when starting failed', async () => {
+    t.test('should stop when starting failed', async t => {
       wallProfiler.start.throws()
 
       await profiler._start({ profilers, exporters, logger })
@@ -179,9 +185,10 @@ describe('profiler', function () {
       sinon.assert.calledOnce(wallProfiler.stop)
       sinon.assert.calledOnce(spaceProfiler.stop)
       sinon.assert.calledOnce(consoleLogger.error)
+      t.end()
     })
 
-    it('should stop when capturing failed', async () => {
+    t.test('should stop when capturing failed', async t => {
       wallProfiler.profile.throws(new Error('boom'))
 
       await profiler._start({ profilers, exporters, logger })
@@ -194,9 +201,10 @@ describe('profiler', function () {
       sinon.assert.notCalled(wallProfiler.encode)
       sinon.assert.notCalled(spaceProfiler.encode)
       sinon.assert.notCalled(exporter.export)
+      t.end()
     })
 
-    it('should not stop when encoding failed', async () => {
+    t.test('should not stop when encoding failed', async t => {
       const rejected = Promise.reject(new Error('boom'))
       wallProfiler.encode.returns(rejected)
 
@@ -211,9 +219,10 @@ describe('profiler', function () {
       sinon.assert.notCalled(spaceProfiler.stop)
       sinon.assert.calledOnce(consoleLogger.error)
       sinon.assert.calledOnce(exporter.export)
+      t.end()
     })
 
-    it('should not stop when exporting failed', async () => {
+    t.test('should not stop when exporting failed', async t => {
       const rejected = Promise.reject(new Error('boom'))
       exporter.export.returns(rejected)
 
@@ -227,9 +236,10 @@ describe('profiler', function () {
       sinon.assert.notCalled(wallProfiler.stop)
       sinon.assert.notCalled(spaceProfiler.stop)
       sinon.assert.calledOnce(exporter.export)
+      t.end()
     })
 
-    it('should flush when the interval is reached', async () => {
+    t.test('should flush when the interval is reached', async t => {
       await profiler._start({ profilers, exporters })
 
       clock.tick(interval)
@@ -237,9 +247,10 @@ describe('profiler', function () {
       await waitForExport()
 
       sinon.assert.calledOnce(exporter.export)
+      t.end()
     })
 
-    it('should flush when the profiler is stopped', async () => {
+    t.test('should flush when the profiler is stopped', async t => {
       await profiler._start({ profilers, exporters })
 
       profiler.stop()
@@ -247,6 +258,7 @@ describe('profiler', function () {
       await waitForExport()
 
       sinon.assert.calledOnce(exporter.export)
+      t.end()
     })
 
     async function shouldExportProfiles (compression, magicBytes) {
@@ -287,27 +299,32 @@ describe('profiler', function () {
       expect(tags).to.have.property('foo', 'foo')
     }
 
-    it('should export uncompressed profiles', async () => {
+    t.test('should export uncompressed profiles', async t => {
       await shouldExportProfiles('off', Buffer.from('uncompressed profile - '))
+      t.end()
     })
 
-    it('should export gzip profiles', async () => {
+    t.test('should export gzip profiles', async t => {
       await shouldExportProfiles('gzip', Buffer.from([0x1f, 0x8b]))
+      t.end()
     })
 
-    it('should export zstd profiles', async function () {
+    t.test('should export zstd profiles', async function (t) {
       await shouldExportProfiles('zstd', Buffer.from([0x28, 0xb5, 0x2f, 0xfd]))
+      t.end()
     })
 
-    it('should export gzip profiles with a level', async () => {
+    t.test('should export gzip profiles with a level', async t => {
       await shouldExportProfiles('gzip-3', Buffer.from([0x1f, 0x8b]))
+      t.end()
     })
 
-    it('should export zstd profiles with a level', async function () {
+    t.test('should export zstd profiles with a level', async function (t) {
       await shouldExportProfiles('zstd-4', Buffer.from([0x28, 0xb5, 0x2f, 0xfd]))
+      t.end()
     })
 
-    it('should log exporter errors', async () => {
+    t.test('should log exporter errors', async t => {
       exporter.export.rejects(new Error('boom'))
 
       await profiler._start({ profilers, exporters, logger })
@@ -317,9 +334,10 @@ describe('profiler', function () {
       await waitForExport()
 
       sinon.assert.calledOnce(consoleLogger.warn)
+      t.end()
     })
 
-    it('should log encoded profile', async () => {
+    t.test('should log encoded profile', async t => {
       exporter.export.rejects(new Error('boom'))
 
       await profiler._start({ profilers, exporters, logger })
@@ -344,9 +362,10 @@ describe('profiler', function () {
       expect(collectSpace.args[0]()).to.match(/^Collected space profile: /)
 
       sinon.assert.calledWithMatch(submit, 'Submitted profiles')
+      t.end()
     })
 
-    it('should have a new start time for each capture', async () => {
+    t.test('should have a new start time for each capture', async t => {
       await profiler._start({ profilers, exporters })
 
       clock.tick(interval)
@@ -371,16 +390,18 @@ describe('profiler', function () {
       expect(end2 - start2).to.equal(65000)
 
       sinon.assert.calledOnce(exporter.export)
+      t.end()
     })
 
-    it('should not pass source mapper to profilers when disabled', async () => {
+    t.test('should not pass source mapper to profilers when disabled', async t => {
       await profiler._start({ profilers, exporters, sourceMap: false })
 
       const options = profilers[0].start.args[0][0]
       expect(options).to.have.property('mapper', undefined)
+      t.end()
     })
 
-    it('should pass source mapper to profilers when enabled', async () => {
+    t.test('should pass source mapper to profilers when enabled', async t => {
       const mapper = {}
       sourceMapCreate.returns(mapper)
       await profiler._start({ profilers, exporters, sourceMap: true })
@@ -388,18 +409,21 @@ describe('profiler', function () {
       const options = profilers[0].start.args[0][0]
       expect(options).to.have.property('mapper')
         .which.equals(mapper)
+      t.end()
     })
 
-    it('should work with a root working dir and source maps on', async () => {
+    t.test('should work with a root working dir and source maps on', async t => {
       const error = new Error('fail')
       sourceMapCreate.rejects(error)
       await profiler._start({ profilers, exporters, logger, sourceMap: true })
       expect(consoleLogger.error.args[0][0]).to.equal(error)
       expect(profiler._enabled).to.equal(true)
+      t.end()
     })
+    t.end()
   })
 
-  describe('serverless', function () {
+  t.test('serverless', function (t) {
     const flushAfterIntervals = 65
 
     function initServerlessProfiler () {
@@ -416,19 +440,19 @@ describe('profiler', function () {
       profiler = new Profiler()
     }
 
-    beforeEach(() => {
+    t.beforeEach(() => {
       process.env.AWS_LAMBDA_FUNCTION_NAME = 'foobar'
       setUpProfiler()
       initServerlessProfiler()
     })
 
-    afterEach(() => {
+    t.afterEach(() => {
       profiler.stop()
       clock.restore()
       delete process.env.AWS_LAMBDA_FUNCTION_NAME
     })
 
-    it('should increment profiled intervals after one interval elapses', async () => {
+    t.test('should increment profiled intervals after one interval elapses', async t => {
       await profiler._start({ profilers, exporters })
       expect(profiler._profiledIntervals).to.equal(0)
 
@@ -436,9 +460,10 @@ describe('profiler', function () {
 
       expect(profiler._profiledIntervals).to.equal(1)
       sinon.assert.notCalled(exporter.export)
+      t.end()
     })
 
-    it('should flush when flush after intervals is reached', async () => {
+    t.test('should flush when flush after intervals is reached', async t => {
       await profiler._start({ profilers, exporters })
 
       // flushAfterIntervals + 1 becauses flushes after last interval
@@ -449,6 +474,9 @@ describe('profiler', function () {
       await waitForExport()
 
       sinon.assert.calledOnce(exporter.export)
+      t.end()
     })
+    t.end()
   })
+  t.end()
 })

@@ -1,15 +1,16 @@
 'use strict'
 
-require('../setup/tap')
+const t = require('tap')
+require('../setup/core')
 
 const proxyquire = require('proxyquire')
 
-describe('metrics', () => {
+t.test('metrics', t => {
   let metrics
   let sendData
   let now
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     now = Date.now()
     sinon.stub(Date, 'now').returns(now)
 
@@ -21,29 +22,32 @@ describe('metrics', () => {
     })
   })
 
-  afterEach(() => {
+  t.afterEach(() => {
     Date.now.restore()
   })
 
-  describe('NamespaceManager', () => {
-    it('should export singleton manager', () => {
+  t.test('NamespaceManager', t => {
+    t.test('should export singleton manager', t => {
       expect(metrics.manager).to.be.instanceOf(metrics.NamespaceManager)
+      t.end()
     })
 
-    it('should make namespaces', () => {
+    t.test('should make namespaces', t => {
       const manager = new metrics.NamespaceManager()
       const ns = manager.namespace('test')
       expect(ns).to.be.instanceOf(metrics.Namespace)
       expect(ns.metrics.namespace).to.equal('test')
+      t.end()
     })
 
-    it('should reuse namespace instances with the same name', () => {
+    t.test('should reuse namespace instances with the same name', t => {
       const manager = new metrics.NamespaceManager()
       const ns = manager.namespace('test')
       expect(manager.namespace('test')).to.equal(ns)
+      t.end()
     })
 
-    it('should convert to json', () => {
+    t.test('should convert to json', t => {
       const manager = new metrics.NamespaceManager()
 
       const test1 = manager.namespace('test1')
@@ -90,9 +94,10 @@ describe('metrics', () => {
           }
         }
       ])
+      t.end()
     })
 
-    it('should send data', () => {
+    t.test('should send data', t => {
       const manager = new metrics.NamespaceManager()
 
       const test1 = manager.namespace('test1')
@@ -148,9 +153,10 @@ describe('metrics', () => {
             }
           ]
         })
+      t.end()
     })
 
-    it('should not send empty metrics', () => {
+    t.test('should not send empty metrics', t => {
       const manager = new metrics.NamespaceManager()
 
       const ns = manager.namespace('test')
@@ -175,37 +181,44 @@ describe('metrics', () => {
       manager.send(config, application, host)
 
       expect(sendData).to.not.have.been.called
+      t.end()
     })
+    t.end()
   })
 
-  describe('Namespace', () => {
-    it('should pass namespace name through to collections', () => {
+  t.test('Namespace', t => {
+    t.test('should pass namespace name through to collections', t => {
       const ns = new metrics.Namespace('name')
       expect(ns.metrics).to.have.property('namespace', 'name')
       expect(ns.distributions).to.have.property('namespace', 'name')
+      t.end()
     })
 
-    it('should get count metric', () => {
+    t.test('should get count metric', t => {
       const ns = new metrics.Namespace('name')
       expect(ns.count('name')).to.be.instanceOf(metrics.CountMetric)
+      t.end()
     })
 
-    it('should get distribution metric', () => {
+    t.test('should get distribution metric', t => {
       const ns = new metrics.Namespace('name')
       expect(ns.distribution('name')).to.be.instanceOf(metrics.DistributionMetric)
+      t.end()
     })
 
-    it('should get gauge metric', () => {
+    t.test('should get gauge metric', t => {
       const ns = new metrics.Namespace('name')
       expect(ns.gauge('name')).to.be.instanceOf(metrics.GaugeMetric)
+      t.end()
     })
 
-    it('should get rate metric', () => {
+    t.test('should get rate metric', t => {
       const ns = new metrics.Namespace('name')
       expect(ns.rate('name')).to.be.instanceOf(metrics.RateMetric)
+      t.end()
     })
 
-    it('should have unique metrics per unique tag set', () => {
+    t.test('should have unique metrics per unique tag set', t => {
       const ns = new metrics.Namespace('test')
       ns.count('foo', { bar: 'baz' }).inc()
       ns.count('foo', { bar: 'baz' }).inc() // not unique
@@ -214,9 +227,10 @@ describe('metrics', () => {
       expect(ns.distributions).to.have.lengthOf(0)
       ns.distribution('foo', { bux: 'bax' }).track()
       expect(ns.distributions).to.have.lengthOf(1)
+      t.end()
     })
 
-    it('should reset metrics', () => {
+    t.test('should reset metrics', t => {
       const ns = new metrics.Namespace('test')
       const metric = ns.count('foo', { bar: 'baz' })
       metric.inc()
@@ -228,9 +242,10 @@ describe('metrics', () => {
       expect(metric.points).to.have.lengthOf(0)
 
       expect(metric.reset).to.have.been.called
+      t.end()
     })
 
-    it('should convert to json', () => {
+    t.test('should convert to json', t => {
       const ns = new metrics.Namespace('test')
       ns.count('foo', { bar: 'baz' }).inc()
       ns.count('foo', { bux: 'bax' }).inc()
@@ -263,9 +278,10 @@ describe('metrics', () => {
           ]
         }
       })
+      t.end()
     })
 
-    it('should skip empty metrics', () => {
+    t.test('should skip empty metrics', t => {
       const ns = new metrics.Namespace('test')
       const metric = ns.count('foo', { bar: 'baz' })
       metric.inc()
@@ -275,11 +291,13 @@ describe('metrics', () => {
         distributions: undefined,
         metrics: undefined
       })
+      t.end()
     })
+    t.end()
   })
 
-  describe('CountMetric', () => {
-    it('should expose input data', () => {
+  t.test('CountMetric', t => {
+    t.test('should expose input data', t => {
       const ns = new metrics.Namespace('tracers')
       const metric = ns.count('name', {
         foo: 'bar',
@@ -297,9 +315,10 @@ describe('metrics', () => {
         common: true,
         points: []
       })
+      t.end()
     })
 
-    it('should increment', () => {
+    t.test('should increment', t => {
       const ns = new metrics.Namespace('tracers')
       const metric = ns.count('name')
 
@@ -318,9 +337,10 @@ describe('metrics', () => {
       expect(metric.points).to.deep.equal([
         [now / 1e3, 2]
       ])
+      t.end()
     })
 
-    it('should decrement', () => {
+    t.test('should decrement', t => {
       const ns = new metrics.Namespace('tracers')
       const metric = ns.count('name')
 
@@ -336,9 +356,10 @@ describe('metrics', () => {
       expect(metric.points).to.deep.equal([
         [now / 1e3, 1]
       ])
+      t.end()
     })
 
-    it('should decrement with explicit arg', () => {
+    t.test('should decrement with explicit arg', t => {
       const ns = new metrics.Namespace('tracers')
       const metric = ns.count('name')
 
@@ -353,9 +374,10 @@ describe('metrics', () => {
       expect(metric.points).to.deep.equal([
         [now / 1e3, 1]
       ])
+      t.end()
     })
 
-    it('should retain timestamp of first change', () => {
+    t.test('should retain timestamp of first change', t => {
       const ns = new metrics.Namespace('tracers')
       const metric = ns.count('name')
 
@@ -370,9 +392,10 @@ describe('metrics', () => {
       expect(metric.points).to.deep.equal([
         [now / 1e3, 2]
       ])
+      t.end()
     })
 
-    it('should reset state', () => {
+    t.test('should reset state', t => {
       const ns = new metrics.Namespace('tracers')
       const metric = ns.count('name')
 
@@ -380,9 +403,10 @@ describe('metrics', () => {
       metric.reset()
 
       expect(metric.points).to.deep.equal([])
+      t.end()
     })
 
-    it('should convert to json', () => {
+    t.test('should convert to json', t => {
       const ns = new metrics.Namespace('tracers')
       const metric = ns.count('name', {
         foo: 'bar',
@@ -402,11 +426,13 @@ describe('metrics', () => {
         ],
         common: true
       })
+      t.end()
     })
+    t.end()
   })
 
-  describe('DistributionMetric', () => {
-    it('should expose input data', () => {
+  t.test('DistributionMetric', t => {
+    t.test('should expose input data', t => {
       const ns = new metrics.Namespace('tracers')
       const metric = ns.distribution('name', {
         foo: 'bar',
@@ -424,9 +450,10 @@ describe('metrics', () => {
         common: true,
         points: []
       })
+      t.end()
     })
 
-    it('should track', () => {
+    t.test('should track', t => {
       const ns = new metrics.Namespace('tracers')
       const metric = ns.distribution('name')
 
@@ -439,9 +466,10 @@ describe('metrics', () => {
         50,
         300
       ])
+      t.end()
     })
 
-    it('should reset state', () => {
+    t.test('should reset state', t => {
       const ns = new metrics.Namespace('tracers')
       const metric = ns.distribution('name')
 
@@ -449,9 +477,10 @@ describe('metrics', () => {
       metric.reset()
 
       expect(metric.points).to.deep.equal([])
+      t.end()
     })
 
-    it('should convert to json', () => {
+    t.test('should convert to json', t => {
       const ns = new metrics.Namespace('tracers')
       const metric = ns.distribution('name', {
         foo: 'bar',
@@ -471,11 +500,13 @@ describe('metrics', () => {
           'baz:buz'
         ]
       })
+      t.end()
     })
+    t.end()
   })
 
-  describe('GaugeMetric', () => {
-    it('should expose input data', () => {
+  t.test('GaugeMetric', t => {
+    t.test('should expose input data', t => {
       const ns = new metrics.Namespace('tracers')
       const metric = ns.gauge('name', {
         foo: 'bar',
@@ -493,9 +524,10 @@ describe('metrics', () => {
         common: true,
         points: []
       })
+      t.end()
     })
 
-    it('should mark', () => {
+    t.test('should mark', t => {
       const ns = new metrics.Namespace('tracers')
       const metric = ns.gauge('name')
 
@@ -519,9 +551,10 @@ describe('metrics', () => {
         [now / 1e3, 1],
         [newNow / 1e3, 2]
       ])
+      t.end()
     })
 
-    it('should reset state', () => {
+    t.test('should reset state', t => {
       const ns = new metrics.Namespace('tracers')
       const metric = ns.gauge('name')
 
@@ -529,9 +562,10 @@ describe('metrics', () => {
       metric.reset()
 
       expect(metric.points).to.deep.equal([])
+      t.end()
     })
 
-    it('should convert to json', () => {
+    t.test('should convert to json', t => {
       const ns = new metrics.Namespace('tracers')
       const metric = ns.gauge('name', {
         foo: 'bar',
@@ -560,11 +594,13 @@ describe('metrics', () => {
         ],
         common: true
       })
+      t.end()
     })
+    t.end()
   })
 
-  describe('RateMetric', () => {
-    it('should expose input data', () => {
+  t.test('RateMetric', t => {
+    t.test('should expose input data', t => {
       const ns = new metrics.Namespace('tracers')
       const metric = ns.rate('name', 1000, {
         foo: 'bar',
@@ -584,9 +620,10 @@ describe('metrics', () => {
         interval: 1000,
         rate: 0
       })
+      t.end()
     })
 
-    it('should track', () => {
+    t.test('should track', t => {
       const ns = new metrics.Namespace('tracers')
       const metric = ns.rate('name', 1000)
 
@@ -595,9 +632,10 @@ describe('metrics', () => {
       expect(metric.points).to.deep.equal([
         [now / 1e3, 0.1]
       ])
+      t.end()
     })
 
-    it('should reset state', () => {
+    t.test('should reset state', t => {
       const ns = new metrics.Namespace('tracers')
       const metric = ns.rate('name', 1000)
 
@@ -605,9 +643,10 @@ describe('metrics', () => {
       metric.reset()
 
       expect(metric.points).to.deep.equal([])
+      t.end()
     })
 
-    it('should convert to json', () => {
+    t.test('should convert to json', t => {
       const ns = new metrics.Namespace('tracers')
       const metric = ns.rate('name', 1000, {
         foo: 'bar',
@@ -629,6 +668,9 @@ describe('metrics', () => {
         ],
         common: true
       })
+      t.end()
     })
+    t.end()
   })
+  t.end()
 })

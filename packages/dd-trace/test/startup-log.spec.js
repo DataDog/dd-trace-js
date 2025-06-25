@@ -1,6 +1,7 @@
 'use strict'
 
-require('./setup/tap')
+const t = require('tap')
+require('./setup/core')
 
 const assert = require('node:assert')
 const os = require('node:os')
@@ -9,12 +10,12 @@ const Config = require('../src/config')
 const SamplingRule = require('../src/sampling_rule')
 const tracerVersion = require('../../../package.json').version
 
-describe('startup logging', () => {
+t.test('startup logging', t => {
   let firstStderrCall
   let secondStderrCall
   let tracerInfoMethod
 
-  before(() => {
+  t.before(() => {
     sinon.stub(console, 'info')
     sinon.stub(console, 'warn')
     delete require.cache[require.resolve('../src/startup-log')]
@@ -62,7 +63,7 @@ describe('startup logging', () => {
     console.warn.restore() /* eslint-disable-line no-console */
   })
 
-  it('startupLog should be formatted correctly', () => {
+  t.test('startupLog should be formatted correctly', t => {
     expect(firstStderrCall.args[0].startsWith('DATADOG TRACER CONFIGURATION - ')).to.equal(true)
     const info = JSON.parse(String(tracerInfoMethod()))
     assert.deepStrictEqual(info, {
@@ -92,15 +93,18 @@ describe('startup logging', () => {
       integrations_loaded: ['http', 'fs', 'semver'],
       appsec_enabled: true
     })
+    t.end()
   })
 
-  it('startupLog should correctly also output the diagnostic message', () => {
+  t.test('startupLog should correctly also output the diagnostic message', t => {
     expect(secondStderrCall.args[0]).to.equal('DATADOG TRACER DIAGNOSTIC - Agent Error: Error: fake error')
+    t.end()
   })
+  t.end()
 })
 
-describe('profiling_enabled', () => {
-  it('should be correctly logged', () => {
+t.test('profiling_enabled', t => {
+  t.test('should be correctly logged', t => {
     [
       [undefined, false],
       ['false', false],
@@ -125,5 +129,7 @@ describe('profiling_enabled', () => {
       console.info.restore() /* eslint-disable-line no-console */
       expect(logObj.profiling_enabled).to.equal(expected)
     })
+    t.end()
   })
+  t.end()
 })

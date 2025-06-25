@@ -1,11 +1,12 @@
 'use strict'
 
-require('../../../../dd-trace/test/setup/tap')
+const t = require('tap')
+require('../../../../dd-trace/test/setup/core')
 
 const parseTags = require('../../../src/utils/src/parse-tags')
 
-describe('parseTags', () => {
-  it('should parse tags to object', () => {
+t.test('parseTags', t => {
+  t.test('should parse tags to object', t => {
     const obj = {
       'a.0.a': 'foo',
       'a.0.b': 'bar',
@@ -15,9 +16,12 @@ describe('parseTags', () => {
     expect(parseTags(obj)).to.deep.equal({
       a: [{ a: 'foo', b: 'bar' }, { a: 'baz' }]
     })
+    t.end()
   })
 
-  it('should work with empty object', () => {
+  t.test('should work with empty object', t => {
     expect(parseTags({})).to.deep.equal({})
+    t.end()
   })
+  t.end()
 })

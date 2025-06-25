@@ -1,6 +1,7 @@
 'use strict'
 
-require('../../setup/tap')
+const t = require('tap')
+require('../../setup/core')
 
 const tracer = require('../../../../../init')
 const expect = require('chai').expect
@@ -50,9 +51,7 @@ async function createProfile (periodType) {
   return profiler.encode(profile)
 }
 
-const describeOnUnix = os.platform() === 'win32' ? describe.skip : describe
-
-describe('exporters/agent', function () {
+t.test('exporters/agent', function (t) {
   let AgentExporter
   let sockets
   let url
@@ -138,7 +137,7 @@ describe('exporters/agent', function () {
     expect(spaceProfile).to.deep.equal(Profile.decode(profiles.space))
   }
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     docker = {
       inject (carrier) {
         carrier.test = 'injected'
@@ -169,24 +168,28 @@ describe('exporters/agent', function () {
     })
   }
 
-  describe('using HTTP', () => {
-    beforeEach(done => {
-      getPort().then(port => {
-        url = new URL(`http://127.0.0.1:${port}`)
+  t.test('using HTTP', t => {
+    t.beforeEach(() => {
+      return new Promise(resolve => {
+        getPort().then(port => {
+          url = new URL(`http://127.0.0.1:${port}`)
 
-        listener = app.listen(port, '127.0.0.1', done)
-        listener.on('connection', socket => sockets.push(socket))
-        startSpan = sinon.spy(tracer._tracer, 'startSpan')
+          listener = app.listen(port, '127.0.0.1', resolve)
+          listener.on('connection', socket => sockets.push(socket))
+          startSpan = sinon.spy(tracer._tracer, 'startSpan')
+        })
       })
     })
 
-    afterEach(done => {
-      listener.close(done)
-      sockets.forEach(socket => socket.end())
-      tracer._tracer.startSpan.restore()
+    t.afterEach(() => {
+      return new Promise(resolve => {
+        listener.close(resolve)
+        sockets.forEach(socket => socket.end())
+        tracer._tracer.startSpan.restore()
+      })
     })
 
-    it('should send profiles as pprof to the intake', async () => {
+    t.test('should send profiles as pprof to the intake', async t => {
       const exporter = newAgentExporter({ url, logger })
       const start = new Date()
       const end = new Date()
@@ -225,9 +228,10 @@ describe('exporters/agent', function () {
           throw new Error('traced profiling endpoint call')
         }
       })
+      t.end()
     })
 
-    it('should backoff up to the uploadTimeout', async () => {
+    t.test('should backoff up to the uploadTimeout', async t => {
       const uploadTimeout = 100
       const exporter = newAgentExporter({ url, logger, uploadTimeout })
 
@@ -289,9 +293,10 @@ describe('exporters/agent', function () {
         expect(call.args[0].timeout)
           .to.equal(initialTimeout * Math.pow(2, i + 1))
       }
+      t.end()
     })
 
-    it('should log exports and handle http errors gracefully', async function () {
+    t.test('should log exports and handle http errors gracefully', async function (t) {
       const expectedLogs = [
         /^Building agent export report:\n\{.+\}$/,
         /^Adding wall profile to agent export:( [0-9a-f]{2})+$/,
@@ -349,9 +354,10 @@ describe('exporters/agent', function () {
         exporter.export({ profiles, start, end, tags }),
         waitForResponse
       ])
+      t.end()
     })
 
-    it('should not retry on 4xx errors', async function () {
+    t.test('should not retry on 4xx errors', async function (t) {
       const exporter = newAgentExporter({ url, logger: { debug: () => {}, warn: () => {} } })
       const start = new Date()
       const end = new Date()
@@ -386,27 +392,33 @@ describe('exporters/agent', function () {
         expect(err.message).to.equal('HTTP Error 400')
       }
       expect(tries).to.equal(1)
+      t.end()
     })
+    t.end()
   })
 
-  describe('using ipv6', () => {
-    beforeEach(done => {
-      getPort().then(port => {
-        url = new URL(`http://[0:0:0:0:0:0:0:1]:${port}`)
+  t.test('using ipv6', t => {
+    t.beforeEach(() => {
+      return new Promise(resolve => {
+        getPort().then(port => {
+          url = new URL(`http://[0:0:0:0:0:0:0:1]:${port}`)
 
-        listener = app.listen(port, '0:0:0:0:0:0:0:1', done)
-        listener.on('connection', socket => sockets.push(socket))
-        startSpan = sinon.spy(tracer._tracer, 'startSpan')
+          listener = app.listen(port, '0:0:0:0:0:0:0:1', resolve)
+          listener.on('connection', socket => sockets.push(socket))
+          startSpan = sinon.spy(tracer._tracer, 'startSpan')
+        })
       })
     })
 
-    afterEach(done => {
-      listener.close(done)
-      sockets.forEach(socket => socket.end())
-      tracer._tracer.startSpan.restore()
+    t.afterEach(() => {
+      return new Promise(resolve => {
+        listener.close(resolve)
+        sockets.forEach(socket => socket.end())
+        tracer._tracer.startSpan.restore()
+      })
     })
 
-    it('should support ipv6 urls', async () => {
+    t.test('should support ipv6 urls', async t => {
       const exporter = newAgentExporter({ url, logger })
       const start = new Date()
       const end = new Date()
@@ -438,25 +450,31 @@ describe('exporters/agent', function () {
 
         exporter.export({ profiles, start, end, tags }).catch(reject)
       })
+      t.end()
     })
+    t.end()
   })
 
-  describeOnUnix('using UDS', () => {
+  t.test('using UDS', { skip: os.platform() === 'win32' }, t => {
     let listener
 
-    beforeEach(done => {
-      url = `${path.join(os.tmpdir(), `dd-trace-profiler-test-${Date.now()}`)}.sock`
+    t.beforeEach(() => {
+      return new Promise(resolve => {
+        url = `${path.join(os.tmpdir(), `dd-trace-profiler-test-${Date.now()}`)}.sock`
 
-      listener = app.listen(url, done)
-      listener.on('connection', socket => sockets.push(socket))
+        listener = app.listen(url, resolve)
+        listener.on('connection', socket => sockets.push(socket))
+      })
     })
 
-    afterEach(done => {
-      listener.close(done)
-      sockets.forEach(socket => socket.end())
+    t.afterEach(() => {
+      return new Promise(resolve => {
+        listener.close(resolve)
+        sockets.forEach(socket => socket.end())
+      })
     })
 
-    it('should support Unix domain sockets', async () => {
+    t.test('should support Unix domain sockets', async t => {
       const exporter = newAgentExporter({ url: new URL(`unix://${url}`), logger })
       const start = new Date()
       const end = new Date()
@@ -488,6 +506,9 @@ describe('exporters/agent', function () {
 
         exporter.export({ profiles, start, end, tags }).catch(reject)
       })
+      t.end()
     })
+    t.end()
   })
+  t.end()
 })

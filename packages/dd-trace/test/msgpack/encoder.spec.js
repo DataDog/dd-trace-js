@@ -1,6 +1,7 @@
 'use strict'
 
-require('../setup/tap')
+const t = require('tap')
+require('../setup/core')
 
 const { expect } = require('chai')
 const msgpack = require('@msgpack/msgpack')
@@ -12,14 +13,14 @@ function randString (length) {
   }).join('')
 }
 
-describe('msgpack/encoder', () => {
+t.test('msgpack/encoder', t => {
   let encoder
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     encoder = new MsgpackEncoder()
   })
 
-  it('should encode to msgpack', () => {
+  t.test('should encode to msgpack', t => {
     const data = [
       { first: 'test' },
       {
@@ -79,5 +80,7 @@ describe('msgpack/encoder', () => {
     expect(decoded[1].uint8array[1]).to.equal(2)
     expect(decoded[1].uint8array[2]).to.equal(3)
     expect(decoded[1].uint8array[3]).to.equal(4)
+    t.end()
   })
+  t.end()
 })

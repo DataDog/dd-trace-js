@@ -1,5 +1,6 @@
 'use strict'
-require('../setup/tap')
+const t = require('tap')
+require('../setup/core')
 const pkg = require('../../../../package.json')
 const stubRequest = sinon.stub()
 const msgpack = require('@msgpack/msgpack')
@@ -16,7 +17,7 @@ const { DataStreamsWriter } = proxyquire(
     zlib: stubZlib
   })
 
-describe('DataStreamWriter unix', () => {
+t.test('DataStreamWriter unix', t => {
   let writer
   const unixConfig = {
     hostname: '',
@@ -24,12 +25,13 @@ describe('DataStreamWriter unix', () => {
     port: ''
   }
 
-  it('should construct unix config', () => {
+  t.test('should construct unix config', t => {
     writer = new DataStreamsWriter(unixConfig)
     expect(writer._url).to.equal(unixConfig.url)
+    t.end()
   })
 
-  it("should call 'request' through flush with correct options", () => {
+  t.test("should call 'request' through flush with correct options", t => {
     writer = new DataStreamsWriter(unixConfig)
     writer.flush({})
     const stubRequestCall = stubRequest.getCalls()[0]
@@ -47,5 +49,7 @@ describe('DataStreamWriter unix', () => {
       },
       url: unixConfig.url
     })
+    t.end()
   })
+  t.end()
 })

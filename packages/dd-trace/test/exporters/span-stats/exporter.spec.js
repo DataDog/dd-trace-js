@@ -1,19 +1,20 @@
 'use strict'
 
-require('../../setup/tap')
+const t = require('tap')
+require('../../setup/core')
 
 const { expect } = require('chai')
 
 const URL = require('url').URL
 
-describe('span-stats exporter', () => {
+t.test('span-stats exporter', t => {
   let url
   let Exporter
   let exporter
   let Writer
   let writer
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     url = 'www.example.com'
     writer = {
       append: sinon.spy(),
@@ -26,7 +27,7 @@ describe('span-stats exporter', () => {
     }).SpanStatsExporter
   })
 
-  it('should flush immediately on export', () => {
+  t.test('should flush immediately on export', t => {
     exporter = new Exporter({ url })
 
     expect(writer.append).to.have.not.been.called
@@ -36,9 +37,10 @@ describe('span-stats exporter', () => {
 
     expect(writer.append).to.have.been.called
     expect(writer.flush).to.have.been.called
+    t.end()
   })
 
-  it('should set url from hostname and port', () => {
+  t.test('should set url from hostname and port', t => {
     const hostname = '0.0.0.0'
     const port = '1234'
     const url = new URL(`http://${hostname}:${port}`)
@@ -50,9 +52,10 @@ describe('span-stats exporter', () => {
       url: exporter._url,
       tags: undefined
     })
+    t.end()
   })
 
-  it('should pass tags through to writer', () => {
+  t.test('should pass tags through to writer', t => {
     const tags = { foo: 'bar' }
 
     exporter = new Exporter({ url, tags })
@@ -61,5 +64,7 @@ describe('span-stats exporter', () => {
       url: exporter._url,
       tags
     })
+    t.end()
   })
+  t.end()
 })

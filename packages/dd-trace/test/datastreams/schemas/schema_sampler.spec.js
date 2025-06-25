@@ -1,12 +1,13 @@
 'use strict'
 
-require('../../setup/tap')
+const t = require('tap')
+require('../../setup/core')
 
 const { SchemaSampler } = require('../../../src/datastreams/schemas/schema_sampler')
 const { expect } = require('chai')
 
-describe('SchemaSampler', () => {
-  it('samples with correct weights', () => {
+t.test('SchemaSampler', t => {
+  t.test('samples with correct weights', t => {
     const currentTimeMs = 100000
     const sampler = new SchemaSampler()
 
@@ -35,5 +36,7 @@ describe('SchemaSampler', () => {
     expect(weight4).to.equal(3)
     expect(canSample5).to.be.false
     expect(weight5).to.equal(0)
+    t.end()
   })
+  t.end()
 })

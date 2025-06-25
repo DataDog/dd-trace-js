@@ -1,11 +1,12 @@
 'use strict'
 
-require('./setup/tap')
+const t = require('tap')
+require('./setup/core')
 
 const { expect } = require('chai')
 const dc = require('dc-polyfill')
 
-describe('iitm.js', () => {
+t.test('iitm.js', t => {
   let hookFn
   const iitm = {
     addHook: (fn) => {
@@ -17,26 +18,29 @@ describe('iitm.js', () => {
   context('with a supported nodejs version', () => {
     let listener
     const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
-    before(() => {
+    t.before(() => {
       listener = sinon.stub()
       iitmjs = proxyquire('../src/iitm', {
         'import-in-the-middle': iitm
       })
     })
 
-    it('should export iitm', () => {
+    t.test('should export iitm', t => {
       expect(iitmjs).to.equal(iitm)
+      t.end()
     })
 
-    it('should publish in channel hook trigger', () => {
+    t.test('should publish in channel hook trigger', t => {
       moduleLoadStartChannel.subscribe(listener)
       hookFn('moduleName', 'moduleNs')
       expect(listener).to.have.been.calledOnce
+      t.end()
     })
 
-    after(() => {
+    t.after(() => {
       const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
       moduleLoadStartChannel.unsubscribe(listener)
     })
   })
+  t.end()
 })

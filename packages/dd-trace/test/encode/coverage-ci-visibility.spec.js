@@ -1,18 +1,19 @@
 'use strict'
 
-require('../setup/tap')
+const t = require('tap')
+require('../setup/core')
 
 const { expect } = require('chai')
 const msgpack = require('@msgpack/msgpack')
 
 const id = require('../../src/id')
 
-describe('coverage-ci-visibility', () => {
+t.test('coverage-ci-visibility', t => {
   let encoder
   let logger
   let formattedCoverage, formattedCoverage2, formattedCoverageTest
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     logger = {
       debug: sinon.stub()
     }
@@ -39,7 +40,7 @@ describe('coverage-ci-visibility', () => {
     }
   })
 
-  it('should encode a form', () => {
+  t.test('should encode a form', t => {
     encoder.encode(formattedCoverage)
     encoder.encode(formattedCoverage2)
 
@@ -57,9 +58,10 @@ describe('coverage-ci-visibility', () => {
 
     expect(decodedCoverages.coverages[1]).to.contain({ test_session_id: 3, test_suite_id: 4 })
     expect(decodedCoverages.coverages[1].files[0]).to.eql({ filename: 'file2.js' })
+    t.end()
   })
 
-  it('should report its count', () => {
+  t.test('should report its count', t => {
     expect(encoder.count()).to.equal(0)
 
     encoder.encode(formattedCoverage)
@@ -69,16 +71,18 @@ describe('coverage-ci-visibility', () => {
     encoder.encode(formattedCoverage)
 
     expect(encoder.count()).to.equal(2)
+    t.end()
   })
 
-  it('should reset after making a payload', () => {
+  t.test('should reset after making a payload', t => {
     encoder.encode(formattedCoverage)
     encoder.makePayload()
 
     expect(encoder.count()).to.equal(0)
+    t.end()
   })
 
-  it('should be able to make multiple payloads', () => {
+  t.test('should be able to make multiple payloads', t => {
     let form, decodedCoverages
     encoder.encode(formattedCoverage)
     form = encoder.makePayload()
@@ -93,9 +97,10 @@ describe('coverage-ci-visibility', () => {
     expect(decodedCoverages.version).to.equal(2)
     expect(decodedCoverages.coverages).to.have.length(1)
     expect(decodedCoverages.coverages[0]).to.contain({ test_session_id: 3, test_suite_id: 4 })
+    t.end()
   })
 
-  it('should be able to encode test coverages', () => {
+  t.test('should be able to encode test coverages', t => {
     encoder.encode(formattedCoverageTest)
 
     const form = encoder.makePayload()
@@ -109,5 +114,7 @@ describe('coverage-ci-visibility', () => {
     expect(decodedCoverages.coverages).to.have.length(1)
     expect(decodedCoverages.coverages[0]).to.contain({ test_session_id: 5, test_suite_id: 6, span_id: 7 })
     expect(decodedCoverages.coverages[0].files[0]).to.eql({ filename: 'file3.js' })
+    t.end()
   })
+  t.end()
 })

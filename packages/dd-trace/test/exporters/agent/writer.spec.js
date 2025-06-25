@@ -1,6 +1,7 @@
 'use strict'
 
-require('../../setup/tap')
+const t = require('tap')
+require('../../setup/core')
 
 const { expect } = require('chai')
 
@@ -17,7 +18,7 @@ function describeWriter (protocolVersion) {
   let prioritySampler
   let log
 
-  beforeEach((done) => {
+  t.beforeEach(async () => {
     span = 'formatted'
 
     response = JSON.stringify({
@@ -57,19 +58,23 @@ function describeWriter (protocolVersion) {
     })
     writer = new Writer({ url, prioritySampler, protocolVersion })
 
-    process.nextTick(done)
-  })
-
-  describe('append', () => {
-    it('should append a trace', () => {
-      writer.append([span])
-
-      expect(encoder.encode).to.have.been.calledWith([span])
+    return new Promise(resolve => {
+      process.nextTick(resolve)
     })
   })
 
-  describe('setUrl', () => {
-    it('should set the URL used in the flush', () => {
+  t.test('append', t => {
+    t.test('should append a trace', t => {
+      writer.append([span])
+
+      expect(encoder.encode).to.have.been.calledWith([span])
+      t.end()
+    })
+    t.end()
+  })
+
+  t.test('setUrl', t => {
+    t.test('should set the URL used in the flush', t => {
       const url = new URL('http://example.com:1234')
       writer.setUrl(url)
       writer.append([span])
@@ -79,29 +84,33 @@ function describeWriter (protocolVersion) {
       expect(request.getCall(0).args[1]).to.contain({
         url
       })
+      t.end()
     })
+    t.end()
   })
 
-  describe('flush', () => {
-    it('should skip flushing if empty', () => {
+  t.test('flush', t => {
+    t.test('should skip flushing if empty', t => {
       writer.flush()
 
       expect(encoder.makePayload).to.not.have.been.called
+      t.end()
     })
 
-    it('should empty the internal queue', () => {
+    t.test('should empty the internal queue', t => {
       encoder.count.returns(1)
 
       writer.flush()
 
       expect(encoder.makePayload).to.have.been.called
+      t.end()
     })
 
-    it('should call callback when empty', (done) => {
-      writer.flush(done)
+    t.test('should call callback when empty', (t) => {
+      writer.flush(t.end)
     })
 
-    it('should flush its traces to the agent, and call callback', (done) => {
+    t.test('should flush its traces to the agent, and call callback', (t) => {
       const expectedData = Buffer.from('prefixed')
 
       encoder.count.returns(2)
@@ -122,11 +131,11 @@ function describeWriter (protocolVersion) {
           },
           lookup: undefined
         })
-        done()
+        t.end()
       })
     })
 
-    it('should pass through headers', (done) => {
+    t.test('should pass through headers', (t) => {
       const headers = {
         'My-Header': 'bar'
       }
@@ -143,11 +152,11 @@ function describeWriter (protocolVersion) {
           'Datadog-Meta-Tracer-Version': 'tracerVersion',
           'X-Datadog-Trace-Count': '2'
         })
-        done()
+        t.end()
       })
     })
 
-    it('should log request errors', done => {
+    t.test('should log request errors', t => {
       const error = new Error('boom')
       error.status = 42
 
@@ -159,27 +168,27 @@ function describeWriter (protocolVersion) {
       setTimeout(() => {
         expect(log.error)
           .to.have.been.calledWith('Error sending payload to the agent (status code: %s)', error.status, error)
-        done()
+        t.end()
       })
     })
 
-    it('should update sampling rates', (done) => {
+    t.test('should update sampling rates', (t) => {
       encoder.count.returns(1)
       writer.flush(() => {
         expect(prioritySampler.update).to.have.been.calledWith({
           'service:hello,env:test': 1
         })
-        done()
+        t.end()
       })
     })
 
     context('with the url as a unix socket', () => {
-      beforeEach(() => {
+      t.beforeEach(() => {
         url = new URL('unix:/path/to/somesocket.sock')
         writer = new Writer({ url, protocolVersion })
       })
 
-      it('should make a request to the socket', () => {
+      t.test('should make a request to the socket', t => {
         encoder.count.returns(1)
         writer.flush()
         setImmediate(() => {
@@ -187,13 +196,16 @@ function describeWriter (protocolVersion) {
             url
           })
         })
+        t.end()
       })
     })
+    t.end()
   })
 }
 
-describe('Writer', () => {
-  describe('0.4', () => describeWriter(0.4))
+t.test('Writer', t => {
+  t.test('0.4', t => describeWriter(0.4))
 
-  describe('0.5', () => describeWriter(0.5))
+  t.test('0.5', t => describeWriter(0.5))
+  t.end()
 })

@@ -1,26 +1,30 @@
 'use strict'
 
-require('./setup/tap')
+const t = require('tap')
+require('./setup/core')
 
 const os = require('os')
 const { getAzureAppMetadata, getAzureTagsFromMetadata } = require('../src/azure_metadata')
 
-describe('Azure metadata', () => {
-  describe('for apps is', () => {
-    it('not provided without DD_AZURE_APP_SERVICES', () => {
+t.test('Azure metadata', t => {
+  t.test('for apps is', t => {
+    t.test('not provided without DD_AZURE_APP_SERVICES', t => {
       delete process.env.DD_AZURE_APP_SERVICES
       expect(getAzureAppMetadata()).to.be.undefined
+      t.end()
     })
 
-    it('provided with DD_AZURE_APP_SERVICES', () => {
+    t.test('provided with DD_AZURE_APP_SERVICES', t => {
       delete process.env.COMPUTERNAME // actually defined on Windows
       process.env.DD_AZURE_APP_SERVICES = '1'
       delete process.env.WEBSITE_SITE_NAME
       expect(getAzureAppMetadata()).to.deep.equal({ operatingSystem: os.platform(), siteKind: 'app', siteType: 'app' })
+      t.end()
     })
+    t.end()
   })
 
-  it('provided completely with minimum vars', () => {
+  t.test('provided completely with minimum vars', t => {
     delete process.env.WEBSITE_RESOURCE_GROUP
     delete process.env.WEBSITE_OS
     delete process.env.FUNCTIONS_EXTENSION_VERSION
@@ -46,9 +50,10 @@ describe('Azure metadata', () => {
       subscriptionID: 'subscription_id'
     }
     expect(getAzureAppMetadata()).to.deep.equal(expected)
+    t.end()
   })
 
-  it('provided completely with complete vars', () => {
+  t.test('provided completely with complete vars', t => {
     process.env.COMPUTERNAME = 'boaty_mcboatface'
     process.env.DD_AZURE_APP_SERVICES = '1'
     process.env.WEBSITE_SITE_NAME = 'website_name'
@@ -77,9 +82,10 @@ describe('Azure metadata', () => {
       subscriptionID: 'subscription_id'
     }
     expect(getAzureAppMetadata()).to.deep.equal(expected)
+    t.end()
   })
 
-  it('tags are correctly generated from vars', () => {
+  t.test('tags are correctly generated from vars', t => {
     delete process.env.WEBSITE_RESOURCE_GROUP
     delete process.env.WEBSITE_OS
     delete process.env.FUNCTIONS_EXTENSION_VERSION
@@ -105,5 +111,7 @@ describe('Azure metadata', () => {
       'aas.subscription.id': 'subscription_id'
     }
     expect(getAzureTagsFromMetadata(getAzureAppMetadata())).to.deep.equal(expected)
+    t.end()
   })
+  t.end()
 })

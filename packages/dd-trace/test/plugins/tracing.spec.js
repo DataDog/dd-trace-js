@@ -1,15 +1,16 @@
 'use strict'
 
-require('../setup/tap')
+const t = require('tap')
+require('../setup/core')
 
 const TracingPlugin = require('../../src/plugins/tracing')
 const agent = require('../plugins/agent')
 const plugins = require('../../src/plugins')
 const { channel } = require('dc-polyfill')
 
-describe('TracingPlugin', () => {
-  describe('startSpan method', () => {
-    it('passes given childOf relationship to the tracer', () => {
+t.test('TracingPlugin', t => {
+  t.test('startSpan method', t => {
+    t.test('passes given childOf relationship to the tracer', t => {
       const startSpanSpy = sinon.spy()
       const plugin = new TracingPlugin({
         _tracer: {
@@ -26,14 +27,17 @@ describe('TracingPlugin', () => {
           childOf: 'some parent span'
         })
       )
+      t.end()
     })
+    t.end()
   })
+  t.end()
 })
 
-describe('common Plugin behaviour', () => {
-  before(() => agent.load())
+t.test('common Plugin behaviour', t => {
+  t.before(() => agent.load())
 
-  after(() => agent.close({ ritmReset: false }))
+  t.after(() => agent.close({ ritmReset: false }))
   class CommonPlugin extends TracingPlugin {
     static get id () { return 'commonPlugin' }
     static get operation () { return 'dothings' }
@@ -58,16 +62,16 @@ describe('common Plugin behaviour', () => {
   const testPlugins = { commonPlugin: CommonPlugin, suffixPlugin: SuffixPlugin }
   const loadChannel = channel('dd-trace:instrumentation:load')
 
-  before(() => {
+  t.before(() => {
     for (const [name, cls] of Object.entries(testPlugins)) {
       plugins[name] = cls
       loadChannel.publish({ name })
     }
   })
 
-  after(() => { Object.keys(testPlugins).forEach(name => delete plugins[name]) })
+  t.after(() => { Object.keys(testPlugins).forEach(name => delete plugins[name]) })
 
-  describe('tagBaseService', () => {
+  t.test('tagBaseService', t => {
     function makeSpan (done, pluginName, pluginConf, spanExpectations) {
       /**
        * Make plugin `pluginName` generate a span given `pluginConf` plugin init
@@ -83,15 +87,15 @@ describe('common Plugin behaviour', () => {
           const span = traces[0][0]
           spanExpectations(span)
         }
-      ).then(done).catch(done)
+      ).then(t.end).catch(t.error)
 
       startCh.publish({ foo: 'bar' })
       finishCh.publish({})
     }
 
-    it('should tag when tracer service does not match plugin', done => {
+    t.test('should tag when tracer service does not match plugin', t => {
       makeSpan(
-        done, 'commonPlugin', { service: 'not-the-right-test' },
+        t.end, 'commonPlugin', { service: 'not-the-right-test' },
         span => {
           expect(span).to.have.property('service', 'not-the-right-test')
           expect(span.meta).to.have.property('_dd.base_service', 'test')
@@ -99,9 +103,9 @@ describe('common Plugin behaviour', () => {
       )
     })
 
-    it('should tag when plugin impl does not match tracer service', done => {
+    t.test('should tag when plugin impl does not match tracer service', t => {
       makeSpan(
-        done, 'suffixPlugin', {},
+        t.end, 'suffixPlugin', {},
         span => {
           expect(span).to.have.property('service', 'test-suffix')
           expect(span.meta).to.have.property('_dd.base_service', 'test')
@@ -109,14 +113,16 @@ describe('common Plugin behaviour', () => {
       )
     })
 
-    it('should not tag when service matches tracer service', done => {
+    t.test('should not tag when service matches tracer service', t => {
       makeSpan(
-        done, 'commonPlugin', {},
+        t.end, 'commonPlugin', {},
         span => {
           expect(span).to.have.property('service', 'test')
           expect(span.meta).to.not.have.property('_dd.base_service', 'test')
         }
       )
     })
+    t.end()
   })
+  t.end()
 })

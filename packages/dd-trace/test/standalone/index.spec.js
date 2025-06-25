@@ -1,6 +1,7 @@
 'use strict'
 
-require('../setup/tap')
+const t = require('tap')
+require('../setup/core')
 const proxyquire = require('proxyquire')
 
 const { channel } = require('dc-polyfill')
@@ -22,11 +23,11 @@ const startCh = channel('dd-trace:span:start')
 const injectCh = channel('dd-trace:span:inject')
 const extractCh = channel('dd-trace:span:extract')
 
-describe('Disabled APM Tracing or Standalone', () => {
+t.test('Disabled APM Tracing or Standalone', t => {
   let config
   let tracer, processor, prioritySampler
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     config = {
       apmTracingEnabled: false,
 
@@ -41,9 +42,9 @@ describe('Disabled APM Tracing or Standalone', () => {
     prioritySampler = {}
   })
 
-  afterEach(() => { sinon.restore() })
+  t.afterEach(() => { sinon.restore() })
 
-  describe('configure', () => {
+  t.test('configure', t => {
     let startChSubscribe
     let startChUnsubscribe
     let injectChSubscribe
@@ -51,7 +52,7 @@ describe('Disabled APM Tracing or Standalone', () => {
     let extractChSubscribe
     let extractChUnsubscribe
 
-    beforeEach(() => {
+    t.beforeEach(() => {
       startChSubscribe = sinon.stub(startCh, 'subscribe')
       startChUnsubscribe = sinon.stub(startCh, 'unsubscribe')
       injectChSubscribe = sinon.stub(injectCh, 'subscribe')
@@ -60,15 +61,16 @@ describe('Disabled APM Tracing or Standalone', () => {
       extractChUnsubscribe = sinon.stub(extractCh, 'unsubscribe')
     })
 
-    it('should subscribe to start span if apmTracing disabled', () => {
+    t.test('should subscribe to start span if apmTracing disabled', t => {
       standalone.configure(config)
 
       sinon.assert.calledOnce(startChSubscribe)
       sinon.assert.calledOnce(injectChSubscribe)
       sinon.assert.calledOnce(extractChSubscribe)
+      t.end()
     })
 
-    it('should not subscribe to start span if apmTracing enabled', () => {
+    t.test('should not subscribe to start span if apmTracing enabled', t => {
       config.apmTracingEnabled = true
 
       standalone.configure(config)
@@ -79,9 +81,10 @@ describe('Disabled APM Tracing or Standalone', () => {
       sinon.assert.notCalled(startChUnsubscribe)
       sinon.assert.notCalled(injectChUnsubscribe)
       sinon.assert.notCalled(extractChUnsubscribe)
+      t.end()
     })
 
-    it('should unsubscribe before subscribing', () => {
+    t.test('should unsubscribe before subscribing', t => {
       const channels = {}
       const standalone = proxyquire('../../src/standalone', {
         'dc-polyfill': {
@@ -106,23 +109,27 @@ describe('Disabled APM Tracing or Standalone', () => {
         sinon.assert.calledThrice(channel.unsubscribe)
         sinon.assert.calledThrice(channel.subscribe)
       })
+      t.end()
     })
 
-    it('should not return a prioritySampler when standalone ASM is disabled', () => {
+    t.test('should not return a prioritySampler when standalone ASM is disabled', t => {
       const prioritySampler = standalone.configure({ apmTracingEnabled: true })
 
       assert.isUndefined(prioritySampler)
+      t.end()
     })
 
-    it('should return a TraceSourcePrioritySampler when standalone ASM is enabled', () => {
+    t.test('should return a TraceSourcePrioritySampler when standalone ASM is enabled', t => {
       const prioritySampler = standalone.configure(config)
 
       assert.instanceOf(prioritySampler, TraceSourcePrioritySampler)
+      t.end()
     })
+    t.end()
   })
 
-  describe('onStartSpan', () => {
-    it('should not add _dd.apm.enabled tag when standalone is disabled', () => {
+  t.test('onStartSpan', t => {
+    t.test('should not add _dd.apm.enabled tag when standalone is disabled', t => {
       config.apmTracingEnabled = true
       standalone.configure(config)
 
@@ -131,9 +138,10 @@ describe('Disabled APM Tracing or Standalone', () => {
       })
 
       assert.notProperty(span.context()._tags, APM_TRACING_ENABLED_KEY)
+      t.end()
     })
 
-    it('should add _dd.apm.enabled tag when standalone is enabled', () => {
+    t.test('should add _dd.apm.enabled tag when standalone is enabled', t => {
       standalone.configure(config)
 
       const span = new DatadogSpan(tracer, processor, prioritySampler, {
@@ -141,9 +149,10 @@ describe('Disabled APM Tracing or Standalone', () => {
       })
 
       assert.property(span.context()._tags, APM_TRACING_ENABLED_KEY)
+      t.end()
     })
 
-    it('should not add _dd.apm.enabled tag in child spans with local parent', () => {
+    t.test('should not add _dd.apm.enabled tag in child spans with local parent', t => {
       standalone.configure(config)
 
       const parent = new DatadogSpan(tracer, processor, prioritySampler, {
@@ -158,9 +167,10 @@ describe('Disabled APM Tracing or Standalone', () => {
       })
 
       assert.notProperty(child.context()._tags, APM_TRACING_ENABLED_KEY)
+      t.end()
     })
 
-    it('should add _dd.apm.enabled tag in child spans with remote parent', () => {
+    t.test('should add _dd.apm.enabled tag in child spans with remote parent', t => {
       standalone.configure(config)
 
       const parent = new DatadogSpan(tracer, processor, prioritySampler, {
@@ -175,11 +185,13 @@ describe('Disabled APM Tracing or Standalone', () => {
       })
 
       assert.propertyVal(child.context()._tags, APM_TRACING_ENABLED_KEY, 0)
+      t.end()
     })
+    t.end()
   })
 
-  describe('onSpanExtract', () => {
-    it('should reset priority if _dd.p.ts not present', () => {
+  t.test('onSpanExtract', t => {
+    t.test('should reset priority if _dd.p.ts not present', t => {
       standalone.configure(config)
 
       const carrier = {
@@ -192,9 +204,10 @@ describe('Disabled APM Tracing or Standalone', () => {
       const spanContext = propagator.extract(carrier)
 
       assert.isUndefined(spanContext._sampling.priority)
+      t.end()
     })
 
-    it('should not reset dm if _dd.p.ts not present', () => {
+    t.test('should not reset dm if _dd.p.ts not present', t => {
       standalone.configure(config)
 
       const carrier = {
@@ -208,9 +221,10 @@ describe('Disabled APM Tracing or Standalone', () => {
       const spanContext = propagator.extract(carrier)
 
       assert.propertyVal(spanContext._trace.tags, DECISION_MAKER_KEY, '-4')
+      t.end()
     })
 
-    it('should keep priority if _dd.p.ts is present', () => {
+    t.test('should keep priority if _dd.p.ts is present', t => {
       standalone.configure(config)
 
       const carrier = {
@@ -225,9 +239,10 @@ describe('Disabled APM Tracing or Standalone', () => {
 
       assert.strictEqual(spanContext._sampling.priority, USER_KEEP)
       assert.propertyVal(spanContext._trace.tags, DECISION_MAKER_KEY, '-5')
+      t.end()
     })
 
-    it('should set USER_KEEP priority if _dd.p.ts=02 is present', () => {
+    t.test('should set USER_KEEP priority if _dd.p.ts=02 is present', t => {
       standalone.configure(config)
 
       const carrier = {
@@ -241,9 +256,10 @@ describe('Disabled APM Tracing or Standalone', () => {
       const spanContext = propagator.extract(carrier)
 
       assert.strictEqual(spanContext._sampling.priority, USER_KEEP)
+      t.end()
     })
 
-    it('should keep priority if apm tracing is enabled', () => {
+    t.test('should keep priority if apm tracing is enabled', t => {
       config.apmTracingEnabled = true
       standalone.configure(config)
 
@@ -257,11 +273,13 @@ describe('Disabled APM Tracing or Standalone', () => {
       const spanContext = propagator.extract(carrier)
 
       assert.strictEqual(spanContext._sampling.priority, USER_KEEP)
+      t.end()
     })
+    t.end()
   })
 
-  describe('onSpanInject', () => {
-    it('should reset priority if apm tracing is disabled and there is no appsec event', () => {
+  t.test('onSpanInject', t => {
+    t.test('should reset priority if apm tracing is disabled and there is no appsec event', t => {
       standalone.configure(config)
 
       const span = new DatadogSpan(tracer, processor, prioritySampler, {
@@ -283,9 +301,10 @@ describe('Disabled APM Tracing or Standalone', () => {
 
       assert.notProperty(carrier, 'x-b3-traceid')
       assert.notProperty(carrier, 'x-b3-spanid')
+      t.end()
     })
 
-    it('should keep priority if apm tracing is disabled and there is an appsec event', () => {
+    t.test('should keep priority if apm tracing is disabled and there is an appsec event', t => {
       standalone.configure(config)
 
       const span = new DatadogSpan(tracer, processor, prioritySampler, {
@@ -307,9 +326,10 @@ describe('Disabled APM Tracing or Standalone', () => {
       assert.property(carrier, 'x-datadog-parent-id')
       assert.property(carrier, 'x-datadog-sampling-priority')
       assert.propertyVal(carrier, 'x-datadog-tags', '_dd.p.ts=02')
+      t.end()
     })
 
-    it('should not reset priority if standalone disabled', () => {
+    t.test('should not reset priority if standalone disabled', t => {
       config.apmTracingEnabled = true
       standalone.configure(config)
 
@@ -332,9 +352,10 @@ describe('Disabled APM Tracing or Standalone', () => {
 
       assert.property(carrier, 'x-b3-traceid')
       assert.property(carrier, 'x-b3-spanid')
+      t.end()
     })
 
-    it('should clear tracestate datadog info', () => {
+    t.test('should clear tracestate datadog info', t => {
       standalone.configure(config)
 
       const span = new DatadogSpan(tracer, processor, prioritySampler, {
@@ -357,6 +378,9 @@ describe('Disabled APM Tracing or Standalone', () => {
 
       assert.propertyVal(carrier, 'tracestate', 'other=id:0xC0FFEE')
       assert.notProperty(carrier, 'traceparent')
+      t.end()
     })
+    t.end()
   })
+  t.end()
 })

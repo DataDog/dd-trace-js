@@ -1,24 +1,25 @@
 'use strict'
 
-require('./setup/tap')
+const t = require('tap')
+require('./setup/core')
 
 const agent = require('./plugins/agent')
 
 const { SAMPLING_PRIORITY_KEY, DECISION_MAKER_KEY } = require('../src/constants')
 
-describe('dd-trace', () => {
+t.test('dd-trace', t => {
   let tracer
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     tracer = require('../')
     return agent.load()
   })
 
-  afterEach(() => {
+  t.afterEach(() => {
     agent.close()
   })
 
-  it('should record and send a trace to the agent', () => {
+  t.test('should record and send a trace to the agent', async () => {
     const span = tracer.startSpan('hello', {
       tags: {
         'resource.name': '/hello/:name'
@@ -39,4 +40,5 @@ describe('dd-trace', () => {
       expect(payload[0][0].meta).to.have.property(DECISION_MAKER_KEY)
     })
   })
+  t.end()
 })

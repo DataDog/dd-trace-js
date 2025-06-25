@@ -1,17 +1,18 @@
 'use strict'
 
-require('../../setup/tap')
+const t = require('tap')
+require('../../setup/core')
 
 const { match } = require('sinon')
 const proxyquire = require('proxyquire')
 const { Log } = require('../../../src/log/log')
 
-describe('telemetry logs', () => {
+t.test('telemetry logs', t => {
   let defaultConfig
   let telemetryLog
   let dc
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     defaultConfig = {
       telemetry: {
         enabled: true,
@@ -33,8 +34,8 @@ describe('telemetry logs', () => {
     }
   })
 
-  describe('start', () => {
-    it('should be enabled by default and subscribe', () => {
+  t.test('start', t => {
+    t.test('should be enabled by default and subscribe', t => {
       const logs = proxyquire('../../../src/telemetry/logs', {
         'dc-polyfill': dc
       })
@@ -42,9 +43,10 @@ describe('telemetry logs', () => {
       logs.start(defaultConfig)
 
       expect(telemetryLog.subscribe).to.have.been.calledTwice
+      t.end()
     })
 
-    it('should be subscribe only once', () => {
+    t.test('should be subscribe only once', t => {
       const logs = proxyquire('../../../src/telemetry/logs', {
         'dc-polyfill': dc
       })
@@ -54,9 +56,10 @@ describe('telemetry logs', () => {
       logs.start(defaultConfig)
 
       expect(telemetryLog.subscribe).to.have.been.calledTwice
+      t.end()
     })
 
-    it('should be disabled and not subscribe if DD_TELEMETRY_LOG_COLLECTION_ENABLED = false', () => {
+    t.test('should be disabled and not subscribe if DD_TELEMETRY_LOG_COLLECTION_ENABLED = false', t => {
       const logs = proxyquire('../../../src/telemetry/logs', {
         'dc-polyfill': dc
       })
@@ -65,11 +68,13 @@ describe('telemetry logs', () => {
       logs.start(defaultConfig)
 
       expect(telemetryLog.subscribe).to.not.been.called
+      t.end()
     })
+    t.end()
   })
 
-  describe('stop', () => {
-    it('should unsubscribe configured listeners', () => {
+  t.test('stop', t => {
+    t.test('should unsubscribe configured listeners', t => {
       const logs = proxyquire('../../../src/telemetry/logs', {
         'dc-polyfill': dc
       })
@@ -78,16 +83,18 @@ describe('telemetry logs', () => {
       logs.stop()
 
       expect(telemetryLog.unsubscribe).to.have.been.calledTwice
+      t.end()
     })
+    t.end()
   })
 
-  describe('logCollector add', () => {
+  t.test('logCollector add', t => {
     const dc = require('dc-polyfill')
     let logCollectorAdd
     let telemetryLog
     let errorLog
 
-    beforeEach(() => {
+    t.beforeEach(() => {
       telemetryLog = dc.channel('datadog:telemetry:log')
       errorLog = dc.channel('datadog:log:error')
 
@@ -100,46 +107,52 @@ describe('telemetry logs', () => {
       logs.start(defaultConfig)
     })
 
-    it('should be not called with DEBUG level', () => {
+    t.test('should be not called with DEBUG level', t => {
       telemetryLog.publish({ message: 'message', level: 'DEBUG' })
 
       expect(logCollectorAdd).to.not.be.called
+      t.end()
     })
 
-    it('should be called with WARN level', () => {
+    t.test('should be called with WARN level', t => {
       telemetryLog.publish({ message: 'message', level: 'WARN' })
 
       expect(logCollectorAdd).to.be.calledOnceWith(match({ message: 'message', level: 'WARN' }))
+      t.end()
     })
 
-    it('should be called with ERROR level', () => {
+    t.test('should be called with ERROR level', t => {
       telemetryLog.publish({ message: 'message', level: 'ERROR' })
 
       expect(logCollectorAdd).to.be.calledOnceWith(match({ message: 'message', level: 'ERROR' }))
+      t.end()
     })
 
-    it('should be called with ERROR level and stack_trace', () => {
+    t.test('should be called with ERROR level and stack_trace', t => {
       const error = new Error('message')
       const stack = error.stack
       telemetryLog.publish({ message: error.message, stack_trace: stack, level: 'ERROR' })
 
       expect(logCollectorAdd).to.be.calledOnceWith(match({ message: 'message', level: 'ERROR', stack_trace: stack }))
+      t.end()
     })
 
-    it('should not be called with no defined level', () => {
+    t.test('should not be called with no defined level', t => {
       telemetryLog.publish({ message: 'message' })
 
       expect(logCollectorAdd).to.not.be.called
+      t.end()
     })
 
-    it('should not be called with incorrect level', () => {
+    t.test('should not be called with incorrect level', t => {
       telemetryLog.publish({ message: 'message', level: 'INFO' })
 
       expect(logCollectorAdd).to.not.be.called
+      t.end()
     })
 
-    describe('datadog:log:error', () => {
-      it('should be called when an Error object is published to datadog:log:error', () => {
+    t.test('datadog:log:error', t => {
+      t.test('should be called when an Error object is published to datadog:log:error', t => {
         const error = new Error('message')
         const stack = error.stack
         errorLog.publish({ cause: error })
@@ -151,9 +164,10 @@ describe('telemetry logs', () => {
             errorType: 'Error',
             stack_trace: stack
           }))
+        t.end()
       })
 
-      it('should be called when an error string is published to datadog:log:error', () => {
+      t.test('should be called when an error string is published to datadog:log:error', t => {
         errorLog.publish({ message: 'custom error message' })
 
         expect(logCollectorAdd).to.be.calledOnceWith(match({
@@ -161,29 +175,34 @@ describe('telemetry logs', () => {
           level: 'ERROR',
           stack_trace: undefined
         }))
+        t.end()
       })
 
-      it('should not be called when an invalid object is published to datadog:log:error', () => {
+      t.test('should not be called when an invalid object is published to datadog:log:error', t => {
         errorLog.publish({ invalid: 'field' })
 
         expect(logCollectorAdd).not.to.be.called
+        t.end()
       })
 
-      it('should not be called when an object without message and stack is published to datadog:log:error', () => {
+      t.test('should not be called when an object without message and stack is published to datadog:log:error', t => {
         errorLog.publish(Log.parse(() => new Error('error')))
 
         expect(logCollectorAdd).not.to.be.called
+        t.end()
       })
+      t.end()
     })
+    t.end()
   })
 
-  describe('send', () => {
+  t.test('send', t => {
     let collectedLogs, application, host
     let logs
     let logCollectorDrain
     let sendData
 
-    beforeEach(() => {
+    t.beforeEach(() => {
       collectedLogs = [{ message: 'message', level: 'ERROR' }]
       application = {}
       host = {}
@@ -201,15 +220,16 @@ describe('telemetry logs', () => {
       })
     })
 
-    it('should drain logCollector and call sendData', () => {
+    t.test('should drain logCollector and call sendData', t => {
       logs.start(defaultConfig)
 
       logs.send(defaultConfig, application, host)
 
       expect(sendData).to.be.calledOnceWithExactly(defaultConfig, application, host, 'logs', { logs: collectedLogs })
+      t.end()
     })
 
-    it('should not drain logCollector and call sendData if not enabled', () => {
+    t.test('should not drain logCollector and call sendData if not enabled', t => {
       defaultConfig.telemetry.logCollection = false
 
       logs.start(defaultConfig)
@@ -218,6 +238,9 @@ describe('telemetry logs', () => {
 
       expect(logCollectorDrain).to.not.be.called
       expect(sendData).to.not.be.called
+      t.end()
     })
+    t.end()
   })
+  t.end()
 })

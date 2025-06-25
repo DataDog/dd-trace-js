@@ -1,8 +1,9 @@
 'use strict'
 
-require('./setup/tap')
+const t = require('tap')
+require('./setup/core')
 
-describe('SpanProcessor', () => {
+t.test('SpanProcessor', t => {
   let prioritySampler
   let processor
   let SpanProcessor
@@ -16,7 +17,7 @@ describe('SpanProcessor', () => {
   let SpanSampler
   let sample
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     tracer = {}
     trace = {
       started: [],
@@ -61,13 +62,14 @@ describe('SpanProcessor', () => {
     processor = new SpanProcessor(exporter, prioritySampler, config)
   })
 
-  it('should generate sampling priority', () => {
+  t.test('should generate sampling priority', t => {
     processor.process(finishedSpan)
 
     expect(prioritySampler.sample).to.have.been.calledWith(finishedSpan.context())
+    t.end()
   })
 
-  it('should erase the trace once finished', () => {
+  t.test('should erase the trace once finished', t => {
     trace.started = [finishedSpan]
     trace.finished = [finishedSpan]
 
@@ -76,26 +78,29 @@ describe('SpanProcessor', () => {
     expect(trace).to.have.deep.property('started', [])
     expect(trace).to.have.deep.property('finished', [])
     expect(finishedSpan.context()).to.have.deep.property('_tags', {})
+    t.end()
   })
 
-  it('should skip traces with unfinished spans', () => {
+  t.test('should skip traces with unfinished spans', t => {
     trace.started = [activeSpan, finishedSpan]
     trace.finished = [finishedSpan]
     processor.process(finishedSpan)
 
     expect(exporter.export).not.to.have.been.called
+    t.end()
   })
 
-  it('should skip unrecorded traces', () => {
+  t.test('should skip unrecorded traces', t => {
     trace.record = false
     trace.started = [finishedSpan]
     trace.finished = [finishedSpan]
     processor.process(activeSpan)
 
     expect(exporter.export).not.to.have.been.called
+    t.end()
   })
 
-  it('should export a partial trace with span count above configured threshold', () => {
+  t.test('should export a partial trace with span count above configured threshold', t => {
     trace.started = [activeSpan, finishedSpan, finishedSpan, finishedSpan]
     trace.finished = [finishedSpan, finishedSpan, finishedSpan]
     processor.process(finishedSpan)
@@ -108,9 +113,10 @@ describe('SpanProcessor', () => {
 
     expect(trace).to.have.deep.property('started', [activeSpan])
     expect(trace).to.have.deep.property('finished', [])
+    t.end()
   })
 
-  it('should configure span sampler conrrectly', () => {
+  t.test('should configure span sampler conrrectly', t => {
     const config = {
       stats: { enabled: false },
       sampler: {
@@ -130,9 +136,10 @@ describe('SpanProcessor', () => {
     processor.process(finishedSpan)
 
     expect(SpanSampler).to.have.been.calledWith(config.sampler)
+    t.end()
   })
 
-  it('should erase the trace and stop execution when tracing=false', () => {
+  t.test('should erase the trace and stop execution when tracing=false', t => {
     const config = {
       tracing: false,
       stats: {
@@ -150,5 +157,7 @@ describe('SpanProcessor', () => {
     expect(trace).to.have.deep.property('finished', [])
     expect(finishedSpan.context()).to.have.deep.property('_tags', {})
     expect(exporter.export).not.to.have.been.called
+    t.end()
   })
+  t.end()
 })

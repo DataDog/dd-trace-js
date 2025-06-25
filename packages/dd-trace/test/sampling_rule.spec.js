@@ -1,6 +1,7 @@
 'use strict'
 
-require('./setup/tap')
+const t = require('tap')
+require('./setup/core')
 
 const { expect } = require('chai')
 const id = require('../src/id')
@@ -85,13 +86,13 @@ function createDummySpans () {
   return { spans, spanContexts }
 }
 
-describe('sampling rule', () => {
+t.test('sampling rule', t => {
   let spans
   let spanContexts
   let SamplingRule
   let rule
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     const info = createDummySpans()
     spans = info.spans
     spanContexts = info.spanContexts
@@ -101,8 +102,8 @@ describe('sampling rule', () => {
     SamplingRule = require('../src/sampling_rule')
   })
 
-  describe('match', () => {
-    it('should match with exact strings', () => {
+  t.test('match', t => {
+    t.test('should match with exact strings', t => {
       rule = new SamplingRule({
         service: 'test',
         name: 'operation'
@@ -119,9 +120,10 @@ describe('sampling rule', () => {
       expect(rule.match(spans[8])).to.equal(false)
       expect(rule.match(spans[9])).to.equal(false)
       expect(rule.match(spans[10])).to.equal(false)
+      t.end()
     })
 
-    it('should match with case-insensitive strings', () => {
+    t.test('should match with case-insensitive strings', t => {
       const lowerCaseRule = new SamplingRule({
         service: 'test',
         name: 'operation'
@@ -143,9 +145,10 @@ describe('sampling rule', () => {
       expect(lowerCaseRule.match(spans[8])).to.equal(mixedCaseRule.match(spans[8]))
       expect(lowerCaseRule.match(spans[9])).to.equal(mixedCaseRule.match(spans[9]))
       expect(lowerCaseRule.match(spans[10])).to.equal(mixedCaseRule.match(spans[10]))
+      t.end()
     })
 
-    it('should match with regexp', () => {
+    t.test('should match with regexp', t => {
       rule = new SamplingRule({
         service: /test/,
         name: /op.*/
@@ -162,9 +165,10 @@ describe('sampling rule', () => {
       expect(rule.match(spans[8])).to.equal(false)
       expect(rule.match(spans[9])).to.equal(true)
       expect(rule.match(spans[10])).to.equal(true)
+      t.end()
     })
 
-    it('should match with postfix glob', () => {
+    t.test('should match with postfix glob', t => {
       rule = new SamplingRule({
         service: 'test',
         name: 'op*'
@@ -181,9 +185,10 @@ describe('sampling rule', () => {
       expect(rule.match(spans[8])).to.equal(false)
       expect(rule.match(spans[9])).to.equal(false)
       expect(rule.match(spans[10])).to.equal(false)
+      t.end()
     })
 
-    it('should match with prefix glob', () => {
+    t.test('should match with prefix glob', t => {
       rule = new SamplingRule({
         service: 'test',
         name: '*operation'
@@ -200,9 +205,10 @@ describe('sampling rule', () => {
       expect(rule.match(spans[8])).to.equal(false)
       expect(rule.match(spans[9])).to.equal(true)
       expect(rule.match(spans[10])).to.equal(true)
+      t.end()
     })
 
-    it('should match with single character any matcher', () => {
+    t.test('should match with single character any matcher', t => {
       rule = new SamplingRule({
         service: 'test',
         name: 'o?eration'
@@ -219,9 +225,10 @@ describe('sampling rule', () => {
       expect(rule.match(spans[8])).to.equal(false)
       expect(rule.match(spans[9])).to.equal(false)
       expect(rule.match(spans[10])).to.equal(false)
+      t.end()
     })
 
-    it('should consider missing service as match-all for service name', () => {
+    t.test('should consider missing service as match-all for service name', t => {
       rule = new SamplingRule({
         name: 'sub_second_operation_*'
       })
@@ -238,9 +245,10 @@ describe('sampling rule', () => {
       expect(rule.match(spans[8])).to.equal(false)
       expect(rule.match(spans[9])).to.equal(false)
       expect(rule.match(spans[10])).to.equal(false)
+      t.end()
     })
 
-    it('should consider missing name as match-all for span name', () => {
+    t.test('should consider missing name as match-all for span name', t => {
       rule = new SamplingRule({
         service: 'test'
       })
@@ -257,9 +265,10 @@ describe('sampling rule', () => {
       // Should not match because of different service name
       expect(rule.match(spans[6])).to.equal(false)
       expect(rule.match(spans[7])).to.equal(false)
+      t.end()
     })
 
-    it('should use span service name tags where present', () => {
+    t.test('should use span service name tags where present', t => {
       rule = new SamplingRule({
         service: 'span-service'
       })
@@ -275,9 +284,10 @@ describe('sampling rule', () => {
       expect(rule.match(spans[8])).to.equal(false)
       expect(rule.match(spans[9])).to.equal(false)
       expect(rule.match(spans[10])).to.equal(false)
+      t.end()
     })
 
-    it('should match renamed spans', () => {
+    t.test('should match renamed spans', t => {
       rule = new SamplingRule({
         service: 'test',
         name: 'renamed'
@@ -294,9 +304,10 @@ describe('sampling rule', () => {
       expect(rule.match(spans[8])).to.equal(true)
       expect(rule.match(spans[9])).to.equal(false)
       expect(rule.match(spans[10])).to.equal(false)
+      t.end()
     })
 
-    it('should match tag sets', () => {
+    t.test('should match tag sets', t => {
       rule = new SamplingRule({
         tags: {
           tagged: 'yup',
@@ -315,9 +326,10 @@ describe('sampling rule', () => {
       expect(rule.match(spans[8])).to.equal(false)
       expect(rule.match(spans[9])).to.equal(true)
       expect(rule.match(spans[10])).to.equal(false)
+      t.end()
     })
 
-    it('should match resource name', () => {
+    t.test('should match resource name', t => {
       rule = new SamplingRule({
         resource: 'named'
       })
@@ -333,19 +345,21 @@ describe('sampling rule', () => {
       expect(rule.match(spans[8])).to.equal(false)
       expect(rule.match(spans[9])).to.equal(false)
       expect(rule.match(spans[10])).to.equal(true)
+      t.end()
     })
+    t.end()
   })
 
-  describe('sampleRate', () => {
-    beforeEach(() => {
+  t.test('sampleRate', t => {
+    t.beforeEach(() => {
       sinon.stub(Math, 'random').returns(0.5)
     })
 
-    afterEach(() => {
+    t.afterEach(() => {
       Math.random.restore()
     })
 
-    it('should sample on allowed sample rate', () => {
+    t.test('should sample on allowed sample rate', t => {
       rule = new SamplingRule({
         service: 'test',
         name: 'operation',
@@ -354,9 +368,10 @@ describe('sampling rule', () => {
       })
 
       expect(rule.sample(new SpanContext({ traceId: id() }))).to.equal(true)
+      t.end()
     })
 
-    it('should not sample on non-allowed sample rate', () => {
+    t.test('should not sample on non-allowed sample rate', t => {
       rule = new SamplingRule({
         service: 'test',
         name: 'operation',
@@ -365,11 +380,13 @@ describe('sampling rule', () => {
       })
 
       expect(rule.sample(new SpanContext({ traceId: id('6148299799767393280', 10) }))).to.equal(false)
+      t.end()
     })
+    t.end()
   })
 
-  describe('maxPerSecond', () => {
-    it('should not create limiter without finite maxPerSecond', () => {
+  t.test('maxPerSecond', t => {
+    t.test('should not create limiter without finite maxPerSecond', t => {
       rule = new SamplingRule({
         service: 'test',
         name: 'operation',
@@ -378,9 +395,10 @@ describe('sampling rule', () => {
 
       expect(rule._limiter).to.equal(undefined)
       expect(rule.maxPerSecond).to.equal(undefined)
+      t.end()
     })
 
-    it('should create limiter with finite maxPerSecond', () => {
+    t.test('should create limiter with finite maxPerSecond', t => {
       rule = new SamplingRule({
         service: 'test',
         name: 'operation',
@@ -390,9 +408,10 @@ describe('sampling rule', () => {
 
       expect(rule._limiter).to.not.equal(undefined)
       expect(rule).to.have.property('maxPerSecond', 123)
+      t.end()
     })
 
-    it('should not sample spans past the rate limit', () => {
+    t.test('should not sample spans past the rate limit', t => {
       rule = new SamplingRule({
         service: 'test',
         name: 'operation',
@@ -404,9 +423,10 @@ describe('sampling rule', () => {
 
       expect(rule.sample(spanContext)).to.equal(true)
       expect(rule.sample(spanContext)).to.equal(false)
+      t.end()
     })
 
-    it('should allow unlimited rate limits', () => {
+    t.test('should allow unlimited rate limits', t => {
       rule = new SamplingRule({
         service: 'test',
         name: 'operation',
@@ -416,9 +436,10 @@ describe('sampling rule', () => {
       for (let i = 0; i < 1e3; i++) {
         expect(rule.sample(new SpanContext({ traceId: id() }))).to.equal(true)
       }
+      t.end()
     })
 
-    it('should sample if enough time has elapsed', () => {
+    t.test('should sample if enough time has elapsed', t => {
       rule = new SamplingRule({
         service: 'test',
         name: 'operation',
@@ -431,6 +452,9 @@ describe('sampling rule', () => {
       expect(rule.sample(new SpanContext({ traceId: id() }))).to.equal(false)
       clock.tick(1000)
       expect(rule.sample(new SpanContext({ traceId: id() }))).to.equal(true)
+      t.end()
     })
+    t.end()
   })
+  t.end()
 })

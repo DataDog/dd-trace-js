@@ -1,6 +1,7 @@
 'use strict'
 
-require('../../../../../dd-trace/test/setup/tap')
+const t = require('tap')
+require('../../../../../dd-trace/test/setup/core')
 
 const proxyquire = require('proxyquire')
 const { expect } = require('chai')
@@ -14,8 +15,8 @@ let encoder
 let url
 let log
 
-describe('CI Visibility Coverage Writer', () => {
-  beforeEach(() => {
+t.test('CI Visibility Coverage Writer', t => {
+  t.beforeEach(() => {
     request = sinon.stub().yieldsAsync(null, 'OK', 200)
 
     encoder = {
@@ -49,35 +50,39 @@ describe('CI Visibility Coverage Writer', () => {
     coverageWriter = new CoverageWriter({ url })
   })
 
-  describe('append', () => {
-    it('should encode a coverage payload', () => {
+  t.test('append', t => {
+    t.test('should encode a coverage payload', t => {
       const input = { sessionId: id('1'), suiteId: id('2'), files: ['file.js'] }
       coverageWriter.append(input)
 
       expect(encoder.encode).to.have.been.calledWith(input)
+      t.end()
     })
+    t.end()
   })
 
-  describe('flush', () => {
-    it('should skip flushing if empty', () => {
+  t.test('flush', t => {
+    t.test('should skip flushing if empty', t => {
       coverageWriter.flush()
 
       expect(encoder.makePayload).to.not.have.been.called
+      t.end()
     })
 
-    it('should empty the internal queue', () => {
+    t.test('should empty the internal queue', t => {
       encoder.count.returns(1)
 
       coverageWriter.flush()
 
       expect(encoder.makePayload).to.have.been.called
+      t.end()
     })
 
-    it('should call callback when empty', (done) => {
-      coverageWriter.flush(done)
+    t.test('should call callback when empty', (t) => {
+      coverageWriter.flush(t.end)
     })
 
-    it('should flush its traces to the intake and call done', (done) => {
+    t.test('should flush its traces to the intake and call done', (t) => {
       encoder.count.returns(2)
       const payload = {
         getHeaders: () => ({}),
@@ -92,11 +97,11 @@ describe('CI Visibility Coverage Writer', () => {
           path: '/api/v2/citestcov',
           method: 'POST'
         })
-        done()
+        t.end()
       })
     })
 
-    it('should log request errors', done => {
+    t.test('should log request errors', t => {
       const error = new Error('boom')
 
       request.yields(error)
@@ -112,8 +117,10 @@ describe('CI Visibility Coverage Writer', () => {
 
       coverageWriter.flush(() => {
         expect(log.error).to.have.been.calledWith('Error sending CI coverage payload', error)
-        done()
+        t.end()
       })
     })
+    t.end()
   })
+  t.end()
 })

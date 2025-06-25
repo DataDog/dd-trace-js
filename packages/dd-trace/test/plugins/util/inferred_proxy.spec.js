@@ -1,13 +1,14 @@
 'use strict'
 
-require('../../setup/tap')
+const t = require('tap')
+require('../../setup/core')
 
 const agent = require('../agent')
 const getPort = require('get-port')
 const { expect } = require('chai')
 const axios = require('axios')
 
-describe('Inferred Proxy Spans', function () {
+t.test('Inferred Proxy Spans', function (t) {
   let http
   let appListener
   let controller
@@ -27,7 +28,7 @@ describe('Inferred Proxy Spans', function () {
     http = require('http')
 
     const server = new http.Server(async (req, res) => {
-      controller && await controller(req, res)
+      controller && (await controller(req, res))
       if (req.url === '/error') {
         res.statusCode = 500
         res.end(JSON.stringify({ message: 'ERROR' }))
@@ -59,8 +60,8 @@ describe('Inferred Proxy Spans', function () {
     'x-dd-proxy-stage': 'dev'
   }
 
-  describe('without configuration', () => {
-    it('should create a parent span and a child span for a 200', async () => {
+  t.test('without configuration', t => {
+    t.test('should create a parent span and a child span for a 200', async t => {
       await loadTest({})
 
       await axios.get(`http://127.0.0.1:${port}/`, {
@@ -103,9 +104,10 @@ describe('Inferred Proxy Spans', function () {
           }
         }
       }).then(cleanupTest).catch(cleanupTest)
+      t.end()
     })
 
-    it('should create a parent span and a child span for an error', async () => {
+    t.test('should create a parent span and a child span for an error', async t => {
       await loadTest({})
 
       await axios.get(`http://127.0.0.1:${port}/error`, {
@@ -150,9 +152,10 @@ describe('Inferred Proxy Spans', function () {
           }
         }
       }).then(cleanupTest).catch(cleanupTest)
+      t.end()
     })
 
-    it('should not create an API Gateway span if all necessary headers are missing', async () => {
+    t.test('should not create an API Gateway span if all necessary headers are missing', async t => {
       await loadTest({})
 
       await axios.get(`http://127.0.0.1:${port}/no-aws-headers`, {
@@ -182,9 +185,10 @@ describe('Inferred Proxy Spans', function () {
           }
         }
       }).then(cleanupTest).catch(cleanupTest)
+      t.end()
     })
 
-    it('should not create an API Gateway span if missing the proxy system header', async () => {
+    t.test('should not create an API Gateway span if missing the proxy system header', async t => {
       await loadTest({})
 
       // remove x-dd-proxy from headers
@@ -217,11 +221,13 @@ describe('Inferred Proxy Spans', function () {
           }
         }
       }).then(cleanupTest).catch(cleanupTest)
+      t.end()
     })
+    t.end()
   })
 
-  describe('with configuration', function () {
-    it('should not create a span when configured to be off', async () => {
+  t.test('with configuration', function (t) {
+    t.test('should not create a span when configured to be off', async t => {
       await loadTest({ inferredProxyServicesEnabled: false })
 
       await axios.get(`http://127.0.0.1:${port}/configured-off`, {
@@ -251,6 +257,9 @@ describe('Inferred Proxy Spans', function () {
           }
         }
       }).then(cleanupTest).catch(cleanupTest)
+      t.end()
     })
+    t.end()
   })
+  t.end()
 })

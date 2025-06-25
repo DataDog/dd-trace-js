@@ -1,44 +1,52 @@
 'use strict'
 
-require('./setup/tap')
+const t = require('tap')
+require('./setup/core')
 
 const os = require('os')
 const { execSync } = require('child_process')
 const proxyquire = require('proxyquire').noPreserveCache()
 
-describe('pkg', () => {
+t.test('pkg', t => {
   let pkg
 
   if (os.platform() !== 'win32') {
-    describe('in pre-require', () => {
-      it('should load the package.json correctly', () => {
+    t.test('in pre-require', t => {
+      t.test('should load the package.json correctly', t => {
         const pkg = JSON.parse(execSync('node --require ./pkg-loader.js -e ""', {
           cwd: __dirname
         }).toString())
         expect(pkg.name).to.equal('dd-trace')
+        t.end()
       })
+      t.end()
     })
   }
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     pkg = require('../src/pkg')
   })
 
-  it('should load the service name from the main module', () => {
+  t.test('should load the service name from the main module', t => {
     expect(pkg.name).to.equal('dd-trace')
+    t.end()
   })
 
-  it('should load the version number from the main module', () => {
+  t.test('should load the version number from the main module', t => {
     expect(pkg.version).to.match(/^\d+.\d+.\d+/)
+    t.end()
   })
+  t.end()
 })
 
-describe('load', () => {
-  it('should not break if path.parse returns undefined', () => {
+t.test('load', t => {
+  t.test('should not break if path.parse returns undefined', t => {
     const pathStub = { }
     pathStub.parse = function () {
       return undefined
     }
     proxyquire('../src/pkg', { path: pathStub })
+    t.end()
   })
+  t.end()
 })

@@ -1,6 +1,7 @@
 'use strict'
 
-require('../../setup/tap')
+const t = require('tap')
+require('../../setup/core')
 
 const path = require('path')
 const istanbul = require('istanbul-lib-coverage')
@@ -28,8 +29,8 @@ const {
   TELEMETRY_GIT_SHA_MATCH
 } = require('../../../src/ci-visibility/telemetry')
 
-describe('getTestParametersString', () => {
-  it('returns formatted test parameters and removes params from input', () => {
+t.test('getTestParametersString', t => {
+  t.test('returns formatted test parameters and removes params from input', t => {
     const input = { test_stuff: [['params'], [{ b: 'c' }]] }
     expect(getTestParametersString(input, 'test_stuff')).to.equal(
       JSON.stringify({ arguments: ['params'], metadata: {} })
@@ -39,15 +40,17 @@ describe('getTestParametersString', () => {
       JSON.stringify({ arguments: [{ b: 'c' }], metadata: {} })
     )
     expect(input).to.eql({ test_stuff: [] })
+    t.end()
   })
 
-  it('does not crash when test name is not found and does not modify input', () => {
+  t.test('does not crash when test name is not found and does not modify input', t => {
     const input = { test_stuff: [['params'], ['params2']] }
     expect(getTestParametersString(input, 'test_not_present')).to.equal('')
     expect(input).to.eql({ test_stuff: [['params'], ['params2']] })
+    t.end()
   })
 
-  it('does not crash when parameters can not be serialized and removes params from input', () => {
+  t.test('does not crash when parameters can not be serialized and removes params from input', t => {
     const circular = { a: 'b' }
     circular.b = circular
 
@@ -57,26 +60,31 @@ describe('getTestParametersString', () => {
     expect(getTestParametersString(input, 'test_stuff')).to.equal(
       JSON.stringify({ arguments: ['params2'], metadata: {} })
     )
+    t.end()
   })
+  t.end()
 })
 
-describe('getTestSuitePath', () => {
-  it('returns sourceRoot if the test path is falsy', () => {
+t.test('getTestSuitePath', t => {
+  t.test('returns sourceRoot if the test path is falsy', t => {
     const sourceRoot = '/users/opt'
     const testSuitePath = getTestSuitePath(undefined, sourceRoot)
     expect(testSuitePath).to.equal(sourceRoot)
+    t.end()
   })
 
-  it('returns sourceRoot if the test path has the same value', () => {
+  t.test('returns sourceRoot if the test path has the same value', t => {
     const sourceRoot = '/users/opt'
     const testSuiteAbsolutePath = sourceRoot
     const testSuitePath = getTestSuitePath(testSuiteAbsolutePath, sourceRoot)
     expect(testSuitePath).to.equal(sourceRoot)
+    t.end()
   })
+  t.end()
 })
 
-describe('getCodeOwnersFileEntries', () => {
-  it('returns code owners entries', () => {
+t.test('getCodeOwnersFileEntries', t => {
+  t.test('returns code owners entries', t => {
     const rootDir = path.join(__dirname, '__test__')
     const codeOwnersFileEntries = getCodeOwnersFileEntries(rootDir)
 
@@ -88,9 +96,10 @@ describe('getCodeOwnersFileEntries', () => {
       pattern: 'packages/dd-trace/test/plugins/util/*',
       owners: ['@datadog-dd-trace-js']
     })
+    t.end()
   })
 
-  it('returns null if CODEOWNERS can not be found', () => {
+  t.test('returns null if CODEOWNERS can not be found', t => {
     const rootDir = path.join(__dirname, '__not_found__')
     // We have to change the working directory,
     // otherwise it will find the CODEOWNERS file in the root of dd-trace-js
@@ -99,9 +108,10 @@ describe('getCodeOwnersFileEntries', () => {
     const codeOwnersFileEntries = getCodeOwnersFileEntries(rootDir)
     expect(codeOwnersFileEntries).to.equal(null)
     process.chdir(oldCwd)
+    t.end()
   })
 
-  it('tries both input rootDir and process.cwd()', () => {
+  t.test('tries both input rootDir and process.cwd()', t => {
     const rootDir = path.join(__dirname, '__not_found__')
     const oldCwd = process.cwd()
 
@@ -117,17 +127,20 @@ describe('getCodeOwnersFileEntries', () => {
       owners: ['@datadog-dd-trace-js']
     })
     process.chdir(oldCwd)
+    t.end()
   })
+  t.end()
 })
 
-describe('getCodeOwnersForFilename', () => {
-  it('returns null if entries is empty', () => {
+t.test('getCodeOwnersForFilename', t => {
+  t.test('returns null if entries is empty', t => {
     const codeOwners = getCodeOwnersForFilename('filename', undefined)
 
     expect(codeOwners).to.equal(null)
+    t.end()
   })
 
-  it('returns the code owners for a given file path', () => {
+  t.test('returns the code owners for a given file path', t => {
     const rootDir = path.join(__dirname, '__test__')
     const codeOwnersFileEntries = getCodeOwnersFileEntries(rootDir)
 
@@ -144,47 +157,55 @@ describe('getCodeOwnersForFilename', () => {
     )
 
     expect(codeOwnersForTestSpec).to.equal(JSON.stringify(['@datadog-ci-app']))
+    t.end()
   })
+  t.end()
 })
 
-describe('coverage utils', () => {
+t.test('coverage utils', t => {
   let coverage
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     delete require.cache[require.resolve('./fixtures/coverage.json')]
     coverage = require('./fixtures/coverage.json')
   })
 
-  describe('getCoveredFilenamesFromCoverage', () => {
-    it('returns the list of files the code coverage includes', () => {
+  t.test('getCoveredFilenamesFromCoverage', t => {
+    t.test('returns the list of files the code coverage includes', t => {
       const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
       expect(coverageFiles).to.eql(['subtract.js', 'add.js'])
+      t.end()
     })
 
-    it('returns an empty list if coverage is empty', () => {
+    t.test('returns an empty list if coverage is empty', t => {
       const coverageFiles = getCoveredFilenamesFromCoverage({})
       expect(coverageFiles).to.eql([])
+      t.end()
     })
+    t.end()
   })
 
-  describe('resetCoverage', () => {
-    it('resets the code coverage', () => {
+  t.test('resetCoverage', t => {
+    t.test('resets the code coverage', t => {
       resetCoverage(coverage)
       const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
       expect(coverageFiles).to.eql([])
+      t.end()
     })
+    t.end()
   })
 
-  describe('mergeCoverage', () => {
-    it('copies the code coverage', () => {
+  t.test('mergeCoverage', t => {
+    t.test('copies the code coverage', t => {
       const newCoverageMap = istanbul.createCoverageMap()
       // At first it's different, then it is the same after copying
       expect(JSON.stringify(coverage)).not.to.equal(JSON.stringify(newCoverageMap.toJSON()))
       mergeCoverage(coverage, newCoverageMap)
       expect(JSON.stringify(coverage)).to.equal(JSON.stringify(newCoverageMap.toJSON()))
+      t.end()
     })
 
-    it('returns a copy that is not affected by other copies being reset', () => {
+    t.test('returns a copy that is not affected by other copies being reset', t => {
       const newCoverageMap = istanbul.createCoverageMap()
 
       expect(JSON.stringify(coverage)).not.to.equal(JSON.stringify(newCoverageMap.toJSON()))
@@ -205,12 +226,15 @@ describe('coverage utils', () => {
 
       // The copied coverage remains the same after the original reset
       expect(copiedCoverageJson).to.equal(JSON.stringify(newCoverageMap.toJSON()))
+      t.end()
     })
+    t.end()
   })
+  t.end()
 })
 
-describe('metadata validation', () => {
-  it('should remove invalid metadata', () => {
+t.test('metadata validation', t => {
+  t.test('should remove invalid metadata', t => {
     const invalidMetadata1 = {
       [GIT_REPOSITORY_URL]: 'www.datadog.com',
       [CI_PIPELINE_URL]: 'www.datadog.com',
@@ -238,9 +262,10 @@ describe('metadata validation', () => {
         JSON.stringify(removeInvalidMetadata(invalidMetadata)), `${JSON.stringify(invalidMetadata)} is valid`
       ).to.equal(JSON.stringify({}))
     })
+    t.end()
   })
 
-  it('should keep valid metadata', () => {
+  t.test('should keep valid metadata', t => {
     const validMetadata1 = {
       [GIT_REPOSITORY_URL]: 'https://datadoghq.com/myrepo/repo.git',
       [CI_PIPELINE_URL]: 'https://datadog.com',
@@ -260,11 +285,13 @@ describe('metadata validation', () => {
     validMetadatas.forEach((validMetadata) => {
       expect(JSON.stringify(removeInvalidMetadata(validMetadata))).to.be.equal(JSON.stringify(validMetadata))
     })
+    t.end()
   })
+  t.end()
 })
 
-describe('parseAnnotations', () => {
-  it('parses correctly shaped annotations', () => {
+t.test('parseAnnotations', t => {
+  t.test('parses correctly shaped annotations', t => {
     const tags = parseAnnotations([
       {
         type: 'DD_TAGS[test.requirement]',
@@ -279,9 +306,10 @@ describe('parseAnnotations', () => {
       'test.requirement': 'high',
       'test.responsible_team': 'sales'
     })
+    t.end()
   })
 
-  it('does not crash with invalid arguments', () => {
+  t.test('does not crash with invalid arguments', t => {
     const tags = parseAnnotations([
       {},
       'invalid',
@@ -290,11 +318,13 @@ describe('parseAnnotations', () => {
       { type: 'test.requirement', description: 'sure' }
     ])
     expect(tags).to.eql({})
+    t.end()
   })
+  t.end()
 })
 
-describe('getIsFaultyEarlyFlakeDetection', () => {
-  it('returns false if the absolute number of new suites is smaller or equal than the threshold', () => {
+t.test('getIsFaultyEarlyFlakeDetection', t => {
+  t.test('returns false if the absolute number of new suites is smaller or equal than the threshold', t => {
     const faultyThreshold = 30
 
     // Session has 50 tests and 25 are marked as new (50%): not faulty.
@@ -323,9 +353,10 @@ describe('getIsFaultyEarlyFlakeDetection', () => {
       faultyThreshold
     )
     expect(isFaulty2).to.be.false
+    t.end()
   })
 
-  it('returns true if the percentage is above the threshold', () => {
+  t.test('returns true if the percentage is above the threshold', t => {
     const faultyThreshold = 30
 
     // Session has 100 tests and 31 are marked as new (31%): faulty.
@@ -341,11 +372,13 @@ describe('getIsFaultyEarlyFlakeDetection', () => {
       faultyThreshold
     )
     expect(isFaulty).to.be.true
+    t.end()
   })
+  t.end()
 })
 
-describe('getNumFromKnownTests', () => {
-  it('calculates the number of tests from the known tests', () => {
+t.test('getNumFromKnownTests', t => {
+  t.test('calculates the number of tests from the known tests', t => {
     const knownTests = {
       testModule: {
         'test1.spec.js': ['test1', 'test2'],
@@ -355,26 +388,30 @@ describe('getNumFromKnownTests', () => {
 
     const numTests = getNumFromKnownTests(knownTests)
     expect(numTests).to.equal(3)
+    t.end()
   })
 
-  it('does not crash with empty dictionaries', () => {
+  t.test('does not crash with empty dictionaries', t => {
     const knownTests = {}
 
     const numTests = getNumFromKnownTests(knownTests)
     expect(numTests).to.equal(0)
+    t.end()
   })
 
-  it('does not crash if known tests is undefined or null', () => {
+  t.test('does not crash if known tests is undefined or null', t => {
     const numTestsUndefined = getNumFromKnownTests(undefined)
     expect(numTestsUndefined).to.equal(0)
 
     const numTestsNull = getNumFromKnownTests(null)
     expect(numTestsNull).to.equal(0)
+    t.end()
   })
+  t.end()
 })
 
-describe('getModifiedTestsFromDiff', () => {
-  it('should parse git diff and return modified lines per file', () => {
+t.test('getModifiedTestsFromDiff', t => {
+  t.test('should parse git diff and return modified lines per file', t => {
     const diff = `diff --git a/test/file1.js b/test/file1.js
 index 1234567..89abcde 100644
 --- a/test/file1.js
@@ -397,15 +434,17 @@ index 1234567..89abcde 100644
     }
 
     expect(getModifiedTestsFromDiff(diff)).to.eql(expected)
+    t.end()
   })
 
-  it('should return null for empty or invalid diff', () => {
+  t.test('should return null for empty or invalid diff', t => {
     expect(getModifiedTestsFromDiff('')).to.be.null
     expect(getModifiedTestsFromDiff(null)).to.be.null
     expect(getModifiedTestsFromDiff(undefined)).to.be.null
+    t.end()
   })
 
-  it('should handle multiple line changes in a single hunk', () => {
+  t.test('should handle multiple line changes in a single hunk', t => {
     const diff = `diff --git a/test/file.js b/test/file.js
 index 1234567..89abcde 100644
 --- a/test/file.js
@@ -423,74 +462,86 @@ index 1234567..89abcde 100644
     }
 
     expect(getModifiedTestsFromDiff(diff)).to.eql(expected)
+    t.end()
   })
+  t.end()
 })
 
-describe('isModifiedTest', () => {
-  describe('when tests come from local diff', () => {
+t.test('isModifiedTest', t => {
+  t.test('when tests come from local diff', t => {
     const testFramework = 'jest'
 
-    it('should return true when test lines overlap with modified lines', () => {
+    t.test('should return true when test lines overlap with modified lines', t => {
       const modifiedTests = {
         'test/file.js': [2, 4, 6]
       }
       expect(isModifiedTest('test/file.js', 1, 3, modifiedTests, testFramework)).to.be.true // overlaps with line 2
       expect(isModifiedTest('test/file.js', 3, 5, modifiedTests, testFramework)).to.be.true // overlaps with line 4
       expect(isModifiedTest('test/file.js', 5, 7, modifiedTests, testFramework)).to.be.true // overlaps with line 6
+      t.end()
     })
 
-    it('should return false when test lines do not overlap with modified lines', () => {
+    t.test('should return false when test lines do not overlap with modified lines', t => {
       const modifiedTests = {
         'test/file.js': [2, 4, 6]
       }
       expect(isModifiedTest('test/file.js', 7, 9, modifiedTests, testFramework)).to.be.false
       expect(isModifiedTest('test/file.js', 0, 1, modifiedTests, testFramework)).to.be.false
+      t.end()
     })
 
-    it('should return false when file is not in modified tests', () => {
+    t.test('should return false when file is not in modified tests', t => {
       const modifiedTests = {
         'test/file.js': [2, 4, 6]
       }
       expect(isModifiedTest('test/other.js', 1, 3, modifiedTests, testFramework)).to.be.false
+      t.end()
     })
 
-    it('should handle single line tests', () => {
+    t.test('should handle single line tests', t => {
       const modifiedTests = {
         'test/file.js': [2, 4, 6]
       }
       expect(isModifiedTest('test/file.js', 2, 2, modifiedTests, testFramework)).to.be.true
       expect(isModifiedTest('test/file.js', 3, 3, modifiedTests, testFramework)).to.be.false
+      t.end()
     })
+    t.end()
   })
 
-  describe('when tests frameworks do not support granular impacted tests', () => {
+  t.test('when tests frameworks do not support granular impacted tests', t => {
     const testFramework = 'playwright'
 
-    it('should return true when test file is in modifiedTests', () => {
+    t.test('should return true when test file is in modifiedTests', t => {
       const modifiedTests = {
         'test/file.js': [2, 4, 6],
         'test/other.js': [2, 4, 6]
       }
       expect(isModifiedTest('test/file.js', 1, 10, modifiedTests, testFramework)).to.be.true
       expect(isModifiedTest('test/other.js', 1, 10, modifiedTests, testFramework)).to.be.true
+      t.end()
     })
 
-    it('should return false when test file is not in modifiedTests', () => {
+    t.test('should return false when test file is not in modifiedTests', t => {
       const modifiedTests = {
         'test/file.js': [2, 4, 6]
       }
       expect(isModifiedTest('test/other.js', 1, 10, modifiedTests, testFramework)).to.be.false
+      t.end()
     })
+    t.end()
   })
 
-  it('should handle empty modifiedTests object', () => {
+  t.test('should handle empty modifiedTests object', t => {
     expect(isModifiedTest('test/file.js', 1, 10, {}, 'jest')).to.be.false
+    t.end()
   })
+  t.end()
 })
 
-describe('getPullRequestBaseBranch', () => {
+t.test('getPullRequestBaseBranch', t => {
   context('there is a pull request base branch', () => {
-    it('returns base commit SHA to compare against ', () => {
+    t.test('returns base commit SHA to compare against ', t => {
       const getMergeBaseStub = sinon.stub()
       getMergeBaseStub.returns('1234af')
       const checkAndFetchBranchStub = sinon.stub()
@@ -509,11 +560,12 @@ describe('getPullRequestBaseBranch', () => {
       expect(checkAndFetchBranchStub).to.have.been.calledWith('trunk', 'origin')
       expect(getMergeBaseStub).to.have.been.calledWith('trunk', 'feature-branch')
       expect(getLocalBranchesStub).not.to.have.been.called
+      t.end()
     })
   })
 
   context('there is no pull request base branch', () => {
-    it('returns the best base branch SHA from local branches', () => {
+    t.test('returns the best base branch SHA from local branches', t => {
       const checkAndFetchBranchStub = sinon.stub()
       const getLocalBranchesStub = sinon.stub().returns(['trunk', 'master', 'feature-branch'])
 
@@ -547,14 +599,16 @@ describe('getPullRequestBaseBranch', () => {
       expect(getMergeBaseStub).to.have.been.calledWith('trunk', 'feature-branch')
       expect(getCountsStub).to.have.been.calledWith('master', 'feature-branch')
       expect(getCountsStub).to.have.been.calledWith('trunk', 'feature-branch')
+      t.end()
     })
   })
+  t.end()
 })
 
-describe('checkShaDiscrepancies', () => {
+t.test('checkShaDiscrepancies', t => {
   const incrementCountMetricStub = sinon.stub()
 
-  it('return true if the CI/Git Client repository URL is different from the user provided repository URL', () => {
+  t.test('return true if the CI/Git Client repository URL is different from the user provided repository URL', t => {
     const ciMetadata = {
       [GIT_COMMIT_SHA]: '1234af',
       [GIT_REPOSITORY_URL]: 'https://github.com/datadog/dd-trace-js.git'
@@ -593,9 +647,10 @@ describe('checkShaDiscrepancies', () => {
       })
     })
     expect(incrementCountMetricStub).to.have.been.calledWith(TELEMETRY_GIT_SHA_MATCH, { match: false })
+    t.end()
   })
 
-  it('return true if the CI/Git Client commit SHA is different from the user provided commit SHA', () => {
+  t.test('return true if the CI/Git Client commit SHA is different from the user provided commit SHA', t => {
     incrementCountMetricStub.resetHistory()
     const ciMetadata = {
       [GIT_COMMIT_SHA]: 'abcd',
@@ -635,9 +690,10 @@ describe('checkShaDiscrepancies', () => {
       })
     })
     expect(incrementCountMetricStub).to.have.been.calledWith(TELEMETRY_GIT_SHA_MATCH, { match: false })
+    t.end()
   })
 
-  it('increment TELEMETRY_GIT_SHA_MATCH with match: true when all values match', () => {
+  t.test('increment TELEMETRY_GIT_SHA_MATCH with match: true when all values match', t => {
     incrementCountMetricStub.resetHistory()
     const ciMetadata = {
       [GIT_COMMIT_SHA]: '1234af',
@@ -664,5 +720,7 @@ describe('checkShaDiscrepancies', () => {
     checkShaDiscrepancies(ciMetadata, userProvidedGitMetadata)
 
     expect(incrementCountMetricStub).to.have.been.calledWith(TELEMETRY_GIT_SHA_MATCH, { match: true })
+    t.end()
   })
+  t.end()
 })

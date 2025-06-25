@@ -1,6 +1,7 @@
 'use strict'
 
-require('../../../../../dd-trace/test/setup/tap')
+const t = require('tap')
+require('../../../../../dd-trace/test/setup/core')
 
 const { expect } = require('chai')
 const sinon = require('sinon')
@@ -8,19 +9,19 @@ const nock = require('nock')
 const DynamicInstrumentationLogsWriter = require('../../../../src/ci-visibility/exporters/agentless/di-logs-writer')
 const log = require('../../../../src/log')
 
-describe('Test Visibility DI Writer', () => {
-  beforeEach(() => {
+t.test('Test Visibility DI Writer', t => {
+  t.beforeEach(() => {
     nock.cleanAll()
     process.env.DD_API_KEY = '1'
   })
 
-  afterEach(() => {
+  t.afterEach(() => {
     delete process.env.DD_API_KEY
     sinon.restore()
   })
 
   context('agentless', () => {
-    it('can send logs to the logs intake', (done) => {
+    t.test('can send logs to the logs intake', (t) => {
       const scope = nock('http://www.example.com')
         .post('/api/v2/logs', body => {
           expect(body).to.deep.equal([{ message: 'test' }, { message: 'test2' }])
@@ -34,12 +35,12 @@ describe('Test Visibility DI Writer', () => {
       logsWriter.append({ message: 'test2' })
 
       logsWriter.flush(() => {
-        scope.done()
-        done()
+        scope.t.end()
+        t.end()
       })
     })
 
-    it('logs an error if the request fails', (done) => {
+    t.test('logs an error if the request fails', (t) => {
       const logErrorSpy = sinon.spy(log, 'error')
 
       const scope = nock('http://www.example.com')
@@ -53,14 +54,14 @@ describe('Test Visibility DI Writer', () => {
 
       logsWriter.flush(() => {
         expect(logErrorSpy.called).to.be.true
-        scope.done()
-        done()
+        scope.t.end()
+        t.end()
       })
     })
   })
 
   context('agent based', () => {
-    it('can send logs to the debugger endpoint in the agent', (done) => {
+    t.test('can send logs to the debugger endpoint in the agent', (t) => {
       delete process.env.DD_API_KEY
 
       const scope = nock('http://www.example.com')
@@ -76,12 +77,12 @@ describe('Test Visibility DI Writer', () => {
       logsWriter.append({ message: 'test4' })
 
       logsWriter.flush(() => {
-        scope.done()
-        done()
+        scope.t.end()
+        t.end()
       })
     })
 
-    it('logs an error if the request fails', (done) => {
+    t.test('logs an error if the request fails', (t) => {
       delete process.env.DD_API_KEY
 
       const logErrorSpy = sinon.spy(log, 'error')
@@ -97,9 +98,10 @@ describe('Test Visibility DI Writer', () => {
 
       logsWriter.flush(() => {
         expect(logErrorSpy.called).to.be.true
-        scope.done()
-        done()
+        scope.t.end()
+        t.end()
       })
     })
   })
+  t.end()
 })

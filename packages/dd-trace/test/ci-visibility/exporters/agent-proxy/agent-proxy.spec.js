@@ -1,6 +1,7 @@
 'use strict'
 
-require('../../../../../dd-trace/test/setup/tap')
+const t = require('tap')
+require('../../../../../dd-trace/test/setup/core')
 
 const nock = require('nock')
 
@@ -10,13 +11,13 @@ const DynamicInstrumentationLogsWriter = require('../../../../src/ci-visibility/
 const CoverageWriter = require('../../../../src/ci-visibility/exporters/agentless/coverage-writer')
 const AgentWriter = require('../../../../src/exporters/agent/writer')
 
-describe('AgentProxyCiVisibilityExporter', () => {
+t.test('AgentProxyCiVisibilityExporter', t => {
   const flushInterval = 50
   const port = 8126
   const queryDelay = 50
   const tags = {}
 
-  it('should query /info right when it is instantiated', (done) => {
+  t.test('should query /info right when it is instantiated', (t) => {
     const scope = nock('http://localhost:8126')
       .get('/info')
       .reply(200, JSON.stringify({
@@ -27,10 +28,10 @@ describe('AgentProxyCiVisibilityExporter', () => {
 
     expect(agentProxyCiVisibilityExporter).not.to.be.null
     expect(scope.isDone()).to.be.true
-    done()
+    t.end()
   })
 
-  it('should store traces and coverages as is until the query to /info is resolved', async () => {
+  t.test('should store traces and coverages as is until the query to /info is resolved', async t => {
     nock('http://localhost:8126')
       .get('/info')
       .delay(queryDelay)
@@ -61,10 +62,11 @@ describe('AgentProxyCiVisibilityExporter', () => {
     // old traces and coverages are exported at once
     expect(agentProxyCiVisibilityExporter.export).to.have.been.calledWith(trace)
     expect(agentProxyCiVisibilityExporter.exportCoverage).to.have.been.calledWith(coverage)
+    t.end()
   })
 
-  describe('agent is evp compatible', () => {
-    beforeEach(() => {
+  t.test('agent is evp compatible', t => {
+    t.beforeEach(() => {
       nock('http://localhost:8126')
         .get('/info')
         .delay(queryDelay)
@@ -76,14 +78,15 @@ describe('AgentProxyCiVisibilityExporter', () => {
         }))
     })
 
-    it('should initialise AgentlessWriter and CoverageWriter', async () => {
+    t.test('should initialise AgentlessWriter and CoverageWriter', async t => {
       const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
       await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
       expect(agentProxyCiVisibilityExporter._writer).to.be.instanceOf(AgentlessWriter)
       expect(agentProxyCiVisibilityExporter._coverageWriter).to.be.instanceOf(CoverageWriter)
+      t.end()
     })
 
-    it('should process test suite level visibility spans', async () => {
+    t.test('should process test suite level visibility spans', async t => {
       const mockWriter = {
         append: sinon.spy(),
         flush: sinon.spy()
@@ -97,9 +100,10 @@ describe('AgentProxyCiVisibilityExporter', () => {
       agentProxyCiVisibilityExporter.export(testSessionTrace)
       expect(mockWriter.append).to.have.been.calledWith(testSuiteTrace)
       expect(mockWriter.append).to.have.been.calledWith(testSessionTrace)
+      t.end()
     })
 
-    it('should process coverages', async () => {
+    t.test('should process coverages', async t => {
       const mockWriter = {
         append: sinon.spy(),
         flush: sinon.spy()
@@ -115,10 +119,11 @@ describe('AgentProxyCiVisibilityExporter', () => {
       agentProxyCiVisibilityExporter._libraryConfig = { isCodeCoverageEnabled: true }
       agentProxyCiVisibilityExporter.exportCoverage(coverage)
       expect(mockWriter.append).to.have.been.calledWith({ spanId: '1', traceId: '1', files: [] })
+      t.end()
     })
 
     context('if isTestDynamicInstrumentationEnabled is set', () => {
-      it('should initialise DynamicInstrumentationLogsWriter', async () => {
+      t.test('should initialise DynamicInstrumentationLogsWriter', async t => {
         const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({
           port,
           tags,
@@ -126,9 +131,10 @@ describe('AgentProxyCiVisibilityExporter', () => {
         })
         await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
         expect(agentProxyCiVisibilityExporter._logsWriter).to.be.instanceOf(DynamicInstrumentationLogsWriter)
+        t.end()
       })
 
-      it('should process logs', async () => {
+      t.test('should process logs', async t => {
         const mockWriter = {
           append: sinon.spy(),
           flush: sinon.spy()
@@ -143,12 +149,14 @@ describe('AgentProxyCiVisibilityExporter', () => {
         const log = { message: 'hello' }
         agentProxyCiVisibilityExporter.exportDiLogs({}, log)
         expect(mockWriter.append).to.have.been.calledWith(sinon.match(log))
+        t.end()
       })
     })
+    t.end()
   })
 
-  describe('agent is not evp compatible', () => {
-    beforeEach(() => {
+  t.test('agent is not evp compatible', t => {
+    t.beforeEach(() => {
       nock('http://localhost:8126')
         .get('/info')
         .delay(queryDelay)
@@ -157,14 +165,15 @@ describe('AgentProxyCiVisibilityExporter', () => {
         }))
     })
 
-    it('should initialise AgentWriter', async () => {
+    t.test('should initialise AgentWriter', async t => {
       const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
       await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
       expect(agentProxyCiVisibilityExporter._writer).to.be.instanceOf(AgentWriter)
       expect(agentProxyCiVisibilityExporter._coverageWriter).to.be.undefined
+      t.end()
     })
 
-    it('should not process test suite level visibility spans', async () => {
+    t.test('should not process test suite level visibility spans', async t => {
       const mockWriter = {
         append: sinon.spy(),
         flush: sinon.spy()
@@ -177,9 +186,10 @@ describe('AgentProxyCiVisibilityExporter', () => {
       agentProxyCiVisibilityExporter.export(testSuiteTrace)
       agentProxyCiVisibilityExporter.export(testSessionTrace)
       expect(mockWriter.append).not.to.have.been.called
+      t.end()
     })
 
-    it('should not process coverages', async () => {
+    t.test('should not process coverages', async t => {
       const mockWriter = {
         append: sinon.spy(),
         flush: sinon.spy()
@@ -198,10 +208,11 @@ describe('AgentProxyCiVisibilityExporter', () => {
         files: []
       })
       expect(mockWriter.append).not.to.have.been.called
+      t.end()
     })
 
     context('if isTestDynamicInstrumentationEnabled is set', () => {
-      it('should not initialise DynamicInstrumentationLogsWriter', async () => {
+      t.test('should not initialise DynamicInstrumentationLogsWriter', async t => {
         const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({
           port,
           tags,
@@ -209,9 +220,10 @@ describe('AgentProxyCiVisibilityExporter', () => {
         })
         await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
         expect(agentProxyCiVisibilityExporter._logsWriter).to.be.undefined
+        t.end()
       })
 
-      it('should not process logs', async () => {
+      t.test('should not process logs', async t => {
         const mockWriter = {
           append: sinon.spy(),
           flush: sinon.spy()
@@ -226,12 +238,14 @@ describe('AgentProxyCiVisibilityExporter', () => {
         const log = { message: 'hello' }
         agentProxyCiVisibilityExporter.exportDiLogs({}, log)
         expect(mockWriter.append).not.to.have.been.called
+        t.end()
       })
     })
+    t.end()
   })
 
-  describe('export', () => {
-    it('should flush after the flush interval if a trace has been exported', async () => {
+  t.test('export', t => {
+    t.test('should flush after the flush interval if a trace has been exported', async t => {
       const mockWriter = {
         append: sinon.spy(),
         flush: sinon.spy()
@@ -253,9 +267,10 @@ describe('AgentProxyCiVisibilityExporter', () => {
       expect(mockWriter.append).to.have.been.calledWith(trace)
       await new Promise(resolve => setTimeout(resolve, flushInterval))
       expect(mockWriter.flush).to.have.been.called
+      t.end()
     })
 
-    it('should flush after the flush interval if a coverage has been exported', async () => {
+    t.test('should flush after the flush interval if a coverage has been exported', async t => {
       const mockWriter = {
         append: sinon.spy(),
         flush: sinon.spy()
@@ -284,11 +299,13 @@ describe('AgentProxyCiVisibilityExporter', () => {
       expect(mockWriter.append).to.have.been.calledWith({ traceId: '1', spanId: '1', files: [] })
       await new Promise(resolve => setTimeout(resolve, flushInterval))
       expect(mockWriter.flush).to.have.been.called
+      t.end()
     })
+    t.end()
   })
 
-  describe('setUrl', () => {
-    it('should set the URL on self and writers', () => {
+  t.test('setUrl', t => {
+    t.test('should set the URL on self and writers', t => {
       const mockWriter = {
         setUrl: sinon.spy()
       }
@@ -314,11 +331,13 @@ describe('AgentProxyCiVisibilityExporter', () => {
       expect(agentProxyCiVisibilityExporter._coverageUrl).to.deep.equal(coverageUrl)
       expect(mockWriter.setUrl).to.have.been.calledWith(url)
       expect(mockCoverageWriter.setUrl).to.have.been.calledWith(coverageUrl)
+      t.end()
     })
+    t.end()
   })
 
-  describe('_isGzipCompatible', () => {
-    it('should set _isGzipCompatible to true if the newest version is v4 or newer', async () => {
+  t.test('_isGzipCompatible', t => {
+    t.test('should set _isGzipCompatible to true if the newest version is v4 or newer', async t => {
       const scope = nock('http://localhost:8126')
         .get('/info')
         .reply(200, JSON.stringify({
@@ -333,9 +352,10 @@ describe('AgentProxyCiVisibilityExporter', () => {
 
       expect(agentProxyCiVisibilityExporter._isGzipCompatible).to.be.true
       expect(scope.isDone()).to.be.true
+      t.end()
     })
 
-    it('should set _isGzipCompatible to false if the newest version is v3 or older', async () => {
+    t.test('should set _isGzipCompatible to false if the newest version is v3 or older', async t => {
       const scope = nock('http://localhost:8126')
         .get('/info')
         .reply(200, JSON.stringify({
@@ -350,11 +370,13 @@ describe('AgentProxyCiVisibilityExporter', () => {
 
       expect(agentProxyCiVisibilityExporter._isGzipCompatible).to.be.false
       expect(scope.isDone()).to.be.true
+      t.end()
     })
+    t.end()
   })
 
-  describe('evpProxyPrefix', () => {
-    it('should set evpProxyPrefix to v2 if the newest version is v3', async () => {
+  t.test('evpProxyPrefix', t => {
+    t.test('should set evpProxyPrefix to v2 if the newest version is v3', async t => {
       const scope = nock('http://localhost:8126')
         .get('/info')
         .reply(200, JSON.stringify({
@@ -369,9 +391,10 @@ describe('AgentProxyCiVisibilityExporter', () => {
 
       expect(agentProxyCiVisibilityExporter.evpProxyPrefix).to.equal('/evp_proxy/v2')
       expect(scope.isDone()).to.be.true
+      t.end()
     })
 
-    it('should set evpProxyPrefix to v4 if the newest version is v4', async () => {
+    t.test('should set evpProxyPrefix to v4 if the newest version is v4', async t => {
       const scope = nock('http://localhost:8126')
         .get('/info')
         .reply(200, JSON.stringify({
@@ -386,6 +409,9 @@ describe('AgentProxyCiVisibilityExporter', () => {
 
       expect(agentProxyCiVisibilityExporter.evpProxyPrefix).to.equal('/evp_proxy/v4')
       expect(scope.isDone()).to.be.true
+      t.end()
     })
+    t.end()
   })
+  t.end()
 })

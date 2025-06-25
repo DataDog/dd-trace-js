@@ -1,6 +1,7 @@
 'use strict'
 
-require('./setup/tap')
+const t = require('tap')
+require('./setup/core')
 
 const { hostname } = require('os')
 
@@ -83,30 +84,35 @@ const {
   }
 })
 
-describe('SpanAggKey', () => {
-  it('should make aggregation key for a basic span', () => {
+t.test('SpanAggKey', t => {
+  t.test('should make aggregation key for a basic span', t => {
     const key = new SpanAggKey(basicSpan)
     expect(key.toString()).to.equal('basic-span,service-name,resource-name,span-type,200,false')
+    t.end()
   })
 
-  it('should make aggregation key for a synthetic span', () => {
+  t.test('should make aggregation key for a synthetic span', t => {
     const key = new SpanAggKey(syntheticSpan)
     expect(key.toString()).to.equal('synthetic-span,service-name,resource-name,span-type,200,true')
+    t.end()
   })
 
-  it('should make aggregation key for an error span', () => {
+  t.test('should make aggregation key for an error span', t => {
     const key = new SpanAggKey(errorSpan)
     expect(key.toString()).to.equal('error-span,service-name,resource-name,span-type,500,false')
+    t.end()
   })
 
-  it('should use sensible defaults', () => {
+  t.test('should use sensible defaults', t => {
     const key = new SpanAggKey({ meta: {}, metrics: {} })
     expect(key.toString()).to.equal(`${DEFAULT_SPAN_NAME},${DEFAULT_SERVICE_NAME},,,0,false`)
+    t.end()
   })
+  t.end()
 })
 
-describe('SpanAggStats', () => {
-  it('should record a basic span', () => {
+t.test('SpanAggStats', t => {
+  t.test('should record a basic span', t => {
     const aggKey = new SpanAggKey(basicSpan)
     const aggStats = new SpanAggStats(aggKey)
     aggStats.record(basicSpan)
@@ -129,9 +135,10 @@ describe('SpanAggStats', () => {
       OkSummary: okDistribution.toProto(),
       ErrorSummary: errorDistribution.toProto()
     })
+    t.end()
   })
 
-  it('should record a top-level span', () => {
+  t.test('should record a top-level span', t => {
     const aggKey = new SpanAggKey(topLevelSpan)
     const aggStats = new SpanAggStats(aggKey)
     aggStats.record(topLevelSpan)
@@ -154,9 +161,10 @@ describe('SpanAggStats', () => {
       OkSummary: okDistribution.toProto(),
       ErrorSummary: errorDistribution.toProto()
     })
+    t.end()
   })
 
-  it('should record an error span', () => {
+  t.test('should record an error span', t => {
     const aggKey = new SpanAggKey(errorSpan)
     const aggStats = new SpanAggStats(aggKey)
     aggStats.record(errorSpan)
@@ -179,47 +187,56 @@ describe('SpanAggStats', () => {
       OkSummary: okDistribution.toProto(),
       ErrorSummary: errorDistribution.toProto()
     })
+    t.end()
   })
+  t.end()
 })
 
-describe('SpanBuckets', () => {
+t.test('SpanBuckets', t => {
   const buckets = new SpanBuckets()
 
-  it('should start empty', () => {
+  t.test('should start empty', t => {
     expect(buckets.size).to.equal(0)
+    t.end()
   })
 
-  it('should add a new entry when no matching span agg key is found', () => {
+  t.test('should add a new entry when no matching span agg key is found', t => {
     const bucket = buckets.forSpan(basicSpan)
     expect(bucket).to.be.an.instanceOf(SpanAggStats)
     expect(buckets.size).to.equal(1)
     const [key, value] = Array.from(buckets.entries())[0]
     expect(key).to.equal((new SpanAggKey(basicSpan)).toString())
     expect(value).to.be.instanceOf(SpanAggStats)
+    t.end()
   })
 
-  it('should not add a new entry if matching span agg key is found', () => {
+  t.test('should not add a new entry if matching span agg key is found', t => {
     buckets.forSpan(basicSpan)
     expect(buckets.size).to.equal(1)
+    t.end()
   })
 
-  it('should add a new entry when new span does not match existing agg keys', () => {
+  t.test('should add a new entry when new span does not match existing agg keys', t => {
     buckets.forSpan(errorSpan)
     expect(buckets.size).to.equal(2)
+    t.end()
   })
+  t.end()
 })
 
-describe('TimeBuckets', () => {
-  it('should acquire a span agg bucket for the given time', () => {
+t.test('TimeBuckets', t => {
+  t.test('should acquire a span agg bucket for the given time', t => {
     const buckets = new TimeBuckets()
     expect(buckets.size).to.equal(0)
     const bucket = buckets.forTime(12345)
     expect(buckets.size).to.equal(1)
     expect(bucket).to.be.an.instanceOf(SpanBuckets)
+    t.end()
   })
+  t.end()
 })
 
-describe('SpanStatsProcessor', () => {
+t.test('SpanStatsProcessor', t => {
   let errorDistribution
   let okDistribution
   let processor
@@ -238,7 +255,7 @@ describe('SpanStatsProcessor', () => {
     version: '1.0.0'
   }
 
-  it('should construct', () => {
+  t.test('should construct', t => {
     processor = new SpanStatsProcessor(config)
     clearTimeout(processor.timer)
 
@@ -255,17 +272,19 @@ describe('SpanStatsProcessor', () => {
     expect(processor.env).to.equal(config.env)
     expect(processor.tags).to.deep.equal(config.tags)
     expect(processor.version).to.equal(config.version)
+    t.end()
   })
 
-  it('should construct a disabled instance', () => {
+  t.test('should construct a disabled instance', t => {
     const disabledConfig = { ...config, stats: { enabled: false, interval: 10 } }
     const processor = new SpanStatsProcessor(disabledConfig)
 
     expect(processor.enabled).to.be.false
     expect(processor.timer).to.be.undefined
+    t.end()
   })
 
-  it('should track span stats', () => {
+  t.test('should track span stats', t => {
     expect(processor.buckets.size).to.equal(0)
     for (let i = 0; i < n; i++) {
       processor.onSpanFinished(topLevelSpan)
@@ -300,9 +319,10 @@ describe('SpanStatsProcessor', () => {
       OkSummary: okDistribution.toProto(),
       ErrorSummary: errorDistribution.toProto()
     })
+    t.end()
   })
 
-  it('should export on interval', () => {
+  t.test('should export on interval', t => {
     processor.onInterval()
 
     expect(exporter.export).to.be.calledWith({
@@ -332,9 +352,10 @@ describe('SpanStatsProcessor', () => {
       RuntimeID: processor.tags['runtime-id'],
       Sequence: processor.sequence
     })
+    t.end()
   })
 
-  it('should export on interval with default version', () => {
+  t.test('should export on interval with default version', t => {
     const versionlessConfig = { ...config }
     delete versionlessConfig.version
     const processor = new SpanStatsProcessor(versionlessConfig)
@@ -350,5 +371,7 @@ describe('SpanStatsProcessor', () => {
       RuntimeID: processor.tags['runtime-id'],
       Sequence: processor.sequence
     })
+    t.end()
   })
+  t.end()
 })

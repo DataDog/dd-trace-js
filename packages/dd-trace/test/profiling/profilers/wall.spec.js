@@ -1,17 +1,18 @@
 'use strict'
 
-require('../../setup/tap')
+const t = require('tap')
+require('../../setup/core')
 
 const { expect } = require('chai')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
-describe('profilers/native/wall', () => {
+t.test('profilers/native/wall', t => {
   let NativeWallProfiler
   let pprof
   let profile0
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     profile0 = {
       encodeAsync: sinon.stub().returns(Promise.resolve('encoded'))
     }
@@ -33,7 +34,7 @@ describe('profilers/native/wall', () => {
     })
   })
 
-  it('should start the internal time profiler', () => {
+  t.test('should start the internal time profiler', t => {
     const profiler = new NativeWallProfiler()
 
     // Verify start/stop profiler idle notifiers are created if not present.
@@ -63,9 +64,10 @@ describe('profilers/native/wall', () => {
         workaroundV8Bug: false,
         collectCpuTime: false
       })
+    t.end()
   })
 
-  it('should use the provided configuration options', () => {
+  t.test('should use the provided configuration options', t => {
     const samplingInterval = 500
     const profiler = new NativeWallProfiler({ samplingInterval })
 
@@ -82,26 +84,29 @@ describe('profilers/native/wall', () => {
         workaroundV8Bug: false,
         collectCpuTime: false
       })
+    t.end()
   })
 
-  it('should not stop when not started', () => {
+  t.test('should not stop when not started', t => {
     const profiler = new NativeWallProfiler()
 
     profiler.stop()
 
     sinon.assert.notCalled(pprof.time.stop)
+    t.end()
   })
 
-  it('should stop the internal time profiler', () => {
+  t.test('should stop the internal time profiler', t => {
     const profiler = new NativeWallProfiler()
 
     profiler.start()
     profiler.stop()
 
     sinon.assert.calledOnce(pprof.time.stop)
+    t.end()
   })
 
-  it('should stop the internal time profiler only once', () => {
+  t.test('should stop the internal time profiler only once', t => {
     const profiler = new NativeWallProfiler()
 
     profiler.start()
@@ -109,9 +114,10 @@ describe('profilers/native/wall', () => {
     profiler.stop()
 
     sinon.assert.calledOnce(pprof.time.stop)
+    t.end()
   })
 
-  it('should collect profiles from the internal time profiler', () => {
+  t.test('should collect profiles from the internal time profiler', t => {
     const profiler = new NativeWallProfiler()
 
     expect(profiler.isStarted()).to.be.false
@@ -128,9 +134,10 @@ describe('profilers/native/wall', () => {
     profiler.stop()
     expect(profiler.isStarted()).to.be.false
     sinon.assert.calledTwice(pprof.time.stop)
+    t.end()
   })
 
-  it('should collect profiles from the internal time profiler and stop profiler if not restarted', () => {
+  t.test('should collect profiles from the internal time profiler and stop profiler if not restarted', t => {
     const profiler = new NativeWallProfiler()
 
     profiler.start()
@@ -144,9 +151,10 @@ describe('profilers/native/wall', () => {
     expect(profiler.isStarted()).to.be.false
     profiler.stop()
     sinon.assert.calledOnce(pprof.time.stop)
+    t.end()
   })
 
-  it('should encode profiles calling their encodeAsync method', () => {
+  t.test('should encode profiles calling their encodeAsync method', t => {
     const profiler = new NativeWallProfiler()
 
     profiler.start()
@@ -158,9 +166,10 @@ describe('profilers/native/wall', () => {
     profiler.stop()
 
     sinon.assert.calledOnce(profile0.encodeAsync)
+    t.end()
   })
 
-  it('should use mapper if given', () => {
+  t.test('should use mapper if given', t => {
     const profiler = new NativeWallProfiler()
 
     const mapper = {}
@@ -178,9 +187,10 @@ describe('profilers/native/wall', () => {
         workaroundV8Bug: false,
         collectCpuTime: false
       })
+    t.end()
   })
 
-  it('should generate appropriate sample labels', () => {
+  t.test('should generate appropriate sample labels', t => {
     const profiler = new NativeWallProfiler({ timelineEnabled: true })
     profiler.start()
     profiler.stop()
@@ -265,5 +275,7 @@ describe('profilers/native/wall', () => {
       'local root span id': '0987654321',
       'trace endpoint': 'GET /foo/bar'
     })
+    t.end()
   })
+  t.end()
 })

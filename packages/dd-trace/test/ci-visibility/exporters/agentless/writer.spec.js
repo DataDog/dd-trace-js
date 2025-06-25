@@ -1,6 +1,7 @@
 'use strict'
 
-require('../../../../../dd-trace/test/setup/tap')
+const t = require('tap')
+require('../../../../../dd-trace/test/setup/core')
 
 const proxyquire = require('proxyquire')
 const { expect } = require('chai')
@@ -14,8 +15,8 @@ let coverageEncoder
 let url
 let log
 
-describe('CI Visibility Writer', () => {
-  beforeEach(() => {
+t.test('CI Visibility Writer', t => {
+  t.beforeEach(() => {
     span = 'formatted'
 
     request = sinon.stub().yieldsAsync(null, 'OK', 200)
@@ -58,34 +59,38 @@ describe('CI Visibility Writer', () => {
     writer = new Writer({ url, tags: { 'runtime-id': 'runtime-id' }, coverageUrl: url })
   })
 
-  describe('append', () => {
-    it('should encode a trace', () => {
+  t.test('append', t => {
+    t.test('should encode a trace', t => {
       writer.append([span])
 
       expect(encoder.encode).to.have.been.calledWith([span])
+      t.end()
     })
+    t.end()
   })
 
-  describe('flush', () => {
-    it('should skip flushing if empty', () => {
+  t.test('flush', t => {
+    t.test('should skip flushing if empty', t => {
       writer.flush()
 
       expect(encoder.makePayload).to.not.have.been.called
+      t.end()
     })
 
-    it('should empty the internal queue', () => {
+    t.test('should empty the internal queue', t => {
       encoder.count.returns(1)
 
       writer.flush()
 
       expect(encoder.makePayload).to.have.been.called
+      t.end()
     })
 
-    it('should call callback when empty', (done) => {
-      writer.flush(done)
+    t.test('should call callback when empty', (t) => {
+      writer.flush(t.end)
     })
 
-    it('should flush its traces to the intake, and call callback', (done) => {
+    t.test('should flush its traces to the intake, and call callback', (t) => {
       const expectedData = Buffer.from('prefixed')
 
       encoder.count.returns(2)
@@ -100,12 +105,12 @@ describe('CI Visibility Writer', () => {
             'Content-Type': 'application/msgpack'
           }
         })
-        done()
+        t.end()
       })
     })
 
-    describe('when request fails', function () {
-      it('should log request errors', done => {
+    t.test('when request fails', function (t) {
+      t.test('should log request errors', t => {
         const error = new Error('boom')
 
         request.yields(error)
@@ -114,9 +119,12 @@ describe('CI Visibility Writer', () => {
 
         writer.flush(() => {
           expect(log.error).to.have.been.calledWith('Error sending CI agentless payload', error)
-          done()
+          t.end()
         })
       })
+      t.end()
     })
+    t.end()
   })
+  t.end()
 })

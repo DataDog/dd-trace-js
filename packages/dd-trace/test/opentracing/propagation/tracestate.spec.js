@@ -1,24 +1,26 @@
 'use strict'
 
-require('../../setup/tap')
+const t = require('tap')
+require('../../setup/core')
 
 const { expect } = require('chai')
 
-describe('TraceState', () => {
+t.test('TraceState', t => {
   let TraceState
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     TraceState = require('../../../src/opentracing/propagation/tracestate')
   })
 
-  it('should convert from header', () => {
+  t.test('should convert from header', t => {
     const ts = TraceState.fromString('other=bleh,dd=s:2;o:foo;t.dm:-4')
     expect(ts).to.be.an.instanceOf(Map)
     expect(ts.get('other')).to.equal('bleh')
     expect(ts.get('dd')).to.equal('s:2;o:foo;t.dm:-4')
+    t.end()
   })
 
-  it('should convert to header', () => {
+  t.test('should convert to header', t => {
     // NOTE: order is reversed because it makes use of insertion order to represent last-edited
     // by deleting on-change so the most recently edited pairs will always appear at the end.
     // However the spec requires that entries are ordered recently edited first.
@@ -27,9 +29,10 @@ describe('TraceState', () => {
       ['other', 'bleh']
     ])
     expect(ts.toString()).to.equal('other=bleh,dd=s:2;o:foo;t.dm:-4')
+    t.end()
   })
 
-  it('should extract our vendor key as a map', () => {
+  t.test('should extract our vendor key as a map', t => {
     const ts = TraceState.fromString('other=bleh,dd=s:2;o:foo:bar;t.dm:-4')
 
     let called = false
@@ -42,9 +45,10 @@ describe('TraceState', () => {
       expect(state.get('t.dm')).to.equal('-4')
     })
     expect(called).to.be.true
+    t.end()
   })
 
-  it('should mutate value in tracestate when changing value', () => {
+  t.test('should mutate value in tracestate when changing value', t => {
     const ts = TraceState.fromString('other=bleh,dd=s:2;o:foo:bar;t.dm:-4')
 
     // Set
@@ -57,9 +61,10 @@ describe('TraceState', () => {
 
     // Vendor key should move to the front on modification
     expect(ts.toString()).to.equal('dd=s:2;o:baz:buz;t.dm:-4,other=bleh')
+    t.end()
   })
 
-  it('should mutate value in tracestate when deleting value', () => {
+  t.test('should mutate value in tracestate when deleting value', t => {
     const ts = TraceState.fromString('other=bleh,dd=s:2;o:foo:bar;t.dm:-4')
 
     // Delete
@@ -72,9 +77,10 @@ describe('TraceState', () => {
 
     // Vendor key should move to the front on modification
     expect(ts.toString()).to.equal('dd=s:2;t.dm:-4,other=bleh')
+    t.end()
   })
 
-  it('should remove value from tracestate when clearing values', () => {
+  t.test('should remove value from tracestate when clearing values', t => {
     const ts = TraceState.fromString('other=bleh,dd=s:2;o:foo:bar;t.dm:-4')
 
     // Clear
@@ -87,5 +93,7 @@ describe('TraceState', () => {
 
     // Vendor key should move to the front on modification
     expect(ts.toString()).to.equal('other=bleh')
+    t.end()
   })
+  t.end()
 })

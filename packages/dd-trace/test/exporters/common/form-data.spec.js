@@ -1,6 +1,7 @@
 'use strict'
 
-require('../../setup/tap')
+const t = require('tap')
+require('../../setup/core')
 
 const { expect } = require('chai')
 
@@ -14,24 +15,26 @@ async function streamToString (stream) {
   return Buffer.concat(chunks).toString()
 }
 
-describe('exporters/form-data', () => {
-  it('should have a valid boundary', () => {
+t.test('exporters/form-data', t => {
+  t.test('should have a valid boundary', t => {
     const form = new FormData()
 
     expect(form._boundary)
       .to.be.a('string')
       .and.not.be.empty
+    t.end()
   })
 
-  it('should get expected headers', () => {
+  t.test('should get expected headers', t => {
     const form = new FormData()
 
     expect(form.getHeaders()).to.deep.equal({
       'Content-Type': 'multipart/form-data; boundary=' + form._boundary
     })
+    t.end()
   })
 
-  it('should encode key/value fields correctly', async () => {
+  t.test('should encode key/value fields correctly', async t => {
     const form = new FormData()
 
     const key = 'foo'
@@ -47,9 +50,10 @@ describe('exporters/form-data', () => {
       `--${form._boundary}--`,
       ''
     ].join('\r\n'))
+    t.end()
   })
 
-  it('should encode files correctly', async () => {
+  t.test('should encode files correctly', async t => {
     const form = new FormData()
 
     const key = 'foo'
@@ -67,9 +71,10 @@ describe('exporters/form-data', () => {
       `--${form._boundary}--`,
       ''
     ].join('\r\n'))
+    t.end()
   })
 
-  it('should encode multiple files and fields correctly', async () => {
+  t.test('should encode multiple files and fields correctly', async t => {
     const form = new FormData()
 
     const fields = [
@@ -99,5 +104,7 @@ describe('exporters/form-data', () => {
       `--${form._boundary}--`,
       ''
     ].join('\r\n'))
+    t.end()
   })
+  t.end()
 })

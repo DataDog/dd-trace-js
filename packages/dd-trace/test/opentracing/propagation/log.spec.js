@@ -1,17 +1,18 @@
 'use strict'
 
-require('../../setup/tap')
+const t = require('tap')
+require('../../setup/core')
 
 const id = require('../../../src/id')
 const SpanContext = require('../../../src/opentracing/span_context')
 
-describe('LogPropagator', () => {
+t.test('LogPropagator', t => {
   let LogPropagator
   let propagator
   let log
   let config
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     config = {
       service: 'test',
       env: 'dev',
@@ -27,8 +28,8 @@ describe('LogPropagator', () => {
     }
   })
 
-  describe('inject', () => {
-    it('should inject the span context into the carrier', () => {
+  t.test('inject', t => {
+    t.test('should inject the span context into the carrier', t => {
       const carrier = {}
       const spanContext = new SpanContext({
         traceId: id('123', 10),
@@ -40,9 +41,10 @@ describe('LogPropagator', () => {
       expect(carrier).to.have.property('dd')
       expect(carrier.dd).to.have.property('trace_id', '123')
       expect(carrier.dd).to.have.property('span_id', '456')
+      t.end()
     })
 
-    it('should inject the global context into the carrier', () => {
+    t.test('should inject the global context into the carrier', t => {
       const carrier = {}
 
       propagator.inject(null, carrier)
@@ -54,9 +56,10 @@ describe('LogPropagator', () => {
           version: '1.0.0'
         }
       })
+      t.end()
     })
 
-    it('should inject 128-bit trace IDs when enabled', () => {
+    t.test('should inject 128-bit trace IDs when enabled', t => {
       config.traceId128BitLoggingEnabled = true
       config.traceId128BitGenerationEnabled = true
 
@@ -75,9 +78,10 @@ describe('LogPropagator', () => {
       expect(carrier).to.have.property('dd')
       expect(carrier.dd).to.have.property('trace_id', '87654321876543211234567812345678')
       expect(carrier.dd).to.have.property('span_id', '456')
+      t.end()
     })
 
-    it('should correctly inject 128 bit trace ids when _dd.p.tid is present', () => {
+    t.test('should correctly inject 128 bit trace ids when _dd.p.tid is present', t => {
       config.traceId128BitLoggingEnabled = true
       config.traceId128BitGenerationEnabled = true
       const carrier = {}
@@ -95,9 +99,10 @@ describe('LogPropagator', () => {
       expect(carrier).to.have.property('dd')
       expect(carrier.dd).to.have.property('trace_id', '4e2a9c1573d240b1a3b7e3c1d4c2f9a7')
       expect(carrier.dd).to.have.property('span_id', '456')
+      t.end()
     })
 
-    it('should not inject 128-bit trace IDs when disabled', () => {
+    t.test('should not inject 128-bit trace IDs when disabled', t => {
       config.traceId128BitLoggingEnabled = false
       config.traceId128BitGenerationEnabled = true
       const carrier = {}
@@ -115,9 +120,10 @@ describe('LogPropagator', () => {
       expect(carrier).to.have.property('dd')
       expect(carrier.dd).to.have.property('trace_id', '123')
       expect(carrier.dd).to.have.property('span_id', '456')
+      t.end()
     })
 
-    it('should not inject 128-bit trace IDs when 128 bit generation is disabled', () => {
+    t.test('should not inject 128-bit trace IDs when 128 bit generation is disabled', t => {
       config.traceId128BitLoggingEnabled = true
       config.traceId128BitGenerationEnabled = false
       const carrier = {}
@@ -135,11 +141,13 @@ describe('LogPropagator', () => {
       expect(carrier).to.have.property('dd')
       expect(carrier.dd).to.have.property('trace_id', '123')
       expect(carrier.dd).to.have.property('span_id', '456')
+      t.end()
     })
+    t.end()
   })
 
-  describe('extract', () => {
-    it('should extract a span context from the carrier', () => {
+  t.test('extract', t => {
+    t.test('should extract a span context from the carrier', t => {
       const carrier = log
       const spanContext = propagator.extract(carrier)
 
@@ -147,9 +155,10 @@ describe('LogPropagator', () => {
         traceId: id('123', 10),
         spanId: id('456', 10)
       }))
+      t.end()
     })
 
-    it('should convert signed IDs to unsigned', () => {
+    t.test('should convert signed IDs to unsigned', t => {
       log.dd.trace_id = '-123'
       log.dd.span_id = '-456'
 
@@ -160,16 +169,18 @@ describe('LogPropagator', () => {
         traceId: id('18446744073709551493', 10), // -123 casted to uint64
         spanId: id('18446744073709551160', 10) // -456 casted to uint64
       }))
+      t.end()
     })
 
-    it('should return null if the carrier does not contain a trace', () => {
+    t.test('should return null if the carrier does not contain a trace', t => {
       const carrier = {}
       const spanContext = propagator.extract(carrier)
 
       expect(spanContext).to.equal(null)
+      t.end()
     })
 
-    it('should extract 128-bit IDs', () => {
+    t.test('should extract 128-bit IDs', t => {
       config.traceId128BitLoggingEnabled = true
       log.dd.trace_id = '87654321876543211234567812345678'
 
@@ -187,6 +198,9 @@ describe('LogPropagator', () => {
           }
         }
       }))
+      t.end()
     })
+    t.end()
   })
+  t.end()
 })

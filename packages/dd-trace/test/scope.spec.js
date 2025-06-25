@@ -1,43 +1,49 @@
 'use strict'
 
-require('./setup/tap')
+const t = require('tap')
+require('./setup/core')
 
 const Span = require('opentracing').Span
 const Scope = require('../src/scope')
 
-describe('Scope', () => {
+t.test('Scope', t => {
   let scope
   let span
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     scope = new Scope()
     span = new Span()
   })
 
-  describe('active()', () => {
-    it('should return null by default', () => {
+  t.test('active()', t => {
+    t.test('should return null by default', t => {
       expect(scope.active()).to.be.null
+      t.end()
     })
+    t.end()
   })
 
-  describe('activate()', () => {
-    it('should return the value returned by the callback', () => {
+  t.test('activate()', t => {
+    t.test('should return the value returned by the callback', t => {
       expect(scope.activate(span, () => 'test')).to.equal('test')
+      t.end()
     })
 
-    it('should preserve the surrounding scope', () => {
+    t.test('should preserve the surrounding scope', t => {
       expect(scope.active()).to.be.null
 
       scope.activate(span, () => {})
 
       expect(scope.active()).to.be.null
+      t.end()
     })
 
-    it('should support an invalid callback', () => {
+    t.test('should support an invalid callback', t => {
       expect(() => { scope.activate(span, 'invalid') }).to.not.throw(Error)
+      t.end()
     })
 
-    it('should activate the span on the current scope', () => {
+    t.test('should activate the span on the current scope', t => {
       expect(scope.active()).to.be.null
 
       scope.activate(span, () => {
@@ -45,27 +51,28 @@ describe('Scope', () => {
       })
 
       expect(scope.active()).to.be.null
+      t.end()
     })
 
-    it('should persist through setTimeout', done => {
+    t.test('should persist through setTimeout', t => {
       scope.activate(span, () => {
         setTimeout(() => {
           expect(scope.active()).to.equal(span)
-          done()
+          t.end()
         }, 0)
       })
     })
 
-    it('should persist through setImmediate', done => {
+    t.test('should persist through setImmediate', t => {
       scope.activate(span, () => {
         setImmediate(() => {
           expect(scope.active()).to.equal(span)
-          done()
+          t.end()
         }, 0)
       })
     })
 
-    it('should persist through setInterval', done => {
+    t.test('should persist through setInterval', t => {
       scope.activate(span, () => {
         let shouldReturn = false
 
@@ -74,7 +81,7 @@ describe('Scope', () => {
 
           if (shouldReturn) {
             clearInterval(timer)
-            return done()
+            return t.end()
           }
 
           shouldReturn = true
@@ -82,16 +89,16 @@ describe('Scope', () => {
       })
     })
 
-    it('should persist through process.nextTick', done => {
+    t.test('should persist through process.nextTick', t => {
       scope.activate(span, () => {
         process.nextTick(() => {
           expect(scope.active()).to.equal(span)
-          done()
+          t.end()
         }, 0)
       })
     })
 
-    it('should persist through promises', () => {
+    t.test('should persist through promises', t => {
       const promise = Promise.resolve()
 
       return scope.activate(span, () => {
@@ -101,18 +108,18 @@ describe('Scope', () => {
       })
     })
 
-    it('should handle concurrency', done => {
+    t.test('should handle concurrency', t => {
       scope.activate(span, () => {
         setImmediate(() => {
           expect(scope.active()).to.equal(span)
-          done()
+          t.end()
         })
       })
 
       scope.activate(span, () => {})
     })
 
-    it('should handle errors', () => {
+    t.test('should handle errors', t => {
       const error = new Error('boom')
 
       sinon.spy(span, 'setTag')
@@ -124,12 +131,14 @@ describe('Scope', () => {
       } catch (e) {
         expect(span.setTag).to.have.been.calledWith('error', e)
       }
+      t.end()
     })
+    t.end()
   })
 
-  describe('bind()', () => {
-    describe('with a function', () => {
-      it('should bind the function to the active span', () => {
+  t.test('bind()', t => {
+    t.test('with a function', t => {
+      t.test('should bind the function to the active span', t => {
         let fn = () => {
           expect(scope.active()).to.equal(span)
         }
@@ -139,9 +148,10 @@ describe('Scope', () => {
         })
 
         fn()
+        t.end()
       })
 
-      it('should bind the function to the provided span', () => {
+      t.test('should bind the function to the provided span', t => {
         let fn = () => {
           expect(scope.active()).to.equal(span)
         }
@@ -149,21 +159,28 @@ describe('Scope', () => {
         fn = scope.bind(fn, span)
 
         fn()
+        t.end()
       })
 
-      it('should keep the return value', () => {
+      t.test('should keep the return value', t => {
         let fn = () => 'test'
 
         fn = scope.bind(fn)
 
         expect(fn()).to.equal('test')
+        t.end()
       })
+      t.end()
     })
 
-    describe('with an unsupported target', () => {
-      it('should return the target', () => {
+    t.test('with an unsupported target', t => {
+      t.test('should return the target', t => {
         expect(scope.bind('test', span)).to.equal('test')
+        t.end()
       })
+      t.end()
     })
+    t.end()
   })
+  t.end()
 })

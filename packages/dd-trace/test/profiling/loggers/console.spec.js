@@ -1,15 +1,16 @@
 'use strict'
 
-require('../../setup/tap')
+const t = require('tap')
+require('../../setup/core')
 
 /* eslint-disable no-console */
 
 const sinon = require('sinon')
 
-describe('loggers/console', () => {
+t.test('loggers/console', t => {
   let ConsoleLogger
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     sinon.stub(console, 'debug')
     sinon.stub(console, 'info')
     sinon.stub(console, 'warn')
@@ -18,14 +19,14 @@ describe('loggers/console', () => {
     ConsoleLogger = require('../../../src/profiling/loggers/console').ConsoleLogger
   })
 
-  afterEach(() => {
+  t.afterEach(() => {
     console.debug.restore()
     console.info.restore()
     console.warn.restore()
     console.error.restore()
   })
 
-  it('should call the underlying console for error', () => {
+  t.test('should call the underlying console for error', t => {
     const logger = new ConsoleLogger()
 
     logger.error('error')
@@ -38,9 +39,10 @@ describe('loggers/console', () => {
     sinon.assert.notCalled(console.debug)
     sinon.assert.notCalled(console.info)
     sinon.assert.notCalled(console.warn)
+    t.end()
   })
 
-  it('should call the underlying console for warn', () => {
+  t.test('should call the underlying console for warn', t => {
     const logger = new ConsoleLogger({ level: 'warn' })
 
     logger.error('error')
@@ -54,9 +56,10 @@ describe('loggers/console', () => {
     sinon.assert.calledWith(console.warn, 'warn')
     sinon.assert.notCalled(console.info)
     sinon.assert.notCalled(console.debug)
+    t.end()
   })
 
-  it('should call the underlying console for info', () => {
+  t.test('should call the underlying console for info', t => {
     const logger = new ConsoleLogger({ level: 'info' })
 
     logger.error('error')
@@ -71,9 +74,10 @@ describe('loggers/console', () => {
     sinon.assert.calledOnce(console.info)
     sinon.assert.calledWith(console.info, 'info')
     sinon.assert.notCalled(console.debug)
+    t.end()
   })
 
-  it('should call the underlying console for debug', () => {
+  t.test('should call the underlying console for debug', t => {
     const logger = new ConsoleLogger({ level: 'debug' })
 
     logger.error('error')
@@ -89,5 +93,7 @@ describe('loggers/console', () => {
     sinon.assert.calledWith(console.info, 'info')
     sinon.assert.calledOnce(console.debug)
     sinon.assert.calledWith(console.debug, 'debug')
+    t.end()
   })
+  t.end()
 })

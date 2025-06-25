@@ -1,9 +1,10 @@
 'use strict'
 
-require('../setup/tap')
+const t = require('tap')
+require('../setup/core')
 
-describe('config/disabled_instrumentations', () => {
-  it('should disable loading instrumentations completely', () => {
+t.test('config/disabled_instrumentations', t => {
+  t.test('should disable loading instrumentations completely', t => {
     process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = 'express'
     const handleBefore = require('express').application.handle
     const tracer = require('../../../..')
@@ -14,9 +15,10 @@ describe('config/disabled_instrumentations', () => {
     expect(handleBefore).to.equal(handleAfterImport)
     expect(handleBefore).to.equal(handleAfterInit)
     delete process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS
+    t.end()
   })
 
-  it('should disable loading instrumentations using DD_TRACE_<INTEGRATION>_ENABLED', () => {
+  t.test('should disable loading instrumentations using DD_TRACE_<INTEGRATION>_ENABLED', t => {
     process.env.DD_TRACE_EXPRESS_ENABLED = 'false'
     const handleBefore = require('express').application.handle
     const tracer = require('../../../..')
@@ -27,5 +29,7 @@ describe('config/disabled_instrumentations', () => {
     expect(handleBefore).to.equal(handleAfterImport)
     expect(handleBefore).to.equal(handleAfterInit)
     delete process.env.DD_TRACE_EXPRESS_ENABLED
+    t.end()
   })
+  t.end()
 })

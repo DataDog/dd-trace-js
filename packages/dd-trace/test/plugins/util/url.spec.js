@@ -1,11 +1,12 @@
 'use strict'
 
-require('../../setup/tap')
+const t = require('tap')
+require('../../setup/core')
 
 const { filterSensitiveInfoFromRepository } = require('../../../src/plugins/util/url')
 
-describe('filterSensitiveInfoFromRepository', () => {
-  it('returns the same url if no sensitive info is present', () => {
+t.test('filterSensitiveInfoFromRepository', t => {
+  t.test('returns the same url if no sensitive info is present', t => {
     const urls = [
       'http://example.com/repository.git',
       'https://datadog.com/repository.git',
@@ -15,9 +16,10 @@ describe('filterSensitiveInfoFromRepository', () => {
     urls.forEach(url => {
       expect(filterSensitiveInfoFromRepository(url)).to.equal(url)
     })
+    t.end()
   })
 
-  it('returns the scrubbed url if credentials are present', () => {
+  t.test('returns the scrubbed url if credentials are present', t => {
     const sensitiveUrls = [
       'https://username:password@datadog.com/repository.git',
       'ssh://username@host.xz:port/path/to/repo.git/',
@@ -26,9 +28,10 @@ describe('filterSensitiveInfoFromRepository', () => {
     expect(filterSensitiveInfoFromRepository(sensitiveUrls[0])).to.equal('https://datadog.com/repository.git')
     expect(filterSensitiveInfoFromRepository(sensitiveUrls[1])).to.equal('ssh://host.xz:port/path/to/repo.git/')
     expect(filterSensitiveInfoFromRepository(sensitiveUrls[2])).to.equal('https://datadog.com/repository.git')
+    t.end()
   })
 
-  it('does not crash for empty or invalid repository URLs', () => {
+  t.test('does not crash for empty or invalid repository URLs', t => {
     const invalidUrls = [
       null,
       '',
@@ -38,5 +41,7 @@ describe('filterSensitiveInfoFromRepository', () => {
     invalidUrls.forEach(url => {
       expect(filterSensitiveInfoFromRepository(url)).to.equal('')
     })
+    t.end()
   })
+  t.end()
 })

@@ -1,15 +1,16 @@
 'use strict'
 
-require('./setup/tap')
+const t = require('tap')
+require('./setup/core')
 
 const id = require('../src/id')
 
-describe('span sampler', () => {
+t.test('span sampler', t => {
   const spies = {}
   let SpanSampler
   let SamplingRule
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     if (!SamplingRule) {
       SamplingRule = require('../src/sampling_rule')
       spies.match = sinon.spy(SamplingRule.prototype, 'match')
@@ -23,7 +24,7 @@ describe('span sampler', () => {
     })
   })
 
-  it('should not sample anything when trace is kept', done => {
+  t.test('should not sample anything when trace is kept', t => {
     const sampler = new SpanSampler({})
 
     const spanContext = {
@@ -48,11 +49,11 @@ describe('span sampler', () => {
     try {
       const ingested = sampler.sample(spanContext)
       expect(ingested).to.be.undefined
-      done()
-    } catch (err) { done(err) }
+      t.end()
+    } catch (err) { t.error(err) }
   })
 
-  it('adds _spanSampling when sampled successfully', () => {
+  t.test('adds _spanSampling when sampled successfully', t => {
     const sampler = new SpanSampler({
       spanSamplingRules: [
         {
@@ -92,9 +93,10 @@ describe('span sampler', () => {
       sampleRate: 1.0,
       maxPerSecond: 5
     })
+    t.end()
   })
 
-  it('should stop at first rule match', () => {
+  t.test('should stop at first rule match', t => {
     const sampler = new SpanSampler({
       spanSamplingRules: [
         {
@@ -146,9 +148,10 @@ describe('span sampler', () => {
       sampleRate: 1.0,
       maxPerSecond: 5
     })
+    t.end()
   })
 
-  it('should sample multiple spans with one rule', () => {
+  t.test('should sample multiple spans with one rule', t => {
     const sampler = new SpanSampler({
       spanSamplingRules: [
         {
@@ -208,9 +211,10 @@ describe('span sampler', () => {
       sampleRate: 1.0,
       maxPerSecond: 5
     })
+    t.end()
   })
 
-  it('should sample mutiple spans with multiple rules', () => {
+  t.test('should sample mutiple spans with multiple rules', t => {
     const sampler = new SpanSampler({
       spanSamplingRules: [
         {
@@ -276,5 +280,7 @@ describe('span sampler', () => {
       sampleRate: 1.0,
       maxPerSecond: 3
     })
+    t.end()
   })
+  t.end()
 })

@@ -1,23 +1,24 @@
 'use strict'
 
-require('../../../../dd-trace/test/setup/tap')
+const t = require('tap')
+require('../../../../dd-trace/test/setup/core')
 
 const { JSONEncoder } = require('../../../src/ci-visibility/encode/json-encoder')
 
-describe('CI Visibility JSON encoder', () => {
+t.test('CI Visibility JSON encoder', t => {
   let send, originalSend
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     send = sinon.spy()
     originalSend = process.send
     process.send = send
   })
 
-  afterEach(() => {
+  t.afterEach(() => {
     process.send = originalSend
   })
 
-  it('can JSON serialize payloads', () => {
+  t.test('can JSON serialize payloads', t => {
     const payload = [{ type: 'test' }, { type: 'test', name: 'test2' }]
     const payloadSecond = { type: 'test', name: 'other' }
     const encoder = new JSONEncoder()
@@ -27,5 +28,7 @@ describe('CI Visibility JSON encoder', () => {
     expect(encoder.count()).to.equal(2)
     const serializedPayload = encoder.makePayload()
     expect(serializedPayload).to.equal(JSON.stringify([payload, payloadSecond]))
+    t.end()
   })
+  t.end()
 })

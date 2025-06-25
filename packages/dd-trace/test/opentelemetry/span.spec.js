@@ -1,6 +1,7 @@
 'use strict'
 
-require('../setup/tap')
+const t = require('tap')
+require('../setup/core')
 
 const sinon = require('sinon')
 const { performance } = require('perf_hooks')
@@ -35,31 +36,34 @@ function makeSpan (...args) {
   return tracer.startSpan(...args)
 }
 
-describe('OTel Span', () => {
-  it('should inherit service and host name from tracer', () => {
+t.test('OTel Span', t => {
+  t.test('should inherit service and host name from tracer', t => {
     const span = makeSpan('name')
 
     const context = span._ddSpan.context()
     expect(context._tags[SERVICE_NAME]).to.equal(tracer._tracer._service)
     expect(context._hostname).to.equal(tracer._hostname)
+    t.end()
   })
 
-  it('should expose parent span id', () => {
+  t.test('should expose parent span id', t => {
     tracer.trace('outer', (outer) => {
       const span = makeSpan('name', {})
       expect(span.parentSpanId).to.equal(outer.context()._spanId.toString(16))
     })
+    t.end()
   })
 
-  it('should expose span name', () => {
+  t.test('should expose span name', t => {
     const span = makeSpan('name')
 
     expect(span.name).to.equal('name')
+    t.end()
   })
 
-  describe('span name default mapping', () => {
+  t.test('span name default mapping', t => {
     // Explicitly named operation
-    it('should map span name from operation.name', () => {
+    t.test('should map span name from operation.name', t => {
       const span = makeSpan(undefined, {
         attributes: {
           'operation.name': 'test'
@@ -67,21 +71,23 @@ describe('OTel Span', () => {
       })
 
       expect(span.name).to.equal('test')
+      t.end()
     })
 
     // HTTP server and client requests
     for (const key of ['http.method', 'http.request.method']) {
       for (const kind of [api.SpanKind.CLIENT, api.SpanKind.SERVER]) {
         const kindName = spanKindNames[kind]
-        it(`should map span name from ${kindName} kind with ${key}`, () => {
+        t.test(`should map span name from ${kindName} kind with ${key}`, t => {
           const span = makeSpan(undefined, { kind, attributes: { [key]: 'GET' } })
           expect(span.name).to.equal(`http.${kindName}.request`)
+          t.end()
         })
       }
     }
 
     // Database operations
-    it('should map span name from db.system if client kind', () => {
+    t.test('should map span name from db.system if client kind', t => {
       const span = makeSpan(undefined, {
         kind: api.SpanKind.CLIENT,
         attributes: {
@@ -90,6 +96,7 @@ describe('OTel Span', () => {
       })
 
       expect(span.name).to.equal('mysql.query')
+      t.end()
     })
 
     // Messaging systems
@@ -100,18 +107,19 @@ describe('OTel Span', () => {
       api.SpanKind.CONSUMER
     ]) {
       const kindName = spanKindNames[kind]
-      it(`should map span name from messaging.system and messaging.operation when ${kindName} kind`, () => {
+      t.test(`should map span name from messaging.system and messaging.operation when ${kindName} kind`, t => {
         const attributes = {
           'messaging.system': kindName,
           'messaging.operation': 'send'
         }
         const span = makeSpan(undefined, { kind, attributes })
         expect(span.name).to.equal(`${kindName}.send`)
+        t.end()
       })
     }
 
     // AWS client request
-    it('should map span name from rpc.system of aws-api if client kind', () => {
+    t.test('should map span name from rpc.system of aws-api if client kind', t => {
       const span = makeSpan(undefined, {
         kind: api.SpanKind.CLIENT,
         attributes: {
@@ -120,9 +128,10 @@ describe('OTel Span', () => {
       })
 
       expect(span.name).to.equal('aws.client.request')
+      t.end()
     })
 
-    it('should map span name from rpc.system of aws-api with rpc.service if client kind', () => {
+    t.test('should map span name from rpc.system of aws-api with rpc.service if client kind', t => {
       const span = makeSpan(undefined, {
         kind: api.SpanKind.CLIENT,
         attributes: {
@@ -132,12 +141,13 @@ describe('OTel Span', () => {
       })
 
       expect(span.name).to.equal('aws.s3.request')
+      t.end()
     })
 
     // RPC client and server requests
     for (const kind of [api.SpanKind.CLIENT, api.SpanKind.SERVER]) {
       const kindName = spanKindNames[kind]
-      it(`should map span name from other rpc.system if ${kindName} kind`, () => {
+      t.test(`should map span name from other rpc.system if ${kindName} kind`, t => {
         const span = makeSpan(undefined, {
           kind,
           attributes: {
@@ -146,11 +156,12 @@ describe('OTel Span', () => {
         })
 
         expect(span.name).to.equal(`system.${kindName}.request`)
+        t.end()
       })
     }
 
     // FaaS invocations
-    it('should map span name from faas.invoked_provider and faas.invoked_name if client kind', () => {
+    t.test('should map span name from faas.invoked_provider and faas.invoked_name if client kind', t => {
       const span = makeSpan(undefined, {
         kind: api.SpanKind.CLIENT,
         attributes: {
@@ -160,9 +171,10 @@ describe('OTel Span', () => {
       })
 
       expect(span.name).to.equal('provider.name.invoke')
+      t.end()
     })
 
-    it('should map span name from faas.trigger if server kind', () => {
+    t.test('should map span name from faas.trigger if server kind', t => {
       const span = makeSpan(undefined, {
         kind: api.SpanKind.SERVER,
         attributes: {
@@ -171,10 +183,11 @@ describe('OTel Span', () => {
       })
 
       expect(span.name).to.equal('trigger.invoke')
+      t.end()
     })
 
     // GraphQL
-    it('should map span name from graphql.operation.type', () => {
+    t.test('should map span name from graphql.operation.type', t => {
       const span = makeSpan(undefined, {
         attributes: {
           'graphql.operation.type': 'query'
@@ -182,13 +195,14 @@ describe('OTel Span', () => {
       })
 
       expect(span.name).to.equal('graphql.server.request')
+      t.end()
     })
 
     // Network
     for (const kind of [api.SpanKind.CLIENT, api.SpanKind.SERVER]) {
       const kindName = spanKindNames[kind]
 
-      it(`should map span name when ${kindName} kind with network.protocol.name`, () => {
+      t.test(`should map span name when ${kindName} kind with network.protocol.name`, t => {
         const span = makeSpan(undefined, {
           kind,
           attributes: {
@@ -197,14 +211,16 @@ describe('OTel Span', () => {
         })
 
         expect(span.name).to.equal(`protocol.${kindName}.request`)
+        t.end()
       })
 
-      it(`should map span name when ${kindName} kind without network.protocol.name`, () => {
+      t.test(`should map span name when ${kindName} kind without network.protocol.name`, t => {
         const span = makeSpan(undefined, {
           kind
         })
 
         expect(span.name).to.equal(`${kindName}.request`)
+        t.end()
       })
     }
 
@@ -215,41 +231,47 @@ describe('OTel Span', () => {
       api.SpanKind.CONSUMER
     ]) {
       const kindName = spanKindNames[kind]
-      it(`should map span name with ${kindName} kind`, () => {
+      t.test(`should map span name with ${kindName} kind`, t => {
         const span = makeSpan(undefined, { kind })
         expect(span.name).to.equal(kindName)
+        t.end()
       })
     }
 
-    it('should map span name with default span kind of internal', () => {
+    t.test('should map span name with default span kind of internal', t => {
       const span = makeSpan()
       expect(span.name).to.equal('internal')
+      t.end()
     })
+    t.end()
   })
 
-  it('should copy span name to resource.name', () => {
+  t.test('should copy span name to resource.name', t => {
     const span = makeSpan('name')
 
     const context = span._ddSpan.context()
     expect(context._tags[RESOURCE_NAME]).to.equal('name')
+    t.end()
   })
 
-  it('should expose span context', () => {
+  t.test('should expose span context', t => {
     const span = makeSpan('name')
 
     const spanContext = span.spanContext()
     expect(spanContext).to.be.an.instanceOf(SpanContext)
     expect(spanContext._ddContext).to.be.equal(span._ddSpan.context())
+    t.end()
   })
 
-  it('should expose duration', () => {
+  t.test('should expose duration', t => {
     const span = makeSpan('name')
     span.end()
 
     expect(span.duration).to.equal(span._ddSpan._duration)
+    t.end()
   })
 
-  it('should expose trace provider resource', () => {
+  t.test('should expose trace provider resource', t => {
     const resource = 'resource'
     const tracerProvider = new TracerProvider({
       resource
@@ -259,9 +281,10 @@ describe('OTel Span', () => {
     const span = tracer.startSpan('name')
 
     expect(span.resource).to.equal(resource)
+    t.end()
   })
 
-  it('should expose tracer instrumentation library', () => {
+  t.test('should expose tracer instrumentation library', t => {
     const tracerProvider = new TracerProvider()
     const tracer = tracerProvider.getTracer('library name', '1.2.3')
 
@@ -271,16 +294,18 @@ describe('OTel Span', () => {
       name: 'library name',
       version: '1.2.3'
     })
+    t.end()
   })
 
-  it('should update span name', () => {
+  t.test('should update span name', t => {
     const span = makeSpan('name')
     span.updateName('new name')
 
     expect(span.name).to.equal('new name')
+    t.end()
   })
 
-  it('should set attributes', () => {
+  t.test('should set attributes', t => {
     const span = makeSpan('name')
 
     const { _tags } = span._ddSpan.context()
@@ -290,29 +315,33 @@ describe('OTel Span', () => {
 
     span.setAttributes({ baz: 'buz' })
     expect(_tags).to.have.property('baz', 'buz')
+    t.end()
   })
 
-  describe('should remap http.response.status_code', () => {
-    it('should remap when setting attributes', () => {
+  t.test('should remap http.response.status_code', t => {
+    t.test('should remap when setting attributes', t => {
       const span = makeSpan('name')
 
       const { _tags } = span._ddSpan.context()
 
       span.setAttributes({ 'http.response.status_code': 200 })
       expect(_tags).to.have.property('http.status_code', '200')
+      t.end()
     })
 
-    it('should remap when setting singular attribute', () => {
+    t.test('should remap when setting singular attribute', t => {
       const span = makeSpan('name')
 
       const { _tags } = span._ddSpan.context()
 
       span.setAttribute('http.response.status_code', 200)
       expect(_tags).to.have.property('http.status_code', '200')
+      t.end()
     })
+    t.end()
   })
 
-  it('should set span links', () => {
+  t.test('should set span links', t => {
     const span = makeSpan('name')
     const span2 = makeSpan('name2')
     const span3 = makeSpan('name3')
@@ -324,9 +353,10 @@ describe('OTel Span', () => {
 
     span.addLink(span3.spanContext())
     expect(_links).to.have.lengthOf(2)
+    t.end()
   })
 
-  it('should add span pointers', () => {
+  t.test('should add span pointers', t => {
     const span = makeSpan('name')
     const { _links } = span._ddSpan
 
@@ -351,9 +381,10 @@ describe('OTel Span', () => {
     })
     expect(_links[1].context.toTraceId()).to.equal('0')
     expect(_links[1].context.toSpanId()).to.equal('0')
+    t.end()
   })
 
-  it('should set status', () => {
+  t.test('should set status', t => {
     const unset = makeSpan('name')
     const unsetCtx = unset._ddSpan.context()
     unset.setStatus({ code: 0, message: 'unset' })
@@ -370,9 +401,10 @@ describe('OTel Span', () => {
     error.setStatus({ code: 2, message: 'error' })
     expect(errorCtx._tags).to.have.property(ERROR_MESSAGE, 'error')
     expect(errorCtx._tags).to.have.property(IGNORE_OTEL_ERROR, false)
+    t.end()
   })
 
-  it('should record exceptions', () => {
+  t.test('should record exceptions', t => {
     const span = makeSpan('name')
 
     class TestError extends Error {}
@@ -415,9 +447,10 @@ describe('OTel Span', () => {
     expect(formatted).to.have.property('error', 1)
     expect(formatted).to.have.property('meta')
     expect(formatted.meta).to.have.property('error.message', 'foobar')
+    t.end()
   })
 
-  it('should record exception without passing in time', () => {
+  t.test('should record exception without passing in time', t => {
     const stub = sinon.stub(performance, 'now').returns(60000)
     const span = makeSpan('name')
 
@@ -449,9 +482,10 @@ describe('OTel Span', () => {
       startTime: timeInMilliseconds
     }])
     stub.restore()
+    t.end()
   })
 
-  it('should not set status on already ended spans', () => {
+  t.test('should not set status on already ended spans', t => {
     const span = makeSpan('name')
     span.end()
 
@@ -459,9 +493,10 @@ describe('OTel Span', () => {
 
     span.setStatus({ code: 2, message: 'error' })
     expect(_tags).to.not.have.property(ERROR_MESSAGE, 'error')
+    t.end()
   })
 
-  it('should mark ended and expose recording state', () => {
+  t.test('should mark ended and expose recording state', t => {
     const span = makeSpan('name')
 
     expect(span.ended).to.equal(false)
@@ -473,9 +508,10 @@ describe('OTel Span', () => {
     expect(span.ended).to.equal(true)
     expect(span.isRecording()).to.equal(false)
     expect(span._ddSpan).to.have.property('_duration')
+    t.end()
   })
 
-  it('should trigger span processor events', () => {
+  t.test('should trigger span processor events', t => {
     const tracerProvider = new TracerProvider()
     const tracer = tracerProvider.getTracer()
 
@@ -496,9 +532,10 @@ describe('OTel Span', () => {
 
     expect(processor.onStart).to.have.been.calledWith(span, span._context)
     expect(processor.onEnd).to.have.been.calledWith(span)
+    t.end()
   })
 
-  it('should add span events', () => {
+  t.test('should add span events', t => {
     const span1 = makeSpan('span1')
     const span2 = makeSpan('span2')
     const datenow = Date.now()
@@ -518,5 +555,7 @@ describe('OTel Span', () => {
       }
     }])
     expect(events2).to.have.lengthOf(2)
+    t.end()
   })
+  t.end()
 })

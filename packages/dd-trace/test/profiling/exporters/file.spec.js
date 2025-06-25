@@ -1,15 +1,16 @@
 'use strict'
 
-require('../../setup/tap')
+const t = require('tap')
+require('../../setup/core')
 
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
-describe('exporters/file', () => {
+t.test('exporters/file', t => {
   let FileExporter
   let fs
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     fs = {
       writeFile: sinon.stub().yields()
     }
@@ -19,7 +20,7 @@ describe('exporters/file', () => {
     }).FileExporter
   })
 
-  it('should export to a file per profile type', async () => {
+  t.test('should export to a file per profile type', async t => {
     const exporter = new FileExporter()
     const buffer = Buffer.from('profile')
     const profiles = {
@@ -33,9 +34,10 @@ describe('exporters/file', () => {
 
     sinon.assert.calledTwice(fs.writeFile)
     sinon.assert.calledWith(fs.writeFile, 'test_worker_0_20230210T210305Z.pprof', buffer)
+    t.end()
   })
 
-  it('should export to a file per profile type with given prefix', async () => {
+  t.test('should export to a file per profile type with given prefix', async t => {
     const exporter = new FileExporter({ pprofPrefix: 'myprefix_' })
     const buffer = Buffer.from('profile')
     const profiles = {
@@ -49,5 +51,7 @@ describe('exporters/file', () => {
 
     sinon.assert.calledTwice(fs.writeFile)
     sinon.assert.calledWith(fs.writeFile, 'myprefix_test_worker_0_20230210T210305Z.pprof', buffer)
+    t.end()
   })
+  t.end()
 })

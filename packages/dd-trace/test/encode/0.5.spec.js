@@ -1,6 +1,7 @@
 'use strict'
 
-require('../setup/tap')
+const t = require('tap')
+require('../setup/core')
 
 const msgpack = require('@msgpack/msgpack')
 const id = require('../../src/id')
@@ -11,12 +12,12 @@ function randString (length) {
   }).join('')
 }
 
-describe('encode 0.5', () => {
+t.test('encode 0.5', t => {
   let encoder
   let writer
   let data
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     const { AgentEncoder } = require('../../src/encode/0.5')
     writer = { flush: sinon.spy() }
     encoder = new AgentEncoder(writer)
@@ -40,7 +41,7 @@ describe('encode 0.5', () => {
     }]
   })
 
-  it('should encode to msgpack', () => {
+  t.test('should encode to msgpack', t => {
     encoder.encode(data)
 
     const buffer = encoder.makePayload()
@@ -62,9 +63,10 @@ describe('encode 0.5', () => {
     expect(trace[0][9]).to.deep.equal({ [stringMap.indexOf('bar')]: stringMap.indexOf('baz') })
     expect(trace[0][10]).to.deep.equal({ [stringMap.indexOf('example')]: 1 })
     expect(stringMap[trace[0][11]]).to.equal('') // unset
+    t.end()
   })
 
-  it('should encode span events', () => {
+  t.test('should encode span events', t => {
     const topLevelEvents = [
       { name: 'Something went so wrong', time_unix_nano: 1000000 },
       {
@@ -92,9 +94,10 @@ describe('encode 0.5', () => {
       [stringMap.indexOf('bar')]: stringMap.indexOf('baz'),
       [stringMap.indexOf('events')]: stringMap.indexOf(encodedLink)
     })
+    t.end()
   })
 
-  it('should encode span links', () => {
+  t.test('should encode span links', t => {
     const traceIdHigh = id('10')
     const traceId = id('1234abcd1234abcd')
     const rootTid = traceIdHigh.toString(16).padStart(16, '0')
@@ -132,9 +135,10 @@ describe('encode 0.5', () => {
     })
     expect(trace[0][10]).to.deep.equal({ [stringMap.indexOf('example')]: 1 })
     expect(stringMap[trace[0][11]]).to.equal('') // unset
+    t.end()
   })
 
-  it('should encode span link with just span and trace id', () => {
+  t.test('should encode span link with just span and trace id', t => {
     const traceId = '00000000000000001234abcd1234abcd'
     const spanId = '1234abcd1234abcd'
     const encodedLink = `[{"trace_id":"${traceId}","span_id":"${spanId}"}]`
@@ -166,9 +170,10 @@ describe('encode 0.5', () => {
     })
     expect(trace[0][10]).to.deep.equal({ [stringMap.indexOf('example')]: 1 })
     expect(stringMap[trace[0][11]]).to.equal('') // unset
+    t.end()
   })
 
-  it('should truncate long IDs', () => {
+  t.test('should truncate long IDs', t => {
     data[0].trace_id = id('ffffffffffffffff1234abcd1234abcd')
     data[0].span_id = id('ffffffffffffffff1234abcd1234abcd')
     data[0].arent_id = id('ffffffffffffffff1234abcd1234abcd')
@@ -182,9 +187,10 @@ describe('encode 0.5', () => {
     expect(trace[0][3].toString(16)).to.equal('1234abcd1234abcd')
     expect(trace[0][4].toString(16)).to.equal('1234abcd1234abcd')
     expect(trace[0][5].toString(16)).to.equal('1234abcd1234abcd')
+    t.end()
   })
 
-  it('should report its count', () => {
+  t.test('should report its count', t => {
     expect(encoder.count()).to.equal(0)
 
     encoder.encode(data)
@@ -194,9 +200,10 @@ describe('encode 0.5', () => {
     encoder.encode(data)
 
     expect(encoder.count()).to.equal(2)
+    t.end()
   })
 
-  it('should flush when the payload size limit is reached', function () {
+  t.test('should flush when the payload size limit is reached', function (t) {
     // Make 8mb of data
     for (let i = 0; i < 8 * 1024; i++) {
       data[0].meta[`foo${i}`] = randString(1024)
@@ -205,9 +212,10 @@ describe('encode 0.5', () => {
     encoder.encode(data)
 
     expect(writer.flush).to.have.been.called
+    t.end()
   })
 
-  it('should reset after making a payload', () => {
+  t.test('should reset after making a payload', t => {
     encoder.encode(data)
     encoder.makePayload()
 
@@ -217,9 +225,10 @@ describe('encode 0.5', () => {
     expect(payload).to.have.length(12)
     expect(payload[5]).to.equal(1)
     expect(payload[11]).to.equal(0)
+    t.end()
   })
 
-  it('should ignore meta_struct property', () => {
+  t.test('should ignore meta_struct property', t => {
     data[0].meta_struct = { foo: 'bar' }
 
     encoder.encode(data)
@@ -244,5 +253,7 @@ describe('encode 0.5', () => {
     expect(trace[0][10]).to.deep.equal({ [stringMap.indexOf('example')]: 1 })
     expect(stringMap[trace[0][11]]).to.equal('') // unset
     expect(trace[0][12]).to.be.undefined // Everything works the same as without meta_struct, and nothing else is added
+    t.end()
   })
+  t.end()
 })

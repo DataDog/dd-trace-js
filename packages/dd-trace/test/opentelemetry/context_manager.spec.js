@@ -1,6 +1,7 @@
 'use strict'
 
-require('../setup/tap')
+const t = require('tap')
+require('../setup/core')
 
 const { expect } = require('chai')
 const ContextManager = require('../../src/opentelemetry/context_manager')
@@ -16,11 +17,11 @@ function makeSpan (...args) {
   return tracer.startSpan(...args)
 }
 
-describe('OTel Context Manager', () => {
+t.test('OTel Context Manager', t => {
   let contextManager
   let db
 
-  beforeEach(() => {
+  t.beforeEach(() => {
     contextManager = new ContextManager()
     api.context.setGlobalContextManager(contextManager)
     db = {
@@ -31,14 +32,15 @@ describe('OTel Context Manager', () => {
     }
   })
 
-  it('should create a new context', () => {
+  t.test('should create a new context', t => {
     const key1 = api.createContextKey('My first key')
     const key2 = api.createContextKey('My second key')
     expect(key1.description).to.equal('My first key')
     expect(key2.description).to.equal('My second key')
+    t.end()
   })
 
-  it('should delete a context', () => {
+  t.test('should delete a context', t => {
     const key = api.createContextKey('some key')
     const ctx = api.ROOT_CONTEXT
     const ctx2 = ctx.setValue(key, 'context 2')
@@ -49,40 +51,45 @@ describe('OTel Context Manager', () => {
     expect(ctx3.getValue(key)).to.equal(undefined)
     expect(ctx2.getValue(key)).to.equal('context 2')
     expect(ctx.getValue(key)).to.equal(undefined)
+    t.end()
   })
 
-  it('should create a new root context', () => {
+  t.test('should create a new root context', t => {
     const key = api.createContextKey('some key')
     const ctx = api.ROOT_CONTEXT
     const ctx2 = ctx.setValue(key, 'context 2')
     expect(ctx2.getValue(key)).to.equal('context 2')
     expect(ctx.getValue(key)).to.equal(undefined)
+    t.end()
   })
 
-  it('should return root context', () => {
+  t.test('should return root context', t => {
     const ctx = api.context.active()
     expect(ctx).to.be.an.instanceof(ROOT_CONTEXT.constructor)
+    t.end()
   })
 
-  it('should set active context', () => {
+  t.test('should set active context', t => {
     const key = api.createContextKey('Key to store a value')
     const ctx = api.context.active()
 
     api.context.with(ctx.setValue(key, 'context 2'), async () => {
       expect(api.context.active().getValue(key)).to.equal('context 2')
     })
+    t.end()
   })
 
-  it('should set active context on an asynchronous callback and return the result synchronously', async () => {
+  t.test('should set active context on an asynchronous callback and return the result synchronously', async t => {
     const name = await api.context.with(api.context.active(), async () => {
       const row = await db.getSomeValue()
       return row.name
     })
 
     expect(name).to.equal('Dummy Name')
+    t.end()
   })
 
-  it('should set active contexts in nested functions', async () => {
+  t.test('should set active contexts in nested functions', async t => {
     const key = api.createContextKey('Key to store a value')
     const ctx = api.context.active()
     expect(api.context.active().getValue(key)).to.equal(undefined)
@@ -94,9 +101,10 @@ describe('OTel Context Manager', () => {
       expect(api.context.active().getValue(key)).to.equal('context 2')
     })
     expect(api.context.active().getValue(key)).to.equal(undefined)
+    t.end()
   })
 
-  it('should not modify contexts, instead it should create new context objects', async () => {
+  t.test('should not modify contexts, instead it should create new context objects', async t => {
     const key = api.createContextKey('Key to store a value')
 
     const ctx = api.context.active()
@@ -122,9 +130,10 @@ describe('OTel Context Manager', () => {
       return 'return value'
     })
     expect(ret).to.equal('return value')
+    t.end()
   })
 
-  it('should propagate baggage from an otel span to a datadog span', () => {
+  t.test('should propagate baggage from an otel span to a datadog span', t => {
     const entries = {
       foo: { value: 'bar' }
     }
@@ -135,9 +144,10 @@ describe('OTel Context Manager', () => {
     api.context.with(contextWithSpan, () => {
       expect(tracer.scope().active().getBaggageItem('foo')).to.be.equal('bar')
     })
+    t.end()
   })
 
-  it('should propagate baggage from a datadog span to an otel span', () => {
+  t.test('should propagate baggage from a datadog span to an otel span', t => {
     const baggageKey = 'raccoon'
     const baggageVal = 'chunky'
     const ddSpan = tracer.startSpan('dd-to-otel')
@@ -149,9 +159,10 @@ describe('OTel Context Manager', () => {
       expect(baggage[0]).to.equal(baggageKey)
       expect(baggage[1].value).to.equal(baggageVal)
     })
+    t.end()
   })
 
-  it('should handle dd-otel baggage conflict', () => {
+  t.test('should handle dd-otel baggage conflict', t => {
     const ddSpan = tracer.startSpan('dd')
     ddSpan.setBaggageItem('key1', 'dd1')
     let contextWithUpdatedBaggages
@@ -171,9 +182,10 @@ describe('OTel Context Manager', () => {
         [['key1', { value: 'otel1' }], ['key2', { value: 'dd2' }]]
       )
     })
+    t.end()
   })
 
-  it('should handle dd-otel baggage removal', () => {
+  t.test('should handle dd-otel baggage removal', t => {
     const ddSpan = tracer.startSpan('dd')
     ddSpan.setBaggageItem('key1', 'dd1')
     ddSpan.setBaggageItem('key2', 'dd2')
@@ -193,5 +205,7 @@ describe('OTel Context Manager', () => {
       ddSpan.removeBaggageItem('key2')
       expect(propagation.getActiveBaggage().getAllEntries()).to.deep.equal([])
     })
+    t.end()
   })
+  t.end()
 })
