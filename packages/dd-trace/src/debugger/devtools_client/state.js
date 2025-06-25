@@ -165,9 +165,12 @@ session.on('Debugger.scriptParsed', ({ params }) => {
       loadedScripts.push(params)
     }
 
-    clearTimeout(reEvaluateProbesTimer)
-    reEvaluateProbesTimer = setTimeout(() => {
-      session.emit('scriptLoadingStabilized')
-    }, 500)
+    if (reEvaluateProbesTimer === null) {
+      reEvaluateProbesTimer = setTimeout(() => {
+        session.emit('scriptLoadingStabilized')
+      }, 500).unref()
+    } else {
+      reEvaluateProbesTimer.refresh()
+    }
   }
 })

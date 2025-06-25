@@ -2,7 +2,7 @@ name: Flakiness Report
 
 on:
   schedule:
-    - cron: '0 6 * * *'
+    - cron: '0 6 * * 1'
 
 jobs:
   flakiness:
@@ -11,9 +11,17 @@ jobs:
       actions: read
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      DAYS: '7'
+      OCCURRENCES: '2'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            .github
+            scripts
       - uses: ./.github/actions/node
         with:
           version: ''
+      - run: npm install octokit
       - run: node scripts/flakiness.mjs
