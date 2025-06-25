@@ -226,7 +226,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('openai.response.choices.0.logprobs')
               expect(traces[0][0].meta).to.have.property('openai.response.choices.0.text')
               expect(traces[0][0].meta).to.have.property('openai.response.model')
-              // expect(traces[0][0].meta).to.have.property('openai.user.api_key', 'sk-...ESTS') // TODO uncomment
+              expect(traces[0][0].meta).to.have.property('openai.user.api_key', 'sk-...ESTS')
               expect(traces[0][0].metrics).to.have.property('openai.request.max_tokens', 100)
               expect(traces[0][0].metrics).to.have.property('openai.request.temperature', 0.5)
               expect(traces[0][0].metrics).to.have.property('openai.request.n', 1)
