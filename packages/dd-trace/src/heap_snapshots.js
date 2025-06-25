@@ -47,16 +47,16 @@ function getName (folder) {
 
 module.exports = {
   async start (config) {
-    if (config.heapSnapshot.count > 0 && globalThis.gc) {
-      const log = require('./log')
-      const folder = config.heapSnapshot.folder
+    if (config.heapSnapshot.count === 0 || !globalThis.gc) return
 
-      try {
-        await scheduleSnapshot(config, 1)
-        log.debug('Wrote heap snapshots to %s.', folder)
-      } catch (e) {
-        log.error('Failed to write heap snapshots to %s.', folder, e)
-      }
+    const log = require('./log')
+    const folder = config.heapSnapshot.folder
+
+    try {
+      await scheduleSnapshot(config, 1)
+      log.debug('Wrote heap snapshots to %s.', folder)
+    } catch (e) {
+      log.error('Failed to write heap snapshots to %s.', folder, e)
     }
   }
 }
