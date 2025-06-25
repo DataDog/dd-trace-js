@@ -2,19 +2,21 @@
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing.js')
 
-class WSProducerPlugin extends TracingPlugin {
+class WSReceiverPlugin extends TracingPlugin {
   static get id () { return 'websocket' }
   static get prefix () { return 'tracing:ws:send' }
   static get type () { return 'websocket' }
   static get kind () { return 'producer' }
 
   bindStart (ctx) {
+    // console.log('ctx in receiver', ctx)
+
     const span = this.startSpan(this.operationName(), {
       meta: {
         service: this.serviceName({ pluginConfig: this.config }),
         // 'resource.name': 'websocket ' + ,
         'span.type': 'ws',
-        'span.kind': 'producer'
+        'span.kind': 'receiver'
 
       }
 
@@ -27,10 +29,10 @@ class WSProducerPlugin extends TracingPlugin {
   }
 
   end (ctx) {
-    ctx.span.addLink(ctx.link.spanContext)
+    // console.log('ctx in end', ctx)
 
     ctx.span.finish()
   }
 }
 
-module.exports = WSProducerPlugin
+module.exports = WSReceiverPlugin
