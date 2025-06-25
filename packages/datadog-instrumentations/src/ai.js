@@ -147,23 +147,11 @@ addHook({
   name: 'ai',
   versions: ['>=4.0.0'],
 }, exports => {
-  // the exports from this package are not configurable
-  // to return wrapped functions with the tracer provided above,
-  // we need to copy the exports
-  const wrappedExports = {}
-
   for (const [fnName, patchingFn] of Object.entries(TRACED_FUNCTIONS)) {
-    const original = exports[fnName]
-    wrappedExports[fnName] = shimmer.wrapFunction(original, patchingFn)
+    exports = shimmer.wrap(exports, fnName, patchingFn, { replaceGetter: true })
   }
 
-  Object.getOwnPropertyNames(exports).forEach(prop => {
-    if (!Object.keys(TRACED_FUNCTIONS).includes(prop)) {
-      wrappedExports[prop] = exports[prop]
-    }
-  })
-
-  return wrappedExports
+  return exports
 })
 
 // ESM exports
@@ -173,8 +161,7 @@ addHook({
   file: 'dist/index.mjs'
 }, exports => {
   for (const [fnName, patchingFn] of Object.entries(TRACED_FUNCTIONS)) {
-    const original = exports[fnName]
-    exports[fnName] = shimmer.wrapFunction(original, patchingFn)
+    exports = shimmer.wrap(exports, fnName, patchingFn, { replaceGetter: true })
   }
 
   return exports
