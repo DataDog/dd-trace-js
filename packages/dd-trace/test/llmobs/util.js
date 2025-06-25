@@ -21,7 +21,7 @@ function deepEqualWithMockValues (expected) {
     } else if (Array.isArray(expected[key])) {
       const sortedExpected = [...expected[key].sort()]
       const sortedActual = [...actual[key].sort()]
-      new chai.Assertion(sortedActual, `key: ${key}`).to.deep.equal(sortedExpected)
+      new chai.Assertion(sortedActual, `key: ${key}`).to.deepEqualWithMockValues(sortedExpected)
     } else if (typeof expected[key] === 'object') {
       new chai.Assertion(actual[key], `key: ${key}`).to.deepEqualWithMockValues(expected[key])
     } else {

@@ -1,0 +1,10 @@
+{"messages":[{"role":"user","content":"What is the meaning of life?"},{"role":"assistant","content":"The meaning of life is 42"}]}
+{"messages":[{"role":"user","content":"What is 5 + 5?"},{"role":"assistant","content":"5 + 5 equals 10"}]}
+{"messages":[{"role":"user","content":"What is the capital of France?"},{"role":"assistant","content":"The capital of France is Paris"}]}
+{"messages":[{"role":"user","content":"What is the largest planet in our solar system?"},{"role":"assistant","content":"Jupiter is the largest planet in our solar system"}]}
+{"messages":[{"role":"user","content":"How many sides does a triangle have?"},{"role":"assistant","content":"A triangle has three sides"}]}
+{"messages":[{"role":"user","content":"What is the chemical symbol for gold?"},{"role":"assistant","content":"The chemical symbol for gold is Au"}]}
+{"messages":[{"role":"user","content":"What is the opposite of hot?"},{"role":"assistant","content":"The opposite of hot is cold"}]}
+{"messages":[{"role":"user","content":"How many days are in a week?"},{"role":"assistant","content":"There are seven days in a week"}]}
+{"messages":[{"role":"user","content":"What color is the sky on a clear day?"},{"role":"assistant","content":"The sky is blue on a clear day"}]}
+{"messages":[{"role":"user","content":"What is the square root of 16?"},{"role":"assistant","content":"The square root of 16 is 4"}]}
