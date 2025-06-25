@@ -8,6 +8,7 @@ const path = require('path')
 const ritm = require('../../src/ritm')
 const { storage } = require('../../../datadog-core')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
+const { expect } = require('chai')
 
 const traceHandlers = new Set()
 const statsHandlers = new Set()
@@ -18,6 +19,7 @@ let tracer = null
 let plugins = []
 const testedPlugins = []
 let dsmStats = []
+let currentIntegrationName = null
 
 function isMatchingTrace (spans, spanResourceMatch) {
   if (!spanResourceMatch) {
@@ -218,6 +220,38 @@ function getDsmStats () {
   return dsmStats
 }
 
+function getCurrentIntegrationName () {
+  // gets the current integration name from the stack trace, used to determine if these tests are
+  // integration tests or not
+  const stack = new Error().stack
+  // The regex looks for /packages/datadog-plugin-NAME/test/ in the stack trace
+  const pluginTestRegex = /packages\/datadog-plugin-([^\/]+)\/test/
+  const match = stack.match(pluginTestRegex)
+
+  return match ? match[1] : null
+}
+
+function assertIntegrationName (args) {
+  // we want to assert that all spans have the _dd.integration tag set to the current integration name
+  if (currentIntegrationName) {
+    const traces = args[0]
+    if (traces && Array.isArray(traces)) {
+      traces.forEach(trace => {
+        if (Array.isArray(trace)) {
+          trace.forEach(span => {
+            if (span && span.meta) {
+              expect(span.meta['_dd.integration']).to.equal(
+                currentIntegrationName,
+                `Expected span to have "_dd.integration" tag "${currentIntegrationName}" but found "${span.meta['_dd.integration']}" for span ID ${span.span_id}`
+              )
+            }
+          })
+        }
+      })
+    }
+  }
+}
+
 const DEFAULT_AVAILABLE_ENDPOINTS = ['/evp_proxy/v2']
 let availableEndpoints = DEFAULT_AVAILABLE_ENDPOINTS
 
@@ -255,6 +289,9 @@ function runCallbackAgainstTraces (callback, options, handlers) {
   }
 
   function handler () {
+    // we assert integration name being tagged on all spans (when running integration tests)
+    assertIntegrationName(arguments)
+
     try {
       const result = callback.apply(null, arguments)
       handlers.delete(handlerPayload)
@@ -286,6 +323,8 @@ module.exports = {
    * @returns Promise<void>
    */
   async load (pluginName, config, tracerConfig = {}) {
+    currentIntegrationName = getCurrentIntegrationName()
+
     tracer = require('../..')
     agent = express()
     agent.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
@@ -374,6 +413,7 @@ module.exports = {
     server.on('close', () => {
       tracer = null
       dsmStats = []
+      currentIntegrationName = null
     })
 
     return promise
@@ -508,6 +548,7 @@ module.exports = {
       this.wipe()
     }
     this.setAvailableEndpoints(DEFAULT_AVAILABLE_ENDPOINTS)
+    currentIntegrationName = null
 
     return new Promise((resolve, reject) => {
       this.server.on('close', () => {
