@@ -1,5 +1,6 @@
 'use strict'
 
+const log = require('../../log')
 const LLMObsPlugin = require('./base')
 
 function isIterable (obj) {
@@ -38,9 +39,12 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
   }
 
   setLLMObsTags (ctx) {
+    log.info('setting openai llmobs tags')
     const span = ctx.currentStore?.span
     const resource = ctx.methodName
     const methodName = gateResource(normalizeOpenAIResourceName(resource))
+    log.info(`normalized resource name: ${normalizeOpenAIResourceName(resource)}`)
+    log.info(`methodName: ${methodName}`)
     if (!methodName) return // we will not trace all openai methods for llmobs
 
     const inputs = ctx.args[0] // completion, chat completion, and embeddings take one argument
@@ -118,6 +122,9 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     }
 
     this._tagger.tagEmbeddingIO(span, embeddingInput, embeddingOutput)
+
+    log.info(`[LLMObs] embedding input: ${JSON.stringify(embeddingInput)}`)
+    log.info(`[LLMObs] embedding output: ${JSON.stringify(embeddingOutput)}`)
   }
 
   _tagCompletion (span, inputs, response, error) {
@@ -130,6 +137,9 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
 
     this._tagger.tagLLMIO(span, completionInput, completionOutput)
     this._tagger.tagMetadata(span, parameters)
+
+    log.info(`[LLMObs] completion input: ${JSON.stringify(completionInput)}`)
+    log.info(`[LLMObs] completion output: ${JSON.stringify(completionOutput)}`)
   }
 
   _tagChatCompletion (span, inputs, response, error) {
@@ -176,6 +186,9 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     }
 
     this._tagger.tagLLMIO(span, messages, outputMessages)
+
+    log.info(`[LLMObs] chat completion input: ${JSON.stringify(messages)}`)
+    log.info(`[LLMObs] chat completion output: ${JSON.stringify(outputMessages)}`)
 
     const metadata = Object.entries(parameters).reduce((obj, [key, value]) => {
       if (!['tools', 'functions'].includes(key)) {
