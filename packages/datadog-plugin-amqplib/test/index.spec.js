@@ -61,7 +61,7 @@ describe('Plugin', () => {
             withPeerService(
               () => tracer,
               'amqplib',
-              () => channel.assertQueue(queue, {}, () => {}),
+              (done) => channel.assertQueue(queue, {}, done),
               'localhost',
               'out.host'
             )
@@ -139,7 +139,7 @@ describe('Plugin', () => {
             withPeerService(
               () => tracer,
               'amqplib',
-              () => channel.assertQueue(queue, {}, () => {}),
+              (done) => channel.assertQueue(queue, {}, done),
               'localhost',
               'out.host'
             )

@@ -93,9 +93,10 @@ describe('Plugin', () => {
       withPeerService(
         () => tracer,
         'net',
-        () => {
+        (done) => {
           const socket = new net.Socket()
           socket.connect(port, 'localhost')
+          done()
         },
         'localhost',
         'out.host'

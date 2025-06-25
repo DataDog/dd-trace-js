@@ -59,8 +59,10 @@ describe('Plugin', () => {
         withPeerService(
           () => tracer,
           'mariadb',
-          done => connection.query('SELECT 1', (err) => { err && done(err) }),
-          'db', 'db.name')
+          done => connection.query('SELECT 1', done),
+          'db',
+          'db.name'
+        )
 
         it('should propagate context to callbacks, with correct callback args', done => {
           const span = tracer.startSpan('test')

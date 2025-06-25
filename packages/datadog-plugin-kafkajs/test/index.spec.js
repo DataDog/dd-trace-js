@@ -103,9 +103,10 @@ describe('Plugin', () => {
           withPeerService(
             () => tracer,
             'kafkajs',
-            (done) => sendMessages(kafka, testTopic, messages).catch(done),
+            () => sendMessages(kafka, testTopic, messages),
             '127.0.0.1:9092',
-            'messaging.kafka.bootstrap.servers')
+            'messaging.kafka.bootstrap.servers'
+          )
 
           it('should be instrumented w/ error', async () => {
             const producer = kafka.producer()

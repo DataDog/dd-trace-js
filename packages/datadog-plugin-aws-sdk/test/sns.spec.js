@@ -355,7 +355,7 @@ describe('Sns', function () {
         (done) => sns.publish({
           TopicArn,
           Message: 'message 1'
-        }, (err) => err && done()),
+        }, done),
         'TestTopic', 'topicname')
 
       withNamingSchema(

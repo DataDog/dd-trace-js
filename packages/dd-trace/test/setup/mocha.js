@@ -133,17 +133,26 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
       computePeerServiceSpy.restore()
     })
 
-    it('should compute peer service', done => {
-      agent
-        .assertSomeTraces(traces => {
+    it('should compute peer service', async () => {
+      const useCallback = spanGenerationFn.length === 1
+      const spanGenerationPromise = useCallback
+        ? new Promise((resolve, reject) => spanGenerationFn((err) => err ? reject(err) : resolve()))
+        : spanGenerationFn()
+
+      assert.ok(
+        typeof spanGenerationPromise?.then === 'function',
+        'spanGenerationFn should return a promise in case no callback is defined. Received: ' +
+        util.inspect(spanGenerationPromise, { depth: 1 })
+      )
+
+      await Promise.all([
+        agent.assertSomeTraces(traces => {
           const span = traces[0][0]
           expect(span.meta).to.have.property('peer.service', typeof service === 'function' ? service() : service)
           expect(span.meta).to.have.property('_dd.peer.service.source', serviceSource)
-        })
-        .then(done)
-        .catch(done)
-
-      spanGenerationFn(done)
+        }),
+        spanGenerationPromise
+      ])
     })
   })
 }

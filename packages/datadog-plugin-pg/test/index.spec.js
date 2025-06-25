@@ -61,12 +61,9 @@ describe('Plugin', () => {
           withPeerService(
             () => tracer,
             'pg',
-            (done) => client.query('SELECT 1', (err, result) => {
-              if (err) {
-                done()
-              }
-            }),
-            'postgres', 'db.name'
+            (done) => client.query('SELECT 1', done),
+            'postgres',
+            'db.name'
           )
 
           it('should do automatic instrumentation when using callbacks', done => {

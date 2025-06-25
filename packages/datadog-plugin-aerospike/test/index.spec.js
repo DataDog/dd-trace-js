@@ -54,10 +54,11 @@ describe('Plugin', () => {
           withPeerService(
             () => tracer,
             'aerospike',
-            () => aerospike.connect(config).then(client => {
-              return client.put(key, { i: 123 })
-                .then(() => client.close(false))
-            }),
+            async () => {
+              const client = await aerospike.connect(config)
+              await client.put(key, { i: 123 })
+              return client.close(false)
+            },
             'test',
             'aerospike.namespace'
           )

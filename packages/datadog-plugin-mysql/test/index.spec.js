@@ -252,7 +252,7 @@ describe('Plugin', () => {
         withPeerService(
           () => tracer,
           'mysql',
-          () => pool.query('SELECT 1', (_) => {}),
+          (done) => pool.query('SELECT 1', (_) => done()),
           'db', 'db.name')
 
         it('should do automatic instrumentation', done => {

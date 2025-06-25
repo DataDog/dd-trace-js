@@ -30,7 +30,7 @@ describe('Plugin', () => {
         withPeerService(
           () => tracer,
           'memcached',
-          done => memcached.get('test', err => err && done(err)),
+          done => memcached.get('test', done),
           'localhost',
           'out.host'
         )

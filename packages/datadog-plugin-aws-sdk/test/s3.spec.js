@@ -63,7 +63,7 @@ describe('Plugin', () => {
             Bucket: bucketName,
             Key: 'test-key',
             Body: 'test body'
-          }, (err) => err && done(err)),
+          }, done),
           bucketName, 'bucketname')
 
         withNamingSchema(

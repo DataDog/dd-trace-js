@@ -46,7 +46,9 @@ describe('Plugin', () => {
           () => tracer,
           'mysql2',
           (done) => connection.query('SELECT 1', (_) => done()),
-          'db', 'db.name')
+          'db',
+          'db.name'
+        )
 
         withNamingSchema(
           () => connection.query('SELECT 1', (_) => {}),

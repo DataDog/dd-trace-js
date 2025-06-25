@@ -84,7 +84,8 @@ describe('Plugin', () => {
             () => tracer,
             'mongodb-core',
             () => collection.insertOne({ a: 1 }, {}, () => {}),
-            'test', 'peer.service'
+            'test',
+            'peer.service'
           )
 
           it('should do automatic instrumentation', done => {

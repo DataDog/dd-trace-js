@@ -84,7 +84,7 @@ describe('Plugin', () => {
         withPeerService(
           () => tracer,
           'redis',
-          (done) => client.get('bar').catch(done),
+          () => client.get('bar'),
           '127.0.0.1', 'out.host')
 
         it('should handle errors', async () => {
@@ -169,7 +169,7 @@ describe('Plugin', () => {
         withPeerService(
           () => tracer,
           'redis',
-          (done) => client.get('bar').catch(done),
+          () => client.get('bar'),
           'localhost', 'out.host')
 
         it('should be able to filter commands', async () => {

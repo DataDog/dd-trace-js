@@ -101,11 +101,11 @@ describe('Plugin', () => {
             withPeerService(
               () => tracer,
               'grpc',
-              async () => {
+              async (done) => {
                 const client = await buildClient({
                   getUnary: (_, callback) => callback()
                 })
-                client.getUnary({ first: 'foobar' }, () => {})
+                client.getUnary({ first: 'foobar' }, done)
               },
               'test.TestService', 'rpc.service')
 

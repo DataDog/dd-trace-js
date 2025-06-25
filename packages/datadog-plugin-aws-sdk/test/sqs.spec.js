@@ -74,7 +74,7 @@ describe('Plugin', () => {
           (done) => sqs.sendMessage({
             MessageBody: 'test body',
             QueueUrl
-          }, (err) => err && done(err)),
+          }, done),
           'SQS_QUEUE_NAME',
           'queuename'
         )
