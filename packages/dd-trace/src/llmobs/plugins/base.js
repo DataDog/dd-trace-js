@@ -25,8 +25,12 @@ class LLMObsPlugin extends TracingPlugin {
   start (ctx) {
     // even though llmobs span events won't be enqueued if llmobs is disabled
     // we should avoid doing any computations here (these listeners aren't disabled)
+    log.info(
+      `[LLMObs] will try to start span for ${this.constructor.name}, enabled: ${this._tracerConfig.llmobs.enabled}`)
     const enabled = this._tracerConfig.llmobs.enabled
     if (!enabled) return
+
+    log.info(`[LLMObs] Starting span for ${this.constructor.name}`)
 
     const parent = this.getLLMObsParent(ctx)
     const apmStore = ctx.currentStore
@@ -44,10 +48,15 @@ class LLMObsPlugin extends TracingPlugin {
       ctx.llmobs.parent = parent
 
       this._tagger.registerLLMObsSpan(span, { parent, integration: this.constructor.integration, ...registerOptions })
+      log.info(`[LLMObs] Registered span for ${this.constructor.name}`)
     }
   }
 
   end (ctx) {
+    log.info(
+      `[LLMObs] Will try and end span context scope for ${this.constructor.name},
+      enabled: ${this._tracerConfig.llmobs.enabled}`
+    )
     const enabled = this._tracerConfig.llmobs.enabled
     if (!enabled) return
 
@@ -58,9 +67,15 @@ class LLMObsPlugin extends TracingPlugin {
 
     const parent = ctx.llmobs.parent
     llmobsStorage.enterWith({ span: parent })
+
+    log.info(`[LLMObs] Ended span context scope for ${this.constructor.name}`)
   }
 
   asyncEnd (ctx) {
+    log.info(
+      `[LLMObs] Will try and set LLMObs tags for ${this.constructor.name},
+      enabled: ${this._tracerConfig.llmobs.enabled}`
+    )
     // even though llmobs span events won't be enqueued if llmobs is disabled
     // we should avoid doing any computations here (these listeners aren't disabled)
     const enabled = this._tracerConfig.llmobs.enabled
@@ -77,6 +92,8 @@ class LLMObsPlugin extends TracingPlugin {
     }
 
     this.setLLMObsTags(ctx)
+
+    log.info(`[LLMObs] Set LLMObs tags for ${this.constructor.name}`)
   }
 
   configure (config) {
@@ -85,6 +102,7 @@ class LLMObsPlugin extends TracingPlugin {
     if (llmobsEnabled === false) {
       config = typeof config === 'boolean' ? false : { ...config, enabled: false } // override to false
     }
+    log.info(`[LLMObs] Configured ${this.constructor.name} with config: ${config}`)
     super.configure(config)
   }
 

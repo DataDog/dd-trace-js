@@ -61,8 +61,6 @@ class LLMObsTagger {
     if (!this._config.llmobs.enabled) return
     if (!kind) return // do not register it in the map if it doesn't have an llmobs span kind
 
-    this._register(span)
-
     if (name) this._setTag(span, NAME, name)
 
     this._setTag(span, SPAN_KIND, kind)
@@ -94,6 +92,8 @@ class LLMObsTagger {
       span.context()._trace.tags[PROPAGATED_PARENT_ID_KEY] ??
       ROOT_PARENT_ID
     this._setTag(span, PARENT_ID_KEY, parentId)
+
+    this._register(span)
   }
 
   // TODO: similarly for the following `tag` methods,

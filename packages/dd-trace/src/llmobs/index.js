@@ -74,6 +74,7 @@ function enable (config) {
     evalWriter?.setAgentless(useAgentless)
     spanWriter?.setAgentless(useAgentless)
 
+    log.info(`[LLMObs] Enabled with ml app config: ${config.llmobs}`)
     telemetry.recordLLMObsEnabled(startTime, config)
   })
 }
