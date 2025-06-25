@@ -1,7 +1,8 @@
 'use strict'
 
-const assert = require('assert')
+const assert = require('node:assert')
 
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE } = require('../../dd-trace/src/constants')

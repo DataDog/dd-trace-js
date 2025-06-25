@@ -1,6 +1,7 @@
 'use strict'
 
 const sinon = require('sinon')
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const semver = require('semver')

@@ -1,5 +1,6 @@
 'use strict'
 
+const { withNamingSchema, withPeerService } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const fs = require('fs')
 const path = require('path')

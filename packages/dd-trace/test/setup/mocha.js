@@ -2,8 +2,10 @@
 
 require('./core')
 
-const { platform } = require('os')
-const path = require('path')
+const assert = require('node:assert')
+const util = require('node:util')
+const { platform } = require('node:os')
+const path = require('node:path')
 const semver = require('semver')
 const externals = require('../plugins/externals.json')
 const runtimeMetrics = require('../../src/runtime_metrics')
@@ -14,10 +16,13 @@ const { getInstrumentation } = require('./helpers/load-inst')
 
 const NODE_PATH_SEP = platform() === 'win32' ? ';' : ':'
 
+// TODO: Remove global
 global.withVersions = withVersions
-global.withExports = withExports
-global.withNamingSchema = withNamingSchema
-global.withPeerService = withPeerService
+
+exports.withVersions = withVersions
+exports.withExports = withExports
+exports.withNamingSchema = withNamingSchema
+exports.withPeerService = withPeerService
 
 const testedPlugins = agent.testedPlugins
 

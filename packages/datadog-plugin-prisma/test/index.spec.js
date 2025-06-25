@@ -1,7 +1,8 @@
 'use strict'
 
-const fs = require('fs/promises')
-const path = require('path')
+const fs = require('node:fs/promises')
+const path = require('node:path')
+const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { execSync } = require('node:child_process')
 const { expectedSchema, rawExpectedSchema } = require('./naming')

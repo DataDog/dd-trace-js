@@ -1,6 +1,7 @@
 'use strict'
 
 const semver = require('semver')
+const { withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const id = require('../../dd-trace/src/id')
 
