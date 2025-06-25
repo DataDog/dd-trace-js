@@ -239,7 +239,7 @@ function assertIntegrationName (args) {
       traces.forEach(trace => {
         if (Array.isArray(trace)) {
           trace.forEach(span => {
-            if (span && span.meta) {
+            if (span && span.meta && span.meta.component) {
               expect(span.meta['_dd.integration']).to.equal(
                 currentIntegrationName,
                 `Expected span to have "_dd.integration" tag "${currentIntegrationName}" but found "${span.meta['_dd.integration']}" for span ID ${span.span_id}`

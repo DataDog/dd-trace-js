@@ -18,6 +18,8 @@ class ApolloBasePlugin extends TracingPlugin {
       meta: {}
     }, false)
 
+    span._integrationName = 'apollo'
+
     ctx.parentStore = store
     ctx.currentStore = { ...store, span }
 
