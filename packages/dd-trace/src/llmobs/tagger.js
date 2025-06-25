@@ -78,6 +78,9 @@ class LLMObsTagger {
       span.context()._trace.tags[PROPAGATED_ML_APP_KEY] ||
       this._config.llmobs.mlApp
 
+    // eslint-disable-next-line @stylistic/max-len
+    log.info(`[LLMObs] spanMlApp: ${spanMlApp}, determined from 1. specified ml app: ${mlApp}, 2. parent: ${registry.get(parent)?.[ML_APP]}, 3. trace: ${span.context()._trace.tags[PROPAGATED_ML_APP_KEY]}, global: ${this._config.llmobs.mlApp}`)
+
     if (!spanMlApp) {
       throw new Error(
         '[LLMObs] Cannot start an LLMObs span without an mlApp configured.' +
