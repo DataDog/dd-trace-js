@@ -734,8 +734,8 @@ class Config {
       DD_REMOTE_CONFIGURATION_ENABLED,
       DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS,
       DD_RUNTIME_METRICS_ENABLED,
-      DD_RUNTIME_METRICS_EVENT_LOOP,
-      DD_RUNTIME_METRICS_GC,
+      DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED,
+      DD_RUNTIME_METRICS_GC_ENABLED,
       DD_RUNTIME_METRICS_GC_COLLECTOR,
       DD_SERVICE,
       DD_SERVICE_MAPPING,
@@ -960,8 +960,8 @@ class Config {
       : undefined
     this._setBoolean(env, 'runtimeMetrics.enabled', DD_RUNTIME_METRICS_ENABLED ||
     otelSetRuntimeMetrics)
-    this._setBoolean(env, 'runtimeMetrics.eventLoop', DD_RUNTIME_METRICS_EVENT_LOOP)
-    this._setBoolean(env, 'runtimeMetrics.gc.enabled', DD_RUNTIME_METRICS_GC)
+    this._setBoolean(env, 'runtimeMetrics.eventLoop', DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED)
+    this._setBoolean(env, 'runtimeMetrics.gc.enabled', DD_RUNTIME_METRICS_GC_ENABLED)
     this._setString(env, 'runtimeMetrics.gc.collector', DD_RUNTIME_METRICS_GC_COLLECTOR)
     this._setBoolean(env, 'runtimeMetricsRuntimeId', DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED)
     this._setArray(env, 'sampler.spanSamplingRules', reformatSpanSamplingRules(coalesce(
