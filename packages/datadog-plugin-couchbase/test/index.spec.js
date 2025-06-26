@@ -2,6 +2,7 @@
 
 const { expect } = require('chai')
 const semver = require('semver')
+const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const proxyquire = require('proxyquire').noPreserveCache()
 const { expectedSchema, rawExpectedSchema } = require('./naming')

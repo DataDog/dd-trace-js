@@ -1,5 +1,6 @@
 'use strict'
 
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const semver = require('semver')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -80,9 +81,9 @@ describe('Plugin', () => {
       withPeerService(
         () => tracer,
         'tedious',
-        (done) => connection.execSql(new tds.Request('SELECT 1', (err) => {
-          if (err) return done(err)
-        })), 'master', 'db.name'
+        (done) => connection.execSql(new tds.Request('SELECT 1', done)),
+        'master',
+        'db.name'
       )
 
       describe('with tedious disabled', () => {
