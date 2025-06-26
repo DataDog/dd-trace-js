@@ -1806,7 +1806,7 @@ describe('Plugin', () => {
         })
       })
 
-      it('makes a successful call with the beta chat completions', async function () {
+      it('makes a successful call with chat.completions.parse', async function () {
         if (semver.satisfies(realVersion, '<4.59.0')) {
           this.skip()
         }
