@@ -1035,10 +1035,7 @@ describe('Config', () => {
       runtimeMetrics: {
         enabled: true,
         eventLoop: false,
-        gc: {
-          enabled: false,
-          collector: 'native'
-        }
+        gc: false
       },
       runtimeMetricsRuntimeId: true,
       sampleRate: 0.5,

@@ -163,10 +163,7 @@ suiteDescribe('runtimeMetrics', () => {
       runtimeMetrics: {
         enabled: true,
         eventLoop: true,
-        gc: {
-          enabled: true,
-          collector: 'default'
-        }
+        gc: true
       },
       tags: {
         str: 'bar',
