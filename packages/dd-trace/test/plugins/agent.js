@@ -225,7 +225,7 @@ function getCurrentIntegrationName () {
   // integration tests or not
   const stack = new Error().stack
   // The regex looks for /packages/datadog-plugin-NAME/test/ in the stack trace
-  const pluginTestRegex = /packages\/datadog-plugin-([^\/]+)\/test/
+  const pluginTestRegex = /packages\/datadog-plugin-([^/]+)\/test/
   const match = stack.match(pluginTestRegex)
 
   return match ? match[1] : null
@@ -244,7 +244,8 @@ function assertIntegrationName (args) {
             if (span && span.meta && span.meta.component && span.meta.component !== span.meta['_dd.integration']) {
               expect(span.meta['_dd.integration']).to.equal(
                 currentIntegrationName,
-                 `Expected span to have "_dd.integration" tag "${currentIntegrationName}" but found "${span.meta['_dd.integration']}" for span ID ${span.span_id}`
+                 `Expected span to have "_dd.integration" tag "${currentIntegrationName}" 
+                 but found "${span.meta['_dd.integration']}" for span ID ${span.span_id}`
               )
             }
           })
