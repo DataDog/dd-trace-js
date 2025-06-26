@@ -136,7 +136,12 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
     it('should compute peer service', async () => {
       const useCallback = spanGenerationFn.length === 1
       const spanGenerationPromise = useCallback
-        ? new Promise((resolve, reject) => spanGenerationFn((err) => err ? reject(err) : resolve())?.then?.(resolve, reject))
+        ? new Promise((resolve, reject) => {
+          const result = spanGenerationFn((err) => err ? reject(err) : resolve())
+          if (result && Object.keys(result).length === 0) {
+            result.then?.(resolve, reject)
+          }
+        })
         : spanGenerationFn()
 
       assert.ok(

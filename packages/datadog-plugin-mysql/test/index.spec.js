@@ -253,7 +253,9 @@ describe('Plugin', () => {
           () => tracer,
           'mysql',
           (done) => pool.query('SELECT 1', (_) => done()),
-          'db', 'db.name')
+          'db',
+          'db.name'
+        )
 
         it('should do automatic instrumentation', done => {
           agent

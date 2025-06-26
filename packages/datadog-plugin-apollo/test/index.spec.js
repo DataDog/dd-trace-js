@@ -444,14 +444,12 @@ describe('Plugin', () => {
         })
 
         withNamingSchema(
-          () => {
+          async () => {
             const operationName = 'MyQuery'
             const source = `query ${operationName} { hello(name: "world") }`
             const variableValues = { who: 'world' }
-            gateway()
-              .then(({ executor }) => {
-                return execute(executor, source, variableValues, operationName).then(() => {})
-              })
+            const { executor } = await gateway()
+            return execute(executor, source, variableValues, operationName)
           },
           rawExpectedSchema.server,
           {

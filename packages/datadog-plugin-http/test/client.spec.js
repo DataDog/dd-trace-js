@@ -91,7 +91,7 @@ describe('Plugin', () => {
         )
 
         withNamingSchema(
-          spanProducerFn,
+          (done) => spanProducerFn((err) => err && done(err)),
           rawExpectedSchema.client
         )
 

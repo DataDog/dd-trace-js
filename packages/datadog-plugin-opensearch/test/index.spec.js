@@ -254,6 +254,8 @@ describe('Plugin', () => {
                 match_all: {}
               }
             }
+          }).catch(() => {
+            // Ignore index_not_found_exception for peer service assertion
           }),
           'localhost',
           'out.host'

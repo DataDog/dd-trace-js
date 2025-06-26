@@ -68,7 +68,8 @@ describe('Plugin', () => {
                 match_all: {}
               }
             }
-          }, hasCallbackSupport ? done : undefined),
+          // Ignore index_not_found_exception
+          }, hasCallbackSupport ? () => done() : undefined),
           'localhost',
           'out.host'
         )
