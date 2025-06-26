@@ -578,8 +578,7 @@ class Config {
     defaults.reportHostname = false
     defaults['runtimeMetrics.enabled'] = false
     defaults['runtimeMetrics.eventLoop'] = true
-    defaults['runtimeMetrics.gc.enabled'] = true
-    defaults['runtimeMetrics.gc.collector'] = 'default'
+    defaults['runtimeMetrics.gc'] = true
     defaults.runtimeMetricsRuntimeId = false
     defaults.sampleRate = undefined
     defaults['sampler.rateLimit'] = 100
@@ -736,7 +735,6 @@ class Config {
       DD_RUNTIME_METRICS_ENABLED,
       DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED,
       DD_RUNTIME_METRICS_GC_ENABLED,
-      DD_RUNTIME_METRICS_GC_COLLECTOR,
       DD_SERVICE,
       DD_SERVICE_MAPPING,
       DD_SITE,
@@ -961,8 +959,7 @@ class Config {
     this._setBoolean(env, 'runtimeMetrics.enabled', DD_RUNTIME_METRICS_ENABLED ||
     otelSetRuntimeMetrics)
     this._setBoolean(env, 'runtimeMetrics.eventLoop', DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED)
-    this._setBoolean(env, 'runtimeMetrics.gc.enabled', DD_RUNTIME_METRICS_GC_ENABLED)
-    this._setString(env, 'runtimeMetrics.gc.collector', DD_RUNTIME_METRICS_GC_COLLECTOR)
+    this._setBoolean(env, 'runtimeMetrics.gc', DD_RUNTIME_METRICS_GC_ENABLED)
     this._setBoolean(env, 'runtimeMetricsRuntimeId', DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED)
     this._setArray(env, 'sampler.spanSamplingRules', reformatSpanSamplingRules(coalesce(
       safeJsonParse(maybeFile(DD_SPAN_SAMPLING_RULES_FILE)),
@@ -1160,8 +1157,7 @@ class Config {
     this._setBoolean(opts, 'reportHostname', options.reportHostname)
     this._setBoolean(opts, 'runtimeMetrics.enabled', options.runtimeMetrics?.enabled)
     this._setBoolean(opts, 'runtimeMetrics.eventLoop', options.runtimeMetrics?.eventLoop)
-    this._setBoolean(opts, 'runtimeMetrics.gc.enabled', options.runtimeMetrics?.gc?.enabled)
-    this._setString(opts, 'runtimeMetrics.gc.collector', options.runtimeMetrics?.gc?.collector)
+    this._setBoolean(opts, 'runtimeMetrics.gc', options.runtimeMetrics?.gc?.enabled)
     this._setBoolean(opts, 'runtimeMetricsRuntimeId', options.runtimeMetricsRuntimeId)
     this._setArray(opts, 'sampler.spanSamplingRules', reformatSpanSamplingRules(options.spanSamplingRules))
     this._setUnit(opts, 'sampleRate', coalesce(options.sampleRate, options.ingestion.sampleRate))
