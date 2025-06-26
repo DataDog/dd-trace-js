@@ -27,6 +27,7 @@ class OutboundPlugin extends TracingPlugin {
   }
 
   bindFinish (ctx) {
+    this.finish(ctx)
     return ctx.parentStore
   }
 

@@ -145,17 +145,17 @@ function getStartCtx (client, command, args, url = {}) {
 
 function wrapCallback (finishCh, errorCh, ctx, callback) {
   return shimmer.wrapFunction(callback, callback => function (err) {
-    finish(finishCh, errorCh, ctx, err)
-    if (callback) {
-      return callback.apply(this, arguments)
-    }
+    return finish(finishCh, errorCh, ctx, err, callback, this, arguments)
   })
 }
 
-function finish (finishCh, errorCh, ctx, error) {
+function finish (finishCh, errorCh, ctx, error, callback, thisArg, args) {
   if (error) {
     ctx.error = error
     errorCh.publish(ctx)
+  }
+  if (callback) {
+    return finishCh.runStores(ctx, callback, thisArg, ...args)
   }
   finishCh.publish(ctx)
 }
