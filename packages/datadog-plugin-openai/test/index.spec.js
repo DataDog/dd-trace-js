@@ -11,10 +11,11 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { DogStatsDClient } = require('../../dd-trace/src/dogstatsd')
 const { NoopExternalLogger } = require('../../dd-trace/src/external-logger/src')
 const Sampler = require('../../dd-trace/src/sampler')
+const { useEnv } = require('../../../integration-tests/helpers')
 
 const tracerRequirePath = '../../dd-trace'
 
-const { DD_MAJOR } = require('../../../version')
+const { DD_MAJOR, NODE_MAJOR } = require('../../../version')
 
 describe('Plugin', () => {
   let openai
@@ -24,10 +25,14 @@ describe('Plugin', () => {
   let externalLoggerStub
   let realVersion
   let tracer
+  let globalFile
+
+  useEnv({
+    OPENAI_API_KEY: 'sk-DATADOG-ACCEPTANCE-TESTS'
+  })
 
   describe('openai', () => {
-    // TODO: Remove the range once we support openai 5
-    withVersions('openai', 'openai', '<5.0.0', version => {
+    withVersions('openai', 'openai', version => {
       const moduleRequirePath = `../../../versions/openai@${version}`
 
       before(() => {
@@ -36,6 +41,10 @@ describe('Plugin', () => {
       })
 
       after(() => {
+        if (semver.satisfies(realVersion, '>=5.0.0') && NODE_MAJOR < 20) {
+          global.File = globalFile
+        }
+
         return agent.close({ ritmReset: false })
       })
 
@@ -46,11 +55,22 @@ describe('Plugin', () => {
         const module = requiredModule.get()
         realVersion = requiredModule.version()
 
+        if (semver.satisfies(realVersion, '>=5.0.0') && NODE_MAJOR < 20) {
+          /**
+           * resolves the following error for OpenAI v5
+           *
+           * Error: `File` is not defined as a global, which is required for file uploads.
+           * Update to Node 20 LTS or newer, or set `globalThis.File` to `import('node:buffer').File`.
+           */
+          globalFile = global.File
+          global.File = require('node:buffer').File
+        }
+
         if (semver.satisfies(realVersion, '>=4.0.0')) {
           const OpenAI = module
 
           openai = new OpenAI({
-            apiKey: process.env.OPENAI_API_KEY ?? 'sk-DATADOG-ACCEPTANCE-TESTS',
+            apiKey: process.env.OPENAI_API_KEY,
             baseURL: 'http://127.0.0.1:9126/vcr/openai'
           })
 
@@ -59,7 +79,7 @@ describe('Plugin', () => {
           const { Configuration, OpenAIApi } = module
 
           const configuration = new Configuration({
-            apiKey: process.env.OPENAI_API_KEY ?? 'sk-DATADOG-ACCEPTANCE-TESTS',
+            apiKey: process.env.OPENAI_API_KEY,
             basePath: 'http://127.0.0.1:9126/vcr/openai'
           })
 
@@ -548,7 +568,8 @@ describe('Plugin', () => {
           })
 
         if (semver.satisfies(realVersion, '>=4.0.0')) {
-          const result = await openai.models.del('ft:gpt-4.1-mini-2025-04-14:datadog-staging::BkaILRSh')
+          const method = semver.satisfies(realVersion, '>=5.0.0') ? 'delete' : 'del'
+          const result = await openai.models[method]('ft:gpt-4.1-mini-2025-04-14:datadog-staging::BkaILRSh')
 
           expect(result.deleted).to.eql(true)
         } else {
@@ -734,7 +755,8 @@ describe('Plugin', () => {
           })
 
         if (semver.satisfies(realVersion, '>=4.0.0')) {
-          const result = await openai.files.del('file-RpTpuvRVtnKpdKZb7DDGto')
+          const method = semver.satisfies(realVersion, '>=5.0.0') ? 'delete' : 'del'
+          const result = await openai.files[method]('file-RpTpuvRVtnKpdKZb7DDGto')
 
           expect(result.deleted).to.eql(true)
         } else {
@@ -1784,7 +1806,7 @@ describe('Plugin', () => {
         })
       })
 
-      it('makes a successful call with the beta chat completions', async function () {
+      it('makes a successful call with chat.completions.parse', async function () {
         if (semver.satisfies(realVersion, '<4.59.0')) {
           this.skip()
         }
@@ -1795,7 +1817,11 @@ describe('Plugin', () => {
             expect(span).to.have.property('name', 'openai.request')
           })
 
-        const prom = openai.beta.chat.completions.parse({
+        const parse = semver.satisfies(realVersion, '>=5.0.0')
+          ? openai.chat.completions.parse.bind(openai.chat.completions)
+          : openai.beta.chat.completions.parse.bind(openai.beta.chat.completions)
+
+        const prom = parse({
           model: 'gpt-4o',
           messages: [
             { role: 'system', content: 'You are a helpful assistant' },
