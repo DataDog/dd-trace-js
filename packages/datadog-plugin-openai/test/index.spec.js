@@ -550,7 +550,8 @@ describe('Plugin', () => {
             expect(traces[0][0]).to.have.property('name', 'openai.request')
             expect(traces[0][0]).to.have.property('type', 'openai')
             if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
-              expect(traces[0][0]).to.have.property('resource', 'models.del')
+              const method = semver.satisfies(realVersion, '>=5.0.0') ? 'delete' : 'del'
+              expect(traces[0][0]).to.have.property('resource', `models.${method}`)
             } else {
               expect(traces[0][0]).to.have.property('resource', 'deleteModel')
             }
@@ -740,7 +741,8 @@ describe('Plugin', () => {
             expect(traces[0][0]).to.have.property('name', 'openai.request')
             expect(traces[0][0]).to.have.property('type', 'openai')
             if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
-              expect(traces[0][0]).to.have.property('resource', 'files.del')
+              const method = semver.satisfies(realVersion, '>=5.0.0') ? 'delete' : 'del'
+              expect(traces[0][0]).to.have.property('resource', `files.${method}`)
             } else {
               expect(traces[0][0]).to.have.property('resource', 'deleteFile')
             }
