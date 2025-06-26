@@ -23,10 +23,9 @@ class AzureFunctionsPlugin extends TracingPlugin {
   static get prefix () { return 'tracing:datadog:azure:functions:invoke' }
 
   bindStart (ctx) {
-    const { functionName, methodName, httpRequest } = ctx
+    const { functionName, methodName, invocationContext } = ctx
     const store = storage('legacy').getStore()
-    // httpRequest.headers is a map
-    const childOf = this._tracer.extract('http_headers', Object.fromEntries(httpRequest.headers))
+    const childOf = extractTraceContext(this._tracer, ctx)
     const span = this.startSpan(this.operationName(), {
       childOf,
       service: this.serviceName(),
@@ -37,32 +36,19 @@ class AzureFunctionsPlugin extends TracingPlugin {
       }
     }, false)
 
-    if (functionName === 'sendMessage') {
-      // console.log("This is the context", ctx)
-    }
     if (methodName === 'serviceBusQueue') {
-      // console.log('This is the context for the q trigger', ctx)
-      const { messageId, deliveryCount, enqueuedTimeUtc } = invocationContext.triggerMetadata
-      if (messageId) span.setTag('messaging.message_id', messageId)
-      if (deliveryCount) span.setTag('messaging.delivery_count', deliveryCount)
-      if (enqueuedTimeUtc) span.setTag('messaging.enqueued_time', enqueuedTimeUtc)
+      span.setTag('messaging.message_id', invocationContext.triggerMetadata.messageId)
+      span.setTag('messaging.delivery_count', invocationContext.triggerMetadata.deliveryCount)
+      span.setTag('messaging.enqueued_time', invocationContext.triggerMetadata.enqueuedTimeUtc)
+      span.setTag('messaging.operation', 'receive')
       span.setTag('messaging.system', 'azure_service_bus')
+      span.setTag('resource.name', 'serviceBusQueueTrigger')
       span.setTag('span.kind', 'consumer')
     }
+
     ctx.span = span
     ctx.parentStore = store
     ctx.currentStore = { ...store, span }
-
-    if (invocationContext.options.return?.type === 'serviceBus') {
-      const childSpan = this.startSpan('serviceBusOutput', {
-        service: this.serviceName(),
-        type: 'serverless',
-        childOf: ctx.currentStore.span
-      }, false)
-      ctx.childSpan = childSpan
-      ctx.currentStore = { ...ctx.currentStore, childSpan }
-    }
-    ctx.invocationContext.extraOutputs.hello = 'world'
     return ctx.currentStore
   }
 
@@ -73,13 +59,8 @@ class AzureFunctionsPlugin extends TracingPlugin {
 
   asyncEnd (ctx) {
     const { httpRequest, methodName, result = {} } = ctx
-
-    // For Service Bus triggers, we don't have HTTP context
-    if (methodName === 'serviceBusQueue') {
-      ctx.currentStorespan.setTag('resource.name', 'serviceBusQueueTrigger')
-      ctx.currentStore.span.finish()
-    } else if (httpRequest) {
-    // if (httpRequest) {
+    if (triggerMap[methodName] === 'Http') {
+      // If the method is an HTTP trigger, we need to patch the request and finish the span
       const path = (new URL(httpRequest.url)).pathname
       const req = {
         method: httpRequest.method,
@@ -92,14 +73,10 @@ class AzureFunctionsPlugin extends TracingPlugin {
       context.res = { statusCode: result.status }
       context.span = ctx.currentStore.span
 
-      if (ctx.currentStore.childSpan) {
-        ctx.currentStore.childSpan.finish()
-      }
-
       serverless.finishSpan(context)
     // Fallback for other trigger types
     } else {
-      ctx.currentStore.span.finish()
+      super.finish()
     }
   }
 
@@ -112,8 +89,13 @@ function mapTriggerTag (methodName) {
   return triggerMap[methodName] || 'Unknown'
 }
 
-function extract (tracer, headers) {
-  if (!headers) return null
-  return tracer.extract('http_headers', headers)
+function extractTraceContext (tracer, ctx) {
+  switch (String(ctx.methodName)) {
+    case triggerMap.http:
+      return tracer.extract('http_headers', Object.fromEntries(ctx.httpRequest.headers))
+    case triggerMap.serviceBusQueue:
+      return tracer.extract('text_map', ctx.invocationContext.triggerMetadata.applicationProperties)
+  }
 }
+
 module.exports = AzureFunctionsPlugin
