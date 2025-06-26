@@ -10,7 +10,7 @@ t.test('metrics', t => {
   let sendData
   let now
 
-  t.beforeEach(() => {
+  function beforeEach () {
     now = Date.now()
     sinon.stub(Date, 'now').returns(now)
 
@@ -20,13 +20,16 @@ t.test('metrics', t => {
         sendData
       }
     })
-  })
+  }
 
-  t.afterEach(() => {
+  function afterEach () {
     Date.now.restore()
-  })
+  }
 
   t.test('NamespaceManager', t => {
+    t.beforeEach(beforeEach)
+    t.afterEach(afterEach)
+
     t.test('should export singleton manager', t => {
       expect(metrics.manager).to.be.instanceOf(metrics.NamespaceManager)
       t.end()
@@ -187,6 +190,9 @@ t.test('metrics', t => {
   })
 
   t.test('Namespace', t => {
+    t.beforeEach(beforeEach)
+    t.afterEach(afterEach)
+
     t.test('should pass namespace name through to collections', t => {
       const ns = new metrics.Namespace('name')
       expect(ns.metrics).to.have.property('namespace', 'name')
@@ -297,6 +303,9 @@ t.test('metrics', t => {
   })
 
   t.test('CountMetric', t => {
+    t.beforeEach(beforeEach)
+    t.afterEach(afterEach)
+
     t.test('should expose input data', t => {
       const ns = new metrics.Namespace('tracers')
       const metric = ns.count('name', {
@@ -432,6 +441,9 @@ t.test('metrics', t => {
   })
 
   t.test('DistributionMetric', t => {
+    t.beforeEach(beforeEach)
+    t.afterEach(afterEach)
+
     t.test('should expose input data', t => {
       const ns = new metrics.Namespace('tracers')
       const metric = ns.distribution('name', {
@@ -506,6 +518,9 @@ t.test('metrics', t => {
   })
 
   t.test('GaugeMetric', t => {
+    t.beforeEach(beforeEach)
+    t.afterEach(afterEach)
+
     t.test('should expose input data', t => {
       const ns = new metrics.Namespace('tracers')
       const metric = ns.gauge('name', {
@@ -600,6 +615,9 @@ t.test('metrics', t => {
   })
 
   t.test('RateMetric', t => {
+    t.beforeEach(beforeEach)
+    t.afterEach(afterEach)
+
     t.test('should expose input data', t => {
       const ns = new metrics.Namespace('tracers')
       const metric = ns.rate('name', 1000, {
