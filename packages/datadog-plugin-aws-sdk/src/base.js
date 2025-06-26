@@ -58,6 +58,49 @@ class BaseAwsSdkPlugin extends ClientPlugin {
 
       const span = this.tracer.startSpan(this.operationFromRequest(request), { childOf, tags })
 
+      let hostname
+
+      switch (awsService) {
+        case 'EventBridge':
+          hostname = `events.${this.activeSpan._spanContext._tags.region}.amazonaws.com`
+          break
+        case 'SQS':
+          hostname = `sqs.${this.activeSpan._spanContext._tags.region}.amazonaws.com`
+          break
+        case 'SNS':
+          hostname = `sns.${this.activeSpan._spanContext._tags.region}.amazonaws.com`
+          break
+        case 'S3':
+          hostname = `${params.Bucket}.s3.${this.activeSpan._spanContext._tags.region}.amazonaws.com`
+          break
+        case 'Kinesis':
+          hostname = `kinesis.${this.activeSpan._spanContext._tags.region}.amazonaws.com`
+          break
+        case 'DynamoDBDocument':
+          hostname = `dynamodb.${this.activeSpan._spanContext._tags.region}.amazonaws.com`
+          break
+        default:
+          break
+      }
+
+      if (hostname) {
+        this._tracer._pluginManager._pluginsByName.http.client.config.hooks.request = ((span, req, res) => {
+          span.setTag('peer.service', hostname)
+        })
+
+        this._tracer._pluginManager._pluginsByName.http2.client.config.hooks.request = ((span, req, res) => {
+          span.setTag('peer.service', hostname)
+        })
+
+        this._tracer._pluginManager._pluginsByName.dns.client.config.hooks.request = ((span, req, res) => {
+          span.setTag('peer.service', hostname)
+        })
+
+        this._tracer._pluginManager._pluginsByName.net.client.config.hooks.request = ((span, req, res) => {
+          span.setTag('peer.service', hostname)
+        })
+      }
+
       analyticsSampler.sample(span, this.config.measured)
 
       this.requestInject(span, request)
