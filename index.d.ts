@@ -626,7 +626,7 @@ declare namespace tracer {
      * Appends the SQL comment propagation to the query string. Prepends the comment if `false`. For long query strings, the appended propagation comment might be truncated, causing loss of correlation between the query and trace.
      * @default false
      */
-    dbmAppendComment?: boolean;
+    appendComment?: boolean;
 
     /**
      * Configuration of the AppSec protection. Can be a boolean as an alias to `appsec.enabled`.
@@ -1944,7 +1944,7 @@ declare namespace tracer {
       /**
        * Appends the SQL comment propagation to the query string. Prepends the comment if `false`. For long query strings, the appended propagation comment might be truncated, causing loss of correlation between the query and trace.
        */
-      dbmAppendComment?: boolean;
+      appendComment?: boolean;
     }
 
     /**

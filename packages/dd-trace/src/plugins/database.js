@@ -89,7 +89,7 @@ class DatabasePlugin extends StoragePlugin {
       return query
     }
 
-    return this.config.dbmAppendComment
+    return this.config.appendComment
       ? `${query} /*${dbmTraceComment}*/`
       : `/*${dbmTraceComment}*/ ${query}`
   }

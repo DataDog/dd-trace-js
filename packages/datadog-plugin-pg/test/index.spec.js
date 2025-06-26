@@ -758,7 +758,7 @@ describe('Plugin', () => {
       describe('with DBM propagation enabled with append comment configurations', () => {
         before(async () => {
           await agent.load('pg', [{
-            dbmAppendComment: true,
+            appendComment: true,
             dbmPropagationMode: 'service',
             service: () => 'serviced',
           }])
