@@ -35,7 +35,7 @@ describe('Plugin', () => {
     withVersions('openai', 'openai', version => {
       const moduleRequirePath = `../../../versions/openai@${version}`
 
-      before(function () {
+      before(() => {
         tracer = require(tracerRequirePath)
         return agent.load('openai')
       })
