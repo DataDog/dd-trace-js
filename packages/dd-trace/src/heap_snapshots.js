@@ -1,10 +1,14 @@
 'use strict'
 
+const { join } = require('path')
+const { setImmediate, setTimeout } = require('timers/promises')
+const { format } = require('util')
+const { writeHeapSnapshot } = require('v8')
+const { threadId } = require('worker_threads')
+const log = require('./log')
+
 async function scheduleSnapshot (config, total) {
   if (total > config.heapSnapshot.count) return
-
-  const { setTimeout } = require('timers/promises')
-  const { writeHeapSnapshot } = require('v8')
 
   await setTimeout(config.heapSnapshot.interval * 1000, null, { ref: false })
   await clearMemory()
@@ -13,8 +17,6 @@ async function scheduleSnapshot (config, total) {
 }
 
 async function clearMemory () {
-  const { setImmediate } = require('timers/promises')
-
   globalThis.gc()
   await setImmediate()
   globalThis.gc() // Run full GC a second time for anything missed in first GC.
@@ -25,10 +27,6 @@ function pad (value) {
 }
 
 function getName (folder) {
-  const { join } = require('path')
-  const { format } = require('util')
-  const { threadId } = require('worker_threads')
-
   const date = new Date()
   const filename = format(
     'Heap-%s%s%s-%s%s%s-%s-%s.heapsnapshot',
@@ -49,7 +47,6 @@ module.exports = {
   async start (config) {
     if (config.heapSnapshot.count === 0 || !globalThis.gc) return
 
-    const log = require('./log')
     const folder = config.heapSnapshot.folder
 
     try {

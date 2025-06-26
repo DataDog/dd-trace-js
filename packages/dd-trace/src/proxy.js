@@ -100,7 +100,9 @@ class Tracer extends NoopProxy {
         require('./crashtracking').start(config)
       }
 
-      require('./heap_snapshots').start(config)
+      if (config.heapSnapshot.count > 0) {
+        require('./heap_snapshots').start(config)
+      }
 
       telemetry.start(config, this._pluginManager)
 
