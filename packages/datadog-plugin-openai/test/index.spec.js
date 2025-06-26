@@ -70,7 +70,7 @@ describe('Plugin', () => {
           const OpenAI = module
 
           openai = new OpenAI({
-            // apiKey: process.env.OPENAI_API_KEY ?? 'sk-DATADOG-ACCEPTANCE-TESTS',
+            apiKey: process.env.OPENAI_API_KEY,
             baseURL: 'http://127.0.0.1:9126/vcr/openai'
           })
 
