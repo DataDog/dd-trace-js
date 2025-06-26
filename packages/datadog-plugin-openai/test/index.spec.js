@@ -1807,7 +1807,7 @@ describe('Plugin', () => {
       })
 
       it('makes a successful call with the beta chat completions', async function () {
-        if (semver.satisfies(realVersion, '<4.59.0 || >=5.0.0')) {
+        if (semver.satisfies(realVersion, '<4.59.0')) {
           this.skip()
         }
 
@@ -1817,7 +1817,11 @@ describe('Plugin', () => {
             expect(span).to.have.property('name', 'openai.request')
           })
 
-        const prom = openai.beta.chat.completions.parse({
+        const parse = semver.satisfies(realVersion, '>=5.0.0')
+          ? openai.chat.completions.parse.bind(openai.chat.completions)
+          : openai.beta.chat.completions.parse.bind(openai.beta.chat.completions)
+
+        const prom = parse({
           model: 'gpt-4o',
           messages: [
             { role: 'system', content: 'You are a helpful assistant' },
