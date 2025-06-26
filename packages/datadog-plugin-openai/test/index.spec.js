@@ -942,7 +942,7 @@ describe('Plugin', () => {
           .assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('name', 'openai.request')
             expect(traces[0][0]).to.have.property('type', 'openai')
-            if (DD_MAJOR < 6) {
+            if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
               expect(traces[0][0]).to.have.property('resource', 'moderations.create')
             } else {
               expect(traces[0][0]).to.have.property('resource', 'createModeration')
