@@ -138,7 +138,9 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
       const spanGenerationPromise = useCallback
         ? new Promise((resolve, reject) => {
           const result = spanGenerationFn((err) => err ? reject(err) : resolve())
-          if (result && Object.keys(result).length === 0) {
+          // Some callback based methods are a mixture of callback and promise,
+          // depending on the module version. Await the promises as well.
+          if (util.types.isPromise(result)) {
             result.then?.(resolve, reject)
           }
         })
