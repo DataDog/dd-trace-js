@@ -69,7 +69,7 @@ describe('Plugin', () => {
               }
             }
           // Ignore index_not_found_exception
-          }, hasCallbackSupport ? () => done() : undefined),
+          }, hasCallbackSupport ? () => done() : undefined)?.catch?.(() => {}),
           'localhost',
           'out.host'
         )
