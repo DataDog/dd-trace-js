@@ -290,7 +290,7 @@ describe('Plugin', () => {
               const client = await aerospike.connect(config)
               await client.put(key, { i: 123 })
               return client.close(false)
-            }),
+            },
             rawExpectedSchema.command
           )
         })
@@ -325,7 +325,7 @@ describe('Plugin', () => {
             const client = await aerospike.connect(config)
             await client.put(key, { i: 123 })
             return client.close(false)
-          }),
+          },
           {
             v0: {
               opName: 'aerospike.command',
