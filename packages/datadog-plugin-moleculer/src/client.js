@@ -21,7 +21,7 @@ class MoleculerClientPlugin extends ClientPlugin {
     return ctx.currentStore
   }
 
-  bindFinish (ctx) {
+  finish (ctx) {
     const { promiseCtx, broker } = ctx
 
     const span = ctx.currentStore.span || this.activeSpan
@@ -36,8 +36,6 @@ class MoleculerClientPlugin extends ClientPlugin {
     }
 
     super.finish(ctx)
-
-    return ctx.parentStore
   }
 }
 

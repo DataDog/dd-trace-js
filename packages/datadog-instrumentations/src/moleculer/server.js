@@ -30,18 +30,20 @@ function createMiddleware () {
           try {
             return next(middlewareCtx).then(
               result => {
-                finishChannel.runStores(ctx, () => { return result })
+                finishChannel.publish(ctx)
+                return result
               },
               error => {
                 ctx.error = error
                 errorChannel.publish(ctx)
-                finishChannel.runStores(ctx, () => { throw error })
+                finishChannel.publish(ctx)
+                throw error
               }
             )
           } catch (e) {
             ctx.error = e
             errorChannel.publish(ctx)
-            finishChannel.runStores(ctx, () => {})
+            finishChannel.publish(ctx)
           }
         })
       })

@@ -24,12 +24,14 @@ function wrapCall (call) {
       return promise
         .then(
           result => {
-            finishChannel.runStores(ctx, () => { return result })
+            finishChannel.publish(ctx)
+            return result
           },
           error => {
             ctx.error = error
             errorChannel.publish(ctx)
-            finishChannel.runStores(ctx, () => { throw error })
+            finishChannel.publish(ctx)
+            throw error
           }
         )
     })

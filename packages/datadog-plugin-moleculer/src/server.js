@@ -25,11 +25,6 @@ class MoleculerServerPlugin extends ServerPlugin {
 
     return ctx.currentStore
   }
-
-  bindFinish (ctx) {
-    super.finish(ctx)
-    return ctx.parentStore
-  }
 }
 
 module.exports = MoleculerServerPlugin
