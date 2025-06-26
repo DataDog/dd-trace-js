@@ -103,6 +103,7 @@ module.exports = {
   'node:net': () => require('../net'),
   'node:url': () => require('../url'),
   'node:vm': () => require('../vm'),
+  'node:test': () => require('../node-test'),
   nyc: () => require('../nyc'),
   oracledb: () => require('../oracledb'),
   openai: { esmFirst: true, fn: () => require('../openai') },
