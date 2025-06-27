@@ -92,7 +92,7 @@
     "@datadog/sketches-js": "^2.1.1",
     "@datadog/wasm-js-rewriter": "^4.0.1",
     "@isaacs/ttlcache": "^1.4.1",
-    "@opentelemetry/api": "1.9.0",
+    "@opentelemetry/api": "1.8.0",
     "@opentelemetry/core": "^1.14.0",
     "crypto-randomuuid": "^1.0.0",
     "dc-polyfill": "^0.1.9",
