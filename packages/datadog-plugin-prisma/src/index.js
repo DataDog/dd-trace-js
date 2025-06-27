@@ -6,6 +6,7 @@ const PrismaClientPlugin = require('./client')
 const PrismaEnginePlugin = require('./engine')
 
 class PrismaPlugin extends CompositePlugin {
+  static experimental = true
   static get id () { return 'prisma' }
   static get plugins () {
     return {
