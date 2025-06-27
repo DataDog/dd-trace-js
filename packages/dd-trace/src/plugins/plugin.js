@@ -70,7 +70,6 @@ module.exports = class Plugin {
 
   // TODO: Implement filters on resource name for all plugins.
   /** Prevents creation of spans here and for all async descendants. */
-
   skip () {
     storage('legacy').enterWith({ noop: true })
   }
