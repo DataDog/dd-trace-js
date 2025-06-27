@@ -91,6 +91,7 @@ describe('Plugin Manager', () => {
 
   afterEach(() => {
     delete process.env.DD_TRACE_DISABLED_PLUGINS
+    delete process.env.DD_TRACE_EIGHT_ENABLED
     pm.destroy()
   })
 
@@ -286,6 +287,20 @@ describe('Plugin Manager', () => {
         pm.configure()
         loadChannel.publish({ name: 'eight' })
         expect(Eight.prototype.configure).to.have.been.calledWithMatch({ enabled: false })
+      })
+
+      it('should enable the plugin when configured programmatically', () => {
+        pm.configure()
+        pm.configurePlugin('eight')
+        loadChannel.publish({ name: 'eight' })
+        expect(Eight.prototype.configure).to.have.been.calledWithMatch({ enabled: true })
+      })
+
+      it('should enable the plugin when configured with an environment variable', () => {
+        process.env.DD_TRACE_EIGHT_ENABLED = 'true'
+        pm.configure()
+        loadChannel.publish({ name: 'eight' })
+        expect(Eight.prototype.configure).to.have.been.calledWithMatch({ enabled: true })
       })
     })
 
