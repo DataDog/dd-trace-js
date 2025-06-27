@@ -6,16 +6,19 @@ const tracerVersion = require('../../../../package.json').version
 
 const MOCK_STRING = Symbol('string')
 const MOCK_NUMBER = Symbol('number')
+const MOCK_OBJECT = Symbol('object')
 const MOCK_ANY = Symbol('any')
 
 function deepEqualWithMockValues (expected) {
   const actual = this._obj
 
-  for (const key in actual) {
+  for (const key of Object.keys(actual)) {
     if (expected[key] === MOCK_STRING) {
       new chai.Assertion(typeof actual[key], `key ${key}`).to.equal('string')
     } else if (expected[key] === MOCK_NUMBER) {
       new chai.Assertion(typeof actual[key], `key ${key}`).to.equal('number')
+    } else if (expected[key] === MOCK_OBJECT) {
+      new chai.Assertion(typeof actual[key], `key ${key}`).to.equal('object')
     } else if (expected[key] === MOCK_ANY) {
       new chai.Assertion(actual[key], `key ${key}`).to.exist
     } else if (Array.isArray(expected[key])) {
@@ -190,11 +193,73 @@ function fromBuffer (spanProperty, isNumber = false) {
   return isNumber ? Number(strVal) : strVal
 }
 
+const sinon = require('sinon')
+const agent = require('../plugins/agent')
+const LLMObsSpanWriter = require('../../src/llmobs/writers/spans')
+
+function useLlmobs ({
+  plugin,
+  tracerConfigOptions = {
+    llmobs: {
+      mlApp: 'test',
+      agentlessEnabled: false
+    }
+  },
+  closeOptions = { ritmReset: false }
+}) {
+  if (!plugin) {
+    throw new TypeError(
+      '`plugin` is required when using `useLlmobs`'
+    )
+  }
+
+  if (!tracerConfigOptions.llmobs) {
+    throw new TypeError(
+      '`loadOptions.llmobs` is required when using `useLlmobs`'
+    )
+  }
+
+  let agentPromise
+  let llmobsEvents = []
+
+  before(() => {
+    sinon.stub(LLMObsSpanWriter.prototype, 'append').callsFake(event => {
+      llmobsEvents.push(event)
+    })
+
+    return agent.load(plugin, {}, tracerConfigOptions)
+  })
+
+  beforeEach(() => {
+    agentPromise = agent.assertSomeTraces(traces => {
+      return traces.flatMap(trace => trace)
+    })
+  })
+
+  afterEach(() => {
+    llmobsEvents = []
+  })
+
+  after(() => {
+    LLMObsSpanWriter.prototype.append.restore()
+    return agent.close(closeOptions)
+  })
+
+  return async function () {
+    const spans = await agentPromise
+    const llmobsSpans = llmobsEvents
+
+    return { spans, llmobsSpans }
+  }
+}
+
 module.exports = {
   expectedLLMObsLLMSpanEvent,
   expectedLLMObsNonLLMSpanEvent,
   deepEqualWithMockValues,
+  useLlmobs,
   MOCK_ANY,
   MOCK_NUMBER,
-  MOCK_STRING
+  MOCK_STRING,
+  MOCK_OBJECT
 }

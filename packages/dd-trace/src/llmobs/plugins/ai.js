@@ -76,14 +76,17 @@ function getOperation (span) {
  * @returns {{inputTokens: number, outputTokens: number, totalTokens: number}}
  */
 function getUsage (tags) {
+  const usage = {}
   const inputTokens = tags['ai.usage.promptTokens']
   const outputTokens = tags['ai.usage.completionTokens']
 
-  return {
-    inputTokens,
-    outputTokens,
-    totalTokens: inputTokens + outputTokens
-  }
+  if (inputTokens != null) usage.inputTokens = inputTokens
+  if (outputTokens != null) usage.outputTokens = outputTokens
+
+  const totalTokens = inputTokens + outputTokens
+  if (!Number.isNaN(totalTokens)) usage.totalTokens = totalTokens
+
+  return usage
 }
 
 /**
@@ -317,7 +320,7 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
     this._tagger.tagTextIO(span, prompt, output)
 
     const metadata = getGenerationMetadata(tags)
-    metadata.schema = tags['ai.schema']
+    metadata.schema = getJsonStringValue(tags['ai.schema'], {})
     this._tagger.tagMetadata(span, metadata)
   }
 
@@ -428,10 +431,10 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
       if (toolCalls.length) {
         finalMessage.toolCalls = toolCalls
       }
+    } else if (role === 'tool') {
+      // TODO(sabrenner): add support for tool messages in a follow-up once BE supports it
+      return
     }
-
-    // TODO(sabrenner): add support for tool messages in a follow-up once BE supports it
-    // role === 'tool'
 
     return finalMessage
   }
