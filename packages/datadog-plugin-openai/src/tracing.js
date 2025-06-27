@@ -366,6 +366,7 @@ function normalizeMethodName (methodName) {
     case 'files.retrieve':
       return 'retrieveFile'
     case 'files.del':
+    case 'files.delete':
       return 'deleteFile'
     case 'files.retrieveContent':
     case 'files.content':
@@ -410,6 +411,7 @@ function normalizeMethodName (methodName) {
     case 'models.retrieve':
       return 'retrieveModel'
     case 'models.del':
+    case 'models.delete':
       return 'deleteModel'
     default:
       return methodName
@@ -686,8 +688,8 @@ function commonFineTuneResponseExtraction (tags, body) {
 
 // the OpenAI package appears to stream the content download then provide it all as a singular string
 function downloadFileResponseExtraction (tags, body) {
-  if (!body.file) return
-  tags['openai.response.total_bytes'] = body.file.length
+  if (typeof body.file !== 'string') return
+  tags['openai.response.total_bytes'] = Buffer.byteLength(body.file)
 }
 
 function deleteFileResponseExtraction (tags, body) {
@@ -952,6 +954,7 @@ function normalizeRequestPayload (methodName, args) {
 
     case 'deleteFile':
     case 'files.del':
+    case 'files.delete':
     case 'retrieveFile':
     case 'files.retrieve':
     case 'downloadFile':
@@ -972,6 +975,7 @@ function normalizeRequestPayload (methodName, args) {
     case 'fine-tune.retrieve':
     case 'deleteModel':
     case 'models.del':
+    case 'models.delete':
     case 'cancelFineTune':
     case 'fine_tuning.jobs.cancel':
     case 'fine-tune.cancel':

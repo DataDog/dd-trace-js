@@ -1,6 +1,7 @@
 'use strict'
 
 const semver = require('semver')
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const proxyquire = require('proxyquire').noPreserveCache()
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -58,8 +59,10 @@ describe('Plugin', () => {
         withPeerService(
           () => tracer,
           'mariadb',
-          done => connection.query('SELECT 1', (err) => { err && done(err) }),
-          'db', 'db.name')
+          done => connection.query('SELECT 1', done),
+          'db',
+          'db.name'
+        )
 
         it('should propagate context to callbacks, with correct callback args', done => {
           const span = tracer.startSpan('test')
