@@ -592,7 +592,7 @@ describe('checkShaDiscrepancies', () => {
         discrepant_provider: discrepantProvider
       })
     })
-    expect(incrementCountMetricStub).to.have.been.calledWith(TELEMETRY_GIT_SHA_MATCH, { match: false })
+    expect(incrementCountMetricStub).to.have.been.calledWith(TELEMETRY_GIT_SHA_MATCH, { matched: false })
   })
 
   it('return true if the CI/Git Client commit SHA is different from the user provided commit SHA', () => {
@@ -634,7 +634,7 @@ describe('checkShaDiscrepancies', () => {
         discrepant_provider: discrepantProvider
       })
     })
-    expect(incrementCountMetricStub).to.have.been.calledWith(TELEMETRY_GIT_SHA_MATCH, { match: false })
+    expect(incrementCountMetricStub).to.have.been.calledWith(TELEMETRY_GIT_SHA_MATCH, { matched: false })
   })
 
   it('increment TELEMETRY_GIT_SHA_MATCH with match: true when all values match', () => {
@@ -663,6 +663,6 @@ describe('checkShaDiscrepancies', () => {
 
     checkShaDiscrepancies(ciMetadata, userProvidedGitMetadata)
 
-    expect(incrementCountMetricStub).to.have.been.calledWith(TELEMETRY_GIT_SHA_MATCH, { match: true })
+    expect(incrementCountMetricStub).to.have.been.calledWith(TELEMETRY_GIT_SHA_MATCH, { matched: true })
   })
 })
