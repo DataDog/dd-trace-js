@@ -6,6 +6,8 @@ const tags = require('../../../ext/tags')
 const { expect } = require('chai')
 const { rawExpectedSchema } = require('./naming')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const semver = require('semver')
+const { NODE_MAJOR } = require('../../../version')
 
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
@@ -18,7 +20,10 @@ describe('Plugin', () => {
   let appListener
 
   describe('undici-fetch', () => {
-    withVersions('undici', 'undici', version => {
+    withVersions('undici', 'undici', (version, _moduleName_, realVersion) => {
+      if (NODE_MAJOR < 20 && semver.satisfies(realVersion, '>=7.11.0')) {
+        return
+      }
       function server (app, listener) {
         const server = require('http').createServer(app)
         server.listen(0, 'localhost', () => listener(server.address().port))
