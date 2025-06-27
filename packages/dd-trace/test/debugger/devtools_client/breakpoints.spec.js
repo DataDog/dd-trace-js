@@ -217,7 +217,9 @@ describe('breakpoints', function () {
         })
         .catch((err) => {
           expect(err).to.be.instanceOf(Error)
-          expect(err.message).to.equal('Cannot compile expression: this is an invalid condition')
+          expect(err.message).to.equal(
+            'Cannot compile expression: this is an invalid condition (probe: probe-1, version: 1)'
+          )
         })
     })
   })
