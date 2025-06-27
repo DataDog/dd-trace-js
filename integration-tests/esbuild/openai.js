@@ -1,0 +1,2 @@
+require('../../').init()
+require('openai')

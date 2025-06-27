@@ -1,5 +1,6 @@
 'use strict'
 
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -253,8 +254,12 @@ describe('Plugin', () => {
                 match_all: {}
               }
             }
+          }).catch(() => {
+            // Ignore index_not_found_exception for peer service assertion
           }),
-          'localhost', 'out.host')
+          'localhost',
+          'out.host'
+        )
 
         it('should be configured with the correct values', done => {
           client.search({

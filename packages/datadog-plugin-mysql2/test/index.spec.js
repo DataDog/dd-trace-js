@@ -1,5 +1,6 @@
 'use strict'
 
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const proxyquire = require('proxyquire').noPreserveCache()
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -45,7 +46,9 @@ describe('Plugin', () => {
           () => tracer,
           'mysql2',
           (done) => connection.query('SELECT 1', (_) => done()),
-          'db', 'db.name')
+          'db',
+          'db.name'
+        )
 
         withNamingSchema(
           () => connection.query('SELECT 1', (_) => {}),
