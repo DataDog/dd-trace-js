@@ -96,22 +96,25 @@ function request (data, options, callback) {
           callback(null, buffer.toString(), res.statusCode)
         }
       } else {
-        let errorMessage = ''
+        let logArgs = [''] // use with log.error(...logArgs), it's a sprintf string with placeholder args
         try {
           const fullUrl = new URL(
             options.path,
             options.url || options.hostname || `http://localhost:${options.port}`
           ).href
-          errorMessage = `Error from ${fullUrl}: ${res.statusCode} ${http.STATUS_CODES[res.statusCode]}.`
+          logArgs[0] += 'Error from agent, url=%s, status=%s %s'
+          logArgs.push(fullUrl, res.statusCode, http.STATUS_CODES[res.statusCode])
         } catch {
           // ignore error
         }
         const responseData = buffer.toString()
         if (responseData) {
-          errorMessage += ` Response from the endpoint: "${responseData}"`
+          logArgs[0] += ', response=%s'
+          logArgs.push(responseData.substring(0, 100).replaceAll(/[\r\n]/g, ' ')) // can be a 1MB HTML document from an nginx proxy
         }
-        const error = new Error(errorMessage)
+        const error = new Error('error from agent. DO NOT PASS TO log.error() INSTEAD USE log.error(...error.logArgs)') // TODO DON'T MERGE THIS
         error.status = res.statusCode
+        error.logArgs = logArgs
 
         callback(error, null, res.statusCode)
       }
