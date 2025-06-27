@@ -12,12 +12,8 @@ class Http2ServerPlugin extends ServerPlugin {
     return 'http2'
   }
 
-  addTraceSub (eventName, handler) {
-    this.addSub(`apm:${this.constructor.id}:server:${this.operation}:${eventName}`, handler)
-  }
-
-  addTraceBind (eventName, handler) {
-    this.addBind(`apm:${this.constructor.id}:server:${this.operation}:${eventName}`, handler)
+  static get prefix () {
+    return 'apm:http2:server:request'
   }
 
   bindStart (ctx) {
