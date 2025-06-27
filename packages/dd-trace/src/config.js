@@ -151,6 +151,16 @@ function maybeFile (filepath) {
   }
 }
 
+function maybeJsonFile (filepath) {
+  const file = maybeFile(filepath)
+  if (!file) return
+  try {
+    return JSON.parse(file)
+  } catch (e) {
+    log.error('Error parsing JSON file %s', filepath, e)
+  }
+}
+
 function safeJsonParse (input) {
   try {
     return JSON.parse(input)
@@ -962,7 +972,7 @@ class Config {
     this._setBoolean(env, 'runtimeMetrics.gc', DD_RUNTIME_METRICS_GC_ENABLED)
     this._setBoolean(env, 'runtimeMetricsRuntimeId', DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED)
     this._setArray(env, 'sampler.spanSamplingRules', reformatSpanSamplingRules(coalesce(
-      safeJsonParse(maybeFile(DD_SPAN_SAMPLING_RULES_FILE)),
+      maybeJsonFile(DD_SPAN_SAMPLING_RULES_FILE),
       safeJsonParse(DD_SPAN_SAMPLING_RULES)
     )))
     this._setUnit(env, 'sampleRate', DD_TRACE_SAMPLE_RATE ||
