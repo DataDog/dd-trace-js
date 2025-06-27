@@ -34,15 +34,8 @@ addHook({ name: 'tedious', versions: ['>=1.0.0'] }, tedious => {
           ctx.error = error
           errorCh.publish(ctx)
         }
-<<<<<<< HEAD
-        finishCh.publish()
-
-        return cb.apply(this, arguments)
-      }, null, request)
-=======
         return finishCh.runStores(ctx, cb, this, error, ...args)
       }
->>>>>>> 4d8d59fe1 (migrating tedious to use runStores)
 
       try {
         return makeRequest.apply(this, arguments)
