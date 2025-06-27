@@ -179,7 +179,7 @@ describe('Config', () => {
     expect(config).to.have.property('service', 'service')
     expect(config).to.have.property('logLevel', 'error')
     expect(config).to.have.property('sampleRate', 0.5)
-    expect(config).to.have.property('runtimeMetrics', true)
+    expect(config).to.have.nested.property('runtimeMetrics.enabled', true)
     expect(config.tags).to.include({ foo: 'bar', baz: 'qux' })
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['b3', 'tracecontext'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['b3', 'tracecontext'])
@@ -209,7 +209,7 @@ describe('Config', () => {
     expect(config).to.have.property('service', 'otel_service')
     expect(config).to.have.property('logLevel', 'debug')
     expect(config).to.have.property('sampleRate', 0.1)
-    expect(config).to.have.property('runtimeMetrics', false)
+    expect(config).to.have.nested.property('runtimeMetrics.enabled', false)
     expect(config.tags).to.include({ foo: 'bar1', baz: 'qux1' })
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['b3', 'datadog'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['b3', 'datadog'])
@@ -327,7 +327,9 @@ describe('Config', () => {
     expect(config).to.have.nested.property('remoteConfig.enabled', true)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 5)
     expect(config).to.have.property('reportHostname', false)
-    expect(config).to.have.property('runtimeMetrics', false)
+    expect(config).to.have.nested.property('runtimeMetrics.enabled', false)
+    expect(config).to.have.nested.property('runtimeMetrics.eventLoop', true)
+    expect(config).to.have.nested.property('runtimeMetrics.gc', true)
     expect(config).to.have.property('runtimeMetricsRuntimeId', false)
     expect(config).to.have.property('sampleRate', undefined)
     expect(config).to.have.property('scope', undefined)
@@ -452,7 +454,7 @@ describe('Config', () => {
       { name: 'remoteConfig.pollInterval', value: 5, origin: 'default' },
       { name: 'reportHostname', value: false, origin: 'default' },
       { name: 'reportHostname', value: false, origin: 'default' },
-      { name: 'runtimeMetrics', value: false, origin: 'default' },
+      { name: 'runtimeMetrics.enabled', value: false, origin: 'default' },
       { name: 'runtimeMetricsRuntimeId', value: false, origin: 'default' },
       { name: 'sampleRate', value: undefined, origin: 'default' },
       { name: 'sampler.rateLimit', value: 100, origin: 'default' },
@@ -581,6 +583,8 @@ describe('Config', () => {
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = '42'
     process.env.DD_REMOTE_CONFIGURATION_ENABLED = 'false'
     process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
+    process.env.DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED = 'false'
+    process.env.DD_RUNTIME_METRICS_GC_ENABLED = 'false'
     process.env.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED = 'true'
     process.env.DD_SERVICE = 'service'
     process.env.DD_SERVICE_MAPPING = 'a:aa, b:bb'
@@ -696,7 +700,9 @@ describe('Config', () => {
     expect(config).to.have.nested.property('remoteConfig.enabled', false)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.property('reportHostname', true)
-    expect(config).to.have.property('runtimeMetrics', true)
+    expect(config).to.have.nested.property('runtimeMetrics.enabled', true)
+    expect(config).to.have.nested.property('runtimeMetrics.eventLoop', false)
+    expect(config).to.have.nested.property('runtimeMetrics.gc', false)
     expect(config).to.have.property('runtimeMetricsRuntimeId', true)
     expect(config).to.have.property('sampleRate', 0.5)
     expect(config).to.have.deep.nested.property('sampler', {
@@ -801,7 +807,7 @@ describe('Config', () => {
       { name: 'remoteConfig.enabled', value: false, origin: 'env_var' },
       { name: 'remoteConfig.pollInterval', value: '42', origin: 'env_var' },
       { name: 'reportHostname', value: true, origin: 'env_var' },
-      { name: 'runtimeMetrics', value: true, origin: 'env_var' },
+      { name: 'runtimeMetrics.enabled', value: true, origin: 'env_var' },
       { name: 'runtimeMetricsRuntimeId', value: true, origin: 'env_var' },
       { name: 'sampler.rateLimit', value: '-1', origin: 'env_var' },
       { name: 'sampler.rules', value: process.env.DD_TRACE_SAMPLING_RULES, origin: 'env_var' },
@@ -883,7 +889,7 @@ describe('Config', () => {
 
     expect(config).to.have.property('tracing', false)
     expect(config).to.have.property('tracePropagationExtractFirst', true)
-    expect(config).to.have.property('runtimeMetrics', false)
+    expect(config).to.have.nested.property('runtimeMetrics.enabled', false)
   })
 
   it('should initialize from environment variables with url taking precedence', () => {
@@ -1025,7 +1031,11 @@ describe('Config', () => {
         pollInterval: 42
       },
       reportHostname: true,
-      runtimeMetrics: true,
+      runtimeMetrics: {
+        enabled: true,
+        eventLoop: false,
+        gc: false
+      },
       runtimeMetricsRuntimeId: true,
       sampleRate: 0.5,
       samplingRules,
@@ -1095,7 +1105,9 @@ describe('Config', () => {
     expect(config).to.have.property('protocolVersion', '0.5')
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.property('reportHostname', true)
-    expect(config).to.have.property('runtimeMetrics', true)
+    expect(config).to.have.nested.property('runtimeMetrics.enabled', true)
+    expect(config).to.have.nested.property('runtimeMetrics.eventLoop', false)
+    expect(config).to.have.nested.property('runtimeMetrics.gc', false)
     expect(config).to.have.property('runtimeMetricsRuntimeId', true)
     expect(config).to.have.property('sampleRate', 0.5)
     expect(config).to.have.deep.nested.property('sampler', {
@@ -1177,7 +1189,7 @@ describe('Config', () => {
       { name: 'protocolVersion', value: '0.5', origin: 'code' },
       { name: 'remoteConfig.pollInterval', value: 42, origin: 'code' },
       { name: 'reportHostname', value: true, origin: 'code' },
-      { name: 'runtimeMetrics', value: true, origin: 'code' },
+      { name: 'runtimeMetrics.enabled', value: true, origin: 'code' },
       { name: 'runtimeMetricsRuntimeId', value: true, origin: 'code' },
       { name: 'sampler.rateLimit', value: 1000, origin: 'code' },
       { name: 'sampler.rules', value: samplingRules, origin: 'code' },
@@ -1567,7 +1579,7 @@ describe('Config', () => {
     expect(config).to.have.property('protocolVersion', '0.5')
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.property('reportHostname', false)
-    expect(config).to.have.property('runtimeMetrics', false)
+    expect(config).to.have.nested.property('runtimeMetrics.enabled', false)
     expect(config).to.have.property('runtimeMetricsRuntimeId', false)
     expect(config).to.have.property('service', 'test')
     expect(config).to.have.deep.property('serviceMapping', { b: 'bb' })
@@ -2636,7 +2648,7 @@ apm_configuration_default:
   DD_RUNTIME_METRICS_ENABLED: true
 `)
       const config = new Config()
-      expect(config).to.have.property('runtimeMetrics', true)
+      expect(config).to.have.nested.property('runtimeMetrics.enabled', true)
     })
 
     it('should apply service specific config', () => {
@@ -2731,7 +2743,7 @@ apm_configuration_default:
       expect(stableConfig.warnings).to.have.lengthOf(0)
 
       const config = new Config()
-      expect(config).to.have.property('runtimeMetrics', true)
+      expect(config).to.have.nested.property('runtimeMetrics.enabled', true)
     })
 
     it('should log a warning if the YAML files are malformed', () => {

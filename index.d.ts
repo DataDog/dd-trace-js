@@ -484,10 +484,14 @@ declare namespace tracer {
     flushMinSpans?: number;
 
     /**
-     * Whether to enable runtime metrics.
+     * Whether to enable runtime metrics, or an object specifying whether to enable specific metric types.
      * @default false
      */
-    runtimeMetrics?: boolean
+    runtimeMetrics?: boolean | {
+      enabled?: boolean,
+      gc?: boolean,
+      eventLoop?: boolean
+    }
 
     /**
      * Custom function for DNS lookups when sending requests to the agent.

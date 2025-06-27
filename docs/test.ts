@@ -101,6 +101,11 @@ tracer.init({
 });
 
 tracer.init({
+  runtimeMetrics: {
+    enabled: true,
+    gc: true,
+    eventLoop: false
+  },
   appsec: {
     enabled: true,
     rules: './rules.json',
