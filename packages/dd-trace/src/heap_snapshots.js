@@ -12,7 +12,7 @@ async function scheduleSnapshot (config, total) {
 
   await setTimeout(config.heapSnapshot.interval * 1000, null, { ref: false })
   await clearMemory()
-  writeHeapSnapshot(getName(config.heapSnapshot.folder))
+  writeHeapSnapshot(getName(config.heapSnapshot.destination))
   await scheduleSnapshot(config, total + 1)
 }
 
@@ -26,7 +26,7 @@ function pad (value) {
   return String(value).padStart(2, 0)
 }
 
-function getName (folder) {
+function getName (destination) {
   const date = new Date()
   const filename = format(
     'Heap-%s%s%s-%s%s%s-%s-%s.heapsnapshot',
@@ -40,20 +40,20 @@ function getName (folder) {
     threadId
   )
 
-  return join(folder, filename)
+  return join(destination, filename)
 }
 
 module.exports = {
   async start (config) {
     if (config.heapSnapshot.count === 0 || !globalThis.gc) return
 
-    const folder = config.heapSnapshot.folder
+    const destination = config.heapSnapshot.destination
 
     try {
       await scheduleSnapshot(config, 1)
-      log.debug('Wrote heap snapshots to %s.', folder)
+      log.debug('Wrote heap snapshots to %s.', destination)
     } catch (e) {
-      log.error('Failed to write heap snapshots to %s.', folder, e)
+      log.error('Failed to write heap snapshots to %s.', destination, e)
     }
   }
 }
