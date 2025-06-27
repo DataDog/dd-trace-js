@@ -185,7 +185,7 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   const allDependencies = [`file:${out}`].concat(dependencies)
 
   fs.mkdirSync(folder)
-  const addCommand = `yarn add ${allDependencies.join(' ')} --ignore-engines`
+  const addCommand = `yarn add ${allDependencies.join(' ')} --ignore-engines --prefer-offline`
   const addOptions = { cwd: folder, env: restOfEnv }
   await exec(`yarn pack --filename ${out}`, { env: restOfEnv }) // TODO: cache this
 
