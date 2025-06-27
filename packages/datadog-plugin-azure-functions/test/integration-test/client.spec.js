@@ -8,7 +8,7 @@ const {
 } = require('../../../../integration-tests/helpers')
 const { spawn } = require('child_process')
 const { assert } = require('chai')
-const { NODE_MAJOR } = require('../../../version')
+const { NODE_MAJOR } = require('../../../../version')
 
 describe('esm', () => {
   let agent
