@@ -1,13 +1,15 @@
 'use strict'
 
 const { expect } = require('chai')
-const assert = require('assert')
+const assert = require('node:assert')
 const semver = require('semver')
+
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const net = require('net')
+const net = require('node:net')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
-const EventEmitter = require('events')
+const EventEmitter = require('node:events')
 
 const ddpv = require('mocha/package.json').version
 
@@ -59,12 +61,9 @@ describe('Plugin', () => {
           withPeerService(
             () => tracer,
             'pg',
-            (done) => client.query('SELECT 1', (err, result) => {
-              if (err) {
-                done()
-              }
-            }),
-            'postgres', 'db.name'
+            (done) => client.query('SELECT 1', done),
+            'postgres',
+            'db.name'
           )
 
           it('should do automatic instrumentation when using callbacks', done => {
