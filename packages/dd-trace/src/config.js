@@ -664,7 +664,6 @@ class Config {
       DD_API_SECURITY_ENABLED,
       DD_API_SECURITY_SAMPLE_DELAY,
       DD_APM_TRACING_ENABLED,
-      DD_APPEND_COMMENT,
       DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE,
       DD_APPSEC_COLLECT_ALL_HEADERS,
       DD_APPSEC_ENABLED,
@@ -858,7 +857,6 @@ class Config {
       'codeOriginForSpans.experimental.exit_spans.enabled',
       DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED
     )
-    this._setBoolean(env, 'appendComment', DD_APPEND_COMMENT)
     this._setString(env, 'dbmPropagationMode', DD_DBM_PROPAGATION_MODE)
     this._setString(env, 'dogstatsd.hostname', DD_DOGSTATSD_HOST)
     this._setString(env, 'dogstatsd.port', DD_DOGSTATSD_PORT)
