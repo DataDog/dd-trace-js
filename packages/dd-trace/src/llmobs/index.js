@@ -22,6 +22,8 @@ const LLMObsTagger = require('./tagger')
 const LLMObsSpanWriter = require('./writers/spans')
 const { setAgentStrategy } = require('./writers/util')
 
+const util = require('node:util')
+
 /**
  * Setting writers and processor globally when LLMObs is enabled
  * We're setting these in this module instead of on the SDK.
@@ -75,7 +77,7 @@ function enable (config) {
     spanWriter?.setAgentless(useAgentless)
 
     telemetry.recordLLMObsEnabled(startTime, config)
-    log.debug(`[LLMObs] Enabled LLM Observability with configuration: ${JSON.stringify(config.llmobs)}`)
+    log.debug(`[LLMObs] Enabled LLM Observability with configuration: ${util.inspect(config.llmobs)}`)
   })
 }
 
