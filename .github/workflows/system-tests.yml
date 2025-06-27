@@ -35,6 +35,7 @@ jobs:
     runs-on: ${{ contains(fromJSON('["CROSSED_TRACING_LIBRARIES", "INTEGRATIONS"]'), matrix.scenario) && 'ubuntu-latest-16-cores' || 'ubuntu-latest' }}
     needs:
       - get-scenarios
+    if: github.actor != 'dependabot[bot]'
     strategy:
       matrix:
         weblog-variant: ${{fromJson(needs.get-scenarios.outputs.endtoend_weblogs)}}
