@@ -78,7 +78,7 @@ module.exports = class PluginManager {
       this._pluginsByName[name] = new Plugin(this._tracer, this._tracerConfig)
     }
     const pluginConfig = this._configsByName[name] || {
-      enabled: isTrue(getEnvEnabled(Plugin)) || (this._tracerConfig.plugins !== false && !Plugin.experimental)
+      enabled: this._tracerConfig.plugins !== false && (!Plugin.experimental || isTrue(getEnvEnabled(Plugin)))
     }
 
     // extracts predetermined configuration from tracer and combines it with plugin-specific config
