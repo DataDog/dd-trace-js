@@ -6,6 +6,7 @@ const getPort = require('get-port')
 const path = require('path')
 const zlib = require('zlib')
 const fs = require('node:fs')
+const semver = require('semver')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
@@ -533,6 +534,94 @@ withVersions('fastify', 'fastify', '>=2', version => {
             }
           })
         })
+      })
+    })
+  })
+
+  describe('Suspicious request blocking - multipart', () => {
+    withVersions('fastify', '@fastify/multipart', multipartVersion => {
+      let server, uploadSpy, axios
+
+      before(function () {
+        // @fastify/multipart is not compatible with Fastify 2.x
+        if (version.startsWith('2')) {
+          this.skip()
+        }
+
+        // @fastify/multipart v6.x is not compatible with Fastify >3
+        // For Fastify v5.x, you need @fastify/multipart v9.x or newer
+        if (semver.intersects(version, '>3.0.0') && multipartVersion === '6.0.0') {
+          this.skip()
+        }
+
+        return agent.load(['fastify', '@fastify/multipart', 'http'], { client: false })
+      })
+
+      before((done) => {
+        const fastify = require(`../../../../versions/fastify@${version}`).get()
+        const fastifyMultipart = require(`../../../../versions/@fastify/multipart@${multipartVersion}`).get()
+
+        const app = fastify()
+
+        app.register(fastifyMultipart, { attachFieldsToBody: true })
+
+        app.post('/', (request, reply) => {
+          uploadSpy()
+          reply.send('DONE')
+        })
+
+        getPort().then((port) => {
+          app.listen({ port }, () => {
+            axios = Axios.create({ baseURL: `http://localhost:${port}` })
+            done()
+          })
+          server = app.server
+        }).catch(done)
+      })
+
+      beforeEach(() => {
+        uploadSpy = sinon.stub()
+        appsec.enable(new Config({
+          appsec: {
+            enabled: true,
+            rules: path.join(__dirname, 'body-parser-rules.json')
+          }
+        }))
+      })
+
+      afterEach(() => {
+        appsec.disable()
+      })
+
+      after(() => {
+        if (server) {
+          server.close()
+        }
+        return agent.close({ ritmReset: false })
+      })
+
+      it('should not block the request without an attack', async () => {
+        const form = new FormData()
+        form.append('key', 'value')
+
+        const res = await axios.post('/', form)
+
+        sinon.assert.calledOnce(uploadSpy)
+        assert.strictEqual(res.data, 'DONE')
+      })
+
+      it('should block the request when attack is detected', async () => {
+        try {
+          const form = new FormData()
+          form.append('key', 'testattack')
+
+          await axios.post('/', form)
+
+          return Promise.reject(new Error('Request should not return 200'))
+        } catch (e) {
+          assert.strictEqual(e.response.status, 403)
+          sinon.assert.notCalled(uploadSpy)
+        }
       })
     })
   })
