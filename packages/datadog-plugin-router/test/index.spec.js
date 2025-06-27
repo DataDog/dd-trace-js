@@ -111,7 +111,7 @@ describe('Plugin', () => {
           router.use((req, res, next) => {
             return next('route')
           })
-          router.get('/foo', (req, res) => {
+          router.get('/foo', [[[(_req, _res, next) => { next() }]]], (req, res) => {
             res.end()
           })
 

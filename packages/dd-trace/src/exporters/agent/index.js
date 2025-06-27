@@ -5,6 +5,8 @@ const log = require('../../log')
 const Writer = require('./writer')
 
 class AgentExporter {
+  #timer
+
   constructor (config, prioritySampler) {
     this._config = config
     const { url, hostname, port, lookup, protocolVersion, stats = {}, apmTracingEnabled } = config
@@ -28,8 +30,9 @@ class AgentExporter {
       config
     })
 
-    this._timer = undefined
-    process.once('beforeExit', () => this._writer.flush())
+    process.once('beforeExit', () => {
+      this.flush()
+    })
   }
 
   setUrl (url) {
@@ -49,15 +52,17 @@ class AgentExporter {
 
     if (flushInterval === 0) {
       this._writer.flush()
-    } else if (flushInterval > 0 && !this._timer) {
-      this._timer = setTimeout(() => {
+    } else if (this.#timer === undefined) {
+      this.#timer = setTimeout(() => {
         this._writer.flush()
-        this._timer = clearTimeout(this._timer)
+        this.#timer = undefined
       }, flushInterval).unref()
     }
   }
 
   flush (done = () => {}) {
+    clearTimeout(this.#timer)
+    this.#timer = undefined
     this._writer.flush(done)
   }
 }

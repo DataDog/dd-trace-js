@@ -47,7 +47,7 @@ function guard (fn) {
       { name: 'abort.runtime', tags: [] }
     ])
     log.info('Aborting application instrumentation due to incompatible_runtime.')
-    log.info('Found incompatible runtime nodejs ' + version + ', Supported runtimes: nodejs ' + engines.node + '.')
+    log.info('Found incompatible runtime nodejs %s, Supported runtimes: nodejs %s.', version, engines.node)
     if (forced) {
       log.info('DD_INJECT_FORCE enabled, allowing unsupported runtimes and continuing.')
     }

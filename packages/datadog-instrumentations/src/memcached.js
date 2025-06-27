@@ -2,8 +2,7 @@
 
 const {
   channel,
-  addHook,
-  AsyncResource
+  addHook
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
@@ -17,35 +16,29 @@ addHook({ name: 'memcached', versions: ['>=2.2'] }, Memcached => {
       return command.apply(this, arguments)
     }
 
-    const callbackResource = new AsyncResource('bound-anonymous-fn')
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-
     const client = this
 
-    const wrappedQueryCompiler = asyncResource.bind(function () {
+    const wrappedQueryCompiler = function () {
       const query = queryCompiler.apply(this, arguments)
-      const callback = callbackResource.bind(query.callback)
 
-      query.callback = shimmer.wrapFunction(callback, callback => asyncResource.bind(function (err) {
-        if (err) {
-          errorCh.publish(err)
-        }
-        finishCh.publish()
+      const ctx = { client, server, query }
+      startCh.runStores(ctx, () => {
+        query.callback = shimmer.wrapFunction(query.callback, callback => function (err) {
+          if (err) {
+            ctx.error = err
+            errorCh.publish(ctx)
+          }
+          finishCh.publish(ctx)
 
-        return callback.apply(this, arguments)
-      }))
-      startCh.publish({ client, server, query })
-
+          return finishCh.runStores(ctx, callback, this, ...arguments)
+        })
+      })
       return query
-    })
+    }
 
-    return asyncResource.runInAsyncScope(() => {
-      arguments[0] = wrappedQueryCompiler
+    arguments[0] = wrappedQueryCompiler
 
-      const result = command.apply(this, arguments)
-
-      return result
-    })
+    return command.apply(this, arguments)
   })
 
   return Memcached

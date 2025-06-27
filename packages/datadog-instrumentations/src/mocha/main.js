@@ -201,9 +201,10 @@ function getOnEndHandler (isParallel) {
   }
 }
 
-function getExecutionConfiguration (runner, isParallel, onFinishRequest) {
+function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFinishRequest) {
   const ctx = {
-    isParallel
+    isParallel,
+    frameworkVersion
   }
 
   const onReceivedSkippableSuites = ({ err, skippableSuites, itrCorrelationId: responseItrCorrelationId }) => {
@@ -343,7 +344,7 @@ addHook({
   name: 'mocha',
   versions: ['>=5.2.0'],
   file: 'lib/mocha.js'
-}, (Mocha) => {
+}, (Mocha, frameworkVersion) => {
   shimmer.wrap(Mocha.prototype, 'run', run => function () {
     // Workers do not need to request any data, just run the tests
     if (!testFinishCh.hasSubscribers || getEnvironmentVariable('MOCHA_WORKER_ID') || this.options.parallel) {
@@ -363,7 +364,7 @@ addHook({
       }
     })
 
-    getExecutionConfiguration(runner, false, () => {
+    getExecutionConfiguration(runner, false, frameworkVersion, () => {
       if (config.isKnownTestsEnabled) {
         const testSuites = this.files.map(file => getTestSuitePath(file, process.cwd()))
         const isFaulty = getIsFaultyEarlyFlakeDetection(
@@ -521,7 +522,7 @@ addHook({
       if (ctx) {
         testSuiteFinishCh.publish({ status, ...ctx.currentStore }, () => {})
       } else {
-        log.warn(() => `No ctx found for suite ${suite.file}`)
+        log.warn('No ctx found for suite', suite.file)
       }
     })
 
@@ -616,7 +617,7 @@ addHook({
     this.once('start', getOnStartHandler(true, frameworkVersion))
     this.once('end', getOnEndHandler(true))
 
-    getExecutionConfiguration(this, true, () => {
+    getExecutionConfiguration(this, true, frameworkVersion, () => {
       if (config.isKnownTestsEnabled) {
         const testSuites = files.map(file => getTestSuitePath(file, process.cwd()))
         const isFaulty = getIsFaultyEarlyFlakeDetection(

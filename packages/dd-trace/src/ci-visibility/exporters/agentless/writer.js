@@ -48,7 +48,7 @@ class Writer extends BaseWriter {
     const startRequestTime = Date.now()
 
     incrementCountMetric(TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS, { endpoint: 'test_cycle' })
-    distributionMetric(TELEMETRY_ENDPOINT_PAYLOAD_BYTES, { endpoint: 'test_cycle' }, data.length)
+    distributionMetric(TELEMETRY_ENDPOINT_PAYLOAD_BYTES, { endpoint: 'test_cycle' }, Buffer.byteLength(data))
 
     request(data, options, (err, res, statusCode) => {
       distributionMetric(
@@ -69,7 +69,7 @@ class Writer extends BaseWriter {
         done()
         return
       }
-      log.debug(`Response from the intake: ${res}`)
+      log.debug('Response from the intake:', res)
       done()
     })
   }

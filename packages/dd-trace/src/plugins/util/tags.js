@@ -28,6 +28,8 @@ const CI_NODE_LABELS = 'ci.node.labels'
 
 const CI_ENV_VARS = '_dd.ci.env_vars'
 
+const PR_NUMBER = 'pr.number'
+
 module.exports = {
   GIT_COMMIT_SHA,
   GIT_BRANCH,
@@ -54,5 +56,6 @@ module.exports = {
   CI_STAGE_NAME,
   CI_ENV_VARS,
   CI_NODE_NAME,
-  CI_NODE_LABELS
+  CI_NODE_LABELS,
+  PR_NUMBER
 }

@@ -12,10 +12,6 @@ describe('mysql2 instrumentation', () => {
       assert.isString(sql)
       const error = new Error('Test')
       abortController.abort(error)
-
-      if (!abortController.signal.reason) {
-        abortController.signal.reason = error
-      }
     }
 
     function noop () {}
