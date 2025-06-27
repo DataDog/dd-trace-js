@@ -75,6 +75,7 @@ function enable (config) {
     spanWriter?.setAgentless(useAgentless)
 
     telemetry.recordLLMObsEnabled(startTime, config)
+    log.debug(`[LLMObs] Enabled LLM Observability with configuration: ${JSON.stringify(config.llmobs)}`)
   })
 }
 
@@ -90,6 +91,8 @@ function disable () {
 
   spanWriter = null
   evalWriter = null
+
+  log.debug('[LLMObs] Disabled LLM Observability')
 }
 
 // since LLMObs traces can extend between services and be the same trace,
