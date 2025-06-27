@@ -233,7 +233,7 @@
     node-addon-api "^6.1.0"
     node-gyp-build "^3.9.0"
 
-"@datadog/pprof@^5.8.2":
+"@datadog/pprof@^5.9.0":
   version "5.9.0"
   resolved "https://registry.yarnpkg.com/@datadog/pprof/-/pprof-5.9.0.tgz#beacd1507304e3490900ff39ea108e7ea772921b"
   integrity sha512-7KretVkHUANWe31u9cGJpxmUkyrXsCD+fmlZQUz/zk9mtQNC4uBIKX53VUFfrVj/bxAhEEIPw5XTYiMc5RJLsw==
