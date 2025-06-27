@@ -12,7 +12,9 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    environment: npm
+    environment:
+      name: npm
+      url: https://npmjs.com/package/dd-trace
     permissions:
       id-token: write
       contents: write

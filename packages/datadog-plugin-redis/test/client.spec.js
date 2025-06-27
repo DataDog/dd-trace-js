@@ -1,7 +1,8 @@
 'use strict'
 
-const assert = require('assert')
+const assert = require('node:assert')
 
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE } = require('../../dd-trace/src/constants')
@@ -83,8 +84,10 @@ describe('Plugin', () => {
         withPeerService(
           () => tracer,
           'redis',
-          (done) => client.get('bar').catch(done),
-          '127.0.0.1', 'out.host')
+          () => client.get('bar'),
+          '127.0.0.1',
+          'out.host'
+        )
 
         it('should handle errors', async () => {
           let error
@@ -168,7 +171,7 @@ describe('Plugin', () => {
         withPeerService(
           () => tracer,
           'redis',
-          (done) => client.get('bar').catch(done),
+          () => client.get('bar'),
           'localhost', 'out.host')
 
         it('should be able to filter commands', async () => {
