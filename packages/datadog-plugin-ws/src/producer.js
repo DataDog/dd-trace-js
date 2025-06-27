@@ -18,16 +18,27 @@ class WSProducerPlugin extends TracingPlugin {
 
       }
 
-    }, true)
+    }, ctx)
 
     ctx.span = span
-    ctx.currentStore = { span }
 
     return ctx.currentStore
   }
 
-  end (ctx) {
+  bindAsyncStart (ctx) {
+    return ctx.parentStore
+  }
+
+  asyncStart (ctx) {
     ctx.span.addLink(ctx.link.spanContext)
+
+    ctx.span.finish()
+  }
+
+  end (ctx) {
+    if (!Object.hasOwn(ctx, 'result')) return
+
+    ctx.span.addLink(ctx.socket.spanContext)
 
     ctx.span.finish()
   }

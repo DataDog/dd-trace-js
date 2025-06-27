@@ -47,18 +47,22 @@ class WSServerPlugin extends TracingPlugin {
 
       }
 
-    }, true)
+    }, ctx)
     ctx.span = span
-    ctx.currentStore = { span }
 
     return ctx.currentStore
   }
 
-  end (ctx) {
-    ctx.socket.spanContext = ctx.span._spanContext
-    ctx.req.res = ctx.resStatus
+  bindAsyncStart (ctx) {
+    return ctx.parentStore
+  }
 
-    ctx.span.setTag(HTTP_STATUS_CODE, ctx.req.res)
+  asyncStart (ctx) {
+    console.log('ctx', ctx)
+    ctx.socket.spanContext = ctx.span._spanContext
+    // ctx.req.res = ctx.resStatus
+
+    // ctx.span.setTag(HTTP_STATUS_CODE, ctx.req.res)
 
     ctx.span.finish()
   }

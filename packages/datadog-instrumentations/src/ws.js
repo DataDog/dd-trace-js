@@ -42,15 +42,23 @@ function createWrapEmit (ctx) {
 
 function wrapHandleUpgrade (handleUpgrade) {
   return function () {
-    if (!serverCh.start.hasSubscribers) return handleUpgrade.apply(this, arguments)
+    const [req, socket, , cb] = arguments
+    if (!serverCh.start.hasSubscribers || typeof cb !== 'function') {
+      return handleUpgrade.apply(this, arguments)
+    }
 
-    const [req, socket, head, cb] = arguments
     const ctx = { req, socket }
 
-    return serverCh.tracePromise(() => {
-      shimmer.wrap(this, 'emit', createWrapEmit(ctx))
-      handleUpgrade.call(this, req, socket, head, cb)
-    }, ctx)
+    arguments[3] = function () {
+      return serverCh.asyncStart.runStores(ctx, () => {
+        try {
+          return cb.apply(this, arguments)
+        } finally {
+          serverCh.asyncEnd.publish(ctx)
+        }
+      }, this, ...arguments)
+    }
+    return serverCh.traceSync(handleUpgrade, ctx, this, ...arguments)
   }
 }
 
@@ -59,11 +67,12 @@ function wrapHandleSend (send) {
     if (!producerCh.start.hasSubscribers) return send.apply(this, arguments)
 
     const [data, options, cb] = arguments
-    const ctx = { data, link: this._sender._socket }
 
-    return producerCh.tracePromise(() => {
-      send.call(this, data, options, cb)
-    }, ctx)
+    const ctx = { data, socket: this._sender._socket }
+
+    return typeof cb === 'function'
+      ? producerCh.traceCallback(send, undefined, ctx, this, data, options, cb)
+      : producerCh.traceSync(send, ctx, this, data, options, cb)
   }
 }
 
