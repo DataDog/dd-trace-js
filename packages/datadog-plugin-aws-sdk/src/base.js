@@ -36,54 +36,51 @@ class BaseAwsSdkPlugin extends ClientPlugin {
 
     if (this._tracerConfig._isInServerlessEnvironment()) {
 
+      //subscribe to http channels for cold start
       const httpChannelsStart = [
         'apm:http:client:request:start',
-        'apm:http2:client:request:start'
-      ]
-
-      for (const ch of httpChannelsStart) {
-        this.addSub(ch, ({ span }) => {
-          const store = storage('legacy').getStore() || {}
-          if (store.awsService === 'Kinesis') {
-            const host = store.peerHostname
-            if (span && host) {
-              span.setTag('thisIsATestTag', host)
-              span.setTag('peer.service', host)
-            }
-          }
-        })
-      }
-
-      const httpChannels = [
-        'apm:http:client:request:finish',
-        'apm:http2:client:request:finish'
-      ]
-
-      for (const ch of httpChannels) {
-        this.addSub(ch, ({ span }) => {
-          const { peerHostname } = storage('legacy').getStore() || {}
-          if (peerHostname) {
-            span.setTag('thisIsATestTag', peerHostname)
-            span.setTag('peer.service', peerHostname)
-          }
-        })
-      }
-    }
-    /*
-      const netChannels = [
+        'apm:http2:client:request:start',
         'apm:net:tcp:start',
         'apm:dns:lookup:start'
       ]
 
-      for (const ch of netChannels) {
-        this.addSub(ch, ctx => {
-          const span = ctx.currentStore?.span // span created by dns plugin
-          if (!span) return
-          const { peerHostname } = storage('legacy').getStore() || {}
-          if (span && peerHostname) span.setTag('thisIsATestTag', peerHostname)
-        })
-      }*/
-    //}
+      for (const ch of httpChannelsStart) {
+        this.addSub(ch, () => {})
+      }
+
+      this.addSub('apm:http:client:request:finish', ({ span }) => {
+        const { peerHostname } = storage('legacy').getStore() || {}
+        if (peerHostname) {
+          span.setTag('peer.service', peerHostname)
+        }
+      })
+
+      this.addSub('apm:http2:client:request:end', ({ currentStore }) => {
+        const span = currentStore?.span
+        const { peerHostname } = currentStore || {}
+        if (span && peerHostname) {
+          span.setTag('peer.service', peerHostname)
+        }
+      })
+
+      this.addSub('apm:net:tcp:finish', (ctx) => {
+        const span = ctx?.currentStore?.span
+        if (!span) return
+        const { peerHostname } = storage('legacy').getStore() || {}
+        if (span && peerHostname) {
+          span.setTag('peer.service', peerHostname)
+        }
+      })
+
+      this.addSub('apm:dns:lookup:finish', (ctx) => {
+        const span = ctx?.currentStore?.span
+        if (!span) return
+        const { peerHostname } = storage('legacy').getStore() || {}
+        if (span && peerHostname) {
+          span.setTag('peer.service', peerHostname)
+        }
+      })
+    }
 
     this.addSub(`apm:aws:request:start:${this.serviceIdentifier}`, ({
       request,
@@ -153,7 +150,6 @@ class BaseAwsSdkPlugin extends ClientPlugin {
           }
         })()
         if (!hostname) return
-        span.setTag('thisIsATestTag', hostname)
         span.setTag('peer.service', hostname)
         store.peerHostname = hostname
       }
