@@ -34,7 +34,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
   constructor (...args) {
     super(...args)
 
-    if (!this._tracerConfig._isInServerlessEnvironment()) {
+    if (this._tracerConfig._isInServerlessEnvironment()) {
       const httpChannels = [
         'apm:http:client:request:start',
         'apm:http2:client:request:start'
@@ -43,7 +43,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       for (const ch of httpChannels) {
         this.addSub(ch, ({ span }) => {
           const { peerHostname } = storage('legacy').getStore() || {}
-          if (peerHostname) span.setTag('peer.service', peerHostname)
+          if (peerHostname) span.setTag('thisIsATestTag', peerHostname)
         })
       }
 
@@ -57,7 +57,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
           const span = ctx.currentStore?.span // span created by dns plugin
           if (!span) return
           const { peerHostname } = storage('legacy').getStore() || {}
-          if (span && peerHostname) span.setTag('peer.service', peerHostname)
+          if (span && peerHostname) span.setTag('thisIsATestTag', peerHostname)
         })
       }
     }
@@ -97,7 +97,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       }
 
       const store = storage('legacy').getStore()
-      if (!this._tracerConfig._isInServerlessEnvironment()) {
+      if (this._tracerConfig._isInServerlessEnvironment()) {
         this.enter(span, { ...store, span, awsParams: request.params, awsService })
       } else {
         this.enter(span)
@@ -112,7 +112,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       span.setTag('aws.region', region)
       span.setTag('region', region)
 
-      if (!this._tracerConfig._isInServerlessEnvironment()) {
+      if (this._tracerConfig._isInServerlessEnvironment()) {
         const { awsParams, awsService } = store
         const hostname = (() => {
           switch (awsService) {
