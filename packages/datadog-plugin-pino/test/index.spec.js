@@ -1,6 +1,7 @@
 'use strict'
 
-const Writable = require('stream').Writable
+const Writable = require('node:stream').Writable
+const { withExports, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const semver = require('semver')
 const { NODE_MAJOR } = require('../../../version')

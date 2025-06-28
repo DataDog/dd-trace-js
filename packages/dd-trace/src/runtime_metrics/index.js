@@ -15,7 +15,7 @@ const noop = runtimeMetrics = {
 
 module.exports = {
   start (config) {
-    if (!config?.runtimeMetrics) return
+    if (!config?.runtimeMetrics.enabled) return
 
     runtimeMetrics = require('./runtime_metrics')
 
