@@ -293,6 +293,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('dogstatsd.hostname', '127.0.0.1')
     expect(config).to.have.nested.property('dogstatsd.port', '8125')
     expect(config).to.have.nested.property('dynamicInstrumentation.enabled', false)
+    expect(config).to.have.nested.property('dynamicInstrumentation.probeFile', undefined)
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactedIdentifiers', [])
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactionExcludedIdentifiers', [])
     expect(config).to.have.nested.property('dynamicInstrumentation.uploadIntervalSeconds', 1)
@@ -390,6 +391,7 @@ describe('Config', () => {
       { name: 'dogstatsd.port', value: '8125', origin: 'default' },
       { name: 'dsmEnabled', value: false, origin: 'default' },
       { name: 'dynamicInstrumentation.enabled', value: false, origin: 'default' },
+      { name: 'dynamicInstrumentation.probeFile', value: undefined, origin: 'default' },
       { name: 'dynamicInstrumentation.redactedIdentifiers', value: [], origin: 'default' },
       { name: 'dynamicInstrumentation.redactionExcludedIdentifiers', value: [], origin: 'default' },
       { name: 'dynamicInstrumentation.uploadIntervalSeconds', value: 1, origin: 'default' },
@@ -551,6 +553,7 @@ describe('Config', () => {
     process.env.DD_DOGSTATSD_HOSTNAME = 'dsd-agent'
     process.env.DD_DOGSTATSD_PORT = '5218'
     process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
+    process.env.DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE = 'probes.json'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS = 'foo,bar'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS = 'a,b,c'
     process.env.DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS = '0.1'
@@ -666,6 +669,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('dogstatsd.hostname', 'dsd-agent')
     expect(config).to.have.nested.property('dogstatsd.port', '5218')
     expect(config).to.have.nested.property('dynamicInstrumentation.enabled', true)
+    expect(config).to.have.nested.property('dynamicInstrumentation.probeFile', 'probes.json')
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactedIdentifiers', ['foo', 'bar'])
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactionExcludedIdentifiers', ['a', 'b', 'c'])
     expect(config).to.have.nested.property('dynamicInstrumentation.uploadIntervalSeconds', 0.1)
@@ -767,6 +771,7 @@ describe('Config', () => {
       { name: 'dogstatsd.hostname', value: 'dsd-agent', origin: 'env_var' },
       { name: 'dogstatsd.port', value: '5218', origin: 'env_var' },
       { name: 'dynamicInstrumentation.enabled', value: true, origin: 'env_var' },
+      { name: 'dynamicInstrumentation.probeFile', value: 'probes.json', origin: 'env_var' },
       { name: 'dynamicInstrumentation.redactedIdentifiers', value: ['foo', 'bar'], origin: 'env_var' },
       { name: 'dynamicInstrumentation.redactionExcludedIdentifiers', value: ['a', 'b', 'c'], origin: 'env_var' },
       { name: 'dynamicInstrumentation.uploadIntervalSeconds', value: 0.1, origin: 'env_var' },
@@ -981,6 +986,7 @@ describe('Config', () => {
       },
       dynamicInstrumentation: {
         enabled: true,
+        probeFile: 'probes.json',
         redactedIdentifiers: ['foo', 'bar'],
         redactionExcludedIdentifiers: ['a', 'b', 'c'],
         uploadIntervalSeconds: 0.1
@@ -1072,6 +1078,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('dogstatsd.hostname', 'agent-dsd')
     expect(config).to.have.nested.property('dogstatsd.port', '5218')
     expect(config).to.have.nested.property('dynamicInstrumentation.enabled', true)
+    expect(config).to.have.nested.property('dynamicInstrumentation.probeFile', 'probes.json')
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactedIdentifiers', ['foo', 'bar'])
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactionExcludedIdentifiers', ['a', 'b', 'c'])
     expect(config).to.have.nested.property('dynamicInstrumentation.uploadIntervalSeconds', 0.1)
@@ -1155,6 +1162,7 @@ describe('Config', () => {
       { name: 'dogstatsd.hostname', value: 'agent-dsd', origin: 'code' },
       { name: 'dogstatsd.port', value: '5218', origin: 'code' },
       { name: 'dynamicInstrumentation.enabled', value: true, origin: 'code' },
+      { name: 'dynamicInstrumentation.probeFile', value: 'probes.json', origin: 'code' },
       { name: 'dynamicInstrumentation.redactedIdentifiers', value: ['foo', 'bar'], origin: 'code' },
       { name: 'dynamicInstrumentation.redactionExcludedIdentifiers', value: ['a', 'b', 'c'], origin: 'code' },
       { name: 'dynamicInstrumentation.uploadIntervalSeconds', value: 0.1, origin: 'code' },
@@ -1376,6 +1384,7 @@ describe('Config', () => {
     process.env.DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED = 'true'
     process.env.DD_DOGSTATSD_PORT = '5218'
     process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
+    process.env.DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE = 'probes.json'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS = 'foo,bar'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS = 'a,b,c'
     process.env.DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS = '0.1'
@@ -1466,6 +1475,7 @@ describe('Config', () => {
       },
       dynamicInstrumentation: {
         enabled: false,
+        probeFile: 'probes2.json',
         redactedIdentifiers: ['foo2', 'bar2'],
         redactionExcludedIdentifiers: ['a2', 'b2'],
         uploadIntervalSeconds: 0.2
@@ -1553,6 +1563,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('dogstatsd.hostname', 'server')
     expect(config).to.have.nested.property('dogstatsd.port', '8888')
     expect(config).to.have.nested.property('dynamicInstrumentation.enabled', false)
+    expect(config).to.have.nested.property('dynamicInstrumentation.probeFile', 'probes2.json')
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactedIdentifiers', ['foo2', 'bar2'])
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactionExcludedIdentifiers', ['a2', 'b2'])
     expect(config).to.have.nested.property('dynamicInstrumentation.uploadIntervalSeconds', 0.2)

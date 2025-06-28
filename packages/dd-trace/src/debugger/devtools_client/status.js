@@ -34,7 +34,8 @@ const STATUSES = {
   BLOCKED: 'BLOCKED' // TODO: Implement once support for allow list, deny list or max probe limit has been added
 }
 
-function ackReceived ({ id: probeId, version }) {
+function ackReceived ({ id: probeId, version, shouldAcknowledge }) {
+  if (shouldAcknowledge === false) return
   log.debug('[debugger:devtools_client] Queueing RECEIVED status for probe %s (version: %d)', probeId, version)
 
   onlyUniqueUpdates(
@@ -43,7 +44,8 @@ function ackReceived ({ id: probeId, version }) {
   )
 }
 
-function ackInstalled ({ id: probeId, version }) {
+function ackInstalled ({ id: probeId, version, shouldAcknowledge }) {
+  if (shouldAcknowledge === false) return
   log.debug('[debugger:devtools_client] Queueing INSTALLED status for probe %s (version: %d)', probeId, version)
 
   onlyUniqueUpdates(
@@ -52,7 +54,8 @@ function ackInstalled ({ id: probeId, version }) {
   )
 }
 
-function ackEmitting ({ id: probeId, version }) {
+function ackEmitting ({ id: probeId, version, shouldAcknowledge }) {
+  if (shouldAcknowledge === false) return
   log.debug('[debugger:devtools_client] Queueing EMITTING status for probe %s (version: %d)', probeId, version)
 
   onlyUniqueUpdates(
@@ -61,8 +64,9 @@ function ackEmitting ({ id: probeId, version }) {
   )
 }
 
-function ackError (err, { id: probeId, version }) {
+function ackError (err, { id: probeId, version, shouldAcknowledge }) {
   log.error('[debugger:devtools_client] ackError', err)
+  if (shouldAcknowledge === false) return
 
   onlyUniqueUpdates(STATUSES.ERROR, probeId, version, () => {
     const payload = statusPayload(probeId, version, STATUSES.ERROR)
