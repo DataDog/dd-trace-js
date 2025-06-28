@@ -81,7 +81,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       span.setTag('region', region)
 
       //only if parent is lambda
-      if (this._tracerConfig._isInServerlessEnvironment()) {
+      if (!this._tracerConfig._isInServerlessEnvironment()) {
         const hostname = (() => {
           switch (awsService) {
             case 'EventBridge':        return `events.${region}.amazonaws.com`
@@ -100,18 +100,6 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         if (!hostname) return
         span.setTag('peer.service', hostname)
         store.peerHostname = hostname
-
-        const netChannels = [
-          'apm:http:client:request:finish',
-          'apm:http2:client:request:finish'
-        ]
-
-        for (const ch of netChannels) {
-          this.addSub(ch, ({ span }) => {
-            const { peerHostname } = storage('legacy').getStore() || {}
-            if (peerHostname) span.setTag('peer.service', peerHostname)
-          })
-        }
       }
     })
 
