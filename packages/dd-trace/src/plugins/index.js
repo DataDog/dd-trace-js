@@ -45,6 +45,7 @@ module.exports = {
   get graphql () { return require('../../../datadog-plugin-graphql/src') },
   get grpc () { return require('../../../datadog-plugin-grpc/src') },
   get hapi () { return require('../../../datadog-plugin-hapi/src') },
+  get hono () { return require('../../../datadog-plugin-hono/src') },
   get http () { return require('../../../datadog-plugin-http/src') },
   get http2 () { return require('../../../datadog-plugin-http2/src') },
   get https () { return require('../../../datadog-plugin-http/src') },
