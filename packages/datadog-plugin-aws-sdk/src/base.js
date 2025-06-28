@@ -42,7 +42,16 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       ]
 
       for (const ch of httpChannelsStart) {
-        this.addSub(ch, () => {})
+        this.addSub(ch, ({ span }) => {
+          const store = storage('legacy').getStore() || {}
+          if (store.awsService === 'Kinesis') {
+            const host = store.peerHostname
+            if (span && host) {
+              span.setTag('thisIsATestTag', host)
+              span.setTag('peer.service', host)
+            }
+          }
+        })
       }
 
       const httpChannels = [
