@@ -58,49 +58,6 @@ class BaseAwsSdkPlugin extends ClientPlugin {
 
       const span = this.tracer.startSpan(this.operationFromRequest(request), { childOf, tags })
 
-      let hostname
-
-      switch (awsService) {
-        case 'EventBridge':
-          hostname = `events.${this.activeSpan._spanContext._tags.region}.amazonaws.com`
-          break
-        case 'SQS':
-          hostname = `sqs.${this.activeSpan._spanContext._tags.region}.amazonaws.com`
-          break
-        case 'SNS':
-          hostname = `sns.${this.activeSpan._spanContext._tags.region}.amazonaws.com`
-          break
-        case 'S3':
-          hostname = `${params.Bucket}.s3.${this.activeSpan._spanContext._tags.region}.amazonaws.com`
-          break
-        case 'Kinesis':
-          hostname = `kinesis.${this.activeSpan._spanContext._tags.region}.amazonaws.com`
-          break
-        case 'DynamoDBDocument':
-          hostname = `dynamodb.${this.activeSpan._spanContext._tags.region}.amazonaws.com`
-          break
-        default:
-          break
-      }
-
-      if (hostname) {
-        this._tracer._pluginManager._pluginsByName.http.client.config.hooks.request = ((span, req, res) => {
-          span.setTag('peer.service', hostname)
-        })
-
-        this._tracer._pluginManager._pluginsByName.http2.client.config.hooks.request = ((span, req, res) => {
-          span.setTag('peer.service', hostname)
-        })
-
-        this._tracer._pluginManager._pluginsByName.dns.client.config.hooks.request = ((span, req, res) => {
-          span.setTag('peer.service', hostname)
-        })
-
-        this._tracer._pluginManager._pluginsByName.net.client.config.hooks.request = ((span, req, res) => {
-          span.setTag('peer.service', hostname)
-        })
-      }
-
       analyticsSampler.sample(span, this.config.measured)
 
       this.requestInject(span, request)
@@ -112,17 +69,50 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       }
 
       const store = storage('legacy').getStore()
-
-      this.enter(span, store)
+      this.enter(span, { ...store, span, awsParams: request.params, awsService })
     })
 
     this.addSub(`apm:aws:request:region:${this.serviceIdentifier}`, region => {
       const store = storage('legacy').getStore()
       if (!store) return
-      const { span } = store
+      const { span, awsParams, awsService, parentSpan } = store
       if (!span) return
       span.setTag('aws.region', region)
       span.setTag('region', region)
+
+      //only if parent is lambda
+      if (this._tracerConfig._isInServerlessEnvironment()) {
+        const hostname = (() => {
+          switch (awsService) {
+            case 'EventBridge':        return `events.${region}.amazonaws.com`
+            case 'SQS':               return `sqs.${region}.amazonaws.com`
+            case 'SNS':               return `sns.${region}.amazonaws.com`
+            case 'Kinesis':           return `kinesis.${region}.amazonaws.com`
+            case 'DynamoDBDocument':  // or 'DynamoDB'
+              return `dynamodb.${region}.amazonaws.com`
+            case 'S3':
+              return awsParams?.Bucket
+                ? `${awsParams.Bucket}.s3.${region}.amazonaws.com`
+                : `s3.${region}.amazonaws.com`
+            default:                  return null
+          }
+        })()
+        if (!hostname) return
+        span.setTag('peer.service', hostname)
+        store.peerHostname = hostname
+
+        const netChannels = [
+          'apm:http:client:request:finish',
+          'apm:http2:client:request:finish'
+        ]
+
+        for (const ch of netChannels) {
+          this.addSub(ch, ({ span }) => {
+            const { peerHostname } = storage('legacy').getStore() || {}
+            if (peerHostname) span.setTag('peer.service', peerHostname)
+          })
+        }
+      }
     })
 
     this.addSub(`apm:aws:request:complete:${this.serviceIdentifier}`, ({ response, cbExists = false }) => {
