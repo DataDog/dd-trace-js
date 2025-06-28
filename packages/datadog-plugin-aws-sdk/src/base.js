@@ -34,6 +34,53 @@ class BaseAwsSdkPlugin extends ClientPlugin {
   constructor (...args) {
     super(...args)
 
+    if (this._tracerConfig?._isInServerlessEnvironment()) {
+      // subscribe to http channels for cold start
+      const httpChannelsStart = [
+        'apm:http:client:request:start',
+        'apm:http2:client:request:start',
+        'apm:net:tcp:start',
+        'apm:dns:lookup:start'
+      ]
+
+      for (const ch of httpChannelsStart) {
+        this.addSub(ch, () => {})
+      }
+
+      this.addSub('apm:http:client:request:finish', ({ span }) => {
+        const { peerHostname } = storage('legacy').getStore() || {}
+        if (peerHostname) {
+          span.setTag('peer.service', peerHostname)
+        }
+      })
+
+      this.addSub('apm:http2:client:request:end', ({ currentStore }) => {
+        const span = currentStore?.span
+        const { peerHostname } = currentStore || {}
+        if (span && peerHostname) {
+          span.setTag('peer.service', peerHostname)
+        }
+      })
+
+      this.addSub('apm:net:tcp:finish', (ctx) => {
+        const span = ctx?.currentStore?.span
+        if (!span) return
+        const { peerHostname } = storage('legacy').getStore() || {}
+        if (span && peerHostname) {
+          span.setTag('peer.service', peerHostname)
+        }
+      })
+
+      this.addSub('apm:dns:lookup:finish', (ctx) => {
+        const span = ctx?.currentStore?.span
+        if (!span) return
+        const { peerHostname } = storage('legacy').getStore() || {}
+        if (span && peerHostname) {
+          span.setTag('peer.service', peerHostname)
+        }
+      })
+    }
+
     this.addSub(`apm:aws:request:start:${this.serviceIdentifier}`, ({
       request,
       operation,
@@ -69,8 +116,11 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       }
 
       const store = storage('legacy').getStore()
-
-      this.enter(span, store)
+      if (this._tracerConfig?._isInServerlessEnvironment()) {
+        this.enter(span, { ...store, span, awsParams: request.params, awsService })
+      } else {
+        this.enter(span)
+      }
     })
 
     this.addSub(`apm:aws:request:region:${this.serviceIdentifier}`, region => {
@@ -80,6 +130,28 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       if (!span) return
       span.setTag('aws.region', region)
       span.setTag('region', region)
+
+      if (this._tracerConfig?._isInServerlessEnvironment()) {
+        const { awsParams, awsService } = store
+        const hostname = (() => {
+          switch (awsService) {
+            case 'EventBridge': return `events.${region}.amazonaws.com`
+            case 'SQS': return `sqs.${region}.amazonaws.com`
+            case 'SNS': return `sns.${region}.amazonaws.com`
+            case 'Kinesis': return `kinesis.${region}.amazonaws.com`
+            case 'DynamoDBDocument': // or 'DynamoDB'
+              return `dynamodb.${region}.amazonaws.com`
+            case 'S3':
+              return awsParams?.Bucket
+                ? `${awsParams.Bucket}.s3.${region}.amazonaws.com`
+                : `s3.${region}.amazonaws.com`
+            default: return null
+          }
+        })()
+        if (!hostname) return
+        span.setTag('peer.service', hostname)
+        store.peerHostname = hostname
+      }
     })
 
     this.addSub(`apm:aws:request:complete:${this.serviceIdentifier}`, ({ response, cbExists = false }) => {
