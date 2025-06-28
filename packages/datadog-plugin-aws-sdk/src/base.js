@@ -35,9 +35,19 @@ class BaseAwsSdkPlugin extends ClientPlugin {
     super(...args)
 
     if (this._tracerConfig._isInServerlessEnvironment()) {
-      const httpChannels = [
+
+      const httpChannelsStart = [
         'apm:http:client:request:start',
         'apm:http2:client:request:start'
+      ]
+
+      for (const ch of httpChannelsStart) {
+        this.addSub(ch, () => {})
+      }
+
+      const httpChannels = [
+        'apm:http:client:request:finish',
+        'apm:http2:client:request:finish'
       ]
 
       for (const ch of httpChannels) {
@@ -45,13 +55,13 @@ class BaseAwsSdkPlugin extends ClientPlugin {
           const { peerHostname } = storage('legacy').getStore() || {}
           if (peerHostname) {
             span.setTag('thisIsATestTag', peerHostname)
-            span.setTag('peerHostname', peerHostname)
+            span.setTag('peer.service', peerHostname)
           }
         })
       }
     }
-
-      /*const netChannels = [
+    /*
+      const netChannels = [
         'apm:net:tcp:start',
         'apm:dns:lookup:start'
       ]
@@ -135,7 +145,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         })()
         if (!hostname) return
         span.setTag('thisIsATestTag', hostname)
-        span.setTag('peerHostname', hostname)
+        span.setTag('peer.service', hostname)
         store.peerHostname = hostname
       }
     })
