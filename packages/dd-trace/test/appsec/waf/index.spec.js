@@ -1,5 +1,6 @@
 'use strict'
 
+const assert = require('node:assert')
 const proxyquire = require('proxyquire')
 const Config = require('../../../src/config')
 const rules = require('../../../src/appsec/recommended.json')
@@ -27,17 +28,14 @@ describe('WAF Manager', () => {
     DDWAF.version = sinon.stub().returns('1.2.3')
     DDWAF.prototype.dispose = sinon.stub()
     DDWAF.prototype.createContext = sinon.stub()
-    DDWAF.prototype.update = sinon.stub().callsFake(function (newRules) {
-      if (newRules?.metadata?.rules_version) {
-        this.diagnostics.ruleset_version = newRules?.metadata?.rules_version
-      }
-    })
     DDWAF.prototype.diagnostics = {
       ruleset_version: '1.0.0',
       rules: {
         loaded: ['rule_1'], failed: []
       }
     }
+    DDWAF.prototype.createOrUpdateConfig = sinon.stub().returns(true)
+    DDWAF.prototype.removeConfig = sinon.stub()
     DDWAF.prototype.knownAddresses = knownAddresses
 
     WAFManager = proxyquire('../../../src/appsec/waf/waf_manager', {
@@ -51,9 +49,9 @@ describe('WAF Manager', () => {
     sinon.stub(Reporter.metricsQueue, 'set')
     sinon.stub(Reporter, 'reportMetrics')
     sinon.stub(Reporter, 'reportAttack')
-    sinon.stub(Reporter, 'reportWafUpdate')
     sinon.stub(Reporter, 'reportDerivatives')
     sinon.spy(Reporter, 'reportWafInit')
+    sinon.spy(Reporter, 'reportWafConfigUpdate')
 
     webContext = {}
     sinon.stub(web, 'getContext').returns(webContext)
@@ -97,31 +95,6 @@ describe('WAF Manager', () => {
       waf.init(rules, config.appsec)
 
       expect(Reporter.metricsQueue.set).to.have.been.calledWithExactly('_dd.appsec.waf.version', '1.2.3')
-      expect(Reporter.metricsQueue.set).to.have.been.calledWithExactly('_dd.appsec.event_rules.loaded', 1)
-      expect(Reporter.metricsQueue.set).to.have.been.calledWithExactly('_dd.appsec.event_rules.error_count', 0)
-      expect(Reporter.metricsQueue.set).not.to.have.been.calledWith('_dd.appsec.event_rules.errors')
-    })
-
-    it('should set init metrics with errors', () => {
-      DDWAF.version.returns('2.3.4')
-      DDWAF.prototype.diagnostics = {
-        rules: {
-          loaded: ['rule_1'],
-          failed: ['rule_2', 'rule_3'],
-          errors: {
-            error_1: ['invalid_1'],
-            error_2: ['invalid_2', 'invalid_3']
-          }
-        }
-      }
-
-      waf.init(rules, config.appsec)
-
-      expect(Reporter.metricsQueue.set).to.have.been.calledWithExactly('_dd.appsec.waf.version', '2.3.4')
-      expect(Reporter.metricsQueue.set).to.have.been.calledWithExactly('_dd.appsec.event_rules.loaded', 1)
-      expect(Reporter.metricsQueue.set).to.have.been.calledWithExactly('_dd.appsec.event_rules.error_count', 2)
-      expect(Reporter.metricsQueue.set).to.have.been.calledWithExactly('_dd.appsec.event_rules.errors',
-        '{"error_1":["invalid_1"],"error_2":["invalid_2","invalid_3"]}')
     })
   })
 
@@ -151,6 +124,151 @@ describe('WAF Manager', () => {
     })
   })
 
+  describe('waf disabled check', () => {
+    it('should fail when updating configs on disabled waf', () => {
+      assert.throws(
+        () => {
+          waf.updateConfig('path', {})
+        },
+        {
+          name: 'Error',
+          message: 'Cannot update disabled WAF'
+        }
+      )
+    })
+
+    it('should fail when removing configs on disabled waf', () => {
+      assert.throws(
+        () => {
+          waf.removeConfig('path', {})
+        },
+        {
+          name: 'Error',
+          message: 'Cannot update disabled WAF'
+        }
+      )
+    })
+  })
+
+  describe('configurations handling', () => {
+    const ASM_CONFIG = {
+      rules_override: [],
+      actions: [],
+      exclusions: [],
+      custom_rules: []
+    }
+
+    const ASM_DATA_CONFIG = {
+      rules_data: [
+        {
+          data: [
+            {
+              expiration: 1661848350,
+              value: '188.243.182.156'
+            },
+            {
+              expiration: 1661848350,
+              value: '51.222.158.205'
+            }
+          ],
+          id: 'blocked_ips',
+          type: 'ip_with_expiration'
+        }
+      ]
+    }
+
+    const ASM_DD_CONFIG = {
+      version: '2.2',
+      metadata: {
+        rules_version: '1.42.11'
+      },
+      rules: []
+    }
+
+    beforeEach(() => {
+      waf.init(rules, config.appsec)
+    })
+
+    afterEach(() => {
+      sinon.restore()
+    })
+
+    describe('update config', () => {
+      it('should update WAF config - ASM / ASM_DATA', () => {
+        DDWAF.prototype.configPaths = ['datadog/00/ASM_DD/default/config']
+
+        waf.updateConfig('ASM', 'config_id_1', 'datadog/00/ASM/test/update_config', ASM_CONFIG)
+        waf.updateConfig('ASM_DATA', 'config_id_2', 'datadog/00/ASM_DATA/test/update_config', ASM_DATA_CONFIG)
+
+        sinon.assert.calledWithExactly(
+          DDWAF.prototype.createOrUpdateConfig.getCall(0),
+          ASM_CONFIG,
+          'datadog/00/ASM/test/update_config'
+        )
+        sinon.assert.calledWithExactly(
+          DDWAF.prototype.createOrUpdateConfig.getCall(1),
+          ASM_DATA_CONFIG,
+          'datadog/00/ASM_DATA/test/update_config'
+        )
+      })
+
+      it('should remove default rules on ASM_DD update', () => {
+        DDWAF.prototype.configPaths = ['datadog/00/ASM_DD/default/config']
+
+        waf.updateConfig('ASM_DD', 'config_id_1', 'datadog/00/ASM_DD/test/update_config', ASM_DD_CONFIG)
+
+        sinon.assert.calledOnceWithExactly(
+          DDWAF.prototype.removeConfig,
+          'datadog/00/ASM_DD/default/config'
+        )
+        sinon.assert.calledOnceWithExactly(
+          DDWAF.prototype.createOrUpdateConfig,
+          ASM_DD_CONFIG,
+          'datadog/00/ASM_DD/test/update_config'
+        )
+      })
+    })
+
+    describe('remove config', () => {
+      it('should remove WAF config', () => {
+        DDWAF.prototype.configPaths = ['datadog/00/ASM_DD/default/config']
+
+        waf.removeConfig('path/to/remove')
+
+        sinon.assert.calledOnceWithExactly(DDWAF.prototype.removeConfig, 'path/to/remove')
+      })
+    })
+
+    it('should throw WafUpdateError on failed update', () => {
+      DDWAF.prototype.configPaths = []
+      DDWAF.prototype.createOrUpdateConfig.returns(false)
+
+      assert.throws(
+        () => {
+          waf.updateConfig('path', {})
+        },
+        {
+          name: 'WafUpdateError'
+        }
+      )
+    })
+
+    it('should report waf config update', () => {
+      DDWAF.prototype.configPaths = []
+      DDWAF.prototype.createOrUpdateConfig.returns(true)
+
+      waf.updateConfig('ASM', 'configId', 'path', {})
+
+      sinon.assert.calledOnceWithExactly(
+        Reporter.reportWafConfigUpdate,
+        'ASM',
+        'configId',
+        DDWAF.prototype.diagnostics,
+        '1.2.3'
+      )
+    })
+  })
+
   describe('wafManager.createDDWAFContext', () => {
     beforeEach(() => {
       DDWAF.version.returns('4.5.6')
@@ -167,81 +285,6 @@ describe('WAF Manager', () => {
       const req = {}
       const context = waf.wafManager.getWAFContext(req)
       expect(context.wafVersion).to.be.eq('4.5.6')
-    })
-  })
-
-  describe('wafManager.update', () => {
-    const wafVersion = '2.3.4'
-
-    beforeEach(() => {
-      DDWAF.version.returns(wafVersion)
-
-      waf.init(rules, config.appsec)
-    })
-
-    it('should call ddwaf.update', () => {
-      const rules = {
-        rules_data: [
-          {
-            id: 'blocked_users',
-            type: 'data_with_expiration',
-            data: [
-              {
-                expiration: 9999999999,
-                value: 'user1'
-              }
-            ]
-          }
-        ]
-      }
-
-      waf.update(rules)
-
-      expect(DDWAF.prototype.update).to.be.calledOnceWithExactly(rules)
-      expect(Reporter.reportWafUpdate).to.be.calledOnceWithExactly(wafVersion, '1.0.0', true)
-    })
-
-    it('should call Reporter.reportWafUpdate on successful update', () => {
-      const rules = {
-        metadata: {
-          rules_version: '4.2.0'
-        },
-        rules_data: [
-          {
-            id: 'blocked_users',
-            type: 'data_with_expiration',
-            data: [
-              {
-                expiration: 9999999999,
-                value: 'user1'
-              }
-            ]
-          }
-        ]
-      }
-
-      waf.update(rules)
-
-      expect(Reporter.reportWafUpdate).to.be.calledOnceWithExactly(wafVersion, '4.2.0', true)
-    })
-
-    it('should call Reporter.reportWafUpdate on failed update', () => {
-      const rules = {
-        metadata: {
-          rules_version: '4.2.0'
-        }
-      }
-      const error = new Error('Failed to update rules')
-
-      DDWAF.prototype.update = sinon.stub().throws(error)
-
-      try {
-        waf.update(rules)
-        expect.fail('waf.update should have thrown an error')
-      } catch (err) {
-        expect(err).to.equal(error)
-        expect(Reporter.reportWafUpdate).to.be.calledOnceWithExactly(wafVersion, 'unknown', false)
-      }
     })
   })
 

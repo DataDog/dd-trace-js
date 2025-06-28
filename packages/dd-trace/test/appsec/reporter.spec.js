@@ -1,8 +1,10 @@
 'use strict'
 
+const dc = require('dc-polyfill')
 const proxyquire = require('proxyquire')
-const { storage } = require('../../../datadog-core')
 const zlib = require('zlib')
+
+const { storage } = require('../../../datadog-core')
 const { ASM } = require('../../src/standalone/product')
 const { USER_KEEP } = require('../../../../ext/priority')
 
@@ -46,11 +48,12 @@ describe('reporter', () => {
 
     telemetry = {
       incrementWafInitMetric: sinon.stub(),
+      incrementWafConfigErrorsMetric: sinon.stub(),
+      incrementWafUpdatesMetric: sinon.stub(),
+      incrementWafRequestsMetric: sinon.stub(),
       updateWafRequestsMetricTags: sinon.stub(),
       updateRaspRequestsMetricTags: sinon.stub(),
       updateRaspRuleSkippedMetricTags: sinon.stub(),
-      incrementWafUpdatesMetric: sinon.stub(),
-      incrementWafRequestsMetric: sinon.stub(),
       updateRateLimitedMetric: sinon.stub(),
       getRequestMetrics: sinon.stub()
     }
@@ -141,19 +144,12 @@ describe('reporter', () => {
       Reporter.reportWafInit(wafVersion, rulesVersion, diagnosticsRules, true)
 
       expect(Reporter.metricsQueue.get('_dd.appsec.waf.version')).to.be.eq(wafVersion)
-      expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.loaded')).to.be.eq(3)
-      expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.error_count')).to.be.eq(1)
-      expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.errors'))
-        .to.be.eq(JSON.stringify(diagnosticsRules.errors))
     })
 
     it('should not add entries to metricsQueue with success false', () => {
-      Reporter.reportWafInit(wafVersion, rulesVersion, diagnosticsRules, false)
+      Reporter.reportWafInit(wafVersion, rulesVersion, false)
 
       expect(Reporter.metricsQueue.get('_dd.appsec.waf.version')).to.be.undefined
-      expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.loaded')).to.be.undefined
-      expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.error_count')).to.be.undefined
-      expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.errors')).to.be.undefined
     })
 
     it('should call incrementWafInitMetric', () => {
@@ -168,9 +164,6 @@ describe('reporter', () => {
       const diagnosticsRules = undefined
 
       Reporter.reportWafInit(wafVersion, rulesVersion, diagnosticsRules, true)
-
-      expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.loaded')).to.be.eq(0)
-      expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.error_count')).to.be.eq(0)
 
       expect(telemetry.incrementWafInitMetric).to.have.been.calledOnceWithExactly(wafVersion, rulesVersion, true)
     })
@@ -296,6 +289,72 @@ describe('reporter', () => {
 
       expect(telemetry.updateRaspRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, store.req, raspRule)
       expect(telemetry.updateWafRequestsMetricTags).to.not.have.been.called
+    })
+  })
+
+  describe('reportWafConfigUpdate', () => {
+    const product = 'ASM_DD'
+    const rcConfigId = '1'
+    const diagnostics = {
+      ruleset_version: '1.42.11',
+      rules: {
+        loaded: [],
+        failed: ['blk-001-001'],
+        skipped: [],
+        errors: {
+          'missing key operator': [
+            'blk-001-001'
+          ]
+        },
+        warnings: {
+          'invalid tag': [
+            'blk-001-001'
+          ]
+        }
+      },
+      processors: {
+        loaded: ['http-endpoint-fingerprint'],
+        failed: [],
+        skipped: [],
+        errors: {
+          'no mappings defined': [
+            'http-endpoint-fingerprint'
+          ]
+        }
+      }
+    }
+
+    it('should send diagnostics using telemetry logs', () => {
+      const telemetryLogHandlerAssert = sinon.stub()
+
+      const telemetryLogCh = dc.channel('datadog:telemetry:log')
+      telemetryLogCh.subscribe(telemetryLogHandlerAssert)
+
+      Reporter.reportWafConfigUpdate(product, rcConfigId, diagnostics)
+
+      expect(telemetryLogHandlerAssert).to.have.been.calledThrice
+      expect(telemetryLogHandlerAssert.getCall(0)).to.have.been.calledWithExactly({
+        message: '"missing key operator": ["blk-001-001"]',
+        level: 'ERROR',
+        tags: 'log_type:rc::asm_dd::diagnostic,appsec_config_key:rules,rc_config_id:1'
+      }, 'datadog:telemetry:log')
+      expect(telemetryLogHandlerAssert.getCall(1)).to.have.been.calledWithExactly({
+        message: '"invalid tag": ["blk-001-001"]',
+        level: 'WARN',
+        tags: 'log_type:rc::asm_dd::diagnostic,appsec_config_key:rules,rc_config_id:1'
+      }, 'datadog:telemetry:log')
+      expect(telemetryLogHandlerAssert.getCall(2)).to.have.been.calledWithExactly({
+        message: '"no mappings defined": ["http-endpoint-fingerprint"]',
+        level: 'ERROR',
+        tags: 'log_type:rc::asm_dd::diagnostic,appsec_config_key:processors,rc_config_id:1'
+      }, 'datadog:telemetry:log')
+    })
+
+    it('should increment waf.config_errors metric', () => {
+      Reporter.reportWafConfigUpdate(product, rcConfigId, diagnostics, '1.24.1')
+
+      expect(telemetry.incrementWafConfigErrorsMetric).to.have.been.calledTwice
+      expect(telemetry.incrementWafConfigErrorsMetric).to.always.have.been.calledWithExactly('1.24.1', '1.42.11')
     })
   })
 
