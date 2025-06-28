@@ -124,6 +124,16 @@ function preHandler (request, reply, done) {
   if (!reply || typeof reply.send !== 'function') return done()
 
   const req = getReq(request)
+  const res = getRes(reply)
+
+  // For multipart/form-data, the body is not available until after preValidation hook
+  if (bodyParserReadCh.hasSubscribers && request.body) {
+    const abortController = new AbortController()
+
+    bodyParserReadCh.publish({ req, res, body: request.body, abortController })
+
+    if (abortController.signal.aborted) return
+  }
 
   reply.send = wrapSend(reply.send, req)
 
@@ -151,6 +161,7 @@ function preValidation (request, reply, done) {
       if (abortController.signal.aborted) return
     }
 
+    // Analyze body before schema validation
     if (bodyParserReadCh.hasSubscribers && request.body) {
       abortController ??= new AbortController()
 
