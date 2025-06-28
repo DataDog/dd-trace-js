@@ -294,4 +294,33 @@ describe('end to end sdk integration tests', () => {
       expect(getTag(llmobsSpans[2], 'ml_app')).to.equal('test')
     })
   })
+
+  describe('with no global mlApp', () => {
+    let originalMlApp
+
+    before(() => {
+      originalMlApp = tracer._tracer._config.llmobs.mlApp
+      tracer._tracer._config.llmobs.mlApp = null
+    })
+
+    after(() => {
+      tracer._tracer._config.llmobs.mlApp = originalMlApp
+    })
+
+    it('does not submit a span if there is no mlApp', () => {
+      payloadGenerator = function () {
+        let error
+        try {
+          llmobs.trace({ kind: 'workflow', name: 'myWorkflow' }, () => {})
+        } catch (e) {
+          error = e
+        }
+
+        expect(error).to.exist
+      }
+
+      const { llmobsSpans } = run(payloadGenerator)
+      expect(llmobsSpans).to.have.lengthOf(0)
+    })
+  })
 })
