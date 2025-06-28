@@ -34,7 +34,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
   constructor (...args) {
     super(...args)
 
-    if (!this._tracerConfig._isInServerlessEnvironment()) {
+    if (this._tracerConfig._isInServerlessEnvironment()) {
       // subscribe to http channels for cold start
       const httpChannelsStart = [
         'apm:http:client:request:start',
@@ -117,9 +117,9 @@ class BaseAwsSdkPlugin extends ClientPlugin {
 
       const store = storage('legacy').getStore()
       if (this._tracerConfig._isInServerlessEnvironment()) {
-        this.enter(span)
-      } else {
         this.enter(span, { ...store, span, awsParams: request.params, awsService })
+      } else {
+        this.enter(span)
       }
     })
 
@@ -131,7 +131,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       span.setTag('aws.region', region)
       span.setTag('region', region)
 
-      if (!this._tracerConfig._isInServerlessEnvironment()) {
+      if (this._tracerConfig._isInServerlessEnvironment()) {
         const { awsParams, awsService } = store
         const hostname = (() => {
           switch (awsService) {
