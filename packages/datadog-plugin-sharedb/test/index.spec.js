@@ -48,6 +48,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('service', 'test')
               expect(traces[0][0].meta).to.have.property('sharedb.action', 'fetch')
               expect(traces[0][0].meta).to.have.property('component', 'sharedb')
+              expect(traces[0][0].meta).to.have.property('_dd.integration', 'sharedb')
             })
               .then(done)
               .catch(done)

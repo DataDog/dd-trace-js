@@ -94,6 +94,7 @@ describe('Plugin', () => {
                 expect(span.meta).to.have.property('db.name', `test.${collection}`)
                 expect(span.meta).to.have.property('out.host', '127.0.0.1')
                 expect(span.meta).to.have.property('component', 'mongodb')
+                expect(span.meta).to.have.property('_dd.integration', 'mongodb')
               })
               .then(done)
               .catch(done)

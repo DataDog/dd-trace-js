@@ -40,6 +40,7 @@ class Http2ClientPlugin extends ClientPlugin {
     const childOf = store && allowed ? store.span : null
     const span = this.startSpan(this.operationName(), {
       childOf,
+      integrationName: this.constructor.id,
       meta: {
         [COMPONENT]: this.constructor.id,
         [SPAN_KIND]: CLIENT,

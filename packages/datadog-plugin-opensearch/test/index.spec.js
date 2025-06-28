@@ -100,6 +100,7 @@ describe('Plugin', () => {
               )
               expect(traces[0][0].meta).to.have.property('opensearch.params', '{"size":100}')
               expect(traces[0][0].meta).to.have.property('component', 'opensearch')
+              expect(traces[0][0].meta).to.have.property('_dd.integration', 'opensearch')
             })
             .then(done)
             .catch(done)

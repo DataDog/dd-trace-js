@@ -112,6 +112,7 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('http.method', 'GET')
                 expect(traces[0][0].meta).to.have.property('http.status_code', '200')
                 expect(traces[0][0].meta).to.have.property('component', 'http')
+                expect(traces[0][0].meta).to.have.property('_dd.integration', 'http')
                 expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
               })
               .then(done)

@@ -85,6 +85,7 @@ describe('Plugin', () => {
                 expect(span.meta).to.have.property('span.kind', 'client')
                 expect(span.meta).to.have.property('couchbase.bucket.name', 'datadog-test')
                 expect(span.meta).to.have.property('component', 'couchbase')
+                expect(span.meta).to.have.property('_dd.integration', 'couchbase')
               })
               .then(done)
               .catch(done)

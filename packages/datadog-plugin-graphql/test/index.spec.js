@@ -260,6 +260,7 @@ describe('Plugin', () => {
                 expect(spans[0].meta).to.have.property('graphql.operation.type', 'query')
                 expect(spans[0].meta).to.have.property('graphql.operation.name', 'MyQuery')
                 expect(spans[0].meta).to.have.property('component', 'graphql')
+                expect(spans[0].meta).to.have.property('_dd.integration', 'graphql')
               })
               .then(done)
 

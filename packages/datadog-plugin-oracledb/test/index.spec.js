@@ -88,6 +88,7 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('type', 'sql')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('component', 'oracledb')
+              expect(traces[0][0].meta).to.have.property('_dd.integration', 'oracledb')
               if (url) {
                 expect(traces[0][0].meta).to.have.property('db.instance', url.pathname.slice(1))
                 expect(traces[0][0].meta).to.have.property('db.hostname', url.hostname)

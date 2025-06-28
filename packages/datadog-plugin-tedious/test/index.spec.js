@@ -143,6 +143,7 @@ describe('Plugin', () => {
             expect(traces[0][0]).to.have.property('resource', query)
             expect(traces[0][0]).to.have.property('type', 'sql')
             expect(traces[0][0].meta).to.have.property('component', 'tedious')
+            expect(traces[0][0].meta).to.have.property('_dd.integration', 'tedious')
             expect(traces[0][0].meta).to.have.property('db.name', 'master')
             expect(traces[0][0].meta).to.have.property('db.user', 'sa')
             expect(traces[0][0].meta).to.have.property('db.type', 'mssql')

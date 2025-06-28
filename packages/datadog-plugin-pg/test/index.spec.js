@@ -77,6 +77,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('db.user', 'postgres')
               expect(traces[0][0].meta).to.have.property('db.type', 'postgres')
               expect(traces[0][0].meta).to.have.property('component', 'pg')
+              expect(traces[0][0].meta).to.have.property('_dd.integration', 'pg')
               expect(traces[0][0].metrics).to.have.property('network.destination.port', 5432)
 
               if (implementation !== 'pg.native') {

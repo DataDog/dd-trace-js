@@ -38,7 +38,8 @@ class Kinesis extends BaseAwsSdkPlugin {
             tags: {
               ...this.requestTags.get(request),
               'span.kind': 'server'
-            }
+            },
+            integrationName: 'aws-sdk'
           }
           span = plugin.tracer.startSpan('aws.response', options)
           this.enter(span, store)

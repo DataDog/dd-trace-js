@@ -86,7 +86,8 @@ describe('Plugin', () => {
                 'db.name': 'db',
                 'db.user': 'root',
                 'db.type': 'mysql',
-                component: 'mysql'
+                component: 'mysql',
+                '_dd.integration': 'mysql'
               }
             })
             .then(done)

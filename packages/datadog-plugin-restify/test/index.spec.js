@@ -49,6 +49,7 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('http.method', 'GET')
                 expect(traces[0][0].meta).to.have.property('http.status_code', '404')
                 expect(traces[0][0].meta).to.have.property('component', 'restify')
+                expect(traces[0][0].meta).to.have.property('_dd.integration', 'restify')
               })
               .then(done)
               .catch(done)

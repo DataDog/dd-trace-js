@@ -77,6 +77,7 @@ describe('Plugin', () => {
                   expect(span.meta).to.have.property('span.kind', 'client')
                   expect(span.meta).to.have.property('out.host', 'localhost')
                   expect(span.meta).to.have.property('component', 'amqplib')
+                  expect(span.meta).to.have.property('_dd.integration', 'amqplib')
                   expect(span.metrics).to.have.property('network.destination.port', 5672)
                 }, 2)
                 .then(done)

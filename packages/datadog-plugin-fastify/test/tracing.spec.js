@@ -64,6 +64,7 @@ describe('Plugin', () => {
                   expect(spans[0].meta).to.have.property('http.method', 'GET')
                   expect(spans[0].meta).to.have.property('http.status_code', '200')
                   expect(spans[0].meta).to.have.property('component', 'fastify')
+                  expect(spans[0].meta).to.have.property('_dd.integration', 'fastify')
                 })
                 .then(done)
                 .catch(done)
