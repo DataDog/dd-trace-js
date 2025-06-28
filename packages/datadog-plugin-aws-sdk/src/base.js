@@ -81,7 +81,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       span.setTag('region', region)
 
       //only if parent is lambda
-      if (!this._tracerConfig._isInServerlessEnvironment()) {
+      if (this._tracerConfig._isInServerlessEnvironment()) {
         const hostname = (() => {
           switch (awsService) {
             case 'EventBridge':        return `events.${region}.amazonaws.com`
