@@ -67,7 +67,8 @@ versions.forEach((version) => {
       sandbox = await createSandbox([
         `vitest@${version}`,
         `@vitest/coverage-istanbul@${version}`,
-        `@vitest/coverage-v8@${version}`
+        `@vitest/coverage-v8@${version}`,
+        'tinypool'
       ], true)
       cwd = sandbox.folder
     })
@@ -2052,6 +2053,25 @@ versions.forEach((version) => {
           })
           runImpactedTest(done, { isModified: true, isEfd: true, isNew: true })
         })
+      })
+    })
+
+    it('does not blow up when tinypool is used outside of a test', (done) => {
+      childProcess = exec('node ./ci-visibility/run-tinypool.mjs', {
+        cwd,
+        env: getCiVisAgentlessConfig(receiver.port),
+        stdio: 'pipe'
+      })
+      childProcess.stdout.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.on('exit', (code) => {
+        assert.include(testOutput, 'result 10')
+        assert.equal(code, 0)
+        done()
       })
     })
   })
