@@ -34,7 +34,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
   constructor (...args) {
     super(...args)
 
-    //if (!this._tracerConfig._isInServerlessEnvironment()) {
+    if (this._tracerConfig._isInServerlessEnvironment()) {
       const httpChannels = [
         'apm:http:client:request:start',
         'apm:http2:client:request:start'
@@ -43,11 +43,15 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       for (const ch of httpChannels) {
         this.addSub(ch, ({ span }) => {
           const { peerHostname } = storage('legacy').getStore() || {}
-          if (peerHostname) span.setTag('thisIsATestTag', peerHostname)
+          if (peerHostname) {
+            span.setTag('thisIsATestTag', peerHostname)
+            span.setTag('peerHostname', peerHostname)
+          }
         })
       }
+    }
 
-      const netChannels = [
+      /*const netChannels = [
         'apm:net:tcp:start',
         'apm:dns:lookup:start'
       ]
@@ -59,7 +63,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
           const { peerHostname } = storage('legacy').getStore() || {}
           if (span && peerHostname) span.setTag('thisIsATestTag', peerHostname)
         })
-      }
+      }*/
     //}
 
     this.addSub(`apm:aws:request:start:${this.serviceIdentifier}`, ({
@@ -97,11 +101,11 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       }
 
       const store = storage('legacy').getStore()
-      //if (!this._tracerConfig._isInServerlessEnvironment()) {
+      if (this._tracerConfig._isInServerlessEnvironment()) {
         this.enter(span, { ...store, span, awsParams: request.params, awsService })
-      //} else {
-      //  this.enter(span)
-      //}
+      } else {
+        this.enter(span)
+      }
     })
 
     this.addSub(`apm:aws:request:region:${this.serviceIdentifier}`, region => {
@@ -112,7 +116,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       span.setTag('aws.region', region)
       span.setTag('region', region)
 
-      //if (!this._tracerConfig._isInServerlessEnvironment()) {
+      if (this._tracerConfig._isInServerlessEnvironment()) {
         const { awsParams, awsService } = store
         const hostname = (() => {
           switch (awsService) {
@@ -131,8 +135,9 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         })()
         if (!hostname) return
         span.setTag('thisIsATestTag', hostname)
+        span.setTag('peerHostname', hostname)
         store.peerHostname = hostname
-      //}
+      }
     })
 
     this.addSub(`apm:aws:request:complete:${this.serviceIdentifier}`, ({ response, cbExists = false }) => {
