@@ -1,4 +1,14 @@
 {
+  "ai": [
+    {
+      "name": "@ai-sdk/openai",
+      "versions": [">=1.0.0"]
+    },
+    {
+      "name": "zod",
+      "versions": ["3.25.67"]
+    }
+  ],
   "apollo": [
     {
       "name": "@apollo/subgraph",
