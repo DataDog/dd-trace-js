@@ -9,7 +9,8 @@ class GraphQLResolvePlugin extends TracingPlugin {
   static get id () { return 'graphql' }
   static get operation () { return 'resolve' }
 
-  start ({ info, context, args }) {
+  start (ctx) {
+    const { info, context, args, childOf } = ctx
     const path = getPath(info, this.config)
 
     if (!shouldInstrument(this.config, path)) return
@@ -35,6 +36,7 @@ class GraphQLResolvePlugin extends TracingPlugin {
     const span = this.startSpan('graphql.resolve', {
       service: this.config.service,
       resource: `${info.fieldName}:${info.returnType}`,
+      childOf,
       type: 'graphql',
       meta: {
         'graphql.field.name': info.fieldName,
@@ -42,7 +44,7 @@ class GraphQLResolvePlugin extends TracingPlugin {
         'graphql.field.type': info.returnType.name,
         'graphql.source': source
       }
-    })
+    }, ctx)
 
     if (fieldNode && this.config.variables && fieldNode.arguments) {
       const variables = this.config.variables(info.variableValues)
@@ -58,17 +60,21 @@ class GraphQLResolvePlugin extends TracingPlugin {
     if (this.resolverStartCh.hasSubscribers) {
       this.resolverStartCh.publish({ context, resolverInfo: getResolverInfo(info, args) })
     }
+
+    return ctx.currentStore
   }
 
   constructor (...args) {
     super(...args)
 
-    this.addTraceSub('updateField', ({ field, info, err }) => {
+    this.addTraceSub('updateField', (ctx) => {
+      const { field, info, err } = ctx
+
       const path = getPath(info, this.config)
 
       if (!shouldInstrument(this.config, path)) return
 
-      const span = this.activeSpan
+      const span = ctx?.currentStore?.span || this.activeSpan
       field.finishTime = span._getTime ? span._getTime() : 0
       field.error = field.error || err
     })
@@ -81,8 +87,13 @@ class GraphQLResolvePlugin extends TracingPlugin {
     super.configure(config.depth === 0 ? false : config)
   }
 
-  finish (finishTime) {
-    this.activeSpan.finish(finishTime)
+  bindFinish (ctx) {
+    const { finishTime } = ctx
+
+    const span = ctx?.currentStore?.span || this.activeSpan
+    span.finish(finishTime)
+
+    return ctx.parentStore
   }
 }
 
