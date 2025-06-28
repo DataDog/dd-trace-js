@@ -53,6 +53,27 @@ for (const extension of extensions) {
     return exports
   })
 
+  addHook({ name: '@langchain/core', file: `dist/tools/index.${extension}`, versions: ['>=0.1'] }, exports => {
+    if (extension === 'cjs') {
+      wrap(exports.StructuredTool.prototype, 'invoke', 'orchestrion:@langchain/core:Tool_invoke')
+    }
+    return exports
+  })
+
+  addHook({ name: '@langchain/core', file: `dist/vectorstores.${extension}`, versions: ['>=0.1'] }, exports => {
+    if (extension === 'cjs') {
+      wrap(
+        exports.VectorStore.prototype, 'similaritySearch', 'orchestrion:@langchain/core:VectorStore_similaritySearch'
+      )
+      wrap(
+        exports.VectorStore.prototype, 'similaritySearchWithScore',
+        'orchestrion:@langchain/core:VectorStore_similaritySearchWithScore'
+      )
+    }
+
+    return exports
+  })
+
   addHook({ name: '@langchain/core', file: `dist/embeddings.${extension}`, versions: ['>=0.1'] }, exports => {
     if (extension === 'cjs') {
       shimmer.wrap(exports, 'Embeddings', Embeddings => {
