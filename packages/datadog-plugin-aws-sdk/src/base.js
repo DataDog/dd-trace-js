@@ -34,6 +34,34 @@ class BaseAwsSdkPlugin extends ClientPlugin {
   constructor (...args) {
     super(...args)
 
+    if (this._tracerConfig._isInServerlessEnvironment()) {
+      const httpChannels = [
+        'apm:http:client:request:start',
+        'apm:http2:client:request:start'
+      ]
+
+      for (const ch of httpChannels) {
+        this.addSub(ch, ({ span }) => {
+          const { peerHostname } = storage('legacy').getStore() || {}
+          if (peerHostname) span.setTag('peer.service', peerHostname)
+        })
+      }
+
+      const netChannels = [
+        'apm:net:tcp:start',
+        'apm:dns:lookup:start'
+      ]
+
+      for (const ch of netChannels) {
+        this.addSub(ch, ctx => {
+          const span = ctx.currentStore?.span // span created by dns plugin
+          if (!span) return
+          const { peerHostname } = storage('legacy').getStore() || {}
+          if (span && peerHostname) span.setTag('peer.service', peerHostname)
+        })
+      }
+    }
+
     this.addSub(`apm:aws:request:start:${this.serviceIdentifier}`, ({
       request,
       operation,
@@ -69,32 +97,36 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       }
 
       const store = storage('legacy').getStore()
-      this.enter(span, { ...store, span, awsParams: request.params, awsService })
+      if (this._tracerConfig._isInServerlessEnvironment()) {
+        this.enter(span, { ...store, span, awsParams: request.params, awsService })
+      } else {
+        this.enter(span)
+      }
     })
 
     this.addSub(`apm:aws:request:region:${this.serviceIdentifier}`, region => {
       const store = storage('legacy').getStore()
       if (!store) return
-      const { span, awsParams, awsService, parentSpan } = store
+      const { span } = store
       if (!span) return
       span.setTag('aws.region', region)
       span.setTag('region', region)
 
-      //only if parent is lambda
       if (this._tracerConfig._isInServerlessEnvironment()) {
+        const { awsParams, awsService } = store
         const hostname = (() => {
           switch (awsService) {
-            case 'EventBridge':        return `events.${region}.amazonaws.com`
-            case 'SQS':               return `sqs.${region}.amazonaws.com`
-            case 'SNS':               return `sns.${region}.amazonaws.com`
-            case 'Kinesis':           return `kinesis.${region}.amazonaws.com`
-            case 'DynamoDBDocument':  // or 'DynamoDB'
+            case 'EventBridge': return `events.${region}.amazonaws.com`
+            case 'SQS': return `sqs.${region}.amazonaws.com`
+            case 'SNS': return `sns.${region}.amazonaws.com`
+            case 'Kinesis': return `kinesis.${region}.amazonaws.com`
+            case 'DynamoDBDocument': // or 'DynamoDB'
               return `dynamodb.${region}.amazonaws.com`
             case 'S3':
               return awsParams?.Bucket
                 ? `${awsParams.Bucket}.s3.${region}.amazonaws.com`
                 : `s3.${region}.amazonaws.com`
-            default:                  return null
+            default: return null
           }
         })()
         if (!hostname) return
