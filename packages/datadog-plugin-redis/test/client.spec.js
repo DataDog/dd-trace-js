@@ -132,6 +132,15 @@ describe('Plugin', () => {
           async () => client.get('foo'),
           rawExpectedSchema.outbound
         )
+
+        it('should restore the parent context in the callback', async () => {
+          const span = {}
+          tracer.scope().activate(span, () => {
+            client.get('foo', () => {
+              expect(span.context().active()).to.equal(span)
+            })
+          })
+        })
       })
 
       describe('with configuration', () => {
