@@ -550,7 +550,7 @@ class CypressPlugin {
           [TEST_SESSION_NAME]: testSessionName
         }
       }
-      const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id)
+      const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id, false, this.frameworkVersion)
       metadataTags.test = {
         ...metadataTags.test,
         ...libraryCapabilitiesTags

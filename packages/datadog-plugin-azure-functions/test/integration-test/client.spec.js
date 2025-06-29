@@ -8,13 +8,16 @@ const {
 } = require('../../../../integration-tests/helpers')
 const { spawn } = require('child_process')
 const { assert } = require('chai')
+const { NODE_MAJOR } = require('../../../../version')
 
 describe('esm', () => {
   let agent
   let proc
   let sandbox
 
-  withVersions('azure-functions', '@azure/functions', version => {
+  // TODO: Allow newer versions in Node.js 18 when their breaking change is reverted.
+  // See https://github.com/Azure/azure-functions-nodejs-library/pull/357
+  withVersions('azure-functions', '@azure/functions', NODE_MAJOR < 20 ? '<4.7.3' : '*', version => {
     before(async function () {
       this.timeout(50000)
       sandbox = await createSandbox([`@azure/functions@${version}`, 'azure-functions-core-tools@4'], false,

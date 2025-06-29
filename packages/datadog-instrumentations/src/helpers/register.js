@@ -9,6 +9,7 @@ const log = require('../../../dd-trace/src/log')
 const checkRequireCache = require('./check-require-cache')
 const telemetry = require('../../../dd-trace/src/guardrails/telemetry')
 const { isInServerlessEnvironment } = require('../../../dd-trace/src/serverless')
+const { isFalse, isTrue, normalizePluginEnvName } = require('../../../dd-trace/src/util')
 const { getEnvironmentVariables } = require('../../../dd-trace/src/config-helper')
 
 const envs = getEnvironmentVariables()
@@ -22,16 +23,22 @@ const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
 const names = Object.keys(hooks)
 const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
+
 const disabledInstrumentations = new Set(
-  DD_TRACE_DISABLED_INSTRUMENTATIONS ? DD_TRACE_DISABLED_INSTRUMENTATIONS.split(',') : []
+  DD_TRACE_DISABLED_INSTRUMENTATIONS?.split(',').map(name => normalizePluginEnvName(name, true)) ?? []
 )
+const reenabledInstrumentations = new Set()
 
 // Check for DD_TRACE_<INTEGRATION>_ENABLED environment variables
 for (const [key, value] of Object.entries(envs)) {
   const match = key.match(/^DD_TRACE_(.+)_ENABLED$/)
-  if (match && (value?.toLowerCase() === 'false' || value === '0')) {
-    const integration = match[1].toLowerCase()
-    disabledInstrumentations.add(integration)
+  if (match && value) {
+    const integration = normalizePluginEnvName(match[1], true)
+    if (isFalse(value)) {
+      disabledInstrumentations.add(integration)
+    } else if (isTrue(value)) {
+      reenabledInstrumentations.add(integration)
+    }
   }
 }
 
@@ -58,7 +65,8 @@ const allInstrumentations = {}
 
 // TODO: make this more efficient
 for (const packageName of names) {
-  if (disabledInstrumentations.has(packageName)) continue
+  const normalizedPackageName = normalizePluginEnvName(packageName, true)
+  if (disabledInstrumentations.has(normalizedPackageName)) continue
 
   const hookOptions = {}
 
@@ -66,6 +74,10 @@ for (const packageName of names) {
 
   if (typeof hook === 'object') {
     if (hook.serverless === false && isInServerlessEnvironment()) continue
+
+    // some integrations are disabled by default, but can be enabled by setting
+    // the DD_TRACE_<INTEGRATION>_ENABLED environment variable to true
+    if (hook.disabled && !reenabledInstrumentations.has(normalizedPackageName)) continue
 
     hookOptions.internals = hook.esmFirst
     hook = hook.fn

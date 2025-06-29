@@ -1,5 +1,6 @@
 'use strict'
 
+const { withNamingSchema, withPeerService } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const fs = require('fs')
 const path = require('path')
@@ -66,7 +67,7 @@ describe('Plugin', () => {
             })
         })
 
-        const spanProducerFn = () => {
+        const spanProducerFn = (done) => {
           const app = express()
           app.get('/user', (req, res) => {
             res.status(200).send()
@@ -77,6 +78,7 @@ describe('Plugin', () => {
               res.on('data', () => {})
             })
             req.end()
+            done()
           })
         }
 
@@ -89,7 +91,7 @@ describe('Plugin', () => {
         )
 
         withNamingSchema(
-          spanProducerFn,
+          (done) => spanProducerFn((err) => err && done(err)),
           rawExpectedSchema.client
         )
 

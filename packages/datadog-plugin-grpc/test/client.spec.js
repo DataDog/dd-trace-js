@@ -1,10 +1,11 @@
 'use strict'
 
-const path = require('path')
+const path = require('node:path')
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const getPort = require('get-port')
 const semver = require('semver')
-const Readable = require('stream').Readable
+const Readable = require('node:stream').Readable
 const getService = require('./service')
 const loader = require('../../../versions/@grpc/proto-loader').get()
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK, GRPC_CLIENT_ERROR_STATUSES } = require('../../dd-trace/src/constants')
@@ -100,11 +101,11 @@ describe('Plugin', () => {
             withPeerService(
               () => tracer,
               'grpc',
-              async () => {
+              async (done) => {
                 const client = await buildClient({
                   getUnary: (_, callback) => callback()
                 })
-                client.getUnary({ first: 'foobar' }, () => {})
+                client.getUnary({ first: 'foobar' }, done)
               },
               'test.TestService', 'rpc.service')
 

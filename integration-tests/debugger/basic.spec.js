@@ -674,10 +674,17 @@ describe('Dynamic Instrumentation', function () {
       })
 
       it('should report error if condition cannot be compiled', function (done) {
+        const rcConfig = t.generateRemoteConfig({
+          when: { dsl: 'original dsl', json: { ref: 'this is not a valid ref' } }
+        })
+
         t.agent.on('debugger-diagnostics', ({ payload }) => {
           payload.forEach(({ debugger: { diagnostics } }) => {
             if (diagnostics.status === 'ERROR') {
-              assert.strictEqual(diagnostics.exception.message, 'Cannot compile expression: original dsl')
+              assert.strictEqual(
+                diagnostics.exception.message,
+                `Cannot compile expression: original dsl (probe: ${rcConfig.config.id}, version: 0)`
+              )
               done()
             } else if (diagnostics.status === 'INSTALLED') {
               assert.fail('Should not install when condition cannot be compiled')
@@ -685,9 +692,7 @@ describe('Dynamic Instrumentation', function () {
           })
         })
 
-        t.agent.addRemoteConfig(t.generateRemoteConfig({
-          when: { dsl: 'original dsl', json: { ref: 'this is not a valid ref' } }
-        }))
+        t.agent.addRemoteConfig(rcConfig)
       })
     })
 

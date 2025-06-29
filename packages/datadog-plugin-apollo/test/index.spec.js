@@ -1,6 +1,7 @@
 'use strict'
 
 const { expect } = require('chai')
+const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent.js')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants.js')
 const { expectedSchema, rawExpectedSchema } = require('./naming.js')
@@ -443,14 +444,12 @@ describe('Plugin', () => {
         })
 
         withNamingSchema(
-          () => {
+          async () => {
             const operationName = 'MyQuery'
             const source = `query ${operationName} { hello(name: "world") }`
             const variableValues = { who: 'world' }
-            gateway()
-              .then(({ executor }) => {
-                return execute(executor, source, variableValues, operationName).then(() => {})
-              })
+            const { executor } = await gateway()
+            return execute(executor, source, variableValues, operationName)
           },
           rawExpectedSchema.server,
           {

@@ -1,5 +1,6 @@
 'use strict'
 
+const { withNamingSchema } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const tags = require('../../../ext/tags')
 const { expect } = require('chai')

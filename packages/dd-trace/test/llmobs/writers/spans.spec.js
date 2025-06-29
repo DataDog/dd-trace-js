@@ -52,7 +52,7 @@ describe('LLMObsSpanWriter', () => {
     writer = new LLMObsSpanWriter(config)
 
     const event = { name: 'test', value: 1 }
-    const eventSizeBytes = Buffer.from(JSON.stringify(event)).byteLength
+    const eventSizeBytes = Buffer.byteLength(JSON.stringify(event))
 
     writer.append(event)
 

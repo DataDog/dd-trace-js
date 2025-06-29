@@ -3,10 +3,13 @@
 /* eslint-disable no-console */
 
 const https = require('https')
+const { setTimeout } = require('timers/promises')
 
 const API_REPOSITORY_URL = 'https://api.github.com/repos/DataDog/test-environment'
 const DISPATCH_WORKFLOW_URL = `${API_REPOSITORY_URL}/actions/workflows/dd-trace-js-tests.yml/dispatches`
 const GET_WORKFLOWS_URL = `${API_REPOSITORY_URL}/actions/runs`
+
+const MAX_ATTEMPTS = 30 * 60 / 5 // 30 minutes, polling every 5 seconds = 360 attempts
 
 function getBranchUnderTest () {
   /**
@@ -106,17 +109,9 @@ const getCurrentWorkflowJobs = (runId) => {
   })
 }
 
-const wait = (timeToWaitMs) => {
-  return new Promise(resolve => {
-    setTimeout(() => {
-      resolve()
-    }, timeToWaitMs)
-  })
-}
-
 async function main () {
   // Trigger JS GHA
-  console.log('Triggering CI Visibility test environment workflow.')
+  console.log('Triggering Test Optimization test environment workflow.')
   const httpResponseCode = await triggerWorkflow()
   console.log('GitHub API response code:', httpResponseCode)
 
@@ -125,7 +120,7 @@ async function main () {
   }
 
   // Give some time for GH to process the request
-  await wait(15000)
+  await setTimeout(15000)
 
   // Get the run ID from the workflow we just triggered
   const workflowsInProgress = await getWorkflowRunsInProgress()
@@ -143,30 +138,35 @@ async function main () {
   console.log(`Workflow URL: https://github.com/DataDog/test-environment/actions/runs/${runId}`)
 
   // Wait an initial 1 minute, because we're sure it won't finish earlier
-  await wait(60000)
+  await setTimeout(60000)
 
-  // Poll every 5 seconds until we have a finished status
-  await new Promise((resolve, reject) => {
-    const intervalId = setInterval(async () => {
-      const currentWorkflow = await getCurrentWorkflowJobs(runId)
-      const { jobs } = currentWorkflow
-      const hasAnyJobFailed = jobs.some(({ status, conclusion }) => status === 'completed' && conclusion !== 'success')
-      const hasEveryJobPassed = jobs.every(
-        ({ status, conclusion }) => status === 'completed' && conclusion === 'success'
-      )
-      if (hasAnyJobFailed) {
-        reject(new Error(`Performance overhead test failed.
-Check https://github.com/DataDog/test-environment/actions/runs/${runId} for more details.`))
-        clearInterval(intervalId)
-      } else if (hasEveryJobPassed) {
-        console.log('Performance overhead test successful.')
-        resolve()
-        clearInterval(intervalId)
-      } else {
-        console.log(`Workflow https://github.com/DataDog/test-environment/actions/runs/${runId} is not finished yet.`)
-      }
-    }, 5000)
-  })
+  // Poll every 5 seconds until we have a finished status, up to 30 minutes
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const currentWorkflow = await getCurrentWorkflowJobs(runId)
+    const { jobs } = currentWorkflow
+    if (!jobs) {
+      console.error('Workflow check returned unknown object %o. Retry in 5 seconds.', currentWorkflow)
+      await setTimeout(5000)
+      continue
+    }
+    const hasAnyJobFailed = jobs
+      .some(({ status, conclusion }) => status === 'completed' && conclusion !== 'success')
+    const hasEveryJobPassed = jobs.every(
+      ({ status, conclusion }) => status === 'completed' && conclusion === 'success'
+    )
+    if (hasAnyJobFailed) {
+      throw new Error(`Performance overhead test failed.\n  Check https://github.com/DataDog/test-environment/actions/runs/${runId} for more details.`)
+    } else if (hasEveryJobPassed) {
+      console.log('Performance overhead test successful.')
+      break
+    } else {
+      console.log(`Workflow https://github.com/DataDog/test-environment/actions/runs/${runId} is not finished yet. [Attempt ${attempt + 1}/${MAX_ATTEMPTS}]`)
+    }
+    if (attempt === MAX_ATTEMPTS - 1) {
+      throw new Error(`Timeout: Workflow did not finish within 30 minutes. Check https://github.com/DataDog/test-environment/actions/runs/${runId} for more details.`)
+    }
+    await setTimeout(5000)
+  }
 }
 
 main().catch(e => {

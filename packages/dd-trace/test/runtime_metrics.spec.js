@@ -12,8 +12,15 @@ const suiteDescribe = isWindows ? describe.skip : describe
 suiteDescribe('runtimeMetrics (proxy)', () => {
   let runtimeMetrics
   let proxy
+  let config
 
   beforeEach(() => {
+    config = {
+      runtimeMetrics: {
+        enabled: false
+      }
+    }
+
     runtimeMetrics = sinon.spy({
       start () {},
       stop () {},
@@ -54,7 +61,7 @@ suiteDescribe('runtimeMetrics (proxy)', () => {
   })
 
   it('should proxy when enabled', () => {
-    const config = { runtimeMetrics: true }
+    config.runtimeMetrics.enabled = true
 
     proxy.start(config)
     proxy.track()
@@ -78,11 +85,11 @@ suiteDescribe('runtimeMetrics (proxy)', () => {
   })
 
   it('should be noop when disabled after being enabled', () => {
-    const config = { runtimeMetrics: true }
-
+    config.runtimeMetrics.enabled = true
     proxy.start(config)
     proxy.stop()
-    proxy.start()
+    config.runtimeMetrics.enabled = false
+    proxy.start(config)
     proxy.track()
     proxy.boolean()
     proxy.histogram()
@@ -152,6 +159,11 @@ suiteDescribe('runtimeMetrics', () => {
       dogstatsd: {
         hostname: 'localhost',
         port: 8125
+      },
+      runtimeMetrics: {
+        enabled: true,
+        eventLoop: true,
+        gc: true
       },
       tags: {
         str: 'bar',

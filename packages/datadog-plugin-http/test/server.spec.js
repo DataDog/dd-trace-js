@@ -1,5 +1,6 @@
 'use strict'
 
+const { withNamingSchema } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const axios = require('axios')
 const { incomingHttpRequestStart } = require('../../dd-trace/src/appsec/channels')

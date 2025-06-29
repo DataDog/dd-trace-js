@@ -450,7 +450,7 @@ class MochaPlugin extends CiPlugin {
             const testSuite = span.meta[TEST_SUITE]
             const testSuiteSpan = this._testSuites.get(testSuite)
             if (!testSuiteSpan) {
-              log.warn(`Test suite span not found for test span with test suite ${testSuite}`)
+              log.warn('Test suite span not found for test span with test suite', testSuite)
               return formattedSpan
             }
             const suiteTags = getTestSuiteLevelVisibilityTags(testSuiteSpan)

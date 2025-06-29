@@ -8,7 +8,6 @@ const {
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
 
-// TODO(sabrenner): re-enable once issues with mocking OpenAI calls are resolved
 describe('esm', () => {
   let agent
   let proc

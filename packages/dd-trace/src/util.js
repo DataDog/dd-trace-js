@@ -61,12 +61,10 @@ function globMatch (pattern, subject) {
   return true
 }
 
-// TODO: this adds stack traces relative to packages/
-// shouldn't paths be relative to the root of dd-trace?
 function calculateDDBasePath (dirname) {
   const dirSteps = dirname.split(path.sep)
   const packagesIndex = dirSteps.lastIndexOf('packages')
-  return dirSteps.slice(0, packagesIndex + 1).join(path.sep) + path.sep
+  return dirSteps.slice(0, packagesIndex).join(path.sep) + path.sep
 }
 
 function normalizeProfilingEnabledValue (configValue) {
@@ -77,11 +75,20 @@ function normalizeProfilingEnabledValue (configValue) {
       : configValue === 'auto' ? 'auto' : undefined
 }
 
+function normalizePluginEnvName (envPluginName, makeLowercase = false) {
+  if (envPluginName.startsWith('@')) {
+    envPluginName = envPluginName.slice(1)
+  }
+  envPluginName = envPluginName.replaceAll(/[^a-z0-9_]/ig, '_')
+  return makeLowercase ? envPluginName.toLowerCase() : envPluginName
+}
+
 module.exports = {
   isTrue,
   isFalse,
   isError,
   globMatch,
   ddBasePath: calculateDDBasePath(__dirname),
-  normalizeProfilingEnabledValue
+  normalizeProfilingEnabledValue,
+  normalizePluginEnvName
 }

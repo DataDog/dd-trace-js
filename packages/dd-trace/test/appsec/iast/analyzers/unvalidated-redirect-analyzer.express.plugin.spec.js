@@ -6,9 +6,7 @@ const path = require('path')
 
 const { UNVALIDATED_REDIRECT } = require('../../../../src/appsec/iast/vulnerabilities')
 const { prepareTestServerForIastInExpress } = require('../utils')
-const { storage } = require('../../../../../datadog-core')
-const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
-const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
+const Axios = require('axios')
 
 describe('Unvalidated Redirect vulnerability', () => {
   let redirectFunctions
@@ -24,13 +22,17 @@ describe('Unvalidated Redirect vulnerability', () => {
     fs.unlinkSync(redirectFunctionsPath)
   })
 
+  function getAxiosInstance (config) {
+    return Axios.create({
+      baseURL: `http://localhost:${config.port}`
+    })
+  }
+
   withVersions('express', 'express', version => {
     prepareTestServerForIastInExpress('in express', version,
       (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
         testThatRequestHasVulnerability((req, res) => {
-          const store = storage('legacy').getStore()
-          const iastCtx = iastContextFunctions.getIastContext(store)
-          const location = newTaintedString(iastCtx, 'https://app.com?id=tron', 'param', 'Request')
+          const location = req.query.location
           redirectFunctions.insecureWithResHeaderMethod('location', location, res)
         }, UNVALIDATED_REDIRECT, {
           occurrences: 1,
@@ -38,44 +40,67 @@ describe('Unvalidated Redirect vulnerability', () => {
             path: redirectFunctionsFilename,
             line: 4
           }
+        }, null, (done, config) => {
+          getAxiosInstance(config).get('/?location=https://app.com?id=tron').catch(done)
         })
 
         testThatRequestHasVulnerability((req, res) => {
-          const store = storage('legacy').getStore()
-          const iastCtx = iastContextFunctions.getIastContext(store)
-          const location = newTaintedString(iastCtx, 'http://user@app.com/', 'param', 'Request')
-          redirectFunctions.insecureWithResRedirectMethod(location, res)
+          redirectFunctions.insecureWithResRedirectMethod(req.query.location, res)
         }, UNVALIDATED_REDIRECT, {
           occurrences: 1,
           location: {
             path: redirectFunctionsFilename,
             line: 8
           }
+        }, null, (done, config) => {
+          getAxiosInstance(config).get('/?location=http://user@app.com/').catch(done)
         })
 
         testThatRequestHasVulnerability((req, res) => {
-          const store = storage('legacy').getStore()
-          const iastCtx = iastContextFunctions.getIastContext(store)
-          const location = newTaintedString(iastCtx, 'http://user@app.com/', 'param', 'Request')
-          redirectFunctions.insecureWithResLocationMethod(location, res)
+          redirectFunctions.insecureWithResLocationMethod(req.query.location, res)
         }, UNVALIDATED_REDIRECT, {
           occurrences: 1,
           location: {
             path: redirectFunctionsFilename,
             line: 12
           }
+        }, null, (done, config) => {
+          getAxiosInstance(config).get('/?location=http://user@app.com/').catch(done)
+        })
+
+        testThatRequestHasVulnerability((req, res) => {
+          redirectFunctions.insecureWithResLocationMethod(req.body.location, res)
+        }, UNVALIDATED_REDIRECT, {
+          occurrences: 1,
+          location: {
+            path: redirectFunctionsFilename,
+            line: 12
+          }
+        }, null, (done, config) => {
+          getAxiosInstance(config).post('', {
+            location: 'http://user@app.com/'
+          }).catch(done)
         })
 
         testThatRequestHasNoVulnerability((req, res) => {
-          const store = storage('legacy').getStore()
-          const iastCtx = iastContextFunctions.getIastContext(store)
-          const location = newTaintedString(iastCtx, 'http://user@app.com/', 'pathParam', 'Request')
-          res.header('X-test', location)
-        }, UNVALIDATED_REDIRECT)
+          res.header('X-test', req.query.location)
+        }, UNVALIDATED_REDIRECT, (done, config) => {
+          getAxiosInstance(config).get('/?location=http://user@app.com/').catch(done)
+        })
 
         testThatRequestHasNoVulnerability((req, res) => {
           redirectFunctions.insecureWithResHeaderMethod('location', 'http://user@app.com/', res)
         }, UNVALIDATED_REDIRECT)
+
+        testThatRequestHasNoVulnerability((req, res) => {
+          redirectFunctions.insecureWithResLocationMethod(req.headers.redirectlocation, res)
+        }, UNVALIDATED_REDIRECT, (done, config) => {
+          getAxiosInstance(config).get('', {
+            headers: {
+              redirectlocation: 'http://user@app.com/'
+            }
+          }).catch(done)
+        })
       })
   })
 })

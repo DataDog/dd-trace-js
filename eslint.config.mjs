@@ -196,9 +196,6 @@ export default [
         expect: 'readonly',
         proxyquire: 'readonly',
         withVersions: 'readonly',
-        withPeerService: 'readonly',
-        withNamingSchema: 'readonly',
-        withExports: 'readonly'
       }
     },
     rules: {

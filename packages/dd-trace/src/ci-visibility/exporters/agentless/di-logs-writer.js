@@ -45,7 +45,7 @@ class DynamicInstrumentationLogsWriter extends BaseWriter {
         done()
         return
       }
-      log.debug(`Response from the logs intake: ${res}`)
+      log.debug('Response from the logs intake:', res)
       done()
     })
   }
