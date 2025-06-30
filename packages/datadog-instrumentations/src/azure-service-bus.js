@@ -7,9 +7,9 @@ const {
 
 const shimmer = require('../../datadog-shimmer')
 
-const producerStartCh = channel('apm:azure:service-bus:produce:start')
-const producerErrorCh = channel('apm:azure:service-bus:produce:error')
-const producerFinishCh = channel('apm:azure:service-bus:produce:finish')
+const producerStartCh = channel('apm:azure-service-bus:send:start')
+const producerErrorCh = channel('apm:azure-service-bus:send:error')
+const producerFinishCh = channel('apm:azure-service-bus:send:finish')
 
 addHook({ name: '@azure/service-bus', versions: ['>=6'] }, (obj) => {
   const ServiceBusClient = obj.ServiceBusClient
@@ -22,7 +22,6 @@ addHook({ name: '@azure/service-bus', versions: ['>=6'] }, (obj) => {
           .then(
             response => {
               producerFinishCh.publish(ctx)
-              console.log("Message sent successfully")
             },
             error => {
               ctx.error = error
@@ -35,4 +34,5 @@ addHook({ name: '@azure/service-bus', versions: ['>=6'] }, (obj) => {
     })
     return sender
   })
+  return obj
 })
