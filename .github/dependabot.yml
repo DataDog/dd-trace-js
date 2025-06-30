@@ -21,6 +21,13 @@ updates:
       - "/"
     schedule:
       interval: "weekly"
+    ignore:
+      - dependency-name: "@types/node"
+        # Update the types manually with new Node.js version support
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "eslint-plugin-mocha"
+        # ESM only from v11.0.0 onwards
+        update-types: ["version-update:semver-major"]
     groups:
       dev-minor-and-patch-dependencies:
         dependency-type: "development"
@@ -36,3 +43,6 @@ updates:
         update-types:
           - "minor"
           - "patch"
+        exclude-patterns:
+          # Add entries that we should update manually.
+          - "@opentelemetry/api"
