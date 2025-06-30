@@ -21,6 +21,9 @@ updates:
       - "/"
     schedule:
       interval: "weekly"
+    ignore:
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     groups:
       dev-minor-and-patch-dependencies:
         dependency-type: "development"
