@@ -8,13 +8,22 @@ const coalesce = require('koalas')
 const { tagsFromRequest, tagsFromResponse } = require('../../dd-trace/src/payload-tagging')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
-// channels for Lambda cold-start to carry peer.service
-const httpChannelsStart = [
-  'apm:http:client:request:start',
-  'apm:http2:client:request:start',
-  'apm:net:tcp:start',
-  'apm:dns:lookup:start'
+// channels for Lambda to carry peer.service
+const networkChannelsEnd = [
+  'apm:http:client:request:finish',
+  'apm:http2:client:request:end',
+  'apm:net:tcp:finish',
+  'apm:dns:lookup:finish'
 ]
+
+// handler to attach peer.service to underlying network spans
+const setPeerServiceTag = (ctx = {}) => {
+  const span = ctx.span || ctx.currentStore?.span
+  if (!span) return
+  const peerHostname = ctx.currentStore?.peerHostname ||
+                       storage('legacy').getStore()?.peerHostname
+  if (peerHostname) span.setTag('peer.service', peerHostname)
+}
 
 class BaseAwsSdkPlugin extends ClientPlugin {
   static get id () { return 'aws' }
@@ -42,44 +51,8 @@ class BaseAwsSdkPlugin extends ClientPlugin {
   constructor (...args) {
     super(...args)
 
-    if (this._tracerConfig?._isInServerlessEnvironment()) {
-      // subscribe to http channels for cold start
-      for (const ch of httpChannelsStart) {
-        this.addSub(ch, () => {})
-      }
-
-      this.addSub('apm:http:client:request:finish', ({ span }) => {
-        const { peerHostname } = storage('legacy').getStore() || {}
-        if (peerHostname) {
-          span.setTag('peer.service', peerHostname)
-        }
-      })
-
-      this.addSub('apm:http2:client:request:end', ({ currentStore }) => {
-        const span = currentStore?.span
-        const { peerHostname } = currentStore || {}
-        if (span && peerHostname) {
-          span.setTag('peer.service', peerHostname)
-        }
-      })
-
-      this.addSub('apm:net:tcp:finish', (ctx) => {
-        const span = ctx?.currentStore?.span
-        if (!span) return
-        const { peerHostname } = storage('legacy').getStore() || {}
-        if (span && peerHostname) {
-          span.setTag('peer.service', peerHostname)
-        }
-      })
-
-      this.addSub('apm:dns:lookup:finish', (ctx) => {
-        const span = ctx?.currentStore?.span
-        if (!span) return
-        const { peerHostname } = storage('legacy').getStore() || {}
-        if (span && peerHostname) {
-          span.setTag('peer.service', peerHostname)
-        }
-      })
+    if (!this._tracerConfig?._isInServerlessEnvironment()) {
+      networkChannelsEnd.forEach(ch => this.addSub(ch, setPeerServiceTag))
     }
 
     this.addSub(`apm:aws:request:start:${this.serviceIdentifier}`, ({
@@ -123,9 +96,9 @@ class BaseAwsSdkPlugin extends ClientPlugin {
 
       const store = storage('legacy').getStore()
       if (this._tracerConfig?._isInServerlessEnvironment()) {
-        this.enter(span, { ...store, span, awsParams: request.params, awsService })
-      } else {
         this.enter(span, store)
+      } else {
+        this.enter(span, { ...store, span, awsParams: request.params, awsService })
       }
     })
 
@@ -137,7 +110,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       span.setTag('aws.region', region)
       span.setTag('region', region)
 
-      if (this._tracerConfig?._isInServerlessEnvironment()) {
+      if (!this._tracerConfig?._isInServerlessEnvironment()) {
         const hostname = getHostname(store, region)
         if (!hostname) return
         span.setTag('peer.service', hostname)
