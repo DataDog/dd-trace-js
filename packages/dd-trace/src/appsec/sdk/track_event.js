@@ -167,10 +167,8 @@ function flattenFields (fields, depth = 0) {
           result[`${key}.${flatKey}`] = flatValue[flatKey]
         }
       }
-    } else {
-      if (value !== undefined) {
-        result[key] = value
-      }
+    } else if (value !== undefined) {
+      result[key] = value
     }
   }
 
