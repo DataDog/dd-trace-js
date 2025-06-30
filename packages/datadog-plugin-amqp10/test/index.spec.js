@@ -90,6 +90,7 @@ describe('Plugin', () => {
                 expect(span.meta).to.have.property('amqp.link.role', 'sender')
                 expect(span.meta['amqp.link.name']).to.match(/^amq\.topic_[0-9a-f-]+$/)
                 expect(span.meta).to.have.property('component', 'amqp10')
+                expect(span.meta).to.have.property('_dd.integration', 'amqp10')
                 expect(span.metrics).to.have.property('network.destination.port', 5673)
                 expect(span.metrics).to.have.property('amqp.connection.port', 5673)
                 expect(span.metrics).to.have.property('amqp.link.handle', 1)

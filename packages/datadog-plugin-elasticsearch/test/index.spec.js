@@ -80,6 +80,7 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0].meta).to.have.property('component', 'elasticsearch')
+              expect(traces[0][0].meta).to.have.property('_dd.integration', 'elasticsearch')
               expect(traces[0][0].meta).to.have.property('db.type', 'elasticsearch')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('elasticsearch.method', 'POST')
