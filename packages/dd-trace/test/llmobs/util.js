@@ -22,6 +22,7 @@ function deepEqualWithMockValues (expected) {
     } else if (expected[key] === MOCK_ANY) {
       new chai.Assertion(actual[key], `key ${key}`).to.exist
     } else if (Array.isArray(expected[key])) {
+      assert.ok(Array.isArray(actual[key]), `key "${key}" is not an array`)
       const sortedExpected = [...expected[key].sort()]
       const sortedActual = [...actual[key].sort()]
       new chai.Assertion(sortedActual, `key: ${key}`).to.deepEqualWithMockValues(sortedExpected)
@@ -196,6 +197,7 @@ function fromBuffer (spanProperty, isNumber = false) {
 const sinon = require('sinon')
 const agent = require('../plugins/agent')
 const LLMObsSpanWriter = require('../../src/llmobs/writers/spans')
+const assert = require('node:assert')
 
 function useLlmobs ({
   plugin,

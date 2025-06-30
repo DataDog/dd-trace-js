@@ -130,7 +130,7 @@ function getJsonStringValue (str, defaultValue) {
 /**
  * Get the model metadata from the span tags (top_p, top_k, temperature, etc.)
  * @param {import('../../opentracing/span')} span
- * @returns {Record<string, string>}
+ * @returns {Record<string, string> | null}
  */
 function getModelMetadata (tags) {
   const modelMetadata = {}
@@ -142,13 +142,13 @@ function getModelMetadata (tags) {
     }
   }
 
-  return modelMetadata
+  return Object.keys(modelMetadata).length ? modelMetadata : null
 }
 
 /**
  * Get the generation metadata from the span tags (maxSteps, maxRetries, etc.)
  * @param {import('../../opentracing/span')} span
- * @returns {Record<string, string>}
+ * @returns {Record<string, string> | null}
  */
 function getGenerationMetadata (ctx) {
   const metadata = {}
@@ -165,7 +165,7 @@ function getGenerationMetadata (ctx) {
     metadata[settingKey] = settingValue
   }
 
-  return metadata
+  return Object.keys(metadata).length ? metadata : null
 }
 
 class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
@@ -319,7 +319,7 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
 
     this._tagger.tagTextIO(span, prompt, output)
 
-    const metadata = getGenerationMetadata(tags)
+    const metadata = getGenerationMetadata(tags) ?? {}
     metadata.schema = getJsonStringValue(tags['ai.schema'], {})
     this._tagger.tagMetadata(span, metadata)
   }
