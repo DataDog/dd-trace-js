@@ -238,6 +238,7 @@ describe('Plugin', () => {
               )
 
               expect(traces[0][0].meta).to.have.property('component', 'openai')
+              expect(traces[0][0].meta).to.have.property('_dd.integration', 'openai')
               expect(traces[0][0].meta).to.have.property('openai.api_base', 'http://127.0.0.1:9126/vcr/openai')
               expect(traces[0][0].meta).to.have.property('openai.organization.name', 'datadog-staging')
               expect(traces[0][0].meta).to.have.property('openai.request.model', 'gpt-3.5-turbo-instruct')
