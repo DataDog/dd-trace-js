@@ -94,10 +94,10 @@ $ yarn
 To create a new plugin for a third-party package, follow these steps:
 
 1. `mkdir -p packages/datadog-plugin-<pluginname>/src`
-2. `cp packages/datadog-plugin-kafkajs/src/index.js packages/datadog-plugin-<pluginname>/src`
+2. Copy an `index.js` file from another plugin to use as a starting point: `cp packages/datadog-plugin-kafkajs/src/index.js packages/datadog-plugin-<pluginname>/src`
 3. Edit index.js as appropriate for your new plugin
 4. `mkdir -p packages/datadog-plugin-<pluginname>/test`
-5. `cp packages/datadog-plugin-kafkajs/test/index.spec.js packages/datadog-plugin-<pluginname>/test`
+5. Create an packages/datadog-plugin-<pluginname>/test/index.spec.js file and add the necessary tests. See other plugin tests for inspiration to file structure.
 6. Edit index.spec.js as appropriate for your new plugin
 7. Add entries to the following files for your new plugin:
   - `packages/dd-trace/src/plugins/index.js`
