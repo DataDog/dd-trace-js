@@ -8,6 +8,14 @@ const coalesce = require('koalas')
 const { tagsFromRequest, tagsFromResponse } = require('../../dd-trace/src/payload-tagging')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
+// channels for Lambda cold-start to carry peer.service
+const httpChannelsStart = [
+  'apm:http:client:request:start',
+  'apm:http2:client:request:start',
+  'apm:net:tcp:start',
+  'apm:dns:lookup:start'
+]
+
 class BaseAwsSdkPlugin extends ClientPlugin {
   static get id () { return 'aws' }
   static get isPayloadReporter () { return false }
@@ -36,13 +44,6 @@ class BaseAwsSdkPlugin extends ClientPlugin {
 
     if (this._tracerConfig?._isInServerlessEnvironment()) {
       // subscribe to http channels for cold start
-      const httpChannelsStart = [
-        'apm:http:client:request:start',
-        'apm:http2:client:request:start',
-        'apm:net:tcp:start',
-        'apm:dns:lookup:start'
-      ]
-
       for (const ch of httpChannelsStart) {
         this.addSub(ch, () => {})
       }
@@ -124,7 +125,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       if (this._tracerConfig?._isInServerlessEnvironment()) {
         this.enter(span, { ...store, span, awsParams: request.params, awsService })
       } else {
-        this.enter(span)
+        this.enter(span, store)
       }
     })
 
@@ -137,22 +138,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       span.setTag('region', region)
 
       if (this._tracerConfig?._isInServerlessEnvironment()) {
-        const { awsParams, awsService } = store
-        const hostname = (() => {
-          switch (awsService) {
-            case 'EventBridge': return `events.${region}.amazonaws.com`
-            case 'SQS': return `sqs.${region}.amazonaws.com`
-            case 'SNS': return `sns.${region}.amazonaws.com`
-            case 'Kinesis': return `kinesis.${region}.amazonaws.com`
-            case 'DynamoDBDocument': // or 'DynamoDB'
-              return `dynamodb.${region}.amazonaws.com`
-            case 'S3':
-              return awsParams?.Bucket
-                ? `${awsParams.Bucket}.s3.${region}.amazonaws.com`
-                : `s3.${region}.amazonaws.com`
-            default: return null
-          }
-        })()
+        const hostname = getHostname(store, region)
         if (!hostname) return
         span.setTag('peer.service', hostname)
         store.peerHostname = hostname
@@ -313,6 +299,30 @@ function getHooks (config) {
   const request = config.hooks?.request || noop
 
   return { request }
+}
+
+function getHostname (store, region) {
+  if (!store) return null
+  const { awsParams, awsService } = store
+  switch (awsService) {
+    case 'EventBridge':
+      return `events.${region}.amazonaws.com`
+    case 'SQS':
+      return `sqs.${region}.amazonaws.com`
+    case 'SNS':
+      return `sns.${region}.amazonaws.com`
+    case 'Kinesis':
+      return `kinesis.${region}.amazonaws.com`
+    case 'DynamoDBDocument':
+    case 'DynamoDB':
+      return `dynamodb.${region}.amazonaws.com`
+    case 'S3':
+      return awsParams?.Bucket
+        ? `${awsParams.Bucket}.s3.${region}.amazonaws.com`
+        : `s3.${region}.amazonaws.com`
+    default:
+      return null
+  }
 }
 
 module.exports = BaseAwsSdkPlugin
