@@ -38,6 +38,7 @@ describe('Plugin', () => {
             expect(traces[0][0]).to.have.property('resource', 'get')
             expect(traces[0][0]).to.have.property('type', 'valkey')
             expect(traces[0][0].meta).to.have.property('component', 'iovalkey')
+            expect(traces[0][0].meta).to.have.property('_dd.integration', 'iovalkey')
             expect(traces[0][0].meta).to.have.property('db.name', '0')
             expect(traces[0][0].meta).to.have.property('db.type', 'valkey')
             expect(traces[0][0].meta).to.have.property('span.kind', 'client')
