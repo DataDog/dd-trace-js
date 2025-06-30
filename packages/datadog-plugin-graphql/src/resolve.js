@@ -9,26 +9,35 @@ class GraphQLResolvePlugin extends TracingPlugin {
   static get id () { return 'graphql' }
   static get operation () { return 'resolve' }
 
-  start (ctx) {
-    const { info, context, args, childOf } = ctx
-    const path = getPath(info, this.config)
+  start (fieldCtx) {
+    const { info, ctx: parentCtx, args } = fieldCtx
+
+    const pathInfo = info && info.path
+    const path = pathToArray(pathInfo)
+
+    // we need to get the parent span to the field if it exists for correct span parenting
+    // of nested fields
+    const parentField = getParentField(parentCtx, path)
+    const childOf = parentField?.ctx?.currentStore?.span
+
+    fieldCtx.parent = parentField
 
     if (!shouldInstrument(this.config, path)) return
     const computedPathString = path.join('.')
 
     if (this.config.collapse) {
-      if (context.fields[computedPathString]) return
+      if (parentCtx.fields[computedPathString]) return
 
-      if (!context[collapsedPathSym]) {
-        context[collapsedPathSym] = {}
-      } else if (context[collapsedPathSym][computedPathString]) {
+      if (!parentCtx[collapsedPathSym]) {
+        parentCtx[collapsedPathSym] = {}
+      } else if (parentCtx[collapsedPathSym][computedPathString]) {
         return
       }
 
-      context[collapsedPathSym][computedPathString] = true
+      parentCtx[collapsedPathSym][computedPathString] = true
     }
 
-    const document = context.source
+    const document = parentCtx.source
     const fieldNode = info.fieldNodes.find(fieldNode => fieldNode.kind === 'Field')
     const loc = this.config.source && document && fieldNode && fieldNode.loc
     const source = loc && document.slice(loc.start, loc.end)
@@ -44,7 +53,7 @@ class GraphQLResolvePlugin extends TracingPlugin {
         'graphql.field.type': info.returnType.name,
         'graphql.source': source
       }
-    }, ctx)
+    }, fieldCtx)
 
     if (fieldNode && this.config.variables && fieldNode.arguments) {
       const variables = this.config.variables(info.variableValues)
@@ -58,17 +67,17 @@ class GraphQLResolvePlugin extends TracingPlugin {
     }
 
     if (this.resolverStartCh.hasSubscribers) {
-      this.resolverStartCh.publish({ context, resolverInfo: getResolverInfo(info, args) })
+      this.resolverStartCh.publish({ ctx: parentCtx, resolverInfo: getResolverInfo(info, args) })
     }
 
-    return ctx.currentStore
+    return fieldCtx.currentStore
   }
 
   constructor (...args) {
     super(...args)
 
     this.addTraceSub('updateField', (ctx) => {
-      const { field, info, err } = ctx
+      const { field, info, error } = ctx
 
       const path = getPath(info, this.config)
 
@@ -76,7 +85,7 @@ class GraphQLResolvePlugin extends TracingPlugin {
 
       const span = ctx?.currentStore?.span || this.activeSpan
       field.finishTime = span._getTime ? span._getTime() : 0
-      field.error = field.error || err
+      field.error = field.error || error
     })
 
     this.resolverStartCh = dc.channel('datadog:graphql:resolver:start')
@@ -87,7 +96,7 @@ class GraphQLResolvePlugin extends TracingPlugin {
     super.configure(config.depth === 0 ? false : config)
   }
 
-  bindFinish (ctx) {
+  finish (ctx) {
     const { finishTime } = ctx
 
     const span = ctx?.currentStore?.span || this.activeSpan
@@ -163,6 +172,21 @@ function getResolverInfo (info, args) {
   }
 
   return resolverInfo
+}
+
+function getParentField (parentCtx, path) {
+  for (let i = path.length - 1; i > 0; i--) {
+    const field = getField(parentCtx, path.slice(0, i))
+    if (field) {
+      return field
+    }
+  }
+
+  return null
+}
+
+function getField (parentCtx, path) {
+  return parentCtx.fields[path.join('.')]
 }
 
 module.exports = GraphQLResolvePlugin

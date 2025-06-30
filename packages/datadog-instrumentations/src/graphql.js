@@ -88,20 +88,20 @@ function wrapParse (parse) {
       return parse.apply(this, arguments)
     }
 
-    const ctx = {}
+    const ctx = { source }
     return parseStartCh.runStores(ctx, () => {
-      let document
       try {
-        document = parse.apply(this, arguments)
-        const operation = getOperation(document)
+        ctx.document = parse.apply(this, arguments)
+        const operation = getOperation(ctx.document)
 
-        if (!operation) return document
+        if (!operation) return ctx.document
 
         if (source) {
-          documentSources.set(document, source.body || source)
+          documentSources.set(ctx.document, source.body || source)
         }
+        ctx.docSource = documentSources.get(ctx.document)
 
-        return document
+        return ctx.document
       } catch (err) {
         err.stack
         ctx.error = err
@@ -109,7 +109,7 @@ function wrapParse (parse) {
 
         throw err
       } finally {
-        parseFinishCh.publish({ source, document, docSource: documentSources.get(document), ...ctx })
+        parseFinishCh.publish(ctx)
       }
     })
   }
@@ -138,7 +138,8 @@ function wrapValidate (validate) {
 
         throw err
       } finally {
-        validateFinishCh.publish({ errors, ...ctx })
+        ctx.errors = errors
+        validateFinishCh.publish(ctx)
       }
     })
   }
@@ -159,7 +160,14 @@ function wrapExecute (execute) {
       const contextValue = args.contextValue
       const operation = getOperation(document, args.operationName)
 
-      const ctx = { operation, args, docSource: documentSources.get(document) }
+      const ctx = {
+        operation,
+        args,
+        docSource: documentSources.get(document),
+        source,
+        fields: {},
+        abortController: new AbortController()
+      }
       return startExecuteCh.runStores(ctx, () => {
         if (contexts.has(contextValue)) {
           return exe.apply(this, arguments)
@@ -170,12 +178,10 @@ function wrapExecute (execute) {
           wrapFields(schema._mutationType)
         }
 
-        const context = { source, fields: {}, abortController: new AbortController(), ...ctx }
+        contexts.set(contextValue, ctx)
 
-        contexts.set(contextValue, context)
-
-        return callInAsyncScope(exe, this, arguments, context.abortController, (err, res) => {
-          if (finishResolveCh.hasSubscribers) finishResolvers(context)
+        return callInAsyncScope(exe, this, arguments, ctx.abortController, (err, res) => {
+          if (finishResolveCh.hasSubscribers) finishResolvers(ctx)
 
           const error = err || (res && res.errors && res.errors[0])
 
@@ -198,14 +204,17 @@ function wrapResolve (resolve) {
   function resolveAsync (source, args, contextValue, info) {
     if (!startResolveCh.hasSubscribers) return resolve.apply(this, arguments)
 
-    const context = contexts.get(contextValue)
+    const ctx = contexts.get(contextValue)
 
-    if (!context) return resolve.apply(this, arguments)
+    if (!ctx) return resolve.apply(this, arguments)
 
-    const field = assertField(context, info, args)
+    const field = assertField(ctx, info, args)
 
-    return callInAsyncScope(resolve, this, arguments, context.abortController, (err) => {
-      updateFieldCh.publish({ field, info, err, ...field.ctx })
+    return callInAsyncScope(resolve, this, arguments, ctx.abortController, (err) => {
+      field.ctx.error = err
+      field.ctx.info = info
+      field.ctx.field = field
+      updateFieldCh.publish(field.ctx)
     })
   }
 
@@ -250,47 +259,26 @@ function pathToArray (path) {
   return flattened.reverse()
 }
 
-function assertField (context, info, args) {
+function assertField (parentCtx, info, args) {
   const pathInfo = info && info.path
 
   const path = pathToArray(pathInfo)
 
   const pathString = path.join('.')
-  const fields = context.fields
+  const fields = parentCtx.fields
 
   let field = fields[pathString]
 
   if (!field) {
-    const parent = getParentField(context, path)
-    // we need to pass the parent span to the field if it exists for correct span parenting
-    // of nested fields
-    const ctx = { info, context, args, childOf: parent?.ctx?.currentStore?.span }
-    startResolveCh.publish(ctx)
+    const fieldCtx = { info, ctx: parentCtx, args }
+    startResolveCh.publish(fieldCtx)
     field = fields[pathString] = {
-      parent,
       error: null,
-      ctx
+      ctx: fieldCtx
     }
   }
 
   return field
-}
-
-function getParentField (context, path) {
-  for (let i = path.length - 1; i > 0; i--) {
-    const field = getField(context, path.slice(0, i))
-    if (field) {
-      return field
-    }
-  }
-
-  return {
-    asyncResource: context.asyncResource
-  }
-}
-
-function getField (context, path) {
-  return context.fields[path.join('.')]
 }
 
 function wrapFields (type) {
@@ -328,12 +316,14 @@ function wrapFieldType (field) {
 function finishResolvers ({ fields }) {
   Object.keys(fields).reverse().forEach(key => {
     const field = fields[key]
-    const ctx = { field, finishTime: field.finishTime, ...field.ctx }
+    field.ctx.finishTime = field.finishTime
+    field.ctx.field = field
     if (field.error) {
-      ctx.error = field.error
-      resolveErrorCh.publish(ctx)
+      field.ctx.error = field.error
+      resolveErrorCh.publish(field.ctx)
     }
-    finishResolveCh.publish(ctx)
+    console.log('finishResolvers', field)
+    finishResolveCh.publish(field.ctx)
   })
 }
 
