@@ -1,13 +1,15 @@
 'use strict'
 
 const {
-  addHook
+  addHook,
+  channel
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
 const tracingChannel = require('dc-polyfill').tracingChannel
 const serverCh = tracingChannel('ws:server:connect')
 const producerCh = tracingChannel('ws:send')
+const emitCh = channel('tracing:ws:server:connect:emit')
 
 function createWrapRequest (ws, options) {
   return function wrapRequest (request) {
@@ -20,23 +22,20 @@ function createWrapRequest (ws, options) {
     }
   }
 }
-function createWrapEmit (ctx) {
-  return function wrapEmit (emit) {
-    return function (title, headers, req) {
-      ctx.resStatus = headers[0].split(' ')[1]
+function createWrapEmit (emit) {
+  return function (title, headers, req) {
+    if (!serverCh.start.hasSubscribers || title !== 'headers') return emit.apply(this, arguments)
 
-      // return serverCh.tracePromise(() => {
-      //   // console.log('ctx in instrumentation', arguments)
-      //   return emit.apply(this, arguments)
-      // }, ctx)
-      serverCh.asyncStart.runStores(ctx, () => {
-        try {
-          return emit.apply(this, arguments)
-        } finally {
-          serverCh.asyncEnd.publish(ctx)
-        }
-      })
-    }
+    const ctx = { req }
+    ctx.req.resStatus = headers[0].split(' ')[1]
+
+    emitCh.runStores(ctx, () => {
+      try {
+        return emit.apply(this, arguments)
+      } finally {
+        emitCh.publish(ctx)
+      }
+    })
   }
 }
 
@@ -78,6 +77,25 @@ function wrapHandleSend (send) {
 
 addHook({
   name: 'ws',
+  file: 'lib/websocket.js'
+}, ws => {
+  shimmer.wrap(ws.prototype, 'send', wrapHandleSend)
+
+  return ws
+})
+
+addHook({
+  name: 'ws',
+  file: 'lib/websocket.js'
+}, ws => {
+  console.log('receive', ws.prototype)
+  // shimmer.wrap(ws.prototype, 'on', wrapHandleSend)
+
+  return ws
+})
+
+addHook({
+  name: 'ws',
   file: 'lib/websocket-server.js'
 }, ws => {
   shimmer.wrap(ws.prototype, 'handleUpgrade', wrapHandleUpgrade)
@@ -87,9 +105,9 @@ addHook({
 
 addHook({
   name: 'ws',
-  file: 'lib/websocket.js'
+  file: 'lib/websocket-server.js'
 }, ws => {
-  shimmer.wrap(ws.prototype, 'send', wrapHandleSend)
+  shimmer.wrap(ws.prototype, 'emit', createWrapEmit)
 
   return ws
 })
