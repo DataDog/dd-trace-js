@@ -38,6 +38,7 @@ class HttpClientPlugin extends ClientPlugin {
     // TODO delegate to super.startspan
     const span = this.startSpan(this.operationName(), {
       childOf,
+      integrationName: this.constructor.id,
       meta: {
         [COMPONENT]: this.constructor.id,
         'span.kind': 'client',

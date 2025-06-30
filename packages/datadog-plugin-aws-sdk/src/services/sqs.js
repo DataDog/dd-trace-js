@@ -30,7 +30,8 @@ class Sqs extends BaseAwsSdkPlugin {
           tags: {
             ...this.requestTags.get(request),
             'span.kind': 'server'
-          }
+          },
+          integrationName: 'aws-sdk'
         }
         parsedMessageAttributes = contextExtraction.parsedAttributes
         span = this.tracer.startSpan('aws.response', options)

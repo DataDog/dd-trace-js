@@ -103,7 +103,12 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       }
       if (this.requestTags) this.requestTags.set(request, tags)
 
-      const span = this.tracer.startSpan(this.operationFromRequest(request), { childOf, tags })
+      const span = this.tracer.startSpan(this.operationFromRequest(request),
+        {
+          childOf,
+          tags,
+          integrationName: 'aws-sdk'
+        })
 
       analyticsSampler.sample(span, this.config.measured)
 
