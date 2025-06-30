@@ -101,6 +101,11 @@ tracer.init({
 });
 
 tracer.init({
+  runtimeMetrics: {
+    enabled: true,
+    gc: true,
+    eventLoop: false
+  },
   appsec: {
     enabled: true,
     rules: './rules.json',
@@ -387,6 +392,7 @@ tracer.use('oracledb', { service: params => `${params.host}-${params.database}` 
 tracer.use('playwright');
 tracer.use('pg');
 tracer.use('pg', { service: params => `${params.host}-${params.database}` });
+tracer.use('pg', { appendComment: true });
 tracer.use('pino');
 tracer.use('prisma');
 tracer.use('protobufjs');

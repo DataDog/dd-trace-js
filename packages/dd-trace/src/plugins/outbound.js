@@ -21,8 +21,8 @@ class OutboundPlugin extends TracingPlugin {
   constructor (...args) {
     super(...args)
 
-    this.addTraceSub('connect', message => {
-      this.connect(message)
+    this.addTraceSub('connect', ctx => {
+      this.connect(ctx)
     })
   }
 
@@ -105,12 +105,14 @@ class OutboundPlugin extends TracingPlugin {
     }
   }
 
-  connect (url) {
-    this.addHost(url.hostname, url.port)
+  connect (ctx) {
+    this.addHost(ctx)
   }
 
-  addHost (hostname, port) {
-    const span = this.activeSpan
+  addHost (ctx) {
+    const { hostname, port } = ctx
+
+    const span = ctx?.currentStore?.span || this.activeSpan
 
     if (!span) return
 

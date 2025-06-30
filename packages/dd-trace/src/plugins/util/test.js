@@ -426,7 +426,7 @@ function checkShaDiscrepancies (ciMetadata, userProvidedGitMetadata) {
 
   incrementCountMetric(
     TELEMETRY_GIT_SHA_MATCH,
-    { match: gitCommitShaMatch }
+    { matched: gitCommitShaMatch }
   )
 }
 
