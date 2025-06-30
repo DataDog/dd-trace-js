@@ -232,6 +232,8 @@ class Config {
       }
     }
 
+    this.heartbeatInterval = options.heartbeatInterval || 60 * 1000 // 1 minute
+
     this.profilers = ensureProfilers(profilers, this)
   }
 }
