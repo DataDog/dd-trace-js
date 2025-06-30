@@ -8,6 +8,14 @@ const coalesce = require('koalas')
 const { tagsFromRequest, tagsFromResponse } = require('../../dd-trace/src/payload-tagging')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
+// channels for Lambda cold-start to enable subscriptions
+const networkChannelsStart = [
+  'apm:http:client:request:start',
+  'apm:http2:client:request:start',
+  'apm:net:tcp:start',
+  'apm:dns:lookup:start'
+]
+
 // channels for Lambda to carry peer.service
 const networkChannelsEnd = [
   'apm:http:client:request:finish',
@@ -51,7 +59,8 @@ class BaseAwsSdkPlugin extends ClientPlugin {
   constructor (...args) {
     super(...args)
 
-    if (!this._tracerConfig?._isInServerlessEnvironment()) {
+    if (this._tracerConfig?._isInServerlessEnvironment()) {
+      networkChannelsStart.forEach(ch => this.addSub(ch, () => {}))
       networkChannelsEnd.forEach(ch => this.addSub(ch, setPeerServiceTag))
     }
 
@@ -96,9 +105,9 @@ class BaseAwsSdkPlugin extends ClientPlugin {
 
       const store = storage('legacy').getStore()
       if (this._tracerConfig?._isInServerlessEnvironment()) {
-        this.enter(span, store)
-      } else {
         this.enter(span, { ...store, span, awsParams: request.params, awsService })
+      } else {
+        this.enter(span, store)
       }
     })
 
@@ -110,7 +119,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       span.setTag('aws.region', region)
       span.setTag('region', region)
 
-      if (!this._tracerConfig?._isInServerlessEnvironment()) {
+      if (this._tracerConfig?._isInServerlessEnvironment()) {
         const hostname = getHostname(store, region)
         if (!hostname) return
         span.setTag('peer.service', hostname)
