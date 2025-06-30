@@ -9,13 +9,8 @@ else
 
   PR_AUTHOR="${PR_AUTHOR:-}"
   PR_USER_TYPE="${PR_USER_TYPE:-}"
-  IS_BOT=false
 
-  if [[ "$PR_USER_TYPE" == "Bot" ]] || [[ "$PR_AUTHOR" == *"bot"* ]] || [[ "$PR_AUTHOR" == "renovate"* ]] || [[ "$PR_AUTHOR" == "github-actions"* ]]; then
-    IS_BOT=true
-  fi
-
-  if [[ "$IS_BOT" == "true" ]] && [[ "${GITHUB_EVENT_NAME:-}" == "pull_request" ]]; then
+  if [[ "$PR_USER_TYPE" == "Bot" ]] && [[ "${GITHUB_EVENT_NAME:-}" == "pull_request" ]]; then
     echo "🤖 Bot-created PR detected. Auto-committing yarn.lock changes..."
 
     git config --local user.email "action@github.com"
