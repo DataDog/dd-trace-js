@@ -93,18 +93,18 @@ $ yarn
 
 To create a new plugin for a third-party package, follow these steps:
 
-1. ``mkdir -p packages/datadog-plugin-<pluginname>/src``
-2. ``cp packages/datadog-plugin-kafkajs/src/index.js packages/datadog-plugin-<pluginname>/src``
+1. `mkdir -p packages/datadog-plugin-<pluginname>/src`
+2. `cp packages/datadog-plugin-kafkajs/src/index.js packages/datadog-plugin-<pluginname>/src`
 3. Edit index.js as appropriate for your new plugin
-4. ``mkdir -p packages/datadog-plugin-<pluginname>/test``
-5. ``cp packages/datadog-plugin-kafkajs/test/index.spec.js packages/datadog-plugin-<pluginname>/test``
+4. `mkdir -p packages/datadog-plugin-<pluginname>/test`
+5. `cp packages/datadog-plugin-kafkajs/test/index.spec.js packages/datadog-plugin-<pluginname>/test`
 6. Edit index.spec.js as appropriate for your new plugin
 7. Add entries to the following files for your new plugin:
-  - ``packages/dd-trace/src/plugins/index.js``
-  - ``index.d.ts``
-  - ``docs/test.ts``
-  - ``docs/API.md``
-  - ``.github/workflows/apm-integrations.yml``
+  - `packages/dd-trace/src/plugins/index.js`
+  - `index.d.ts`
+  - `docs/test.ts`
+  - `docs/API.md`
+  - `.github/workflows/apm-integrations.yml`
 
 ### Adding a Plugin Test to CI
 
