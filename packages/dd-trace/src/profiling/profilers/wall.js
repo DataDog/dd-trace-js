@@ -112,6 +112,7 @@ class NativeWallProfiler {
     this._timelineEnabled = !!options.timelineEnabled
     this._cpuProfilingEnabled = !!options.cpuProfilingEnabled
     this._useAsyncContextFrame = !!options.useAsyncContextFrame
+    this._telemetryHeartbeatIntervalMillis = options.heartbeatInterval || 60 * 1e3 // 60 seconds
 
     // We need to capture span data into the sample context for either code hotspots
     // or endpoint collection.
@@ -178,7 +179,9 @@ class NativeWallProfiler {
 
         ensureChannelsActivated(this._useAsyncContextFrame)
 
-        if (!this._useAsyncContextFrame) {
+        if (this._useAsyncContextFrame) {
+          this._setupTelemetryMetrics()
+        } else {
           beforeCh.subscribe(this._enter)
         }
         enterCh.subscribe(this._enter)
@@ -187,6 +190,16 @@ class NativeWallProfiler {
     }
 
     this._started = true
+  }
+
+  _setupTelemetryMetrics () {
+    const contextCountGauge = profilerTelemetryMetrics.gauge('wall.sample_contexts')
+
+    const that = this
+    this._contextCountGaugeUpdater = setInterval(() => {
+      contextCountGauge.mark(that._profilerState[kCPEDContextCount])
+    }, that._telemetryHeartbeatIntervalMillis)
+    this._contextCountGaugeUpdater.unref()
   }
 
   _enter () {
@@ -316,6 +329,7 @@ class NativeWallProfiler {
         this._reportV8bug(v8BugDetected === 1)
       }
     } else {
+      clearInterval(this._contextCountGaugeUpdater)
       if (this._captureSpanData) {
         if (!this._useAsyncContextFrame) {
           beforeCh.unsubscribe(this._enter)
