@@ -35,13 +35,12 @@ class AzureFunctionsPlugin extends TracingPlugin {
         'aas.function.trigger': mapTriggerTag(methodName)
       }
     }, false)
-
     if (methodName === 'serviceBusQueue') {
+      const triggerEntity = invocationContext.options.trigger.queueName || invocationContext.options.trigger.topicName
       span.setTag('messaging.message_id', invocationContext.triggerMetadata.messageId)
-      span.setTag('messaging.delivery_count', invocationContext.triggerMetadata.deliveryCount)
-      span.setTag('messaging.enqueued_time', invocationContext.triggerMetadata.enqueuedTimeUtc)
       span.setTag('messaging.operation', 'receive')
-      span.setTag('messaging.system', 'azure_service_bus')
+      span.setTag('messaging.system', 'servicebus')
+      span.setTag('messaging.destination.name', triggerEntity)
       span.setTag('resource.name', 'serviceBusQueueTrigger')
       span.setTag('span.kind', 'consumer')
     }
