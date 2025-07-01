@@ -45,4 +45,11 @@ updates:
           - "patch"
         exclude-patterns:
           # Add entries that we should update manually.
+          - "@datadog/libdatadog"
+          - "@datadog/native-appsec"
+          - "@datadog/native-iast-taint-tracking"
+          - "@datadog/native-metrics"
+          - "@datadog/pprof"
+          - "@datadog/sketches-js"
+          - "@datadog/wasm-js-rewriter"
           - "@opentelemetry/api"
