@@ -19,6 +19,7 @@ describe('Span', () => {
   let handle
   let id
   let tagger
+  let log
 
   beforeEach(() => {
     sinon.stub(Date, 'now').returns(1500000000000)
@@ -48,6 +49,11 @@ describe('Span', () => {
       add: sinon.spy()
     }
 
+    log = {
+      warn: sinon.stub(),
+      error: sinon.stub()
+    }
+
     Span = proxyquire('../src/opentracing/span', {
       perf_hooks: {
         performance: {
@@ -56,7 +62,8 @@ describe('Span', () => {
       },
       '../id': id,
       '../tagger': tagger,
-      '../metrics': metrics
+      '../metrics': metrics,
+      '../log': log
     })
   })
 
@@ -336,7 +343,7 @@ describe('Span', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
 
       span.addEvent('Web page unresponsive',
-        { 'error.code': '403', 'unknown values': [1, ['h', 'a', [false]]] }, 1714536311886)
+        { 'error.code': '403', 'unknown values': [1] }, 1714536311886)
       span.addEvent('Web page loaded')
       span.addEvent('Button changed color', { colors: [112, 215, 70], 'response.time': 134.3, success: true })
 
@@ -365,6 +372,86 @@ describe('Span', () => {
         }
       ]
       expect(events).to.deep.equal(expectedEvents)
+    })
+  })
+
+  describe('recordException', () => {
+    it('should record exception', () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+
+      try {
+        throw new TypeError("foo")
+      } catch(error) {
+        span.recordException(error)
+      }
+
+      try {
+        throw new Error("bar")
+      } catch(error) {
+        span.recordException(error)
+      }
+
+      const events = span._events
+      expect(events).to.have.lengthOf(2)
+
+      expect(events[0].name).to.equal('exception')
+      expect(events[0].attributes).to.have.property('exception.type', 'TypeError')
+      expect(events[0].attributes).to.have.property('exception.message', 'foo')
+
+      expect(events[1].name).to.equal('exception')
+      expect(events[1].attributes).to.have.property('exception.type', 'Error')
+      expect(events[1].attributes).to.have.property('exception.message', 'bar')
+    })
+
+    it('should record exception with custom attributes', () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+
+      try {
+        throw new TypeError("foo")
+      } catch(error) {
+        span.recordException(error, {'foo': 'bar'})
+      }
+
+      const events = span._events
+      expect(events).to.have.lengthOf(1)
+
+      expect(events[0].name).to.equal('exception')
+      expect(events[0].attributes).to.have.property('exception.type', 'TypeError')
+      expect(events[0].attributes).to.have.property('exception.message', 'foo')
+      expect(events[0].attributes).to.have.property('foo', 'bar')
+    })
+
+    it('should record exception with invalid attributes', () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+
+      try {
+        throw new TypeError("foo")
+      } catch(error) {
+        span.recordException(error,
+          {'foo': 'bar',
+           'invalid1': [1, false],
+           'invalid2': [[1]],
+           'invalid3': {"foo": "bar"},
+           "invalid4": NaN,
+           "invalid5": 9223372036854775808n,
+          })
+      }
+
+      const events = span._events
+      expect(events).to.have.lengthOf(1)
+
+      expect(events[0].name).to.equal('exception')
+      expect(Object.keys(events[0].attributes)).to.have.lengthOf(4)
+      expect(events[0].attributes).to.have.property('exception.type', 'TypeError')
+      expect(events[0].attributes).to.have.property('exception.message', 'foo')
+      expect(events[0].attributes).to.have.property('foo', 'bar')
+
+      // Check that warning logs were called for invalid attributes
+      expect(log.warn).to.have.been.calledWith('Dropping span event attribute. Attribute invalid1 array values are not homogenous or valid: 1,false')
+      expect(log.warn).to.have.been.calledWith('Dropping span event attribute. List values invalid2 must be string, number, or boolean: 1')
+      expect(log.warn).to.have.been.calledWith('Dropping span event attribute. Attribute invalid3 must be (array of) string, number, or boolean: [object Object]')
+      expect(log.warn).to.have.been.calledWith('Dropping span event attribute. Attribute invalid4 must be a finite number: NaN')
+      expect(log.warn).to.have.been.calledWith('Dropping span event attribute. Attribute invalid5 must be (array of) string, number, or boolean: 9223372036854775808')
     })
   })
 

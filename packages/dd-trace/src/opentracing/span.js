@@ -14,6 +14,7 @@ const telemetryMetrics = require('../telemetry/metrics')
 const { channel } = require('dc-polyfill')
 const util = require('util')
 const { getEnvironmentVariable } = require('../config-helper')
+const { isError } = require('../util')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -25,6 +26,10 @@ const finishedRegistry = createRegistry('finished')
 
 const OTEL_ENABLED = !!getEnvironmentVariable('DD_TRACE_OTEL_ENABLED')
 const ALLOWED = new Set(['string', 'number', 'boolean'])
+
+const MIN_INT_64BITS = -(2n ** 63n);
+const MAX_INT_64BITS = (2n ** 63n) - 1n;
+
 
 const integrationCounters = {
   spans_created: {},
@@ -230,6 +235,18 @@ class DatadogSpan {
     this._events.push(event)
   }
 
+  recordException(exception, attributes={}) {
+    if (!isError(exception)) return
+
+    const event_attributes = {
+      "exception.type": exception.name,
+      "exception.message": exception.message,
+      "exception.stacktrace": exception.stack
+    }
+
+    this.addEvent('exception', {...event_attributes, ...attributes})
+  }
+
   finish (finishTime) {
     if (this._duration !== undefined) {
       return
@@ -290,25 +307,54 @@ class DatadogSpan {
     return sanitizedAttributes
   }
 
+
+  _validateEventAttributes (key, value) {
+    if (ALLOWED.has(typeof value)) {
+      return this._validateScalar(key, value)
+    }
+
+    if (Array.isArray(value)) {
+      if (value.length === 0) return true
+
+      const expectedType = typeof value[0]
+      if (!ALLOWED.has(expectedType)) {
+        log.warn(`Dropping span event attribute. List values ${key} must be string, number, or boolean: ${value}`)
+        return false
+      }
+
+      for (let i = 0; i < value.length; i++) {
+        if (typeof value[i] !== expectedType || !this._validateScalar(key, value[i])) {
+          log.warn(`Dropping span event attribute. Attribute ${key} array values are not homogenous or valid: ${value}`)
+          return false
+        }
+      }
+      return true
+    }
+
+    log.warn(`Dropping span event attribute. Attribute ${key} must be (array of) string, number, or boolean: ${value}`)
+    return false
+  }
+
+  _validateScalar (key, value) {
+    if (typeof value !== 'number') {
+      return true
+    }
+
+    if (Number.isInteger(value) && (value < MIN_INT_64BITS || value > MAX_INT_64BITS)) {
+      log.warn(`Dropping span event attribute. Attribute ${key} must be within the range of a signed 64-bit integer: ${value}`)
+      return false
+    } else if (!Number.isFinite(value)) {
+      log.warn(`Dropping span event attribute. Attribute ${key} must be a finite number: ${value}`)
+      return false
+    }
+    return true
+  }
+
   _sanitizeEventAttributes (attributes = {}) {
     const sanitizedAttributes = {}
-
-    for (const key in attributes) {
-      const value = attributes[key]
-      if (Array.isArray(value)) {
-        const newArray = []
-        for (const subkey in value) {
-          if (ALLOWED.has(typeof value[subkey])) {
-            newArray.push(value[subkey])
-          } else {
-            log.warn('Dropping span event attribute. It is not of an allowed type')
-          }
-        }
-        sanitizedAttributes[key] = newArray
-      } else if (ALLOWED.has(typeof value)) {
-        sanitizedAttributes[key] = value
-      } else {
-        log.warn('Dropping span event attribute. It is not of an allowed type')
+    for (const [k, v] of Object.entries(attributes)) {
+      if (this._validateEventAttributes(k, v)) {
+        sanitizedAttributes[k] = v
       }
     }
     return sanitizedAttributes
