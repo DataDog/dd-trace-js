@@ -61,6 +61,12 @@
       "versions": ["^4"]
     }
   ],
+  "child_process": [
+    {
+      "name": "bluebird",
+      "versions": ["^3"]
+    }
+  ],
   "cookie-parser": [
     {
       "name": "express",
