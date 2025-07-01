@@ -85,7 +85,7 @@
   },
   "dependencies": {
     "@datadog/libdatadog": "0.7.0",
-    "@datadog/native-appsec": "8.5.2",
+    "@datadog/native-appsec": "9.0.0",
     "@datadog/native-iast-taint-tracking": "4.0.0",
     "@datadog/native-metrics": "3.1.1",
     "@datadog/pprof": "5.9.0",
