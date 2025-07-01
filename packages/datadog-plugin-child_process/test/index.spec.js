@@ -364,6 +364,127 @@ describe('Child process plugin', () => {
     })
   })
 
+  describe('Bluebird Promise Compatibility', () => {
+    // BLUEBIRD REGRESSION TEST - Prevents "this._then is not a function" bug
+
+    let childProcess, tracer, util
+    let originalPromise
+    let Bluebird
+
+    beforeEach(() => {
+      return agent.load('child_process', undefined, { flushInterval: 1 }).then(() => {
+        tracer = require('../../dd-trace')
+        childProcess = require('child_process')
+        util = require('util')
+        tracer.use('child_process', { enabled: true })
+        Bluebird = require('../../../versions/bluebird@3.7.2').get()
+
+        // Store original Promise for restoration
+        originalPromise = global.Promise
+        global.Promise = Bluebird
+      })
+    })
+
+    afterEach(() => {
+      global.Promise = originalPromise
+      return agent.close({ ritmReset: false })
+    })
+
+    it('should not crash with "this._then is not a function" when using Bluebird promises', (done) => {
+      const execFileAsync = util.promisify(childProcess.execFile)
+
+      expect(global.Promise).to.equal(Bluebird)
+      expect(global.Promise.version).to.exist
+
+      const expected = {
+        type: 'system',
+        name: 'command_execution',
+        error: 0,
+        meta: {
+          component: 'subprocess',
+          'cmd.exec': '["echo","bluebird-test"]',
+        }
+      }
+
+      expectSomeSpan(agent, expected).then(done)
+
+      execFileAsync('echo', ['bluebird-test'])
+        .then(result => {
+          expect(result).to.exist
+          expect(result.stdout).to.contain('bluebird-test')
+        })
+        .catch(done)
+    })
+
+    it('should work with concurrent Bluebird promise calls', (done) => {
+      const execFileAsync = util.promisify(childProcess.execFile)
+
+      const promises = []
+      for (let i = 0; i < 5; i++) {
+        promises.push(
+          execFileAsync('echo', [`concurrent-test-${i}`])
+            .then(result => {
+              expect(result.stdout).to.contain(`concurrent-test-${i}`)
+              return result
+            })
+        )
+      }
+
+      Promise.all(promises)
+        .then(results => {
+          expect(results).to.have.length(5)
+          done()
+        })
+        .catch(done)
+    })
+
+    it('should handle Bluebird promise rejection properly', (done) => {
+      global.Promise = Bluebird
+
+      const execFileAsync = util.promisify(childProcess.execFile)
+
+      const expected = {
+        type: 'system',
+        name: 'command_execution',
+        error: 1,
+        meta: {
+          component: 'subprocess',
+          'cmd.exec': '["node","-invalidFlag"]'
+        }
+      }
+
+      expectSomeSpan(agent, expected).then(done, done)
+
+      execFileAsync('node', ['-invalidFlag'], { stdio: 'pipe' })
+        .then(() => {
+          done(new Error('Expected command to fail'))
+        })
+        .catch(error => {
+          expect(error).to.exist
+          expect(error.code).to.exist
+        })
+    })
+
+    it('should work with util.promisify when global Promise is Bluebird', (done) => {
+      // Re-require util to get Bluebird-aware promisify
+      delete require.cache[require.resolve('util')]
+      const utilWithBluebird = require('util')
+
+      const execFileAsync = utilWithBluebird.promisify(childProcess.execFile)
+
+      const promise = execFileAsync('echo', ['util-promisify-test'])
+      expect(promise.constructor).to.equal(Bluebird)
+      expect(promise.constructor.version).to.exist
+
+      promise
+        .then(result => {
+          expect(result.stdout).to.contain('util-promisify-test')
+          done()
+        })
+        .catch(done)
+    })
+  })
+
   describe('Integration', () => {
     describe('Methods which spawn a shell by default', () => {
       const execAsyncMethods = ['exec']
