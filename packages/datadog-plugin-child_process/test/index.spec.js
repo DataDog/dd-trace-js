@@ -379,7 +379,6 @@ describe('Child process plugin', () => {
         tracer.use('child_process', { enabled: true })
         Bluebird = require('../../../versions/bluebird').get()
 
-        // Store original Promise for restoration
         originalPromise = global.Promise
         global.Promise = Bluebird
       })
@@ -390,13 +389,13 @@ describe('Child process plugin', () => {
       return agent.close({ ritmReset: false })
     })
 
-    it('should not crash with "this._then is not a function" when using Bluebird promises', (done) => {
+    it('should not crash with "this._then is not a function" when using Bluebird promises', async () => {
       const execFileAsync = util.promisify(childProcess.execFile)
 
       expect(global.Promise).to.equal(Bluebird)
       expect(global.Promise.version).to.exist
 
-      const expected = {
+      const expectedPromise = expectSomeSpan(agent, {
         type: 'system',
         name: 'command_execution',
         error: 0,
@@ -404,19 +403,16 @@ describe('Child process plugin', () => {
           component: 'subprocess',
           'cmd.exec': '["echo","bluebird-test"]',
         }
-      }
+      })
 
-      expectSomeSpan(agent, expected).then(done)
+      const result = await execFileAsync('echo', ['bluebird-test'])
+      expect(result).to.exist
+      expect(result.stdout).to.contain('bluebird-test')
 
-      execFileAsync('echo', ['bluebird-test'])
-        .then(result => {
-          expect(result).to.exist
-          expect(result.stdout).to.contain('bluebird-test')
-        })
-        .catch(done)
+      return expectedPromise
     })
 
-    it('should work with concurrent Bluebird promise calls', (done) => {
+    it('should work with concurrent Bluebird promise calls', async () => {
       const execFileAsync = util.promisify(childProcess.execFile)
 
       const promises = []
@@ -430,20 +426,16 @@ describe('Child process plugin', () => {
         )
       }
 
-      Promise.all(promises)
-        .then(results => {
-          expect(results).to.have.length(5)
-          done()
-        })
-        .catch(done)
+      const results = await Promise.all(promises)
+      expect(results).to.have.length(5)
     })
 
-    it('should handle Bluebird promise rejection properly', (done) => {
+    it('should handle Bluebird promise rejection properly', async () => {
       global.Promise = Bluebird
 
       const execFileAsync = util.promisify(childProcess.execFile)
 
-      const expected = {
+      const expectedPromise = expectSomeSpan(agent, {
         type: 'system',
         name: 'command_execution',
         error: 1,
@@ -451,21 +443,20 @@ describe('Child process plugin', () => {
           component: 'subprocess',
           'cmd.exec': '["node","-invalidFlag"]'
         }
+      })
+
+      try {
+        await execFileAsync('node', ['-invalidFlag'], { stdio: 'pipe' })
+        throw new Error('Expected command to fail')
+      } catch (error) {
+        expect(error).to.exist
+        expect(error.code).to.exist
       }
 
-      expectSomeSpan(agent, expected).then(done, done)
-
-      execFileAsync('node', ['-invalidFlag'], { stdio: 'pipe' })
-        .then(() => {
-          done(new Error('Expected command to fail'))
-        })
-        .catch(error => {
-          expect(error).to.exist
-          expect(error.code).to.exist
-        })
+      return expectedPromise
     })
 
-    it('should work with util.promisify when global Promise is Bluebird', (done) => {
+    it('should work with util.promisify when global Promise is Bluebird', async () => {
       // Re-require util to get Bluebird-aware promisify
       delete require.cache[require.resolve('util')]
       const utilWithBluebird = require('util')
@@ -476,12 +467,8 @@ describe('Child process plugin', () => {
       expect(promise.constructor).to.equal(Bluebird)
       expect(promise.constructor.version).to.exist
 
-      promise
-        .then(result => {
-          expect(result.stdout).to.contain('util-promisify-test')
-          done()
-        })
-        .catch(done)
+      const result = await promise
+      expect(result.stdout).to.contain('util-promisify-test')
     })
   })
 
