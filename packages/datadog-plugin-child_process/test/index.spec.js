@@ -377,7 +377,7 @@ describe('Child process plugin', () => {
         childProcess = require('child_process')
         util = require('util')
         tracer.use('child_process', { enabled: true })
-        Bluebird = require('../../../versions/bluebird@^3').get()
+        Bluebird = require('../../../versions/bluebird').get()
 
         // Store original Promise for restoration
         originalPromise = global.Promise
