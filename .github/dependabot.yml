@@ -28,6 +28,10 @@ updates:
       - dependency-name: "eslint-plugin-mocha"
         # ESM only from v11.0.0 onwards
         update-types: ["version-update:semver-major"]
+        # Ignore native appsec and profiler related PRs
+      - dependency-name: "@datadog/native-appsec"
+      - dependency-name: "@datadog/native-iast-taint-tracking"
+      - dependency-name: "@datadog/pprof"
     groups:
       dev-minor-and-patch-dependencies:
         dependency-type: "development"
@@ -44,12 +48,9 @@ updates:
           - "minor"
           - "patch"
         exclude-patterns:
-          # Add entries that we should update manually.
+          # Add entries that we should update individually.
           - "@datadog/libdatadog"
-          - "@datadog/native-appsec"
-          - "@datadog/native-iast-taint-tracking"
           - "@datadog/native-metrics"
-          - "@datadog/pprof"
           - "@datadog/sketches-js"
           - "@datadog/wasm-js-rewriter"
           - "@opentelemetry/api"
