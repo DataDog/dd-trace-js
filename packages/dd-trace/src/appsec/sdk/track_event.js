@@ -130,7 +130,7 @@ function trackUserLoginFailureV2 (tracer, login, exists, metadata) {
 
   const wafData = { login }
 
-  if (typeof exists === 'object' && metadata === undefined) {
+  if (exists !== null && typeof exists === 'object' && metadata === undefined) {
     metadata = exists
     exists = false
   }
