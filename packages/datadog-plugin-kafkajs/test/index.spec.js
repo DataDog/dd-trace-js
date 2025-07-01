@@ -2,6 +2,7 @@
 
 const { expect } = require('chai')
 const semver = require('semver')
+const rfdc = require('rfdc')()
 const dc = require('dc-polyfill')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -70,6 +71,7 @@ describe('Plugin', () => {
             brokers: ['127.0.0.1:9092'],
             logLevel: lib.logLevel.WARN
           })
+          await require('timers/promises').setTimeout(20)
         })
 
         describe('producer', () => {
@@ -95,7 +97,11 @@ describe('Plugin', () => {
 
             })
 
+            const messageCopy = rfdc(messages)
+
             await sendMessages(kafka, testTopic, messages)
+
+            expect(messages).to.deep.equal(messageCopy)
 
             return expectedSpanPromise
           })
@@ -143,6 +149,7 @@ describe('Plugin', () => {
               await producer.disconnect()
               return expectedSpanPromise
             }
+            throw new Error('Failed')
           })
           // Dynamic broker list support added in 1.14/2.0 (https://github.com/tulios/kafkajs/commit/62223)
           if (semver.intersects(version, '>=1.14')) {
@@ -208,7 +215,8 @@ describe('Plugin', () => {
               } catch (e) {
                 expect(e).to.equal(error)
               }
-              expect(messages[0].headers).to.have.property('x-datadog-trace-id')
+              expect(messages[0]).to.not.have.property('headers')
+              // TODO: Fix test to verify that the headers are injected, just not by manipulating user input
 
               // restore the stub to allow the next send to succeed
               sendRequestStub.restore()
@@ -232,6 +240,7 @@ describe('Plugin', () => {
             consumer = kafka.consumer({ groupId: 'test-group' })
             await consumer.connect()
             await consumer.subscribe({ topic: testTopic })
+            await require('timers/promises').setTimeout(20)
           })
 
           afterEach(async () => {
@@ -432,6 +441,7 @@ describe('Plugin', () => {
             consumer = kafka.consumer({ groupId: 'test-group' })
             await consumer.connect()
             await consumer.subscribe({ topic: testTopic })
+            await require('timers/promises').setTimeout(20)
           })
 
           before(() => {
@@ -597,6 +607,7 @@ function expectSpanWithDefaults (expected) {
 async function sendMessages (kafka, topic, messages) {
   const producer = kafka.producer()
   await producer.connect()
+  await require('timers/promises').setTimeout(20)
   await producer.send({
     topic,
     messages
