@@ -19,7 +19,6 @@ describe('Plugin', () => {
       let AWS
       let sandbox
 
-
       before(async () => {
         sandbox = sinon.createSandbox()
         sandbox.stub(Config.prototype, '_isInServerlessEnvironment').returns(true)
