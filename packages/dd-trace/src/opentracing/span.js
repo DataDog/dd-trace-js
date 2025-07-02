@@ -27,9 +27,8 @@ const finishedRegistry = createRegistry('finished')
 const OTEL_ENABLED = !!getEnvironmentVariable('DD_TRACE_OTEL_ENABLED')
 const ALLOWED = new Set(['string', 'number', 'boolean'])
 
-const MIN_INT_64BITS = -(2n ** 63n);
-const MAX_INT_64BITS = (2n ** 63n) - 1n;
-
+const MIN_INT_64BITS = -(2n ** 63n)
+const MAX_INT_64BITS = (2n ** 63n) - 1n
 
 const integrationCounters = {
   spans_created: {},
@@ -235,16 +234,16 @@ class DatadogSpan {
     this._events.push(event)
   }
 
-  recordException(exception, attributes={}) {
+  recordException (exception, attributes = {}) {
     if (!isError(exception)) return
 
-    const event_attributes = {
-      "exception.type": exception.name,
-      "exception.message": exception.message,
-      "exception.stacktrace": exception.stack
+    const eventAttributes = {
+      'exception.type': exception.name,
+      'exception.message': exception.message,
+      'exception.stacktrace': exception.stack
     }
 
-    this.addEvent('exception', {...event_attributes, ...attributes})
+    this.addEvent('exception', { ...eventAttributes, ...attributes })
   }
 
   finish (finishTime) {
@@ -307,7 +306,6 @@ class DatadogSpan {
     return sanitizedAttributes
   }
 
-
   _validateEventAttributes (key, value) {
     if (ALLOWED.has(typeof value)) {
       return this._validateScalar(key, value)
@@ -341,7 +339,8 @@ class DatadogSpan {
     }
 
     if (Number.isInteger(value) && (value < MIN_INT_64BITS || value > MAX_INT_64BITS)) {
-      log.warn(`Dropping span event attribute. Attribute ${key} must be within the range of a signed 64-bit integer: ${value}`)
+      log.warn(`Dropping span event attribute. Attribute ${key} must be within the range of a
+        signed 64-bit integer: ${value}`)
       return false
     } else if (!Number.isFinite(value)) {
       log.warn(`Dropping span event attribute. Attribute ${key} must be a finite number: ${value}`)
