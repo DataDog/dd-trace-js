@@ -9,35 +9,8 @@ const shimmer = require('../../datadog-shimmer')
 const tracingChannel = require('dc-polyfill').tracingChannel
 const serverCh = tracingChannel('ws:server:connect')
 const producerCh = tracingChannel('ws:send')
+const receiverCh = tracingChannel('ws:receive')
 const emitCh = channel('tracing:ws:server:connect:emit')
-
-function createWrapRequest (ws, options) {
-  return function wrapRequest (request) {
-    return function (headers) {
-      if (!serverCh.start.hasSubscribers) return request.apply(this, arguments)
-
-      const ctx = { headers, ws, options }
-
-      return serverCh.tracePromise(() => request.call(this), ctx)
-    }
-  }
-}
-function createWrapEmit (emit) {
-  return function (title, headers, req) {
-    if (!serverCh.start.hasSubscribers || title !== 'headers') return emit.apply(this, arguments)
-
-    const ctx = { req }
-    ctx.req.resStatus = headers[0].split(' ')[1]
-
-    emitCh.runStores(ctx, () => {
-      try {
-        return emit.apply(this, arguments)
-      } finally {
-        emitCh.publish(ctx)
-      }
-    })
-  }
-}
 
 function wrapHandleUpgrade (handleUpgrade) {
   return function () {
@@ -75,24 +48,39 @@ function wrapHandleSend (send) {
   }
 }
 
-addHook({
-  name: 'ws',
-  file: 'lib/websocket.js'
-}, ws => {
-  shimmer.wrap(ws.prototype, 'send', wrapHandleSend)
+function createWrapEmit (emit) {
+  return function (title, headers, req) {
+    if (!serverCh.start.hasSubscribers || title !== 'headers') return emit.apply(this, arguments)
 
-  return ws
-})
+    const ctx = { req }
+    ctx.req.resStatus = headers[0].split(' ')[1]
 
-addHook({
-  name: 'ws',
-  file: 'lib/websocket.js'
-}, ws => {
-  console.log('receive', ws.prototype)
-  // shimmer.wrap(ws.prototype, 'on', wrapHandleSend)
+    emitCh.runStores(ctx, () => {
+      try {
+        return emit.apply(this, arguments)
+      } finally {
+        emitCh.publish(ctx)
+      }
+    })
+  }
+}
 
-  return ws
-})
+function createWrappedHandler (handler) {
+  return function wrappedMessageHandler (data, binary) {
+    const ctx = { data, socket: this._sender._socket }
+
+    return receiverCh.traceSync(handler, ctx, this, data, binary)
+  }
+}
+
+function wrapListener (originalOn) {
+  return function (eventName, handler) {
+    if (eventName === 'message') {
+      return originalOn.call(this, eventName, createWrappedHandler(handler))
+    }
+    return originalOn.apply(this, arguments)
+  }
+}
 
 addHook({
   name: 'ws',
@@ -105,9 +93,26 @@ addHook({
 
 addHook({
   name: 'ws',
+  file: 'lib/websocket.js'
+}, ws => {
+  shimmer.wrap(ws.prototype, 'send', wrapHandleSend)
+
+  return ws
+})
+
+addHook({
+  name: 'ws',
   file: 'lib/websocket-server.js'
 }, ws => {
   shimmer.wrap(ws.prototype, 'emit', createWrapEmit)
 
+  return ws
+})
+
+addHook({
+  name: 'ws',
+  file: 'lib/websocket.js'
+}, ws => {
+  shimmer.wrap(ws.prototype, 'on', wrapListener)
   return ws
 })
