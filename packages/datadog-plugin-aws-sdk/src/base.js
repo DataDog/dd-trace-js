@@ -59,6 +59,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
   constructor (...args) {
     super(...args)
 
+    // subscribe to network channels for serverless environment peer.service propagation
     if (this._tracerConfig?._isInServerlessEnvironment()) {
       networkChannelsStart.forEach(ch => this.addSub(ch, () => {}))
       networkChannelsEnd.forEach(ch => this.addSub(ch, setPeerServiceTag))
@@ -104,8 +105,21 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       }
 
       const store = storage('legacy').getStore()
+
       if (this._tracerConfig?._isInServerlessEnvironment()) {
-        this.enter(span, { ...store, span, awsParams: request.params, awsService })
+        const serverlessStore = { ...store, span }
+
+        // Try to resolve the hostname immediately; if not possible, keep enough
+        // information so the region callback can resolve it later.
+        const hostname = getHostname({ awsParams: request.params, awsService }, awsRegion)
+        if (hostname) {
+          span.setTag('peer.service', hostname)
+          serverlessStore.peerHostname = hostname
+        } else {
+          serverlessStore.awsParams = request.params
+          serverlessStore.awsService = awsService
+        }
+        this.enter(span, serverlessStore)
       } else {
         this.enter(span, store)
       }
