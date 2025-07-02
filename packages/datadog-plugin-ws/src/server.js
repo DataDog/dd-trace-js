@@ -6,7 +6,7 @@ const tags = require('../../../ext/tags.js')
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 
 class WSServerPlugin extends TracingPlugin {
-  static get id () { return 'websocket' }
+  static get id () { return 'ws' }
   static get prefix () { return 'tracing:ws:server:connect' }
   static get type () { return 'websocket' }
   static get kind () { return 'consumer' }
