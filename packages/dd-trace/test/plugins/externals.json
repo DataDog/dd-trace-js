@@ -1,6 +1,10 @@
 {
   "ai": [
     {
+      "name": "ai",
+      "versions": ["4.0.2"]
+    },
+    {
       "name": "@ai-sdk/openai",
       "versions": [">=1.0.0"]
     },

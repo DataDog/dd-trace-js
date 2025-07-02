@@ -4,6 +4,10 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { useEnv } = require('../../../integration-tests/helpers')
 const assert = require('node:assert')
 
+const semifies = require('semifies')
+
+const { NODE_MAJOR } = require('../../../version')
+
 describe('Plugin', () => {
   useEnv({
     OPENAI_API_KEY: '<not-a-real-key>'
@@ -18,8 +22,20 @@ describe('Plugin', () => {
 
     after(() => agent.close({ ritmReset: false }))
 
-    beforeEach(() => {
-      ai = require(`../../../versions/ai@${version}`).get()
+    beforeEach(function () {
+      const mod = require(`../../../versions/ai@${version}`)
+      const moduleVersion = mod.version()
+
+      if (semifies(moduleVersion, '<4.0.2') && NODE_MAJOR < 22) {
+        /**
+         * Resolves the following error:
+         *
+         * Error [ERR_REQUIRE_ESM]: require() of ES Module  from ... not supported.
+         */
+        this.skip()
+      }
+
+      ai = mod.get()
 
       const OpenAI = require('../../../versions/@ai-sdk/openai').get()
       openai = OpenAI.createOpenAI({
