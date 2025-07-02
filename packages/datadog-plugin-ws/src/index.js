@@ -7,7 +7,7 @@ const WSProducerPlugin = require('./producer')
 const WSReceiverPlugin = require('./receiver')
 
 class WSPlugin extends CompositePlugin {
-  static get id () { return 'websocket' }
+  static get id () { return 'ws' }
   static get plugins () {
     return {
       server: WSServerPlugin,

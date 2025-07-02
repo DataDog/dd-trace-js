@@ -3,7 +3,7 @@
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing.js')
 
 class WSProducerPlugin extends TracingPlugin {
-  static get id () { return 'websocket' }
+  static get id () { return 'ws' }
   static get prefix () { return 'tracing:ws:send' }
   static get type () { return 'websocket' }
   static get kind () { return 'producer' }
