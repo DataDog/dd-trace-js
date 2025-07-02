@@ -2,7 +2,6 @@
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
-const axios = require('axios')
 const sinon = require('sinon')
 const Config = require('../../dd-trace/src/config')
 const helpers = require('./kinesis_helpers')
@@ -29,16 +28,6 @@ describe('Plugin', () => {
         let dynamo
         const tableName = 'PeerServiceTestTable'
         const dynamoClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-dynamodb' : 'aws-sdk'
-
-        /* eslint-disable no-console */
-        async function resetLocalStackDynamo () {
-          try {
-            await axios.post('http://localhost:4566/reset')
-            console.log('LocalStack Dynamo reset successful')
-          } catch (error) {
-            console.error('Error resetting LocalStack Dynamo:', error.message)
-          }
-        }
 
         function getCreateTableParams () {
           return {
@@ -80,10 +69,6 @@ describe('Plugin', () => {
           }
         })
 
-        after(async () => {
-          await resetLocalStackDynamo()
-        })
-
         it('propagates peer.service from aws span to underlying http span', async () => {
           const send = toPromise(dynamo, dynamo.putItem)
 
@@ -91,10 +76,10 @@ describe('Plugin', () => {
             const spans = traces[0]
             const awsSpan = spans.find(s => s.name === 'aws.request')
             const httpSpan = spans.find(s => s.name === 'http.request')
-
             expect(awsSpan).to.exist
             expect(httpSpan).to.exist
-
+            expect(awsSpan.meta['peer.service']).to.exist
+            expect(httpSpan.meta['peer.service']).to.exist
             expect(awsSpan.meta['peer.service']).to.equal(httpSpan.meta['peer.service'])
           })
 
@@ -134,7 +119,7 @@ describe('Plugin', () => {
           kinesis.createStream({
             StreamName: streamName,
             ShardCount: 1
-          }, (err, res) => {
+          }, (err, _) => {
             if (err) return cb(err)
 
             helpers.waitForActiveStream(kinesis, streamName, cb)
@@ -162,6 +147,8 @@ describe('Plugin', () => {
             const httpSpan = spans.find(s => s.name === 'http.request')
             expect(awsSpan).to.exist
             expect(httpSpan).to.exist
+            expect(awsSpan.meta['peer.service']).to.exist
+            expect(httpSpan.meta['peer.service']).to.exist
             expect(awsSpan.meta['peer.service']).to.equal(httpSpan.meta['peer.service'])
           }, { timeoutMs: 10000 }).then(done, done)
 
@@ -226,6 +213,8 @@ describe('Plugin', () => {
             const httpSpan = spans.find(s => s.name === 'http.request')
             expect(awsSpan).to.exist
             expect(httpSpan).to.exist
+            expect(awsSpan.meta['peer.service']).to.exist
+            expect(httpSpan.meta['peer.service']).to.exist
             expect(awsSpan.meta['peer.service']).to.equal(httpSpan.meta['peer.service'])
           }).then(done, done)
 
@@ -281,6 +270,8 @@ describe('Plugin', () => {
             const httpSpan = spans.find(s => s.name === 'http.request')
             expect(awsSpan).to.exist
             expect(httpSpan).to.exist
+            expect(awsSpan.meta['peer.service']).to.exist
+            expect(httpSpan.meta['peer.service']).to.exist
             expect(awsSpan.meta['peer.service']).to.equal(httpSpan.meta['peer.service'])
           }).then(done, done)
 
@@ -297,16 +288,6 @@ describe('Plugin', () => {
 
         const s3ClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-s3' : 'aws-sdk'
 
-        /* eslint-disable no-console */
-        async function resetLocalStackS3 () {
-          try {
-            await axios.post('http://localhost:4566/reset')
-            console.log('LocalStack S3 reset successful')
-          } catch (error) {
-            console.error('Error resetting LocalStack S3:', error.message)
-          }
-        }
-
         before(done => {
           AWS = require(`../../../versions/${s3ClientName}@${version}`).get()
           s3 = new AWS.S3({ endpoint: 'http://127.0.0.1:4566', s3ForcePathStyle: true, region: 'us-east-1' })
@@ -322,7 +303,6 @@ describe('Plugin', () => {
         })
 
         after(async () => {
-          await resetLocalStackS3()
           return agent.close({ ritmReset: false })
         })
 
@@ -333,6 +313,8 @@ describe('Plugin', () => {
             const httpSpan = spans.find(s => s.name === 'http.request')
             expect(awsSpan).to.exist
             expect(httpSpan).to.exist
+            expect(awsSpan.meta['peer.service']).to.exist
+            expect(httpSpan.meta['peer.service']).to.exist
             expect(awsSpan.meta['peer.service']).to.equal(httpSpan.meta['peer.service'])
           }).then(done, done)
 
