@@ -1,24 +1,24 @@
 const { identityService } = require('../util')
 
-const websocket = {
+const ws = {
   consumer: {
-    websocket: {
+    ws: {
       opName: () => 'websocket.request',
       serviceName: identityService
     }
   },
   producer: {
-    websocket: {
+    ws: {
       opName: () => 'websocket.send',
       serviceName: identityService
     }
   },
   receiver: {
-    websocket: {
+    ws: {
       opName: () => 'websocket.send',
       serviceName: identityService
     }
   }
 }
 
-module.exports = websocket
+module.exports = ws
