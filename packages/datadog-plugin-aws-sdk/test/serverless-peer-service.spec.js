@@ -8,13 +8,19 @@ const helpers = require('./kinesis_helpers')
 
 describe('Plugin', () => {
   describe('Serverless', function () {
+    let tracer
     setup()
 
     withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
       let AWS
 
       before(async () => {
+        tracer = require('../../dd-trace')
         sinon.stub(Config.prototype, '_isInServerlessEnvironment').returns(true)
+        // force a reload of the plugins by deleting the plugin instance
+        delete tracer._pluginManager._pluginsByName['aws-sdk']
+        // load the agent and plugins again to ensure `_isInServerlessEnvironment` check
+        // in the plugin constructor is called and the necessary channels are subscribed
         await agent.load(['aws-sdk', 'http'], [{}, { server: false }])
       })
 
