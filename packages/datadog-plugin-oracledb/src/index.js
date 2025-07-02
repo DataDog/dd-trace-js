@@ -8,12 +8,13 @@ class OracledbPlugin extends DatabasePlugin {
   static get system () { return 'oracle' }
   static get peerServicePrecursors () { return ['db.instance', 'db.hostname'] }
 
-  start ({ query, connAttrs }) {
-    const service = this.serviceName({ pluginConfig: this.config, params: connAttrs })
+  start ({ query, connAttrs, port, hostname, dbInstance }) {
+    let service = this.serviceName({ pluginConfig: this.config, params: connAttrs })
 
-    const lastCollonIndex = connAttrs.dbRemoteAddress.lastIndexOf(':')
-    const port = connAttrs.dbRemoteAddress.slice(lastCollonIndex + 1)
-    const hostname = connAttrs.dbRemoteAddress.slice(0, lastCollonIndex)
+    if (service === undefined && hostname) {
+      // Fallback for users not providing the service properly in a serviceName method
+      service = `${hostname}:${port}/${dbInstance}`
+    }
 
     this.startSpan(this.operationName(), {
       service,
@@ -22,9 +23,9 @@ class OracledbPlugin extends DatabasePlugin {
       kind: 'client',
       meta: {
         'db.user': this.config.user,
-        'db.instance': connAttrs.dbInstance,
+        'db.instance': dbInstance,
         'db.hostname': hostname,
-        [CLIENT_PORT_KEY]: port
+        [CLIENT_PORT_KEY]: port,
       }
     })
   }

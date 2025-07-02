@@ -6,7 +6,7 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/c
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 const hostname = process.env.CI ? 'oracledb' : 'localhost'
-const port = 1521
+const port = '1521'
 const dbInstance = 'xepdb1'
 
 const config = {
@@ -142,10 +142,16 @@ describe('Plugin', () => {
 
           it('should instrument errors', async () => {
             let error
-
+            let resolver
+            const promise = new Promise((resolve) => {
+              resolver = resolve
+            })
             connection.execute('invalid', err => {
               error = err
+              resolver()
             })
+
+            await promise
 
             await agent.assertFirstTraceSpan({
               name: expectedSchema.outbound.opName,
@@ -235,37 +241,77 @@ describe('Plugin', () => {
             expect(tracer.scope().active()).to.be.null
           })
 
-          it('should instrument errors', () => {
-            let error
-
-            const promise = agent.assertFirstTraceSpan({
-              name: expectedSchema.outbound.opName,
-              service: expectedSchema.outbound.serviceName,
-              resource: 'invalid',
-              type: 'sql',
-              meta: {
-                'span.kind': 'client',
-                component: 'oracledb',
-                'db.instance': dbInstance,
-                'db.hostname': hostname,
-                'network.destination.port': port,
-                [ERROR_MESSAGE]: error.message,
-                [ERROR_TYPE]: error.name,
-                [ERROR_STACK]: error.stack
-              }
-            })
-
-            connection.execute('invalid').catch(err => {
-              error = err
-            })
-
-            return promise
+          it('should instrument errors', async () => {
+            try {
+              await connection.execute('invalid')
+              throw new Error('Expected an error to be thrown')
+            } catch (error) {
+              await agent.assertFirstTraceSpan({
+                name: expectedSchema.outbound.opName,
+                service: expectedSchema.outbound.serviceName,
+                resource: 'invalid',
+                type: 'sql',
+                meta: {
+                  'span.kind': 'client',
+                  component: 'oracledb',
+                  'db.instance': dbInstance,
+                  'db.hostname': hostname,
+                  'network.destination.port': port,
+                  [ERROR_MESSAGE]: error.message,
+                  [ERROR_TYPE]: error.name,
+                  [ERROR_STACK]: error.stack
+                }
+              })
+            }
           })
         }
       })
 
       describe('with configuration', () => {
         describe('with service string', () => {
+          before(async () => {
+            await agent.load('oracledb', { service () {} })
+            oracledb = require(`../../../versions/oracledb@${version}`).get()
+            tracer = require('../../dd-trace')
+          })
+
+          before(async () => {
+            connection = await oracledb.getConnection(config)
+          })
+
+          after(async () => {
+            await connection.close()
+          })
+
+          after(async () => {
+            await agent.close({ ritmReset: false })
+          })
+          withNamingSchema(
+            () => connection.execute(dbQuery),
+            {
+              v0: {
+                opName: 'oracle.query',
+                serviceName: config.connectString
+              },
+              v1: {
+                opName: 'oracle.query',
+                serviceName: config.connectString
+              }
+            }
+          )
+
+          it('should set the service name', async () => {
+            await Promise.all([
+              agent.assertFirstTraceSpan({
+                name: expectedSchema.outbound.opName,
+                service: config.connectString
+              }),
+              connection.execute(dbQuery)
+            ])
+          })
+        })
+
+        describe('with service returning undefined', () => {
           before(async () => {
             await agent.load('oracledb', { service: 'custom' })
             oracledb = require(`../../../versions/oracledb@${version}`).get()
@@ -310,7 +356,7 @@ describe('Plugin', () => {
 
         describe('with service function', () => {
           before(async () => {
-            await agent.load('oracledb', { service: connAttrs => `${connAttrs.connectString}` })
+            await agent.load('oracledb', { service: connAttrs => connAttrs.connectString })
             oracledb = require(`../../../versions/oracledb@${version}`).get()
             tracer = require('../../dd-trace')
           })
@@ -331,11 +377,11 @@ describe('Plugin', () => {
             {
               v0: {
                 opName: 'oracle.query',
-                serviceName: 'oracledb:1521/xepdb1'
+                serviceName: config.connectString,
               },
               v1: {
                 opName: 'oracle.query',
-                serviceName: 'oracledb:1521/xepdb1'
+                serviceName: config.connectString,
               }
             }
           )

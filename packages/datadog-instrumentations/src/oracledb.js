@@ -7,6 +7,9 @@ const {
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
+const connectionAttributes = new WeakMap()
+const poolAttributes = new WeakMap()
+
 const startChannel = channel('apm:oracledb:query:start')
 const errorChannel = channel('apm:oracledb:query:error')
 const finishChannel = channel('apm:oracledb:query:finish')
@@ -35,12 +38,21 @@ addHook({ name: 'oracledb', versions: ['>=5'] }, oracledb => {
       }
 
       return new AsyncResource('apm:oracledb:inner-scope').runInAsyncScope(() => {
+        // The connAttrs are only used to pass through the argument to the potential
+        // serviceName method a user might have passed through.
+        const connAttrs = connectionAttributes.get(this)
+
+        const details = this.hostName ? this : this._impl
+
+        const hostname = details?.nscon?.ntAdapter?.hostName ?? details.hostName
+        const port = details?.nscon?.ntAdapter?.port ?? details.port
+
         startChannel.publish({
           query: dbQuery,
-          connAttrs: {
-            dbInstance: this.serviceName,
-            dbRemoteAddress: this.remoteAddress,
-          }
+          connAttrs,
+          dbInstance: details.serviceName,
+          port: String(port),
+          hostname,
         })
         try {
           let result = execute.apply(this, arguments)
@@ -64,6 +76,66 @@ addHook({ name: 'oracledb', versions: ['>=5'] }, oracledb => {
           throw err
         }
       })
+    }
+  })
+  shimmer.wrap(oracledb, 'getConnection', getConnection => {
+    return function wrappedGetConnection (connAttrs, callback) {
+      if (callback) {
+        arguments[1] = shimmer.wrapFunction(callback, callback => (err, connection) => {
+          if (connection) {
+            connectionAttributes.set(connection, connAttrs)
+          }
+          callback(err, connection)
+        })
+
+        getConnection.apply(this, arguments)
+      } else {
+        return getConnection.apply(this, arguments).then((connection) => {
+          connectionAttributes.set(connection, connAttrs)
+          return connection
+        })
+      }
+    }
+  })
+  shimmer.wrap(oracledb, 'createPool', createPool => {
+    return function wrappedCreatePool (poolAttrs, callback) {
+      if (callback) {
+        arguments[1] = shimmer.wrapFunction(callback, callback => (err, pool) => {
+          if (pool) {
+            poolAttributes.set(pool, poolAttrs)
+          }
+          callback(err, pool)
+        })
+
+        createPool.apply(this, arguments)
+      } else {
+        return createPool.apply(this, arguments).then((pool) => {
+          poolAttributes.set(pool, poolAttrs)
+          return pool
+        })
+      }
+    }
+  })
+  shimmer.wrap(oracledb.Pool.prototype, 'getConnection', getConnection => {
+    return function wrappedGetConnection () {
+      let callback
+      if (typeof arguments[arguments.length - 1] === 'function') {
+        callback = arguments[arguments.length - 1]
+      }
+      if (callback) {
+        arguments[arguments.length - 1] = shimmer.wrapFunction(callback, callback => (err, connection) => {
+          if (connection) {
+            connectionAttributes.set(connection, poolAttributes.get(this))
+          }
+          callback(err, connection)
+        })
+        getConnection.apply(this, arguments)
+      } else {
+        return getConnection.apply(this, arguments).then((connection) => {
+          connectionAttributes.set(connection, poolAttributes.get(this))
+          return connection
+        })
+      }
     }
   })
   return oracledb
