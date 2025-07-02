@@ -14,6 +14,7 @@ const pathParamsReadCh = channel('datadog:fastify:path-params:finish')
 
 const parsingResources = new WeakMap()
 const cookiesPublished = new WeakSet()
+const bodyPublished = new WeakSet()
 
 function wrapFastify (fastify, hasParsingEvents) {
   if (typeof fastify !== 'function') return fastify
@@ -126,11 +127,15 @@ function preHandler (request, reply, done) {
   const req = getReq(request)
   const res = getRes(reply)
 
+  const hasBody = request.body && Object.keys(request.body).length > 0
+
   // For multipart/form-data, the body is not available until after preValidation hook
-  if (bodyParserReadCh.hasSubscribers && request.body) {
+  if (bodyParserReadCh.hasSubscribers && hasBody && !bodyPublished.has(req)) {
     const abortController = new AbortController()
 
     bodyParserReadCh.publish({ req, res, body: request.body, abortController })
+
+    bodyPublished.add(req)
 
     if (abortController.signal.aborted) return
   }
@@ -162,10 +167,12 @@ function preValidation (request, reply, done) {
     }
 
     // Analyze body before schema validation
-    if (bodyParserReadCh.hasSubscribers && request.body) {
+    if (bodyParserReadCh.hasSubscribers && request.body && !bodyPublished.has(req)) {
       abortController ??= new AbortController()
 
       bodyParserReadCh.publish({ req, res, body: request.body, abortController })
+
+      bodyPublished.add(req)
 
       if (abortController.signal.aborted) return
     }

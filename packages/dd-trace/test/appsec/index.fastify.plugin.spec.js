@@ -490,9 +490,7 @@ withVersions('fastify', 'fastify', '>=2', version => {
           })
 
           after(() => {
-            if (server) {
-              server.close()
-            }
+            server?.close()
             return agent.close({ ritmReset: false })
           })
 
@@ -529,13 +527,16 @@ withVersions('fastify', 'fastify', '>=2', version => {
 
       before(function () {
         // @fastify/multipart is not compatible with Fastify 2.x
-        if (version.startsWith('2')) {
+        if (semver.satisfies(semver.coerce(version), '2')) {
+          this.skip()
+        }
+        // @fastify/multipart v6.x is not compatible with Fastify >=3
+        // For Fastify v5.x, you need @fastify/multipart v9.x or newer
+        if (semver.intersects(version, '3.9.2') && multipartVersion === '>=6') {
           this.skip()
         }
 
-        // @fastify/multipart v6.x is not compatible with Fastify >3
-        // For Fastify v5.x, you need @fastify/multipart v9.x or newer
-        if (semver.intersects(version, '>3.0.0') && multipartVersion === '6.0.0') {
+        if (semver.intersects(version, '>=5') && multipartVersion === '6.0.0') {
           this.skip()
         }
 

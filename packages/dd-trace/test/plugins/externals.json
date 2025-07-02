@@ -146,7 +146,7 @@
   "fastify": [
     {
       "name": "fastify",
-      "versions": ["2.15.0", ">=3"]
+      "versions": ["2.15.0", "3.0.0", "3.9.2"]
     },
     {
       "name": "middie",
