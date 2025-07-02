@@ -11,6 +11,7 @@ import globals from 'globals'
 
 import eslintProcessEnv from './eslint-rules/eslint-process-env.mjs'
 import eslintEnvAliases from './eslint-rules/eslint-env-aliases.mjs'
+import eslintSafeTypeOfObject from './eslint-rules/eslint-safe-typeof-object.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -117,13 +118,15 @@ export default [
       'eslint-rules': {
         rules: {
           'eslint-process-env': eslintProcessEnv,
-          'eslint-env-aliases': eslintEnvAliases
+          'eslint-env-aliases': eslintEnvAliases,
+          'eslint-safe-typeof-object': eslintSafeTypeOfObject
         }
       }
     },
     rules: {
       'eslint-rules/eslint-process-env': 'error',
       'eslint-rules/eslint-env-aliases': 'error',
+      'eslint-rules/eslint-safe-typeof-object': 'error',
       'n/no-restricted-require': ['error', [
         {
           name: 'diagnostics_channel',

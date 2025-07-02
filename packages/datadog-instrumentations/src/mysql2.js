@@ -35,7 +35,7 @@ function wrapConnection (Connection, version) {
   shimmer.wrap(Connection.prototype, 'query', query => function (sql, values, cb) {
     if (!startOuterQueryCh.hasSubscribers) return query.apply(this, arguments)
 
-    if (typeof sql === 'object') sql = sql?.sql
+    if (sql !== null && typeof sql === 'object') sql = sql.sql
 
     if (!sql) return query.apply(this, arguments)
 
@@ -76,7 +76,7 @@ function wrapConnection (Connection, version) {
   shimmer.wrap(Connection.prototype, 'execute', execute => function (sql, values, cb) {
     if (!startOuterQueryCh.hasSubscribers) return execute.apply(this, arguments)
 
-    if (typeof sql === 'object') sql = sql?.sql
+    if (sql !== null && typeof sql === 'object') sql = sql.sql
 
     if (!sql) return execute.apply(this, arguments)
 
@@ -167,7 +167,7 @@ function wrapPool (Pool, version) {
   shimmer.wrap(Pool.prototype, 'query', query => function (sql, values, cb) {
     if (!startOuterQueryCh.hasSubscribers) return query.apply(this, arguments)
 
-    if (typeof sql === 'object') sql = sql?.sql
+    if (sql !== null && typeof sql === 'object') sql = sql.sql
 
     if (!sql) return query.apply(this, arguments)
 
@@ -206,7 +206,7 @@ function wrapPool (Pool, version) {
   shimmer.wrap(Pool.prototype, 'execute', execute => function (sql, values, cb) {
     if (!startOuterQueryCh.hasSubscribers) return execute.apply(this, arguments)
 
-    if (typeof sql === 'object') sql = sql?.sql
+    if (sql !== null && typeof sql === 'object') sql = sql.sql
 
     if (!sql) return execute.apply(this, arguments)
 
@@ -239,7 +239,7 @@ function wrapPoolCluster (PoolCluster) {
 
     if (startOuterQueryCh.hasSubscribers && !wrappedPoolNamespaces.has(poolNamespace)) {
       shimmer.wrap(poolNamespace, 'query', query => function (sql, values, cb) {
-        if (typeof sql === 'object') sql = sql?.sql
+        if (sql !== null && typeof sql === 'object') sql = sql.sql
 
         if (!sql) return query.apply(this, arguments)
 
@@ -274,7 +274,7 @@ function wrapPoolCluster (PoolCluster) {
       })
 
       shimmer.wrap(poolNamespace, 'execute', execute => function (sql, values, cb) {
-        if (typeof sql === 'object') sql = sql?.sql
+        if (sql !== null && typeof sql === 'object') sql = sql.sql
 
         if (!sql) return execute.apply(this, arguments)
 
