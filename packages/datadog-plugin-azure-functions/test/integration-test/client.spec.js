@@ -51,7 +51,7 @@ describe('esm', () => {
       })
     }).timeout(50000)
 
-    it('propagates context to child requests', async () => {
+    it('propagates context to child http requests', async () => {
       const envArgs = {
         PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
       }
@@ -59,7 +59,31 @@ describe('esm', () => {
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest2', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 2)
-        assert.strictEqual(payload[0][0].parent_id, payload[1][1].span_id)
+        assert.strictEqual(payload[1][0].span_id, payload[1][1].parent_id)
+      })
+    }).timeout(50000)
+
+    it('propagates context through a service bus queue', async () => {
+      const envArgs = {
+        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+      }
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
+
+      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest3', ({ headers, payload }) => {
+        assert.strictEqual(payload.length, 2)
+        assert.strictEqual(payload[1][0].span_id, payload[1][1].parent_id)
+      })
+    }).timeout(50000)
+
+    it('propagates context through a service bus topic', async () => {
+      const envArgs = {
+        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+      }
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
+
+      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest4', ({ headers, payload }) => {
+        assert.strictEqual(payload.length, 2)
+        assert.strictEqual(payload[1][0].span_id, payload[1][1].parent_id)
       })
     }).timeout(50000)
   })
