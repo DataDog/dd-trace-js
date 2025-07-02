@@ -2,11 +2,8 @@
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing.js')
 const tags = require('../../../ext/tags.js')
-const { storage } = require('../../datadog-core')
 
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
-const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
-const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 
 class WSServerPlugin extends TracingPlugin {
   static get id () { return 'websocket' }
@@ -54,12 +51,14 @@ class WSServerPlugin extends TracingPlugin {
   }
 
   bindAsyncStart (ctx) {
+    console.log('in server bind async ')
     ctx.span.setTag(HTTP_STATUS_CODE, ctx.req.resStatus)
 
     return ctx.parentStore
   }
 
   asyncStart (ctx) {
+    console.log('in server async ')
     ctx.socket.spanContext = ctx.span._spanContext
 
     ctx.span.finish()

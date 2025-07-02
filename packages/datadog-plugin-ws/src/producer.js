@@ -12,7 +12,7 @@ class WSProducerPlugin extends TracingPlugin {
     const span = this.startSpan(this.operationName(), {
       meta: {
         service: this.serviceName({ pluginConfig: this.config }),
-        // 'resource.name': 'websocket ' + ,
+        'resource.name': 'websocket.send',
         'span.type': 'ws',
         'span.kind': 'producer'
 
@@ -26,21 +26,26 @@ class WSProducerPlugin extends TracingPlugin {
   }
 
   bindAsyncStart (ctx) {
+    console.log('bind asyc start in producer')
+    ctx.span.finish()
     return ctx.parentStore
   }
 
   asyncStart (ctx) {
+    console.log(' asyc start in producer')
     ctx.span.addLink(ctx.link.spanContext)
 
     ctx.span.finish()
   }
 
   end (ctx) {
-    if (!Object.hasOwn(ctx, 'result')) return
+    console.log('end start in producer')
+    // if (!Object.hasOwn(ctx, 'result')) return
 
     ctx.span.addLink(ctx.socket.spanContext)
 
     ctx.span.finish()
+    return ctx.parentStore
   }
 }
 

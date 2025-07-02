@@ -12,6 +12,12 @@ const websocket = {
       opName: () => 'websocket.send',
       serviceName: identityService
     }
+  },
+  receiver: {
+    websocket: {
+      opName: () => 'websocket.send',
+      serviceName: identityService
+    }
   }
 }
 
