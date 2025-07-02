@@ -4,8 +4,10 @@ const { withNamingSchema, withPeerService, withVersions } = require('../../dd-tr
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
+const assert = require('node:assert')
 
 const hostname = process.env.CI ? 'oracledb' : 'localhost'
+// TODO: Use another port or db instance to differentiate it better from defaults
 const port = '1521'
 const dbInstance = 'xepdb1'
 
@@ -268,7 +270,7 @@ describe('Plugin', () => {
       })
 
       describe('with configuration', () => {
-        describe('with service string', () => {
+        describe('with service returning undefined', () => {
           before(async () => {
             await agent.load('oracledb', { service () {} })
             oracledb = require(`../../../versions/oracledb@${version}`).get()
@@ -311,7 +313,7 @@ describe('Plugin', () => {
           })
         })
 
-        describe('with service returning undefined', () => {
+        describe('with service string', () => {
           before(async () => {
             await agent.load('oracledb', { service: 'custom' })
             oracledb = require(`../../../versions/oracledb@${version}`).get()
@@ -356,7 +358,12 @@ describe('Plugin', () => {
 
         describe('with service function', () => {
           before(async () => {
-            await agent.load('oracledb', { service: connAttrs => connAttrs.connectString })
+            await agent.load('oracledb', {
+              service (connAttrs) {
+                assert.strictEqual(connAttrs.connectString, config.connectString)
+                return connAttrs.connectString
+              }
+            })
             oracledb = require(`../../../versions/oracledb@${version}`).get()
             tracer = require('../../dd-trace')
           })

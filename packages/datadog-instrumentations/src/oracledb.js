@@ -38,11 +38,12 @@ addHook({ name: 'oracledb', versions: ['>=5'] }, oracledb => {
       }
 
       return new AsyncResource('apm:oracledb:inner-scope').runInAsyncScope(() => {
-        // The connAttrs are only used to pass through the argument to the potential
-        // serviceName method a user might have passed through.
+        // The connAttrs are used to pass through the argument to the potential
+        // serviceName method a user might have passed through as well as parsing
+        // the connection string in v5.
         const connAttrs = connectionAttributes.get(this)
 
-        const details = this.hostName ? this : this._impl
+        const details = typeof this.hostName === 'string' ? this : this._impl
 
         let hostname
         let port
@@ -50,8 +51,8 @@ addHook({ name: 'oracledb', versions: ['>=5'] }, oracledb => {
 
         if (details) {
           dbInstance = details.serviceName
-          hostname = details.nscon?.ntAdapter?.hostName ?? details.hostName
-          port = String(details.nscon?.ntAdapter?.port ?? details.port ?? '')
+          hostname = details.hostName ?? details.nscon?.ntAdapter?.hostName
+          port = String(details.port ?? details.nscon?.ntAdapter?.port ?? '')
         }
 
         startChannel.publish({
