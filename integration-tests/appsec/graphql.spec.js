@@ -109,7 +109,7 @@ describe('graphql', () => {
       assert.property(payload[1][0].metrics, '_dd.appsec.waf.duration')
       assert.propertyVal(payload[1][0].meta, 'appsec.event', 'true')
       assert.property(payload[1][0].meta, '_dd.appsec.json')
-      assert.propertyVal(payload[1][0].meta, '_dd.appsec.json', JSON.stringify(result))
+      assert.deepStrictEqual(JSON.parse(payload[1][0].meta['_dd.appsec.json']), result)
     })
 
     await axios({
