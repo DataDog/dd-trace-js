@@ -441,7 +441,7 @@ withVersions('fastify', 'fastify', '>=2', version => {
             }
 
             // Skip preParsing hook for Fastify 2.x - has compatibility issues
-            if (hook === 'preParsing' && version.startsWith('2')) {
+            if (hook === 'preParsing' && semver.intersects(version, '<= 2.x')) {
               this.skip()
             }
 
@@ -527,7 +527,7 @@ withVersions('fastify', 'fastify', '>=2', version => {
 
       before(function () {
         // @fastify/multipart is not compatible with Fastify 2.x
-        if (semver.satisfies(semver.coerce(version), '2')) {
+        if (semver.intersects(version, '<= 2.x')) {
           this.skip()
         }
         // @fastify/multipart v6.x is not compatible with Fastify >=3
@@ -536,7 +536,7 @@ withVersions('fastify', 'fastify', '>=2', version => {
           this.skip()
         }
 
-        if (semver.intersects(version, '>=5') && multipartVersion === '6.0.0') {
+        if (semver.intersects(version, '>3') && semver.intersects(multipartVersion, '<7.0.0')) {
           this.skip()
         }
 
@@ -587,6 +587,7 @@ withVersions('fastify', 'fastify', '>=2', version => {
 
         const res = await axios.post('/', form)
 
+        assert.strictEqual(res.status, 200)
         sinon.assert.calledOnce(uploadSpy)
         assert.strictEqual(res.data, 'DONE')
       })
