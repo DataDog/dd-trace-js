@@ -73,7 +73,9 @@ class Http2ClientPlugin extends ClientPlugin {
     return message.currentStore
   }
 
-  bindAsyncStart ({ eventName, eventData, currentStore, parentStore }) {
+  bindAsyncStart (ctx) {
+    const { eventName, eventData, currentStore, parentStore } = ctx
+
     // Plugin wasn't enabled when the request started.
     if (!currentStore) return storage('legacy').getStore()
 
@@ -82,10 +84,10 @@ class Http2ClientPlugin extends ClientPlugin {
         this._onResponse(currentStore, eventData)
         return parentStore
       case 'error':
-        this._onError(currentStore, eventData)
+        this._onError(currentStore, eventData, ctx)
         return parentStore
       case 'close':
-        this._onClose(currentStore, eventData)
+        this._onClose(ctx)
         return parentStore
     }
 
@@ -108,14 +110,13 @@ class Http2ClientPlugin extends ClientPlugin {
     addHeaderTags(store.span, headers, HTTP_RESPONSE_HEADERS, this.config)
   }
 
-  _onError (currentStore, error) {
-    const { span } = currentStore
+  _onError ({ span }, error, ctx) {
     span.setTag('error', error)
-    super.finish({ currentStore })
+    super.finish(ctx)
   }
 
-  _onClose (currentStore) {
-    super.finish({ currentStore })
+  _onClose (ctx) {
+    super.finish(ctx)
   }
 }
 
