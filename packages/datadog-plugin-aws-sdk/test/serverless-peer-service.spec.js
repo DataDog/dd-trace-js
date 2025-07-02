@@ -6,21 +6,28 @@ const sinon = require('sinon')
 const Config = require('../../dd-trace/src/config')
 const helpers = require('./kinesis_helpers')
 
+// assert we have a single copy (optional safety net)
+if (require.cache[require.resolve('../../dd-trace/src/config')] === undefined) {
+  throw new Error('Duplicate Config module detected')
+}
+
 describe('Plugin', () => {
   describe('Serverless', function () {
     setup()
 
     withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
       let AWS
+      let sandbox
+
 
       before(async () => {
-        sinon.stub(Config.prototype, '_isInServerlessEnvironment').returns(true)
-
+        sandbox = sinon.createSandbox()
+        sandbox.stub(Config.prototype, '_isInServerlessEnvironment').returns(true)
         await agent.load(['aws-sdk', 'http'], [{}, { server: false }])
       })
 
       after(async () => {
-        Config.prototype._isInServerlessEnvironment.restore()
+        sandbox.restore()
         await agent.close({ ritmReset: false })
       })
 
