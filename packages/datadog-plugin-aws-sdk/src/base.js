@@ -8,31 +8,6 @@ const coalesce = require('koalas')
 const { tagsFromRequest, tagsFromResponse } = require('../../dd-trace/src/payload-tagging')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
-// channels for Lambda cold-start to enable subscriptions
-const networkChannelsStart = [
-  'apm:http:client:request:start',
-  'apm:http2:client:request:start',
-  'apm:net:tcp:start',
-  'apm:dns:lookup:start'
-]
-
-// channels for Lambda to carry peer.service
-const networkChannelsEnd = [
-  'apm:http:client:request:finish',
-  'apm:http2:client:request:end',
-  'apm:net:tcp:finish',
-  'apm:dns:lookup:finish'
-]
-
-// handler to attach peer.service to underlying network spans
-const setPeerServiceTag = (ctx = {}) => {
-  const span = ctx.span || ctx.currentStore?.span
-  if (!span) return
-  const peerHostname = ctx.currentStore?.peerHostname ||
-                       storage('legacy').getStore()?.peerHostname
-  if (peerHostname) span.setTag('peer.service', peerHostname)
-}
-
 class BaseAwsSdkPlugin extends ClientPlugin {
   static get id () { return 'aws' }
   static get isPayloadReporter () { return false }
@@ -58,12 +33,6 @@ class BaseAwsSdkPlugin extends ClientPlugin {
 
   constructor (...args) {
     super(...args)
-
-    // subscribe to network channels for serverless environment peer.service propagation
-    if (this._tracerConfig?._isInServerlessEnvironment()) {
-      networkChannelsStart.forEach(ch => this.addSub(ch, () => {}))
-      networkChannelsEnd.forEach(ch => this.addSub(ch, setPeerServiceTag))
-    }
 
     this.addSub(`apm:aws:request:start:${this.serviceIdentifier}`, ({
       request,
@@ -104,24 +73,24 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         span.addTags(requestTags)
       }
 
+      this.enter(span)
       const store = storage('legacy').getStore()
 
+      const peerServerlessStorage = storage('peerServerless')
       if (this._tracerConfig?._isInServerlessEnvironment()) {
-        const serverlessStore = { ...store, span }
-
         // Try to resolve the hostname immediately; if not possible, keep enough
         // information so the region callback can resolve it later.
         const hostname = getHostname({ awsParams: request.params, awsService }, awsRegion)
+        const peerServerlessStore = {}
+        peerServerlessStorage.enterWith(peerServerlessStore)
+
         if (hostname) {
           span.setTag('peer.service', hostname)
-          serverlessStore.peerHostname = hostname
+          peerServerlessStore.peerHostname = hostname
         } else {
-          serverlessStore.awsParams = request.params
-          serverlessStore.awsService = awsService
+          store.awsParams = request.params
+          store.awsService = awsService
         }
-        this.enter(span, serverlessStore)
-      } else {
-        this.enter(span, store)
       }
     })
 
@@ -137,7 +106,11 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         const hostname = getHostname(store, region)
         if (!hostname) return
         span.setTag('peer.service', hostname)
-        store.peerHostname = hostname
+
+        const peerServerlessStore = storage('peerServerless').getStore()
+        if (peerServerlessStore) {
+          peerServerlessStore.peerHostname = hostname
+        }
       }
     })
 
