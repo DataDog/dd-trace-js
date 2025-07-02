@@ -403,6 +403,19 @@ describe('Span', () => {
       expect(events[1].attributes).to.have.property('exception.message', 'bar')
     })
 
+    it('should record exception when error is not an error object', async () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+
+      await Promise.reject({ message: "something went wrong" }).catch(error => span.recordException(error));
+
+      const events = span._events
+      expect(events).to.have.lengthOf(1)
+
+      expect(events[0].name).to.equal('exception')
+      expect(Object.keys(events[0].attributes)).to.have.lengthOf(1)
+      expect(events[0].attributes).to.have.property('exception.message', 'something went wrong')
+    })
+
     it('should record exception with custom attributes', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
 

@@ -273,12 +273,21 @@ declare namespace tracer {
     addLink (context: SpanContext, attributes?: Object): void;
 
     /**
+     * Represents an exception object that can be recorded on a span.
+     */
+    Exception?: {
+      message: string;
+      name?: string;
+      stack?: string;
+    };
+
+    /**
      * Records an exception as a span event.
      *
-     * @param exception the exception to record.
-     * @param [attributes] additional attributes to add to the span event.
+     * @param {Error | Span['Exception']} exception the exception to record.
+     * @param {SpanAttributes} [attributes] additional attributes to add to the span event.
      */
-    recordException(exception: Error | Object, attributes?: SpanAttributes): this;
+    recordException(exception: Error | Span['Exception'], attributes?: SpanAttributes): this;
 
   }
 
