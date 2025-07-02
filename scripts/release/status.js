@@ -52,7 +52,7 @@ async function checkStatuses (contexts) {
   attempts++
 
   if (attempts >= MAX_ATTEMPTS) {
-    throw new Error(`Jobs did not finish before timeout: ${contexts.join(', ')}.`)
+    throw new Error(`Jobs did not finish before timeout: ${[...contexts].join(', ')}.`)
   }
 
   setTimeout(() => checkStatuses(contexts), TIMEOUT)
