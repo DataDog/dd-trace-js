@@ -44,14 +44,21 @@ addHook({ name: 'oracledb', versions: ['>=5'] }, oracledb => {
 
         const details = this.hostName ? this : this._impl
 
-        const hostname = details?.nscon?.ntAdapter?.hostName ?? details.hostName
-        const port = details?.nscon?.ntAdapter?.port ?? details.port
+        let hostname
+        let port
+        let dbInstance
+
+        if (details) {
+          dbInstance = details.serviceName
+          hostname = details.nscon?.ntAdapter?.hostName ?? details.hostName
+          port = String(details.nscon?.ntAdapter?.port ?? details.port ?? '')
+        }
 
         startChannel.publish({
           query: dbQuery,
           connAttrs,
-          dbInstance: details.serviceName,
-          port: String(port),
+          dbInstance,
+          port,
           hostname,
         })
         try {
