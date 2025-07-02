@@ -306,6 +306,14 @@ function assertPeerServicePropagation (traces) {
   ).to.exist
 
   expect(awsSpan.meta['peer.service'],
+    'expected the aws span peer.service tag not to have region "undefined"'
+  ).to.not.include('undefined')
+
+  expect(httpSpan.meta['peer.service'],
+    'expected the underlying http span peer.service tag not to have region "undefined"'
+  ).to.not.include('undefined')
+
+  expect(awsSpan.meta['peer.service'],
     'expected the aws span to have the same peer.service tag as the underlying http span'
   ).to.equal(httpSpan.meta['peer.service'])
 }
