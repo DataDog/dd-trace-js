@@ -298,7 +298,7 @@ function getHooks (config) {
 }
 
 function getHostname (store, region) {
-  if (!store) return null
+  if (!store) return
   const { awsParams, awsService } = store
   switch (awsService) {
     case 'EventBridge':
@@ -316,8 +316,6 @@ function getHostname (store, region) {
       return awsParams?.Bucket
         ? `${awsParams.Bucket}.s3.${region}.amazonaws.com`
         : `s3.${region}.amazonaws.com`
-    default:
-      return null
   }
 }
 

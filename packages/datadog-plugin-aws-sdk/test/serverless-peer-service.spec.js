@@ -5,6 +5,7 @@ const { setup } = require('./spec_helpers')
 const sinon = require('sinon')
 const Config = require('../../dd-trace/src/config')
 const helpers = require('./kinesis_helpers')
+const { promisify } = require('util')
 
 describe('Plugin', () => {
   describe('Serverless', function () {
@@ -59,7 +60,7 @@ describe('Plugin', () => {
               return result.promise()
             }
 
-            return require('util').promisify(fn)(...args)
+            return promisify(fn)(...args)
           }
         }
 
@@ -68,6 +69,7 @@ describe('Plugin', () => {
 
           dynamo = new AWS.DynamoDB({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' })
 
+          // ignore error if the table already exists
           if (typeof dynamo.createTable === 'function') {
             const createTable = toPromise(dynamo, dynamo.createTable)
             try { await createTable(getCreateTableParams()) } catch (_) {}
@@ -130,7 +132,7 @@ describe('Plugin', () => {
           kinesis.createStream({
             StreamName: streamName,
             ShardCount: 1
-          }, (err, _) => {
+          }, (err) => {
             if (err) return cb(err)
 
             helpers.waitForActiveStream(kinesis, streamName, cb)
@@ -174,10 +176,7 @@ describe('Plugin', () => {
       })
 
       describe('SNS-Serverless', () => {
-        let sns
-        let sqs
-        let TopicArn
-        let QueueUrl
+        let sns, sqs, TopicArn, QueueUrl
 
         const queueName = 'PeerQueue'
         const topicName = 'PeerTopic'
@@ -275,11 +274,7 @@ describe('Plugin', () => {
           AWS = require(`../../../versions/${sqsClientName}@${version}`).get()
 
           sqs = new AWS.SQS({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' })
-          sqs.createQueue(queueOptions, (err, res) => {
-            if (err) return done(err)
-
-            done()
-          })
+          sqs.createQueue(queueOptions, done)
         })
 
         after(done => {
@@ -325,10 +320,7 @@ describe('Plugin', () => {
             s3.api.globalEndpoint = '127.0.0.1'
           }
 
-          s3.createBucket({ Bucket: bucketName }, (err) => {
-            if (err) return done(err)
-            done()
-          })
+          s3.createBucket({ Bucket: bucketName }, done)
         })
 
         after(async () => {
