@@ -6,27 +6,20 @@ const sinon = require('sinon')
 const Config = require('../../dd-trace/src/config')
 const helpers = require('./kinesis_helpers')
 
-// assert we have a single copy (optional safety net)
-if (require.cache[require.resolve('../../dd-trace/src/config')] === undefined) {
-  throw new Error('Duplicate Config module detected')
-}
-
 describe('Plugin', () => {
   describe('Serverless', function () {
     setup()
 
     withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
       let AWS
-      let sandbox
 
       before(async () => {
-        sandbox = sinon.createSandbox()
-        sandbox.stub(Config.prototype, '_isInServerlessEnvironment').returns(true)
+        sinon.stub(Config.prototype, '_isInServerlessEnvironment').returns(true)
         await agent.load(['aws-sdk', 'http'], [{}, { server: false }])
       })
 
       after(async () => {
-        sandbox.restore()
+        Config.prototype._isInServerlessEnvironment.restore()
         await agent.close({ ritmReset: false })
       })
 
@@ -82,11 +75,17 @@ describe('Plugin', () => {
             const spans = traces[0]
             const awsSpan = spans.find(s => s.name === 'aws.request')
             const httpSpan = spans.find(s => s.name === 'http.request')
-            expect(awsSpan).to.exist
-            expect(httpSpan).to.exist
-            expect(awsSpan.meta['peer.service']).to.exist
-            expect(httpSpan.meta['peer.service']).to.exist
-            expect(awsSpan.meta['peer.service']).to.equal(httpSpan.meta['peer.service'])
+            expect(awsSpan, 'expected the aws span to exist').to.exist
+            expect(httpSpan, 'expected the underlying http span to exist').to.exist
+            expect(awsSpan.meta['peer.service'],
+              'expected the aws span to have a peer.service tag'
+            ).to.exist
+            expect(httpSpan.meta['peer.service'],
+              'expected the underlying http span to have a peer.service tag'
+            ).to.exist
+            expect(awsSpan.meta['peer.service'],
+              'expected the aws span to have the same peer.service tag as the underlying http span'
+            ).to.equal(httpSpan.meta['peer.service'])
           })
 
           await Promise.all([
@@ -151,11 +150,17 @@ describe('Plugin', () => {
             const spans = traces[0]
             const awsSpan = spans.find(s => s.name === 'aws.request')
             const httpSpan = spans.find(s => s.name === 'http.request')
-            expect(awsSpan).to.exist
-            expect(httpSpan).to.exist
-            expect(awsSpan.meta['peer.service']).to.exist
-            expect(httpSpan.meta['peer.service']).to.exist
-            expect(awsSpan.meta['peer.service']).to.equal(httpSpan.meta['peer.service'])
+            expect(awsSpan, 'expected the aws span to exist').to.exist
+            expect(httpSpan, 'expected the underlying http span to exist').to.exist
+            expect(awsSpan.meta['peer.service'],
+              'expected the aws span to have a peer.service tag'
+            ).to.exist
+            expect(httpSpan.meta['peer.service'],
+              'expected the underlying http span to have a peer.service tag'
+            ).to.exist
+            expect(awsSpan.meta['peer.service'],
+              'expected the aws span to have the same peer.service tag as the underlying http span'
+            ).to.equal(httpSpan.meta['peer.service'])
           }, { timeoutMs: 10000 }).then(done, done)
 
           helpers.putTestRecord(kinesis, streamName, helpers.dataBuffer, e => e && done(e))
@@ -217,11 +222,17 @@ describe('Plugin', () => {
             const spans = traces[0]
             const awsSpan = spans.find(s => s.name === 'aws.request')
             const httpSpan = spans.find(s => s.name === 'http.request')
-            expect(awsSpan).to.exist
-            expect(httpSpan).to.exist
-            expect(awsSpan.meta['peer.service']).to.exist
-            expect(httpSpan.meta['peer.service']).to.exist
-            expect(awsSpan.meta['peer.service']).to.equal(httpSpan.meta['peer.service'])
+            expect(awsSpan, 'expected the aws span to exist').to.exist
+            expect(httpSpan, 'expected the underlying http span to exist').to.exist
+            expect(awsSpan.meta['peer.service'],
+              'expected the aws span to have a peer.service tag'
+            ).to.exist
+            expect(httpSpan.meta['peer.service'],
+              'expected the underlying http span to have a peer.service tag'
+            ).to.exist
+            expect(awsSpan.meta['peer.service'],
+              'expected the aws span to have the same peer.service tag as the underlying http span'
+            ).to.equal(httpSpan.meta['peer.service'])
           }).then(done, done)
 
           sns.publish({
@@ -274,11 +285,17 @@ describe('Plugin', () => {
             const spans = traces[0]
             const awsSpan = spans.find(s => s.name === 'aws.request')
             const httpSpan = spans.find(s => s.name === 'http.request')
-            expect(awsSpan).to.exist
-            expect(httpSpan).to.exist
-            expect(awsSpan.meta['peer.service']).to.exist
-            expect(httpSpan.meta['peer.service']).to.exist
-            expect(awsSpan.meta['peer.service']).to.equal(httpSpan.meta['peer.service'])
+            expect(awsSpan, 'expected the aws span to exist').to.exist
+            expect(httpSpan, 'expected the underlying http span to exist').to.exist
+            expect(awsSpan.meta['peer.service'],
+              'expected the aws span to have a peer.service tag'
+            ).to.exist
+            expect(httpSpan.meta['peer.service'],
+              'expected the underlying http span to have a peer.service tag'
+            ).to.exist
+            expect(awsSpan.meta['peer.service'],
+              'expected the aws span to have the same peer.service tag as the underlying http span'
+            ).to.equal(httpSpan.meta['peer.service'])
           }).then(done, done)
 
           sqs.sendMessage({
@@ -317,11 +334,17 @@ describe('Plugin', () => {
             const spans = traces[0]
             const awsSpan = spans.find(s => s.name === 'aws.request')
             const httpSpan = spans.find(s => s.name === 'http.request')
-            expect(awsSpan).to.exist
-            expect(httpSpan).to.exist
-            expect(awsSpan.meta['peer.service']).to.exist
-            expect(httpSpan.meta['peer.service']).to.exist
-            expect(awsSpan.meta['peer.service']).to.equal(httpSpan.meta['peer.service'])
+            expect(awsSpan, 'expected the aws span to exist').to.exist
+            expect(httpSpan, 'expected the underlying http span to exist').to.exist
+            expect(awsSpan.meta['peer.service'],
+              'expected the aws span to have a peer.service tag'
+            ).to.exist
+            expect(httpSpan.meta['peer.service'],
+              'expected the underlying http span to have a peer.service tag'
+            ).to.exist
+            expect(awsSpan.meta['peer.service'],
+              'expected the aws span to have the same peer.service tag as the underlying http span'
+            ).to.equal(httpSpan.meta['peer.service'])
           }).then(done, done)
 
           s3.copyObject({
