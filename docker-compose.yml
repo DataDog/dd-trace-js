@@ -154,7 +154,7 @@ services:
       - LDAP_PASSWORDS=password1,password2
 
   testagent:
-    image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.24.1
+    image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.27.0
     ports:
         - "127.0.0.1:9126:9126"
     environment:
@@ -166,7 +166,7 @@ services:
   # Use this for local development when making new VCR cassettes to persist to the test agent
   # Do not use the above testagent service if using this one.
   testagent-vcr:
-    image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.24.1
+    image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.27.0
     ports:
       - "127.0.0.1:9126:9126"
     environment:
