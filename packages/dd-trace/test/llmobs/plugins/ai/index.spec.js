@@ -75,6 +75,8 @@ describe('Plugin', () => {
         metadata: {
           maxTokens: 100,
           temperature: 0.5,
+          maxSteps: MOCK_NUMBER,
+          maxRetries: MOCK_NUMBER,
         },
         tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
         tags: { ml_app: 'test', language: 'javascript', integration: 'vercel-ai' },
@@ -124,7 +126,9 @@ describe('Plugin', () => {
         inputValue: 'Invent a character for a video game',
         outputValue: MOCK_STRING,
         metadata: {
-          schema: MOCK_OBJECT
+          schema: MOCK_OBJECT,
+          output: 'object',
+          maxRetries: MOCK_NUMBER,
         },
         tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
         tags: { ml_app: 'test', language: 'javascript', integration: 'vercel-ai' },
@@ -161,6 +165,10 @@ describe('Plugin', () => {
         spanKind: 'workflow',
         inputValue: 'hello world',
         outputValue: '[1 embedding(s) returned with size 1536]',
+        metadata: {
+          maxSteps: MOCK_NUMBER,
+          maxRetries: MOCK_NUMBER,
+        },
         tags: { ml_app: 'test', language: 'javascript', integration: 'vercel-ai' }
       })
 
@@ -195,6 +203,10 @@ describe('Plugin', () => {
         spanKind: 'workflow',
         inputValue: JSON.stringify(['hello world', 'goodbye world']),
         outputValue: '[2 embedding(s) returned with size 1536]',
+        metadata: {
+          maxSteps: MOCK_NUMBER,
+          maxRetries: MOCK_NUMBER,
+        },
         tags: { ml_app: 'test', language: 'javascript', integration: 'vercel-ai' }
       })
 
@@ -236,6 +248,10 @@ describe('Plugin', () => {
         spanKind: 'workflow',
         inputValue: 'Hello, OpenAI!',
         outputValue: 'Hello! How can I assist you today?', // assert text from stream is fully captured
+        metadata: {
+          maxSteps: MOCK_NUMBER,
+          maxRetries: MOCK_NUMBER,
+        },
         tags: { ml_app: 'test', language: 'javascript', integration: 'vercel-ai' }
       })
 
@@ -287,7 +303,9 @@ describe('Plugin', () => {
         inputValue: 'Invent a character for a video game',
         outputValue: JSON.stringify({ name: 'Astra', age: 25, height: '5\'8"' }),
         metadata: {
-          schema: MOCK_OBJECT
+          schema: MOCK_OBJECT,
+          output: 'object',
+          maxRetries: MOCK_NUMBER,
         },
         tags: { ml_app: 'test', language: 'javascript', integration: 'vercel-ai' }
       })
@@ -341,7 +359,8 @@ describe('Plugin', () => {
         inputValue: 'What is the weather in Tokyo?',
         outputValue: 'The weather in Tokyo is nice and sunny.',
         metadata: {
-          maxSteps: 2,
+          maxSteps: MOCK_NUMBER,
+          maxRetries: MOCK_NUMBER,
         },
         tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
         tags: { ml_app: 'test', language: 'javascript', integration: 'vercel-ai' },
@@ -462,7 +481,8 @@ describe('Plugin', () => {
         inputValue: 'What is the weather in Tokyo?',
         outputValue: 'The weather in Tokyo is nice and sunny.',
         metadata: {
-          maxSteps: 2,
+          maxSteps: MOCK_NUMBER,
+          maxRetries: MOCK_NUMBER,
         },
         tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
         tags: { ml_app: 'test', language: 'javascript', integration: 'vercel-ai' },

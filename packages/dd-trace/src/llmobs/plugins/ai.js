@@ -72,7 +72,7 @@ function getOperation (span) {
 
 /**
  * Get the LLM token usage from the span tags
- * @param {import('../../opentracing/span')} span
+ * @param {Record<string, string>} tags
  * @returns {{inputTokens: number, outputTokens: number, totalTokens: number}}
  */
 function getUsage (tags) {
@@ -93,7 +93,7 @@ function getUsage (tags) {
  * Get the model provider from the span tags.
  * This is normalized to LLM Observability model provider standards.
  *
- * @param {import('../../opentracing/span')} span
+ * @param {Record<string, string>} tags
  * @returns {string}
  */
 function getModelProvider (tags) {
@@ -147,12 +147,11 @@ function getModelMetadata (tags) {
 
 /**
  * Get the generation metadata from the span tags (maxSteps, maxRetries, etc.)
- * @param {import('../../opentracing/span')} span
+ * @param {Record<string, string>} tags
  * @returns {Record<string, string> | null}
  */
-function getGenerationMetadata (ctx) {
+function getGenerationMetadata (tags) {
   const metadata = {}
-  const tags = getSpanTags(ctx)
 
   for (const tag of Object.keys(tags)) {
     if (!tag.startsWith('ai.settings')) continue
