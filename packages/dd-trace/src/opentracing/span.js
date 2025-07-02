@@ -321,7 +321,8 @@ class DatadogSpan {
       }
 
       for (let i = 0; i < value.length; i++) {
-        if (typeof value[i] !== expectedType || !this._validateScalar(key, value[i])) {
+        const currentType = typeof value[i]
+        if (currentType !== expectedType || !this._validateScalar(key, value[i])) {
           log.warn(`Dropping span event attribute. Attribute ${key} array values are not homogenous or valid: ${value}`)
           return false
         }

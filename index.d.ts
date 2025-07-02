@@ -285,9 +285,9 @@ declare namespace tracer {
      * Records an exception as a span event.
      *
      * @param {Error | Span['Exception']} exception the exception to record.
-     * @param {SpanAttributes} [attributes] additional attributes to add to the span event.
+     * @param {otel.Attributes} [attributes] additional attributes to add to the span event.
      */
-    recordException(exception: Error | Span['Exception'], attributes?: SpanAttributes): this;
+    recordException(exception: Error | Span['Exception'], attributes?: otel.Attributes): this;
 
   }
 

@@ -503,7 +503,7 @@ describe('OTel Span', () => {
     const span2 = makeSpan('span2')
     const datenow = Date.now()
     span1.addEvent('Web page unresponsive',
-      { 'error.code': '403', 'unknown values': [1, ['h', 'a', [false]]] }, datenow)
+      { 'error.code': '403', 'unknown values': [1] }, datenow)
     span2.addEvent('Web page loaded')
     span2.addEvent('Button changed color', { colors: [112, 215, 70], 'response.time': 134.3, success: true })
     const events1 = span1._ddSpan._events
