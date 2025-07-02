@@ -32,8 +32,6 @@ const port = process.env.PORT || 0
 
 server.listen(port, () => {
   const actualPort = server.address().port
-  process.stdout.write(`GraphQL Yoga server is running on http://localhost:${actualPort}/graphql\n`)
-
   // Send port to parent process for integration tests
   if (process.send) {
     process.send({ port: actualPort })

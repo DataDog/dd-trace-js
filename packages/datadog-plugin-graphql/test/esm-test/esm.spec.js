@@ -17,10 +17,10 @@ describe('Plugin (ESM)', () => {
     let proc
     let sandbox
 
-    withVersions('graphql', ['graphql'], version => {
+    withVersions('graphql', ['graphql'], (version, moduleName, resolvedVersion) => {
       before(async function () {
         this.timeout(50000)
-        sandbox = await createSandbox([`'graphql@${version}'`, "'graphql-yoga@3.6.0'"], false, [
+        sandbox = await createSandbox([`'graphql@${resolvedVersion}'`, "'graphql-yoga@3.6.0'"], false, [
           './packages/datadog-plugin-graphql/test/esm-test/*'])
       })
 
@@ -44,7 +44,13 @@ describe('Plugin (ESM)', () => {
           assert.strictEqual(checkSpansForServiceName(payload, 'graphql.execute'), true)
         })
 
-        proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'esm-graphql-server.mjs', agent.port)
+        proc = await spawnPluginIntegrationTestProc(
+          sandbox.folder,
+          'esm-graphql-server.mjs',
+          agent.port,
+          undefined,
+          { NODE_OPTIONS: '--no-warnings --loader=dd-trace/loader-hook.mjs' }
+        )
 
         // Make a GraphQL request
         const query = `
@@ -67,7 +73,7 @@ describe('Plugin (ESM)', () => {
       // Only run GraphQL Yoga test for newer GraphQL versions (>= 15.0.0)
       // GraphQL Yoga 3.6.0 requires newer GraphQL versions that have versionInfo export
       // Extract version number from range strings like ">=0.10" or "^15.2.0"
-      const cleanVersion = version.replace(/^[>=^~]+/, '')
+      const cleanVersion = resolvedVersion.replace(/^[>=^~]+/, '')
       const coercedVersion = semver.coerce(cleanVersion)
       if (coercedVersion && semver.gte(coercedVersion, '15.0.0')) {
         it('should instrument GraphQL Yoga execution with ESM', async () => {
@@ -77,7 +83,13 @@ describe('Plugin (ESM)', () => {
             assert.strictEqual(checkSpansForServiceName(payload, 'graphql.execute'), true)
           })
 
-          proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'esm-graphql-yoga-server.mjs', agent.port)
+          proc = await spawnPluginIntegrationTestProc(
+            sandbox.folder,
+            'esm-graphql-yoga-server.mjs',
+            agent.port,
+            undefined,
+            { NODE_OPTIONS: '--no-warnings --loader=dd-trace/loader-hook.mjs' }
+          )
 
           // Make a GraphQL request to Yoga server
           const query = `
