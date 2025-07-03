@@ -100,7 +100,7 @@
     "ignore": "^5.2.4",
     "import-in-the-middle": "^1.14.2",
     "istanbul-lib-coverage": "^3.2.2",
-    "jest-docblock": "^29.7.0",
+    "jest-docblock": "^30.0.1",
     "jsonpath-plus": "^10.3.0",
     "koalas": "^1.0.2",
     "limiter": "^1.1.5",
