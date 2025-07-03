@@ -44,7 +44,6 @@ dev,benchmark,MIT,Copyright 2010-2016 Mathias Bynens Robert Kieffer John-David D
 dev,body-parser,MIT,Copyright 2014 Jonathan Ong 2014-2015 Douglas Christopher Wilson
 dev,chai,MIT,Copyright 2017 Chai.js Assertion Library
 dev,eslint,MIT,Copyright JS Foundation and other contributors https://js.foundation
-dev,eslint-config-standard,MIT,Copyright Feross Aboukhadijeh
 dev,eslint-plugin-import,MIT,Copyright 2015 Ben Mosher
 dev,eslint-plugin-mocha,MIT,Copyright 2014 Mathias Schreck
 dev,eslint-plugin-n,MIT,Copyright 2015 Toru Nagashima
