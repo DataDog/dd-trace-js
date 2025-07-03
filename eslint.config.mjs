@@ -1,5 +1,6 @@
 import eslintPluginJs from '@eslint/js'
 import eslintPluginStylistic from '@stylistic/eslint-plugin'
+import eslintPluginCypress from 'eslint-plugin-cypress'
 import eslintPluginImport from 'eslint-plugin-import'
 import eslintPluginMocha from 'eslint-plugin-mocha'
 import eslintPluginN from 'eslint-plugin-n'
@@ -405,6 +406,12 @@ export default [
       'unicorn/prefer-top-level-await': 'off', // Only useful when using ESM
       'unicorn/switch-case-braces': 'off', // Questionable benefit
     }
+  },
+  {
+    ...eslintPluginCypress.configs.recommended,
+    files: [
+      'packages/datadog-plugin-cypress/src/support.js'
+    ]
   },
   {
     name: 'mocha/recommended',
