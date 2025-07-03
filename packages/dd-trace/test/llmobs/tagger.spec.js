@@ -679,17 +679,14 @@ describe('tagger', () => {
         })
       })
 
-      it('logs a warning when a tool message is not associated with a tool role', () => {
+      it('logs a warning if the tool id is not a string', () => {
         const messages = [
-          { role: 'user', content: 'The weather in San Francisco is sunny', toolId: '123' }
+          { role: 'tool', content: 'The weather in San Francisco is sunny', toolId: 123 }
         ]
 
         tagger._register(span)
         tagger.tagLLMIO(span, messages, undefined)
-
-        const messageTags = Tagger.tagMap.get(span)['_ml_obs.meta.input.messages']
-        expect(messageTags[0]).to.not.have.property('tool_id')
-
+        expect(Tagger.tagMap.get(span)).to.not.have.property('_ml_obs.meta.input.messages')
         expect(logger.warn).to.have.been.calledOnce
       })
     })
