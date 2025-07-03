@@ -4,7 +4,6 @@ const BaseLLMObsPlugin = require('./base')
 const { parseModelId } = require('../../../../datadog-plugin-aws-sdk/src/services/bedrockruntime/utils')
 
 const { channel } = require('dc-polyfill')
-const util = require('util')
 
 const toolCreationCh = channel('dd-trace:vercel-ai:tool')
 const setAttributesCh = channel('dd-trace:vercel-ai:span:setAttributes')
