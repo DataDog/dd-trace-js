@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { FlatCompat } from '@eslint/eslintrc'
 import eslintPluginJs from '@eslint/js'
 import eslintPluginStylistic from '@stylistic/eslint-plugin'
+import eslintPluginImport from 'eslint-plugin-import'
 import eslintPluginMocha from 'eslint-plugin-mocha'
 import eslintPluginN from 'eslint-plugin-n'
 import eslintPluginUnicorn from 'eslint-plugin-unicorn'
@@ -64,8 +65,8 @@ export default [
 
     plugins: {
       '@stylistic': eslintPluginStylistic,
-      n: eslintPluginN,
-      unicorn: eslintPluginUnicorn
+      import: eslintPluginImport,
+      n: eslintPluginN
     },
 
     languageOptions: {
@@ -120,7 +121,9 @@ export default [
           'eslint-env-aliases': eslintEnvAliases,
           'eslint-safe-typeof-object': eslintSafeTypeOfObject
         }
-      }
+      },
+      n: eslintPluginN,
+      unicorn: eslintPluginUnicorn
     },
     rules: {
       'eslint-rules/eslint-process-env': 'error',
@@ -200,6 +203,10 @@ export default [
         withVersions: 'readonly',
       }
     },
+    plugins: {
+      mocha: eslintPluginMocha,
+      n: eslintPluginN
+    },
     rules: {
       'mocha/max-top-level-suites': 'off',
       'mocha/no-exports': 'off',
@@ -216,6 +223,9 @@ export default [
   },
   {
     name: 'dd-trace/tests/integration',
+    plugins: {
+      import: eslintPluginImport
+    },
     files: [
       'integration-tests/**/*.js',
       'integration-tests/**/*.mjs',
