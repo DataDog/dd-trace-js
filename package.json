@@ -132,7 +132,6 @@
     "body-parser": "^2.2.0",
     "chai": "^4.5.0",
     "eslint": "^9.29.0",
-    "eslint-config-standard": "^17.1.0",
     "eslint-plugin-import": "^2.32.0",
     "eslint-plugin-mocha": "^10.5.0",
     "eslint-plugin-n": "^17.20.0",
