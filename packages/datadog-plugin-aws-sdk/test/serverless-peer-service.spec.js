@@ -79,7 +79,8 @@ describe('Plugin', () => {
         it('propagates peer.service from aws span to underlying http span', async () => {
           const send = toPromise(dynamo, dynamo.putItem)
 
-          const tracesPromise = agent.assertSomeTraces(assertPeerServicePropagation)
+          const tracesPromise = agent.assertSomeTraces(
+            assertPeerServicePropagation('dynamodb.us-east-1.amazonaws.com'))
 
           await Promise.all([
             tracesPromise,
@@ -139,7 +140,7 @@ describe('Plugin', () => {
         })
 
         it('propagates peer.service', done => {
-          agent.assertSomeTraces(assertPeerServicePropagation, { timeoutMs: 10000 })
+          agent.assertSomeTraces(assertPeerServicePropagation('kinesis.us-east-1.amazonaws.com'), { timeoutMs: 10000 })
             .then(done, done)
 
           helpers.putTestRecord(kinesis, streamName, helpers.dataBuffer, e => e && done(e))
@@ -194,7 +195,7 @@ describe('Plugin', () => {
         })
 
         it('propagates peer.service from aws span to underlying http span', done => {
-          agent.assertSomeTraces(assertPeerServicePropagation)
+          agent.assertSomeTraces(assertPeerServicePropagation('sns.us-east-1.amazonaws.com'))
             .then(done, done)
 
           sns.publish({
@@ -239,7 +240,7 @@ describe('Plugin', () => {
         })
 
         it('propagates peer.service from aws span to underlying http span', done => {
-          agent.assertSomeTraces(assertPeerServicePropagation)
+          agent.assertSomeTraces(assertPeerServicePropagation('sqs.us-east-1.amazonaws.com'))
             .then(done, done)
 
           sqs.sendMessage({
@@ -271,7 +272,7 @@ describe('Plugin', () => {
         })
 
         it('propagates peer.service from aws span to underlying http span', done => {
-          agent.assertSomeTraces(assertPeerServicePropagation)
+          agent.assertSomeTraces(assertPeerServicePropagation('s3-bucket-name-test.s3.us-east-1.amazonaws.com'))
             .then(done, done)
 
           s3.copyObject({
@@ -289,31 +290,33 @@ describe('Plugin', () => {
   })
 })
 
-function assertPeerServicePropagation (traces) {
-  const spans = traces[0]
-  const awsSpan = spans.find(s => s.name === 'aws.request')
-  const httpSpan = spans.find(s => s.name === 'http.request')
+function assertPeerServicePropagation (peerService) {
+  return (traces) => {
+    const spans = traces[0]
+    const awsSpan = spans.find(s => s.name === 'aws.request')
+    const httpSpan = spans.find(s => s.name === 'http.request')
 
-  expect(awsSpan, 'expected the aws span to exist').to.exist
-  expect(httpSpan, 'expected the underlying http span to exist').to.exist
+    expect(awsSpan, 'expected the aws span to exist').to.exist
+    expect(httpSpan, 'expected the underlying http span to exist').to.exist
 
-  expect(awsSpan.meta['peer.service'],
-    'expected the aws span to have a peer.service tag'
-  ).to.exist
+    expect(awsSpan.meta['peer.service'],
+      'expected the aws span to have a peer.service tag'
+    ).to.exist
 
-  expect(httpSpan.meta['peer.service'],
-    'expected the underlying http span to have a peer.service tag'
-  ).to.exist
+    expect(httpSpan.meta['peer.service'],
+      'expected the underlying http span to have a peer.service tag'
+    ).to.exist
 
-  expect(awsSpan.meta['peer.service'],
-    'expected the aws span peer.service tag not to have region "undefined"'
-  ).to.not.include('undefined')
+    expect(awsSpan.meta['peer.service'],
+    `expected the aws span peer.service to be ${peerService}`
+    ).to.equal(peerService)
 
-  expect(httpSpan.meta['peer.service'],
-    'expected the underlying http span peer.service tag not to have region "undefined"'
-  ).to.not.include('undefined')
+    expect(httpSpan.meta['peer.service'],
+    `expected the underlying http span peer.service to be ${peerService}`
+    ).to.equal(peerService)
 
-  expect(awsSpan.meta['peer.service'],
-    'expected the aws span to have the same peer.service tag as the underlying http span'
-  ).to.equal(httpSpan.meta['peer.service'])
+    expect(awsSpan.meta['peer.service'],
+      'expected the aws span to have the same peer.service tag as the underlying http span'
+    ).to.equal(httpSpan.meta['peer.service'])
+  }
 }

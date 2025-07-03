@@ -77,20 +77,20 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       const store = storage('legacy').getStore()
 
       const peerServerlessStorage = storage('peerServerless')
-      if (this._tracerConfig?._isInServerlessEnvironment()) {
-        // Try to resolve the hostname immediately; if not possible, keep enough
-        // information so the region callback can resolve it later.
-        const hostname = getHostname({ awsParams: request.params, awsService }, awsRegion)
-        const peerServerlessStore = {}
-        peerServerlessStorage.enterWith(peerServerlessStore)
+      if (!this._tracerConfig?._isInServerlessEnvironment()) return
 
-        if (hostname) {
-          span.setTag('peer.service', hostname)
-          peerServerlessStore.peerHostname = hostname
-        } else {
-          store.awsParams = request.params
-          store.awsService = awsService
-        }
+      // Try to resolve the hostname immediately; if not possible, keep enough
+      // information so the region callback can resolve it later.
+      const hostname = getHostname({ awsParams: request.params, awsService }, awsRegion)
+      const peerServerlessStore = {}
+      peerServerlessStorage.enterWith(peerServerlessStore)
+
+      if (hostname) {
+        span.setTag('peer.service', hostname)
+        peerServerlessStore.peerHostname = hostname
+      } else {
+        store.awsParams = request.params
+        store.awsService = awsService
       }
     })
 
@@ -102,15 +102,15 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       span.setTag('aws.region', region)
       span.setTag('region', region)
 
-      if (this._tracerConfig?._isInServerlessEnvironment()) {
-        const hostname = getHostname(store, region)
-        if (!hostname) return
-        span.setTag('peer.service', hostname)
+      if (!this._tracerConfig?._isInServerlessEnvironment()) return
 
-        const peerServerlessStore = storage('peerServerless').getStore()
-        if (peerServerlessStore) {
-          peerServerlessStore.peerHostname = hostname
-        }
+      const hostname = getHostname(store, region)
+      if (!hostname) return
+
+      span.setTag('peer.service', hostname)
+      const peerServerlessStore = storage('peerServerless').getStore()
+      if (peerServerlessStore) {
+        peerServerlessStore.peerHostname = hostname
       }
     })
 
