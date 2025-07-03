@@ -8,7 +8,7 @@ const { join } = require('path')
 const { threadId } = require('worker_threads')
 const { start } = require('../src/heap_snapshots')
 
-const folder = mkdtempSync(join(tmpdir(), 'dd-trace-heap-snapshot-'))
+const destination = mkdtempSync(join(tmpdir(), 'dd-trace-heap-snapshot-'))
 
 describe('Heap Snapshots', () => {
   it('should take heap snapshots over time', async () => {
@@ -17,8 +17,8 @@ describe('Heap Snapshots', () => {
 
     await start({
       heapSnapshot: {
-        count: 2,
-        folder,
+        enabled: true,
+        destination,
         interval: 1
       }
     })
@@ -26,9 +26,9 @@ describe('Heap Snapshots', () => {
     clearInterval(interval)
 
     const pattern = new RegExp(`^Heap-\\d{8}-\\d{6}-${process.pid}-${threadId}\\.heapsnapshot$`)
-    const files = readdirSync(folder)
+    const files = readdirSync(destination)
 
-    expect(files).to.have.length(2)
+    expect(files).to.have.length(3)
     expect(files[0]).to.match(pattern)
     expect(files[1]).to.match(pattern)
   })
