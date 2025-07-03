@@ -112,6 +112,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('db.type', 'mariadb')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('component', 'mariadb')
+              expect(traces[0][0].meta).to.have.property('_dd.integration', 'mariadb')
             })
             .then(done)
             .catch(done)

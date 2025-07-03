@@ -45,6 +45,7 @@ class VulnerabilityFormatter {
 
     if (evidence.value == null) return { valueParts }
 
+    // eslint-disable-next-line eslint-rules/eslint-safe-typeof-object
     if (typeof evidence.value === 'object' && evidence.rangesToApply) {
       const { value, ranges } = stringifyWithRanges(evidence.value, evidence.rangesToApply)
       evidence.value = value

@@ -77,6 +77,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('db.user', 'postgres')
               expect(traces[0][0].meta).to.have.property('db.type', 'postgres')
               expect(traces[0][0].meta).to.have.property('component', 'pg')
+              expect(traces[0][0].meta).to.have.property('_dd.integration', 'pg')
               expect(traces[0][0].metrics).to.have.property('network.destination.port', 5432)
 
               if (implementation !== 'pg.native') {
@@ -551,9 +552,19 @@ describe('Plugin', () => {
         let seenTraceParent
         let seenTraceId
         let seenSpanId
-        let originalWrite
+        const originalWrite = net.Socket.prototype.write
 
         before(() => {
+          net.Socket.prototype.write = function (buffer) {
+            let strBuf = buffer.toString()
+            if (strBuf.includes('traceparent=\'')) {
+              strBuf = strBuf.split('-')
+              seenTraceParent = true
+              seenTraceId = strBuf[2]
+              seenSpanId = strBuf[3]
+            }
+            return originalWrite.apply(this, arguments)
+          }
           return agent.load('pg')
         })
 
@@ -572,20 +583,9 @@ describe('Plugin', () => {
             database: 'postgres'
           })
           client.connect(err => done(err))
-          originalWrite = net.Socket.prototype.write
-          net.Socket.prototype.write = function (buffer) {
-            let strBuf = buffer.toString()
-            if (strBuf.includes('traceparent=\'')) {
-              strBuf = strBuf.split('-')
-              seenTraceParent = true
-              seenTraceId = strBuf[2]
-              seenSpanId = strBuf[3]
-            }
-            return originalWrite.apply(this, arguments)
-          }
         })
 
-        afterEach(() => {
+        after(() => {
           net.Socket.prototype.write = originalWrite
         })
 
@@ -663,14 +663,21 @@ describe('Plugin', () => {
           client.connect(err => done(err))
         })
 
-        it('query config objects should be handled', done => {
-          let queryText = ''
+        afterEach((done) => {
+          client.end(done)
+        })
 
+        it('query config objects should be handled', async () => {
           const query = {
             text: 'SELECT $1::text as message'
           }
 
-          agent.assertSomeTraces(traces => {
+          const queryPromise = client.query(query, ['Hello world!'])
+          const queryText = client.queryQueue[0].text
+
+          await queryPromise
+
+          await agent.assertSomeTraces(traces => {
             const expectedTimePrefix = traces[0][0].meta['_dd.p.tid'].toString(16).padStart(16, '0')
             const traceId = expectedTimePrefix + traces[0][0].trace_id.toString(16).padStart(16, '0')
             const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
@@ -678,16 +685,7 @@ describe('Plugin', () => {
             expect(queryText).to.equal(
               `/*dddb='postgres',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}',` +
               `traceparent='00-${traceId}-${spanId}-00'*/ SELECT $1::text as message`)
-          }).then(done, done)
-
-          client.query(query, ['Hello world!'], (err) => {
-            if (err) return done(err)
-
-            client.end((err) => {
-              if (err) return done(err)
-            })
           })
-          queryText = client.queryQueue[0].text
         })
 
         it('query config object should persist when comment is injected', done => {
@@ -697,70 +695,42 @@ describe('Plugin', () => {
           }
 
           client.query(query, ['Hello world!'], (err) => {
-            if (err) return done(err)
-
-            client.end((err) => {
-              if (err) return done(err)
-            })
+            done(err)
           })
 
-          agent.assertSomeTraces(traces => {
-            expect(query).to.have.property(
-              'name', 'pgSelectQuery')
-          }).then(done, done)
+          expect(query).to.have.property('name', 'pgSelectQuery')
         })
 
         it('falls back to service with prepared statements', done => {
-          let queryText = ''
-
           const query = {
             name: 'pgSelectQuery',
             text: 'SELECT $1::text as message'
           }
 
-          agent.assertSomeTraces(traces => {
-            expect(queryText).to.equal(
-              `/*dddb='postgres',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'` +
-              '*/ SELECT $1::text as message')
-          }).then(done, done)
-
           client.query(query, ['Hello world!'], (err) => {
-            if (err) return done(err)
-
-            client.end((err) => {
-              if (err) return done(err)
-            })
+            done(err)
           })
-          queryText = client.queryQueue[0].text
+          expect(client.queryQueue[0].text).to.equal(
+            `/*dddb='postgres',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'` +
+            '*/ SELECT $1::text as message'
+          )
         })
 
         it('should not fail when using query object with getters', done => {
-          let queryText = ''
-
           const query = {
             name: 'pgSelectQuery',
             get text () { return 'SELECT $1::text as message' }
           }
 
-          agent.assertSomeTraces(traces => {
-            expect(queryText).to.equal(
-              `/*dddb='postgres',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'` +
-              '*/ SELECT $1::text as message')
-          }).then(done, done)
-
-          client.query(query, ['Hello world!'], (err) => {
-            if (err) return done(err)
-
-            client.end((err) => {
-              if (err) return done(err)
-            })
+          client.query(query, ['Hello world!'], async (err) => {
+            done(err)
           })
-          queryText = client.queryQueue[0].text
+          expect(client.queryQueue[0].text).to.equal(
+            `/*dddb='postgres',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'` +
+            '*/ SELECT $1::text as message')
         })
 
         it('should not fail when using query object that is an EventEmitter', done => {
-          let queryText = ''
-
           class Query extends EventEmitter {
             constructor (name, text) {
               super()
@@ -776,20 +746,52 @@ describe('Plugin', () => {
 
           const query = new Query('pgSelectQuery', 'SELECT $1::text as greeting')
 
-          agent.assertSomeTraces(traces => {
-            expect(queryText).to.equal(
-              `/*dddb='postgres',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'` +
-              '*/ SELECT $1::text as greeting')
-          }).then(done, done)
-
           client.query(query, ['Goodbye'], (err) => {
-            if (err) return done(err)
-
-            client.end((err) => {
-              if (err) return done(err)
-            })
+            done(err)
           })
-          queryText = client.queryQueue[0].text
+          expect(client.queryQueue[0].text).to.equal(
+            `/*dddb='postgres',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'` +
+            '*/ SELECT $1::text as greeting')
+        })
+      })
+
+      describe('with DBM propagation enabled with append comment configurations', () => {
+        before(async () => {
+          await agent.load('pg', [{
+            appendComment: true,
+            dbmPropagationMode: 'service',
+            service: () => 'serviced',
+          }])
+          pg = require(`../../../versions/pg@${version}`).get()
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        beforeEach((done) => {
+          client = new pg.Client({
+            host: '127.0.0.1',
+            user: 'postgres',
+            password: 'postgres',
+            database: 'postgres'
+          })
+          client.connect(err => done(err))
+        })
+
+        afterEach((done) => {
+          client.end(done)
+        })
+
+        it('should append comment in query text', async () => {
+          const queryPromise = client.query('SELECT $1::text as message', ['Hello world!'])
+
+          expect(client.queryQueue[0].text).to.equal(
+            'SELECT $1::text as message /*dddb=\'postgres\',dddbs=\'serviced\',dde=\'tester\',' +
+              `ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'*/`
+          )
+
+          await queryPromise
         })
       })
     })
