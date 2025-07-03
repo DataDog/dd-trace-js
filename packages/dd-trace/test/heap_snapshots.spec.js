@@ -17,7 +17,7 @@ describe('Heap Snapshots', () => {
 
     await start({
       heapSnapshot: {
-        enabled: true,
+        count: 3,
         destination,
         interval: 1
       }

@@ -7,10 +7,8 @@ const { writeHeapSnapshot } = require('v8')
 const { threadId } = require('worker_threads')
 const log = require('./log')
 
-const count = 3
-
 async function scheduleSnapshot (config, total) {
-  if (total > count) return
+  if (total > config.heapSnapshot.count) return
 
   await setTimeout(config.heapSnapshot.interval * 1000, null, { ref: false })
   await clearMemory()
@@ -48,8 +46,6 @@ function getName (destination) {
 
 module.exports = {
   async start (config) {
-    if (!config.heapSnapshot.enabled) return
-
     const destination = config.heapSnapshot.destination
 
     try {
