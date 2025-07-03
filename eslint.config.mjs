@@ -49,6 +49,9 @@ export default [
       'integration-tests/debugger/target-app/source-map-support/typescript.js', // Generated
       'integration-tests/esbuild/out.js', // Generated
       'integration-tests/esbuild/aws-sdk-out.js', // Generated
+      'packages/datadog-plugin-graphql/src/tools/index.js', // Inlined from apollo-graphql
+      'packages/datadog-plugin-graphql/src/tools/signature.js', // Inlined from apollo-graphql
+      'packages/datadog-plugin-graphql/src/tools/transforms.js', // Inlined from apollo-graphql
       'packages/dd-trace/src/guardrails/**/*' // Guardrails contain very old JS
     ]
   },
