@@ -1,8 +1,10 @@
 'use strict'
 
 const BaseLLMObsPlugin = require('./base')
+const { parseModelId } = require('../../../../datadog-plugin-aws-sdk/src/services/bedrockruntime/utils')
 
 const { channel } = require('dc-polyfill')
+const util = require('util')
 
 const toolCreationCh = channel('dd-trace:vercel-ai:tool')
 const setAttributesCh = channel('dd-trace:vercel-ai:span:setAttributes')
@@ -25,12 +27,6 @@ const SPAN_NAME_TO_KIND_MAPPING = {
   doStream: 'llm',
   // tools
   toolCall: 'tool'
-}
-
-const MODEL_PROVIDER_MAPPING = {
-  'amazon-bedrock': 'bedrock',
-  vertex: 'vertexai',
-  'generative-ai': 'genai' // TODO(sabrenner): double check this
 }
 
 const MODEL_METADATA_KEYS = new Set([
@@ -101,13 +97,13 @@ function getModelProvider (tags) {
   const providerParts = modelProviderTag?.split('.')
   const provider = providerParts?.[0]
 
-  // TODO(sabrenner): explain or simplify this logic
-  switch (provider) {
-    case 'google':
-      return MODEL_PROVIDER_MAPPING[providerParts?.[1]] ?? provider
-    default:
-      return MODEL_PROVIDER_MAPPING[provider] ?? provider
+  if (provider === 'amazon-bedrock') {
+    const modelId = tags['ai.model.id']
+    const model = modelId && parseModelId(modelId)
+    return model?.modelProvider ?? provider
   }
+
+  return provider
 }
 
 /**
@@ -340,12 +336,17 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
 
   setLLMOperationTags (span, tags) {
     const toolsForModel = tags['ai.prompt.tools']?.map(getJsonStringValue)
-    const inputMessages = getJsonStringValue(tags['ai.prompt.messages'], [])?.map(
-      message => this.formatMessage(message, toolsForModel)
-    )
+
+    const inputMessages = getJsonStringValue(tags['ai.prompt.messages'], [])
+    const parsedInputMessages = []
+    for (const message of inputMessages) {
+      const formattedMessages = this.formatMessage(message, toolsForModel)
+      parsedInputMessages.push(...formattedMessages)
+    }
+
     const outputMessage = this.formatOutputMessage(tags, toolsForModel)
 
-    this._tagger.tagLLMIO(span, inputMessages, outputMessage)
+    this._tagger.tagLLMIO(span, parsedInputMessages, outputMessage)
 
     const metadata = getModelMetadata(tags)
     this._tagger.tagMetadata(span, metadata)
@@ -393,27 +394,27 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
 
   formatMessage (message, toolsForModel) {
     const { role, content } = message
-    const toolCalls = []
-
-    const finalMessage = {
-      role,
-      content: ''
-    }
 
     if (role === 'system') {
-      finalMessage.content = content
+      return [{ role, content }]
     } else if (role === 'user') {
+      let finalContent = ''
       for (const part of content) {
         const { type } = part
         if (type === 'text') {
-          finalMessage.content += part.text
+          finalContent += part.text
         }
       }
+
+      return [{ role, content: finalContent }]
     } else if (role === 'assistant') {
+      const toolCalls = []
+      let finalContent = ''
+
       for (const part of content) {
         const { type } = part
         if (['text', 'reasoning', 'redacted-reasoning'].includes(type)) {
-          finalMessage.content += part.text ?? part.data
+          finalContent += part.text ?? part.data
         } else if (type === 'tool-call') {
           const toolDescription = toolsForModel?.find(tool => part.toolName === tool.name)?.description
           const name = this.findToolName(toolDescription)
@@ -427,15 +428,37 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
         }
       }
 
-      if (toolCalls.length) {
-        finalMessage.toolCalls = toolCalls
+      const finalMessage = {
+        role,
+        content: finalContent
       }
-    } else if (role === 'tool') {
-      // TODO(sabrenner): add support for tool messages in a follow-up once BE supports it
-      return
-    }
 
-    return finalMessage
+      if (toolCalls.length) {
+        finalMessage.toolCalls = toolCalls.length ? toolCalls : undefined
+      }
+
+      return [finalMessage]
+    } else if (role === 'tool') {
+      const finalMessages = []
+      for (const part of content) {
+        if (part.type === 'tool-result') {
+          let safeResult
+          try {
+            safeResult = JSON.stringify(part.result)
+          } catch {
+            safeResult = '[Unparsable Tool Result]'
+          }
+
+          finalMessages.push({
+            role,
+            content: safeResult,
+            toolId: part.toolCallId
+          })
+        }
+      }
+
+      return finalMessages
+    }
   }
 }
 
