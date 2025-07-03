@@ -5,7 +5,7 @@ const {
   PAYLOAD_TAG_RESPONSE_PREFIX
 } = require('../constants')
 
-const jsonpath = require('./jsonpath-plus.js').JSONPath
+const jsonpath = require('jsonpath-plus').JSONPath
 
 const { tagsFromObject } = require('./tagging')
 
