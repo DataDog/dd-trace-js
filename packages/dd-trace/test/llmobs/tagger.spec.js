@@ -391,6 +391,44 @@ describe('tagger', () => {
           expect(() => tagger.tagLLMIO(span, messages, undefined)).to.throw()
         })
       })
+
+      describe('tool message tagging', () => {
+        it('tags a span with a tool message', () => {
+          const messages = [
+            { role: 'tool', content: 'The weather in San Francisco is sunny', toolId: '123' }
+          ]
+
+          tagger._register(span)
+          tagger.tagLLMIO(span, messages, undefined)
+          expect(Tagger.tagMap.get(span)).to.deep.equal({
+            '_ml_obs.meta.input.messages': [
+              { role: 'tool', content: 'The weather in San Francisco is sunny', tool_id: '123' }
+            ]
+          })
+        })
+
+        it('throws if the tool id is not a string', () => {
+          const messages = [
+            { role: 'tool', content: 'The weather in San Francisco is sunny', toolId: 123 }
+          ]
+
+          expect(() => tagger.tagLLMIO(span, messages, undefined)).to.throw()
+        })
+
+        it('logs a warning if the tool id is not associated with a tool role', () => {
+          const messages = [
+            { role: 'user', content: 'The weather in San Francisco is sunny', toolId: '123' }
+          ]
+
+          tagger._register(span)
+          tagger.tagLLMIO(span, messages, undefined)
+
+          const messageTags = Tagger.tagMap.get(span)['_ml_obs.meta.input.messages']
+          expect(messageTags[0]).to.not.have.property('tool_id')
+
+          expect(logger.warn).to.have.been.calledOnce
+        })
+      })
     })
 
     describe('tagEmbeddingIO', () => {
@@ -639,6 +677,20 @@ describe('tagger', () => {
           tagger.tagLLMIO(span, messages, undefined)
           expect(logger.warn.callCount).to.equal(5) // 4 for tool call + 1 for role
         })
+      })
+
+      it('logs a warning when a tool message is not associated with a tool role', () => {
+        const messages = [
+          { role: 'user', content: 'The weather in San Francisco is sunny', toolId: '123' }
+        ]
+
+        tagger._register(span)
+        tagger.tagLLMIO(span, messages, undefined)
+
+        const messageTags = Tagger.tagMap.get(span)['_ml_obs.meta.input.messages']
+        expect(messageTags[0]).to.not.have.property('tool_id')
+
+        expect(logger.warn).to.have.been.calledOnce
       })
     })
   })
