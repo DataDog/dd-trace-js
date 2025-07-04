@@ -29,13 +29,12 @@ describe('package guardrails', () => {
       useEnv({ DD_INJECTION_ENABLED })
       it('should not instrument the package, and send telemetry', () =>
         runTest('false\n',
-          ['complete', 'injection_forced:false',
-            'abort.integration', 'integration:bluebird,integration_version:1.0.0'
-          ]
+          'complete', 'injection_forced:false',
+          'abort.integration', 'integration:bluebird,integration_version:1.0.0'
         ))
     })
     context('with logging disabled', () => {
-      it('should not instrument the package', () => runTest('false\n', []))
+      it('should not instrument the package', () => runTest('false\n'))
     })
     context('with logging enabled', () => {
       useEnv({ DD_TRACE_DEBUG })
@@ -43,31 +42,31 @@ describe('package guardrails', () => {
         runTest(`Application instrumentation bootstrapping complete
 Found incompatible integration version: bluebird@1.0.0
 false
-`, []))
+`))
     })
   })
 
   context('when package is in range', () => {
     context('when bluebird is 2.9.0', () => {
       useSandbox(['bluebird@2.9.0'])
-      it('should instrument the package', () => runTest('true\n', [], 'ssi'))
+      it('should instrument the package', () => runTest('true\n'))
     })
     context('when bluebird is 3.7.2', () => {
       useSandbox(['bluebird@3.7.2'])
-      it('should instrument the package', () => runTest('true\n', [], 'ssi'))
+      it('should instrument the package', () => runTest('true\n'))
     })
   })
 
   context('when package is in range (fastify)', () => {
     context('when fastify is latest', () => {
       useSandbox(['fastify'])
-      it('should instrument the package', () => runTest('true\n', [], 'ssi'))
+      it('should instrument the package', () => runTest('true\n'))
     })
     context('when fastify is latest and logging enabled', () => {
       useSandbox(['fastify'])
       useEnv({ DD_TRACE_DEBUG })
       it('should instrument the package', () =>
-        runTest('Application instrumentation bootstrapping complete\ntrue\n', [], 'ssi'))
+        runTest('Application instrumentation bootstrapping complete\ntrue\n'))
     })
   })
 
@@ -89,13 +88,13 @@ addHook({ name: 'bluebird', versions: ['*'] }, Promise => {
       useEnv({ DD_INJECTION_ENABLED })
       it('should not instrument the package, and send telemetry', () =>
         runTest('false\n',
-          ['complete', 'injection_forced:false',
-            'error', 'error_type:ReferenceError,integration:bluebird,integration_version:3.7.2']
+          'complete', 'injection_forced:false',
+          'error', 'error_type:ReferenceError,integration:bluebird,integration_version:3.7.2'
         ))
     })
 
     context('with logging disabled', () => {
-      it('should not instrument the package', () => runTest('false\n', []))
+      it('should not instrument the package', () => runTest('false\n'))
     })
 
     context('with logging enabled', () => {
@@ -108,7 +107,7 @@ Error during ddtrace instrumentation of application, aborting.
 ReferenceError: this is a test error
     at `))
             assert.ok(log.includes('\nfalse\n'))
-          }, []))
+          }))
     })
   })
 })

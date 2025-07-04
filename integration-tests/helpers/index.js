@@ -18,7 +18,7 @@ const hookFile = 'dd-trace/loader-hook.mjs'
 // This is set by the setShouldKill function
 let shouldKill
 
-async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
+async function runAndCheckOutput (filename, cwd, expectedOut) {
   const proc = spawn(process.execPath, [filename], { cwd, stdio: 'pipe' })
   const pid = proc.pid
   let out = await new Promise((resolve, reject) => {
@@ -42,12 +42,7 @@ async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
       // Debug adds this, which we don't care about in these tests
       out = out.replace('Flushing 0 metrics via HTTP\n', '')
     }
-    assert.match(out, new RegExp(expectedOut), `output "${out} does not contain expected output "${expectedOut}"`)
-  }
-
-  if (expectedSource) {
-    assert.match(out, new RegExp(`instrumentation source: ${expectedSource}`),
-    `Expected the process to output "${expectedSource}", but logs only contain: "${out}"`)
+    assert.strictEqual(out, expectedOut)
   }
   return pid
 }
@@ -56,10 +51,10 @@ async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
 let sandbox
 
 // This _must_ be used with the useSandbox function
-async function runAndCheckWithTelemetry (filename, expectedOut, expectedTelemetryPoints, expectedSource) {
+async function runAndCheckWithTelemetry (filename, expectedOut, ...expectedTelemetryPoints) {
   const cwd = sandbox.folder
   const cleanup = telemetryForwarder(expectedTelemetryPoints)
-  const pid = await runAndCheckOutput(filename, cwd, expectedOut, expectedSource)
+  const pid = await runAndCheckOutput(filename, cwd, expectedOut)
   const msgs = await cleanup()
   if (expectedTelemetryPoints.length === 0) {
     // assert no telemetry sent
@@ -185,8 +180,7 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   const allDependencies = [`file:${out}`].concat(dependencies)
 
   fs.mkdirSync(folder)
-  const preferOfflineFlag = process.env.OFFLINE === '1' || process.env.OFFLINE === 'true' ? ' --prefer-offline' : ''
-  const addCommand = `yarn add ${allDependencies.join(' ')} --ignore-engines${preferOfflineFlag}`
+  const addCommand = `yarn add ${allDependencies.join(' ')} --ignore-engines`
   const addOptions = { cwd: folder, env: restOfEnv }
   await exec(`yarn pack --filename ${out}`, { env: restOfEnv }) // TODO: cache this
 
@@ -391,31 +385,6 @@ function setShouldKill (value) {
 }
 
 const assertObjectContains = assert.partialDeepStrictEqual || function assertObjectContains (actual, expected) {
-  if (Array.isArray(expected)) {
-    assert.ok(Array.isArray(actual), `Expected array but got ${typeof actual}`)
-    let startIndex = 0
-    for (const expectedItem of expected) {
-      let found = false
-      for (let i = startIndex; i < actual.length; i++) {
-        const actualItem = actual[i]
-        try {
-          if (expectedItem !== null && typeof expectedItem === 'object') {
-            assertObjectContains(actualItem, expectedItem)
-          } else {
-            assert.strictEqual(actualItem, expectedItem)
-          }
-          startIndex = i + 1
-          found = true
-          break
-        } catch {
-          continue
-        }
-      }
-      assert.ok(found, `Expected array to contain ${JSON.stringify(expectedItem)}`)
-    }
-    return
-  }
-
   for (const [key, val] of Object.entries(expected)) {
     if (val !== null && typeof val === 'object') {
       assert.ok(Object.hasOwn(actual, key))
