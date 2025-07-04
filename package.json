@@ -105,7 +105,7 @@
     "koalas": "^1.0.2",
     "limiter": "^1.1.5",
     "lodash.sortby": "^4.7.0",
-    "lru-cache": "^7.18.3",
+    "lru-cache": "^11.1.0",
     "module-details-from-path": "^1.0.4",
     "mutexify": "^1.4.0",
     "opentracing": ">=0.12.1",
