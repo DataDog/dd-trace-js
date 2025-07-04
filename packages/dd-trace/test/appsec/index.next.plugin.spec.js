@@ -1,5 +1,4 @@
 'use strict'
-/* eslint n/no-unsupported-features/node-builtins: ['error', { ignores: ['fs.cpSync'] }] */
 
 const { spawn, execSync } = require('child_process')
 const { cpSync, mkdirSync, rmdirSync, unlinkSync } = require('fs')

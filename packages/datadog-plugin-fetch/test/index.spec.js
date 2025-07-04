@@ -1,5 +1,4 @@
 'use strict'
-/* eslint n/no-unsupported-features/node-builtins: ['error', { ignores: ['fetch', 'Request'] }] */
 
 const { withNamingSchema } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')

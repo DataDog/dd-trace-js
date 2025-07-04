@@ -1,5 +1,4 @@
 'use strict'
-/* eslint n/no-unsupported-features/node-builtins: ['error', { ignores: ['fs.cp'] }] */
 
 const os = require('os')
 const path = require('path')
