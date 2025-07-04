@@ -109,7 +109,7 @@
     "module-details-from-path": "^1.0.4",
     "mutexify": "^1.4.0",
     "opentracing": ">=0.12.1",
-    "path-to-regexp": "^0.1.12",
+    "path-to-regexp": "^8.2.0",
     "pprof-format": "^2.1.0",
     "protobufjs": "^7.5.3",
     "retry": "^0.13.1",
