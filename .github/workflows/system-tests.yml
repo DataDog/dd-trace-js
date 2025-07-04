@@ -2,6 +2,21 @@ name: System Tests
 
 on:
   pull_request:
+    paths:
+      # Paths for whole project (should be same in all workflows)
+      - '**'
+      - '!.github/workflows/**'
+      - '!.gitlab/**'
+      - '!.vscode/**'
+      - '!devdocs/**'
+      - '!examples/**'
+      - '!*.md'
+      - '!.gitlab-ci.yml'
+      - '!LICENSE*'
+      - 'LICENSE-3rdparty.csv'
+      - '!NOTICE'
+      # Paths for this workflow only
+      - '.github/workflows/system-tests.yml'
   push:
     branches: [master]
   workflow_dispatch:

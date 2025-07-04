@@ -172,7 +172,6 @@ const IGNORED_WORKFLOWS = {
     'retry.yml'
   ],
   trigger_pull_request: [
-    'audit.yml',
     'eslint-rules.yml',
     'stale.yml'
   ],
@@ -199,9 +198,10 @@ for (const workflow of workflows) {
   const yamlPath = path.join(__dirname, '..', '.github', 'workflows', workflow)
   const yamlContent = yaml.parse(fs.readFileSync(yamlPath, 'utf8'))
   const triggers = yamlContent.on
-  if (!IGNORED_WORKFLOWS.trigger_pull_request.includes(workflow) &&
-      triggers?.pull_request !== null) {
-    triggersError(workflow, 'The `pull_request` trigger should be blank')
+  if (!IGNORED_WORKFLOWS.trigger_pull_request.includes(workflow)) {
+    if (triggers?.pull_request !== null && Object.keys(triggers.pull_request).toString() !== 'paths') {
+      triggersError(workflow, 'The `pull_request` trigger should be blank or only include paths')
+    }
   }
   if (!IGNORED_WORKFLOWS.trigger_push.includes(workflow) &&
       triggers?.push?.branches?.[0] !== 'master') {
