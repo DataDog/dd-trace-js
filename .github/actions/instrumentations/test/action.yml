@@ -10,4 +10,4 @@ runs:
     - uses: ./.github/actions/node/active-lts
     - run: yarn test:instrumentations:ci
       shell: bash
-    - uses: codecov/codecov-action@0565863a31f2c772f9f0395002a31e3f06189574 # v5.4.0
+    - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
