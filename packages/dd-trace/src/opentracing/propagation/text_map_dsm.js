@@ -1,3 +1,5 @@
+'use strict'
+
 const pick = require('../../../../datadog-core/src/utils/src/pick')
 const log = require('../../log')
 

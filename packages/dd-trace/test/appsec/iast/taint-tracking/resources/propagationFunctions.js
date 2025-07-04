@@ -1,3 +1,5 @@
+'use strict'
+
 function concatSuffix (str) {
   return str + '_suffix'
 }

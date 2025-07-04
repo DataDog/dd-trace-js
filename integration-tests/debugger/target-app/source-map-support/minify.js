@@ -1,3 +1,5 @@
+'use strict'
+
 require('dd-trace/init')
 
 const { createServer } = require('node:http')

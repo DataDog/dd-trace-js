@@ -1,3 +1,5 @@
+'use strict'
+
 // Playwright config file for integration tests
 const { devices } = require('@playwright/test')
 

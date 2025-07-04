@@ -356,7 +356,8 @@ export default [
       'no-console': 'error',
       'no-prototype-builtins': 'off', // Override (turned on by @eslint/js/recommended)
       'no-var': 'error',
-      'require-await': 'error'
+      'require-await': 'error',
+      strict: 'error'
     }
   },
   {

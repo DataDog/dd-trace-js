@@ -1,3 +1,5 @@
+'use strict'
+
 const Plugin = require('../../dd-trace/src/plugins/plugin')
 
 // Cypress plugin does not patch any library. This is just a placeholder to

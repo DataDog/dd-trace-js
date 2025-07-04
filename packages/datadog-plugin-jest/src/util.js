@@ -1,3 +1,5 @@
+'use strict'
+
 const { readFileSync } = require('fs')
 const { parse, extract } = require('jest-docblock')
 

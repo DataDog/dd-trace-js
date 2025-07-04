@@ -1,3 +1,5 @@
+'use strict'
+
 const net = require('net')
 
 async function streamToString (stream) {

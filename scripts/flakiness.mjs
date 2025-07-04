@@ -1,5 +1,3 @@
-'use strict'
-
 /* eslint-disable no-console */
 
 import { Octokit } from 'octokit'

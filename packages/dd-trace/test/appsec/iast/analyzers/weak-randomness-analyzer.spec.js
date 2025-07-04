@@ -94,7 +94,7 @@ describe('weak-randomness-analyzer', () => {
           occurrences: 1,
           location: {
             path: randomFunctionsPath,
-            line: 2
+            line: 4
           }
         })
       })

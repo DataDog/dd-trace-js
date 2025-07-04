@@ -1,3 +1,5 @@
+'use strict'
+
 let isEarlyFlakeDetectionEnabled = false
 let isKnownTestsEnabled = false
 let knownTestsForSuite = []
