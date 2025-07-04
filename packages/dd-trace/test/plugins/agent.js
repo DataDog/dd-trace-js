@@ -321,8 +321,8 @@ module.exports = {
    * Load the plugin on the tracer with an optional config and start a mock agent.
    *
    * @param {String|Array<String>} pluginName - Name or list of names of plugins to load
-   * @param {Record<string, unknown>} config
-   * @param {Record<string, unknown>} tracerConfig
+   * @param {Record<string, unknown>} [config]
+   * @param {Record<string, unknown>} [tracerConfig={}]
    * @returns Promise<void>
    */
   async load (pluginName, config, tracerConfig = {}) {
@@ -521,18 +521,17 @@ module.exports = {
 
   /**
    * Stop the mock agent, reset all expectations and wipe the require cache.
-   * @param {Object} opts
-   * @param {boolean} opts.ritmReset - Resets the Require In The Middle cache. You probably don't need this.
-   * @param {boolean} opts.wipe - Wipes tracer and non-native modules from require cache. You probably don't need this.
+   * @param {Object} [options]
+   * @param {boolean} [options.ritmReset=true] - Resets the Require In The Middle cache. You probably don't need this.
+   * @param {boolean} [options.wipe=false] - Wipes tracer and non-native modules from require cache. You probably don't
+   *     need this.
    * @returns
    */
-  close (opts = {}) {
+  close ({ ritmReset = true, wipe = false } = {}) {
     // Allow close to be called idempotent
     if (listener === null) {
       return Promise.resolve()
     }
-
-    const { ritmReset, wipe } = opts
 
     listener.close()
     listener = null
