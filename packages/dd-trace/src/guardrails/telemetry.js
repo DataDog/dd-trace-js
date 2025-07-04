@@ -28,28 +28,21 @@ var metadata = {
   pid: process.pid
 }
 
-function Seen () {
-  this._values = []
-}
-
-Seen.prototype.check = function (value) {
-  var has = this._values.includes(value)
-  if (has === false) {
-    this._values.push(value)
-  }
-  return has
-}
-
-var seen = new Seen()
+var seen = {}
 function shouldSend (point) {
   if (point.name === 'abort') {
     // This one can only be sent once, regardless of tags
-    return !seen.check('abort')
-  }
-  if (point.name === 'abort.integration') {
+    if (seen.abort) {
+      return false
+    }
+    seen.abort = true
+  } else if (point.name === 'abort.integration') {
     // For now, this is the only other one we want to dedupe
     var compiledPoint = point.name + point.tags.join('')
-    return !seen.check(compiledPoint)
+    if (seen[compiledPoint]) {
+      return false
+    }
+    seen[compiledPoint] = true
   }
   return true
 }
