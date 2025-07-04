@@ -1,6 +1,5 @@
 'use strict'
 
-/* eslint-disable no-var */
 /* eslint-disable no-console */
 
 var isTrue = require('./util').isTrue
@@ -23,7 +22,8 @@ var logLevel = isTrue(DD_TRACE_DEBUG)
   : logLevels.off
 
 var log = {
-  debug: logLevel <= 20 ? console.debug.bind(console) : function () {},
+  /* eslint n/no-unsupported-features/node-builtins: ['error', { ignores: ['console.debug'] }] */
+  debug: logLevel <= 20 ? (console.debug || console.log).bind(console) : function () {},
   info: logLevel <= 30 ? console.info.bind(console) : function () {},
   warn: logLevel <= 40 ? console.warn.bind(console) : function () {},
   error: logLevel <= 50 ? console.error.bind(console) : function () {}
