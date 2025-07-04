@@ -13,7 +13,3 @@ try {
   // eslint-disable-next-line no-console
   console.log(fastify.toString().startsWith('function fastifyWithTrace'))
 }
-if (global._ddtrace) {
-  // eslint-disable-next-line no-console
-  console.log('instrumentation source:', global._ddtrace._tracer._config.instrumentationSource)
-}

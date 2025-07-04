@@ -16,7 +16,7 @@ const { updateConfig } = require('./telemetry')
 const telemetryMetrics = require('./telemetry/metrics')
 const { isInServerlessEnvironment, getIsGCPFunction, getIsAzureFunction } = require('./serverless')
 const {
-  ORIGIN_KEY, GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES, INSTRUMENTED_BY_SSI
+  ORIGIN_KEY, GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES,
 } = require('./constants')
 const { appendRules } = require('./payload-tagging/config')
 const { getEnvironmentVariable, getEnvironmentVariables } = require('./config-helper')
@@ -1004,6 +1004,9 @@ class Config {
     // 0: disabled, 1: logging, 2: garbage collection + logging
     env.spanLeakDebug = maybeInt(DD_TRACE_SPAN_LEAK_DEBUG)
     this._setBoolean(env, 'spanRemoveIntegrationFromService', DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED)
+    if (getEnvironmentVariable('DD_INSTRUMENTATION_INSTALL_TYPE')?.endsWith('single_step')) {
+      this._setString(env, 'instrumentationSource', 'ssi')
+    }
     this._setBoolean(env, 'startupLogs', DD_TRACE_STARTUP_LOGS)
     this._setTags(env, 'tags', tags)
     env.tagsHeaderMaxLength = DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH
@@ -1150,9 +1153,6 @@ class Config {
     opts['iast.securityControlsConfiguration'] = options.iast?.securityControlsConfiguration
     this._setBoolean(opts, 'iast.stackTrace.enabled', options.iast?.stackTrace?.enabled)
     this._setString(opts, 'iast.telemetryVerbosity', options.iast && options.iast.telemetryVerbosity)
-    if (options[INSTRUMENTED_BY_SSI]) {
-      this._setString(opts, 'instrumentationSource', options[INSTRUMENTED_BY_SSI])
-    }
     this._setBoolean(opts, 'isCiVisibility', options.isCiVisibility)
     this._setBoolean(opts, 'legacyBaggageEnabled', options.legacyBaggageEnabled)
     this._setBoolean(opts, 'llmobs.agentlessEnabled', options.llmobs?.agentlessEnabled)
