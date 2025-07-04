@@ -54,7 +54,9 @@ function cleanIastContext (store, context, iastContext) {
     context[IAST_CONTEXT_KEY] = null
   }
   if (iastContext) {
-    Object.keys(iastContext).forEach(key => delete iastContext[key])
+    if (typeof iastContext === 'object') { // eslint-disable-line eslint-rules/eslint-safe-typeof-object
+      Object.keys(iastContext).forEach(key => delete iastContext[key])
+    }
     return true
   }
   return false

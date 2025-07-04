@@ -1,8 +1,7 @@
-'use strict'
-
 /**
  * @datadog {"unskippable": true}
  */
+'use strict'
 
 const { expect } = require('chai')
 

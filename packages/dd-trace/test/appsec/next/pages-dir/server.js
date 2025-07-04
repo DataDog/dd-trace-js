@@ -1,6 +1,3 @@
-// eslint-disable-next-line strict
-'use strict'
-
 const { PORT, HOSTNAME } = process.env
 
 const { createServer } = require('http')

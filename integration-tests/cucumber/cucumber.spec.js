@@ -1743,7 +1743,7 @@ versions.forEach(version => {
                     retriedTest.meta[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_FILE_SUFFIX}`]
                       .endsWith('ci-visibility/features-di/support/sum.js')
                   )
-                  assert.equal(retriedTest.metrics[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_LINE_SUFFIX}`], 4)
+                  assert.equal(retriedTest.metrics[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_LINE_SUFFIX}`], 6)
 
                   const snapshotIdKey = `${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`
                   assert.exists(retriedTest.meta[snapshotIdKey])
@@ -1761,7 +1761,7 @@ versions.forEach(version => {
                     level: 'error'
                   })
                   assert.equal(diLog.debugger.snapshot.language, 'javascript')
-                  assert.deepInclude(diLog.debugger.snapshot.captures.lines['4'].locals, {
+                  assert.deepInclude(diLog.debugger.snapshot.captures.lines['6'].locals, {
                     a: {
                       type: 'number',
                       value: '11'
