@@ -13,6 +13,7 @@ const fsync = require('fs')
 const net = require('net')
 const zlib = require('zlib')
 const { Profile } = require('pprof-format')
+const satisfies = require('semifies')
 
 const DEFAULT_PROFILE_TYPES = ['wall', 'space']
 if (process.platform !== 'win32') {
@@ -332,15 +333,24 @@ describe('profiler', () => {
       // with recomputed busyCycleTimeNs, but let's give ourselves more leeway.
       this.retries(9)
       const procStart = BigInt(Date.now() * 1000000)
-      const proc = fork(path.join(cwd, 'profiler/codehotspots.js'), {
-        cwd,
-        env: {
-          DD_PROFILING_EXPORTERS: 'file',
-          DD_PROFILING_ENABLED: 1,
-          BUSY_CYCLE_TIME: (busyCycleTimeNs | 0).toString(),
-          DD_TRACE_AGENT_PORT: agent.port
+      const env = {
+        DD_PROFILING_EXPORTERS: 'file',
+        DD_PROFILING_ENABLED: 1,
+        BUSY_CYCLE_TIME: (busyCycleTimeNs | 0).toString(),
+        DD_TRACE_AGENT_PORT: agent.port
+      }
+      // With Node 23 or later, test the profiler with async context frame use.
+      const execArgv = []
+      if (satisfies(process.versions.node, '>=23.0.0')) {
+        env.DD_PROFILING_USE_ASYNC_CONTEXT_FRAME = 1
+        if (!satisfies(process.versions.node, '>=24.0.0')) {
+          // For Node 23, use the experimental command line flag for Node to enable
+          // async context frame. Node 24 has it enabled by default.
+          execArgv.push('--experimental-async-context-frame')
         }
-      })
+      }
+      console.log({path: path.join(cwd, 'profiler/codehotspots.js'), env, execArgv })
+      const proc = fork(path.join(cwd, 'profiler/codehotspots.js'), { cwd, env, execArgv })
 
       await processExitPromise(proc, timeout)
       const procEnd = BigInt(Date.now() * 1000000)
@@ -641,7 +651,7 @@ describe('profiler', () => {
     })
   })
 
-  context('Profiler API telemetry', () => {
+  context('Profiler telemetry', () => {
     beforeEach(async () => {
       agent = await new FakeAgent().start()
     })
@@ -669,21 +679,20 @@ describe('profiler', () => {
         const pp = payload.payload
         assert.equal(pp.namespace, 'profilers')
         const series = pp.series
-        assert.lengthOf(series, 2)
-        assert.equal(series[0].metric, 'profile_api.requests')
-        assert.equal(series[0].type, 'count')
+        const requests = series.find(s => s.metric === 'profile_api.requests')
+        assert.equal(requests.type, 'count')
         // There's a race between metrics and on-shutdown profile, so metric
         // value will be between 1 and 3
-        requestCount = series[0].points[0][1]
+        requestCount = requests.points[0][1]
         assert.isAtLeast(requestCount, 1)
         assert.isAtMost(requestCount, 3)
 
-        assert.equal(series[1].metric, 'profile_api.responses')
-        assert.equal(series[1].type, 'count')
-        assert.include(series[1].tags, 'status_code:200')
+        const responses = series.find(s => s.metric === 'profile_api.responses')
+        assert.equal(responses.type, 'count')
+        assert.include(responses.tags, 'status_code:200')
 
         // Same number of requests and responses
-        assert.equal(series[1].points[0][1], requestCount)
+        assert.equal(responses.points[0][1], requestCount)
       }, 'generate-metrics', timeout)
 
       const checkDistributions = agent.assertTelemetryReceived(({ _, payload }) => {
@@ -703,6 +712,34 @@ describe('profiler', () => {
 
       // Same number of requests and points
       assert.equal(requestCount, pointsCount)
+    })
+
+    it('sends wall profiler sample context telemetry', async function () {
+      if (satisfies(process.versions.node, '<24.0.0')) {
+        this.skip() // Wall profiler context count telemetry is not supported in Node < 24
+      }
+      proc = fork(profilerTestFile, {
+        cwd,
+        env: {
+          DD_TRACE_AGENT_PORT: agent.port,
+          DD_PROFILING_ENABLED: 1,
+          DD_PROFILING_UPLOAD_PERIOD: 1,
+          DD_PROFILING_USE_ASYNC_CONTEXT_FRAME: 1,
+          DD_TELEMETRY_HEARTBEAT_INTERVAL: 1, // every second
+          TEST_DURATION_MS: 1500
+        }
+      })
+
+      const checkMetrics = agent.assertTelemetryReceived(({ _, payload }) => {
+        const pp = payload.payload
+        assert.equal(pp.namespace, 'profilers')
+        const sampleContexts = pp.series.find(s => s.metric === 'wall.sample_contexts')
+        assert.isDefined(sampleContexts)
+        assert.equal(sampleContexts.type, 'gauge')
+        assert.isAtLeast(sampleContexts.points[0][1], 1)
+      }, 'generate-metrics', timeout)
+
+      await Promise.all([checkProfiles(agent, proc, timeout), checkMetrics])
     })
   })
 
