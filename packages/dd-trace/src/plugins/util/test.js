@@ -128,6 +128,7 @@ const DD_CAPABILITIES_IMPACTED_TESTS = '_dd.library_capabilities.impacted_tests'
 const DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE = '_dd.library_capabilities.test_management.quarantine'
 const DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE = '_dd.library_capabilities.test_management.disable'
 const DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX = '_dd.library_capabilities.test_management.attempt_to_fix'
+const DD_CAPABILITIES_FAILED_TEST_REPLAY = '_dd.library_capabilities.failed_test_replay'
 const UNSUPPORTED_TIA_FRAMEWORKS = new Set(['playwright', 'vitest'])
 const UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE = new Set(['cucumber', 'mocha'])
 const MINIMUM_FRAMEWORK_VERSION_FOR_EFD = {
@@ -143,6 +144,9 @@ const MINIMUM_FRAMEWORK_VERSION_FOR_DISABLE = {
   playwright: '>=1.38.0'
 }
 const MINIMUM_FRAMEWORK_VERSION_FOR_ATTEMPT_TO_FIX = {
+  playwright: '>=1.38.0'
+}
+const MINIMUM_FRAMEWORK_VERSION_FOR_FAILED_TEST_REPLAY = {
   playwright: '>=1.38.0'
 }
 
@@ -274,6 +278,7 @@ module.exports = {
   DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
   DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
   DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
+  DD_CAPABILITIES_FAILED_TEST_REPLAY,
   TEST_LEVEL_EVENT_TYPES,
   TEST_RETRY_REASON_TYPES,
   getNumFromKnownTests,
@@ -426,7 +431,7 @@ function checkShaDiscrepancies (ciMetadata, userProvidedGitMetadata) {
 
   incrementCountMetric(
     TELEMETRY_GIT_SHA_MATCH,
-    { match: gitCommitShaMatch }
+    { matched: gitCommitShaMatch }
   )
 }
 
@@ -944,6 +949,12 @@ function isAttemptToFixSupported (testFramework, isParallel, frameworkVersion) {
   return !(isParallel && UNSUPPORTED_ATTEMPT_TO_FIX_FRAMEWORKS_PARALLEL_MODE.has(testFramework))
 }
 
+function isFailedTestReplaySupported (testFramework, frameworkVersion) {
+  return testFramework === 'playwright'
+    ? satisfies(frameworkVersion, MINIMUM_FRAMEWORK_VERSION_FOR_FAILED_TEST_REPLAY[testFramework])
+    : true
+}
+
 function getLibraryCapabilitiesTags (testFramework, isParallel, frameworkVersion) {
   return {
     [DD_CAPABILITIES_TEST_IMPACT_ANALYSIS]: isTiaSupported(testFramework, isParallel)
@@ -965,7 +976,10 @@ function getLibraryCapabilitiesTags (testFramework, isParallel, frameworkVersion
     [DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX]:
       isAttemptToFixSupported(testFramework, isParallel, frameworkVersion)
         ? '4'
-        : undefined
+        : undefined,
+    [DD_CAPABILITIES_FAILED_TEST_REPLAY]: isFailedTestReplaySupported(testFramework, frameworkVersion)
+      ? '1'
+      : undefined
   }
 }
 

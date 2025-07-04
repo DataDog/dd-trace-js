@@ -151,6 +151,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.not.have.property('graphql.source')
               expect(traces[0][0].meta).to.have.property('graphql.operation.type', 'query')
               expect(traces[0][0].meta).to.have.property('component', 'apollo.gateway')
+              expect(traces[0][0].meta).to.have.property('_dd.integration', 'apollo.gateway')
 
               expect(traces[0][1]).to.have.property('name', 'apollo.gateway.validate')
               expect(traces[0][1]).to.have.property('service', expectedSchema.server.serviceName)

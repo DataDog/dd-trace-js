@@ -149,6 +149,13 @@ $ yarn test:instrumentations
 Several other components have test commands as well. See `package.json` for
 details.
 
+### Integration Tests
+
+When running integration tests, some packages are installed from npm into temporary sandboxes.
+If running locally without an internet connection,
+it's possible to use the environment variable `OFFLINE=true` to make `yarn` use the `--prefer-offline` flag,
+which will use the local yarn cache instead of fecthing packages from npm.
+
 ### Adding a Plugin Test to CI
 
 The plugin tests run on pull requests in Github Actions. Each plugin test suite has its own Github job, so adding a new suite to CI

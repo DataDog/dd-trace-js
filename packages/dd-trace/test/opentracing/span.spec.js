@@ -471,6 +471,15 @@ describe('Span', () => {
       expect(processor.process).to.have.been.calledOnce
     })
 
+    it('should add _dd.integration', () => {
+      processor.process.returns(Promise.resolve())
+
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+      span.finish()
+
+      expect(span._spanContext._tags).to.include({ '_dd.integration': 'opentracing' })
+    })
+
     describe('tracePropagationBehaviorExtract and Baggage', () => {
       let parent
 

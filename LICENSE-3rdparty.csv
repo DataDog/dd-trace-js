@@ -15,6 +15,7 @@ require,ignore,MIT,Copyright 2013 Kael Zhang and contributors
 require,import-in-the-middle,Apache license 2.0,Copyright 2021 Datadog Inc.
 require,istanbul-lib-coverage,BSD-3-Clause,Copyright 2012-2015 Yahoo! Inc.
 require,jest-docblock,MIT,Copyright Meta Platforms, Inc. and affiliates.
+require,jsonpath-plus,MIT,Copyright (c) 2011-2019 Stefan Goessner, Subbu Allamaraju, Mike Brevoort, Robert Krahn, Brett Zamir, Richard Schneider
 require,koalas,MIT,Copyright 2013-2017 Brian Woodward
 require,limiter,MIT,Copyright 2011 John Hurliman
 require,lodash.sortby,MIT,Copyright JS Foundation and other contributors
@@ -43,7 +44,7 @@ dev,benchmark,MIT,Copyright 2010-2016 Mathias Bynens Robert Kieffer John-David D
 dev,body-parser,MIT,Copyright 2014 Jonathan Ong 2014-2015 Douglas Christopher Wilson
 dev,chai,MIT,Copyright 2017 Chai.js Assertion Library
 dev,eslint,MIT,Copyright JS Foundation and other contributors https://js.foundation
-dev,eslint-config-standard,MIT,Copyright Feross Aboukhadijeh
+dev,eslint-plugin-cypress,MIT,Copyright (c) 2019 Cypress.io
 dev,eslint-plugin-import,MIT,Copyright 2015 Ben Mosher
 dev,eslint-plugin-mocha,MIT,Copyright 2014 Mathias Schreck
 dev,eslint-plugin-n,MIT,Copyright 2015 Toru Nagashima

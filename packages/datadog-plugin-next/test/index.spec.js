@@ -168,6 +168,7 @@ describe('Plugin', function () {
                 expect(spans[1].meta).to.have.property('http.method', 'GET')
                 expect(spans[1].meta).to.have.property('http.status_code', '200')
                 expect(spans[1].meta).to.have.property('component', 'next')
+                expect(spans[1].meta).to.have.property('_dd.integration', 'next')
               })
               .then(done)
               .catch(done)
