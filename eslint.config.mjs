@@ -456,6 +456,17 @@ export default [
     }
   },
   {
+    name: 'dd-trace/scripts',
+    files: [
+      'scripts/**/*'
+    ],
+    rules: {
+      'n/no-unsupported-features/node-builtins': ['error', {
+        allowExperimental: true
+      }]
+    }
+  },
+  {
     name: 'dd-trace/tests/all',
     files: TEST_FILES,
     languageOptions: {
