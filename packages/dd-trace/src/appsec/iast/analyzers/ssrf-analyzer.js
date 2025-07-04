@@ -25,7 +25,7 @@ class SSRFAnalyzer extends InjectionAnalyzer {
   }
 
   _isRangeSecure (range, value) {
-    const fragmentIndex = value?.indexOf('#')
+    const fragmentIndex = value.indexOf('#')
     if (fragmentIndex > -1 && range.start >= fragmentIndex) {
       return true
     }
