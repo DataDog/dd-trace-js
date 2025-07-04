@@ -1,5 +1,4 @@
 'use strict'
-/* eslint n/no-unsupported-features/node-builtins: ['error', { allowExperimental: true }] */
 
 const { assert } = require('chai')
 const path = require('path')

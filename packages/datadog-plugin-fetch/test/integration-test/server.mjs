@@ -1,5 +1,3 @@
-/* eslint n/no-unsupported-features/node-builtins: ['error', { ignores: ['fetch'] }] */
-
 import 'dd-trace/init.js'
 import getPort from 'get-port'
 

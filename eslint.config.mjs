@@ -482,6 +482,9 @@ export default [
       'mocha/no-top-level-hooks': 'off',
       'n/handle-callback-err': 'off',
       'n/no-missing-require': 'off',
+      'n/no-unsupported-features/node-builtins': ['error', {
+        allowExperimental: true
+      }],
       'require-await': 'off'
     }
   },
