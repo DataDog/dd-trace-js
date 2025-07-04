@@ -293,11 +293,11 @@ describe('Plugin', () => {
             {
               v0: {
                 opName: 'oracle.query',
-                serviceName: config.connectString
+                serviceName: 'test-oracle'
               },
               v1: {
                 opName: 'oracle.query',
-                serviceName: config.connectString
+                serviceName: 'test'
               }
             }
           )
@@ -306,7 +306,7 @@ describe('Plugin', () => {
             await Promise.all([
               agent.assertFirstTraceSpan({
                 name: expectedSchema.outbound.opName,
-                service: config.connectString
+                service: 'test-oracle'
               }),
               connection.execute(dbQuery)
             ])
