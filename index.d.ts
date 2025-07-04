@@ -2629,6 +2629,11 @@ declare namespace tracer {
        * Tool calls of the message
        */
       toolCalls?: ToolCall[],
+
+      /**
+       * Tool ID of the message if the role is "tool"
+       */
+      toolId?: string
     }
 
     /**
