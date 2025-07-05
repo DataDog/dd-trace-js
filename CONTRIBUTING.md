@@ -89,6 +89,28 @@ To install dependencies once you have Node and yarn installed, run this in the p
 $ yarn
 ```
 
+## Adding a Plugin
+
+To create a new plugin for a third-party package, follow these steps:
+
+1. `mkdir -p packages/datadog-plugin-<pluginname>/src`
+2. Copy an `index.js` file from another plugin to use as a starting point: `cp packages/datadog-plugin-kafkajs/src/index.js packages/datadog-plugin-<pluginname>/src`
+3. Edit index.js as appropriate for your new plugin
+4. `mkdir -p packages/datadog-plugin-<pluginname>/test`
+5. Create an packages/datadog-plugin-<pluginname>/test/index.spec.js file and add the necessary tests. See other plugin tests for inspiration to file structure.
+6. Edit index.spec.js as appropriate for your new plugin
+7. Add entries to the following files for your new plugin:
+  - `packages/dd-trace/src/plugins/index.js`
+  - `index.d.ts`
+  - `docs/test.ts`
+  - `docs/API.md`
+  - `.github/workflows/apm-integrations.yml`
+
+### Adding a Plugin Test to CI
+
+The plugin tests run on pull requests in Github Actions. Each plugin test suite has its own Github job, so adding a new suite to CI
+requires adding a new job to the Github Actions config. The file containing these configs is `.github/workflows/apm-integrations.yml`.
+You can copypaste and modify an existing plugin job configuration in this file to create a new job config.
 
 ## Testing
 
