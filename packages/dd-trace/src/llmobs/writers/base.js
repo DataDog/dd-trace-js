@@ -1,7 +1,7 @@
 'use strict'
 
 const request = require('../../exporters/common/request')
-const { URL, format } = require('node:url')
+const { format } = require('node:url')
 const path = require('node:path')
 
 const logger = require('../../log')
@@ -44,11 +44,12 @@ class BaseLLMObsWriter {
   get url () {
     if (this._agentless == null) return null
 
-    const baseUrl = this._baseUrl.href
+    const baseUrl = this._baseUrl
     const endpoint = this._endpoint
 
-    // Split on protocol separator to preserve it
-    // path.join will remove some slashes unnecessarily
+    // We can't use `new URL(endpoint, baseUrl).href` because the URL constructor doesn't resolve unix sockets
+    // correctly, instead we need to manually construct the URL string. Split on protocol separator to preserve it as
+    // `path.join` will remove some slashes unnecessarily.
     const [protocol, rest] = baseUrl.split('://')
     return protocol + '://' + path.join(rest, endpoint)
   }
@@ -110,20 +111,20 @@ class BaseLLMObsWriter {
   _getUrlAndPath () {
     if (this._agentless) {
       return {
-        url: new URL(format({
+        url: format({
           protocol: 'https:',
           hostname: `${this._intake}.${this._config.site}`
-        })),
+        }),
         endpoint: this._endpoint
       }
     }
 
     const { hostname, port } = this._config
-    const base = this._config.url || new URL(format({
+    const base = this._config.url || format({
       protocol: 'http:',
       hostname,
       port
-    }))
+    })
 
     return {
       url: base,

@@ -82,7 +82,7 @@ describe('RemoteConfigManager', () => {
 
     expect(rc.scheduler).to.equal(scheduler)
 
-    expect(rc.url).to.deep.equal(config.url)
+    expect(rc.url).to.equal(config.url)
 
     expect(tagger.add).to.have.been.calledOnceWithExactly(config.tags, {
       '_dd.rc.client_id': '1234-5678'
