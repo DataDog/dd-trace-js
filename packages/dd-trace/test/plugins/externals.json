@@ -257,6 +257,12 @@
       "versions": ["9.1.4"]
     }
   ],
+  "hono": [
+    {
+      "name": "@hono/node-server",
+      "versions": ["1.13.2"]
+    }
+  ],
   "jest": [
     {
       "name": "jest",
