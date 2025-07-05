@@ -28,6 +28,9 @@ updates:
       - dependency-name: "eslint-plugin-mocha"
         # ESM only from v11.0.0 onwards
         update-types: ["version-update:semver-major"]
+      - dependency-name: "jest-docblock"
+        # 30.0.0 onwards only supports Node.js 18.14.x and above
+        update-types: ["version-update:semver-major"]
     groups:
       dev-minor-and-patch-dependencies:
         dependency-type: "development"

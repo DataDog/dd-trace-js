@@ -165,7 +165,7 @@ class LLMObsSpanProcessor {
           carrier[key] = UNSERIALIZABLE_VALUE_TEXT
           continue
         }
-        if (typeof value === 'object') {
+        if (value !== null && typeof value === 'object') {
           add(value, carrier[key] = {})
         } else {
           carrier[key] = value

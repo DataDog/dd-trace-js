@@ -63,7 +63,7 @@ function scrubChildProcessCmd (expression) {
 
       if (token === null) {
         continue
-      } else if (typeof token === 'object') {
+      } else if (typeof token === 'object') { // eslint-disable-line eslint-rules/eslint-safe-typeof-object
         if (token.pattern) {
           result.push(token.pattern)
         } else if (token.op) {

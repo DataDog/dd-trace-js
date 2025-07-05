@@ -1071,7 +1071,7 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
   const adapter = jestAdapter.default ?? jestAdapter
   const newAdapter = shimmer.wrapFunction(adapter, adapter => function () {
     const environment = arguments[2]
-    if (!environment) {
+    if (!environment || !environment.testEnvironmentOptions) {
       return adapter.apply(this, arguments)
     }
     testSuiteStartCh.publish({

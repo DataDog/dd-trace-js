@@ -213,10 +213,10 @@ class NativeWallProfiler {
   }
 
   _updateContext (context) {
-    if (typeof context.spanId === 'object') {
+    if (context.spanId !== null && typeof context.spanId === 'object') {
       context.spanId = context.spanId.toString(10)
     }
-    if (typeof context.rootSpanId === 'object') {
+    if (context.rootSpanId !== null && typeof context.rootSpanId === 'object') {
       context.rootSpanId = context.rootSpanId.toString(10)
     }
     if (context.webTags !== undefined && context.endpoint === undefined) {

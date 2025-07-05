@@ -303,6 +303,9 @@ describe('Config', () => {
     expect(config).to.have.property('flushMinSpans', 1000)
     expect(config.grpc.client.error.statuses).to.deep.equal(GRPC_CLIENT_ERROR_STATUSES)
     expect(config.grpc.server.error.statuses).to.deep.equal(GRPC_SERVER_ERROR_STATUSES)
+    expect(config).to.have.nested.property('heapSnapshot.count', 0)
+    expect(config).to.have.nested.property('heapSnapshot.destination', '')
+    expect(config).to.have.nested.property('heapSnapshot.interval', 3600)
     expect(config).to.have.nested.property('iast.enabled', false)
     expect(config).to.have.nested.property('iast.redactionEnabled', true)
     expect(config).to.have.nested.property('iast.redactionNamePattern', null)
@@ -557,6 +560,9 @@ describe('Config', () => {
     process.env.DD_ENV = 'test'
     process.env.DD_GRPC_CLIENT_ERROR_STATUSES = '3,13,400-403'
     process.env.DD_GRPC_SERVER_ERROR_STATUSES = '3,13,400-403'
+    process.env.DD_HEAP_SNAPSHOT_COUNT = '1'
+    process.env.DD_HEAP_SNAPSHOT_DESTINATION = '/tmp'
+    process.env.DD_HEAP_SNAPSHOT_INTERVAL = '1800'
     process.env.DD_IAST_DB_ROWS_TO_TAINT = 2
     process.env.DD_IAST_DEDUPLICATION_ENABLED = false
     process.env.DD_IAST_ENABLED = 'true'
@@ -675,6 +681,9 @@ describe('Config', () => {
     expect(config.grpc.client.error.statuses).to.deep.equal([3, 13, 400, 401, 402, 403])
     expect(config.grpc.server.error.statuses).to.deep.equal([3, 13, 400, 401, 402, 403])
     expect(config).to.have.property('hostname', 'agent')
+    expect(config).to.have.nested.property('heapSnapshot.count', 1)
+    expect(config).to.have.nested.property('heapSnapshot.destination', '/tmp')
+    expect(config).to.have.nested.property('heapSnapshot.interval', 1800)
     expect(config).to.have.nested.property('iast.dbRowsToTaint', 2)
     expect(config).to.have.nested.property('iast.deduplicationEnabled', false)
     expect(config).to.have.nested.property('iast.enabled', true)

@@ -359,6 +359,15 @@ function finishResolvers ({ fields }) {
   })
 }
 
+addHook({ name: '@graphql-tools/executor', versions: ['>=0.0.14'] }, executor => {
+  // graphql-yoga uses the normalizedExecutor function, so we need to wrap both. There is no risk in wrapping both
+  // since the functions are closely related, and our wrappedExecute function prevents double calls with the
+  // contexts.has(contextValue) check.
+  shimmer.wrap(executor, 'execute', wrapExecute(executor))
+  shimmer.wrap(executor, 'normalizedExecutor', wrapExecute(executor))
+  return executor
+})
+
 addHook({ name: '@graphql-tools/executor', file: 'cjs/execution/execute.js', versions: ['>=0.0.14'] }, execute => {
   shimmer.wrap(execute, 'execute', wrapExecute(execute))
   return execute

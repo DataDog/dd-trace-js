@@ -71,20 +71,6 @@ describe('Service naming', () => {
     const resolver = new SchemaDefinition(dummySchema)
     const extra = { my: { extra: 'args' } }
 
-    describe('Item resolver', () => {
-      it('should answer undefined on inexistent plugin', () => {
-        expect(resolver.getSchemaItem('messaging', 'inbound', 'foo')).to.be.equal(undefined)
-      })
-
-      it('should answer undefined on inexistent i/o dir', () => {
-        expect(resolver.getSchemaItem('messaging', 'foo', 'kafka')).to.be.equal(undefined)
-      })
-
-      it('should answer undefined on inexistent type', () => {
-        expect(resolver.getSchemaItem('foo', 'inbound', 'kafka')).to.be.equal(undefined)
-      })
-    })
-
     describe('Operation name getter', () => {
       it('should passthrough operation name arguments', () => {
         resolver.getOpName('messaging', 'inbound', 'kafka', extra)

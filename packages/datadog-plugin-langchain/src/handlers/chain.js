@@ -13,7 +13,7 @@ class LangChainChainHandler extends LangChainHandler {
 
     for (const idx in inputs) {
       const input = inputs[idx]
-      if (typeof input === 'object') {
+      if (input !== null && typeof input === 'object') {
         for (const [key, value] of Object.entries(input)) {
         // these are mappings to the python client names, ie lc_kwargs
         // only present on BaseMessage types

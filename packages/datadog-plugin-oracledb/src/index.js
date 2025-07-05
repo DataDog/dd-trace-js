@@ -2,17 +2,30 @@
 
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
-const log = require('../../dd-trace/src/log')
+
+let parser
 
 class OracledbPlugin extends DatabasePlugin {
   static get id () { return 'oracledb' }
   static get system () { return 'oracle' }
   static get peerServicePrecursors () { return ['db.instance', 'db.hostname'] }
 
-  start ({ query, connAttrs }) {
-    const service = this.serviceName({ pluginConfig: this.config, params: connAttrs })
-    // Users can pass either connectString or connectionString
-    const url = getUrl(connAttrs.connectString || connAttrs.connectionString)
+  start ({ query, connAttrs, port, hostname, dbInstance }) {
+    let service = this.serviceName({ pluginConfig: this.config, params: connAttrs })
+
+    if (hostname === undefined) {
+      // Lazy load for performance. This is not needed in v6 and up
+      parser ??= require('./connection-parser')
+      const dbInfo = parser(connAttrs)
+      hostname = dbInfo.hostname
+      port ??= dbInfo.port
+      dbInstance ??= dbInfo.dbInstance
+    }
+
+    if (service === undefined && hostname) {
+      // Fallback for users not providing the service properly in a serviceName method
+      service = `${hostname}:${port}/${dbInstance}`
+    }
 
     this.startSpan(this.operationName(), {
       service,
@@ -21,21 +34,11 @@ class OracledbPlugin extends DatabasePlugin {
       kind: 'client',
       meta: {
         'db.user': this.config.user,
-        'db.instance': url.pathname && url.pathname.slice(1),
-        'db.hostname': url.hostname,
-        [CLIENT_PORT_KEY]: url.port
+        'db.instance': dbInstance,
+        'db.hostname': hostname,
+        [CLIENT_PORT_KEY]: port,
       }
     })
-  }
-}
-
-// TODO: Avoid creating an error since it's a heavy operation.
-function getUrl (connectString) {
-  try {
-    return new URL(`http://${connectString}`)
-  } catch (e) {
-    log.error('Invalid oracle connection string', e)
-    return {}
   }
 }
 

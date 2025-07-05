@@ -173,12 +173,14 @@ const IGNORED_WORKFLOWS = {
   ],
   trigger_pull_request: [
     'audit.yml',
+    'eslint-rules.yml',
     'stale.yml'
   ],
   trigger_push: [
     'stale.yml'
   ],
   trigger_schedule: [
+    'eslint-rules.yml',
     'project.yml'
   ]
 }

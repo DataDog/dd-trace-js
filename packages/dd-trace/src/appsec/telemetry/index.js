@@ -13,6 +13,7 @@ const {
   trackWafMetrics,
   incrementWafInit,
   incrementWafUpdates,
+  incrementWafConfigErrors,
   incrementWafRequests
 } = require('./waf')
 const telemetryMetrics = require('../../telemetry/metrics')
@@ -151,6 +152,12 @@ function incrementWafUpdatesMetric (wafVersion, rulesVersion, success) {
   incrementWafUpdates(wafVersion, rulesVersion, success)
 }
 
+function incrementWafConfigErrorsMetric (wafVersion, rulesVersion) {
+  if (!enabled) return
+
+  incrementWafConfigErrors(wafVersion, rulesVersion)
+}
+
 function incrementWafRequestsMetric (req) {
   if (!req || !enabled) return
 
@@ -197,6 +204,7 @@ module.exports = {
   updateRaspRuleSkippedMetricTags,
   incrementWafInitMetric,
   incrementWafUpdatesMetric,
+  incrementWafConfigErrorsMetric,
   incrementWafRequestsMetric,
   incrementMissingUserLoginMetric,
   incrementMissingUserIdMetric,

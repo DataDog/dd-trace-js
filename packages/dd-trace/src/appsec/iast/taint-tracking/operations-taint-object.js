@@ -28,7 +28,10 @@ function taintObject (iastContext, object, type) {
           } else {
             result = tainted
           }
-        } else if (typeof value === 'object' && !visited.has(value)) {
+        } else if (
+          // eslint-disable-next-line eslint-rules/eslint-safe-typeof-object
+          typeof value === 'object' && !visited.has(value)
+        ) {
           visited.add(value)
 
           for (const key of Object.keys(value)) {
@@ -69,7 +72,7 @@ function traverseAndTaint (node, path, cache, transactionId) {
     return tainted
   }
 
-  if (typeof node === 'object') {
+  if (typeof node === 'object') { // eslint-disable-line eslint-rules/eslint-safe-typeof-object
     const keys = Array.isArray(node) ? node.keys() : Object.keys(node)
 
     for (const key of keys) {

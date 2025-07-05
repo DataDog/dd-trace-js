@@ -179,7 +179,7 @@ function wrapChildProcessCustomPromisifyMethod (customPromisifyMethod, shell) {
       return result
     }
 
-    return Promise.prototype.then.call(result, resolve, reject)
+    return Promise.resolve(result).then(resolve, reject)
   }
 }
 

@@ -1312,6 +1312,7 @@ describe('IP blocking', function () {
   const toModify = [{
     product: 'ASM_DATA',
     id: '1',
+    path: 'datadog/00/ASM_DATA/test/IP blocking',
     file: ruleData
   }]
   const htmlDefaultContent = blockedTemplate.html
@@ -1434,6 +1435,7 @@ describe('IP blocking', function () {
       const toModifyCustomActions = [{
         product: 'ASM',
         id: 'custom-actions',
+        path: 'datadog/00/ASM/test/Custom actions/Default content with custom status',
         file: {
           actions: [
             {
@@ -1494,6 +1496,7 @@ describe('IP blocking', function () {
       const toModifyCustomActions = [{
         product: 'ASM',
         id: 'custom-actions',
+        path: 'datadog/00/ASM/test/Custom actions/Redirect on error',
         file: {
           actions: [
             {
