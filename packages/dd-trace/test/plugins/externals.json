@@ -161,6 +161,10 @@
     {
       "name": "@fastify/cookie",
       "versions": [">=6"]
+    },
+    {
+      "name": "@fastify/multipart",
+      "versions": [">=6"]
     }
   ],
   "generic-pool": [

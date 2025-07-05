@@ -6,6 +6,7 @@ const getPort = require('get-port')
 const path = require('path')
 const zlib = require('zlib')
 const fs = require('node:fs')
+const semver = require('semver')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
@@ -19,7 +20,7 @@ withVersions('fastify', 'fastify', '>=2', version => {
       return agent.load(['fastify', 'http'], { client: false })
     })
 
-    before((done) => {
+    before(async () => {
       const fastify = require(`../../../../versions/fastify@${version}`).get()
 
       const app = fastify()
@@ -29,13 +30,10 @@ withVersions('fastify', 'fastify', '>=2', version => {
         reply.send('DONE')
       })
 
-      getPort().then((port) => {
-        app.listen({ port }, () => {
-          axios = Axios.create({ baseURL: `http://localhost:${port}` })
-          done()
-        })
-        server = app.server
-      })
+      const port = await getPort()
+      await app.listen({ port })
+      axios = Axios.create({ baseURL: `http://localhost:${port}` })
+      server = app.server
     })
 
     after(() => {
@@ -85,7 +83,7 @@ withVersions('fastify', 'fastify', '>=2', version => {
       return agent.load(['fastify', 'http'], { client: false })
     })
 
-    before((done) => {
+    before(async () => {
       const fastify = require(`../../../../versions/fastify@${version}`).get()
 
       const app = fastify()
@@ -95,13 +93,10 @@ withVersions('fastify', 'fastify', '>=2', version => {
         reply.send('DONE')
       })
 
-      getPort().then((port) => {
-        app.listen({ port }, () => {
-          axios = Axios.create({ baseURL: `http://localhost:${port}` })
-          done()
-        })
-        server = app.server
-      })
+      const port = await getPort()
+      await app.listen({ port })
+      axios = Axios.create({ baseURL: `http://localhost:${port}` })
+      server = app.server
     })
 
     after(() => {
@@ -186,7 +181,7 @@ withVersions('fastify', 'fastify', '>=2', version => {
       return agent.load(['fastify', 'http'], { client: false })
     })
 
-    before((done) => {
+    before(async () => {
       const fastify = require(`../../../../versions/fastify@${version}`).get()
 
       const app = fastify()
@@ -205,13 +200,10 @@ withVersions('fastify', 'fastify', '>=2', version => {
         reply.send('DONE')
       })
 
-      getPort().then((port) => {
-        app.listen({ port }, () => {
-          axios = Axios.create({ baseURL: `http://localhost:${port}` })
-          done()
-        })
-        server = app.server
-      })
+      const port = await getPort()
+      await app.listen({ port })
+      axios = Axios.create({ baseURL: `http://localhost:${port}` })
+      server = app.server
     })
 
     after(() => {
@@ -262,7 +254,7 @@ withVersions('fastify', 'fastify', '>=2', version => {
       return agent.load(['fastify', 'http'], { client: false })
     })
 
-    before((done) => {
+    before(async () => {
       const fastify = require(`../../../../versions/fastify@${version}`).get()
 
       const app = fastify()
@@ -295,13 +287,10 @@ withVersions('fastify', 'fastify', '>=2', version => {
         reply.send('DONE')
       })
 
-      getPort().then((port) => {
-        app.listen({ port }, () => {
-          axios = Axios.create({ baseURL: `http://localhost:${port}` })
-          done()
-        })
-        server = app.server
-      })
+      const port = await getPort()
+      await app.listen({ port })
+      axios = Axios.create({ baseURL: `http://localhost:${port}` })
+      server = app.server
     })
 
     after(() => {
@@ -452,14 +441,14 @@ withVersions('fastify', 'fastify', '>=2', version => {
             }
 
             // Skip preParsing hook for Fastify 2.x - has compatibility issues
-            if (hook === 'preParsing' && version.startsWith('2')) {
+            if (hook === 'preParsing' && semver.intersects(version, '<= 2.x')) {
               this.skip()
             }
 
             return agent.load(['fastify', '@fastify/cookie', 'http'], { client: false })
           })
 
-          before((done) => {
+          before(async () => {
             const fastify = require(`../../../../versions/fastify@${version}`).get()
             const fastifyCookie = require(`../../../../versions/@fastify/cookie@${cookieVersion}`).get()
 
@@ -478,13 +467,10 @@ withVersions('fastify', 'fastify', '>=2', version => {
               reply.send('DONE')
             })
 
-            getPort().then((port) => {
-              app.listen({ port }, () => {
-                axios = Axios.create({ baseURL: `http://localhost:${port}` })
-                done()
-              })
-              server = app.server
-            }).catch(done)
+            const port = await getPort()
+            await app.listen({ port })
+            axios = Axios.create({ baseURL: `http://localhost:${port}` })
+            server = app.server
           })
 
           beforeEach(async () => {
@@ -504,9 +490,7 @@ withVersions('fastify', 'fastify', '>=2', version => {
           })
 
           after(() => {
-            if (server) {
-              server.close()
-            }
+            server?.close()
             return agent.close({ ritmReset: false })
           })
 
@@ -536,6 +520,93 @@ withVersions('fastify', 'fastify', '>=2', version => {
       })
     })
   })
+
+  describe('Suspicious request blocking - multipart', () => {
+    withVersions('fastify', '@fastify/multipart', multipartVersion => {
+      let server, uploadSpy, axios
+
+      before(function () {
+        // @fastify/multipart is not compatible with Fastify 2.x
+        if (semver.intersects(version, '<= 2.x')) {
+          this.skip()
+        }
+        // @fastify/multipart v6.x is not compatible with Fastify >=3
+        // For Fastify v5.x, you need @fastify/multipart v9.x or newer
+        if (semver.intersects(version, '3.9.2') && multipartVersion === '>=6') {
+          this.skip()
+        }
+
+        if (semver.intersects(version, '>3') && semver.intersects(multipartVersion, '<7.0.0')) {
+          this.skip()
+        }
+
+        return agent.load(['fastify', '@fastify/multipart', 'http'], { client: false })
+      })
+
+      before(async () => {
+        const fastify = require(`../../../../versions/fastify@${version}`).get()
+        const fastifyMultipart = require(`../../../../versions/@fastify/multipart@${multipartVersion}`).get()
+
+        const app = fastify()
+
+        app.register(fastifyMultipart, { attachFieldsToBody: true })
+
+        app.post('/', (request, reply) => {
+          uploadSpy()
+          reply.send('DONE')
+        })
+
+        const port = await getPort()
+        await app.listen({ port })
+        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        server = app.server
+      })
+
+      beforeEach(() => {
+        uploadSpy = sinon.stub()
+        appsec.enable(new Config({
+          appsec: {
+            enabled: true,
+            rules: path.join(__dirname, 'body-parser-rules.json')
+          }
+        }))
+      })
+
+      afterEach(() => {
+        appsec.disable()
+      })
+
+      after(() => {
+        server?.close()
+        return agent.close({ ritmReset: false })
+      })
+
+      it('should not block the request without an attack', async () => {
+        const form = new FormData()
+        form.append('key', 'value')
+
+        const res = await axios.post('/', form)
+
+        assert.strictEqual(res.status, 200)
+        sinon.assert.calledOnce(uploadSpy)
+        assert.strictEqual(res.data, 'DONE')
+      })
+
+      it('should block the request when attack is detected', async () => {
+        try {
+          const form = new FormData()
+          form.append('key', 'testattack')
+
+          await axios.post('/', form)
+
+          return Promise.reject(new Error('Request should not return 200'))
+        } catch (e) {
+          assert.strictEqual(e.response.status, 403)
+          sinon.assert.notCalled(uploadSpy)
+        }
+      })
+    })
+  })
 })
 
 describe('Api Security - Fastify', () => {
@@ -546,7 +617,7 @@ describe('Api Security - Fastify', () => {
       return agent.load(['fastify', 'http'], { client: false })
     })
 
-    before((done) => {
+    before(async () => {
       const fastify = require(`../../../../versions/fastify@${version}`).get()
 
       const app = fastify()
@@ -577,13 +648,10 @@ describe('Api Security - Fastify', () => {
         reply.send(new Uint16Array(10))
       })
 
-      getPort().then((port) => {
-        app.listen({ port }, () => {
-          axios = Axios.create({ baseURL: `http://localhost:${port}` })
-          done()
-        })
-        server = app.server
-      })
+      const port = await getPort()
+      await app.listen({ port })
+      axios = Axios.create({ baseURL: `http://localhost:${port}` })
+      server = app.server
     })
 
     after(() => {
