@@ -135,7 +135,7 @@ class WAFContextWrapper {
         this.setUserIdCache(userId, result)
       }
 
-      metrics.duration = result.totalRuntime / 1e3
+      metrics.duration = result.duration / 1e3
       metrics.blockTriggered = blockTriggered
       metrics.ruleTriggered = ruleTriggered
       metrics.wafTimeout = result.timeout
@@ -144,7 +144,7 @@ class WAFContextWrapper {
         Reporter.reportAttack(result.events)
       }
 
-      Reporter.reportDerivatives(result.derivatives)
+      Reporter.reportAttributes(result.attributes)
 
       return result
     } catch (err) {
