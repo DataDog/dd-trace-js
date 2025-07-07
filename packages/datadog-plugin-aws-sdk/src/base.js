@@ -73,9 +73,25 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         span.addTags(requestTags)
       }
 
+      this.enter(span)
       const store = storage('legacy').getStore()
 
-      this.enter(span, store)
+      const peerServerlessStorage = storage('peerServerless')
+      if (!this._tracerConfig?._isInServerlessEnvironment()) return
+
+      // Try to resolve the hostname immediately; if not possible, keep enough
+      // information so the region callback can resolve it later.
+      const hostname = getHostname({ awsParams: request.params, awsService }, awsRegion)
+      const peerServerlessStore = {}
+      peerServerlessStorage.enterWith(peerServerlessStore)
+
+      if (hostname) {
+        span.setTag('peer.service', hostname)
+        peerServerlessStore.peerHostname = hostname
+      } else {
+        store.awsParams = request.params
+        store.awsService = awsService
+      }
     })
 
     this.addSub(`apm:aws:request:region:${this.serviceIdentifier}`, region => {
@@ -85,6 +101,17 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       if (!span) return
       span.setTag('aws.region', region)
       span.setTag('region', region)
+
+      if (!this._tracerConfig?._isInServerlessEnvironment()) return
+
+      const hostname = getHostname(store, region)
+      if (!hostname) return
+
+      span.setTag('peer.service', hostname)
+      const peerServerlessStore = storage('peerServerless').getStore()
+      if (peerServerlessStore) {
+        peerServerlessStore.peerHostname = hostname
+      }
     })
 
     this.addSub(`apm:aws:request:complete:${this.serviceIdentifier}`, ({ response, cbExists = false }) => {
@@ -241,6 +268,29 @@ function getHooks (config) {
   const request = config.hooks?.request || noop
 
   return { request }
+}
+
+function getHostname (store, region) {
+  if (!store) return
+  if (!region) return
+  const { awsParams, awsService } = store
+  switch (awsService) {
+    case 'EventBridge':
+      return `events.${region}.amazonaws.com`
+    case 'SQS':
+      return `sqs.${region}.amazonaws.com`
+    case 'SNS':
+      return `sns.${region}.amazonaws.com`
+    case 'Kinesis':
+      return `kinesis.${region}.amazonaws.com`
+    case 'DynamoDBDocument':
+    case 'DynamoDB':
+      return `dynamodb.${region}.amazonaws.com`
+    case 'S3':
+      return awsParams?.Bucket
+        ? `${awsParams.Bucket}.s3.${region}.amazonaws.com`
+        : `s3.${region}.amazonaws.com`
+  }
 }
 
 module.exports = BaseAwsSdkPlugin
