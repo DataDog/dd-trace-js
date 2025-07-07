@@ -34,6 +34,7 @@ function withNamingSchema (
   const {
     hooks = (version, defaultToGlobalService) => {},
     desc = '',
+    selectSpan = (traces) => traces[0][0],
   } = opts
   let fullConfig
 
@@ -64,7 +65,7 @@ function withNamingSchema (
           return new Promise((resolve, reject) => {
             agent
               .assertSomeTraces(traces => {
-                const span = traces[0][0]
+                const span = selectSpan(traces)
                 const expectedOpName = typeof opName === 'function'
                   ? opName()
                   : opName
