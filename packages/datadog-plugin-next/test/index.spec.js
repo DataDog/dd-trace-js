@@ -4,7 +4,6 @@
 
 const path = require('node:path')
 const axios = require('axios')
-const getPort = require('get-port')
 const { execSync, spawn } = require('node:child_process')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -25,8 +24,6 @@ describe('Plugin', function () {
 
       const startServer = ({ withConfig, standalone }, schemaVersion = 'v0', defaultToGlobalService = false) => {
         before(async () => {
-          port = await getPort()
-
           return agent.load('next')
         })
 
@@ -41,7 +38,6 @@ describe('Plugin', function () {
             env: {
               ...process.env,
               VERSION: version,
-              PORT: port,
               DD_TRACE_AGENT_PORT: agent.server.address().port,
               WITH_CONFIG: withConfig,
               DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: schemaVersion,
@@ -56,8 +52,9 @@ describe('Plugin', function () {
           server.once('error', done)
 
           function waitUntilServerStarted (chunk) {
-            const chunkString = chunk.toString()
-            if (chunkString?.includes(port) || chunkString?.includes('Ready ')) {
+            port = Number(chunk.toString().match(/port: (\d+)/)?.[1])
+
+            if (port) {
               server.stdout.off('data', waitUntilServerStarted)
               done()
             }
