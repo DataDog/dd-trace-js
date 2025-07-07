@@ -333,7 +333,6 @@ describe('Plugin', () => {
           )
         })
 
-
         before(() => {
           AWS = require(`../../../versions/${sqsClientName}@${version}`).get()
           sqs = new AWS.SQS({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' })
