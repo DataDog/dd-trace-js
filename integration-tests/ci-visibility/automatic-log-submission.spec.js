@@ -8,9 +8,9 @@ const {
   createSandbox,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig
-} = require('./helpers')
-const { FakeCiVisIntake } = require('./ci-visibility-intake')
-const webAppServer = require('./ci-visibility/web-app-server')
+} = require('../helpers')
+const { FakeCiVisIntake } = require('../ci-visibility-intake')
+const webAppServer = require('./web-app-server')
 
 describe('test visibility automatic log submission', () => {
   let sandbox, cwd, receiver, childProcess, webAppPort
