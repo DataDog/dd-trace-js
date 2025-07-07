@@ -391,6 +391,17 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
     }
   }
 
+  /**
+   * Returns a list of formatted messages from a message object.
+   * Most of these will just be one entry, but in the case of a "tool" role,
+   * it is possible to have multiple tool call results in a single message that we
+   * need to split into multiple messages.
+   *
+   * @param {*} message
+   * @param {*} toolsForModel
+   * @returns {Array<{role: string, content: string, toolId?: string,
+   *   toolCalls?: Array<{arguments: string, name: string, toolId: string, type: string}>}>}
+   */
   formatMessage (message, toolsForModel) {
     const { role, content } = message
 
@@ -458,6 +469,8 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
 
       return finalMessages
     }
+
+    return []
   }
 }
 
