@@ -11,7 +11,7 @@ class OracledbPlugin extends DatabasePlugin {
   static get peerServicePrecursors () { return ['db.instance', 'db.hostname'] }
 
   start ({ query, connAttrs, port, hostname, dbInstance }) {
-    let service = this.serviceName({ pluginConfig: this.config, params: connAttrs })
+    const service = this.serviceName({ pluginConfig: this.config, params: connAttrs })
 
     if (hostname === undefined) {
       // Lazy load for performance. This is not needed in v6 and up
@@ -20,11 +20,6 @@ class OracledbPlugin extends DatabasePlugin {
       hostname = dbInfo.hostname
       port ??= dbInfo.port
       dbInstance ??= dbInfo.dbInstance
-    }
-
-    if (service === undefined && hostname) {
-      // Fallback for users not providing the service properly in a serviceName method
-      service = `${hostname}:${port}/${dbInstance}`
     }
 
     this.startSpan(this.operationName(), {

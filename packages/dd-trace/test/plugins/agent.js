@@ -244,7 +244,7 @@ function assertIntegrationName (args) {
             if (span && span.meta && span.meta.component && span.meta.component !== span.meta['_dd.integration']) {
               expect(span.meta['_dd.integration']).to.equal(
                 currentIntegrationName,
-                 `Expected span to have "_dd.integration" tag "${currentIntegrationName}" 
+                 `Expected span to have "_dd.integration" tag "${currentIntegrationName}"
                  but found "${span.meta['_dd.integration']}" for span ID ${span.span_id}`
               )
             }
