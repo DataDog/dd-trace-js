@@ -13,13 +13,14 @@ class SchemaBuilder {
     this.properties = 0
   }
 
+  // TODO: This is only used in tests. Let's refactor the code and stop exposing the cache.
+  // It might be sufficient to
   static getCache () {
     return CACHE
   }
 
   static getSchemaDefinition (schema) {
-    const noNones = convertToJsonCompatible(schema)
-    const definition = jsonStringify(noNones)
+    const definition = toJSON(schema)
     const id = fnv64(Buffer.from(definition, 'utf8')).toString()
     return new Schema(definition, id)
   }
@@ -92,42 +93,46 @@ class OpenApiComponents {
   }
 }
 
-function convertToJsonCompatible (obj) {
-  if (Array.isArray(obj)) {
-    return obj.filter(item => item !== null).map(item => convertToJsonCompatible(item))
-  } else if (obj && typeof obj === 'object') {
-    const jsonObj = {}
-    for (const [key, value] of Object.entries(obj)) {
-      if (value !== null) {
-        jsonObj[key] = convertToJsonCompatible(value)
+function toJSON (value) {
+  if (typeof value === 'boolean') {
+    return value ? 'true' : 'false'
+  }
+  // eslint-disable-next-line eslint-rules/eslint-safe-typeof-object
+  if (typeof value === 'object') {
+    if (value === null) {
+      return 'null'
+    }
+    if (Array.isArray(value)) {
+      let result = '['
+      for (let i = 0; i < value.length; i++) {
+        if (i > 0) {
+          result += ', '
+        }
+        result += value[i] == null ? 'null' : toJSON(value[i])
+      }
+      return result + ']'
+    }
+    let result = '{'
+    for (const [key, objectValue] of Object.entries(value)) {
+      if (objectValue != null && typeof key === 'string') {
+        const converted = toJSON(objectValue)
+        if (converted !== undefined) {
+          if (result !== '{') {
+            result += ', '
+          }
+          result += `"${key}": ${converted}`
+        }
       }
     }
-    return jsonObj
+    return result + '}'
   }
-  return obj
-}
-
-function convertKey (key) {
-  if (key === 'enumValues') {
-    return 'enum'
+  if (typeof value === 'function') {
+    return 'null'
   }
-  return key
-}
-
-function jsonStringify (obj, indent = 2) {
-  // made to stringify json exactly similar to python / java in order for hashing to be the same
-  const jsonString = JSON.stringify(obj, (_, value) => value, indent)
-  return jsonString.replaceAll(/^ +/gm, ' ') // Replace leading spaces with single space
-    .replaceAll('\n', '') // Remove newlines
-    .replaceAll('{ ', '{') // Remove space after '{'
-    .replaceAll(' }', '}') // Remove space before '}'
-    .replaceAll('[ ', '[') // Remove space after '['
-    .replaceAll(' ]', ']') // Remove space before ']'
+  return JSON.stringify(value)
 }
 
 module.exports = {
   SchemaBuilder,
   OpenApiSchema,
-  convertToJsonCompatible,
-  convertKey
 }
