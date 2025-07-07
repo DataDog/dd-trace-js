@@ -38,6 +38,25 @@ class TaintTrackingPlugin extends SourceIastPlugin {
   }
 
   onConfigure () {
+    this.addBodyParsingSubscriptions()
+
+    this.addQueryParameterSubscriptions()
+
+    this.addCookieSubscriptions()
+
+    this.addDatabaseSubscriptions()
+
+    this.addPathParameterSubscriptions()
+
+    this.addGraphQLSubscriptions()
+
+    this.addURLParsingSubscriptions()
+
+    // this is a special case to increment INSTRUMENTED_SOURCE metric for header
+    this.addInstrumentedSource('http', [HTTP_REQUEST_HEADER_VALUE, HTTP_REQUEST_HEADER_NAME])
+  }
+
+  addBodyParsingSubscriptions () {
     const onRequestBody = ({ req }) => {
       const iastContext = getIastContext(storage('legacy').getStore())
       if (iastContext && iastContext.body !== req.body) {
@@ -57,17 +76,14 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     )
 
     this.addSub(
-      { channelName: 'datadog:query:read:finish', tag: HTTP_REQUEST_PARAMETER },
-      ({ query }) => this._taintTrackingHandler(HTTP_REQUEST_PARAMETER, query)
-    )
-
-    this.addSub(
-      { channelName: 'datadog:express:query:finish', tag: HTTP_REQUEST_PARAMETER },
-      ({ query }) => {
+      { channelName: 'datadog:fastify:body-parser:finish', tag: HTTP_REQUEST_BODY },
+      ({ req, body }) => {
         const iastContext = getIastContext(storage('legacy').getStore())
-        if (!iastContext || !query) return
-
-        taintQueryWithCache(iastContext, query)
+        if (iastContext && iastContext.body !== body) {
+          req.body = body
+          this._taintTrackingHandler(HTTP_REQUEST_BODY, req, 'body', iastContext)
+          iastContext.body = body
+        }
       }
     )
 
@@ -83,12 +99,45 @@ class TaintTrackingPlugin extends SourceIastPlugin {
         }
       }
     )
+  }
 
+  addQueryParameterSubscriptions () {
+    this.addSub(
+      { channelName: 'datadog:query:read:finish', tag: HTTP_REQUEST_PARAMETER },
+      ({ query }) => this._taintTrackingHandler(HTTP_REQUEST_PARAMETER, query)
+    )
+
+    this.addSub(
+      { channelName: 'datadog:fastify:query-params:finish', tag: HTTP_REQUEST_PARAMETER },
+      ({ query }) => {
+        this._taintTrackingHandler(HTTP_REQUEST_PARAMETER, query)
+      }
+    )
+
+    this.addSub(
+      { channelName: 'datadog:express:query:finish', tag: HTTP_REQUEST_PARAMETER },
+      ({ query }) => {
+        const iastContext = getIastContext(storage('legacy').getStore())
+        if (!iastContext || !query) return
+
+        taintQueryWithCache(iastContext, query)
+      }
+    )
+  }
+
+  addCookieSubscriptions () {
     this.addSub(
       { channelName: 'datadog:cookie:parse:finish', tag: [HTTP_REQUEST_COOKIE_VALUE, HTTP_REQUEST_COOKIE_NAME] },
       ({ cookies }) => this._cookiesTaintTrackingHandler(cookies)
     )
 
+    this.addSub(
+      { channelName: 'datadog:fastify-cookie:read:finish', tag: [HTTP_REQUEST_COOKIE_VALUE, HTTP_REQUEST_COOKIE_NAME] },
+      ({ cookies }) => this._cookiesTaintTrackingHandler(cookies)
+    )
+  }
+
+  addDatabaseSubscriptions () {
     this.addSub(
       { channelName: 'datadog:sequelize:query:finish', tag: SQL_ROW_VALUE },
       ({ result }) => this._taintDatabaseResult(result, 'sequelize')
@@ -98,25 +147,32 @@ class TaintTrackingPlugin extends SourceIastPlugin {
       { channelName: 'apm:pg:query:finish', tag: SQL_ROW_VALUE },
       ({ result }) => this._taintDatabaseResult(result, 'pg')
     )
+  }
+
+  addPathParameterSubscriptions () {
+    const pathParamHandler = ({ req }) => {
+      if (req && req.params !== null && typeof req.params === 'object') {
+        this._taintTrackingHandler(HTTP_REQUEST_PATH_PARAM, req, 'params')
+      }
+    }
 
     this.addSub(
       { channelName: 'datadog:express:process_params:start', tag: HTTP_REQUEST_PATH_PARAM },
-      ({ req }) => {
-        if (req && req.params !== null && typeof req.params === 'object') {
-          this._taintTrackingHandler(HTTP_REQUEST_PATH_PARAM, req, 'params')
-        }
-      }
+      pathParamHandler
+    )
+
+    this.addSub(
+      { channelName: 'datadog:fastify:path-params:finish', tag: HTTP_REQUEST_PATH_PARAM },
+      pathParamHandler
     )
 
     this.addSub(
       { channelName: 'datadog:router:param:start', tag: HTTP_REQUEST_PATH_PARAM },
-      ({ req }) => {
-        if (req && req.params !== null && typeof req.params === 'object') {
-          this._taintTrackingHandler(HTTP_REQUEST_PATH_PARAM, req, 'params')
-        }
-      }
+      pathParamHandler
     )
+  }
 
+  addGraphQLSubscriptions () {
     this.addSub(
       { channelName: 'apm:graphql:resolve:start', tag: HTTP_REQUEST_BODY },
       (data) => {
@@ -128,7 +184,9 @@ class TaintTrackingPlugin extends SourceIastPlugin {
         }
       }
     )
+  }
 
+  addURLParsingSubscriptions () {
     const urlResultTaintedProperties = ['host', 'origin', 'hostname']
     this.addSub(
       { channelName: 'datadog:url:parse:finish' },
@@ -162,9 +220,6 @@ class TaintTrackingPlugin extends SourceIastPlugin {
         context.result =
           newTaintedString(iastContext, context.result, origRange.iinfo.parameterName, origRange.iinfo.type)
       })
-
-    // this is a special case to increment INSTRUMENTED_SOURCE metric for header
-    this.addInstrumentedSource('http', [HTTP_REQUEST_HEADER_VALUE, HTTP_REQUEST_HEADER_NAME])
   }
 
   _taintTrackingHandler (type, target, property, iastContext = getIastContext(storage('legacy').getStore())) {

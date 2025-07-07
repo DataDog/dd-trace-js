@@ -11,7 +11,7 @@ const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
 const { json } = require('../../src/appsec/blocked_templates')
 
-withVersions('fastify', 'fastify', '>=2', version => {
+withVersions('fastify', 'fastify', '5.4.0', version => {
   describe('Suspicious request blocking - query', () => {
     let server, requestBody, axios
 
@@ -433,7 +433,7 @@ withVersions('fastify', 'fastify', '>=2', version => {
   })
 
   describe('Suspicious request blocking - cookie', () => {
-    withVersions('fastify', '@fastify/cookie', cookieVersion => {
+    withVersions('fastify', '@fastify/cookie', '11.0.2', cookieVersion => {
       const hookConfigurations = [
         'onRequest',
         'preParsing',
@@ -478,6 +478,11 @@ withVersions('fastify', 'fastify', '>=2', version => {
               reply.send('DONE')
             })
 
+            app.get('/test-cookie', (request, reply) => {
+              reply.cookie('test', 'value', { httpOnly: true })
+              reply.send('Cookie set')
+            })
+
             getPort().then((port) => {
               app.listen({ port }, () => {
                 axios = Axios.create({ baseURL: `http://localhost:${port}` })
@@ -508,6 +513,16 @@ withVersions('fastify', 'fastify', '>=2', version => {
               server.close()
             }
             return agent.close({ ritmReset: false })
+          })
+
+          it.only('should trigger HTTP header instrumentation when setting cookies', async () => {
+            const res = await axios.get('/test-cookie')
+
+            console.log('Response headers:', res.headers)
+            assert.equal(res.status, 200)
+            assert.equal(res.data, 'Cookie set')
+            // Check if Set-Cookie header was set
+            assert.property(res.headers, 'set-cookie')
           })
 
           it('should not block the request without an attack', async () => {

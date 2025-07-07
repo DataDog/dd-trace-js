@@ -112,6 +112,14 @@ function wrapWriteHead (writeHead) {
     // this doesn't support explicit duplicate headers, but it's an edge case
     const responseHeaders = Object.assign(this.getHeaders(), obj)
 
+    // Publish all headers from writeHead to ensure frameworks like Fastify 
+    // that bypass setHeader() are still captured for analysis
+    if (finishSetHeaderCh.hasSubscribers) {
+      for (const [name, value] of Object.entries(responseHeaders)) {
+        finishSetHeaderCh.publish({ name, value, res: this })
+      }
+    }
+
     startWriteHeadCh.publish({
       req: this.req,
       res: this,
