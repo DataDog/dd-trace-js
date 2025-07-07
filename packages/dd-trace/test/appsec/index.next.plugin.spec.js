@@ -128,9 +128,12 @@ describe('test suite', () => {
         server.once('error', done)
 
         function waitUntilServerStarted (chunk) {
-          port = Number(chunk.toString().match(/port: (\d+)/)?.[1])
+          const chunkStr = chunk.toString()
+          const match = chunkStr.match(/port:? (\d+)/) ||
+              chunkStr.match(/http:\/\/127\.0\.0\.1:(\d+)/)
 
-          if (port) {
+          if (match) {
+            port = Number(match[1])
             server.stdout.off('data', waitUntilServerStarted)
             done()
           }
