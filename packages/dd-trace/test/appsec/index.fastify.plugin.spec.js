@@ -12,7 +12,7 @@ const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
 const { json } = require('../../src/appsec/blocked_templates')
 
-withVersions('fastify', 'fastify', '>=2', version => {
+withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersion) => {
   describe('Suspicious request blocking - query', () => {
     let server, requestBody, axios
 
@@ -21,7 +21,7 @@ withVersions('fastify', 'fastify', '>=2', version => {
     })
 
     before(async () => {
-      const fastify = require(`../../../../versions/fastify@${version}`).get()
+      const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
 
       const app = fastify()
 
@@ -84,7 +84,7 @@ withVersions('fastify', 'fastify', '>=2', version => {
     })
 
     before(async () => {
-      const fastify = require(`../../../../versions/fastify@${version}`).get()
+      const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
 
       const app = fastify()
 
@@ -182,7 +182,7 @@ withVersions('fastify', 'fastify', '>=2', version => {
     })
 
     before(async () => {
-      const fastify = require(`../../../../versions/fastify@${version}`).get()
+      const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
 
       const app = fastify()
 
@@ -255,7 +255,7 @@ withVersions('fastify', 'fastify', '>=2', version => {
     })
 
     before(async () => {
-      const fastify = require(`../../../../versions/fastify@${version}`).get()
+      const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
 
       const app = fastify()
       app.get('/multiple-path-params/:parameter1/:parameter2', (request, reply) => {
@@ -435,13 +435,13 @@ withVersions('fastify', 'fastify', '>=2', version => {
           let server, requestCookie, axios
 
           before(function () {
-            if (version === '3.9.2') {
+            if (semver.intersects(fastifyLoadedVersion, '3.9.2')) {
               // Fastify 3.9.2 is incompatible with @fastify/cookie >=6
               this.skip()
             }
 
             // Skip preParsing hook for Fastify 2.x - has compatibility issues
-            if (hook === 'preParsing' && semver.intersects(version, '<= 2.x')) {
+            if (hook === 'preParsing' && semver.intersects(fastifyLoadedVersion, '2')) {
               this.skip()
             }
 
@@ -449,7 +449,7 @@ withVersions('fastify', 'fastify', '>=2', version => {
           })
 
           before(async () => {
-            const fastify = require(`../../../../versions/fastify@${version}`).get()
+            const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
             const fastifyCookie = require(`../../../../versions/@fastify/cookie@${cookieVersion}`).get()
 
             const app = fastify()
@@ -522,21 +522,21 @@ withVersions('fastify', 'fastify', '>=2', version => {
   })
 
   describe('Suspicious request blocking - multipart', () => {
-    withVersions('fastify', '@fastify/multipart', multipartVersion => {
+    withVersions('fastify', '@fastify/multipart', (multipartVersion, _, multipartLoadedVersion) => {
       let server, uploadSpy, axios
 
       before(function () {
         // @fastify/multipart is not compatible with Fastify 2.x
-        if (semver.intersects(version, '<= 2.x')) {
-          this.skip()
-        }
-        // @fastify/multipart v6.x is not compatible with Fastify >=3
-        // For Fastify v5.x, you need @fastify/multipart v9.x or newer
-        if (semver.intersects(version, '3.9.2') && multipartVersion === '>=6') {
+        if (semver.intersects(fastifyLoadedVersion, '2')) {
           this.skip()
         }
 
-        if (semver.intersects(version, '>3') && semver.intersects(multipartVersion, '<7.0.0')) {
+        // 6.x works for this specific Fastify patch version.
+        if (semver.intersects(fastifyLoadedVersion, '3.9.2') && semver.intersects(multipartLoadedVersion, '>6')) {
+          this.skip()
+        }
+
+        if (semver.intersects(fastifyLoadedVersion, '>3') && semver.intersects(multipartLoadedVersion, '<7.0.0')) {
           this.skip()
         }
 
@@ -544,7 +544,7 @@ withVersions('fastify', 'fastify', '>=2', version => {
       })
 
       before(async () => {
-        const fastify = require(`../../../../versions/fastify@${version}`).get()
+        const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
         const fastifyMultipart = require(`../../../../versions/@fastify/multipart@${multipartVersion}`).get()
 
         const app = fastify()
