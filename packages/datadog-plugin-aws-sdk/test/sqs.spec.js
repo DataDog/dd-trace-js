@@ -406,7 +406,7 @@ describe('Plugin', () => {
         })
       })
 
-      describe.only('data stream monitoring', () => {
+      describe('data stream monitoring', () => {
         let expectedProducerHash
         let expectedConsumerHash
         let nowStub
