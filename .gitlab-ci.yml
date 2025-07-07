@@ -35,6 +35,7 @@ variables:
 configure_system_tests:
   variables:
     SYSTEM_TESTS_SCENARIOS_GROUPS: "simple_onboarding,simple_onboarding_profiling,simple_onboarding_appsec,docker-ssi,lib-injection"
+    SYSTEM_TESTS_REF: 92dc804a321b496e5f1cc53f3925295557bfd211
 
 requirements_json_test:
   rules:
