@@ -1,5 +1,6 @@
 import eslintPluginJs from '@eslint/js'
 import eslintPluginStylistic from '@stylistic/eslint-plugin'
+import eslintPluginCypress from 'eslint-plugin-cypress'
 import eslintPluginImport from 'eslint-plugin-import'
 import eslintPluginMocha from 'eslint-plugin-mocha'
 import eslintPluginN from 'eslint-plugin-n'
@@ -48,6 +49,9 @@ export default [
       'integration-tests/debugger/target-app/source-map-support/typescript.js', // Generated
       'integration-tests/esbuild/out.js', // Generated
       'integration-tests/esbuild/aws-sdk-out.js', // Generated
+      'packages/datadog-plugin-graphql/src/tools/index.js', // Inlined from apollo-graphql
+      'packages/datadog-plugin-graphql/src/tools/signature.js', // Inlined from apollo-graphql
+      'packages/datadog-plugin-graphql/src/tools/transforms.js', // Inlined from apollo-graphql
       'packages/dd-trace/src/guardrails/**/*' // Guardrails contain very old JS
     ]
   },
@@ -405,6 +409,12 @@ export default [
       'unicorn/prefer-top-level-await': 'off', // Only useful when using ESM
       'unicorn/switch-case-braces': 'off', // Questionable benefit
     }
+  },
+  {
+    ...eslintPluginCypress.configs.recommended,
+    files: [
+      'packages/datadog-plugin-cypress/src/support.js'
+    ]
   },
   {
     name: 'mocha/recommended',
