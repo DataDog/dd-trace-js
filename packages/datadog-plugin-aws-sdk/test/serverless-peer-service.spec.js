@@ -1,32 +1,26 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const Config = require('../../dd-trace/src/config')
 const helpers = require('./kinesis_helpers')
 const { promisify } = require('util')
 const { setup } = require('./spec_helpers')
-const sinon = require('sinon')
 
 describe('Plugin', () => {
   describe('Serverless', function () {
-    let tracer
     setup()
 
     withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
       let AWS
 
       before(async () => {
-        tracer = require('../../dd-trace')
-        sinon.stub(Config.prototype, '_isInServerlessEnvironment').returns(true)
-        // force a reload of the plugins by deleting the plugin instance
-        delete tracer._pluginManager._pluginsByName['aws-sdk']
-        // load the agent and plugins again to ensure `_isInServerlessEnvironment` check
-        // in the plugin constructor is called and the necessary channels are subscribed
+        process.env.DD_TRACE_EXPERIMENTAL_EXPORTER = 'agent'
+        process.env.AWS_LAMBDA_FUNCTION_NAME = 'test'
         await agent.load(['aws-sdk', 'http'], [{}, { server: false }])
       })
 
       after(async () => {
-        Config.prototype._isInServerlessEnvironment.restore()
+        delete process.env.DD_TRACE_EXPERIMENTAL_EXPORTER
+        delete process.env.AWS_LAMBDA_FUNCTION_NAME
         await agent.close({ ritmReset: false })
       })
 
@@ -41,26 +35,6 @@ describe('Plugin', () => {
             KeySchema: [{ AttributeName: 'id', KeyType: 'HASH' }],
             AttributeDefinitions: [{ AttributeName: 'id', AttributeType: 'S' }],
             ProvisionedThroughput: { ReadCapacityUnits: 5, WriteCapacityUnits: 5 }
-          }
-        }
-
-        function toPromise (client, fn) {
-          return function (...args) {
-            if (typeof fn === 'function' && typeof fn.bind === 'function') {
-              fn = fn.bind(client)
-            }
-
-            const result = fn(...args)
-
-            if (result && typeof result.then === 'function') {
-              return result
-            }
-
-            if (result && typeof result.promise === 'function') {
-              return result.promise()
-            }
-
-            return promisify(fn)(...args)
           }
         }
 
@@ -79,8 +53,14 @@ describe('Plugin', () => {
         it('propagates peer.service from aws span to underlying http span', async () => {
           const send = toPromise(dynamo, dynamo.putItem)
 
-          const tracesPromise = agent.assertSomeTraces(
-            assertPeerServicePropagation('dynamodb.us-east-1.amazonaws.com'))
+          const tracesPromise = agent.assertSomeTraces(traces => {
+            const peerService = 'dynamodb.us-east-1.amazonaws.com'
+            const spans = traces[0]
+            const awsSpan = spans.find(s => s.name === 'aws.request')
+            const httpSpan = spans.find(s => s.name === 'http.request')
+            expect(awsSpan.meta['peer.service']).to.equal(peerService)
+            expect(httpSpan.meta['peer.service']).to.equal(peerService)
+          })
 
           await Promise.all([
             tracesPromise,
@@ -139,8 +119,15 @@ describe('Plugin', () => {
           })
         })
 
-        it('propagates peer.service', done => {
-          agent.assertSomeTraces(assertPeerServicePropagation('kinesis.us-east-1.amazonaws.com'), { timeoutMs: 10000 })
+        it('propagates peer.service from aws span to underlying http span', done => {
+          agent.assertSomeTraces(traces => {
+            const peerService = 'kinesis.us-east-1.amazonaws.com'
+            const spans = traces[0]
+            const awsSpan = spans.find(s => s.name === 'aws.request')
+            const httpSpan = spans.find(s => s.name === 'http.request')
+            expect(awsSpan.meta['peer.service']).to.equal(peerService)
+            expect(httpSpan.meta['peer.service']).to.equal(peerService)
+          }, { timeoutMs: 10000 })
             .then(done, done)
 
           helpers.putTestRecord(kinesis, streamName, helpers.dataBuffer, e => e && done(e))
@@ -195,7 +182,14 @@ describe('Plugin', () => {
         })
 
         it('propagates peer.service from aws span to underlying http span', done => {
-          agent.assertSomeTraces(assertPeerServicePropagation('sns.us-east-1.amazonaws.com'))
+          agent.assertSomeTraces(traces => {
+            const peerService = 'sns.us-east-1.amazonaws.com'
+            const spans = traces[0]
+            const awsSpan = spans.find(s => s.name === 'aws.request')
+            const httpSpan = spans.find(s => s.name === 'http.request')
+            expect(awsSpan.meta['peer.service']).to.equal(peerService)
+            expect(httpSpan.meta['peer.service']).to.equal(peerService)
+          })
             .then(done, done)
 
           sns.publish({
@@ -240,7 +234,14 @@ describe('Plugin', () => {
         })
 
         it('propagates peer.service from aws span to underlying http span', done => {
-          agent.assertSomeTraces(assertPeerServicePropagation('sqs.us-east-1.amazonaws.com'))
+          agent.assertSomeTraces(traces => {
+            const peerService = 'sqs.us-east-1.amazonaws.com'
+            const spans = traces[0]
+            const awsSpan = spans.find(s => s.name === 'aws.request')
+            const httpSpan = spans.find(s => s.name === 'http.request')
+            expect(awsSpan.meta['peer.service']).to.equal(peerService)
+            expect(httpSpan.meta['peer.service']).to.equal(peerService)
+          })
             .then(done, done)
 
           sqs.sendMessage({
@@ -267,22 +268,22 @@ describe('Plugin', () => {
           s3.createBucket({ Bucket: bucketName }, done)
         })
 
-        after(async () => {
-          return agent.close({ ritmReset: false })
-        })
+        it('propagates peer.service from aws span to underlying http span', async () => {
+          const put = toPromise(s3, s3.putObject)
 
-        it('propagates peer.service from aws span to underlying http span', done => {
-          agent.assertSomeTraces(assertPeerServicePropagation('s3-bucket-name-test.s3.us-east-1.amazonaws.com'))
-            .then(done, done)
-
-          s3.copyObject({
+          await put({
             Bucket: bucketName,
-            Key: 'new-key',
-            CopySource: `${bucketName}/test-key`
-          }, (err) => {
-            if (err) {
-              done(err)
-            }
+            Key: 'test-key',
+            Body: 'dummy-data'
+          })
+
+          await agent.assertSomeTraces(traces => {
+            const peerService = 's3-bucket-name-test.s3.us-east-1.amazonaws.com'
+            const spans = traces[0]
+            const awsSpan = spans.find(s => s.name === 'aws.request')
+            const httpSpan = spans.find(s => s.name === 'http.request')
+            expect(awsSpan.meta['peer.service']).to.equal(peerService)
+            expect(httpSpan.meta['peer.service']).to.equal(peerService)
           })
         })
       })
@@ -290,33 +291,22 @@ describe('Plugin', () => {
   })
 })
 
-function assertPeerServicePropagation (peerService) {
-  return (traces) => {
-    const spans = traces[0]
-    const awsSpan = spans.find(s => s.name === 'aws.request')
-    const httpSpan = spans.find(s => s.name === 'http.request')
+function toPromise (client, fn) {
+  return function (...args) {
+    if (typeof fn === 'function' && typeof fn.bind === 'function') {
+      fn = fn.bind(client)
+    }
 
-    expect(awsSpan, 'expected the aws span to exist').to.exist
-    expect(httpSpan, 'expected the underlying http span to exist').to.exist
+    const result = fn(...args)
 
-    expect(awsSpan.meta['peer.service'],
-      'expected the aws span to have a peer.service tag'
-    ).to.exist
+    if (result && typeof result.then === 'function') {
+      return result
+    }
 
-    expect(httpSpan.meta['peer.service'],
-      'expected the underlying http span to have a peer.service tag'
-    ).to.exist
+    if (result && typeof result.promise === 'function') {
+      return result.promise()
+    }
 
-    expect(awsSpan.meta['peer.service'],
-    `expected the aws span peer.service to be ${peerService}`
-    ).to.equal(peerService)
-
-    expect(httpSpan.meta['peer.service'],
-    `expected the underlying http span peer.service to be ${peerService}`
-    ).to.equal(peerService)
-
-    expect(awsSpan.meta['peer.service'],
-      'expected the aws span to have the same peer.service tag as the underlying http span'
-    ).to.equal(httpSpan.meta['peer.service'])
+    return promisify(fn)(...args)
   }
 }
