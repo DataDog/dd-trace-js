@@ -34,7 +34,6 @@ function withNamingSchema (
   const {
     hooks = (version, defaultToGlobalService) => {},
     desc = '',
-    selectSpan = (traces) => traces[0][0]
   } = opts
   let fullConfig
 
@@ -59,23 +58,25 @@ function withNamingSchema (
         hooks(versionName, false)
 
         const { opName, serviceName } = expected[versionName]
-        const expectedOpName = typeof opName === 'function'
-          ? opName()
-          : opName
-        const expectedServiceName = typeof serviceName === 'function'
-          ? serviceName()
-          : serviceName
 
         it('should conform to the naming schema', function () {
-          console.log(expectedServiceName, expectedOpName)
           this.timeout(10000)
           return new Promise((resolve, reject) => {
-            agent.assertFirstTraceSpan({
-              name: expectedOpName,
-              service: expectedServiceName,
-            })
-            .then(resolve)
-            .catch(reject)
+            agent
+              .assertSomeTraces(traces => {
+                const span = traces[0][0]
+                const expectedOpName = typeof opName === 'function'
+                  ? opName()
+                  : opName
+                const expectedServiceName = typeof serviceName === 'function'
+                  ? serviceName()
+                  : serviceName
+
+                expect(span).to.have.property('name', expectedOpName)
+                expect(span).to.have.property('service', expectedServiceName)
+              })
+              .then(resolve)
+              .catch(reject)
             spanProducerFn(reject)
           })
         })
