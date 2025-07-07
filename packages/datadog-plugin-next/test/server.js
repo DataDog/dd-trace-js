@@ -1,6 +1,6 @@
 'use strict'
 
-const { PORT = 0, HOSTNAME } = process.env
+const { PORT, HOSTNAME } = process.env
 
 const { createServer } = require('http')
 // eslint-disable-next-line n/no-deprecated-api

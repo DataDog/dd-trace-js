@@ -116,6 +116,7 @@ describe('test suite', () => {
           env: {
             ...process.env,
             VERSION: version,
+            PORT: 0,
             DD_TRACE_AGENT_PORT: agent.server.address().port,
             DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: schemaVersion,
             DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: defaultToGlobalService,
