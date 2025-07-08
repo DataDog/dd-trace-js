@@ -36,7 +36,7 @@ describe('esm', () => {
 
     it('is instrumented', async () => {
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
-      proc.url += 'hello'
+      proc.url += '/hello'
 
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
         assertObjectContains(headers, { host: `127.0.0.1:${agent.port}` })
