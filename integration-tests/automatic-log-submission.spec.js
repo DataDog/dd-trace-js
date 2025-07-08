@@ -136,6 +136,10 @@ describe('test visibility automatic log submission', () => {
 
         childProcess.on('exit', () => {
           Promise.all([logsPromise, eventsPromise]).then(() => {
+            if (name === 'playwright') {
+              // eslint-disable-next-line no-console
+              console.log(testOutput)
+            }
             const { logSpanId, logTraceId } = logIds
             const { testSpanId, testTraceId } = testIds
             assert.include(testOutput, 'Hello simple log!')
@@ -153,17 +157,9 @@ describe('test visibility automatic log submission', () => {
         })
 
         childProcess.stdout.on('data', (chunk) => {
-          if (name === 'playwright') {
-            // eslint-disable-next-line no-console
-            console.log(chunk.toString())
-          }
           testOutput += chunk.toString()
         })
         childProcess.stderr.on('data', (chunk) => {
-          if (name === 'playwright') {
-            // eslint-disable-next-line no-console
-            console.log(chunk.toString())
-          }
           testOutput += chunk.toString()
         })
       })
