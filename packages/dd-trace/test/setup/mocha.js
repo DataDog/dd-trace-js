@@ -34,7 +34,7 @@ function withNamingSchema (
   const {
     hooks = (version, defaultToGlobalService) => {},
     desc = '',
-    selectSpan = (traces) => traces[0][0]
+    selectSpan = (traces) => traces[0][0],
   } = opts
   let fullConfig
 

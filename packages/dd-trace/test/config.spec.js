@@ -802,6 +802,7 @@ describe('Config', () => {
       { name: 'injectForce', value: false, origin: 'env_var' },
       { name: 'injectionEnabled', value: ['tracer'], origin: 'env_var' },
       { name: 'instrumentation_config_id', value: 'abcdef123', origin: 'env_var' },
+      { name: 'instrumentationSource', value: 'ssi', origin: 'env_var' },
       { name: 'isGCPFunction', value: false, origin: 'env_var' },
       { name: 'langchain.spanCharLimit', value: 50, origin: 'env_var' },
       { name: 'langchain.spanPromptCompletionSampleRate', value: 0.5, origin: 'env_var' },
