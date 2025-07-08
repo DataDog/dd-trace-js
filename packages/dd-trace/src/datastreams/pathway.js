@@ -3,12 +3,11 @@
 // this inconsistency is ok because hashes do not need to be consistent across services
 const crypto = require('crypto')
 const { encodeVarint, decodeVarint } = require('./encoding')
-const LRUCache = require('lru-cache')
+const { LRUCache } = require('lru-cache')
 const log = require('../log')
 const pick = require('../../../datadog-core/src/utils/src/pick')
 
-const options = { max: 500 }
-const cache = new LRUCache(options)
+const cache = new LRUCache({ max: 500 })
 
 const CONTEXT_PROPAGATION_KEY = 'dd-pathway-ctx'
 const CONTEXT_PROPAGATION_KEY_BASE64 = 'dd-pathway-ctx-base64'
@@ -24,15 +23,16 @@ function computeHash (service, env, edgeTags, parentHash) {
   edgeTags.sort()
   const hashableEdgeTags = edgeTags.filter(item => item !== 'manual_checkpoint:true')
 
-  const key = `${service}${env}` + hashableEdgeTags.join('') + parentHash.toString()
-  if (cache.get(key)) {
-    return cache.get(key)
+  const key = `${service}${env}${hashableEdgeTags.join('')}${parentHash}`
+  let value = cache.get(key)
+  if (value) {
+    return value
   }
   const currentHash = shaHash(`${service}${env}` + hashableEdgeTags.join(''))
   const buf = Buffer.concat([currentHash, parentHash], 16)
-  const val = shaHash(buf.toString())
-  cache.set(key, val)
-  return val
+  value = shaHash(buf.toString())
+  cache.set(key, value)
+  return value
 }
 
 function encodePathwayContext (dataStreamsContext) {
