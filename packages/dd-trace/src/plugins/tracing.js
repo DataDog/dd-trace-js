@@ -102,17 +102,19 @@ class TracingPlugin extends Plugin {
     }
   }
 
-  startSpan (name, { childOf, kind, meta, metrics, service, resource, type } = {}, enterOrCtx = true) {
+  startSpan (name, { childOf, kind, meta, metrics, service, resource, type, tracer } = {}, enterOrCtx = true) {
     const store = storage('legacy').getStore()
     if (store && childOf === undefined) {
       childOf = store.span
     }
 
-    const span = this.tracer.startSpan(name, {
+    tracer = tracer || this.tracer
+
+    const span = tracer.startSpan(name, {
       childOf,
       tags: {
         [COMPONENT]: this.component,
-        'service.name': service || this.tracer._service,
+        'service.name': service || tracer._service,
         'resource.name': resource,
         'span.kind': kind,
         'span.type': type,
