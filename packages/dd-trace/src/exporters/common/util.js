@@ -1,3 +1,5 @@
+'use strict'
+
 const { getEnvironmentVariable } = require('../../config-helper')
 
 function safeJSONStringify (value) {

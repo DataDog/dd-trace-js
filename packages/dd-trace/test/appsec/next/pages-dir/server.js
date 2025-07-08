@@ -1,5 +1,3 @@
-'use strict'
-
 const { PORT, HOSTNAME } = process.env
 
 const { createServer } = require('http')

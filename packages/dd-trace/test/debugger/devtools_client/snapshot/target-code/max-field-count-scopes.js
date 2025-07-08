@@ -1,4 +1,4 @@
-'use stict'
+'use strict'
 
 function run () {
   // local scope

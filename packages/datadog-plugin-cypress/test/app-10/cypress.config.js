@@ -1,3 +1,5 @@
+'use strict'
+
 const setupNodeEvents = require('./cypress/plugins/index.js')
 
 module.exports = {
