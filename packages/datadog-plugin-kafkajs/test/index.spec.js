@@ -66,7 +66,6 @@ describe('Plugin', () => {
             brokers: ['127.0.0.1:9092'],
             logLevel: lib.logLevel.WARN
           })
-          // KAFKAJS_NO_PARTITIONER_WARNING=1
           testTopic = `test-topic-${randomUUID()}`
           admin = kafka.admin()
           await admin.createTopics({
