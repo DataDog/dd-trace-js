@@ -2,7 +2,6 @@
 
 const Axios = require('axios')
 const { assert } = require('chai')
-const getPort = require('get-port')
 const path = require('path')
 const zlib = require('zlib')
 const fs = require('node:fs')
@@ -29,13 +28,12 @@ withVersions('fastify', 'fastify', '>=2', version => {
         reply.send('DONE')
       })
 
-      getPort().then((port) => {
-        app.listen({ port }, () => {
-          axios = Axios.create({ baseURL: `http://localhost:${port}` })
-          done()
-        })
-        server = app.server
+      app.listen({ port: 0 }, () => {
+        const port = server.address().port
+        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        done()
       })
+      server = app.server
     })
 
     after(() => {
@@ -95,13 +93,12 @@ withVersions('fastify', 'fastify', '>=2', version => {
         reply.send('DONE')
       })
 
-      getPort().then((port) => {
-        app.listen({ port }, () => {
-          axios = Axios.create({ baseURL: `http://localhost:${port}` })
-          done()
-        })
-        server = app.server
+      app.listen({ port: 0 }, () => {
+        const port = server.address().port
+        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        done()
       })
+      server = app.server
     })
 
     after(() => {
@@ -205,13 +202,12 @@ withVersions('fastify', 'fastify', '>=2', version => {
         reply.send('DONE')
       })
 
-      getPort().then((port) => {
-        app.listen({ port }, () => {
-          axios = Axios.create({ baseURL: `http://localhost:${port}` })
-          done()
-        })
-        server = app.server
+      app.listen({ port: 0 }, () => {
+        const port = server.address().port
+        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        done()
       })
+      server = app.server
     })
 
     after(() => {
@@ -295,13 +291,12 @@ withVersions('fastify', 'fastify', '>=2', version => {
         reply.send('DONE')
       })
 
-      getPort().then((port) => {
-        app.listen({ port }, () => {
-          axios = Axios.create({ baseURL: `http://localhost:${port}` })
-          done()
-        })
-        server = app.server
+      app.listen({ port: 0 }, () => {
+        const port = server.address().port
+        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        done()
       })
+      server = app.server
     })
 
     after(() => {
@@ -478,13 +473,12 @@ withVersions('fastify', 'fastify', '>=2', version => {
               reply.send('DONE')
             })
 
-            getPort().then((port) => {
-              app.listen({ port }, () => {
-                axios = Axios.create({ baseURL: `http://localhost:${port}` })
-                done()
-              })
-              server = app.server
-            }).catch(done)
+            app.listen({ port: 0 }, () => {
+              const port = server.address().port
+              axios = Axios.create({ baseURL: `http://localhost:${port}` })
+              done()
+            })
+            server = app.server
           })
 
           beforeEach(async () => {
@@ -577,13 +571,12 @@ describe('Api Security - Fastify', () => {
         reply.send(new Uint16Array(10))
       })
 
-      getPort().then((port) => {
-        app.listen({ port }, () => {
-          axios = Axios.create({ baseURL: `http://localhost:${port}` })
-          done()
-        })
-        server = app.server
+      app.listen({ port: 0 }, () => {
+        const port = server.address().port
+        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        done()
       })
+      server = app.server
     })
 
     after(() => {
