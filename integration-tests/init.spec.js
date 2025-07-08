@@ -36,10 +36,10 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
 
       if (currentVersionIsSupported) {
         context('without DD_INJECTION_ENABLED', () => {
-          it('should initialize the tracer', () => doTest('init/trace.js', 'true\n', [], 'ssi'))
-          it('should initialize instrumentation', () => doTest('init/instrument.js', 'true\n', [], 'ssi'))
+          it('should initialize the tracer', () => doTest('init/trace.js', 'true\n', [], 'manual'))
+          it('should initialize instrumentation', () => doTest('init/instrument.js', 'true\n', [], 'manual'))
           it(`should ${esmWorks ? '' : 'not '}initialize ESM instrumentation`, () =>
-            doTest('init/instrument.mjs', `${esmWorks}\n`, []))
+            doTest('init/instrument.mjs', `${esmWorks}\n`, [], 'manual'))
         })
       }
       context('with DD_INJECTION_ENABLED', () => {
@@ -55,10 +55,10 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
       useEnv({ NODE_OPTIONS })
 
       context('without DD_INJECTION_ENABLED', () => {
-        it('should initialize the tracer', () => doTest('init/trace.js', 'true\n', [], 'ssi'))
-        it('should initialize instrumentation', () => doTest('init/instrument.js', 'true\n', [], 'ssi'))
+        it('should initialize the tracer', () => doTest('init/trace.js', 'true\n', [], 'manual'))
+        it('should initialize instrumentation', () => doTest('init/instrument.js', 'true\n', [], 'manual'))
         it(`should ${esmWorks ? '' : 'not '}initialize ESM instrumentation`, () =>
-          doTest('init/instrument.mjs', `${esmWorks}\n`, []))
+          doTest('init/instrument.mjs', `${esmWorks}\n`, [], 'manual'))
       })
       context('with DD_INJECTION_ENABLED', () => {
         useEnv({ DD_INJECTION_ENABLED, DD_TRACE_DEBUG })
@@ -122,7 +122,7 @@ true
       context('when node version is more than engines field', () => {
         useEnv({ NODE_OPTIONS })
 
-        it('should initialize the tracer, if no DD_INJECTION_ENABLED', () => doTest('true\n', [], 'ssi'))
+        it('should initialize the tracer, if no DD_INJECTION_ENABLED', () => doTest('true\n', [], 'manual'))
         context('with DD_INJECTION_ENABLED', () => {
           useEnv({ DD_INJECTION_ENABLED })
 
