@@ -42,9 +42,9 @@ const TracingPlugin = require('../tracing')
 
 function createSpan (tracer, name, { childOf } = {}, traceCtx, config = {}) {
   return TracingPlugin.prototype.startSpan.call(
-    { component: 'web', config }, 
-    name, 
-    { childOf, tracer }, 
+    { component: 'web', config },
+    name,
+    { childOf, tracer },
     traceCtx
   )
 }
