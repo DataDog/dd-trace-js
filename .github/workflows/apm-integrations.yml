@@ -484,8 +484,7 @@ jobs:
   kafkajs:
     strategy:
       matrix:
-        # using node versions matrix since this plugin testing fails due to install differences between node versions
-        node-version: ['18', '20', '22']
+        node-version: ['oldest', 'latest']
     runs-on: ubuntu-latest
     services:
       kafka:
@@ -511,9 +510,9 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/testagent/start
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: ./.github/actions/node
         with:
-          node-version: ${{ matrix.node-version }}
+          version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
       - if: always()
