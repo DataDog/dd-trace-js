@@ -1,3 +1,5 @@
+'use strict'
+
 describe('jest-test-focused', () => {
   it('will be skipped', () => {
     expect(true).toEqual(true)

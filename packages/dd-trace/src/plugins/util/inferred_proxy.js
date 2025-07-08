@@ -1,3 +1,5 @@
+'use strict'
+
 const log = require('../../log')
 const tags = require('../../../../../ext/tags')
 

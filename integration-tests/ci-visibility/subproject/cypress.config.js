@@ -1,3 +1,5 @@
+'use strict'
+
 module.exports = {
   defaultCommandTimeout: 100,
   e2e: {
