@@ -1,3 +1,5 @@
+'use strict'
+
 const { expect } = require('chai')
 const sum = require('../test/sum')
 const tracer = require('dd-trace')

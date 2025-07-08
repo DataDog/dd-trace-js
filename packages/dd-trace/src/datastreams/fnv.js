@@ -1,3 +1,5 @@
+'use strict'
+
 const FNV_64_PRIME = BigInt('0x100000001B3')
 const FNV1_64_INIT = BigInt('0xCBF29CE484222325')
 

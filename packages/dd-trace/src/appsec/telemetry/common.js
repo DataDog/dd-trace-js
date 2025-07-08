@@ -1,4 +1,4 @@
-'use strinct'
+'use strict'
 
 const DD_TELEMETRY_REQUEST_METRICS = Symbol('_dd.appsec.telemetry.request.metrics')
 
