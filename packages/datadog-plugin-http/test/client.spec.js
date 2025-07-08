@@ -1,5 +1,6 @@
 'use strict'
 
+const { withNamingSchema, withPeerService } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const fs = require('fs')
 const path = require('path')
@@ -66,7 +67,7 @@ describe('Plugin', () => {
             })
         })
 
-        const spanProducerFn = () => {
+        const spanProducerFn = (done) => {
           const app = express()
           app.get('/user', (req, res) => {
             res.status(200).send()
@@ -77,6 +78,7 @@ describe('Plugin', () => {
               res.on('data', () => {})
             })
             req.end()
+            done()
           })
         }
 
@@ -89,7 +91,7 @@ describe('Plugin', () => {
         )
 
         withNamingSchema(
-          spanProducerFn,
+          (done) => spanProducerFn((err) => err && done(err)),
           rawExpectedSchema.client
         )
 
@@ -110,6 +112,7 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('http.method', 'GET')
                 expect(traces[0][0].meta).to.have.property('http.status_code', '200')
                 expect(traces[0][0].meta).to.have.property('component', 'http')
+                expect(traces[0][0].meta).to.have.property('_dd.integration', 'http')
                 expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
               })
               .then(done)

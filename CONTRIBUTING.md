@@ -79,7 +79,7 @@ should always work.
 
 We use [yarn](https://yarnpkg.com/) 1.x for its workspace functionality, so make sure to install that as well. The easist way to install yarn 1.x with with npm:
 
-```sh  
+```sh
 $ npm install -g yarn
 ```
 
@@ -89,6 +89,28 @@ To install dependencies once you have Node and yarn installed, run this in the p
 $ yarn
 ```
 
+## Adding a Plugin
+
+To create a new plugin for a third-party package, follow these steps:
+
+1. `mkdir -p packages/datadog-plugin-<pluginname>/src`
+2. Copy an `index.js` file from another plugin to use as a starting point: `cp packages/datadog-plugin-kafkajs/src/index.js packages/datadog-plugin-<pluginname>/src`
+3. Edit index.js as appropriate for your new plugin
+4. `mkdir -p packages/datadog-plugin-<pluginname>/test`
+5. Create an packages/datadog-plugin-<pluginname>/test/index.spec.js file and add the necessary tests. See other plugin tests for inspiration to file structure.
+6. Edit index.spec.js as appropriate for your new plugin
+7. Add entries to the following files for your new plugin:
+  - `packages/dd-trace/src/plugins/index.js`
+  - `index.d.ts`
+  - `docs/test.ts`
+  - `docs/API.md`
+  - `.github/workflows/apm-integrations.yml`
+
+### Adding a Plugin Test to CI
+
+The plugin tests run on pull requests in Github Actions. Each plugin test suite has its own Github job, so adding a new suite to CI
+requires adding a new job to the Github Actions config. The file containing these configs is `.github/workflows/apm-integrations.yml`.
+You can copypaste and modify an existing plugin job configuration in this file to create a new job config.
 
 ## Testing
 
@@ -108,7 +130,7 @@ Before running _plugin_ tests, the supporting docker containers need to be runni
 
 Instead, you can follow this procedure for the plugin you want to run tests for:
 
-1. Check the CI config in `.github/workflows/plugins.yml` to see what the appropriate values for the `SERVICES` and `PLUGINS` environment variables are for the plugin you're trying to test (noting that not all plugins require `SERVICES`). For example, for the `amqplib` plugin, the `SERVICES` value is `rabbitmq`, and the `PLUGINS` value is `amqplib`.
+1. Check the CI config in `.github/workflows/*.yml` to see what the appropriate values for the `SERVICES` and `PLUGINS` environment variables are for the plugin you're trying to test (noting that not all plugins require `SERVICES`). For example, for the `amqplib` plugin, the `SERVICES` value is `rabbitmq`, and the `PLUGINS` value is `amqplib`.
 2. Run the appropriate docker-compose command to start the required services. For example, for the `amqplib` plugin, you would run: `docker compose up -d rabbitmq`.
 3. Run `yarn services`, with the environment variables set above. This will install any versions of the library to be tested against into the `versions` directory, and check that the appropriate services are running prior to running the test.
 4. Now, you can run `yarn test:plugins` with the environment variables set above to run the tests for the plugin you're interested in.
@@ -117,8 +139,8 @@ To wrap that all up into a simple few lines of shell commands, here is all of th
 
 ```sh
 # These are exported for simplicity, but you can also just set them inline.
-export SERVICES="rabbitmq" # retrieved from .github/workflows/plugins.yml
-export PLUGINS="amqplib" # retrieved from .github/workflows/plugins.yml
+export SERVICES="rabbitmq" # retrieved from .github/workflows/apm-integrations.yml
+export PLUGINS="amqplib" # retrieved from .github/workflows/apm-integrations.yml
 
 docker compose up -d $SERVICES
 yarn services
@@ -148,6 +170,19 @@ $ yarn test:instrumentations
 
 Several other components have test commands as well. See `package.json` for
 details.
+
+### Integration Tests
+
+When running integration tests, some packages are installed from npm into temporary sandboxes.
+If running locally without an internet connection,
+it's possible to use the environment variable `OFFLINE=true` to make `yarn` use the `--prefer-offline` flag,
+which will use the local yarn cache instead of fecthing packages from npm.
+
+### Adding a Plugin Test to CI
+
+The plugin tests run on pull requests in Github Actions. Each plugin test suite has its own Github job, so adding a new suite to CI
+requires adding a new job to the Github Actions config. The file containing these configs is ``.github/workflows/apm-integrations.yml``.
+You can copypaste and modify an existing plugin job configuration in this file to create a new job config.
 
 ### Linting
 

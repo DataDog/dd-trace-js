@@ -135,8 +135,12 @@ describe('TracerProxy', () => {
       remoteConfig: {
         enabled: true
       },
+      runtimeMetrics: {
+        enabled: false
+      },
       configure: sinon.spy(),
-      llmobs: {}
+      llmobs: {},
+      heapSnapshot: {}
     }
     Config = sinon.stub().returns(config)
 
@@ -386,7 +390,7 @@ describe('TracerProxy', () => {
       })
 
       it('should start capturing runtimeMetrics when configured', () => {
-        config.runtimeMetrics = true
+        config.runtimeMetrics.enabled = true
 
         proxy.init()
 
@@ -661,7 +665,7 @@ describe('TracerProxy', () => {
         })
 
         it('should return empty object when no items exist', () => {
-          expect(proxy.getAllBaggageItems()).to.be.undefined
+          expect(proxy.getAllBaggageItems()).to.deep.equal({})
         })
       })
 
@@ -685,7 +689,7 @@ describe('TracerProxy', () => {
           proxy.setBaggageItem('key1', 'value1')
           proxy.setBaggageItem('key2', 'value2')
           const baggage = proxy.removeAllBaggageItems()
-          expect(baggage).to.deep.equal({})
+          expect(baggage).to.be.undefined
         })
       })
     })

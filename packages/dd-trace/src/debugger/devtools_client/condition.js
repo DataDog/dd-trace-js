@@ -278,7 +278,7 @@ function guardAgainstCoercionSideEffects (variable) {
 
 function assertString (variable) {
   return `((val) => {
-    if (typeof val === 'string' || val instanceof String) {
+    if (${isString('val')}) {
       return val
     } else {
       throw new TypeError('Variable is not a string')

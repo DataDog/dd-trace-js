@@ -1,6 +1,6 @@
 'use strict'
 
-const LRUCache = require('lru-cache')
+const { LRUCache } = require('lru-cache')
 const web = require('../../plugins/util/web')
 const vulnerabilities = require('./vulnerabilities')
 

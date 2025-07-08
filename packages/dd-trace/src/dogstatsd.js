@@ -63,7 +63,7 @@ class DogStatsDClient {
   flush () {
     const queue = this._enqueue()
 
-    log.debug(`Flushing ${queue.length} metrics via ${this._httpOptions ? 'HTTP' : 'UDP'}`)
+    log.debug('Flushing %s metrics via', queue.length, this._httpOptions ? 'HTTP' : 'UDP')
 
     if (this._queue.length === 0) return
 
@@ -108,7 +108,7 @@ class DogStatsDClient {
     const socket = family === 6 ? this._udp6 : this._udp4
 
     queue.forEach((buffer) => {
-      log.debug(`Sending to DogStatsD: ${buffer}`)
+      log.debug('Sending to DogStatsD: %s', buffer)
       socket.send(buffer, 0, buffer.length, this._port, address)
     })
   }
@@ -165,7 +165,7 @@ class DogStatsDClient {
         .filter(key => {
           // Skip runtime-id unless enabled as cardinality may be too high
           if (key !== 'runtime-id') return true
-          return (config.experimental && config.experimental.runtimeId)
+          return config.runtimeMetricsRuntimeId
         })
         .forEach(key => {
           // https://docs.datadoghq.com/tagging/#defining-tags

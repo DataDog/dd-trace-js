@@ -1,6 +1,7 @@
 'use strict'
 
-const { EventEmitter } = require('events')
+const { EventEmitter } = require('node:events')
+const { withNamingSchema } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { rawExpectedSchema } = require('./naming')
 

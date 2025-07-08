@@ -119,8 +119,10 @@ class DynamoDb extends BaseAwsSdkPlugin {
 
     const configStr = this._tracerConfig?.trace?.dynamoDb?.tablePrimaryKeys
     if (!configStr) {
-      log.warn('Missing DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS env variable. ' +
-        'Please add your table\'s primary keys under this env variable.')
+      log.warn(
+        // eslint-disable-next-line @stylistic/max-len
+        'Missing DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS env variable. Please add your table\'s primary keys under this env variable.'
+      )
       return
     }
 
@@ -131,8 +133,11 @@ class DynamoDb extends BaseAwsSdkPlugin {
         if (Array.isArray(primaryKeys) && primaryKeys.length > 0 && primaryKeys.length <= 2) {
           config[tableName] = primaryKeys
         } else {
-          log.warn(`Invalid primary key configuration for table: ${tableName}.` +
-            'Please fix the DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS env var.')
+          log.warn(
+            // eslint-disable-next-line @stylistic/max-len
+            'Invalid primary key configuration for table: %s. Please fix the DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS env var.',
+            tableName
+          )
         }
       }
 

@@ -2,7 +2,8 @@
 
 require('../../setup/mocha')
 
-const { expectWithin, getRequestOptions } = require('./utils')
+const sinon = require('sinon')
+const { getRequestOptions } = require('./utils')
 const JSONBuffer = require('../../../src/debugger/devtools_client/json-buffer')
 
 const ddsource = 'dd_debugger'
@@ -10,7 +11,7 @@ const service = 'my-service'
 const runtimeId = 'my-runtime-id'
 
 describe('diagnostic message http requests', function () {
-  let statusproxy, request, jsonBuffer
+  let clock, statusproxy, request, jsonBuffer
 
   const acks = [
     ['ackReceived', 'RECEIVED'],
@@ -20,6 +21,8 @@ describe('diagnostic message http requests', function () {
   ]
 
   beforeEach(function () {
+    clock = sinon.useFakeTimers()
+
     request = sinon.spy()
     request['@noCallThru'] = true
 
@@ -32,10 +35,22 @@ describe('diagnostic message http requests', function () {
     }
 
     statusproxy = proxyquire('../src/debugger/devtools_client/status', {
-      './config': { service, runtimeId, '@noCallThru': true },
+      './config': {
+        service,
+        runtimeId,
+        maxTotalPayloadSize: 5 * 1024 * 1024, // 5MB
+        dynamicInstrumentation: {
+          uploadIntervalSeconds: 1
+        },
+        '@noCallThru': true
+      },
       './json-buffer': JSONBufferSpy,
       '../../exporters/common/request': request
     })
+  })
+
+  afterEach(function () {
+    clock.restore()
   })
 
   for (const [ackFnName, status, err] of acks) {
@@ -107,23 +122,23 @@ describe('diagnostic message http requests', function () {
         ackFn({ id: 'bar', version: 0 })
         expect(request).to.not.have.been.called
 
-        expectWithin(1200, () => {
-          expect(request).to.have.been.calledOnce
+        clock.tick(1000)
 
-          const payload = getFormPayload(request)
+        expect(request).to.have.been.calledOnce
 
-          expect(payload).to.deep.equal([
-            formatAsDiagnosticsEvent({ probeId: 'foo', version: 0, status, exception }),
-            formatAsDiagnosticsEvent({ probeId: 'foo', version: 1, status, exception }),
-            formatAsDiagnosticsEvent({ probeId: 'bar', version: 0, status, exception })
-          ])
+        const payload = getFormPayload(request)
 
-          const opts = getRequestOptions(request)
-          expect(opts).to.have.property('method', 'POST')
-          expect(opts).to.have.property('path', '/debugger/v1/diagnostics')
+        expect(payload).to.deep.equal([
+          formatAsDiagnosticsEvent({ probeId: 'foo', version: 0, status, exception }),
+          formatAsDiagnosticsEvent({ probeId: 'foo', version: 1, status, exception }),
+          formatAsDiagnosticsEvent({ probeId: 'bar', version: 0, status, exception })
+        ])
 
-          done()
-        })
+        const opts = getRequestOptions(request)
+        expect(opts).to.have.property('method', 'POST')
+        expect(opts).to.have.property('path', '/debugger/v1/diagnostics')
+
+        done()
       })
     })
   }

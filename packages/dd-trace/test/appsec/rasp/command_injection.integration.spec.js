@@ -1,13 +1,12 @@
 'use strict'
 
 const { createSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
-const getPort = require('get-port')
 const path = require('path')
 const Axios = require('axios')
 const { assert } = require('chai')
 
 describe('RASP - command_injection - integration', () => {
-  let axios, sandbox, cwd, appPort, appFile, agent, proc
+  let axios, sandbox, cwd, appFile, agent, proc
 
   before(async function () {
     this.timeout(process.platform === 'win32' ? 90000 : 30000)
@@ -18,13 +17,8 @@ describe('RASP - command_injection - integration', () => {
       [path.join(__dirname, 'resources')]
     )
 
-    appPort = await getPort()
     cwd = sandbox.folder
     appFile = path.join(cwd, 'resources', 'shi-app', 'index.js')
-
-    axios = Axios.create({
-      baseURL: `http://localhost:${appPort}`
-    })
   })
 
   after(async function () {
@@ -39,13 +33,13 @@ describe('RASP - command_injection - integration', () => {
       env: {
         DD_TRACE_AGENT_PORT: agent.port,
         DD_TRACE_DEBUG: 'true',
-        APP_PORT: appPort,
         DD_APPSEC_ENABLED: 'true',
         DD_APPSEC_RASP_ENABLED: 'true',
         DD_TELEMETRY_HEARTBEAT_INTERVAL: 1,
         DD_APPSEC_RULES: path.join(cwd, 'resources', 'rasp_rules.json')
       }
     })
+    axios = Axios.create({ baseURL: proc.url })
   })
 
   afterEach(async () => {
@@ -90,13 +84,12 @@ describe('RASP - command_injection - integration', () => {
           assert.include(matchSerie.tags, `rule_variant:${variant}`)
           assert.strictEqual(matchSerie.type, 'count')
         }
-      }, 30_000, 'generate-metrics', 2)
+      }, 'generate-metrics', 30_000, 2)
 
-      return Promise.all([checkMessages, checkTelemetry]).then(() => {
-        assert.equal(appsecTelemetryReceived, true)
+      await Promise.all([checkMessages, checkTelemetry])
 
-        return true
-      })
+      assert.equal(appsecTelemetryReceived, true)
+      return
     }
 
     throw new Error('Request should be blocked')

@@ -61,19 +61,6 @@ class LLMObsTagger {
     if (!this._config.llmobs.enabled) return
     if (!kind) return // do not register it in the map if it doesn't have an llmobs span kind
 
-    this._register(span)
-
-    if (name) this._setTag(span, NAME, name)
-
-    this._setTag(span, SPAN_KIND, kind)
-    if (modelName) this._setTag(span, MODEL_NAME, modelName)
-    if (modelProvider) this._setTag(span, MODEL_PROVIDER, modelProvider)
-
-    sessionId = sessionId || registry.get(parent)?.[SESSION_ID]
-    if (sessionId) this._setTag(span, SESSION_ID, sessionId)
-    if (integration) this._setTag(span, INTEGRATION, integration)
-    if (_decorator) this._setTag(span, DECORATOR, _decorator)
-
     const spanMlApp =
       mlApp ||
       registry.get(parent)?.[ML_APP] ||
@@ -87,7 +74,20 @@ class LLMObsTagger {
       )
     }
 
+    this._register(span)
+
     this._setTag(span, ML_APP, spanMlApp)
+
+    if (name) this._setTag(span, NAME, name)
+
+    this._setTag(span, SPAN_KIND, kind)
+    if (modelName) this._setTag(span, MODEL_NAME, modelName)
+    if (modelProvider) this._setTag(span, MODEL_PROVIDER, modelProvider)
+
+    sessionId = sessionId || registry.get(parent)?.[SESSION_ID]
+    if (sessionId) this._setTag(span, SESSION_ID, sessionId)
+    if (integration) this._setTag(span, INTEGRATION, integration)
+    if (_decorator) this._setTag(span, DECORATOR, _decorator)
 
     const parentId =
       parent?.context().toSpanId() ??

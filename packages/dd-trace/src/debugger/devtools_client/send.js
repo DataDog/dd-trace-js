@@ -32,7 +32,11 @@ const ddtags = [
 
 const path = `/debugger/v1/input?${stringify({ ddtags })}`
 
-const jsonBuffer = new JSONBuffer({ size: config.maxTotalPayloadSize, timeout: 1000, onFlush })
+const jsonBuffer = new JSONBuffer({
+  size: config.maxTotalPayloadSize,
+  timeout: config.dynamicInstrumentation.uploadIntervalSeconds * 1000,
+  onFlush
+})
 
 function send (message, logger, dd, snapshot) {
   const payload = {

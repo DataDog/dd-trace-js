@@ -2,7 +2,6 @@
 
 const { spawn, execSync } = require('child_process')
 const { cpSync, mkdirSync, rmdirSync, unlinkSync } = require('fs')
-const getPort = require('get-port')
 const axios = require('axios')
 const { writeFileSync } = require('fs')
 const { satisfies } = require('semver')
@@ -105,8 +104,6 @@ describe('test suite', () => {
       const appDir = path.join(__dirname, 'next', appName)
 
       before(async () => {
-        port = await getPort()
-
         return agent.load('next')
       })
 
@@ -119,7 +116,7 @@ describe('test suite', () => {
           env: {
             ...process.env,
             VERSION: version,
-            PORT: port,
+            PORT: 0,
             DD_TRACE_AGENT_PORT: agent.server.address().port,
             DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: schemaVersion,
             DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: defaultToGlobalService,
@@ -129,9 +126,20 @@ describe('test suite', () => {
         })
 
         server.once('error', done)
-        server.stdout.once('data', () => {
-          done()
-        })
+
+        function waitUntilServerStarted (chunk) {
+          const chunkStr = chunk.toString()
+          const match = chunkStr.match(/port:? (\d+)/) ||
+              chunkStr.match(/http:\/\/127\.0\.0\.1:(\d+)/)
+
+          if (match) {
+            port = Number(match[1])
+            server.stdout.off('data', waitUntilServerStarted)
+            done()
+          }
+        }
+        server.stdout.on('data', waitUntilServerStarted)
+
         server.stderr.on('data', chunk => process.stderr.write(chunk))
         server.stdout.on('data', chunk => process.stdout.write(chunk))
       })

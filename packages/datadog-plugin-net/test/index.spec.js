@@ -1,6 +1,7 @@
 'use strict'
 
-const dns = require('dns')
+const dns = require('node:dns')
+const { withPeerService } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -92,9 +93,10 @@ describe('Plugin', () => {
       withPeerService(
         () => tracer,
         'net',
-        () => {
+        (done) => {
           const socket = new net.Socket()
           socket.connect(port, 'localhost')
+          done()
         },
         'localhost',
         'out.host'

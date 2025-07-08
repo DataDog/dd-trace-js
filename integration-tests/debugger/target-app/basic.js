@@ -13,10 +13,10 @@ fastify.get('/bar/:name', function barHandler (request) {
   return { hello: request.params.name } // BREAKPOINT: /bar/baz
 })
 
-fastify.listen({ port: process.env.APP_PORT }, (err) => {
+fastify.listen({ port: process.env.APP_PORT || 0 }, (err) => {
   if (err) {
     fastify.log.error(err)
     process.exit(1)
   }
-  process.send({ port: process.env.APP_PORT })
+  process.send?.({ port: fastify.server.address().port })
 })

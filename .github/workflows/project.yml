@@ -26,7 +26,7 @@ jobs:
           npm init -y
       - name: actionlint
         id: actionlint
-        uses: raven-actions/actionlint@01fce4f43a270a612932cb1c64d40505a029f821 # v2.0.0
+        uses: raven-actions/actionlint@3a24062651993d40fed1019b58ac6fbdfbf276cc # v2.0.1
         with:
           matcher: true
           fail-on-error: true
@@ -67,6 +67,7 @@ jobs:
   static-analysis:
     runs-on: ubuntu-latest
     name: Datadog Static Analyzer
+    if: github.actor != 'dependabot[bot]'
     steps:
     - name: Checkout
       uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -98,9 +99,15 @@ jobs:
 
   yarn-dedupe:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
     steps:
       - name: Checkout code
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: ./.github/actions/node/active-lts
@@ -111,21 +118,9 @@ jobs:
       - name: Run yarn dependencies:dedupe
         run: yarn dependencies:dedupe
 
-      - name: Check if yarn.lock was modified
-        run: |
-          if git diff --exit-code yarn.lock; then
-            echo "✅ yarn.lock is already properly deduplicated"
-          else
-            echo "❌ The yarn.lock file needs deduplication!"
-            echo ""
-            echo "The yarn dedupe command has modified your yarn.lock file."
-            echo "This means there were duplicate dependencies that could be optimized."
-            echo ""
-            echo "To fix this issue:"
-            echo "1. Run 'yarn dependencies:dedupe' locally"
-            echo "2. Commit the updated yarn.lock file"
-            echo "3. Push your changes"
-            echo ""
-            echo "This helps keep the dependency tree clean."
-            exit 1
-          fi
+      - name: Run yarn dedupe check
+        run: ./.github/scripts/yarn-dedupe.sh
+        env:
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_USER_TYPE: ${{ github.event.pull_request.user.type }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}

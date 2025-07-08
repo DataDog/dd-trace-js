@@ -1,5 +1,6 @@
 'use strict'
 
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -99,6 +100,7 @@ describe('Plugin', () => {
               )
               expect(traces[0][0].meta).to.have.property('opensearch.params', '{"size":100}')
               expect(traces[0][0].meta).to.have.property('component', 'opensearch')
+              expect(traces[0][0].meta).to.have.property('_dd.integration', 'opensearch')
             })
             .then(done)
             .catch(done)
@@ -253,8 +255,12 @@ describe('Plugin', () => {
                 match_all: {}
               }
             }
+          }).catch(() => {
+            // Ignore index_not_found_exception for peer service assertion
           }),
-          'localhost', 'out.host')
+          'localhost',
+          'out.host'
+        )
 
         it('should be configured with the correct values', done => {
           client.search({

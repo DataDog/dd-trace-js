@@ -41,7 +41,7 @@ function handleResult (result, req, res, abortController, config, raspRule) {
   const ruleTriggered = !!result?.events?.length
 
   if (generateStackTraceAction && enabled && canReportStackTrace(rootSpan, maxStackTraces)) {
-    const frames = getCallsiteFrames(maxDepth)
+    const frames = getCallsiteFrames(maxDepth, handleResult)
 
     reportStackTrace(
       rootSpan,
@@ -57,11 +57,6 @@ function handleResult (result, req, res, abortController, config, raspRule) {
     if (blockingAction && rootSpan?.context()._name === 'express.request') {
       const abortError = new DatadogRaspAbortError(req, res, blockingAction, raspRule, ruleTriggered)
       abortController.abort(abortError)
-
-      // TODO Delete this when support for node 16 is removed
-      if (!abortController.signal.reason) {
-        abortController.signal.reason = abortError
-      }
 
       return
     }

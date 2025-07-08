@@ -5,22 +5,30 @@ test.beforeEach(async ({ page }) => {
   await page.goto(process.env.PW_BASE_URL)
 })
 
+// active span is only supported from >=1.38.0, at which point we add DD_PLAYWRIGHT_WORKER to the env
+function setActiveTestSpanTags (tags) {
+  if (process.env.DD_PLAYWRIGHT_WORKER) {
+    tracer.scope().active().addTags(tags)
+  }
+  return null
+}
+
 test.describe('highest-level-describe', () => {
   test.describe(' leading and trailing spaces ', () => {
     // even empty describe blocks should be allowed
     test.describe(' ', () => {
       test.beforeEach(async ({ page }) => {
-        tracer.scope().active().addTags({
+        setActiveTestSpanTags({
           'custom_tag.beforeEach': 'hello beforeEach'
         })
       })
       test.afterEach(async ({ page }) => {
-        tracer.scope().active().addTags({
+        setActiveTestSpanTags({
           'custom_tag.afterEach': 'hello afterEach'
         })
       })
       test('should work with passing tests', async ({ page }) => {
-        tracer.scope().active().addTags({
+        setActiveTestSpanTags({
           'custom_tag.it': 'hello it'
         })
         await expect(page.locator('.hello-world')).toHaveText([

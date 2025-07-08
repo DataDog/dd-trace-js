@@ -3,6 +3,7 @@
 
 const sinon = require('sinon')
 const semver = require('semver')
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const { rawExpectedSchema } = require('./sns-naming')
@@ -354,7 +355,7 @@ describe('Sns', function () {
         (done) => sns.publish({
           TopicArn,
           Message: 'message 1'
-        }, (err) => err && done()),
+        }, done),
         'TestTopic', 'topicname')
 
       withNamingSchema(

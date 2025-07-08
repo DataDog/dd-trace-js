@@ -64,6 +64,7 @@ describe('Plugin', () => {
                 expect(spans[0].meta).to.have.property('http.method', 'GET')
                 expect(spans[0].meta).to.have.property('http.status_code', '200')
                 expect(spans[0].meta).to.have.property('component', 'koa')
+                expect(spans[0].meta).to.have.property('_dd.integration', 'koa')
 
                 expect(spans[1]).to.have.property('name', 'koa.middleware')
                 expect(spans[1]).to.have.property('service', 'test')

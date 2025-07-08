@@ -23,8 +23,6 @@ module.exports = {
       activation = 'auto'
     } else if (enabled === 'true') {
       activation = 'manual'
-    } else if (injectionEnabled.includes('profiler')) {
-      activation = 'injection'
     } // else activation = undefined
 
     return profiler.start({

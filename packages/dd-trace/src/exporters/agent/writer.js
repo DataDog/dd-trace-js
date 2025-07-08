@@ -69,7 +69,9 @@ function setHeader (headers, key, value) {
 }
 
 function getEncoder (protocolVersion) {
-  return require(`../../encode/${protocolVersion === '0.5' ? '0.5' : '0.4'}`).AgentEncoder
+  return protocolVersion === '0.5'
+    ? require('../../encode/0.5').AgentEncoder
+    : require('../../encode/0.4').AgentEncoder
 }
 
 function makeRequest (version, data, count, url, headers, lookup, needsStartupLog, cb) {
@@ -90,7 +92,7 @@ function makeRequest (version, data, count, url, headers, lookup, needsStartupLo
   setHeader(options.headers, 'Datadog-Meta-Lang-Version', process.version)
   setHeader(options.headers, 'Datadog-Meta-Lang-Interpreter', process.jsEngine || 'v8')
 
-  log.debug(() => `Request to the agent: ${JSON.stringify(options)}`)
+  log.debug('Request to the agent: %j', options)
 
   request(data, options, (err, res, status) => {
     if (needsStartupLog) {

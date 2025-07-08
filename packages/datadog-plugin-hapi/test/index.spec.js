@@ -103,6 +103,7 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.have.property('http.method', 'GET')
             expect(traces[0][0].meta).to.have.property('http.status_code')
             expect(traces[0][0].meta).to.have.property('component', 'hapi')
+            expect(traces[0][0].meta).to.have.property('_dd.integration', 'hapi')
             expect(Number(traces[0][0].meta['http.status_code'])).to.be.within(200, 299)
           })
           .then(done)

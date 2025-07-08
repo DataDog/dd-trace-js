@@ -1,5 +1,6 @@
 'use strict'
 
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
@@ -43,7 +44,7 @@ describe('Legacy Plugin', () => {
         withPeerService(
           () => tracer,
           'redis',
-          () => client.get('foo'),
+          (done) => client.get('foo', done),
           '127.0.0.1',
           'out.host'
         )
@@ -62,6 +63,7 @@ describe('Legacy Plugin', () => {
               expect(traces[0][0].meta).to.have.property('out.host', '127.0.0.1')
               expect(traces[0][0].meta).to.have.property('redis.raw_command', 'GET foo')
               expect(traces[0][0].meta).to.have.property('component', 'redis')
+              expect(traces[0][0].meta).to.have.property('_dd.integration', 'redis')
             })
             .then(done)
             .catch(done)

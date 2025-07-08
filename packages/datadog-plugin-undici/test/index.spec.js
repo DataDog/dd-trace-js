@@ -1,10 +1,12 @@
 'use strict'
 
+const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const tags = require('../../../ext/tags')
 const { expect } = require('chai')
 const { rawExpectedSchema } = require('./naming')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { NODE_MAJOR } = require('../../../version')
 
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
@@ -17,7 +19,7 @@ describe('Plugin', () => {
   let appListener
 
   describe('undici-fetch', () => {
-    withVersions('undici', 'undici', version => {
+    withVersions('undici', 'undici', NODE_MAJOR < 20 ? '<7.11.0' : '*', (version) => {
       function server (app, listener) {
         const server = require('http').createServer(app)
         server.listen(0, 'localhost', () => listener(server.address().port))
@@ -80,6 +82,7 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('http.method', 'GET')
                 expect(traces[0][0].meta).to.have.property('http.status_code', '200')
                 expect(traces[0][0].meta).to.have.property('component', 'undici')
+                expect(traces[0][0].meta).to.have.property('_dd.integration', 'undici')
                 expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
               })
               .then(done)

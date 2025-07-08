@@ -113,9 +113,9 @@ function isBaseSequencer (vitestPackage) {
   return vitestPackage.b?.name === 'BaseSequencer'
 }
 
-function getChannelPromise (channelToPublishTo) {
+function getChannelPromise (channelToPublishTo, frameworkVersion) {
   return new Promise(resolve => {
-    channelToPublishTo.publish({ onDone: resolve })
+    channelToPublishTo.publish({ onDone: resolve, frameworkVersion })
   })
 }
 
@@ -173,7 +173,7 @@ function getTestName (task) {
   return testName
 }
 
-function getSortWrapper (sort) {
+function getSortWrapper (sort, frameworkVersion) {
   return async function () {
     if (!testSessionFinishCh.hasSubscribers) {
       return sort.apply(this, arguments)
@@ -193,7 +193,7 @@ function getSortWrapper (sort) {
     let isDiEnabled = false
 
     try {
-      const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh)
+      const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh, frameworkVersion)
       if (!err) {
         isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
         flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount

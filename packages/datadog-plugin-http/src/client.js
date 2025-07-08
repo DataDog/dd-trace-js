@@ -38,6 +38,7 @@ class HttpClientPlugin extends ClientPlugin {
     // TODO delegate to super.startspan
     const span = this.startSpan(this.operationName(), {
       childOf,
+      integrationName: this.constructor.id,
       meta: {
         [COMPONENT]: this.constructor.id,
         'span.kind': 'client',
@@ -88,7 +89,8 @@ class HttpClientPlugin extends ClientPlugin {
     return parentStore
   }
 
-  finish ({ req, res, span }) {
+  finish (ctx) {
+    const { req, res, span } = ctx
     if (!span) return
     if (res) {
       const status = res.status || res.statusCode
@@ -108,9 +110,7 @@ class HttpClientPlugin extends ClientPlugin {
 
     this.config.hooks.request(span, req, res)
 
-    this.tagPeerService(span)
-
-    span.finish()
+    super.finish(ctx)
   }
 
   error ({ span, error, args, customRequestTimeout }) {

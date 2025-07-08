@@ -1,6 +1,6 @@
 'use strict'
 
-const { channel, addHook, AsyncResource } = require('../helpers/instrument')
+const { channel, addHook } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 
 const startChannel = channel('apm:moleculer:action:start')
@@ -24,27 +24,26 @@ function createMiddleware () {
     localAction (next, action) {
       const broker = this
 
-      return shimmer.wrapFunction(next, next => function datadogMiddleware (ctx) {
-        const actionResource = new AsyncResource('bound-anonymous-fn')
-
-        return actionResource.runInAsyncScope(() => {
-          startChannel.publish({ action, ctx, broker })
-
+      return shimmer.wrapFunction(next, next => function datadogMiddleware (middlewareCtx) {
+        const ctx = { action, middlewareCtx, broker }
+        return startChannel.runStores(ctx, () => {
           try {
-            return next(ctx).then(
+            return next(middlewareCtx).then(
               result => {
-                finishChannel.publish()
+                finishChannel.publish(ctx)
                 return result
               },
               error => {
-                errorChannel.publish(error)
-                finishChannel.publish()
+                ctx.error = error
+                errorChannel.publish(ctx)
+                finishChannel.publish(ctx)
                 throw error
               }
             )
           } catch (e) {
-            errorChannel.publish(e)
-            finishChannel.publish()
+            ctx.error = e
+            errorChannel.publish(ctx)
+            finishChannel.publish(ctx)
           }
         })
       })

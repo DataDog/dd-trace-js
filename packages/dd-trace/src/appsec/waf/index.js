@@ -2,14 +2,26 @@
 
 const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
+const Reporter = require('../reporter')
+
+class WafUpdateError extends Error {
+  constructor (diagnosticErrors) {
+    super('WafUpdateError')
+    this.name = 'WafUpdateError'
+    this.diagnosticErrors = diagnosticErrors
+  }
+}
 
 const waf = {
   wafManager: null,
   init,
   destroy,
-  update,
+  updateConfig,
+  removeConfig,
+  checkAsmDdFallback,
   run: noop,
-  disposeContext: noop
+  disposeContext: noop,
+  WafUpdateError
 }
 
 function init (rules, config) {
@@ -34,14 +46,43 @@ function destroy () {
   waf.disposeContext = noop
 }
 
-function update (newRules) {
-  // TODO: check race conditions between Appsec enable/disable and WAF updates, the whole RC state management in general
+function checkAsmDdFallback () {
   if (!waf.wafManager) throw new Error('Cannot update disabled WAF')
 
   try {
-    waf.wafManager.update(newRules)
+    waf.wafManager.setAsmDdFallbackConfig()
+  } catch {
+    log.error('[ASM] Could not apply default ruleset back as fallback')
+  }
+}
+
+function updateConfig (product, configId, configPath, config) {
+  if (!waf.wafManager) throw new Error('Cannot update disabled WAF')
+
+  try {
+    if (product === 'ASM_DD') {
+      waf.wafManager.removeConfig(waf.wafManager.constructor.defaultWafConfigPath)
+    }
+
+    const updateSucceeded = waf.wafManager.updateConfig(configPath, config)
+    Reporter.reportWafConfigUpdate(product, configId, waf.wafManager.ddwaf.diagnostics, waf.wafManager.ddwafVersion)
+
+    if (!updateSucceeded) {
+      throw new WafUpdateError(waf.wafManager.ddwaf.diagnostics)
+    }
   } catch (err) {
-    log.error('[ASM] Could not apply rules from remote config')
+    log.error('[ASM] Could not update config from RC')
+    throw err
+  }
+}
+
+function removeConfig (configPath) {
+  if (!waf.wafManager) throw new Error('Cannot update disabled WAF')
+
+  try {
+    waf.wafManager.removeConfig(configPath)
+  } catch (err) {
+    log.error('[ASM] Could not remove config from RC')
     throw err
   }
 }

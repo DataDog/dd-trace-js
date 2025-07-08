@@ -99,7 +99,8 @@ describe('integrations', () => {
       return agent.close({ ritmReset: false, wipe: true })
     })
 
-    withVersions('langchain', ['@langchain/core'], version => {
+    // TODO(sabrenner): remove this once we have the more robust mocking merged
+    withVersions('langchain', ['@langchain/core'], '<0.3.60', version => {
       describe('langchain', () => {
         beforeEach(() => {
           langchainOpenai = require(`../../../../../../versions/@langchain/openai@${version}`).get()

@@ -31,7 +31,21 @@ const V4_PACKAGE_SHIMS = [
     file: 'resources/files',
     targetClass: 'Files',
     baseResource: 'files',
-    methods: ['create', 'del', 'list', 'retrieve']
+    methods: ['create', 'list', 'retrieve'],
+  },
+  {
+    file: 'resources/files',
+    targetClass: 'Files',
+    baseResource: 'files',
+    methods: ['del'],
+    versions: ['>=4.0.0 <5.0.0']
+  },
+  {
+    file: 'resources/files',
+    targetClass: 'Files',
+    baseResource: 'files',
+    methods: ['delete'],
+    versions: ['>=5']
   },
   {
     file: 'resources/files',
@@ -78,7 +92,21 @@ const V4_PACKAGE_SHIMS = [
     file: 'resources/models',
     targetClass: 'Models',
     baseResource: 'models',
-    methods: ['del', 'list', 'retrieve']
+    methods: ['list', 'retrieve']
+  },
+  {
+    file: 'resources/models',
+    targetClass: 'Models',
+    baseResource: 'models',
+    methods: ['del'],
+    versions: ['>=4 <5']
+  },
+  {
+    file: 'resources/models',
+    targetClass: 'Models',
+    baseResource: 'models',
+    methods: ['delete'],
+    versions: ['>=5']
   },
   {
     file: 'resources/moderations',

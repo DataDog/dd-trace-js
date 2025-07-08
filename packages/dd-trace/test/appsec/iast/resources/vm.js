@@ -9,7 +9,6 @@ const express = require('express')
 const vm = require('node:vm')
 
 const app = express()
-const port = process.env.APP_PORT || 3000
 
 app.get('/vm/SourceTextModule', async (req, res) => {
   const module = new vm.SourceTextModule(req.query.script)
@@ -19,6 +18,6 @@ app.get('/vm/SourceTextModule', async (req, res) => {
   res.end('OK')
 })
 
-app.listen(port, () => {
-  process.send({ port })
+const server = app.listen(process.env.APP_PORT || 0, () => {
+  process.send?.({ port: server.address().port })
 })

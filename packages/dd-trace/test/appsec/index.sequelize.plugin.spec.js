@@ -18,7 +18,7 @@ describe('sequelize', () => {
           appsec.enable(new Config({
             appsec: {
               enabled: true,
-              rules: path.join(__dirname, 'express-rules.json'),
+              rules: path.join(__dirname, 'rules-example.json'),
               apiSecurity: {
                 enabled: true,
                 sampleDelay: 10

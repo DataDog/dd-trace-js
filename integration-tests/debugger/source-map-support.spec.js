@@ -17,7 +17,7 @@ describe('Dynamic Instrumentation', function () {
         t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { probe: { location } } } }] }) => {
           assert.deepEqual(location, {
             file: 'target-app/source-map-support/typescript.ts',
-            lines: ['10']
+            lines: ['11']
           })
           done()
         })

@@ -43,7 +43,7 @@ require("dd-trace/init");
 var server = (0, import_node_http.createServer)((req, res) => {
   res.end((0, import_world.sayHello)());
 });
-server.listen(process.env.APP_PORT, () => {
-  process.send?.({ port: process.env.APP_PORT });
+server.listen(process.env.APP_PORT || 0, () => {
+  process.send?.({ port: server.address().port });
 });
 //# sourceMappingURL=bundle.js.map

@@ -77,7 +77,7 @@ class Tracer {
           origin
         )
       } else {
-        log.debug(`no dd list member in tracestate from incoming request: ${ts}`)
+        log.debug('no dd list member in tracestate from incoming request:', ts)
       }
     }
 

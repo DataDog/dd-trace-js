@@ -152,7 +152,8 @@ class MochaPlugin extends CiPlugin {
           [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,
           ...testSuiteMetadata
-        }
+        },
+        integrationName: this.constructor.id
       })
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
       if (this.libraryConfig?.isCodeCoverageEnabled) {
@@ -450,7 +451,7 @@ class MochaPlugin extends CiPlugin {
             const testSuite = span.meta[TEST_SUITE]
             const testSuiteSpan = this._testSuites.get(testSuite)
             if (!testSuiteSpan) {
-              log.warn(`Test suite span not found for test span with test suite ${testSuite}`)
+              log.warn('Test suite span not found for test span with test suite', testSuite)
               return formattedSpan
             }
             const suiteTags = getTestSuiteLevelVisibilityTags(testSuiteSpan)

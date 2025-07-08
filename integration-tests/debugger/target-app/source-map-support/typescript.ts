@@ -1,6 +1,7 @@
 require('dd-trace/init')
 
 import { createServer } from 'node:http'
+import { type AddressInfo } from 'node:net'
 import { sayHello } from './hello/world'
 
 const server = createServer((req, res) => {
@@ -10,6 +11,6 @@ const server = createServer((req, res) => {
   res.end(sayHello()) // BREAKPOINT: /
 })
 
-server.listen(process.env.APP_PORT, () => {
-  process.send?.({ port: process.env.APP_PORT })
+server.listen(process.env.APP_PORT || 0, () => {
+  process.send?.({ port: (server.address() as AddressInfo).port })
 })

@@ -20,6 +20,7 @@ module.exports = {
   get '@langchain/openai' () { return require('../../../datadog-plugin-langchain/src') },
   get '@node-redis/client' () { return require('../../../datadog-plugin-redis/src') },
   get '@opensearch-project/opensearch' () { return require('../../../datadog-plugin-opensearch/src') },
+  get '@prisma/client' () { return require('../../../datadog-plugin-prisma/src') },
   get '@redis/client' () { return require('../../../datadog-plugin-redis/src') },
   get '@smithy/smithy-client' () { return require('../../../datadog-plugin-aws-sdk/src') },
   get '@vitest/runner' () { return require('../../../datadog-plugin-vitest/src') },
