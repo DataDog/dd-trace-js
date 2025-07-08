@@ -18,7 +18,8 @@ runs:
       shell: bash
       if: inputs.cache == 'true' && steps.yarn-cache.outputs.cache-hit == 'true'
       # Retry in case of server error from registry.
-    - run: yarn install --frozen-lockfile --ignore-engines || yarn install --frozen-lockfile --ignore-engines
+      # Wait 60 seconds to give the registry server time to heal.
+    - run: yarn install --frozen-lockfile --ignore-engines || sleep 60 && yarn install --frozen-lockfile --ignore-engines
       shell: bash
     - run: tar -cf node_modules.tar node_modules
       shell: bash
