@@ -531,7 +531,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
           this.skip()
         }
 
-        // 6.x works for this specific Fastify patch version.
+        // 6.x doesn't work for this specific Fastify patch version.
         if (semver.intersects(fastifyLoadedVersion, '3.9.2') && semver.intersects(multipartLoadedVersion, '>6')) {
           this.skip()
         }
