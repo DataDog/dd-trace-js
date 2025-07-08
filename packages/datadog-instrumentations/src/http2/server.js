@@ -33,7 +33,8 @@ function wrapResponseEmit (emit, ctx) {
   return function (eventName, event) {
     if (eventName !== 'close') return emit.apply(this, arguments)
 
-    return finishServerCh.runStores({ req: this.req, ...ctx }, () => {
+    ctx.req = this.req
+    return finishServerCh.runStores(ctx, () => {
       return emit.apply(this, arguments)
     })
   }
