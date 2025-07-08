@@ -260,7 +260,7 @@
   "hono": [
     {
       "name": "@hono/node-server",
-      "dep": true
+      "versions": ["1.15.0"]
     }
   ],
   "jest": [
