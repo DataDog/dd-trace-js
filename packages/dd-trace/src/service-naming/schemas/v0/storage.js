@@ -1,3 +1,5 @@
+'use strict'
+
 function getRedisService (pluginConfig, connectionName) {
   if (pluginConfig.splitByInstance && connectionName) {
     return pluginConfig.service

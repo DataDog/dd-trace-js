@@ -1,3 +1,5 @@
+'use strict'
+
 const { NODE_MAJOR } = require('../../version')
 
 // These polyfills are here because cypress@6.7.0, which we still support for v5, runs its plugin code

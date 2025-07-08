@@ -1,3 +1,5 @@
+'use strict'
+
 const { addHook } = require('./helpers/instrument')
 const { DD_MAJOR } = require('../../../version')
 
