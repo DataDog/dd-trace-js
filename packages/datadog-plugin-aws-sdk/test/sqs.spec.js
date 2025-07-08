@@ -419,7 +419,6 @@ describe('Plugin', () => {
         before(async () => {
           return agent.load('aws-sdk', {
             sqs: {
-              consumer: false,
               dsmEnabled: true
             }
           },
@@ -529,33 +528,25 @@ describe('Plugin', () => {
         })
 
         if (sqsClientName === 'aws-sdk' && semver.intersects(version, '>=2.3')) {
-          // This test was always failing on its own but for some reason it
-          // passes only because of side-effects from other tests.
-          // TODO: Fix the test to work properly without side-effects.
-          it.skip('Should set pathway hash tag on a span when consuming and promise() was used over a callback',
+          it('Should set pathway hash tag on a span when consuming and promise() was used over a callback',
             async () => {
-              await sqs.sendMessage({ MessageBody: 'test DSM', QueueUrl: QueueUrlDsm })
-              await sqs.receiveMessage({ QueueUrl: QueueUrlDsm }).promise()
-
               let consumeSpanMeta = {}
-              return new Promise((resolve, reject) => {
-                agent.assertSomeTraces(traces => {
-                  const span = traces[0][0]
+              const tracePromise = agent.assertSomeTraces(traces => {
+                const span = traces[0][0]
 
-                  if (span.name === 'aws.request' && span.meta['aws.operation'] === 'receiveMessage') {
-                    consumeSpanMeta = span.meta
-                  }
+                if (span.name === 'aws.request' && span.meta['aws.operation'] === 'receiveMessage') {
+                  consumeSpanMeta = span.meta
+                }
 
-                  try {
-                    expect(consumeSpanMeta).to.include({
-                      'pathway.hash': expectedConsumerHash
-                    })
-                    resolve()
-                  } catch (error) {
-                    reject(error)
-                  }
+                expect(consumeSpanMeta).to.include({
+                  'pathway.hash': expectedConsumerHash
                 })
               })
+
+              await sqs.sendMessage({ MessageBody: 'test DSM', QueueUrl: QueueUrlDsm }).promise()
+              await sqs.receiveMessage({ QueueUrl: QueueUrlDsm }).promise()
+
+              return tracePromise
             })
         }
 
