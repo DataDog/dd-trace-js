@@ -38,6 +38,16 @@ const HTTP2_HEADER_PATH = ':path'
 const contexts = new WeakMap()
 const ends = new WeakMap()
 
+const TracingPlugin = require('../tracing')
+let tracingPlugin
+
+const initializeTracingPlugin = (tracer) => {
+  if (!tracingPlugin) {
+    tracingPlugin = new TracingPlugin(tracer, tracer.config)
+  }
+  return tracingPlugin
+}
+
 const web = {
   TYPE: WEB,
 
@@ -95,6 +105,8 @@ const web = {
 
   startSpan (tracer, config, req, res, name, traceCtx) {
     const context = this.patch(req)
+
+    tracingPlugin = initializeTracingPlugin(tracer)
 
     let span
 
@@ -159,14 +171,17 @@ const web = {
   wrapMiddleware (req, middleware, name, fn) {
     if (!this.active(req)) return fn()
 
+    tracingPlugin = initializeTracingPlugin(context.tracer)
+
     const context = contexts.get(req)
     const tracer = context.tracer
     const childOf = this.active(req)
     const config = context.config
+    const traceCtx = context.traceCtx
 
     if (config.middleware === false) return this.bindAndWrapMiddlewareErrors(fn, req, tracer, childOf)
 
-    const span = tracer.startSpan(name, { childOf })
+    const span = tracingPlugin.startSpan(name, { childOf }, traceCtx)
 
     analyticsSampler.sample(span, config.measured)
 
@@ -263,6 +278,8 @@ const web = {
     const reqCtx = contexts.get(req)
     let childOf = tracer.extract(FORMAT_HTTP_HEADERS, headers)
 
+    tracingPlugin = initializeTracingPlugin(tracer)
+
     const store = storage('legacy').getStore()
 
     // we may have headers signaling a router proxy span should be created (such as for AWS API Gateway)
@@ -273,12 +290,7 @@ const web = {
       }
     }
 
-    const span = tracer.startSpan(name, { childOf, links: childOf?._links })
-
-    if (traceCtx) {
-      traceCtx.parentStore = store
-      traceCtx.currentStore = { ...store, span }
-    }
+    const span = tracingPlugin.startSpan(name, { childOf }, traceCtx)
 
     return span
   },
