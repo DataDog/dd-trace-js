@@ -22,7 +22,7 @@ const initHTTPServer = () => {
 
     server.on('connection', socket => sockets.push(socket))
 
-    server.listen(0, '127.0.0.1', () => {
+    server.listen(0, () => {
       const shutdown = () => {
         sockets.forEach(socket => socket.end())
         server.close()
