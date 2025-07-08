@@ -154,12 +154,14 @@ describe('test visibility automatic log submission', () => {
 
         childProcess.stdout.on('data', (chunk) => {
           if (name === 'playwright') {
+            // eslint-disable-next-line no-console
             console.log(chunk.toString())
           }
           testOutput += chunk.toString()
         })
         childProcess.stderr.on('data', (chunk) => {
           if (name === 'playwright') {
+            // eslint-disable-next-line no-console
             console.log(chunk.toString())
           }
           testOutput += chunk.toString()
