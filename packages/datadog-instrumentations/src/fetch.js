@@ -1,5 +1,7 @@
 'use strict'
 
+/* eslint n/no-unsupported-features/node-builtins: ['error', { ignores: ['fetch', 'Request'] }] */
+
 const { isInServerlessEnvironment } = require('../../dd-trace/src/serverless')
 
 if (globalThis.fetch) {

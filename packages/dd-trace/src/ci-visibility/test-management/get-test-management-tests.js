@@ -1,3 +1,5 @@
+'use strict'
+
 const request = require('../../exporters/common/request')
 const id = require('../../id')
 const { getEnvironmentVariable } = require('../../config-helper')

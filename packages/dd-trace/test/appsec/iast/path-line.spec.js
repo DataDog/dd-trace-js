@@ -1,3 +1,5 @@
+'use strict'
+
 const proxyquire = require('proxyquire')
 const path = require('path')
 const os = require('os')
@@ -199,7 +201,7 @@ describe('path-line', function () {
       const basePath = pathLine.ddBasePath
       pathLine.ddBasePath = path.join('test', 'base', 'path')
 
-      const list = getCallsiteFrames(32, getCallSiteInfo)
+      const list = getCallsiteFrames(32, getCallSiteInfo, getCallSiteInfo)
       const firstNonDDPath = pathLine.getNonDDCallSiteFrames(list)[0]
 
       const expectedPath = path.join('node_modules', firstNonDDPath.path)

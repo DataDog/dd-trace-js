@@ -3,7 +3,6 @@
 require('../../setup/tap')
 
 const agent = require('../agent')
-const getPort = require('get-port')
 const { expect } = require('chai')
 const axios = require('axios')
 
@@ -19,7 +18,6 @@ describe('Inferred Proxy Spans', function () {
     process.env.DD_SERVICE = 'aws-server'
     process.env.DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED = 'true'
 
-    port = await getPort()
     require('../../../../dd-trace')
 
     await agent.load(['http'], null, options)
@@ -37,14 +35,19 @@ describe('Inferred Proxy Spans', function () {
       }
     })
 
-    appListener = server.listen(port, '127.0.0.1')
+    return new Promise((resolve, reject) => {
+      appListener = server.listen(0, '127.0.0.1', () => {
+        port = server.address().port
+        resolve()
+      })
+    })
   }
 
   // test cleanup function
-  const cleanupTest = function () {
+  const cleanupTest = async function () {
     appListener && appListener.close()
     try {
-      agent.close({ ritmReset: false })
+      await agent.close({ ritmReset: false })
     } catch {
       // pass
     }
@@ -58,6 +61,8 @@ describe('Inferred Proxy Spans', function () {
     'x-dd-proxy-domain-name': 'example.com',
     'x-dd-proxy-stage': 'dev'
   }
+
+  afterEach(cleanupTest)
 
   describe('without configuration', () => {
     it('should create a parent span and a child span for a 200', async () => {
@@ -103,7 +108,7 @@ describe('Inferred Proxy Spans', function () {
             continue
           }
         }
-      }).then(cleanupTest).catch(cleanupTest)
+      })
     })
 
     it('should create a parent span and a child span for an error', async () => {
@@ -150,7 +155,7 @@ describe('Inferred Proxy Spans', function () {
             continue
           }
         }
-      }).then(cleanupTest).catch(cleanupTest)
+      })
     })
 
     it('should not create an API Gateway span if all necessary headers are missing', async () => {
@@ -182,7 +187,7 @@ describe('Inferred Proxy Spans', function () {
             continue
           }
         }
-      }).then(cleanupTest).catch(cleanupTest)
+      })
     })
 
     it('should not create an API Gateway span if missing the proxy system header', async () => {
@@ -217,7 +222,7 @@ describe('Inferred Proxy Spans', function () {
             continue
           }
         }
-      }).then(cleanupTest).catch(cleanupTest)
+      })
     })
   })
 
@@ -251,7 +256,7 @@ describe('Inferred Proxy Spans', function () {
             continue
           }
         }
-      }).then(cleanupTest).catch(cleanupTest)
+      })
     })
   })
 })
