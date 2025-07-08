@@ -3,7 +3,6 @@
 require('../../setup/tap')
 
 const nock = require('nock')
-const getPort = require('get-port')
 const http = require('http')
 const zlib = require('zlib')
 
@@ -23,11 +22,13 @@ const initHTTPServer = (port) => {
 
     server.on('connection', socket => sockets.push(socket))
 
-    server.listen(port, () => {
-      resolve(() => {
+    server.listen(0, '127.0.0.1', () => {
+      const shutdown = () => {
         sockets.forEach(socket => socket.end())
         server.close()
-      })
+      }
+      shutdown.port = server.address().port
+      resolve(shutdown)
     })
   })
 }
@@ -223,37 +224,33 @@ describe('request', function () {
   })
 
   it('should be able to send concurrent requests to different hosts', function (done) {
-    // TODO: try to simplify the setup here. I haven't been able to reproduce the
-    // concurrent socket issue using nock
-    Promise.all([getPort(), getPort()]).then(([port1, port2]) => {
-      Promise.all([initHTTPServer(port1), initHTTPServer(port2)]).then(([shutdownFirst, shutdownSecond]) => {
-        // this interval is blocking a socket for the other request
-        const intervalId = setInterval(() => {
-          request(Buffer.from(''), {
-            path: '/',
-            method: 'POST',
-            hostname: 'localhost',
-            protocol: 'http:',
-            port: port1
-          }, () => {})
-        }, 1000)
+    Promise.all([initHTTPServer(), initHTTPServer()]).then(([shutdownFirst, shutdownSecond]) => {
+      // this interval is blocking a socket for the other request
+      const intervalId = setInterval(() => {
+        request(Buffer.from(''), {
+          path: '/',
+          method: 'POST',
+          hostname: 'localhost',
+          protocol: 'http:',
+          port: shutdownFirst.port
+        }, () => {})
+      }, 1000)
 
-        setTimeout(() => {
-          request(Buffer.from(''), {
-            path: '/',
-            method: 'POST',
-            hostname: 'localhost',
-            protocol: 'http:',
-            port: port2
-          }, (err, res) => {
-            expect(res).to.equal('OK')
-            shutdownFirst()
-            shutdownSecond()
-            clearInterval(intervalId)
-            done()
-          })
-        }, 2000)
-      })
+      setTimeout(() => {
+        request(Buffer.from(''), {
+          path: '/',
+          method: 'POST',
+          hostname: 'localhost',
+          protocol: 'http:',
+          port: shutdownSecond.port
+        }, (err, res) => {
+          expect(res).to.equal('OK')
+          shutdownFirst()
+          shutdownSecond()
+          clearInterval(intervalId)
+          done()
+        })
+      }, 2000)
     })
   })
 
