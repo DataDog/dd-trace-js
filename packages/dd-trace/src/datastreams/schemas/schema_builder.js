@@ -1,3 +1,5 @@
+'use strict'
+
 const { LRUCache } = require('lru-cache')
 const { fnv64 } = require('../fnv')
 const { Schema } = require('./schema')

@@ -1,3 +1,5 @@
+'use strict'
+
 // eslint-disable-next-line no-undef
 jest.mock('../test/sum.js')
 

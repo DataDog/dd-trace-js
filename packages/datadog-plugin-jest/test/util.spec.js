@@ -1,3 +1,5 @@
+'use strict'
+
 const path = require('path')
 const { getFormattedJestTestParameters, getJestSuitesToRun } = require('../src/util')
 
