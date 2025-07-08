@@ -7,6 +7,8 @@
 const chproc = require('child_process')
 const path = require('path')
 const fs = require('fs')
+// TODO: It shouldn't be necessary to disable n/no-extraneous-require - Research
+// eslint-disable-next-line n/no-extraneous-require
 const { assert } = require('chai')
 
 const TEST_DIR = path.join(__dirname, '.')
