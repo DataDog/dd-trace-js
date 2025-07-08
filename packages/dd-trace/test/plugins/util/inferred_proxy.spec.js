@@ -62,6 +62,8 @@ describe('Inferred Proxy Spans', function () {
     'x-dd-proxy-stage': 'dev'
   }
 
+  afterEach(cleanupTest)
+
   describe('without configuration', () => {
     it('should create a parent span and a child span for a 200', async () => {
       await loadTest({})
@@ -106,7 +108,7 @@ describe('Inferred Proxy Spans', function () {
             continue
           }
         }
-      }).then(cleanupTest).catch(cleanupTest)
+      })
     })
 
     it('should create a parent span and a child span for an error', async () => {
@@ -153,7 +155,7 @@ describe('Inferred Proxy Spans', function () {
             continue
           }
         }
-      }).then(cleanupTest).catch(cleanupTest)
+      })
     })
 
     it('should not create an API Gateway span if all necessary headers are missing', async () => {
@@ -185,7 +187,7 @@ describe('Inferred Proxy Spans', function () {
             continue
           }
         }
-      }).then(cleanupTest).catch(cleanupTest)
+      })
     })
 
     it('should not create an API Gateway span if missing the proxy system header', async () => {
@@ -220,7 +222,7 @@ describe('Inferred Proxy Spans', function () {
             continue
           }
         }
-      }).then(cleanupTest).catch(cleanupTest)
+      })
     })
   })
 
@@ -254,7 +256,7 @@ describe('Inferred Proxy Spans', function () {
             continue
           }
         }
-      }).then(cleanupTest).catch(cleanupTest)
+      })
     })
   })
 })
