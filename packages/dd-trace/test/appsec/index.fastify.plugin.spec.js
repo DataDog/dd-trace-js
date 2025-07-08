@@ -515,7 +515,7 @@ withVersions('fastify', 'fastify', '5.4.0', version => {
             return agent.close({ ritmReset: false })
           })
 
-          it.only('should trigger HTTP header instrumentation when setting cookies', async () => {
+          it('should trigger HTTP header instrumentation when setting cookies', async () => {
             const res = await axios.get('/test-cookie')
 
             console.log('Response headers:', res.headers)

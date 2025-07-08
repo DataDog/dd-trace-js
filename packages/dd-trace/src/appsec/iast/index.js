@@ -16,6 +16,10 @@ const { IAST_ENABLED_TAG_KEY } = require('./tags')
 const iastTelemetry = require('./telemetry')
 const { enable: enableFsPlugin, disable: disableFsPlugin, IAST_MODULE } = require('../rasp/fs-plugin')
 const securityControls = require('./security-controls')
+const { responseWriteHead } = require('../channels')
+
+// Map raw response -> accumulated headers set via writeHead
+const collectedResponseHeaders = new WeakMap()
 
 // TODO Change to `apm:http:server:request:[start|close]` when the subscription
 //  order of the callbacks can be enforce
@@ -33,6 +37,7 @@ function enable (config, _tracer) {
   enableTaintTracking(config.iast, iastTelemetry.verbosity)
   requestStart.subscribe(onIncomingHttpRequestStart)
   requestClose.subscribe(onIncomingHttpRequestEnd)
+  responseWriteHead.subscribe(onResponseWriteHeadCollect)
   overheadController.configure(config.iast)
   overheadController.startGlobalContext()
   securityControls.configure(config.iast)
@@ -53,6 +58,7 @@ function disable () {
   overheadController.finishGlobalContext()
   if (requestStart.hasSubscribers) requestStart.unsubscribe(onIncomingHttpRequestStart)
   if (requestClose.hasSubscribers) requestClose.unsubscribe(onIncomingHttpRequestEnd)
+  if (responseWriteHead.hasSubscribers) responseWriteHead.unsubscribe(onResponseWriteHeadCollect)
   vulnerabilityReporter.stop()
 }
 
@@ -87,7 +93,13 @@ function onIncomingHttpRequestEnd (data) {
     const topContext = web.getContext(data.req)
     const iastContext = iastContextFunctions.getIastContext(store, topContext)
     if (iastContext?.rootSpan) {
-      iastResponseEnd.publish(data)
+      const storedHeaders = collectedResponseHeaders.get(data.res) || {}
+
+      iastResponseEnd.publish({ ...data, storedHeaders })
+
+      if (storedHeaders) {
+        collectedResponseHeaders.delete(data.res)
+      }
 
       const vulnerabilities = iastContext.vulnerabilities
       const rootSpan = iastContext.rootSpan
@@ -102,5 +114,14 @@ function onIncomingHttpRequestEnd (data) {
     }
   }
 }
+
+function onResponseWriteHeadCollect ({ res, responseHeaders = {} }) {
+  if (!res) return
+
+  if (Object.keys(responseHeaders).length) {
+    collectedResponseHeaders.set(res, responseHeaders)
+  }
+}
+
 
 module.exports = { enable, disable, onIncomingHttpRequestEnd, onIncomingHttpRequestStart }
