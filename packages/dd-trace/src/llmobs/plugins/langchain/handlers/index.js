@@ -8,7 +8,12 @@ const ROLE_MAPPINGS = {
 
 class LangChainLLMObsHandler {
   constructor (tagger) {
+    /** @type {import('../../../tagger')} */
     this._tagger = tagger
+  }
+
+  getName ({ span }) {
+    return span?.context()._tags?.['resource.name']
   }
 
   setMetaTags () {}
