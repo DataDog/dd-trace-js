@@ -27,13 +27,14 @@ class HttpServerPlugin extends ServerPlugin {
       this.tracer,
       {
         ...this.config,
-        service: this.config.service || this.serviceName()
+        service: this.config.service || this.serviceName(),
       },
       req,
       res,
       this.operationName()
     )
     span.setTag(COMPONENT, this.constructor.id)
+    span._integrationName = this.constructor.id
 
     this._parentStore = store
     this.enter(span, { ...store, req, res })

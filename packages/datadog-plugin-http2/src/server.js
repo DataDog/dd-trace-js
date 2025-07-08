@@ -32,6 +32,7 @@ class Http2ServerPlugin extends ServerPlugin {
     )
 
     span.setTag(COMPONENT, this.constructor.id)
+    span._integrationName = this.constructor.id
 
     this.enter(span, { ...store, req, res })
 

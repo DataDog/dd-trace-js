@@ -4,7 +4,6 @@ const Axios = require('axios')
 const { assert } = require('chai')
 const getPort = require('get-port')
 const path = require('path')
-const semver = require('semver')
 const zlib = require('zlib')
 const fs = require('node:fs')
 const agent = require('../plugins/agent')
@@ -12,7 +11,7 @@ const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
 const { json } = require('../../src/appsec/blocked_templates')
 
-withVersions('fastify', 'fastify', version => {
+withVersions('fastify', 'fastify', '>=2', version => {
   describe('Suspicious request blocking - query', () => {
     let server, requestBody, axios
 
@@ -234,11 +233,6 @@ withVersions('fastify', 'fastify', version => {
     })
 
     it('should return 403 for dangerous payloads', async () => {
-      // Skip Fastify v1 - different behavior where schema validation takes precedence
-      if (semver.lt(semver.coerce(version), '2.0.0')) {
-        return
-      }
-
       try {
         await axios.post('/schema-validated', { key: 'testattack' })
 
@@ -250,11 +244,6 @@ withVersions('fastify', 'fastify', version => {
     })
 
     it('should return 403 for valid schema with attack content', async () => {
-      // Skip Fastify v1 - different behavior where schema validation takes precedence
-      if (semver.lt(semver.coerce(version), '2.0.0')) {
-        return
-      }
-
       try {
         await axios.post('/schema-validated', { validField: 'testattack' })
 
@@ -267,11 +256,6 @@ withVersions('fastify', 'fastify', version => {
   })
 
   describe('Suspicious request blocking - path parameters', () => {
-    // Skip Fastify v1 - preValidation hook is not supported
-    if (semver.lt(semver.coerce(version), '2.0.0')) {
-      return
-    }
-
     let server, preHandlerHookSpy, preValidationHookSpy, axios
 
     before(() => {
@@ -444,6 +428,111 @@ withVersions('fastify', 'fastify', version => {
           sinon.assert.notCalled(preHandlerHookSpy)
           sinon.assert.notCalled(preValidationHookSpy)
         }
+      })
+    })
+  })
+
+  describe('Suspicious request blocking - cookie', () => {
+    withVersions('fastify', '@fastify/cookie', cookieVersion => {
+      const hookConfigurations = [
+        'onRequest',
+        'preParsing',
+        'preValidation',
+        'preHandler'
+      ]
+
+      hookConfigurations.forEach((hook) => {
+        describe(`with ${hook} hook`, () => {
+          let server, requestCookie, axios
+
+          before(function () {
+            if (version === '3.9.2') {
+              // Fastify 3.9.2 is incompatible with @fastify/cookie >=6
+              this.skip()
+            }
+
+            // Skip preParsing hook for Fastify 2.x - has compatibility issues
+            if (hook === 'preParsing' && version.startsWith('2')) {
+              this.skip()
+            }
+
+            return agent.load(['fastify', '@fastify/cookie', 'http'], { client: false })
+          })
+
+          before((done) => {
+            const fastify = require(`../../../../versions/fastify@${version}`).get()
+            const fastifyCookie = require(`../../../../versions/@fastify/cookie@${cookieVersion}`).get()
+
+            const app = fastify()
+
+            app.register(fastifyCookie, {
+              secret: 'my-secret',
+              hook
+            })
+
+            // Dummy hook
+            app.addHook('onRequest', (req, reply, done) => done())
+
+            app.post('/', (request, reply) => {
+              requestCookie()
+              reply.send('DONE')
+            })
+
+            getPort().then((port) => {
+              app.listen({ port }, () => {
+                axios = Axios.create({ baseURL: `http://localhost:${port}` })
+                done()
+              })
+              server = app.server
+            }).catch(done)
+          })
+
+          beforeEach(async () => {
+            requestCookie = sinon.stub()
+            appsec.enable(
+              new Config({
+                appsec: {
+                  enabled: true,
+                  rules: path.join(__dirname, 'cookie-parser-rules.json')
+                }
+              })
+            )
+          })
+
+          afterEach(() => {
+            appsec.disable()
+          })
+
+          after(() => {
+            if (server) {
+              server.close()
+            }
+            return agent.close({ ritmReset: false })
+          })
+
+          it('should not block the request without an attack', async () => {
+            const res = await axios.post('/', {})
+
+            sinon.assert.calledOnce(requestCookie)
+            assert.strictEqual(res.data, 'DONE')
+          })
+
+          it('should block the request when attack is detected', async () => {
+            try {
+              await axios.post('/', {}, {
+                headers: {
+                  Cookie: 'key=testattack'
+                }
+              })
+
+              return Promise.reject(new Error('Request should not return 200'))
+            } catch (e) {
+              assert.strictEqual(e.response.status, 403)
+              assert.deepEqual(e.response.data, JSON.parse(json))
+              sinon.assert.notCalled(requestCookie)
+            }
+          })
+        })
       })
     })
   })

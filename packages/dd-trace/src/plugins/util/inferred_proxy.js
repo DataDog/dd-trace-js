@@ -1,3 +1,5 @@
+'use strict'
+
 const log = require('../../log')
 const tags = require('../../../../../ext/tags')
 
@@ -45,6 +47,7 @@ function createInferredProxySpan (headers, childOf, tracer, reqCtx, store, trace
       childOf,
       type: 'web',
       startTime: proxyContext.requestTime,
+      integrationName: proxySpanInfo.component,
       tags: {
         service: proxyContext.domainName || tracer._config.service,
         component: proxySpanInfo.component,

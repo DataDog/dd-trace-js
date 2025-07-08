@@ -7,7 +7,7 @@ class InjectionAnalyzer extends Analyzer {
   _isVulnerable (value, iastContext) {
     let ranges = value && getRanges(iastContext, value)
     if (ranges?.length > 0) {
-      ranges = this._filterSecureRanges(ranges)
+      ranges = this._filterSecureRanges(ranges, value)
       if (!ranges?.length) {
         this._incrementSuppressedMetric(iastContext)
       }
@@ -27,11 +27,13 @@ class InjectionAnalyzer extends Analyzer {
     return ranges?.some(range => range.iinfo.type !== SQL_ROW_VALUE)
   }
 
-  _filterSecureRanges (ranges) {
-    return ranges?.filter(range => !this._isRangeSecure(range))
+  _filterSecureRanges (ranges, value) {
+    return ranges?.filter(range => !this._isRangeSecure(range, value))
   }
 
-  _isRangeSecure (range) {
+  _isRangeSecure (range, _value) {
+    // _value is not necessary in this method, but could be used in overridden methods
+    // added here for visibility
     const { secureMarks } = range
     return (secureMarks & this._secureMark) === this._secureMark
   }

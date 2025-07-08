@@ -1,5 +1,7 @@
 'use strict'
 
+/* eslint n/no-unsupported-features/node-builtins: ['error', { ignores: ['inspector/promises'] }] */
+
 const { builtinModules } = require('node:module')
 
 if (builtinModules.includes('inspector/promises')) {

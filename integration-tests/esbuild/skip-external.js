@@ -1,3 +1,5 @@
+'use strict'
+
 require('../../').init() // dd-trace
 
 // this should be bundled

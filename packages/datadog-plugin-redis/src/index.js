@@ -13,10 +13,14 @@ class RedisPlugin extends CachePlugin {
     this._spanType = 'redis'
   }
 
-  start ({ db, command, args, connectionOptions = {}, connectionName }) {
+  bindStart (ctx) {
+    const { db, command, args, connectionOptions, connectionName } = ctx
+
     const resource = command
     const normalizedCommand = command.toUpperCase()
-    if (!this.config.filter(normalizedCommand)) return this.skip()
+    if (!this.config.filter(normalizedCommand)) {
+      return { noop: true }
+    }
 
     this.startSpan({
       resource,
@@ -29,7 +33,9 @@ class RedisPlugin extends CachePlugin {
         'out.host': connectionOptions.host,
         [CLIENT_PORT_KEY]: connectionOptions.port
       }
-    })
+    }, ctx)
+
+    return ctx.currentStore
   }
 
   configure (config) {

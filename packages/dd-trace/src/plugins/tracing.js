@@ -121,7 +121,7 @@ class TracingPlugin extends Plugin {
         ...meta,
         ...metrics
       },
-      integrationName: type,
+      integrationName: this.component,
       links: childOf?._links
     })
 
