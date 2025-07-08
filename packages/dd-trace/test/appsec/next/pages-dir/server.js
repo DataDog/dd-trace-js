@@ -7,7 +7,7 @@ const { createServer } = require('http')
 const { parse } = require('url')
 const next = require('next')
 
-const app = next({ dir: __dirname, dev: false, quiet: true, hostname: HOSTNAME })
+const app = next({ dir: __dirname, dev: false, quiet: true, hostname: HOSTNAME, port: PORT })
 const handle = app.getRequestHandler()
 
 app.prepare().then(() => {
