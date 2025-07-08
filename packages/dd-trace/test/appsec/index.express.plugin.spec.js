@@ -45,7 +45,7 @@ withVersions('express', 'express', version => {
 
       app.param('callbackedParameter', paramCallbackSpy)
 
-      server = app.listen(0, '127.0.0.1', () => {
+      server = app.listen(0, () => {
         const port = server.address().port
         axios = Axios.create({ baseURL: `http://localhost:${port}` })
         done()
@@ -194,7 +194,7 @@ withVersions('express', 'express', version => {
         res.end('DONE')
       })
 
-      server = app.listen(0, '127.0.0.1', () => {
+      server = app.listen(0, () => {
         const port = server.address().port
         axios = Axios.create({ baseURL: `http://localhost:${port}` })
         done()
@@ -271,7 +271,7 @@ withVersions('express', 'express', version => {
         res.json({ jsonResKey: 'jsonResValue' })
       })
 
-      server = app.listen(0, '127.0.0.1', () => {
+      server = app.listen(0, () => {
         const port = server.address().port
         axios = Axios.create({ baseURL: `http://localhost:${port}` })
         done()
