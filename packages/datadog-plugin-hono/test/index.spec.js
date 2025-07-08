@@ -1,5 +1,6 @@
 'use strict'
 
+const assert = require('node:assert')
 const axios = require('axios')
 const agent = require('../../dd-trace/test/plugins/agent')
 const {
@@ -7,8 +8,6 @@ const {
   ERROR_MESSAGE,
   ERROR_STACK
 } = require('../../dd-trace/src/constants')
-
-const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
 
 describe('Plugin', () => {
   let tracer
@@ -19,10 +18,9 @@ describe('Plugin', () => {
 
   describe('hono', () => {
     withVersions('hono', 'hono', version => {
-      before(() => {
-        return agent.load(['hono', 'http'], [{}, { client: false }]).then(() => {
-          hono = require(`../../../versions/hono@${version}`).get()
-        })
+      before(async () => {
+        await agent.load(['hono', 'http'], [{}, { client: false }])
+        hono = require(`../../../versions/hono@${version}`).get()
       })
 
       after(() => {
@@ -31,7 +29,7 @@ describe('Plugin', () => {
 
       beforeEach(() => {
         tracer = require('../../dd-trace')
-        serve = require('../../../versions/@hono/node-server@1.13.2').get().serve
+        serve = require('../../../versions/@hono/node-server@1.15.0').get().serve
 
         app = new hono.Hono()
 
@@ -49,46 +47,51 @@ describe('Plugin', () => {
       })
 
       afterEach(() => {
-        server && server.close()
+        server?.close()
         server = null
       })
 
-      it('should do automatic instrumentation on routes', function (done) {
+      it('should do automatic instrumentation on routes', async function () {
+        let resolver
+        const promise = new Promise((resolve) => {
+          resolver = resolve
+        })
+
         server = serve({
           fetch: app.fetch,
-          port: 1
-        }, (i) => {
-          const port = i.port
+          port: 0
+        }, ({ port }) => resolver(port))
 
-          agent
-            .use(traces => {
-              expect(traces[0][0]).to.have.property('name', 'hono.request')
-              expect(traces[0][0]).to.have.property('service', 'test')
-              expect(traces[0][0]).to.have.property('type', 'web')
-              expect(traces[0][0]).to.have.property('resource', 'GET /user/:id')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'server')
-              expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
-              expect(traces[0][0].meta).to.have.property('http.method', 'GET')
-              expect(traces[0][0].meta).to.have.property('http.status_code')
-              expect(traces[0][0].meta).to.have.property('component', 'hono')
-              expect(Number(traces[0][0].meta['http.status_code'])).to.be.within(200, 299)
-            })
-            .then(done)
-            .catch(done)
+        const port = await promise
 
-          axios
-            .get(`http://localhost:${port}/user/123`)
-            .then(r => {
-              expect(r.data).to.deep.equal({
-                id: '123',
-                middleware: 'test'
-              })
-            })
-            .catch(done)
+        const { data } = await axios.get(`http://localhost:${port}/user/123`)
+
+        assert.deepStrictEqual(data, {
+          id: '123',
+          middleware: 'test'
+        })
+
+        await agent.assertFirstTraceSpan({
+          name: 'hono.request',
+          service: 'test',
+          type: 'web',
+          resource: 'GET /user/:id',
+          meta: {
+            'span.kind': 'server',
+            'http.url': `http://localhost:${port}/user/123`,
+            'http.method': 'GET',
+            'http.status_code': '200',
+            component: 'hono',
+          }
         })
       })
 
-      it('should do automatic instrumentation on nested routes', function (done) {
+      it('should do automatic instrumentation on nested routes', async function () {
+        let resolver
+        const promise = new Promise((resolve) => {
+          resolver = resolve
+        })
+
         const books = new hono.Hono()
 
         books.get('/:id', (c) => c.json({
@@ -100,39 +103,39 @@ describe('Plugin', () => {
 
         server = serve({
           fetch: app.fetch,
-          port: 1
-        }, (i) => {
-          const port = i.port
+          port: 0
+        }, ({ port }) => resolver(port))
 
-          agent
-            .use(traces => {
-              expect(traces[0][0]).to.have.property('name', 'hono.request')
-              expect(traces[0][0]).to.have.property('service', 'test')
-              expect(traces[0][0]).to.have.property('type', 'web')
-              expect(traces[0][0]).to.have.property('resource', 'GET /books/:id')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'server')
-              expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/books/123`)
-              expect(traces[0][0].meta).to.have.property('http.method', 'GET')
-              expect(traces[0][0].meta).to.have.property('http.status_code')
-              expect(traces[0][0].meta).to.have.property('component', 'hono')
-              expect(Number(traces[0][0].meta['http.status_code'])).to.be.within(200, 299)
-            })
-            .then(done)
-            .catch(done)
+        const port = await promise
 
-          axios
-            .get(`http://localhost:${port}/books/123`)
-            .then(r => {
-              expect(r.data).to.deep.equal({
-                id: '123',
-                name: 'test'
-              })
-            })
-            .catch(done)
+        const { data } = await axios.get(`http://localhost:${port}/books/12345`)
+
+        assert.deepStrictEqual(data, {
+          id: '12345',
+          name: 'test'
+        })
+
+        await agent.assertFirstTraceSpan({
+          name: 'hono.request',
+          service: 'test',
+          type: 'web',
+          resource: 'GET /books/:id',
+          meta: {
+            'span.kind': 'server',
+            'http.url': `http://localhost:${port}/books/12345`,
+            'http.method': 'GET',
+            'http.status_code': '200',
+            component: 'hono',
+          }
         })
       })
 
-      it('should handle errors', function (done) {
+      it('should handle errors', async function () {
+        let resolver
+        const promise = new Promise((resolve) => {
+          resolver = resolve
+        })
+
         const error = new Error('message')
 
         app.get('/error', () => {
@@ -141,76 +144,84 @@ describe('Plugin', () => {
 
         server = serve({
           fetch: app.fetch,
-          port: 1
-        }, (i) => {
-          const port = i.port
+          port: 0
+        }, ({ port }) => resolver(port))
 
-          agent
-            .use(traces => {
-              const spans = sort(traces[0])
-              expect(spans[0]).to.have.property('error', 1)
-              expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
-              expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
-              expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
-              expect(spans[0].meta).to.have.property('http.status_code', '500')
-              expect(spans[0].meta).to.have.property('component', 'hono')
-            })
-            .then(done)
-            .catch(done)
+        const port = await promise
 
-          axios
-            .get(`http://localhost:${port}/error`)
-            .catch(() => {
-            })
+        await assert.rejects(
+          axios.get(`http://localhost:${port}/error`),
+          {
+            message: 'Request failed with status code 500',
+            name: 'AxiosError'
+          }
+        )
+
+        await agent.assertFirstTraceSpan({
+          error: 1,
+          resource: 'GET /error',
+          meta: {
+            [ERROR_TYPE]: error.name,
+            [ERROR_MESSAGE]: error.message,
+            [ERROR_STACK]: error.stack,
+            'http.status_code': '500',
+            component: 'hono',
+          }
         })
       })
 
-      it('should have active scope within request', done => {
+      it('should have active scope within request', async () => {
+        let resolver
+        const promise = new Promise((resolve) => {
+          resolver = resolve
+        })
+
         app.get('/request', (c) => {
-          expect(tracer.scope().active()).to.not.be.null
+          assert(tracer.scope().active())
           return c.text('test')
         })
 
         server = serve({
           fetch: app.fetch,
-          port: 1
-        }, (i) => {
-          const port = i.port
+          port: 0
+        }, ({ port }) => resolver(port))
 
-          axios
-            .get(`http://localhost:${port}/request`)
-            .then(r => {
-              expect(r.data).to.deep.equal('test')
-              done()
-            })
-            .catch(done)
-        })
+        const port = await promise
+
+        const { data } = await axios.get(`http://localhost:${port}/request`)
+
+        assert.deepStrictEqual(data, 'test')
       })
 
-      it('should extract its parent span from the headers', done => {
+      it('should extract its parent span from the headers', async () => {
+        let resolver
+        const promise = new Promise((resolve) => {
+          resolver = resolve
+        })
+
+        app.get('/request', (c) => {
+          assert(tracer.scope().active())
+          return c.text('test')
+        })
+
         server = serve({
           fetch: app.fetch,
-          port: 1
-        }, (i) => {
-          const port = i.port
+          port: 0
+        }, ({ port }) => resolver(port))
 
-          agent
-            .use(traces => {
-              expect(traces[0][0].trace_id.toString()).to.equal('1234')
-              expect(traces[0][0].parent_id.toString()).to.equal('5678')
-            })
-            .then(done)
-            .catch(done)
+        const port = await promise
 
-          axios
-            .get(`http://localhost:${port}/user/123`, {
-              headers: {
-                'x-datadog-trace-id': '1234',
-                'x-datadog-parent-id': '5678',
-                'ot-baggage-foo': 'bar'
-              }
-            })
-            .catch(done)
+        await axios.get(`http://localhost:${port}/user/123`, {
+          headers: {
+            'x-datadog-trace-id': '1234',
+            'x-datadog-parent-id': '5678',
+            'ot-baggage-foo': 'bar'
+          }
+        })
+
+        await agent.assertFirstTraceSpan({
+          trace_id: 1234n,
+          parent_id: 5678n,
         })
       })
     })
