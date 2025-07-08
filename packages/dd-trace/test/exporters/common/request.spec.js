@@ -8,7 +8,7 @@ const zlib = require('zlib')
 
 const FormData = require('../../../src/exporters/common/form-data')
 
-const initHTTPServer = (port) => {
+const initHTTPServer = () => {
   return new Promise(resolve => {
     const sockets = []
     const requestListener = function (req, res) {
