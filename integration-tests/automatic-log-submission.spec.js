@@ -69,7 +69,8 @@ describe('test visibility automatic log submission', () => {
       command: './node_modules/.bin/playwright test -c playwright.config.js',
       getExtraEnvVars: () => ({
         PW_BASE_URL: `http://localhost:${webAppPort}`,
-        TEST_DIR: 'ci-visibility/automatic-log-submission-playwright'
+        TEST_DIR: 'ci-visibility/automatic-log-submission-playwright',
+        DD_TRACE_DEBUG: 1
       })
     }
   ]
@@ -135,6 +136,10 @@ describe('test visibility automatic log submission', () => {
 
         childProcess.on('exit', () => {
           Promise.all([logsPromise, eventsPromise]).then(() => {
+            if (name === 'playwright') {
+              // eslint-disable-next-line no-console
+              console.log(testOutput)
+            }
             const { logSpanId, logTraceId } = logIds
             const { testSpanId, testTraceId } = testIds
             assert.include(testOutput, 'Hello simple log!')
