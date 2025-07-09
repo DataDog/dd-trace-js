@@ -16,7 +16,7 @@ describe('esm', () => {
 
   before(async function () {
     this.timeout(50000)
-    sandbox = await createSandbox(['get-port'], false, [
+    sandbox = await createSandbox([], false, [
       './packages/datadog-plugin-fetch/test/integration-test/*'])
   })
 
