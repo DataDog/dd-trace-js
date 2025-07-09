@@ -1,8 +1,5 @@
 'use strict'
 
-/* eslint-disable no-var */
-/* eslint-disable object-shorthand */
-
 var fs = require('fs')
 var spawn = require('child_process').spawn
 var tracerVersion = require('../../../../package.json').version
@@ -11,12 +8,12 @@ var log = require('./log')
 module.exports = sendTelemetry
 
 if (!process.env.DD_INJECTION_ENABLED) {
-  module.exports = function () {}
+  module.exports = function noop () {}
 }
 
 var telemetryForwarderPath = process.env.DD_TELEMETRY_FORWARDER_PATH
 if (typeof telemetryForwarderPath !== 'string' || !fs.existsSync(telemetryForwarderPath)) {
-  module.exports = function () {}
+  module.exports = function noop () {}
 }
 
 var metadata = {
@@ -32,12 +29,12 @@ var seen = []
 function hasSeen (point) {
   if (point.name === 'abort') {
     // This one can only be sent once, regardless of tags
-    return seen.includes('abort')
+    return seen.indexOf('abort') !== -1
   }
   if (point.name === 'abort.integration') {
     // For now, this is the only other one we want to dedupe
     var compiledPoint = point.name + point.tags.join('')
-    return seen.includes(compiledPoint)
+    return seen.indexOf(compiledPoint) !== -1
   }
   return false
 }
@@ -48,7 +45,7 @@ function sendTelemetry (name, tags) {
     points = [{ name: name, tags: tags || [] }]
   }
   if (['1', 'true', 'True'].indexOf(process.env.DD_INJECT_FORCE) !== -1) {
-    points = points.filter(function (p) { return ['error', 'complete'].includes(p.name) })
+    points = points.filter(function (p) { return ['error', 'complete'].indexOf(p.name) !== -1 })
   }
   points = points.filter(function (p) { return !hasSeen(p) })
   for (var i = 0; i < points.length; i++) {

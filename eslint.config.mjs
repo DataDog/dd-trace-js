@@ -51,8 +51,7 @@ export default [
       'integration-tests/esbuild/aws-sdk-out.js', // Generated
       'packages/datadog-plugin-graphql/src/tools/index.js', // Inlined from apollo-graphql
       'packages/datadog-plugin-graphql/src/tools/signature.js', // Inlined from apollo-graphql
-      'packages/datadog-plugin-graphql/src/tools/transforms.js', // Inlined from apollo-graphql
-      'packages/dd-trace/src/guardrails/**/*' // Guardrails contain very old JS
+      'packages/datadog-plugin-graphql/src/tools/transforms.js' // Inlined from apollo-graphql
     ]
   },
   { name: '@eslint/js/recommended', ...eslintPluginJs.configs.recommended },
@@ -301,21 +300,17 @@ export default [
   },
   {
     name: 'dd-trace/defaults',
-
     plugins: {
       '@stylistic': eslintPluginStylistic,
       import: eslintPluginImport,
       n: eslintPluginN
     },
-
     languageOptions: {
       globals: {
         ...globals.node
       },
-
       ecmaVersion: 2022
     },
-
     settings: {
       node: {
         // Used by `eslint-plugin-n` to determine the minimum version of Node.js to support.
@@ -325,7 +320,6 @@ export default [
         version: '>=18.0.0'
       }
     },
-
     rules: {
       '@stylistic/max-len': ['error', { code: 120, tabWidth: 2, ignoreUrls: true, ignoreRegExpLiterals: true }],
       '@stylistic/object-curly-newline': ['error', { multiline: true, consistent: true }],
@@ -437,6 +431,81 @@ export default [
     }
   },
   {
+    name: 'dd-trace/defaults/v0.8-oldest',
+    plugins: {
+      n: eslintPluginN
+    },
+    files: [
+      'init.js',
+      'packages/dd-trace/src/guardrails/**/*',
+      'version.js'
+    ],
+    settings: {
+      node: {
+        version: '>=0.8.0'
+      }
+    },
+    rules: {
+      'eslint-rules/eslint-process-env': 'off', // Would require us to load a module outside the guardrails directory
+      'n/no-unsupported-features/es-builtins': ['error', {
+        // The following are false positives that are supported in Node.js 0.8.0
+        ignores: [
+          'JSON',
+          'JSON.stringify',
+          'parseInt',
+          'String'
+        ]
+      }],
+      'n/no-unsupported-features/es-syntax': ['error', {
+        // The following are false positives that are supported in Node.js 0.8.0
+        ignores: [
+          'array-prototype-indexof',
+          'json'
+        ]
+      }],
+      'no-var': 'off', // Only supported in Node.js 6+
+      'object-shorthand': 'off', // Only supported in Node.js 4+
+      'unicorn/prefer-includes': 'off', // Only supported in Node.js 6+
+      'unicorn/prefer-number-properties': 'off', // Only supported in Node.js 0.12+
+      'unicorn/prefer-optional-catch-binding': 'off', // Only supported in Node.js 10+
+      'unicorn/prefer-set-has': 'off', // Only supported in Node.js 0.12+
+      'unicorn/prefer-string-replace-all': 'off' // Only supported in Node.js 15+
+    }
+  },
+  {
+    name: 'dd-trace/defaults/v16-oldest',
+    plugins: {
+      n: eslintPluginN
+    },
+    files: [
+      'packages/datadog-plugin-cypress/src/support.js'
+    ],
+    settings: {
+      node: {
+        version: '>=16.0.0'
+      }
+    }
+  },
+  {
+    name: 'dd-trace/defaults/v18-latest',
+    plugins: {
+      n: eslintPluginN
+    },
+    files: [
+      'benchmark/**/*',
+      'scripts/**/*',
+      ...TEST_FILES
+    ],
+    settings: {
+      node: {
+        version: '>=18' // These files don't have to support the oldest v18 release
+      }
+    },
+    rules: {
+      'n/no-unsupported-features/node-builtins': ['error', { allowExperimental: true }]
+    }
+  },
+  {
     ...eslintPluginCypress.configs.recommended,
     files: [
       'packages/datadog-plugin-cypress/src/support.js'
@@ -462,9 +531,7 @@ export default [
       'scripts/**/*'
     ],
     rules: {
-      'n/no-unsupported-features/node-builtins': ['error', {
-        allowExperimental: true
-      }]
+      'n/no-unsupported-features/node-builtins': ['error', { allowExperimental: true }]
     }
   },
   {
@@ -494,9 +561,7 @@ export default [
       'mocha/no-top-level-hooks': 'off',
       'n/handle-callback-err': 'off',
       'n/no-missing-require': 'off',
-      'n/no-unsupported-features/node-builtins': ['error', {
-        allowExperimental: true
-      }],
+      'n/no-unsupported-features/node-builtins': ['error', { allowExperimental: true }],
       'require-await': 'off'
     }
   },
