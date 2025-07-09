@@ -69,7 +69,8 @@ describe('test visibility automatic log submission', () => {
       command: './node_modules/.bin/playwright test -c playwright.config.js',
       getExtraEnvVars: () => ({
         PW_BASE_URL: `http://localhost:${webAppPort}`,
-        TEST_DIR: 'ci-visibility/automatic-log-submission-playwright'
+        TEST_DIR: 'ci-visibility/automatic-log-submission-playwright',
+        DD_TRACE_DEBUG: 1
       })
     }
   ]
@@ -135,6 +136,10 @@ describe('test visibility automatic log submission', () => {
 
         childProcess.on('exit', () => {
           Promise.all([logsPromise, eventsPromise]).then(() => {
+            if (name === 'playwright') {
+              // eslint-disable-next-line no-console
+              console.log(testOutput)
+            }
             const { logSpanId, logTraceId } = logIds
             const { testSpanId, testTraceId } = testIds
             assert.include(testOutput, 'Hello simple log!')
@@ -174,8 +179,10 @@ describe('test visibility automatic log submission', () => {
         )
         childProcess.on('exit', () => {
           assert.include(testOutput, 'Hello simple log!')
-          assert.notInclude(testOutput, 'span_id')
-          done()
+          assert.include(testOutput, 'span_id')
+          logsPromise.then(() => {
+            done()
+          }).catch(done)
         })
 
         childProcess.stdout.on('data', (chunk) => {
@@ -184,6 +191,13 @@ describe('test visibility automatic log submission', () => {
         childProcess.stderr.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
+
+        const logsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.includes('/api/v2/logs'), payloads => {
+            if (payloads.length > 0) {
+              throw new Error('Unexpected logs')
+            }
+          }, 5000)
       })
 
       it('does not submit logs when DD_AGENTLESS_LOG_SUBMISSION_ENABLED is set but DD_API_KEY is not', (done) => {

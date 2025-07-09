@@ -6,8 +6,15 @@ const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const errorChannel = channel('apm:fastify:middleware:error')
 const handleChannel = channel('apm:fastify:request:handle')
 const routeAddedChannel = channel('apm:fastify:route:added')
+const bodyParserReadCh = channel('datadog:fastify:body-parser:finish')
+const queryParamsReadCh = channel('datadog:fastify:query-params:finish')
+const cookieParserReadCh = channel('datadog:fastify-cookie:read:finish')
+const responsePayloadReadCh = channel('datadog:fastify:response:finish')
+const pathParamsReadCh = channel('datadog:fastify:path-params:finish')
 
 const parsingResources = new WeakMap()
+const cookiesPublished = new WeakSet()
+const bodyPublished = new WeakSet()
 
 function wrapFastify (fastify, hasParsingEvents) {
   if (typeof fastify !== 'function') return fastify
@@ -45,11 +52,30 @@ function wrapAddHook (addHook) {
       const req = getReq(request)
 
       try {
-        if (typeof done === 'function') {
-          done = arguments[arguments.length - 1]
+        // done callback is always the last argument
+        const doneCallback = arguments[arguments.length - 1]
 
+        if (typeof doneCallback === 'function') {
           arguments[arguments.length - 1] = function (err) {
             publishError(err, req)
+
+            const hasCookies = request.cookies && Object.keys(request.cookies).length > 0
+
+            if (cookieParserReadCh.hasSubscribers && hasCookies && !cookiesPublished.has(req)) {
+              const res = getRes(reply)
+              const abortController = new AbortController()
+
+              cookieParserReadCh.publish({
+                req,
+                res,
+                abortController,
+                cookies: request.cookies
+              })
+
+              cookiesPublished.add(req)
+
+              if (abortController.signal.aborted) return
+            }
 
             if (name === 'onRequest' || name === 'preParsing') {
               const parsingResource = new AsyncResource('bound-anonymous-fn')
@@ -57,14 +83,15 @@ function wrapAddHook (addHook) {
               parsingResources.set(req, parsingResource)
 
               return parsingResource.runInAsyncScope(() => {
-                return done.apply(this, arguments)
+                return doneCallback.apply(this, arguments)
               })
             }
-            return done.apply(this, arguments)
+            return doneCallback.apply(this, arguments)
           }
 
           return fn.apply(this, arguments)
         }
+
         const promise = fn.apply(this, arguments)
 
         if (promise && typeof promise.catch === 'function') {
@@ -98,6 +125,20 @@ function preHandler (request, reply, done) {
   if (!reply || typeof reply.send !== 'function') return done()
 
   const req = getReq(request)
+  const res = getRes(reply)
+
+  const hasBody = request.body && Object.keys(request.body).length > 0
+
+  // For multipart/form-data, the body is not available until after preValidation hook
+  if (bodyParserReadCh.hasSubscribers && hasBody && !bodyPublished.has(req)) {
+    const abortController = new AbortController()
+
+    bodyParserReadCh.publish({ req, res, body: request.body, abortController })
+
+    bodyPublished.add(req)
+
+    if (abortController.signal.aborted) return
+  }
 
   reply.send = wrapSend(reply.send, req)
 
@@ -106,11 +147,55 @@ function preHandler (request, reply, done) {
 
 function preValidation (request, reply, done) {
   const req = getReq(request)
+  const res = getRes(reply)
   const parsingResource = parsingResources.get(req)
 
-  if (!parsingResource) return done()
+  const processInContext = () => {
+    let abortController
 
-  parsingResource.runInAsyncScope(() => done())
+    if (queryParamsReadCh.hasSubscribers && request.query) {
+      abortController ??= new AbortController()
+
+      queryParamsReadCh.publish({
+        req,
+        res,
+        abortController,
+        query: request.query
+      })
+
+      if (abortController.signal.aborted) return
+    }
+
+    // Analyze body before schema validation
+    if (bodyParserReadCh.hasSubscribers && request.body && !bodyPublished.has(req)) {
+      abortController ??= new AbortController()
+
+      bodyParserReadCh.publish({ req, res, body: request.body, abortController })
+
+      bodyPublished.add(req)
+
+      if (abortController.signal.aborted) return
+    }
+
+    if (pathParamsReadCh.hasSubscribers && request.params) {
+      abortController ??= new AbortController()
+
+      pathParamsReadCh.publish({
+        req,
+        res,
+        abortController,
+        params: request.params
+      })
+
+      if (abortController.signal.aborted) return
+    }
+
+    done()
+  }
+
+  if (!parsingResource) return processInContext()
+
+  parsingResource.runInAsyncScope(processInContext)
 }
 
 function preParsing (request, reply, payload, done) {
@@ -126,9 +211,12 @@ function preParsing (request, reply, payload, done) {
 }
 
 function wrapSend (send, req) {
-  return function sendWithTrace (error) {
-    if (error instanceof Error) {
-      errorChannel.publish({ req, error })
+  return function sendWithTrace (payload) {
+    if (payload instanceof Error) {
+      errorChannel.publish({ req, error: payload })
+    } else if (canPublishResponsePayload(payload)) {
+      const res = getRes(this)
+      responsePayloadReadCh.publish({ req, res, body: payload })
     }
 
     return send.apply(this, arguments)
@@ -157,6 +245,18 @@ function publishError (error, req) {
 
 function onRoute (routeOptions) {
   routeAddedChannel.publish({ routeOptions, onRoute })
+}
+
+// send() payload types: https://fastify.dev/docs/latest/Reference/Reply/#senddata
+function canPublishResponsePayload (payload) {
+  return responsePayloadReadCh.hasSubscribers &&
+    payload &&
+    typeof payload === 'object' &&
+    typeof payload.pipe !== 'function' && // Node streams
+    typeof payload.body?.pipe !== 'function' && // Response with body stream
+    !Buffer.isBuffer(payload) && // Buffer
+    !(payload instanceof ArrayBuffer) && // ArrayBuffer
+    !ArrayBuffer.isView(payload) // TypedArray
 }
 
 addHook({ name: 'fastify', versions: ['>=3'] }, fastify => {

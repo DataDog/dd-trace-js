@@ -1,8 +1,11 @@
+'use strict'
+
 const path = require('path')
 const fs = require('fs')
 const { URL } = require('url')
 const log = require('../../log')
 const { getEnvironmentVariable } = require('../../config-helper')
+const satisfies = require('semifies')
 
 const istanbul = require('istanbul-lib-coverage')
 const ignore = require('ignore')
@@ -127,8 +130,28 @@ const DD_CAPABILITIES_IMPACTED_TESTS = '_dd.library_capabilities.impacted_tests'
 const DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE = '_dd.library_capabilities.test_management.quarantine'
 const DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE = '_dd.library_capabilities.test_management.disable'
 const DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX = '_dd.library_capabilities.test_management.attempt_to_fix'
+const DD_CAPABILITIES_FAILED_TEST_REPLAY = '_dd.library_capabilities.failed_test_replay'
 const UNSUPPORTED_TIA_FRAMEWORKS = new Set(['playwright', 'vitest'])
 const UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE = new Set(['cucumber', 'mocha'])
+const MINIMUM_FRAMEWORK_VERSION_FOR_EFD = {
+  playwright: '>=1.38.0'
+}
+const MINIMUM_FRAMEWORK_VERSION_FOR_IMPACTED_TESTS = {
+  playwright: '>=1.38.0'
+}
+const MINIMUM_FRAMEWORK_VERSION_FOR_QUARANTINE = {
+  playwright: '>=1.38.0'
+}
+const MINIMUM_FRAMEWORK_VERSION_FOR_DISABLE = {
+  playwright: '>=1.38.0'
+}
+const MINIMUM_FRAMEWORK_VERSION_FOR_ATTEMPT_TO_FIX = {
+  playwright: '>=1.38.0'
+}
+const MINIMUM_FRAMEWORK_VERSION_FOR_FAILED_TEST_REPLAY = {
+  playwright: '>=1.38.0'
+}
+
 const UNSUPPORTED_ATTEMPT_TO_FIX_FRAMEWORKS_PARALLEL_MODE = new Set(['mocha'])
 const NOT_SUPPORTED_GRANULARITY_IMPACTED_TESTS_FRAMEWORKS = new Set(['mocha', 'playwright', 'vitest'])
 
@@ -257,6 +280,7 @@ module.exports = {
   DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
   DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
   DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
+  DD_CAPABILITIES_FAILED_TEST_REPLAY,
   TEST_LEVEL_EVENT_TYPES,
   TEST_RETRY_REASON_TYPES,
   getNumFromKnownTests,
@@ -409,7 +433,7 @@ function checkShaDiscrepancies (ciMetadata, userProvidedGitMetadata) {
 
   incrementCountMetric(
     TELEMETRY_GIT_SHA_MATCH,
-    { match: gitCommitShaMatch }
+    { matched: gitCommitShaMatch }
   )
 }
 
@@ -895,20 +919,68 @@ function isTiaSupported (testFramework, isParallel) {
            (isParallel && UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE.has(testFramework)))
 }
 
-function isAttemptToFixSupported (testFramework, isParallel) {
+function isEarlyFlakeDetectionSupported (testFramework, frameworkVersion) {
+  return testFramework === 'playwright'
+    ? satisfies(frameworkVersion, MINIMUM_FRAMEWORK_VERSION_FOR_EFD[testFramework])
+    : true
+}
+
+function isImpactedTestsSupported (testFramework, frameworkVersion) {
+  return testFramework === 'playwright'
+    ? satisfies(frameworkVersion, MINIMUM_FRAMEWORK_VERSION_FOR_IMPACTED_TESTS[testFramework])
+    : true
+}
+
+function isQuarantineSupported (testFramework, frameworkVersion) {
+  return testFramework === 'playwright'
+    ? satisfies(frameworkVersion, MINIMUM_FRAMEWORK_VERSION_FOR_QUARANTINE[testFramework])
+    : true
+}
+
+function isDisableSupported (testFramework, frameworkVersion) {
+  return testFramework === 'playwright'
+    ? satisfies(frameworkVersion, MINIMUM_FRAMEWORK_VERSION_FOR_DISABLE[testFramework])
+    : true
+}
+
+function isAttemptToFixSupported (testFramework, isParallel, frameworkVersion) {
+  if (testFramework === 'playwright') {
+    return satisfies(frameworkVersion, MINIMUM_FRAMEWORK_VERSION_FOR_ATTEMPT_TO_FIX[testFramework])
+  }
+
   return !(isParallel && UNSUPPORTED_ATTEMPT_TO_FIX_FRAMEWORKS_PARALLEL_MODE.has(testFramework))
 }
 
-function getLibraryCapabilitiesTags (testFramework, isParallel) {
+function isFailedTestReplaySupported (testFramework, frameworkVersion) {
+  return testFramework === 'playwright'
+    ? satisfies(frameworkVersion, MINIMUM_FRAMEWORK_VERSION_FOR_FAILED_TEST_REPLAY[testFramework])
+    : true
+}
+
+function getLibraryCapabilitiesTags (testFramework, isParallel, frameworkVersion) {
   return {
-    [DD_CAPABILITIES_TEST_IMPACT_ANALYSIS]: isTiaSupported(testFramework, isParallel) ? '1' : undefined,
-    [DD_CAPABILITIES_EARLY_FLAKE_DETECTION]: '1',
+    [DD_CAPABILITIES_TEST_IMPACT_ANALYSIS]: isTiaSupported(testFramework, isParallel)
+      ? '1'
+      : undefined,
+    [DD_CAPABILITIES_EARLY_FLAKE_DETECTION]: isEarlyFlakeDetectionSupported(testFramework, frameworkVersion)
+      ? '1'
+      : undefined,
     [DD_CAPABILITIES_AUTO_TEST_RETRIES]: '1',
-    [DD_CAPABILITIES_IMPACTED_TESTS]: '1',
-    [DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE]: '1',
-    [DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE]: '1',
-    [DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX]: isAttemptToFixSupported(testFramework, isParallel)
-      ? '4'
+    [DD_CAPABILITIES_IMPACTED_TESTS]: isImpactedTestsSupported(testFramework, frameworkVersion)
+      ? '1'
+      : undefined,
+    [DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE]: isQuarantineSupported(testFramework, frameworkVersion)
+      ? '1'
+      : undefined,
+    [DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE]: isDisableSupported(testFramework, frameworkVersion)
+      ? '1'
+      : undefined,
+    [DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX]:
+      isAttemptToFixSupported(testFramework, isParallel, frameworkVersion)
+        ? '4'
+        : undefined,
+    [DD_CAPABILITIES_FAILED_TEST_REPLAY]: isFailedTestReplaySupported(testFramework, frameworkVersion)
+      ? '1'
       : undefined
   }
 }

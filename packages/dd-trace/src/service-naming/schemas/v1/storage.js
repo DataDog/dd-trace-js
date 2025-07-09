@@ -1,3 +1,5 @@
+'use strict'
+
 function configWithFallback ({ tracerService, pluginConfig }) {
   return pluginConfig.service || tracerService
 }
@@ -14,7 +16,8 @@ const mySQLNaming = {
 
 function withFunction ({ tracerService, pluginConfig, params }) {
   if (typeof pluginConfig.service === 'function') {
-    return pluginConfig.service(params)
+    const result = pluginConfig.service(params)
+    return typeof result === 'string' && result.length > 0 ? result : tracerService
   }
   return configWithFallback({ tracerService, pluginConfig })
 }
@@ -67,6 +70,10 @@ const storage = {
     pg: {
       opName: () => 'postgresql.query',
       serviceName: withFunction
+    },
+    prisma: {
+      opName: ({ operation }) => `prisma.${operation}`,
+      serviceName: configWithFallback
     },
     redis: redisNaming,
     tedious: {

@@ -375,14 +375,15 @@ describe('Telemetry extended heartbeat', () => {
 
   it('be sent with up-to-date configuration values', (done) => {
     let configuration
+
     const sendDataRequest = {
       sendData: (config, application, host, reqType, payload, cb = () => {}) => {
         if (reqType === 'app-extended-heartbeat') {
           configuration = payload.configuration
         }
       }
-
     }
+
     telemetry = proxyquire('../../src/telemetry/telemetry', {
       '../exporters/common/docker': {
         id () {
@@ -412,40 +413,25 @@ describe('Telemetry extended heartbeat', () => {
     expect(configuration).to.deep.equal([])
 
     const changes = [
-      {
-        name: 'test',
-        value: true,
-        origin: 'code'
-      }
+      { name: 'test', value: true, origin: 'code', seq_id: 0 }
     ]
     telemetry.updateConfig(changes, config)
     clock.tick(86400000)
     expect(configuration).to.deep.equal(changes)
 
     const updatedChanges = [
-      {
-        name: 'test',
-        value: false,
-        origin: 'code'
-      }
+      { name: 'test', value: false, origin: 'code', seq_id: 1 }
     ]
     telemetry.updateConfig(updatedChanges, config)
     clock.tick(86400000)
     expect(configuration).to.deep.equal(updatedChanges)
 
     const changeNeedingNameRemapping = [
-      {
-        name: 'sampleRate', // one of the config names that require a remapping
-        value: 0,
-        origin: 'code'
-      }
+      { name: 'sampleRate', value: 0, origin: 'code', seq_id: 2 }
     ]
     const expectedConfigList = [
       updatedChanges[0],
-      {
-        ...changeNeedingNameRemapping[0],
-        name: 'DD_TRACE_SAMPLE_RATE' // remapped name
-      }
+      { ...changeNeedingNameRemapping[0], name: 'DD_TRACE_SAMPLE_RATE' }
     ]
     telemetry.updateConfig(changeNeedingNameRemapping, config)
     clock.tick(86400000)
@@ -453,7 +439,7 @@ describe('Telemetry extended heartbeat', () => {
 
     const samplingRule = [
       {
-        name: 'sampler.rules', // one of the config names that require a remapping
+        name: 'sampler.rules',
         value: [
           { service: '*', sampling_rate: 1 },
           {
@@ -464,22 +450,37 @@ describe('Telemetry extended heartbeat', () => {
             sample_rate: 0.5
           }
         ],
-        origin: 'code'
+        origin: 'code',
+        seq_id: 3
       }
     ]
-    const expectedConfigListWithSamplingRules =
-      expectedConfigList.concat([
-        {
-          name: 'DD_TRACE_SAMPLING_RULES',
-          value:
-          // eslint-disable-next-line @stylistic/max-len
-          '[{"service":"*","sampling_rate":1},{"service":"svc*","resource":"*abc","name":"op-??","tags":{"tag-a":"ta-v*","tag-b":"tb-v?","tag-c":"tc-v"},"sample_rate":0.5}]',
-          origin: 'code'
-        }
-      ])
+    const expectedConfigListWithSamplingRules = expectedConfigList.concat([
+      {
+        name: 'DD_TRACE_SAMPLING_RULES',
+        value: '[{"service":"*","sampling_rate":1},' +
+          '{"service":"svc*","resource":"*abc","name":"op-??",' +
+          '"tags":{"tag-a":"ta-v*","tag-b":"tb-v?","tag-c":"tc-v"},"sample_rate":0.5}]',
+        origin: 'code',
+        seq_id: 3
+      }
+    ])
     telemetry.updateConfig(samplingRule, config)
     clock.tick(86400000)
     expect(configuration).to.deep.equal(expectedConfigListWithSamplingRules)
+
+    const chainedChanges = expectedConfigListWithSamplingRules.concat([
+      { name: 'test', value: true, origin: 'env', seq_id: 4 },
+      { name: 'test', value: false, origin: 'remote_config', seq_id: 5 }
+    ])
+    const samplingRule2 = [
+      { name: 'test', value: true, origin: 'env' },
+      { name: 'test', value: false, origin: 'remote_config' }
+    ]
+
+    telemetry.updateConfig(samplingRule2, config)
+    clock.tick(86400000)
+    expect(configuration).to.deep.equal(chainedChanges)
+
     done()
   })
 })
@@ -946,7 +947,7 @@ describe('AVM OSS', () => {
         it('in app-started message', () => {
           return testSeq(1, 'app-started', payload => {
             expect(payload).to.have.property('configuration').that.deep.equal([
-              { name: 'appsec.sca.enabled', value: scaValue, origin: scaValueOrigin }
+              { name: 'appsec.sca.enabled', value: scaValue, origin: scaValueOrigin, seq_id: 0 }
             ])
           }, true)
         })
@@ -956,7 +957,7 @@ describe('AVM OSS', () => {
           clock.tick(86400000)
           return testSeq(2, 'app-extended-heartbeat', payload => {
             expect(payload).to.have.property('configuration').that.deep.equal([
-              { name: 'appsec.sca.enabled', value: scaValue, origin: scaValueOrigin }
+              { name: 'appsec.sca.enabled', value: scaValue, origin: scaValueOrigin, seq_id: 0 }
             ])
           }, true)
         })

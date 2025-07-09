@@ -28,6 +28,8 @@ const extendedHeartbeatPayload = {}
 
 const sentIntegrations = new Set()
 
+let seqId = 0
+
 function getRetryData () {
   return retryData
 }
@@ -319,7 +321,11 @@ const nameMapping = {
   clientIpHeader: 'DD_TRACE_CLIENT_IP_HEADER',
   'grpc.client.error.statuses': 'DD_GRPC_CLIENT_ERROR_STATUSES',
   'grpc.server.error.statuses': 'DD_GRPC_SERVER_ERROR_STATUSES',
-  traceId128BitLoggingEnabled: 'DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED'
+  traceId128BitLoggingEnabled: 'DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED',
+  instrumentationSource: 'instrumentation_source',
+  injectionEnabled: 'ssi_injection_enabled',
+  injectForce: 'ssi_forced_injection_enabled',
+  'runtimeMetrics.enabled': 'runtimeMetrics'
 }
 
 const namesNeedFormatting = new Set(['DD_TAGS', 'peerServiceMapping', 'serviceMapping'])
@@ -337,9 +343,8 @@ function updateConfig (changes, config) {
 
   for (const change of changes) {
     const name = nameMapping[change.name] || change.name
-
     const { origin, value } = change
-    const entry = { name, value, origin }
+    const entry = { name, value, origin, seq_id: seqId++ }
 
     if (namesNeedFormatting.has(entry.name)) {
       entry.value = formatMapForTelemetry(entry.value)
@@ -352,7 +357,9 @@ function updateConfig (changes, config) {
     } else if (Array.isArray(entry.value)) {
       entry.value = value.join(',')
     }
-    configWithOrigin.set(name, entry)
+
+    // Use composite key to support multiple origins for same config name
+    configWithOrigin.set(`${name}|${origin}`, entry)
   }
 
   if (changed) {

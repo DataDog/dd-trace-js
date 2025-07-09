@@ -1,3 +1,5 @@
+'use strict'
+
 const request = require('../../exporters/common/request')
 const id = require('../../id')
 const log = require('../../log')
@@ -96,7 +98,7 @@ function getKnownTests ({
         incrementCountMetric(TELEMETRY_KNOWN_TESTS_RESPONSE_TESTS, {}, numTests)
         distributionMetric(TELEMETRY_KNOWN_TESTS_RESPONSE_BYTES, {}, res.length)
 
-        log.debug(() => `Number of received known tests: ${numTests}`)
+        log.debug('Number of received known tests:', numTests)
 
         done(null, knownTests)
       } catch (err) {

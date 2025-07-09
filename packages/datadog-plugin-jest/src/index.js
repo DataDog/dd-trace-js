@@ -1,3 +1,5 @@
+'use strict'
+
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
@@ -252,7 +254,8 @@ class JestPlugin extends CiPlugin {
           [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,
           ...testSuiteMetadata
-        }
+        },
+        integrationName: this.constructor.id
       })
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
       if (_ddTestCodeCoverageEnabled) {
@@ -318,11 +321,11 @@ class JestPlugin extends CiPlugin {
      * because this subscription happens in a different process from the one
      * fetching the ITR config.
      */
-    this.addSub('ci:jest:test-suite:code-coverage', ({ coverageFiles, testSuite }) => {
+    this.addSub('ci:jest:test-suite:code-coverage', ({ coverageFiles, testSuite, mockedFiles }) => {
       if (!coverageFiles.length) {
         this.telemetry.count(TELEMETRY_CODE_COVERAGE_EMPTY)
       }
-      const files = [...coverageFiles, testSuite]
+      const files = [...coverageFiles, ...mockedFiles, testSuite]
 
       const { _traceId, _spanId } = this.testSuiteSpan.context()
       const formattedCoverage = {

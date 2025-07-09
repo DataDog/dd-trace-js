@@ -22,6 +22,8 @@ const LLMObsTagger = require('./tagger')
 const LLMObsSpanWriter = require('./writers/spans')
 const { setAgentStrategy } = require('./writers/util')
 
+const util = require('node:util')
+
 /**
  * Setting writers and processor globally when LLMObs is enabled
  * We're setting these in this module instead of on the SDK.
@@ -75,6 +77,7 @@ function enable (config) {
     spanWriter?.setAgentless(useAgentless)
 
     telemetry.recordLLMObsEnabled(startTime, config)
+    log.debug(`[LLMObs] Enabled LLM Observability with configuration: ${util.inspect(config.llmobs)}`)
   })
 }
 
@@ -90,6 +93,8 @@ function disable () {
 
   spanWriter = null
   evalWriter = null
+
+  log.debug('[LLMObs] Disabled LLM Observability')
 }
 
 // since LLMObs traces can extend between services and be the same trace,
@@ -116,7 +121,7 @@ function handleFlush () {
     evalWriter.flush()
   } catch (e) {
     err = 'writer_flush_error'
-    log.warn(`Failed to flush LLMObs spans and evaluation metrics: ${e.message}`)
+    log.warn('Failed to flush LLMObs spans and evaluation metrics:', e.message)
   }
   telemetry.recordUserFlush(err)
 }
@@ -129,10 +134,11 @@ function handleEvalMetricAppend (payload) {
   try {
     evalWriter.append(payload)
   } catch (e) {
-    log.warn(`
-      Failed to append evaluation metric to LLM Observability writer, likely due to an unserializable property.
-      Evaluation metrics won't be sent to LLM Observability: ${e.message}
-    `)
+    log.warn(
+      // eslint-disable-next-line @stylistic/max-len
+      'Failed to append evaluation metric to LLM Observability writer, likely due to an unserializable property. Evaluation metrics won\'t be sent to LLM Observability:',
+      e.message
+    )
   }
 }
 

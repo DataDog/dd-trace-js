@@ -6,12 +6,12 @@ const { join } = require('path')
 const { assert } = require('chai')
 const axios = require('axios')
 
-function check (agent, proc, timeout, onMessage = () => { }, isMetrics) {
+async function check (agent, proc, timeout, onMessage = () => { }, isMetrics) {
   const messageReceiver = isMetrics
-    ? agent.assertTelemetryReceived(onMessage, timeout, 'generate-metrics')
+    ? agent.assertTelemetryReceived(onMessage, 'generate-metrics', timeout)
     : agent.assertMessageReceived(onMessage, timeout)
 
-  return Promise.all([
+  const [res] = await Promise.all([
     messageReceiver,
     new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -30,7 +30,9 @@ function check (agent, proc, timeout, onMessage = () => { }, isMetrics) {
           }
         })
     })
-  ]).then(([res]) => res)
+  ])
+
+  return res
 }
 
 function allEqual (spans, fn) {
@@ -76,7 +78,7 @@ describe('opentelemetry', () => {
     await sandbox.remove()
   })
 
-  it("should not capture telemetry DD and OTEL vars don't conflict", () => {
+  it("should not capture telemetry DD and OTEL vars don't conflict", async () => {
     proc = fork(join(cwd, 'opentelemetry/basic.js'), {
       cwd,
       env: {
@@ -94,7 +96,7 @@ describe('opentelemetry', () => {
       }
     })
 
-    return check(agent, proc, timeout, ({ payload }) => {
+    await check(agent, proc, timeout, ({ payload }) => {
       assert.strictEqual(payload.request_type, 'generate-metrics')
 
       const metrics = payload.payload
@@ -108,7 +110,7 @@ describe('opentelemetry', () => {
     }, true)
   })
 
-  it('should capture telemetry if both DD and OTEL env vars are set', () => {
+  it('should capture telemetry if both DD and OTEL env vars are set', async () => {
     proc = fork(join(cwd, 'opentelemetry/basic.js'), {
       cwd,
       env: {
@@ -136,7 +138,7 @@ describe('opentelemetry', () => {
       }
     })
 
-    return check(agent, proc, timeout, ({ payload }) => {
+    await check(agent, proc, timeout, ({ payload }) => {
       assert.strictEqual(payload.request_type, 'generate-metrics')
 
       const metrics = payload.payload
@@ -188,7 +190,7 @@ describe('opentelemetry', () => {
     }, true)
   })
 
-  it('should capture telemetry when OTEL env vars are invalid', () => {
+  it('should capture telemetry when OTEL env vars are invalid', async () => {
     proc = fork(join(cwd, 'opentelemetry/basic.js'), {
       cwd,
       env: {
@@ -209,7 +211,7 @@ describe('opentelemetry', () => {
       }
     })
 
-    return check(agent, proc, timeout, ({ payload }) => {
+    await check(agent, proc, timeout, ({ payload }) => {
       assert.strictEqual(payload.request_type, 'generate-metrics')
 
       const metrics = payload.payload
@@ -274,7 +276,7 @@ describe('opentelemetry', () => {
         DD_TRACE_AGENT_PORT: agent.port
       }
     })
-    return check(agent, proc, timeout, ({ payload }) => {
+    await check(agent, proc, timeout, ({ payload }) => {
       // Should have a single trace with a single span
       assert.strictEqual(payload.length, 1)
       const [trace] = payload
@@ -286,7 +288,7 @@ describe('opentelemetry', () => {
     })
   })
 
-  it('should capture telemetry', () => {
+  it('should capture telemetry', async () => {
     proc = fork(join(cwd, 'opentelemetry/basic.js'), {
       cwd,
       env: {
@@ -297,7 +299,7 @@ describe('opentelemetry', () => {
       }
     })
 
-    return check(agent, proc, timeout, ({ payload }) => {
+    await check(agent, proc, timeout, ({ payload }) => {
       assert.strictEqual(payload.request_type, 'generate-metrics')
 
       const metrics = payload.payload
@@ -342,7 +344,7 @@ describe('opentelemetry', () => {
     await new Promise(resolve => setTimeout(resolve, 1000)) // Adjust the delay as necessary
     await axios.get(`http://localhost:${SERVER_PORT}/first-endpoint`)
 
-    return check(agent, proc, 10000, ({ payload }) => {
+    await check(agent, proc, 10000, ({ payload }) => {
       assert.strictEqual(payload.request_type, 'generate-metrics')
 
       const metrics = payload.payload
@@ -379,7 +381,7 @@ describe('opentelemetry', () => {
         DD_TRACE_AGENT_PORT: agent.port
       }
     })
-    return check(agent, proc, timeout, ({ payload }) => {
+    await check(agent, proc, timeout, ({ payload }) => {
       // Should have three spans
       const [trace] = payload
       assert.strictEqual(trace.length, 3)
@@ -414,7 +416,7 @@ describe('opentelemetry', () => {
     await new Promise(resolve => setTimeout(resolve, 1000)) // Adjust the delay as necessary
     await axios.get(`http://localhost:${SERVER_PORT}/first-endpoint`)
 
-    return check(agent, proc, 10000, ({ payload }) => {
+    await check(agent, proc, 10000, ({ payload }) => {
       assert.strictEqual(payload.length, 2)
       // combine the traces
       const trace = payload.flat()
@@ -457,7 +459,7 @@ describe('opentelemetry', () => {
         DD_TRACE_AGENT_PORT: agent.port
       }
     })
-    return check(agent, proc, timeout, ({ payload }) => {
+    await check(agent, proc, timeout, ({ payload }) => {
       // Should have a single trace with a single span
       assert.strictEqual(payload.length, 1)
       const [trace] = payload

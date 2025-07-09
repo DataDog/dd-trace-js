@@ -1,3 +1,5 @@
+'use strict'
+
 const {
   TEST_STATUS,
   TEST_IS_RUM_ACTIVE,
@@ -376,7 +378,8 @@ class CypressPlugin {
         [COMPONENT]: TEST_FRAMEWORK_NAME,
         ...this.testEnvironmentMetadata,
         ...testSuiteSpanMetadata
-      }
+      },
+      integrationName: TEST_FRAMEWORK_NAME
     })
   }
 
@@ -443,7 +446,8 @@ class CypressPlugin {
         ...testSpanMetadata,
         ...this.testEnvironmentMetadata,
         ...testSuiteTags
-      }
+      },
+      integrationName: TEST_FRAMEWORK_NAME
     })
   }
 
@@ -550,7 +554,7 @@ class CypressPlugin {
           [TEST_SESSION_NAME]: testSessionName
         }
       }
-      const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id)
+      const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id, false, this.frameworkVersion)
       metadataTags.test = {
         ...metadataTags.test,
         ...libraryCapabilitiesTags
@@ -565,7 +569,8 @@ class CypressPlugin {
         [COMPONENT]: TEST_FRAMEWORK_NAME,
         ...this.testEnvironmentMetadata,
         ...testSessionSpanMetadata
-      }
+      },
+      integrationName: TEST_FRAMEWORK_NAME
     })
     this.ciVisEvent(TELEMETRY_EVENT_CREATED, 'session')
 
@@ -575,7 +580,8 @@ class CypressPlugin {
         [COMPONENT]: TEST_FRAMEWORK_NAME,
         ...this.testEnvironmentMetadata,
         ...testModuleSpanMetadata
-      }
+      },
+      integrationName: TEST_FRAMEWORK_NAME
     })
     this.ciVisEvent(TELEMETRY_EVENT_CREATED, 'module')
 

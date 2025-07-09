@@ -135,8 +135,12 @@ describe('TracerProxy', () => {
       remoteConfig: {
         enabled: true
       },
+      runtimeMetrics: {
+        enabled: false
+      },
       configure: sinon.spy(),
-      llmobs: {}
+      llmobs: {},
+      heapSnapshot: {}
     }
     Config = sinon.stub().returns(config)
 
@@ -386,7 +390,7 @@ describe('TracerProxy', () => {
       })
 
       it('should start capturing runtimeMetrics when configured', () => {
-        config.runtimeMetrics = true
+        config.runtimeMetrics.enabled = true
 
         proxy.init()
 

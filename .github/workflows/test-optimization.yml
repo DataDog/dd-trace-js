@@ -17,7 +17,7 @@ jobs:
     name: Performance and correctness tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/create-github-app-token@db3cdf40984fe6fd25ae19ac2bf2f4886ae8d959 # v2.0.5
+      - uses: actions/create-github-app-token@df432ceedc7162793a195dd1713ff69aefc7379e # v2.0.6
         id: app-token
         with:
           app-id: ${{ vars.APP_ID }}
@@ -29,8 +29,8 @@ jobs:
         with:
           token: ${{ steps.app-token.outputs.token }}
       - uses: ./.github/actions/node/oldest-maintenance-lts
-      - name: CI Visibility Performance Overhead Test
-        run: yarn bench:e2e:ci-visibility
+      - name: Test Optimization Performance Overhead Test
+        run: yarn bench:e2e:test-optimization
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
 
@@ -63,7 +63,7 @@ jobs:
     strategy:
       matrix:
         version: [oldest, latest]
-        framework: [cucumber, selenium, mocha]
+        framework: [cucumber, selenium, jest, mocha]
     runs-on: ubuntu-latest
     env:
       DD_SERVICE: dd-trace-js-integration-tests
@@ -170,24 +170,24 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d # v5.4.2
+      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
 
   # TODO: fix performance issues and test more Node versions
-  # plugin-jest:
-  #   runs-on: ubuntu-latest
-  #   env:
-  #     PLUGINS: jest
-  #   steps:
-  #     - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-  #     - uses: ./.github/actions/testagent/start
-  #     - uses: ./.github/actions/node/active-lts
-  #     - uses: ./.github/actions/install
-  #     - run: yarn test:plugins:ci
-  #     - if: always()
-  #       uses: ./.github/actions/testagent/logs
-  #       with:
-  #         suffix: plugins-${{ github.job }}
-  #     - uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d # v5.4.2
+  plugin-jest:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: jest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/install
+      - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+        with:
+          suffix: plugins-${{ github.job }}
+      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
 
   plugin-mocha:
     runs-on: ubuntu-latest

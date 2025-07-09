@@ -60,7 +60,7 @@ class BaseLLMObsWriter {
       return
     }
 
-    this._bufferSize += byteLength || Buffer.from(JSON.stringify(event)).byteLength
+    this._bufferSize += byteLength || Buffer.byteLength(JSON.stringify(event))
     this._buffer.push(event)
   }
 
@@ -76,7 +76,7 @@ class BaseLLMObsWriter {
     this._bufferSize = 0
     const payload = this._encode(this.makePayload(events))
 
-    log.debug(`Encoded LLMObs payload: ${payload}`)
+    log.debug('Encoded LLMObs payload: %s', payload)
 
     const options = this._getOptions()
 

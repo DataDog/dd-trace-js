@@ -84,13 +84,12 @@ describe('RASP - command_injection - integration', () => {
           assert.include(matchSerie.tags, `rule_variant:${variant}`)
           assert.strictEqual(matchSerie.type, 'count')
         }
-      }, 30_000, 'generate-metrics', 2)
+      }, 'generate-metrics', 30_000, 2)
 
-      return Promise.all([checkMessages, checkTelemetry]).then(() => {
-        assert.equal(appsecTelemetryReceived, true)
+      await Promise.all([checkMessages, checkTelemetry])
 
-        return true
-      })
+      assert.equal(appsecTelemetryReceived, true)
+      return
     }
 
     throw new Error('Request should be blocked')

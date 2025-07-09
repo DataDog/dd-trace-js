@@ -1,3 +1,5 @@
+'use strict'
+
 const cp = require('child_process')
 const os = require('os')
 const path = require('path')
@@ -380,6 +382,7 @@ function generatePackFilesForCommits (commitsToUpload) {
   const tmpFolder = os.tmpdir()
 
   if (!isDirectory(tmpFolder)) {
+    // TODO: Do we need the stack trace for this error? If not, just log the string
     log.error(new Error('Provided path to generate packfiles is not a directory'))
     return []
   }

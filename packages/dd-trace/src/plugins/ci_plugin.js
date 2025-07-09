@@ -1,3 +1,5 @@
+'use strict'
+
 const { storage } = require('../../../datadog-core')
 const {
   getTestEnvironmentMetadata,
@@ -75,7 +77,7 @@ module.exports = class CiPlugin extends Plugin {
     this.rootDir = process.cwd() // fallback in case :session:start events are not emitted
 
     this.addSub(`ci:${this.constructor.id}:library-configuration`, (ctx) => {
-      const { onDone, isParallel } = ctx
+      const { onDone, isParallel, frameworkVersion } = ctx
       ctx.currentStore = storage('legacy').getStore()
 
       if (!this.tracer._exporter || !this.tracer._exporter.getLibraryConfiguration) {
@@ -88,7 +90,7 @@ module.exports = class CiPlugin extends Plugin {
           this.libraryConfig = libraryConfig
         }
 
-        const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id, isParallel)
+        const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id, isParallel, frameworkVersion)
         const metadataTags = {
           test: {
             ...libraryCapabilitiesTags
@@ -150,7 +152,8 @@ module.exports = class CiPlugin extends Plugin {
           [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,
           ...testSessionSpanMetadata
-        }
+        },
+        integrationName: this.constructor.id
       })
       // TODO: add telemetry tag when we can add `is_agentless_log_submission_enabled` for agentless log submission
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'session')
@@ -161,7 +164,8 @@ module.exports = class CiPlugin extends Plugin {
           [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,
           ...testModuleSpanMetadata
-        }
+        },
+        integrationName: this.constructor.id
       })
       // only for vitest
       // These are added for the worker threads to use
@@ -194,7 +198,8 @@ module.exports = class CiPlugin extends Plugin {
             ...testSuiteMetadata,
             [TEST_STATUS]: 'skip',
             [TEST_SKIPPED_BY_ITR]: 'true'
-          }
+          },
+          integrationName: this.constructor.id
         }).finish()
       })
       this.telemetry.count(TELEMETRY_ITR_SKIPPED, { testLevel: 'suite' }, skippedSuites.length)
@@ -396,7 +401,8 @@ module.exports = class CiPlugin extends Plugin {
         tags: {
           ...this.testEnvironmentMetadata,
           ...testTags
-        }
+        },
+        integrationName: this.constructor.id
       })
 
     testSpan.context()._trace.origin = CI_APP_ORIGIN
@@ -453,7 +459,7 @@ module.exports = class CiPlugin extends Plugin {
 
   removeDiProbe ({ file, line }) {
     const probeId = this.fileLineToProbeId.get(`${file}:${line}`)
-    log.warn(`Removing probe from ${file}:${line}, with id: ${probeId}`)
+    log.warn('Removing probe from %s:%s, with id: %s', file, line, probeId)
     this.fileLineToProbeId.delete(probeId)
     return this.di.removeProbe(probeId)
   }

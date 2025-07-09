@@ -1,3 +1,5 @@
+'use strict'
+
 const PROTOBUF = 'protobuf'
 const {
   SCHEMA_DEFINITION,
@@ -108,7 +110,7 @@ class SchemaExtractor {
     }
     for (const field of schema.fieldsArray) {
       if (!this.extractProperty(field, schemaName, field.name, builder, depth)) {
-        log.warn(`DSM: Unable to extract field with name: ${field.name} from Avro schema with name: ${schemaName}`)
+        log.warn('DSM: Unable to extract field with name: %s from Avro schema with name:', field.name, schemaName)
       }
     }
     return true

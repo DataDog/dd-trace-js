@@ -51,6 +51,7 @@ const {
   DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
   DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
   DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
+  DD_CAPABILITIES_FAILED_TEST_REPLAY,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
@@ -546,7 +547,7 @@ describe('jest CommonJS', () => {
             retriedTest.meta[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_FILE_SUFFIX}`]
               .endsWith('ci-visibility/dynamic-instrumentation/dependency.js')
           )
-          assert.equal(retriedTest.metrics[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_LINE_SUFFIX}`], 4)
+          assert.equal(retriedTest.metrics[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_LINE_SUFFIX}`], 6)
 
           const snapshotIdKey = `${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`
           assert.exists(retriedTest.meta[snapshotIdKey])
@@ -1427,61 +1428,6 @@ describe('jest CommonJS', () => {
       })
     })
 
-    it('can skip when using a custom test sequencer', (done) => {
-      receiver.setSettings({
-        itr_enabled: true,
-        tests_skipping: true
-      })
-      receiver.setSuitesToSkip([{
-        type: 'suite',
-        attributes: {
-          suite: 'ci-visibility/test/ci-visibility-test.js'
-        }
-      }])
-
-      const eventsPromise = receiver
-        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-          const events = payloads.flatMap(({ payload }) => payload.events)
-          const testEvents = events.filter(event => event.type === 'test')
-          // no tests end up running (suite is skipped)
-          assert.equal(testEvents.length, 0)
-
-          const testSession = events.find(event => event.type === 'test_session_end').content
-          assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'true')
-
-          const skippedSuite = events.find(event =>
-            event.content.resource === 'test_suite.ci-visibility/test/ci-visibility-test.js'
-          ).content
-          assert.propertyVal(skippedSuite.meta, TEST_STATUS, 'skip')
-          assert.propertyVal(skippedSuite.meta, TEST_SKIPPED_BY_ITR, 'true')
-        })
-      childProcess = exec(
-        runTestsWithCoverageCommand,
-        {
-          cwd,
-          env: {
-            ...getCiVisAgentlessConfig(receiver.port),
-            CUSTOM_TEST_SEQUENCER: './ci-visibility/jest-custom-test-sequencer.js',
-            TEST_SHARD: '2/2'
-          },
-          stdio: 'inherit'
-        }
-      )
-      childProcess.stdout.on('data', (chunk) => {
-        testOutput += chunk.toString()
-      })
-      childProcess.stderr.on('data', (chunk) => {
-        testOutput += chunk.toString()
-      })
-
-      childProcess.on('exit', () => {
-        assert.include(testOutput, 'Running shard with a custom sequencer')
-        eventsPromise.then(() => {
-          done()
-        }).catch(done)
-      })
-    })
-
     it('works with multi project setup and test skipping', (done) => {
       receiver.setSettings({
         itr_enabled: true,
@@ -1613,6 +1559,37 @@ describe('jest CommonJS', () => {
         codeCoveragesPromise.then(() => {
           done()
         }).catch(done)
+      })
+    })
+
+    it('report code coverage with all mocked files', (done) => {
+      const codeCovRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/citestcov')
+
+      codeCovRequestPromise.then((codeCovRequest) => {
+        const allCoverageFiles = codeCovRequest.payload
+          .flatMap(coverage => coverage.content.coverages)
+          .flatMap(file => file.files)
+          .map(file => file.filename)
+
+        assert.includeMembers(allCoverageFiles, [
+          'ci-visibility/test/sum.js',
+          'ci-visibility/jest/mocked-test.js'
+        ])
+      }).catch(done)
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'jest/mocked-test.js',
+          },
+          stdio: 'pipe'
+        }
+      )
+      childProcess.on('exit', () => {
+        done()
       })
     })
   })
@@ -2739,7 +2716,7 @@ describe('jest CommonJS', () => {
             retriedTest.meta[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_FILE_SUFFIX}`]
               .endsWith('ci-visibility/dynamic-instrumentation/dependency.js')
           )
-          assert.equal(retriedTest.metrics[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_LINE_SUFFIX}`], 4)
+          assert.equal(retriedTest.metrics[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_LINE_SUFFIX}`], 6)
 
           const snapshotIdKey = `${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`
           assert.exists(retriedTest.meta[snapshotIdKey])
@@ -2761,7 +2738,7 @@ describe('jest CommonJS', () => {
             level: 'error'
           })
           assert.equal(diLog.debugger.snapshot.language, 'javascript')
-          assert.deepInclude(diLog.debugger.snapshot.captures.lines['4'].locals, {
+          assert.deepInclude(diLog.debugger.snapshot.captures.lines['6'].locals, {
             a: {
               type: 'number',
               value: '11'
@@ -3559,6 +3536,7 @@ describe('jest CommonJS', () => {
             assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
             assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
             assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '4')
+            assert.equal(metadata.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], '1')
             // capabilities logic does not overwrite test session name
             assert.equal(metadata.test[TEST_SESSION_NAME], 'my-test-session-name')
           })

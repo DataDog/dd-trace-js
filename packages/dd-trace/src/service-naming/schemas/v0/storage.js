@@ -1,3 +1,5 @@
+'use strict'
+
 function getRedisService (pluginConfig, connectionName) {
   if (pluginConfig.splitByInstance && connectionName) {
     return pluginConfig.service
@@ -99,6 +101,10 @@ const storage = {
     pg: {
       opName: () => 'pg.query',
       serviceName: withSuffixFunction('postgres')
+    },
+    prisma: {
+      opName: ({ operation }) => `prisma.${operation}`,
+      serviceName: withSuffixFunction('prisma')
     },
     redis: redisConfig,
     tedious: {

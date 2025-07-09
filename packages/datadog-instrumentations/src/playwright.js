@@ -1,3 +1,5 @@
+'use strict'
+
 const satisfies = require('semifies')
 
 const { addHook, channel } = require('./helpers/instrument')
@@ -516,7 +518,10 @@ function runnerHook (runnerExport, playwrightVersion) {
     testSessionStartCh.publish({ command, frameworkVersion: playwrightVersion, rootDir })
 
     try {
-      const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh)
+      const { err, libraryConfig } = await getChannelPromise(
+        libraryConfigurationCh,
+        { frameworkVersion: playwrightVersion }
+      )
       if (!err) {
         isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
         isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
