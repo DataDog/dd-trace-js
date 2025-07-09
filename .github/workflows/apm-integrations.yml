@@ -230,16 +230,9 @@ jobs:
           env:
               ACCEPT_EULA: "Y"
               MSSQL_SA_PASSWORD: "Localtestpass1!"
-        qpid:
-          image: scholzj/qpid-cpp:1.38.0
-          env:
-            QPIDD_ADMIN_USERNAME: admin
-            QPIDD_ADMIN_PASSWORD: admin
-          ports:
-            - 5673:5673
     env:
       PLUGINS: azure-service-bus
-      SERVICES: azureservicebusemulator,azuresqledge, qpid
+      SERVICES: azureservicebusemulator,azuresqledge
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/plugins/test
