@@ -1,5 +1,7 @@
 'use strict'
 
+/* eslint n/no-unsupported-features/node-builtins: ['error', { ignores: ['v8.GCProfiler'] }] */
+
 // TODO: capture every second and flush every 10 seconds
 
 const v8 = require('v8')

@@ -2,7 +2,6 @@
 
 const Axios = require('axios')
 const { assert } = require('chai')
-const getPort = require('get-port')
 const path = require('path')
 const zlib = require('zlib')
 const fs = require('node:fs')
