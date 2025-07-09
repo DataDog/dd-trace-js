@@ -16,7 +16,7 @@ const { updateConfig } = require('./telemetry')
 const telemetryMetrics = require('./telemetry/metrics')
 const { isInServerlessEnvironment, getIsGCPFunction, getIsAzureFunction } = require('./serverless')
 const {
-  ORIGIN_KEY, GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES, INSTRUMENTED_BY_SSI
+  ORIGIN_KEY, GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES
 } = require('./constants')
 const { appendRules } = require('./payload-tagging/config')
 const { getEnvironmentVariable, getEnvironmentVariables } = require('./config-helper')
@@ -529,6 +529,9 @@ class Config {
     defaults['grpc.client.error.statuses'] = GRPC_CLIENT_ERROR_STATUSES
     defaults['grpc.server.error.statuses'] = GRPC_SERVER_ERROR_STATUSES
     defaults.headerTags = []
+    defaults['heapSnapshot.count'] = 0
+    defaults['heapSnapshot.destination'] = ''
+    defaults['heapSnapshot.interval'] = 3600
     defaults.hostname = '127.0.0.1'
     defaults['iast.dbRowsToTaint'] = 1
     defaults['iast.deduplicationEnabled'] = true
@@ -713,6 +716,9 @@ class Config {
       DD_GRPC_CLIENT_ERROR_STATUSES,
       DD_GRPC_SERVER_ERROR_STATUSES,
       JEST_WORKER_ID,
+      DD_HEAP_SNAPSHOT_COUNT,
+      DD_HEAP_SNAPSHOT_DESTINATION,
+      DD_HEAP_SNAPSHOT_INTERVAL,
       DD_IAST_DB_ROWS_TO_TAINT,
       DD_IAST_DEDUPLICATION_ENABLED,
       DD_IAST_ENABLED,
@@ -896,6 +902,9 @@ class Config {
     this._setIntegerRangeSet(env, 'grpc.client.error.statuses', DD_GRPC_CLIENT_ERROR_STATUSES)
     this._setIntegerRangeSet(env, 'grpc.server.error.statuses', DD_GRPC_SERVER_ERROR_STATUSES)
     this._setArray(env, 'headerTags', DD_TRACE_HEADER_TAGS)
+    env['heapSnapshot.count'] = maybeInt(DD_HEAP_SNAPSHOT_COUNT)
+    this._setString(env, 'heapSnapshot.destination', DD_HEAP_SNAPSHOT_DESTINATION)
+    env['heapSnapshot.interval'] = maybeInt(DD_HEAP_SNAPSHOT_INTERVAL)
     this._setString(env, 'hostname', DD_AGENT_HOST)
     env['iast.dbRowsToTaint'] = maybeInt(DD_IAST_DB_ROWS_TO_TAINT)
     this._setBoolean(env, 'iast.deduplicationEnabled', DD_IAST_DEDUPLICATION_ENABLED)
@@ -916,6 +925,7 @@ class Config {
     this._setString(env, 'iast.telemetryVerbosity', DD_IAST_TELEMETRY_VERBOSITY)
     this._setBoolean(env, 'iast.stackTrace.enabled', DD_IAST_STACK_TRACE_ENABLED)
     this._setArray(env, 'injectionEnabled', DD_INJECTION_ENABLED)
+    this._setString(env, 'instrumentationSource', DD_INJECTION_ENABLED ? 'ssi' : 'manual')
     this._setBoolean(env, 'injectForce', DD_INJECT_FORCE)
     this._setBoolean(env, 'isAzureFunction', getIsAzureFunction())
     this._setBoolean(env, 'isGCPFunction', getIsGCPFunction())
@@ -1141,9 +1151,6 @@ class Config {
     opts['iast.securityControlsConfiguration'] = options.iast?.securityControlsConfiguration
     this._setBoolean(opts, 'iast.stackTrace.enabled', options.iast?.stackTrace?.enabled)
     this._setString(opts, 'iast.telemetryVerbosity', options.iast && options.iast.telemetryVerbosity)
-    if (options[INSTRUMENTED_BY_SSI]) {
-      this._setString(opts, 'instrumentationSource', options[INSTRUMENTED_BY_SSI])
-    }
     this._setBoolean(opts, 'isCiVisibility', options.isCiVisibility)
     this._setBoolean(opts, 'legacyBaggageEnabled', options.legacyBaggageEnabled)
     this._setBoolean(opts, 'llmobs.agentlessEnabled', options.llmobs?.agentlessEnabled)

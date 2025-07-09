@@ -1,3 +1,5 @@
+'use strict'
+
 const AVRO = 'avro'
 const {
   SCHEMA_DEFINITION,

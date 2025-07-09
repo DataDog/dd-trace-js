@@ -1,3 +1,5 @@
+'use strict'
+
 const http = require('http')
 
 describe('mocha-test-integration-http', () => {

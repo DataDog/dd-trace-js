@@ -1,4 +1,7 @@
+'use strict'
+
 const ddPlugin = require('../../esbuild')
+
 module.exports = {
   format: 'esm',
   entryPoints: ['basic-test.js'],

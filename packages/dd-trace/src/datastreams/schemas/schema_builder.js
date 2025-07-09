@@ -1,4 +1,6 @@
-const LRUCache = require('lru-cache')
+'use strict'
+
+const { LRUCache } = require('lru-cache')
 const { fnv64 } = require('../fnv')
 const { Schema } = require('./schema')
 
@@ -25,10 +27,12 @@ class SchemaBuilder {
   }
 
   static getSchema (schemaName, iterator, builder) {
-    if (!CACHE.has(schemaName)) {
-      CACHE.set(schemaName, (builder ?? new SchemaBuilder(iterator)).build())
+    let entry = CACHE.get(schemaName)
+    if (!entry) {
+      entry = (builder ?? new SchemaBuilder(iterator)).build()
+      CACHE.set(schemaName, entry)
     }
-    return CACHE.get(schemaName)
+    return entry
   }
 
   build () {
