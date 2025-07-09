@@ -19,7 +19,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
       return agent.load(['fastify', 'http'], { client: false })
     })
 
-    before(async () => {
+    before((done) => {
       const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
 
       const app = fastify()
@@ -29,9 +29,11 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         reply.send('DONE')
       })
 
-      const port = await getPort()
-      await app.listen({ port })
-      axios = Axios.create({ baseURL: `http://localhost:${port}` })
+      app.listen({ port: 0 }, () => {
+        const port = server.address().port
+        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        done()
+      })
       server = app.server
     })
 
@@ -82,7 +84,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
       return agent.load(['fastify', 'http'], { client: false })
     })
 
-    before(async () => {
+    before((done) => {
       const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
 
       const app = fastify()
@@ -92,9 +94,11 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         reply.send('DONE')
       })
 
-      const port = await getPort()
-      await app.listen({ port })
-      axios = Axios.create({ baseURL: `http://localhost:${port}` })
+      app.listen({ port: 0 }, () => {
+        const port = server.address().port
+        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        done()
+      })
       server = app.server
     })
 
@@ -180,7 +184,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
       return agent.load(['fastify', 'http'], { client: false })
     })
 
-    before(async () => {
+    before((done) => {
       const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
 
       const app = fastify()
@@ -199,9 +203,11 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         reply.send('DONE')
       })
 
-      const port = await getPort()
-      await app.listen({ port })
-      axios = Axios.create({ baseURL: `http://localhost:${port}` })
+      app.listen({ port: 0 }, () => {
+        const port = server.address().port
+        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        done()
+      })
       server = app.server
     })
 
@@ -253,7 +259,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
       return agent.load(['fastify', 'http'], { client: false })
     })
 
-    before(async () => {
+    before((done) => {
       const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
 
       const app = fastify()
@@ -286,9 +292,11 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         reply.send('DONE')
       })
 
-      const port = await getPort()
-      await app.listen({ port })
-      axios = Axios.create({ baseURL: `http://localhost:${port}` })
+      app.listen({ port: 0 }, () => {
+        const port = server.address().port
+        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        done()
+      })
       server = app.server
     })
 
@@ -447,7 +455,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
             return agent.load(['fastify', '@fastify/cookie', 'http'], { client: false })
           })
 
-          before(async () => {
+          before((done) => {
             const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
             const fastifyCookie = require(`../../../../versions/@fastify/cookie@${cookieVersion}`).get()
 
@@ -466,9 +474,11 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
               reply.send('DONE')
             })
 
-            const port = await getPort()
-            await app.listen({ port })
-            axios = Axios.create({ baseURL: `http://localhost:${port}` })
+            app.listen({ port: 0 }, () => {
+              const port = server.address().port
+              axios = Axios.create({ baseURL: `http://localhost:${port}` })
+              done()
+            })
             server = app.server
           })
 
@@ -545,7 +555,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         return agent.load(['fastify', '@fastify/multipart', 'http'], { client: false })
       })
 
-      before(async () => {
+      before((done) => {
         const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
         const fastifyMultipart = require(`../../../../versions/@fastify/multipart@${multipartVersion}`).get()
 
@@ -558,9 +568,11 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
           reply.send('DONE')
         })
 
-        const port = await getPort()
-        await app.listen({ port })
-        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        app.listen({ port: 0 }, () => {
+          const port = server.address().port
+          axios = Axios.create({ baseURL: `http://localhost:${port}` })
+          done()
+        })
         server = app.server
       })
 
@@ -619,7 +631,7 @@ describe('Api Security - Fastify', () => {
       return agent.load(['fastify', 'http'], { client: false })
     })
 
-    before(async () => {
+    before((done) => {
       const fastify = require(`../../../../versions/fastify@${version}`).get()
 
       const app = fastify()
@@ -650,9 +662,11 @@ describe('Api Security - Fastify', () => {
         reply.send(new Uint16Array(10))
       })
 
-      const port = await getPort()
-      await app.listen({ port })
-      axios = Axios.create({ baseURL: `http://localhost:${port}` })
+      app.listen({ port: 0 }, () => {
+        const port = server.address().port
+        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        done()
+      })
       server = app.server
     })
 
