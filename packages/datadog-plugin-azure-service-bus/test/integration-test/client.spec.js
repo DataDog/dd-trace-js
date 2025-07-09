@@ -37,7 +37,7 @@ describe('esm', () => {
       const res = agent.assertMessageReceived(({ headers, payload }) => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
         assert.isArray(payload)
-        assert.strictEqual(checkSpansForServiceName(payload, 'azure-service-bus.send'), true)
+        assert.strictEqual(checkSpansForServiceName(payload, 'azure.servicebus.send'), true)
       })
 
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
