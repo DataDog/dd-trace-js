@@ -525,18 +525,21 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
     withVersions('fastify', '@fastify/multipart', (multipartVersion, _, multipartLoadedVersion) => {
       let server, uploadSpy, axios
 
+      // The skips in this section are complex because of the incompatibilities between Fastify and @fastify/multipart
+      // We are not testing every major version of those libraries because of the complexity of the tests
       before(function () {
         // @fastify/multipart is not compatible with Fastify 2.x
         if (semver.intersects(fastifyLoadedVersion, '2')) {
           this.skip()
         }
 
-        // 6.x doesn't work for this specific Fastify patch version.
-        if (semver.intersects(fastifyLoadedVersion, '3.9.2') && semver.intersects(multipartLoadedVersion, '>6')) {
+        // This Fastify version is working only with @fastify/multipart 6
+        if (semver.intersects(fastifyLoadedVersion, '3.9.2') && semver.intersects(multipartLoadedVersion, '>=7')) {
           this.skip()
         }
 
-        if (semver.intersects(fastifyLoadedVersion, '>3') && semver.intersects(multipartLoadedVersion, '<7.0.0')) {
+        // Fastify 5 drop le support pour multipart <7
+        if (semver.intersects(fastifyLoadedVersion, '>=5') && semver.intersects(multipartLoadedVersion, '<7.0.0')) {
           this.skip()
         }
 
