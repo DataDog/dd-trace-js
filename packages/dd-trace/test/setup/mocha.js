@@ -62,8 +62,9 @@ function withNamingSchema (
 
         it('should conform to the naming schema', function () {
           this.timeout(10000)
+
           return new Promise((resolve, reject) => {
-            agent
+            const agentPromise = agent
               .assertSomeTraces(traces => {
                 const span = selectSpan(traces)
                 const expectedOpName = typeof opName === 'function'
@@ -76,9 +77,10 @@ function withNamingSchema (
                 expect(span).to.have.property('name', expectedOpName)
                 expect(span).to.have.property('service', expectedServiceName)
               })
-              .then(resolve)
-              .catch(reject)
-            spanProducerFn(reject)
+
+            const testPromise = spanProducerFn(reject)
+
+            Promise.all([testPromise, agentPromise]).then(resolve, reject)
           })
         })
       })
@@ -102,19 +104,21 @@ function withNamingSchema (
 
       const { serviceName } = expected.v1
 
-      it('should pass service name through', done => {
-        agent
-          .assertSomeTraces(traces => {
-            const span = traces[0][0]
-            const expectedServiceName = typeof serviceName === 'function'
-              ? serviceName()
-              : serviceName
-            expect(span).to.have.property('service', expectedServiceName)
-          })
-          .then(done)
-          .catch(done)
+      it('should pass service name through', () => {
+        return new Promise((resolve, reject) => {
+          const agentPromise = agent
+            .assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const expectedServiceName = typeof serviceName === 'function'
+                ? serviceName()
+                : serviceName
+              expect(span).to.have.property('service', expectedServiceName)
+            })
 
-        spanProducerFn(done)
+          const testPromise = spanProducerFn(reject)
+
+          Promise.all([testPromise, agentPromise]).then(resolve, reject)
+        })
       })
     })
   })
