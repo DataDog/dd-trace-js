@@ -40,7 +40,7 @@ const ends = new WeakMap()
 
 const TracingPlugin = require('../tracing')
 
-function createSpan (tracer, name, { childOf } = {}, traceCtx, config = {}) {
+function startSpanHelper (tracer, name, { childOf } = {}, traceCtx, config = {}) {
   return TracingPlugin.prototype.startSpan.call(
     { component: 'web', config },
     name,
@@ -179,7 +179,7 @@ const web = {
 
     if (config.middleware === false) return this.bindAndWrapMiddlewareErrors(fn, req, tracer, childOf)
 
-    const span = createSpan(tracer, name, { childOf }, traceCtx, config)
+    const span = startSpanHelper(tracer, name, { childOf }, traceCtx, config)
 
     analyticsSampler.sample(span, config.measured)
 
@@ -280,13 +280,13 @@ const web = {
 
     // we may have headers signaling a router proxy span should be created (such as for AWS API Gateway)
     if (tracer._config?.inferredProxyServicesEnabled) {
-      const proxySpan = createInferredProxySpan(headers, childOf, tracer, reqCtx, store, traceCtx)
+      const proxySpan = createInferredProxySpan(headers, childOf, tracer, reqCtx, store, traceCtx, startSpanHelper)
       if (proxySpan) {
         childOf = proxySpan
       }
     }
 
-    const span = createSpan(tracer, name, { childOf }, traceCtx)
+    const span = startSpanHelper(tracer, name, { childOf }, traceCtx)
 
     return span
   },

@@ -31,9 +31,8 @@ function wrapCreateServer (createServer) {
 
 function wrapResponseEmit (emit, ctx) {
   return function (eventName, event) {
-    if (eventName !== 'close') return emit.apply(this, arguments)
-
     ctx.req = this.req
+    ctx.eventName = eventName
     return finishServerCh.runStores(ctx, () => {
       return emit.apply(this, arguments)
     })

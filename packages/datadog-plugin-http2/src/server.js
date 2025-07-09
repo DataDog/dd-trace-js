@@ -19,7 +19,6 @@ class Http2ServerPlugin extends ServerPlugin {
   bindStart (ctx) {
     const { req, res } = ctx
 
-    const store = storage('legacy').getStore()
     const span = web.startSpan(
       this.tracer,
       {
@@ -28,13 +27,15 @@ class Http2ServerPlugin extends ServerPlugin {
       },
       req,
       res,
-      this.operationName()
+      this.operationName(),
+      ctx
     )
 
     span.setTag(COMPONENT, this.constructor.id)
     span._integrationName = this.constructor.id
 
-    this.enter(span, { ...store, req, res })
+    ctx.currentStore.req = req
+    ctx.currentStore.res = res
 
     const context = web.getContext(req)
 
@@ -47,6 +48,8 @@ class Http2ServerPlugin extends ServerPlugin {
   }
 
   bindFinish (ctx) {
+    if (ctx.eventName !== 'close') return ctx.currentStore
+
     const { req } = ctx
 
     const context = web.getContext(req)
@@ -55,7 +58,13 @@ class Http2ServerPlugin extends ServerPlugin {
 
     web.finishAll(context)
 
-    return ctx.parentStore
+    return ctx.currentStore
+  }
+
+  finish (ctx) {
+    // we let bindFinish handle the finish, but keep this method because we don't want to finish the span
+    // early for a response event that is not a 'close' event, which prevents tags from being set during web.finishAll
+    return
   }
 
   error (error) {

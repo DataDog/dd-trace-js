@@ -22,7 +22,7 @@ const supportedProxies = {
   }
 }
 
-function createInferredProxySpan (headers, childOf, tracer, reqCtx, store, traceCtx) {
+function createInferredProxySpan (headers, childOf, tracer, reqCtx, traceCtx, startSpanHelper) {
   if (!headers) {
     return null
   }
@@ -41,23 +41,20 @@ function createInferredProxySpan (headers, childOf, tracer, reqCtx, store, trace
 
   log.debug('Successfully extracted inferred span info %s for proxy:', proxyContext, proxyContext.proxySystemName)
 
-  const span = tracer.startSpan(
-    proxySpanInfo.spanName,
-    {
-      childOf,
-      type: 'web',
-      startTime: proxyContext.requestTime,
-      integrationName: proxySpanInfo.component,
-      tags: {
-        service: proxyContext.domainName || tracer._config.service,
-        component: proxySpanInfo.component,
-        [SPAN_TYPE]: 'web',
-        [HTTP_METHOD]: proxyContext.method,
-        [HTTP_URL]: proxyContext.domainName + proxyContext.path,
-        stage: proxyContext.stage
-      }
+  const span = startSpanHelper(tracer, proxySpanInfo.spanName, {
+    childOf,
+    type: 'web',
+    startTime: proxyContext.requestTime,
+    integrationName: proxySpanInfo.component,
+    tags: {
+      service: proxyContext.domainName || tracer._config.service,
+      component: proxySpanInfo.component,
+      [SPAN_TYPE]: 'web',
+      [HTTP_METHOD]: proxyContext.method,
+      [HTTP_URL]: proxyContext.domainName + proxyContext.path,
+      stage: proxyContext.stage
     }
-  )
+  }, traceCtx)
 
   tracer.scope().activate(span)
   reqCtx.inferredProxySpan = span
@@ -66,11 +63,6 @@ function createInferredProxySpan (headers, childOf, tracer, reqCtx, store, trace
   log.debug('Successfully created inferred proxy span.')
 
   setInferredProxySpanTags(span, proxyContext)
-
-  if (traceCtx) {
-    traceCtx.parentStore = store
-    traceCtx.currentStore = { ...store, span }
-  }
 
   return childOf
 }
