@@ -14,7 +14,6 @@ class SchemaBuilder {
   }
 
   // TODO: This is only used in tests. Let's refactor the code and stop exposing the cache.
-  // It might be sufficient to
   static getCache () {
     return CACHE
   }
@@ -93,10 +92,10 @@ class OpenApiComponents {
   }
 }
 
+// This adds a single whitespace between entries without adding newlines.
+// This differs from JSON.stringify and is used to align with the output
+// in other platforms.
 function toJSON (value) {
-  if (typeof value === 'boolean') {
-    return value ? 'true' : 'false'
-  }
   // eslint-disable-next-line eslint-rules/eslint-safe-typeof-object
   if (typeof value === 'object') {
     if (value === null) {
@@ -110,7 +109,7 @@ function toJSON (value) {
         }
         result += value[i] == null ? 'null' : toJSON(value[i])
       }
-      return result + ']'
+      return `${result}]`
     }
     let result = '{'
     for (const [key, objectValue] of Object.entries(value)) {
@@ -124,10 +123,7 @@ function toJSON (value) {
         }
       }
     }
-    return result + '}'
-  }
-  if (typeof value === 'function') {
-    return 'null'
+    return `${result}}`
   }
   return JSON.stringify(value)
 }
