@@ -929,10 +929,7 @@ class Config {
 
     this._setString(env, 'protocolVersion', DD_TRACE_AGENT_PROTOCOL_VERSION)
     this._setString(env, 'queryStringObfuscation', DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP)
-    this._setBoolean(env, 'remoteConfig.enabled', coalesce(
-      DD_REMOTE_CONFIGURATION_ENABLED,
-      !this._isInServerlessEnvironment()
-    ))
+    this._setBoolean(env, 'remoteConfig.enabled', DD_REMOTE_CONFIGURATION_ENABLED)
     env['remoteConfig.pollInterval'] = maybeFloat(DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS)
     this._envUnprocessed['remoteConfig.pollInterval'] = DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS
     this._setBoolean(env, 'reportHostname', DD_TRACE_REPORT_HOSTNAME)

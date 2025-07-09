@@ -29,9 +29,13 @@ class RemoteConfigManager extends EventEmitter {
 
     const pollInterval = Math.floor(config.remoteConfig.pollInterval * 1000)
 
+    console.log('getEnvironmentVariable', process.env['DD_SERVERLESS_REMOTE_CONFIG_HOST'])
+    console.log('config.hostname', config.hostname)
+    console.log('config.url', config.url)
+
     this.url = config.url || new URL(format({
       protocol: 'http:',
-      hostname: config.hostname || 'localhost',
+      hostname: process.env['DD_SERVERLESS_REMOTE_CONFIG_HOST'] || config.hostname || 'localhost',
       port: config.port
     }))
 
@@ -148,6 +152,10 @@ class RemoteConfigManager extends EventEmitter {
       }
     }
 
+    console.log('options', options.url)
+    console.log('this.getPayload()', JSON.parse(this.getPayload()))
+    console.log('this.url', this.url)
+
     request(this.getPayload(), options, (err, data, statusCode) => {
       // 404 means RC is disabled, ignore it
       if (statusCode === 404) return cb()
@@ -162,6 +170,8 @@ class RemoteConfigManager extends EventEmitter {
         this.state.client.state.has_error = false
         this.state.client.state.error = ''
       }
+
+      console.log('data', JSON.parse(data))
 
       if (data && data !== '{}') { // '{}' means the tracer is up to date
         try {
@@ -197,6 +207,9 @@ class RemoteConfigManager extends EventEmitter {
     }
 
     targets = fromBase64JSON(targets)
+    console.log('targets', targets)
+    console.log('clientConfigs', clientConfigs)
+    console.log('targetFiles', targetFiles)
 
     if (targets) {
       for (const path of clientConfigs) {
