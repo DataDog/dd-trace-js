@@ -3,35 +3,8 @@
 const sinon = require('sinon')
 const chai = require('chai')
 const sinonChai = require('sinon-chai')
-const { setTimeout } = require('timers/promises')
 const proxyquire = require('../proxyquire')
 const { NODE_MAJOR } = require('../../../../version')
-
-{
-  // get-port can often return a port that is already in use, thanks to a race
-  // condition. This patch adds a retry for 10 iterations, which should be
-  // enough to avoid flaky tests. The patch is added here in the require cache
-  // because it's used in all sorts of places.
-  const getPort = require('get-port')
-  require.cache[require.resolve('get-port')].exports = async function (...args) {
-    let tries = 10
-    let err = null
-    while (tries-- > 0) {
-      try {
-        return await getPort(...args)
-      } catch (e) {
-        if (e.code !== 'EADDRINUSE') {
-          throw e
-        }
-        if (tries) {
-          await setTimeout(5)
-        }
-        err = e
-      }
-    }
-    throw err
-  }
-}
 
 chai.use(sinonChai)
 chai.use(require('../asserts/profile'))
