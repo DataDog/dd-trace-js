@@ -15,6 +15,7 @@ module.exports = {
   fastifyBodyParser: dc.channel('datadog:fastify:body-parser:finish'),
   fastifyResponseChannel: dc.channel('datadog:fastify:response:finish'),
   fastifyQueryParams: dc.channel('datadog:fastify:query-params:finish'),
+  fastifyCookieParser: dc.channel('datadog:fastify-cookie:read:finish'),
   fastifyPathParams: dc.channel('datadog:fastify:path-params:finish'),
   fsOperationStart: dc.channel('apm:fs:operation:start'),
   graphqlMiddlewareChannel: dc.tracingChannel('datadog:apollo:middleware'),

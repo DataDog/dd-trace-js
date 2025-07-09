@@ -1,3 +1,5 @@
+'use strict'
+
 // Build config dynamically for ease in testing and modification
 
 const { satisfies } = require('semver')

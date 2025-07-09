@@ -8,10 +8,13 @@ const handleChannel = channel('apm:fastify:request:handle')
 const routeAddedChannel = channel('apm:fastify:route:added')
 const bodyParserReadCh = channel('datadog:fastify:body-parser:finish')
 const queryParamsReadCh = channel('datadog:fastify:query-params:finish')
+const cookieParserReadCh = channel('datadog:fastify-cookie:read:finish')
 const responsePayloadReadCh = channel('datadog:fastify:response:finish')
 const pathParamsReadCh = channel('datadog:fastify:path-params:finish')
 
 const parsingResources = new WeakMap()
+const cookiesPublished = new WeakSet()
+const bodyPublished = new WeakSet()
 
 function wrapFastify (fastify, hasParsingEvents) {
   if (typeof fastify !== 'function') return fastify
@@ -49,11 +52,30 @@ function wrapAddHook (addHook) {
       const req = getReq(request)
 
       try {
-        if (typeof done === 'function') {
-          done = arguments[arguments.length - 1]
+        // done callback is always the last argument
+        const doneCallback = arguments[arguments.length - 1]
 
+        if (typeof doneCallback === 'function') {
           arguments[arguments.length - 1] = function (err) {
             publishError(err, req)
+
+            const hasCookies = request.cookies && Object.keys(request.cookies).length > 0
+
+            if (cookieParserReadCh.hasSubscribers && hasCookies && !cookiesPublished.has(req)) {
+              const res = getRes(reply)
+              const abortController = new AbortController()
+
+              cookieParserReadCh.publish({
+                req,
+                res,
+                abortController,
+                cookies: request.cookies
+              })
+
+              cookiesPublished.add(req)
+
+              if (abortController.signal.aborted) return
+            }
 
             if (name === 'onRequest' || name === 'preParsing') {
               const parsingResource = new AsyncResource('bound-anonymous-fn')
@@ -61,14 +83,15 @@ function wrapAddHook (addHook) {
               parsingResources.set(req, parsingResource)
 
               return parsingResource.runInAsyncScope(() => {
-                return done.apply(this, arguments)
+                return doneCallback.apply(this, arguments)
               })
             }
-            return done.apply(this, arguments)
+            return doneCallback.apply(this, arguments)
           }
 
           return fn.apply(this, arguments)
         }
+
         const promise = fn.apply(this, arguments)
 
         if (promise && typeof promise.catch === 'function') {
@@ -102,6 +125,20 @@ function preHandler (request, reply, done) {
   if (!reply || typeof reply.send !== 'function') return done()
 
   const req = getReq(request)
+  const res = getRes(reply)
+
+  const hasBody = request.body && Object.keys(request.body).length > 0
+
+  // For multipart/form-data, the body is not available until after preValidation hook
+  if (bodyParserReadCh.hasSubscribers && hasBody && !bodyPublished.has(req)) {
+    const abortController = new AbortController()
+
+    bodyParserReadCh.publish({ req, res, body: request.body, abortController })
+
+    bodyPublished.add(req)
+
+    if (abortController.signal.aborted) return
+  }
 
   reply.send = wrapSend(reply.send, req)
 
@@ -118,6 +155,7 @@ function preValidation (request, reply, done) {
 
     if (queryParamsReadCh.hasSubscribers && request.query) {
       abortController ??= new AbortController()
+
       queryParamsReadCh.publish({
         req,
         res,
@@ -128,15 +166,20 @@ function preValidation (request, reply, done) {
       if (abortController.signal.aborted) return
     }
 
-    if (bodyParserReadCh.hasSubscribers && request.body) {
+    // Analyze body before schema validation
+    if (bodyParserReadCh.hasSubscribers && request.body && !bodyPublished.has(req)) {
       abortController ??= new AbortController()
+
       bodyParserReadCh.publish({ req, res, body: request.body, abortController })
+
+      bodyPublished.add(req)
 
       if (abortController.signal.aborted) return
     }
 
     if (pathParamsReadCh.hasSubscribers && request.params) {
       abortController ??= new AbortController()
+
       pathParamsReadCh.publish({
         req,
         res,

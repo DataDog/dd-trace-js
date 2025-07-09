@@ -1,10 +1,7 @@
 import 'dd-trace/init.js'
 import net from 'net'
-import getPort from 'get-port'
 
-const port = await getPort()
-
-const client = net.createConnection(port, () => {})
+const client = net.createConnection(0, () => {})
 
 client.on('data', (data) => {})
 

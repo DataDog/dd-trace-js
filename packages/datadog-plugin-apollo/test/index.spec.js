@@ -1,6 +1,7 @@
 'use strict'
 
 const { expect } = require('chai')
+const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent.js')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants.js')
 const { expectedSchema, rawExpectedSchema } = require('./naming.js')
@@ -150,6 +151,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.not.have.property('graphql.source')
               expect(traces[0][0].meta).to.have.property('graphql.operation.type', 'query')
               expect(traces[0][0].meta).to.have.property('component', 'apollo.gateway')
+              expect(traces[0][0].meta).to.have.property('_dd.integration', 'apollo.gateway')
 
               expect(traces[0][1]).to.have.property('name', 'apollo.gateway.validate')
               expect(traces[0][1]).to.have.property('service', expectedSchema.server.serviceName)
@@ -443,14 +445,12 @@ describe('Plugin', () => {
         })
 
         withNamingSchema(
-          () => {
+          async () => {
             const operationName = 'MyQuery'
             const source = `query ${operationName} { hello(name: "world") }`
             const variableValues = { who: 'world' }
-            gateway()
-              .then(({ executor }) => {
-                return execute(executor, source, variableValues, operationName).then(() => {})
-              })
+            const { executor } = await gateway()
+            return execute(executor, source, variableValues, operationName)
           },
           rawExpectedSchema.server,
           {
