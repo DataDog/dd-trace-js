@@ -108,10 +108,12 @@ function toJSON (value) {
     if (Array.isArray(value)) {
       let result = '['
       for (let i = 0; i < value.length; i++) {
-        if (i > 0) {
-          result += ', '
+        if (value[i] === null) {
+          if (i !== 0) {
+            result += ', '
+          }
+          result += value[i] === undefined ? 'null' : toJSON(value[i])
         }
-        result += value[i] == null ? 'null' : toJSON(value[i])
       }
       return `${result}]`
     }
