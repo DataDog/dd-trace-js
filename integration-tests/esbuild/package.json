@@ -24,10 +24,10 @@
     "@koa/router": "*",
     "aws-sdk": "*",
     "axios": "*",
-    "esbuild": "*",
+    "esbuild": "^0.16.12",
     "express": "^4.16.2",
-    "knex": "*",
-    "koa": "*",
+    "knex": "^0.19.5",
+    "koa": "^2.0.0",
     "openai": "*"
   }
 }
