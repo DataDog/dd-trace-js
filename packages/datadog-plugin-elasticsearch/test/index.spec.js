@@ -34,7 +34,7 @@ describe('Plugin', () => {
           elasticsearch = metaModule.get()
 
           client = new elasticsearch.Client({
-            node: 'http://localhost:9200'
+            node: 'http://127.0.0.1:9200'
           })
         })
 
@@ -70,7 +70,7 @@ describe('Plugin', () => {
             }
           // Ignore index_not_found_exception
           }, hasCallbackSupport ? () => done() : undefined)?.catch?.(() => {}),
-          'localhost',
+          '127.0.0.1',
           'out.host'
         )
 
@@ -85,7 +85,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('elasticsearch.method', 'POST')
               expect(traces[0][0].meta).to.have.property('elasticsearch.url', '/docs/_search')
-              expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
+              expect(traces[0][0].meta).to.have.property('out.host', '127.0.0.1')
 
               if (hasCallbackSupport) {
                 expect(traces[0][0].meta).to.have.property('elasticsearch.body', '{"query":{"match_all":{}}}')
@@ -304,13 +304,17 @@ describe('Plugin', () => {
             client.ping().catch(done)
           })
 
-          withNamingSchema(
-            () => client.search(
-              { index: 'logstash-2000.01.01', body: {} },
-              hasCallbackSupport ? () => {} : undefined
-            ),
-            rawExpectedSchema.outbound
-          )
+          describe('test', () => {
+            withNamingSchema(
+              () => {
+                client.search(
+                  { index: 'logstash-2000.01.01', body: {} },
+                  hasCallbackSupport ? () => {} : undefined
+                )
+              },
+              rawExpectedSchema.outbound
+            )
+          })
         })
       })
 
@@ -335,7 +339,7 @@ describe('Plugin', () => {
         beforeEach(() => {
           elasticsearch = require(`../../../versions/${moduleName}@${version}`).get()
           client = new elasticsearch.Client({
-            node: 'http://localhost:9200'
+            node: 'http://127.0.0.1:9200'
           })
         })
 
@@ -370,10 +374,12 @@ describe('Plugin', () => {
         })
 
         withNamingSchema(
-          () => client.search(
-            { index: 'logstash-2000.01.01', body: {} },
-            hasCallbackSupport ? () => {} : undefined
-          ),
+          () => {
+            client.search(
+              { index: 'logstash-2000.01.01', body: {} },
+              hasCallbackSupport ? () => {} : undefined
+            )
+          },
           {
             v0: {
               opName: 'elasticsearch.query',
