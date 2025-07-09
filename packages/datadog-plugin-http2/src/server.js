@@ -3,7 +3,6 @@
 // Plugin temporarily disabled. See https://github.com/DataDog/dd-trace-js/issues/312
 
 const ServerPlugin = require('../../dd-trace/src/plugins/server')
-const { storage } = require('../../datadog-core')
 const web = require('../../dd-trace/src/plugins/util/web')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 
@@ -64,7 +63,6 @@ class Http2ServerPlugin extends ServerPlugin {
   finish (ctx) {
     // we let bindFinish handle the finish, but keep this method because we don't want to finish the span
     // early for a response event that is not a 'close' event, which prevents tags from being set during web.finishAll
-    return
   }
 
   error (error) {
