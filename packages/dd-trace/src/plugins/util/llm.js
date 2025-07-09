@@ -1,3 +1,5 @@
+'use strict'
+
 const Sampler = require('../../sampler')
 
 const RE_NEWLINE = /\n/g

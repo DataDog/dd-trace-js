@@ -1,3 +1,5 @@
+'use strict'
+
 const {
   addHook,
   channel
@@ -16,20 +18,15 @@ const CHANNELS = {
 
 const generalErrorCh = channel('apm:apollo:gateway:general:error')
 
-function wrapExecutor (executor) {
-  return function (...args) {
-    const channel = CHANNELS['gateway.request']
-    const ctx = { requestContext: args[0], gateway: this }
-
-    return channel.tracePromise(executor, ctx, this, ...args)
-  }
-}
-
 function wrapApolloGateway (ApolloGateway) {
   class ApolloGatewayWrapper extends ApolloGateway {
     constructor (...args) {
       super(...args)
-      shimmer.wrap(this, 'executor', wrapExecutor)
+      shimmer.wrap(this, 'executor', (originalExecutor) => (...args) => {
+        const channel = CHANNELS['gateway.request']
+        const ctx = { requestContext: args[0], gateway: this }
+        return channel.tracePromise(originalExecutor, ctx, this, ...args)
+      })
     }
   }
   return ApolloGatewayWrapper

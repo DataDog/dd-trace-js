@@ -1,5 +1,6 @@
 'use strict'
 
+const { randomUUID } = require('crypto')
 const { expect } = require('chai')
 const semver = require('semver')
 const dc = require('dc-polyfill')
@@ -13,10 +14,9 @@ const DataStreamsContext = require('../../dd-trace/src/datastreams/context')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
 
-const testTopic = 'test-topic'
 const testKafkaClusterId = '5L6g3nShT-eMCtK--X86sw'
 
-const getDsmPathwayHash = (clusterIdAvailable, isProducer, parentHash) => {
+const getDsmPathwayHash = (testTopic, clusterIdAvailable, isProducer, parentHash) => {
   let edgeTags
   if (isProducer) {
     edgeTags = ['direction:out', 'topic:' + testTopic, 'type:kafka']
@@ -41,18 +41,14 @@ describe('Plugin', () => {
     })
     withVersions('kafkajs', 'kafkajs', (version) => {
       let kafka
+      let admin
       let tracer
       let Kafka
       let Broker
       let clusterIdAvailable
       let expectedProducerHash
       let expectedConsumerHash
-
-      before(() => {
-        clusterIdAvailable = semver.intersects(version, '>=1.13')
-        expectedProducerHash = getDsmPathwayHash(clusterIdAvailable, true, ENTRY_PARENT_HASH)
-        expectedConsumerHash = getDsmPathwayHash(clusterIdAvailable, false, expectedProducerHash)
-      })
+      let testTopic
 
       describe('without configuration', () => {
         const messages = [{ key: 'key1', value: 'test2' }]
@@ -70,6 +66,18 @@ describe('Plugin', () => {
             brokers: ['127.0.0.1:9092'],
             logLevel: lib.logLevel.WARN
           })
+          testTopic = `test-topic-${randomUUID()}`
+          admin = kafka.admin()
+          await admin.createTopics({
+            topics: [{
+              topic: testTopic,
+              numPartitions: 1,
+              replicationFactor: 1
+            }]
+          })
+          clusterIdAvailable = semver.intersects(version, '>=1.13')
+          expectedProducerHash = getDsmPathwayHash(testTopic, clusterIdAvailable, true, ENTRY_PARENT_HASH)
+          expectedConsumerHash = getDsmPathwayHash(testTopic, clusterIdAvailable, false, expectedProducerHash)
         })
 
         describe('producer', () => {
@@ -78,7 +86,7 @@ describe('Plugin', () => {
               'span.kind': 'producer',
               component: 'kafkajs',
               'pathway.hash': expectedProducerHash.readBigUInt64BE(0).toString(),
-              'messaging.destination.name': 'test-topic',
+              'messaging.destination.name': testTopic,
               'messaging.kafka.bootstrap.servers': '127.0.0.1:9092'
             }
             if (clusterIdAvailable) meta['kafka.cluster_id'] = testKafkaClusterId
@@ -246,7 +254,7 @@ describe('Plugin', () => {
                 'span.kind': 'consumer',
                 component: 'kafkajs',
                 'pathway.hash': expectedConsumerHash.readBigUInt64BE(0).toString(),
-                'messaging.destination.name': 'test-topic'
+                'messaging.destination.name': testTopic
               },
               resource: testTopic,
               error: 0,
@@ -436,8 +444,8 @@ describe('Plugin', () => {
 
           before(() => {
             clusterIdAvailable = semver.intersects(version, '>=1.13')
-            expectedProducerHash = getDsmPathwayHash(clusterIdAvailable, true, ENTRY_PARENT_HASH)
-            expectedConsumerHash = getDsmPathwayHash(clusterIdAvailable, false, expectedProducerHash)
+            expectedProducerHash = getDsmPathwayHash(testTopic, clusterIdAvailable, true, ENTRY_PARENT_HASH)
+            expectedConsumerHash = getDsmPathwayHash(testTopic, clusterIdAvailable, false, expectedProducerHash)
           })
 
           afterEach(async () => {
@@ -531,7 +539,11 @@ describe('Plugin', () => {
               it('Should add backlog on consumer explicit commit', async () => {
                 // Send a message, consume it, and record the last consumed offset
                 let commitMeta
-                await sendMessages(kafka, testTopic, messages)
+                const deferred = {}
+                deferred.promise = new Promise((resolve, reject) => {
+                  deferred.resolve = resolve
+                  deferred.reject = reject
+                })
                 await consumer.run({
                   eachMessage: async payload => {
                     const { topic, partition, message } = payload
@@ -540,10 +552,12 @@ describe('Plugin', () => {
                       partition,
                       offset: Number(message.offset)
                     }
+                    deferred.resolve()
                   },
                   autoCommit: false
                 })
-                await new Promise(resolve => setTimeout(resolve, 50)) // Let eachMessage be called
+                await sendMessages(kafka, testTopic, messages)
+                await deferred.promise
                 await consumer.disconnect() // Flush ongoing `eachMessage` calls
                 for (const call of setOffsetSpy.getCalls()) {
                   expect(call.args[0]).to.not.have.property('type', 'kafka_commit')

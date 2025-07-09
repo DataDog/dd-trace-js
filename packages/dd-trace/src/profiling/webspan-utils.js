@@ -1,3 +1,5 @@
+'use strict'
+
 const { HTTP_METHOD, HTTP_ROUTE, RESOURCE_NAME, SPAN_TYPE } = require('../../../../ext/tags')
 const { WEB } = require('../../../../ext/types')
 

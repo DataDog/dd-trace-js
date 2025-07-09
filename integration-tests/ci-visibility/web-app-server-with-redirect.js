@@ -1,3 +1,5 @@
+'use strict'
+
 // File to spin an HTTP server that returns an HTML for playwright to visit
 const http = require('http')
 

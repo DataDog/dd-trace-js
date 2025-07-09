@@ -80,8 +80,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
       ({ req, body }) => {
         const iastContext = getIastContext(storage('legacy').getStore())
         if (iastContext && iastContext.body !== body) {
-          req.body = body
-          this._taintTrackingHandler(HTTP_REQUEST_BODY, req, 'body', iastContext)
+          this._taintTrackingHandler(HTTP_REQUEST_BODY, body)
           iastContext.body = body
         }
       }
@@ -162,13 +161,17 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     )
 
     this.addSub(
-      { channelName: 'datadog:fastify:path-params:finish', tag: HTTP_REQUEST_PATH_PARAM },
+      { channelName: 'datadog:router:param:start', tag: HTTP_REQUEST_PATH_PARAM },
       pathParamHandler
     )
 
     this.addSub(
-      { channelName: 'datadog:router:param:start', tag: HTTP_REQUEST_PATH_PARAM },
-      pathParamHandler
+      { channelName: 'datadog:fastify:path-params:finish', tag: HTTP_REQUEST_PATH_PARAM },
+      ({ req, params }) => {
+        if (req) {
+          this._taintTrackingHandler(HTTP_REQUEST_PATH_PARAM, params)
+        }
+      }
     )
   }
 

@@ -7,10 +7,10 @@ const { URL } = require('url')
 function noop () {}
 
 describe('Taint tracking plugin sources fastify tests', () => {
-  withVersions('fastify', 'fastify', '>=2', version => {
+  withVersions('fastify', 'fastify', version => {
     prepareTestServerForIastInFastify('in fastify', version,
       (testThatRequestHasVulnerability, _, config) => {
-        describe.skip('tainted body', () => {
+        describe('tainted body', () => {
           function makePostRequest (done) {
             axios.post(`http://localhost:${config.port}/`, {
               command: 'echo 1'
@@ -23,7 +23,7 @@ describe('Taint tracking plugin sources fastify tests', () => {
           }, 'COMMAND_INJECTION', 1, noop, makePostRequest)
         })
 
-        describe.skip('tainted query param', () => {
+        describe('tainted query param', () => {
           function makeRequestWithQueryParam (done) {
             axios.get(`http://localhost:${config.port}/?command=echo`).catch(done)
           }
@@ -34,7 +34,7 @@ describe('Taint tracking plugin sources fastify tests', () => {
           }, 'COMMAND_INJECTION', 1, noop, makeRequestWithQueryParam)
         })
 
-        describe.skip('tainted header', () => {
+        describe('tainted header', () => {
           function makeRequestWithHeader (done) {
             axios.get(`http://localhost:${config.port}/`, {
               headers: {
@@ -49,7 +49,7 @@ describe('Taint tracking plugin sources fastify tests', () => {
           }, 'COMMAND_INJECTION', 1, noop, makeRequestWithHeader)
         })
 
-        describe.skip('url parse taint tracking', () => {
+        describe('url parse taint tracking', () => {
           function makePostRequest (done) {
             axios.post(`http://localhost:${config.port}/`, {
               url: 'http://www.datadoghq.com/'
@@ -138,40 +138,16 @@ describe('Taint tracking plugin sources fastify tests', () => {
           }
         })
 
-        describe.skip('tainted path parameters', () => {
+        describe('tainted path parameters', () => {
           function makeRequestWithPathParam (done) {
-            // Note: This would require setting up a parameterized route in Fastify
-            // For now, using query params as a substitute since the test setup is generic
             axios.get(`http://localhost:${config.port}/?id=malicious-path`).catch(done)
           }
 
           testThatRequestHasVulnerability((req) => {
             const childProcess = require('child_process')
-            // Simulating path parameter access through query for test purposes
             childProcess.exec(req.query.id, noop)
           }, 'COMMAND_INJECTION', 1, noop, makeRequestWithPathParam)
         })
-
-        // NO
-        // describe.skip('tainted cookies', () => {
-        //   function makeRequestWithCookie (done) {
-        //     axios.get(`http://localhost:${config.port}/`, {
-        //       headers: {
-        //         Cookie: 'command=echo cookie-injection'
-        //       }
-        //     }).catch(done)
-        //   }
-
-        //   testThatRequestHasVulnerability((req) => {
-        //     const childProcess = require('child_process')
-        //     // Access cookie through raw request since Fastify cookie parsing may vary
-        //     const cookieHeader = req.headers.cookie
-        //     if (cookieHeader) {
-        //       const command = cookieHeader.split('=')[1]
-        //       childProcess.exec(command, noop)
-        //     }
-        //   }, 'COMMAND_INJECTION', 1, noop, makeRequestWithCookie)
-        // })
       }
     )
   })

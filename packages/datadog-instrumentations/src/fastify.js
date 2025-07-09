@@ -259,17 +259,23 @@ addHook({ name: 'fastify', versions: ['1'] }, fastify => {
   return shimmer.wrapFunction(fastify, fastify => wrapFastify(fastify, false))
 })
 
-addHook({ name: 'fastify', file: 'lib/reply.js', versions: ['>=3'] }, Reply => {
-  
-  shimmer.wrap(Reply.prototype, 'header', header => function (key, value = '') {
+
+function wrapReplyHeader (Reply) {
+  shimmer.wrap(Reply.prototype, 'header', header => function (key, value) {
     const result = header.apply(this, arguments)
-    
+
     if (finishSetHeaderCh.hasSubscribers && key && value) {
-      finishSetHeaderCh.publish({ name: key, value, res: this.raw })
+      finishSetHeaderCh.publish({ name: key, value, res: getRes(this) })
     }
-    
+
     return result
   })
-  
+
   return Reply
-})
+}
+
+addHook({ name: 'fastify', file: 'lib/reply.js', versions: ['1'] }, wrapReplyHeader)
+
+addHook({ name: 'fastify', file: 'lib/reply.js', versions: ['2'] }, wrapReplyHeader)
+
+addHook({ name: 'fastify', file: 'lib/reply.js', versions: ['>=3'] }, wrapReplyHeader)

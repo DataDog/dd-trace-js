@@ -416,27 +416,19 @@ function prepareTestServerForIastInFastify (description, fastifyVersion, tests, 
     let app, server
 
     before(function () {
-      if (fastifyVersion === '3.9.2') {
-        this.skip()
-      }
-
       return agent.load(['fastify', 'http'], { client: false }, { flushInterval: 1 })
     })
 
     before(async () => {
       const fastify = require(`../../../../../versions/fastify@${fastifyVersion}`).get()
-      const fastifyCookie = require('../../../../../versions/@fastify/cookie').get()
-
       const fastifyApp = fastify()
-
-      fastifyApp.register(fastifyCookie)
 
       fastifyApp.all('/', (request, reply) => {
         const headersSent = () => {
           if (reply.raw && typeof reply.raw.headersSent !== 'undefined') {
             return reply.raw.headersSent
           }
-          // Fastify <3: use reply.sent indicator
+          // Fastify <3: use reply.sent
           return reply.sent === true
         }
 
