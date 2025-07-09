@@ -1,3 +1,5 @@
+'use strict'
+
 /* eslint-disable require-await */
 
 const shimmer = require('../../../packages/datadog-shimmer')

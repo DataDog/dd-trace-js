@@ -5,17 +5,14 @@ const Sampler = require('../../../../src/sampler')
 const { DogStatsDClient } = require('../../../../src/dogstatsd')
 const { NoopExternalLogger } = require('../../../../src/external-logger/src')
 
-const nock = require('nock')
-const { expectedLLMObsLLMSpanEvent, deepEqualWithMockValues } = require('../../util')
+const { expectedLLMObsLLMSpanEvent, deepEqualWithMockValues, MOCK_STRING, MOCK_NUMBER } = require('../../util')
 const chai = require('chai')
-const semver = require('semver')
+const semifies = require('semifies')
 const LLMObsSpanWriter = require('../../../../src/llmobs/writers/spans')
 
 const { expect } = chai
 
 chai.Assertion.addMethod('deepEqualWithMockValues', deepEqualWithMockValues)
-
-const satisfiesChatCompletion = version => semver.intersects('>=3.2.0', version)
 
 describe('integrations', () => {
   let openai
@@ -42,7 +39,6 @@ describe('integrations', () => {
     })
 
     afterEach(() => {
-      nock.cleanAll()
       LLMObsSpanWriter.prototype.append.reset()
     })
 
@@ -54,34 +50,24 @@ describe('integrations', () => {
 
     withVersions('openai', 'openai', '<4', version => {
       const moduleRequirePath = `../../../../../../versions/openai@${version}`
+      let realVersion
 
       beforeEach(() => {
         const requiredModule = require(moduleRequirePath)
         const module = requiredModule.get()
+        realVersion = requiredModule.version()
 
         const { Configuration, OpenAIApi } = module
 
         const configuration = new Configuration({
-          apiKey: 'sk-DATADOG-ACCEPTANCE-TESTS'
+          apiKey: process.env.OPENAI_API_KEY ?? 'sk-DATADOG-ACCEPTANCE-TESTS',
+          basePath: 'http://127.0.0.1:9126/vcr/openai'
         })
 
         openai = new OpenAIApi(configuration)
       })
 
       it('submits a completion span', async () => {
-        nock('https://api.openai.com:443')
-          .post('/v1/completions')
-          .reply(200, {
-            model: 'text-davinci-002',
-            choices: [{
-              text: 'I am doing well, how about you?',
-              index: 0,
-              logprobs: null,
-              finish_reason: 'length'
-            }],
-            usage: { prompt_tokens: 3, completion_tokens: 16, total_tokens: 19 }
-          }, [])
-
         const checkSpan = agent.assertSomeTraces(traces => {
           const span = traces[0][0]
           const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
@@ -91,15 +77,20 @@ describe('integrations', () => {
             spanKind: 'llm',
             name: 'OpenAI.createCompletion',
             inputMessages: [
-              { content: 'How are you?' }
+              { content: 'Hello, OpenAI!' }
             ],
             outputMessages: [
-              { content: 'I am doing well, how about you?' }
+              { content: MOCK_STRING }
             ],
-            tokenMetrics: { input_tokens: 3, output_tokens: 16, total_tokens: 19 },
-            modelName: 'text-davinci-002',
+            tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+            modelName: 'gpt-3.5-turbo-instruct',
             modelProvider: 'openai',
-            metadata: {},
+            metadata: {
+              max_tokens: 100,
+              temperature: 0.5,
+              n: 1,
+              stream: false,
+            },
             tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
           })
 
@@ -107,91 +98,76 @@ describe('integrations', () => {
         })
 
         await openai.createCompletion({
-          model: 'text-davinci-002',
-          prompt: 'How are you?'
+          model: 'gpt-3.5-turbo-instruct',
+          prompt: 'Hello, OpenAI!',
+          max_tokens: 100,
+          temperature: 0.5,
+          n: 1,
+          stream: false,
         })
 
         await checkSpan
       })
 
-      if (satisfiesChatCompletion(version)) {
-        it('submits a chat completion span', async () => {
-          nock('https://api.openai.com:443')
-            .post('/v1/chat/completions')
-            .reply(200, {
-              id: 'chatcmpl-7GaWqyMTD9BLmkmy8SxyjUGX3KSRN',
-              object: 'chat.completion',
-              created: 1684188020,
-              model: 'gpt-3.5-turbo-0301',
-              usage: {
-                prompt_tokens: 37,
-                completion_tokens: 10,
-                total_tokens: 47
-              },
-              choices: [{
-                message: {
-                  role: 'assistant',
-                  content: 'I am doing well, how about you?'
-                },
-                finish_reason: 'length',
-                index: 0
-              }]
-            }, [])
+      it('submits a chat completion span', async function () {
+        if (semifies(realVersion, '<3.2.0')) {
+          this.skip()
+        }
 
-          const checkSpan = agent.assertSomeTraces(traces => {
-            const span = traces[0][0]
-            const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
+        const checkSpan = agent.assertSomeTraces(traces => {
+          const span = traces[0][0]
+          const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
-            const expected = expectedLLMObsLLMSpanEvent({
-              span,
-              spanKind: 'llm',
-              name: 'OpenAI.createChatCompletion',
-              inputMessages: [
-                { role: 'system', content: 'You are a helpful assistant' },
-                { role: 'user', content: 'How are you?' }
-              ],
-              outputMessages: [
-                { role: 'assistant', content: 'I am doing well, how about you?' }
-              ],
-              tokenMetrics: { input_tokens: 37, output_tokens: 10, total_tokens: 47 },
-              modelName: 'gpt-3.5-turbo-0301',
-              modelProvider: 'openai',
-              metadata: {},
-              tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
-            })
-
-            expect(spanEvent).to.deepEqualWithMockValues(expected)
+          const expected = expectedLLMObsLLMSpanEvent({
+            span,
+            spanKind: 'llm',
+            name: 'OpenAI.createChatCompletion',
+            inputMessages: [
+              { role: 'system', content: 'You are a helpful assistant.' },
+              { role: 'user', content: 'Hello, OpenAI!' }
+            ],
+            outputMessages: [
+              { role: 'assistant', content: MOCK_STRING }
+            ],
+            tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+            modelName: 'gpt-3.5-turbo',
+            modelProvider: 'openai',
+            metadata: {
+              max_tokens: 100,
+              temperature: 0.5,
+              n: 1,
+              stream: false,
+              user: 'dd-trace-test'
+            },
+            tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
           })
 
-          await openai.createChatCompletion({
-            model: 'gpt-3.5-turbo-0301',
-            messages: [
-              { role: 'system', content: 'You are a helpful assistant' },
-              { role: 'user', content: 'How are you?' }
-            ]
-          })
-
-          await checkSpan
+          expect(spanEvent).to.deepEqualWithMockValues(expected)
         })
-      }
+
+        await openai.createChatCompletion({
+          model: 'gpt-3.5-turbo',
+          messages: [
+            {
+              role: 'system',
+              content: 'You are a helpful assistant.'
+            },
+            {
+              role: 'user',
+              content: 'Hello, OpenAI!'
+            }
+          ],
+          temperature: 0.5,
+          stream: false,
+          max_tokens: 100,
+          n: 1,
+          user: 'dd-trace-test'
+        })
+
+        await checkSpan
+      })
 
       it('submits an embedding span', async () => {
-        nock('https://api.openai.com:443')
-          .post('/v1/embeddings')
-          .reply(200, {
-            object: 'list',
-            data: [{
-              object: 'embedding',
-              index: 0,
-              embedding: [-0.0034387498, -0.026400521]
-            }],
-            model: 'text-embedding-ada-002-v2',
-            usage: {
-              prompt_tokens: 2,
-              total_tokens: 2
-            }
-          }, [])
-
         const checkSpan = agent.assertSomeTraces(traces => {
           const span = traces[0][0]
           const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
@@ -201,13 +177,13 @@ describe('integrations', () => {
             spanKind: 'embedding',
             name: 'OpenAI.createEmbedding',
             inputDocuments: [
-              { text: 'Hello, world!' }
+              { text: 'hello world' }
             ],
-            outputValue: '[1 embedding(s) returned with size 2]',
-            tokenMetrics: { input_tokens: 2, total_tokens: 2 },
-            modelName: 'text-embedding-ada-002-v2',
+            outputValue: '[1 embedding(s) returned]',
+            tokenMetrics: { input_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+            modelName: 'text-embedding-ada-002',
             modelProvider: 'openai',
-            metadata: { encoding_format: 'float' },
+            metadata: { encoding_format: 'base64' },
             tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
           })
 
@@ -215,89 +191,73 @@ describe('integrations', () => {
         })
 
         await openai.createEmbedding({
-          model: 'text-embedding-ada-002-v2',
-          input: 'Hello, world!'
+          model: 'text-embedding-ada-002',
+          input: 'hello world',
+          encoding_format: 'base64'
         })
 
         await checkSpan
       })
 
-      if (satisfiesChatCompletion(version)) {
-        it('submits a chat completion span with functions', async () => {
-          nock('https://api.openai.com:443')
-            .post('/v1/chat/completions')
-            .reply(200, {
-              id: 'chatcmpl-7GaWqyMTD9BLmkmy8SxyjUGX3KSRN',
-              object: 'chat.completion',
-              created: 1684188020,
-              model: 'gpt-3.5-turbo-0301',
-              usage: {
-                prompt_tokens: 37,
-                completion_tokens: 10,
-                total_tokens: 47
-              },
-              choices: [{
-                message: {
-                  role: 'assistant',
-                  content: 'THOUGHT: I will use the "extract_fictional_info" tool',
-                  function_call: {
-                    name: 'extract_fictional_info',
-                    arguments: '{"name":"SpongeBob","origin":"Bikini Bottom"}'
-                  }
-                },
-                finish_reason: 'function_call',
-                index: 0
-              }]
-            }, [])
+      it('submits a chat completion span with functions', async function () {
+        if (semifies(realVersion, '<3.2.0')) {
+          this.skip()
+        }
 
-          const checkSpan = agent.assertSomeTraces(traces => {
-            const span = traces[0][0]
-            const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
+        const checkSpan = agent.assertSomeTraces(traces => {
+          const span = traces[0][0]
+          const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
-            const expected = expectedLLMObsLLMSpanEvent({
-              span,
-              spanKind: 'llm',
-              name: 'OpenAI.createChatCompletion',
-              modelName: 'gpt-3.5-turbo-0301',
-              modelProvider: 'openai',
-              inputMessages: [{ role: 'user', content: 'What is SpongeBob SquarePants\'s origin?' }],
-              outputMessages: [{
-                role: 'assistant',
-                content: 'THOUGHT: I will use the "extract_fictional_info" tool',
-                tool_calls: [
-                  {
-                    name: 'extract_fictional_info',
-                    arguments: {
-                      name: 'SpongeBob',
-                      origin: 'Bikini Bottom'
-                    }
-                  }
-                ]
-              }],
-              metadata: { function_call: 'auto' },
-              tags: { ml_app: 'test', language: 'javascript', integration: 'openai' },
-              tokenMetrics: { input_tokens: 37, output_tokens: 10, total_tokens: 47 }
-            })
-
-            expect(spanEvent).to.deepEqualWithMockValues(expected)
+          const expected = expectedLLMObsLLMSpanEvent({
+            span,
+            spanKind: 'llm',
+            name: 'OpenAI.createChatCompletion',
+            modelName: 'gpt-3.5-turbo',
+            modelProvider: 'openai',
+            inputMessages: [{ role: 'user', content: 'What is the weather in New York City?' }],
+            outputMessages: [{
+              role: 'assistant',
+              content: '',
+              tool_calls: [
+                {
+                  name: 'get_weather',
+                  arguments: {
+                    city: 'New York City'
+                  },
+                  tool_id: MOCK_STRING,
+                  type: 'function'
+                }
+              ]
+            }],
+            metadata: { function_call: 'auto', stream: false },
+            tags: { ml_app: 'test', language: 'javascript', integration: 'openai' },
+            tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER }
           })
 
-          await openai.createChatCompletion({
-            model: 'gpt-3.5-turbo-0301',
-            messages: [{ role: 'user', content: 'What is SpongeBob SquarePants\'s origin?' }],
-            functions: [{ type: 'function', functiin: { /* this doesn't matter */} }],
-            function_call: 'auto'
-          })
-
-          await checkSpan
+          expect(spanEvent).to.deepEqualWithMockValues(expected)
         })
-      }
+
+        await openai.createChatCompletion({
+          model: 'gpt-3.5-turbo',
+          messages: [{ role: 'user', content: 'What is the weather in New York City?' }],
+          functions: [{
+            name: 'get_weather',
+            description: 'Get the weather in a given city',
+            parameters: {
+              type: 'object',
+              properties: {
+                city: { type: 'string', description: 'The city to get the weather for' }
+              }
+            }
+          }],
+          function_call: 'auto',
+          stream: false,
+        })
+
+        await checkSpan
+      })
 
       it('submits a completion span with an error', async () => {
-        nock('https://api.openai.com:443')
-          .post('/v1/completions')
-          .reply(400, {})
-
         let error
         const checkSpan = agent.assertSomeTraces(traces => {
           const span = traces[0][0]
@@ -307,11 +267,11 @@ describe('integrations', () => {
             span,
             spanKind: 'llm',
             name: 'OpenAI.createCompletion',
-            inputMessages: [{ content: 'Hello' }],
+            inputMessages: [{ content: 'Hello, OpenAI!' }],
             outputMessages: [{ content: '' }],
             modelName: 'gpt-3.5-turbo',
             modelProvider: 'openai',
-            metadata: { max_tokens: 50 },
+            metadata: { max_tokens: 100, temperature: 0.5, n: 1, stream: false },
             tags: { ml_app: 'test', language: 'javascript', integration: 'openai' },
             error,
             errorType: error.type || error.name,
@@ -324,9 +284,12 @@ describe('integrations', () => {
 
         try {
           await openai.createCompletion({
-            model: 'gpt-3.5-turbo',
-            prompt: 'Hello',
-            max_tokens: 50
+            model: 'gpt-3.5-turbo', // incorrect model
+            prompt: 'Hello, OpenAI!',
+            max_tokens: 100,
+            temperature: 0.5,
+            n: 1,
+            stream: false,
           })
         } catch (e) {
           error = e
@@ -335,49 +298,63 @@ describe('integrations', () => {
         await checkSpan
       })
 
-      if (satisfiesChatCompletion(version)) {
-        it('submits a chat completion span with an error', async () => {
-          nock('https://api.openai.com:443')
-            .post('/v1/chat/completions')
-            .reply(400, {})
+      it('submits a chat completion span with an error', async function () {
+        if (semifies(realVersion, '<3.2.0')) {
+          this.skip()
+        }
 
-          let error
-          const checkSpan = agent.assertSomeTraces(traces => {
-            const span = traces[0][0]
-            const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
+        let error
+        const checkSpan = agent.assertSomeTraces(traces => {
+          const span = traces[0][0]
+          const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
-            const expected = expectedLLMObsLLMSpanEvent({
-              span,
-              spanKind: 'llm',
-              name: 'OpenAI.createChatCompletion',
-              inputMessages: [{ role: 'user', content: 'Hello' }],
-              outputMessages: [{ content: '' }],
-              modelName: 'gpt-3.5-turbo',
-              modelProvider: 'openai',
-              metadata: { max_tokens: 50 },
-              tags: { ml_app: 'test', language: 'javascript', integration: 'openai' },
-              error,
-              errorType: error.type || error.name,
-              errorMessage: error.message,
-              errorStack: error.stack
-            })
-
-            expect(spanEvent).to.deepEqualWithMockValues(expected)
+          const expected = expectedLLMObsLLMSpanEvent({
+            span,
+            spanKind: 'llm',
+            name: 'OpenAI.createChatCompletion',
+            inputMessages: [
+              { role: 'system', content: 'You are a helpful assistant.' },
+              { role: 'user', content: 'Hello, OpenAI!' }
+            ],
+            outputMessages: [{ content: '' }],
+            modelName: 'gpt-3.5-turbo-instruct',
+            modelProvider: 'openai',
+            metadata: { max_tokens: 100, temperature: 0.5, n: 1, stream: false, user: 'dd-trace-test' },
+            tags: { ml_app: 'test', language: 'javascript', integration: 'openai' },
+            error,
+            errorType: error.type || error.name,
+            errorMessage: error.message,
+            errorStack: error.stack
           })
 
-          try {
-            await openai.createChatCompletion({
-              model: 'gpt-3.5-turbo',
-              messages: [{ role: 'user', content: 'Hello' }],
-              max_tokens: 50
-            })
-          } catch (e) {
-            error = e
-          }
-
-          await checkSpan
+          expect(spanEvent).to.deepEqualWithMockValues(expected)
         })
-      }
+
+        try {
+          await openai.createChatCompletion({
+            model: 'gpt-3.5-turbo-instruct', // incorrect model
+            messages: [
+              {
+                role: 'system',
+                content: 'You are a helpful assistant.'
+              },
+              {
+                role: 'user',
+                content: 'Hello, OpenAI!'
+              }
+            ],
+            temperature: 0.5,
+            stream: false,
+            max_tokens: 100,
+            n: 1,
+            user: 'dd-trace-test'
+          })
+        } catch (e) {
+          error = e
+        }
+
+        await checkSpan
+      })
     })
   })
 })

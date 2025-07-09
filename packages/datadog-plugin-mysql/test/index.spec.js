@@ -1,5 +1,6 @@
 'use strict'
 
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const proxyquire = require('proxyquire').noPreserveCache()
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -85,7 +86,8 @@ describe('Plugin', () => {
                 'db.name': 'db',
                 'db.user': 'root',
                 'db.type': 'mysql',
-                component: 'mysql'
+                component: 'mysql',
+                '_dd.integration': 'mysql'
               }
             })
             .then(done)
@@ -251,8 +253,10 @@ describe('Plugin', () => {
         withPeerService(
           () => tracer,
           'mysql',
-          () => pool.query('SELECT 1', (_) => {}),
-          'db', 'db.name')
+          (done) => pool.query('SELECT 1', (_) => done()),
+          'db',
+          'db.name'
+        )
 
         it('should do automatic instrumentation', done => {
           agent

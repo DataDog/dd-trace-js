@@ -1,3 +1,5 @@
+'use strict'
+
 const NoopTracer = require('../../dd-trace/src/noop/tracer')
 const cypressPlugin = require('./cypress-plugin')
 const satisfies = require('semifies')

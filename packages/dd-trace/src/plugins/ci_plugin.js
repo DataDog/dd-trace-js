@@ -1,3 +1,5 @@
+'use strict'
+
 const { storage } = require('../../../datadog-core')
 const {
   getTestEnvironmentMetadata,
@@ -150,7 +152,8 @@ module.exports = class CiPlugin extends Plugin {
           [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,
           ...testSessionSpanMetadata
-        }
+        },
+        integrationName: this.constructor.id
       })
       // TODO: add telemetry tag when we can add `is_agentless_log_submission_enabled` for agentless log submission
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'session')
@@ -161,7 +164,8 @@ module.exports = class CiPlugin extends Plugin {
           [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,
           ...testModuleSpanMetadata
-        }
+        },
+        integrationName: this.constructor.id
       })
       // only for vitest
       // These are added for the worker threads to use
@@ -194,7 +198,8 @@ module.exports = class CiPlugin extends Plugin {
             ...testSuiteMetadata,
             [TEST_STATUS]: 'skip',
             [TEST_SKIPPED_BY_ITR]: 'true'
-          }
+          },
+          integrationName: this.constructor.id
         }).finish()
       })
       this.telemetry.count(TELEMETRY_ITR_SKIPPED, { testLevel: 'suite' }, skippedSuites.length)
@@ -396,7 +401,8 @@ module.exports = class CiPlugin extends Plugin {
         tags: {
           ...this.testEnvironmentMetadata,
           ...testTags
-        }
+        },
+        integrationName: this.constructor.id
       })
 
     testSpan.context()._trace.origin = CI_APP_ORIGIN

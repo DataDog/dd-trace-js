@@ -76,7 +76,7 @@ describe('OTel Span Context', () => {
     }
   })
 
-  it('should get trace id as hex', () => {
+  it('should get trace state as string', () => {
     const tracestate = new TraceState()
     tracestate.forVendor('dd', vendor => {
       vendor.set('foo', 'bar')

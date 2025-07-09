@@ -1,6 +1,7 @@
 'use strict'
 
 const { expect } = require('chai')
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
@@ -131,7 +132,10 @@ describe('Plugin', () => {
             withPeerService(
               () => tracer,
               'rhea',
-              () => context.sender.send({ body: 'Hello World!' }),
+              (done) => {
+                context.sender.send({ body: 'Hello World!' })
+                done()
+              },
               'localhost',
               'out.host'
             )

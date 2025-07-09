@@ -72,7 +72,7 @@ for (const packageName of names) {
 
   let hook = hooks[packageName]
 
-  if (typeof hook === 'object') {
+  if (hook !== null && typeof hook === 'object') {
     if (hook.serverless === false && isInServerlessEnvironment()) continue
 
     // some integrations are disabled by default, but can be enabled by setting
