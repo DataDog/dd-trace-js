@@ -32,14 +32,12 @@ function start (config, rc) {
   readProbeFile(config.dynamicInstrumentation.probeFile, (probes) => {
     const action = 'apply'
     for (const probe of probes) {
-      probe.shouldAcknowledge = false
       probeChannel.port2.postMessage({ action, probe })
     }
   })
 
   rc.setProductHandler('LIVE_DEBUGGING', (action, probe, id, ack) => {
     rcAckCallbacks.set(++ackId, ack)
-    probe.shouldAcknowledge = true
     probeChannel.port2.postMessage({ action, probe, ackId })
   })
 

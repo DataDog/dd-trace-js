@@ -752,16 +752,6 @@ describe('Dynamic Instrumentation', function () {
     writeFileSync(probeFile, JSON.stringify([probe]))
 
     it('should install probes from a probe file', testBasicInputWithoutRC.bind(null, t, probe))
-
-    it('should not call diagnostics enpoint for probes that are received via probe file', function (done) {
-      t.agent.on('debugger-diagnostics', () => {
-        assert.fail('Diagnostics endpoint was called for a probe that was received via probe file')
-      })
-      t.agent.on('debugger-input', () => {
-        done()
-      })
-      t.triggerBreakpoint(false)
-    })
   })
 
   describe('DD_TRACING_ENABLED=true, DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED=true', function () {

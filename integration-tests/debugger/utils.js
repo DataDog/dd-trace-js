@@ -53,25 +53,16 @@ function setup ({ env, testApp, testAppSource, dependencies } = {}) {
   }
 
   // Trigger the breakpoint once probe is successfully installed
-  function triggerBreakpoint (url, probeReceivedViaRC = true) {
+  function triggerBreakpoint (url) {
     let triggered = false
-
-    if (probeReceivedViaRC) {
-      t.agent.on('debugger-diagnostics', ({ payload }) => {
-        payload.forEach((event) => {
-          if (!triggered && event.debugger.diagnostics.status === 'INSTALLED') {
-            triggered = true
-            t.axios.get(url)
-          }
-        })
+    t.agent.on('debugger-diagnostics', ({ payload }) => {
+      payload.forEach((event) => {
+        if (!triggered && event.debugger.diagnostics.status === 'INSTALLED') {
+          triggered = true
+          t.axios.get(url)
+        }
       })
-    } else {
-      // Probe is received via probe file, so we need to manually wait for it to be installed
-      // TODO: Use a more reliable way to wait for the probe to be installed
-      setTimeout(() => {
-        t.axios.get(url)
-      }, 700) // 200ms more than the reEvaluateProbesTimer
-    }
+    })
   }
 
   function generateRemoteConfig (breakpoint, overrides = {}) {

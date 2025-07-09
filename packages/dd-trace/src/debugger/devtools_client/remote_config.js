@@ -35,9 +35,9 @@ const log = require('../../log')
 probePort.on('message', async ({ action, probe, ackId }) => {
   try {
     await processMsg(action, probe)
-    if (probe.shouldAcknowledge) probePort.postMessage({ ackId })
+    probePort.postMessage({ ackId })
   } catch (err) {
-    if (probe.shouldAcknowledge) probePort.postMessage({ ackId, error: err })
+    probePort.postMessage({ ackId, error: err })
     ackError(err, probe)
   }
 })
