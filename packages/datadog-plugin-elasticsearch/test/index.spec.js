@@ -34,7 +34,7 @@ describe('Plugin', () => {
           elasticsearch = metaModule.get()
 
           client = new elasticsearch.Client({
-            node: 'http://127.0.0.1:9200'
+            node: 'http://localhost:9200'
           })
         })
 
@@ -70,7 +70,7 @@ describe('Plugin', () => {
             }
           // Ignore index_not_found_exception
           }, hasCallbackSupport ? () => done() : undefined)?.catch?.(() => {}),
-          '127.0.0.1',
+          'localhost',
           'out.host'
         )
 
@@ -85,7 +85,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('elasticsearch.method', 'POST')
               expect(traces[0][0].meta).to.have.property('elasticsearch.url', '/docs/_search')
-              expect(traces[0][0].meta).to.have.property('out.host', '127.0.0.1')
+              expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
 
               if (hasCallbackSupport) {
                 expect(traces[0][0].meta).to.have.property('elasticsearch.body', '{"query":{"match_all":{}}}')
@@ -339,7 +339,7 @@ describe('Plugin', () => {
         beforeEach(() => {
           elasticsearch = require(`../../../versions/${moduleName}@${version}`).get()
           client = new elasticsearch.Client({
-            node: 'http://127.0.0.1:9200'
+            node: 'http://localhost:9200'
           })
         })
 
