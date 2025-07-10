@@ -2,7 +2,7 @@ import 'dd-trace/init.js'
 import { app } from '@azure/functions'
 import { ServiceBusClient } from '@azure/service-bus'
 
-const client = new ServiceBusClient(process.env['MyServiceBus'])
+const client = new ServiceBusClient(process.env.MyServiceBus)
 const sender1 = client.createSender('queue.1')
 const sender2 = client.createSender('topic.1')
 
