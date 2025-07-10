@@ -4,8 +4,8 @@ const { exec } = require('child_process')
 
 const { assert } = require('chai')
 
-const { createSandbox } = require('./helpers')
-const { FakeCiVisIntake } = require('./ci-visibility-intake')
+const { createSandbox } = require('../helpers')
+const { FakeCiVisIntake } = require('../ci-visibility-intake')
 
 const packageManagers = ['yarn', 'npm', 'pnpm']
 
