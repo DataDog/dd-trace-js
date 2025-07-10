@@ -186,11 +186,6 @@ jobs:
       - uses: ./.github/actions/plugins/upstream
 
   azure-functions:
-    strategy:
-      matrix:
-        include:
-          - node-version: [20, 22]
-
     runs-on: ubuntu-latest
     services:
         azureservicebusemulator:
