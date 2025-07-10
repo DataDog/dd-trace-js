@@ -5,7 +5,6 @@ const satisfies = require('semifies')
 const path = require('path')
 const fs = require('fs')
 
-const getPort = require('get-port')
 const { assert } = require('chai')
 
 const {
@@ -86,10 +85,12 @@ versions.forEach((version) => {
       // Install chromium (configured in integration-tests/playwright.config.js)
       // *Be advised*: this means that we'll only be using chromium for this test suite
       execSync('npx playwright install chromium', { cwd, env: restOfEnv, stdio: 'inherit' })
-      webAppPort = await getPort()
-      webAppServer.listen(webAppPort)
-      webPortWithRedirect = await getPort()
-      webAppServerWithRedirect.listen(webPortWithRedirect)
+      webAppServer.listen(0, () => {
+        webAppPort = webAppServer.address().port
+      })
+      webAppServerWithRedirect.listen(0, () => {
+        webPortWithRedirect = webAppServerWithRedirect.address().port
+      })
     })
 
     after(async () => {
@@ -99,8 +100,7 @@ versions.forEach((version) => {
     })
 
     beforeEach(async function () {
-      const port = await getPort()
-      receiver = await new FakeCiVisIntake(port).start()
+      receiver = await new FakeCiVisIntake().start()
     })
 
     afterEach(async () => {
