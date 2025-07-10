@@ -3,7 +3,6 @@
 const dc = require('dc-polyfill')
 const zlib = require('zlib')
 
-const Limiter = require('../rate_limiter')
 const { storage } = require('../../../datadog-core')
 const web = require('../plugins/util/web')
 const { ipHeaderList } = require('../plugins/util/ip_extractor')
@@ -15,7 +14,6 @@ const {
   updateWafRequestsMetricTags,
   updateRaspRequestsMetricTags,
   updateRaspRuleSkippedMetricTags,
-  updateRateLimitedMetric,
   getRequestMetrics
 } = require('./telemetry')
 const { keepTrace } = require('../priority_sampler')
@@ -30,9 +28,6 @@ const COLLECTED_REQUEST_BODY_MAX_DEPTH = 20
 const COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE = 256
 
 const telemetryLogCh = dc.channel('datadog:telemetry:log')
-
-// default limiter, configurable with setRateLimit()
-let limiter = new Limiter(100)
 
 const config = {
   headersExtendedCollectionEnabled: false,
@@ -91,7 +86,6 @@ const NON_EXTENDED_REQUEST_HEADERS = new Set([...requestHeadersList, ...eventHea
 const NON_EXTENDED_RESPONSE_HEADERS = new Set(contentHeaderList)
 
 function init (_config) {
-  limiter = new Limiter(_config.rateLimit)
   config.headersExtendedCollectionEnabled = _config.extendedHeadersCollection.enabled
   config.maxHeadersCollected = _config.extendedHeadersCollection.maxHeaders
   config.headersRedaction = _config.extendedHeadersCollection.redaction
@@ -323,12 +317,6 @@ function reportAttack (attackData) {
 
   const newTags = {
     'appsec.event': 'true'
-  }
-
-  if (limiter.isAllowed()) {
-    keepTrace(rootSpan, ASM)
-  } else {
-    updateRateLimitedMetric(req)
   }
 
   // TODO: maybe add this to format.js later (to take decision as late as possible)
