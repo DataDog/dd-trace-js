@@ -112,8 +112,9 @@ await Promise.all(workflows.map(w => checkWorkflowRuns(w)))
 
 const dateRange = startDate === endDate ? `on ${endDate}` : `from ${startDate} to ${endDate}`
 const logString = `jobs with at least ${OCCURRENCES} occurrences seen ${dateRange} (UTC)*`
-const workflowSuccessRate = Math.round(1000 - flakeCount / totalCount * 1000) / 1000
-const pipelineSuccessRate = Math.round(workflowSuccessRate ** workflows.length * 1000) / 1000
+const workflowSuccessRate = +((1 - flakeCount / totalCount) * 100).toFixed(1)
+const pipelineSuccessRate = ((workflowSuccessRate / 100) ** workflows.length * 100).toFixed(1)
+const pipelineBadge = pipelineSuccessRate >= 80 ? '🟢' : pipelineSuccessRate >= 70 ? '🟡' : '🔴'
 
 if (Object.keys(flaky).length === 0) {
   console.log(`*No flaky ${logString}`)
@@ -126,12 +127,13 @@ if (Object.keys(flaky).length === 0) {
       if (urls.length < OCCURRENCES) continue
       // Padding is needed because Slack doesn't show single digits as links.
       const links = urls.map((url, idx) => `[${String(idx + 1).padStart(2, '0')}](${url})`)
-      console.log(`    * ${job} (${links.join(', ')})`)
+      const runsBadge = urls.length >= 3 ? ' 🔴' : urls.length === 2 ? ' 🟡' : ''
+      console.log(`    * ${job} (${links.join(', ')})${runsBadge}`)
     }
   }
   console.log('*Flakiness stats*')
   console.log(`* Total runs: ${totalCount}`)
   console.log(`* Flaky runs: ${flakeCount}`)
-  console.log(`* Workflow success rate: ${workflowSuccessRate * 100}%`)
-  console.log(`* Pipeline success rate (approx): ${pipelineSuccessRate * 100}%`)
+  console.log(`* Workflow success rate: ${workflowSuccessRate}%`)
+  console.log(`* Pipeline success rate (approx): ${pipelineSuccessRate}% ${pipelineBadge}`)
 }
