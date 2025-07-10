@@ -135,7 +135,7 @@ function spawnProc (command, args, options = {}, stdioHandler, stderrHandler) {
       // eslint-disable-next-line no-console
       if (!options.silent) console.log(data.toString())
 
-      if (data.toString().includes('http://127.0.0.1:7071/api/httptest')) {
+      if (data.toString().includes('http://localhost:7071/api/httptest')) {
         resolve(proc)
       }
     })
