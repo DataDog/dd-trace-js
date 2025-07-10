@@ -676,7 +676,8 @@ describe('reporter', () => {
         '_dd.appsec.s.req.params': schemaValue,
         '_dd.appsec.s.req.cookies': schemaValue,
         '_dd.appsec.s.req.body': schemaValue,
-        'custom.processor.output': schemaValue
+        'custom.processor.output': 'custom_attribute',
+        'custom.processor.output_int': 42
       }
 
       Reporter.reportAttributes(attributes)
@@ -692,7 +693,8 @@ describe('reporter', () => {
         '_dd.appsec.s.req.params': schemaEncoded,
         '_dd.appsec.s.req.cookies': schemaEncoded,
         '_dd.appsec.s.req.body': schemaEncoded,
-        'custom.processor.output': schemaEncoded
+        'custom.processor.output': 'custom_attribute',
+        'custom.processor.output_int': 42
       })
     })
   })
