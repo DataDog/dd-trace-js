@@ -102,27 +102,28 @@ class TracingPlugin extends Plugin {
     }
   }
 
-  startSpan (name, { childOf, kind, meta, metrics, service, resource, type, tracer } = {}, enterOrCtx = true) {
+  startSpan (name, options = {}, enterOrCtx = true) {
     const store = storage('legacy').getStore()
-    if (store && childOf === undefined) {
-      childOf = store.span
+    if (store && options.childOf === undefined) {
+      options.childOf = store.span
     }
 
-    tracer = tracer || this.tracer
+    const tracer = options.tracer || this.tracer
 
     const span = tracer.startSpan(name, {
-      childOf,
+      startTime: options.startTime,
+      childOf: options.childOf,
       tags: {
-        [COMPONENT]: this.component,
-        'service.name': service || tracer._service,
-        'resource.name': resource,
-        'span.kind': kind,
-        'span.type': type,
-        ...meta,
-        ...metrics
+        [COMPONENT]: options.component || this.component,
+        'service.name': options.service || tracer._service,
+        'resource.name': options.resource,
+        'span.kind': options.kind,
+        'span.type': options.type,
+        ...options.meta,
+        ...options.metrics
       },
-      integrationName: this.component,
-      links: childOf?._links
+      integrationName: options.integrationName || options.component || this.component,
+      links: options.childOf?._links
     })
 
     analyticsSampler.sample(span, this.config.measured)
