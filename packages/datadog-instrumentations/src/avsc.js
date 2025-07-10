@@ -1,3 +1,5 @@
+'use strict'
+
 const shimmer = require('../../datadog-shimmer')
 const { addHook } = require('./helpers/instrument')
 

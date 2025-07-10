@@ -72,15 +72,15 @@ describe('graphql', () => {
     const result = {
       triggers: [
         {
-          rule:
-          {
+          rule: {
             id: 'test-rule-id-1',
             name: 'test-rule-name-1',
             tags:
             {
-              category: 'attack_attempt',
-              type: 'security_scanner'
-            }
+              type: 'security_scanner',
+              category: 'attack_attempt'
+            },
+            on_match: []
           },
           rule_matches: [
             {

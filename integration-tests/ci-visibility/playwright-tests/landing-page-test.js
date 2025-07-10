@@ -1,3 +1,5 @@
+'use strict'
+
 const { test, expect } = require('@playwright/test')
 const tracer = require('dd-trace')
 

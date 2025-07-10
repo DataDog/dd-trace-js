@@ -2,7 +2,6 @@
 
 const Axios = require('axios')
 const { assert } = require('chai')
-const getPort = require('get-port')
 const path = require('path')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
@@ -46,11 +45,10 @@ withVersions('express', 'express', version => {
 
       app.param('callbackedParameter', paramCallbackSpy)
 
-      getPort().then((port) => {
-        server = app.listen(port, () => {
-          axios = Axios.create({ baseURL: `http://localhost:${port}` })
-          done()
-        })
+      server = app.listen(0, () => {
+        const port = server.address().port
+        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        done()
       })
     })
 
@@ -196,11 +194,10 @@ withVersions('express', 'express', version => {
         res.end('DONE')
       })
 
-      getPort().then((port) => {
-        server = app.listen(port, () => {
-          axios = Axios.create({ baseURL: `http://localhost:${port}` })
-          done()
-        })
+      server = app.listen(0, () => {
+        const port = server.address().port
+        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        done()
       })
     })
 
@@ -274,11 +271,10 @@ withVersions('express', 'express', version => {
         res.json({ jsonResKey: 'jsonResValue' })
       })
 
-      getPort().then((port) => {
-        server = app.listen(port, () => {
-          axios = Axios.create({ baseURL: `http://localhost:${port}` })
-          done()
-        })
+      server = app.listen(0, () => {
+        const port = server.address().port
+        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        done()
       })
     })
 

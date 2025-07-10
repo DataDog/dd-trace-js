@@ -1,3 +1,5 @@
+'use strict'
+
 const { expect } = require('chai')
 
 let numAttempts = 0

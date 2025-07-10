@@ -10,7 +10,6 @@ const upload = require('multer')()
 const os = require('os')
 const path = require('path')
 const { request } = require('http')
-const getPort = require('get-port')
 const proxyquire = require('proxyquire')
 const WallProfiler = require('../../../src/profiling/profilers/wall')
 const SpaceProfiler = require('../../../src/profiling/profilers/space')
@@ -171,13 +170,13 @@ describe('exporters/agent', function () {
 
   describe('using HTTP', () => {
     beforeEach(done => {
-      getPort().then(port => {
+      listener = app.listen(0, '127.0.0.1', () => {
+        const port = listener.address().port
         url = new URL(`http://127.0.0.1:${port}`)
-
-        listener = app.listen(port, '127.0.0.1', done)
-        listener.on('connection', socket => sockets.push(socket))
-        startSpan = sinon.spy(tracer._tracer, 'startSpan')
+        done()
       })
+      listener.on('connection', socket => sockets.push(socket))
+      startSpan = sinon.spy(tracer._tracer, 'startSpan')
     })
 
     afterEach(done => {
@@ -391,13 +390,13 @@ describe('exporters/agent', function () {
 
   describe('using ipv6', () => {
     beforeEach(done => {
-      getPort().then(port => {
+      listener = app.listen(0, '0:0:0:0:0:0:0:1', () => {
+        const port = listener.address().port
         url = new URL(`http://[0:0:0:0:0:0:0:1]:${port}`)
-
-        listener = app.listen(port, '0:0:0:0:0:0:0:1', done)
-        listener.on('connection', socket => sockets.push(socket))
-        startSpan = sinon.spy(tracer._tracer, 'startSpan')
+        done()
       })
+      listener.on('connection', socket => sockets.push(socket))
+      startSpan = sinon.spy(tracer._tracer, 'startSpan')
     })
 
     afterEach(done => {

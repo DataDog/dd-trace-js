@@ -1,3 +1,5 @@
+'use strict'
+
 const Plugin = require('../../plugins/plugin')
 const log = require('../../log')
 const { getEnvironmentVariable } = require('../../config-helper')

@@ -1,3 +1,5 @@
+'use strict'
+
 // eslint-disable-next-line @stylistic/max-len
 const DEFAULT_IAST_REDACTION_NAME_PATTERN = '(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?|(?:sur|last)name|user(?:name)?|address|e?mail)'
 // eslint-disable-next-line @stylistic/max-len

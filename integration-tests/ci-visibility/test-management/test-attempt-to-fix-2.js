@@ -1,3 +1,5 @@
+'use strict'
+
 const { expect } = require('chai')
 
 describe('attempt to fix tests 2', () => {

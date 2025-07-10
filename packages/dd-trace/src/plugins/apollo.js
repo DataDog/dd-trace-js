@@ -1,3 +1,5 @@
+'use strict'
+
 const TracingPlugin = require('./tracing')
 const { storage } = require('../../../datadog-core')
 

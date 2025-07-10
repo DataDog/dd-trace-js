@@ -1,3 +1,5 @@
+'use strict'
+
 const { test, expect } = require('@playwright/test')
 
 test.beforeEach(async ({ page }) => {

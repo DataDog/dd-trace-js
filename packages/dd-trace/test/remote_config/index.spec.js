@@ -248,6 +248,8 @@ describe('Remote Config index', () => {
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_SHI, true)
         expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_CMDI, true)
+        expect(rc.updateCapabilities)
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_DD_MULTICONFIG, true)
 
         expect(rc.setProductHandler).to.have.been.calledWith('ASM_DATA')
         expect(rc.setProductHandler).to.have.been.calledWith('ASM_DD')
@@ -296,6 +298,8 @@ describe('Remote Config index', () => {
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_SHI, true)
         expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_CMDI, true)
+        expect(rc.updateCapabilities)
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_DD_MULTICONFIG, true)
 
         expect(rc.setProductHandler).to.have.been.calledWith('ASM_DATA')
         expect(rc.setProductHandler).to.have.been.calledWith('ASM_DD')
@@ -346,6 +350,8 @@ describe('Remote Config index', () => {
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_SHI, true)
         expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_CMDI, true)
+        expect(rc.updateCapabilities)
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_DD_MULTICONFIG, true)
       })
 
       it('should not activate rasp capabilities if rasp is disabled', () => {
@@ -391,6 +397,8 @@ describe('Remote Config index', () => {
           .to.not.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_SHI)
         expect(rc.updateCapabilities)
           .to.not.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_CMDI)
+        expect(rc.updateCapabilities)
+          .to.not.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_DD_MULTICONFIG)
       })
     })
 
@@ -436,6 +444,8 @@ describe('Remote Config index', () => {
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_SHI, false)
         expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_CMDI, false)
+        expect(rc.updateCapabilities)
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_DD_MULTICONFIG, false)
 
         expect(rc.removeProductHandler).to.have.been.calledWith('ASM_DATA')
         expect(rc.removeProductHandler).to.have.been.calledWith('ASM_DD')

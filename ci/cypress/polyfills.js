@@ -1,3 +1,5 @@
+'use strict'
+
 if (!Object.hasOwn) {
   Object.defineProperty(Object, 'hasOwn', {
     // eslint-disable-next-line prefer-object-has-own

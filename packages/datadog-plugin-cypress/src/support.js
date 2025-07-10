@@ -1,3 +1,5 @@
+'use strict'
+
 let isEarlyFlakeDetectionEnabled = false
 let isKnownTestsEnabled = false
 let knownTestsForSuite = []
@@ -28,8 +30,8 @@ function isNewTest (test) {
 }
 
 function getTestProperties (testName) {
-  // We neeed to do it in this way because of compatibility with older versions as '?' is not supported in older
-  // versions of Cypress
+  // TODO: Use optional chaining when we drop support for older Cypress versions, which will happen when dd-trace@5 is
+  // EoL. Until then, this files needs to support Node.js 16.
   const properties = testManagementTests[testName] && testManagementTests[testName].properties || {}
 
   const { attempt_to_fix: isAttemptToFix, disabled: isDisabled, quarantined: isQuarantined } = properties

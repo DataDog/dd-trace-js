@@ -1,3 +1,5 @@
+'use strict'
+
 const SchemaDefinition = require('../definition')
 const messaging = require('./messaging')
 const storage = require('./storage')
