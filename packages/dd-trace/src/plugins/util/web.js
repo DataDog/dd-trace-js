@@ -10,7 +10,6 @@ const kinds = require('../../../../../ext/kinds')
 const urlFilter = require('./urlfilter')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../constants')
 const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred_proxy')
-const { storage } = require('../../../../datadog-core')
 
 let extractIp
 
