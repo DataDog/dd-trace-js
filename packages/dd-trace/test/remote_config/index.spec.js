@@ -250,6 +250,8 @@ describe('Remote Config index', () => {
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_CMDI, true)
         expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_DD_MULTICONFIG, true)
+        expect(rc.updateCapabilities)
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_TRACE_TAGGING_RULES, true)
 
         expect(rc.setProductHandler).to.have.been.calledWith('ASM_DATA')
         expect(rc.setProductHandler).to.have.been.calledWith('ASM_DD')
@@ -300,6 +302,8 @@ describe('Remote Config index', () => {
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_CMDI, true)
         expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_DD_MULTICONFIG, true)
+        expect(rc.updateCapabilities)
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_TRACE_TAGGING_RULES, true)
 
         expect(rc.setProductHandler).to.have.been.calledWith('ASM_DATA')
         expect(rc.setProductHandler).to.have.been.calledWith('ASM_DD')
@@ -352,6 +356,8 @@ describe('Remote Config index', () => {
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_CMDI, true)
         expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_DD_MULTICONFIG, true)
+        expect(rc.updateCapabilities)
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_TRACE_TAGGING_RULES, true)
       })
 
       it('should not activate rasp capabilities if rasp is disabled', () => {
@@ -387,6 +393,8 @@ describe('Remote Config index', () => {
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_NETWORK_FINGERPRINT, true)
         expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_HEADER_FINGERPRINT, true)
+        expect(rc.updateCapabilities)
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_TRACE_TAGGING_RULES, true)
         expect(rc.updateCapabilities)
           .to.not.have.been.calledWith(RemoteConfigCapabilities.ASM_RASP_SSRF)
         expect(rc.updateCapabilities)
@@ -446,6 +454,8 @@ describe('Remote Config index', () => {
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_CMDI, false)
         expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_DD_MULTICONFIG, false)
+        expect(rc.updateCapabilities)
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_TRACE_TAGGING_RULES, false)
 
         expect(rc.removeProductHandler).to.have.been.calledWith('ASM_DATA')
         expect(rc.removeProductHandler).to.have.been.calledWith('ASM_DD')
