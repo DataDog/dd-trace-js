@@ -73,8 +73,14 @@ describe('esm', () => {
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest3', ({ headers, payload }) => {
-        assert.strictEqual(payload.length, 2)
-        assert.strictEqual(payload[1][0].span_id, payload[1][1].parent_id)
+        assert.strictEqual(payload.length, 3)
+        assert.strictEqual(payload[1][1].span_id, payload[2][0].parent_id)
+        assert.strictEqual(payload[2][0].name, 'azure.functions.invoke')
+        assert.strictEqual(payload[2][0].resource, 'ServiceBus queueTest')
+        assert.strictEqual(payload[2][0].meta['messaging.destination.name'], 'queue.1')
+        assert.strictEqual(payload[2][0].meta['messaging.operation'], 'receive')
+        assert.strictEqual(payload[2][0].meta['messaging.system'], 'servicebus')
+        assert.strictEqual(payload[2][0].meta['span.kind'], 'consumer')
       })
     }).timeout(50000)
 
@@ -85,8 +91,14 @@ describe('esm', () => {
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest4', ({ headers, payload }) => {
-        assert.strictEqual(payload.length, 2)
-        assert.strictEqual(payload[1][0].span_id, payload[1][1].parent_id)
+        assert.strictEqual(payload.length, 3)
+        assert.strictEqual(payload[1][1].span_id, payload[2][0].parent_id)
+        assert.strictEqual(payload[2][0].name, 'azure.functions.invoke')
+        assert.strictEqual(payload[2][0].resource, 'ServiceBus topicTest')
+        assert.strictEqual(payload[2][0].meta['messaging.destination.name'], 'topic.1')
+        assert.strictEqual(payload[2][0].meta['messaging.operation'], 'receive')
+        assert.strictEqual(payload[2][0].meta['messaging.system'], 'servicebus')
+        assert.strictEqual(payload[2][0].meta['span.kind'], 'consumer')
       })
     }).timeout(50000)
   })

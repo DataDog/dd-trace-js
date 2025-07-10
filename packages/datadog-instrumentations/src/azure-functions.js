@@ -21,6 +21,7 @@ addHook({ name: '@azure/functions', versions: ['>=4'] }, azureFunction => {
 
   // Service Bus triggers
   shimmer.wrap(app, 'serviceBusQueue', wrapHandler)
+  shimmer.wrap(app, 'serviceBusTopic', wrapHandler)
 
   return azureFunction
 })

@@ -12,7 +12,8 @@ const triggerMap = {
   patch: 'Http',
   post: 'Http',
   put: 'Http',
-  serviceBusQueue: 'serviceBusQueue'
+  serviceBusQueue: 'ServiceBus',
+  serviceBusTopic: 'ServiceBus',
 }
 
 class AzureFunctionsPlugin extends TracingPlugin {
@@ -35,13 +36,13 @@ class AzureFunctionsPlugin extends TracingPlugin {
         'aas.function.trigger': mapTriggerTag(methodName)
       }
     }, false)
-    if (methodName === 'serviceBusQueue') {
+    if (triggerMap[methodName] === 'ServiceBus') {
       const triggerEntity = invocationContext.options.trigger.queueName || invocationContext.options.trigger.topicName
       span.setTag('messaging.message_id', invocationContext.triggerMetadata.messageId)
       span.setTag('messaging.operation', 'receive')
       span.setTag('messaging.system', 'servicebus')
       span.setTag('messaging.destination.name', triggerEntity)
-      span.setTag('resource.name', 'serviceBusQueueTrigger')
+      span.setTag('resource.name', `ServiceBus ${functionName}`)
       span.setTag('span.kind', 'consumer')
     }
 
@@ -89,10 +90,10 @@ function mapTriggerTag (methodName) {
 }
 
 function extractTraceContext (tracer, ctx) {
-  switch (String(ctx.methodName)) {
-    case triggerMap.http:
+  switch (String(triggerMap[ctx.methodName])) {
+    case 'Http':
       return tracer.extract('http_headers', Object.fromEntries(ctx.httpRequest.headers))
-    case triggerMap.serviceBusQueue:
+    case 'ServiceBus':
       return tracer.extract('text_map', ctx.invocationContext.triggerMetadata.applicationProperties)
   }
 }
