@@ -137,11 +137,8 @@ function wrapChildProcessCustomPromisifyMethod (customPromisifyMethod, shell) {
 
     const { start, end, asyncStart, asyncEnd, error } = childProcessChannel
     const abortController = new AbortController()
-
-    start.publish({
-      ...context,
-      abortController
-    })
+    context.abortController = abortController
+    start.publish(context)
 
     let result
     if (abortController.signal.aborted) {
@@ -189,7 +186,7 @@ function wrapChildProcessAsyncMethod (ChildProcess, shell = false) {
 
       const context = createContextFromChildProcessInfo(childProcessInfo)
       const abortController = new AbortController()
-
+      context.abortController = abortController
       return childProcessChannel.start.runStores(context, () => {
         let childProcess
         if (abortController.signal.aborted) {
