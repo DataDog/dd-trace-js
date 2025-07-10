@@ -245,7 +245,12 @@ describe('child process', () => {
                     abortController: sinon.match.instanceOf(AbortController)
                   })
                   expect(asyncFinish).to.have.been.calledOnce
-                  expect(asyncFinish).to.have.been.calledWithMatch({ command: 'ls', file: 'ls', shell: true, result: 0 })
+                  expect(asyncFinish).to.have.been.calledWithMatch({
+                    command: 'ls',
+                    file: 'ls',
+                    shell: true,
+                    result: 0
+                  })
                   expect(error).not.to.have.been.called
                   done()
                 })
