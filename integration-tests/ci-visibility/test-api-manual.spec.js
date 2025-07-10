@@ -7,11 +7,11 @@ const { assert } = require('chai')
 const {
   createSandbox,
   getCiVisAgentlessConfig
-} = require('./helpers')
-const { FakeCiVisIntake } = require('./ci-visibility-intake')
+} = require('../helpers')
+const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const {
   TEST_STATUS
-} = require('../packages/dd-trace/src/plugins/util/test')
+} = require('../../packages/dd-trace/src/plugins/util/test')
 
 describe('test-api-manual', () => {
   let sandbox, cwd, receiver, childProcess
