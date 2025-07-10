@@ -49,7 +49,7 @@ describe('IAST Taint tracking plugin', () => {
   })
 
   it('Should subscribe to body parser, qs, cookie and process_params channel', () => {
-    expect(taintTrackingPlugin._subscriptions).to.have.lengthOf(16)
+    expect(taintTrackingPlugin._subscriptions).to.have.lengthOf(17)
     let i = 0
     expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:body-parser:read:finish')
     expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:multer:read:finish')
@@ -59,11 +59,12 @@ describe('IAST Taint tracking plugin', () => {
     expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:fastify:query-params:finish')
     expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:express:query:finish')
     expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:cookie:parse:finish')
+    expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:fastify-cookie:read:finish')
     expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:sequelize:query:finish')
     expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('apm:pg:query:finish')
     expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:express:process_params:start')
-    expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:fastify:path-params:finish')
     expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:router:param:start')
+    expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:fastify:path-params:finish')
     expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('apm:graphql:resolve:start')
     expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:url:parse:finish')
     expect(taintTrackingPlugin._subscriptions[i++]._channel.name).to.equals('datadog:url:getter:finish')

@@ -123,5 +123,4 @@ function onResponseWriteHeadCollect ({ res, responseHeaders = {} }) {
   }
 }
 
-
 module.exports = { enable, disable, onIncomingHttpRequestEnd, onIncomingHttpRequestStart }

@@ -8,8 +8,11 @@ class SetCookiesHeaderInterceptor extends Plugin {
     super()
     this.cookiesInRequest = new WeakMap()
 
-    this.addSub('datadog:http:server:response:set-header:finish', ({ name, value, res }) => this._handleCookies(name, value, res))
-    this.addSub('datadog:fastify:set-header:finish', ({ name, value, res }) => this._handleCookies(name, value, res))
+    this.addSub('datadog:http:server:response:set-header:finish',
+      ({ name, value, res }) => this._handleCookies(name, value, res))
+
+    this.addSub('datadog:fastify:set-header:finish',
+      ({ name, value, res }) => this._handleCookies(name, value, res))
   }
 
   _handleCookies (name, value, res) {

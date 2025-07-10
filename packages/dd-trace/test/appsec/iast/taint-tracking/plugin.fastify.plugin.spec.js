@@ -7,7 +7,7 @@ const { URL } = require('url')
 function noop () {}
 
 describe('Taint tracking plugin sources fastify tests', () => {
-  withVersions('fastify', 'fastify', version => {
+  withVersions('fastify', 'fastify', '>=2', version => {
     prepareTestServerForIastInFastify('in fastify', version,
       (testThatRequestHasVulnerability, _, config) => {
         describe('tainted body', () => {

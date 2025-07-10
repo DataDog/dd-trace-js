@@ -259,7 +259,6 @@ addHook({ name: 'fastify', versions: ['1'] }, fastify => {
   return shimmer.wrapFunction(fastify, fastify => wrapFastify(fastify, false))
 })
 
-
 function wrapReplyHeader (Reply) {
   shimmer.wrap(Reply.prototype, 'header', header => function (key, value) {
     const result = header.apply(this, arguments)

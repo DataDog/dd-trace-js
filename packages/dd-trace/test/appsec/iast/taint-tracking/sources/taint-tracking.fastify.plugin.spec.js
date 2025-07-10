@@ -122,7 +122,6 @@ describe('Path params sourcing with fastify', () => {
         reply.code(200).send()
       })
 
-      
       await appInstance.listen({ port: 0 })
 
       const port = appInstance.server.address().port
@@ -132,4 +131,4 @@ describe('Path params sourcing with fastify', () => {
       expect(response.status).to.be.equal(200)
     })
   })
-}) 
+})
