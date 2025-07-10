@@ -3,7 +3,6 @@
 const { exec, execSync } = require('child_process')
 
 const { assert } = require('chai')
-const getPort = require('get-port')
 
 const {
   createSandbox,
@@ -31,8 +30,9 @@ describe('test visibility automatic log submission', () => {
     // Install chromium (configured in integration-tests/playwright.config.js)
     // *Be advised*: this means that we'll only be using chromium for this test suite
     execSync('npx playwright install chromium', { cwd, env: restOfEnv, stdio: 'inherit' })
-    webAppPort = await getPort()
-    webAppServer.listen(webAppPort)
+    webAppServer.listen(0, () => {
+      webAppPort = webAppServer.address().port
+    })
   })
 
   after(async () => {
@@ -41,8 +41,7 @@ describe('test visibility automatic log submission', () => {
   })
 
   beforeEach(async function () {
-    const port = await getPort()
-    receiver = await new FakeCiVisIntake(port).start()
+    receiver = await new FakeCiVisIntake().start()
   })
 
   afterEach(async () => {
