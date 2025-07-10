@@ -1727,5 +1727,52 @@ versions.forEach((version) => {
         })
       })
     })
+
+    contextNewVersions('check retries tagging', () => {
+      it('does not send attempt to fix tags if test is retried and not attempt to fix', (done) => {
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            assert.equal(tests.length, NUM_RETRIES_EFD + 1)
+            for (const test of tests) {
+              assert.notProperty(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED)
+              assert.notProperty(test.meta, TEST_HAS_FAILED_ALL_RETRIES)
+            }
+          })
+
+        receiver.setSettings({
+          impacted_tests_enabled: true,
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD
+            }
+          },
+          known_tests_enabled: true,
+          test_management: {
+            attempt_to_fix_retries: NUM_RETRIES_EFD
+          }
+        })
+
+        childProcess = exec(
+          './node_modules/.bin/playwright test -c playwright.config.js retried-test.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-tests-retries-tagging',
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          receiverPromise.then(done).catch(done)
+        })
+      })
+    })
   })
 })
