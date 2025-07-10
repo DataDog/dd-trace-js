@@ -21,18 +21,18 @@ describe('Inferred Proxy Spans', function () {
 
   // tap was throwing timeout errors when trying to use hooks like `before`, so instead we just use this function
   // and call before the test starts
-  const loadTest = async function ({ inferredProxyServicesEnabled = true } = {}) {    
+  const loadTest = async function ({ inferredProxyServicesEnabled = true } = {}) {
     const options = {
       inferredProxyServicesEnabled,
       service: 'aws-server'
     }
-    
+
     await agent.load(
       ['http', 'dns', 'net'],
       [{ client: false }, { enabled: false }, { enabled: false }],
       options
     )
-    
+
     // we can't force re-init the tracer, so we have to set the config manually
     const tracer = require('../../../../dd-trace').init(options)
     tracer._tracer._config.inferredProxyServicesEnabled = inferredProxyServicesEnabled
@@ -68,9 +68,9 @@ describe('Inferred Proxy Spans', function () {
     })
   }
 
-  const cleanupTest = async function () {    
+  const cleanupTest = async function () {
     controller = null
-    
+
     if (appListener) {
       // Force close all existing connections
       if (appListener._connections) {
@@ -78,7 +78,7 @@ describe('Inferred Proxy Spans', function () {
           connection.destroy()
         }
       }
-      
+
       await new Promise((resolve, reject) => {
         appListener.close((err) => {
           if (err) {
@@ -90,7 +90,7 @@ describe('Inferred Proxy Spans', function () {
       })
       appListener = null
     }
-    
+
     await agent.close({ ritmReset: false, wipe: true })
   }
 
@@ -174,7 +174,7 @@ describe('Inferred Proxy Spans', function () {
         expect(spans[0].span_id.toString()).to.be.equal(spans[1].parent_id.toString())
 
         expect(spans[1]).to.have.property('name', 'web.request')
-        expect(spans[1]).to.have.property('service', 'aws-server') 
+        expect(spans[1]).to.have.property('service', 'aws-server')
         expect(spans[1]).to.have.property('type', 'web')
         expect(spans[1]).to.have.property('resource', 'GET')
         expect(spans[1].meta).to.have.property('component', 'http')
