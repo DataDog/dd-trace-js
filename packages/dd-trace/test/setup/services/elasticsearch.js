@@ -9,7 +9,7 @@ function waitForElasticsearch () {
 
     operation.attempt(currentAttempt => {
       // Not using ES client because it's buggy for initial connection.
-      axios.get('http://localhost:9200/_cluster/health?wait_for_status=green&local=true&timeout=100ms')
+      axios.get('http://127.0.0.1:9200/_cluster/health?wait_for_status=green&local=true&timeout=100ms')
         .then(() => resolve())
         .catch(err => {
           if (operation.retry(err)) return
