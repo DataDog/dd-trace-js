@@ -980,7 +980,7 @@ function getLibraryCapabilitiesTags (testFramework, isParallel, frameworkVersion
       : undefined,
     [DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX]:
       isAttemptToFixSupported(testFramework, isParallel, frameworkVersion)
-        ? '4'
+        ? '5'
         : undefined,
     [DD_CAPABILITIES_FAILED_TEST_REPLAY]: isFailedTestReplaySupported(testFramework, frameworkVersion)
       ? '1'
