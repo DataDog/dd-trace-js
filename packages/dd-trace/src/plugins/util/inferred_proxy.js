@@ -47,7 +47,7 @@ function createInferredProxySpan (headers, childOf, tracer, reqCtx, traceCtx, st
     startTime: proxyContext.requestTime,
     integrationName: proxySpanInfo.component,
     meta: {
-      'service.name': proxyContext.domainName || tracer._config.service,
+      service: proxyContext.domainName || tracer._config.service,
       component: proxySpanInfo.component,
       [SPAN_TYPE]: 'web',
       [HTTP_METHOD]: proxyContext.method,

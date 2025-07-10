@@ -115,7 +115,7 @@ class TracingPlugin extends Plugin {
       childOf: options.childOf,
       tags: {
         [COMPONENT]: options.component || this.component,
-        'service.name': options.service || tracer._service,
+        'service.name': options.service || options.meta?.service || tracer._service,
         'resource.name': options.resource,
         'span.kind': options.kind,
         'span.type': options.type,
