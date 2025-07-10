@@ -430,12 +430,12 @@ function isRaspAttack (events) {
   return events.some(e => e.rule?.tags?.module === 'rasp')
 }
 
-function isFingerprintDerivative (derivative) {
-  return derivative.startsWith('_dd.appsec.fp')
+function isFingerprintAttribute (attribute) {
+  return attribute.startsWith('_dd.appsec.fp')
 }
 
-function reportDerivatives (derivatives) {
-  if (!derivatives) return
+function reportAttributes (attributes) {
+  if (!attributes) return
 
   const req = storage('legacy').getStore()?.req
   const rootSpan = web.root(req)
@@ -443,8 +443,8 @@ function reportDerivatives (derivatives) {
   if (!rootSpan) return
 
   const tags = {}
-  for (let [tag, value] of Object.entries(derivatives)) {
-    if (!isFingerprintDerivative(tag)) {
+  for (let [tag, value] of Object.entries(attributes)) {
+    if (!isFingerprintAttribute(tag)) {
       const gzippedValue = zlib.gzipSync(JSON.stringify(value))
       value = gzippedValue.toString('base64')
     }
@@ -543,7 +543,7 @@ module.exports = {
   reportAttack,
   reportWafUpdate: incrementWafUpdatesMetric,
   reportRaspRuleSkipped: updateRaspRuleSkippedMetricTags,
-  reportDerivatives,
+  reportAttributes,
   finishRequest,
   mapHeaderAndTags,
   truncateRequestBody
