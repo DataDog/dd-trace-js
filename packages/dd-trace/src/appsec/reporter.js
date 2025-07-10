@@ -418,8 +418,8 @@ function isRaspAttack (events) {
   return events.some(e => e.rule?.tags?.module === 'rasp')
 }
 
-function isFingerprintAttribute (attribute) {
-  return attribute.startsWith('_dd.appsec.fp')
+function isSchemaAttribute (attribute) {
+  return attribute.startsWith('_dd.appsec.s.')
 }
 
 function reportAttributes (attributes) {
@@ -432,7 +432,7 @@ function reportAttributes (attributes) {
 
   const tags = {}
   for (let [tag, value] of Object.entries(attributes)) {
-    if (!isFingerprintAttribute(tag)) {
+    if (isSchemaAttribute(tag)) {
       const gzippedValue = zlib.gzipSync(JSON.stringify(value))
       value = gzippedValue.toString('base64')
     }
