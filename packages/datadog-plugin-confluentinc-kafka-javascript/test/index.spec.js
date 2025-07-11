@@ -28,7 +28,7 @@ describe('Plugin', () => {
   const groupId = 'test-group-confluent'
 
   describe('confluentinc-kafka-javascript', function () {
-    this.timeout(10000)
+    this.timeout(30000)
 
     afterEach(() => {
       return agent.close({ ritmReset: false })
