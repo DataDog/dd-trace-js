@@ -1,7 +1,6 @@
 'use strict'
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
-const { storage } = require('../../datadog-core')
 const serverless = require('../../dd-trace/src/plugins/util/serverless')
 const web = require('../../dd-trace/src/plugins/util/web')
 
@@ -24,31 +23,16 @@ class AzureFunctionsPlugin extends TracingPlugin {
   static get prefix () { return 'tracing:datadog:azure:functions:invoke' }
 
   bindStart (ctx) {
-    const { functionName, methodName, invocationContext } = ctx
-    const store = storage('legacy').getStore()
     const childOf = extractTraceContext(this._tracer, ctx)
+    const meta = getMetaForTrigger(ctx)
     const span = this.startSpan(this.operationName(), {
       childOf,
       service: this.serviceName(),
       type: 'serverless',
-      meta: {
-        'aas.function.name': functionName,
-        'aas.function.trigger': mapTriggerTag(methodName)
-      }
-    }, false)
-    if (triggerMap[methodName] === 'ServiceBus') {
-      const triggerEntity = invocationContext.options.trigger.queueName || invocationContext.options.trigger.topicName
-      span.setTag('messaging.message_id', invocationContext.triggerMetadata.messageId)
-      span.setTag('messaging.operation', 'receive')
-      span.setTag('messaging.system', 'servicebus')
-      span.setTag('messaging.destination.name', triggerEntity)
-      span.setTag('resource.name', `ServiceBus ${functionName}`)
-      span.setTag('span.kind', 'consumer')
-    }
+      meta: meta,
+    }, ctx)
 
     ctx.span = span
-    ctx.parentStore = store
-    ctx.currentStore = { ...store, span }
     return ctx.currentStore
   }
 
@@ -83,6 +67,27 @@ class AzureFunctionsPlugin extends TracingPlugin {
   configure (config) {
     return super.configure(web.normalizeConfig(config))
   }
+}
+
+function getMetaForTrigger({functionName, methodName, invocationContext }) {
+  let meta = {
+    'aas.function.name': functionName,
+    'aas.function.trigger': mapTriggerTag(methodName)
+  }
+
+  if (triggerMap[methodName] === 'ServiceBus') {
+      const triggerEntity = invocationContext.options.trigger.queueName || invocationContext.options.trigger.topicName
+      meta = { ...meta,
+        'messaging.message_id': invocationContext.triggerMetadata.messageId,
+        'messaging.operation': 'receive',
+        'messaging.system': 'servicebus',
+        'messaging.destination.name': triggerEntity,
+        'resource.name': `ServiceBus ${functionName}`,
+        'span.kind': 'consumer'
+      }
+    }
+
+  return meta
 }
 
 function mapTriggerTag (methodName) {
