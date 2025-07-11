@@ -196,7 +196,7 @@ jobs:
           env:
               ACCEPT_EULA: "Y"
               MSSQL_SA_PASSWORD: "Localtestpass1!"
-              SQL_SERVER: localhost
+              SQL_SERVER: azuresqledge
         azuresqledge:
           image: mcr.microsoft.com/azure-sql-edge:1.0.7
           ports:
@@ -222,7 +222,7 @@ jobs:
           env:
               ACCEPT_EULA: "Y"
               MSSQL_SA_PASSWORD: "Localtestpass1!"
-              SQL_SERVER: localhost
+              SQL_SERVER: azuresqledge
         azuresqledge:
           image: mcr.microsoft.com/azure-sql-edge:1.0.7
           ports:
