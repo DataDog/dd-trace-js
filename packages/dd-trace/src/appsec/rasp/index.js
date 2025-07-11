@@ -104,6 +104,7 @@ function enable (config) {
 
   process.on('uncaughtExceptionMonitor', handleUncaughtExceptionMonitor)
   expressMiddlewareError.subscribe(blockOnDatadogRaspAbortError)
+  require('dc-polyfill').channel('apm:fastify:middleware:error').subscribe(blockOnDatadogRaspAbortError)
 }
 
 function disable () {
