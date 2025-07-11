@@ -18,7 +18,14 @@ const {
   GIT_COMMIT_AUTHOR_DATE,
   GIT_COMMIT_AUTHOR_EMAIL,
   GIT_COMMIT_AUTHOR_NAME,
-  CI_WORKSPACE_PATH
+  CI_WORKSPACE_PATH,
+  GIT_COMMIT_HEAD_AUTHOR_DATE,
+  GIT_COMMIT_HEAD_AUTHOR_EMAIL,
+  GIT_COMMIT_HEAD_AUTHOR_NAME,
+  GIT_COMMIT_HEAD_COMMITER_DATE,
+  GIT_COMMIT_HEAD_COMMITER_EMAIL,
+  GIT_COMMIT_HEAD_COMMITER_NAME,
+  GIT_COMMIT_HEAD_MESSAGE
 } = require('./tags')
 const {
   incrementCountMetric,
@@ -119,7 +126,7 @@ function getGitVersion () {
   }
 }
 
-function unshallowRepository () {
+function unshallowRepository (parentOnly = false) {
   const gitVersion = getGitVersion()
   if (!gitVersion) {
     log.warn('Git version could not be extracted, so git unshallow will not proceed')
@@ -134,7 +141,7 @@ function unshallowRepository () {
 
   const baseGitOptions = [
     'fetch',
-    '--shallow-since="1 month ago"',
+    parentOnly ? '--deepen=1' : '--shallow-since="1 month ago"',
     '--update-shallow',
     '--filter=blob:none',
     '--recurse-submodules=no',
@@ -453,7 +460,8 @@ function getGitMetadata (ciMetadata) {
     commitMessage,
     authorName: ciAuthorName,
     authorEmail: ciAuthorEmail,
-    ciWorkspacePath
+    ciWorkspacePath,
+    headCommitSha
   } = ciMetadata
 
   // With stdio: 'pipe', errors in this command will not be output to the parent process,
@@ -472,7 +480,32 @@ function getGitMetadata (ciMetadata) {
       commitMessage || sanitizedExec('git', ['show', '-s', '--format=%B'], null, null, null, false),
     [GIT_BRANCH]: branch || sanitizedExec('git', ['rev-parse', '--abbrev-ref', 'HEAD']),
     [GIT_COMMIT_SHA]: commitSHA || sanitizedExec('git', ['rev-parse', 'HEAD']),
-    [CI_WORKSPACE_PATH]: ciWorkspacePath || sanitizedExec('git', ['rev-parse', '--show-toplevel'])
+    [CI_WORKSPACE_PATH]: ciWorkspacePath || sanitizedExec('git', ['rev-parse', '--show-toplevel']),
+  }
+
+  if (headCommitSha) {
+    if (isShallowRepository()) {
+      unshallowRepository(true)
+    }
+
+    tags[GIT_COMMIT_HEAD_MESSAGE] =
+      sanitizedExec('git', ['show', '-s', '--format=%B', headCommitSha], null, null, null, false)
+
+    const [
+      headAuthorName,
+      headAuthorEmail,
+      headAuthorDate,
+      headCommitterName,
+      headCommitterEmail,
+      headCommitterDate
+    ] = sanitizedExec('git', ['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI', headCommitSha]).split(',')
+
+    tags[GIT_COMMIT_HEAD_AUTHOR_DATE] = headAuthorDate
+    tags[GIT_COMMIT_HEAD_AUTHOR_EMAIL] = headAuthorEmail
+    tags[GIT_COMMIT_HEAD_AUTHOR_NAME] = headAuthorName
+    tags[GIT_COMMIT_HEAD_COMMITER_DATE] = headCommitterDate
+    tags[GIT_COMMIT_HEAD_COMMITER_EMAIL] = headCommitterEmail
+    tags[GIT_COMMIT_HEAD_COMMITER_NAME] = headCommitterName
   }
 
   const entries = [
