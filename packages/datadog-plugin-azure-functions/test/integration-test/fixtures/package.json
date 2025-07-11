@@ -5,12 +5,5 @@
   "main": "src/functions/server.mjs",
   "scripts": {
     "start": "func start"
-  },
-  "dependencies": {
-    "@azure/functions": "^4.6.0",
-    "@azure/service-bus": "^7.9.2"
-  },
-  "devDependencies": {
-    "azure-functions-core-tools": "^4.x"
   }
 }
