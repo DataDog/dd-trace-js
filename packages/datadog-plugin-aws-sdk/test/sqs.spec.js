@@ -19,7 +19,7 @@ const getQueueParams = (queueName) => {
   }
 }
 
-describe.only('Plugin', () => {
+describe('Plugin', () => {
   describe('aws-sdk (sqs)', function () {
     setup()
 
