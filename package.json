@@ -185,5 +185,8 @@
     "workerpool": "^9.2.0",
     "yaml": "^2.8.0",
     "yarn-deduplicate": "^6.0.2"
+  },
+  "volta": {
+    "node": "24.2.0"
   }
 }
