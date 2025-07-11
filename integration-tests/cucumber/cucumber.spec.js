@@ -2,7 +2,6 @@
 
 const { exec, execSync } = require('child_process')
 
-const getPort = require('get-port')
 const { assert } = require('chai')
 const fs = require('fs')
 const path = require('path')
@@ -95,8 +94,7 @@ versions.forEach(version => {
     })
 
     beforeEach(async function () {
-      const port = await getPort()
-      receiver = await new FakeCiVisIntake(port).start()
+      receiver = await new FakeCiVisIntake().start()
     })
 
     afterEach(async () => {
@@ -2511,7 +2509,7 @@ versions.forEach(version => {
                 assert.equal(metadata.test[DD_CAPABILITIES_IMPACTED_TESTS], '1')
                 assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
                 assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
-                assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '4')
+                assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
                 assert.equal(metadata.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], '1')
                 // capabilities logic does not overwrite test session name
                 assert.equal(metadata.test[TEST_SESSION_NAME], 'my-test-session-name')

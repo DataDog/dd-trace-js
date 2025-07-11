@@ -29,6 +29,7 @@ class MissingHeaderAnalyzer extends Analyzer {
   }
 
   _getHeaderValues (res, storedHeaders, headerName) {
+    headerName = headerName.toLowerCase()
     const headerValue = res.getHeader(headerName) || storedHeaders[headerName]
     if (Array.isArray(headerValue)) {
       return headerValue

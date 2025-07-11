@@ -15,6 +15,7 @@ const finishSetHeaderCh = channel('datadog:fastify:set-header:finish')
 
 const parsingResources = new WeakMap()
 const cookiesPublished = new WeakSet()
+const bodyPublished = new WeakSet()
 
 function wrapFastify (fastify, hasParsingEvents) {
   if (typeof fastify !== 'function') return fastify
@@ -125,6 +126,20 @@ function preHandler (request, reply, done) {
   if (!reply || typeof reply.send !== 'function') return done()
 
   const req = getReq(request)
+  const res = getRes(reply)
+
+  const hasBody = request.body && Object.keys(request.body).length > 0
+
+  // For multipart/form-data, the body is not available until after preValidation hook
+  if (bodyParserReadCh.hasSubscribers && hasBody && !bodyPublished.has(req)) {
+    const abortController = new AbortController()
+
+    bodyParserReadCh.publish({ req, res, body: request.body, abortController })
+
+    bodyPublished.add(req)
+
+    if (abortController.signal.aborted) return
+  }
 
   reply.send = wrapSend(reply.send, req)
 
@@ -152,10 +167,13 @@ function preValidation (request, reply, done) {
       if (abortController.signal.aborted) return
     }
 
-    if (bodyParserReadCh.hasSubscribers && request.body) {
+    // Analyze body before schema validation
+    if (bodyParserReadCh.hasSubscribers && request.body && !bodyPublished.has(req)) {
       abortController ??= new AbortController()
 
       bodyParserReadCh.publish({ req, res, body: request.body, abortController })
+
+      bodyPublished.add(req)
 
       if (abortController.signal.aborted) return
     }

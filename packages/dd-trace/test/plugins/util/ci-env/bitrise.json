@@ -486,7 +486,7 @@
       "BITRISE_BUILD_URL": "https://bitrise-build-url.com//",
       "BITRISE_GIT_MESSAGE": "bitrise-git-commit-message",
       "BITRISE_TRIGGERED_WORKFLOW_ID": "bitrise-pipeline-name",
-      "TESTING_TEST_OPTIMIZATION_TEST_CASE_NAME": "http-repository-url-no-git-suffix",
+      "DD_TEST_CASE_NAME": "http-repository-url-no-git-suffix",
       "GIT_CLONE_COMMIT_HASH": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "GIT_REPOSITORY_URL": "https://github.com/DataDog/dogweb"
     },
@@ -508,7 +508,7 @@
       "BITRISE_BUILD_URL": "https://bitrise-build-url.com//",
       "BITRISE_GIT_MESSAGE": "bitrise-git-commit-message",
       "BITRISE_TRIGGERED_WORKFLOW_ID": "bitrise-pipeline-name",
-      "TESTING_TEST_OPTIMIZATION_TEST_CASE_NAME": "ssh-repository-url-no-git-suffix",
+      "DD_TEST_CASE_NAME": "ssh-repository-url-no-git-suffix",
       "GIT_CLONE_COMMIT_HASH": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "GIT_REPOSITORY_URL": "ssh://host.xz:54321/path/to/repo/"
     },
