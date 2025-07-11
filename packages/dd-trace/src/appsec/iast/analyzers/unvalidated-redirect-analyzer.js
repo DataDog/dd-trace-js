@@ -9,7 +9,10 @@ const {
   HTTP_REQUEST_PARAMETER
 } = require('../taint-tracking/source-types')
 
-const EXCLUDED_PATHS = getNodeModulesPaths('express/lib/response.js')
+const EXCLUDED_PATHS = [
+  getNodeModulesPaths('express/lib/response.js'),
+  getNodeModulesPaths('fastify/lib/reply.js'),
+]
 
 const VULNERABLE_SOURCE_TYPES = new Set([
   HTTP_REQUEST_BODY,
@@ -23,6 +26,7 @@ class UnvalidatedRedirectAnalyzer extends InjectionAnalyzer {
 
   onConfigure () {
     this.addSub('datadog:http:server:response:set-header:finish', ({ name, value }) => this.analyze(name, value))
+    this.addSub('datadog:fastify:set-header:finish', ({ name, value }) => this.analyze(name, value))
   }
 
   analyze (name, value) {

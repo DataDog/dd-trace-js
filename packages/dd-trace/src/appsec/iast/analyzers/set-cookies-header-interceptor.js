@@ -7,25 +7,32 @@ class SetCookiesHeaderInterceptor extends Plugin {
   constructor () {
     super()
     this.cookiesInRequest = new WeakMap()
-    this.addSub('datadog:http:server:response:set-header:finish', ({ name, value, res }) => {
-      if (name.toLowerCase() === 'set-cookie') {
-        let allCookies = value
-        if (typeof value === 'string') {
-          allCookies = [value]
-        }
-        const alreadyCheckedCookies = this._getAlreadyCheckedCookiesInResponse(res)
 
-        let location
-        allCookies.forEach(cookieString => {
-          if (!alreadyCheckedCookies.includes(cookieString)) {
-            alreadyCheckedCookies.push(cookieString)
-            const parsedCookie = this._parseCookie(cookieString, location)
-            setCookieChannel.publish(parsedCookie)
-            location = parsedCookie.location
-          }
-        })
+    this.addSub('datadog:http:server:response:set-header:finish',
+      ({ name, value, res }) => this._handleCookies(name, value, res))
+
+    this.addSub('datadog:fastify:set-header:finish',
+      ({ name, value, res }) => this._handleCookies(name, value, res))
+  }
+
+  _handleCookies (name, value, res) {
+    if (name.toLowerCase() === 'set-cookie') {
+      let allCookies = value
+      if (typeof value === 'string') {
+        allCookies = [value]
       }
-    })
+      const alreadyCheckedCookies = this._getAlreadyCheckedCookiesInResponse(res)
+
+      let location
+      allCookies.forEach(cookieString => {
+        if (!alreadyCheckedCookies.includes(cookieString)) {
+          alreadyCheckedCookies.push(cookieString)
+          const parsedCookie = this._parseCookie(cookieString, location)
+          setCookieChannel.publish(parsedCookie)
+          location = parsedCookie.location
+        }
+      })
+    }
   }
 
   _parseCookie (cookieString, location) {
