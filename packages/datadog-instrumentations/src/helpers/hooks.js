@@ -134,5 +134,6 @@ module.exports = {
   vm: () => require('../vm'),
   when: () => require('../when'),
   winston: () => require('../winston'),
-  workerpool: () => require('../mocha')
+  workerpool: () => require('../mocha'),
+  ws: () => require('../ws')
 }
