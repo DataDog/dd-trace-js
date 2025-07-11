@@ -112,13 +112,14 @@ await Promise.all(workflows.map(w => checkWorkflowRuns(w)))
 
 const dateRange = startDate === endDate ? `on ${endDate}` : `from ${startDate} to ${endDate}`
 const logString = `jobs with at least ${OCCURRENCES} occurrences seen ${dateRange} (UTC)*`
-const workflowSuccessRate = +((1 - flakeCount / totalCount) * 100).toFixed(1)
-const pipelineSuccessRate = +((workflowSuccessRate / 100) ** workflows.length * 100).toFixed(1)
-const pipelineBadge = pipelineSuccessRate >= 80 ? '🟢' : pipelineSuccessRate >= 70 ? '🟡' : '🔴'
 
 if (Object.keys(flaky).length === 0) {
   console.log(`*No flaky ${logString}`)
 } else {
+  const workflowSuccessRate = +((1 - flakeCount / totalCount) * 100).toFixed(1)
+  const pipelineSuccessRate = +((workflowSuccessRate / 100) ** workflows.length * 100).toFixed(1)
+  const pipelineBadge = pipelineSuccessRate >= 80 ? '🟢' : pipelineSuccessRate >= 70 ? '🟡' : '🔴'
+
   console.log(`*Flaky ${logString}`)
   for (const [workflow, jobs] of Object.entries(flaky).sort()) {
     if (!reported.has(workflow)) continue
