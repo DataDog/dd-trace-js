@@ -2,11 +2,10 @@
 
 const { exec } = require('child_process')
 
-const getPort = require('get-port')
 const { assert } = require('chai')
 
-const { createSandbox } = require('./helpers')
-const { FakeCiVisIntake } = require('./ci-visibility-intake')
+const { createSandbox } = require('../helpers')
+const { FakeCiVisIntake } = require('../ci-visibility-intake')
 
 const packageManagers = ['yarn', 'npm', 'pnpm']
 
@@ -24,8 +23,7 @@ describe('test optimization startup', () => {
 
   beforeEach(async function () {
     processOutput = ''
-    const port = await getPort()
-    receiver = await new FakeCiVisIntake(port).start()
+    receiver = await new FakeCiVisIntake().start()
   })
 
   afterEach(async () => {

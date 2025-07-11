@@ -339,6 +339,7 @@ export default [
       'n/no-process-exit': 'off', // TODO: Enable this rule once we have a plan to address it
       'n/no-unsupported-features/node-builtins': ['error', {
         ignores: [
+          'Request',
           'Response',
           'async_hooks.createHook',
           'async_hooks.executionAsyncId',
@@ -502,7 +503,12 @@ export default [
       }
     },
     rules: {
-      'n/no-unsupported-features/node-builtins': ['error', { allowExperimental: true }]
+      'n/no-unsupported-features/node-builtins': ['error', {
+        allowExperimental: true,
+        ignores: [
+          'module.register'
+        ]
+      }]
     }
   },
   {
@@ -523,15 +529,6 @@ export default [
     ],
     rules: {
       'n/no-missing-require': 'off'
-    }
-  },
-  {
-    name: 'dd-trace/scripts',
-    files: [
-      'scripts/**/*'
-    ],
-    rules: {
-      'n/no-unsupported-features/node-builtins': ['error', { allowExperimental: true }]
     }
   },
   {
@@ -561,7 +558,6 @@ export default [
       'mocha/no-top-level-hooks': 'off',
       'n/handle-callback-err': 'off',
       'n/no-missing-require': 'off',
-      'n/no-unsupported-features/node-builtins': ['error', { allowExperimental: true }],
       'require-await': 'off'
     }
   },
