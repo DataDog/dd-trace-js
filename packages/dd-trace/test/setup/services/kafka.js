@@ -10,7 +10,7 @@ const kafka = new Kafka({
 const admin = kafka.admin()
 const producer = kafka.producer()
 const consumer = kafka.consumer({ groupId: 'setup-group' })
-const topic = 'setup-topic'
+const topic = 'test-topic'
 const messages = [{ key: 'setup', value: 'test' }]
 
 function waitForKafka () {
