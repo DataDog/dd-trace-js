@@ -37,6 +37,17 @@ const HTTP2_HEADER_PATH = ':path'
 const contexts = new WeakMap()
 const ends = new WeakMap()
 
+const TracingPlugin = require('../tracing')
+
+function startSpanHelper (tracer, name, options, traceCtx, config = {}) {
+  return TracingPlugin.prototype.startSpan.call(
+    { component: 'web', config },
+    name,
+    { ...options, tracer },
+    traceCtx
+  )
+}
+
 const web = {
   TYPE: WEB,
 
@@ -93,7 +104,7 @@ const web = {
     analyticsSampler.sample(span, config.measured, true)
   },
 
-  startSpan (tracer, config, req, res, name) {
+  startSpan (tracer, config, req, res, name, traceCtx) {
     const context = this.patch(req)
 
     let span
@@ -102,7 +113,7 @@ const web = {
       context.span.context()._name = name
       span = context.span
     } else {
-      span = web.startChildSpan(tracer, name, req)
+      span = web.startChildSpan(tracer, name, req, traceCtx)
     }
 
     context.tracer = tracer
@@ -163,10 +174,11 @@ const web = {
     const tracer = context.tracer
     const childOf = this.active(req)
     const config = context.config
+    const traceCtx = context.traceCtx
 
     if (config.middleware === false) return this.bindAndWrapMiddlewareErrors(fn, req, tracer, childOf)
 
-    const span = tracer.startSpan(name, { childOf })
+    const span = startSpanHelper(tracer, name, { childOf }, traceCtx, config)
 
     analyticsSampler.sample(span, config.measured)
 
@@ -258,20 +270,20 @@ const web = {
   },
 
   // Extract the parent span from the headers and start a new span as its child
-  startChildSpan (tracer, name, req) {
+  startChildSpan (tracer, name, req, traceCtx) {
     const headers = req.headers
-    const context = contexts.get(req)
+    const reqCtx = contexts.get(req)
     let childOf = tracer.extract(FORMAT_HTTP_HEADERS, headers)
 
     // we may have headers signaling a router proxy span should be created (such as for AWS API Gateway)
     if (tracer._config?.inferredProxyServicesEnabled) {
-      const proxySpan = createInferredProxySpan(headers, childOf, tracer, context)
+      const proxySpan = createInferredProxySpan(headers, childOf, tracer, reqCtx, traceCtx, startSpanHelper)
       if (proxySpan) {
         childOf = proxySpan
       }
     }
 
-    const span = tracer.startSpan(name, { childOf, links: childOf?._links })
+    const span = startSpanHelper(tracer, name, { childOf }, traceCtx)
 
     return span
   },
