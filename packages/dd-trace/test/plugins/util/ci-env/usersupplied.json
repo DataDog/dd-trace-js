@@ -166,7 +166,7 @@
       "DD_GIT_COMMIT_MESSAGE": "usersupplied-message",
       "DD_GIT_COMMIT_SHA": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "DD_GIT_REPOSITORY_URL": "https://github.com/DataDog/dogweb",
-      "TESTING_TEST_OPTIMIZATION_TEST_CASE_NAME": "http-repository-url-no-git-suffix"
+      "DD_TEST_CASE_NAME": "http-repository-url-no-git-suffix"
     },
     {
       "git.commit.author.date": "usersupplied-authordate",
@@ -191,7 +191,7 @@
       "DD_GIT_COMMIT_MESSAGE": "usersupplied-message",
       "DD_GIT_COMMIT_SHA": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "DD_GIT_REPOSITORY_URL": "ssh://host.xz:54321/path/to/repo/",
-      "TESTING_TEST_OPTIMIZATION_TEST_CASE_NAME": "ssh-repository-url-no-git-suffix"
+      "DD_TEST_CASE_NAME": "ssh-repository-url-no-git-suffix"
     },
     {
       "git.commit.author.date": "usersupplied-authordate",

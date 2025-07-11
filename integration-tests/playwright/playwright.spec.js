@@ -1370,7 +1370,7 @@ versions.forEach((version) => {
                 assert.equal(metadata.test[DD_CAPABILITIES_IMPACTED_TESTS], '1')
                 assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
                 assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
-                assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '4')
+                assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
                 assert.equal(metadata.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], '1')
               } else {
                 assert.equal(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], undefined)
