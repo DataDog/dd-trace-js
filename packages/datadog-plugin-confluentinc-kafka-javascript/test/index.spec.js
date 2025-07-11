@@ -360,9 +360,9 @@ describe('Plugin', () => {
               nativeConsumer = new Consumer({
                 'bootstrap.servers': '127.0.0.1:9092',
                 'group.id': groupId,
-                'enable.auto.commit': false, // don't commit my offset
+                'enable.auto.commit': false,
               }, {
-                'auto.offset.reset': 'earliest' // consume from the start
+                'auto.offset.reset': 'earliest'
               })
 
               await new Promise((resolve, reject) => {
@@ -644,7 +644,6 @@ describe('Plugin', () => {
               // wait for the message to be processed before continuing
               await sendMessages(kafka, testTopic, messages)
               await messageProcessedPromise
-              await consumer.disconnect() // Flush ongoing `eachMessage` calls
 
               for (const call of setOffsetSpy.getCalls()) {
                 expect(call.args[0]).to.not.have.property('type', 'kafka_commit')
