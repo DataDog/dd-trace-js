@@ -29,7 +29,7 @@ class AzureFunctionsPlugin extends TracingPlugin {
       childOf,
       service: this.serviceName(),
       type: 'serverless',
-      meta: meta,
+      meta,
     }, ctx)
 
     ctx.span = span
@@ -69,23 +69,24 @@ class AzureFunctionsPlugin extends TracingPlugin {
   }
 }
 
-function getMetaForTrigger({functionName, methodName, invocationContext }) {
+function getMetaForTrigger ({ functionName, methodName, invocationContext }) {
   let meta = {
     'aas.function.name': functionName,
     'aas.function.trigger': mapTriggerTag(methodName)
   }
 
   if (triggerMap[methodName] === 'ServiceBus') {
-      const triggerEntity = invocationContext.options.trigger.queueName || invocationContext.options.trigger.topicName
-      meta = { ...meta,
-        'messaging.message_id': invocationContext.triggerMetadata.messageId,
-        'messaging.operation': 'receive',
-        'messaging.system': 'servicebus',
-        'messaging.destination.name': triggerEntity,
-        'resource.name': `ServiceBus ${functionName}`,
-        'span.kind': 'consumer'
-      }
+    const triggerEntity = invocationContext.options.trigger.queueName || invocationContext.options.trigger.topicName
+    meta = {
+      ...meta,
+      'messaging.message_id': invocationContext.triggerMetadata.messageId,
+      'messaging.operation': 'receive',
+      'messaging.system': 'servicebus',
+      'messaging.destination.name': triggerEntity,
+      'resource.name': `ServiceBus ${functionName}`,
+      'span.kind': 'consumer'
     }
+  }
 
   return meta
 }
