@@ -339,6 +339,8 @@ tracer.use('grpc', { client: { metadata: [] } });
 tracer.use('grpc', { server: { metadata: [] } });
 tracer.use('hapi');
 tracer.use('hapi', httpServerOptions);
+tracer.use('hono');
+tracer.use('hono', httpServerOptions);
 tracer.use('http');
 tracer.use('http', {
   server: httpServerOptions
