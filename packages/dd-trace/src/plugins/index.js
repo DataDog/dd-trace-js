@@ -4,6 +4,7 @@ module.exports = {
   get '@apollo/gateway' () { return require('../../../datadog-plugin-apollo/src') },
   get '@aws-sdk/smithy-client' () { return require('../../../datadog-plugin-aws-sdk/src') },
   get '@azure/functions' () { return require('../../../datadog-plugin-azure-functions/src') },
+  get '@azure/service-bus' () { return require('../../../datadog-plugin-azure-service-bus/src') },
   get '@cucumber/cucumber' () { return require('../../../datadog-plugin-cucumber/src') },
   get '@playwright/test' () { return require('../../../datadog-plugin-playwright/src') },
   get '@elastic/elasticsearch' () { return require('../../../datadog-plugin-elasticsearch/src') },
