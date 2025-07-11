@@ -20,8 +20,9 @@ describe('esm', () => {
   withVersions('azure-functions', '@azure/functions', NODE_MAJOR < 20 ? '<4.7.3' : '*', version => {
     before(async function () {
       this.timeout(50000)
-      sandbox = await createSandbox([`@azure/functions@${version}`, 'azure-functions-core-tools@4', '@azure/service-bus@7.9.2'], false,
-        ['./packages/datadog-plugin-azure-functions/test/integration-test/fixtures/*'])
+      sandbox = await createSandbox([
+        `@azure/functions@${version}`, 'azure-functions-core-tools@4', '@azure/service-bus@7.9.2'], false,
+      ['./packages/datadog-plugin-azure-functions/test/integration-test/fixtures/*'])
     })
 
     after(async function () {
