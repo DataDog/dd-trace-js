@@ -1,6 +1,6 @@
 'use strict'
 
-require('./core')
+require('./core.mjs')
 
 const assert = require('node:assert')
 const util = require('node:util')
