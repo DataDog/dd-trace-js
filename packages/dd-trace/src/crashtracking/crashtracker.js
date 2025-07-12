@@ -49,8 +49,18 @@ class Crashtracker {
 
   // TODO: Send only configured values when defaults are fixed.
   #getConfig (config) {
-    const { hostname = '127.0.0.1', port = 8126 } = config
-    const url = config.url || new URL(`http://${hostname}:${port}`)
+    let scheme, authority
+    if (config.url) {
+      const { protocol, host, pathname } = new URL(config.url)
+      scheme = protocol.slice(0, -1)
+      authority = protocol === 'unix:'
+        ? Buffer.from(pathname).toString('hex')
+        : host
+    } else {
+      const { hostname = '127.0.0.1', port = 8126 } = config
+      scheme = 'http'
+      authority = `${hostname}:${port}`
+    }
 
     return {
       additional_files: [],
@@ -58,13 +68,7 @@ class Crashtracker {
       use_alt_stack: true,
       endpoint: {
         // TODO: Use the string directly when deserialization is fixed.
-        url: {
-          scheme: url.protocol.slice(0, -1),
-          authority: url.protocol === 'unix:'
-            ? Buffer.from(url.pathname).toString('hex')
-            : url.host,
-          path_and_query: ''
-        },
+        url: { scheme, authority, path_and_query: '' },
         timeout_ms: 3000
       },
       timeout_ms: 5000,
