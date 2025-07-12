@@ -33,7 +33,7 @@ describe('Plugin', () => {
           opensearch = metaModule.get()
 
           client = new opensearch.Client({
-            node: 'http://localhost:9201'
+            node: 'http://127.0.0.1:9201'
           })
         })
 
@@ -67,7 +67,7 @@ describe('Plugin', () => {
                 'opensearch.url': '/docs/_search',
                 'opensearch.body': '{"query":{"match_all":{}}}',
                 component: 'opensearch',
-                'out.host': 'localhost'
+                'out.host': '127.0.0.1'
               }
             })
             .then(done)
@@ -213,7 +213,9 @@ describe('Plugin', () => {
         })
 
         withNamingSchema(
-          () => client.search({ index: 'logstash-2000.01.01', body: {} }),
+          () => {
+            client.search({ index: 'logstash-2000.01.01', body: {} })
+          },
           rawExpectedSchema.outbound
         )
       })
@@ -239,7 +241,7 @@ describe('Plugin', () => {
         beforeEach(() => {
           opensearch = require(`../../../versions/${moduleName}@${version}`).get()
           client = new opensearch.Client({
-            node: 'http://localhost:9201'
+            node: 'http://127.0.0.1:9201'
           })
         })
 
@@ -258,7 +260,7 @@ describe('Plugin', () => {
           }).catch(() => {
             // Ignore index_not_found_exception for peer service assertion
           }),
-          'localhost',
+          '127.0.0.1',
           'out.host'
         )
 
@@ -291,7 +293,9 @@ describe('Plugin', () => {
         })
 
         withNamingSchema(
-          () => client.search({ index: 'logstash-2000.01.01', body: {} }),
+          () => {
+            client.search({ index: 'logstash-2000.01.01', body: {} })
+          },
           {
             v0: {
               opName: 'opensearch.query',

@@ -1,3 +1,5 @@
+'use strict'
+
 const path = require('path')
 const fs = require('fs')
 const { URL } = require('url')
@@ -32,7 +34,8 @@ const {
   GIT_COMMIT_MESSAGE,
   CI_WORKSPACE_PATH,
   CI_PIPELINE_URL,
-  CI_JOB_NAME
+  CI_JOB_NAME,
+  GIT_COMMIT_HEAD_SHA
 } = require('./tags')
 const id = require('../../id')
 const {
@@ -446,7 +449,8 @@ function getTestEnvironmentMetadata (testFramework, config) {
     [GIT_COMMIT_AUTHOR_NAME]: authorName,
     [GIT_COMMIT_AUTHOR_EMAIL]: authorEmail,
     [GIT_COMMIT_MESSAGE]: commitMessage,
-    [CI_WORKSPACE_PATH]: ciWorkspacePath
+    [CI_WORKSPACE_PATH]: ciWorkspacePath,
+    [GIT_COMMIT_HEAD_SHA]: headCommitSha
   } = ciMetadata
 
   const gitMetadata = getGitMetadata({
@@ -457,7 +461,8 @@ function getTestEnvironmentMetadata (testFramework, config) {
     authorName,
     authorEmail,
     commitMessage,
-    ciWorkspacePath
+    ciWorkspacePath,
+    headCommitSha
   })
 
   const userProvidedGitMetadata = getUserProviderGitMetadata()
@@ -975,7 +980,7 @@ function getLibraryCapabilitiesTags (testFramework, isParallel, frameworkVersion
       : undefined,
     [DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX]:
       isAttemptToFixSupported(testFramework, isParallel, frameworkVersion)
-        ? '4'
+        ? '5'
         : undefined,
     [DD_CAPABILITIES_FAILED_TEST_REPLAY]: isFailedTestReplaySupported(testFramework, frameworkVersion)
       ? '1'

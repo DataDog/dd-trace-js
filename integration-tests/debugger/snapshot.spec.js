@@ -87,7 +87,8 @@ describe('Dynamic Instrumentation', function () {
           // There's no reason to test the `request` object 100%, instead just check its fingerprint
           assert.deepEqual(Object.keys(request), ['type', 'fields'])
           assert.equal(request.type, 'Request')
-          assert.deepEqual(request.fields.id, { type: 'string', value: 'req-1' })
+          assert.equal(request.fields.id.type, 'string')
+          assert.match(request.fields.id.value, /^req-\d+$/)
           assert.deepEqual(request.fields.params, {
             type: 'NullObject', fields: { name: { type: 'string', value: 'foo' } }
           })

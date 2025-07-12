@@ -469,7 +469,7 @@
       "CI_PROJECT_PATH": "gitlab-pipeline-name",
       "CI_PROJECT_URL": "https://gitlab.com/repo",
       "CI_REPOSITORY_URL": "http://hostname.com/repo",
-      "TESTING_TEST_OPTIMIZATION_TEST_CASE_NAME": "http-repository-url-no-git-suffix",
+      "DD_TEST_CASE_NAME": "http-repository-url-no-git-suffix",
       "GITLAB_CI": "gitlab"
     },
     {
@@ -510,7 +510,7 @@
       "CI_PROJECT_PATH": "gitlab-pipeline-name",
       "CI_PROJECT_URL": "https://gitlab.com/repo",
       "CI_REPOSITORY_URL": "ssh://host.xz:54321/path/to/repo/",
-      "TESTING_TEST_OPTIMIZATION_TEST_CASE_NAME": "ssh-repository-url-no-git-suffix",
+      "DD_TEST_CASE_NAME": "ssh-repository-url-no-git-suffix",
       "GITLAB_CI": "gitlab"
     },
     {

@@ -34,7 +34,7 @@ describe('Plugin', () => {
           mysql2 = proxyquire(`../../../versions/mysql2@${version}`, {}).get()
 
           connection = mysql2.createConnection({
-            host: 'localhost',
+            host: '127.0.0.1',
             user: 'root',
             database: 'db'
           })
@@ -51,7 +51,9 @@ describe('Plugin', () => {
         )
 
         withNamingSchema(
-          () => connection.query('SELECT 1', (_) => {}),
+          () => new Promise((resolve) => {
+            connection.query('SELECT 1', (_) => resolve())
+          }),
           rawExpectedSchema.outbound
         )
 
@@ -213,7 +215,7 @@ describe('Plugin', () => {
           mysql2 = proxyquire(`../../../versions/mysql2@${version}`, {}).get()
 
           connection = mysql2.createConnection({
-            host: 'localhost',
+            host: '127.0.0.1',
             user: 'root',
             database: 'db'
           })
@@ -222,7 +224,9 @@ describe('Plugin', () => {
         })
 
         withNamingSchema(
-          () => connection.query('SELECT 1', (_) => {}),
+          () => new Promise((resolve) => {
+            connection.query('SELECT 1', (_) => resolve())
+          }),
           {
             v0: {
               opName: 'mysql.query',
@@ -262,7 +266,7 @@ describe('Plugin', () => {
           mysql2 = proxyquire(`../../../versions/mysql2@${version}`, {}).get()
 
           connection = mysql2.createConnection({
-            host: 'localhost',
+            host: '127.0.0.1',
             user: 'root',
             database: 'db'
           })
@@ -271,7 +275,9 @@ describe('Plugin', () => {
         })
 
         withNamingSchema(
-          () => connection.query('SELECT 1', (_) => {}),
+          () => new Promise((resolve) => {
+            connection.query('SELECT 1', (_) => resolve())
+          }),
           {
             v0: {
               opName: 'mysql.query',
@@ -288,7 +294,7 @@ describe('Plugin', () => {
           agent.assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('service', 'custom')
             sinon.assert.calledWith(serviceSpy, sinon.match({
-              host: 'localhost',
+              host: '127.0.0.1',
               user: 'root',
               database: 'db'
             }))
@@ -314,7 +320,7 @@ describe('Plugin', () => {
 
           pool = mysql2.createPool({
             connectionLimit: 1,
-            host: 'localhost',
+            host: '127.0.0.1',
             user: 'root'
           })
         })

@@ -49,7 +49,7 @@ describe('WAF Manager', () => {
     sinon.stub(Reporter.metricsQueue, 'set')
     sinon.stub(Reporter, 'reportMetrics')
     sinon.stub(Reporter, 'reportAttack')
-    sinon.stub(Reporter, 'reportDerivatives')
+    sinon.stub(Reporter, 'reportAttributes')
     sinon.spy(Reporter, 'reportWafInit')
     sinon.spy(Reporter, 'reportWafConfigUpdate')
 
@@ -333,7 +333,7 @@ describe('WAF Manager', () => {
       })
 
       it('should call ddwafContext.run with params', () => {
-        ddwafContext.run.returns({ totalRuntime: 1, durationExt: 1 })
+        ddwafContext.run.returns({ duration: 1, durationExt: 1 })
 
         wafContextWrapper.run({
           persistent: {
@@ -354,7 +354,7 @@ describe('WAF Manager', () => {
 
       it('should report attack when ddwafContext returns events', () => {
         const result = {
-          totalRuntime: 1,
+          duration: 1,
           durationExt: 1,
           events: ['ATTACK DATA']
         }
@@ -373,7 +373,7 @@ describe('WAF Manager', () => {
 
       it('should report if rule is triggered', () => {
         const result = {
-          totalRuntime: 1,
+          duration: 1,
           durationExt: 1,
           events: ['ruleTriggered']
         }
@@ -395,7 +395,7 @@ describe('WAF Manager', () => {
 
       it('should report raspRuleType', () => {
         const result = {
-          totalRuntime: 1,
+          duration: 1,
           durationExt: 1
         }
 
@@ -414,7 +414,7 @@ describe('WAF Manager', () => {
 
       it('should not report raspRuleType when it is not provided', () => {
         const result = {
-          totalRuntime: 1,
+          duration: 1,
           durationExt: 1
         }
 
@@ -432,7 +432,7 @@ describe('WAF Manager', () => {
       })
 
       it('should not report attack when ddwafContext does not return events', () => {
-        ddwafContext.run.returns({ totalRuntime: 1, durationExt: 1 })
+        ddwafContext.run.returns({ duration: 1, durationExt: 1 })
         const params = {
           persistent: {
             'server.request.headers.no_cookies': { header: 'value' }
@@ -445,7 +445,7 @@ describe('WAF Manager', () => {
       })
 
       it('should not report attack when ddwafContext returns empty data', () => {
-        ddwafContext.run.returns({ totalRuntime: 1, durationExt: 1, events: [] })
+        ddwafContext.run.returns({ duration: 1, durationExt: 1, events: [] })
         const params = {
           persistent: {
             'server.request.headers.no_cookies': { header: 'value' }
@@ -459,7 +459,7 @@ describe('WAF Manager', () => {
 
       it('should return waf result', () => {
         const result = {
-          totalRuntime: 1, durationExt: 1, events: [], actions: ['block']
+          duration: 1, durationExt: 1, events: [], actions: ['block']
         }
         ddwafContext.run.returns(result)
 
@@ -474,11 +474,11 @@ describe('WAF Manager', () => {
         expect(wafResult).to.be.equals(result)
       })
 
-      it('should report schemas when ddwafContext returns schemas in the derivatives', () => {
+      it('should report schemas when ddwafContext returns schemas in the attributes', () => {
         const result = {
-          totalRuntime: 1,
+          duration: 1,
           durationExt: 1,
-          derivatives: [{ '_dd.appsec.s.req.body': [8] }]
+          attributes: [{ '_dd.appsec.s.req.body': [8] }]
         }
         const params = {
           persistent: {
@@ -492,14 +492,14 @@ describe('WAF Manager', () => {
         ddwafContext.run.returns(result)
 
         wafContextWrapper.run(params)
-        expect(Reporter.reportDerivatives).to.be.calledOnceWithExactly(result.derivatives)
+        expect(Reporter.reportAttributes).to.be.calledOnceWithExactly(result.attributes)
       })
 
-      it('should report fingerprints when ddwafContext returns fingerprints in results derivatives', () => {
+      it('should report fingerprints when ddwafContext returns fingerprints in results attributes', () => {
         const result = {
-          totalRuntime: 1,
+          duration: 1,
           durationExt: 1,
-          derivatives: {
+          attributes: {
             '_dd.appsec.s.req.body': [8],
             '_dd.appsec.fp.http.endpoint': 'http-post-abcdefgh-12345678-abcdefgh',
             '_dd.appsec.fp.http.network': 'net-1-0100000000',
@@ -514,7 +514,7 @@ describe('WAF Manager', () => {
             'server.request.body': 'foo'
           }
         })
-        sinon.assert.calledOnceWithExactly(Reporter.reportDerivatives, result.derivatives)
+        sinon.assert.calledOnceWithExactly(Reporter.reportAttributes, result.attributes)
       })
     })
   })

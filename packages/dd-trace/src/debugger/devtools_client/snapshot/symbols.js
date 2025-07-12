@@ -1,4 +1,4 @@
-'use stict'
+'use strict'
 
 module.exports = {
   collectionSizeSym: Symbol('datadog.collectionSize'),

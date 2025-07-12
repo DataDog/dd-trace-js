@@ -41,7 +41,7 @@ function handleResult (result, req, res, abortController, config, raspRule) {
   const ruleTriggered = !!result?.events?.length
 
   if (generateStackTraceAction && enabled && canReportStackTrace(rootSpan, maxStackTraces)) {
-    const frames = getCallsiteFrames(maxDepth)
+    const frames = getCallsiteFrames(maxDepth, handleResult)
 
     reportStackTrace(
       rootSpan,

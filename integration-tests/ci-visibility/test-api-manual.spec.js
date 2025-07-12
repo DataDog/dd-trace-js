@@ -2,17 +2,16 @@
 
 const { exec } = require('child_process')
 
-const getPort = require('get-port')
 const { assert } = require('chai')
 
 const {
   createSandbox,
   getCiVisAgentlessConfig
-} = require('./helpers')
-const { FakeCiVisIntake } = require('./ci-visibility-intake')
+} = require('../helpers')
+const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const {
   TEST_STATUS
-} = require('../packages/dd-trace/src/plugins/util/test')
+} = require('../../packages/dd-trace/src/plugins/util/test')
 
 describe('test-api-manual', () => {
   let sandbox, cwd, receiver, childProcess
@@ -27,8 +26,7 @@ describe('test-api-manual', () => {
   })
 
   beforeEach(async function () {
-    const port = await getPort()
-    receiver = await new FakeCiVisIntake(port).start()
+    receiver = await new FakeCiVisIntake().start()
   })
 
   afterEach(async () => {

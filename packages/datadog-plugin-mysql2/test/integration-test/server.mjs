@@ -2,7 +2,7 @@ import 'dd-trace/init.js'
 import mysql from 'mysql2'
 
 const conn = {
-  host: 'localhost',
+  host: '127.0.0.1',
   user: 'root',
   database: 'db',
   port: 3306

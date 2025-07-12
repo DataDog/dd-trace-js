@@ -13,6 +13,9 @@ app.get('/', async (req, res) => {
   res.end('OK')
 })
 
-const server = app.listen(process.env.APP_PORT || 0, () => {
+const server = app.listen(process.env.APP_PORT || 0, (error) => {
+  if (error) {
+    throw error
+  }
   process.send?.({ port: server.address().port })
 })

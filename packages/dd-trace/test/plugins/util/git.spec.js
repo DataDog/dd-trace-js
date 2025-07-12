@@ -23,7 +23,14 @@ const {
   GIT_COMMIT_AUTHOR_DATE,
   GIT_COMMIT_AUTHOR_EMAIL,
   GIT_COMMIT_AUTHOR_NAME,
-  CI_WORKSPACE_PATH
+  CI_WORKSPACE_PATH,
+  GIT_COMMIT_HEAD_MESSAGE,
+  GIT_COMMIT_HEAD_AUTHOR_DATE,
+  GIT_COMMIT_HEAD_AUTHOR_EMAIL,
+  GIT_COMMIT_HEAD_AUTHOR_NAME,
+  GIT_COMMIT_HEAD_COMMITER_DATE,
+  GIT_COMMIT_HEAD_COMMITER_EMAIL,
+  GIT_COMMIT_HEAD_COMMITER_NAME
 } = require('../../../src/plugins/util/tags')
 
 const { getGitMetadata, unshallowRepository, getGitDiff } = proxyquire('../../../src/plugins/util/git',
@@ -63,7 +70,8 @@ describe('git', () => {
       branch: 'myBranch',
       commitMessage: 'myCommitMessage',
       authorName: 'ciAuthorName',
-      ciWorkspacePath: 'ciWorkspacePath'
+      ciWorkspacePath: 'ciWorkspacePath',
+      headCommitSha: 'headCommitSha'
     }
     const metadata = getGitMetadata(ciMetadata)
 
@@ -83,6 +91,11 @@ describe('git', () => {
     expect(execFileSyncStub).not.to.have.been.calledWith('git', ['rev-parse', 'HEAD'])
     expect(execFileSyncStub).not.to.have.been.calledWith('git', ['rev-parse', '--abbrev-ref', 'HEAD'])
     expect(execFileSyncStub).not.to.have.been.calledWith('git', ['rev-parse', '--show-toplevel'])
+    expect(execFileSyncStub).to.have.been.calledWith('git', ['show', '-s', '--format=%B', ciMetadata.headCommitSha])
+    expect(execFileSyncStub).to.have.been.calledWith(
+      'git',
+      ['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI', ciMetadata.headCommitSha]
+    )
   })
 
   it('does not crash if git is not available', () => {
@@ -102,6 +115,8 @@ describe('git', () => {
   it('returns all git metadata is git is available', () => {
     const commitMessage = `multi line
       commit message`
+    const headCommitMessage = `multi line
+      head commit message`
 
     execFileSyncStub
       .onCall(0).returns(
@@ -112,9 +127,15 @@ describe('git', () => {
       .onCall(2).returns('gitBranch')
       .onCall(3).returns('gitCommitSHA')
       .onCall(4).returns('ciWorkspacePath')
-      .onCall(5).returns('https://github.com/datadog/safe-repository.git')
+      .onCall(5).returns(false)
+      .onCall(6).returns(headCommitMessage)
+      .onCall(7).returns(
+        'git head author,git.head.author@email.com,2022-02-14T16:22:03-05:00,' +
+        'git head committer,git.head.committer@email.com,2022-02-14T16:23:03-05:00'
+      )
+      .onCall(8).returns('https://github.com/datadog/safe-repository.git')
 
-    const metadata = getGitMetadata({ tag: 'ciTag' })
+    const metadata = getGitMetadata({ tag: 'ciTag', headCommitSha: 'headCommitSha' })
 
     expect(metadata).to.eql({
       [GIT_BRANCH]: 'gitBranch',
@@ -128,6 +149,13 @@ describe('git', () => {
       [GIT_COMMIT_COMMITTER_EMAIL]: 'git.committer@email.com',
       [GIT_COMMIT_COMMITTER_DATE]: '2022-02-14T16:23:03-05:00',
       [GIT_COMMIT_COMMITTER_NAME]: 'git committer',
+      [GIT_COMMIT_HEAD_MESSAGE]: headCommitMessage,
+      [GIT_COMMIT_HEAD_AUTHOR_DATE]: '2022-02-14T16:22:03-05:00',
+      [GIT_COMMIT_HEAD_AUTHOR_EMAIL]: 'git.head.author@email.com',
+      [GIT_COMMIT_HEAD_AUTHOR_NAME]: 'git head author',
+      [GIT_COMMIT_HEAD_COMMITER_DATE]: '2022-02-14T16:23:03-05:00',
+      [GIT_COMMIT_HEAD_COMMITER_EMAIL]: 'git.head.committer@email.com',
+      [GIT_COMMIT_HEAD_COMMITER_NAME]: 'git head committer',
       [CI_WORKSPACE_PATH]: 'ciWorkspacePath'
     })
 
@@ -292,7 +320,29 @@ describe('unshallowRepository', () => {
       'daede5785233abb1a3cb76b9453d4eb5b98290b3'
     ]
 
-    unshallowRepository()
+    unshallowRepository(false)
+    expect(execFileSyncStub).to.have.been.calledWith('git', options)
+  })
+
+  it('works for the usual case with parentOnly', () => {
+    execFileSyncStub
+      .onCall(0).returns(
+        'git version 2.39.0'
+      )
+      .onCall(1).returns('origin')
+      .onCall(2).returns('daede5785233abb1a3cb76b9453d4eb5b98290b3')
+
+    const options = [
+      'fetch',
+      '--deepen=1',
+      '--update-shallow',
+      '--filter=blob:none',
+      '--recurse-submodules=no',
+      'origin',
+      'daede5785233abb1a3cb76b9453d4eb5b98290b3'
+    ]
+
+    unshallowRepository(true)
     expect(execFileSyncStub).to.have.been.calledWith('git', options)
   })
 
@@ -316,7 +366,7 @@ describe('unshallowRepository', () => {
       'origin/master'
     ]
 
-    unshallowRepository()
+    unshallowRepository(false)
     expect(execFileSyncStub).to.have.been.calledWith('git', options)
   })
 
@@ -340,7 +390,7 @@ describe('unshallowRepository', () => {
       'origin'
     ]
 
-    unshallowRepository()
+    unshallowRepository(false)
     expect(execFileSyncStub).to.have.been.calledWith('git', options)
   })
 })

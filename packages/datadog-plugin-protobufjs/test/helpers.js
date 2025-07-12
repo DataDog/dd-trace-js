@@ -1,3 +1,5 @@
+'use strict'
+
 async function loadMessage (protobuf, messageTypeName) {
   if (messageTypeName === 'OtherMessage') {
     const root = await protobuf.load('packages/datadog-plugin-protobufjs/test/schemas/other_message.proto')

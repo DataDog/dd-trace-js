@@ -1,3 +1,5 @@
+'use strict'
+
 const { expect } = require('chai')
 
 it('no describe can do stuff', () => {

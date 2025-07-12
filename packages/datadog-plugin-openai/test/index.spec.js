@@ -42,7 +42,7 @@ describe('Plugin', () => {
 
       after(() => {
         if (semver.satisfies(realVersion, '>=5.0.0') && NODE_MAJOR < 20) {
-          global.File = globalFile
+          global.File = globalFile // eslint-disable-line n/no-unsupported-features/node-builtins
         }
 
         return agent.close({ ritmReset: false })
@@ -62,8 +62,8 @@ describe('Plugin', () => {
            * Error: `File` is not defined as a global, which is required for file uploads.
            * Update to Node 20 LTS or newer, or set `globalThis.File` to `import('node:buffer').File`.
            */
-          globalFile = global.File
-          global.File = require('node:buffer').File
+          globalFile = global.File // eslint-disable-line n/no-unsupported-features/node-builtins
+          global.File = require('node:buffer').File // eslint-disable-line n/no-unsupported-features/node-builtins
         }
 
         if (semver.satisfies(realVersion, '>=4.0.0')) {
