@@ -161,6 +161,10 @@
     {
       "name": "@fastify/cookie",
       "versions": [">=6"]
+    },
+    {
+      "name": "@fastify/multipart",
+      "versions": [">=6"]
     }
   ],
   "generic-pool": [
@@ -255,6 +259,12 @@
     {
       "name": "@hapi/boom",
       "versions": ["9.1.4"]
+    }
+  ],
+  "hono": [
+    {
+      "name": "@hono/node-server",
+      "versions": ["1.15.0"]
     }
   ],
   "jest": [

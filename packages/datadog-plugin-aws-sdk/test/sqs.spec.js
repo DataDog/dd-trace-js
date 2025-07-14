@@ -99,10 +99,10 @@ describe('Plugin', () => {
         )
 
         withNamingSchema(
-          (done) => sqs.sendMessage({
+          () => new Promise((resolve, reject) => sqs.sendMessage({
             MessageBody: 'test body',
             QueueUrl
-          }, (err) => err && done(err)),
+          }, (err) => err ? reject(err) : resolve())),
           rawExpectedSchema.producer,
           {
             desc: 'producer'
@@ -110,17 +110,17 @@ describe('Plugin', () => {
         )
 
         withNamingSchema(
-          (done) => sqs.sendMessage({
+          () => new Promise((resolve, reject) => sqs.sendMessage({
             MessageBody: 'test body',
             QueueUrl
           }, (err) => {
-            if (err) return done(err)
+            if (err) return reject(err)
 
             sqs.receiveMessage({
               QueueUrl,
               MessageAttributeNames: ['.*']
-            }, (err) => err && done(err))
-          }),
+            }, (err) => err ? reject(err) : resolve())
+          })),
           rawExpectedSchema.consumer,
           {
             desc: 'consumer'
@@ -128,7 +128,9 @@ describe('Plugin', () => {
         )
 
         withNamingSchema(
-          (done) => sqs.listQueues({}, (err) => err && done(err)),
+          () => new Promise((resolve, reject) => {
+            sqs.listQueues({}, (err) => err ? reject(err) : resolve())
+          }),
           rawExpectedSchema.client,
           {
             desc: 'client'
