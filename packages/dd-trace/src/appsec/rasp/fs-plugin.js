@@ -14,7 +14,7 @@ const enabledFor = {
 
 let fsPlugin
 
-function storeToStart (fsProps, store = storage('legacy').getStore()) {
+function getStoreToStart (fsProps, store = storage('legacy').getStore()) {
   if (store && !store.fs?.opExcluded) {
     return {
       ...store,
@@ -46,12 +46,12 @@ class AppsecFsPlugin extends Plugin {
   _onFsOperationStart () {
     const store = storage('legacy').getStore()
     if (store) {
-      return storeToStart({ root: store.fs?.root === undefined }, store)
+      return getStoreToStart({ root: store.fs?.root === undefined }, store)
     }
   }
 
   _onResponseRenderStart () {
-    return storeToStart({ opExcluded: true })
+    return getStoreToStart({ opExcluded: true })
   }
 
   _onFsOperationFinishOrRenderEnd () {
