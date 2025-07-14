@@ -13,7 +13,7 @@ describe('Plugin', () => {
     OPENAI_API_KEY: '<not-a-real-key>'
   })
 
-  withVersions('ai', 'ai', version => {
+  withVersions('ai', 'ai', (version, _, moduleVersion) => {
     let ai
     let openai
     let zod
@@ -23,9 +23,6 @@ describe('Plugin', () => {
     after(() => agent.close({ ritmReset: false }))
 
     beforeEach(function () {
-      const mod = require(`../../../versions/ai@${version}`)
-      const moduleVersion = mod.version()
-
       if (semifies(moduleVersion, '<4.0.2') && NODE_MAJOR < 22) {
         /**
          * Resolves the following error:
@@ -35,7 +32,7 @@ describe('Plugin', () => {
         this.skip()
       }
 
-      ai = mod.get()
+      ai = require(`../../../versions/ai@${version}`).get()
 
       const OpenAI = require('../../../versions/@ai-sdk/openai').get()
       openai = OpenAI.createOpenAI({

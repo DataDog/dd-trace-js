@@ -3,7 +3,7 @@
 const { parseModelId } = require('../../datadog-plugin-aws-sdk/src/services/bedrockruntime/utils')
 
 /**
- * Get the model provider from the span tags.
+ * Get the model provider from the span tags or attributes.
  * This is normalized to LLM Observability model provider standards.
  *
  * @param {Record<string, string>} tags

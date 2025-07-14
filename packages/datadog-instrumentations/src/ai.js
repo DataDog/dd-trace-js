@@ -69,14 +69,8 @@ function wrapTracer (tracer) {
   shimmer.wrap(tracer, 'startActiveSpan', function (startActiveSpan) {
     return function () {
       const name = arguments[0]
+      const options = arguments.length > 2 ? (arguments[1] ?? {}) : {} // startActiveSpan(name, fn)
       const cb = arguments[arguments.length - 1]
-
-      let options = {}
-      if (arguments.length === 3) {
-        options = arguments[1]
-      } else if (arguments.length === 4) {
-        options = arguments[2]
-      }
 
       const ctx = {
         name,

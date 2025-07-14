@@ -38,6 +38,12 @@ const MODEL_METADATA_KEYS = new Set([
   'stop_sequences'
 ])
 
+/**
+ * Get the span tags from the context (either the attributes or the span tags).
+ *
+ * @param {Record<string, any>} ctx
+ * @returns {Record<string, any>}
+ */
 function getSpanTags (ctx) {
   const span = ctx.currentStore?.span
   const carrier = ctx.attributes ?? span?.context()._tags ?? {}
@@ -194,7 +200,7 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
   }
 
   getLLMObsSpanRegisterOptions (ctx) {
-    const span = ctx.currentStore.span
+    const span = ctx.currentStore?.span
     const operation = getOperation(span)
     const kind = SPAN_NAME_TO_KIND_MAPPING[operation]
     if (!kind) return
@@ -203,7 +209,7 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
   }
 
   setLLMObsTags (ctx) {
-    const span = ctx.currentStore.span
+    const span = ctx.currentStore?.span
     if (!span) return
 
     const operation = getOperation(span)
@@ -265,6 +271,8 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
 
   setEmbeddingTags (span, tags) {
     const inputs = tags['ai.values']
+    if (!Array.isArray(inputs)) return
+
     const parsedInputs = inputs.map(input => getJsonStringValue(input, ''))
 
     const embeddingsOutput = tags['ai.embeddings']
