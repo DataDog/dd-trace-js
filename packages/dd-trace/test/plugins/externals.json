@@ -75,6 +75,12 @@
       "versions": ["^4"]
     }
   ],
+  "child_process": [
+    {
+      "name": "bluebird",
+      "versions": ["^3"]
+    }
+  ],
   "cookie-parser": [
     {
       "name": "express",
@@ -168,6 +174,10 @@
     },
     {
       "name": "@fastify/cookie",
+      "versions": [">=6"]
+    },
+    {
+      "name": "@fastify/multipart",
       "versions": [">=6"]
     }
   ],
@@ -263,6 +273,12 @@
     {
       "name": "@hapi/boom",
       "versions": ["9.1.4"]
+    }
+  ],
+  "hono": [
+    {
+      "name": "@hono/node-server",
+      "versions": ["1.15.0"]
     }
   ],
   "jest": [

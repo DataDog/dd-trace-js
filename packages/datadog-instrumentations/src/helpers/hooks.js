@@ -59,6 +59,7 @@ module.exports = {
   grpc: () => require('../grpc'),
   handlebars: () => require('../handlebars'),
   hapi: () => require('../hapi'),
+  hono: { esmFirst: true, fn: () => require('../hono') },
   http: () => require('../http'),
   http2: () => require('../http2'),
   https: () => require('../http'),

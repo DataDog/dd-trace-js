@@ -186,6 +186,7 @@ interface Plugins {
   "graphql": tracer.plugins.graphql;
   "grpc": tracer.plugins.grpc;
   "hapi": tracer.plugins.hapi;
+  "hono": tracer.plugins.hono;
   "http": tracer.plugins.http;
   "http2": tracer.plugins.http2;
   "ioredis": tracer.plugins.ioredis;
@@ -484,10 +485,14 @@ declare namespace tracer {
     flushMinSpans?: number;
 
     /**
-     * Whether to enable runtime metrics.
+     * Whether to enable runtime metrics, or an object specifying whether to enable specific metric types.
      * @default false
      */
-    runtimeMetrics?: boolean
+    runtimeMetrics?: boolean | {
+      enabled?: boolean,
+      gc?: boolean,
+      eventLoop?: boolean
+    }
 
     /**
      * Custom function for DNS lookups when sending requests to the agent.
@@ -1601,6 +1606,12 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [hono](https://hono.dev/) module.
+     */
+    interface hono extends HttpServer {}
+
+    /**
+     * This plugin automatically instruments the
      * [http](https://nodejs.org/api/http.html) module.
      *
      * By default any option set at the root will apply to both clients and
@@ -1935,6 +1946,10 @@ declare namespace tracer {
        * The database monitoring propagation mode to be used for this plugin.
        */
       dbmPropagationMode?: string;
+      /**
+       * Appends the SQL comment propagation to the query string. Prepends the comment if `false`. For long query strings, the appended propagation comment might be truncated, causing loss of correlation between the query and trace.
+       */
+      appendComment?: boolean;
     }
 
     /**

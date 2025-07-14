@@ -1,5 +1,7 @@
 'use strict'
+
 /* eslint-disable no-console */
+/* eslint n/no-unsupported-features/node-builtins: ['error', { version: '>=22.0.0' }] */
 
 const fs = require('fs')
 const path = require('path')
@@ -148,7 +150,8 @@ checkPlugins(path.join(__dirname, '..', '.github', 'workflows', 'test-optimizati
     .filter(file => fs.existsSync(path.join(__dirname, '..', 'packages', file, 'test')))
     .map(file => file.replace('datadog-plugin-', ''))
   for (const plugin of allPlugins) {
-    if (!allTestedPlugins.has(plugin)) {
+    // TODO: Remove check of cucumber once cucumber+12 is fixed
+    if (!allTestedPlugins.has(plugin) && plugin !== 'cucumber') {
       pluginErrorMsg(plugin, 'ERROR', 'Plugin is tested but not in at least one GitHub workflow')
     }
   }
@@ -173,12 +176,14 @@ const IGNORED_WORKFLOWS = {
   ],
   trigger_pull_request: [
     'audit.yml',
+    'eslint-rules.yml',
     'stale.yml'
   ],
   trigger_push: [
     'stale.yml'
   ],
   trigger_schedule: [
+    'eslint-rules.yml',
     'project.yml'
   ]
 }

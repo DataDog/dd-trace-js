@@ -1,3 +1,5 @@
+'use strict'
+
 const { PAYLOAD_TAGGING_MAX_TAGS } = require('../constants')
 
 const redactedKeys = new Set([
@@ -36,7 +38,7 @@ function tagsFromObject (object, opts) {
       return
     }
 
-    if (depth >= maxDepth && typeof object === 'object') {
+    if (depth >= maxDepth && object !== null && typeof object === 'object') {
       tagCount += 1
       result[prefix] = truncated
       return
@@ -65,7 +67,7 @@ function tagsFromObject (object, opts) {
       result[prefix] = object.slice(0, 5000)
     }
 
-    if (typeof object === 'object') {
+    if (typeof object === 'object') { // eslint-disable-line eslint-rules/eslint-safe-typeof-object
       for (const [key, value] of Object.entries(object)) {
         if (redactedKeys.has(key.toLowerCase())) {
           tagCount += 1

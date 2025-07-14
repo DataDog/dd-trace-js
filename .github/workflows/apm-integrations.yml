@@ -438,6 +438,14 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/plugins/test
 
+  hono:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: hono
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/plugins/test
+
   http:
     strategy:
       matrix:
@@ -482,6 +490,9 @@ jobs:
       - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
 
   kafkajs:
+    strategy:
+      matrix:
+        node-version: ['oldest', 'latest']
     runs-on: ubuntu-latest
     services:
       kafka:
@@ -506,7 +517,17 @@ jobs:
       SERVICES: kafka
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/plugins/test
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node
+        with:
+          version: ${{ matrix.node-version }}
+      - uses: ./.github/actions/install
+      - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+        with:
+          suffix: plugins-${{ github.job }}-${{ matrix.node-version }}
+      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
 
   koa:
     runs-on: ubuntu-latest
@@ -771,14 +792,12 @@ jobs:
       SERVICES: oracledb
       DD_TEST_AGENT_URL: http://testagent:9126
       DD_INJECT_FORCE: 'true'
-      # Needed to fix issue with `actions/checkout@v3: https://github.com/actions/checkout/issues/1590
-      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     steps:
       # https://github.com/actions/runner/issues/2906#issuecomment-2109514798
       - name: Install Node for runner (with glibc 2.17 compatibility)
         run: |
-          curl -LO https://unofficial-builds.nodejs.org/download/release/v20.9.0/node-v20.9.0-linux-x64-glibc-217.tar.xz
-          tar -xf node-v20.9.0-linux-x64-glibc-217.tar.xz --strip-components 1 -C /node20217
+          curl -LO https://unofficial-builds.nodejs.org/download/release/v20.19.3/node-v20.19.3-linux-x64-glibc-217.tar.xz
+          tar -xf node-v20.19.3-linux-x64-glibc-217.tar.xz --strip-components 1 -C /node20217
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/node
         with:

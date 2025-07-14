@@ -18,7 +18,7 @@ class LangChainLLMHandler extends LangChainLanguageModelHandler {
     const identifyingParams = (typeof instance._identifyingParams === 'function' && instance._identifyingParams()) || {}
     for (const [param, val] of Object.entries(identifyingParams)) {
       if (param.toLowerCase().includes('apikey') || param.toLowerCase().includes('apitoken')) continue
-      if (typeof val === 'object') {
+      if (val !== null && typeof val === 'object') {
         for (const [key, value] of Object.entries(val)) {
           tags[`langchain.request.${provider}.parameters.${param}.${key}`] = value
         }

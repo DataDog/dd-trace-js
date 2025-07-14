@@ -1,7 +1,8 @@
 'use strict'
 
-const assert = require('assert')
+const assert = require('node:assert')
 
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE } = require('../../dd-trace/src/constants')
@@ -72,6 +73,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('redis.raw_command', 'GET foo')
               expect(traces[0][0].meta).to.have.property('component', 'redis')
+              expect(traces[0][0].meta).to.have.property('_dd.integration', 'redis')
               expect(traces[0][0].meta).to.have.property('out.host', '127.0.0.1')
               expect(traces[0][0].metrics).to.have.property('network.destination.port', 6379)
             })
@@ -83,8 +85,10 @@ describe('Plugin', () => {
         withPeerService(
           () => tracer,
           'redis',
-          (done) => client.get('bar').catch(done),
-          '127.0.0.1', 'out.host')
+          () => client.get('bar'),
+          '127.0.0.1',
+          'out.host'
+        )
 
         it('should handle errors', async () => {
           let error
@@ -129,6 +133,15 @@ describe('Plugin', () => {
           async () => client.get('foo'),
           rawExpectedSchema.outbound
         )
+
+        it('should restore the parent context in the callback', async () => {
+          const span = {}
+          tracer.scope().activate(span, () => {
+            client.get('foo', () => {
+              expect(span.context().active()).to.equal(span)
+            })
+          })
+        })
       })
 
       describe('with configuration', () => {
@@ -168,7 +181,7 @@ describe('Plugin', () => {
         withPeerService(
           () => tracer,
           'redis',
-          (done) => client.get('bar').catch(done),
+          () => client.get('bar'),
           'localhost', 'out.host')
 
         it('should be able to filter commands', async () => {

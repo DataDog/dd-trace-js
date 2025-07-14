@@ -16,7 +16,7 @@ const { updateConfig } = require('./telemetry')
 const telemetryMetrics = require('./telemetry/metrics')
 const { isInServerlessEnvironment, getIsGCPFunction, getIsAzureFunction } = require('./serverless')
 const {
-  ORIGIN_KEY, GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES, INSTRUMENTED_BY_SSI
+  ORIGIN_KEY, GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES
 } = require('./constants')
 const { appendRules } = require('./payload-tagging/config')
 const { getEnvironmentVariable, getEnvironmentVariables } = require('./config-helper')
@@ -311,6 +311,18 @@ class Config {
       }
     }
 
+    if (typeof options.runtimeMetrics === 'boolean') {
+      options.runtimeMetrics = {
+        enabled: options.runtimeMetrics
+      }
+    }
+
+    if (typeof options.runtimeMetrics?.gc === 'boolean') {
+      options.runtimeMetrics.gc = {
+        enabled: options.runtimeMetrics.gc
+      }
+    }
+
     const DD_INSTRUMENTATION_INSTALL_ID = coalesce(
       getEnvironmentVariable('DD_INSTRUMENTATION_INSTALL_ID'),
       null
@@ -517,6 +529,9 @@ class Config {
     defaults['grpc.client.error.statuses'] = GRPC_CLIENT_ERROR_STATUSES
     defaults['grpc.server.error.statuses'] = GRPC_SERVER_ERROR_STATUSES
     defaults.headerTags = []
+    defaults['heapSnapshot.count'] = 0
+    defaults['heapSnapshot.destination'] = ''
+    defaults['heapSnapshot.interval'] = 3600
     defaults.hostname = '127.0.0.1'
     defaults['iast.dbRowsToTaint'] = 1
     defaults['iast.deduplicationEnabled'] = true
@@ -574,7 +589,9 @@ class Config {
     defaults['remoteConfig.enabled'] = true
     defaults['remoteConfig.pollInterval'] = 5 // seconds
     defaults.reportHostname = false
-    defaults.runtimeMetrics = false
+    defaults['runtimeMetrics.enabled'] = false
+    defaults['runtimeMetrics.eventLoop'] = true
+    defaults['runtimeMetrics.gc'] = true
     defaults.runtimeMetricsRuntimeId = false
     defaults.sampleRate = undefined
     defaults['sampler.rateLimit'] = 100
@@ -651,7 +668,7 @@ class Config {
     this._setBoolean(obj, 'logInjection', DD_LOGS_INJECTION)
     const profilingEnabled = normalizeProfilingEnabledValue(DD_PROFILING_ENABLED)
     this._setString(obj, 'profiling.enabled', profilingEnabled)
-    this._setBoolean(obj, 'runtimeMetrics', DD_RUNTIME_METRICS_ENABLED)
+    this._setBoolean(obj, 'runtimeMetrics.enabled', DD_RUNTIME_METRICS_ENABLED)
     this._setString(obj, 'service', DD_SERVICE)
     this._setString(obj, 'version', DD_VERSION)
   }
@@ -699,6 +716,9 @@ class Config {
       DD_GRPC_CLIENT_ERROR_STATUSES,
       DD_GRPC_SERVER_ERROR_STATUSES,
       JEST_WORKER_ID,
+      DD_HEAP_SNAPSHOT_COUNT,
+      DD_HEAP_SNAPSHOT_DESTINATION,
+      DD_HEAP_SNAPSHOT_INTERVAL,
       DD_IAST_DB_ROWS_TO_TAINT,
       DD_IAST_DEDUPLICATION_ENABLED,
       DD_IAST_ENABLED,
@@ -729,6 +749,8 @@ class Config {
       DD_REMOTE_CONFIGURATION_ENABLED,
       DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS,
       DD_RUNTIME_METRICS_ENABLED,
+      DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED,
+      DD_RUNTIME_METRICS_GC_ENABLED,
       DD_SERVICE,
       DD_SERVICE_MAPPING,
       DD_SITE,
@@ -880,6 +902,9 @@ class Config {
     this._setIntegerRangeSet(env, 'grpc.client.error.statuses', DD_GRPC_CLIENT_ERROR_STATUSES)
     this._setIntegerRangeSet(env, 'grpc.server.error.statuses', DD_GRPC_SERVER_ERROR_STATUSES)
     this._setArray(env, 'headerTags', DD_TRACE_HEADER_TAGS)
+    env['heapSnapshot.count'] = maybeInt(DD_HEAP_SNAPSHOT_COUNT)
+    this._setString(env, 'heapSnapshot.destination', DD_HEAP_SNAPSHOT_DESTINATION)
+    env['heapSnapshot.interval'] = maybeInt(DD_HEAP_SNAPSHOT_INTERVAL)
     this._setString(env, 'hostname', DD_AGENT_HOST)
     env['iast.dbRowsToTaint'] = maybeInt(DD_IAST_DB_ROWS_TO_TAINT)
     this._setBoolean(env, 'iast.deduplicationEnabled', DD_IAST_DEDUPLICATION_ENABLED)
@@ -900,6 +925,7 @@ class Config {
     this._setString(env, 'iast.telemetryVerbosity', DD_IAST_TELEMETRY_VERBOSITY)
     this._setBoolean(env, 'iast.stackTrace.enabled', DD_IAST_STACK_TRACE_ENABLED)
     this._setArray(env, 'injectionEnabled', DD_INJECTION_ENABLED)
+    this._setString(env, 'instrumentationSource', DD_INJECTION_ENABLED ? 'ssi' : 'manual')
     this._setBoolean(env, 'injectForce', DD_INJECT_FORCE)
     this._setBoolean(env, 'isAzureFunction', getIsAzureFunction())
     this._setBoolean(env, 'isGCPFunction', getIsGCPFunction())
@@ -950,8 +976,10 @@ class Config {
     const otelSetRuntimeMetrics = String(OTEL_METRICS_EXPORTER).toLowerCase() === 'none'
       ? false
       : undefined
-    this._setBoolean(env, 'runtimeMetrics', DD_RUNTIME_METRICS_ENABLED ||
+    this._setBoolean(env, 'runtimeMetrics.enabled', DD_RUNTIME_METRICS_ENABLED ||
     otelSetRuntimeMetrics)
+    this._setBoolean(env, 'runtimeMetrics.eventLoop', DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED)
+    this._setBoolean(env, 'runtimeMetrics.gc', DD_RUNTIME_METRICS_GC_ENABLED)
     this._setBoolean(env, 'runtimeMetricsRuntimeId', DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED)
     this._setArray(env, 'sampler.spanSamplingRules', reformatSpanSamplingRules(coalesce(
       maybeJsonFile(DD_SPAN_SAMPLING_RULES_FILE),
@@ -1123,9 +1151,6 @@ class Config {
     opts['iast.securityControlsConfiguration'] = options.iast?.securityControlsConfiguration
     this._setBoolean(opts, 'iast.stackTrace.enabled', options.iast?.stackTrace?.enabled)
     this._setString(opts, 'iast.telemetryVerbosity', options.iast && options.iast.telemetryVerbosity)
-    if (options[INSTRUMENTED_BY_SSI]) {
-      this._setString(opts, 'instrumentationSource', options[INSTRUMENTED_BY_SSI])
-    }
     this._setBoolean(opts, 'isCiVisibility', options.isCiVisibility)
     this._setBoolean(opts, 'legacyBaggageEnabled', options.legacyBaggageEnabled)
     this._setBoolean(opts, 'llmobs.agentlessEnabled', options.llmobs?.agentlessEnabled)
@@ -1147,7 +1172,9 @@ class Config {
       this._optsUnprocessed['remoteConfig.pollInterval'] = options.remoteConfig.pollInterval
     }
     this._setBoolean(opts, 'reportHostname', options.reportHostname)
-    this._setBoolean(opts, 'runtimeMetrics', options.runtimeMetrics)
+    this._setBoolean(opts, 'runtimeMetrics.enabled', options.runtimeMetrics?.enabled)
+    this._setBoolean(opts, 'runtimeMetrics.eventLoop', options.runtimeMetrics?.eventLoop)
+    this._setBoolean(opts, 'runtimeMetrics.gc', options.runtimeMetrics?.gc?.enabled)
     this._setBoolean(opts, 'runtimeMetricsRuntimeId', options.runtimeMetricsRuntimeId)
     this._setArray(opts, 'sampler.spanSamplingRules', reformatSpanSamplingRules(options.spanSamplingRules))
     this._setUnit(opts, 'sampleRate', coalesce(options.sampleRate, options.ingestion.sampleRate))

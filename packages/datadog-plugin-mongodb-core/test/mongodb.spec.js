@@ -2,6 +2,7 @@
 
 const sinon = require('sinon')
 const semver = require('semver')
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
@@ -82,8 +83,9 @@ describe('Plugin', () => {
           withPeerService(
             () => tracer,
             'mongodb-core',
-            () => collection.insertOne({ a: 1 }, {}, () => {}),
-            'test', 'peer.service'
+            (done) => collection.insertOne({ a: 1 }, {}, done),
+            'test',
+            'peer.service'
           )
 
           it('should do automatic instrumentation', done => {

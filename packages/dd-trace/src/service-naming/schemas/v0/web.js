@@ -1,3 +1,5 @@
+'use strict'
+
 const { identityService, httpPluginClientService, awsServiceV0 } = require('../util')
 
 const web = {
