@@ -40,7 +40,7 @@ let promise: Promise<void>;
 ddTrace.init();
 tracer.init({
   apmTracingEnabled: false,
-  logInjection: true,
+  logInjection: 'structured',
   startupLogs: false,
   env: 'test',
   version: '1.0.0',
