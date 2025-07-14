@@ -179,7 +179,7 @@ describe('Config', () => {
     expect(config).to.have.property('service', 'service')
     expect(config).to.have.property('logLevel', 'error')
     expect(config).to.have.property('sampleRate', 0.5)
-    expect(config).to.have.property('runtimeMetrics', true)
+    expect(config).to.have.nested.property('runtimeMetrics.enabled', true)
     expect(config.tags).to.include({ foo: 'bar', baz: 'qux' })
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['b3', 'tracecontext'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['b3', 'tracecontext'])
@@ -209,7 +209,7 @@ describe('Config', () => {
     expect(config).to.have.property('service', 'otel_service')
     expect(config).to.have.property('logLevel', 'debug')
     expect(config).to.have.property('sampleRate', 0.1)
-    expect(config).to.have.property('runtimeMetrics', false)
+    expect(config).to.have.nested.property('runtimeMetrics.enabled', false)
     expect(config.tags).to.include({ foo: 'bar1', baz: 'qux1' })
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['b3', 'datadog'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['b3', 'datadog'])
@@ -293,6 +293,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('dogstatsd.hostname', '127.0.0.1')
     expect(config).to.have.nested.property('dogstatsd.port', '8125')
     expect(config).to.have.nested.property('dynamicInstrumentation.enabled', false)
+    expect(config).to.have.nested.property('dynamicInstrumentation.probeFile', undefined)
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactedIdentifiers', [])
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactionExcludedIdentifiers', [])
     expect(config).to.have.nested.property('dynamicInstrumentation.uploadIntervalSeconds', 1)
@@ -303,6 +304,9 @@ describe('Config', () => {
     expect(config).to.have.property('flushMinSpans', 1000)
     expect(config.grpc.client.error.statuses).to.deep.equal(GRPC_CLIENT_ERROR_STATUSES)
     expect(config.grpc.server.error.statuses).to.deep.equal(GRPC_SERVER_ERROR_STATUSES)
+    expect(config).to.have.nested.property('heapSnapshot.count', 0)
+    expect(config).to.have.nested.property('heapSnapshot.destination', '')
+    expect(config).to.have.nested.property('heapSnapshot.interval', 3600)
     expect(config).to.have.nested.property('iast.enabled', false)
     expect(config).to.have.nested.property('iast.redactionEnabled', true)
     expect(config).to.have.nested.property('iast.redactionNamePattern', null)
@@ -327,7 +331,9 @@ describe('Config', () => {
     expect(config).to.have.nested.property('remoteConfig.enabled', true)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 5)
     expect(config).to.have.property('reportHostname', false)
-    expect(config).to.have.property('runtimeMetrics', false)
+    expect(config).to.have.nested.property('runtimeMetrics.enabled', false)
+    expect(config).to.have.nested.property('runtimeMetrics.eventLoop', true)
+    expect(config).to.have.nested.property('runtimeMetrics.gc', true)
     expect(config).to.have.property('runtimeMetricsRuntimeId', false)
     expect(config).to.have.property('sampleRate', undefined)
     expect(config).to.have.property('scope', undefined)
@@ -388,6 +394,7 @@ describe('Config', () => {
       { name: 'dogstatsd.port', value: '8125', origin: 'default' },
       { name: 'dsmEnabled', value: false, origin: 'default' },
       { name: 'dynamicInstrumentation.enabled', value: false, origin: 'default' },
+      { name: 'dynamicInstrumentation.probeFile', value: undefined, origin: 'default' },
       { name: 'dynamicInstrumentation.redactedIdentifiers', value: [], origin: 'default' },
       { name: 'dynamicInstrumentation.redactionExcludedIdentifiers', value: [], origin: 'default' },
       { name: 'dynamicInstrumentation.uploadIntervalSeconds', value: 1, origin: 'default' },
@@ -452,7 +459,7 @@ describe('Config', () => {
       { name: 'remoteConfig.pollInterval', value: 5, origin: 'default' },
       { name: 'reportHostname', value: false, origin: 'default' },
       { name: 'reportHostname', value: false, origin: 'default' },
-      { name: 'runtimeMetrics', value: false, origin: 'default' },
+      { name: 'runtimeMetrics.enabled', value: false, origin: 'default' },
       { name: 'runtimeMetricsRuntimeId', value: false, origin: 'default' },
       { name: 'sampleRate', value: undefined, origin: 'default' },
       { name: 'sampler.rateLimit', value: 100, origin: 'default' },
@@ -549,12 +556,16 @@ describe('Config', () => {
     process.env.DD_DOGSTATSD_HOSTNAME = 'dsd-agent'
     process.env.DD_DOGSTATSD_PORT = '5218'
     process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
+    process.env.DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE = 'probes.json'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS = 'foo,bar'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS = 'a,b,c'
     process.env.DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS = '0.1'
     process.env.DD_ENV = 'test'
     process.env.DD_GRPC_CLIENT_ERROR_STATUSES = '3,13,400-403'
     process.env.DD_GRPC_SERVER_ERROR_STATUSES = '3,13,400-403'
+    process.env.DD_HEAP_SNAPSHOT_COUNT = '1'
+    process.env.DD_HEAP_SNAPSHOT_DESTINATION = '/tmp'
+    process.env.DD_HEAP_SNAPSHOT_INTERVAL = '1800'
     process.env.DD_IAST_DB_ROWS_TO_TAINT = 2
     process.env.DD_IAST_DEDUPLICATION_ENABLED = false
     process.env.DD_IAST_ENABLED = 'true'
@@ -568,7 +579,7 @@ describe('Config', () => {
     process.env.DD_IAST_STACK_TRACE_ENABLED = 'false'
     process.env.DD_IAST_TELEMETRY_VERBOSITY = 'DEBUG'
     process.env.DD_INJECT_FORCE = 'false'
-    process.env.DD_INJECTION_ENABLED = 'profiler'
+    process.env.DD_INJECTION_ENABLED = 'tracer'
     process.env.DD_INSTRUMENTATION_CONFIG_ID = 'abcdef123'
     process.env.DD_INSTRUMENTATION_INSTALL_ID = '68e75c48-57ca-4a12-adfc-575c4b05fcbe'
     process.env.DD_INSTRUMENTATION_INSTALL_TIME = '1703188212'
@@ -581,6 +592,8 @@ describe('Config', () => {
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = '42'
     process.env.DD_REMOTE_CONFIGURATION_ENABLED = 'false'
     process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
+    process.env.DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED = 'false'
+    process.env.DD_RUNTIME_METRICS_GC_ENABLED = 'false'
     process.env.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED = 'true'
     process.env.DD_SERVICE = 'service'
     process.env.DD_SERVICE_MAPPING = 'a:aa, b:bb'
@@ -662,6 +675,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('dogstatsd.hostname', 'dsd-agent')
     expect(config).to.have.nested.property('dogstatsd.port', '5218')
     expect(config).to.have.nested.property('dynamicInstrumentation.enabled', true)
+    expect(config).to.have.nested.property('dynamicInstrumentation.probeFile', 'probes.json')
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactedIdentifiers', ['foo', 'bar'])
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactionExcludedIdentifiers', ['a', 'b', 'c'])
     expect(config).to.have.nested.property('dynamicInstrumentation.uploadIntervalSeconds', 0.1)
@@ -671,6 +685,9 @@ describe('Config', () => {
     expect(config.grpc.client.error.statuses).to.deep.equal([3, 13, 400, 401, 402, 403])
     expect(config.grpc.server.error.statuses).to.deep.equal([3, 13, 400, 401, 402, 403])
     expect(config).to.have.property('hostname', 'agent')
+    expect(config).to.have.nested.property('heapSnapshot.count', 1)
+    expect(config).to.have.nested.property('heapSnapshot.destination', '/tmp')
+    expect(config).to.have.nested.property('heapSnapshot.interval', 1800)
     expect(config).to.have.nested.property('iast.dbRowsToTaint', 2)
     expect(config).to.have.nested.property('iast.deduplicationEnabled', false)
     expect(config).to.have.nested.property('iast.enabled', true)
@@ -696,7 +713,9 @@ describe('Config', () => {
     expect(config).to.have.nested.property('remoteConfig.enabled', false)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.property('reportHostname', true)
-    expect(config).to.have.property('runtimeMetrics', true)
+    expect(config).to.have.nested.property('runtimeMetrics.enabled', true)
+    expect(config).to.have.nested.property('runtimeMetrics.eventLoop', false)
+    expect(config).to.have.nested.property('runtimeMetrics.gc', false)
     expect(config).to.have.property('runtimeMetricsRuntimeId', true)
     expect(config).to.have.property('sampleRate', 0.5)
     expect(config).to.have.deep.nested.property('sampler', {
@@ -761,6 +780,7 @@ describe('Config', () => {
       { name: 'dogstatsd.hostname', value: 'dsd-agent', origin: 'env_var' },
       { name: 'dogstatsd.port', value: '5218', origin: 'env_var' },
       { name: 'dynamicInstrumentation.enabled', value: true, origin: 'env_var' },
+      { name: 'dynamicInstrumentation.probeFile', value: 'probes.json', origin: 'env_var' },
       { name: 'dynamicInstrumentation.redactedIdentifiers', value: ['foo', 'bar'], origin: 'env_var' },
       { name: 'dynamicInstrumentation.redactionExcludedIdentifiers', value: ['a', 'b', 'c'], origin: 'env_var' },
       { name: 'dynamicInstrumentation.uploadIntervalSeconds', value: 0.1, origin: 'env_var' },
@@ -785,8 +805,9 @@ describe('Config', () => {
       { name: 'iast.stackTrace.enabled', value: false, origin: 'env_var' },
       { name: 'iast.telemetryVerbosity', value: 'DEBUG', origin: 'env_var' },
       { name: 'injectForce', value: false, origin: 'env_var' },
-      { name: 'injectionEnabled', value: ['profiler'], origin: 'env_var' },
+      { name: 'injectionEnabled', value: ['tracer'], origin: 'env_var' },
       { name: 'instrumentation_config_id', value: 'abcdef123', origin: 'env_var' },
+      { name: 'instrumentationSource', value: 'ssi', origin: 'env_var' },
       { name: 'isGCPFunction', value: false, origin: 'env_var' },
       { name: 'langchain.spanCharLimit', value: 50, origin: 'env_var' },
       { name: 'langchain.spanPromptCompletionSampleRate', value: 0.5, origin: 'env_var' },
@@ -801,7 +822,7 @@ describe('Config', () => {
       { name: 'remoteConfig.enabled', value: false, origin: 'env_var' },
       { name: 'remoteConfig.pollInterval', value: '42', origin: 'env_var' },
       { name: 'reportHostname', value: true, origin: 'env_var' },
-      { name: 'runtimeMetrics', value: true, origin: 'env_var' },
+      { name: 'runtimeMetrics.enabled', value: true, origin: 'env_var' },
       { name: 'runtimeMetricsRuntimeId', value: true, origin: 'env_var' },
       { name: 'sampler.rateLimit', value: '-1', origin: 'env_var' },
       { name: 'sampler.rules', value: process.env.DD_TRACE_SAMPLING_RULES, origin: 'env_var' },
@@ -883,7 +904,7 @@ describe('Config', () => {
 
     expect(config).to.have.property('tracing', false)
     expect(config).to.have.property('tracePropagationExtractFirst', true)
-    expect(config).to.have.property('runtimeMetrics', false)
+    expect(config).to.have.nested.property('runtimeMetrics.enabled', false)
   })
 
   it('should initialize from environment variables with url taking precedence', () => {
@@ -975,6 +996,7 @@ describe('Config', () => {
       },
       dynamicInstrumentation: {
         enabled: true,
+        probeFile: 'probes.json',
         redactedIdentifiers: ['foo', 'bar'],
         redactionExcludedIdentifiers: ['a', 'b', 'c'],
         uploadIntervalSeconds: 0.1
@@ -1025,7 +1047,11 @@ describe('Config', () => {
         pollInterval: 42
       },
       reportHostname: true,
-      runtimeMetrics: true,
+      runtimeMetrics: {
+        enabled: true,
+        eventLoop: false,
+        gc: false
+      },
       runtimeMetricsRuntimeId: true,
       sampleRate: 0.5,
       samplingRules,
@@ -1062,6 +1088,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('dogstatsd.hostname', 'agent-dsd')
     expect(config).to.have.nested.property('dogstatsd.port', '5218')
     expect(config).to.have.nested.property('dynamicInstrumentation.enabled', true)
+    expect(config).to.have.nested.property('dynamicInstrumentation.probeFile', 'probes.json')
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactedIdentifiers', ['foo', 'bar'])
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactionExcludedIdentifiers', ['a', 'b', 'c'])
     expect(config).to.have.nested.property('dynamicInstrumentation.uploadIntervalSeconds', 0.1)
@@ -1095,7 +1122,9 @@ describe('Config', () => {
     expect(config).to.have.property('protocolVersion', '0.5')
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.property('reportHostname', true)
-    expect(config).to.have.property('runtimeMetrics', true)
+    expect(config).to.have.nested.property('runtimeMetrics.enabled', true)
+    expect(config).to.have.nested.property('runtimeMetrics.eventLoop', false)
+    expect(config).to.have.nested.property('runtimeMetrics.gc', false)
     expect(config).to.have.property('runtimeMetricsRuntimeId', true)
     expect(config).to.have.property('sampleRate', 0.5)
     expect(config).to.have.deep.nested.property('sampler', {
@@ -1143,6 +1172,7 @@ describe('Config', () => {
       { name: 'dogstatsd.hostname', value: 'agent-dsd', origin: 'code' },
       { name: 'dogstatsd.port', value: '5218', origin: 'code' },
       { name: 'dynamicInstrumentation.enabled', value: true, origin: 'code' },
+      { name: 'dynamicInstrumentation.probeFile', value: 'probes.json', origin: 'code' },
       { name: 'dynamicInstrumentation.redactedIdentifiers', value: ['foo', 'bar'], origin: 'code' },
       { name: 'dynamicInstrumentation.redactionExcludedIdentifiers', value: ['a', 'b', 'c'], origin: 'code' },
       { name: 'dynamicInstrumentation.uploadIntervalSeconds', value: 0.1, origin: 'code' },
@@ -1177,7 +1207,7 @@ describe('Config', () => {
       { name: 'protocolVersion', value: '0.5', origin: 'code' },
       { name: 'remoteConfig.pollInterval', value: 42, origin: 'code' },
       { name: 'reportHostname', value: true, origin: 'code' },
-      { name: 'runtimeMetrics', value: true, origin: 'code' },
+      { name: 'runtimeMetrics.enabled', value: true, origin: 'code' },
       { name: 'runtimeMetricsRuntimeId', value: true, origin: 'code' },
       { name: 'sampler.rateLimit', value: 1000, origin: 'code' },
       { name: 'sampler.rules', value: samplingRules, origin: 'code' },
@@ -1364,6 +1394,7 @@ describe('Config', () => {
     process.env.DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED = 'true'
     process.env.DD_DOGSTATSD_PORT = '5218'
     process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
+    process.env.DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE = 'probes.json'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS = 'foo,bar'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS = 'a,b,c'
     process.env.DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS = '0.1'
@@ -1454,6 +1485,7 @@ describe('Config', () => {
       },
       dynamicInstrumentation: {
         enabled: false,
+        probeFile: 'probes2.json',
         redactedIdentifiers: ['foo2', 'bar2'],
         redactionExcludedIdentifiers: ['a2', 'b2'],
         uploadIntervalSeconds: 0.2
@@ -1541,6 +1573,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('dogstatsd.hostname', 'server')
     expect(config).to.have.nested.property('dogstatsd.port', '8888')
     expect(config).to.have.nested.property('dynamicInstrumentation.enabled', false)
+    expect(config).to.have.nested.property('dynamicInstrumentation.probeFile', 'probes2.json')
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactedIdentifiers', ['foo2', 'bar2'])
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactionExcludedIdentifiers', ['a2', 'b2'])
     expect(config).to.have.nested.property('dynamicInstrumentation.uploadIntervalSeconds', 0.2)
@@ -1567,7 +1600,7 @@ describe('Config', () => {
     expect(config).to.have.property('protocolVersion', '0.5')
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.property('reportHostname', false)
-    expect(config).to.have.property('runtimeMetrics', false)
+    expect(config).to.have.nested.property('runtimeMetrics.enabled', false)
     expect(config).to.have.property('runtimeMetricsRuntimeId', false)
     expect(config).to.have.property('service', 'test')
     expect(config).to.have.deep.property('serviceMapping', { b: 'bb' })
@@ -2636,7 +2669,7 @@ apm_configuration_default:
   DD_RUNTIME_METRICS_ENABLED: true
 `)
       const config = new Config()
-      expect(config).to.have.property('runtimeMetrics', true)
+      expect(config).to.have.nested.property('runtimeMetrics.enabled', true)
     })
 
     it('should apply service specific config', () => {
@@ -2731,7 +2764,7 @@ apm_configuration_default:
       expect(stableConfig.warnings).to.have.lengthOf(0)
 
       const config = new Config()
-      expect(config).to.have.property('runtimeMetrics', true)
+      expect(config).to.have.nested.property('runtimeMetrics.enabled', true)
     })
 
     it('should log a warning if the YAML files are malformed', () => {

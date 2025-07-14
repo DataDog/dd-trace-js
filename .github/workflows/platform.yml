@@ -283,6 +283,15 @@ jobs:
       - run: yarn test:integration
       - run: yarn test:integration:esbuild
 
+  unit-guardrails:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/install
+      - run: yarn test:trace:guardrails:ci
+      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+
   # We'll run these separately for earlier (i.e. unsupported) versions
   integration-guardrails:
     strategy:
@@ -296,6 +305,7 @@ jobs:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
       - run: yarn add --ignore-scripts mocha@10 # Use older mocha to support old Node.js versions
+      - run: yarn add --ignore-scripts express@4 # Use older express to support old Node.js versions
       - run: node node_modules/.bin/mocha --colors --timeout 30000 integration-tests/init.spec.js
 
   integration-guardrails-unsupported:
@@ -303,6 +313,8 @@ jobs:
       matrix:
         version: ['0.8', '0.10', '0.12', '4', '6', '8', '10', '12']
     runs-on: ubuntu-latest
+    env:
+      DD_TRACE_DEBUG: 'true' # This exercises more of the guardrails code
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/node

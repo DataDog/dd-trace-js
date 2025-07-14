@@ -52,13 +52,14 @@ async function checkStatuses (contexts) {
   attempts++
 
   if (attempts >= MAX_ATTEMPTS) {
-    throw new Error(`Jobs did not finish before timeout: ${contexts.join(', ')}.`)
+    throw new Error(`Jobs did not finish before timeout: ${[...contexts].join(', ')}.`)
   }
 
   setTimeout(() => checkStatuses(contexts), TIMEOUT)
 }
 
 checkStatuses(new Set([
+  'dd-gitlab/internal-publish-lib-init-tags',
   'dd-gitlab/promote-oci-to-prod',
-  'dd-gitlab/publish-lib-init-ghcr-tags'
+  'dd-gitlab/publish-lib-init-pinned-tags'
 ]))

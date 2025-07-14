@@ -1,3 +1,5 @@
+'use strict'
+
 const path = require('path')
 const fs = require('fs')
 const { URL } = require('url')
@@ -32,7 +34,8 @@ const {
   GIT_COMMIT_MESSAGE,
   CI_WORKSPACE_PATH,
   CI_PIPELINE_URL,
-  CI_JOB_NAME
+  CI_JOB_NAME,
+  GIT_COMMIT_HEAD_SHA
 } = require('./tags')
 const id = require('../../id')
 const {
@@ -128,6 +131,7 @@ const DD_CAPABILITIES_IMPACTED_TESTS = '_dd.library_capabilities.impacted_tests'
 const DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE = '_dd.library_capabilities.test_management.quarantine'
 const DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE = '_dd.library_capabilities.test_management.disable'
 const DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX = '_dd.library_capabilities.test_management.attempt_to_fix'
+const DD_CAPABILITIES_FAILED_TEST_REPLAY = '_dd.library_capabilities.failed_test_replay'
 const UNSUPPORTED_TIA_FRAMEWORKS = new Set(['playwright', 'vitest'])
 const UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE = new Set(['cucumber', 'mocha'])
 const MINIMUM_FRAMEWORK_VERSION_FOR_EFD = {
@@ -142,6 +146,13 @@ const MINIMUM_FRAMEWORK_VERSION_FOR_QUARANTINE = {
 const MINIMUM_FRAMEWORK_VERSION_FOR_DISABLE = {
   playwright: '>=1.38.0'
 }
+const MINIMUM_FRAMEWORK_VERSION_FOR_ATTEMPT_TO_FIX = {
+  playwright: '>=1.38.0'
+}
+const MINIMUM_FRAMEWORK_VERSION_FOR_FAILED_TEST_REPLAY = {
+  playwright: '>=1.38.0'
+}
+
 const UNSUPPORTED_ATTEMPT_TO_FIX_FRAMEWORKS_PARALLEL_MODE = new Set(['mocha'])
 const NOT_SUPPORTED_GRANULARITY_IMPACTED_TESTS_FRAMEWORKS = new Set(['mocha', 'playwright', 'vitest'])
 
@@ -270,6 +281,7 @@ module.exports = {
   DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
   DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
   DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
+  DD_CAPABILITIES_FAILED_TEST_REPLAY,
   TEST_LEVEL_EVENT_TYPES,
   TEST_RETRY_REASON_TYPES,
   getNumFromKnownTests,
@@ -422,7 +434,7 @@ function checkShaDiscrepancies (ciMetadata, userProvidedGitMetadata) {
 
   incrementCountMetric(
     TELEMETRY_GIT_SHA_MATCH,
-    { match: gitCommitShaMatch }
+    { matched: gitCommitShaMatch }
   )
 }
 
@@ -437,7 +449,8 @@ function getTestEnvironmentMetadata (testFramework, config) {
     [GIT_COMMIT_AUTHOR_NAME]: authorName,
     [GIT_COMMIT_AUTHOR_EMAIL]: authorEmail,
     [GIT_COMMIT_MESSAGE]: commitMessage,
-    [CI_WORKSPACE_PATH]: ciWorkspacePath
+    [CI_WORKSPACE_PATH]: ciWorkspacePath,
+    [GIT_COMMIT_HEAD_SHA]: headCommitSha
   } = ciMetadata
 
   const gitMetadata = getGitMetadata({
@@ -448,7 +461,8 @@ function getTestEnvironmentMetadata (testFramework, config) {
     authorName,
     authorEmail,
     commitMessage,
-    ciWorkspacePath
+    ciWorkspacePath,
+    headCommitSha
   })
 
   const userProvidedGitMetadata = getUserProviderGitMetadata()
@@ -932,8 +946,18 @@ function isDisableSupported (testFramework, frameworkVersion) {
     : true
 }
 
-function isAttemptToFixSupported (testFramework, isParallel) {
+function isAttemptToFixSupported (testFramework, isParallel, frameworkVersion) {
+  if (testFramework === 'playwright') {
+    return satisfies(frameworkVersion, MINIMUM_FRAMEWORK_VERSION_FOR_ATTEMPT_TO_FIX[testFramework])
+  }
+
   return !(isParallel && UNSUPPORTED_ATTEMPT_TO_FIX_FRAMEWORKS_PARALLEL_MODE.has(testFramework))
+}
+
+function isFailedTestReplaySupported (testFramework, frameworkVersion) {
+  return testFramework === 'playwright'
+    ? satisfies(frameworkVersion, MINIMUM_FRAMEWORK_VERSION_FOR_FAILED_TEST_REPLAY[testFramework])
+    : true
 }
 
 function getLibraryCapabilitiesTags (testFramework, isParallel, frameworkVersion) {
@@ -954,8 +978,12 @@ function getLibraryCapabilitiesTags (testFramework, isParallel, frameworkVersion
     [DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE]: isDisableSupported(testFramework, frameworkVersion)
       ? '1'
       : undefined,
-    [DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX]: isAttemptToFixSupported(testFramework, isParallel)
-      ? '4'
+    [DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX]:
+      isAttemptToFixSupported(testFramework, isParallel, frameworkVersion)
+        ? '5'
+        : undefined,
+    [DD_CAPABILITIES_FAILED_TEST_REPLAY]: isFailedTestReplaySupported(testFramework, frameworkVersion)
+      ? '1'
       : undefined
   }
 }

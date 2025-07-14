@@ -1,3 +1,5 @@
+'use strict'
+
 const { test, expect } = require('@playwright/test')
 const logger = require('./logger')
 const sum = require('./sum')

@@ -3,6 +3,23 @@ services:
     image: aerospike:ce-6.4.0.3
     ports:
       - "127.0.0.1:3000-3002:3000-3002"
+  azureservicebusemulator:
+    image: mcr.microsoft.com/azure-messaging/servicebus-emulator:1.1.2
+    ports:
+        - "127.0.0.1:5672:5672"
+        - "127.0.0.1:5300:5300"
+    environment:
+        ACCEPT_EULA: "Y"
+        MSSQL_SA_PASSWORD: "Localtestpass1!"
+        SQL_SERVER: azuresqledge
+  azuresqledge:
+    image: mcr.microsoft.com/azure-sql-edge:1.0.7
+    platform: linux/amd64
+    ports:
+        - "127.0.0.1:1433:1433"
+    environment:
+        ACCEPT_EULA: "Y"
+        MSSQL_SA_PASSWORD: "Localtestpass1!"
   couchbase:
     image: ghcr.io/datadog/couchbase-server-sandbox:latest
     ports:
@@ -154,7 +171,7 @@ services:
       - LDAP_PASSWORDS=password1,password2
 
   testagent:
-    image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.21.1
+    image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.24.1
     ports:
         - "127.0.0.1:9126:9126"
     environment:
@@ -162,3 +179,17 @@ services:
         - TRACE_LANGUAGE=javascript
         - ENABLED_CHECKS=trace_stall,meta_tracer_version_header,trace_count_header,trace_peer_service
         - PORT=9126
+
+  # Use this for local development when making new VCR cassettes to persist to the test agent
+  # Do not use the above testagent service if using this one.
+  # testagent-vcr:
+  #   image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.24.1
+  #   ports:
+  #     - "127.0.0.1:9126:9126"
+  #   environment:
+  #     - LOG_LEVEL=DEBUG
+  #     - TRACE_LANGUAGE=javascript
+  #     - ENABLED_CHECKS=trace_stall,meta_tracer_version_header,trace_count_header,trace_peer_service
+  #     - PORT=9126
+  #   volumes:
+  #     - ${VCR_CASSETTES_PATH:-/tmp/empty-vcr}:/vcr-cassettes:delegated

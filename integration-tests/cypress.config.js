@@ -1,3 +1,5 @@
+'use strict'
+
 const ddAfterRun = require('dd-trace/ci/cypress/after-run')
 const ddAfterSpec = require('dd-trace/ci/cypress/after-spec')
 const cypressFailFast = require('cypress-fail-fast/plugin')

@@ -72,7 +72,7 @@ for (const packageName of names) {
 
   let hook = hooks[packageName]
 
-  if (typeof hook === 'object') {
+  if (hook !== null && typeof hook === 'object') {
     if (hook.serverless === false && isInServerlessEnvironment()) continue
 
     // some integrations are disabled by default, but can be enabled by setting
@@ -207,7 +207,7 @@ function filename (name, file) {
 // This function captures the instrumentation file name for a given package by parsing the hook require
 // function given the module name. It is used to ensure that instrumentations such as redis
 // that have several different modules being hooked, ie: 'redis' main package, and @redis/client submodule
-// return a consistent instrumentation name. This is used later to ensure that atleast some portion of
+// return a consistent instrumentation name. This is used later to ensure that at least some portion of
 // the integration was successfully instrumented. Prevents incorrect `Found incompatible integration version: ` messages
 // Example:
 //                  redis -> "() => require('../redis')" -> redis
