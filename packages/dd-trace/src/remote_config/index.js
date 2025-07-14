@@ -93,6 +93,7 @@ function enableWafUpdate (appsecConfig) {
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_SESSION_FINGERPRINT, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_NETWORK_FINGERPRINT, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_HEADER_FINGERPRINT, true)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_DD_MULTICONFIG, true)
 
     if (appsecConfig.rasp?.enabled) {
       rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SQLI, true)
@@ -128,6 +129,7 @@ function disableWafUpdate () {
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_SESSION_FINGERPRINT, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_NETWORK_FINGERPRINT, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_HEADER_FINGERPRINT, false)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_DD_MULTICONFIG, false)
 
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SQLI, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SSRF, false)

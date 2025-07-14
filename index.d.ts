@@ -167,6 +167,7 @@ interface Plugins {
   "avsc": tracer.plugins.avsc;
   "aws-sdk": tracer.plugins.aws_sdk;
   "azure-functions": tracer.plugins.azure_functions;
+  "azure-service-bus": tracer.plugins.azure_service_bus;
   "bunyan": tracer.plugins.bunyan;
   "cassandra-driver": tracer.plugins.cassandra_driver;
   "child_process": tracer.plugins.child_process;
@@ -1381,6 +1382,11 @@ declare namespace tracer {
     */
     interface azure_functions extends Instrumentation {}
 
+    /**
+     * This plugin automatically instruments the
+     * @azure/service-bus module
+     */
+    interface azure_service_bus extends Integration {}
     /**
      * This plugin patches the [bunyan](https://github.com/trentm/node-bunyan)
      * to automatically inject trace identifiers in log records when the
