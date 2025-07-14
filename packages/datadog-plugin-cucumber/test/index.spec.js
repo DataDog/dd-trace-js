@@ -1,6 +1,7 @@
 'use strict'
 const path = require('path')
 const { PassThrough } = require('stream')
+const satisfies = require('semifies')
 
 const proxyquire = require('proxyquire').noPreserveCache()
 const nock = require('nock')
@@ -55,7 +56,7 @@ describe('Plugin', function () {
   let Cucumber
   this.timeout(10000)
   withVersions('cucumber', '@cucumber/cucumber', (version, _, specificVersion) => {
-    if ((NODE_MAJOR === 18 || NODE_MAJOR === 23) && version >= '12.0.0') return
+    if ((NODE_MAJOR === 18 || NODE_MAJOR === 23) && satisfies(specificVersion, '>=12.0.0')) return
 
     afterEach(() => {
       // > If you want to run tests multiple times, you may need to clear Node's require cache
