@@ -399,11 +399,10 @@ function wrapRun (pl, isLatestVersion, version) {
         const promise = runStep.apply(this, arguments)
 
         promise.then((result) => {
-          const { status, skipReason, errorMessage } = satisfies(version, '>=12.0.0')
-            ? getStatusFromResultLatest(result.result)
-            : satisfies(version, '>=7.3.0')
-              ? getStatusFromResultLatest(result)
-              : getStatusFromResult(result)
+          const finalResult = satisfies(version, '>=12.0.0') ? result.result : result
+          const unwrapResult = satisfies(version, '>=7.3.0') ? getStatusFromResultLatest : getStatusFromResult
+
+          const { status, skipReason, errorMessage } = unwrapResult(finalResult)
 
           testFinishCh.publish({ isStep: true, status, skipReason, errorMessage, ...ctx.currentStore })
         })
