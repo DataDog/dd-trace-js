@@ -11,6 +11,7 @@ const {
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const webAppServer = require('./web-app-server')
+const { NODE_MAJOR } = require('../../version')
 
 describe('test visibility automatic log submission', () => {
   let sandbox, cwd, receiver, childProcess, webAppPort
@@ -75,6 +76,8 @@ describe('test visibility automatic log submission', () => {
   ]
 
   testFrameworks.forEach(({ name, command, getExtraEnvVars = () => ({}) }) => {
+    if ((NODE_MAJOR === 18 || NODE_MAJOR === 23) && name === 'cucumber') return
+
     context(`with ${name}`, () => {
       it('can automatically submit logs', (done) => {
         let logIds, testIds
