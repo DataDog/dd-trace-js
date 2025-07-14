@@ -1,7 +1,7 @@
 'use strict'
 
 const BaseLLMObsPlugin = require('./base')
-const { parseModelId } = require('../../../../datadog-plugin-aws-sdk/src/services/bedrockruntime/utils')
+const { getModelProvider } = require('../../../../datadog-plugin-ai/src/utils')
 
 const { channel } = require('dc-polyfill')
 
@@ -82,27 +82,6 @@ function getUsage (tags) {
   if (!Number.isNaN(totalTokens)) usage.totalTokens = totalTokens
 
   return usage
-}
-
-/**
- * Get the model provider from the span tags.
- * This is normalized to LLM Observability model provider standards.
- *
- * @param {Record<string, string>} tags
- * @returns {string}
- */
-function getModelProvider (tags) {
-  const modelProviderTag = tags['ai.model.provider']
-  const providerParts = modelProviderTag?.split('.')
-  const provider = providerParts?.[0]
-
-  if (provider === 'amazon-bedrock') {
-    const modelId = tags['ai.model.id']
-    const model = modelId && parseModelId(modelId)
-    return model?.modelProvider ?? provider
-  }
-
-  return provider
 }
 
 /**
@@ -454,14 +433,14 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
       for (const part of content) {
         if (part.type === 'tool-result') {
           let safeResult
-          if (typeof part.result !== 'string') {
+          if (typeof part.result === 'string') {
+            safeResult = part.result
+          } else {
             try {
               safeResult = JSON.stringify(part.result)
             } catch {
               safeResult = '[Unparsable Tool Result]'
             }
-          } else {
-            safeResult = part.result
           }
 
           finalMessages.push({

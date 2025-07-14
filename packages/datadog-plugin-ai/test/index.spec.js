@@ -52,8 +52,13 @@ describe('Plugin', () => {
 
         assert.strictEqual(generateTextSpan.name, 'ai.generateText')
         assert.strictEqual(generateTextSpan.resource, 'ai.generateText')
+        assert.strictEqual(generateTextSpan.meta['ai.request.model'], 'gpt-3.5-turbo')
+        assert.strictEqual(generateTextSpan.meta['ai.request.model_provider'], 'openai')
+
         assert.strictEqual(doGenerateSpan.name, 'ai.generateText.doGenerate')
         assert.strictEqual(doGenerateSpan.resource, 'ai.generateText.doGenerate')
+        assert.strictEqual(doGenerateSpan.meta['ai.request.model'], 'gpt-3.5-turbo')
+        assert.strictEqual(doGenerateSpan.meta['ai.request.model_provider'], 'openai')
       })
 
       const result = await ai.generateText({
@@ -76,8 +81,13 @@ describe('Plugin', () => {
 
         assert.strictEqual(generateObjectSpan.name, 'ai.generateObject')
         assert.strictEqual(generateObjectSpan.resource, 'ai.generateObject')
+        assert.strictEqual(generateObjectSpan.meta['ai.request.model'], 'gpt-3.5-turbo')
+        assert.strictEqual(generateObjectSpan.meta['ai.request.model_provider'], 'openai')
+
         assert.strictEqual(doGenerateSpan.name, 'ai.generateObject.doGenerate')
         assert.strictEqual(doGenerateSpan.resource, 'ai.generateObject.doGenerate')
+        assert.strictEqual(doGenerateSpan.meta['ai.request.model'], 'gpt-3.5-turbo')
+        assert.strictEqual(doGenerateSpan.meta['ai.request.model_provider'], 'openai')
       })
 
       const result = await ai.generateObject({
@@ -102,8 +112,13 @@ describe('Plugin', () => {
 
         assert.strictEqual(embedSpan.name, 'ai.embed')
         assert.strictEqual(embedSpan.resource, 'ai.embed')
+        assert.strictEqual(embedSpan.meta['ai.request.model'], 'text-embedding-ada-002')
+        assert.strictEqual(embedSpan.meta['ai.request.model_provider'], 'openai')
+
         assert.strictEqual(doEmbedSpan.name, 'ai.embed.doEmbed')
         assert.strictEqual(doEmbedSpan.resource, 'ai.embed.doEmbed')
+        assert.strictEqual(doEmbedSpan.meta['ai.request.model'], 'text-embedding-ada-002')
+        assert.strictEqual(doEmbedSpan.meta['ai.request.model_provider'], 'openai')
       })
 
       const result = await ai.embed({
@@ -123,8 +138,13 @@ describe('Plugin', () => {
 
         assert.strictEqual(embedManySpan.name, 'ai.embedMany')
         assert.strictEqual(embedManySpan.resource, 'ai.embedMany')
+        assert.strictEqual(embedManySpan.meta['ai.request.model'], 'text-embedding-ada-002')
+        assert.strictEqual(embedManySpan.meta['ai.request.model_provider'], 'openai')
+
         assert.strictEqual(doEmbedSpan.name, 'ai.embedMany.doEmbed')
         assert.strictEqual(doEmbedSpan.resource, 'ai.embedMany.doEmbed')
+        assert.strictEqual(doEmbedSpan.meta['ai.request.model'], 'text-embedding-ada-002')
+        assert.strictEqual(doEmbedSpan.meta['ai.request.model_provider'], 'openai')
       })
 
       const result = await ai.embedMany({
@@ -144,8 +164,13 @@ describe('Plugin', () => {
 
         assert.strictEqual(streamTextSpan.name, 'ai.streamText')
         assert.strictEqual(streamTextSpan.resource, 'ai.streamText')
+        assert.strictEqual(streamTextSpan.meta['ai.request.model'], 'gpt-3.5-turbo')
+        assert.strictEqual(streamTextSpan.meta['ai.request.model_provider'], 'openai')
+
         assert.strictEqual(doStreamSpan.name, 'ai.streamText.doStream')
         assert.strictEqual(doStreamSpan.resource, 'ai.streamText.doStream')
+        assert.strictEqual(doStreamSpan.meta['ai.request.model'], 'gpt-3.5-turbo')
+        assert.strictEqual(doStreamSpan.meta['ai.request.model_provider'], 'openai')
       })
 
       const result = await ai.streamText({
@@ -174,8 +199,13 @@ describe('Plugin', () => {
 
         assert.strictEqual(streamObjectSpan.name, 'ai.streamObject')
         assert.strictEqual(streamObjectSpan.resource, 'ai.streamObject')
+        assert.strictEqual(streamObjectSpan.meta['ai.request.model'], 'gpt-3.5-turbo')
+        assert.strictEqual(streamObjectSpan.meta['ai.request.model_provider'], 'openai')
+
         assert.strictEqual(doStreamSpan.name, 'ai.streamObject.doStream')
         assert.strictEqual(doStreamSpan.resource, 'ai.streamObject.doStream')
+        assert.strictEqual(doStreamSpan.meta['ai.request.model'], 'gpt-3.5-turbo')
+        assert.strictEqual(doStreamSpan.meta['ai.request.model_provider'], 'openai')
       })
 
       const result = await ai.streamObject({
@@ -208,12 +238,21 @@ describe('Plugin', () => {
 
         assert.strictEqual(toolCallSpan.name, 'ai.generateText')
         assert.strictEqual(toolCallSpan.resource, 'ai.generateText')
+        assert.strictEqual(toolCallSpan.meta['ai.request.model'], 'gpt-3.5-turbo')
+        assert.strictEqual(toolCallSpan.meta['ai.request.model_provider'], 'openai')
+
         assert.strictEqual(doGenerateSpan.name, 'ai.generateText.doGenerate')
         assert.strictEqual(doGenerateSpan.resource, 'ai.generateText.doGenerate')
+        assert.strictEqual(doGenerateSpan.meta['ai.request.model'], 'gpt-3.5-turbo')
+        assert.strictEqual(doGenerateSpan.meta['ai.request.model_provider'], 'openai')
+
         assert.strictEqual(toolCallSpan2.name, 'ai.toolCall')
         assert.strictEqual(toolCallSpan2.resource, 'ai.toolCall')
+
         assert.strictEqual(doGenerateSpan2.name, 'ai.generateText.doGenerate')
         assert.strictEqual(doGenerateSpan2.resource, 'ai.generateText.doGenerate')
+        assert.strictEqual(doGenerateSpan2.meta['ai.request.model'], 'gpt-3.5-turbo')
+        assert.strictEqual(doGenerateSpan2.meta['ai.request.model_provider'], 'openai')
       })
 
       const getWeather = ai.tool({
