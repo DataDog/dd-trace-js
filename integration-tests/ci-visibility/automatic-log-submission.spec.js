@@ -59,10 +59,11 @@ describe('test visibility automatic log submission', () => {
       name: 'jest',
       command: 'node ./node_modules/jest/bin/jest --config ./ci-visibility/automatic-log-submission/config-jest.js'
     },
-    {
-      name: 'cucumber',
-      command: './node_modules/.bin/cucumber-js ci-visibility/automatic-log-submission-cucumber/*.feature'
-    },
+    // TODO: Uncomment once cucumber+12 is fixed
+    // {
+    //   name: 'cucumber',
+    //   command: './node_modules/.bin/cucumber-js ci-visibility/automatic-log-submission-cucumber/*.feature'
+    // },
     {
       name: 'playwright',
       command: './node_modules/.bin/playwright test -c playwright.config.js',
