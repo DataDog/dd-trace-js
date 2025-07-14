@@ -16,6 +16,10 @@ const messaging = {
       opName: () => 'amqp.send',
       serviceName: amqpServiceName
     },
+    'azure-service-bus': {
+      opName: () => 'azure.servicebus.send',
+      serviceName: ({ tracerService }) => `${tracerService}-azure-service-bus`
+    },
     'google-cloud-pubsub': {
       opName: () => 'pubsub.request',
       serviceName: ({ tracerService }) => `${tracerService}-pubsub`
