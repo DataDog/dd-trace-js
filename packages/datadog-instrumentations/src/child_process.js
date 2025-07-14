@@ -79,7 +79,8 @@ function createContextFromChildProcessInfo (childProcessInfo) {
   const context = {
     command: childProcessInfo.command,
     file: childProcessInfo.file,
-    shell: childProcessInfo.shell
+    shell: childProcessInfo.shell,
+    abortController: new AbortController()
   }
 
   if (childProcessInfo.fileArgs) {
@@ -97,13 +98,12 @@ function wrapChildProcessSyncMethod (returnError, shell = false) {
       }
 
       const childProcessInfo = normalizeArgs(arguments, shell)
-      const abortController = new AbortController()
+      const context = createContextFromChildProcessInfo(childProcessInfo)
 
-      const context = { ...createContextFromChildProcessInfo(childProcessInfo), abortController }
       return childProcessChannel.start.runStores(context, () => {
         try {
-          if (abortController.signal.aborted) {
-            const error = abortController.signal.reason || new Error('Aborted')
+          if (context.abortController.signal.aborted) {
+            const error = context.abortController.signal.reason || new Error('Aborted')
             // expected behaviors on error are different
             return returnError(error, context)
           }
@@ -136,18 +136,17 @@ function wrapChildProcessCustomPromisifyMethod (customPromisifyMethod, shell) {
     const context = createContextFromChildProcessInfo(childProcessInfo)
 
     const { start, end, asyncStart, asyncEnd, error } = childProcessChannel
-    const abortController = new AbortController()
-    context.abortController = abortController
     start.publish(context)
 
     let result
-    if (abortController.signal.aborted) {
-      result = Promise.reject(abortController.signal.reason || new Error('Aborted'))
+    if (context.abortController.signal.aborted) {
+      result = Promise.reject(context.abortController.signal.reason || new Error('Aborted'))
     } else {
       try {
         result = customPromisifyMethod.apply(this, arguments)
       } catch (error) {
-        error.publish({ ...context, error })
+        context.error = error
+        error.publish(context)
         throw error
       } finally {
         end.publish(context)
@@ -185,16 +184,14 @@ function wrapChildProcessAsyncMethod (ChildProcess, shell = false) {
       const childProcessInfo = normalizeArgs(arguments, shell)
 
       const context = createContextFromChildProcessInfo(childProcessInfo)
-      const abortController = new AbortController()
-      context.abortController = abortController
       return childProcessChannel.start.runStores(context, () => {
         let childProcess
-        if (abortController.signal.aborted) {
+        if (context.abortController.signal.aborted) {
           childProcess = new ChildProcess()
           childProcess.on('error', () => {}) // Original method does not crash when non subscribers
 
           process.nextTick(() => {
-            const error = abortController.signal.reason || new Error('Aborted')
+            const error = context.abortController.signal.reason || new Error('Aborted')
             childProcess.emit('error', error)
 
             const cb = arguments[arguments.length - 1]
@@ -221,10 +218,8 @@ function wrapChildProcessAsyncMethod (ChildProcess, shell = false) {
             if (!errorExecuted && code !== 0) {
               childProcessChannel.error.publish(context)
             }
-            childProcessChannel.asyncEnd.publish({
-              ...context,
-              result: code
-            })
+            context.result = code
+            childProcessChannel.asyncEnd.publish(context)
           })
         }
 
