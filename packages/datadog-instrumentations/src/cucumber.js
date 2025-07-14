@@ -400,9 +400,9 @@ function wrapRun (pl, isLatestVersion, version) {
 
         promise.then((result) => {
           const finalResult = satisfies(version, '>=12.0.0') ? result.result : result
-          const unwrapResult = satisfies(version, '>=7.3.0') ? getStatusFromResultLatest : getStatusFromResult
+          const getStatus = satisfies(version, '>=7.3.0') ? getStatusFromResultLatest : getStatusFromResult
 
-          const { status, skipReason, errorMessage } = unwrapResult(finalResult)
+          const { status, skipReason, errorMessage } = getStatus(finalResult)
 
           testFinishCh.publish({ isStep: true, status, skipReason, errorMessage, ...ctx.currentStore })
         })
