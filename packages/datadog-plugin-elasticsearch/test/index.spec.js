@@ -304,13 +304,17 @@ describe('Plugin', () => {
             client.ping().catch(done)
           })
 
-          withNamingSchema(
-            () => client.search(
-              { index: 'logstash-2000.01.01', body: {} },
-              hasCallbackSupport ? () => {} : undefined
-            ),
-            rawExpectedSchema.outbound
-          )
+          describe('test', () => {
+            withNamingSchema(
+              () => {
+                client.search(
+                  { index: 'logstash-2000.01.01', body: {} },
+                  hasCallbackSupport ? () => {} : undefined
+                )
+              },
+              rawExpectedSchema.outbound
+            )
+          })
         })
       })
 
@@ -370,10 +374,12 @@ describe('Plugin', () => {
         })
 
         withNamingSchema(
-          () => client.search(
-            { index: 'logstash-2000.01.01', body: {} },
-            hasCallbackSupport ? () => {} : undefined
-          ),
+          () => {
+            client.search(
+              { index: 'logstash-2000.01.01', body: {} },
+              hasCallbackSupport ? () => {} : undefined
+            )
+          },
           {
             v0: {
               opName: 'elasticsearch.query',

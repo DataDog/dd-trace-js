@@ -696,20 +696,20 @@ describe('reporter', () => {
     })
   })
 
-  describe('reportDerivatives', () => {
+  describe('reportAttributes', () => {
     it('should not call addTags if parameter is undefined', () => {
-      Reporter.reportDerivatives(undefined)
+      Reporter.reportAttributes(undefined)
       expect(span.addTags).not.to.be.called
     })
 
     it('should call addTags with an empty array', () => {
-      Reporter.reportDerivatives([])
+      Reporter.reportAttributes([])
       expect(span.addTags).to.be.calledOnceWithExactly({})
     })
 
     it('should call addTags', () => {
       const schemaValue = [{ key: [8] }]
-      const derivatives = {
+      const attributes = {
         '_dd.appsec.fp.http.endpoint': 'endpoint_fingerprint',
         '_dd.appsec.fp.http.header': 'header_fingerprint',
         '_dd.appsec.fp.http.network': 'network_fingerprint',
@@ -722,7 +722,7 @@ describe('reporter', () => {
         'custom.processor.output': schemaValue
       }
 
-      Reporter.reportDerivatives(derivatives)
+      Reporter.reportAttributes(attributes)
 
       const schemaEncoded = zlib.gzipSync(JSON.stringify(schemaValue)).toString('base64')
       expect(span.addTags).to.be.calledOnceWithExactly({
