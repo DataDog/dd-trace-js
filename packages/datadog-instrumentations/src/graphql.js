@@ -37,7 +37,7 @@ const validateFinishCh = channel('apm:graphql:validate:finish')
 const validateErrorCh = channel('apm:graphql:validate:error')
 
 class AbortError extends Error {
-  constructor(message) {
+  constructor (message) {
     super(message)
     this.name = 'AbortError'
   }
