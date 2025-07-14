@@ -17,6 +17,7 @@ const {
   TEST_IS_RUM_ACTIVE,
   TEST_TYPE
 } = require('../../packages/dd-trace/src/plugins/util/test')
+const { NODE_MAJOR } = require('../../version')
 
 const webAppServer = require('../ci-visibility/web-app-server')
 
@@ -74,6 +75,7 @@ versionRange.forEach(version => {
       }
     ]
     testFrameworks.forEach(({ name, command }) => {
+      if ((NODE_MAJOR === 18 || NODE_MAJOR === 23) && name === 'cucumber') return
       context(`with ${name}`, () => {
         it('identifies tests using selenium as browser tests', (done) => {
           const assertionPromise = receiver
