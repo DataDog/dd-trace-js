@@ -11,6 +11,7 @@ const {
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const webAppServer = require('./web-app-server')
+const { NODE_MAJOR } = require('../../version')
 
 describe('test visibility automatic log submission', () => {
   let sandbox, cwd, receiver, childProcess, webAppPort
@@ -59,11 +60,10 @@ describe('test visibility automatic log submission', () => {
       name: 'jest',
       command: 'node ./node_modules/jest/bin/jest --config ./ci-visibility/automatic-log-submission/config-jest.js'
     },
-    // TODO: Uncomment once cucumber+12 is fixed
-    // {
-    //   name: 'cucumber',
-    //   command: './node_modules/.bin/cucumber-js ci-visibility/automatic-log-submission-cucumber/*.feature'
-    // },
+    {
+      name: 'cucumber',
+      command: './node_modules/.bin/cucumber-js ci-visibility/automatic-log-submission-cucumber/*.feature'
+    },
     {
       name: 'playwright',
       command: './node_modules/.bin/playwright test -c playwright.config.js',
@@ -76,6 +76,8 @@ describe('test visibility automatic log submission', () => {
   ]
 
   testFrameworks.forEach(({ name, command, getExtraEnvVars = () => ({}) }) => {
+    if ((NODE_MAJOR === 18 || NODE_MAJOR === 23) && name === 'cucumber') return
+
     context(`with ${name}`, () => {
       it('can automatically submit logs', (done) => {
         let logIds, testIds
