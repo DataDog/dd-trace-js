@@ -101,6 +101,11 @@ tracer.init({
 });
 
 tracer.init({
+  runtimeMetrics: {
+    enabled: true,
+    gc: true,
+    eventLoop: false
+  },
   appsec: {
     enabled: true,
     rules: './rules.json',
@@ -334,6 +339,8 @@ tracer.use('grpc', { client: { metadata: [] } });
 tracer.use('grpc', { server: { metadata: [] } });
 tracer.use('hapi');
 tracer.use('hapi', httpServerOptions);
+tracer.use('hono');
+tracer.use('hono', httpServerOptions);
 tracer.use('http');
 tracer.use('http', {
   server: httpServerOptions
@@ -387,7 +394,9 @@ tracer.use('oracledb', { service: params => `${params.host}-${params.database}` 
 tracer.use('playwright');
 tracer.use('pg');
 tracer.use('pg', { service: params => `${params.host}-${params.database}` });
+tracer.use('pg', { appendComment: true });
 tracer.use('pino');
+tracer.use('prisma');
 tracer.use('protobufjs');
 tracer.use('redis');
 tracer.use('redis', redisOptions);

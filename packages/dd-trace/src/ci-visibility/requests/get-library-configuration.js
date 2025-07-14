@@ -1,3 +1,5 @@
+'use strict'
+
 const request = require('../../exporters/common/request')
 const id = require('../../id')
 const log = require('../../log')
@@ -122,15 +124,15 @@ function getLibraryConfiguration ({
           isImpactedTestsEnabled
         }
 
-        log.debug(() => `Remote settings: ${JSON.stringify(settings)}`)
+        log.debug('Remote settings: %j', settings)
 
         if (getEnvironmentVariable('DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE')) {
           settings.isCodeCoverageEnabled = true
-          log.debug(() => 'Dangerously set code coverage to true')
+          log.debug('Dangerously set code coverage to true')
         }
         if (getEnvironmentVariable('DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING')) {
           settings.isSuitesSkippingEnabled = true
-          log.debug(() => 'Dangerously set test skipping to true')
+          log.debug('Dangerously set test skipping to true')
         }
 
         incrementCountMetric(TELEMETRY_GIT_REQUESTS_SETTINGS_RESPONSE, settings)

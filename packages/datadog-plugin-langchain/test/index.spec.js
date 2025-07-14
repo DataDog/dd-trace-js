@@ -68,7 +68,8 @@ describe('Plugin', () => {
   })
 
   describe('langchain', () => {
-    withVersions('langchain', ['@langchain/core'], version => {
+    // TODO(sabrenner): remove this once we have the more robust mocking merged
+    withVersions('langchain', ['@langchain/core'], '<0.3.60', version => {
       before(() => {
         iastFilter.isDdTrace = file => {
           if (file.includes('dd-trace-js/versions/')) {

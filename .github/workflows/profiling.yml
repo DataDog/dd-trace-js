@@ -20,7 +20,7 @@ jobs:
       - uses: ./.github/actions/install
       - run: yarn test:profiler:ci
       - run: yarn test:integration:profiler
-      - uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d # v5.4.2
+      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
 
   ubuntu:
     runs-on: ubuntu-latest
@@ -39,7 +39,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:profiler:ci
       - run: yarn test:integration:profiler
-      - uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d # v5.4.2
+      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
 
   windows:
     runs-on: windows-latest
@@ -51,4 +51,4 @@ jobs:
           cache: 'true'
       - run: yarn test:profiler:ci
       - run: yarn test:integration:profiler
-      - uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d # v5.4.2
+      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3

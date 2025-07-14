@@ -1,5 +1,3 @@
-'use strict'
-
 import childProcess from 'node:child_process'
 import express from 'express'
 import Module from 'node:module'

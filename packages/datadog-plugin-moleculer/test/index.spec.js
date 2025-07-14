@@ -2,7 +2,8 @@
 
 const { expect } = require('chai')
 const getPort = require('get-port')
-const os = require('os')
+const os = require('node:os')
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
@@ -70,6 +71,7 @@ describe('Plugin', () => {
               expect(spans[0].meta).to.have.property('moleculer.namespace', 'multi')
               expect(spans[0].meta).to.have.property('moleculer.node_id', `server-${process.pid}`)
               expect(spans[0].meta).to.have.property('component', 'moleculer')
+              expect(spans[0].meta).to.have.property('_dd.integration', 'moleculer')
 
               expect(spans[1]).to.have.property('name', expectedSchema.server.opName)
               expect(spans[1]).to.have.property('service', expectedSchema.server.serviceName)
@@ -152,9 +154,7 @@ describe('Plugin', () => {
           withPeerService(
             () => tracer,
             'moleculer',
-            done => {
-              broker.call('math.add', { a: 5, b: 3 }).catch(done)
-            },
+            () => broker.call('math.add', { a: 5, b: 3 }),
             hostname,
             'out.host'
           )

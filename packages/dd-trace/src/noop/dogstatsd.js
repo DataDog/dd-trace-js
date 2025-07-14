@@ -1,3 +1,5 @@
+'use strict'
+
 /**
  * @import { DogStatsD } from "../../../../index.d.ts"
  * @implements {DogStatsD}

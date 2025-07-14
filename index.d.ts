@@ -186,6 +186,7 @@ interface Plugins {
   "graphql": tracer.plugins.graphql;
   "grpc": tracer.plugins.grpc;
   "hapi": tracer.plugins.hapi;
+  "hono": tracer.plugins.hono;
   "http": tracer.plugins.http;
   "http2": tracer.plugins.http2;
   "ioredis": tracer.plugins.ioredis;
@@ -212,6 +213,7 @@ interface Plugins {
   "playwright": tracer.plugins.playwright;
   "pg": tracer.plugins.pg;
   "pino": tracer.plugins.pino;
+  "prisma": tracer.plugins.prisma;
   "protobufjs": tracer.plugins.protobufjs;
   "redis": tracer.plugins.redis;
   "restify": tracer.plugins.restify;
@@ -483,10 +485,14 @@ declare namespace tracer {
     flushMinSpans?: number;
 
     /**
-     * Whether to enable runtime metrics.
+     * Whether to enable runtime metrics, or an object specifying whether to enable specific metric types.
      * @default false
      */
-    runtimeMetrics?: boolean
+    runtimeMetrics?: boolean | {
+      enabled?: boolean,
+      gc?: boolean,
+      eventLoop?: boolean
+    }
 
     /**
      * Custom function for DNS lookups when sending requests to the agent.
@@ -1271,6 +1277,15 @@ declare namespace tracer {
       meta?: boolean;
     }
 
+    /** @hidden */
+    interface Prisma extends Instrumentation {}
+
+    /** @hidden */
+    interface PrismaClient extends Prisma {}
+
+    /** @hidden */
+    interface PrismaEngine extends Prisma {}
+
     /**
      * This plugin automatically instruments the
      * [aerospike](https://github.com/aerospike/aerospike-client-nodejs) for module versions >= v3.16.2.
@@ -1591,6 +1606,12 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [hono](https://hono.dev/) module.
+     */
+    interface hono extends HttpServer {}
+
+    /**
+     * This plugin automatically instruments the
      * [http](https://nodejs.org/api/http.html) module.
      *
      * By default any option set at the root will apply to both clients and
@@ -1821,6 +1842,13 @@ declare namespace tracer {
      */
     interface mongodb_core extends Instrumentation {
       /**
+       * Whether to enable mongo heartbeats spans.
+       *
+       * @default true
+       */
+      heartbeatEnabled?: boolean;
+
+      /**
        * Whether to include the query contents in the resource name.
        */
       queryInResourceName?: boolean;
@@ -1918,6 +1946,10 @@ declare namespace tracer {
        * The database monitoring propagation mode to be used for this plugin.
        */
       dbmPropagationMode?: string;
+      /**
+       * Appends the SQL comment propagation to the query string. Prepends the comment if `false`. For long query strings, the appended propagation comment might be truncated, causing loss of correlation between the query and trace.
+       */
+      appendComment?: boolean;
     }
 
     /**
@@ -1927,6 +1959,23 @@ declare namespace tracer {
      * on the tracer.
      */
     interface pino extends Integration {}
+
+    /**
+     * This plugin automatically instruments the
+     * [@prisma/client](https://www.prisma.io/docs/orm/prisma-client) module.
+     */
+    interface prisma extends PrismaClient, PrismaEngine {
+      /**
+       * Configuration for prisma client.
+       */
+      client?: PrismaClient | boolean,
+
+      /**
+       * Configuration for Prisma engine.
+       */
+      engine?: PrismaEngine | boolean
+    }
+
     /**
      * This plugin automatically patches the [protobufjs](https://protobufjs.github.io/protobuf.js/)
      * to collect protobuf message schemas when Datastreams Monitoring is enabled.

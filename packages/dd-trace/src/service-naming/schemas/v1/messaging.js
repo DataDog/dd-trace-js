@@ -1,3 +1,5 @@
+'use strict'
+
 const { identityService } = require('../util')
 
 const amqpInbound = {
@@ -22,7 +24,7 @@ const messaging = {
       opName: () => 'kafka.send',
       serviceName: identityService
     },
-    '@confluentinc/kafka-javascript': {
+    'confluentinc-kafka-javascript': {
       opName: () => 'kafka.send',
       serviceName: identityService
     },
@@ -47,7 +49,7 @@ const messaging = {
       opName: () => 'kafka.process',
       serviceName: identityService
     },
-    '@confluentinc/kafka-javascript': {
+    'confluentinc-kafka-javascript': {
       opName: () => 'kafka.process',
       serviceName: identityService
     },

@@ -39,7 +39,7 @@ class NoopLLMObs {
     const llmobs = this
     return function (target, ctxOrPropertyKey, descriptor) {
       if (!ctxOrPropertyKey) return target
-      if (typeof ctxOrPropertyKey === 'object') {
+      if (typeof ctxOrPropertyKey === 'object') { // eslint-disable-line eslint-rules/eslint-safe-typeof-object
         const ctx = ctxOrPropertyKey
         if (ctx.kind !== 'method') return target
 

@@ -1,16 +1,21 @@
 'use strict'
 
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
+const assert = require('node:assert')
 
 const hostname = process.env.CI ? 'oracledb' : 'localhost'
+// TODO: Use another port or db instance to differentiate it better from defaults
+const port = '1521'
+const dbInstance = 'xepdb1'
+
 const config = {
   user: 'test',
   password: 'Oracle18',
-  connectString: `${hostname}:1521/xepdb1`
+  connectString: `${hostname}:${port}/${dbInstance}`
 }
-const expectedPeerService = new URL('http://' + config.connectString).pathname.slice(1)
 
 const dbQuery = 'select current_timestamp from dual'
 
@@ -51,11 +56,11 @@ describe('Plugin', () => {
             () => tracer,
             'oracledb',
             () => connection.execute(dbQuery),
-            expectedPeerService,
+            dbInstance,
             'db.instance'
           )
 
-          connectionTests(new URL('http://' + config.connectString))
+          connectionTests()
         })
 
         describe('with connection and connect descriptor', () => {
@@ -78,45 +83,45 @@ describe('Plugin', () => {
           connectionTests()
         })
 
-        function connectionTests (url) {
-          it('should be instrumented for promise API', done => {
-            agent.assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-              expect(traces[0][0]).to.have.property('resource', dbQuery)
-              expect(traces[0][0]).to.have.property('type', 'sql')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('component', 'oracledb')
-              if (url) {
-                expect(traces[0][0].meta).to.have.property('db.instance', url.pathname.slice(1))
-                expect(traces[0][0].meta).to.have.property('db.hostname', url.hostname)
-                expect(traces[0][0].meta).to.have.property('network.destination.port', url.port)
-              }
-            }).then(done, done)
+        function connectionTests () {
+          it('should be instrumented for promise API', async () => {
             connection.execute(dbQuery)
+
+            await agent.assertFirstTraceSpan({
+              name: expectedSchema.outbound.opName,
+              service: expectedSchema.outbound.serviceName,
+              resource: dbQuery,
+              type: 'sql',
+              meta: {
+                'span.kind': 'client',
+                component: 'oracledb',
+                'db.instance': dbInstance,
+                'db.hostname': hostname,
+                'network.destination.port': port
+              }
+            })
           })
 
           it('should restore the parent context in the promise callback', () => {
             const span = {}
-            return tracer.scope().activate(span, () => {
-              return connection.execute(dbQuery).then(() => {
-                expect(tracer.scope().active()).to.equal(span)
-              })
+            return tracer.scope().activate(span, async () => {
+              await connection.execute(dbQuery)
+              expect(tracer.scope().active()).to.equal(span)
             })
           })
 
           it('should be instrumented for callback API', done => {
-            agent.assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-              expect(traces[0][0]).to.have.property('resource', dbQuery)
-              expect(traces[0][0]).to.have.property('type', 'sql')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('component', 'oracledb')
-              if (url) {
-                expect(traces[0][0].meta).to.have.property('db.instance', url.pathname.slice(1))
-                expect(traces[0][0].meta).to.have.property('db.hostname', url.hostname)
-                expect(traces[0][0].meta).to.have.property('network.destination.port', url.port)
+            agent.assertFirstTraceSpan({
+              name: expectedSchema.outbound.opName,
+              service: expectedSchema.outbound.serviceName,
+              resource: dbQuery,
+              type: 'sql',
+              meta: {
+                'span.kind': 'client',
+                component: 'oracledb',
+                'db.instance': dbInstance,
+                'db.hostname': hostname,
+                'network.destination.port': port
               }
             }).then(done, done)
 
@@ -137,28 +142,34 @@ describe('Plugin', () => {
             })
           })
 
-          it('should instrument errors', done => {
+          it('should instrument errors', async () => {
             let error
-
-            agent.assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-              expect(traces[0][0]).to.have.property('resource', 'invalid')
-              expect(traces[0][0]).to.have.property('type', 'sql')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('component', 'oracledb')
-              if (url) {
-                expect(traces[0][0].meta).to.have.property('db.instance', url.pathname.slice(1))
-                expect(traces[0][0].meta).to.have.property('db.hostname', url.hostname)
-                expect(traces[0][0].meta).to.have.property('network.destination.port', url.port)
-              }
-              expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
-              expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
-              expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
-            }).then(done, done)
-
+            let resolver
+            const promise = new Promise((resolve) => {
+              resolver = resolve
+            })
             connection.execute('invalid', err => {
               error = err
+              resolver()
+            })
+
+            await promise
+
+            await agent.assertFirstTraceSpan({
+              name: expectedSchema.outbound.opName,
+              service: expectedSchema.outbound.serviceName,
+              resource: 'invalid',
+              type: 'sql',
+              meta: {
+                'span.kind': 'client',
+                component: 'oracledb',
+                'db.instance': dbInstance,
+                'db.hostname': hostname,
+                'network.destination.port': port,
+                [ERROR_MESSAGE]: error.message,
+                [ERROR_TYPE]: error.name,
+                [ERROR_STACK]: error.stack
+              }
             })
           })
         }
@@ -174,13 +185,13 @@ describe('Plugin', () => {
             await pool.close()
           })
 
-          poolTests(new URL('http://' + config.connectString))
+          poolTests()
 
           withPeerService(
             () => tracer,
             'oracledb',
             () => connection.execute(dbQuery),
-            expectedPeerService,
+            dbInstance,
             'db.instance'
           )
         })
@@ -207,60 +218,101 @@ describe('Plugin', () => {
           poolTests()
         })
 
-        function poolTests (url) {
-          it('should be instrumented correctly with correct tags', done => {
-            agent.assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-              expect(traces[0][0]).to.have.property('resource', dbQuery)
-              expect(traces[0][0]).to.have.property('type', 'sql')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('component', 'oracledb')
-              if (url) {
-                expect(traces[0][0].meta).to.have.property('db.instance', url.pathname.slice(1))
-                expect(traces[0][0].meta).to.have.property('db.hostname', url.hostname)
-                expect(traces[0][0].meta).to.have.property('network.destination.port', url.port)
-              }
-            }).then(done, done)
-            connection.execute(dbQuery)
+        function poolTests () {
+          it('should be instrumented correctly with correct tags', async () => {
+            await Promise.all([
+              agent.assertFirstTraceSpan({
+                name: expectedSchema.outbound.opName,
+                service: expectedSchema.outbound.serviceName,
+                resource: dbQuery,
+                type: 'sql',
+                meta: {
+                  'span.kind': 'client',
+                  component: 'oracledb',
+                  'db.instance': dbInstance,
+                  'db.hostname': hostname,
+                  'network.destination.port': port
+                }
+              }),
+              connection.execute(dbQuery)
+            ])
           })
 
-          it('should restore the parent context in the callback', () => {
-            return connection.execute(dbQuery).then(() => {
-              expect(tracer.scope().active()).to.be.null
-            })
+          it('should restore the parent context in the callback', async () => {
+            await connection.execute(dbQuery)
+            expect(tracer.scope().active()).to.be.null
           })
 
-          it('should instrument errors', () => {
-            let error
-
-            const promise = agent.assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-              expect(traces[0][0]).to.have.property('resource', 'invalid')
-              expect(traces[0][0]).to.have.property('type', 'sql')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('component', 'oracledb')
-              if (url) {
-                expect(traces[0][0].meta).to.have.property('db.instance', url.pathname.slice(1))
-                expect(traces[0][0].meta).to.have.property('db.hostname', url.hostname)
-                expect(traces[0][0].meta).to.have.property('network.destination.port', url.port)
-              }
-              expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
-              expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
-              expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
-            })
-
-            connection.execute('invalid').catch(err => {
-              error = err
-            })
-
-            return promise
+          it('should instrument errors', async () => {
+            try {
+              await connection.execute('invalid')
+              throw new Error('Expected an error to be thrown')
+            } catch (error) {
+              await agent.assertFirstTraceSpan({
+                name: expectedSchema.outbound.opName,
+                service: expectedSchema.outbound.serviceName,
+                resource: 'invalid',
+                type: 'sql',
+                meta: {
+                  'span.kind': 'client',
+                  component: 'oracledb',
+                  'db.instance': dbInstance,
+                  'db.hostname': hostname,
+                  'network.destination.port': port,
+                  [ERROR_MESSAGE]: error.message,
+                  [ERROR_TYPE]: error.name,
+                  [ERROR_STACK]: error.stack
+                }
+              })
+            }
           })
         }
       })
 
       describe('with configuration', () => {
+        describe('with service returning undefined', () => {
+          before(async () => {
+            await agent.load('oracledb', { service () {} })
+            oracledb = require(`../../../versions/oracledb@${version}`).get()
+            tracer = require('../../dd-trace')
+          })
+
+          before(async () => {
+            connection = await oracledb.getConnection(config)
+          })
+
+          after(async () => {
+            await connection.close()
+          })
+
+          after(async () => {
+            await agent.close({ ritmReset: false })
+          })
+          withNamingSchema(
+            () => connection.execute(dbQuery),
+            {
+              v0: {
+                opName: 'oracle.query',
+                serviceName: 'test-oracle'
+              },
+              v1: {
+                opName: 'oracle.query',
+                serviceName: 'test'
+              }
+            }
+          )
+
+          it('should set the service name', async () => {
+            await Promise.all([
+              agent.assertFirstTraceSpan({
+                name: expectedSchema.outbound.opName,
+                service: 'test-oracle'
+              }),
+              connection.execute(dbQuery)
+            ])
+          })
+        })
+
         describe('with service string', () => {
           before(async () => {
             await agent.load('oracledb', { service: 'custom' })
@@ -293,18 +345,25 @@ describe('Plugin', () => {
             }
           )
 
-          it('should set the service name', done => {
-            agent.assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', 'custom')
-            }).then(done, done)
-            connection.execute(dbQuery)
+          it('should set the service name', async () => {
+            await Promise.all([
+              agent.assertFirstTraceSpan({
+                name: expectedSchema.outbound.opName,
+                service: 'custom'
+              }),
+              connection.execute(dbQuery)
+            ])
           })
         })
 
         describe('with service function', () => {
           before(async () => {
-            await agent.load('oracledb', { service: connAttrs => `${connAttrs.connectString}` })
+            await agent.load('oracledb', {
+              service (connAttrs) {
+                assert.strictEqual(connAttrs.connectString, config.connectString)
+                return connAttrs.connectString
+              }
+            })
             oracledb = require(`../../../versions/oracledb@${version}`).get()
             tracer = require('../../dd-trace')
           })
@@ -325,21 +384,23 @@ describe('Plugin', () => {
             {
               v0: {
                 opName: 'oracle.query',
-                serviceName: 'oracledb:1521/xepdb1'
+                serviceName: config.connectString,
               },
               v1: {
                 opName: 'oracle.query',
-                serviceName: 'oracledb:1521/xepdb1'
+                serviceName: config.connectString,
               }
             }
           )
 
-          it('should set the service name', done => {
-            agent.assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', config.connectString)
-            }).then(done, done)
-            connection.execute(dbQuery)
+          it('should set the service name', async () => {
+            await Promise.all([
+              agent.assertFirstTraceSpan({
+                name: expectedSchema.outbound.opName,
+                service: config.connectString
+              }),
+              connection.execute(dbQuery)
+            ])
           })
         })
 
@@ -363,13 +424,13 @@ describe('Plugin', () => {
               connectionString: config.connectString // Use valid connection string
             })
 
-            const promise = agent.assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('service', config.connectString)
-            })
-
-            connection.execute(dbQuery)
+            await Promise.all([
+              agent.assertFirstTraceSpan({
+                service: config.connectString
+              }),
+              connection.execute(dbQuery)
+            ])
             await connection.close()
-            return promise
           })
         })
       })

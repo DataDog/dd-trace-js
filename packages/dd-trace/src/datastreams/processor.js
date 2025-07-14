@@ -1,3 +1,5 @@
+'use strict'
+
 const os = require('os')
 const pkg = require('../../../../package.json')
 
@@ -78,15 +80,14 @@ class StatsBucket {
     return this._backlogs
   }
 
-  forCheckpoint (checkpoint) {
-    const key = checkpoint.hash
-    if (!this._checkpoints.has(key)) {
-      this._checkpoints.set(
-        key, new StatsPoint(checkpoint.hash, checkpoint.parentHash, checkpoint.edgeTags)
-      )
+  forCheckpoint ({ hash, parentHash, edgeTags }) {
+    let checkpoint = this._checkpoints.get(hash)
+    if (!checkpoint) {
+      checkpoint = new StatsPoint(hash, parentHash, edgeTags)
+      this._checkpoints.set(hash, checkpoint)
     }
 
-    return this._checkpoints.get(key)
+    return checkpoint
   }
 
   /**
@@ -204,7 +205,7 @@ class DataStreamsProcessor {
     let closestOppositeDirectionHash = ENTRY_PARENT_HASH
     let closestOppositeDirectionEdgeStart = nowNs
     if (ctx == null) {
-      log.debug(() => 'Setting DSM Checkpoint with empty parent context.')
+      log.debug('Setting DSM Checkpoint with empty parent context.')
     } else {
       pathwayStartNs = ctx.pathwayStartNs
       edgeStartNs = ctx.edgeStartNs

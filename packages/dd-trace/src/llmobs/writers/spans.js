@@ -26,7 +26,7 @@ class LLMObsSpanWriter extends BaseWriter {
   }
 
   append (event) {
-    const eventSizeBytes = Buffer.from(JSON.stringify(event)).byteLength
+    const eventSizeBytes = Buffer.byteLength(JSON.stringify(event))
     telemetry.recordLLMObsRawSpanSize(event, eventSizeBytes)
 
     const shouldTruncate = eventSizeBytes > EVP_EVENT_SIZE_LIMIT
@@ -35,7 +35,7 @@ class LLMObsSpanWriter extends BaseWriter {
     if (shouldTruncate) {
       logger.warn(`Dropping event input/output because its size (${eventSizeBytes}) exceeds the 1MB event size limit`)
       event = this._truncateSpanEvent(event)
-      processedEventSizeBytes = Buffer.from(JSON.stringify(event)).byteLength
+      processedEventSizeBytes = Buffer.byteLength(JSON.stringify(event))
     }
 
     telemetry.recordLLMObsSpanSize(event, processedEventSizeBytes, shouldTruncate)

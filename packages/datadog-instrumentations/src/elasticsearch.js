@@ -2,8 +2,7 @@
 
 const {
   channel,
-  addHook,
-  AsyncResource
+  addHook
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
@@ -73,33 +72,30 @@ function createWrapRequest (name) {
 
       if (!params) return request.apply(this, arguments)
 
-      const parentResource = new AsyncResource('bound-anonymous-fn')
-      const asyncResource = new AsyncResource('bound-anonymous-fn')
-
-      return asyncResource.runInAsyncScope(() => {
-        startCh.publish({ params })
-
+      const ctx = { params }
+      return startCh.runStores(ctx, () => {
         try {
           const lastIndex = arguments.length - 1
           cb = arguments[lastIndex]
 
           if (typeof cb === 'function') {
-            cb = parentResource.bind(cb)
-
-            arguments[lastIndex] = shimmer.wrapFunction(cb, cb => asyncResource.bind(function (error) {
-              finish(params, error)
-              return cb.apply(null, arguments)
-            }))
+            arguments[lastIndex] = shimmer.wrapFunction(cb, cb => function (error) {
+              if (error) {
+                ctx.error = error
+                errorCh.publish(ctx)
+              }
+              return finishCh.runStores(ctx, cb, null, ...arguments)
+            })
             return request.apply(this, arguments)
           }
           const promise = request.apply(this, arguments)
           if (promise && typeof promise.then === 'function') {
-            const onResolve = asyncResource.bind(() => finish(params))
-            const onReject = asyncResource.bind(e => finish(params, e))
+            const onResolve = () => finish(ctx)
+            const onReject = e => finish(ctx, e)
 
             promise.then(onResolve, onReject)
           } else {
-            finish(params)
+            finish(ctx)
           }
           return promise
         } catch (err) {
@@ -112,11 +108,12 @@ function createWrapRequest (name) {
     }
   }
 
-  function finish (params, error) {
+  function finish (ctx, error) {
     if (error) {
+      ctx.error = error
       errorCh.publish(error)
     }
-    finishCh.publish({ params })
+    return finishCh.runStores(ctx, () => {})
   }
 }
 

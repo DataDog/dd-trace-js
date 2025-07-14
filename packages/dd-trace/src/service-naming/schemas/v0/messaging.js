@@ -1,3 +1,5 @@
+'use strict'
+
 const { identityService, awsServiceV0 } = require('../util')
 
 function amqpServiceName ({ tracerService }) {
@@ -22,7 +24,7 @@ const messaging = {
       opName: () => 'kafka.produce',
       serviceName: ({ tracerService }) => `${tracerService}-kafka`
     },
-    '@confluentinc/kafka-javascript': {
+    'confluentinc-kafka-javascript': {
       opName: () => 'kafka.produce',
       serviceName: ({ tracerService }) => `${tracerService}-kafka`
     },
@@ -56,7 +58,7 @@ const messaging = {
       opName: () => 'kafka.consume',
       serviceName: ({ tracerService }) => `${tracerService}-kafka`
     },
-    '@confluentinc/kafka-javascript': {
+    'confluentinc-kafka-javascript': {
       opName: () => 'kafka.consume',
       serviceName: ({ tracerService }) => `${tracerService}-kafka`
     },

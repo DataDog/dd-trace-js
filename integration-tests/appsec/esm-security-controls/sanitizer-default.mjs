@@ -1,5 +1,3 @@
-'use strict'
-
 function sanitizeDefault (input) {
   return input
 }

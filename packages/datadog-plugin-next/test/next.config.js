@@ -1,3 +1,5 @@
+'use strict'
+
 // Build config dynamically for ease in testing and modification
 
 const { satisfies } = require('semver')
@@ -18,10 +20,10 @@ if (satisfies(VERSION, '<11')) {
   }
 }
 
-// In older versions of Next.js (11.0.1 and before), the webpack config doesn't support 'node' prefixes by default
+// In older versions of Next.js (11.X and before), the webpack config doesn't support 'node' prefixes by default
 // So, any "node" prefixes are replaced for these older versions by this webpack plugin
 // Additionally, webpack was having problems with our use of 'worker_threads', so we don't resolve it
-if (satisfies(VERSION, '<11.1.0')) {
+if (satisfies(VERSION, '<=11')) {
   config.webpack = (config, { webpack }) => {
     config.plugins.push(
       new webpack.NormalModuleReplacementPlugin(/^node:/, resource => {
@@ -35,7 +37,8 @@ if (satisfies(VERSION, '<11.1.0')) {
     config.resolve.fallback = {
       ...config.resolve.fallback,
       worker_threads: false,
-      perf_hooks: false
+      perf_hooks: false,
+      'util/types': false
     }
 
     return config

@@ -70,6 +70,7 @@ const web = {
 
     span.context()._name = `${name}.request`
     span.context()._tags.component = name
+    span._integrationName = name
 
     web.setConfig(req, config)
   },

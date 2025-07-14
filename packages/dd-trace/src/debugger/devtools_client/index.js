@@ -40,11 +40,19 @@ const SUPPORT_ARRAY_BUFFER_RESIZE = NODE_MAJOR >= 20
 const oneSecondNs = 1_000_000_000n
 let globalSnapshotSamplingRateWindowStart = 0n
 let snapshotsSampledWithinTheLastSecond = 0
-// TODO: Is a limit of 256 snapshots ever going to be a problem?
-const snapshotProbeIndexBuffer = new ArrayBuffer(1, { maxByteLength: 256 })
-// TODO: Is a limit of 256 probes ever going to be a problem?
+
 // TODO: Change to const once we drop support for Node.js 18
-let snapshotProbeIndex = new Uint8Array(snapshotProbeIndexBuffer)
+let snapshotProbeIndexBuffer, snapshotProbeIndex
+
+if (SUPPORT_ARRAY_BUFFER_RESIZE) {
+  // TODO: Is a limit of 256 snapshots ever going to be a problem?
+  // eslint-disable-next-line n/no-unsupported-features/es-syntax
+  snapshotProbeIndexBuffer = new ArrayBuffer(1, { maxByteLength: 256 })
+  // TODO: Is a limit of 256 probes ever going to be a problem?
+  snapshotProbeIndex = new Uint8Array(snapshotProbeIndexBuffer)
+} else {
+  snapshotProbeIndex = new Uint8Array(1)
+}
 
 // WARNING: The code above the line `await session.post('Debugger.resume')` is highly optimized. Please edit with care!
 session.on('Debugger.paused', async ({ params }) => {
@@ -160,10 +168,9 @@ session.on('Debugger.paused', async ({ params }) => {
   await session.post('Debugger.resume')
   const diff = process.hrtime.bigint() - start // TODO: Recored as telemetry (DEBUG-2858)
 
-  log.debug(
-    '[debugger:devtools_client] Finished processing breakpoints - main thread paused for: %d ms',
+  log.debug(() => `[debugger:devtools_client] Finished processing breakpoints - main thread paused for: ${
     Number(diff) / 1_000_000
-  )
+  } ms`)
 
   const logger = {
     // We can safely use `location.file` from the first probe in the array, since all probes hit by `hitBreakpoints`

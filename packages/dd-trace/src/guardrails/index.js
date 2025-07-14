@@ -1,7 +1,5 @@
 'use strict'
 
-/* eslint-disable no-var */
-
 var path = require('path')
 var Module = require('module')
 var isTrue = require('./util').isTrue
@@ -26,9 +24,11 @@ function guard (fn) {
     var resolvedInApp
     var entrypoint = process.argv[1]
     try {
+      // eslint-disable-next-line n/no-unsupported-features/node-builtins
       resolvedInApp = Module.createRequire(entrypoint).resolve('dd-trace')
     } catch (e) {
       // Ignore. If we can't resolve the module, we assume it's not in the app.
+      // TODO: There's also the possibility that this version of Node.js doesn't have Module.createRequire (pre v12.2.0)
     }
     if (resolvedInApp) {
       var ourselves = path.normalize(path.join(__dirname, '..', '..', '..', '..', 'index.js'))
@@ -47,15 +47,14 @@ function guard (fn) {
       { name: 'abort.runtime', tags: [] }
     ])
     log.info('Aborting application instrumentation due to incompatible_runtime.')
-    log.info('Found incompatible runtime nodejs ' + version + ', Supported runtimes: nodejs ' + engines.node + '.')
+    log.info('Found incompatible runtime nodejs %s, Supported runtimes: nodejs %s.', version, engines.node)
     if (forced) {
       log.info('DD_INJECT_FORCE enabled, allowing unsupported runtimes and continuing.')
     }
   }
 
   if (!clobberBailout && (!initBailout || forced)) {
-    // Ensure the instrumentation source is set for the current process and potential 
-    // child processes.
+    // Ensure the instrumentation source is set for the current process and potential child processes.
     var result = fn()
     telemetry('complete', ['injection_forced:' + (forced && initBailout ? 'true' : 'false')])
     log.info('Application instrumentation bootstrapping complete')

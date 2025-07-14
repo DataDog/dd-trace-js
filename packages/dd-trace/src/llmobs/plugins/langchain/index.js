@@ -72,7 +72,7 @@ class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
     const type = ctx.type = this.constructor.lcType // langchain operation type (oneof chain,chat_model,llm,embedding)
 
     if (!Object.keys(this._handlers).includes(type)) {
-      log.warn(`Unsupported LangChain operation type: ${type}`)
+      log.warn('Unsupported LangChain operation type:', type)
       return
     }
 

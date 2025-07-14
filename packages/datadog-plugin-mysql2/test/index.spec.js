@@ -1,5 +1,6 @@
 'use strict'
 
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const proxyquire = require('proxyquire').noPreserveCache()
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -33,7 +34,7 @@ describe('Plugin', () => {
           mysql2 = proxyquire(`../../../versions/mysql2@${version}`, {}).get()
 
           connection = mysql2.createConnection({
-            host: 'localhost',
+            host: '127.0.0.1',
             user: 'root',
             database: 'db'
           })
@@ -45,10 +46,14 @@ describe('Plugin', () => {
           () => tracer,
           'mysql2',
           (done) => connection.query('SELECT 1', (_) => done()),
-          'db', 'db.name')
+          'db',
+          'db.name'
+        )
 
         withNamingSchema(
-          () => connection.query('SELECT 1', (_) => {}),
+          () => new Promise((resolve) => {
+            connection.query('SELECT 1', (_) => resolve())
+          }),
           rawExpectedSchema.outbound
         )
 
@@ -210,7 +215,7 @@ describe('Plugin', () => {
           mysql2 = proxyquire(`../../../versions/mysql2@${version}`, {}).get()
 
           connection = mysql2.createConnection({
-            host: 'localhost',
+            host: '127.0.0.1',
             user: 'root',
             database: 'db'
           })
@@ -219,7 +224,9 @@ describe('Plugin', () => {
         })
 
         withNamingSchema(
-          () => connection.query('SELECT 1', (_) => {}),
+          () => new Promise((resolve) => {
+            connection.query('SELECT 1', (_) => resolve())
+          }),
           {
             v0: {
               opName: 'mysql.query',
@@ -259,7 +266,7 @@ describe('Plugin', () => {
           mysql2 = proxyquire(`../../../versions/mysql2@${version}`, {}).get()
 
           connection = mysql2.createConnection({
-            host: 'localhost',
+            host: '127.0.0.1',
             user: 'root',
             database: 'db'
           })
@@ -268,7 +275,9 @@ describe('Plugin', () => {
         })
 
         withNamingSchema(
-          () => connection.query('SELECT 1', (_) => {}),
+          () => new Promise((resolve) => {
+            connection.query('SELECT 1', (_) => resolve())
+          }),
           {
             v0: {
               opName: 'mysql.query',
@@ -285,7 +294,7 @@ describe('Plugin', () => {
           agent.assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('service', 'custom')
             sinon.assert.calledWith(serviceSpy, sinon.match({
-              host: 'localhost',
+              host: '127.0.0.1',
               user: 'root',
               database: 'db'
             }))
@@ -311,7 +320,7 @@ describe('Plugin', () => {
 
           pool = mysql2.createPool({
             connectionLimit: 1,
-            host: 'localhost',
+            host: '127.0.0.1',
             user: 'root'
           })
         })

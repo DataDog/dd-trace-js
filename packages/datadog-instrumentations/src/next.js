@@ -51,7 +51,9 @@ function wrapHandleApiRequest (handleApiRequest) {
 function wrapHandleApiRequestWithMatch (handleApiRequest) {
   return function (req, res, query, match) {
     return instrument(req, res, () => {
-      const page = (match !== null && typeof match === 'object' && typeof match.definition === 'object')
+      const page = (
+        match !== null && typeof match === 'object' && match.definition !== null && typeof match.definition === 'object'
+      )
         ? match.definition.pathname
         : undefined
 

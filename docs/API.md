@@ -90,6 +90,7 @@ tracer.use('pg', {
 <h5 id="pg"></h5>
 <h5 id="pg-tags"></h5>
 <h5 id="pg-config"></h5>
+<h5 id="prisma"></h5>
 <h5 id="protobufjs"></h5>
 <h5 id="redis"></h5>
 <h5 id="redis-tags"></h5>
@@ -147,6 +148,7 @@ tracer.use('pg', {
 * [oracledb](./interfaces/export_.plugins.oracledb.html)
 * [pino](./interfaces/export_.plugins.pino.html)
 * [pg](./interfaces/export_.plugins.pg.html)
+* [prisma](./interfaces/export_.plugins.prisma.html)
 * [promise](./interfaces/export_.plugins.promise.html)
 * [promise-js](./interfaces/export_.plugins.promise_js.html)
 * [protobufjs](./interfaces/export_.plugins.protobufjs.html)

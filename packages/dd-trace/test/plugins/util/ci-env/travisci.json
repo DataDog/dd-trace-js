@@ -564,7 +564,7 @@
       "ci.pipeline.url": "https://travisci.com/pipeline",
       "ci.provider.name": "travisci",
       "git.branch": "pr",
-      "git.commit.head_sha": "724faca55efebf66fc15bfccc34577c64c5480bd",
+      "git.commit.head.sha": "724faca55efebf66fc15bfccc34577c64c5480bd",
       "git.commit.message": "travis-commit-message",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.pull_request.base_branch": "master",
