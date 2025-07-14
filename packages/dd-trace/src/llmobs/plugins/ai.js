@@ -423,6 +423,7 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
 
       for (const part of content) {
         const { type } = part
+        // TODO(sabrenner): do we want to include reasoning?
         if (['text', 'reasoning', 'redacted-reasoning'].includes(type)) {
           finalContent += part.text ?? part.data
         } else if (type === 'tool-call') {
@@ -453,10 +454,14 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
       for (const part of content) {
         if (part.type === 'tool-result') {
           let safeResult
-          try {
-            safeResult = JSON.stringify(part.result)
-          } catch {
-            safeResult = '[Unparsable Tool Result]'
+          if (typeof part.result !== 'string') {
+            try {
+              safeResult = JSON.stringify(part.result)
+            } catch {
+              safeResult = '[Unparsable Tool Result]'
+            }
+          } else {
+            safeResult = part.result
           }
 
           finalMessages.push({

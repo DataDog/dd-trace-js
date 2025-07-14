@@ -428,6 +428,11 @@ describe('Plugin', () => {
               },
               type: 'function'
             }]
+          },
+          {
+            content: 'It is nice and sunny in Tokyo.',
+            role: 'tool',
+            tool_id: MOCK_STRING
           }
         ],
         outputMessages: [{ content: 'The weather in Tokyo is nice and sunny.', role: 'assistant' }],
@@ -559,6 +564,11 @@ describe('Plugin', () => {
               },
               type: 'function'
             }]
+          },
+          {
+            content: 'It is nice and sunny in Tokyo.',
+            role: 'tool',
+            tool_id: MOCK_STRING
           }
         ],
         outputMessages: [{ content: 'The weather in Tokyo is nice and sunny.', role: 'assistant' }],
