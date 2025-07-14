@@ -4,6 +4,12 @@ const { performance, constants, PerformanceObserver } = require('perf_hooks')
 const { END_TIMESTAMP_LABEL, SPAN_ID_LABEL, LOCAL_ROOT_SPAN_ID_LABEL, encodeProfileAsync } = require('./shared')
 const { Function, Label, Line, Location, Profile, Sample, StringTable, ValueType } = require('pprof-format')
 const { availableParallelism, effectiveLibuvThreadCount } = require('../libuv-size')
+const { getEnvironmentVariable } = require('../../config-helper')
+const dc = require('dc-polyfill')
+
+const testEventChannel = ['true', '1'].includes(getEnvironmentVariable('TESTING_PROFILING_EVENTS'))
+  ? dc.channel('dd-trace:profiling:events-test')
+  : undefined
 
 // perf_hooks uses millis, with fractional part representing nanos. We emit nanos into the pprof file.
 const MS_TO_NS = 1_000_000
@@ -363,6 +369,27 @@ class DatadogInstrumentationEventSource {
   }
 }
 
+class TestEventSource {
+  constructor (eventHandler) {
+    this.eventHandler = eventHandler
+    this.started = false
+  }
+
+  start () {
+    if (!this.started) {
+      testEventChannel.subscribe(this.eventHandler)
+      this.started = true
+    }
+  }
+
+  stop () {
+    if (this.started) {
+      testEventChannel.unsubscribe(this.eventHandler)
+      this.started = false
+    }
+  }
+}
+
 class CompositeEventSource {
   constructor (sources) {
     this.sources = sources
@@ -430,15 +457,21 @@ class EventsProfiler {
       }
     }
 
-    this.eventSource = options.codeHotspotsEnabled
+    const eventSources = options.codeHotspotsEnabled
       // Use Datadog instrumentation to collect events with span IDs. Still use
       // Node API for GC events.
-      ? new CompositeEventSource([
-        new DatadogInstrumentationEventSource(eventHandler, eventFilter),
-        new NodeApiEventSource(filteringEventHandler, ['gc'])
-      ])
+      ? [
+          new DatadogInstrumentationEventSource(eventHandler, eventFilter),
+          new NodeApiEventSource(filteringEventHandler, ['gc']),
+        ]
       // Use Node API instrumentation to collect events without span IDs
-      : new NodeApiEventSource(filteringEventHandler)
+      : [
+          new NodeApiEventSource(filteringEventHandler)
+        ]
+    if (testEventChannel !== undefined) {
+      eventSources.push(new TestEventSource(filteringEventHandler))
+    }
+    this.eventSource = new CompositeEventSource(eventSources)
   }
 
   start () {
@@ -460,6 +493,12 @@ class EventsProfiler {
 
   encode (profile) {
     return encodeProfileAsync(profile())
+  }
+
+  static emitTestEvent (event) {
+    if (testEventChannel !== undefined) {
+      testEventChannel.publish(event)
+    }
   }
 }
 
