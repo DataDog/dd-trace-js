@@ -1,7 +1,6 @@
 'use strict'
 const path = require('path')
 const { PassThrough } = require('stream')
-const satisfies = require('semifies')
 
 const proxyquire = require('proxyquire').noPreserveCache()
 const nock = require('nock')
@@ -25,7 +24,6 @@ const {
 } = require('../../dd-trace/src/plugins/util/test')
 
 const { version: ddTraceVersion } = require('../../../package.json')
-const { NODE_MAJOR } = require('../../../version')
 
 const runCucumber = (version, Cucumber, requireName, featureName, testName) => {
   const stdout = new PassThrough()
@@ -56,8 +54,6 @@ describe('Plugin', function () {
   let Cucumber
   this.timeout(10000)
   withVersions('cucumber', '@cucumber/cucumber', (version, _, specificVersion) => {
-    if ((NODE_MAJOR === 18 || NODE_MAJOR === 23) && satisfies(specificVersion, '>=12.0.0')) return
-
     afterEach(() => {
       // > If you want to run tests multiple times, you may need to clear Node's require cache
       // before subsequent calls in whichever manner best suits your needs.
