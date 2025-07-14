@@ -24,11 +24,7 @@ function wrapExec (exec) {
       const store = storage('legacy').getStore()
       const bound = wrap(callback, store)
 
-      if (op === undefined) {
-        return exec.call(this, bound)
-      } else {
-        return exec.call(this, op, bound)
-      }
+      return op === undefined ? exec.call(this, bound) : exec.call(this, op, bound)
     }
 
     return exec.apply(this, arguments)
