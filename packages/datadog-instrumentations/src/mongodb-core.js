@@ -2,7 +2,8 @@
 
 const {
   channel,
-  addHook
+  addHook,
+  AsyncResource
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
@@ -55,6 +56,22 @@ addHook({ name: 'mongodb-core', versions: ['~3.1.10'], file: 'lib/wireprotocol/3
 addHook({ name: 'mongodb-core', versions: ['~3.1.10'], file: 'lib/wireprotocol/2_6_support.js' }, WireProtocol => {
   shimmer.wrap(WireProtocol.prototype, 'command', command => wrapUnifiedCommand(command, 'command'))
   return WireProtocol
+})
+
+addHook({ name: 'mongodb', versions: ['>=3.5.4 <4.11.0'], file: 'lib/utils.js' }, util => {
+  shimmer.wrap(util, 'maybePromise', maybePromise => function (parent, callback, fn) {
+    const asyncResource = new AsyncResource('bound-anonymous-fn')
+    const callbackIndex = arguments.length - 2
+
+    callback = arguments[callbackIndex]
+
+    if (typeof callback === 'function') {
+      arguments[callbackIndex] = asyncResource.bind(callback)
+    }
+
+    return maybePromise.apply(this, arguments)
+  })
+  return util
 })
 
 function wrapWp (wp) {
