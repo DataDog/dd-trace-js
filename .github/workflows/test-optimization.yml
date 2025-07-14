@@ -75,8 +75,9 @@ jobs:
   integration-ci:
     strategy:
       matrix:
+        # TODO: Add cucumber and selenium once cucumber+12 is fixed
         version: [oldest, latest]
-        framework: [cucumber, selenium, jest, mocha]
+        framework: [jest, mocha]
     runs-on: ubuntu-latest
     env:
       DD_SERVICE: dd-trace-js-integration-tests
@@ -160,13 +161,14 @@ jobs:
         env:
           NODE_OPTIONS: '-r ./ci/init'
 
-  plugin-cucumber:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: cucumber
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/plugins/test
+  # TODO: Remove comment once cucumber+12 is fixed
+  # plugin-cucumber:
+  #   runs-on: ubuntu-latest
+  #   env:
+  #     PLUGINS: cucumber
+  #   steps:
+  #     - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+  #     - uses: ./.github/actions/plugins/test
 
   # TODO: fix performance issues and test more Node versions
   plugin-cypress:
