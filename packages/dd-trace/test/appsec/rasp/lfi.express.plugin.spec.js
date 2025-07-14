@@ -296,6 +296,13 @@ describe('RASP - lfi', () => {
 
       describe('test readFile', () => {
         runFsMethodTestThreeWay('readFile', undefined, __filename)
+
+        runFsMethodTest('an async operation without callback is executed before',
+          { getAppFn: getAppSync, ruleEvalCount: 2 }, (args) => {
+            const fs = require('fs')
+            fs.readFile(path.join(__dirname, 'utils.js'), () => {}) // safe and ignored operation
+            return fs.readFileSync(...args)
+          }, __filename)
       })
 
       describe('test readlink', () => {
