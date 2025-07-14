@@ -1,8 +1,5 @@
 'use strict'
 
-/* eslint-disable no-var */
-/* eslint-disable object-shorthand */
-
 var fs = require('fs')
 var spawn = require('child_process').spawn
 var tracerVersion = require('../../../../package.json').version
@@ -11,12 +8,12 @@ var log = require('./log')
 module.exports = sendTelemetry
 
 if (!process.env.DD_INJECTION_ENABLED) {
-  module.exports = function () {}
+  module.exports = function noop () {}
 }
 
 var telemetryForwarderPath = process.env.DD_TELEMETRY_FORWARDER_PATH
 if (typeof telemetryForwarderPath !== 'string' || !fs.existsSync(telemetryForwarderPath)) {
-  module.exports = function () {}
+  module.exports = function noop () {}
 }
 
 var metadata = {
@@ -53,7 +50,7 @@ function sendTelemetry (name, tags) {
     points = [{ name: name, tags: tags || [] }]
   }
   if (['1', 'true', 'True'].indexOf(process.env.DD_INJECT_FORCE) !== -1) {
-    points = points.filter(function (p) { return ['error', 'complete'].includes(p.name) })
+    points = points.filter(function (p) { return ['error', 'complete'].indexOf(p.name) !== -1 })
   }
   points = points.filter(function (p) { return shouldSend(p) })
   for (var i = 0; i < points.length; i++) {

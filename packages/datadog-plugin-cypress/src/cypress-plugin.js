@@ -1,3 +1,5 @@
+'use strict'
+
 const {
   TEST_STATUS,
   TEST_IS_RUM_ACTIVE,
@@ -76,7 +78,8 @@ const {
   GIT_TAG,
   GIT_PULL_REQUEST_BASE_BRANCH_SHA,
   GIT_COMMIT_HEAD_SHA,
-  GIT_PULL_REQUEST_BASE_BRANCH
+  GIT_PULL_REQUEST_BASE_BRANCH,
+  GIT_COMMIT_HEAD_MESSAGE
 } = require('../../dd-trace/src/plugins/util/tags')
 const {
   OS_VERSION,
@@ -238,7 +241,8 @@ class CypressPlugin {
       [GIT_COMMIT_MESSAGE]: commitMessage,
       [GIT_TAG]: tag,
       [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseSha,
-      [GIT_COMMIT_HEAD_SHA]: commitHeadSha
+      [GIT_COMMIT_HEAD_SHA]: commitHeadSha,
+      [GIT_COMMIT_HEAD_MESSAGE]: commitHeadMessage
     } = this.testEnvironmentMetadata
 
     this.repositoryRoot = repositoryRoot || process.cwd()
@@ -258,7 +262,8 @@ class CypressPlugin {
       commitMessage,
       tag,
       pullRequestBaseSha,
-      commitHeadSha
+      commitHeadSha,
+      commitHeadMessage
     }
     this.finishedTestsByFile = {}
     this.testStatuses = {}
