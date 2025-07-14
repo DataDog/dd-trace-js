@@ -373,9 +373,13 @@ declare namespace tracer {
     /**
      * Whether to enable trace ID injection in log records to be able to correlate
      * traces with logs.
-     * @default false
+     * all: enable for both structured and unstructured logs
+     * structured: enable only for structured logs
+     * (same as 'all' since dd-trace does support log injection for unstructured logs)
+     * disabled: disable trace ID injection in all logs
+     * @default 'structured'
      */
-    logInjection?: boolean,
+    logInjection?: string,
 
     /**
      * Whether to enable startup logs.
