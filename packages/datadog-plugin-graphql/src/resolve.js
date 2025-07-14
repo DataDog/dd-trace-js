@@ -12,12 +12,11 @@ class GraphQLResolvePlugin extends TracingPlugin {
   start (fieldCtx) {
     const { info, ctx: parentCtx, args } = fieldCtx
 
-    const pathInfo = info && info.path
-    const path = pathToArray(pathInfo)
+    const path = getPath(info, this.config)
 
     // we need to get the parent span to the field if it exists for correct span parenting
     // of nested fields
-    const parentField = getParentField(parentCtx, path)
+    const parentField = getParentField(parentCtx, pathToArray(info && info.path))
     const childOf = parentField?.ctx?.currentStore?.span
 
     fieldCtx.parent = parentField

@@ -322,7 +322,6 @@ function finishResolvers ({ fields }) {
       field.ctx.error = field.error
       resolveErrorCh.publish(field.ctx)
     }
-    console.log('finishResolvers', field)
     finishResolveCh.publish(field.ctx)
   })
 }
