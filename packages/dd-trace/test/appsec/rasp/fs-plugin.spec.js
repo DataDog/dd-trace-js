@@ -222,8 +222,14 @@ describe('AppsecFsPlugin', () => {
           opStartCh.unsubscribe(onStart)
         }
       })
-      it.only('should clean up store when finishing op', () => {
+
+      it('should clean up store when finishing op', () => {
         let count = 4
+        // hack to node 18 and early 20.x
+        // with dc-polyfill addBind is not enough to force a channel.hasSubscribers === true
+        const onStart = () => {}
+        opStartCh.subscribe(onStart)
+
         const onFinish = () => {
           const store = storage('legacy').getStore()
           count--
@@ -237,14 +243,13 @@ describe('AppsecFsPlugin', () => {
           storage('legacy').enterWith(origStore)
 
           opFinishCh.subscribe(onFinish)
-          console.log('BEFORE - fs.readFileSync')
 
           fs.readFileSync(path.join(__dirname, 'fs-plugin.spec.js'))
 
-          console.log('AFTER - fs.readFileSync')
           assert.strictEqual(count, 0)
         } finally {
           opFinishCh.unsubscribe(onFinish)
+          opStartCh.unsubscribe(onStart)
         }
       })
     })

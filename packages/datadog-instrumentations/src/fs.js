@@ -259,8 +259,7 @@ function createWrapFunction (prefix = '', override = '') {
     const operation = name.match(/^(.+?)(Sync)?(\.native)?$/)[1]
 
     return function () {
-      if (!startChannel.hasSubscribers)
-        return original.apply(this, arguments)
+      if (!startChannel.hasSubscribers) return original.apply(this, arguments)
 
       const lastIndex = arguments.length - 1
       const cb = typeof arguments[lastIndex] === 'function' && arguments[lastIndex]
