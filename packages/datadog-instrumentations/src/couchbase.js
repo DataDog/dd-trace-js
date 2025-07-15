@@ -36,7 +36,9 @@ function wrapMaybeInvoke (_maybeInvoke, callbackCh) {
     const callback = args[callbackIndex]
 
     if (typeof callback === 'function') {
-      args[callbackIndex] = callbackCh.runStores({}, callback)
+      args[callbackIndex] = shimmer.wrapFunction(callback, cb => callbackCh.runStores({}, () => {
+        return cb.apply(this, arguments)
+      }))
     }
 
     return _maybeInvoke.apply(this, arguments)
@@ -48,7 +50,9 @@ function wrapQuery (query, queryCh) {
   const wrapped = function (q, params, callback) {
     const cb = arguments[arguments.length - 1]
     if (typeof cb === 'function') {
-      arguments[arguments.length - 1] = queryCh.runStores({}, cb)
+      arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => queryCh.runStores({}, () => {
+        return cb.apply(this, arguments)
+      }))
     }
 
     return query.apply(this, arguments)
