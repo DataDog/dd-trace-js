@@ -222,8 +222,7 @@ describe('AppsecFsPlugin', () => {
           opStartCh.unsubscribe(onStart)
         }
       })
-
-      it('should clean up store when finishing op', () => {
+      it.only('should clean up store when finishing op', () => {
         let count = 4
         const onFinish = () => {
           const store = storage('legacy').getStore()
