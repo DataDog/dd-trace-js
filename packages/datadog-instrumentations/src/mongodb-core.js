@@ -170,7 +170,7 @@ function instrument (operation, command, instance, args, server, ns, ops, option
         errorCh.publish(ctx)
       }
 
-      return callback ? finishCh.runStores(ctx, callback, this, ...arguments) : finishCh.publish(ctx)
+      return finishCh.runStores(ctx, callback, this, ...arguments)
     })
 
     try {
