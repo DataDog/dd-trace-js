@@ -40,9 +40,14 @@ class BaseLangChainTracingPlugin extends TracingPlugin {
 
     // Runnable interfaces have an `lc_namespace` property
     const ns = ctx.self.lc_namespace || ctx.namespace
-    const resource = ctx.resource = [...ns, ctx.self.constructor.name].join('.')
 
-    const handler = this.handlers[type]
+    const resourceParts = [...ns, ctx.self.constructor.name]
+    if (type === 'tool') {
+      resourceParts.push(ctx.instance.name)
+    }
+    const resource = ctx.resource = resourceParts.join('.')
+
+    const handler = this.handlers[type] || this.handlers.default
 
     const instance = ctx.instance
     const apiKey = handler.extractApiKey(instance)
@@ -78,7 +83,7 @@ class BaseLangChainTracingPlugin extends TracingPlugin {
 
     const { type } = ctx
 
-    const handler = this.handlers[type]
+    const handler = this.handlers[type] || this.handlers.default
     const tags = handler.getSpanEndTags(ctx, span) || {}
 
     span.addTags(tags)
@@ -139,11 +144,38 @@ class EmbeddingsEmbedDocumentsPlugin extends BaseLangChainTracingPlugin {
   }
 }
 
+class ToolInvokePlugin extends BaseLangChainTracingPlugin {
+  static get id () { return 'langchain_tool_invoke' }
+  static get lcType () { return 'tool' }
+  static get prefix () {
+    return 'tracing:orchestrion:@langchain/core:Tool_invoke'
+  }
+}
+
+class VectorStoreSimilaritySearchPlugin extends BaseLangChainTracingPlugin {
+  static get id () { return 'langchain_vectorstore_similarity_search' }
+  static get lcType () { return 'similarity_search' }
+  static get prefix () {
+    return 'tracing:orchestrion:@langchain/core:VectorStore_similaritySearch'
+  }
+}
+
+class VectorStoreSimilaritySearchWithScorePlugin extends BaseLangChainTracingPlugin {
+  static get id () { return 'langchain_vectorstore_similarity_search_with_score' }
+  static get lcType () { return 'similarity_search' }
+  static get prefix () {
+    return 'tracing:orchestrion:@langchain/core:VectorStore_similaritySearchWithScore'
+  }
+}
+
 module.exports = [
   RunnableSequenceInvokePlugin,
   RunnableSequenceBatchPlugin,
   BaseChatModelGeneratePlugin,
   BaseLLMGeneratePlugin,
   EmbeddingsEmbedQueryPlugin,
-  EmbeddingsEmbedDocumentsPlugin
+  EmbeddingsEmbedDocumentsPlugin,
+  ToolInvokePlugin,
+  VectorStoreSimilaritySearchPlugin,
+  VectorStoreSimilaritySearchWithScorePlugin
 ]
