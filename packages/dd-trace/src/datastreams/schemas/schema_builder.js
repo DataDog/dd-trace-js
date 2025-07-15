@@ -99,6 +99,8 @@ class OpenApiComponents {
 // This adds a single whitespace between entries without adding newlines.
 // This differs from JSON.stringify and is used to align with the output
 // in other platforms.
+// TODO: Add tests to verify this behavior. A couple of cases are not
+// covered by the existing tests.
 function toJSON (value) {
   // eslint-disable-next-line eslint-rules/eslint-safe-typeof-object
   if (typeof value === 'object') {
@@ -108,10 +110,12 @@ function toJSON (value) {
     if (Array.isArray(value)) {
       let result = '['
       for (let i = 0; i < value.length; i++) {
-        if (i > 0) {
-          result += ', '
+        if (value[i] !== null) {
+          if (i !== 0) {
+            result += ', '
+          }
+          result += value[i] === undefined ? 'null' : toJSON(value[i])
         }
-        result += value[i] == null ? 'null' : toJSON(value[i])
       }
       return `${result}]`
     }

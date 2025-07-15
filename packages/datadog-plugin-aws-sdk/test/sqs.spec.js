@@ -176,11 +176,22 @@ describe('Plugin', () => {
           })
         })
 
-        it('should propagate the tracing context from the producer to the consumer in batch operations', (done) => {
+        it('should propagate the tracing context from the producer to the consumer in batch operations', async () => {
           let parentId
           let traceId
 
-          agent.assertSomeTraces(traces => {
+          const sendPromise = new Promise((resolve, reject) => {
+            sqs.sendMessageBatch({
+              Entries: [
+                { Id: '1', MessageBody: 'test batch propagation 1' },
+                { Id: '2', MessageBody: 'test batch propagation 2' },
+                { Id: '3', MessageBody: 'test batch propagation 3' }
+              ],
+              QueueUrl
+            }, (err) => err ? reject(err) : resolve())
+          })
+
+          const parentPromise = agent.assertSomeTraces(traces => {
             const span = traces[0][0]
 
             expect(span.resource.startsWith('sendMessageBatch')).to.equal(true)
@@ -192,56 +203,45 @@ describe('Plugin', () => {
             traceId = span.trace_id.toString()
           })
 
-          let batchChildSpans = 0
-          agent.assertSomeTraces(traces => {
-            const span = traces[0][0]
+          await Promise.all([sendPromise, parentPromise])
 
-            expect(parentId).to.be.a('string')
-            expect(span.parent_id.toString()).to.equal(parentId)
-            expect(span.trace_id.toString()).to.equal(traceId)
-            batchChildSpans += 1
-            expect(batchChildSpans).to.equal(3)
-          }, { timeoutMs: 2000 }).then(done, done)
+          async function receiveAndAssertMessage () {
+            const childPromise = agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
 
-          sqs.sendMessageBatch(
-            {
-              Entries: [
-                {
-                  Id: '1',
-                  MessageBody: 'test batch propagation 1'
-                },
-                {
-                  Id: '2',
-                  MessageBody: 'test batch propagation 2'
-                },
-                {
-                  Id: '3',
-                  MessageBody: 'test batch propagation 3'
-                }
-              ],
-              QueueUrl
-            }, (err) => {
-              if (err) return done(err)
+              expect(parentId).to.be.a('string')
+              expect(span.parent_id.toString()).to.equal(parentId)
+              expect(span.trace_id.toString()).to.equal(traceId)
+            })
 
-              function receiveMessage () {
-                sqs.receiveMessage({
-                  QueueUrl,
-                  MaxNumberOfMessages: 1
-                }, (err, data) => {
-                  if (err) return done(err)
+            const receiveMessage = new Promise((resolve, reject) => {
+              sqs.receiveMessage({
+                QueueUrl,
+                MaxNumberOfMessages: 1
+              }, (err, data) => {
+                if (err) return reject(err)
 
+                try {
                   for (const message in data.Messages) {
                     const recordData = data.Messages[message].MessageAttributes
                     expect(recordData).to.have.property('_datadog')
                     const traceContext = JSON.parse(recordData._datadog.StringValue)
                     expect(traceContext).to.have.property('x-datadog-trace-id')
                   }
-                })
-              }
-              receiveMessage()
-              receiveMessage()
-              receiveMessage()
+
+                  resolve()
+                } catch (e) {
+                  reject(e)
+                }
+              })
             })
+
+            await Promise.all([childPromise, receiveMessage])
+          }
+
+          await receiveAndAssertMessage()
+          await receiveAndAssertMessage()
+          await receiveAndAssertMessage()
         })
 
         it('should run the consumer in the context of its span', (done) => {

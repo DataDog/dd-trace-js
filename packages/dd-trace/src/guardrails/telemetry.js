@@ -25,18 +25,23 @@ var metadata = {
   pid: process.pid
 }
 
-var seen = []
-function hasSeen (point) {
+var seen = {}
+function shouldSend (point) {
   if (point.name === 'abort') {
     // This one can only be sent once, regardless of tags
-    return seen.indexOf('abort') !== -1
-  }
-  if (point.name === 'abort.integration') {
+    if (seen.abort) {
+      return false
+    }
+    seen.abort = true
+  } else if (point.name === 'abort.integration') {
     // For now, this is the only other one we want to dedupe
     var compiledPoint = point.name + point.tags.join('')
-    return seen.indexOf(compiledPoint) !== -1
+    if (seen[compiledPoint]) {
+      return false
+    }
+    seen[compiledPoint] = true
   }
-  return false
+  return true
 }
 
 function sendTelemetry (name, tags) {
@@ -47,7 +52,7 @@ function sendTelemetry (name, tags) {
   if (['1', 'true', 'True'].indexOf(process.env.DD_INJECT_FORCE) !== -1) {
     points = points.filter(function (p) { return ['error', 'complete'].indexOf(p.name) !== -1 })
   }
-  points = points.filter(function (p) { return !hasSeen(p) })
+  points = points.filter(function (p) { return shouldSend(p) })
   for (var i = 0; i < points.length; i++) {
     points[i].name = 'library_entrypoint.' + points[i].name
   }
