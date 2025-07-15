@@ -16,11 +16,21 @@ updates:
       gh-actions-packages:
         patterns:
           - "*"
+    labels:
+      - dependabot
+      - dependencies
+      - github_actions
+      - semver-patch
   - package-ecosystem: "npm"
     directories:
       - "/"
     schedule:
       interval: "weekly"
+    labels:
+      - dependabot
+      - dependencies
+      - javascript
+      - semver-patch
     ignore:
       - dependency-name: "@types/node"
         # Update the types manually with new Node.js version support
