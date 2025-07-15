@@ -1,12 +1,12 @@
 'use strict'
 
+const RuleManager = require('../../src/appsec/rule_manager')
 const RemoteConfigCapabilities = require('../../src/remote_config/capabilities')
 const { kPreUpdate } = require('../../src/remote_config/manager')
 
 let config
 let rc
 let RemoteConfigManager
-let RuleManager
 let UserTracking
 let log
 let appsec
@@ -33,10 +33,6 @@ describe('Remote Config index', () => {
 
     RemoteConfigManager = sinon.stub().returns(rc)
 
-    RuleManager = {
-      updateWafFromRC: sinon.stub()
-    }
-
     UserTracking = {
       setCollectionMode: sinon.stub()
     }
@@ -52,10 +48,8 @@ describe('Remote Config index', () => {
 
     remoteConfig = proxyquire('../src/remote_config', {
       './manager': RemoteConfigManager,
-      '../rule_manager': RuleManager,
-      '../user_tracking': UserTracking,
-      '../../log': log,
-      '..': appsec
+      '../appsec/user_tracking': UserTracking,
+      '../log': log,
     })
   })
 

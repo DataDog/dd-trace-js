@@ -42,11 +42,11 @@ describe('RemoteConfigManager', () => {
     RemoteConfigManager = proxyquire('../src/remote_config/manager', {
       'crypto-randomuuid': uuid,
       './scheduler': Scheduler,
-      '../../../../../package.json': { version: '3.0.0' },
-      '../../exporters/common/request': request,
-      '../../log': log,
+      '../../../../package.json': { version: '3.0.0' },
+      '../exporters/common/request': request,
+      '../log': log,
       '../tagger': tagger,
-      '../../service-naming/extra-services': {
+      '../service-naming/extra-services': {
         getExtraServices: () => extraServices
       }
     })
