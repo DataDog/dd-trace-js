@@ -3,13 +3,19 @@
 const { addHook, channel } = require('./helpers/instrument')
 const { wrapThen } = require('./helpers/promise')
 const shimmer = require('../../datadog-shimmer')
-const { storage } = require('../../datadog-core')
 
-function wrap (fn, store) {
-  if (typeof fn !== 'function') return fn
-  return function () {
-    storage('legacy').enterWith(store)
-    return fn.apply(this, arguments)
+const startCh = channel('datadog:mongoose:model:filter:start')
+const finishCh = channel('datadog:mongoose:model:filter:finish')
+// this channel is purely for wrapping the callback of exec methods and handling store context, it doesn't have any subscribers
+const callbackCh = channel('datadog:mongoose:model:exec:callback')
+
+
+function wrapAddQueue (addQueue) {
+  return function (name, args, options) {
+    if (typeof name === 'function') {
+      arguments[0] = callbackCh.runStores(ctx, addQueue, this, ...arguments)
+    }
+    return addQueue.apply(this, arguments)
   }
 }
 
@@ -21,8 +27,8 @@ function wrapExec (exec) {
     }
 
     if (typeof callback === 'function') {
-      const store = storage('legacy').getStore()
-      const bound = wrap(callback, store)
+      const ctx = {}
+      const bound = callbackCh.runStores(ctx, callback, this, ...arguments)
 
       return op === undefined ? exec.call(this, bound) : exec.call(this, op, bound)
     }
@@ -48,25 +54,12 @@ addHook({
     shimmer.wrap(mongoose.Aggregate.prototype, 'exec', wrapExec)
   }
 
-  // The `addQueue` function is used internally to execute buffered operations.
-  // We need to wrap it to make sure the context is propagated to the functions
-  // it executes.
   if (mongoose.Collection) {
-    shimmer.wrap(mongoose.Collection.prototype, 'addQueue', function (addQueue) {
-      return function (name, args, options) {
-        if (typeof name === 'function') {
-          arguments[0] = wrap(name, storage('legacy').getStore())
-        }
-        return addQueue.apply(this, arguments)
-      }
-    })
+    shimmer.wrap(mongoose.Collection.prototype, 'addQueue', wrapAddQueue)
   }
 
   return mongoose
 })
-
-const startCh = channel('datadog:mongoose:model:filter:start')
-const finishCh = channel('datadog:mongoose:model:filter:finish')
 
 const collectionMethodsWithFilter = [
   'count',
