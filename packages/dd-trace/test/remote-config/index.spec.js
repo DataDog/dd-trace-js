@@ -1,5 +1,7 @@
 'use strict'
 
+require('../setup/tap')
+
 const RuleManager = require('../../src/appsec/rule_manager')
 const RemoteConfigCapabilities = require('../../src/remote_config/capabilities')
 const { kPreUpdate } = require('../../src/remote_config/manager')

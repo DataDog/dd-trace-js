@@ -1,5 +1,7 @@
 'use strict'
 
+require('../setup/tap')
+
 const Capabilities = require('../../src/remote_config/capabilities')
 const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('../../src/remote_config/apply_states')
 

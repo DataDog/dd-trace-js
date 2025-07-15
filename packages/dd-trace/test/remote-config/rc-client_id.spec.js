@@ -1,5 +1,7 @@
 'use strict'
 
+require('../setup/tap')
+
 const { createSandbox, FakeAgent, spawnProc } = require('../../../../integration-tests/helpers')
 const path = require('path')
 const Axios = require('axios')
