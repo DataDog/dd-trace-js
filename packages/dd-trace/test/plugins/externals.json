@@ -319,11 +319,11 @@
       "versions": [">=0.1"]
     },
     {
-      "name": "@langchain/openai",
+      "name": "@langchain/cohere",
       "versions": [">=0.1"]
     },
     {
-      "name": "@langchain/cohere",
+      "name": "langchain",
       "versions": [">=0.1"]
     }
   ],
