@@ -148,12 +148,12 @@ function wrapCommand (command, operation, name) {
   return wrapped
 }
 
-function instrument (operation, command, mongoCtx, args, server, ns, ops, options = {}) {
+function instrument (operation, command, instance, args, server, ns, ops, options = {}) {
   const name = options.name || (ops && Object.keys(ops)[0])
   const index = args.length - 1
   const callback = args[index]
 
-  if (typeof callback !== 'function') return command.apply(mongoCtx, args)
+  if (typeof callback !== 'function') return command.apply(instance, args)
 
   const serverInfo = server && server.s && server.s.options
 
@@ -174,7 +174,7 @@ function instrument (operation, command, mongoCtx, args, server, ns, ops, option
     })
 
     try {
-      return command.apply(mongoCtx, args)
+      return command.apply(instance, args)
     } catch (err) {
       ctx.error = err
       errorCh.publish(ctx)
@@ -184,7 +184,7 @@ function instrument (operation, command, mongoCtx, args, server, ns, ops, option
   })
 }
 
-function instrumentPromise (operation, command, mongoCtx, args, server, ns, ops, options = {}) {
+function instrumentPromise (operation, command, instance, args, server, ns, ops, options = {}) {
   const name = options.name || (ops && Object.keys(ops)[0])
 
   const serverInfo = server && server.s && server.s.options
@@ -197,7 +197,7 @@ function instrumentPromise (operation, command, mongoCtx, args, server, ns, ops,
   }
 
   return startCh.runStores(ctx, () => {
-    const promise = command.apply(mongoCtx, args)
+    const promise = command.apply(instance, args)
 
     return promise.then(function (res) {
       ctx.result = res
