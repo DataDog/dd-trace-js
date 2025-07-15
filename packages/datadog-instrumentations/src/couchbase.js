@@ -36,8 +36,7 @@ function wrapMaybeInvoke (_maybeInvoke, callbackCh) {
     const callback = args[callbackIndex]
 
     if (typeof callback === 'function') {
-      const ctx = {}
-      args[callbackIndex] = callbackCh.runStores(ctx, callback, this, ...arguments)
+      args[callbackIndex] = callbackCh.runStores({}, callback)
     }
 
     return _maybeInvoke.apply(this, arguments)
@@ -47,9 +46,9 @@ function wrapMaybeInvoke (_maybeInvoke, callbackCh) {
 
 function wrapQuery (query, queryCh) {
   const wrapped = function (q, params, callback) {
-    if (typeof arguments[arguments.length - 1] === 'function') {
-      const ctx = {}
-      arguments[arguments.length - 1] = queryCh.runStores(ctx, () => arguments[arguments.length - 1])
+    const cb = arguments[arguments.length - 1]
+    if (typeof cb === 'function') {
+      arguments[arguments.length - 1] = queryCh.runStores({}, cb)
     }
 
     return query.apply(this, arguments)
