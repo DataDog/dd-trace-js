@@ -37,7 +37,7 @@ function wrapMaybeInvoke (_maybeInvoke, callbackCh) {
 
     if (typeof callback === 'function') {
       args[callbackIndex] = callbackCh.runStores({}, () => {
-        return cb.apply(this, arguments)
+        return callback.apply(this, arguments)
       })
     }
 
