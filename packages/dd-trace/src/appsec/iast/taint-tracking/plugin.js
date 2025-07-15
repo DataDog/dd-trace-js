@@ -77,7 +77,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
 
     this.addSub(
       { channelName: 'datadog:fastify:body-parser:finish', tag: HTTP_REQUEST_BODY },
-      ({ req, body }) => {
+      ({ body }) => {
         const iastContext = getIastContext(storage('legacy').getStore())
         if (iastContext && iastContext.body !== body) {
           this._taintTrackingHandler(HTTP_REQUEST_BODY, body)

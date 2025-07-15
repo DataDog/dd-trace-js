@@ -96,7 +96,7 @@ function onIncomingHttpRequestEnd (data) {
 
       iastResponseEnd.publish({ ...data, storedHeaders })
 
-      if (storedHeaders) {
+      if (Object.keys(storedHeaders).length) {
         collectedResponseHeaders.delete(data.res)
       }
 
