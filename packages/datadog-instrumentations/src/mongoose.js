@@ -6,11 +6,10 @@ const shimmer = require('../../datadog-shimmer')
 
 const startCh = channel('datadog:mongoose:model:filter:start')
 const finishCh = channel('datadog:mongoose:model:filter:finish')
-// this channel is purely for wrapping the callback of exec methods and handling store context, it doesn't have any subscribers
+// this channel is for wrapping the callback of exec methods and handling store context, it doesn't have any subscribers
 const callbackCh = channel('datadog:mongoose:model:exec:callback')
 
-
-function wrapAddQueue (addQueue) {
+function wrapAddQueue (addQueue, ctx) {
   return function (name, args, options) {
     if (typeof name === 'function') {
       arguments[0] = callbackCh.runStores(ctx, addQueue, this, ...arguments)
@@ -55,7 +54,7 @@ addHook({
   }
 
   if (mongoose.Collection) {
-    shimmer.wrap(mongoose.Collection.prototype, 'addQueue', wrapAddQueue)
+    shimmer.wrap(mongoose.Collection.prototype, 'addQueue', addQueue => wrapAddQueue(addQueue, ctx))
   }
 
   return mongoose
