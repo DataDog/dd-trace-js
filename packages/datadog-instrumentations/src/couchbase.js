@@ -7,6 +7,10 @@ const {
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
+// these channels are for maintaining store context for their respective methods
+const callbackCh = channel('apm:couchbase:query:callback')
+const queryCh = channel('apm:couchbase:query')
+
 function findCallbackIndex (args, lowerbound = 2) {
   for (let i = args.length - 1; i >= lowerbound; i--) {
     if (typeof args[i] === 'function') return i
@@ -165,9 +169,6 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.12'] }, Buc
   const startCh = channel('apm:couchbase:query:start')
   const finishCh = channel('apm:couchbase:query:finish')
   const errorCh = channel('apm:couchbase:query:error')
-  // these channels are for maintaining store context for their respective methods
-  const callbackCh = channel('apm:couchbase:query:callback')
-  const queryCh = channel('apm:couchbase:query')
 
   shimmer.wrap(Bucket.prototype, '_maybeInvoke', maybeInvoke => wrapMaybeInvoke(maybeInvoke, callbackCh))
   shimmer.wrap(Bucket.prototype, 'query', query => wrapQuery(query, queryCh))
@@ -213,8 +214,8 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.12'] }, Buc
 })
 
 addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^2.6.12'] }, Cluster => {
-  shimmer.wrap(Cluster.prototype, '_maybeInvoke', maybeInvoke => wrapMaybeInvoke(maybeInvoke))
-  shimmer.wrap(Cluster.prototype, 'query', query => wrapQuery(query))
+  shimmer.wrap(Cluster.prototype, '_maybeInvoke', maybeInvoke => wrapMaybeInvoke(maybeInvoke, callbackCh))
+  shimmer.wrap(Cluster.prototype, 'query', query => wrapQuery(query, queryCh))
 
   shimmer.wrap(Cluster.prototype, 'openBucket', openBucket => {
     return function () {
