@@ -47,11 +47,12 @@ class CouchBasePlugin extends StoragePlugin {
       console.log('startSpan', 'query')
 
       this.startSpan(
-        'query', {
-        'span.type': 'sql',
-        'resource.name': resource,
-        'span.kind': this.constructor.kind
-      },
+        'query',
+        {
+          'span.type': 'sql',
+          'resource.name': resource,
+          'span.kind': this.constructor.kind
+        },
         { bucket, seedNodes },
         ctx
       )

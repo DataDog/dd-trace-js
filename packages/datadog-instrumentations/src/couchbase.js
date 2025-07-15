@@ -32,6 +32,7 @@ function wrapMaybeInvoke (_maybeInvoke, callbackCh) {
     const callback = args[callbackIndex]
 
     if (typeof callback === 'function') {
+      const ctx = {}
       args[callbackIndex] = callbackCh.runStores(ctx, callback, this, ...arguments)
     }
 
@@ -121,8 +122,14 @@ function wrapCBandPromise (fn, name, startData, thisArg, args) {
 
       // semver >=3 will always return promise by default
       res.then(
-        (result) => finishCh.publish({ result, ...ctx }),
-        (err) => errorCh.publish({ error: err, ...ctx })
+        (result) => {
+          ctx.result = result
+          finishCh.publish(ctx)
+        },
+        (err) => {
+          ctx.error = err
+          errorCh.publish(ctx)
+        }
       )
       return res
     } catch (e) {
