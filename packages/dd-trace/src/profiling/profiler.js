@@ -124,11 +124,12 @@ class Profiler extends EventEmitter {
 
     try {
       const start = new Date()
+      const nearOOMCallback = this._nearOOMExport.bind(this)
       for (const profiler of config.profilers) {
         // TODO: move this out of Profiler when restoring sourcemap support
         profiler.start({
           mapper,
-          nearOOMCallback: this._nearOOMExport.bind(this)
+          nearOOMCallback
         })
         this._logger.debug(`Started ${profiler.type} profiler in ${threadNamePrefix} thread`)
       }
