@@ -16,56 +16,8 @@ stages:
 
 include:
   - local: ".gitlab/one-pipeline.locked.yml"
-    rules:
-      - changes:
-          paths:
-            # Paths for whole project (should be same in all workflows)
-            - '**'
-            - '!.github/workflows/**'
-            - '!.gitlab/**'
-            - '!.vscode/**'
-            - '!devdocs/**'
-            - '!examples/**'
-            - '!*.md'
-            - '!LICENSE*'
-            - 'LICENSE-3rdparty.csv'
-            - '!NOTICE'
-            # Paths for this workflow only
-            - '.gitlab/one-pipeline.locked.yml'
   - local: ".gitlab/benchmarks.yml"
-    rules:
-      - changes:
-          paths:
-            # Paths for whole project (should be same in all workflows)
-            - '**'
-            - '!.github/workflows/**'
-            - '!.gitlab/**'
-            - '!.vscode/**'
-            - '!devdocs/**'
-            - '!examples/**'
-            - '!*.md'
-            - '!LICENSE*'
-            - 'LICENSE-3rdparty.csv'
-            - '!NOTICE'
-            # Paths for this workflow only
-            - '.gitlab/benchmarks.yml'
   - local: ".gitlab/macrobenchmarks.yml"
-    rules:
-      - changes:
-          paths:
-            # Paths for whole project (should be same in all workflows)
-            - '**'
-            - '!.github/workflows/**'
-            - '!.gitlab/**'
-            - '!.vscode/**'
-            - '!devdocs/**'
-            - '!examples/**'
-            - '!*.md'
-            - '!LICENSE*'
-            - 'LICENSE-3rdparty.csv'
-            - '!NOTICE'
-            # Paths for this workflow only
-            - '.gitlab/macrobenchmarks.yml'
 
 workflow:
   rules:
