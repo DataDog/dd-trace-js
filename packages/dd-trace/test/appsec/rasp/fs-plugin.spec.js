@@ -237,9 +237,11 @@ describe('AppsecFsPlugin', () => {
           storage('legacy').enterWith(origStore)
 
           opFinishCh.subscribe(onFinish)
+          console.log('BEFORE - fs.readFileSync')
 
           fs.readFileSync(path.join(__dirname, 'fs-plugin.spec.js'))
 
+          console.log('AFTER - fs.readFileSync')
           assert.strictEqual(count, 0)
         } finally {
           opFinishCh.unsubscribe(onFinish)

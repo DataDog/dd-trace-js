@@ -259,8 +259,13 @@ function createWrapFunction (prefix = '', override = '') {
     const operation = name.match(/^(.+?)(Sync)?(\.native)?$/)[1]
 
     return function () {
-      if (!startChannel.hasSubscribers) return original.apply(this, arguments)
-
+      console.log(`wrapFunction => function(): name: ${name}, method: ${method}, operation: ${operation}`)
+      console.log('startChannel._stores', startChannel._stores)
+      if (!startChannel.hasSubscribers) {
+        console.log(`NO SUBSCRIBERS - name: ${name}, method: ${method}, operation: ${operation}`)
+        return original.apply(this, arguments)
+      }
+      console.log(`HAS_SUBSCRIBERS - name: ${name}, method: ${method}, operation: ${operation}`)
       const lastIndex = arguments.length - 1
       const cb = typeof arguments[lastIndex] === 'function' && arguments[lastIndex]
       const params = getMethodParamsRelationByPrefix(prefix)[operation]
@@ -272,6 +277,7 @@ function createWrapFunction (prefix = '', override = '') {
           ctx.error = error
           errorChannel.publish(ctx)
         }
+        console.log('finishChannel.runStores(ctx, cb)')
         return finishChannel.runStores(ctx, cb)
       }
 
@@ -282,6 +288,7 @@ function createWrapFunction (prefix = '', override = '') {
       }
 
       return startChannel.runStores(ctx, () => {
+        console.log(`startChannel.runStores: name: ${name}, method: ${method}, operation: ${operation}`)
         if (abortController.signal.aborted) {
           const error = abortController.signal.reason || new Error('Aborted')
 
@@ -319,7 +326,7 @@ function createWrapFunction (prefix = '', override = '') {
               }
             )
           }
-
+          console.log('finishChannel.runStores(ctx, () => {}): L324')
           finishChannel.runStores(ctx, () => {})
 
           return result
