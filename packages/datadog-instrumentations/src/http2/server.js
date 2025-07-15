@@ -8,11 +8,12 @@ const {
   addHook
 } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
-const { storage } = require('../../../datadog-core')
 
 const startServerCh = channel('apm:http2:server:request:start')
 const errorServerCh = channel('apm:http2:server:request:error')
 const finishServerCh = channel('apm:http2:server:request:finish')
+// this channel is purely for wrapping the response emit method and handling store context, it doesn't have any subscribers
+const responseCh = channel('apm:http2:server:response:emit')
 
 const names = ['http2', 'node:http2']
 
@@ -30,14 +31,11 @@ function wrapCreateServer (createServer) {
   }
 }
 
-function wrapResponseEmit (emit, ctx, store) {
+function wrapResponseEmit (emit, ctx) {
   return function (eventName, event) {
-    storage('legacy').enterWith(store)
     ctx.req = this.req
     ctx.eventName = eventName
-    return finishServerCh.runStores(ctx, () => {
-      return emit.apply(this, arguments)
-    })
+    return finishServerCh.runStores(ctx, emit, this, ...arguments)
   }
 }
 function wrapEmit (emit) {
@@ -51,8 +49,9 @@ function wrapEmit (emit) {
 
       const ctx = { req, res }
       return startServerCh.runStores(ctx, () => {
-        const store = storage('legacy').getStore()
-        shimmer.wrap(res, 'emit', emit => wrapResponseEmit(emit, ctx, store))
+        shimmer.wrap(res, 'emit', emit => responseCh.runStores(ctx, () => {
+          return wrapResponseEmit(emit, ctx)
+        }))
 
         try {
           return emit.apply(this, arguments)
