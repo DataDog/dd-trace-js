@@ -11,7 +11,9 @@ function getTestManagementTests ({
   isGzipCompatible,
   repositoryUrl,
   commitMessage,
-  sha
+  sha,
+  commitHeadSha,
+  commitHeadMessage
 }, done) {
   const options = {
     path: '/api/v2/test/libraries/test-management/tests',
@@ -45,8 +47,8 @@ function getTestManagementTests ({
       type: 'ci_app_libraries_tests_request',
       attributes: {
         repository_url: repositoryUrl,
-        commit_message: commitMessage,
-        sha
+        commit_message: commitHeadMessage || commitMessage,
+        sha: commitHeadSha || sha
       }
     }
   })

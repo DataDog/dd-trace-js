@@ -161,6 +161,10 @@
     {
       "name": "@fastify/cookie",
       "versions": [">=6"]
+    },
+    {
+      "name": "@fastify/multipart",
+      "versions": [">=6"]
     }
   ],
   "generic-pool": [
@@ -257,6 +261,12 @@
       "versions": ["9.1.4"]
     }
   ],
+  "hono": [
+    {
+      "name": "@hono/node-server",
+      "versions": ["1.15.0"]
+    }
+  ],
   "jest": [
     {
       "name": "jest",
@@ -309,11 +319,11 @@
       "versions": [">=0.1"]
     },
     {
-      "name": "@langchain/openai",
+      "name": "@langchain/cohere",
       "versions": [">=0.1"]
     },
     {
-      "name": "@langchain/cohere",
+      "name": "langchain",
       "versions": [">=0.1"]
     }
   ],

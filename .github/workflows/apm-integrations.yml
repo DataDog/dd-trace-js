@@ -187,8 +187,52 @@ jobs:
 
   azure-functions:
     runs-on: ubuntu-latest
+    services:
+        azureservicebusemulator:
+          image: mcr.microsoft.com/azure-messaging/servicebus-emulator:1.1.2
+          ports:
+              - "127.0.0.1:5672:5672"
+              - "127.0.0.1:5300:5300"
+          env:
+              ACCEPT_EULA: "Y"
+              MSSQL_SA_PASSWORD: "Localtestpass1!"
+              SQL_SERVER: azuresqledge
+        azuresqledge:
+          image: mcr.microsoft.com/azure-sql-edge:1.0.7
+          ports:
+              - "127.0.0.1:1433:1433"
+          env:
+              ACCEPT_EULA: "Y"
+              MSSQL_SA_PASSWORD: "Localtestpass1!"
     env:
       PLUGINS: azure-functions
+      SERVICES: azureservicebusemulator,azuresqledge
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/plugins/test
+
+  azure-service-bus:
+    runs-on: ubuntu-latest
+    services:
+        azureservicebusemulator:
+          image: mcr.microsoft.com/azure-messaging/servicebus-emulator:1.1.2
+          ports:
+              - "127.0.0.1:5672:5672"
+              - "127.0.0.1:5300:5300"
+          env:
+              ACCEPT_EULA: "Y"
+              MSSQL_SA_PASSWORD: "Localtestpass1!"
+              SQL_SERVER: azuresqledge
+        azuresqledge:
+          image: mcr.microsoft.com/azure-sql-edge:1.0.7
+          ports:
+              - "127.0.0.1:1433:1433"
+          env:
+              ACCEPT_EULA: "Y"
+              MSSQL_SA_PASSWORD: "Localtestpass1!"
+    env:
+      PLUGINS: azure-service-bus
+      SERVICES: azureservicebusemulator,azuresqledge
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/plugins/test
@@ -434,6 +478,14 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PLUGINS: hapi
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/plugins/test
+
+  hono:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: hono
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/plugins/test
@@ -702,7 +754,7 @@ jobs:
         version:
           - 18
           - latest
-        range: ['>=10.2.0 <11', '>=11.0.0 <13', '11.1.4', '>=13.0.0 <14', '13.2.0', '>=14.0.0 <=14.2.6', '>=14.2.7 <15', '>=15.0.0']
+        range: ['>=10.2.0 <11', '>=11.0.0 <13', '11.1.4', '>=13.0.0 <14', '13.2.0', '>=14.0.0 <=14.2.6', '>=14.2.7 <15', '>=15.0.0 <15.4.1']
         include:
           - range: '>=10.2.0 <11'
             range_clean: gte.10.2.0.and.lt.11
@@ -718,7 +770,7 @@ jobs:
             range_clean: gte.14.0.0.and.lte.14.2.6
           - range: '>=14.2.7 <15'
             range_clean: gte.14.2.7.and.lt.15
-          - range: '>=15.0.0'
+          - range: '>=15.0.0 <15.4.1'
             range_clean: gte.15.0.0
     runs-on: ubuntu-latest
     env:

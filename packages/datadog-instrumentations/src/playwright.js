@@ -337,7 +337,9 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout, isMain
     testStatuses.push(testStatus)
   }
 
-  if (testStatuses.length === testManagementAttemptToFixRetries + 1) {
+  const testProperties = getTestProperties(test)
+
+  if (testStatuses.length === testManagementAttemptToFixRetries + 1 && testProperties.attemptToFix) {
     if (testStatuses.includes('fail')) {
       test._ddHasFailedAttemptToFixRetries = true
     }

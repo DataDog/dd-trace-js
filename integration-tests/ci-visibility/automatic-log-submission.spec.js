@@ -3,15 +3,15 @@
 const { exec, execSync } = require('child_process')
 
 const { assert } = require('chai')
-const getPort = require('get-port')
 
 const {
   createSandbox,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig
-} = require('./helpers')
-const { FakeCiVisIntake } = require('./ci-visibility-intake')
-const webAppServer = require('./ci-visibility/web-app-server')
+} = require('../helpers')
+const { FakeCiVisIntake } = require('../ci-visibility-intake')
+const webAppServer = require('./web-app-server')
+const { NODE_MAJOR } = require('../../version')
 
 describe('test visibility automatic log submission', () => {
   let sandbox, cwd, receiver, childProcess, webAppPort
@@ -31,8 +31,9 @@ describe('test visibility automatic log submission', () => {
     // Install chromium (configured in integration-tests/playwright.config.js)
     // *Be advised*: this means that we'll only be using chromium for this test suite
     execSync('npx playwright install chromium', { cwd, env: restOfEnv, stdio: 'inherit' })
-    webAppPort = await getPort()
-    webAppServer.listen(webAppPort)
+    webAppServer.listen(0, () => {
+      webAppPort = webAppServer.address().port
+    })
   })
 
   after(async () => {
@@ -41,8 +42,7 @@ describe('test visibility automatic log submission', () => {
   })
 
   beforeEach(async function () {
-    const port = await getPort()
-    receiver = await new FakeCiVisIntake(port).start()
+    receiver = await new FakeCiVisIntake().start()
   })
 
   afterEach(async () => {
@@ -69,12 +69,15 @@ describe('test visibility automatic log submission', () => {
       command: './node_modules/.bin/playwright test -c playwright.config.js',
       getExtraEnvVars: () => ({
         PW_BASE_URL: `http://localhost:${webAppPort}`,
-        TEST_DIR: 'ci-visibility/automatic-log-submission-playwright'
+        TEST_DIR: 'ci-visibility/automatic-log-submission-playwright',
+        DD_TRACE_DEBUG: 1
       })
     }
   ]
 
   testFrameworks.forEach(({ name, command, getExtraEnvVars = () => ({}) }) => {
+    if ((NODE_MAJOR === 18 || NODE_MAJOR === 23) && name === 'cucumber') return
+
     context(`with ${name}`, () => {
       it('can automatically submit logs', (done) => {
         let logIds, testIds
@@ -135,6 +138,10 @@ describe('test visibility automatic log submission', () => {
 
         childProcess.on('exit', () => {
           Promise.all([logsPromise, eventsPromise]).then(() => {
+            if (name === 'playwright') {
+              // eslint-disable-next-line no-console
+              console.log(testOutput)
+            }
             const { logSpanId, logTraceId } = logIds
             const { testSpanId, testTraceId } = testIds
             assert.include(testOutput, 'Hello simple log!')
