@@ -33,8 +33,8 @@ class AppsecFsPlugin extends Plugin {
   enable () {
     this.addBind('apm:fs:operation:start', this._onFsOperationStart)
     this.addBind('apm:fs:operation:finish', this._onFsOperationFinishOrRenderEnd)
-    this.addBind('tracing:datadog:express:response:render:start', this._onResponseRenderStart)
-    this.addBind('tracing:datadog:express:response:render:end', this._onFsOperationFinishOrRenderEnd)
+    // this.addBind('tracing:datadog:express:response:render:start', this._onResponseRenderStart)
+    // this.addBind('tracing:datadog:express:response:render:end', this._onFsOperationFinishOrRenderEnd)
 
     super.configure(true)
   }
