@@ -12,7 +12,7 @@ const shimmer = require('../../../datadog-shimmer')
 const startServerCh = channel('apm:http2:server:request:start')
 const errorServerCh = channel('apm:http2:server:request:error')
 const finishServerCh = channel('apm:http2:server:request:finish')
-// this channel is purely for wrapping the response emit method and handling store context, it doesn't have any subscribers
+// this channel is for wrapping the response emit method and handling store context, it doesn't have any subscribers
 const responseCh = channel('apm:http2:server:response:emit')
 
 const names = ['http2', 'node:http2']
