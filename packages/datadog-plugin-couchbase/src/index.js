@@ -13,7 +13,7 @@ class CouchBasePlugin extends StoragePlugin {
     this.addBind(`apm:couchbase:${func}:finish`, message => this.finish(message))
   }
 
-  startSpan (operation, customTags, store, { bucket, collection, seedNodes }, ctx) {
+  startSpan (operation, customTags, { bucket, collection, seedNodes }, ctx) {
     const tags = {
       'db.type': 'couchbase',
       component: 'couchbase',
@@ -44,19 +44,19 @@ class CouchBasePlugin extends StoragePlugin {
 
     this.addBinds('query', (ctx) => {
       const { resource, bucket, seedNodes } = ctx
+      console.log('startSpan', 'query')
 
-      const store = storage('legacy').getStore()
-      const span = this.startSpan(
+      this.startSpan(
         'query', {
-          'span.type': 'sql',
-          'resource.name': resource,
-          'span.kind': this.constructor.kind
-        },
-        store,
+        'span.type': 'sql',
+        'resource.name': resource,
+        'span.kind': this.constructor.kind
+      },
         { bucket, seedNodes },
         ctx
       )
-      this.enter(span, store)
+
+      return ctx.currentStore
     })
 
     this._addCommandSubs('upsert')

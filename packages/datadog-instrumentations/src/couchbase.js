@@ -24,17 +24,29 @@ function wrapAllNames (names, action) {
 }
 
 // semver >=2 <3
-function wrapMaybeInvoke (_maybeInvoke) {
+function wrapMaybeInvoke (_maybeInvoke, callbackCh) {
   const wrapped = function (fn, args) {
     if (!Array.isArray(args)) return _maybeInvoke.apply(this, arguments)
+
+    const callbackIndex = args.length - 1
+    const callback = args[callbackIndex]
+
+    if (typeof callback === 'function') {
+      args[callbackIndex] = callbackCh.runStores(ctx, callback, this, ...arguments)
+    }
 
     return _maybeInvoke.apply(this, arguments)
   }
   return wrapped
 }
 
-function wrapQuery (query) {
+function wrapQuery (query, queryCh) {
   const wrapped = function (q, params, callback) {
+    if (typeof arguments[arguments.length - 1] === 'function') {
+      const ctx = {}
+      arguments[arguments.length - 1] = queryCh.runStores(ctx, () => arguments[arguments.length - 1])
+    }
+
     return query.apply(this, arguments)
   }
   return wrapped
@@ -146,9 +158,12 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.12'] }, Buc
   const startCh = channel('apm:couchbase:query:start')
   const finishCh = channel('apm:couchbase:query:finish')
   const errorCh = channel('apm:couchbase:query:error')
+  // these channels are for maintaining store context for their respective methods
+  const callbackCh = channel('apm:couchbase:query:callback')
+  const queryCh = channel('apm:couchbase:query')
 
-  shimmer.wrap(Bucket.prototype, '_maybeInvoke', maybeInvoke => wrapMaybeInvoke(maybeInvoke))
-  shimmer.wrap(Bucket.prototype, 'query', query => wrapQuery(query))
+  shimmer.wrap(Bucket.prototype, '_maybeInvoke', maybeInvoke => wrapMaybeInvoke(maybeInvoke, callbackCh))
+  shimmer.wrap(Bucket.prototype, 'query', query => wrapQuery(query, queryCh))
 
   shimmer.wrap(Bucket.prototype, '_n1qlReq', _n1qlReq => function (host, q, adhoc, emitter) {
     if (!startCh.hasSubscribers) {
