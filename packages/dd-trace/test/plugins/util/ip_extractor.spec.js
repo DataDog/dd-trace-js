@@ -16,7 +16,7 @@ describe('ip extractor', () => {
       res.end(JSON.stringify({ message: 'OK' }))
     })
     appListener = server
-      .listen('localhost', () => {
+      .listen(0, 'localhost', () => {
         port = server.address().port
         done()
       })
