@@ -225,8 +225,9 @@ describe('AppsecFsPlugin', () => {
 
       it('should clean up store when finishing op', () => {
         let count = 4
-        // hack to node 18 and early 20.x
-        // with dc-polyfill addBind is not enough to force a channel.hasSubscribers === true
+        // TODO Remove this when node 18 is unsupported or dc-polyfill is fixed&updated
+        //  hack to node 18 and early 20.x
+        //  with dc-polyfill addBind is not enough to force a channel.hasSubscribers === true
         const onStart = () => {}
         opStartCh.subscribe(onStart)
 
