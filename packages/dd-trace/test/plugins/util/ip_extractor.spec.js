@@ -2,19 +2,12 @@
 
 require('../../setup/tap')
 
-const getPort = require('get-port')
 const { extractIp } = require('../../../src/plugins/util/ip_extractor')
 const http = require('http')
 const axios = require('axios')
 
 describe('ip extractor', () => {
   let port, appListener, controller
-
-  before(() => {
-    return getPort().then(newPort => {
-      port = newPort
-    })
-  })
 
   before(done => {
     const server = new http.Server(async (req, res) => {
@@ -23,7 +16,10 @@ describe('ip extractor', () => {
       res.end(JSON.stringify({ message: 'OK' }))
     })
     appListener = server
-      .listen(port, 'localhost', () => done())
+      .listen('localhost', () => {
+        port = server.address().port
+        done()
+      })
   })
 
   after(() => {
