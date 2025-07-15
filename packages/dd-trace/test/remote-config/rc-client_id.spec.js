@@ -11,8 +11,6 @@ describe('Remote config client id', () => {
   let axios, sandbox, cwd, appFile
 
   before(async function () {
-    this.timeout(process.platform === 'win32' ? 90000 : 30000)
-
     sandbox = await createSandbox(
       ['express'],
       false,
@@ -24,7 +22,6 @@ describe('Remote config client id', () => {
   })
 
   after(async function () {
-    this.timeout(60000)
     await sandbox.remove()
   })
 
