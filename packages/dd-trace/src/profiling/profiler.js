@@ -42,6 +42,8 @@ function findWebSpan (startedSpans, spanId) {
 }
 
 class Profiler extends EventEmitter {
+  #profileSeq = 0
+
   constructor () {
     super()
     this._enabled = false
@@ -123,11 +125,12 @@ class Profiler extends EventEmitter {
 
     try {
       const start = new Date()
+      const nearOOMCallback = this._nearOOMExport.bind(this)
       for (const profiler of config.profilers) {
         // TODO: move this out of Profiler when restoring sourcemap support
         profiler.start({
           mapper,
-          nearOOMCallback: this._nearOOMExport.bind(this)
+          nearOOMCallback
         })
         this._logger.debug(`Started ${profiler.type} profiler in ${threadNamePrefix} thread`)
       }
@@ -292,6 +295,7 @@ class Profiler extends EventEmitter {
     this.endpointCounts.clear()
 
     tags.snapshot = snapshotKind
+    tags.profile_seq = this.#profileSeq++
     const exportSpec = { profiles, start, end, tags, endpointCounts }
     const tasks = this._config.exporters.map(exporter =>
       exporter.export(exportSpec).catch(err => {
