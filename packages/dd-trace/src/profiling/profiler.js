@@ -42,6 +42,8 @@ function findWebSpan (startedSpans, spanId) {
 }
 
 class Profiler extends EventEmitter {
+  #profileSeq = 0
+
   constructor () {
     super()
     this._enabled = false
@@ -50,7 +52,6 @@ class Profiler extends EventEmitter {
     this._timer = undefined
     this._lastStart = undefined
     this._timeoutInterval = undefined
-    this._profile_seq = 0
     this.endpointCounts = new Map()
   }
 
@@ -294,7 +295,7 @@ class Profiler extends EventEmitter {
     this.endpointCounts.clear()
 
     tags.snapshot = snapshotKind
-    tags.profile_seq = this._profile_seq++
+    tags.profile_seq = this.#profileSeq++
     const exportSpec = { profiles, start, end, tags, endpointCounts }
     const tasks = this._config.exporters.map(exporter =>
       exporter.export(exportSpec).catch(err => {
