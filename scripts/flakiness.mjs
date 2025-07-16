@@ -118,7 +118,7 @@ if (Object.keys(flaky).length === 0) {
 } else {
   const workflowSuccessRate = +((1 - flakeCount / totalCount) * 100).toFixed(1)
   const pipelineSuccessRate = +((workflowSuccessRate / 100) ** workflows.length * 100).toFixed(1)
-  const pipelineBadge = pipelineSuccessRate >= 80 ? '🟢' : pipelineSuccessRate >= 70 ? '🟡' : '🔴'
+  const pipelineBadge = pipelineSuccessRate >= 85 ? '🟢' : pipelineSuccessRate >= 75 ? '🟡' : '🔴'
 
   console.log(`*Flaky ${logString}`)
   for (const [workflow, jobs] of Object.entries(flaky).sort()) {
