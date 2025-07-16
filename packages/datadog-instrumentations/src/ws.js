@@ -10,6 +10,7 @@ const tracingChannel = require('dc-polyfill').tracingChannel
 const serverCh = tracingChannel('ws:server:connect')
 const producerCh = tracingChannel('ws:send')
 const receiverCh = tracingChannel('ws:receive')
+const closeCh = tracingChannel('ws:close')
 const emitCh = channel('tracing:ws:server:connect:emit')
 
 function wrapHandleUpgrade (handleUpgrade) {
@@ -20,6 +21,8 @@ function wrapHandleUpgrade (handleUpgrade) {
     }
 
     const ctx = { req, socket }
+
+    // console.log('in instrumentation', ctx.req.url)
 
     arguments[3] = function () {
       return serverCh.asyncStart.runStores(ctx, () => {
@@ -34,11 +37,13 @@ function wrapHandleUpgrade (handleUpgrade) {
   }
 }
 
-function wrapHandleSend (send) {
+function wrapSend (send) {
   return function wrappedSend (...args) {
     if (!producerCh.start.hasSubscribers) return send.apply(this, arguments)
 
     const [data, options, cb] = arguments
+    // const byteLength = Buffer.byteLength(data)
+    // console.log('otpions in send', this)
 
     const ctx = { data, socket: this._sender._socket }
 
@@ -67,7 +72,11 @@ function createWrapEmit (emit) {
 
 function createWrappedHandler (handler) {
   return function wrappedMessageHandler (data, binary) {
-    const ctx = { data, socket: this._sender._socket }
+    const byteLength = binary ? data.length : Buffer.byteLength(data)
+    // console.log('in wrap handler', dataType, byteLength, binary)
+    console.log('byte length', dataLength(data))
+
+    const ctx = { data, binary, socket: this._sender._socket, byteLength }
 
     return receiverCh.traceSync(handler, ctx, this, data, binary)
   }
@@ -79,6 +88,14 @@ function wrapListener (originalOn) {
       return originalOn.call(this, eventName, createWrappedHandler(handler))
     }
     return originalOn.apply(this, arguments)
+  }
+}
+
+function wrapClose (close) {
+  return function (code, data) {
+    const ctx = { code, data }
+    // console.log('arguments in wrap close', arguments)
+    return closeCh.traceSync(close, ctx, this, ...arguments)
   }
 }
 
@@ -95,7 +112,7 @@ addHook({
   name: 'ws',
   file: 'lib/websocket.js'
 }, ws => {
-  shimmer.wrap(ws.prototype, 'send', wrapHandleSend)
+  shimmer.wrap(ws.prototype, 'send', wrapSend)
 
   return ws
 })
@@ -116,3 +133,26 @@ addHook({
   shimmer.wrap(ws.prototype, 'on', wrapListener)
   return ws
 })
+
+addHook({
+  name: 'ws',
+  file: 'lib/websocket.js'
+}, ws => {
+  shimmer.wrap(ws.prototype, 'close', wrapClose)
+  return ws
+})
+
+function detectType (data) {
+  if (typeof Blob !== 'undefined' && data instanceof Blob) return 'Blob'
+  if (typeof Buffer !== 'undefined' && Buffer.isBuffer(data)) return 'Buffer'
+  if (typeof data === 'string') return 'string'
+  return 'Unknown'
+}
+
+function dataLength (data) {
+  const type = detectType(data)
+  if (type === 'Blob') return data.size
+  if (type === 'Buffer') return data.length
+  if (type === 'string') return Buffer.byteLength(data)
+  return 0
+}
