@@ -7,6 +7,7 @@ module.exports = {
   '@aws-sdk/smithy-client': () => require('../aws-sdk'),
   '@azure/functions': () => require('../azure-functions'),
   '@azure/service-bus': () => require('../azure-service-bus'),
+  '@azure/event-hubs': () => require('../azure-event-hubs'),
   '@cucumber/cucumber': () => require('../cucumber'),
   '@playwright/test': () => require('../playwright'),
   '@elastic/elasticsearch': () => require('../elasticsearch'),

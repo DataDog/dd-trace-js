@@ -20,6 +20,10 @@ const messaging = {
       opName: () => 'azure.servicebus.send',
       serviceName: ({ tracerService }) => `${tracerService}-azure-service-bus`
     },
+    'azure-event-hubs': {
+      opName: () => 'azure.eventhubs.send',
+      serviceName: ({ tracerService }) => `${tracerService}-azure-event-hubs`
+    },
     'google-cloud-pubsub': {
       opName: () => 'pubsub.request',
       serviceName: ({ tracerService }) => `${tracerService}-pubsub`
