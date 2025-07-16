@@ -14,11 +14,11 @@ describe('Remote config client id', () => {
     sandbox = await createSandbox(
       ['express'],
       false,
-      [path.join(__dirname, 'remote-config')]
+      [path.join(__dirname, 'remote_config')]
     )
 
     cwd = sandbox.folder
-    appFile = path.join(cwd, 'remote-config', 'index.js')
+    appFile = path.join(cwd, 'remote_config', 'index.js')
   })
 
   after(async function () {
