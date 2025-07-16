@@ -91,7 +91,9 @@ function getMetaForTrigger ({ functionName, methodName, invocationContext }) {
     const partitionContext = invocationContext.triggerMetadata.triggerPartitionContext
     meta = {
     ...meta,
-    'event.hub.name': partitionContext.eventHubName,
+    'messaging.destination.name': partitionContext.eventHubName,
+    'messaging.operation': 'receive',
+    'messaging.system': 'eventhub',
     'resource.name': `EventHub ${functionName}`,
     'span.kind': 'consumer'
     }
