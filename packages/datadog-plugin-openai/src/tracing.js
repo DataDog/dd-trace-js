@@ -10,6 +10,11 @@ const { MEASURED } = require('../../../ext/tags')
 const { estimateTokens } = require('./token-estimator')
 
 const makeUtilities = require('../../dd-trace/src/plugins/util/llm')
+const {
+  convertBuffersToObjects,
+  constructCompletionResponseFromStreamedChunks,
+  constructChatCompletionResponseFromStreamedChunks
+} = require('./stream-helpers')
 
 let normalize
 
@@ -48,6 +53,41 @@ class OpenAiTracingPlugin extends TracingPlugin {
 
       normalize = utilities.normalize
     }
+
+    this.addSub('apm:openai:request:chunk', ({ ctx, chunk, done }) => {
+      if (!ctx.chunks) ctx.chunks = []
+
+      if (chunk) ctx.chunks.push(chunk)
+      if (!done) return
+
+      let chunks = ctx.chunks
+      if (chunks.length === 0) return
+
+      const firstChunk = chunks[0]
+      // TODO(BridgeAR): It likely depends on the options being passed
+      // through if the stream returns buffers or not. By reading that,
+      // we don't have to do the instanceof check anymore, which is
+      // relatively expensive.
+      if (firstChunk instanceof Buffer) {
+        chunks = convertBuffersToObjects(chunks)
+      }
+
+      const methodName = ctx.currentStore.normalizedMethodName
+      let n = 1
+      const prompt = ctx.args[0].prompt
+      if (Array.isArray(prompt) && typeof prompt[0] !== 'number') {
+        n *= prompt.length
+      }
+
+      let response = {}
+      if (methodName === 'createCompletion') {
+        response = constructCompletionResponseFromStreamedChunks(chunks, n)
+      } else if (methodName === 'createChatCompletion') {
+        response = constructChatCompletionResponseFromStreamedChunks(chunks, n)
+      }
+
+      ctx.result = { data: response }
+    })
   }
 
   configure (config) {
