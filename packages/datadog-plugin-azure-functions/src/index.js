@@ -13,6 +13,7 @@ const triggerMap = {
   put: 'Http',
   serviceBusQueue: 'ServiceBus',
   serviceBusTopic: 'ServiceBus',
+  eventHub: 'EventHub',
 }
 
 class AzureFunctionsPlugin extends TracingPlugin {
@@ -86,6 +87,14 @@ function getMetaForTrigger ({ functionName, methodName, invocationContext }) {
       'resource.name': `ServiceBus ${functionName}`,
       'span.kind': 'consumer'
     }
+  } else if (triggerMap[methodName] === 'EventHub') {
+    const partitionContext = invocationContext.triggerMetadata.triggerPartitionContext
+    meta = {
+    ...meta,
+    'event.hub.name': partitionContext.eventHubName,
+    'resource.name': `EventHub ${functionName}`,
+    'span.kind': 'consumer'
+    }
   }
 
   return meta
@@ -101,6 +110,9 @@ function extractTraceContext (tracer, ctx) {
       return tracer.extract('http_headers', Object.fromEntries(ctx.httpRequest.headers))
     case 'ServiceBus':
       return tracer.extract('text_map', ctx.invocationContext.triggerMetadata.applicationProperties)
+    case 'EventHub':
+      return tracer.extract('text_map', ctx.invocationContext.triggerMetadata.properties)
+    default:
   }
 }
 
