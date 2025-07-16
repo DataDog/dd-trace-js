@@ -122,7 +122,6 @@
     "@opentelemetry/core": "^1.14.0",
     "crypto-randomuuid": "^1.0.0",
     "dc-polyfill": "^0.1.9",
-    "fastify": "^5.4.0",
     "ignore": "^7.0.5",
     "import-in-the-middle": "^1.14.2",
     "istanbul-lib-coverage": "^3.2.2",
