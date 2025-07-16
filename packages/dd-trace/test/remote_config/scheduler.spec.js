@@ -1,5 +1,7 @@
 'use strict'
 
+require('../setup/tap')
+
 const Scheduler = require('../../src/remote_config/scheduler')
 
 const INTERVAL = 5e3
