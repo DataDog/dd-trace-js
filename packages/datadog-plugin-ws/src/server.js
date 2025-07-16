@@ -22,12 +22,11 @@ class WSServerPlugin extends TracingPlugin {
     options.headers = Object.fromEntries(headers)
     options.method = req.method
 
-    const agent = options.agent || options._defaultAgent || http.globalAgent || {}
-    const protocol = options.protocol || agent.protocol || 'http:'
-    const hostname = options.hostname || options.host || 'localhost'
-    const host = options.port ? `${hostname}:${options.port}` : hostname
-    const pathname = options.path || options.pathname
-    const path = pathname ? pathname.split(/[?#]/)[0] : '/'
+    const agent = options['user.agent'] || {}
+    const protocol = `${getRequestProtocol(req)}:`
+    const hostname = options.headers.host.split(':')[0]
+    const host = options.headers.host
+    const path = req.url
     const uri = `${protocol}//${host}${path}`
 
     ctx.args = { options }
@@ -35,11 +34,11 @@ class WSServerPlugin extends TracingPlugin {
     const span = this.startSpan(this.operationName(), {
       meta: {
         service: this.serviceName({ pluginConfig: this.config }),
-        'span.type': 'ws',
+        'span.type': 'websocket',
         'http.upgraded': 'websocket',
         'http.method': options.method,
         'http.url': uri,
-        'resource.name': options.method,
+        'resource.name': `${options.method} ${path}`,
         'span.kind': 'server'
 
       }
@@ -51,18 +50,34 @@ class WSServerPlugin extends TracingPlugin {
   }
 
   bindAsyncStart (ctx) {
-    console.log('in server bind async ')
     ctx.span.setTag(HTTP_STATUS_CODE, ctx.req.resStatus)
 
     return ctx.parentStore
   }
 
   asyncStart (ctx) {
-    console.log('in server async ')
     ctx.socket.spanContext = ctx.span._spanContext
 
     ctx.span.finish()
   }
 }
+
+function getRequestProtocol(req, fallback = 'ws') {
+  // 1. Check if the underlying TLS socket has 'encrypted'
+  if (req.socket && req.socket.encrypted) {
+    return 'wss';
+  }
+
+  // 2. Check for a trusted header set by a proxy
+  if (req.headers && req.headers['x-forwarded-proto']) {
+    const proto = req.headers['x-forwarded-proto'].split(',')[0].trim();
+    if (proto === 'https') return 'wss';
+    if (proto === 'http') return 'ws';
+  }
+
+  // 3. Fallback to ws 
+  return fallback;
+}
+
 
 module.exports = WSServerPlugin
