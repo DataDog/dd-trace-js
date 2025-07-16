@@ -319,6 +319,7 @@ function createWrapFunction (prefix = '', override = '') {
               }
             )
           }
+
           finishChannel.runStores(ctx, () => {})
 
           return result
