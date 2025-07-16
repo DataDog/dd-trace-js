@@ -28,6 +28,7 @@ describe('AppsecFsPlugin', () => {
       configure = sinon.stub()
       class PluginClass {
         addBind (channelName, handler) {}
+        addSub (channelName, handler) {}
 
         configure (config) {
           configure(config)
