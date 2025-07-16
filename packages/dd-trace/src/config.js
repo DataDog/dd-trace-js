@@ -630,6 +630,10 @@ class Config {
     defaults['tracePropagationStyle.inject'] = ['datadog', 'tracecontext', 'baggage']
     defaults['tracePropagationStyle.extract'] = ['datadog', 'tracecontext', 'baggage']
     defaults['tracePropagationStyle.otelPropagators'] = false
+    defaults.traceWebsocketMessagesEnabled = false
+    defaults.traceWebsocketMessagesInheritSampling = false
+    defaults.traceWebsocketMessagesSeparateTraces = false
+    defaults.traceWebsocketTagSessionId = false
     defaults.tracing = true
     defaults.url = undefined
     defaults.version = pkg.version
@@ -812,6 +816,10 @@ class Config {
       DD_TRACE_SPAN_LEAK_DEBUG,
       DD_TRACE_STARTUP_LOGS,
       DD_TRACE_TAGS,
+      DD_TRACE_WEBSOCKET_MESSAGES_ENABLED,
+      DD_TRACE_WEBSOCKET_MESSAGES_INHERIT_SAMPLING,
+      DD_TRACE_WEBSOCKET_MESSAGES_SEPARATE_TRACES,
+      DD_TRACE_WEBSOCKET_TAG_SESSION_ID,
       DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH,
       DD_TRACING_ENABLED,
       DD_VERSION,
@@ -1050,6 +1058,10 @@ class Config {
       DD_TRACE_PROPAGATION_STYLE_EXTRACT
         ? false
         : !!OTEL_PROPAGATORS)
+    this._setBoolean(env, 'traceWebsocketMessagesEnabled', DD_TRACE_WEBSOCKET_MESSAGES_ENABLED)
+    this._setBoolean(env, 'traceWebsocketMessagesInheritSampling', DD_TRACE_WEBSOCKET_MESSAGES_INHERIT_SAMPLING)
+    this._setBoolean(env, 'traceWebsocketMessagesSeparateTraces', DD_TRACE_WEBSOCKET_MESSAGES_SEPARATE_TRACES)
+    this._setBoolean(env, 'traceWebsocketTagSessionId', DD_TRACE_WEBSOCKET_TAG_SESSION_ID)
     this._setBoolean(env, 'tracing', DD_TRACING_ENABLED)
     this._setString(env, 'version', DD_VERSION || tags.version)
     this._setBoolean(env, 'inferredProxyServicesEnabled', DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED)

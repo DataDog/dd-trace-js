@@ -15,7 +15,13 @@ const ws = {
   },
   receiver: {
     ws: {
-      opName: () => 'websocket.send',
+      opName: () => 'websocket.receive',
+      serviceName: identityService
+    }
+  },
+  close: {
+    ws: {
+      opName: () => 'websocket.close',
       serviceName: identityService
     }
   }
