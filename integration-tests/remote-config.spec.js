@@ -1,8 +1,6 @@
 'use strict'
 
-require('../setup/tap')
-
-const { createSandbox, FakeAgent, spawnProc } = require('../../../../integration-tests/helpers')
+const { createSandbox, FakeAgent, spawnProc } = require('./helpers')
 const path = require('path')
 const Axios = require('axios')
 const { assert } = require('chai')
@@ -11,17 +9,20 @@ describe('Remote config client id', () => {
   let axios, sandbox, cwd, appFile
 
   before(async function () {
+    this.timeout(process.platform === 'win32' ? 90000 : 30000)
+
     sandbox = await createSandbox(
       ['express'],
       false,
-      [path.join(__dirname, 'resources')]
+      [path.join(__dirname, 'remote-config')]
     )
 
     cwd = sandbox.folder
-    appFile = path.join(cwd, 'resources', 'index.js')
+    appFile = path.join(cwd, 'remote-config', 'index.js')
   })
 
   after(async function () {
+    this.timeout(60000)
     await sandbox.remove()
   })
 
