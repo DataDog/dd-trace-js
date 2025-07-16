@@ -14,25 +14,31 @@ const enabledFor = {
 
 let fsPlugin
 
-function enterWith (fsProps, store = storage('legacy').getStore()) {
+function getStoreToStart (fsProps, store = storage('legacy').getStore()) {
   if (store && !store.fs?.opExcluded) {
-    storage('legacy').enterWith({
+    return {
       ...store,
       fs: {
         ...store.fs,
         ...fsProps,
         parentStore: store
       }
-    })
+    }
   }
+
+  return store
 }
 
 class AppsecFsPlugin extends Plugin {
   enable () {
-    this.addSub('apm:fs:operation:start', this._onFsOperationStart)
-    this.addSub('apm:fs:operation:finish', this._onFsOperationFinishOrRenderEnd)
-    this.addSub('tracing:datadog:express:response:render:start', this._onResponseRenderStart)
-    this.addSub('tracing:datadog:express:response:render:end', this._onFsOperationFinishOrRenderEnd)
+    this.addBind('apm:fs:operation:start', this._onFsOperationStart)
+    this.addBind('apm:fs:operation:finish', this._onFsOperationFinishOrRenderEnd)
+    this.addBind('tracing:datadog:express:response:render:start', this._onResponseRenderStart)
+    this.addBind('tracing:datadog:express:response:render:end', this._onFsOperationFinishOrRenderEnd)
+    // TODO Remove this when dc-polyfill is fixed&updated
+    //  hack to node 18 and early 20.x
+    //  with dc-polyfill addBind is not enough to force a channel.hasSubscribers === true
+    this.addSub('tracing:datadog:express:response:render:start', () => {})
 
     super.configure(true)
   }
@@ -44,19 +50,20 @@ class AppsecFsPlugin extends Plugin {
   _onFsOperationStart () {
     const store = storage('legacy').getStore()
     if (store) {
-      enterWith({ root: store.fs?.root === undefined }, store)
+      return getStoreToStart({ root: store.fs?.root === undefined }, store)
     }
   }
 
   _onResponseRenderStart () {
-    enterWith({ opExcluded: true })
+    return getStoreToStart({ opExcluded: true })
   }
 
   _onFsOperationFinishOrRenderEnd () {
     const store = storage('legacy').getStore()
-    if (store?.fs?.parentStore) {
-      storage('legacy').enterWith(store.fs.parentStore)
+    if (store?.fs) {
+      return store.fs.parentStore
     }
+    return store
   }
 }
 
