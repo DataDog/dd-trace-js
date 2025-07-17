@@ -37,8 +37,6 @@ async function checkStatuses (contexts) {
   for (const status of statuses) {
     if (!contexts.has(status.context)) continue
 
-    console.log(status)
-
     switch (status.state) {
       case 'success':
         contexts.delete(status.context)
