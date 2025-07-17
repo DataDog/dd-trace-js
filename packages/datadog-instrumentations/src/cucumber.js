@@ -43,6 +43,7 @@ const {
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
   getIsFaultyEarlyFlakeDetection
 } = require('../../dd-trace/src/plugins/util/test')
+const satisfies = require('semifies')
 
 const isMarkedAsUnskippable = (pickle) => {
   return pickle.tags.some(tag => tag.name === '@datadog:unskippable')
@@ -224,7 +225,7 @@ function getPickleByFile (runtimeOrCoodinator) {
   }, {})
 }
 
-function wrapRun (pl, isLatestVersion) {
+function wrapRun (pl, isLatestVersion, version) {
   if (patched.has(pl)) return
 
   patched.add(pl)
@@ -398,9 +399,10 @@ function wrapRun (pl, isLatestVersion) {
         const promise = runStep.apply(this, arguments)
 
         promise.then((result) => {
-          const { status, skipReason, errorMessage } = isLatestVersion
-            ? getStatusFromResultLatest(result)
-            : getStatusFromResult(result)
+          const finalResult = satisfies(version, '>=12.0.0') ? result.result : result
+          const getStatus = satisfies(version, '>=7.3.0') ? getStatusFromResultLatest : getStatusFromResult
+
+          const { status, skipReason, errorMessage } = getStatus(finalResult)
 
           testFinishCh.publish({ isStep: true, status, skipReason, errorMessage, ...ctx.currentStore })
         })
@@ -415,18 +417,18 @@ function wrapRun (pl, isLatestVersion) {
   })
 }
 
-function pickleHook (PickleRunner) {
+function pickleHook (PickleRunner, version) {
   const pl = PickleRunner.default
 
-  wrapRun(pl, false)
+  wrapRun(pl, false, version)
 
   return PickleRunner
 }
 
-function testCaseHook (TestCaseRunner) {
+function testCaseHook (TestCaseRunner, version) {
   const pl = TestCaseRunner.default
 
-  wrapRun(pl, true)
+  wrapRun(pl, true, version)
 
   return TestCaseRunner
 }

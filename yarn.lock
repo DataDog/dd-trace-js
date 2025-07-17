@@ -211,10 +211,10 @@
   resolved "https://registry.yarnpkg.com/@datadog/libdatadog/-/libdatadog-0.7.0.tgz#81e07d3040c628892db697ccd01ae3c4d2a76315"
   integrity sha512-VVZLspzQcfEU47gmGCVoRkngn7RgFRR4CHjw4YaX8eWT+xz4Q4l6PvA45b7CMk9nlt3MNN5MtGdYttYMIpo6Sg==
 
-"@datadog/native-appsec@9.0.0":
-  version "9.0.0"
-  resolved "https://registry.yarnpkg.com/@datadog/native-appsec/-/native-appsec-9.0.0.tgz#3ac854d8597ca75af0aa534aae28fa7f13057d2a"
-  integrity sha512-C7v16pP4p4Y+Cx0jcxTYmhZTptfVs8TYbn6LH/aQgTkwx2tWsWN5lss7fjBYjWyZoPMwVh2UX/yDm4ES25hJnQ==
+"@datadog/native-appsec@10.0.0":
+  version "10.0.0"
+  resolved "https://registry.yarnpkg.com/@datadog/native-appsec/-/native-appsec-10.0.0.tgz#366d292445c6d4b02782f3c28a2a4f26acd498f3"
+  integrity sha512-1veYkp5DRy3RnqFRQGGIfX6ON8UibIq6YOXa+oJ0n5TRQFd1v6qWPzfonO31W4rDJ5qjxNRV6lX33m8JfaYnag==
   dependencies:
     node-gyp-build "^3.9.0"
 
@@ -3147,10 +3147,10 @@ lie@~3.3.0:
   dependencies:
     immediate "~3.0.5"
 
-limiter@^3.0.0:
-  version "3.0.0"
-  resolved "https://registry.yarnpkg.com/limiter/-/limiter-3.0.0.tgz#03556b76d1a81f547caeecc6b83ecc6f24495715"
-  integrity sha512-hev7DuXojsTFl2YwyzUJMDnZ/qBDd3yZQLSH3aD4tdL1cqfc3TMnoecEJtWFaQFdErZsKoFMBTxF/FBSkgDbEg==
+limiter@^1.1.5:
+  version "1.1.5"
+  resolved "https://registry.yarnpkg.com/limiter/-/limiter-1.1.5.tgz#8f92a25b3b16c6131293a0cc834b4a838a2aa7c2"
+  integrity sha512-FWWMIEOxz3GwUI4Ts/IvgVy6LPvoMPgjMdQ185nN6psJyBJ4yOpzqm695/h5umdLJg2vW3GR5iG11MAkR2AzJA==
 
 locate-path@^5.0.0:
   version "5.0.0"
