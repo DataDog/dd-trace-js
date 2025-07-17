@@ -31,6 +31,7 @@ const CI_PROVIDER_NAME = 'ci.provider.name'
 const CI_WORKSPACE_PATH = 'ci.workspace_path'
 const CI_JOB_URL = 'ci.job.url'
 const CI_JOB_NAME = 'ci.job.name'
+const CI_JOB_ID = 'ci.job.id'
 const CI_STAGE_NAME = 'ci.stage.name'
 const CI_NODE_NAME = 'ci.node.name'
 const CI_NODE_LABELS = 'ci.node.labels'
@@ -69,6 +70,7 @@ module.exports = {
   CI_WORKSPACE_PATH,
   CI_JOB_URL,
   CI_JOB_NAME,
+  CI_JOB_ID,
   CI_STAGE_NAME,
   CI_ENV_VARS,
   CI_NODE_NAME,
