@@ -8,7 +8,7 @@ describe('sendTelemetry', () => {
   let cleanup, sendTelemetry
 
   beforeEach(() => {
-    cleanup = telemetryForwarder()
+    cleanup = telemetryForwarder(true)
     sendTelemetry = proxyquire('../src/guardrails/telemetry', {})
   })
 
