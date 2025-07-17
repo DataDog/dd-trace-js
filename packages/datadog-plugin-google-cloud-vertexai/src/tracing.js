@@ -22,7 +22,7 @@ class GoogleCloudVertexAITracingPlugin extends TracingPlugin {
   }
 
   bindStart (ctx) {
-    const { instance, request, resource, stream } = ctx
+    const { instance, resource } = ctx
 
     const span = this.startSpan('vertexai.request', {
       service: this.config.service,
@@ -33,7 +33,10 @@ class GoogleCloudVertexAITracingPlugin extends TracingPlugin {
       }
     }, false)
 
-    const tags = this.tagRequest(request, instance, stream, span)
+    const model = extractModel(instance)
+    const tags = {
+      'vertexai.request.model': model
+    }
     span.addTags(tags)
 
     const store = storage('legacy').getStore() || {}
@@ -47,23 +50,6 @@ class GoogleCloudVertexAITracingPlugin extends TracingPlugin {
     if (!span) return
 
     span.finish()
-  }
-
-  /**
-   * Generate the request tags.
-   *
-   * @param {Object} request
-   * @param {Object} instance
-   * @param {boolean} stream
-   * @param {Span} span
-   * @returns {Object}
-   */
-  tagRequest (request, instance, stream, span) {
-    const model = extractModel(instance)
-    const tags = {
-      'vertexai.request.model': model
-    }
-    return tags
   }
 }
 
