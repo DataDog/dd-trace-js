@@ -5,6 +5,7 @@ const shimmer = require('../../datadog-shimmer')
 
 const dc = require('dc-polyfill')
 const ch = dc.tracingChannel('apm:openai:request')
+const onStreamedChunkCh = dc.channel('apm:openai:request:chunk')
 
 const V4_PACKAGE_SHIMS = [
   {
@@ -160,79 +161,12 @@ addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0 <4'] }, expor
   return exports
 })
 
-function addStreamedChunk (content, chunk) {
-  content.usage = chunk.usage // add usage if it was specified to be returned
-  for (const choice of chunk.choices) {
-    const choiceIdx = choice.index
-    const oldChoice = content.choices.find(choice => choice?.index === choiceIdx)
-    if (oldChoice) {
-      if (!oldChoice.finish_reason) {
-        oldChoice.finish_reason = choice.finish_reason
-      }
-
-      // delta exists on chat completions
-      const delta = choice.delta
-
-      if (delta) {
-        const content = delta.content
-        if (content) {
-          if (oldChoice.delta.content) { // we don't want to append to undefined
-            oldChoice.delta.content += content
-          } else {
-            oldChoice.delta.content = content
-          }
-        }
-      } else {
-        const text = choice.text
-        if (text) {
-          if (oldChoice.text) {
-            oldChoice.text += text
-          } else {
-            oldChoice.text = text
-          }
-        }
-      }
-
-      // tools only exist on chat completions
-      const tools = delta && choice.delta.tool_calls
-
-      if (tools) {
-        oldChoice.delta.tool_calls = tools.map((newTool, toolIdx) => {
-          const oldTool = oldChoice.delta.tool_calls?.[toolIdx]
-
-          if (oldTool) {
-            oldTool.function.arguments += newTool.function.arguments
-            return oldTool
-          }
-
-          return newTool
-        })
-      }
-    } else {
-      // we don't know which choices arrive in which order
-      content.choices[choiceIdx] = choice
-    }
-  }
-}
-
-function convertBufferstoObjects (chunks) {
-  return Buffer
-    .concat(chunks) // combine the buffers
-    .toString() // stringify
-    .split(/(?=data:)/) // split on "data:"
-    .map(chunk => chunk.replaceAll('\n', '').slice(6)) // remove newlines and 'data: ' from the front
-    .slice(0, -1) // remove the last [DONE] message
-    .map(JSON.parse) // parse all of the returned objects
-}
-
 /**
  * For streamed responses, we need to accumulate all of the content in
  * the chunks, and let the combined content be the final response.
  * This way, spans look the same as when not streamed.
  */
-function wrapStreamIterator (response, options, n, ctx) {
-  let processChunksAsBuffers = false
-  let chunks = []
+function wrapStreamIterator (response, options, ctx) {
   return function (itr) {
     return function () {
       const iterator = itr.apply(this, arguments)
@@ -240,39 +174,11 @@ function wrapStreamIterator (response, options, n, ctx) {
         return next.apply(this, arguments)
           .then(res => {
             const { done, value: chunk } = res
-
-            if (chunk) {
-              chunks.push(chunk)
-              // TODO(BridgeAR): It likely depends on the options being passed
-              // through if the stream returns buffers or not. By reading that,
-              // we don't have to do the instanceof check anymore, which is
-              // relatively expensive.
-              if (chunk instanceof Buffer) {
-                // this operation should be safe
-                // if one chunk is a buffer (versus a plain object), the rest should be as well
-                processChunksAsBuffers = true
-              }
-            }
+            onStreamedChunkCh.publish({ ctx, chunk, done })
 
             if (done) {
-              let body = {}
-              if (processChunksAsBuffers) {
-                chunks = convertBufferstoObjects(chunks)
-              }
-
-              if (chunks.length) {
-                // Define the initial body having all the content outside of choices from the first chunk
-                // this will include import data like created, id, model, etc.
-                body = { ...chunks[0], choices: Array.from({ length: n }) }
-                // Start from the first chunk, and add its choices into the body
-                for (const chunk_ of chunks) {
-                  addStreamedChunk(body, chunk_)
-                }
-              }
-
               finish(ctx, {
                 headers: response.headers,
-                data: body,
                 request: {
                   path: response.url,
                   method: options.method
@@ -312,17 +218,6 @@ for (const extension of extensions) {
           // chat.completions and completions
           const stream = streamedResponse && getOption(arguments, 'stream', false)
 
-          // we need to compute how many prompts we are sending in streamed cases for completions
-          // not applicable for chat completiond
-          let n
-          if (stream) {
-            n = getOption(arguments, 'n', 1)
-            const prompt = getOption(arguments, 'prompt')
-            if (Array.isArray(prompt) && typeof prompt[0] !== 'number') {
-              n *= prompt.length
-            }
-          }
-
           const client = this._client || this.client
 
           const ctx = {
@@ -348,7 +243,7 @@ for (const extension of extensions) {
                   const parsedPromise = origApiPromParse.apply(this, arguments)
                     .then(body => Promise.all([this.responsePromise, body]))
 
-                  return handleUnwrappedAPIPromise(parsedPromise, ctx, stream, n)
+                  return handleUnwrappedAPIPromise(parsedPromise, ctx, stream)
                 })
 
                 return unwrappedPromise
@@ -361,7 +256,7 @@ for (const extension of extensions) {
               const parsedPromise = origApiPromParse.apply(this, arguments)
                 .then(body => Promise.all([this.responsePromise, body]))
 
-              return handleUnwrappedAPIPromise(parsedPromise, ctx, stream, n)
+              return handleUnwrappedAPIPromise(parsedPromise, ctx, stream)
             })
 
             ch.end.publish(ctx)
@@ -375,15 +270,15 @@ for (const extension of extensions) {
   }
 }
 
-function handleUnwrappedAPIPromise (apiProm, ctx, stream, n) {
+function handleUnwrappedAPIPromise (apiProm, ctx, stream) {
   return apiProm
     .then(([{ response, options }, body]) => {
       if (stream) {
         if (body.iterator) {
-          shimmer.wrap(body, 'iterator', wrapStreamIterator(response, options, n, ctx))
+          shimmer.wrap(body, 'iterator', wrapStreamIterator(response, options, ctx))
         } else {
           shimmer.wrap(
-            body.response.body, Symbol.asyncIterator, wrapStreamIterator(response, options, n, ctx)
+            body.response.body, Symbol.asyncIterator, wrapStreamIterator(response, options, ctx)
           )
         }
       } else {
@@ -412,7 +307,11 @@ function finish (ctx, response, error) {
     ch.error.publish(ctx)
   }
 
-  ctx.result = response
+  // for successful streamed responses, we've already set the result on ctx.body,
+  // so we don't want to override it here
+  ctx.result ??= {}
+  Object.assign(ctx.result, response)
+
   ch.asyncEnd.publish(ctx)
 }
 

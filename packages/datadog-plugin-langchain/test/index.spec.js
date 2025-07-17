@@ -19,6 +19,27 @@ const openAiBaseEmbeddingInfo = { base: 'https://api.openai.com', path: '/v1/emb
 
 const isDdTrace = iastFilter.isDdTrace
 
+function stubSingleEmbedding (langchainOpenaiOpenAiVersion) {
+  if (semver.satisfies(langchainOpenaiOpenAiVersion, '>=4.91.0')) {
+    stubCall({
+      ...openAiBaseEmbeddingInfo,
+      response: require('./fixtures/single-embedding.json')
+    })
+  } else {
+    stubCall({
+      ...openAiBaseEmbeddingInfo,
+      response: {
+        object: 'list',
+        data: [{
+          object: 'embedding',
+          index: 0,
+          embedding: Array(1536).fill(0)
+        }]
+      }
+    })
+  }
+}
+
 describe('Plugin', () => {
   let langchainOpenai
   let langchainAnthropic
@@ -28,7 +49,8 @@ describe('Plugin', () => {
   let langchainOutputParsers
   let langchainPrompts
   let langchainRunnables
-
+  let langchainTools
+  let MemoryVectorStore
   /**
    * In OpenAI 4.91.0, the default response format for embeddings was changed from `float` to `base64`.
    * We do not have control in @langchain/openai embeddings to change this for an individual call,
@@ -65,7 +87,8 @@ describe('Plugin', () => {
       })
 
       beforeEach(() => {
-        langchainOpenai = require(`../../../versions/@langchain/openai@${version}`).get()
+        langchainOpenai = require(`../../../versions/langchain@${version}`)
+          .get('@langchain/openai')
         langchainAnthropic = require(`../../../versions/@langchain/anthropic@${version}`).get()
         if (version !== '0.1.0') {
           // version mismatching otherwise
@@ -80,10 +103,17 @@ describe('Plugin', () => {
         langchainPrompts = require(`../../../versions/@langchain/core@${version}`).get('@langchain/core/prompts')
         langchainRunnables = require(`../../../versions/@langchain/core@${version}`).get('@langchain/core/runnables')
 
+        langchainTools = require(`../../../versions/@langchain/core@${version}`)
+          .get('@langchain/core/tools')
+
+        MemoryVectorStore = require(`../../../versions/@langchain/core@${version}`)
+          .get('langchain/vectorstores/memory')
+          .MemoryVectorStore
+
         langchainOpenaiOpenAiVersion =
-            require(`../../../versions/@langchain/openai@${version}`)
-              .get('openai/version')
-              .VERSION
+          require(`../../../versions/langchain@${version}`)
+            .get('openai/version')
+            .VERSION
       })
 
       afterEach(() => {
@@ -905,6 +935,133 @@ describe('Plugin', () => {
 
             await checkTraces
           })
+        })
+      })
+
+      describe('tools', () => {
+        it('traces a tool call', async function () {
+          if (!langchainTools?.tool) this.skip()
+
+          const myTool = langchainTools.tool(
+            () => 'Hello, world!',
+            {
+              name: 'myTool',
+              description: 'A tool that returns a greeting'
+            }
+          )
+
+          const checkTraces = agent.assertSomeTraces(traces => {
+            const span = traces[0][0]
+
+            expect(span).to.have.property('name', 'langchain.request')
+            expect(span.resource).to.match(/^langchain\.tools\.[^.]+\.myTool$/)
+          })
+          const result = await myTool.invoke()
+          expect(result).to.equal('Hello, world!')
+
+          await checkTraces
+        })
+
+        it('traces a tool call with an error', async function () {
+          if (!langchainTools?.tool) this.skip()
+
+          const myTool = langchainTools.tool(
+            () => { throw new Error('This is a test error') },
+            {
+              name: 'myTool',
+              description: 'A tool that throws an error'
+            }
+          )
+
+          const checkTraces = agent.assertSomeTraces(traces => {
+            const span = traces[0][0]
+
+            expect(span).to.have.property('name', 'langchain.request')
+            expect(span.resource).to.match(/^langchain\.tools\.[^.]+\.myTool$/)
+
+            expect(span.meta).to.have.property('error.message')
+            expect(span.meta).to.have.property('error.type')
+            expect(span.meta).to.have.property('error.stack')
+          })
+
+          try {
+            await myTool.invoke()
+            expect.fail('Expected an error to be thrown')
+          } catch {}
+
+          await checkTraces
+        })
+      })
+
+      describe('vectorstores', () => {
+        let vectorstore
+
+        beforeEach(async () => {
+          // need to mock out adding a document to the vectorstore
+          stubSingleEmbedding(langchainOpenaiOpenAiVersion)
+
+          const embeddings = new langchainOpenai.OpenAIEmbeddings()
+          vectorstore = new MemoryVectorStore(embeddings)
+
+          const document = {
+            pageContent: 'The powerhouse of the cell is the mitochondria',
+            metadata: { source: 'https://example.com' },
+            id: '1'
+          }
+
+          return vectorstore.addDocuments([document])
+        })
+
+        it('traces a vectorstore similaritySearch call', async () => {
+          stubSingleEmbedding(langchainOpenaiOpenAiVersion)
+
+          const checkTraces = agent.assertSomeTraces(traces => {
+            const spans = traces[0]
+
+            expect(spans).to.have.length(2)
+
+            const vectorstoreSpan = spans[0]
+            const embeddingSpan = spans[1]
+
+            expect(vectorstoreSpan).to.have.property('name', 'langchain.request')
+            expect(vectorstoreSpan).to.have.property('resource', 'langchain.vectorstores.memory.MemoryVectorStore')
+
+            expect(embeddingSpan).to.have.property('name', 'langchain.request')
+            expect(embeddingSpan).to.have.property('resource', 'langchain.embeddings.openai.OpenAIEmbeddings')
+          }, { spanResourceMatch: /langchain\.vectorstores\.memory\.MemoryVectorStore/ })
+          // we need the spanResourceMatch, otherwise we'll match from the beforeEach
+
+          const result = await vectorstore.similaritySearch('The powerhouse of the cell is the mitochondria', 2)
+          expect(result).to.exist
+
+          await checkTraces
+        })
+
+        it('traces a vectorstore similaritySearchWithScore call', async () => {
+          stubSingleEmbedding(langchainOpenaiOpenAiVersion)
+
+          const checkTraces = agent.assertSomeTraces(traces => {
+            const spans = traces[0]
+
+            expect(spans).to.have.length(2)
+
+            const vectorstoreSpan = spans[0]
+            const embeddingSpan = spans[1]
+
+            expect(vectorstoreSpan).to.have.property('name', 'langchain.request')
+            expect(vectorstoreSpan).to.have.property('resource', 'langchain.vectorstores.memory.MemoryVectorStore')
+
+            expect(embeddingSpan).to.have.property('name', 'langchain.request')
+            expect(embeddingSpan).to.have.property('resource', 'langchain.embeddings.openai.OpenAIEmbeddings')
+          }, { spanResourceMatch: /langchain\.vectorstores\.memory\.MemoryVectorStore/ })
+          // we need the spanResourceMatch, otherwise we'll match from the beforeEach
+
+          const result = await vectorstore.similaritySearchWithScore(
+            'The powerhouse of the cell is the mitochondria', 2
+          )
+          expect(result).to.exist
+
+          await checkTraces
         })
       })
     })
