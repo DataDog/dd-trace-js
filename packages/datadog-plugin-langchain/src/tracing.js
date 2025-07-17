@@ -10,8 +10,7 @@ const PROVIDER = 'langchain.request.provider'
 const TYPE = 'langchain.request.type'
 
 const LangChainHandler = require('./handlers/default')
-const LangChainChatModelHandler = require('./handlers/language_models/chat_model')
-const LangChainLLMHandler = require('./handlers/language_models/llm')
+const LangChainLanguageModelHandler = require('./handlers/language_models/index')
 const LangChainChainHandler = require('./handlers/chain')
 const LangChainEmbeddingHandler = require('./handlers/embedding')
 
@@ -25,8 +24,8 @@ class BaseLangChainTracingPlugin extends TracingPlugin {
 
     this.handlers = {
       chain: new LangChainChainHandler(this._tracerConfig),
-      chat_model: new LangChainChatModelHandler(this._tracerConfig),
-      llm: new LangChainLLMHandler(this._tracerConfig),
+      chat_model: new LangChainLanguageModelHandler(this._tracerConfig),
+      llm: new LangChainLanguageModelHandler(this._tracerConfig),
       embedding: new LangChainEmbeddingHandler(this._tracerConfig),
       default: new LangChainHandler(this._tracerConfig)
     }
