@@ -11,12 +11,6 @@ class LangChainHandler {
   }
 
   // no-op for default handler
-  getSpanStartTags (ctx) {}
-
-  // no-op for default handler
-  getSpanEndTags (ctx) {}
-
-  // no-op for default handler
   extractApiKey (instance) {}
 
   // no-op for default handler

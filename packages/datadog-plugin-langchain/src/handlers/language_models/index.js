@@ -28,14 +28,6 @@ class LangChainLanguageModelHandler extends LangChainHandler {
       if (modelName) return modelName
     }
   }
-
-  getSpanStartTags (ctx, provider, span) {
-    return {}
-  }
-
-  getSpanEndTags (ctx, span) {
-    return {}
-  }
 }
 
 module.exports = LangChainLanguageModelHandler

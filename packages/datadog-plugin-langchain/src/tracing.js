@@ -10,7 +10,6 @@ const TYPE = 'langchain.request.type'
 
 const LangChainHandler = require('./handlers/default')
 const LangChainLanguageModelHandler = require('./handlers/language_models/index')
-const LangChainChainHandler = require('./handlers/chain')
 const LangChainEmbeddingHandler = require('./handlers/embedding')
 
 class BaseLangChainTracingPlugin extends TracingPlugin {
@@ -22,7 +21,7 @@ class BaseLangChainTracingPlugin extends TracingPlugin {
     super(...arguments)
 
     this.handlers = {
-      chain: new LangChainChainHandler(this._tracerConfig),
+      chain: new LangChainHandler(this._tracerConfig),
       chat_model: new LangChainLanguageModelHandler(this._tracerConfig),
       llm: new LangChainLanguageModelHandler(this._tracerConfig),
       embedding: new LangChainEmbeddingHandler(this._tracerConfig),
@@ -55,7 +54,7 @@ class BaseLangChainTracingPlugin extends TracingPlugin {
       }
     }, false)
 
-    const tags = handler.getSpanStartTags(ctx, provider, span) || []
+    const tags = {}
 
     if (provider) tags[PROVIDER] = provider
     if (model) tags[MODEL] = model
@@ -71,13 +70,6 @@ class BaseLangChainTracingPlugin extends TracingPlugin {
 
   asyncEnd (ctx) {
     const span = ctx.currentStore.span
-
-    const { type } = ctx
-
-    const handler = this.handlers[type]
-    const tags = handler.getSpanEndTags(ctx, span) || {}
-
-    span.addTags(tags)
 
     span.finish()
   }

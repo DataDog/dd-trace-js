@@ -3,14 +3,6 @@
 const LangChainHandler = require('./default')
 
 class LangChainEmbeddingHandler extends LangChainHandler {
-  getSpanStartTags (ctx, provider, span) {
-    return {}
-  }
-
-  getSpanEndTags (ctx) {
-    return {}
-  }
-
   extractApiKey (instance) {
     const apiKey =
       instance.clientConfig?.apiKey ||
