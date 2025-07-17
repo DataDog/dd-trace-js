@@ -1,6 +1,6 @@
 'use strict'
 
-const LangChainHandler = require('../default')
+const LangChainHandler = require('./default')
 
 class LangChainLanguageModelHandler extends LangChainHandler {
   extractProvider (instance) {
