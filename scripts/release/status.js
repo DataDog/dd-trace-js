@@ -34,8 +34,6 @@ async function checkStatuses (contexts) {
 
   const { statuses } = JSON.parse(await response.text())
 
-  // console.log(statuses)
-
   for (const status of statuses) {
     if (!contexts.has(status.context)) continue
 
