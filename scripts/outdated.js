@@ -29,8 +29,6 @@ const IGNORED_PACKAGES = [
 // Packages that should be pinned to specific versions
 const PINNED_PACKAGES = {
   // Example: 'express': '4.17.3'
-  fastify: '4.28.1', // v5+ is not supported
-  express: '4.21.2'
 }
 
 // Packages that should only use the 'latest' tag (not 'next' or other dist-tags)
