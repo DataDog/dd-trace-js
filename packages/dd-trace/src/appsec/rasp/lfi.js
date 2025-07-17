@@ -98,11 +98,9 @@ function pathToStr (path) {
 
 function shouldAnalyze (path, fs) {
   if (!path) return
-  console.log('path', path)
 
   const notExcludedRootOp = !fs.opExcluded && fs.root
-  console.log('notExcludedRootOp', notExcludedRootOp)
-  return true //notExcludedRootOp && (isAbsolute(path) || path.includes('../') || shouldAnalyzeURLFile(path, fs))
+  return notExcludedRootOp && (isAbsolute(path) || path.includes('../') || shouldAnalyzeURLFile(path, fs))
 }
 
 function shouldAnalyzeURLFile (path, fs) {

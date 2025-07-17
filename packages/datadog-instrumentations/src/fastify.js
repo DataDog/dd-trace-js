@@ -213,7 +213,7 @@ function preParsing (request, reply, payload, done) {
 function wrapSend (send, req) {
   return function sendWithTrace (payload) {
     if (payload instanceof Error) {
-      errorChannel.publish({ req, error: payload, res: req.res })
+      errorChannel.publish({ req, error: payload })
     } else if (canPublishResponsePayload(payload)) {
       const res = getRes(this)
       responsePayloadReadCh.publish({ req, res, body: payload })
@@ -237,7 +237,7 @@ function getRouteConfig (request) {
 
 function publishError (error, req) {
   if (error) {
-    errorChannel.publish({ error, req, res: req.res })
+    errorChannel.publish({ error, req })
   }
 
   return error
