@@ -53,8 +53,9 @@ class TracingPlugin extends Plugin {
 
   start () {} // implemented by individual plugins
 
-  finish () {
-    this.activeSpan?.finish()
+  finish (ctx) {
+    const span = ctx?.currentStore?.span || this.activeSpan
+    span?.finish()
   }
 
   error (ctxOrError) {
@@ -101,7 +102,7 @@ class TracingPlugin extends Plugin {
     }
   }
 
-  startSpan (name, { childOf, kind, meta, metrics, service, resource, type } = {}, enter = true) {
+  startSpan (name, { childOf, kind, meta, metrics, service, resource, type } = {}, enterOrCtx = true) {
     const store = storage('legacy').getStore()
     if (store && childOf === undefined) {
       childOf = store.span
@@ -118,15 +119,18 @@ class TracingPlugin extends Plugin {
         ...meta,
         ...metrics
       },
-      integrationName: type,
+      integrationName: this.component,
       links: childOf?._links
     })
 
     analyticsSampler.sample(span, this.config.measured)
 
     // TODO: Remove this after migration to TracingChannel is done.
-    if (enter) {
+    if (enterOrCtx === true) {
       storage('legacy').enterWith({ ...store, span })
+    } else if (enterOrCtx) {
+      enterOrCtx.parentStore = store
+      enterOrCtx.currentStore = { ...store, span }
     }
 
     return span

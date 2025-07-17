@@ -2,6 +2,7 @@
 
 const sinon = require('sinon')
 const semver = require('semver')
+const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
@@ -81,7 +82,7 @@ describe('Plugin', () => {
         describe('server', () => {
           it('should do automatic instrumentation', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
                 const resource = `insert test.${collection}`
 
@@ -93,6 +94,7 @@ describe('Plugin', () => {
                 expect(span.meta).to.have.property('db.name', `test.${collection}`)
                 expect(span.meta).to.have.property('out.host', '127.0.0.1')
                 expect(span.meta).to.have.property('component', 'mongodb')
+                expect(span.meta).to.have.property('_dd.integration', 'mongodb')
               })
               .then(done)
               .catch(done)
@@ -102,7 +104,7 @@ describe('Plugin', () => {
 
           it('should use the correct resource name for arbitrary commands', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
                 const resource = `planCacheListPlans test.${collection}`
 
@@ -119,7 +121,7 @@ describe('Plugin', () => {
 
           it('should sanitize buffers as values and not as objects', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
                 const resource = `find test.${collection}`
                 const query = '{"_id":"?"}'
@@ -140,7 +142,7 @@ describe('Plugin', () => {
 
           it('should serialize BigInt without erroring', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
                 const resource = `find test.${collection}`
                 const query = '{"_id":"9999999999999999999999"}'
@@ -176,7 +178,7 @@ describe('Plugin', () => {
             const id = '123456781234567812345678'
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
                 const resource = `find test.${collection}`
                 const query = `{"_id":"${id}"}`
@@ -197,7 +199,7 @@ describe('Plugin', () => {
 
           it('should skip functions when sanitizing', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
                 const resource = `find test.${collection}`
                 const query = '{"_id":"1234"}'
@@ -228,7 +230,7 @@ describe('Plugin', () => {
             let error
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
                 expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
                 expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
@@ -258,15 +260,15 @@ describe('Plugin', () => {
 
             Promise.all([
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   expect(traces[0][0].resource).to.equal(`find test.${collection}`)
                 }),
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   expect(traces[0][0].resource).to.equal(`getMore test.${collection}`)
                 }),
               agent
-                .use(traces => {
+                .assertSomeTraces(traces => {
                   expect(traces[0][0].resource).to.equal(`killCursors test.${collection}`)
                 })
             ])
@@ -286,7 +288,7 @@ describe('Plugin', () => {
 
           it('should sanitize the query as the resource', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
                 const resource = `find test.${collection}`
                 const query = '{"foo":1,"bar":{"baz":[1,2,3]}}'
@@ -326,7 +328,7 @@ describe('Plugin', () => {
             let error
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
                 expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
                 expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
@@ -378,7 +380,7 @@ describe('Plugin', () => {
 
         it('should be configured with the correct values', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', 'custom')
             })
@@ -435,7 +437,7 @@ describe('Plugin', () => {
 
         it('DBM propagation should not inject comment', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(startSpy.called).to.be.true
               const ops = startSpy.getCall(0).args[0].ops
               expect(ops).to.not.have.property('comment')
@@ -479,7 +481,7 @@ describe('Plugin', () => {
 
         it('DBM propagation should not inject comment', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(startSpy.called).to.be.true
               const { comment } = startSpy.getCall(0).args[0].ops
               expect(comment).to.be.undefined
@@ -492,7 +494,7 @@ describe('Plugin', () => {
 
         it('DBM propagation should not alter existing comment', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(startSpy.called).to.be.true
               const { comment } = startSpy.getCall(0).args[0].ops
               expect(comment).to.equal('test comment')
@@ -542,7 +544,7 @@ describe('Plugin', () => {
 
         it('DBM propagation should inject service mode as comment', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const span = traces[0][0]
 
               expect(startSpy.called).to.be.true
@@ -565,7 +567,7 @@ describe('Plugin', () => {
 
         it('DBM propagation should inject service mode after eixsting str comment', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const span = traces[0][0]
 
               expect(startSpy.called).to.be.true
@@ -595,7 +597,7 @@ describe('Plugin', () => {
 
         it('DBM propagation should inject service mode after eixsting array comment', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const span = traces[0][0]
 
               expect(startSpy.called).to.be.true
@@ -656,7 +658,7 @@ describe('Plugin', () => {
 
         it('DBM propagation should inject full mode with traceparent as comment', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const span = traces[0][0]
               const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
               const spanId = span.span_id.toString(16).padStart(16, '0')

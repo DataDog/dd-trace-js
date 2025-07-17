@@ -1,13 +1,12 @@
 'use strict'
 
 const { createSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
-const getPort = require('get-port')
 const path = require('path')
 const Axios = require('axios')
 const { assert } = require('chai')
 
 describe('RASP metrics', () => {
-  let axios, sandbox, cwd, appPort, appFile
+  let axios, sandbox, cwd, appFile
 
   before(async function () {
     this.timeout(process.platform === 'win32' ? 90000 : 30000)
@@ -18,13 +17,8 @@ describe('RASP metrics', () => {
       [path.join(__dirname, 'resources')]
     )
 
-    appPort = await getPort()
     cwd = sandbox.folder
     appFile = path.join(cwd, 'resources', 'shi-app', 'index.js')
-
-    axios = Axios.create({
-      baseURL: `http://localhost:${appPort}`
-    })
   })
 
   after(async function () {
@@ -41,7 +35,6 @@ describe('RASP metrics', () => {
         cwd,
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
-          APP_PORT: appPort,
           DD_APPSEC_ENABLED: 'true',
           DD_APPSEC_RASP_ENABLED: 'true',
           DD_TELEMETRY_HEARTBEAT_INTERVAL: 1,
@@ -49,6 +42,7 @@ describe('RASP metrics', () => {
           DD_APPSEC_WAF_TIMEOUT: 0.1
         }
       })
+      axios = Axios.create({ baseURL: proc.url })
     })
 
     afterEach(async () => {
@@ -67,7 +61,7 @@ describe('RASP metrics', () => {
 
       let appsecTelemetryMetricsReceived = false
 
-      return agent.assertTelemetryReceived(({ payload }) => {
+      await agent.assertTelemetryReceived(({ payload }) => {
         const namespace = payload.payload.namespace
 
         if (namespace === 'appsec') {
@@ -79,10 +73,9 @@ describe('RASP metrics', () => {
           assert.include(errorSerie.tags, 'waf_error:-127')
           assert.strictEqual(errorSerie.type, 'count')
         }
-      }, 30_000, 'generate-metrics', 2).then(() => {
-        assert.equal(appsecTelemetryMetricsReceived, true)
-        return true
-      })
+      }, 'generate-metrics', 30_000, 2)
+
+      assert.equal(appsecTelemetryMetricsReceived, true)
     })
   })
 
@@ -95,13 +88,13 @@ describe('RASP metrics', () => {
         cwd,
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
-          APP_PORT: appPort,
           DD_APPSEC_ENABLED: 'true',
           DD_APPSEC_RASP_ENABLED: 'true',
           DD_TELEMETRY_HEARTBEAT_INTERVAL: 1,
           DD_APPSEC_WAF_TIMEOUT: 1
         }
       })
+      axios = Axios.create({ baseURL: proc.url })
     })
 
     afterEach(async () => {
@@ -131,13 +124,11 @@ describe('RASP metrics', () => {
           assert.include(timeoutSerie.tags, 'rule_variant:shell')
           assert.strictEqual(timeoutSerie.type, 'count')
         }
-      }, 30_000, 'generate-metrics', 2)
+      }, 'generate-metrics', 30_000, 2)
 
-      return Promise.all([checkMessages, checkTelemetry]).then(() => {
-        assert.equal(appsecTelemetryReceived, true)
+      await Promise.all([checkMessages, checkTelemetry])
 
-        return true
-      })
+      assert.equal(appsecTelemetryReceived, true)
     })
   })
 })

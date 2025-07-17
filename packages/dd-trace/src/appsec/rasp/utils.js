@@ -20,25 +20,28 @@ const RULE_TYPES = {
 }
 
 class DatadogRaspAbortError extends Error {
-  constructor (req, res, blockingAction, raspRule) {
+  constructor (req, res, blockingAction, raspRule, ruleTriggered) {
     super('DatadogRaspAbortError')
     this.name = 'DatadogRaspAbortError'
     this.req = req
     this.res = res
     this.blockingAction = blockingAction
     this.raspRule = raspRule
+    this.ruleTriggered = ruleTriggered
   }
 }
 
-function handleResult (actions, req, res, abortController, config, raspRule) {
-  const generateStackTraceAction = actions?.generate_stack
+function handleResult (result, req, res, abortController, config, raspRule) {
+  const generateStackTraceAction = result?.actions?.generate_stack
 
   const { enabled, maxDepth, maxStackTraces } = config.appsec.stackTrace
 
   const rootSpan = web.root(req)
 
+  const ruleTriggered = !!result?.events?.length
+
   if (generateStackTraceAction && enabled && canReportStackTrace(rootSpan, maxStackTraces)) {
-    const frames = getCallsiteFrames(maxDepth)
+    const frames = getCallsiteFrames(maxDepth, handleResult)
 
     reportStackTrace(
       rootSpan,
@@ -48,23 +51,20 @@ function handleResult (actions, req, res, abortController, config, raspRule) {
   }
 
   if (abortController && !abortOnUncaughtException) {
-    const blockingAction = getBlockingAction(actions)
+    const blockingAction = getBlockingAction(result?.actions)
 
     // Should block only in express
     if (blockingAction && rootSpan?.context()._name === 'express.request') {
-      const abortError = new DatadogRaspAbortError(req, res, blockingAction, raspRule)
+      const abortError = new DatadogRaspAbortError(req, res, blockingAction, raspRule, ruleTriggered)
       abortController.abort(abortError)
-
-      // TODO Delete this when support for node 16 is removed
-      if (!abortController.signal.reason) {
-        abortController.signal.reason = abortError
-      }
 
       return
     }
   }
 
-  updateRaspRuleMatchMetricTags(req, raspRule, false, false)
+  if (ruleTriggered) {
+    updateRaspRuleMatchMetricTags(req, raspRule, false, false)
+  }
 }
 
 module.exports = {

@@ -1,3 +1,5 @@
+'use strict'
+
 const DNSPlugin = require('./dns')
 
 const queryNames = new Map()
@@ -8,14 +10,14 @@ class DNSResolvePlugin extends DNSPlugin {
   }
 
   extendEvent (event, startEvent) {
-    const rrtype = startEvent[1]
+    const rrtype = startEvent.args[1]
     let name = queryNames.get(rrtype)
     if (!name) {
       name = `query${rrtype}`
       queryNames.set(rrtype, name)
     }
     event.name = name
-    event.detail = { host: startEvent[0] }
+    event.detail = { host: startEvent.args[0] }
 
     return event
   }

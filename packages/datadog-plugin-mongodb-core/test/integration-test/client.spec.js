@@ -7,12 +7,6 @@ const {
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
-const { NODE_MAJOR } = require('../../../../version')
-
-// Error: Command failed: yarn add file:/tmp/1236761b054ee8e5/dd-trace.tgz mongodb mongodb-core
-// error bson@6.0.0: The engine "node" is incompatible with this module. Expected version ">=16.20.1". Got "14.21.3"
-// error Found incompatible module.
-const describe = NODE_MAJOR < 16 ? globalThis.describe.skip : globalThis.describe
 
 describe('esm', () => {
   let agent

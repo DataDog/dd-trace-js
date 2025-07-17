@@ -19,8 +19,14 @@ function now () {
   return Date.now() / 1e3
 }
 
-function mapToJsonArray (map) {
-  return Array.from(map.values()).map(v => v.toJSON())
+function mapToJsonArray (map, filter) {
+  const array = []
+  for (const value of map.values()) {
+    if (!filter || filter(value)) {
+      array.push(value.toJSON())
+    }
+  }
+  return array
 }
 
 function hasPoints (metric) {
@@ -138,7 +144,7 @@ class RateMetric extends Metric {
 
   track (value = 1) {
     this.rate += value
-    const rate = this.interval ? (this.rate / this.interval) : 0.0
+    const rate = this.interval ? (this.rate / this.interval) : 0
     this.points = [[now(), rate]]
   }
 }
@@ -169,8 +175,7 @@ class MetricsCollection extends Map {
   toJSON () {
     if (!this.size) return
 
-    const series = mapToJsonArray(this)
-      .filter(hasPoints)
+    const series = mapToJsonArray(this, hasPoints)
 
     if (!series.length) return
 

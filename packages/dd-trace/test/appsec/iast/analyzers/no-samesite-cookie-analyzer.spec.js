@@ -1,12 +1,9 @@
 'use strict'
 
 const { prepareTestServerForIast } = require('../utils')
-const Analyzer = require('../../../../src/appsec/iast/analyzers/vulnerability-analyzer')
 const { NO_SAMESITE_COOKIE } = require('../../../../src/appsec/iast/vulnerabilities')
 const CookieAnalyzer = require('../../../../src/appsec/iast/analyzers/cookie-analyzer')
 const noSamesiteCookieAnalyzer = require('../../../../src/appsec/iast/analyzers/no-samesite-cookie-analyzer')
-
-const analyzer = new Analyzer()
 
 describe('no SameSite cookie analyzer', () => {
   it('Expected vulnerability identifier', () => {
@@ -31,7 +28,6 @@ describe('no SameSite cookie analyzer', () => {
         res.setHeader('set-cookie', 'key=value')
       }, NO_SAMESITE_COOKIE, 1, function (vulnerabilities) {
         expect(vulnerabilities[0].evidence.value).to.be.equals('key')
-        expect(vulnerabilities[0].hash).to.be.equals(analyzer._createHash('NO_SAMESITE_COOKIE:key'))
       })
 
       testThatRequestHasVulnerability((req, res) => {
@@ -48,11 +44,11 @@ describe('no SameSite cookie analyzer', () => {
 
       testThatRequestHasVulnerability((req, res) => {
         res.setHeader('set-cookie', ['key=value', 'key2=value2'])
-      }, NO_SAMESITE_COOKIE, 2)
+      }, NO_SAMESITE_COOKIE, 1)
 
       testThatRequestHasVulnerability((req, res) => {
         res.setHeader('set-cookie', ['key=value', 'key2=value2; Secure'])
-      }, NO_SAMESITE_COOKIE, 2)
+      }, NO_SAMESITE_COOKIE, 1)
 
       testThatRequestHasVulnerability((req, res) => {
         res.setHeader('set-cookie', ['key=value', 'key2=value2; SameSite=strict'])

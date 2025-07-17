@@ -54,7 +54,7 @@ describe('Attacker fingerprinting', () => {
         res.end()
       }
 
-      agent.use(traces => {
+      agent.assertSomeTraces(traces => {
         assert.property(traces[0][0].meta, '_dd.appsec.fp.http.header')
         assert.equal(traces[0][0].meta['_dd.appsec.fp.http.header'], 'hdr-0110000010-74c2908f-3-98425651')
         assert.property(traces[0][0].meta, '_dd.appsec.fp.http.network')
@@ -74,7 +74,7 @@ describe('Attacker fingerprinting', () => {
         res.end()
       }
 
-      agent.use(traces => {
+      agent.assertSomeTraces(traces => {
         assert.property(traces[0][0].meta, '_dd.appsec.fp.http.header')
         assert.equal(traces[0][0].meta['_dd.appsec.fp.http.header'], 'hdr-0110000010-74c2908f-3-98425651')
         assert.property(traces[0][0].meta, '_dd.appsec.fp.http.network')

@@ -1,5 +1,6 @@
 'use strict'
 
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
@@ -43,7 +44,7 @@ describe('Legacy Plugin', () => {
         withPeerService(
           () => tracer,
           'redis',
-          () => client.get('foo'),
+          (done) => client.get('foo', done),
           '127.0.0.1',
           'out.host'
         )
@@ -51,7 +52,7 @@ describe('Legacy Plugin', () => {
         it('should do automatic instrumentation when using callbacks', done => {
           client.on('error', done)
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', 'get')
@@ -62,6 +63,7 @@ describe('Legacy Plugin', () => {
               expect(traces[0][0].meta).to.have.property('out.host', '127.0.0.1')
               expect(traces[0][0].meta).to.have.property('redis.raw_command', 'GET foo')
               expect(traces[0][0].meta).to.have.property('component', 'redis')
+              expect(traces[0][0].meta).to.have.property('_dd.integration', 'redis')
             })
             .then(done)
             .catch(done)
@@ -112,7 +114,7 @@ describe('Legacy Plugin', () => {
         // TODO: This test is flakey. I've seen it affect 2.6.0, 2.5.3, 3.1.2, 0.12.0
         // Increasing the test timeout does not help.
         // Error will be set but span will not.
-        // agent.use is called a dozen times per test in legacy.spec but once per test in client.spec
+        // agent.assertSomeTraces is called a dozen times per test in legacy.spec but once per test in client.spec
         it.skip('should handle errors', done => {
           const assertError = () => {
             if (!error || !span) return
@@ -132,7 +134,7 @@ describe('Legacy Plugin', () => {
           let error
           let span
 
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('resource', 'set')
             span = traces[0][0]
             assertError()
@@ -171,7 +173,7 @@ describe('Legacy Plugin', () => {
 
         it('should be configured with the correct values', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('service', 'custom')
             })
             .then(done)
@@ -182,9 +184,9 @@ describe('Legacy Plugin', () => {
         })
 
         it('should be able to filter commands', done => {
-          agent.use(() => {}) // wait for initial command
+          agent.assertSomeTraces(() => {}) // wait for initial command
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('resource', 'get')
             })
             .then(done)
@@ -225,9 +227,9 @@ describe('Legacy Plugin', () => {
         })
 
         it('should be able to filter commands', done => {
-          agent.use(() => {}) // wait for initial command
+          agent.assertSomeTraces(() => {}) // wait for initial command
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('resource', 'get')
             })
             .then(done)

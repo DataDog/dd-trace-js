@@ -35,7 +35,7 @@ describe('docker', () => {
       `1:name=systemd:/docker/${id}`
     ].join('\n')
 
-    fs.readFileSync.withArgs('/proc/self/cgroup').returns(Buffer.from(cgroup))
+    fs.readFileSync.withArgs('/proc/self/cgroup', 'utf8').returns(cgroup)
     docker = proxyquire('../src/exporters/common/docker', { fs })
     docker.inject(carrier)
 
@@ -49,7 +49,7 @@ describe('docker', () => {
       `1:name=systemd:/uuid/${id}`
     ].join('\n')
 
-    fs.readFileSync.withArgs('/proc/self/cgroup').returns(Buffer.from(cgroup))
+    fs.readFileSync.withArgs('/proc/self/cgroup', 'utf8').returns(cgroup)
     docker = proxyquire('../src/exporters/common/docker', { fs })
     docker.inject(carrier)
 
@@ -63,7 +63,7 @@ describe('docker', () => {
       `1:name=systemd:/ecs/${id}`
     ].join('\n')
 
-    fs.readFileSync.withArgs('/proc/self/cgroup').returns(Buffer.from(cgroup))
+    fs.readFileSync.withArgs('/proc/self/cgroup', 'utf8').returns(cgroup)
     docker = proxyquire('../src/exporters/common/docker', { fs })
     docker.inject(carrier)
 
@@ -74,10 +74,10 @@ describe('docker', () => {
   it('should support IDs with Kubernetes format', () => {
     const id = '7b8952daecf4c0e44bbcefe1b5c5ebc7b4839d4eefeccefe694709d3809b6199'
     const cgroup = [
-      `1:name=systemd:/kubepods.slice/kubepods-burstable.slice/kubepods-burstable-pod2d3da189_6407_48e3_9ab6_78188d75e609.slice/docker-${id}.scope` // eslint-disable-line @stylistic/js/max-len
+      `1:name=systemd:/kubepods.slice/kubepods-burstable.slice/kubepods-burstable-pod2d3da189_6407_48e3_9ab6_78188d75e609.slice/docker-${id}.scope` // eslint-disable-line @stylistic/max-len
     ].join('\n')
 
-    fs.readFileSync.withArgs('/proc/self/cgroup').returns(Buffer.from(cgroup))
+    fs.readFileSync.withArgs('/proc/self/cgroup', 'utf8').returns(cgroup)
     docker = proxyquire('../src/exporters/common/docker', { fs })
     docker.inject(carrier)
 
@@ -93,7 +93,7 @@ describe('docker', () => {
       '3:cpu:/invalid'
     ].join('\n')
 
-    fs.readFileSync.withArgs('/proc/self/cgroup').returns(Buffer.from(cgroup))
+    fs.readFileSync.withArgs('/proc/self/cgroup', 'utf8').returns(cgroup)
     docker = proxyquire('../src/exporters/common/docker', { fs })
     docker.inject(carrier)
 
@@ -107,7 +107,7 @@ describe('docker', () => {
       `0::/docker/${id}`
     ].join('\n')
 
-    fs.readFileSync.withArgs('/proc/self/cgroup').returns(Buffer.from(cgroup))
+    fs.readFileSync.withArgs('/proc/self/cgroup', 'utf8').returns(cgroup)
     docker = proxyquire('../src/exporters/common/docker', { fs })
     docker.inject(carrier)
 
@@ -121,7 +121,7 @@ describe('docker', () => {
       `1:name=systemd:/system.slice/garden.service/garden/${id}`
     ].join('\n')
 
-    fs.readFileSync.withArgs('/proc/self/cgroup').returns(Buffer.from(cgroup))
+    fs.readFileSync.withArgs('/proc/self/cgroup', 'utf8').returns(cgroup)
     docker = proxyquire('../src/exporters/common/docker', { fs })
     docker.inject(carrier)
 
@@ -135,8 +135,24 @@ describe('docker', () => {
       '1:name=systemd:/system.slice/garden.service/garden/'
     ].join('\n')
 
-    fs.readFileSync.withArgs('/proc/self/cgroup').returns(Buffer.from(cgroup))
+    fs.readFileSync.withArgs('/proc/self/cgroup', 'utf8').returns(cgroup)
     fs.statSync.withArgs('/sys/fs/cgroup/system.slice/garden.service/garden').returns({ ino })
+    docker = proxyquire('../src/exporters/common/docker', { fs })
+    docker.inject(carrier)
+
+    expect(carrier['Datadog-Container-Id']).to.be.undefined
+    expect(carrier['Datadog-Entity-ID']).to.equal(`in-${ino}`)
+  })
+
+  it('should support inode when the ID is not available (any line)', () => {
+    const ino = 1234
+    const cgroup = [
+      '1:name=systemd:/',
+      '0::/'
+    ].join('\n')
+
+    fs.readFileSync.withArgs('/proc/self/cgroup', 'utf8').returns(cgroup)
+    fs.statSync.withArgs('/sys/fs/cgroup/').returns({ ino })
     docker = proxyquire('../src/exporters/common/docker', { fs })
     docker.inject(carrier)
 

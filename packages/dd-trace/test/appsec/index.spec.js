@@ -32,10 +32,12 @@ const telemetryMetrics = require('../../src/telemetry/metrics')
 const addresses = require('../../src/appsec/addresses')
 
 const resultActions = {
-  block_request: {
-    status_code: '401',
-    type: 'auto',
-    grpc_status_code: '10'
+  actions: {
+    block_request: {
+      status_code: '401',
+      type: 'auto',
+      grpc_status_code: '10'
+    }
   }
 }
 
@@ -53,6 +55,7 @@ describe('AppSec Index', function () {
   let apiSecuritySampler
   let rasp
   let standalone
+  let serverless
 
   const RULES = { rules: [{ a: 1 }] }
 
@@ -75,7 +78,13 @@ describe('AppSec Index', function () {
           sampleDelay: 10
         },
         rasp: {
-          enabled: true
+          enabled: true,
+          bodyCollection: true
+        },
+        extendedHeadersCollection: {
+          enabled: true,
+          redaction: false,
+          maxHeaders: 42
         }
       }
     }
@@ -129,6 +138,11 @@ describe('AppSec Index', function () {
       disable: sinon.stub()
     }
 
+    serverless = {
+      isInServerlessEnvironment: sinon.stub()
+    }
+    serverless.isInServerlessEnvironment.returns(false)
+
     AppSec = proxyquire('../../src/appsec', {
       '../log': log,
       '../plugins/util/web': web,
@@ -138,13 +152,14 @@ describe('AppSec Index', function () {
       './graphql': graphql,
       './api_security_sampler': apiSecuritySampler,
       './rasp': rasp,
-      './standalone': standalone
+      './standalone': standalone,
+      '../serverless': serverless
     })
 
     sinon.stub(fs, 'readFileSync').returns(JSON.stringify(RULES))
     sinon.stub(waf, 'init').callThrough()
     sinon.stub(RuleManager, 'loadRules')
-    sinon.stub(Reporter, 'setRateLimit')
+    sinon.stub(Reporter, 'init')
     sinon.stub(incomingHttpRequestStart, 'subscribe')
     sinon.stub(incomingHttpRequestEnd, 'subscribe')
   })
@@ -161,7 +176,7 @@ describe('AppSec Index', function () {
 
       expect(blocking.setTemplates).to.have.been.calledOnceWithExactly(config)
       expect(RuleManager.loadRules).to.have.been.calledOnceWithExactly(config.appsec)
-      expect(Reporter.setRateLimit).to.have.been.calledOnceWithExactly(42)
+      expect(Reporter.init).to.have.been.calledOnceWithExactly(config.appsec)
       expect(UserTracking.setCollectionMode).to.have.been.calledOnceWithExactly('anon', false)
       expect(incomingHttpRequestStart.subscribe)
         .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
@@ -178,6 +193,20 @@ describe('AppSec Index', function () {
       AppSec.enable(config)
 
       expect(log.error).to.have.been.calledOnceWithExactly('[ASM] Unable to start AppSec', err)
+      expect(incomingHttpRequestStart.subscribe).to.not.have.been.called
+      expect(incomingHttpRequestEnd.subscribe).to.not.have.been.called
+    })
+
+    it('should not log when enable fails in serverless', () => {
+      RuleManager.loadRules.restore()
+
+      const err = new Error('Invalid Rules')
+      sinon.stub(RuleManager, 'loadRules').throws(err)
+      serverless.isInServerlessEnvironment.returns(true)
+
+      AppSec.enable(config)
+
+      expect(log.error).to.not.have.been.called
       expect(incomingHttpRequestStart.subscribe).to.not.have.been.called
       expect(incomingHttpRequestEnd.subscribe).to.not.have.been.called
     })
@@ -228,7 +257,7 @@ describe('AppSec Index', function () {
       }
       AppSec.enable(config)
 
-      expect(appsecTelemetry.enable).to.be.calledOnceWithExactly(config.telemetry)
+      expect(appsecTelemetry.enable).to.be.calledOnceWithExactly(config)
     })
 
     it('should call rasp enable', () => {
@@ -395,7 +424,52 @@ describe('AppSec Index', function () {
 
       expect(waf.run).to.have.not.been.called
 
-      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
+      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res, {})
+    })
+
+    it('should pass stored response headers to Reporter.finishRequest', () => {
+      const req = {
+        url: '/path',
+        headers: {
+          'user-agent': 'Arachni',
+          host: 'localhost'
+        },
+        method: 'POST',
+        socket: {
+          remoteAddress: '127.0.0.1',
+          remotePort: 8080
+        }
+      }
+      const res = {
+        getHeaders: () => ({
+          'content-type': 'application/json',
+          'content-length': 42
+        }),
+        statusCode: 200
+      }
+
+      const storedHeaders = {
+        'content-type': 'text/plain',
+        'content-language': 'en-US',
+        'content-length': '15'
+      }
+
+      web.patch(req)
+
+      sinon.stub(Reporter, 'finishRequest')
+      sinon.stub(waf, 'disposeContext')
+
+      responseWriteHead.publish({
+        req,
+        res,
+        abortController: { abort: sinon.stub() },
+        statusCode: 200,
+        responseHeaders: storedHeaders
+      })
+
+      AppSec.incomingHttpEndTranslator({ req, res })
+
+      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res, storedHeaders)
     })
 
     it('should not propagate incoming http end data with invalid framework properties', () => {
@@ -433,7 +507,7 @@ describe('AppSec Index', function () {
 
       expect(waf.run).to.have.not.been.called
 
-      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
+      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res, {})
     })
 
     it('should propagate incoming http end data with express', () => {
@@ -483,7 +557,7 @@ describe('AppSec Index', function () {
           'server.request.query': { b: '2' }
         }
       }, req)
-      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
+      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res, {})
     })
   })
 
@@ -1191,8 +1265,9 @@ describe('AppSec Index', function () {
 
       const metrics = appsecNamespace.metrics.toJSON()
 
-      expect(metrics.series.length).to.equal(1)
-      expect(metrics.series[0].metric).to.equal('waf.init')
+      expect(metrics.series.length).to.equal(2)
+      expect(metrics.series[0].metric).to.equal('enabled')
+      expect(metrics.series[1].metric).to.equal('waf.init')
     })
 
     it('should not increment waf.init metric if metrics are not enabled', () => {
@@ -1237,6 +1312,7 @@ describe('IP blocking', function () {
   const toModify = [{
     product: 'ASM_DATA',
     id: '1',
+    path: 'datadog/00/ASM_DATA/test/IP blocking',
     file: ruleData
   }]
   const htmlDefaultContent = blockedTemplate.html
@@ -1359,6 +1435,7 @@ describe('IP blocking', function () {
       const toModifyCustomActions = [{
         product: 'ASM',
         id: 'custom-actions',
+        path: 'datadog/00/ASM/test/Custom actions/Default content with custom status',
         file: {
           actions: [
             {
@@ -1419,6 +1496,7 @@ describe('IP blocking', function () {
       const toModifyCustomActions = [{
         product: 'ASM',
         id: 'custom-actions',
+        path: 'datadog/00/ASM/test/Custom actions/Redirect on error',
         file: {
           actions: [
             {

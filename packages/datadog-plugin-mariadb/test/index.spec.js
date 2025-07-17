@@ -1,6 +1,7 @@
 'use strict'
 
 const semver = require('semver')
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const proxyquire = require('proxyquire').noPreserveCache()
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -58,8 +59,10 @@ describe('Plugin', () => {
         withPeerService(
           () => tracer,
           'mariadb',
-          done => connection.query('SELECT 1', (err) => { err && done(err) }),
-          'db', 'db.name')
+          done => connection.query('SELECT 1', done),
+          'db',
+          'db.name'
+        )
 
         it('should propagate context to callbacks, with correct callback args', done => {
           const span = tracer.startSpan('test')
@@ -98,7 +101,7 @@ describe('Plugin', () => {
 
         it('should do automatic instrumentation', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', 'SELECT 1 + 1 AS solution')
@@ -109,6 +112,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('db.type', 'mariadb')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('component', 'mariadb')
+              expect(traces[0][0].meta).to.have.property('_dd.integration', 'mariadb')
             })
             .then(done)
             .catch(done)
@@ -121,7 +125,7 @@ describe('Plugin', () => {
         if (semver.intersects(version, '>=3')) {
           it('should support prepared statement shorthand', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
                 expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
                 expect(traces[0][0]).to.have.property('resource', 'SELECT ? + ? AS solution')
@@ -143,7 +147,7 @@ describe('Plugin', () => {
 
           it('should support prepared statements', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
                 expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
                 expect(traces[0][0]).to.have.property('resource', 'SELECT ? + ? AS solution')
@@ -174,7 +178,7 @@ describe('Plugin', () => {
           let error
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
               expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
               expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
@@ -190,7 +194,7 @@ describe('Plugin', () => {
 
         it('should work without a callback', done => {
           agent
-            .use(() => {})
+            .assertSomeTraces(() => {})
             .then(done)
             .catch(done)
 
@@ -230,7 +234,7 @@ describe('Plugin', () => {
 
         it('should be configured with the correct values', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('service', 'custom')
             })
             .then(done)
@@ -300,7 +304,7 @@ describe('Plugin', () => {
         )
 
         it('should be configured with the correct values', done => {
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('service', 'custom')
             sinon.assert.calledWith(serviceSpy, sinon.match({
               host: 'localhost',
@@ -336,7 +340,7 @@ describe('Plugin', () => {
 
         it('should do automatic instrumentation', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', 'SELECT 1 + 1 AS solution')
@@ -395,7 +399,7 @@ describe('Plugin', () => {
         })
 
         it('should not instrument connections to avoid leaks from internal queue', done => {
-          agent.use((traces) => {
+          agent.assertSomeTraces((traces) => {
             expect(traces).to.have.length(1)
             expect(traces[0].find(span => span.name === 'tcp.connect')).to.be.undefined
           }).then(done, done)

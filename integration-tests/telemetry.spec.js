@@ -1,6 +1,6 @@
 'use strict'
 
-const { createSandbox, FakeAgent, spawnProc } = require('./helpers')
+const { createSandbox, FakeAgent, spawnProc, assertObjectContains } = require('./helpers')
 const path = require('path')
 
 describe('telemetry', () => {
@@ -26,7 +26,8 @@ describe('telemetry', () => {
       proc = await spawnProc(startupTestFile, {
         cwd,
         env: {
-          AGENT_PORT: agent.port
+          AGENT_PORT: agent.port,
+          DD_LOGS_INJECTION: true
         }
       })
     })
@@ -36,11 +37,11 @@ describe('telemetry', () => {
       await agent.stop()
     })
 
-    it('Test that tracer and iitm are sent as dependencies', (done) => {
+    it('Test that tracer and iitm are sent as dependencies', async () => {
       let ddTraceFound = false
       let importInTheMiddleFound = false
 
-      agent.assertTelemetryReceived(msg => {
+      await agent.assertTelemetryReceived(msg => {
         const { payload } = msg
 
         if (payload.request_type === 'app-dependencies-loaded') {
@@ -53,12 +54,23 @@ describe('telemetry', () => {
                 importInTheMiddleFound = true
               }
             })
-            if (ddTraceFound && importInTheMiddleFound) {
-              done()
-            }
           }
         }
-      }, null, 'app-dependencies-loaded', 1)
+      }, 'app-dependencies-loaded', 5_000, 1)
+
+      expect(ddTraceFound).to.be.true
+      expect(importInTheMiddleFound).to.be.true
+    })
+
+    it('Assert configuration chaining data is sent', async () => {
+      await agent.assertTelemetryReceived(msg => {
+        const { configuration } = msg.payload.payload
+        assertObjectContains(configuration, [
+          { name: 'DD_LOG_INJECTION', value: 'structured', origin: 'default' },
+          { name: 'DD_LOG_INJECTION', value: true, origin: 'env_var' },
+          { name: 'DD_LOG_INJECTION', value: false, origin: 'code' }
+        ])
+      }, 'app-started', 5_000, 1)
     })
   })
 })

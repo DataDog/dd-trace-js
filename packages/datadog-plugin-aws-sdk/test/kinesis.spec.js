@@ -1,7 +1,8 @@
-/* eslint-disable @stylistic/js/max-len */
+/* eslint-disable @stylistic/max-len */
 'use strict'
 
 const sinon = require('sinon')
+const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const helpers = require('./kinesis_helpers')
@@ -143,7 +144,7 @@ describe('Kinesis', function () {
       })
 
       it('generates tags for proper input', done => {
-        agent.use(traces => {
+        agent.assertSomeTraces(traces => {
           const span = traces[0][0]
           expect(span.meta).to.include({
             streamname: streamName,
@@ -219,7 +220,7 @@ describe('Kinesis', function () {
 
       it('injects DSM pathway hash during Kinesis getRecord to the span', done => {
         let getRecordSpanMeta = {}
-        agent.use(traces => {
+        agent.assertSomeTraces(traces => {
           const span = traces[0][0]
 
           if (span.name === 'aws.response') {
@@ -242,7 +243,7 @@ describe('Kinesis', function () {
 
       it('injects DSM pathway hash during Kinesis putRecord to the span', done => {
         let putRecordSpanMeta = {}
-        agent.use(traces => {
+        agent.assertSomeTraces(traces => {
           const span = traces[0][0]
 
           if (span.resource.startsWith('putRecord')) {

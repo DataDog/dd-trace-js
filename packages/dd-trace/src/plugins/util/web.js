@@ -70,6 +70,7 @@ const web = {
 
     span.context()._name = `${name}.request`
     span.context()._tags.component = name
+    span._integrationName = name
 
     web.setConfig(req, config)
   },
@@ -253,7 +254,7 @@ const web = {
     if (!context) return null
     if (context.middleware.length === 0) return context.span || null
 
-    return context.middleware.slice(-1)[0]
+    return context.middleware.at(-1)
   },
 
   // Extract the parent span from the headers and start a new span as its child
@@ -421,7 +422,7 @@ function addAllowHeaders (req, res, headers) {
   ]
 
   for (const header of contextHeaders) {
-    if (~requestHeaders.indexOf(header)) {
+    if (requestHeaders.includes(header)) {
       allowHeaders.push(header)
     }
   }
@@ -500,7 +501,7 @@ function addResourceTag (context) {
   if (tags['resource.name']) return
 
   const resource = [req.method, tags[HTTP_ROUTE]]
-    .filter(val => val)
+    .filter(Boolean)
     .join(' ')
 
   span.setTag(RESOURCE_NAME, resource)
@@ -530,10 +531,9 @@ function extractURL (req) {
 
   if (req.stream) {
     return `${headers[HTTP2_HEADER_SCHEME]}://${headers[HTTP2_HEADER_AUTHORITY]}${headers[HTTP2_HEADER_PATH]}`
-  } else {
-    const protocol = getProtocol(req)
-    return `${protocol}://${req.headers.host}${req.originalUrl || req.url}`
   }
+  const protocol = getProtocol(req)
+  return `${protocol}://${req.headers.host}${req.originalUrl || req.url}`
 }
 
 function getProtocol (req) {
@@ -567,9 +567,10 @@ function getStatusValidator (config) {
   return code => code < 500
 }
 
+const noop = () => {}
+
 function getHooks (config) {
-  const noop = () => {}
-  const request = (config.hooks && config.hooks.request) || noop
+  const request = config.hooks?.request ?? noop
 
   return { request }
 }

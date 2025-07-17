@@ -1,13 +1,16 @@
+'use strict'
+
 /* eslint-disable no-console */
 const tracer = require('../packages/dd-trace')
 const { isTrue, isFalse } = require('../packages/dd-trace/src/util')
 const log = require('../packages/dd-trace/src/log')
+const { getEnvironmentVariable } = require('../packages/dd-trace/src/config-helper')
 
-const isJestWorker = !!process.env.JEST_WORKER_ID
-const isCucumberWorker = !!process.env.CUCUMBER_WORKER_ID
-const isMochaWorker = !!process.env.MOCHA_WORKER_ID
+const isJestWorker = !!getEnvironmentVariable('JEST_WORKER_ID')
+const isCucumberWorker = !!getEnvironmentVariable('CUCUMBER_WORKER_ID')
+const isMochaWorker = !!getEnvironmentVariable('MOCHA_WORKER_ID')
 
-const isPlaywrightWorker = !!process.env.DD_PLAYWRIGHT_WORKER
+const isPlaywrightWorker = !!getEnvironmentVariable('DD_PLAYWRIGHT_WORKER')
 
 const packageManagers = [
   'npm',
@@ -25,17 +28,17 @@ const options = {
   flushInterval: isJestWorker ? 0 : 5000
 }
 
-let shouldInit = !isFalse(process.env.DD_CIVISIBILITY_ENABLED)
+let shouldInit = !isFalse(getEnvironmentVariable('DD_CIVISIBILITY_ENABLED'))
 
 if (isPackageManager()) {
   log.debug('dd-trace is not initialized in a package manager.')
   shouldInit = false
 }
 
-const isAgentlessEnabled = isTrue(process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED)
+const isAgentlessEnabled = isTrue(getEnvironmentVariable('DD_CIVISIBILITY_AGENTLESS_ENABLED'))
 
 if (isAgentlessEnabled) {
-  if (process.env.DATADOG_API_KEY || process.env.DD_API_KEY) {
+  if (getEnvironmentVariable('DD_API_KEY')) {
     options.experimental = {
       exporter: 'datadog'
     }

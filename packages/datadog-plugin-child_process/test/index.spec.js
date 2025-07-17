@@ -4,7 +4,6 @@ const ChildProcessPlugin = require('../src')
 const { storage } = require('../../datadog-core')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
-const { NODE_MAJOR } = require('../../../version')
 
 function noop () {}
 
@@ -62,7 +61,7 @@ describe('Child process plugin', () => {
               'span.type': 'system',
               'cmd.exec': JSON.stringify(['ls', '-l'])
             },
-            integrationName: 'system',
+            integrationName: 'child_process',
             links: undefined
           }
         )
@@ -85,7 +84,7 @@ describe('Child process plugin', () => {
               'span.type': 'system',
               'cmd.shell': 'ls -l'
             },
-            integrationName: 'system',
+            integrationName: 'child_process',
             links: undefined
           }
         )
@@ -111,7 +110,7 @@ describe('Child process plugin', () => {
               'cmd.exec': JSON.stringify(['echo', arg, '']),
               'cmd.truncated': 'true'
             },
-            integrationName: 'system',
+            integrationName: 'child_process',
             links: undefined
           }
         )
@@ -137,7 +136,7 @@ describe('Child process plugin', () => {
               'cmd.shell': 'ls -l /h ',
               'cmd.truncated': 'true'
             },
-            integrationName: 'system',
+            integrationName: 'child_process',
             links: undefined
           }
         )
@@ -164,7 +163,7 @@ describe('Child process plugin', () => {
               'cmd.exec': JSON.stringify(['ls', '-l', '', '']),
               'cmd.truncated': 'true'
             },
-            integrationName: 'system',
+            integrationName: 'child_process',
             links: undefined
           }
         )
@@ -191,7 +190,7 @@ describe('Child process plugin', () => {
               'cmd.shell': 'ls -l /home -t',
               'cmd.truncated': 'true'
             },
-            integrationName: 'system',
+            integrationName: 'child_process',
             links: undefined
           }
         )
@@ -362,6 +361,114 @@ describe('Child process plugin', () => {
         expect(tracer.scope().active()).to.equal(parent)
         done()
       })
+    })
+  })
+
+  describe('Bluebird Promise Compatibility', () => {
+    // BLUEBIRD REGRESSION TEST - Prevents "this._then is not a function" bug
+
+    let childProcess, tracer, util
+    let originalPromise
+    let Bluebird
+
+    beforeEach(() => {
+      return agent.load('child_process', undefined, { flushInterval: 1 }).then(() => {
+        tracer = require('../../dd-trace')
+        childProcess = require('child_process')
+        util = require('util')
+        tracer.use('child_process', { enabled: true })
+        Bluebird = require('../../../versions/bluebird').get()
+
+        originalPromise = global.Promise
+        global.Promise = Bluebird
+      })
+    })
+
+    afterEach(() => {
+      global.Promise = originalPromise
+      return agent.close({ ritmReset: false })
+    })
+
+    it('should not crash with "this._then is not a function" when using Bluebird promises', async () => {
+      const execFileAsync = util.promisify(childProcess.execFile)
+
+      expect(global.Promise).to.equal(Bluebird)
+      expect(global.Promise.version).to.exist
+
+      const expectedPromise = expectSomeSpan(agent, {
+        type: 'system',
+        name: 'command_execution',
+        error: 0,
+        meta: {
+          component: 'subprocess',
+          'cmd.exec': '["echo","bluebird-test"]',
+        }
+      })
+
+      const result = await execFileAsync('echo', ['bluebird-test'])
+      expect(result).to.exist
+      expect(result.stdout).to.contain('bluebird-test')
+
+      return expectedPromise
+    })
+
+    it('should work with concurrent Bluebird promise calls', async () => {
+      const execFileAsync = util.promisify(childProcess.execFile)
+
+      const promises = []
+      for (let i = 0; i < 5; i++) {
+        promises.push(
+          execFileAsync('echo', [`concurrent-test-${i}`])
+            .then(result => {
+              expect(result.stdout).to.contain(`concurrent-test-${i}`)
+              return result
+            })
+        )
+      }
+
+      const results = await Promise.all(promises)
+      expect(results).to.have.length(5)
+    })
+
+    it('should handle Bluebird promise rejection properly', async () => {
+      global.Promise = Bluebird
+
+      const execFileAsync = util.promisify(childProcess.execFile)
+
+      const expectedPromise = expectSomeSpan(agent, {
+        type: 'system',
+        name: 'command_execution',
+        error: 1,
+        meta: {
+          component: 'subprocess',
+          'cmd.exec': '["node","-invalidFlag"]'
+        }
+      })
+
+      try {
+        await execFileAsync('node', ['-invalidFlag'], { stdio: 'pipe' })
+        throw new Error('Expected command to fail')
+      } catch (error) {
+        expect(error).to.exist
+        expect(error.code).to.exist
+      }
+
+      return expectedPromise
+    })
+
+    it('should work with util.promisify when global Promise is Bluebird', async () => {
+      // Re-require util to get Bluebird-aware promisify
+      delete require.cache[require.resolve('util')]
+      const utilWithBluebird = require('util')
+
+      const execFileAsync = utilWithBluebird.promisify(childProcess.execFile)
+
+      const promise = execFileAsync('echo', ['util-promisify-test'])
+      expect(promise.constructor).to.equal(Bluebird)
+      expect(promise.constructor.version).to.exist
+
+      const result = await promise
+      expect(result.stdout).to.contain('util-promisify-test')
     })
   })
 
@@ -636,58 +743,54 @@ describe('Child process plugin', () => {
                 }
               })
 
-              if (methodName !== 'execFileSync' || NODE_MAJOR > 16) {
-                // when a process return an invalid code, in node <=16, in execFileSync with shell:true
-                // an exception is not thrown
-                it('should be instrumented with error code (override shell default behavior)', (done) => {
-                  const command = ['node', '-badOption']
-                  const options = {
-                    stdio: 'pipe',
-                    shell: true
-                  }
+              it('should be instrumented with error code (override shell default behavior)', (done) => {
+                const command = ['node', '-badOption']
+                const options = {
+                  stdio: 'pipe',
+                  shell: true
+                }
 
-                  const errorExpected = {
-                    type: 'system',
-                    name: 'command_execution',
-                    error: 1,
-                    meta: {
-                      component: 'subprocess',
-                      'cmd.shell': 'node -badOption',
-                      'cmd.exit_code': '9'
+                const errorExpected = {
+                  type: 'system',
+                  name: 'command_execution',
+                  error: 1,
+                  meta: {
+                    component: 'subprocess',
+                    'cmd.shell': 'node -badOption',
+                    'cmd.exit_code': '9'
+                  }
+                }
+
+                const noErrorExpected = {
+                  type: 'system',
+                  name: 'command_execution',
+                  error: 0,
+                  meta: {
+                    component: 'subprocess',
+                    'cmd.shell': 'node -badOption',
+                    'cmd.exit_code': '9'
+                  }
+                }
+
+                const args = normalizeArgs(methodName, command, options)
+
+                if (async) {
+                  expectSomeSpan(agent, errorExpected).then(done, done)
+                  const res = childProcess[methodName].apply(null, args)
+                  res.on('close', noop)
+                } else {
+                  try {
+                    if (methodName === 'spawnSync') {
+                      expectSomeSpan(agent, noErrorExpected).then(done, done)
+                    } else {
+                      expectSomeSpan(agent, errorExpected).then(done, done)
                     }
+                    childProcess[methodName].apply(null, args)
+                  } catch {
+                    // process exit with code 1, exceptions are expected
                   }
-
-                  const noErrorExpected = {
-                    type: 'system',
-                    name: 'command_execution',
-                    error: 0,
-                    meta: {
-                      component: 'subprocess',
-                      'cmd.shell': 'node -badOption',
-                      'cmd.exit_code': '9'
-                    }
-                  }
-
-                  const args = normalizeArgs(methodName, command, options)
-
-                  if (async) {
-                    expectSomeSpan(agent, errorExpected).then(done, done)
-                    const res = childProcess[methodName].apply(null, args)
-                    res.on('close', noop)
-                  } else {
-                    try {
-                      if (methodName === 'spawnSync') {
-                        expectSomeSpan(agent, noErrorExpected).then(done, done)
-                      } else {
-                        expectSomeSpan(agent, errorExpected).then(done, done)
-                      }
-                      childProcess[methodName].apply(null, args)
-                    } catch {
-                      // process exit with code 1, exceptions are expected
-                    }
-                  }
-                })
-              }
+                }
+              })
             })
           })
         })

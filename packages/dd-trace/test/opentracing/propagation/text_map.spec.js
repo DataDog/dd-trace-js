@@ -7,6 +7,7 @@ const id = require('../../../src/id')
 const SpanContext = require('../../../src/opentracing/span_context')
 const TraceState = require('../../../src/opentracing/propagation/tracestate')
 const { channel } = require('dc-polyfill')
+const { setBaggageItem, getBaggageItem, getAllBaggageItems, removeAllBaggageItems } = require('../../../src/baggage')
 
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
 const { SAMPLING_MECHANISM_MANUAL } = require('../../../src/constants')
@@ -84,7 +85,7 @@ describe('TextMapPropagator', () => {
       expect(carrier).to.have.property('x-datadog-trace-id', '123')
       expect(carrier).to.have.property('x-datadog-parent-id', '456')
       expect(carrier).to.have.property('ot-baggage-foo', 'bar')
-      expect(carrier).to.have.property('baggage', 'foo=bar')
+      expect(carrier.baggage).to.be.undefined
     })
 
     it('should handle non-string values', () => {
@@ -103,42 +104,32 @@ describe('TextMapPropagator', () => {
       expect(carrier['ot-baggage-bool']).to.equal('true')
       expect(carrier['ot-baggage-array']).to.equal('foo,bar')
       expect(carrier['ot-baggage-object']).to.equal('[object Object]')
-      expect(carrier.baggage).to.be.equal('number=1.23,bool=true,array=foo%2Cbar,object=%5Bobject%20Object%5D')
+      expect(carrier.baggage).to.be.undefined
     })
 
     it('should handle special characters in baggage', () => {
       const carrier = {}
-      const baggageItems = {
-        '",;\\()/:<=>?@[]{}🐶é我': '",;\\🐶é我'
-      }
-      const spanContext = createContext({ baggageItems })
-
-      propagator.inject(spanContext, carrier)
-      // eslint-disable-next-line @stylistic/js/max-len
+      setBaggageItem('",;\\()/:<=>?@[]{}🐶é我', '",;\\🐶é我')
+      propagator.inject(undefined, carrier)
+      // eslint-disable-next-line @stylistic/max-len
       expect(carrier.baggage).to.be.equal('%22%2C%3B%5C%28%29%2F%3A%3C%3D%3E%3F%40%5B%5D%7B%7D%F0%9F%90%B6%C3%A9%E6%88%91=%22%2C%3B%5C%F0%9F%90%B6%C3%A9%E6%88%91')
     })
 
     it('should drop excess baggage items when there are too many pairs', () => {
       const carrier = {}
-      const baggageItems = {}
       for (let i = 0; i < config.baggageMaxItems + 1; i++) {
-        baggageItems[`key-${i}`] = i
+        setBaggageItem(`key-${i}`, i)
       }
-      const spanContext = createContext({ baggageItems })
-
-      propagator.inject(spanContext, carrier)
+      propagator.inject(undefined, carrier)
       expect(carrier.baggage.split(',').length).to.equal(config.baggageMaxItems)
     })
 
     it('should drop excess baggage items when the resulting baggage header contains many bytes', () => {
       const carrier = {}
-      const baggageItems = {
-        raccoon: 'chunky',
-        foo: Buffer.alloc(config.baggageMaxBytes).toString()
-      }
-      const spanContext = createContext({ baggageItems })
+      setBaggageItem('raccoon', 'chunky')
+      setBaggageItem('foo', Buffer.alloc(config.baggageMaxBytes).toString())
 
-      propagator.inject(spanContext, carrier)
+      propagator.inject(undefined, carrier)
       expect(carrier.baggage).to.equal('raccoon=chunky')
     })
 
@@ -408,6 +399,26 @@ describe('TextMapPropagator', () => {
       expect(spanContext.toSpanId()).to.equal(carrier['x-datadog-parent-id'])
       expect(spanContext._baggageItems.foo).to.equal(carrier['ot-baggage-foo'])
       expect(spanContext._baggageItems).to.deep.equal({ foo: 'bar' })
+      expect(getAllBaggageItems()).to.deep.equal({ foo: 'bar' })
+      expect(spanContext._isRemote).to.equal(true)
+    })
+
+    it('should extract opentracing baggage when baggage is not a propagation style ', () => {
+      config = new Config({
+        tracePropagationStyle: {
+          extract: ['datadog', 'tracecontext'],
+          inject: ['datadog', 'tracecontext']
+        }
+      })
+      propagator = new TextMapPropagator(config)
+      const carrier = textMap
+      const spanContext = propagator.extract(carrier)
+
+      expect(spanContext.toTraceId()).to.equal(carrier['x-datadog-trace-id'])
+      expect(spanContext.toSpanId()).to.equal(carrier['x-datadog-parent-id'])
+      expect(spanContext._baggageItems.foo).to.equal(carrier['ot-baggage-foo'])
+      expect(spanContext._baggageItems).to.deep.equal({ foo: 'bar' })
+      expect(getAllBaggageItems()).to.deep.equal({})
       expect(spanContext._isRemote).to.equal(true)
     })
 
@@ -420,7 +431,8 @@ describe('TextMapPropagator', () => {
         baggage: '%22%2C%3B%5C%28%29%2F%3A%3C%3D%3E%3F%40%5B%5D%7B%7D=%22%2C%3B%5C'
       }
       const spanContext = propagator.extract(carrier)
-      expect(spanContext._baggageItems).to.deep.equal({ '",;\\()/:<=>?@[]{}': '",;\\' })
+      expect(spanContext._baggageItems).to.deep.equal({})
+      expect(getAllBaggageItems()).to.deep.equal({ '",;\\()/:<=>?@[]{}': '",;\\' })
     })
 
     it('should not extract baggage when the header is malformed', () => {
@@ -431,6 +443,7 @@ describe('TextMapPropagator', () => {
       }
       const spanContextA = propagator.extract(carrierA)
       expect(spanContextA._baggageItems).to.deep.equal({})
+      expect(getAllBaggageItems()).to.deep.equal({})
 
       const carrierB = {
         'x-datadog-trace-id': '123',
@@ -439,6 +452,7 @@ describe('TextMapPropagator', () => {
       }
       const spanContextB = propagator.extract(carrierB)
       expect(spanContextB._baggageItems).to.deep.equal({})
+      expect(getAllBaggageItems()).to.deep.equal({})
 
       const carrierC = {
         'x-datadog-trace-id': '123',
@@ -447,6 +461,7 @@ describe('TextMapPropagator', () => {
       }
       const spanContextC = propagator.extract(carrierC)
       expect(spanContextC._baggageItems).to.deep.equal({})
+      expect(getAllBaggageItems()).to.deep.equal({})
 
       const carrierD = {
         'x-datadog-trace-id': '123',
@@ -455,6 +470,73 @@ describe('TextMapPropagator', () => {
       }
       const spanContextD = propagator.extract(carrierD)
       expect(spanContextD._baggageItems).to.deep.equal({})
+      expect(getAllBaggageItems()).to.deep.equal({})
+    })
+
+    it('should add baggage items to span tags', () => {
+      // should add baggage with default keys
+      let carrier = {
+        'x-datadog-trace-id': '123',
+        'x-datadog-parent-id': '456',
+        baggage: 'user.id=capybara,session.id=987,account.id=789,nonDefaultKey=shouldBeIgnored'
+      }
+      const spanContextA = propagator.extract(carrier)
+      expect(spanContextA._trace.tags).to.deep.equal({
+        'baggage.user.id': 'capybara',
+        'baggage.session.id': '987',
+        'baggage.account.id': '789'
+      })
+
+      // should add baggage with case sensitive keys
+      carrier = {
+        'x-datadog-trace-id': '123',
+        'x-datadog-parent-id': '456',
+        baggage: 'user.id=capybara,sesSion.id=987,account.id=789'
+      }
+      const spanContextB = propagator.extract(carrier)
+      expect(spanContextB._trace.tags).to.deep.equal({
+        'baggage.user.id': 'capybara',
+        'baggage.account.id': '789'
+      })
+
+      // should not add baggage when key list is empty
+      config = new Config({
+        baggageTagKeys: ''
+      })
+      propagator = new TextMapPropagator(config)
+      const spanContextC = propagator.extract(carrier)
+      expect(spanContextC._trace.tags).to.deep.equal({})
+
+      // should not add baggage when key list is empty
+      config = new Config({
+        baggageTagKeys: 'customKey'
+      })
+      propagator = new TextMapPropagator(config)
+      carrier = {
+        'x-datadog-trace-id': '123',
+        'x-datadog-parent-id': '456',
+        baggage: 'customKey=beluga,randomKey=shouldBeIgnored'
+      }
+      const spanContextD = propagator.extract(carrier)
+      expect(spanContextD._trace.tags).to.deep.equal({
+        'baggage.customKey': 'beluga'
+      })
+
+      // should add all baggage to span tags
+      config = new Config({
+        baggageTagKeys: '*'
+      })
+      propagator = new TextMapPropagator(config)
+      carrier = {
+        'x-datadog-trace-id': '123',
+        'x-datadog-parent-id': '456',
+        baggage: 'customKey=beluga,randomKey=nothingIsIgnored'
+      }
+      const spanContextE = propagator.extract(carrier)
+      expect(spanContextE._trace.tags).to.deep.equal({
+        'baggage.customKey': 'beluga',
+        'baggage.randomKey': 'nothingIsIgnored'
+      })
     })
 
     it('should discard malformed tids', () => {
@@ -492,8 +574,8 @@ describe('TextMapPropagator', () => {
       expect(spanContext._trace.tags).to.not.have.property('_dd.p.tid')
     })
 
-    // temporary test. On the contrary, it SHOULD extract baggage
-    it('should not extract baggage when it is the only propagation style', () => {
+    it('should extract baggage when it is the only propagation style', () => {
+      removeAllBaggageItems()
       config = new Config({
         tracePropagationStyle: {
           extract: ['baggage']
@@ -504,7 +586,9 @@ describe('TextMapPropagator', () => {
         baggage: 'foo=bar'
       }
       const spanContext = propagator.extract(carrier)
-      expect(spanContext).to.be.null
+      expect(spanContext).to.equal(null)
+      expect(getBaggageItem('foo')).to.equal('bar')
+      expect(getAllBaggageItems()).to.deep.equal({ foo: 'bar' })
     })
 
     it('should convert signed IDs to unsigned', () => {
@@ -1224,6 +1308,25 @@ describe('TextMapPropagator', () => {
         expect(extractedContext._links[0].context.toSpanId(true)).to.equal(spanId)
         expect(extractedContext._links[0].attributes.reason).to.equal('propagation_behavior_extract')
         expect(extractedContext._links[0].attributes.context_headers).to.equal('tracecontext')
+      })
+
+      it('should not extract baggage when Trace_Propagation_Behavior_Extract is set to ignore', () => {
+        process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'ignore'
+        config = new Config({
+          tracePropagationStyle: {
+            extract: ['tracecontext', 'datadog', 'baggage']
+          }
+        })
+        textMap = {
+          'x-datadog-trace-id': '123',
+          'x-datadog-parent-id': '456',
+          traceparent: `00-${traceId}-${spanId}-01`,
+          baggage: 'foo=bar'
+        }
+        propagator = new TextMapPropagator(config)
+        propagator.extract(textMap)
+
+        expect(getAllBaggageItems()).to.deep.equal({})
       })
     })
   })

@@ -10,6 +10,14 @@ const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
+const {
+  setBaggageItem,
+  getBaggageItem,
+  getAllBaggageItems,
+  removeBaggageItem,
+  removeAllBaggageItems
+} = require('./baggage')
 
 class LazyModule {
   constructor (provider) {
@@ -65,6 +73,11 @@ class Tracer extends NoopProxy {
     this.dogstatsd = new NoopDogStatsDClient()
     this._tracingInitialized = false
     this._flare = new LazyModule(() => require('./flare'))
+    this.setBaggageItem = setBaggageItem
+    this.getBaggageItem = getBaggageItem
+    this.getAllBaggageItems = getAllBaggageItems
+    this.removeBaggageItem = removeBaggageItem
+    this.removeAllBaggageItems = removeAllBaggageItems
 
     // these requires must work with esm bundler
     this._modules = {
@@ -85,6 +98,10 @@ class Tracer extends NoopProxy {
 
       if (config.crashtracking.enabled) {
         require('./crashtracking').start(config)
+      }
+
+      if (config.heapSnapshot.count > 0) {
+        require('./heap_snapshots').start(config)
       }
 
       telemetry.start(config, this._pluginManager)
@@ -140,40 +157,22 @@ class Tracer extends NoopProxy {
         }
       }
 
-      if (config.isGCPFunction || config.isAzureFunction) {
-        require('./serverless').maybeStartServerlessMiniAgent(config)
-      }
-
-      if (config.profiling.enabled !== 'false') {
-        const { SSIHeuristics } = require('./profiling/ssi-heuristics')
-        const ssiHeuristics = new SSIHeuristics(config)
-        ssiHeuristics.start()
-        let mockProfiler = null
-        if (config.profiling.enabled === 'true') {
-          this._profilerStarted = this._startProfiler(config)
-        } else if (ssiHeuristics.emitsTelemetry) {
-          // Start a mock profiler that emits mock profile-submitted events for the telemetry.
-          // It will be stopped if the real profiler is started by the heuristics.
-          mockProfiler = require('./profiling/ssi-telemetry-mock-profiler')
-          mockProfiler.start(config)
-        }
-
-        if (ssiHeuristics.heuristicsActive) {
+      if (config.profiling.enabled === 'true') {
+        this._profilerStarted = this._startProfiler(config)
+      } else {
+        this._profilerStarted = Promise.resolve(false)
+        if (config.profiling.enabled === 'auto') {
+          const { SSIHeuristics } = require('./profiling/ssi-heuristics')
+          const ssiHeuristics = new SSIHeuristics(config)
+          ssiHeuristics.start()
           ssiHeuristics.onTriggered(() => {
-            if (mockProfiler) {
-              mockProfiler.stop()
-            }
             this._startProfiler(config)
             ssiHeuristics.onTriggered() // deregister this callback
           })
         }
-
-        if (!this._profilerStarted) {
-          this._profilerStarted = Promise.resolve(false)
-        }
       }
 
-      if (config.runtimeMetrics) {
+      if (config.runtimeMetrics.enabled) {
         runtimeMetrics.start(config)
       }
 
@@ -181,25 +180,23 @@ class Tracer extends NoopProxy {
 
       this._modules.rewriter.enable(config)
 
-      if (config.tracing) {
-        if (config.isManualApiEnabled) {
-          const TestApiManualPlugin = require('./ci-visibility/test-api-manual/test-api-manual-plugin')
-          this._testApiManualPlugin = new TestApiManualPlugin(this)
-          // `shouldGetEnvironmentData` is passed as false so that we only lazily calculate it
-          // This is the only place where we need to do this because the rest of the plugins
-          // are lazily configured when the library is imported.
-          this._testApiManualPlugin.configure({ ...config, enabled: true }, false)
-        }
+      if (config.tracing && config.isManualApiEnabled) {
+        const TestApiManualPlugin = require('./ci-visibility/test-api-manual/test-api-manual-plugin')
+        this._testApiManualPlugin = new TestApiManualPlugin(this)
+        // `shouldGetEnvironmentData` is passed as false so that we only lazily calculate it
+        // This is the only place where we need to do this because the rest of the plugins
+        // are lazily configured when the library is imported.
+        this._testApiManualPlugin.configure({ ...config, enabled: true }, false)
       }
       if (config.ciVisAgentlessLogSubmissionEnabled) {
-        if (process.env.DD_API_KEY) {
+        if (getEnvironmentVariable('DD_API_KEY')) {
           const LogSubmissionPlugin = require('./ci-visibility/log-submission/log-submission-plugin')
           const automaticLogPlugin = new LogSubmissionPlugin(this)
           automaticLogPlugin.configure({ ...config, enabled: true })
         } else {
           log.warn(
-            'DD_AGENTLESS_LOG_SUBMISSION_ENABLED is set, ' +
-            'but DD_API_KEY is undefined, so no automatic log submission will be performed.'
+            // eslint-disable-next-line @stylistic/max-len
+            'DD_AGENTLESS_LOG_SUBMISSION_ENABLED is set, but DD_API_KEY is undefined, so no automatic log submission will be performed.'
           )
         }
       }
@@ -222,8 +219,7 @@ class Tracer extends NoopProxy {
       return require('./profiler').start(config)
     } catch (e) {
       log.error(
-        'Error starting profiler. For troubleshooting tips, see ' +
-        '<https://dtdg.co/nodejs-profiler-troubleshooting>',
+        'Error starting profiler. For troubleshooting tips, see <https://dtdg.co/nodejs-profiler-troubleshooting>',
         e
       )
     }

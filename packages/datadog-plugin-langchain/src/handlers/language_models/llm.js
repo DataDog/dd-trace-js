@@ -3,12 +3,12 @@
 const LangChainLanguageModelHandler = require('.')
 
 class LangChainLLMHandler extends LangChainLanguageModelHandler {
-  getSpanStartTags (ctx, provider) {
+  getSpanStartTags (ctx, provider, span) {
     const tags = {}
 
     const prompts = ctx.args?.[0]
     for (const promptIdx in prompts) {
-      if (!this.isPromptCompletionSampled()) continue
+      if (!this.isPromptCompletionSampled(span)) continue
 
       const prompt = prompts[promptIdx]
       tags[`langchain.request.prompts.${promptIdx}.content`] = this.normalize(prompt) || ''
@@ -18,7 +18,7 @@ class LangChainLLMHandler extends LangChainLanguageModelHandler {
     const identifyingParams = (typeof instance._identifyingParams === 'function' && instance._identifyingParams()) || {}
     for (const [param, val] of Object.entries(identifyingParams)) {
       if (param.toLowerCase().includes('apikey') || param.toLowerCase().includes('apitoken')) continue
-      if (typeof val === 'object') {
+      if (val !== null && typeof val === 'object') {
         for (const [key, value] of Object.entries(val)) {
           tags[`langchain.request.${provider}.parameters.${param}.${key}`] = value
         }
@@ -30,16 +30,17 @@ class LangChainLLMHandler extends LangChainLanguageModelHandler {
     return tags
   }
 
-  getSpanEndTags (ctx) {
+  getSpanEndTags (ctx, span) {
     const { result } = ctx
 
     const tags = {}
+    const sampled = this.isPromptCompletionSampled(span)
 
     this.extractTokenMetrics(ctx.currentStore?.span, result)
 
     for (const completionIdx in result?.generations) {
       const completion = result.generations[completionIdx]
-      if (this.isPromptCompletionSampled()) {
+      if (sampled) {
         tags[`langchain.response.completions.${completionIdx}.text`] = this.normalize(completion[0].text) || ''
       }
 

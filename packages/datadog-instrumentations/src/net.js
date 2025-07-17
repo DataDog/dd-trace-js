@@ -1,10 +1,8 @@
 'use strict'
 
-const {
-  channel,
-  addHook,
-  AsyncResource
-} = require('./helpers/instrument')
+const { errorMonitor } = require('events')
+
+const { channel, addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
 const startICPCh = channel('apm:net:ipc:start')
@@ -15,6 +13,7 @@ const startTCPCh = channel('apm:net:tcp:start')
 const finishTCPCh = channel('apm:net:tcp:finish')
 const errorTCPCh = channel('apm:net:tcp:error')
 
+const readyCh = channel('apm:net:tcp:ready')
 const connectionCh = channel('apm:net:tcp:connection')
 
 const names = ['net', 'node:net']
@@ -39,30 +38,27 @@ addHook({ name: names }, (net, version, name) => {
 
     if (!options) return connect.apply(this, arguments)
 
-    const callbackResource = new AsyncResource('bound-anonymous-fn')
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
+    const protocol = options.path ? 'ipc' : 'tcp'
+    const startCh = protocol === 'ipc' ? startICPCh : startTCPCh
+    const finishCh = protocol === 'ipc' ? finishICPCh : finishTCPCh
+    const errorCh = protocol === 'ipc' ? errorICPCh : errorTCPCh
+    const ctx = { options }
 
     if (typeof callback === 'function') {
-      arguments[lastIndex] = callbackResource.bind(callback)
+      arguments[lastIndex] = function (...args) {
+        return finishCh.runStores(ctx, callback, this, ...args)
+      }
     }
 
-    const protocol = options.path ? 'ipc' : 'tcp'
-
-    return asyncResource.runInAsyncScope(() => {
-      if (protocol === 'ipc') {
-        startICPCh.publish({ options })
-        setupListeners(this, 'ipc', asyncResource)
-      } else {
-        startTCPCh.publish({ options })
-        setupListeners(this, 'tcp', asyncResource)
-      }
+    return startCh.runStores(ctx, () => {
+      setupListeners(this, protocol, ctx, finishCh, errorCh)
 
       const emit = this.emit
       this.emit = shimmer.wrapFunction(emit, emit => function (eventName) {
         switch (eventName) {
           case 'ready':
           case 'connect':
-            return callbackResource.runInAsyncScope(() => {
+            return readyCh.runStores(ctx, () => {
               return emit.apply(this, arguments)
             })
           default:
@@ -73,7 +69,7 @@ addHook({ name: names }, (net, version, name) => {
       try {
         return connect.apply(this, arguments)
       } catch (err) {
-        protocol === 'ipc' ? errorICPCh.publish(err) : errorTCPCh.publish(err)
+        errorCh.publish(err)
 
         throw err
       }
@@ -91,7 +87,7 @@ function getOptions (args) {
       if (Array.isArray(args[0])) return getOptions(args[0])
       return args[0]
     case 'string':
-      if (isNaN(parseFloat(args[0]))) {
+      if (Number.isNaN(Number.parseFloat(args[0]))) {
         return {
           path: args[0]
         }
@@ -104,19 +100,21 @@ function getOptions (args) {
   }
 }
 
-function setupListeners (socket, protocol, asyncResource) {
-  const events = ['connect', 'error', 'close', 'timeout']
+function setupListeners (socket, protocol, ctx, finishCh, errorCh) {
+  const events = ['connect', errorMonitor, 'close', 'timeout']
 
-  const wrapListener = asyncResource.bind(function (error) {
+  const wrapListener = function (error) {
     if (error) {
-      protocol === 'ipc' ? errorICPCh.publish(error) : errorTCPCh.publish(error)
+      ctx.error = error
+      errorCh.publish(ctx)
     }
-    protocol === 'ipc' ? finishICPCh.publish(undefined) : finishTCPCh.publish(undefined)
-  })
+    finishCh.runStores(ctx, () => {})
+  }
 
-  const localListener = asyncResource.bind(function () {
-    connectionCh.publish({ socket })
-  })
+  const localListener = function () {
+    ctx.socket = socket
+    connectionCh.publish(ctx)
+  }
 
   const cleanupListener = function () {
     socket.removeListener('connect', localListener)

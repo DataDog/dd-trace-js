@@ -1,6 +1,7 @@
 'use strict'
 
-const dns = require('dns')
+const dns = require('node:dns')
+const { withPeerService } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -69,7 +70,8 @@ describe('Plugin', () => {
         }).then(done).catch(done)
 
         tracer.scope().activate(parent, () => {
-          net.connect('/tmp/dd-trace.sock')
+          const socket = net.connect('/tmp/dd-trace.sock')
+          expect(socket.listenerCount('error')).to.equal(0)
         })
       })
 
@@ -84,15 +86,17 @@ describe('Plugin', () => {
               resource: 'localhost'
             }, 2000).then(done).catch(done)
           })
+          expect(socket.listenerCount('error')).to.equal(0)
         })
       })
 
       withPeerService(
         () => tracer,
         'net',
-        () => {
+        (done) => {
           const socket = new net.Socket()
           socket.connect(port, 'localhost')
+          done()
         },
         'localhost',
         'out.host'
@@ -123,6 +127,7 @@ describe('Plugin', () => {
               parent_id: BigInt(parent.context()._spanId.toString(10))
             }, 2000).then(done).catch(done)
           })
+          expect(socket.listenerCount('error')).to.equal(0)
         })
       })
 
@@ -183,7 +188,7 @@ describe('Plugin', () => {
         let error = null
 
         agent
-          .use(traces => {
+          .assertSomeTraces(traces => {
             expect(traces[0][0]).to.deep.include({
               name: 'tcp.connect',
               service: 'test',

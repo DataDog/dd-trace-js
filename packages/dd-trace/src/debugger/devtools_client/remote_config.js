@@ -1,8 +1,7 @@
 'use strict'
 
-const { workerData: { rcPort } } = require('node:worker_threads')
-const lock = require('./lock')()
-const { addBreakpoint, removeBreakpoint } = require('./breakpoints')
+const { workerData: { probePort } } = require('node:worker_threads')
+const { addBreakpoint, removeBreakpoint, modifyBreakpoint } = require('./breakpoints')
 const { ackReceived, ackInstalled, ackError } = require('./status')
 const log = require('../../log')
 
@@ -33,16 +32,19 @@ const log = require('../../log')
 //   sampling: { snapshotsPerSecond: 5000 },
 //   evaluateAt: 'EXIT' // only used for method probes
 // }
-rcPort.on('message', async ({ action, conf: probe, ackId }) => {
+probePort.on('message', async ({ action, probe, ackId }) => {
   try {
     await processMsg(action, probe)
-    rcPort.postMessage({ ackId })
+    probePort.postMessage({ ackId })
   } catch (err) {
-    rcPort.postMessage({ ackId, error: err })
+    probePort.postMessage({ ackId, error: err })
     ackError(err, probe)
   }
 })
-rcPort.on('messageerror', (err) => log.error('[debugger:devtools_client] received "messageerror" on RC port', err))
+probePort.on(
+  'messageerror',
+  (err) => log.error('[debugger:devtools_client] received "messageerror" on probe port', err)
+)
 
 async function processMsg (action, probe) {
   log.debug(
@@ -57,45 +59,26 @@ async function processMsg (action, probe) {
   }
   if (!probe.where.sourceFile && !probe.where.lines) {
     throw new Error(
-      // eslint-disable-next-line @stylistic/js/max-len
+      // eslint-disable-next-line @stylistic/max-len
       `Unsupported probe insertion point! Only line-based probes are supported (id: ${probe.id}, version: ${probe.version})`
     )
   }
 
-  // This lock is to ensure that we don't get the following race condition:
-  //
-  // When a breakpoint is being removed and there are no other breakpoints, we disable the debugger by calling
-  // `Debugger.disable` to free resources. However, if a new breakpoint is being added around the same time, we might
-  // have a race condition where the new breakpoint thinks that the debugger is already enabled because the removal of
-  // the other breakpoint hasn't had a chance to call `Debugger.disable` yet. Then once the code that's adding the new
-  // breakpoints tries to call `Debugger.setBreakpoint` it fails because in the meantime `Debugger.disable` was called.
-  //
-  // If the code is ever refactored to not tear down the debugger if there's no active breakpoints, we can safely remove
-  // this lock.
-  const release = await lock()
-
-  try {
-    switch (action) {
-      case 'unapply':
-        await removeBreakpoint(probe)
-        break
-      case 'apply':
-        await addBreakpoint(probe)
-        ackInstalled(probe)
-        break
-      case 'modify':
-        // TODO: Modify existing probe instead of removing it (DEBUG-2817)
-        await removeBreakpoint(probe)
-        await addBreakpoint(probe)
-        ackInstalled(probe) // TODO: Should we also send ackInstalled when modifying a probe?
-        break
-      default:
-        throw new Error(
-          // eslint-disable-next-line @stylistic/js/max-len
-          `Cannot process probe ${probe.id} (version: ${probe.version}) - unknown remote configuration action: ${action}`
-        )
-    }
-  } finally {
-    release()
+  switch (action) {
+    case 'unapply':
+      await removeBreakpoint(probe)
+      break
+    case 'apply':
+      await addBreakpoint(probe)
+      ackInstalled(probe)
+      break
+    case 'modify':
+      await modifyBreakpoint(probe)
+      ackInstalled(probe)
+      break
+    default:
+      throw new Error(
+        `Cannot process probe ${probe.id} (version: ${probe.version}) - unknown remote configuration action: ${action}`
+      )
   }
 }

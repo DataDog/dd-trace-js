@@ -11,7 +11,7 @@ const {
 } = require('../ci-visibility/telemetry')
 
 const ENCODING_VERSION = 1
-const ALLOWED_CONTENT_TYPES = ['test_session_end', 'test_module_end', 'test_suite_end', 'test']
+const ALLOWED_CONTENT_TYPES = new Set(['test_session_end', 'test_module_end', 'test_suite_end', 'test'])
 
 const TEST_SUITE_KEYS_LENGTH = 12
 const TEST_MODULE_KEYS_LENGTH = 11
@@ -26,7 +26,7 @@ function formatSpan (span) {
     encodingVersion = 2
   }
   return {
-    type: ALLOWED_CONTENT_TYPES.includes(span.type) ? span.type : 'span',
+    type: ALLOWED_CONTENT_TYPES.has(span.type) ? span.type : 'span',
     version: encodingVersion,
     content: normalizeSpan(truncateSpan(span))
   }
@@ -161,20 +161,20 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   _encodeEventContent (bytes, content) {
     let totalKeysLength = TEST_AND_SPAN_KEYS_LENGTH
     if (content.meta.test_session_id) {
-      totalKeysLength = totalKeysLength + 1
+      totalKeysLength += 1
     }
     if (content.meta.test_module_id) {
-      totalKeysLength = totalKeysLength + 1
+      totalKeysLength += 1
     }
     if (content.meta.test_suite_id) {
-      totalKeysLength = totalKeysLength + 1
+      totalKeysLength += 1
     }
     const itrCorrelationId = content.meta[ITR_CORRELATION_ID]
     if (itrCorrelationId) {
-      totalKeysLength = totalKeysLength + 1
+      totalKeysLength += 1
     }
     if (content.type) {
-      totalKeysLength = totalKeysLength + 1
+      totalKeysLength += 1
     }
     this._encodeMapPrefix(bytes, totalKeysLength)
     if (content.type) {
@@ -292,7 +292,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     const eventsOffset = this._eventsOffset
     const eventsCount = this._eventCount
 
-    bytes.buffer[eventsOffset] = 0xdd
+    bytes.buffer[eventsOffset] = 0xDD
     bytes.buffer[eventsOffset + 1] = eventsCount >> 24
     bytes.buffer[eventsOffset + 2] = eventsCount >> 16
     bytes.buffer[eventsOffset + 3] = eventsCount >> 8

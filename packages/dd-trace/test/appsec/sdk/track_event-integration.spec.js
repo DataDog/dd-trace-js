@@ -44,7 +44,7 @@ describe('track_event - Integration with the tracer', () => {
         }, { metakey: 'metaValue' })
         res.end()
       }
-      agent.use(traces => {
+      agent.assertSomeTraces(traces => {
         expect(traces[0][0].meta).to.have.property('appsec.events.users.login.success.track', 'true')
         expect(traces[0][0].meta).to.have.property('usr.id', 'test_user_id')
         expect(traces[0][0].meta).to.have.property('appsec.events.users.login.success.metakey', 'metaValue')
@@ -58,7 +58,7 @@ describe('track_event - Integration with the tracer', () => {
         tracer.appsec.trackUserLoginSuccessEvent(undefined, { metakey: 'metaValue' })
         res.end()
       }
-      agent.use(traces => {
+      agent.assertSomeTraces(traces => {
         expect(traces[0][0].meta).to.not.have.property('appsec.events.users.login.success.track', 'true')
       }).then(done).catch(done)
       axios.get(`http://localhost:${port}/`)
@@ -68,7 +68,7 @@ describe('track_event - Integration with the tracer', () => {
       controller = (req, res) => {
         res.end()
       }
-      agent.use(traces => {
+      agent.assertSomeTraces(traces => {
         expect(traces[0][0].meta).to.not.have.property('appsec.events.users.login.success.track', 'true')
       }).then(done).catch(done)
       axios.get(`http://localhost:${port}/`)
@@ -81,7 +81,7 @@ describe('track_event - Integration with the tracer', () => {
         tracer.appsec.trackUserLoginFailureEvent('test_user_id', true, { metakey: 'metaValue' })
         res.end()
       }
-      agent.use(traces => {
+      agent.assertSomeTraces(traces => {
         expect(traces[0][0].meta).to.have.property('appsec.events.users.login.failure.track', 'true')
         expect(traces[0][0].meta).to.have.property('appsec.events.users.login.failure.usr.id', 'test_user_id')
         expect(traces[0][0].meta).to.have.property('appsec.events.users.login.failure.usr.exists', 'true')
@@ -96,7 +96,7 @@ describe('track_event - Integration with the tracer', () => {
         tracer.appsec.trackUserLoginFailureEvent('test_user_id', false, { metakey: 'metaValue' })
         res.end()
       }
-      agent.use(traces => {
+      agent.assertSomeTraces(traces => {
         expect(traces[0][0].meta).to.have.property('appsec.events.users.login.failure.track', 'true')
         expect(traces[0][0].meta).to.have.property('appsec.events.users.login.failure.usr.id', 'test_user_id')
         expect(traces[0][0].meta).to.have.property('appsec.events.users.login.failure.usr.exists', 'false')
@@ -111,7 +111,7 @@ describe('track_event - Integration with the tracer', () => {
         tracer.appsec.trackUserLoginFailureEvent(undefined, false, { metakey: 'metaValue' })
         res.end()
       }
-      agent.use(traces => {
+      agent.assertSomeTraces(traces => {
         expect(traces[0][0].meta).to.not.have.property('appsec.events.users.login.failure.track', 'true')
       }).then(done).catch(done)
       axios.get(`http://localhost:${port}/`)
@@ -121,7 +121,7 @@ describe('track_event - Integration with the tracer', () => {
       controller = (req, res) => {
         res.end()
       }
-      agent.use(traces => {
+      agent.assertSomeTraces(traces => {
         expect(traces[0][0].meta).to.not.have.property('appsec.events.users.login.failure.track', 'true')
       }).then(done).catch(done)
       axios.get(`http://localhost:${port}/`)
@@ -134,7 +134,7 @@ describe('track_event - Integration with the tracer', () => {
         tracer.appsec.trackCustomEvent('my-custom-event', { metakey: 'metaValue' })
         res.end()
       }
-      agent.use(traces => {
+      agent.assertSomeTraces(traces => {
         expect(traces[0][0].meta).to.have.property('appsec.events.my-custom-event.track', 'true')
         expect(traces[0][0].meta).to.have.property('appsec.events.my-custom-event.metakey', 'metaValue')
         expect(traces[0][0].metrics).to.have.property('_sampling_priority_v1', USER_KEEP)
@@ -148,7 +148,7 @@ describe('track_event - Integration with the tracer', () => {
         tracer.appsec.trackCustomEvent({ event: 'name' }, { metakey: 'metaValue' })
         res.end()
       }
-      agent.use(traces => {
+      agent.assertSomeTraces(traces => {
         expect(traces[0][0].metrics).to.not.have.property('_sampling_priority_v1', USER_KEEP)
       }).then(done).catch(done)
       axios.get(`http://localhost:${port}/`)

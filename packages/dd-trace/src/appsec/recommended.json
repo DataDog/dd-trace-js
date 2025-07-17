@@ -1,7 +1,7 @@
 {
   "version": "2.2",
   "metadata": {
-    "rules_version": "1.14.2"
+    "rules_version": "1.15.0"
   },
   "rules": [
     {
@@ -2985,7 +2985,7 @@
                 "address": "graphql.server.resolver"
               }
             ],
-            "regex": "\\b(?:(?:l(?:(?:utimes|chmod)(?:Sync)?|(?:stat|ink)Sync)|w(?:rite(?:(?:File|v)(?:Sync)?|Sync)|atchFile)|u(?:n(?:watchFile|linkSync)|times(?:Sync)?)|s(?:(?:ymlink|tat)Sync|pawn(?:File|Sync))|ex(?:ec(?:File(?:Sync)?|Sync)|istsSync)|a(?:ppendFile|ccess)(?:Sync)?|(?:Caveat|Inode)s|open(?:dir)?Sync|new\\s+Function|Availability|\\beval)\\s*\\(|m(?:ain(?:Module\\s*(?:\\W*\\s*(?:constructor|require)|\\[)|\\s*(?:\\W*\\s*(?:constructor|require)|\\[))|kd(?:temp(?:Sync)?|irSync)\\s*\\(|odule\\.exports\\s*=)|c(?:(?:(?:h(?:mod|own)|lose)Sync|reate(?:Write|Read)Stream|p(?:Sync)?)\\s*\\(|o(?:nstructor\\s*(?:\\W*\\s*_load|\\[)|pyFile(?:Sync)?\\s*\\())|f(?:(?:(?:s(?:(?:yncS)?|tatS)|datas(?:yncS)?)ync|ch(?:mod|own)(?:Sync)?)\\s*\\(|u(?:nction\\s*\\(\\s*\\)\\s*{|times(?:Sync)?\\s*\\())|r(?:e(?:(?:ad(?:(?:File|link|dir)?Sync|v(?:Sync)?)|nameSync)\\s*\\(|quire\\s*(?:\\W*\\s*main|\\[))|m(?:Sync)?\\s*\\()|process\\s*(?:\\W*\\s*(?:mainModule|binding)|\\[)|t(?:his\\.constructor|runcateSync\\s*\\()|_(?:\\$\\$ND_FUNC\\$\\$_|_js_function)|global\\s*(?:\\W*\\s*process|\\[)|String\\s*\\.\\s*fromCharCode|binding\\s*\\[)",
+            "regex": "\\b(?:(?:l(?:(?:utimes|chmod)(?:Sync)?|(?:stat|ink)Sync)|w(?:rite(?:(?:File|v)(?:Sync)?|Sync)|atchFile)|u(?:n(?:watchFile|linkSync)|times(?:Sync)?)|s(?:(?:ymlink|tat)Sync|pawn(?:File|Sync))|ex(?:ec(?:File(?:Sync)?|Sync)|istsSync)|a(?:ppendFile|ccess)(?:Sync)?|(?:Caveat|Inode)s|open(?:dir)?Sync|new\\s+Function|Availability|\\beval)\\s*\\(|m(?:ain(?:Module\\s*(?:\\W*\\s*(?:constructor|require)|\\[)|\\s*(?:\\W*\\s*(?:constructor|require)|\\[))|kd(?:temp(?:Sync)?|irSync)\\s*\\(|odule\\.exports\\s*=)|c(?:(?:(?:h(?:mod|own)|lose)Sync|reate(?:Write|Read)Stream|p(?:Sync)?)\\s*\\(|o(?:nstructor\\s*(?:\\W*\\s*_load|\\[)|pyFile(?:Sync)?\\s*\\())|f(?:(?:(?:s(?:(?:yncS)?|tatS)|datas(?:yncS)?)ync|ch(?:mod|own)(?:Sync)?)\\s*\\(|u(?:nction\\s*\\(\\s*\\)\\s*{|times(?:Sync)?\\s*\\())|r(?:e(?:(?:ad(?:(?:File|link|dir)?Sync|v(?:Sync)?)|nameSync)\\s*\\(|quire\\s*(?:\\W*\\s*main\\b|\\[))|m(?:Sync)?\\s*\\()|process\\s*(?:\\W*\\s*(?:mainModule|binding)|\\[)|t(?:his\\.constructor|runcateSync\\s*\\()|_(?:\\$\\$ND_FUNC\\$\\$_|_js_function)|global\\s*(?:\\W*\\s*process|\\[)|String\\s*\\.\\s*fromCharCode|binding\\s*\\[)",
             "options": {
               "case_sensitive": true,
               "min_length": 3
@@ -5649,6 +5649,52 @@
             "options": {
               "case_sensitive": true,
               "min_length": 5
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-932-110",
+      "name": "Python: Subprocess-based command injection",
+      "tags": {
+        "type": "command_injection",
+        "category": "attack_attempt",
+        "confidence": "0",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
+                "address": "grpc.server.request.message"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "(?s)\\bsubprocess\\b.*\\b(?:check_output|run|Popen|call|check_call)\\b",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 14
             }
           },
           "operator": "match_regex"
@@ -9075,6 +9121,28 @@
       "output": true
     },
     {
+      "id": "decode-auth-jwt",
+      "generator": "jwt_decode",
+      "min_version": "1.25.0",
+      "parameters": {
+        "mappings": [
+          {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "authorization"
+                ]
+              }
+            ],
+            "output": "server.request.jwt"
+          }
+        ]
+      },
+      "evaluate": true,
+      "output": false
+    },
+    {
       "id": "http-network-fingerprint",
       "generator": "http_network_fingerprint",
       "conditions": [],
@@ -9916,6 +9984,24 @@
         "type": "card",
         "card_type": "mastercard",
         "category": "payment"
+      }
+    },
+    {
+      "id": "c542c147-3883-43d6-a067-178e4a7bd65d",
+      "name": "Password",
+      "key": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\bpass(?:[_-]?word|wd)?\\b|\\bpwd\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 3
+          }
+        }
+      },
+      "tags": {
+        "type": "password",
+        "category": "credentials"
       }
     },
     {

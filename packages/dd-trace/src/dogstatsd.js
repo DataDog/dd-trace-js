@@ -63,7 +63,7 @@ class DogStatsDClient {
   flush () {
     const queue = this._enqueue()
 
-    log.debug(`Flushing ${queue.length} metrics via ${this._httpOptions ? 'HTTP' : 'UDP'}`)
+    log.debug('Flushing %s metrics via', queue.length, this._httpOptions ? 'HTTP' : 'UDP')
 
     if (this._queue.length === 0) return
 
@@ -94,13 +94,13 @@ class DogStatsDClient {
   }
 
   _sendUdp (queue) {
-    if (this._family !== 0) {
-      this._sendUdpFromQueue(queue, this._host, this._family)
-    } else {
+    if (this._family === 0) {
       lookup(this._host, (err, address, family) => {
         if (err) return log.error('DogStatsDClient: Host not found', err)
         this._sendUdpFromQueue(queue, address, family)
       })
+    } else {
+      this._sendUdpFromQueue(queue, this._host, this._family)
     }
   }
 
@@ -108,7 +108,7 @@ class DogStatsDClient {
     const socket = family === 6 ? this._udp6 : this._udp4
 
     queue.forEach((buffer) => {
-      log.debug(`Sending to DogStatsD: ${buffer}`)
+      log.debug('Sending to DogStatsD: %s', buffer)
       socket.send(buffer, 0, buffer.length, this._port, address)
     })
   }
@@ -116,7 +116,8 @@ class DogStatsDClient {
   _add (stat, value, type, tags) {
     const message = `${this._prefix + stat}:${value}|${type}`
 
-    tags = tags ? this._tags.concat(tags) : this._tags
+    // Don't manipulate this._tags as it is still used
+    tags = tags ? [...this._tags, ...tags] : this._tags
 
     if (tags.length > 0) {
       this._write(`${message}|#${tags.join(',')}\n`)
@@ -164,11 +165,11 @@ class DogStatsDClient {
         .filter(key => {
           // Skip runtime-id unless enabled as cardinality may be too high
           if (key !== 'runtime-id') return true
-          return (config.experimental && config.experimental.runtimeId)
+          return config.runtimeMetricsRuntimeId
         })
         .forEach(key => {
           // https://docs.datadoghq.com/tagging/#defining-tags
-          const value = config.tags[key].replace(/[^a-z0-9_:./-]/ig, '_')
+          const value = config.tags[key].replaceAll(/[^a-z0-9_:./-]/ig, '_')
 
           tags.push(`${key}:${value}`)
         })
@@ -243,7 +244,7 @@ class MetricsAggregationClient {
     const container = monotonic ? this._counters : this._gauges
     const node = this._ensureTree(container, name, tags, 0)
 
-    node.value = node.value + count
+    node.value += count
   }
 
   gauge (name, value, tags) {
@@ -308,12 +309,16 @@ class MetricsAggregationClient {
     }
 
     for (const [tag, next] of node.nodes) {
-      this._captureNode(next, name, tags.concat(tag), fn)
+      tags.push(tag)
+      this._captureNode(next, name, tags, fn)
+      tags.pop()
     }
   }
 
-  _ensureTree (tree, name, tags, value) {
-    tags = tags ? [].concat(tags) : []
+  _ensureTree (tree, name, tags = [], value) {
+    if (!Array.isArray(tags)) {
+      tags = [tags]
+    }
 
     let node = this._ensureNode(tree, name, value)
 
@@ -331,7 +336,10 @@ class MetricsAggregationClient {
 
     if (!node) {
       node = { nodes: new Map(), touched: false, value }
-      container.set(key, node)
+
+      if (typeof key === 'string') {
+        container.set(key, node)
+      }
     }
 
     return node
@@ -385,6 +393,8 @@ class CustomMetrics {
    * These are translated into [ 'tagName:tagValue' ] for internal use
    */
   static tagTranslator (objTags) {
+    if (Array.isArray(objTags)) return objTags
+
     const arrTags = []
 
     if (!objTags) return arrTags

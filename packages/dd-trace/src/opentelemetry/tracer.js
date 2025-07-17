@@ -32,7 +32,7 @@ class Tracer {
       spanId: id(),
       parentId: parentSpanContext._spanId,
       sampling: parentSpanContext._sampling,
-      baggageItems: Object.assign({}, parentSpanContext._baggageItems),
+      baggageItems: { ...parentSpanContext._baggageItems },
       trace: parentSpanContext._trace,
       tracestate: parentSpanContext._tracestate
     })
@@ -71,9 +71,13 @@ class Tracer {
 
         // Update meta and samplingPriority based on extracted values
         Object.assign(meta, otherPropagatedTags)
-        samplingPriority = TextMapPropagator._getSamplingPriority(traceFlag, parseInt(samplingPriorityTs, 10), origin)
+        samplingPriority = TextMapPropagator._getSamplingPriority(
+          traceFlag,
+          Number.parseInt(samplingPriorityTs, 10),
+          origin
+        )
       } else {
-        log.debug(`no dd list member in tracestate from incoming request: ${ts}`)
+        log.debug('no dd list member in tracestate from incoming request:', ts)
       }
     }
 
@@ -144,10 +148,7 @@ class Tracer {
 
       // Set initial span attributes. The attributes object may have been mutated
       // by the sampler, so we sanitize the merged attributes before setting them.
-      sanitizeAttributes(
-        // Object.assign(attributes, samplingResult.attributes)
-        attributes
-      )
+      sanitizeAttributes(attributes)
     )
   }
 

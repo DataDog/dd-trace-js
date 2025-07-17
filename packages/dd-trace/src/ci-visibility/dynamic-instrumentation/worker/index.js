@@ -30,7 +30,7 @@ const probeIdToBreakpointId = new Map()
 session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint], callFrames } }) => {
   const probe = breakpointIdToProbe.get(hitBreakpoint)
   if (!probe) {
-    log.warn(`No probe found for breakpoint ${hitBreakpoint}`)
+    log.warn('No probe found for breakpoint', hitBreakpoint)
     return session.post('Debugger.resume')
   }
 
@@ -75,12 +75,12 @@ breakpointSetChannel.on('message', async (probe) => {
 async function removeBreakpoint (probeId) {
   if (!sessionStarted) {
     // We should not get in this state, but abort if we do, so the code doesn't fail unexpected
-    throw Error(`Cannot remove probe ${probeId}: Debugger not started`)
+    throw new Error(`Cannot remove probe ${probeId}: Debugger not started`)
   }
 
   const breakpointId = probeIdToBreakpointId.get(probeId)
   if (!breakpointId) {
-    throw Error(`Unknown probe id: ${probeId}`)
+    throw new Error(`Unknown probe id: ${probeId}`)
   }
   await session.post('Debugger.removeBreakpoint', { breakpointId })
   probeIdToBreakpointId.delete(probeId)
@@ -95,13 +95,13 @@ async function addBreakpoint (probe) {
 
   const script = findScriptFromPartialPath(file)
   if (!script) {
-    log.error(`No loaded script found for ${file}`)
+    log.error('No loaded script found for', file)
     throw new Error(`No loaded script found for ${file}`)
   }
 
   const { url, scriptId, sourceMapURL, source } = script
 
-  log.warn(`Adding breakpoint at ${url}:${line}`)
+  log.warn('Adding breakpoint at %s:%s', url, line)
 
   let lineNumber = line
   let columnNumber = 0

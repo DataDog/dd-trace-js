@@ -51,9 +51,8 @@ function compileSegments (segments) {
   let result = '['
   for (let i = 0; i < segments.length; i++) {
     const { str, dsl, json } = segments[i]
-    result += str !== undefined
-      ? JSON.stringify(str)
-      : `(() => {
+    result += str === undefined
+      ? `(() => {
           try {
             const result = ${compile(json)}
             return typeof result === 'string' ? result : $dd_inspect(result, $dd_segmentInspectOptions)
@@ -61,6 +60,7 @@ function compileSegments (segments) {
             return { expr: ${JSON.stringify(dsl)}, message: \`\${e.name}: \${e.message}\` }
           }
         })()`
+      : JSON.stringify(str)
     if (i !== segments.length - 1) {
       result += ','
     }
@@ -95,11 +95,9 @@ function compile (node) {
       }
     })()`
   } else if (type === 'instanceof') {
-    if (isPrimitiveType(value[1])) {
-      return `(typeof ${compile(value[0])} === '${value[1]}')` // TODO: Is parenthesizing necessary?
-    } else {
-      return `Function.prototype[Symbol.hasInstance].call(${assertIdentifier(value[1])}, ${compile(value[0])})`
-    }
+    return isPrimitiveType(value[1])
+      ? `(typeof ${compile(value[0])} === '${value[1]}')` // TODO: Is parenthesizing necessary?
+      : `Function.prototype[Symbol.hasInstance].call(${assertIdentifier(value[1])}, ${compile(value[0])})`
   } else if (type === 'ref') {
     if (value === '@it') {
       return '$dd_it'
@@ -107,9 +105,8 @@ function compile (node) {
       return '$dd_key'
     } else if (value === '@value') {
       return '$dd_value'
-    } else {
-      return assertIdentifier(value)
     }
+    return assertIdentifier(value)
   } else if (Array.isArray(value)) {
     const args = value.map(compile)
     switch (type) {
@@ -281,7 +278,7 @@ function guardAgainstCoercionSideEffects (variable) {
 
 function assertString (variable) {
   return `((val) => {
-    if (typeof val === 'string' || val instanceof String) {
+    if (${isString('val')}) {
       return val
     } else {
       throw new TypeError('Variable is not a string')

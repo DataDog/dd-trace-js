@@ -7,7 +7,10 @@ const { once } = require('node:events')
 // Default settings is tested in unit tests, so we only need to test the env vars here
 describe('Dynamic Instrumentation snapshot PII redaction', function () {
   describe('DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS=foo,bar', function () {
-    const t = setup({ env: { DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS: 'foo,bar' } })
+    const t = setup({
+      env: { DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS: 'foo,bar' },
+      dependencies: ['fastify']
+    })
 
     it('should respect DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS', async function () {
       t.triggerBreakpoint()
@@ -29,7 +32,10 @@ describe('Dynamic Instrumentation snapshot PII redaction', function () {
   })
 
   describe('DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS=secret', function () {
-    const t = setup({ env: { DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS: 'secret' } })
+    const t = setup({
+      env: { DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS: 'secret' },
+      dependencies: ['fastify']
+    })
 
     it('should respect DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS', async function () {
       t.triggerBreakpoint()

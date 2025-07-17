@@ -1,7 +1,5 @@
 'use strict'
 
-/* eslint-disable @stylistic/js/max-len */
-
 const { join } = require('path')
 const { existsSync, readFileSync } = require('fs')
 const os = require('os')
@@ -9,6 +7,12 @@ const path = require('path')
 const { capture, fatal, run } = require('./terminal')
 
 const { CI, HOME, LOCALAPPDATA, XDG_CONFIG_HOME, USERPROFILE } = process.env
+
+function checkAll () {
+  checkGit()
+  checkBranchDiff()
+  checkGitHub()
+}
 
 // Check that the `git` CLI is installed.
 function checkGit () {
@@ -122,4 +126,4 @@ function getApplicationConfigPath (name) {
   }
 }
 
-module.exports = { checkBranchDiff, checkGitHub, checkGit }
+module.exports = { checkAll, checkBranchDiff, checkGitHub, checkGit }

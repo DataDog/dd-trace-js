@@ -1,3 +1,5 @@
+'use strict'
+
 const tracer = require('dd-trace')
 const path = require('path')
 
@@ -97,9 +99,9 @@ async function main () {
     resolvers
   })
 
-  const port = process.env.APP_PORT
-  await startStandaloneServer(server, { listen: { port } })
-  process.send({ port })
+  const { url } = await startStandaloneServer(server, { listen: { port: process.env.APP_PORT || 0 } })
+  const port = new URL(url).port
+  process.send?.({ port })
 }
 
 main()

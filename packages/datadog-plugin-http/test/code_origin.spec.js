@@ -13,7 +13,11 @@ describe('Plugin', () => {
       })
 
       beforeEach(async () => {
-        return agent.load('http', { server: false }, { codeOriginForSpans: { enabled: true } })
+        return agent.load(
+          'http',
+          { server: false },
+          { codeOriginForSpans: { experimental: { exit_spans: { enabled: true } } } }
+        )
       })
 
       afterEach(() => {
@@ -25,7 +29,7 @@ describe('Plugin', () => {
           const http = require('http')
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const span = traces[0][0]
               expect(span.meta).to.have.property('_dd.code_origin.type', 'exit')
 

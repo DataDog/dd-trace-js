@@ -35,11 +35,11 @@ class Kinesis extends BaseAwsSdkPlugin {
           obj.needsFinish = true
           const options = {
             childOf: responseExtraction.maybeChildOf,
-            tags: Object.assign(
-              {},
-              this.requestTags.get(request) || {},
-              { 'span.kind': 'server' }
-            )
+            tags: {
+              ...this.requestTags.get(request),
+              'span.kind': 'server'
+            },
+            integrationName: 'aws-sdk'
           }
           span = plugin.tracer.startSpan('aws.response', options)
           this.enter(span, store)
@@ -128,12 +128,12 @@ class Kinesis extends BaseAwsSdkPlugin {
   _tryParse (body) {
     try {
       return JSON.parse(body)
-    } catch (e) {
+    } catch {
       log.info('Not JSON string. Trying Base64 encoded JSON string')
     }
     try {
       return JSON.parse(Buffer.from(body, 'base64').toString('ascii'), true)
-    } catch (e) {
+    } catch {
       return null
     }
   }
@@ -145,17 +145,17 @@ class Kinesis extends BaseAwsSdkPlugin {
     let stream
     switch (operation) {
       case 'putRecord':
-        stream = params.StreamArn ? params.StreamArn : (params.StreamName ? params.StreamName : '')
+        stream = params.StreamArn ?? params.StreamName ?? ''
         this.injectToMessage(span, params, stream, true)
         break
       case 'putRecords':
-        stream = params.StreamArn ? params.StreamArn : (params.StreamName ? params.StreamName : '')
+        stream = params.StreamArn ?? params.StreamName ?? ''
         for (let i = 0; i < params.Records.length; i++) {
           this.injectToMessage(
             span,
             params.Records[i],
             stream,
-            i === 0 || (this.config.batchPropagationEnabled)
+            i === 0 || this.config.batchPropagationEnabled
           )
         }
     }
@@ -192,7 +192,7 @@ class Kinesis extends BaseAwsSdkPlugin {
       const byteSize = finalData.length
       // Kinesis max payload size is 1MB
       // So we must ensure adding DD context won't go over that (512b is an estimate)
-      if (byteSize >= 1048576) {
+      if (byteSize >= 1_048_576) {
         log.info('Payload size too large to pass context')
         return
       }
@@ -202,7 +202,7 @@ class Kinesis extends BaseAwsSdkPlugin {
 
   setDSMCheckpoint (span, parsedData, stream) {
     // get payload size of request data
-    const payloadSize = Buffer.from(JSON.stringify(parsedData)).byteLength
+    const payloadSize = Buffer.byteLength(JSON.stringify(parsedData))
     const dataStreamsContext = this.tracer
       .setCheckpoint(['direction:out', `topic:${stream}`, 'type:kinesis'], span, payloadSize)
     return dataStreamsContext

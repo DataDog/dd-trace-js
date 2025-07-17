@@ -34,6 +34,9 @@ describe('Plugin', function () {
       return agent.load()
     })
     beforeEach(function (done) {
+      // This test does not check test optimization agentless protocol,
+      // so we'll make the tracer default to reporting to v0.4/traces
+      agent.setAvailableEndpoints([])
       this.timeout(10000)
       agentListenPort = agent.server.address().port
       cypressExecutable = require(`../../../versions/cypress@${version}`).get()
@@ -65,7 +68,7 @@ describe('Plugin', function () {
           headless: true
         })
 
-        agent.use(traces => {
+        agent.assertSomeTraces(traces => {
           const passedTestSpan = traces[0][0]
           const failedTestSpan = traces[1][0]
           expect(passedTestSpan.name).to.equal('cypress.test')

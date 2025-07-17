@@ -10,10 +10,10 @@ function addMetricsToSpan (rootSpan, metrics, tagPrefix) {
       const name = taggedMetricName(data)
       let total = flattenMap.get(name)
       const value = flatten(data)
-      if (!total) {
-        total = value
-      } else {
+      if (total) {
         total += value
+      } else {
+        total = value
       }
       flattenMap.set(name, total)
     })
@@ -34,9 +34,9 @@ function flatten (metricData) {
 function taggedMetricName (data) {
   const metric = data.metric
   const tags = filterTags(data.tags)
-  return !tags?.length
-    ? metric
-    : `${metric}.${processTagValue(tags)}`
+  return tags?.length
+    ? `${metric}.${processTagValue(tags)}`
+    : metric
 }
 
 function filterTags (tags) {
@@ -45,7 +45,7 @@ function filterTags (tags) {
 
 function processTagValue (tags) {
   return tags.map(tag => tag.includes(':') ? tag.split(':')[1] : tag)
-    .join('_').replace(/\./g, '_')
+    .join('_').replaceAll('.', '_')
 }
 
 module.exports = {

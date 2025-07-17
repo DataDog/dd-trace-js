@@ -1,3 +1,5 @@
+'use strict'
+
 const vulnerabilityReporter = require('./vulnerability-reporter')
 const { enableAllAnalyzers, disableAllAnalyzers } = require('./analyzers')
 const web = require('../../plugins/util/web')
@@ -92,6 +94,7 @@ function onIncomingHttpRequestEnd (data) {
       const vulnerabilities = iastContext.vulnerabilities
       const rootSpan = iastContext.rootSpan
       vulnerabilityReporter.sendVulnerabilities(vulnerabilities, rootSpan)
+      overheadController.consolidateVulnerabilities(iastContext)
       removeTransaction(iastContext)
       iastTelemetry.onRequestEnd(iastContext, iastContext.rootSpan)
     }

@@ -129,11 +129,10 @@ function toFunctionOrClass (value, maxLength) {
     // This is a function
     // TODO: Would it make sense to detect if it's an arrow function or not?
     return toObject(value.className, value.properties, maxLength)
-  } else {
-    // This is a class
-    const className = classMatch[1].trim()
-    return { type: className ? `class ${className}` : 'class' }
   }
+  // This is a class
+  const className = classMatch[1].trim()
+  return { type: className ? `class ${className}` : 'class' }
 }
 
 function toString (str, maxLength) {
@@ -238,16 +237,14 @@ function toArrayBuffer (type, bytes, maxLength) {
 
   const size = bytes.length
 
-  if (size > maxLength) {
-    return {
-      type,
-      value: arrayBufferToString(bytes, maxLength),
-      truncated: true,
-      size: bytes.length
-    }
-  } else {
-    return { type, value: arrayBufferToString(bytes, size) }
-  }
+  return size > maxLength
+    ? {
+        type,
+        value: arrayBufferToString(bytes, maxLength),
+        truncated: true,
+        size: bytes.length
+      }
+    : { type, value: arrayBufferToString(bytes, size) }
 }
 
 function arrayBufferToString (bytes, size) {

@@ -114,7 +114,7 @@ class IastPlugin extends Plugin {
       config = { enabled: config }
     }
     if (config.enabled && !this.configured) {
-      this.onConfigure(config.tracerConfig)
+      this.onConfigure()
       this.configured = true
     }
 
@@ -130,9 +130,9 @@ class IastPlugin extends Plugin {
   }
 
   _getAndRegisterSubscription ({ moduleName, channelName, tag, tagKey }) {
-    if (!channelName && !moduleName) return
-
     if (!moduleName) {
+      if (!channelName) return
+
       let firstSep = channelName.indexOf(':')
       if (firstSep === -1) {
         moduleName = channelName
@@ -141,7 +141,7 @@ class IastPlugin extends Plugin {
           firstSep = channelName.indexOf(':', 'tracing:'.length + 1)
         }
         const lastSep = channelName.indexOf(':', firstSep + 1)
-        moduleName = channelName.substring(firstSep + 1, lastSep !== -1 ? lastSep : channelName.length)
+        moduleName = channelName.slice(firstSep + 1, lastSep === -1 ? channelName.length : lastSep)
       }
     }
 

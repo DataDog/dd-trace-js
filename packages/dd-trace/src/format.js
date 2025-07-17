@@ -224,7 +224,7 @@ function addTag (meta, metrics, key, value, nested) {
       meta[key] = value
       break
     case 'number':
-      if (isNaN(value)) break
+      if (Number.isNaN(value)) break
       metrics[key] = value
       break
     case 'boolean':

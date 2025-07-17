@@ -1,13 +1,13 @@
 'use strict'
 
-const getPort = require('get-port')
 const path = require('path')
 const Axios = require('axios')
 const { assert } = require('chai')
+const msgpack = require('@msgpack/msgpack')
 const { createSandbox, FakeAgent, spawnProc } = require('../helpers')
 
 describe('RASP', () => {
-  let axios, sandbox, cwd, appPort, appFile, agent, proc, stdioHandler
+  let axios, sandbox, cwd, appFile, agent, proc, stdioHandler
 
   function stdOutputHandler (data) {
     stdioHandler && stdioHandler(data)
@@ -15,19 +15,15 @@ describe('RASP', () => {
 
   before(async () => {
     sandbox = await createSandbox(['express', 'axios'])
-    appPort = await getPort()
     cwd = sandbox.folder
     appFile = path.join(cwd, 'appsec/rasp/index.js')
-    axios = Axios.create({
-      baseURL: `http://localhost:${appPort}`
-    })
   })
 
   after(async () => {
     await sandbox.remove()
   })
 
-  function startServer (abortOnUncaughtException) {
+  function startServer (abortOnUncaughtException, collectRequestBody = false) {
     beforeEach(async () => {
       let execArgv = process.execArgv
       if (abortOnUncaughtException) {
@@ -39,12 +35,13 @@ describe('RASP', () => {
         execArgv,
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
-          APP_PORT: appPort,
           DD_APPSEC_ENABLED: true,
           DD_APPSEC_RASP_ENABLED: true,
-          DD_APPSEC_RULES: path.join(cwd, 'appsec/rasp/rasp_rules.json')
+          DD_APPSEC_RULES: path.join(cwd, 'appsec/rasp/rasp_rules.json'),
+          DD_APPSEC_RASP_COLLECT_REQUEST_BODY: collectRequestBody
         }
       }, stdOutputHandler, stdOutputHandler)
+      axios = Axios.create({ baseURL: proc.url })
     })
 
     afterEach(async () => {
@@ -57,6 +54,17 @@ describe('RASP', () => {
     await agent.assertMessageReceived(({ headers, payload }) => {
       assert.property(payload[0][0].meta, '_dd.appsec.json')
       assert.include(payload[0][0].meta['_dd.appsec.json'], '"test-rule-id-2"')
+    })
+  }
+
+  async function assertBodyReported (expectedBody, truncated) {
+    await agent.assertMessageReceived(({ headers, payload }) => {
+      assert.property(payload[0][0].meta_struct, 'http.request.body')
+      assert.deepStrictEqual(msgpack.decode(payload[0][0].meta_struct['http.request.body']), expectedBody)
+
+      if (truncated) {
+        assert.property(payload[0][0].meta, '_dd.appsec.rasp.request_body_size.exceeded')
+      }
     })
   }
 
@@ -336,6 +344,67 @@ describe('RASP', () => {
         assert.notEqual(response.status, 418)
         assert.notEqual(response.status, 403)
         await assertExploitDetected()
+      })
+    })
+  })
+
+  describe('extended data collection', () => {
+    describe('with feature enabled', () => {
+      startServer(false, true)
+
+      it('should report body request', async () => {
+        const requestBody = { host: 'localhost/ifconfig.pro' }
+        try {
+          await axios.post('/ssrf', requestBody)
+        } catch (e) {
+          if (!e.response) {
+            throw e
+          }
+
+          await assertBodyReported(requestBody)
+        }
+      })
+
+      it('should report truncated body request', async () => {
+        const requestBody = {
+          host: 'localhost/ifconfig.pro',
+          objectWithLotsOfNodes: Object.fromEntries([...Array(300).keys()].map(i => [i, i])),
+          arr: Array(300).fill('foo')
+        }
+        try {
+          await axios.post('/ssrf', requestBody)
+        } catch (e) {
+          if (!e.response) {
+            throw e
+          }
+
+          const expectedReportedBody = {
+            host: 'localhost/ifconfig.pro',
+            objectWithLotsOfNodes: Object.fromEntries([...Array(256).keys()].map(i => [i, i])),
+            arr: Array(256).fill('foo')
+          }
+
+          await assertBodyReported(expectedReportedBody, true)
+        }
+      })
+    })
+
+    describe('with feature disabled', () => {
+      startServer(false, false)
+
+      it('should not report body request', async () => {
+        const requestBody = { host: 'localhost/ifconfig.pro' }
+        try {
+          await axios.post('/ssrf', requestBody)
+        } catch (e) {
+          if (!e.response) {
+            throw e
+          }
+
+          await agent.assertMessageReceived(({ headers, payload }) => {
+            assert.notProperty(payload[0][0].meta_struct, 'http.request.body')
+          })
+        }
       })
     })
   })

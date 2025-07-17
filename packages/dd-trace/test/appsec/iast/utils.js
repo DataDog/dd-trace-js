@@ -12,6 +12,7 @@ const rewriter = require('../../../src/appsec/iast/taint-tracking/rewriter')
 const iast = require('../../../src/appsec/iast')
 const Config = require('../../../src/config')
 const vulnerabilityReporter = require('../../../src/appsec/iast/vulnerability-reporter')
+const overheadController = require('../../../src/appsec/iast/overhead-controller')
 const { getWebSpan } = require('../utils')
 
 function testInRequest (app, tests) {
@@ -19,6 +20,13 @@ function testInRequest (app, tests) {
   let listener
   let appListener
   const config = {}
+
+  before(() => {
+    return agent.load('http', undefined, { flushInterval: 1 })
+      .then(() => {
+        http = require('http')
+      })
+  })
 
   beforeEach(() => {
     listener = (req, res) => {
@@ -35,13 +43,6 @@ function testInRequest (app, tests) {
     }
   })
 
-  beforeEach(() => {
-    return agent.load('http', undefined, { flushInterval: 1 })
-      .then(() => {
-        http = require('http')
-      })
-  })
-
   beforeEach(done => {
     const server = new http.Server(listener)
     appListener = server
@@ -53,6 +54,9 @@ function testInRequest (app, tests) {
 
   afterEach(() => {
     appListener && appListener.close()
+  })
+
+  after(() => {
     return agent.close({ ritmReset: false })
   })
 
@@ -61,6 +65,7 @@ function testInRequest (app, tests) {
 
 function testOutsideRequestHasVulnerability (fnToTest, vulnerability, plugins, timeout) {
   beforeEach(async () => {
+    vulnerabilityReporter.clearCache()
     await agent.load(plugins)
   })
   afterEach(() => {
@@ -89,7 +94,7 @@ function testOutsideRequestHasVulnerability (fnToTest, vulnerability, plugins, t
       this.timeout(timeout)
     }
     agent
-      .use(traces => {
+      .assertSomeTraces(traces => {
         expect(traces[0][0].meta['_dd.iast.json']).to.include(`"${vulnerability}"`)
         expect(traces[0][0].metrics['_dd.iast.enabled']).to.be.equal(1)
       }, { timeoutMs: 10000 })
@@ -117,6 +122,7 @@ function beforeEachIastTest (iastConfig) {
   }
 
   beforeEach(() => {
+    overheadController.clearGlobalRouteMap()
     vulnerabilityReporter.clearCache()
     const config = new Config({
       iast: iastConfig
@@ -144,7 +150,7 @@ function endResponse (res, appResult) {
 
 function checkNoVulnerabilityInRequest (vulnerability, config, done, makeRequest) {
   agent
-    .use(traces => {
+    .assertSomeTraces(traces => {
       if (traces[0][0].type !== 'web') throw new Error('Not a web span')
       // iastJson == undefiend is valid
       const iastJson = traces[0][0].meta['_dd.iast.json'] || ''
@@ -175,7 +181,7 @@ function checkVulnerabilityInRequest (
     occurrences = occurrencesAndLocation.occurrences
   }
   agent
-    .use(traces => {
+    .assertSomeTraces(traces => {
       expect(traces[0][0].metrics['_dd.iast.enabled']).to.be.equal(1)
       expect(traces[0][0].meta).to.have.property('_dd.iast.json')
 

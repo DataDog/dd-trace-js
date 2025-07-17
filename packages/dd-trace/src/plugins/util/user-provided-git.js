@@ -1,3 +1,5 @@
+'use strict'
+
 const {
   GIT_COMMIT_SHA,
   GIT_BRANCH,
@@ -9,11 +11,15 @@ const {
   GIT_COMMIT_COMMITTER_NAME,
   GIT_COMMIT_AUTHOR_DATE,
   GIT_COMMIT_AUTHOR_EMAIL,
-  GIT_COMMIT_AUTHOR_NAME
+  GIT_COMMIT_AUTHOR_NAME,
+  GIT_PULL_REQUEST_BASE_BRANCH,
+  GIT_PULL_REQUEST_BASE_BRANCH_SHA,
+  GIT_COMMIT_HEAD_SHA
 } = require('./tags')
 
 const { normalizeRef } = require('./ci')
 const { filterSensitiveInfoFromRepository } = require('./url')
+const { getEnvironmentVariables } = require('../../config-helper')
 
 function removeEmptyValues (tags) {
   return Object.keys(tags).reduce((filteredTags, tag) => {
@@ -52,8 +58,11 @@ function getUserProviderGitMetadata () {
     DD_GIT_COMMIT_COMMITTER_DATE,
     DD_GIT_COMMIT_AUTHOR_NAME,
     DD_GIT_COMMIT_AUTHOR_EMAIL,
-    DD_GIT_COMMIT_AUTHOR_DATE
-  } = process.env
+    DD_GIT_COMMIT_AUTHOR_DATE,
+    DD_GIT_PULL_REQUEST_BASE_BRANCH,
+    DD_GIT_PULL_REQUEST_BASE_BRANCH_SHA,
+    DD_GIT_COMMIT_HEAD_SHA
+  } = getEnvironmentVariables()
 
   const branch = normalizeRef(DD_GIT_BRANCH)
   let tag = normalizeRef(DD_GIT_TAG)
@@ -74,7 +83,10 @@ function getUserProviderGitMetadata () {
     [GIT_COMMIT_COMMITTER_EMAIL]: DD_GIT_COMMIT_COMMITTER_EMAIL,
     [GIT_COMMIT_AUTHOR_NAME]: DD_GIT_COMMIT_AUTHOR_NAME,
     [GIT_COMMIT_AUTHOR_EMAIL]: DD_GIT_COMMIT_AUTHOR_EMAIL,
-    [GIT_COMMIT_AUTHOR_DATE]: DD_GIT_COMMIT_AUTHOR_DATE
+    [GIT_COMMIT_AUTHOR_DATE]: DD_GIT_COMMIT_AUTHOR_DATE,
+    [GIT_PULL_REQUEST_BASE_BRANCH]: DD_GIT_PULL_REQUEST_BASE_BRANCH,
+    [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: DD_GIT_PULL_REQUEST_BASE_BRANCH_SHA,
+    [GIT_COMMIT_HEAD_SHA]: DD_GIT_COMMIT_HEAD_SHA
   })
 }
 

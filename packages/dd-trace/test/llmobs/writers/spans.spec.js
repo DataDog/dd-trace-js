@@ -37,7 +37,7 @@ describe('LLMObsSpanWriter', () => {
     writer = new LLMObsSpanWriter(config)
     writer.setAgentless(true)
     expect(writer._agentless).to.equal(true)
-    expect(writer._url.href).to.equal('https://llmobs-intake.datadoghq.com/api/v2/llmobs')
+    expect(writer.url).to.equal('https://llmobs-intake.datadoghq.com/api/v2/llmobs')
   })
 
   it('creates an agent proxy writer', () => {
@@ -45,14 +45,14 @@ describe('LLMObsSpanWriter', () => {
     writer.setAgentless(false)
 
     expect(writer._agentless).to.equal(false)
-    expect(writer._url.href).to.equal('http://localhost:8126/evp_proxy/v2/api/v2/llmobs')
+    expect(writer.url).to.equal('http://localhost:8126/evp_proxy/v2/api/v2/llmobs')
   })
 
   it('computes the number of bytes of the appended event', () => {
     writer = new LLMObsSpanWriter(config)
 
     const event = { name: 'test', value: 1 }
-    const eventSizeBytes = Buffer.from(JSON.stringify(event)).byteLength
+    const eventSizeBytes = Buffer.byteLength(JSON.stringify(event))
 
     writer.append(event)
 

@@ -1,9 +1,10 @@
 'use strict'
 
 const http = require('http')
-const { exec } = require('child_process')
+const { exec, execSync } = require('child_process')
+const path = require('path')
+const fs = require('fs')
 
-const getPort = require('get-port')
 const { assert } = require('chai')
 
 const {
@@ -49,14 +50,17 @@ const {
   DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
   DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
   DD_CAPABILITIES_AUTO_TEST_RETRIES,
+  DD_CAPABILITIES_IMPACTED_TESTS,
   DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
   DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
   DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
-  TEST_RETRY_REASON_TYPES
+  DD_CAPABILITIES_FAILED_TEST_REPLAY,
+  TEST_RETRY_REASON_TYPES,
+  TEST_IS_MODIFIED
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
-const { NODE_MAJOR } = require('../../version')
+const { DD_MAJOR, NODE_MAJOR } = require('../../version')
 
 const version = process.env.CYPRESS_VERSION
 const hookFile = 'dd-trace/loader-hook.mjs'
@@ -76,21 +80,40 @@ const moduleTypes = [
   }
 ].filter(moduleType => !process.env.CYPRESS_MODULE_TYPE || process.env.CYPRESS_MODULE_TYPE === moduleType.type)
 
+function shouldTestsRun (type) {
+  if (DD_MAJOR === 5) {
+    if (NODE_MAJOR <= 16) {
+      return version === '6.7.0' && type === 'commonJS'
+    }
+    if (NODE_MAJOR > 16) {
+      return version === 'latest'
+    }
+  }
+  if (DD_MAJOR === 6) {
+    if (NODE_MAJOR <= 16) {
+      return false
+    }
+    if (NODE_MAJOR > 16) {
+      return version === '10.2.0' || version === 'latest'
+    }
+  }
+  return false
+}
+
 moduleTypes.forEach(({
   type,
   testCommand
 }) => {
-  // cypress only supports esm on versions >= 10.0.0
-  if (type === 'esm' && version === '6.7.0') {
-    return
-  }
-  if (version === '6.7.0' && NODE_MAJOR > 16) {
-    return
-  }
   describe(`cypress@${version} ${type}`, function () {
+    if (!shouldTestsRun(type)) {
+      // eslint-disable-next-line no-console
+      console.log(`Skipping tests for cypress@${version} ${type} for dd-trace@${DD_MAJOR} node@${NODE_MAJOR}`)
+      return
+    }
+
     this.retries(2)
     this.timeout(60000)
-    let sandbox, cwd, receiver, childProcess, webAppPort, secondWebAppServer
+    let sandbox, cwd, receiver, childProcess, webAppPort, secondWebAppServer, secondWebAppPort
 
     if (type === 'commonJS') {
       testCommand = testCommand(version)
@@ -100,8 +123,24 @@ moduleTypes.forEach(({
       // cypress-fail-fast is required as an incompatible plugin
       sandbox = await createSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0'], true)
       cwd = sandbox.folder
-      webAppPort = await getPort()
-      webAppServer.listen(webAppPort)
+      webAppServer.listen(0, 'localhost', () => {
+        webAppPort = webAppServer.address().port
+      })
+      if (version === 'latest') {
+        secondWebAppServer = http.createServer((req, res) => {
+          res.setHeader('Content-Type', 'text/html')
+          res.writeHead(200)
+          res.end(`
+            <!DOCTYPE html>
+            <html>
+              <div class="hella-world">Hella World</div>
+            </html>
+          `)
+        })
+        secondWebAppServer.listen(0, 'localhost', () => {
+          secondWebAppPort = secondWebAppServer.address().port
+        })
+      }
     })
 
     after(async () => {
@@ -1708,21 +1747,6 @@ moduleTypes.forEach(({
           ...restEnvVars
         } = getCiVisEvpProxyConfig(receiver.port)
 
-        const secondWebAppPort = await getPort()
-
-        secondWebAppServer = http.createServer((req, res) => {
-          res.setHeader('Content-Type', 'text/html')
-          res.writeHead(200)
-          res.end(`
-            <!DOCTYPE html>
-            <html>
-              <div class="hella-world">Hella World</div>
-            </html>
-          `)
-        })
-
-        secondWebAppServer.listen(secondWebAppPort)
-
         const specToRun = 'cypress/e2e/multi-origin.js'
 
         childProcess = exec(
@@ -1875,13 +1899,13 @@ moduleTypes.forEach(({
                 if (isLastAttempt) {
                   if (shouldFailSometimes) {
                     assert.notProperty(test.meta, TEST_HAS_FAILED_ALL_RETRIES)
-                    assert.notProperty(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED)
+                    assert.propertyVal(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
                   } else if (shouldAlwaysPass) {
                     assert.propertyVal(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
                     assert.notProperty(test.meta, TEST_HAS_FAILED_ALL_RETRIES)
                   } else {
                     assert.propertyVal(test.meta, TEST_HAS_FAILED_ALL_RETRIES, 'true')
-                    assert.notProperty(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED)
+                    assert.propertyVal(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
                   }
                 }
               }
@@ -2237,9 +2261,11 @@ moduleTypes.forEach(({
               assert.equal(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], '1')
               assert.equal(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')
               assert.equal(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
+              assert.equal(metadata.test[DD_CAPABILITIES_IMPACTED_TESTS], '1')
               assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
               assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
-              assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '2')
+              assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
+              assert.equal(metadata.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], '1')
               // capabilities logic does not overwrite test session name
               assert.equal(metadata.test[TEST_SESSION_NAME], 'my-test-session-name')
             })
@@ -2267,6 +2293,185 @@ moduleTypes.forEach(({
           receiverPromise.then(() => {
             done()
           }).catch(done)
+        })
+      })
+    })
+
+    context('impacted tests', () => {
+      beforeEach(() => {
+        receiver.setKnownTests({
+          cypress: {
+            'cypress/e2e/impacted-test.js': ['impacted test is impacted test']
+          }
+        })
+      })
+
+      // Add git setup before running impacted tests
+      before(function () {
+        execSync('git checkout -b feature-branch', { cwd, stdio: 'ignore' })
+        fs.writeFileSync(
+          path.join(cwd, 'cypress/e2e/impacted-test.js'),
+          `/* eslint-disable */
+          describe('impacted test', () => {
+            it('is impacted test', () => {
+              cy.visit('/')
+                .get('.hello-world')
+                .should('have.text', 'Hello Worldd')
+            })
+          })`
+        )
+        execSync('git add cypress/e2e/impacted-test.js', { cwd, stdio: 'ignore' })
+        execSync('git commit -m "modify impacted-test.js"', { cwd, stdio: 'ignore' })
+      })
+
+      after(function () {
+        execSync('git checkout -', { cwd, stdio: 'ignore' })
+        execSync('git branch -D feature-branch', { cwd, stdio: 'ignore' })
+      })
+
+      const getTestAssertions = ({ isModified, isEfd, isNew }) =>
+        receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+
+            if (isEfd) {
+              assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
+            } else {
+              assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
+            }
+
+            const resourceNames = tests.map(span => span.resource)
+
+            assert.includeMembers(resourceNames,
+              [
+                'cypress/e2e/impacted-test.js.impacted test is impacted test'
+              ]
+            )
+
+            const impactedTests = tests.filter(test =>
+              test.meta[TEST_SOURCE_FILE] === 'cypress/e2e/impacted-test.js' &&
+              test.meta[TEST_NAME] === 'impacted test is impacted test')
+
+            if (isEfd) {
+              assert.equal(impactedTests.length, NUM_RETRIES_EFD + 1) // Retries + original test
+            } else {
+              assert.equal(impactedTests.length, 1)
+            }
+
+            for (const impactedTest of impactedTests) {
+              if (isModified) {
+                assert.propertyVal(impactedTest.meta, TEST_IS_MODIFIED, 'true')
+              } else {
+                assert.notProperty(impactedTest.meta, TEST_IS_MODIFIED)
+              }
+              if (isNew) {
+                assert.propertyVal(impactedTest.meta, TEST_IS_NEW, 'true')
+              } else {
+                assert.notProperty(impactedTest.meta, TEST_IS_NEW)
+              }
+            }
+
+            if (isEfd) {
+              const retriedTests = tests.filter(
+                test => test.meta[TEST_IS_RETRY] === 'true' &&
+                test.meta[TEST_NAME] === 'impacted test is impacted test'
+              )
+              assert.equal(retriedTests.length, NUM_RETRIES_EFD)
+              let retriedTestNew = 0
+              let retriedTestsWithReason = 0
+              retriedTests.forEach(test => {
+                if (test.meta[TEST_IS_NEW] === 'true') {
+                  retriedTestNew++
+                }
+                if (test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd) {
+                  retriedTestsWithReason++
+                }
+              })
+              assert.equal(retriedTestNew, isNew ? NUM_RETRIES_EFD : 0)
+              assert.equal(
+                retriedTestsWithReason,
+                NUM_RETRIES_EFD
+              )
+            }
+          })
+
+      const runImpactedTest = (
+        done,
+        { isModified, isEfd = false, isNew = false },
+        extraEnvVars = {}
+      ) => {
+        const testAssertionsPromise = getTestAssertions({ isModified, isEfd, isNew })
+
+        const {
+          NODE_OPTIONS,
+          ...restEnvVars
+        } = getCiVisEvpProxyConfig(receiver.port)
+
+        const specToRun = 'cypress/e2e/impacted-test.js'
+
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              SPEC_PATTERN: specToRun,
+              GITHUB_BASE_REF: '',
+              ...extraEnvVars
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          testAssertionsPromise.then(done).catch(done)
+        })
+      }
+
+      context('test is not new', () => {
+        it('should be detected as impacted', (done) => {
+          receiver.setSettings({ impacted_tests_enabled: true })
+
+          runImpactedTest(done, { isModified: true })
+        })
+
+        it('should not be detected as impacted if disabled', (done) => {
+          receiver.setSettings({ impacted_tests_enabled: false })
+
+          runImpactedTest(done, { isModified: false })
+        })
+
+        it('should not be detected as impacted if DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED is false',
+          (done) => {
+            receiver.setSettings({ impacted_tests_enabled: true })
+
+            runImpactedTest(done,
+              { isModified: false },
+              { DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0' }
+            )
+          })
+      })
+
+      context('test is new', () => {
+        it('should be retried and marked both as new and modified', (done) => {
+          receiver.setKnownTests({})
+          receiver.setSettings({
+            impacted_tests_enabled: true,
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': NUM_RETRIES_EFD
+              }
+            },
+            known_tests_enabled: true
+          })
+          runImpactedTest(
+            done,
+            { isModified: true, isEfd: true, isNew: true }
+          )
         })
       })
     })

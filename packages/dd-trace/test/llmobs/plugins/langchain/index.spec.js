@@ -33,6 +33,27 @@ const openAiBaseEmbeddingInfo = { base: 'https://api.openai.com', path: '/v1/emb
 
 const isDdTrace = iastFilter.isDdTrace
 
+function stubSingleEmbedding (langchainOpenaiOpenAiVersion) {
+  if (semver.satisfies(langchainOpenaiOpenAiVersion, '>=4.91.0')) {
+    stubCall({
+      ...openAiBaseEmbeddingInfo,
+      response: require('../../../../../datadog-plugin-langchain/test/fixtures/single-embedding.json')
+    })
+  } else {
+    stubCall({
+      ...openAiBaseEmbeddingInfo,
+      response: {
+        object: 'list',
+        data: [{
+          object: 'embedding',
+          index: 0,
+          embedding: Array(1536).fill(0)
+        }]
+      }
+    })
+  }
+}
+
 describe('integrations', () => {
   let langchainOpenai
   let langchainAnthropic
@@ -42,6 +63,8 @@ describe('integrations', () => {
   let langchainOutputParsers
   let langchainPrompts
   let langchainRunnables
+  let tool
+  let MemoryVectorStore
 
   /**
    * In OpenAI 4.91.0, the default response format for embeddings was changed from `float` to `base64`.
@@ -99,10 +122,12 @@ describe('integrations', () => {
       return agent.close({ ritmReset: false, wipe: true })
     })
 
-    withVersions('langchain', ['@langchain/core'], version => {
+    // TODO(sabrenner): remove this once we have the more robust mocking merged
+    withVersions('langchain', ['@langchain/core'], '<0.3.60', version => {
       describe('langchain', () => {
         beforeEach(() => {
-          langchainOpenai = require(`../../../../../../versions/@langchain/openai@${version}`).get()
+          langchainOpenai = require(`../../../../../../versions/langchain@${version}`)
+            .get('@langchain/openai')
           langchainAnthropic = require(`../../../../../../versions/@langchain/anthropic@${version}`).get()
           langchainCohere = require(`../../../../../../versions/@langchain/cohere@${version}`).get()
 
@@ -116,8 +141,16 @@ describe('integrations', () => {
           langchainRunnables = require(`../../../../../../versions/@langchain/core@${version}`)
             .get('@langchain/core/runnables')
 
+          tool = require(`../../../../../../versions/@langchain/core@${version}`)
+            .get('@langchain/core/tools')
+            .tool
+
+          MemoryVectorStore = require(`../../../../../../versions/@langchain/core@${version}`)
+            .get('langchain/vectorstores/memory')
+            .MemoryVectorStore
+
           langchainOpenaiOpenAiVersion =
-            require(`../../../../../../versions/@langchain/openai@${version}`)
+            require(`../../../../../../versions/langchain@${version}`)
               .get('openai/version')
               .VERSION
         })
@@ -138,7 +171,7 @@ describe('integrations', () => {
 
             const llm = new langchainOpenai.OpenAI({ model: 'gpt-3.5-turbo-instruct' })
 
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
               const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
@@ -166,7 +199,7 @@ describe('integrations', () => {
           it('does not tag output if there is an error', async () => {
             nock('https://api.openai.com').post('/v1/completions').reply(500)
 
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
               const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
@@ -223,7 +256,7 @@ describe('integrations', () => {
               }
             })
 
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
 
               const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
@@ -270,7 +303,7 @@ describe('integrations', () => {
 
             const chat = new langchainOpenai.ChatOpenAI({ model: 'gpt-3.5-turbo' })
 
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
               const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
@@ -298,7 +331,7 @@ describe('integrations', () => {
           it('does not tag output if there is an error', async () => {
             nock('https://api.openai.com').post('/v1/chat/completions').reply(500)
 
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
               const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
@@ -349,7 +382,7 @@ describe('integrations', () => {
               }
             })
 
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
               const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
@@ -402,7 +435,7 @@ describe('integrations', () => {
               }
             })
 
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
               const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
@@ -479,7 +512,7 @@ describe('integrations', () => {
 
             const embeddings = new langchainOpenai.OpenAIEmbeddings()
 
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
               const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
@@ -506,7 +539,7 @@ describe('integrations', () => {
           it('does not tag output if there is an error', async () => {
             nock('https://api.openai.com').post('/v1/embeddings').reply(500)
 
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
               const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
@@ -564,7 +597,7 @@ describe('integrations', () => {
 
             const embeddings = new langchainOpenai.OpenAIEmbeddings()
 
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
               const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
 
@@ -612,7 +645,7 @@ describe('integrations', () => {
 
             const chain = prompt.pipe(llm)
 
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               const spans = traces[0]
               const workflowSpan = spans[0]
               const llmSpan = spans[1]
@@ -661,7 +694,7 @@ describe('integrations', () => {
           it('does not tag output if there is an error', async () => {
             nock('https://api.openai.com').post('/v1/completions').reply(500)
 
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               const spans = traces[0]
 
               const workflowSpan = spans[0]
@@ -744,7 +777,7 @@ describe('integrations', () => {
               secondChain
             ])
 
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               const spans = traces[0]
 
               const topLevelWorkflow = spans[0]
@@ -883,7 +916,7 @@ describe('integrations', () => {
               parser
             ])
 
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               const spans = traces[0]
 
               const workflowSpan = spans[0]
@@ -975,7 +1008,7 @@ describe('integrations', () => {
             const model = new langchainOpenai.ChatOpenAI({ model: 'gpt-3.5-turbo' })
             const chain = prompt.pipe(model)
 
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               const spans = traces[0]
 
               const workflowSpan = spans[0]
@@ -1090,7 +1123,7 @@ describe('integrations', () => {
               .pipe(model)
               .pipe(new langchainOutputParsers.StringOutputParser())
 
-            const checkTraces = agent.use(traces => {
+            const checkTraces = agent.assertSomeTraces(traces => {
               const spans = traces[0]
               expect(spans.length).to.equal(3)
 
@@ -1141,6 +1174,184 @@ describe('integrations', () => {
             })
 
             await chain.invoke({ foo: 'bar' })
+
+            await checkTraces
+          })
+        })
+
+        describe('tools', () => {
+          it('submits a tool call span', async function () {
+            if (!tool) this.skip()
+
+            const add = tool(
+              ({ a, b }) => a + b,
+              {
+                name: 'add',
+                description: 'A tool that adds two numbers',
+                schema: {
+                  a: { type: 'number' },
+                  b: { type: 'number' }
+                }
+              }
+            )
+
+            const checkTraces = agent.assertSomeTraces(traces => {
+              const toolSpan = traces[0][0]
+
+              const toolSpanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
+
+              const expectedTool = expectedLLMObsNonLLMSpanEvent({
+                span: toolSpan,
+                spanKind: 'tool',
+                name: 'add',
+                inputValue: JSON.stringify({ a: 1, b: 2 }),
+                outputValue: JSON.stringify(3),
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
+              })
+
+              expect(toolSpanEvent).to.deepEqualWithMockValues(expectedTool)
+            })
+
+            const result = await add.invoke({ a: 1, b: 2 })
+            expect(result).to.equal(3)
+
+            await checkTraces
+          })
+
+          it('submits a tool call with an error', async function () {
+            if (!tool) this.skip()
+
+            const add = tool(
+              ({ a, b }) => {
+                throw new Error('This is a test error')
+              },
+              {
+                name: 'add',
+                description: 'A tool that adds two numbers',
+                schema: {
+                  a: { type: 'number' },
+                  b: { type: 'number' }
+                }
+              }
+            )
+
+            const checkTraces = agent.assertSomeTraces(traces => {
+              const toolSpan = traces[0][0]
+
+              const toolSpanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
+
+              const expectedTool = expectedLLMObsNonLLMSpanEvent({
+                span: toolSpan,
+                spanKind: 'tool',
+                name: 'add',
+                inputValue: JSON.stringify({ a: 1, b: 2 }),
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' },
+                error: 1,
+                errorType: 'Error',
+                errorMessage: 'This is a test error',
+                errorStack: MOCK_ANY
+              })
+
+              expect(toolSpanEvent).to.deepEqualWithMockValues(expectedTool)
+            })
+
+            try {
+              await add.invoke({ a: 1, b: 2 })
+              expect.fail('Expected an error to be thrown')
+            } catch {}
+
+            await checkTraces
+          })
+        })
+
+        describe('vectorstores', () => {
+          let vectorstore
+
+          beforeEach(() => {
+            stubSingleEmbedding(langchainOpenaiOpenAiVersion)
+
+            const embeddings = new langchainOpenai.OpenAIEmbeddings()
+            vectorstore = new MemoryVectorStore(embeddings)
+
+            const document = {
+              pageContent: 'The powerhouse of the cell is the mitochondria',
+              metadata: { source: 'https://example.com' }
+            }
+
+            return vectorstore.addDocuments([document])
+          })
+
+          it('submits a retrieval span with a child embedding span for similaritySearch', async () => {
+            stubSingleEmbedding(langchainOpenaiOpenAiVersion)
+
+            const checkTraces = agent.assertSomeTraces(traces => {
+              const spans = traces[0] // first trace is the embedding call from the beforeEach
+
+              expect(spans).to.have.length(2)
+
+              const vectorstoreSpan = spans[0]
+
+              // first call was for the embedding span in the beforeEach
+              const retrievalSpanEvent = LLMObsSpanWriter.prototype.append.getCall(1).args[0]
+              const embeddingSpanEvent = LLMObsSpanWriter.prototype.append.getCall(2).args[0]
+
+              expect(embeddingSpanEvent.meta).to.have.property('span.kind', 'embedding')
+              expect(embeddingSpanEvent).to.have.property('parent_id', retrievalSpanEvent.span_id)
+
+              const expectedRetrievalEvent = expectedLLMObsNonLLMSpanEvent({
+                span: vectorstoreSpan,
+                spanKind: 'retrieval',
+                name: 'langchain.vectorstores.memory.MemoryVectorStore',
+                inputValue: 'Biology',
+                outputDocuments: [{
+                  text: 'The powerhouse of the cell is the mitochondria',
+                  name: 'https://example.com'
+                }],
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
+              })
+
+              expect(retrievalSpanEvent).to.deepEqualWithMockValues(expectedRetrievalEvent)
+            }, { spanResourceMatch: /langchain\.vectorstores\.memory\.MemoryVectorStore/ })
+
+            await vectorstore.similaritySearch('Biology')
+
+            await checkTraces
+          })
+
+          it('submits a retrieval span with a child embedding span for similaritySearchWithScore', async () => {
+            stubSingleEmbedding(langchainOpenaiOpenAiVersion)
+
+            const checkTraces = agent.assertSomeTraces(traces => {
+              const spans = traces[0] // first trace is the embedding call from the beforeEach
+
+              expect(spans).to.have.length(2)
+
+              const vectorstoreSpan = spans[0]
+
+              // first call was for the embedding span in the beforeEach
+              const retrievalSpanEvent = LLMObsSpanWriter.prototype.append.getCall(1).args[0]
+              const embeddingSpanEvent = LLMObsSpanWriter.prototype.append.getCall(2).args[0]
+
+              expect(embeddingSpanEvent.meta).to.have.property('span.kind', 'embedding')
+              expect(embeddingSpanEvent).to.have.property('parent_id', retrievalSpanEvent.span_id)
+
+              const expectedRetrievalEvent = expectedLLMObsNonLLMSpanEvent({
+                span: vectorstoreSpan,
+                spanKind: 'retrieval',
+                name: 'langchain.vectorstores.memory.MemoryVectorStore',
+                inputValue: 'Biology',
+                outputDocuments: [{
+                  text: 'The powerhouse of the cell is the mitochondria',
+                  name: 'https://example.com',
+                  score: 1
+                }],
+                tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
+              })
+
+              expect(retrievalSpanEvent).to.deepEqualWithMockValues(expectedRetrievalEvent)
+            }, { spanResourceMatch: /langchain\.vectorstores\.memory\.MemoryVectorStore/ })
+
+            await vectorstore.similaritySearchWithScore('Biology')
 
             await checkTraces
           })

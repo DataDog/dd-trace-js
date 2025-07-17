@@ -22,14 +22,12 @@ function addWafRequestMetrics (store, { duration, durationExt, wafTimeout, error
   }
 
   if (errorCode) {
-    if (store[DD_TELEMETRY_REQUEST_METRICS].wafErrorCode) {
-      store[DD_TELEMETRY_REQUEST_METRICS].wafErrorCode = Math.max(
+    store[DD_TELEMETRY_REQUEST_METRICS].wafErrorCode = store[DD_TELEMETRY_REQUEST_METRICS].wafErrorCode
+      ? Math.max(
         errorCode,
         store[DD_TELEMETRY_REQUEST_METRICS].wafErrorCode
       )
-    } else {
-      store[DD_TELEMETRY_REQUEST_METRICS].wafErrorCode = errorCode
-    }
+      : errorCode
   }
 }
 
@@ -105,10 +103,11 @@ function incrementWafInit (wafVersion, rulesVersion, success) {
 function incrementWafUpdates (wafVersion, rulesVersion, success) {
   const versionsTags = getVersionsTags(wafVersion, rulesVersion)
   appsecMetrics.count('waf.updates', { ...versionsTags, success }).inc()
+}
 
-  if (!success) {
-    appsecMetrics.count('waf.config_errors', versionsTags).inc()
-  }
+function incrementWafConfigErrors (wafVersion, rulesVersion) {
+  const versionsTags = getVersionsTags(wafVersion, rulesVersion)
+  appsecMetrics.count('waf.config_errors', versionsTags).inc()
 }
 
 function incrementWafRequests (store) {
@@ -139,5 +138,6 @@ module.exports = {
   trackWafMetrics,
   incrementWafInit,
   incrementWafUpdates,
+  incrementWafConfigErrors,
   incrementWafRequests
 }

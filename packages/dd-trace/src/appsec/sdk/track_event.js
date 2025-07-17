@@ -130,7 +130,7 @@ function trackUserLoginFailureV2 (tracer, login, exists, metadata) {
 
   const wafData = { login }
 
-  if (typeof exists === 'object' && metadata === undefined) {
+  if (exists !== null && typeof exists === 'object' && metadata === undefined) {
     metadata = exists
     exists = false
   }
@@ -167,10 +167,8 @@ function flattenFields (fields, depth = 0) {
           result[`${key}.${flatKey}`] = flatValue[flatKey]
         }
       }
-    } else {
-      if (value !== undefined) {
-        result[key] = value
-      }
+    } else if (value !== undefined) {
+      result[key] = value
     }
   }
 
@@ -196,7 +194,7 @@ function trackEvent (eventName, fields, sdkMethodName, rootSpan) {
     }
 
     for (const metadataKey of Object.keys(flatFields)) {
-      tags[`appsec.events.${eventName}.${metadataKey}`] = '' + flatFields[metadataKey]
+      tags[`appsec.events.${eventName}.${metadataKey}`] = String(flatFields[metadataKey])
     }
   }
 
@@ -211,11 +209,11 @@ function runWaf (eventName, user) {
   }
 
   if (user?.id) {
-    persistent[addresses.USER_ID] = '' + user.id
+    persistent[addresses.USER_ID] = String(user.id)
   }
 
   if (user?.login) {
-    persistent[addresses.USER_LOGIN] = '' + user.login
+    persistent[addresses.USER_LOGIN] = String(user.login)
   }
 
   waf.run({ persistent })

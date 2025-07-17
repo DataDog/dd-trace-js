@@ -2,7 +2,6 @@
 
 const langChainTracingPlugins = require('./tracing')
 const langChainLLMObsPlugins = require('../../dd-trace/src/llmobs/plugins/langchain')
-// const LangChainLLMObsPlugin = require('../../dd-trace/src/llmobs/plugins/langchain')
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 
 const plugins = {}

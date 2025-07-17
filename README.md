@@ -15,12 +15,17 @@
 Most of the documentation for `dd-trace` is available on these webpages:
 
 - [Tracing Node.js Applications](https://docs.datadoghq.com/tracing/languages/nodejs/) - most project documentation, including setup instructions
-- [Configuring the NodeJS Tracing Library](https://docs.datadoghq.com/tracing/trace_collection/library_config/nodejs) - environment variables and config options
+- [Configuring the Node.js Tracing Library](https://docs.datadoghq.com/tracing/trace_collection/library_config/nodejs) - environment variables and config options
 - [API Documentation](https://datadog.github.io/dd-trace-js) - method signatures, plugin list, and some usage examples
 - [APM Terms and Concepts](https://docs.datadoghq.com/tracing/visualization/) - a glossary of concepts applicable across all languages
 
 
 ## Version Release Lines and Maintenance
+
+> **Node.js v24 Notice**: We're currently adding compatibility for Node.js v24. To use the tracer with your application either continue to use Node.js v22 (LTS), or do both of the following as a workaround:
+> * Install v5.52.0 (or newer) of the tracer
+> * Set `--no-async-context-frame` either using a CLI argument or via `NODE_OPTIONS`
+> Once support for Node.js v24 is complete this flag will no longer be needed.
 
 | Release Line                                             | Latest Version                                                                                         | Node.js  | [SSI](https://docs.datadoghq.com/tracing/trace_collection/automatic_instrumentation/single-step-apm/?tab=linuxhostorvm) | [K8s Injection](https://docs.datadoghq.com/tracing/trace_collection/library_injection_local/?tab=kubernetes) |Status          |Initial Release | End of Life |
 | :---:                                                    | :---:                                                                                                  | :---:    | :---:  | :---:  | :---:           | :---:          | :---:       |
@@ -59,7 +64,7 @@ When a new release line is introduced the previous release line then enters main
 Once that year is up the release line enters End of Life and will not receive new updates.
 The library also follows the Node.js LTS lifecycle wherein new release lines drop compatibility with Node.js versions that reach end-of-life (with the maintenance release line still receiving updates for a year).
 
-For more information about library versioning and compatibility, see the [NodeJS Compatibility Requirements](https://docs.datadoghq.com/tracing/trace_collection/compatibility/nodejs/#releases) page.
+For more information about library versioning and compatibility, see the [Node.js Compatibility Requirements](https://docs.datadoghq.com/tracing/trace_collection/compatibility/nodejs/#releases) page.
 
 Changes associated with each individual release are documented on the [GitHub Releases](https://github.com/DataDog/dd-trace-js/releases) screen.
 
@@ -69,21 +74,11 @@ Changes associated with each individual release are documented on the [GitHub Re
 Please read the [CONTRIBUTING.md](https://github.com/DataDog/dd-trace-js/blob/master/CONTRIBUTING.md) document before contributing to this open source project.
 
 
-## EcmaScript Modules (ESM) Support
+## ECMAScript Modules (ESM) Support
 
-ESM support requires an additional command-line argument. Use the following to enable experimental ESM support with your application:
+ESM support requires an _additional_ command line argument when starting the Node.js process.
+For more information, see the [section on ESM support](https://docs.datadoghq.com/tracing/trace_collection/automatic_instrumentation/dd_libraries/nodejs/#esm-applications-only-import-the-loader) in the Node.js tracer documentation.
 
-Node.js < v20.6
-
-```sh
-node --loader dd-trace/loader-hook.mjs entrypoint.js
-```
-
-Node.js >= v20.6
-
-```sh
-node --import dd-trace/register.js entrypoint.js
-```
 
 ## Serverless / Lambda
 

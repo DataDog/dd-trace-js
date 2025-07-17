@@ -16,12 +16,11 @@ exports.createWrapFetch = function createWrapFetch (Request, ch, onLoad) {
         const ctx = { req: input }
 
         return ch.tracePromise(() => fetch.call(this, input, init), ctx)
-      } else {
-        const req = new Request(input, init)
-        const ctx = { req }
-
-        return ch.tracePromise(() => fetch.call(this, req), ctx)
       }
+      const req = new Request(input, init)
+      const ctx = { req }
+
+      return ch.tracePromise(() => fetch.call(this, req), ctx)
     }
   }
 }

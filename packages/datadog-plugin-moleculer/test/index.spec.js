@@ -2,7 +2,8 @@
 
 const { expect } = require('chai')
 const getPort = require('get-port')
-const os = require('os')
+const os = require('node:os')
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
@@ -55,7 +56,7 @@ describe('Plugin', () => {
           after(() => agent.close({ ritmReset: false }))
 
           it('should do automatic instrumentation', done => {
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans[0]).to.have.property('name', expectedSchema.server.opName)
@@ -70,6 +71,7 @@ describe('Plugin', () => {
               expect(spans[0].meta).to.have.property('moleculer.namespace', 'multi')
               expect(spans[0].meta).to.have.property('moleculer.node_id', `server-${process.pid}`)
               expect(spans[0].meta).to.have.property('component', 'moleculer')
+              expect(spans[0].meta).to.have.property('_dd.integration', 'moleculer')
 
               expect(spans[1]).to.have.property('name', expectedSchema.server.opName)
               expect(spans[1]).to.have.property('service', expectedSchema.server.serviceName)
@@ -108,7 +110,7 @@ describe('Plugin', () => {
           after(() => agent.close({ ritmReset: false }))
 
           it('should have the configured service name', done => {
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('service', 'custom')
             }).then(done, done)
 
@@ -152,15 +154,13 @@ describe('Plugin', () => {
           withPeerService(
             () => tracer,
             'moleculer',
-            done => {
-              broker.call('math.add', { a: 5, b: 3 }).catch(done)
-            },
+            () => broker.call('math.add', { a: 5, b: 3 }),
             hostname,
             'out.host'
           )
 
           it('should do automatic instrumentation', done => {
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans[0]).to.have.property('name', expectedSchema.client.opName)
@@ -201,7 +201,7 @@ describe('Plugin', () => {
           after(() => agent.close({ ritmReset: false }))
 
           it('should have the configured service name', done => {
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('service', 'custom')
             }).then(done, done)
 
@@ -237,7 +237,7 @@ describe('Plugin', () => {
           let spanId
           let parentId
 
-          const clientPromise = agent.use(traces => {
+          const clientPromise = agent.assertSomeTraces(traces => {
             const spans = sort(traces[0])
 
             expect(spans[0]).to.have.property('name', expectedSchema.client.opName)
@@ -245,7 +245,7 @@ describe('Plugin', () => {
             spanId = spans[0].span_id
           })
 
-          const serverPromise = agent.use(traces => {
+          const serverPromise = agent.assertSomeTraces(traces => {
             const spans = sort(traces[0])
 
             expect(spans[0]).to.have.property('name', expectedSchema.server.opName)
@@ -305,7 +305,7 @@ describe('Plugin', () => {
           let spanId
           let parentId
 
-          const clientPromise = agent.use(traces => {
+          const clientPromise = agent.assertSomeTraces(traces => {
             const spans = sort(traces[0])
 
             expect(spans[0]).to.have.property('name', expectedSchema.client.opName)
@@ -315,7 +315,7 @@ describe('Plugin', () => {
             spanId = spans[0].span_id
           })
 
-          const serverPromise = agent.use(traces => {
+          const serverPromise = agent.assertSomeTraces(traces => {
             const spans = sort(traces[0])
 
             expect(spans[0]).to.have.property('name', expectedSchema.server.opName)

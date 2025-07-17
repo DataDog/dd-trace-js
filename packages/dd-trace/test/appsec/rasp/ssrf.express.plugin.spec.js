@@ -121,11 +121,11 @@ describe('RASP - ssrf', () => {
 
           it('Should not detect threat', async () => {
             app = (req, res) => {
-              axiosToTest.get(`https://${req.query.host}`)
+              axiosToTest.get(`https://${req.query.host}`).catch(noop) // swallow network error
               res.end('end')
             }
 
-            axios.get('/?host=www.datadoghq.com')
+            await axios.get('/?host=www.datadoghq.com')
 
             return checkRaspExecutedAndNotThreat(agent)
           })

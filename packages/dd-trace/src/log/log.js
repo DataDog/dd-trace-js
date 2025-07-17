@@ -23,7 +23,7 @@ class Log {
   static parse (...args) {
     let message, cause, delegate
 
-    const lastArg = args[args.length - 1]
+    const lastArg = args.at(-1)
     if (lastArg && typeof lastArg === 'object' && lastArg.stack) { // lastArg instanceof Error?
       cause = args.pop()
     }
@@ -32,7 +32,7 @@ class Log {
     if (firstArg) {
       if (typeof firstArg === 'string') {
         message = firstArg
-      } else if (typeof firstArg === 'object') {
+      } else if (typeof firstArg === 'object') { // eslint-disable-line eslint-rules/eslint-safe-typeof-object
         message = String(firstArg.message || firstArg)
       } else if (typeof firstArg === 'function') {
         delegate = firstArg

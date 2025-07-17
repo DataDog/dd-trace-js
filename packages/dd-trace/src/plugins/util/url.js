@@ -1,3 +1,5 @@
+'use strict'
+
 const { URL } = require('url')
 
 function filterSensitiveInfoFromRepository (repositoryUrl) {
@@ -18,7 +20,7 @@ function filterSensitiveInfoFromRepository (repositoryUrl) {
     const { protocol, host, pathname } = new URL(repositoryUrl)
 
     return `${protocol}//${host}${pathname === '/' ? '' : pathname}`
-  } catch (e) {
+  } catch {
     return ''
   }
 }

@@ -2,8 +2,10 @@
 
 require('./core')
 
-const os = require('os')
-const path = require('path')
+const assert = require('node:assert')
+const util = require('node:util')
+const { platform } = require('node:os')
+const path = require('node:path')
 const semver = require('semver')
 const externals = require('../plugins/externals.json')
 const runtimeMetrics = require('../../src/runtime_metrics')
@@ -12,10 +14,15 @@ const Nomenclature = require('../../src/service-naming')
 const { storage } = require('../../../datadog-core')
 const { getInstrumentation } = require('./helpers/load-inst')
 
+const NODE_PATH_SEP = platform() === 'win32' ? ';' : ':'
+
+// TODO: Remove global
 global.withVersions = withVersions
-global.withExports = withExports
-global.withNamingSchema = withNamingSchema
-global.withPeerService = withPeerService
+
+exports.withVersions = withVersions
+exports.withExports = withExports
+exports.withNamingSchema = withNamingSchema
+exports.withPeerService = withPeerService
 
 const testedPlugins = agent.testedPlugins
 
@@ -27,7 +34,7 @@ function withNamingSchema (
   const {
     hooks = (version, defaultToGlobalService) => {},
     desc = '',
-    selectSpan = (traces) => traces[0][0]
+    selectSpan = (traces) => traces[0][0],
   } = opts
   let fullConfig
 
@@ -55,9 +62,10 @@ function withNamingSchema (
 
         it('should conform to the naming schema', function () {
           this.timeout(10000)
+
           return new Promise((resolve, reject) => {
-            agent
-              .use(traces => {
+            const agentPromise = agent
+              .assertSomeTraces(traces => {
                 const span = selectSpan(traces)
                 const expectedOpName = typeof opName === 'function'
                   ? opName()
@@ -69,9 +77,10 @@ function withNamingSchema (
                 expect(span).to.have.property('name', expectedOpName)
                 expect(span).to.have.property('service', expectedServiceName)
               })
-              .then(resolve)
-              .catch(reject)
-            spanProducerFn(reject)
+
+            const testPromise = spanProducerFn(reject)
+
+            Promise.all([testPromise, agentPromise]).then(resolve, reject)
           })
         })
       })
@@ -95,19 +104,21 @@ function withNamingSchema (
 
       const { serviceName } = expected.v1
 
-      it('should pass service name through', done => {
-        agent
-          .use(traces => {
-            const span = traces[0][0]
-            const expectedServiceName = typeof serviceName === 'function'
-              ? serviceName()
-              : serviceName
-            expect(span).to.have.property('service', expectedServiceName)
-          })
-          .then(done)
-          .catch(done)
+      it('should pass service name through', () => {
+        return new Promise((resolve, reject) => {
+          const agentPromise = agent
+            .assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const expectedServiceName = typeof serviceName === 'function'
+                ? serviceName()
+                : serviceName
+              expect(span).to.have.property('service', expectedServiceName)
+            })
 
-        spanProducerFn(done)
+          const testPromise = spanProducerFn(reject)
+
+          Promise.all([testPromise, agentPromise]).then(resolve, reject)
+        })
       })
     })
   })
@@ -126,125 +137,186 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
       computePeerServiceSpy.restore()
     })
 
-    it('should compute peer service', done => {
-      agent
-        .use(traces => {
+    it('should compute peer service', async () => {
+      const useCallback = spanGenerationFn.length === 1
+      const spanGenerationPromise = useCallback
+        ? new Promise((resolve, reject) => {
+          const result = spanGenerationFn((err) => err ? reject(err) : resolve())
+          // Some callback based methods are a mixture of callback and promise,
+          // depending on the module version. Await the promises as well.
+          if (util.types.isPromise(result)) {
+            result.then?.(resolve, reject)
+          }
+        })
+        : spanGenerationFn()
+
+      assert.ok(
+        typeof spanGenerationPromise?.then === 'function',
+        'spanGenerationFn should return a promise in case no callback is defined. Received: ' +
+        util.inspect(spanGenerationPromise, { depth: 1 })
+      )
+
+      await Promise.all([
+        agent.assertSomeTraces(traces => {
           const span = traces[0][0]
           expect(span.meta).to.have.property('peer.service', typeof service === 'function' ? service() : service)
           expect(span.meta).to.have.property('_dd.peer.service.source', serviceSource)
-        })
-        .then(done)
-        .catch(done)
-
-      spanGenerationFn(done)
+        }),
+        spanGenerationPromise
+      ])
     })
   })
 }
 
+/**
+ * @overload
+ * @param {string|Plugin} plugin - The name of the plugin to test, e.g. 'fastify', or the exports object of an already
+ *     loaded plugin
+ * @param {string|string[]} modules - The name(s) of the module(s) to test, e.g. 'fastify' or ['fastify', 'middie']
+ * @param {withVersionsCallback} cb - The callback function to call with the test case data
+ * @returns {void}
+ *
+ * @overload
+ * @param {string|Plugin} plugin - The name of the plugin to test, e.g. 'fastify', or the exports object of an already
+ *     loaded plugin
+ * @param {string|string[]} modules - The name(s) of the module(s) to test, e.g. 'fastify' or ['fastify', 'middie']
+ * @param {string} range - The specific version or range of versions to test, e.g. '>=3' or '3.1.2'
+ * @param {withVersionsCallback} cb - The callback function to call with the test case data
+ * @returns {void}
+ *
+ * @typedef {object} Plugin
+ * @property {string} name
+ * @property {string} version
+ *
+ * @callback withVersionsCallback
+ * @param {string} versionKey - The version string used in the module path
+ * @param {string} moduleName - The name of the module being tested
+ * @param {string} resolvedVersion - The specific version of the module being tested
+ */
 function withVersions (plugin, modules, range, cb) {
-  const instrumentations = typeof plugin === 'string' ? getInstrumentation(plugin) : [].concat(plugin)
-  const names = instrumentations.map(instrumentation => instrumentation.name)
-
-  modules = [].concat(modules)
-
-  names.forEach(name => {
-    if (externals[name]) {
-      [].concat(externals[name]).forEach(external => {
-        instrumentations.push(external)
-      })
-    }
-  })
-
-  if (!cb) {
+  if (typeof range === 'function') {
     cb = range
-    range = null
+    range = undefined
   }
 
-  modules.forEach(moduleName => {
+  const instrumentations = typeof plugin === 'string' ? getInstrumentation(plugin) : [plugin]
+  const names = new Set(instrumentations.map(instrumentation => instrumentation.name))
+
+  for (const name of names) {
+    if (!externals[name]) continue
+    for (const external of externals[name]) {
+      instrumentations.push(external)
+    }
+  }
+
+  for (const moduleName of Array.isArray(modules) ? modules : [modules]) {
     if (process.env.PACKAGE_NAMES) {
       const packages = process.env.PACKAGE_NAMES.split(',')
 
       if (!packages.includes(moduleName)) return
     }
 
+    /** @type {Map<string, {versionRange: string, versionKey: string, resolvedVersion: string}>} */
     const testVersions = new Map()
 
-    instrumentations
-      .filter(instrumentation => instrumentation.name === moduleName)
-      .forEach(instrumentation => {
-        const versions = process.env.PACKAGE_VERSION_RANGE
-          ? [process.env.PACKAGE_VERSION_RANGE]
-          : instrumentation.versions
-        versions
-          .filter(version => !process.env.RANGE || semver.subset(version, process.env.RANGE))
-          .forEach(version => {
-            if (version !== '*') {
-              const min = semver.coerce(version).version
+    for (const instrumentation of instrumentations) {
+      if (instrumentation.name !== moduleName) continue
 
-              testVersions.set(min, { range: version, test: min })
-            }
+      const versions = process.env.PACKAGE_VERSION_RANGE
+        ? [process.env.PACKAGE_VERSION_RANGE]
+        : instrumentation.versions
 
-            const max = require(`../../../../versions/${moduleName}@${version}`).version()
+      for (const version of versions) {
+        if (process.env.RANGE && !semver.subset(version, process.env.RANGE)) continue
+        if (version !== '*') {
+          const result = semver.coerce(version)
+          if (!result) throw new Error(`Invalid version: ${version}`)
+          const min = result.version
+          testVersions.set(min, { versionRange: version, versionKey: min, resolvedVersion: min })
+        }
 
-            testVersions.set(max, { range: version, test: version })
-          })
-      })
+        const max = require(getModulePath(moduleName, version)).version()
+        testVersions.set(max, { versionRange: version, versionKey: version, resolvedVersion: max })
+      }
+    }
 
-    Array.from(testVersions)
-      .filter(v => !range || semver.satisfies(v[0], range))
-      .sort(v => v[0].localeCompare(v[0]))
-      .map(v => Object.assign({}, v[1], { version: v[0] }))
-      .forEach(v => {
-        const versionPath = path.resolve(
-          __dirname, '../../../../versions/',
-          `${moduleName}@${v.test}/node_modules`
-        )
+    const testCases = Array.from(testVersions.values())
+      .filter(({ resolvedVersion }) => !range || semver.satisfies(resolvedVersion, range))
+      .sort(({ resolvedVersion }) => resolvedVersion.localeCompare(resolvedVersion))
 
-        describe(`with ${moduleName} ${v.range} (${v.version})`, () => {
-          let nodePath
+    for (const testCase of testCases) {
+      const absBasePath = path.resolve(__dirname, getModulePath(moduleName, testCase.versionKey))
+      const absNodeModulesPath = `${absBasePath}/node_modules`
 
-          before(() => {
-            // set plugin name and version to later report to test agent regarding tested integrations and
-            // their tested range of versions
-            const lastPlugin = testedPlugins[testedPlugins.length - 1]
-            if (!lastPlugin || lastPlugin.pluginName !== plugin || lastPlugin.pluginVersion !== v.version) {
-              testedPlugins.push({ pluginName: plugin, pluginVersion: v.version })
-            }
+      describe(`with ${moduleName} ${testCase.versionRange} (${testCase.resolvedVersion})`, () => {
+        let nodePath
 
-            nodePath = process.env.NODE_PATH
-            process.env.NODE_PATH = [process.env.NODE_PATH, versionPath]
-              .filter(x => x && x !== 'undefined')
-              .join(os.platform() === 'win32' ? ';' : ':')
+        before(() => {
+          // set plugin name and version to later report to test agent regarding tested integrations and their tested
+          // range of versions
+          const lastPlugin = testedPlugins.at(-1)
+          if (
+            !lastPlugin || lastPlugin.pluginName !== plugin || lastPlugin.pluginVersion !== testCase.resolvedVersion
+          ) {
+            testedPlugins.push({ pluginName: plugin, pluginVersion: testCase.resolvedVersion })
+          }
 
-            require('module').Module._initPaths()
-          })
+          nodePath = process.env.NODE_PATH
+          process.env.NODE_PATH += `${NODE_PATH_SEP}${absNodeModulesPath}`
 
-          cb(v.test, moduleName, v.version)
+          require('module').Module._initPaths()
+        })
 
-          after(() => {
-            process.env.NODE_PATH = nodePath
-            require('module').Module._initPaths()
-          })
+        cb(testCase.versionKey, moduleName, testCase.resolvedVersion)
+
+        after(() => {
+          process.env.NODE_PATH = nodePath
+          require('module').Module._initPaths()
         })
       })
-  })
+    }
+  }
 }
 
-function withExports (moduleName, version, exportNames, versionRange, fn) {
-  const getExport = () => require(`../../../../versions/${moduleName}@${version}`).get()
-  describe('with the default export', () => fn(getExport))
-
+/**
+ * @overload
+ * @param {string} moduleName - The name of the module being tested
+ * @param {string} version - The specific version of the module being tested
+ * @param {string[]} exportNames - The names of the module exports to be tested (the default export will always be
+ *     tested)
+ * @param {withExportsCallback} cb
+ *
+ * @overload
+ * @param {string} moduleName - The name of the module being tested
+ * @param {string} version - The specific version of the module being tested
+ * @param {string[]} exportNames - The names of the module exports to be tested (the default export will always be
+ *     tested)
+ * @param {string} versionRange - The version range in which the given version should reside. If not within this range,
+ *     only the default export will be tested.
+ * @param {withExportsCallback} cb
+ *
+ * @callback withExportsCallback
+ * @param {function} getExport - A function that returns the module export to test
+ */
+function withExports (moduleName, version, exportNames, versionRange, cb) {
   if (typeof versionRange === 'function') {
-    fn = versionRange
+    cb = versionRange
     versionRange = '*'
   }
+
+  const getExport = () => require(getModulePath(moduleName, version)).get()
+  describe('with the default export', () => cb(getExport))
 
   if (!semver.intersects(version, versionRange)) return
 
   for (const exportName of exportNames) {
-    const getExport = () => require(`../../../../versions/${moduleName}@${version}`).get()[exportName]
-    describe(`with exports.${exportName}`, () => fn(getExport))
+    const getExport = () => require(getModulePath(moduleName, version)).get()[exportName]
+    describe(`with exports.${exportName}`, () => cb(getExport))
   }
+}
+
+function getModulePath (moduleName, version) {
+  return `../../../../versions/${moduleName}@${version}`
 }
 
 exports.mochaHooks = {

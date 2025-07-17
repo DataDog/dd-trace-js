@@ -11,15 +11,13 @@ class S3 extends BaseAwsSdkPlugin {
   static get isPayloadReporter () { return true }
 
   generateTags (params, operation, response) {
-    const tags = {}
+    if (!params?.Bucket) return {}
 
-    if (!params || !params.Bucket) return tags
-
-    return Object.assign(tags, {
+    return {
       'resource.name': `${operation} ${params.Bucket}`,
       'aws.s3.bucket_name': params.Bucket,
       bucketname: params.Bucket
-    })
+    }
   }
 
   addSpanPointers (span, response) {

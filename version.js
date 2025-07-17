@@ -1,11 +1,11 @@
 'use strict'
 
-/* eslint-disable no-var */
-
-var ddMatches = require('./package.json').version.match(/^(\d+)\.(\d+)\.(\d+)/)
+var version = require('./package.json').version
+var ddMatches = version.match(/^(\d+)\.(\d+)\.(\d+)/)
 var nodeMatches = process.versions.node.match(/^(\d+)\.(\d+)\.(\d+)/)
 
 module.exports = {
+  VERSION: version,
   DD_MAJOR: parseInt(ddMatches[1]),
   DD_MINOR: parseInt(ddMatches[2]),
   DD_PATCH: parseInt(ddMatches[3]),

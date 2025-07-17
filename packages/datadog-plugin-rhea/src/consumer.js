@@ -1,7 +1,6 @@
 'use strict'
 
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
-const { storage } = require('../../datadog-core')
 const { getAmqpMessageSize } = require('../../dd-trace/src/datastreams')
 
 class RheaConsumerPlugin extends ConsumerPlugin {
@@ -10,13 +9,14 @@ class RheaConsumerPlugin extends ConsumerPlugin {
   constructor (...args) {
     super(...args)
 
-    this.addTraceSub('dispatch', ({ state }) => {
-      const span = storage('legacy').getStore().span
-      span.setTag('amqp.delivery.state', state)
+    this.addTraceSub('dispatch', (ctx) => {
+      const span = ctx.currentStore.span
+      span.setTag('amqp.delivery.state', ctx.state)
     })
   }
 
-  start ({ msgObj }) {
+  bindStart (ctx) {
+    const { msgObj } = ctx
     const name = getResourceNameFromMessage(msgObj)
     const childOf = extractTextMap(msgObj, this.tracer)
 
@@ -29,7 +29,7 @@ class RheaConsumerPlugin extends ConsumerPlugin {
         'amqp.link.source.address': name,
         'amqp.link.role': 'receiver'
       }
-    })
+    }, ctx)
 
     if (
       this.config.dsmEnabled &&
@@ -42,6 +42,8 @@ class RheaConsumerPlugin extends ConsumerPlugin {
       this.tracer
         .setCheckpoint(['direction:in', `topic:${name}`, 'type:rabbitmq'], span, payloadSize)
     }
+
+    return ctx.currentStore
   }
 }
 

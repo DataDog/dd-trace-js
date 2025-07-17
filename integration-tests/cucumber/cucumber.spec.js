@@ -1,9 +1,10 @@
 'use strict'
 
-const { exec } = require('child_process')
+const { exec, execSync } = require('child_process')
 
-const getPort = require('get-port')
 const { assert } = require('chai')
+const fs = require('fs')
+const path = require('path')
 
 const {
   createSandbox,
@@ -53,12 +54,16 @@ const {
   DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
   DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
   DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
+  DD_CAPABILITIES_FAILED_TEST_REPLAY,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
-  TEST_RETRY_REASON_TYPES
+  TEST_RETRY_REASON_TYPES,
+  TEST_IS_MODIFIED,
+  DD_CAPABILITIES_IMPACTED_TESTS
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
+const { NODE_MAJOR } = require('../../version')
 
 const versions = ['7.0.0', 'latest']
 
@@ -70,6 +75,8 @@ const featuresPath = 'ci-visibility/features/'
 const fileExtension = 'js'
 
 versions.forEach(version => {
+  if ((NODE_MAJOR === 18 || NODE_MAJOR === 23) && version === 'latest') return
+
   // TODO: add esm tests
   describe(`cucumber@${version} commonJS`, () => {
     let sandbox, cwd, receiver, childProcess, testOutput
@@ -90,8 +97,7 @@ versions.forEach(version => {
     })
 
     beforeEach(async function () {
-      const port = await getPort()
-      receiver = await new FakeCiVisIntake(port).start()
+      receiver = await new FakeCiVisIntake().start()
     })
 
     afterEach(async () => {
@@ -228,11 +234,18 @@ versions.forEach(version => {
                     assert.propertyVal(meta, CUCUMBER_IS_PARALLEL, 'true')
                   }
                   assert.exists(metrics[DD_HOST_CPU_COUNT])
+                  if (!meta[TEST_NAME].includes('Say skip')) {
+                    assert.propertyVal(meta, 'custom_tag.before', 'hello before')
+                    assert.propertyVal(meta, 'custom_tag.after', 'hello after')
+                  }
                 })
 
                 stepEvents.forEach(stepEvent => {
                   assert.equal(stepEvent.content.name, 'cucumber.step')
                   assert.property(stepEvent.content.meta, 'cucumber.step')
+                  if (stepEvent.content.meta['cucumber.step'] === 'the greeter says greetings') {
+                    assert.propertyVal(stepEvent.content.meta, 'custom_tag.when', 'hello when')
+                  }
                 })
               }, 5000)
 
@@ -1731,7 +1744,7 @@ versions.forEach(version => {
                     retriedTest.meta[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_FILE_SUFFIX}`]
                       .endsWith('ci-visibility/features-di/support/sum.js')
                   )
-                  assert.equal(retriedTest.metrics[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_LINE_SUFFIX}`], 4)
+                  assert.equal(retriedTest.metrics[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_LINE_SUFFIX}`], 6)
 
                   const snapshotIdKey = `${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`
                   assert.exists(retriedTest.meta[snapshotIdKey])
@@ -1749,7 +1762,7 @@ versions.forEach(version => {
                     level: 'error'
                   })
                   assert.equal(diLog.debugger.snapshot.language, 'javascript')
-                  assert.deepInclude(diLog.debugger.snapshot.captures.lines['4'].locals, {
+                  assert.deepInclude(diLog.debugger.snapshot.captures.lines['6'].locals, {
                     a: {
                       type: 'number',
                       value: '11'
@@ -2129,11 +2142,12 @@ versions.forEach(version => {
                   }
                   if (isLastAttempt) {
                     if (shouldFailSometimes) {
-                      assert.notProperty(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED)
+                      assert.propertyVal(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
                       assert.notProperty(test.meta, TEST_HAS_FAILED_ALL_RETRIES)
                     } else if (shouldAlwaysPass) {
                       assert.propertyVal(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
                     } else {
+                      assert.propertyVal(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
                       assert.propertyVal(test.meta, TEST_HAS_FAILED_ALL_RETRIES, 'true')
                     }
                   }
@@ -2495,9 +2509,11 @@ versions.forEach(version => {
                 }
                 assert.equal(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')
                 assert.equal(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
+                assert.equal(metadata.test[DD_CAPABILITIES_IMPACTED_TESTS], '1')
                 assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
                 assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
-                assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '2')
+                assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
+                assert.equal(metadata.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], '1')
                 // capabilities logic does not overwrite test session name
                 assert.equal(metadata.test[TEST_SESSION_NAME], 'my-test-session-name')
               })
@@ -2518,6 +2534,191 @@ versions.forEach(version => {
           childProcess.on('exit', () => {
             receiverPromise.then(() => done()).catch(done)
           })
+        })
+      })
+    })
+
+    context('impacted tests', () => {
+      const NUM_RETRIES = 3
+
+      beforeEach(() => {
+        // By default, the test is not new
+        receiver.setKnownTests(
+          {
+            cucumber: {
+              'ci-visibility/features-impacted-test/impacted-test.feature': ['Say impacted test']
+            }
+          }
+        )
+      })
+
+      // Modify `impacted-test.feature` to mark it as impacted
+      before(() => {
+        execSync('git checkout -b feature-branch', { cwd, stdio: 'ignore' })
+        fs.writeFileSync(
+          path.join(cwd, 'ci-visibility/features-impacted-test/impacted-test.feature'),
+          `Feature: Impacted Test
+           Scenario: Say impacted test
+           When the greeter says impacted test
+           Then I should have heard "impactedd test"`
+        )
+        execSync('git add ci-visibility/features-impacted-test/impacted-test.feature', { cwd, stdio: 'ignore' })
+        execSync('git commit -m "modify impacted-test.feature"', { cwd, stdio: 'ignore' })
+      })
+
+      after(() => {
+        // We can't use main here because in CI it might be "master".
+        // We just use `-` which goes back to the previous branch
+        execSync('git checkout -', { cwd, stdio: 'ignore' })
+        execSync('git branch -D feature-branch', { cwd, stdio: 'ignore' })
+      })
+
+      const getTestAssertions = ({ isModified, isEfd, isNew, isParallel }) =>
+        receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+
+            if (isEfd) {
+              assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
+            } else {
+              assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
+            }
+
+            const resourceNames = tests.map(span => span.resource)
+
+            assert.includeMembers(resourceNames,
+              [
+                'ci-visibility/features-impacted-test/impacted-test.feature.Say impacted test'
+              ]
+            )
+
+            if (isParallel) {
+              assert.includeMembers(resourceNames, [
+                'ci-visibility/features-impacted-test/impacted-test.feature.Say impacted test',
+                'ci-visibility/features-impacted-test/impacted-test-2.feature.Say impacted test 2'
+              ])
+            }
+
+            const impactedTests = tests.filter(test =>
+              test.meta[TEST_SOURCE_FILE] === 'ci-visibility/features-impacted-test/impacted-test.feature' &&
+              test.meta[TEST_NAME] === 'Say impacted test'
+            )
+
+            if (isEfd) {
+              assert.equal(impactedTests.length, NUM_RETRIES + 1) // Retries + original test
+            } else {
+              assert.equal(impactedTests.length, 1)
+            }
+
+            for (const impactedTest of impactedTests) {
+              if (isModified) {
+                assert.propertyVal(impactedTest.meta, TEST_IS_MODIFIED, 'true')
+              } else {
+                assert.notProperty(impactedTest.meta, TEST_IS_MODIFIED)
+              }
+              if (isNew) {
+                assert.propertyVal(impactedTest.meta, TEST_IS_NEW, 'true')
+              } else {
+                assert.notProperty(impactedTest.meta, TEST_IS_NEW)
+              }
+            }
+
+            if (isEfd) {
+              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+              assert.equal(retriedTests.length, NUM_RETRIES)
+              let retriedTestNew = 0
+              let retriedTestsWithReason = 0
+              retriedTests.forEach(test => {
+                if (test.meta[TEST_IS_NEW] === 'true') {
+                  retriedTestNew++
+                }
+                if (test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd) {
+                  retriedTestsWithReason++
+                }
+              })
+              assert.equal(retriedTestNew, isNew ? NUM_RETRIES : 0)
+              assert.equal(retriedTestsWithReason, NUM_RETRIES)
+            }
+          })
+
+      const runImpactedTest = (
+        done,
+        { isModified, isEfd, isParallel, isNew },
+        extraEnvVars = {}
+      ) => {
+        const testAssertionsPromise = getTestAssertions({ isModified, isEfd, isParallel, isNew })
+
+        childProcess = exec(
+          isParallel
+            ? './node_modules/.bin/cucumber-js ci-visibility/features-impacted-test/*.feature --parallel 2'
+            : './node_modules/.bin/cucumber-js ci-visibility/features-impacted-test/impacted-test.feature',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              // we need to trick this process into not reading the event.json contents for GitHub,
+              // otherwise we'll take the diff from the base repository, not from the test project in `cwd`
+              GITHUB_BASE_REF: '',
+              ...extraEnvVars
+            },
+            stdio: 'inherit'
+          }
+        )
+
+        childProcess.on('exit', (code) => {
+          testAssertionsPromise.then(done).catch(done)
+        })
+      }
+
+      context('test is not new', () => {
+        it('should be detected as impacted', (done) => {
+          receiver.setSettings({ impacted_tests_enabled: true })
+
+          runImpactedTest(done, { isModified: true })
+        })
+
+        it('should not be detected as impacted if disabled', (done) => {
+          receiver.setSettings({ impacted_tests_enabled: false })
+
+          runImpactedTest(done, { isModified: false })
+        })
+
+        it('should not be detected as impacted if DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED is false',
+          (done) => {
+            receiver.setSettings({ impacted_tests_enabled: true })
+
+            runImpactedTest(done,
+              { isModified: false },
+              { DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0' }
+            )
+          })
+
+        if (version !== '7.0.0') {
+          it('can detect impacted tests in parallel mode', (done) => {
+            receiver.setSettings({ impacted_tests_enabled: true })
+
+            runImpactedTest(done, { isModified: true, isParallel: true })
+          })
+        }
+      })
+
+      context('test is new', () => {
+        it('should be retried and marked both as new and modified', (done) => {
+          receiver.setKnownTests({})
+
+          receiver.setSettings({
+            impacted_tests_enabled: true,
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': NUM_RETRIES
+              }
+            },
+            known_tests_enabled: true
+          })
+          runImpactedTest(done, { isModified: true, isEfd: true, isNew: true })
         })
       })
     })

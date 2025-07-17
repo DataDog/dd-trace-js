@@ -45,7 +45,7 @@ describe('git metadata tagging', () => {
     childSpan.finish()
     span.finish()
 
-    return agent.use((payload) => {
+    return agent.assertSomeTraces((payload) => {
       const firstSpan = payload[0][0]
       expect(firstSpan.meta[SCI_COMMIT_SHA]).to.equal(DUMMY_GIT_SHA)
       expect(firstSpan.meta[SCI_REPOSITORY_URL]).to.equal(DUMMY_REPOSITORY_URL)

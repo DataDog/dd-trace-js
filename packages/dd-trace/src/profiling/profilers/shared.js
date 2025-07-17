@@ -36,6 +36,10 @@ function getNonJSThreadsLabels () {
   return { [THREAD_NAME_LABEL]: 'Non-JS threads', [THREAD_ID_LABEL]: 'NA', [OS_THREAD_ID_LABEL]: 'NA' }
 }
 
+function encodeProfileAsync (profile) {
+  return profile.encodeAsync().then(Buffer.from)
+}
+
 module.exports = {
   END_TIMESTAMP_LABEL,
   THREAD_NAME_LABEL,
@@ -46,5 +50,6 @@ module.exports = {
   threadNamePrefix,
   eventLoopThreadName,
   getNonJSThreadsLabels,
-  getThreadLabels: cacheThreadLabels()
+  getThreadLabels: cacheThreadLabels(),
+  encodeProfileAsync
 }

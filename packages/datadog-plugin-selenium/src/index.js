@@ -1,3 +1,5 @@
+'use strict'
+
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
 
@@ -44,12 +46,7 @@ class SeleniumPlugin extends CiPlugin {
       if (!span) {
         return
       }
-      let testSpan
-      if (isTestSpan(span)) {
-        testSpan = span
-      } else {
-        testSpan = getTestSpanFromTrace(span.context()._trace)
-      }
+      const testSpan = isTestSpan(span) ? span : getTestSpanFromTrace(span.context()._trace)
       if (!testSpan) {
         return
       }

@@ -4,7 +4,7 @@ const { assert } = require('chai')
 const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
-  const t = setup()
+  const t = setup({ dependencies: ['fastify'] })
 
   describe('input messages', function () {
     describe('with snapshot', function () {
@@ -31,7 +31,7 @@ describe('Dynamic Instrumentation', function () {
             str: { type: 'string', value: 'foo' },
             lstr: {
               type: 'string',
-              // eslint-disable-next-line @stylistic/js/max-len
+              // eslint-disable-next-line @stylistic/max-len
               value: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor i',
               truncated: true,
               size: 445
@@ -87,7 +87,8 @@ describe('Dynamic Instrumentation', function () {
           // There's no reason to test the `request` object 100%, instead just check its fingerprint
           assert.deepEqual(Object.keys(request), ['type', 'fields'])
           assert.equal(request.type, 'Request')
-          assert.deepEqual(request.fields.id, { type: 'string', value: 'req-1' })
+          assert.equal(request.fields.id.type, 'string')
+          assert.match(request.fields.id.value, /^req-\d+$/)
           assert.deepEqual(request.fields.params, {
             type: 'NullObject', fields: { name: { type: 'string', value: 'foo' } }
           })
@@ -129,7 +130,7 @@ describe('Dynamic Instrumentation', function () {
             str: { type: 'string', value: 'foo' },
             lstr: {
               type: 'string',
-              // eslint-disable-next-line @stylistic/js/max-len
+              // eslint-disable-next-line @stylistic/max-len
               value: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor i',
               truncated: true,
               size: 445

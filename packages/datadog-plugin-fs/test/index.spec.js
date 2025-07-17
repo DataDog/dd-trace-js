@@ -6,13 +6,11 @@ const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
 const realFS = Object.assign({}, require('fs'))
 const os = require('os')
 const path = require('path')
-const semver = require('semver')
 const rimraf = require('rimraf')
 const util = require('util')
 const plugins = require('../../dd-trace/src/plugins')
 const { channel } = require('dc-polyfill')
 
-const hasWritev = semver.satisfies(process.versions.node, '>=12.9.0')
 const hasOSymlink = realFS.constants.O_SYMLINK
 
 describe('Plugin', () => {
@@ -37,7 +35,7 @@ describe('Plugin', () => {
       describe('open', () => {
         it('should not be instrumented', (done) => {
           function waitForNextTrace () {
-            agent.use((data) => {
+            agent.assertSomeTraces((data) => {
               if (data) {
                 data.forEach((arr) => {
                   arr.forEach((trace) => {
@@ -95,7 +93,7 @@ describe('Plugin', () => {
     describe('without parent span', () => {
       describe('open', () => {
         it('should not be instrumented', (done) => {
-          agent.use(() => {
+          agent.assertSomeTraces(() => {
             expect.fail('should not have been any traces')
           }).catch(done)
 
@@ -630,41 +628,39 @@ describe('Plugin', () => {
           testHandleErrors(fs, resource, tested, [8675309, Buffer.alloc(5), 0, 5, 0], agent))
       })
 
-      if (hasWritev) {
-        describeThreeWays('writev', (resource, tested) => {
-          let fd
-          let filename
-          beforeEach(() => {
-            filename = path.join(tmpdir, 'writev')
-            fd = realFS.openSync(filename, 'w')
-          })
-          afterEach(() => {
-            realFS.closeSync(fd)
-            realFS.unlinkSync(filename)
-          })
-
-          it('should be instrumented', (done) => {
-            expectOneSpan(agent, done, {
-              resource,
-              meta: {
-                'file.descriptor': fd.toString()
-              }
-            })
-            tested(fs, [fd, [Buffer.from('hello')], 0], done)
-          })
-
-          if (resource === 'writev') {
-            it('should support promisification', () => {
-              const writev = util.promisify(fs.writev)
-
-              return writev(fd, [Buffer.from('hello')], 0)
-            })
-          }
-
-          it('should handle errors', () =>
-            testHandleErrors(fs, resource, tested, [8675309, [Buffer.alloc(5)], 0], agent))
+      describeThreeWays('writev', (resource, tested) => {
+        let fd
+        let filename
+        beforeEach(() => {
+          filename = path.join(tmpdir, 'writev')
+          fd = realFS.openSync(filename, 'w')
         })
-      }
+        afterEach(() => {
+          realFS.closeSync(fd)
+          realFS.unlinkSync(filename)
+        })
+
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            resource,
+            meta: {
+              'file.descriptor': fd.toString()
+            }
+          })
+          tested(fs, [fd, [Buffer.from('hello')], 0], done)
+        })
+
+        if (resource === 'writev') {
+          it('should support promisification', () => {
+            const writev = util.promisify(fs.writev)
+
+            return writev(fd, [Buffer.from('hello')], 0)
+          })
+        }
+
+        it('should handle errors', () =>
+          testHandleErrors(fs, resource, tested, [8675309, [Buffer.alloc(5)], 0], agent))
+      })
 
       describe('createReadStream', () => {
         it('should be instrumented', (done) => {
@@ -675,7 +671,10 @@ describe('Plugin', () => {
               'file.flag': 'r'
             }
           })
-          fs.createReadStream(__filename).on('error', done).resume()
+          const stream = fs.createReadStream(__filename)
+          expect(stream.listenerCount('error')).to.equal(0)
+
+          stream.on('error', done).resume()
         })
 
         it('should be instrumented when closed', (done) => {
@@ -1535,10 +1534,10 @@ describe('Plugin', () => {
             })
 
             it('should handle errors', () =>
-              testHandleErrors(fs, 'dir.read', (_1, _2, _3, cb) => {
+              testHandleErrors(fs, 'dir.read', async (_1, _2, _3, cb) => {
                 dir.closeSync()
                 try {
-                  dir.read()
+                  await dir.read()
                 } catch (e) {
                   cb(e)
                 }
@@ -1558,7 +1557,7 @@ describe('Plugin', () => {
               testHandleErrors(fs, 'dir.read', (_1, _2, _3, cb) => {
                 dir.closeSync()
                 try {
-                  dir.read(cb)
+                  dir.read(() => {})
                 } catch (e) {
                   cb(e)
                 }
@@ -1701,23 +1700,21 @@ describe('Plugin', () => {
               testFileHandleErrors(fs, 'write', ['some more data'], filehandle, agent))
           })
 
-          if (hasWritev) {
-            describe('writev', () => {
-              it('should be instrumented', (done) => {
-                expectOneSpan(agent, done, {
-                  resource: 'filehandle.writev',
-                  meta: {
-                    'file.descriptor': filehandle.fd.toString()
-                  }
-                })
-                filehandle.writev([Buffer.from('some more data')]).catch(done)
+          describe('writev', () => {
+            it('should be instrumented', (done) => {
+              expectOneSpan(agent, done, {
+                resource: 'filehandle.writev',
+                meta: {
+                  'file.descriptor': filehandle.fd.toString()
+                }
               })
-
-              // https://github.com/nodejs/node/issues/31361
-              it('should handle errors', () =>
-                testFileHandleErrors(fs, 'writev', [[Buffer.from('some more data')]], filehandle, agent))
+              filehandle.writev([Buffer.from('some more data')]).catch(done)
             })
-          }
+
+            // https://github.com/nodejs/node/issues/31361
+            it('should handle errors', () =>
+              testFileHandleErrors(fs, 'writev', [[Buffer.from('some more data')]], filehandle, agent))
+          })
 
           describe('read', () => {
             it('should be instrumented', (done) => {

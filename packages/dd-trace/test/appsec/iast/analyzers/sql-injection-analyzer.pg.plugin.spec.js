@@ -1,6 +1,5 @@
 'use strict'
 
-const semver = require('semver')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
@@ -18,11 +17,9 @@ if (process.env.PG_TEST_NATIVE === 'true') {
   clients['pg.native'] = pg => pg.native.Client
 }
 
-const range = semver.satisfies(process.versions.node, '^12.0.0') ? '>=4.5.5' : '>=8.0.3'
-
 describe('sql-injection-analyzer with pg', () => {
   let pg
-  withVersions('pg', 'pg', range, version => {
+  withVersions('pg', 'pg', '>=8.0.3', version => {
     Object.keys(clients).forEach(implementation => {
       describe(`when using ${implementation}.Client`, () => {
         prepareTestServerForIast('pg', (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {

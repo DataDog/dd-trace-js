@@ -11,8 +11,69 @@ updates:
       - "/.github/actions/*"
       - "/.github/actions/*/*"
     schedule:
-      interval: "monthly"
+      interval: "weekly"
     groups:
       gh-actions-packages:
         patterns:
           - "*"
+    labels:
+      - dependabot
+      - dependencies
+      - github_actions
+      - semver-patch
+  - package-ecosystem: "npm"
+    directories:
+      - "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - dependabot
+      - dependencies
+      - javascript
+      - semver-patch
+    ignore:
+      - dependency-name: "@types/node"
+        # Update the types manually with new Node.js version support
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "eslint-plugin-mocha"
+        # ESM only from v11.0.0 onwards
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "jest-docblock"
+        # 30.0.0 onwards only supports Node.js 18.14.x and above
+        update-types: ["version-update:semver-major"]
+        # The path-to-regexp version has to be the same as used in express v4.
+        # Consider vendoring it instead.
+      - dependency-name: "path-to-regexp"
+      - dependency-name: "lru-cache"
+        # 11.0.0 onwards only supports Node.js 20 and above
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "limiter"
+        # 2.0.0 onwards breaks our tests. 3.0.0 works but it requires Node.js v16.
+        # That breaks cypress in our v5 release line. Update when v5 is EOL.
+        # Reverting this commit should suffice.
+        update-types: ["version-update:semver-major"]
+    groups:
+      dev-minor-and-patch-dependencies:
+        dependency-type: "development"
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      runtime-minor-and-patch-dependencies:
+        dependency-type: "production"
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+        exclude-patterns:
+          # Add entries that we should update manually.
+          - "@datadog/libdatadog"
+          - "@datadog/native-appsec"
+          - "@datadog/native-iast-taint-tracking"
+          - "@datadog/native-metrics"
+          - "@datadog/pprof"
+          - "@datadog/sketches-js"
+          - "@datadog/wasm-js-rewriter"
+          - "@opentelemetry/api"

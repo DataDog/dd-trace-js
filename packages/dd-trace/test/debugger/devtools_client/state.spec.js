@@ -18,7 +18,10 @@ describe('findScriptFromPartialPath', function () {
         fs: {
           // Mock reading the source map file
           readFileSync: () => JSON.stringify({
-            sources: ['index.ts']
+            sources: [
+              'index.ts',
+              'folder/./file.ts'
+            ]
           })
         }
       }),
@@ -50,7 +53,8 @@ describe('findScriptFromPartialPath', function () {
               }
             })
           }
-        }
+        },
+        emit () {}
       }
     })
   })
@@ -171,6 +175,16 @@ describe('findScriptFromPartialPath', function () {
         source: 'index.ts'
       })
     })
+
+    it('should normalize relative source paths', function () {
+      const result = state.findScriptFromPartialPath('source-mapped/folder/./file.ts')
+      expect(result).to.deep.equal({
+        url: 'file:///source-mapped/index.js',
+        scriptId: 'should-match-source-mapped',
+        sourceMapURL: 'index.js.map',
+        source: 'folder/file.ts'
+      })
+    })
   })
 
   describe('should abort if the path is', function () {
@@ -187,6 +201,26 @@ describe('findScriptFromPartialPath', function () {
     it('a Windows drive letter', testPathNoMatch('c:'))
 
     it('a Windows drive letter with a backslash', testPathNoMatch('c:\\'))
+  })
+
+  describe('state', function () {
+    it('should be cleared when calling clearState', function () {
+      const path = 'server/index.js'
+
+      expect(state._loadedScripts.length).to.be.above(0)
+      expect(state._scriptUrls.size).to.be.above(0)
+
+      const result = state.findScriptFromPartialPath(path)
+      expect(result).to.be.an('object')
+
+      state.clearState()
+
+      expect(state._loadedScripts.length).to.equal(0)
+      expect(state._scriptUrls.size).to.equal(0)
+
+      const result2 = state.findScriptFromPartialPath(path)
+      expect(result2).to.be.null
+    })
   })
 
   function testPathNoMatch (path) {

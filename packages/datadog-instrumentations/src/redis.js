@@ -2,8 +2,7 @@
 
 const {
   channel,
-  addHook,
-  AsyncResource
+  addHook
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
@@ -22,15 +21,11 @@ function wrapAddCommand (addCommand) {
     const name = command[0]
     const args = command.slice(1)
 
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-    return asyncResource.runInAsyncScope(() => {
-      start(this, name, args, this._url)
-
+    const ctx = getStartCtx(this, name, args, this._url)
+    return startCh.runStores(ctx, () => {
       const res = addCommand.apply(this, arguments)
-      const onResolve = asyncResource.bind(() => finish(finishCh, errorCh))
-      const onReject = asyncResource.bind(err => finish(finishCh, errorCh, err))
 
-      res.then(onResolve, onReject)
+      res.then(() => finish(finishCh, errorCh, ctx), err => finish(finishCh, errorCh, ctx, err))
 
       return res
     })
@@ -39,15 +34,15 @@ function wrapAddCommand (addCommand) {
 
 function wrapCommandQueueClass (cls) {
   const ret = class RedisCommandQueue extends cls {
-    constructor () {
-      super(arguments)
+    constructor (...args) {
+      super(...args)
       if (createClientUrl) {
         try {
           const parsed = new URL(createClientUrl)
           if (parsed) {
-            this._url = { host: parsed.hostname, port: +parsed.port || 6379 }
+            this._url = { host: parsed.hostname, port: Number(parsed.port) || 6379 }
           }
-        } catch (error) {
+        } catch {
           // ignore
         }
       }
@@ -94,14 +89,9 @@ addHook({ name: 'redis', versions: ['>=2.6 <4'] }, redis => {
 
     if (!options.callback) return internalSendCommand.apply(this, arguments)
 
-    const callbackResource = new AsyncResource('bound-anonymous-fn')
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-    const cb = callbackResource.bind(options.callback)
-
-    return asyncResource.runInAsyncScope(() => {
-      start(this, options.command, options.args)
-
-      options.callback = asyncResource.bind(wrapCallback(finishCh, errorCh, cb))
+    const ctx = getStartCtx(this, options.command, options.args)
+    return startCh.runStores(ctx, () => {
+      options.callback = wrapCallback(finishCh, errorCh, ctx, options.callback)
 
       try {
         return internalSendCommand.apply(this, arguments)
@@ -121,26 +111,21 @@ addHook({ name: 'redis', versions: ['>=0.12 <2.6'] }, redis => {
       return sendCommand.apply(this, arguments)
     }
 
-    const callbackResource = new AsyncResource('bound-anonymous-fn')
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-
-    return asyncResource.runInAsyncScope(() => {
-      start(this, command, args)
-
+    const ctx = getStartCtx(this, command, args)
+    return startCh.runStores(ctx, () => {
       if (typeof callback === 'function') {
-        const cb = callbackResource.bind(callback)
-        arguments[2] = asyncResource.bind(wrapCallback(finishCh, errorCh, cb))
-      } else if (Array.isArray(args) && typeof args[args.length - 1] === 'function') {
-        const cb = callbackResource.bind(args[args.length - 1])
-        args[args.length - 1] = asyncResource.bind(wrapCallback(finishCh, errorCh, cb))
+        arguments[2] = wrapCallback(finishCh, errorCh, ctx, callback)
+      } else if (Array.isArray(args) && typeof args.at(-1) === 'function') {
+        args[args.length - 1] = wrapCallback(finishCh, errorCh, ctx, args.at(-1))
       } else {
-        arguments[2] = asyncResource.bind(wrapCallback(finishCh, errorCh))
+        arguments[2] = wrapCallback(finishCh, errorCh, ctx)
       }
 
       try {
         return sendCommand.apply(this, arguments)
       } catch (err) {
-        errorCh.publish(err)
+        ctx.error = err
+        errorCh.publish(ctx)
 
         throw err
       }
@@ -149,24 +134,28 @@ addHook({ name: 'redis', versions: ['>=0.12 <2.6'] }, redis => {
   return redis
 })
 
-function start (client, command, args, url = {}) {
-  const db = client.selected_db
-  const connectionOptions = client.connection_options || client.connection_option || client.connectionOption || url
-  startCh.publish({ db, command, args, connectionOptions })
+function getStartCtx (client, command, args, url = {}) {
+  return {
+    db: client.selected_db,
+    command,
+    args,
+    connectionOptions: client.connection_options || client.connection_option || client.connectionOption || url
+  }
 }
 
-function wrapCallback (finishCh, errorCh, callback) {
+function wrapCallback (finishCh, errorCh, ctx, callback) {
   return shimmer.wrapFunction(callback, callback => function (err) {
-    finish(finishCh, errorCh, err)
-    if (callback) {
-      return callback.apply(this, arguments)
-    }
+    return finish(finishCh, errorCh, ctx, err, callback, this, arguments)
   })
 }
 
-function finish (finishCh, errorCh, error) {
+function finish (finishCh, errorCh, ctx, error, callback, thisArg, args) {
   if (error) {
-    errorCh.publish(error)
+    ctx.error = error
+    errorCh.publish(ctx)
   }
-  finishCh.publish()
+  if (callback) {
+    return finishCh.runStores(ctx, callback, thisArg, ...args)
+  }
+  finishCh.publish(ctx)
 }

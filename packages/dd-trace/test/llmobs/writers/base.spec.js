@@ -49,7 +49,7 @@ describe('BaseLLMObsWriter', () => {
     writer.setAgentless(true)
 
     expect(writer._agentless).to.be.true
-    expect(writer._url.href).to.equal('https://intake.site.com/endpoint')
+    expect(writer.url).to.equal('https://intake.site.com/endpoint')
   })
 
   it('constructs an agent proxy writer', () => {
@@ -57,7 +57,7 @@ describe('BaseLLMObsWriter', () => {
     writer.setAgentless(false)
 
     expect(writer._agentless).to.be.false
-    expect(writer._url.href).to.equal('http://localhost:8126/evp_proxy/v2/endpoint')
+    expect(writer.url).to.equal('http://localhost:8126/evp_proxy/v2/endpoint')
   })
 
   describe('with config url', () => {
@@ -73,7 +73,37 @@ describe('BaseLLMObsWriter', () => {
       writer = new BaseLLMObsWriter(options)
       writer.setAgentless(false)
 
-      expect(writer._url.href).to.equal('http://test-agent:12345/evp_proxy/v2/endpoint')
+      expect(writer.url).to.equal('http://test-agent:12345/evp_proxy/v2/endpoint')
+    })
+  })
+
+  describe('with unix socket', () => {
+    beforeEach(() => {
+      options.config.url = new URL('unix:///var/run/datadog/apm.socket/')
+    })
+
+    afterEach(() => {
+      delete options.config.url
+    })
+
+    it('constructs a writer with the correct url', () => {
+      writer = new BaseLLMObsWriter(options)
+      writer.setAgentless(false)
+
+      expect(writer.url).to.equal('unix:///var/run/datadog/apm.socket/evp_proxy/v2/endpoint')
+    })
+
+    it('makes the request with the correct options', () => {
+      writer = new BaseLLMObsWriter(options)
+      writer.setAgentless(false)
+      writer.makePayload = (events) => ({ events })
+
+      writer.append({ foo: 'bar' })
+      writer.flush()
+
+      const requestOptions = request.getCall(0).args[1]
+      expect(requestOptions.url.href).to.equal('unix:///var/run/datadog/apm.socket/')
+      expect(requestOptions.path).to.equal('/evp_proxy/v2/endpoint')
     })
   })
 
@@ -134,7 +164,8 @@ describe('BaseLLMObsWriter', () => {
       writer.flush()
 
       const requestOptions = request.getCall(0).args[1]
-      expect(requestOptions.url.href).to.equal('https://intake.site.com/endpoint')
+      expect(requestOptions.url.href).to.equal('https://intake.site.com/')
+      expect(requestOptions.path).to.equal('/endpoint')
       expect(requestOptions.headers['Content-Type']).to.equal('application/json')
       expect(requestOptions.headers['DD-API-KEY']).to.equal('test')
     })
@@ -148,7 +179,8 @@ describe('BaseLLMObsWriter', () => {
       writer.flush()
 
       const requestOptions = request.getCall(0).args[1]
-      expect(requestOptions.url.href).to.equal('http://localhost:8126/evp_proxy/v2/endpoint')
+      expect(requestOptions.url.href).to.equal('http://localhost:8126/')
+      expect(requestOptions.path).to.equal('/evp_proxy/v2/endpoint')
       expect(requestOptions.headers['Content-Type']).to.equal('application/json')
       expect(requestOptions.headers['X-Datadog-EVP-Subdomain']).to.equal('intake')
     })
@@ -188,16 +220,14 @@ describe('BaseLLMObsWriter', () => {
     writer.append({ foo: 'bar' })
 
     const error = new Error('boom')
-    let reqUrl
     request.callsFake((url, options, callback) => {
-      reqUrl = options.url.href
       callback(error)
     })
 
     writer.flush()
 
     expect(logger.error).to.have.been.calledWith(
-      'Error sending %d LLMObs %s events to %s: %s', 1, undefined, reqUrl, 'boom', error
+      'Error sending %d LLMObs %s events to %s: %s', 1, undefined, 'https://intake.site.com/endpoint', 'boom', error
     )
   })
 

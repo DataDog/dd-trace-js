@@ -91,7 +91,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('resource', 'GET /parent/child/:id')
@@ -111,11 +111,11 @@ describe('Plugin', () => {
           router.use((req, res, next) => {
             return next('route')
           })
-          router.get('/foo', (req, res) => {
+          router.get('/foo', [[[(_req, _res, next) => { next() }]]], (req, res) => {
             res.end()
           })
 
-          const agentPromise = agent.use(traces => {
+          const agentPromise = agent.assertSomeTraces(traces => {
             for (const span of traces[0]) {
               expect(span.error).to.equal(0)
             }
@@ -139,7 +139,7 @@ describe('Plugin', () => {
             res.end()
           })
 
-          const agentPromise = agent.use(traces => {
+          const agentPromise = agent.assertSomeTraces(traces => {
             for (const span of traces[0]) {
               expect(span.error).to.equal(0)
             }

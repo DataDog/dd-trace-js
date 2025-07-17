@@ -157,7 +157,6 @@ describe('git_metadata', () => {
       .reply(204)
 
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
-      // eslint-disable-next-line
       expect(err.message).to.contain('Error fetching commits to exclude: Error from https://api.test.com/api/v2/git/repository/search_commits: 404 Not Found. Response from the endpoint: "Not found SHA"')
       // to check that it is not called
       expect(scope.isDone()).to.be.false

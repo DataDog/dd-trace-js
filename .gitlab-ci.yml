@@ -5,8 +5,23 @@ stages:
   - single-step-instrumentation-tests
   - macrobenchmarks
 
+check_config_inversion_local_file:
+  rules:
+    - when: on_success
+  extends: .check_config_inversion_local_file
+  variables:
+    LOCAL_JSON_PATH: "packages/dd-trace/src/supported-configurations.json"
+
+config-inversion-update-supported-range:
+  extends: .config_inversion_update_central
+  variables:
+    LOCAL_REPO_NAME: "dd-trace-js"
+    LOCAL_JSON_PATH: "packages/dd-trace/src/supported-configurations.json"
+    LANGUAGE_NAME: "nodejs"
+    MULTIPLE_RELEASE_LINES: "true"
+
 include:
-  - remote: https://gitlab-templates.ddbuild.io/libdatadog/include/one-pipeline.yml
+  - local: ".gitlab/one-pipeline.locked.yml"
   - local: ".gitlab/benchmarks.yml"
   - local: ".gitlab/macrobenchmarks.yml"
 
@@ -25,7 +40,7 @@ variables:
 
 configure_system_tests:
   variables:
-    SYSTEM_TESTS_SCENARIOS_GROUPS: "simple_onboarding,simple_onboarding_profiling,docker-ssi,lib-injection"
+    SYSTEM_TESTS_SCENARIOS_GROUPS: "simple_onboarding,simple_onboarding_profiling,simple_onboarding_appsec,docker-ssi,lib-injection"
 
 requirements_json_test:
   rules:

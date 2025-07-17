@@ -1,3 +1,5 @@
+'use strict'
+
 const rfdc = require('rfdc')({ proto: false, circles: false })
 
 const {
@@ -5,7 +7,7 @@ const {
   PAYLOAD_TAG_RESPONSE_PREFIX
 } = require('../constants')
 
-const jsonpath = require('./jsonpath-plus.js').JSONPath
+const jsonpath = require('jsonpath-plus').JSONPath
 
 const { tagsFromObject } = require('./tagging')
 
@@ -22,7 +24,7 @@ function maybeJSONParseValue (value) {
 
   try {
     return JSON.parse(value)
-  } catch (e) {
+  } catch {
     return value
   }
 }

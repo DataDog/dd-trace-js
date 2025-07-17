@@ -1,10 +1,8 @@
 'use strict'
 
-const {
-  channel,
-  addHook,
-  AsyncResource
-} = require('./helpers/instrument')
+const { errorMonitor } = require('node:events')
+
+const { channel, addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const satisfies = require('semifies')
 
@@ -13,28 +11,31 @@ function wrapConnection (Connection, version) {
   const finishCh = channel('apm:mysql2:query:finish')
   const errorCh = channel('apm:mysql2:query:error')
   const startOuterQueryCh = channel('datadog:mysql2:outerquery:start')
+  const commandAddCh = channel('apm:mysql2:command:add')
+  const commandStartCh = channel('apm:mysql2:command:start')
+  const commandFinishCh = channel('apm:mysql2:command:finish')
   const shouldEmitEndAfterQueryAbort = satisfies(version, '>=1.3.3')
 
   shimmer.wrap(Connection.prototype, 'addCommand', addCommand => function (cmd) {
     if (!startCh.hasSubscribers) return addCommand.apply(this, arguments)
 
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
     const name = cmd && cmd.constructor && cmd.constructor.name
     const isCommand = typeof cmd.execute === 'function'
     const isQuery = isCommand && (name === 'Execute' || name === 'Query')
+    const ctx = {}
 
     // TODO: consider supporting all commands and not just queries
     cmd.execute = isQuery
-      ? wrapExecute(cmd, cmd.execute, asyncResource, this.config)
-      : bindExecute(cmd, cmd.execute, asyncResource)
+      ? wrapExecute(cmd, cmd.execute, ctx, this.config)
+      : bindExecute(cmd.execute, ctx)
 
-    return asyncResource.bind(addCommand, this).apply(this, arguments)
+    return commandAddCh.runStores(ctx, addCommand, this, ...arguments)
   })
 
   shimmer.wrap(Connection.prototype, 'query', query => function (sql, values, cb) {
     if (!startOuterQueryCh.hasSubscribers) return query.apply(this, arguments)
 
-    if (typeof sql === 'object') sql = sql?.sql
+    if (sql !== null && typeof sql === 'object') sql = sql.sql
 
     if (!sql) return query.apply(this, arguments)
 
@@ -75,7 +76,7 @@ function wrapConnection (Connection, version) {
   shimmer.wrap(Connection.prototype, 'execute', execute => function (sql, values, cb) {
     if (!startOuterQueryCh.hasSubscribers) return execute.apply(this, arguments)
 
-    if (typeof sql === 'object') sql = sql?.sql
+    if (sql !== null && typeof sql === 'object') sql = sql.sql
 
     if (!sql) return execute.apply(this, arguments)
 
@@ -103,53 +104,60 @@ function wrapConnection (Connection, version) {
 
   return Connection
 
-  function bindExecute (cmd, execute, asyncResource) {
-    return shimmer.wrapFunction(execute, execute => asyncResource.bind(function executeWithTrace (packet, connection) {
-      if (this.onResult) {
-        this.onResult = asyncResource.bind(this.onResult)
+  function bindExecute (execute, ctx) {
+    return shimmer.wrapFunction(execute, execute => function executeWithTrace (packet, connection) {
+      const onResult = this.onResult
+
+      if (onResult) {
+        this.onResult = function () {
+          return commandFinishCh.runStores(ctx, onResult, this, ...arguments)
+        }
       }
 
-      return execute.apply(this, arguments)
-    }, cmd))
+      return commandStartCh.runStores(ctx, execute, this, ...arguments)
+    })
   }
 
-  function wrapExecute (cmd, execute, asyncResource, config) {
-    const callbackResource = new AsyncResource('bound-anonymous-fn')
+  function wrapExecute (cmd, execute, ctx, config) {
+    return shimmer.wrapFunction(execute, execute => function executeWithTrace (packet, connection) {
+      ctx.sql = cmd.statement ? cmd.statement.query : cmd.sql
+      ctx.conf = config
 
-    return shimmer.wrapFunction(execute, execute => asyncResource.bind(function executeWithTrace (packet, connection) {
-      const sql = cmd.statement ? cmd.statement.query : cmd.sql
-      const payload = { sql, conf: config }
-      startCh.publish(payload)
+      return startCh.runStores(ctx, () => {
+        if (cmd.statement) {
+          cmd.statement.query = ctx.sql
+        } else {
+          cmd.sql = ctx.sql
+        }
 
-      if (cmd.statement) {
-        cmd.statement.query = payload.sql
-      } else {
-        cmd.sql = payload.sql
-      }
+        if (this.onResult) {
+          const onResult = this.onResult
 
-      if (this.onResult) {
-        const onResult = callbackResource.bind(this.onResult)
+          this.onResult = shimmer.wrapFunction(onResult, onResult => function (error) {
+            if (error) {
+              ctx.error = error
+              errorCh.publish(ctx)
+            }
+            finishCh.runStores(ctx, onResult, this, ...arguments)
+          })
+        } else {
+          this.on(errorMonitor, error => {
+            ctx.error = error
+            errorCh.publish(ctx)
+          })
+          this.on('end', () => finishCh.publish(ctx))
+        }
 
-        this.onResult = shimmer.wrapFunction(onResult, onResult => asyncResource.bind(function (error) {
-          if (error) {
-            errorCh.publish(error)
-          }
-          finishCh.publish(undefined)
-          onResult.apply(this, arguments)
-        }, 'bound-anonymous-fn', this))
-      } else {
-        this.on('error', asyncResource.bind(error => errorCh.publish(error)))
-        this.on('end', asyncResource.bind(() => finishCh.publish(undefined)))
-      }
+        this.execute = execute
 
-      this.execute = execute
-
-      try {
-        return execute.apply(this, arguments)
-      } catch (err) {
-        errorCh.publish(err)
-      }
-    }, cmd))
+        try {
+          return execute.apply(this, arguments)
+        } catch (err) {
+          ctx.error = err
+          errorCh.publish(ctx)
+        }
+      })
+    }, cmd)
   }
 }
 function wrapPool (Pool, version) {
@@ -159,7 +167,7 @@ function wrapPool (Pool, version) {
   shimmer.wrap(Pool.prototype, 'query', query => function (sql, values, cb) {
     if (!startOuterQueryCh.hasSubscribers) return query.apply(this, arguments)
 
-    if (typeof sql === 'object') sql = sql?.sql
+    if (sql !== null && typeof sql === 'object') sql = sql.sql
 
     if (!sql) return query.apply(this, arguments)
 
@@ -198,7 +206,7 @@ function wrapPool (Pool, version) {
   shimmer.wrap(Pool.prototype, 'execute', execute => function (sql, values, cb) {
     if (!startOuterQueryCh.hasSubscribers) return execute.apply(this, arguments)
 
-    if (typeof sql === 'object') sql = sql?.sql
+    if (sql !== null && typeof sql === 'object') sql = sql.sql
 
     if (!sql) return execute.apply(this, arguments)
 
@@ -231,7 +239,7 @@ function wrapPoolCluster (PoolCluster) {
 
     if (startOuterQueryCh.hasSubscribers && !wrappedPoolNamespaces.has(poolNamespace)) {
       shimmer.wrap(poolNamespace, 'query', query => function (sql, values, cb) {
-        if (typeof sql === 'object') sql = sql?.sql
+        if (sql !== null && typeof sql === 'object') sql = sql.sql
 
         if (!sql) return query.apply(this, arguments)
 
@@ -266,7 +274,7 @@ function wrapPoolCluster (PoolCluster) {
       })
 
       shimmer.wrap(poolNamespace, 'execute', execute => function (sql, values, cb) {
-        if (typeof sql === 'object') sql = sql?.sql
+        if (sql !== null && typeof sql === 'object') sql = sql.sql
 
         if (!sql) return execute.apply(this, arguments)
 

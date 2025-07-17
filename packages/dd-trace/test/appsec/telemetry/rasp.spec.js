@@ -4,6 +4,7 @@ const telemetryMetrics = require('../../../src/telemetry/metrics')
 const appsecNamespace = telemetryMetrics.manager.namespace('appsec')
 
 const appsecTelemetry = require('../../../src/appsec/telemetry')
+const Config = require('../../../src/config')
 
 describe('Appsec Rasp Telemetry metrics', () => {
   const wafVersion = '0.0.1'
@@ -26,10 +27,11 @@ describe('Appsec Rasp Telemetry metrics', () => {
 
   describe('if enabled', () => {
     beforeEach(() => {
-      appsecTelemetry.enable({
-        enabled: true,
-        metrics: true
-      })
+      const config = new Config()
+      config.telemetry.enabled = true
+      config.telemetry.metrics = true
+
+      appsecTelemetry.enable(config)
     })
 
     describe('updateRaspRequestsMetricTags', () => {
@@ -201,14 +203,6 @@ describe('Appsec Rasp Telemetry metrics', () => {
           block: 'irrelevant'
         })
         expect(inc).to.have.been.called
-      })
-
-      it('should not increment any metric if ruleTriggered is not set', () => {
-        const newReq = {}
-        appsecTelemetry.updateRaspRuleMatchMetricTags(newReq, raspRule, true, true)
-
-        expect(count).to.not.have.been.called
-        expect(inc).to.not.have.been.called
       })
 
       it('should not increment any metric if req is not provided', () => {

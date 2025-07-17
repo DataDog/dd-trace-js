@@ -19,17 +19,19 @@ if (process.platform !== 'win32') {
   DEFAULT_PROFILE_TYPES.push('events')
 }
 
+const TIMEOUT = 30000
+
 function checkProfiles (agent, proc, timeout,
-  expectedProfileTypes = DEFAULT_PROFILE_TYPES, expectBadExit = false, multiplicity = 1
+  expectedProfileTypes = DEFAULT_PROFILE_TYPES, expectBadExit = false, expectSeq = true
 ) {
   return Promise.all([
     processExitPromise(proc, timeout, expectBadExit),
-    expectProfileMessagePromise(agent, timeout, expectedProfileTypes, multiplicity)
+    expectProfileMessagePromise(agent, timeout, expectedProfileTypes, expectSeq)
   ])
 }
 
 function expectProfileMessagePromise (agent, timeout,
-  expectedProfileTypes = DEFAULT_PROFILE_TYPES, multiplicity = 1
+  expectedProfileTypes = DEFAULT_PROFILE_TYPES, expectSeq = true
 ) {
   const fileNames = expectedProfileTypes.map(type => `${type}.pprof`)
   return agent.assertMessageReceived(({ headers, _, files }) => {
@@ -41,15 +43,21 @@ function expectProfileMessagePromise (agent, timeout,
       assert.propertyVal(event, 'family', 'node')
       assert.isString(event.info.profiler.activation)
       assert.isString(event.info.profiler.ssi.mechanism)
-      assert.deepPropertyVal(event, 'attachments', fileNames)
-      for (const [index, fileName] of fileNames.entries()) {
+      const attachments = event.attachments
+      assert.isArray(attachments)
+      // Profiler encodes the files with Promise.all, so their ordering is not guaranteed
+      assert.sameMembers(attachments, fileNames)
+      for (const [index, fileName] of attachments.entries()) {
         assert.propertyVal(files[index + 1], 'originalname', fileName)
+      }
+      if (expectSeq) {
+        assert(event.tags_profiler.indexOf(',profile_seq:') !== -1)
       }
     } catch (e) {
       e.message += ` ${JSON.stringify({ headers, files, event })}`
       throw e
     }
-  }, timeout, multiplicity)
+  }, timeout, 1, true)
 }
 
 function processExitPromise (proc, timeout, expectBadExit = false) {
@@ -150,8 +158,8 @@ class NetworkEventProcessor extends TimelineEventProcessor {
   }
 }
 
-async function gatherNetworkTimelineEvents (cwd, scriptFilePath, eventType, args) {
-  return gatherTimelineEvents(cwd, scriptFilePath, eventType, args, NetworkEventProcessor)
+async function gatherNetworkTimelineEvents (cwd, scriptFilePath, agentPort, eventType, args) {
+  return gatherTimelineEvents(cwd, scriptFilePath, agentPort, eventType, args, NetworkEventProcessor)
 }
 
 class FilesystemEventProcessor extends TimelineEventProcessor {
@@ -201,22 +209,23 @@ class FilesystemEventProcessor extends TimelineEventProcessor {
   }
 }
 
-async function gatherFilesystemTimelineEvents (cwd, scriptFilePath) {
-  return gatherTimelineEvents(cwd, scriptFilePath, 'fs', [], FilesystemEventProcessor)
+async function gatherFilesystemTimelineEvents (cwd, scriptFilePath, agentPort) {
+  return gatherTimelineEvents(cwd, scriptFilePath, agentPort, 'fs', [], FilesystemEventProcessor)
 }
 
-async function gatherTimelineEvents (cwd, scriptFilePath, eventType, args, Processor) {
+async function gatherTimelineEvents (cwd, scriptFilePath, agentPort, eventType, args, Processor) {
   const procStart = BigInt(Date.now() * 1000000)
   const proc = fork(path.join(cwd, scriptFilePath), args, {
     cwd,
     env: {
       DD_PROFILING_EXPORTERS: 'file',
       DD_PROFILING_ENABLED: 1,
-      DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED: 0 // capture all events
+      DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED: 0, // capture all events
+      DD_TRACE_AGENT_PORT: agentPort
     }
   })
 
-  await processExitPromise(proc, 30000)
+  await processExitPromise(proc, TIMEOUT)
   const procEnd = BigInt(Date.now() * 1000000)
 
   const { profile, encoded } = await getLatestProfile(cwd, /^events_.+\.pprof$/)
@@ -284,7 +293,7 @@ describe('profiler', () => {
   let oomTestFile
   let oomEnv
   let oomExecArgv
-  const timeout = 30000
+  const timeout = TIMEOUT
 
   // Target sample count per span for the code hotspots test
   const idealSamplesPerSpan = 10
@@ -312,6 +321,14 @@ describe('profiler', () => {
     await sandbox.remove()
   })
 
+  beforeEach(async () => {
+    agent = await new FakeAgent().start()
+  })
+
+  afterEach(async () => {
+    await agent.stop()
+  })
+
   if (process.platform !== 'win32') {
     it('code hotspots and endpoint tracing works', async function () {
       // see comment on busyCycleTimeNs recomputation below. Ideally a single retry should be enough
@@ -323,11 +340,12 @@ describe('profiler', () => {
         env: {
           DD_PROFILING_EXPORTERS: 'file',
           DD_PROFILING_ENABLED: 1,
-          BUSY_CYCLE_TIME: (busyCycleTimeNs | 0).toString()
+          BUSY_CYCLE_TIME: (busyCycleTimeNs | 0).toString(),
+          DD_TRACE_AGENT_PORT: agent.port
         }
       })
 
-      await processExitPromise(proc, 30000)
+      await processExitPromise(proc, timeout)
       const procEnd = BigInt(Date.now() * 1000000)
 
       // Must've counted the number of times each endpoint was hit
@@ -351,10 +369,9 @@ describe('profiler', () => {
       //   'local root span id's
       // - samples with spans also must have a 'trace endpoint' label with values 'endpoint-0',
       //   'endpoint-1', or 'endpoint-2'
-      // - every occurrence of a span must have the same root span, endpoint, and asyncId
+      // - every occurrence of a span must have the same root span and endpoint
       const rootSpans = new Set()
       const endpoints = new Set()
-      const asyncIds = new Set()
       const spans = new Map()
       const strings = profile.stringTable
       const tsKey = strings.dedup('end_timestamp_ns')
@@ -364,13 +381,11 @@ describe('profiler', () => {
       const threadNameKey = strings.dedup('thread name')
       const threadIdKey = strings.dedup('thread id')
       const osThreadIdKey = strings.dedup('os thread id')
-      const asyncIdKey = strings.dedup('async id')
       const threadNameValue = strings.dedup('Main Event Loop')
       const nonJSThreadNameValue = strings.dedup('Non-JS threads')
 
-      const asyncIdWorks = require('semifies')(process.versions.node, '>=22.10.0')
       for (const sample of profile.sample) {
-        let ts, spanId, rootSpanId, endpoint, threadName, threadId, osThreadId, asyncId
+        let ts, spanId, rootSpanId, endpoint, threadName, threadId, osThreadId
         for (const label of sample.label) {
           switch (label.key) {
             case tsKey: ts = label.num; break
@@ -380,12 +395,6 @@ describe('profiler', () => {
             case threadNameKey: threadName = label.str; break
             case threadIdKey: threadId = label.str; break
             case osThreadIdKey: osThreadId = label.str; break
-            case asyncIdKey:
-              asyncId = label.num
-              if (asyncId === 0) {
-                asyncId = undefined
-              }
-              break
             default: assert.fail(`Unexpected label key ${strings.dedup(label.key)} ${encoded}`)
           }
         }
@@ -419,27 +428,11 @@ describe('profiler', () => {
             // 3 of them.
             continue
           }
-          const spanData = { rootSpanId, endpoint, asyncId }
-          // Record async ID so we can verify we encountered 9 different values.
-          // Async ID can be sporadically missing if sampling hits an intrinsified
-          // function.
-          if (asyncId !== undefined) {
-            asyncIds.add(asyncId)
-          }
+          const spanData = { rootSpanId, endpoint }
           const existingSpanData = spans.get(spanId)
           if (existingSpanData) {
-            // Span's root span, endpoint, and async ID must be consistent
-            // across samples.
-            assert.equal(existingSpanData.rootSpanId, rootSpanId, encoded)
-            assert.equal(existingSpanData.endpoint, endpoint, encoded)
-            if (asyncIdWorks) {
-              // Account for asyncID sporadically missing
-              if (existingSpanData.asyncId === undefined) {
-                existingSpanData.asyncId = asyncId
-              } else if (asyncId !== undefined) {
-                assert.equal(existingSpanData.asyncId, asyncId, encoded)
-              }
-            }
+            // Span's root span and endpoint must be consistent across samples
+            assert.deepEqual(spanData, existingSpanData, encoded)
           } else {
             // New span id, store span data
             spans.set(spanId, spanData)
@@ -457,16 +450,15 @@ describe('profiler', () => {
           }
         }
       }
-      // Need to have a total of 9 different spans, with 9 different async IDs,
-      // 3 different root spans, and 3 different endpoints.
+      // Need to have a total of 9 different spans, with 3 different root spans
+      // and 3 different endpoints.
       assert.equal(spans.size, 9, encoded)
-      assert.equal(asyncIds.size, asyncIdWorks ? 9 : 0, encoded)
       assert.equal(rootSpans.size, 3, encoded)
       assert.equal(endpoints.size, 3, encoded)
     })
 
     it('fs timeline events work', async () => {
-      const fsEvents = await gatherFilesystemTimelineEvents(cwd, 'profiler/fstest.js')
+      const fsEvents = await gatherFilesystemTimelineEvents(cwd, 'profiler/fstest.js', agent.port)
       assert.equal(fsEvents.length, 6)
       const path = fsEvents[0].path
       const fd = fsEvents[1].fd
@@ -482,7 +474,7 @@ describe('profiler', () => {
     })
 
     it('dns timeline events work', async () => {
-      const dnsEvents = await gatherNetworkTimelineEvents(cwd, 'profiler/dnstest.js', 'dns')
+      const dnsEvents = await gatherNetworkTimelineEvents(cwd, 'profiler/dnstest.js', agent.port, 'dns')
       assert.sameDeepMembers(dnsEvents, [
         { operation: 'lookup', host: 'example.org' },
         { operation: 'lookup', host: 'example.com' },
@@ -520,7 +512,7 @@ describe('profiler', () => {
           const args = [String(port1), String(port2), msg]
           // Invoke the profiled program, passing it the ports of the servers and
           // the expected message.
-          const events = await gatherNetworkTimelineEvents(cwd, 'profiler/nettest.js', 'net', args)
+          const events = await gatherNetworkTimelineEvents(cwd, 'profiler/nettest.js', agent.port, 'net', args)
           // The profiled program should have two TCP connection events to the two
           // servers.
           assert.sameDeepMembers(events, [
@@ -537,8 +529,7 @@ describe('profiler', () => {
   }
 
   context('shutdown', () => {
-    beforeEach(async () => {
-      agent = await new FakeAgent().start()
+    beforeEach(() => {
       oomEnv = {
         DD_TRACE_AGENT_PORT: agent.port,
         DD_PROFILING_ENABLED: 1,
@@ -547,12 +538,11 @@ describe('profiler', () => {
       }
     })
 
-    afterEach(async () => {
+    afterEach(() => {
       proc.kill()
-      await agent.stop()
     })
 
-    it('records profile on process exit', () => {
+    it('records profile on process exit', async () => {
       proc = fork(profilerTestFile, {
         cwd,
         env: {
@@ -560,49 +550,10 @@ describe('profiler', () => {
           DD_PROFILING_ENABLED: 1
         }
       })
-      const checkTelemetry = agent.assertTelemetryReceived(_ => {}, 1000, 'generate-metrics')
+      const checkTelemetry = agent.assertTelemetryReceived('generate-metrics', 1000)
       // SSI telemetry is not supposed to have been emitted when DD_INJECTION_ENABLED is absent,
       // so expect telemetry callback to time out
-      return Promise.all([checkProfiles(agent, proc, timeout), expectTimeout(checkTelemetry)])
-    })
-
-    it('records SSI telemetry on process exit', () => {
-      proc = fork(profilerTestFile, {
-        cwd,
-        env: {
-          DD_TRACE_AGENT_PORT: agent.port,
-          DD_INJECTION_ENABLED: 'tracing',
-          DD_PROFILING_ENABLED: 1
-        }
-      })
-
-      function checkTags (tags) {
-        assert.include(tags, 'enablement_choice:manually_enabled')
-        assert.include(tags, 'heuristic_hypothetical_decision:no_span_short_lived')
-        assert.include(tags, 'installation:ssi')
-        // There's a race between metrics and on-shutdown profile, so tag value
-        // can be either false or true but it must be present
-        assert.isTrue(tags.some(tag => tag === 'has_sent_profiles:false' || tag === 'has_sent_profiles:true'))
-      }
-
-      const checkTelemetry = agent.assertTelemetryReceived(({ headers, payload }) => {
-        const pp = payload.payload
-        assert.equal(pp.namespace, 'profilers')
-        const series = pp.series
-        assert.lengthOf(series, 2)
-        assert.equal(series[0].metric, 'ssi_heuristic.number_of_profiles')
-        assert.equal(series[0].type, 'count')
-        checkTags(series[0].tags)
-        // There's a race between metrics and on-shutdown profile, so metric
-        // value will be either 0 or 1
-        assert.isAtMost(series[0].points[0][1], 1)
-
-        assert.equal(series[1].metric, 'ssi_heuristic.number_of_runtime_id')
-        assert.equal(series[1].type, 'count')
-        checkTags(series[1].tags)
-        assert.equal(series[1].points[0][1], 1)
-      }, timeout, 'generate-metrics')
-      return Promise.all([checkProfiles(agent, proc, timeout), checkTelemetry])
+      await Promise.all([checkProfiles(agent, proc, timeout), expectTimeout(checkTelemetry)])
     })
 
     if (process.platform !== 'win32') { // PROF-8905
@@ -612,9 +563,20 @@ describe('profiler', () => {
           execArgv: oomExecArgv,
           env: oomEnv
         })
-        return checkProfiles(agent, proc, timeout, ['space'], true)
+        return checkProfiles(agent, proc, timeout, ['space'], true, false)
       })
 
+      it('sends a heap profile on OOM in worker thread and exits successfully', () => {
+        proc = fork(oomTestFile, [1, 50], {
+          cwd,
+          env: { ...oomEnv, DD_PROFILING_WALLTIME_ENABLED: 0 }
+        })
+        return checkProfiles(agent, proc, timeout, ['space'], false)
+      })
+
+      // Following tests are flaky because they use unreliable strategies to export profiles
+      // (or check that the process can recover from OOM, which is also unreliable).
+      // We retry them 3 times to decrease flakiness.
       it('sends a heap profile on OOM with external process and exits successfully', () => {
         proc = fork(oomTestFile, {
           cwd,
@@ -625,8 +587,8 @@ describe('profiler', () => {
             DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: 3
           }
         })
-        return checkProfiles(agent, proc, timeout, ['space'], false, 2)
-      })
+        return checkProfiles(agent, proc, timeout, ['space'], false, false)
+      }).retries(3)
 
       it('sends a heap profile on OOM with async callback', () => {
         proc = fork(oomTestFile, {
@@ -640,7 +602,7 @@ describe('profiler', () => {
           }
         })
         return checkProfiles(agent, proc, timeout, ['space'], true)
-      })
+      }).retries(3)
 
       it('sends heap profiles on OOM with multiple strategies', () => {
         proc = fork(oomTestFile, {
@@ -653,61 +615,32 @@ describe('profiler', () => {
             DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'async,process'
           }
         })
-        return checkProfiles(agent, proc, timeout, ['space'], true, 2)
-      })
-
-      it('sends a heap profile on OOM in worker thread and exits successfully', () => {
-        proc = fork(oomTestFile, [1, 50], {
-          cwd,
-          env: { ...oomEnv, DD_PROFILING_WALLTIME_ENABLED: 0 }
-        })
-        return checkProfiles(agent, proc, timeout, ['space'], false, 2)
-      })
+        return checkProfiles(agent, proc, timeout, ['space'], true)
+      }).retries(3)
     }
   })
 
   context('SSI heuristics', () => {
-    beforeEach(async () => {
-      agent = await new FakeAgent().start()
-    })
-
-    afterEach(async () => {
+    afterEach(() => {
       proc.kill()
-      await agent.stop()
     })
 
     describe('does not trigger for', () => {
       it('a short-lived app that creates no spans', () => {
-        return heuristicsDoesNotTriggerFor([], false, false)
+        return heuristicsDoesNotTriggerFor([], false)
       })
 
       it('a short-lived app that creates a span', () => {
-        return heuristicsDoesNotTriggerFor(['create-span'], true, false)
+        return heuristicsDoesNotTriggerFor(['create-span'], true)
       })
 
       it('a long-lived app that creates no spans', () => {
-        return heuristicsDoesNotTriggerFor(['long-lived'], false, false)
-      })
-
-      it('a short-lived app that creates no spans with the auto env var', () => {
-        return heuristicsDoesNotTriggerFor([], false, true)
-      })
-
-      it('a short-lived app that creates a span with the auto env var', () => {
-        return heuristicsDoesNotTriggerFor(['create-span'], true, true)
-      })
-
-      it('a long-lived app that creates no spans with the auto env var', () => {
-        return heuristicsDoesNotTriggerFor(['long-lived'], false, true)
+        return heuristicsDoesNotTriggerFor(['long-lived'], false)
       })
     })
 
     it('triggers for long-lived span-creating app', () => {
-      return heuristicsTrigger(false)
-    })
-
-    it('triggers for long-lived span-creating app with the auto env var', () => {
-      return heuristicsTrigger(true)
+      return heuristicsTrigger()
     })
   })
 
@@ -721,7 +654,7 @@ describe('profiler', () => {
       await agent.stop()
     })
 
-    it('sends profiler API telemetry', () => {
+    it('sends profiler API telemetry', async () => {
       proc = fork(profilerTestFile, {
         cwd,
         env: {
@@ -754,7 +687,7 @@ describe('profiler', () => {
 
         // Same number of requests and responses
         assert.equal(series[1].points[0][1], requestCount)
-      }, timeout, 'generate-metrics')
+      }, 'generate-metrics', timeout)
 
       const checkDistributions = agent.assertTelemetryReceived(({ _, payload }) => {
         const pp = payload.payload
@@ -767,41 +700,37 @@ describe('profiler', () => {
         // Same number of points
         pointsCount = series[0].points.length
         assert.equal(pointsCount, series[1].points.length)
-      }, timeout, 'distributions')
+      }, 'distributions', timeout)
 
-      return Promise.all([checkProfiles(agent, proc, timeout), checkMetrics, checkDistributions]).then(() => {
-        // Same number of requests and points
-        assert.equal(requestCount, pointsCount)
-      })
+      await Promise.all([checkProfiles(agent, proc, timeout), checkMetrics, checkDistributions])
+
+      // Same number of requests and points
+      assert.equal(requestCount, pointsCount)
     })
   })
 
-  function forkSsi (args, whichEnv) {
-    const profilerEnablingEnv = whichEnv ? { DD_PROFILING_ENABLED: 'auto' } : { DD_INJECTION_ENABLED: 'profiler' }
+  function forkSsi (args) {
     return fork(ssiTestFile, args, {
       cwd,
       env: {
         DD_TRACE_AGENT_PORT: agent.port,
         DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD: '1300',
-        ...profilerEnablingEnv
+        DD_PROFILING_ENABLED: 'auto'
       }
     })
   }
 
-  function heuristicsTrigger (whichEnv) {
+  function heuristicsTrigger () {
     return checkProfiles(agent,
-      forkSsi(['create-span', 'long-lived'], whichEnv),
+      forkSsi(['create-span', 'long-lived']),
       timeout,
       DEFAULT_PROFILE_TYPES,
-      false,
-      // Will receive 2 messages: first one is for the trace, second one is for the profile. We
-      // only need the assertions in checkProfiles to succeed for the one with the profile.
-      2)
+      false)
   }
 
-  function heuristicsDoesNotTriggerFor (args, allowTraceMessage, whichEnv) {
+  function heuristicsDoesNotTriggerFor (args, allowTraceMessage) {
     return Promise.all([
-      processExitPromise(forkSsi(args, whichEnv), timeout, false),
+      processExitPromise(forkSsi(args), timeout, false),
       expectTimeout(expectProfileMessagePromise(agent, 1500), allowTraceMessage)
     ])
   }

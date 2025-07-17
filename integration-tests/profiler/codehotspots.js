@@ -34,7 +34,7 @@ function runBusySpans () {
       for (let i = 0; i < 3; ++i) {
         const z = i
         tracer.trace('y' + i, (_, done2) => {
-          setTimeout(() => {
+          const busyWork = () => {
             busyLoop()
             done2()
             if (z === 2) {
@@ -43,7 +43,17 @@ function runBusySpans () {
               }
               done()
             }
-          }, 0)
+          }
+          if (i === 1) {
+            // Exercise sample context propagation through a promise
+            const p = new Promise((resolve) => {
+              setTimeout(resolve, 0)
+            })
+            p.then(busyWork)
+          } else {
+            // Exercise sample context propagation through a timeout
+            setTimeout(busyWork, 0)
+          }
         })
       }
     })

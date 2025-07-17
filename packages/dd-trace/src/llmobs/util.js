@@ -2,15 +2,13 @@
 
 const { SPAN_KINDS } = require('./constants/tags')
 
-function encodeUnicode (str) {
-  if (!str) return str
-  return str.split('').map(char => {
-    const code = char.charCodeAt(0)
-    if (code > 127) {
-      return `\\u${code.toString(16).padStart(4, '0')}`
-    }
-    return char
-  }).join('')
+function encodeUnicode (str = '') {
+  let result = ''
+  for (let i = 0; i < str.length; i++) {
+    const code = str.charCodeAt(i)
+    result += code > 127 ? `\\u${code.toString(16).padStart(4, '0')}` : str[i]
+  }
+  return result
 }
 
 function validateKind (kind) {
@@ -107,6 +105,8 @@ function findArgumentsBounds (str) {
   let end = -1
   let closerCount = 0
 
+  // TODO(BridgeAR): This "breaks" up codePoints.
+  // Investigate if this is a problem.
   for (let i = 0; i < str.length; i++) {
     const char = str[i]
 

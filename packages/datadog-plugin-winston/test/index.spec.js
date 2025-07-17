@@ -5,6 +5,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const http = require('http')
 const { expect } = require('chai')
 const proxyquire = require('proxyquire').noPreserveCache()
+const { inspect } = require('util')
 
 function createLogServer () {
   return new Promise((resolve, reject) => {
@@ -130,7 +131,7 @@ describe('Plugin', () => {
           tracer.scope().activate(span, () => {
             winston.info('message')
 
-            expect(spy).to.not.have.been.calledWithMatch(meta.dd)
+            expect(spy).to.have.been.calledWithMatch(meta.dd)
           })
         })
       })
@@ -194,7 +195,6 @@ describe('Plugin', () => {
                 span_id: span.context().toSpanId()
               }
             }
-
             const error = new Error('boom')
 
             tracer.scope().activate(span, () => {
@@ -203,7 +203,7 @@ describe('Plugin', () => {
               const index = semver.intersects(version, '>=3') ? 0 : 2
               const record = log.firstCall.args[index]
 
-              expect(record).to.be.an('error')
+              expect(record).to.be.an.instanceof(Error)
               expect(error).to.not.have.property('dd')
               expect(spy).to.have.been.calledWithMatch(meta.dd)
             })
@@ -211,6 +211,34 @@ describe('Plugin', () => {
           })
 
           if (semver.intersects(version, '>=3')) {
+            it('should support sets and getters', async () => {
+              const meta = {
+                dd: {
+                  trace_id: span.context().toTraceId(true),
+                  span_id: span.context().toSpanId()
+                }
+              }
+              const set = new Set([1])
+              Object.defineProperty(set, 'getter', {
+                get () {
+                  return this.size
+                },
+                enumerable: true
+              })
+
+              tracer.scope().activate(span, () => {
+                winston.log('info', set)
+
+                const record = log.firstCall.args[0]
+
+                expect(record).to.be.an.instanceof(Set)
+                expect(inspect(record)).to.match(/"getter":1,/)
+                expect(set).to.not.have.property('dd')
+                expect(spy).to.have.been.calledWithMatch(meta.dd)
+              })
+              expect(await logServer.logPromise).to.include(meta.dd)
+            })
+
             it('should add the trace identifiers when streaming', async () => {
               const logger = winston.createLogger({
                 transports: [transport, httpTransport]
@@ -308,6 +336,7 @@ describe('Plugin', () => {
             expect(await logServer.logPromise).to.include(meta.dd)
           })
         })
+
         // Only run this test with Winston v3.17.0+ since it uses newer format functions
         if (semver.intersects(version, '>=3.17.0')) {
           describe('with error formatting matching temp.js example', () => {

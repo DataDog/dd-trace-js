@@ -1,3 +1,5 @@
+'use strict'
+
 const { storage } = require('../../../datadog-core')
 const log = require('../log')
 
@@ -7,7 +9,7 @@ function getDataStreamsContext () {
 }
 
 function setDataStreamsContext (dataStreamsContext) {
-  log.debug(() => `Setting new DSM Context: ${JSON.stringify(dataStreamsContext)}.`)
+  log.debug('Setting new DSM Context: %j.', dataStreamsContext)
 
   if (dataStreamsContext) storage('legacy').enterWith({ ...(storage('legacy').getStore()), dataStreamsContext })
 }

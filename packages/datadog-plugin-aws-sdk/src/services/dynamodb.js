@@ -14,30 +14,23 @@ class DynamoDb extends BaseAwsSdkPlugin {
     const tags = {}
 
     if (params) {
-      if (params.TableName) {
-        Object.assign(tags, {
-          'resource.name': `${operation} ${params.TableName}`,
-          'aws.dynamodb.table_name': params.TableName,
-          tablename: params.TableName
-        })
-      }
+      let tableName = params.TableName
 
-      // batch operations have different format, collect table name for batch
+      // Collect table name for batch operations which have different format
       // https://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/DynamoDB.html#batchGetItem-property`
       // dynamoDB batch TableName
-      if (params.RequestItems !== null) {
-        if (typeof params.RequestItems === 'object') {
-          if (Object.keys(params.RequestItems).length === 1) {
-            const tableName = Object.keys(params.RequestItems)[0]
-
-            // also add span type to match serverless convention
-            Object.assign(tags, {
-              'resource.name': `${operation} ${tableName}`,
-              'aws.dynamodb.table_name': tableName,
-              tablename: tableName
-            })
-          }
+      if (params.RequestItems !== null && typeof params.RequestItems === 'object') {
+        const requestItemsKeys = Object.keys(params.RequestItems)
+        if (requestItemsKeys.length === 1) {
+          tableName = requestItemsKeys[0]
         }
+      }
+
+      if (tableName) {
+        // Also add span type to match serverless convention
+        tags['resource.name'] = `${operation} ${tableName}`
+        tags['aws.dynamodb.table_name'] = tableName
+        tags.tablename = tableName
       }
 
       // TODO: DynamoDB.DocumentClient does batches on multiple tables
@@ -45,10 +38,8 @@ class DynamoDb extends BaseAwsSdkPlugin {
       // it may be useful to have a different resource naming convention here to show all table names
     }
 
-    // also add span type to match serverless convention
-    Object.assign(tags, {
-      'span.type': 'dynamodb'
-    })
+    // Also add span type to match serverless convention
+    tags['span.type'] = 'dynamodb'
 
     return tags
   }
@@ -81,10 +72,12 @@ class DynamoDb extends BaseAwsSdkPlugin {
             const hash =
               DynamoDb.calculatePutItemHash(item.Put.TableName, item.Put.Item, this.getPrimaryKeyConfig())
             if (hash) hashes.push(hash)
-          } else if (item.Update || item.Delete) {
-            const operation = item.Update ? item.Update : item.Delete
-            const hash = DynamoDb.calculateHashWithKnownKeys(operation.TableName, operation.Key)
-            if (hash) hashes.push(hash)
+          } else {
+            const operation = item.Update || item.Delete
+            if (operation) {
+              const hash = DynamoDb.calculateHashWithKnownKeys(operation.TableName, operation.Key)
+              if (hash) hashes.push(hash)
+            }
           }
         }
         break
@@ -126,8 +119,10 @@ class DynamoDb extends BaseAwsSdkPlugin {
 
     const configStr = this._tracerConfig?.trace?.dynamoDb?.tablePrimaryKeys
     if (!configStr) {
-      log.warn('Missing DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS env variable. ' +
-        'Please add your table\'s primary keys under this env variable.')
+      log.warn(
+        // eslint-disable-next-line @stylistic/max-len
+        'Missing DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS env variable. Please add your table\'s primary keys under this env variable.'
+      )
       return
     }
 
@@ -136,10 +131,13 @@ class DynamoDb extends BaseAwsSdkPlugin {
       const config = {}
       for (const [tableName, primaryKeys] of Object.entries(parsedConfig)) {
         if (Array.isArray(primaryKeys) && primaryKeys.length > 0 && primaryKeys.length <= 2) {
-          config[tableName] = new Set(primaryKeys)
+          config[tableName] = primaryKeys
         } else {
-          log.warn(`Invalid primary key configuration for table: ${tableName}.` +
-            'Please fix the DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS env var.')
+          log.warn(
+            // eslint-disable-next-line @stylistic/max-len
+            'Invalid primary key configuration for table: %s. Please fix the DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS env var.',
+            tableName
+          )
         }
       }
 
@@ -154,7 +152,7 @@ class DynamoDb extends BaseAwsSdkPlugin {
    * Calculates a hash for DynamoDB PutItem operations using table's configured primary keys.
    * @param {string} tableName - Name of the DynamoDB table.
    * @param {Object} item - Complete PutItem item parameter to be put.
-   * @param {Object.<string, Set<string>>} primaryKeyConfig - Mapping of table names to Sets of primary key names
+   * @param {Object.<string, Array<string>>} primaryKeyConfig - Mapping of table names to an Array of primary key names
    *                                                         loaded from DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS.
    * @returns {string|undefined} Hash combining table name and primary key/value pairs, or undefined if unable.
    */
@@ -163,20 +161,11 @@ class DynamoDb extends BaseAwsSdkPlugin {
       log.debug('Unable to calculate hash because missing required parameters')
       return
     }
-    if (!primaryKeyConfig) {
-      log.warn('Missing DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS env variable')
+    const keyNames = primaryKeyConfig?.[tableName]
+    if (!keyNames) {
       return
     }
-    const primaryKeySet = primaryKeyConfig[tableName]
-    if (!primaryKeySet || !(primaryKeySet instanceof Set) || primaryKeySet.size === 0 || primaryKeySet.size > 2) {
-      log.warn(
-        `span pointers: failed to extract PutItem span pointer: table ${tableName} ` +
-        'not found in primary key names or the DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS env var was invalid.' +
-        'Please update the env var.'
-      )
-      return
-    }
-    const keyValues = extractPrimaryKeys(primaryKeySet, item)
+    const keyValues = extractPrimaryKeys(keyNames, item)
     if (keyValues) {
       return generatePointerHash([tableName, ...keyValues])
     }
@@ -197,8 +186,8 @@ class DynamoDb extends BaseAwsSdkPlugin {
       log.debug('Unable to calculate hash because missing parameters')
       return
     }
-    const keyNamesSet = new Set(Object.keys(keysObject))
-    const keyValues = extractPrimaryKeys(keyNamesSet, keysObject)
+    const keyNames = Object.keys(keysObject)
+    const keyValues = extractPrimaryKeys(keyNames, keysObject)
     if (keyValues) {
       return generatePointerHash([tableName, ...keyValues])
     }

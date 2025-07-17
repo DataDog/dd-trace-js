@@ -1,3 +1,5 @@
+'use strict'
+
 const { SpanStatsEncoder } = require('../../encode/span-stats')
 
 const pkg = require('../../../../../package.json')
@@ -20,7 +22,7 @@ class Writer extends BaseWriter {
         done()
         return
       }
-      log.debug(`Response from the intake: ${res}`)
+      log.debug('Response from the intake:', res)
       done()
     })
   }
@@ -41,7 +43,7 @@ function makeRequest (data, url, cb) {
   options.hostname = url.hostname
   options.port = url.port
 
-  log.debug(() => `Request to the intake: ${JSON.stringify(options)}`)
+  log.debug('Request to the intake: %j', options)
 
   request(data, options, (err, res) => {
     cb(err, res)

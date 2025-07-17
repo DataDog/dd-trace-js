@@ -2,6 +2,7 @@
 
 const sinon = require('sinon')
 const semver = require('semver')
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
@@ -9,9 +10,7 @@ const MongodbCorePlugin = require('../../datadog-plugin-mongodb-core/src/index')
 const ddpv = require('mocha/package.json').version
 
 const withTopologies = fn => {
-  const isOldNode = semver.satisfies(process.version, '<=14')
-  const range = isOldNode ? '>=2 <6' : '>=2' // TODO: remove when 3.x support is removed.
-  withVersions('mongodb-core', 'mongodb', range, (version, moduleName) => {
+  withVersions('mongodb-core', 'mongodb', '>=2', (version, moduleName) => {
     describe('using the default topology', () => {
       fn(async () => {
         const { MongoClient } = require(`../../../versions/${moduleName}@${version}`).get()
@@ -84,13 +83,14 @@ describe('Plugin', () => {
           withPeerService(
             () => tracer,
             'mongodb-core',
-            () => collection.insertOne({ a: 1 }, {}, () => {}),
-            'test', 'peer.service'
+            (done) => collection.insertOne({ a: 1 }, {}, done),
+            'test',
+            'peer.service'
           )
 
           it('should do automatic instrumentation', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
                 const resource = `insert test.${collectionName}`
 
@@ -111,7 +111,7 @@ describe('Plugin', () => {
 
           it('should use the correct resource name for arbitrary commands', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
                 const resource = 'planCacheListPlans test.$cmd'
                 const query = '{}'
@@ -130,7 +130,7 @@ describe('Plugin', () => {
 
           it('should sanitize buffers as values and not as objects', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
                 const resource = `find test.${collectionName}`
                 const query = '{"_id":"?"}'
@@ -148,7 +148,7 @@ describe('Plugin', () => {
 
           it('should sanitize BSON binary', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
                 const resource = `find test.${collectionName}`
                 const query = '{"_bin":"?"}'
@@ -168,7 +168,7 @@ describe('Plugin', () => {
             const id = '123456781234567812345678'
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
                 const resource = `find test.${collectionName}`
                 const query = `{"_id":"${id}"}`
@@ -186,7 +186,7 @@ describe('Plugin', () => {
 
           it('should stringify BSON objects', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
                 const resource = `find test.${collectionName}`
                 const query = '{"_time":{"$timestamp":"0"}}'
@@ -204,7 +204,7 @@ describe('Plugin', () => {
 
           it('should stringify BSON internal types', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
                 const resource = `find test.${collectionName}`
                 const query = '{"_id":"?"}'
@@ -222,7 +222,7 @@ describe('Plugin', () => {
 
           it('should skip functions when sanitizing', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
                 const resource = `find test.${collectionName}`
                 const query = '{"_id":"1234"}'
@@ -241,7 +241,7 @@ describe('Plugin', () => {
 
           it('should log the aggregate pipeline in mongodb.query', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
                 const resource = 'aggregate test.$cmd'
                 const query = '[{"$match":{"_id":"1234"}},{"$project":{"_id":1}}]'
@@ -262,7 +262,7 @@ describe('Plugin', () => {
             const id = '123456781234567812345678'
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
                 const resource = `find test.${collectionName}`
                 const query = `{"_id":"${id}"}`
@@ -318,7 +318,7 @@ describe('Plugin', () => {
 
         it('should be configured with the correct values', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', 'custom')
             })
@@ -330,7 +330,7 @@ describe('Plugin', () => {
 
         it('should include sanitized query in resource when configured', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const span = traces[0][0]
               const resource = `find test.${collectionName} {"_bin":"?"}`
 
@@ -384,7 +384,7 @@ describe('Plugin', () => {
 
         it('DBM propagation should inject service mode as comment', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const span = traces[0][0]
 
               expect(startSpy.called).to.be.true
@@ -433,7 +433,7 @@ describe('Plugin', () => {
 
         it('DBM propagation should inject full mode with traceparent as comment', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const span = traces[0][0]
               const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
               const spanId = span.span_id.toString(16).padStart(16, '0')
@@ -481,7 +481,7 @@ describe('Plugin', () => {
             const parentSpan = tracer.startSpan('test.parent')
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 // Should only receive the trace for the parent span
                 expect(traces[0]).to.have.length(1)
                 const span = traces[0][0]
@@ -522,7 +522,7 @@ describe('Plugin', () => {
             const parentSpan = tracer.startSpan('test.parent')
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0]).to.have.length.at.least(2)
                 const rootSpan = traces[0][0]
 
@@ -569,7 +569,7 @@ describe('Plugin', () => {
             const parentSpan = tracer.startSpan('test.parent')
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 // Should only receive the trace for the parent span
                 expect(traces[0]).to.have.length(1)
                 const span = traces[0][0]
@@ -609,7 +609,7 @@ describe('Plugin', () => {
             const parentSpan = tracer.startSpan('test.parent')
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0]).to.have.length.at.least(2)
                 const rootSpan = traces[0][0]
 

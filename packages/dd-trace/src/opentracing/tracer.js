@@ -107,6 +107,12 @@ class DatadogTracer {
   }
 }
 
+/**
+ * Get the span context from a span or a span context.
+ *
+ * @param {Span|SpanContext} spanContext
+ * @returns {SpanContext}
+ */
 function getContext (spanContext) {
   if (spanContext instanceof Span) {
     spanContext = spanContext.context()
@@ -122,17 +128,14 @@ function getContext (spanContext) {
 function getParent (references = []) {
   let parent = null
 
-  for (let i = 0; i < references.length; i++) {
-    const ref = references[i]
+  for (const ref of references) {
     const type = ref.type()
 
     if (type === REFERENCE_CHILD_OF) {
       parent = ref.referencedContext()
       break
-    } else if (type === REFERENCE_FOLLOWS_FROM) {
-      if (!parent) {
-        parent = ref.referencedContext()
-      }
+    } else if (type === REFERENCE_FOLLOWS_FROM && !parent) {
+      parent = ref.referencedContext()
     }
   }
 

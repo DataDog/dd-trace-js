@@ -22,7 +22,7 @@ function Hook (modules, hookOptions, onrequire) {
   this._patched = Object.create(null)
 
   const safeHook = (moduleExports, moduleName, moduleBaseDir, moduleVersion) => {
-    const parts = [moduleBaseDir, moduleName].filter(v => v)
+    const parts = [moduleBaseDir, moduleName].filter(Boolean)
     const filename = path.join(...parts)
 
     if (this._patched[filename]) return moduleExports
@@ -41,9 +41,8 @@ function Hook (modules, hookOptions, onrequire) {
     if (moduleExports && moduleExports.default) {
       moduleExports.default = safeHook(moduleExports.default, moduleName, moduleBaseDir)
       return moduleExports
-    } else {
-      return safeHook(moduleExports, moduleName, moduleBaseDir)
     }
+    return safeHook(moduleExports, moduleName, moduleBaseDir)
   })
 }
 

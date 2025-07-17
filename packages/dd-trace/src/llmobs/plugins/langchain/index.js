@@ -9,16 +9,20 @@ const ANTHROPIC_PROVIDER_NAME = 'anthropic'
 const BEDROCK_PROVIDER_NAME = 'amazon_bedrock'
 const OPENAI_PROVIDER_NAME = 'openai'
 
-const SUPPORTED_INTEGRATIONS = ['openai']
-const LLM_SPAN_TYPES = ['llm', 'chat_model', 'embedding']
+const SUPPORTED_INTEGRATIONS = new Set(['openai'])
+const LLM_SPAN_TYPES = new Set(['llm', 'chat_model', 'embedding'])
 const LLM = 'llm'
 const WORKFLOW = 'workflow'
 const EMBEDDING = 'embedding'
+const TOOL = 'tool'
+const RETRIEVAL = 'retrieval'
 
 const ChainHandler = require('./handlers/chain')
 const ChatModelHandler = require('./handlers/chat_model')
 const LlmHandler = require('./handlers/llm')
 const EmbeddingHandler = require('./handlers/embedding')
+const ToolHandler = require('./handlers/tool')
+const VectorStoreHandler = require('./handlers/vectorstore')
 
 class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
   static get integration () { return 'langchain' }
@@ -34,7 +38,9 @@ class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
       chain: new ChainHandler(this._tagger),
       chat_model: new ChatModelHandler(this._tagger),
       llm: new LlmHandler(this._tagger),
-      embedding: new EmbeddingHandler(this._tagger)
+      embedding: new EmbeddingHandler(this._tagger),
+      tool: new ToolHandler(this._tagger),
+      similarity_search: new VectorStoreHandler(this._tagger)
     }
   }
 
@@ -45,7 +51,10 @@ class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
     const modelProvider = tags['langchain.request.provider'] // could be undefined
     const modelName = tags['langchain.request.model'] // could be undefined
     const kind = this.getKind(ctx.type, modelProvider)
-    const name = tags['resource.name']
+
+    const instance = ctx.instance || ctx.self
+    const handler = this._handlers[ctx.type]
+    const name = handler?.getName({ span, instance })
 
     return {
       modelProvider,
@@ -63,7 +72,7 @@ class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
     const type = ctx.type = this.constructor.lcType // langchain operation type (oneof chain,chat_model,llm,embedding)
 
     if (!Object.keys(this._handlers).includes(type)) {
-      log.warn(`Unsupported LangChain operation type: ${type}`)
+      log.warn('Unsupported LangChain operation type:', type)
       return
     }
 
@@ -94,18 +103,18 @@ class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
       span?.context()._tags[`langchain.request.${provider}.parameters.model_kwargs.max_tokens`]
 
     if (temperature) {
-      metadata.temperature = parseFloat(temperature)
+      metadata.temperature = Number.parseFloat(temperature)
     }
 
     if (maxTokens) {
-      metadata.maxTokens = parseInt(maxTokens)
+      metadata.maxTokens = Number.parseInt(maxTokens)
     }
 
     this._tagger.tagMetadata(span, metadata)
   }
 
   getKind (type, provider) {
-    if (LLM_SPAN_TYPES.includes(type)) {
+    if (LLM_SPAN_TYPES.has(type)) {
       const llmobsIntegration = this.getIntegrationName(type, provider)
 
       if (!this.isLLMIntegrationEnabled(llmobsIntegration)) {
@@ -113,7 +122,14 @@ class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
       }
     }
 
-    return WORKFLOW
+    switch (type) {
+      case 'tool':
+        return TOOL
+      case 'similarity_search':
+        return RETRIEVAL
+      default:
+        return WORKFLOW
+    }
   }
 
   getIntegrationName (type, provider = 'custom') {
@@ -129,7 +145,7 @@ class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
   }
 
   isLLMIntegrationEnabled (integration) {
-    return SUPPORTED_INTEGRATIONS.includes(integration) && pluginManager?._pluginsByName[integration]?.llmobs?._enabled
+    return SUPPORTED_INTEGRATIONS.has(integration) && pluginManager?._pluginsByName[integration]?.llmobs?._enabled
   }
 }
 
@@ -181,11 +197,38 @@ class EmbeddingsEmbedDocumentsPlugin extends BaseLangChainLLMObsPlugin {
   }
 }
 
+class ToolInvokePlugin extends BaseLangChainLLMObsPlugin {
+  static get id () { return 'llmobs_langchain_tool_invoke' }
+  static get lcType () { return 'tool' }
+  static get prefix () {
+    return 'tracing:orchestrion:@langchain/core:Tool_invoke'
+  }
+}
+
+class VectorStoreSimilaritySearchPlugin extends BaseLangChainLLMObsPlugin {
+  static get id () { return 'llmobs_langchain_vectorstore_similarity_search' }
+  static get lcType () { return 'similarity_search' }
+  static get prefix () {
+    return 'tracing:orchestrion:@langchain/core:VectorStore_similaritySearch'
+  }
+}
+
+class VectorStoreSimilaritySearchWithScorePlugin extends BaseLangChainLLMObsPlugin {
+  static get id () { return 'llmobs_langchain_vectorstore_similarity_search_with_score' }
+  static get lcType () { return 'similarity_search' }
+  static get prefix () {
+    return 'tracing:orchestrion:@langchain/core:VectorStore_similaritySearchWithScore'
+  }
+}
+
 module.exports = [
   RunnableSequenceInvokePlugin,
   RunnableSequenceBatchPlugin,
   BaseChatModelGeneratePlugin,
   BaseLLMGeneratePlugin,
   EmbeddingsEmbedQueryPlugin,
-  EmbeddingsEmbedDocumentsPlugin
+  EmbeddingsEmbedDocumentsPlugin,
+  ToolInvokePlugin,
+  VectorStoreSimilaritySearchPlugin,
+  VectorStoreSimilaritySearchWithScorePlugin
 ]

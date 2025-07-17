@@ -1,12 +1,15 @@
 'use strict'
 
 const { expect } = require('chai')
+const assert = require('node:assert')
 const semver = require('semver')
+
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const net = require('net')
+const net = require('node:net')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
-const EventEmitter = require('events')
+const EventEmitter = require('node:events')
 
 const ddpv = require('mocha/package.json').version
 
@@ -58,16 +61,13 @@ describe('Plugin', () => {
           withPeerService(
             () => tracer,
             'pg',
-            (done) => client.query('SELECT 1', (err, result) => {
-              if (err) {
-                done()
-              }
-            }),
-            'postgres', 'db.name'
+            (done) => client.query('SELECT 1', done),
+            'postgres',
+            'db.name'
           )
 
           it('should do automatic instrumentation when using callbacks', done => {
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', 'SELECT $1::text as message')
@@ -77,6 +77,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('db.user', 'postgres')
               expect(traces[0][0].meta).to.have.property('db.type', 'postgres')
               expect(traces[0][0].meta).to.have.property('component', 'pg')
+              expect(traces[0][0].meta).to.have.property('_dd.integration', 'pg')
               expect(traces[0][0].metrics).to.have.property('network.destination.port', 5432)
 
               if (implementation !== 'pg.native') {
@@ -96,7 +97,7 @@ describe('Plugin', () => {
           })
 
           it('should send long queries to agent', done => {
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('resource', `SELECT '${'x'.repeat(5000)}'::text as message`)
 
               done()
@@ -113,7 +114,7 @@ describe('Plugin', () => {
 
           if (semver.intersects(version, '>=5.1')) { // initial promise support
             it('should do automatic instrumentation when using promises', done => {
-              agent.use(traces => {
+              agent.assertSomeTraces(traces => {
                 expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
                 expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
                 expect(traces[0][0]).to.have.property('resource', 'SELECT $1::text as message')
@@ -141,7 +142,7 @@ describe('Plugin', () => {
           it('should handle errors', done => {
             let error
 
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
               expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
               expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
@@ -163,7 +164,7 @@ describe('Plugin', () => {
           it('should handle errors', done => {
             let error
 
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
               expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
 
@@ -216,6 +217,111 @@ describe('Plugin', () => {
               .catch(done),
             rawExpectedSchema.outbound
           )
+
+          if (implementation !== 'pg.native') {
+            // pg-cursor is not supported on pg.native, pg-query-stream uses pg-cursor so it is also unsupported
+            describe('streaming capabilities', () => {
+              withVersions('pg', 'pg-cursor', pgCursorVersion => {
+                let Cursor
+
+                beforeEach(() => {
+                  Cursor = require(`../../../versions/pg-cursor@${pgCursorVersion}`).get()
+                })
+
+                it('should instrument cursor-based streaming with pg-cursor', async () => {
+                  const tracingPromise = agent.assertSomeTraces(traces => {
+                    expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+                    expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
+                    expect(traces[0][0]).to.have.property('resource', 'SELECT * FROM generate_series(0, 1) num')
+                    expect(traces[0][0]).to.have.property('type', 'sql')
+                    expect(traces[0][0].meta).to.have.property('span.kind', 'client')
+                    expect(traces[0][0].meta).to.have.property('db.name', 'postgres')
+                    expect(traces[0][0].meta).to.have.property('db.type', 'postgres')
+                    expect(traces[0][0].meta).to.have.property('component', 'pg')
+                    expect(traces[0][0].metrics).to.have.property('db.stream', 1)
+                    expect(traces[0][0].metrics).to.have.property('network.destination.port', 5432)
+                  })
+
+                  const cursor = client.query(new Cursor('SELECT * FROM generate_series(0, 1) num'))
+
+                  cursor.read(1, () => {
+                    cursor.close()
+                  })
+                  await tracingPromise
+                })
+              })
+
+              withVersions('pg', 'pg-query-stream', pgQueryStreamVersion => {
+                let QueryStream
+
+                beforeEach(() => {
+                  QueryStream = require(`../../../versions/pg-query-stream@${pgQueryStreamVersion}`).get()
+                })
+
+                it('should instrument stream-based queries with pg-query-stream', async () => {
+                  const agentPromise = agent.assertSomeTraces(traces => {
+                    expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+                    expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
+                    expect(traces[0][0]).to.have.property('resource', 'SELECT * FROM generate_series(0, 1) num')
+                    expect(traces[0][0]).to.have.property('type', 'sql')
+                    expect(traces[0][0]).to.have.property('error', 0)
+                    expect(traces[0][0].meta).to.have.property('span.kind', 'client')
+                    expect(traces[0][0].meta).to.have.property('db.name', 'postgres')
+                    expect(traces[0][0].meta).to.have.property('db.type', 'postgres')
+                    expect(traces[0][0].meta).to.have.property('component', 'pg')
+                    expect(traces[0][0].metrics).to.have.property('db.stream', 1)
+                    expect(traces[0][0].metrics).to.have.property('network.destination.port', 5432)
+                  })
+
+                  const query = new QueryStream('SELECT * FROM generate_series(0, 1) num', [])
+                  const stream = client.query(query)
+
+                  expect(stream.listenerCount('error')).to.equal(0)
+
+                  const readPromise = (async () => {
+                    for await (const row of stream) {
+                      expect(row).to.have.property('num')
+                    }
+                  })()
+
+                  await Promise.all([readPromise, agentPromise])
+                })
+
+                it('should instrument stream-based queries with pg-query-stream and catch errors', async () => {
+                  const agentPromise = agent.assertSomeTraces(traces => {
+                    expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+                    expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
+                    expect(traces[0][0]).to.have.property('resource', 'SELECT * FROM generate_series(0, 1) num')
+                    expect(traces[0][0]).to.have.property('type', 'sql')
+                    expect(traces[0][0]).to.have.property('error', 1)
+                    expect(traces[0][0].meta).to.have.property('span.kind', 'client')
+                    expect(traces[0][0].meta).to.have.property('db.name', 'postgres')
+                    expect(traces[0][0].meta).to.have.property('db.type', 'postgres')
+                    expect(traces[0][0].meta).to.have.property('component', 'pg')
+                    expect(traces[0][0].metrics).to.have.property('db.stream', 1)
+                    expect(traces[0][0].metrics).to.have.property('network.destination.port', 5432)
+                  })
+
+                  const query = new QueryStream('SELECT * FROM generate_series(0, 1) num', [])
+                  const stream = client.query(query)
+
+                  expect(stream.listenerCount('error')).to.equal(0)
+
+                  const rejectedRead = assert.rejects(async () => {
+                    // eslint-disable-next-line no-unreachable-loop
+                    for await (const row of stream) {
+                      expect(row).to.have.property('num')
+                      throw new Error('Test error')
+                    }
+                  }, {
+                    message: 'Test error'
+                  })
+
+                  await Promise.all([rejectedRead, agentPromise])
+                })
+              })
+            })
+          }
         })
       })
 
@@ -242,7 +348,7 @@ describe('Plugin', () => {
         })
 
         it('should be configured with the correct values', done => {
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
             expect(traces[0][0]).to.have.property('service', 'custom')
             expect(traces[0][0]).to.have.property('resource', 'SELECT $1...')
@@ -299,7 +405,7 @@ describe('Plugin', () => {
         })
 
         it('should be configured with the correct service', done => {
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
             expect(traces[0][0]).to.have.property('service', '127.0.0.1-postgres')
           })
@@ -382,7 +488,7 @@ describe('Plugin', () => {
         })
 
         it('trace query resource should not be changed when propagation is enabled', done => {
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('resource', 'SELECT $1::text as message')
             done()
           })
@@ -446,9 +552,19 @@ describe('Plugin', () => {
         let seenTraceParent
         let seenTraceId
         let seenSpanId
-        let originalWrite
+        const originalWrite = net.Socket.prototype.write
 
         before(() => {
+          net.Socket.prototype.write = function (buffer) {
+            let strBuf = buffer.toString()
+            if (strBuf.includes('traceparent=\'')) {
+              strBuf = strBuf.split('-')
+              seenTraceParent = true
+              seenTraceId = strBuf[2]
+              seenSpanId = strBuf[3]
+            }
+            return originalWrite.apply(this, arguments)
+          }
           return agent.load('pg')
         })
 
@@ -467,25 +583,14 @@ describe('Plugin', () => {
             database: 'postgres'
           })
           client.connect(err => done(err))
-          originalWrite = net.Socket.prototype.write
-          net.Socket.prototype.write = function (buffer) {
-            let strBuf = buffer.toString()
-            if (strBuf.includes('traceparent=\'')) {
-              strBuf = strBuf.split('-')
-              seenTraceParent = true
-              seenTraceId = strBuf[2]
-              seenSpanId = strBuf[3]
-            }
-            return originalWrite.apply(this, arguments)
-          }
         })
 
-        afterEach(() => {
+        after(() => {
           net.Socket.prototype.write = originalWrite
         })
 
         it('query text should contain traceparent', done => {
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             const expectedTimePrefix = traces[0][0].meta['_dd.p.tid'].toString(16).padStart(16, '0')
             const traceId = expectedTimePrefix + traces[0][0].trace_id.toString(16).padStart(16, '0')
             const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
@@ -503,7 +608,7 @@ describe('Plugin', () => {
         })
 
         it('query should inject _dd.dbm_trace_injected into span', done => {
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             expect(traces[0][0].meta).to.have.property('_dd.dbm_trace_injected', 'true')
             done()
           })
@@ -518,7 +623,7 @@ describe('Plugin', () => {
         })
 
         it('service should default to tracer service name', done => {
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
             done()
           })
@@ -558,14 +663,21 @@ describe('Plugin', () => {
           client.connect(err => done(err))
         })
 
-        it('query config objects should be handled', done => {
-          let queryText = ''
+        afterEach((done) => {
+          client.end(done)
+        })
 
+        it('query config objects should be handled', async () => {
           const query = {
             text: 'SELECT $1::text as message'
           }
 
-          agent.use(traces => {
+          const queryPromise = client.query(query, ['Hello world!'])
+          const queryText = client.queryQueue[0].text
+
+          await queryPromise
+
+          await agent.assertSomeTraces(traces => {
             const expectedTimePrefix = traces[0][0].meta['_dd.p.tid'].toString(16).padStart(16, '0')
             const traceId = expectedTimePrefix + traces[0][0].trace_id.toString(16).padStart(16, '0')
             const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
@@ -573,16 +685,7 @@ describe('Plugin', () => {
             expect(queryText).to.equal(
               `/*dddb='postgres',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}',` +
               `traceparent='00-${traceId}-${spanId}-00'*/ SELECT $1::text as message`)
-          }).then(done, done)
-
-          client.query(query, ['Hello world!'], (err) => {
-            if (err) return done(err)
-
-            client.end((err) => {
-              if (err) return done(err)
-            })
           })
-          queryText = client.queryQueue[0].text
         })
 
         it('query config object should persist when comment is injected', done => {
@@ -592,70 +695,42 @@ describe('Plugin', () => {
           }
 
           client.query(query, ['Hello world!'], (err) => {
-            if (err) return done(err)
-
-            client.end((err) => {
-              if (err) return done(err)
-            })
+            done(err)
           })
 
-          agent.use(traces => {
-            expect(query).to.have.property(
-              'name', 'pgSelectQuery')
-          }).then(done, done)
+          expect(query).to.have.property('name', 'pgSelectQuery')
         })
 
         it('falls back to service with prepared statements', done => {
-          let queryText = ''
-
           const query = {
             name: 'pgSelectQuery',
             text: 'SELECT $1::text as message'
           }
 
-          agent.use(traces => {
-            expect(queryText).to.equal(
-              `/*dddb='postgres',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'` +
-              '*/ SELECT $1::text as message')
-          }).then(done, done)
-
           client.query(query, ['Hello world!'], (err) => {
-            if (err) return done(err)
-
-            client.end((err) => {
-              if (err) return done(err)
-            })
+            done(err)
           })
-          queryText = client.queryQueue[0].text
+          expect(client.queryQueue[0].text).to.equal(
+            `/*dddb='postgres',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'` +
+            '*/ SELECT $1::text as message'
+          )
         })
 
         it('should not fail when using query object with getters', done => {
-          let queryText = ''
-
           const query = {
             name: 'pgSelectQuery',
             get text () { return 'SELECT $1::text as message' }
           }
 
-          agent.use(traces => {
-            expect(queryText).to.equal(
-              `/*dddb='postgres',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'` +
-              '*/ SELECT $1::text as message')
-          }).then(done, done)
-
-          client.query(query, ['Hello world!'], (err) => {
-            if (err) return done(err)
-
-            client.end((err) => {
-              if (err) return done(err)
-            })
+          client.query(query, ['Hello world!'], async (err) => {
+            done(err)
           })
-          queryText = client.queryQueue[0].text
+          expect(client.queryQueue[0].text).to.equal(
+            `/*dddb='postgres',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'` +
+            '*/ SELECT $1::text as message')
         })
 
         it('should not fail when using query object that is an EventEmitter', done => {
-          let queryText = ''
-
           class Query extends EventEmitter {
             constructor (name, text) {
               super()
@@ -671,20 +746,52 @@ describe('Plugin', () => {
 
           const query = new Query('pgSelectQuery', 'SELECT $1::text as greeting')
 
-          agent.use(traces => {
-            expect(queryText).to.equal(
-              `/*dddb='postgres',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'` +
-              '*/ SELECT $1::text as greeting')
-          }).then(done, done)
-
           client.query(query, ['Goodbye'], (err) => {
-            if (err) return done(err)
-
-            client.end((err) => {
-              if (err) return done(err)
-            })
+            done(err)
           })
-          queryText = client.queryQueue[0].text
+          expect(client.queryQueue[0].text).to.equal(
+            `/*dddb='postgres',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'` +
+            '*/ SELECT $1::text as greeting')
+        })
+      })
+
+      describe('with DBM propagation enabled with append comment configurations', () => {
+        before(async () => {
+          await agent.load('pg', [{
+            appendComment: true,
+            dbmPropagationMode: 'service',
+            service: () => 'serviced',
+          }])
+          pg = require(`../../../versions/pg@${version}`).get()
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        beforeEach((done) => {
+          client = new pg.Client({
+            host: '127.0.0.1',
+            user: 'postgres',
+            password: 'postgres',
+            database: 'postgres'
+          })
+          client.connect(err => done(err))
+        })
+
+        afterEach((done) => {
+          client.end(done)
+        })
+
+        it('should append comment in query text', async () => {
+          const queryPromise = client.query('SELECT $1::text as message', ['Hello world!'])
+
+          expect(client.queryQueue[0].text).to.equal(
+            'SELECT $1::text as message /*dddb=\'postgres\',dddbs=\'serviced\',dde=\'tester\',' +
+              `ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'*/`
+          )
+
+          await queryPromise
         })
       })
     })

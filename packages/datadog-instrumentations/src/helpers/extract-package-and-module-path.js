@@ -10,27 +10,33 @@ const NM = 'node_modules/'
  */
 module.exports = function extractPackageAndModulePath (fullPath) {
   const nm = fullPath.lastIndexOf(NM)
-  if (nm < 0) {
+  if (nm === -1) {
     return { pkg: null, path: null }
   }
 
-  const subPath = fullPath.substring(nm + NM.length)
+  const subPath = fullPath.slice(nm + NM.length)
   const firstSlash = subPath.indexOf('/')
 
-  const firstPath = fullPath.substring(fullPath[0], nm + NM.length)
+  const firstPath = fullPath.slice(0, nm + NM.length)
+
+  const firstSlashSubPath = subPath.slice(Math.max(0, firstSlash + 1))
 
   if (subPath[0] === '@') {
-    const secondSlash = subPath.substring(firstSlash + 1).indexOf('/')
+    const secondSlash = firstSlashSubPath.indexOf('/')
+    const pkg = subPath.slice(0, Math.max(0, firstSlash + 1 + secondSlash))
+
     return {
-      pkg: subPath.substring(0, firstSlash + 1 + secondSlash),
-      path: subPath.substring(firstSlash + 1 + secondSlash + 1),
-      pkgJson: firstPath + subPath.substring(0, firstSlash + 1 + secondSlash) + '/package.json'
+      pkg,
+      path: subPath.slice(Math.max(0, firstSlash + 1 + secondSlash + 1)),
+      pkgJson: firstPath + pkg + '/package.json'
     }
   }
 
+  const pkg = subPath.slice(0, Math.max(0, firstSlash))
+
   return {
-    pkg: subPath.substring(0, firstSlash),
-    path: subPath.substring(firstSlash + 1),
-    pkgJson: firstPath + subPath.substring(0, firstSlash) + '/package.json'
+    pkg,
+    path: firstSlashSubPath,
+    pkgJson: firstPath + pkg + '/package.json'
   }
 }

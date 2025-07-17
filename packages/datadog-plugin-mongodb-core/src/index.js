@@ -3,6 +3,7 @@
 const { isTrue } = require('../../dd-trace/src/util')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 const coalesce = require('koalas')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
 class MongodbCorePlugin extends DatabasePlugin {
   static get id () { return 'mongodb-core' }
@@ -14,7 +15,7 @@ class MongodbCorePlugin extends DatabasePlugin {
   configure (config) {
     super.configure(config)
 
-    const heartbeatFromEnv = process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED
+    const heartbeatFromEnv = getEnvironmentVariable('DD_TRACE_MONGODB_HEARTBEAT_ENABLED')
 
     this.config.heartbeatEnabled = coalesce(
       config.heartbeatEnabled,
@@ -103,7 +104,7 @@ function getResource (plugin, ns, query, operationName) {
 }
 
 function truncate (input) {
-  return input.slice(0, Math.min(input.length, 10000))
+  return input.slice(0, Math.min(input.length, 10_000))
 }
 
 function shouldSimplify (input) {

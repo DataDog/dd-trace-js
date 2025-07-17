@@ -26,7 +26,7 @@ describe('Plugin', () => {
 
       it('should instrument lookup', done => {
         agent
-          .use(traces => {
+          .assertSomeTraces(traces => {
             expect(traces[0][0]).to.deep.include({
               name: 'dns.lookup',
               service: 'test',
@@ -47,7 +47,7 @@ describe('Plugin', () => {
 
       it('should instrument lookup with all addresses', done => {
         agent
-          .use(traces => {
+          .assertSomeTraces(traces => {
             expect(traces[0][0]).to.deep.include({
               name: 'dns.lookup',
               service: 'test',
@@ -69,7 +69,7 @@ describe('Plugin', () => {
 
       it('should instrument errors correctly', done => {
         agent
-          .use(traces => {
+          .assertSomeTraces(traces => {
             expect(traces[0][0]).to.deep.include({
               name: 'dns.lookup',
               service: 'test',
@@ -94,7 +94,7 @@ describe('Plugin', () => {
 
       it('should instrument lookupService', done => {
         agent
-          .use(traces => {
+          .assertSomeTraces(traces => {
             expect(traces[0][0]).to.deep.include({
               name: 'dns.lookup_service',
               service: 'test',
@@ -117,7 +117,7 @@ describe('Plugin', () => {
 
       it('should instrument resolve', done => {
         agent
-          .use(traces => {
+          .assertSomeTraces(traces => {
             expect(traces[0][0]).to.deep.include({
               name: 'dns.resolve',
               service: 'test',
@@ -138,7 +138,7 @@ describe('Plugin', () => {
 
       it('should instrument resolve shorthands', done => {
         agent
-          .use(traces => {
+          .assertSomeTraces(traces => {
             expect(traces[0][0]).to.deep.include({
               name: 'dns.resolve',
               service: 'test',
@@ -159,7 +159,7 @@ describe('Plugin', () => {
 
       it('should instrument reverse', done => {
         agent
-          .use(traces => {
+          .assertSomeTraces(traces => {
             expect(traces[0][0]).to.deep.include({
               name: 'dns.reverse',
               service: 'test',
@@ -204,7 +204,7 @@ describe('Plugin', () => {
         const resolver = new dns.Resolver()
 
         agent
-          .use(traces => {
+          .assertSomeTraces(traces => {
             expect(traces[0][0]).to.deep.include({
               name: 'dns.resolve',
               service: 'test',
@@ -227,7 +227,7 @@ describe('Plugin', () => {
         const timer = setTimeout(done, 200)
 
         agent
-          .use(() => {
+          .assertSomeTraces(() => {
             done(new Error('Resolve was traced.'))
             clearTimeout(timer)
           })

@@ -2,7 +2,7 @@
 
 const { randomFillSync } = require('crypto')
 
-const UINT_MAX = 4294967296
+const UINT_MAX = 4_294_967_296
 
 const data = new Uint8Array(8 * 8192)
 const zeroId = new Uint8Array(8)
@@ -24,6 +24,10 @@ class Identifier {
     return radix === 16
       ? toHexString(this._buffer)
       : toNumberString(this._buffer, radix)
+  }
+
+  toBigInt () {
+    return Buffer.from(this._buffer).readBigUInt64BE(0)
   }
 
   toBuffer () {
@@ -61,12 +65,12 @@ function createBuffer (value) {
 
   const size = Math.ceil(value.length / 16) * 16
   const bytes = size / 2
-  const buffer = new Array(bytes)
+  const buffer = []
 
   value = value.padStart(size, '0')
 
   for (let i = 0; i < bytes; i++) {
-    buffer[i] = parseInt(value.substring(i * 2, i * 2 + 2), 16)
+    buffer[i] = Number.parseInt(value.slice(i * 2, i * 2 + 2), 16)
   }
 
   return buffer
@@ -86,7 +90,7 @@ function fromString (str, raddix) {
   const sign = pos
 
   while (pos < len) {
-    const chr = parseInt(str[pos++], raddix)
+    const chr = Number.parseInt(str[pos++], raddix)
 
     if (!(chr >= 0)) break // NaN
 
@@ -161,7 +165,7 @@ function pseudoRandom () {
 
 // Read a buffer to unsigned integer bytes.
 function readInt32 (buffer, offset) {
-  return (buffer[offset + 0] * 16777216) +
+  return (buffer[offset + 0] * 16_777_216) +
     (buffer[offset + 1] << 16) +
     (buffer[offset + 2] << 8) +
     buffer[offset + 3]
@@ -170,12 +174,14 @@ function readInt32 (buffer, offset) {
 // Write unsigned integer bytes to a buffer.
 function writeUInt32BE (buffer, value, offset) {
   buffer[3 + offset] = value & 255
-  value = value >> 8
+  value >>= 8
   buffer[2 + offset] = value & 255
-  value = value >> 8
+  value >>= 8
   buffer[1 + offset] = value & 255
-  value = value >> 8
+  value >>= 8
   buffer[0 + offset] = value & 255
 }
 
-module.exports = (value, radix) => new Identifier(value, radix)
+module.exports = function createIdentifier (value, radix) {
+  return new Identifier(value, radix)
+}

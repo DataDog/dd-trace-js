@@ -1,3 +1,5 @@
+'use strict'
+
 const SAMPLE_INTERVAL_MILLIS = 30 * 1000
 
 class SchemaSampler {
@@ -8,12 +10,10 @@ class SchemaSampler {
 
   trySample (currentTimeMs) {
     if (currentTimeMs >= this.lastSampleMs + SAMPLE_INTERVAL_MILLIS) {
-      if (currentTimeMs >= this.lastSampleMs + SAMPLE_INTERVAL_MILLIS) {
-        this.lastSampleMs = currentTimeMs
-        const weight = this.weight
-        this.weight = 0
-        return weight
-      }
+      this.lastSampleMs = currentTimeMs
+      const weight = this.weight
+      this.weight = 0
+      return weight
     }
     return 0
   }

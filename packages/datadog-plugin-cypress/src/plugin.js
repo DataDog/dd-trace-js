@@ -1,6 +1,9 @@
+'use strict'
+
 const NoopTracer = require('../../dd-trace/src/noop/tracer')
 const cypressPlugin = require('./cypress-plugin')
 const satisfies = require('semifies')
+const { DD_MAJOR } = require('../../../version')
 
 const noopTask = {
   'dd:testSuiteStart': () => {
@@ -17,10 +20,19 @@ const noopTask = {
   }
 }
 
-module.exports = (on, config) => {
+module.exports = function CypressPlugin (on, config) {
   const tracer = require('../../dd-trace')
 
   if (satisfies(config.version, '<10.2.0')) {
+    if (DD_MAJOR >= 6) {
+      // eslint-disable-next-line no-console
+      console.error(
+        'ERROR: dd-trace v6 has deleted support for Cypress<10.2.0.'
+      )
+      on('task', noopTask)
+      return config
+    }
+
     // console.warn does not seem to work in cypress, so using console.log instead
     // eslint-disable-next-line no-console
     console.log(

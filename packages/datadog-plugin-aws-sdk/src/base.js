@@ -6,6 +6,7 @@ const { storage } = require('../../datadog-core')
 const { isTrue } = require('../../dd-trace/src/util')
 const coalesce = require('koalas')
 const { tagsFromRequest, tagsFromResponse } = require('../../dd-trace/src/payload-tagging')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
 class BaseAwsSdkPlugin extends ClientPlugin {
   static get id () { return 'aws' }
@@ -55,7 +56,12 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       }
       if (this.requestTags) this.requestTags.set(request, tags)
 
-      const span = this.tracer.startSpan(this.operationFromRequest(request), { childOf, tags })
+      const span = this.tracer.startSpan(this.operationFromRequest(request),
+        {
+          childOf,
+          tags,
+          integrationName: 'aws-sdk'
+        })
 
       analyticsSampler.sample(span, this.config.measured)
 
@@ -67,9 +73,25 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         span.addTags(requestTags)
       }
 
+      this.enter(span)
       const store = storage('legacy').getStore()
 
-      this.enter(span, store)
+      const peerServerlessStorage = storage('peerServerless')
+      if (!this._tracerConfig?._isInServerlessEnvironment()) return
+
+      // Try to resolve the hostname immediately; if not possible, keep enough
+      // information so the region callback can resolve it later.
+      const hostname = getHostname({ awsParams: request.params, awsService }, awsRegion)
+      const peerServerlessStore = {}
+      peerServerlessStorage.enterWith(peerServerlessStore)
+
+      if (hostname) {
+        span.setTag('peer.service', hostname)
+        peerServerlessStore.peerHostname = hostname
+      } else {
+        store.awsParams = request.params
+        store.awsService = awsService
+      }
     })
 
     this.addSub(`apm:aws:request:region:${this.serviceIdentifier}`, region => {
@@ -79,6 +101,17 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       if (!span) return
       span.setTag('aws.region', region)
       span.setTag('region', region)
+
+      if (!this._tracerConfig?._isInServerlessEnvironment()) return
+
+      const hostname = getHostname(store, region)
+      if (!hostname) return
+
+      span.setTag('peer.service', hostname)
+      const peerServerlessStore = storage('peerServerless').getStore()
+      if (peerServerlessStore) {
+        peerServerlessStore.peerHostname = hostname
+      }
     })
 
     this.addSub(`apm:aws:request:complete:${this.serviceIdentifier}`, ({ response, cbExists = false }) => {
@@ -132,7 +165,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
 
   isEnabled (request) {
     const serviceId = this.serviceIdentifier.toUpperCase()
-    const envVarValue = process.env[`DD_TRACE_AWS_SDK_${serviceId}_ENABLED`]
+    const envVarValue = getEnvironmentVariable(`DD_TRACE_AWS_SDK_${serviceId}_ENABLED`)
     return envVarValue ? isTrue(envVarValue) : true
   }
 
@@ -142,11 +175,12 @@ class BaseAwsSdkPlugin extends ClientPlugin {
     const operation = response.request.operation
     const extraTags = this.generateTags(params, operation, response) || {}
 
-    const tags = Object.assign({
+    const tags = {
       'aws.response.request_id': response.requestId,
       'resource.name': operation,
-      'span.kind': 'client'
-    }, extraTags)
+      'span.kind': 'client',
+      ...extraTags
+    }
 
     span.addTags(tags)
 
@@ -211,26 +245,52 @@ function normalizeConfig (config, serviceIdentifier) {
   const batchPropagationEnabled = isTrue(
     coalesce(
       specificConfig.batchPropagationEnabled,
-      process.env[`DD_TRACE_AWS_SDK_${serviceId}_BATCH_PROPAGATION_ENABLED`],
+      getEnvironmentVariable(`DD_TRACE_AWS_SDK_${serviceId}_BATCH_PROPAGATION_ENABLED`),
       config.batchPropagationEnabled,
-      process.env.DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED,
+      getEnvironmentVariable('DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED'),
       false
     )
   )
 
   // Merge the specific config back into the main config
-  return Object.assign({}, config, specificConfig, {
+  return {
+    ...config,
+    ...specificConfig,
     splitByAwsService: config.splitByAwsService !== false,
     batchPropagationEnabled,
     hooks
-  })
+  }
 }
 
+const noop = () => {}
+
 function getHooks (config) {
-  const noop = () => {}
-  const request = (config.hooks && config.hooks.request) || noop
+  const request = config.hooks?.request || noop
 
   return { request }
+}
+
+function getHostname (store, region) {
+  if (!store) return
+  if (!region) return
+  const { awsParams, awsService } = store
+  switch (awsService) {
+    case 'EventBridge':
+      return `events.${region}.amazonaws.com`
+    case 'SQS':
+      return `sqs.${region}.amazonaws.com`
+    case 'SNS':
+      return `sns.${region}.amazonaws.com`
+    case 'Kinesis':
+      return `kinesis.${region}.amazonaws.com`
+    case 'DynamoDBDocument':
+    case 'DynamoDB':
+      return `dynamodb.${region}.amazonaws.com`
+    case 'S3':
+      return awsParams?.Bucket
+        ? `${awsParams.Bucket}.s3.${region}.amazonaws.com`
+        : `s3.${region}.amazonaws.com`
+  }
 }
 
 module.exports = BaseAwsSdkPlugin

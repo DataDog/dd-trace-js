@@ -8,7 +8,9 @@ class CassandraDriverPlugin extends DatabasePlugin {
   static get system () { return 'cassandra' }
   static get peerServicePrecursors () { return [CASSANDRA_CONTACT_POINTS_KEY] }
 
-  start ({ keyspace, query, contactPoints = {} }) {
+  bindStart (ctx) {
+    let { keyspace, query, contactPoints = {} } = ctx
+
     if (Array.isArray(query)) {
       query = combine(query)
     }
@@ -24,7 +26,9 @@ class CassandraDriverPlugin extends DatabasePlugin {
         'cassandra.keyspace': keyspace,
         [CASSANDRA_CONTACT_POINTS_KEY]: contactPoints.join(',') || null
       }
-    })
+    }, ctx)
+
+    return ctx.currentStore
   }
 }
 
@@ -37,7 +41,7 @@ function combine (queries) {
 function trim (str, size) {
   if (!str || str.length <= size) return str
 
-  return `${str.substr(0, size - 3)}...`
+  return `${str.slice(0, size - 3)}...`
 }
 
 module.exports = CassandraDriverPlugin

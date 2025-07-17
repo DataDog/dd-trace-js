@@ -1,7 +1,8 @@
 'use strict'
 
-const { fork, exec } = require('child_process')
+const { fork, exec, execSync } = require('child_process')
 const path = require('path')
+const fs = require('fs')
 
 const { assert } = require('chai')
 
@@ -52,10 +53,12 @@ const {
   DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
   DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
   DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
+  DD_CAPABILITIES_FAILED_TEST_REPLAY,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
-  TEST_RETRY_REASON_TYPES
+  TEST_RETRY_REASON_TYPES,
+  TEST_IS_MODIFIED
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -251,6 +254,41 @@ describe('mocha CommonJS', function () {
           assert.include(testOutput, expectedStdout)
           done()
         })
+      })
+    })
+  })
+
+  context('custom tagging', () => {
+    it('can add custom tags to the tests', (done) => {
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const test = events.find(event => event.type === 'test').content
+
+          assert.isNotEmpty(test.meta)
+          assert.equal(test.meta['custom_tag.beforeEach'], 'true')
+          assert.equal(test.meta['custom_tag.it'], 'true')
+          assert.equal(test.meta['custom_tag.afterEach'], 'true')
+        })
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './test-custom-tags/custom-tags.js'
+            ])
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
       })
     })
   })
@@ -2363,7 +2401,7 @@ describe('mocha CommonJS', function () {
             retriedTest.meta[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_FILE_SUFFIX}`]
               .endsWith('ci-visibility/dynamic-instrumentation/dependency.js')
           )
-          assert.equal(retriedTest.metrics[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_LINE_SUFFIX}`], 4)
+          assert.equal(retriedTest.metrics[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_LINE_SUFFIX}`], 6)
 
           const snapshotIdKey = `${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`
 
@@ -2386,7 +2424,7 @@ describe('mocha CommonJS', function () {
             level: 'error'
           })
           assert.equal(diLog.debugger.snapshot.language, 'javascript')
-          assert.deepInclude(diLog.debugger.snapshot.captures.lines['4'].locals, {
+          assert.deepInclude(diLog.debugger.snapshot.captures.lines['6'].locals, {
             a: {
               type: 'number',
               value: '11'
@@ -2670,10 +2708,10 @@ describe('mocha CommonJS', function () {
                   assert.notProperty(test.meta, TEST_HAS_FAILED_ALL_RETRIES)
                 } else if (shouldFailSometimes) {
                   assert.notProperty(test.meta, TEST_HAS_FAILED_ALL_RETRIES)
-                  assert.notProperty(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED)
+                  assert.propertyVal(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
                 } else {
                   assert.propertyVal(test.meta, TEST_HAS_FAILED_ALL_RETRIES, 'true')
-                  assert.notProperty(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED)
+                  assert.propertyVal(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
                 }
               }
             }
@@ -3069,12 +3107,13 @@ describe('mocha CommonJS', function () {
             assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], undefined)
           } else {
             assert.equal(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], '1')
-            assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '2')
+            assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
           }
           assert.equal(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')
           assert.equal(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
           assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
           assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
+          assert.equal(metadata.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], '1')
           // capabilities logic does not overwrite test session name
           assert.equal(metadata.test[TEST_SESSION_NAME], 'my-test-session-name')
         })
@@ -3213,6 +3252,212 @@ describe('mocha CommonJS', function () {
           assert.include(stdout, 'afterEach in context')
           done()
         }).catch(done)
+      })
+    })
+  })
+
+  context('impacted tests', () => {
+    const NUM_RETRIES = 3
+
+    beforeEach(() => {
+      receiver.setKnownTests({
+        mocha: {
+          'ci-visibility/test-impacted-test/test-impacted-1.js': ['impacted tests can pass normally']
+        }
+      })
+    })
+
+    // Modify `test-impacted-1.js` to mark it as impacted
+    before(() => {
+      execSync('git checkout -b feature-branch', { cwd, stdio: 'ignore' })
+      fs.writeFileSync(
+        path.join(cwd, 'ci-visibility/test-impacted-test/test-impacted-1.js'),
+        `const { expect } = require('chai')
+         describe('impacted tests', () => {
+           it('can pass normally', () => {
+             expect(2 + 2).to.equal(3)
+           })
+
+           it('can fail', () => {
+             expect(1 + 2).to.equal(4)
+           })
+         })`
+      )
+      execSync('git add ci-visibility/test-impacted-test/test-impacted-1.js', { cwd, stdio: 'ignore' })
+      execSync('git commit -m "modify test-impacted-1.js"', { cwd, stdio: 'ignore' })
+    })
+
+    after(() => {
+      // We can't use main here because in CI it might be "master".
+      // We just use `-` which goes back to the previous branch
+      execSync('git checkout -', { cwd, stdio: 'ignore' })
+      execSync('git branch -D feature-branch', { cwd, stdio: 'ignore' })
+    })
+
+    const getTestAssertions = ({ isModified, isEfd, isParallel, isNew }) =>
+      receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+
+          if (isEfd) {
+            assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
+          } else {
+            assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
+          }
+
+          const resourceNames = tests.map(span => span.resource)
+
+          assert.includeMembers(resourceNames,
+            [
+              'ci-visibility/test-impacted-test/test-impacted-1.js.impacted tests can pass normally',
+              'ci-visibility/test-impacted-test/test-impacted-1.js.impacted tests can fail'
+            ]
+          )
+
+          if (isParallel) {
+            // Parallel mode in mocha requires more than a single test suite
+            // Here we check that the second test suite is actually running,
+            // so we can be sure that parallel mode is on
+            assert.includeMembers(resourceNames, [
+              'ci-visibility/test-impacted-test/test-impacted-2.js.impacted tests 2 can pass normally',
+              'ci-visibility/test-impacted-test/test-impacted-2.js.impacted tests 2 can fail'
+            ])
+          }
+
+          const impactedTests = tests.filter(test =>
+            test.meta[TEST_SOURCE_FILE] === 'ci-visibility/test-impacted-test/test-impacted-1.js' &&
+            test.meta[TEST_NAME] === 'impacted tests can pass normally')
+
+          if (isEfd) {
+            assert.equal(impactedTests.length, NUM_RETRIES + 1) // Retries + original test
+          } else {
+            assert.equal(impactedTests.length, 1)
+          }
+
+          for (const impactedTest of impactedTests) {
+            if (isModified) {
+              assert.propertyVal(impactedTest.meta, TEST_IS_MODIFIED, 'true')
+            } else {
+              assert.notProperty(impactedTest.meta, TEST_IS_MODIFIED)
+            }
+            if (isNew) {
+              assert.propertyVal(impactedTest.meta, TEST_IS_NEW, 'true')
+            } else {
+              assert.notProperty(impactedTest.meta, TEST_IS_NEW)
+            }
+          }
+
+          if (isEfd) {
+            // Need to filter down to 'impacted tests can pass normally' because
+            // the other test is also retried. This is because we don't have line visibility:
+            // We'll retry all the test in a file as long as any of them is modified.
+            const retriedTests = tests.filter(
+              test => test.meta[TEST_IS_RETRY] === 'true' &&
+              test.meta[TEST_NAME] === 'impacted tests can pass normally'
+            )
+            assert.equal(retriedTests.length, NUM_RETRIES)
+            let retriedTestNew = 0
+            let retriedTestsWithReason = 0
+            retriedTests.forEach(test => {
+              if (test.meta[TEST_IS_NEW] === 'true') {
+                retriedTestNew++
+              }
+              if (test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd) {
+                retriedTestsWithReason++
+              }
+            })
+            assert.equal(retriedTestNew, isNew ? NUM_RETRIES : 0)
+            assert.equal(retriedTestsWithReason, NUM_RETRIES)
+          }
+        })
+
+    const runImpactedTest = (
+      done,
+      { isModified, isEfd = false, isParallel = false, isNew = false },
+      extraEnvVars = {}
+    ) => {
+      const testAssertionsPromise = getTestAssertions({ isModified, isEfd, isParallel, isNew })
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './test-impacted-test/test-impacted-1'
+            ]),
+            // we need to trick this process into not reading the event.json contents for GitHub,
+            // otherwise we'll take the diff from the base repository, not from the test project in `cwd`
+            GITHUB_BASE_REF: '',
+            ...extraEnvVars
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        testAssertionsPromise.then(done).catch(done)
+      })
+    }
+
+    context('test is not new', () => {
+      it('should be detected as impacted', (done) => {
+        receiver.setSettings({ impacted_tests_enabled: true })
+
+        runImpactedTest(done, { isModified: true })
+      })
+
+      it('should not be detected as impacted if disabled', (done) => {
+        receiver.setSettings({ impacted_tests_enabled: false })
+
+        runImpactedTest(done, { isModified: false })
+      })
+
+      it('should not be detected as impacted if DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED is false', (done) => {
+        receiver.setSettings({ impacted_tests_enabled: false })
+
+        runImpactedTest(done,
+          { isModified: false },
+          { DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0' }
+        )
+      })
+
+      it('should be detected as impacted in parallel mode', (done) => {
+        receiver.setSettings({ impacted_tests_enabled: true })
+
+        runImpactedTest(
+          done,
+          { isModified: true, isParallel: true },
+          {
+            // we need to run more than 1 suite for parallel mode to kick in
+            TESTS_TO_RUN: JSON.stringify([
+              './test-impacted-test/test-impacted-1',
+              './test-impacted-test/test-impacted-2'
+            ]),
+            RUN_IN_PARALLEL: true
+          }
+        )
+      })
+      context('test is new', () => {
+        it('should be retried and marked both as new and modified', (done) => {
+          receiver.setKnownTests({})
+          receiver.setSettings({
+            impacted_tests_enabled: true,
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': NUM_RETRIES
+              }
+            },
+            known_tests_enabled: true
+          })
+          runImpactedTest(done,
+            { isModified: true, isEfd: true, isNew: true }
+          )
+        })
       })
     })
   })

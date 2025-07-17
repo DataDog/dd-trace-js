@@ -1,3 +1,5 @@
+'use strict'
+
 const cp = require('child_process')
 const os = require('os')
 const path = require('path')
@@ -16,7 +18,14 @@ const {
   GIT_COMMIT_AUTHOR_DATE,
   GIT_COMMIT_AUTHOR_EMAIL,
   GIT_COMMIT_AUTHOR_NAME,
-  CI_WORKSPACE_PATH
+  CI_WORKSPACE_PATH,
+  GIT_COMMIT_HEAD_AUTHOR_DATE,
+  GIT_COMMIT_HEAD_AUTHOR_EMAIL,
+  GIT_COMMIT_HEAD_AUTHOR_NAME,
+  GIT_COMMIT_HEAD_COMMITER_DATE,
+  GIT_COMMIT_HEAD_COMMITER_EMAIL,
+  GIT_COMMIT_HEAD_COMMITER_NAME,
+  GIT_COMMIT_HEAD_MESSAGE
 } = require('./tags')
 const {
   incrementCountMetric,
@@ -51,7 +60,7 @@ function sanitizedExec (
   try {
     let result = cp.execFileSync(cmd, flags, { stdio: 'pipe' }).toString()
     if (shouldTrim) {
-      result = result.replace(/(\r\n|\n|\r)/gm, '')
+      result = result.replaceAll(/(\r\n|\n|\r)/gm, '')
     }
     if (durationMetric) {
       distributionMetric(durationMetric.name, durationMetric.tags, Date.now() - startTime)
@@ -76,7 +85,7 @@ function isDirectory (path) {
   try {
     const stats = fs.statSync(path)
     return stats.isDirectory()
-  } catch (e) {
+  } catch {
     return false
   }
 }
@@ -87,7 +96,7 @@ function isGitAvailable () {
   try {
     cp.execFileSync(command, ['git'], { stdio: 'pipe' })
     return true
-  } catch (e) {
+  } catch {
     incrementCountMetric(TELEMETRY_GIT_COMMAND_ERRORS, { command: 'check_git', exitCode: 'missing' })
     return false
   }
@@ -108,16 +117,16 @@ function getGitVersion () {
   const gitVersionMatches = gitVersionString.match(/git version (\d+)\.(\d+)\.(\d+)/)
   try {
     return {
-      major: parseInt(gitVersionMatches[1]),
-      minor: parseInt(gitVersionMatches[2]),
-      patch: parseInt(gitVersionMatches[3])
+      major: Number.parseInt(gitVersionMatches[1]),
+      minor: Number.parseInt(gitVersionMatches[2]),
+      patch: Number.parseInt(gitVersionMatches[3])
     }
-  } catch (e) {
+  } catch {
     return null
   }
 }
 
-function unshallowRepository () {
+function unshallowRepository (parentOnly = false) {
   const gitVersion = getGitVersion()
   if (!gitVersion) {
     log.warn('Git version could not be extracted, so git unshallow will not proceed')
@@ -132,7 +141,7 @@ function unshallowRepository () {
 
   const baseGitOptions = [
     'fetch',
-    '--shallow-since="1 month ago"',
+    parentOnly ? '--deepen=1' : '--shallow-since="1 month ago"',
     '--update-shallow',
     '--filter=blob:none',
     '--recurse-submodules=no',
@@ -196,7 +205,7 @@ function getLatestCommits () {
     const result = cp.execFileSync('git', ['log', '--format=%H', '-n 1000', '--since="1 month ago"'], { stdio: 'pipe' })
       .toString()
       .split('\n')
-      .filter(commit => commit)
+      .filter(Boolean)
     distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'get_local_commits' }, Date.now() - startTime)
     return result
   } catch (err) {
@@ -206,6 +215,138 @@ function getLatestCommits () {
       { command: 'get_local_commits', errorType: err.status }
     )
     return []
+  }
+}
+
+function getGitDiff (baseCommit, targetCommit) {
+  const flags = ['diff', '-U0', '--word-diff=porcelain', baseCommit]
+  if (targetCommit) {
+    flags.push(targetCommit)
+  }
+  return sanitizedExec(
+    'git',
+    flags,
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'diff' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'diff' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'diff' } },
+    false // important not to trim or we'll lose the line breaks which we need to detect impacted tests
+  )
+}
+
+function getGitRemoteName () {
+  const upstreamRemote = sanitizedExec(
+    'git',
+    ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_remote_name' } }
+  )
+
+  if (upstreamRemote) {
+    return upstreamRemote.split('/')[0]
+  }
+
+  const remotes = sanitizedExec(
+    'git',
+    ['remote'],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_remote_name' } },
+    false
+  )
+
+  return remotes.split('\n')[0] || 'origin'
+}
+
+function getSourceBranch () {
+  return sanitizedExec(
+    'git',
+    ['rev-parse', '--abbrev-ref', 'HEAD'],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_source_branch' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_source_branch' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_source_branch' } }
+  )
+}
+
+function checkAndFetchBranch (branch, remoteName) {
+  try {
+    // `git show-ref --verify --quiet refs/remotes/${remoteName}/${branch}` will exit 0 if the branch exists
+    // Otherwise it will exit 1
+    cp.execFileSync(
+      'git',
+      ['show-ref', '--verify', '--quiet', `refs/remotes/${remoteName}/${branch}`],
+      { stdio: 'pipe' }
+    )
+    // branch exists locally, so we finish
+  } catch {
+    // branch does not exist locally, so we will check the remote
+    try {
+      // IMPORTANT: we use timeouts because these commands hang if the branch can't be found
+      // `git ls-remote --heads origin my-branch` will exit 0 even if the branch doesn't exist.
+      // The piece of information we need is whether the command outputs anything.
+      // `git ls-remote --heads origin my-branch` could exit an error code if the remote does not exist.
+      const remoteHeads = cp.execFileSync(
+        'git',
+        ['ls-remote', '--heads', remoteName, branch],
+        { stdio: 'pipe', timeout: 2000 }
+      )
+      if (remoteHeads) {
+        // branch exists, so we'll fetch it
+        cp.execFileSync(
+          'git',
+          ['fetch', '--depth', '1', remoteName, branch],
+          { stdio: 'pipe', timeout: 5000 }
+        )
+      }
+    } catch (e) {
+      // branch does not exist or couldn't be fetched, so we can't do anything
+      log.error('Git plugin error checking and fetching branch', e)
+    }
+  }
+}
+
+function getLocalBranches (remoteName) {
+  const localBranches = sanitizedExec(
+    'git',
+    ['for-each-ref', '--format=%(refname:short)', `refs/remotes/${remoteName}`],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_local_branches' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_local_branches' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_local_branches' } },
+    false
+  )
+  try {
+    return localBranches.split('\n').filter(Boolean)
+  } catch {
+    return []
+  }
+}
+
+function getMergeBase (baseBranch, sourceBranch) {
+  return sanitizedExec(
+    'git',
+    ['merge-base', baseBranch, sourceBranch],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_merge_base' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_merge_base' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_merge_base' } }
+  )
+}
+
+function getCounts (sourceBranch, candidateBranch) {
+  const counts = sanitizedExec(
+    'git',
+    ['rev-list', '--left-right', '--count', `${candidateBranch}...${sourceBranch}`],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_counts' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_counts' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_counts' } }
+  )
+  try {
+    if (!counts) {
+      return { behind: null, ahead: null }
+    }
+    const [behind, ahead] = counts.split(/\s+/).map(Number)
+    return { behind, ahead }
+  } catch {
+    return { behind: null, ahead: null }
   }
 }
 
@@ -231,7 +372,7 @@ function getCommitsRevList (commitsToExclude, commitsToInclude) {
       { stdio: 'pipe', maxBuffer: GIT_REV_LIST_MAX_BUFFER })
       .toString()
       .split('\n')
-      .filter(commit => commit)
+      .filter(Boolean)
   } catch (err) {
     log.error('Get commits to upload failed: %s', err.message)
     incrementCountMetric(
@@ -248,11 +389,12 @@ function generatePackFilesForCommits (commitsToUpload) {
   const tmpFolder = os.tmpdir()
 
   if (!isDirectory(tmpFolder)) {
+    // TODO: Do we need the stack trace for this error? If not, just log the string
     log.error(new Error('Provided path to generate packfiles is not a directory'))
     return []
   }
 
-  const randomPrefix = String(Math.floor(Math.random() * 10000))
+  const randomPrefix = String(Math.floor(Math.random() * 10_000))
   const temporaryPath = path.join(tmpFolder, randomPrefix)
   const cwdPath = path.join(process.cwd(), randomPrefix)
 
@@ -270,7 +412,7 @@ function generatePackFilesForCommits (commitsToUpload) {
         targetPath
       ],
       { stdio: 'pipe', input: commitsToUpload.join('\n') }
-    ).toString().split('\n').filter(commit => commit).map(commit => `${targetPath}-${commit}.pack`)
+    ).toString().split('\n').filter(Boolean).map(commit => `${targetPath}-${commit}.pack`)
   }
 
   try {
@@ -318,7 +460,8 @@ function getGitMetadata (ciMetadata) {
     commitMessage,
     authorName: ciAuthorName,
     authorEmail: ciAuthorEmail,
-    ciWorkspacePath
+    ciWorkspacePath,
+    headCommitSha
   } = ciMetadata
 
   // With stdio: 'pipe', errors in this command will not be output to the parent process,
@@ -337,7 +480,32 @@ function getGitMetadata (ciMetadata) {
       commitMessage || sanitizedExec('git', ['show', '-s', '--format=%B'], null, null, null, false),
     [GIT_BRANCH]: branch || sanitizedExec('git', ['rev-parse', '--abbrev-ref', 'HEAD']),
     [GIT_COMMIT_SHA]: commitSHA || sanitizedExec('git', ['rev-parse', 'HEAD']),
-    [CI_WORKSPACE_PATH]: ciWorkspacePath || sanitizedExec('git', ['rev-parse', '--show-toplevel'])
+    [CI_WORKSPACE_PATH]: ciWorkspacePath || sanitizedExec('git', ['rev-parse', '--show-toplevel']),
+  }
+
+  if (headCommitSha) {
+    if (isShallowRepository()) {
+      unshallowRepository(true)
+    }
+
+    tags[GIT_COMMIT_HEAD_MESSAGE] =
+      sanitizedExec('git', ['show', '-s', '--format=%B', headCommitSha], null, null, null, false)
+
+    const [
+      headAuthorName,
+      headAuthorEmail,
+      headAuthorDate,
+      headCommitterName,
+      headCommitterEmail,
+      headCommitterDate
+    ] = sanitizedExec('git', ['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI', headCommitSha]).split(',')
+
+    tags[GIT_COMMIT_HEAD_AUTHOR_DATE] = headAuthorDate
+    tags[GIT_COMMIT_HEAD_AUTHOR_EMAIL] = headAuthorEmail
+    tags[GIT_COMMIT_HEAD_AUTHOR_NAME] = headAuthorName
+    tags[GIT_COMMIT_HEAD_COMMITER_DATE] = headCommitterDate
+    tags[GIT_COMMIT_HEAD_COMMITER_EMAIL] = headCommitterEmail
+    tags[GIT_COMMIT_HEAD_COMMITER_NAME] = headCommitterName
   }
 
   const entries = [
@@ -362,6 +530,20 @@ function getGitMetadata (ciMetadata) {
   return tags
 }
 
+function getGitInformationDiscrepancy () {
+  const gitRepositoryUrl = getRepositoryUrl()
+
+  const gitCommitSHA = sanitizedExec(
+    'git',
+    ['rev-parse', 'HEAD'],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_commit_sha' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_commit_sha' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_commit_sha' } }
+  )
+
+  return { gitRepositoryUrl, gitCommitSHA }
+}
+
 module.exports = {
   getGitMetadata,
   getLatestCommits,
@@ -371,5 +553,13 @@ module.exports = {
   GIT_REV_LIST_MAX_BUFFER,
   isShallowRepository,
   unshallowRepository,
-  isGitAvailable
+  isGitAvailable,
+  getGitInformationDiscrepancy,
+  getGitDiff,
+  getGitRemoteName,
+  getSourceBranch,
+  checkAndFetchBranch,
+  getLocalBranches,
+  getMergeBase,
+  getCounts
 }

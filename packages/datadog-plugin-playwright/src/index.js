@@ -3,6 +3,7 @@
 const { storage } = require('../../datadog-core')
 const id = require('../../dd-trace/src/id')
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
 const {
   TEST_STATUS,
@@ -34,7 +35,9 @@ const {
   TEST_NAME,
   TEST_IS_RUM_ACTIVE,
   TEST_BROWSER_VERSION,
-  TEST_RETRY_REASON_TYPES
+  TEST_RETRY_REASON_TYPES,
+  TEST_IS_MODIFIED,
+  isModifiedTest
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -55,6 +58,16 @@ class PlaywrightPlugin extends CiPlugin {
     this._testSuites = new Map()
     this.numFailedTests = 0
     this.numFailedSuites = 0
+
+    this.addSub('ci:playwright:test:is-modified', ({
+      filePath,
+      modifiedTests,
+      onDone
+    }) => {
+      const testSuite = getTestSuitePath(filePath, this.repositoryRoot)
+      const isModified = isModifiedTest(testSuite, 0, 0, modifiedTests, this.constructor.id)
+      onDone({ isModified })
+    })
 
     this.addSub('ci:playwright:session:finish', ({
       status,
@@ -90,14 +103,16 @@ class PlaywrightPlugin extends CiPlugin {
       finishAllTraceSpans(this.testSessionSpan)
       this.telemetry.count(TELEMETRY_TEST_SESSION, {
         provider: this.ciProviderName,
-        autoInjected: !!process.env.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER
+        autoInjected: !!getEnvironmentVariable('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER')
       })
       appClosingTelemetry()
       this.tracer._exporter.flush(onDone)
       this.numFailedTests = 0
     })
 
-    this.addSub('ci:playwright:test-suite:start', (testSuiteAbsolutePath) => {
+    this.addBind('ci:playwright:test-suite:start', (ctx) => {
+      const { testSuiteAbsolutePath } = ctx
+
       const store = storage('legacy').getStore()
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.rootDir)
       const testSourceFile = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
@@ -126,27 +141,28 @@ class PlaywrightPlugin extends CiPlugin {
         }
       })
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
-      this.enter(testSuiteSpan, store)
+      ctx.parentStore = store
+      ctx.currentStore = { ...store, testSuiteSpan }
 
       this._testSuites.set(testSuiteAbsolutePath, testSuiteSpan)
+
+      return ctx.currentStore
     })
 
-    this.addSub('ci:playwright:test-suite:finish', ({ status, error }) => {
-      const store = storage('legacy').getStore()
-      const span = store && store.span
-      if (!span) return
+    this.addSub('ci:playwright:test-suite:finish', ({ testSuiteSpan, status, error }) => {
+      if (!testSuiteSpan) return
       if (error) {
-        span.setTag('error', error)
-        span.setTag(TEST_STATUS, 'fail')
+        testSuiteSpan.setTag('error', error)
+        testSuiteSpan.setTag(TEST_STATUS, 'fail')
       } else {
-        span.setTag(TEST_STATUS, status)
+        testSuiteSpan.setTag(TEST_STATUS, status)
       }
 
       if (status === 'fail' || error) {
         this.numFailedSuites++
       }
 
-      span.finish()
+      testSuiteSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
     })
 
@@ -180,13 +196,14 @@ class PlaywrightPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:playwright:test:start', ({
-      testName,
-      testSuiteAbsolutePath,
-      testSourceLine,
-      browserName,
-      isDisabled
-    }) => {
+    this.addBind('ci:playwright:test:start', (ctx) => {
+      const {
+        testName,
+        testSuiteAbsolutePath,
+        testSourceLine,
+        browserName,
+        isDisabled
+      } = ctx
       const store = storage('legacy').getStore()
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.rootDir)
       const testSourceFile = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
@@ -203,7 +220,10 @@ class PlaywrightPlugin extends CiPlugin {
         span.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
       }
 
-      this.enter(span, store)
+      ctx.parentStore = store
+      ctx.currentStore = { ...store, span }
+
+      return ctx.currentStore
     })
 
     this.addSub('ci:playwright:worker:report', (serializedTraces) => {
@@ -254,6 +274,7 @@ class PlaywrightPlugin extends CiPlugin {
     })
 
     this.addSub('ci:playwright:test:finish', ({
+      span,
       testStatus,
       steps,
       error,
@@ -267,11 +288,11 @@ class PlaywrightPlugin extends CiPlugin {
       isAttemptToFixRetry,
       hasFailedAllRetries,
       hasPassedAttemptToFixRetries,
+      hasFailedAttemptToFixRetries,
       isAtrRetry,
+      isModified,
       onDone
     }) => {
-      const store = storage('legacy').getStore()
-      const span = store && store.span
       if (!span) return
 
       const isRUMActive = span.context()._tags[TEST_IS_RUM_ACTIVE]
@@ -311,12 +332,21 @@ class PlaywrightPlugin extends CiPlugin {
       }
       if (hasPassedAttemptToFixRetries) {
         span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
+      } else if (hasFailedAttemptToFixRetries) {
+        span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
       }
       if (isDisabled) {
         span.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
       }
       if (isQuarantined) {
         span.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+      }
+      if (isModified) {
+        span.setTag(TEST_IS_MODIFIED, 'true')
+        if (isEfdRetry) {
+          span.setTag(TEST_IS_RETRY, 'true')
+          span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
+        }
       }
       steps.forEach(step => {
         const stepStartTime = step.startTime.getTime()
@@ -333,7 +363,7 @@ class PlaywrightPlugin extends CiPlugin {
           stepSpan.setTag('error', step.error)
         }
         let stepDuration = step.duration
-        if (stepDuration <= 0 || isNaN(stepDuration)) {
+        if (stepDuration <= 0 || Number.isNaN(stepDuration)) {
           stepDuration = 0
         }
         stepSpan.finish(stepStartTime + stepDuration)
@@ -355,7 +385,7 @@ class PlaywrightPlugin extends CiPlugin {
       span.finish()
 
       finishAllTraceSpans(span)
-      if (process.env.DD_PLAYWRIGHT_WORKER) {
+      if (getEnvironmentVariable('DD_PLAYWRIGHT_WORKER')) {
         this.tracer._exporter.flush(onDone)
       }
     })

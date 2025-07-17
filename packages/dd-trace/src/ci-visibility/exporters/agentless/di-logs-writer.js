@@ -3,6 +3,7 @@ const request = require('../../../exporters/common/request')
 const log = require('../../../log')
 const { safeJSONStringify } = require('../../../exporters/common/util')
 const { JSONEncoder } = require('../../encode/json-encoder')
+const { getEnvironmentVariable } = require('../../../config-helper')
 
 const BaseWriter = require('../../../exporters/common/writer')
 
@@ -23,11 +24,11 @@ class DynamicInstrumentationLogsWriter extends BaseWriter {
       path: '/api/v2/logs',
       method: 'POST',
       headers: {
-        'dd-api-key': process.env.DATADOG_API_KEY || process.env.DD_API_KEY,
+        'dd-api-key': getEnvironmentVariable('DD_API_KEY'),
         'Content-Type': 'application/json'
       },
       // TODO: what's a good value for timeout for the logs intake?
-      timeout: this.timeout || 15000,
+      timeout: this.timeout || 15_000,
       url: this._url
     }
 
@@ -44,7 +45,7 @@ class DynamicInstrumentationLogsWriter extends BaseWriter {
         done()
         return
       }
-      log.debug(`Response from the logs intake: ${res}`)
+      log.debug('Response from the logs intake:', res)
       done()
     })
   }

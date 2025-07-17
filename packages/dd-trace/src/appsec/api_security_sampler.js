@@ -4,10 +4,13 @@ const TTLCache = require('@isaacs/ttlcache')
 const web = require('../plugins/util/web')
 const log = require('../log')
 const { AUTO_REJECT, USER_REJECT } = require('../../../../ext/priority')
+const { keepTrace } = require('../priority_sampler')
+const { ASM } = require('../standalone/product')
 
 const MAX_SIZE = 4096
 
 let enabled
+let asmStandaloneEnabled
 
 /**
  * @type {TTLCache}
@@ -15,16 +18,17 @@ let enabled
 let sampledRequests
 
 class NoopTTLCache {
-  clear () { }
-  set (_key, _value) { return undefined }
+  clear () {}
+  set (_key, _value) {}
   has (_key) { return false }
 }
 
-function configure ({ apiSecurity }) {
-  enabled = apiSecurity.enabled
-  sampledRequests = apiSecurity.sampleDelay === 0
+function configure ({ appsec, apmTracingEnabled }) {
+  enabled = appsec.apiSecurity.enabled
+  asmStandaloneEnabled = apmTracingEnabled === false
+  sampledRequests = appsec.apiSecurity.sampleDelay === 0
     ? new NoopTTLCache()
-    : new TTLCache({ max: MAX_SIZE, ttl: apiSecurity.sampleDelay * 1000 })
+    : new TTLCache({ max: MAX_SIZE, ttl: appsec.apiSecurity.sampleDelay * 1000 })
 }
 
 function disable () {
@@ -41,14 +45,18 @@ function sampleRequest (req, res, force = false) {
   const rootSpan = web.root(req)
   if (!rootSpan) return false
 
-  let priority = getSpanPriority(rootSpan)
-  if (!priority) {
-    rootSpan._prioritySampler?.sample(rootSpan)
-    priority = getSpanPriority(rootSpan)
-  }
+  if (asmStandaloneEnabled) {
+    keepTrace(rootSpan, ASM)
+  } else {
+    let priority = getSpanPriority(rootSpan)
+    if (!priority) {
+      rootSpan._prioritySampler?.sample(rootSpan)
+      priority = getSpanPriority(rootSpan)
+    }
 
-  if (priority === AUTO_REJECT || priority === USER_REJECT) {
-    return false
+    if (priority === AUTO_REJECT || priority === USER_REJECT) {
+      return false
+    }
   }
 
   if (force) {

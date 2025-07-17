@@ -112,10 +112,9 @@ function wrapMiddleware (fn, layer) {
             throw err
           }
         )
-      } else {
-        fulfill(ctx)
-        return result
       }
+      fulfill(ctx)
+      return result
     } catch (e) {
       fulfill(ctx, e)
       throw e

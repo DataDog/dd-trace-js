@@ -21,6 +21,7 @@ const privateCIDRs = [
   '172.16.0.0/12',
   '192.168.0.0/16',
   '169.254.0.0/16',
+  '100.65.0.0/10',
   '::1/128',
   'fec0::/10',
   'fe80::/10',
@@ -33,7 +34,7 @@ const privateIPMatcher = new BlockList()
 for (const cidr of privateCIDRs) {
   const [address, prefix] = cidr.split('/')
 
-  privateIPMatcher.addSubnet(address, parseInt(prefix), net.isIPv6(address) ? 'ipv6' : 'ipv4')
+  privateIPMatcher.addSubnet(address, Number.parseInt(prefix), net.isIPv6(address) ? 'ipv6' : 'ipv4')
 }
 
 function extractIp (config, req) {

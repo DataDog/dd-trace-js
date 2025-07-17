@@ -44,27 +44,24 @@ class AbortError extends Error {
   }
 }
 
+const types = new Set(['query', 'mutation', 'subscription'])
+
 function getOperation (document, operationName) {
   if (!document || !Array.isArray(document.definitions)) {
     return
   }
 
-  const definitions = document.definitions.filter(def => def)
-  const types = ['query', 'mutation', 'subscription']
-
-  if (operationName) {
-    return definitions
-      .filter(def => types.indexOf(def.operation) !== -1)
-      .find(def => operationName === (def.name && def.name.value))
-  } else {
-    return definitions.find(def => types.indexOf(def.operation) !== -1)
+  for (const definition of document.definitions) {
+    if (definition && types.has(definition.operation) && (!operationName || definition.name?.value === operationName)) {
+      return definition
+    }
   }
 }
 
 function normalizeArgs (args, defaultFieldResolver) {
   if (args.length !== 1) return normalizePositional(args, defaultFieldResolver)
 
-  args[0].contextValue = args[0].contextValue || {}
+  args[0].contextValue ||= {}
   args[0].fieldResolver = wrapResolve(args[0].fieldResolver || defaultFieldResolver)
 
   return args[0]
@@ -361,6 +358,15 @@ function finishResolvers ({ fields }) {
     })
   })
 }
+
+addHook({ name: '@graphql-tools/executor', versions: ['>=0.0.14'] }, executor => {
+  // graphql-yoga uses the normalizedExecutor function, so we need to wrap both. There is no risk in wrapping both
+  // since the functions are closely related, and our wrappedExecute function prevents double calls with the
+  // contexts.has(contextValue) check.
+  shimmer.wrap(executor, 'execute', wrapExecute(executor))
+  shimmer.wrap(executor, 'normalizedExecutor', wrapExecute(executor))
+  return executor
+})
 
 addHook({ name: '@graphql-tools/executor', file: 'cjs/execution/execute.js', versions: ['>=0.0.14'] }, execute => {
   shimmer.wrap(execute, 'execute', wrapExecute(execute))

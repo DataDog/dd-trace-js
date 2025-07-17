@@ -12,8 +12,15 @@ const suiteDescribe = isWindows ? describe.skip : describe
 suiteDescribe('runtimeMetrics (proxy)', () => {
   let runtimeMetrics
   let proxy
+  let config
 
   beforeEach(() => {
+    config = {
+      runtimeMetrics: {
+        enabled: false
+      }
+    }
+
     runtimeMetrics = sinon.spy({
       start () {},
       stop () {},
@@ -54,7 +61,7 @@ suiteDescribe('runtimeMetrics (proxy)', () => {
   })
 
   it('should proxy when enabled', () => {
-    const config = { runtimeMetrics: true }
+    config.runtimeMetrics.enabled = true
 
     proxy.start(config)
     proxy.track()
@@ -78,11 +85,11 @@ suiteDescribe('runtimeMetrics (proxy)', () => {
   })
 
   it('should be noop when disabled after being enabled', () => {
-    const config = { runtimeMetrics: true }
-
+    config.runtimeMetrics.enabled = true
     proxy.start(config)
     proxy.stop()
-    proxy.start()
+    config.runtimeMetrics.enabled = false
+    proxy.start(config)
     proxy.track()
     proxy.boolean()
     proxy.histogram()
@@ -113,8 +120,22 @@ suiteDescribe('runtimeMetrics', () => {
   let Client
 
   beforeEach(() => {
+    // This is needed because sinon spies keep references to arguments which
+    // breaks tests because the tags parameter is now mutated right after the
+    // call.
+    const wrapSpy = (client, spy) => {
+      return function (stat, value, tags) {
+        return spy.call(client, stat, value, [].concat(tags))
+      }
+    }
+
     Client = sinon.spy(function () {
-      return client
+      return {
+        gauge: wrapSpy(client, client.gauge),
+        increment: wrapSpy(client, client.increment),
+        histogram: wrapSpy(client, client.histogram),
+        flush: client.flush.bind(client)
+      }
     })
 
     Client.generateClientConfig = DogStatsDClient.generateClientConfig
@@ -138,6 +159,11 @@ suiteDescribe('runtimeMetrics', () => {
       dogstatsd: {
         hostname: 'localhost',
         port: 8125
+      },
+      runtimeMetrics: {
+        enabled: true,
+        eventLoop: true,
+        gc: true
       },
       tags: {
         str: 'bar',

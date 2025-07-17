@@ -5,7 +5,9 @@ const ServerPlugin = require('../../dd-trace/src/plugins/server')
 class SharedbPlugin extends ServerPlugin {
   static get id () { return 'sharedb' }
 
-  start ({ actionName, request }) {
+  bindStart (ctx) {
+    const { actionName, request } = ctx
+
     const span = this.startSpan('sharedb.request', {
       service: this.config.service,
       resource: getReadableResourceName(actionName, request.c, request.q),
@@ -13,19 +15,25 @@ class SharedbPlugin extends ServerPlugin {
       meta: {
         'sharedb.action': actionName
       }
-    })
+    }, ctx)
 
     if (this.config.hooks && this.config.hooks.receive) {
       this.config.hooks.receive(span, request)
     }
+
+    return ctx.currentStore
   }
 
-  finish ({ request, res }) {
-    const span = this.activeSpan
+  bindFinish (ctx) {
+    const { request, res } = ctx
+
+    const span = ctx.currentStore.span
     if (this.config.hooks && this.config.hooks.reply) {
       this.config.hooks.reply(span, request, res)
     }
-    super.finish()
+    super.finish(ctx)
+
+    return ctx.parentStore
   }
 }
 

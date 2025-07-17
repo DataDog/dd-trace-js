@@ -1,6 +1,7 @@
 'use strict'
 
 const { expect } = require('chai')
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
@@ -54,7 +55,7 @@ describe('Plugin', () => {
 
           it('Should set pathway hash tag on a span when producing', (done) => {
             let produceSpanMeta = {}
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               const span = traces[0][0]
 
               if (span.meta['span.kind'] === 'producer') {
@@ -74,7 +75,7 @@ describe('Plugin', () => {
 
             container.once('message', msg => {
               let consumeSpanMeta = {}
-              agent.use(traces => {
+              agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
 
                 if (span.meta['span.kind'] === 'consumer') {
@@ -131,13 +132,16 @@ describe('Plugin', () => {
             withPeerService(
               () => tracer,
               'rhea',
-              () => context.sender.send({ body: 'Hello World!' }),
+              (done) => {
+                context.sender.send({ body: 'Hello World!' })
+                done()
+              },
               'localhost',
               'out.host'
             )
 
             it('should automatically instrument', (done) => {
-              agent.use(traces => {
+              agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
                 expect(span).to.include({
                   name: expectedSchema.send.opName,
@@ -193,7 +197,7 @@ describe('Plugin', () => {
 
           describe('receiving a message', () => {
             it('should automatically instrument', done => {
-              agent.use(traces => {
+              agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
                 expect(span).to.include({
                   name: expectedSchema.receive.opName,
@@ -266,7 +270,7 @@ describe('Plugin', () => {
           )
 
           it('should use the configuration for the receiver', (done) => {
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               const span = traces[0][0]
               expect(span).to.have.property('name', expectedSchema.receive.opName)
               expect(span).to.have.property('service', 'a_test_service')
@@ -276,7 +280,7 @@ describe('Plugin', () => {
           })
 
           it('should use the configuration for the sender', (done) => {
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               const span = traces[0][0]
               expect(span).to.have.property('name', expectedSchema.send.opName)
               expect(span).to.have.property('service', 'a_test_service')
@@ -315,7 +319,7 @@ describe('Plugin', () => {
         })
 
         it('should automatically instrument', (done) => {
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             const beforeFinishContext = rheaInstumentation.contexts.get(spy.firstCall.firstArg)
             expect(spy).to.have.been.called
             expect(beforeFinishContext).to.have.property('connection')
@@ -436,7 +440,7 @@ describe('Plugin', () => {
                   throw error
                 })
 
-                agent.use(traces => {
+                agent.assertSomeTraces(traces => {
                   const span = traces[0][0]
                   expect(span.error).to.equal(1)
                   expect(span.meta).to.include({
@@ -636,7 +640,7 @@ describe('Plugin', () => {
 
           it('sender span should get closed', (done) => {
             const err = new Error('fake protocol error')
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               const span = traces[0][0]
               expect(span).to.include({
                 name: expectedSchema.send.opName,
@@ -668,7 +672,7 @@ describe('Plugin', () => {
 
           it('receiver span should closed', (done) => {
             const err = new Error('fake protocol error')
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               const span = traces[0][0]
               expect(span).to.include({
                 name: expectedSchema.receive.opName,
@@ -703,7 +707,7 @@ describe('Plugin', () => {
 function expectReceiving (agent, expectedSchema, deliveryState, topic) {
   deliveryState = deliveryState || deliveryState === false ? undefined : 'accepted'
   topic = topic || 'amq.topic'
-  return Promise.resolve().then(() => agent.use(traces => {
+  return Promise.resolve().then(() => agent.assertSomeTraces(traces => {
     const span = traces[0][0]
     expect(span).to.include({
       name: expectedSchema.receive.opName,
@@ -728,7 +732,7 @@ function expectReceiving (agent, expectedSchema, deliveryState, topic) {
 function expectSending (agent, expectedSchema, deliveryState, topic) {
   deliveryState = deliveryState || deliveryState === false ? undefined : 'accepted'
   topic = topic || 'amq.topic'
-  return Promise.resolve().then(() => agent.use(traces => {
+  return Promise.resolve().then(() => agent.assertSomeTraces(traces => {
     const span = traces[0][0]
     expect(span).to.include({
       name: expectedSchema.send.opName,

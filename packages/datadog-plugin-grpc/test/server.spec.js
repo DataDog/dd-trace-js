@@ -1,16 +1,15 @@
 'use strict'
 
-const path = require('path')
+const path = require('node:path')
+const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const getPort = require('get-port')
-const Readable = require('stream').Readable
+const Readable = require('node:stream').Readable
 
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK, GRPC_SERVER_ERROR_STATUSES } = require('../../dd-trace/src/constants')
 
 const nodeMajor = parseInt(process.versions.node.split('.')[0])
 const pkgs = nodeMajor > 14 ? ['@grpc/grpc-js'] : ['grpc', '@grpc/grpc-js']
-
-const { DD_MAJOR } = require('../../../version')
 
 describe('Plugin', () => {
   let grpc
@@ -89,7 +88,7 @@ describe('Plugin', () => {
           },
           {
             v0: {
-              opName: DD_MAJOR <= 2 ? 'grpc.request' : 'grpc.server',
+              opName: 'grpc.server',
               serviceName: 'test'
             },
             v1: {
@@ -107,7 +106,7 @@ describe('Plugin', () => {
           client.getUnary({ first: 'foobar' }, () => {})
 
           return agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.deep.include({
                 name: 'grpc.server',
                 service: 'test',
@@ -133,7 +132,7 @@ describe('Plugin', () => {
           client.getServerStream({ first: 'foobar' }, () => {})
 
           return agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.deep.include({
                 name: 'grpc.server',
                 service: 'test',
@@ -159,7 +158,7 @@ describe('Plugin', () => {
           call.on('error', () => {})
 
           return agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.deep.include({
                 name: 'grpc.server',
                 service: 'test',
@@ -186,7 +185,7 @@ describe('Plugin', () => {
           call.on('error', () => {})
 
           return agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0].metrics).to.have.property('grpc.status.code', 1)
             })
         })
@@ -201,7 +200,7 @@ describe('Plugin', () => {
           call.on('error', () => {})
 
           return agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0].metrics).to.have.property('grpc.status.code', 1)
             })
         })
@@ -215,7 +214,7 @@ describe('Plugin', () => {
           call.on('error', () => {})
 
           return agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0].metrics).to.have.property('grpc.status.code', 1)
             })
         })
@@ -234,7 +233,7 @@ describe('Plugin', () => {
           client.getUnary({ first: 'foobar' }, () => {})
 
           return agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('error', 1)
               expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, 'foobar')
               expect(traces[0][0].meta).to.have.property(ERROR_TYPE, 'Error')
@@ -266,7 +265,7 @@ describe('Plugin', () => {
           client.getUnary({ first: 'foobar' }, () => {})
 
           return agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('error', 1)
               expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, 'foobar')
               expect(traces[0][0].meta[ERROR_STACK]).to.match(/^Error: foobar\n {4}at Object.getUnary.*/)
@@ -301,7 +300,7 @@ describe('Plugin', () => {
           client.getUnary({ first: 'foobar' }, () => {})
 
           return agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].metrics).to.have.property('grpc.status.code', 5)
               tracer._tracer._config.grpc.server.error.statuses = GRPC_SERVER_ERROR_STATUSES
@@ -322,7 +321,7 @@ describe('Plugin', () => {
           client.getUnary({ first: 'foobar' }, () => {})
 
           return agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('error', 1)
               expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, 'foobar')
               expect(traces[0][0].metrics).to.have.property('grpc.status.code', 5)
@@ -345,7 +344,7 @@ describe('Plugin', () => {
           call.on('error', () => {})
 
           return agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('error', 1)
               expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, 'foobar')
               expect(traces[0][0].meta[ERROR_STACK]).to.equal(error.stack)
@@ -419,7 +418,7 @@ describe('Plugin', () => {
           client.getUnary({ first: 'foobar' }, () => {})
 
           return agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.deep.include({
                 service: 'custom'
               })
@@ -458,7 +457,7 @@ describe('Plugin', () => {
           client.getUnary({ first: 'foobar' }, metadata, () => {})
 
           return agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0].meta).to.have.property('grpc.request.metadata.foo', 'bar')
             })
         })
@@ -477,7 +476,7 @@ describe('Plugin', () => {
           client.getUnary({ first: 'foobar' }, () => {})
 
           return agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0].meta).to.have.property('grpc.response.metadata.foo', 'bar')
             })
         })

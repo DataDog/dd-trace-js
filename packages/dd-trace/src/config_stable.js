@@ -1,5 +1,8 @@
+'use strict'
+
 const os = require('os')
 const fs = require('fs')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
 class StableConfig {
   constructor () {
@@ -27,7 +30,7 @@ class StableConfig {
     try {
       libdatadog = require('@datadog/libdatadog')
       this.wasm_loaded = true
-    } catch (e) {
+    } catch {
       this.warnings.push('Can\'t load libdatadog library')
       return
     }
@@ -40,6 +43,8 @@ class StableConfig {
 
     try {
       const configurator = new libconfig.JsConfigurator()
+      // Intentionally pass through the raw environment variables for reporting.
+      // eslint-disable-next-line eslint-rules/eslint-process-env
       configurator.set_envp(Object.entries(process.env).map(([key, value]) => `${key}=${value}`))
       configurator.set_args(process.argv)
       configurator.get_configuration(localConfig.toString(), fleetConfig.toString()).forEach((entry) => {
@@ -78,19 +83,19 @@ class StableConfig {
         fleetConfigPath = '/opt/datadog-agent/etc/managed/datadog-agent/stable/application_monitoring.yaml'
         break
       case 'win32':
-        localConfigPath = 'C:\\ProgramData\\Datadog\\application_monitoring.yaml'
-        fleetConfigPath = 'C:\\ProgramData\\Datadog\\managed\\datadog-agent\\stable\\application_monitoring.yaml'
+        localConfigPath = String.raw`C:\ProgramData\Datadog\application_monitoring.yaml`
+        fleetConfigPath = String.raw`C:\ProgramData\Datadog\managed\datadog-agent\stable\application_monitoring.yaml`
         break
       default:
         break
     }
 
     // Allow overriding the paths for testing
-    if (process.env.DD_TEST_LOCAL_CONFIG_PATH !== undefined) {
-      localConfigPath = process.env.DD_TEST_LOCAL_CONFIG_PATH
+    if (getEnvironmentVariable('DD_TEST_LOCAL_CONFIG_PATH') !== undefined) {
+      localConfigPath = getEnvironmentVariable('DD_TEST_LOCAL_CONFIG_PATH')
     }
-    if (process.env.DD_TEST_FLEET_CONFIG_PATH !== undefined) {
-      fleetConfigPath = process.env.DD_TEST_FLEET_CONFIG_PATH
+    if (getEnvironmentVariable('DD_TEST_FLEET_CONFIG_PATH') !== undefined) {
+      fleetConfigPath = getEnvironmentVariable('DD_TEST_FLEET_CONFIG_PATH')
     }
 
     return { localConfigPath, fleetConfigPath }

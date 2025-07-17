@@ -1,5 +1,6 @@
 'use strict'
 
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const axios = require('axios')
@@ -62,7 +63,7 @@ describe('Plugin', () => {
             Bucket: bucketName,
             Key: 'test-key',
             Body: 'test body'
-          }, (err) => err && done(err)),
+          }, done),
           bucketName, 'bucketname')
 
         withNamingSchema(
@@ -76,7 +77,7 @@ describe('Plugin', () => {
 
         describe('span pointers', () => {
           it('should add span pointer for putObject operation', (done) => {
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               try {
                 const span = traces[0][0]
                 const links = JSON.parse(span.meta?.['_dd.span_links'] || '[]')
@@ -106,7 +107,7 @@ describe('Plugin', () => {
           })
 
           it('should add span pointer for copyObject operation', (done) => {
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               try {
                 const span = traces[0][0]
                 const links = JSON.parse(span.meta?.['_dd.span_links'] || '[]')
@@ -181,7 +182,7 @@ describe('Plugin', () => {
 
                 s3.completeMultipartUpload(completeParams, (err) => {
                   if (err) done(err)
-                  agent.use(traces => {
+                  agent.assertSomeTraces(traces => {
                     const span = traces[0][0]
                     const operation = span.meta?.['aws.operation']
                     if (operation === 'completeMultipartUpload') {
@@ -209,7 +210,7 @@ describe('Plugin', () => {
         it('should allow disabling a specific span kind of a service', (done) => {
           let total = 0
 
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             const span = traces[0][0]
             expect(span).to.include({
               name: 'aws.request',

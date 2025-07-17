@@ -1,13 +1,12 @@
 'use strict'
 
-const getPort = require('get-port')
 const path = require('path')
 const Axios = require('axios')
 const { assert } = require('chai')
 const { createSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
 
 describe('IAST - code_injection - integration', () => {
-  let axios, sandbox, cwd, appPort, agent, proc
+  let axios, sandbox, cwd, agent, proc
 
   before(async function () {
     this.timeout(process.platform === 'win32' ? 300000 : 30000)
@@ -18,11 +17,7 @@ describe('IAST - code_injection - integration', () => {
       [path.join(__dirname, 'resources')]
     )
 
-    appPort = await getPort()
     cwd = sandbox.folder
-    axios = Axios.create({
-      baseURL: `http://localhost:${appPort}`
-    })
   })
 
   after(async function () {
@@ -56,7 +51,7 @@ describe('IAST - code_injection - integration', () => {
         })
         assert.isNotNull(instrumentedSink)
       }
-    }, 30_000, 'generate-metrics', 2)
+    }, 'generate-metrics', 30_000, 2)
 
     const checkMessages = agent.assertMessageReceived(({ headers, payload }) => {
       assert.strictEqual(payload[0][0].metrics['_dd.iast.enabled'], 1)
@@ -72,11 +67,9 @@ describe('IAST - code_injection - integration', () => {
       assert.isTrue(vulnerabilities.has('CODE_INJECTION'))
     })
 
-    return Promise.all([checkMessages, checkTelemetry]).then(() => {
-      assert.equal(iastTelemetryReceived, true)
+    await Promise.all([checkMessages, checkTelemetry])
 
-      return true
-    })
+    assert.equal(iastTelemetryReceived, true)
   }
 
   describe('SourceTextModule', () => {
@@ -85,13 +78,13 @@ describe('IAST - code_injection - integration', () => {
         cwd,
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
-          APP_PORT: appPort,
           DD_IAST_ENABLED: 'true',
           DD_IAST_REQUEST_SAMPLING: '100',
           DD_TELEMETRY_HEARTBEAT_INTERVAL: 1
         },
         execArgv: ['--experimental-vm-modules']
       })
+      axios = Axios.create({ baseURL: proc.url })
     })
 
     it('should report Code injection vulnerability', async () => {
@@ -105,12 +98,12 @@ describe('IAST - code_injection - integration', () => {
         cwd,
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
-          APP_PORT: appPort,
           DD_IAST_ENABLED: 'true',
           DD_IAST_REQUEST_SAMPLING: '100',
           DD_TELEMETRY_HEARTBEAT_INTERVAL: 1
         }
       })
+      axios = Axios.create({ baseURL: proc.url })
     })
 
     it('should report Code injection vulnerability', async () => {

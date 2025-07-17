@@ -16,12 +16,13 @@ class GraphQLResolvePlugin extends TracingPlugin {
     const computedPathString = path.join('.')
 
     if (this.config.collapse) {
+      if (context.fields[computedPathString]) return
+
       if (!context[collapsedPathSym]) {
         context[collapsedPathSym] = {}
+      } else if (context[collapsedPathSym][computedPathString]) {
+        return
       }
-
-      if (context.fields[computedPathString]) return
-      if (context[collapsedPathSym][computedPathString]) return
 
       context[collapsedPathSym][computedPathString] = true
     }
@@ -29,7 +30,7 @@ class GraphQLResolvePlugin extends TracingPlugin {
     const document = context.source
     const fieldNode = info.fieldNodes.find(fieldNode => fieldNode.kind === 'Field')
     const loc = this.config.source && document && fieldNode && fieldNode.loc
-    const source = loc && document.substring(loc.start, loc.end)
+    const source = loc && document.slice(loc.start, loc.end)
 
     const span = this.startSpan('graphql.resolve', {
       service: this.config.service,
@@ -47,10 +48,9 @@ class GraphQLResolvePlugin extends TracingPlugin {
       const variables = this.config.variables(info.variableValues)
 
       fieldNode.arguments
-        .filter(arg => arg.value && arg.value.kind === 'Variable')
-        .filter(arg => arg.value.name && variables[arg.value.name.value])
-        .map(arg => arg.value.name.value)
-        .forEach(name => {
+        .filter(arg => arg.value?.name && arg.value.kind === 'Variable' && variables[arg.value.name.value])
+        .forEach(arg => {
+          const name = arg.value.name.value
           span.setTag(`graphql.variables.${name}`, variables[name])
         })
     }
@@ -89,7 +89,12 @@ class GraphQLResolvePlugin extends TracingPlugin {
 // helpers
 
 function shouldInstrument (config, path) {
-  const depth = path.filter(item => typeof item === 'string').length
+  let depth = 0
+  for (const item of path) {
+    if (typeof item === 'string') {
+      depth += 1
+    }
+  }
 
   return config.depth < 0 || config.depth >= depth
 }
@@ -122,10 +127,11 @@ function getResolverInfo (info, args) {
   let resolverInfo = null
   const resolverVars = {}
 
-  if (args && Object.keys(args).length) {
+  if (args) {
     Object.assign(resolverVars, args)
   }
 
+  let hasResolvers = false
   const directives = info.fieldNodes?.[0]?.directives
   if (Array.isArray(directives)) {
     for (const directive of directives) {
@@ -134,13 +140,14 @@ function getResolverInfo (info, args) {
         argList[argument.name.value] = argument.value.value
       }
 
-      if (Object.keys(argList).length) {
+      if (directive.arguments.length > 0) {
+        hasResolvers = true
         resolverVars[directive.name.value] = argList
       }
     }
   }
 
-  if (Object.keys(resolverVars).length) {
+  if (hasResolvers || args && Object.keys(resolverVars).length) {
     resolverInfo = { [info.fieldName]: resolverVars }
   }
 

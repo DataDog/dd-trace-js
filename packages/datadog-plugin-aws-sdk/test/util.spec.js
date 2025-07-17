@@ -1,3 +1,5 @@
+'use strict'
+
 const { generatePointerHash, encodeValue, extractPrimaryKeys } = require('../src/util')
 
 describe('generatePointerHash', () => {
@@ -124,21 +126,21 @@ describe('encodeValue', () => {
 describe('extractPrimaryKeys', () => {
   describe('single key table', () => {
     it('handles string key', () => {
-      const keySet = new Set(['userId'])
+      const keySet = ['userId']
       const item = { userId: { S: 'user123' } }
       const result = extractPrimaryKeys(keySet, item)
       expect(result).to.deep.equal(['userId', Buffer.from('user123'), '', ''])
     })
 
     it('handles number key', () => {
-      const keySet = new Set(['timestamp'])
+      const keySet = ['timestamp']
       const item = { timestamp: { N: '1234567' } }
       const result = extractPrimaryKeys(keySet, item)
       expect(result).to.deep.equal(['timestamp', Buffer.from('1234567'), '', ''])
     })
 
     it('handles binary key', () => {
-      const keySet = new Set(['binaryId'])
+      const keySet = ['binaryId']
       const binaryData = Buffer.from([1, 2, 3])
       const item = { binaryId: { B: binaryData } }
       const result = extractPrimaryKeys(keySet, item)
@@ -148,7 +150,7 @@ describe('extractPrimaryKeys', () => {
 
   describe('double key table', () => {
     it('handles and sorts string-string keys', () => {
-      const keySet = new Set(['userId', 'email'])
+      const keySet = ['userId', 'email']
       const item = {
         userId: { S: 'user123' },
         email: { S: 'test@example.com' }
@@ -158,7 +160,7 @@ describe('extractPrimaryKeys', () => {
     })
 
     it('handles and sorts string-number keys', () => {
-      const keySet = new Set(['timestamp', 'userId'])
+      const keySet = ['timestamp', 'userId']
       const item = {
         timestamp: { N: '1234567' },
         userId: { S: 'user123' }
@@ -170,14 +172,14 @@ describe('extractPrimaryKeys', () => {
 
   describe('edge cases', () => {
     it('returns undefined when missing values', () => {
-      const keySet = new Set(['userId', 'timestamp'])
+      const keySet = ['userId', 'timestamp']
       const item = { userId: { S: 'user123' } } // timestamp missing
       const result = extractPrimaryKeys(keySet, item)
       expect(result).to.be.undefined
     })
 
     it('returns undefined when invalid value types', () => {
-      const keySet = new Set(['userId', 'timestamp'])
+      const keySet = ['userId', 'timestamp']
       const item = {
         userId: { S: 'user123' },
         timestamp: { INVALID: '1234567' }
@@ -187,12 +189,12 @@ describe('extractPrimaryKeys', () => {
     })
 
     it('handles empty Set input', () => {
-      const result = extractPrimaryKeys(new Set([]), {})
+      const result = extractPrimaryKeys([], {})
       expect(result).to.be.undefined
     })
 
     it('returns undefined when null values in item', () => {
-      const keySet = new Set(['key1', 'key2'])
+      const keySet = ['key1', 'key2']
       const item = {
         key1: null,
         key2: { S: 'value2' }
@@ -202,7 +204,7 @@ describe('extractPrimaryKeys', () => {
     })
 
     it('returns undefined when undefined values in item', () => {
-      const keySet = new Set(['key1', 'key2'])
+      const keySet = ['key1', 'key2']
       const item = {
         key2: { S: 'value2' }
       }

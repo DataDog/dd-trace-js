@@ -9,13 +9,16 @@ const sinon = require('sinon')
 describe('profilers/native/wall', () => {
   let NativeWallProfiler
   let pprof
+  let profile0
 
   beforeEach(() => {
+    profile0 = {
+      encodeAsync: sinon.stub().returns(Promise.resolve('encoded'))
+    }
     pprof = {
-      encode: sinon.stub().returns(Promise.resolve()),
       time: {
         start: sinon.stub(),
-        stop: sinon.stub().returns('profile'),
+        stop: sinon.stub().returns(profile0),
         setContext: sinon.stub(),
         v8ProfilerStuckEventLoopDetected: sinon.stub().returns(false),
         constants: {
@@ -58,8 +61,7 @@ describe('profilers/native/wall', () => {
         withContexts: false,
         lineNumbers: false,
         workaroundV8Bug: false,
-        collectCpuTime: false,
-        collectAsyncId: false
+        collectCpuTime: false
       })
   })
 
@@ -78,8 +80,7 @@ describe('profilers/native/wall', () => {
         withContexts: false,
         lineNumbers: false,
         workaroundV8Bug: false,
-        collectCpuTime: false,
-        collectAsyncId: false
+        collectCpuTime: false
       })
   })
 
@@ -119,7 +120,7 @@ describe('profilers/native/wall', () => {
 
     const profile = profiler.profile(true)
 
-    expect(profile).to.equal('profile')
+    expect(profile).to.be.equal(profile0)
 
     sinon.assert.calledOnce(pprof.time.stop)
     sinon.assert.calledOnce(pprof.time.start)
@@ -136,7 +137,7 @@ describe('profilers/native/wall', () => {
 
     const profile = profiler.profile(false)
 
-    expect(profile).to.equal('profile')
+    expect(profile).to.equal(profile0)
 
     sinon.assert.calledOnce(pprof.time.stop)
     sinon.assert.calledOnce(pprof.time.start)
@@ -145,7 +146,7 @@ describe('profilers/native/wall', () => {
     sinon.assert.calledOnce(pprof.time.stop)
   })
 
-  it('should encode profiles from the pprof time profiler', () => {
+  it('should encode profiles calling their encodeAsync method', () => {
     const profiler = new NativeWallProfiler()
 
     profiler.start()
@@ -156,7 +157,7 @@ describe('profilers/native/wall', () => {
 
     profiler.stop()
 
-    sinon.assert.calledOnce(pprof.encode)
+    sinon.assert.calledOnce(profile0.encodeAsync)
   })
 
   it('should use mapper if given', () => {
@@ -175,8 +176,7 @@ describe('profilers/native/wall', () => {
         withContexts: false,
         lineNumbers: false,
         workaroundV8Bug: false,
-        collectCpuTime: false,
-        collectAsyncId: false
+        collectCpuTime: false
       })
   })
 

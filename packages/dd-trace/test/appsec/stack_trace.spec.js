@@ -66,7 +66,7 @@ describe('Stack trace reporter', () => {
       const rootSpan = {}
       const stackId = 'test_stack_id'
       const maxDepth = 32
-      const frames = getCallsiteFrames(maxDepth, () => callSiteList)
+      const frames = getCallsiteFrames(maxDepth, getCallsiteFrames, () => callSiteList)
 
       reportStackTrace(rootSpan, stackId, frames)
 
@@ -112,7 +112,7 @@ describe('Stack trace reporter', () => {
         }
       ))
 
-      const frames = getCallsiteFrames(maxDepth, () => callSiteList)
+      const frames = getCallsiteFrames(maxDepth, getCallsiteFrames, () => callSiteList)
 
       reportStackTrace(rootSpan, stackId, frames)
 
@@ -141,7 +141,7 @@ describe('Stack trace reporter', () => {
         }
       ))
 
-      const frames = getCallsiteFrames(maxDepth, () => callSiteList)
+      const frames = getCallsiteFrames(maxDepth, getCallsiteFrames, () => callSiteList)
 
       reportStackTrace(rootSpan, stackId, frames)
 
@@ -174,7 +174,7 @@ describe('Stack trace reporter', () => {
         }
       ))
 
-      const frames = getCallsiteFrames(maxDepth, () => callSiteList)
+      const frames = getCallsiteFrames(maxDepth, getCallsiteFrames, () => callSiteList)
 
       reportStackTrace(rootSpan, stackId, frames)
 
@@ -216,7 +216,7 @@ describe('Stack trace reporter', () => {
       const stackId = 'test_stack_id'
       const maxDepth = 32
 
-      const frames = getCallsiteFrames(maxDepth, () => callSiteList)
+      const frames = getCallsiteFrames(maxDepth, getCallsiteFrames, () => callSiteList)
 
       reportStackTrace(rootSpan, stackId, frames)
 
@@ -265,7 +265,7 @@ describe('Stack trace reporter', () => {
         }
       ))
 
-      const frames = getCallsiteFrames(maxDepth, () => callSiteList)
+      const frames = getCallsiteFrames(maxDepth, getCallsiteFrames, () => callSiteList)
 
       reportStackTrace(rootSpan, stackId, frames)
 
@@ -316,7 +316,7 @@ describe('Stack trace reporter', () => {
         }
       ))
 
-      const frames = getCallsiteFrames(maxDepth, () => callSiteListWithLibraryFrames)
+      const frames = getCallsiteFrames(maxDepth, getCallsiteFrames, () => callSiteListWithLibraryFrames)
 
       reportStackTrace(rootSpan, stackId, frames)
 
@@ -339,7 +339,7 @@ describe('Stack trace reporter', () => {
         }
       ))
 
-      const frames = getCallsiteFrames(maxDepth, () => callSiteList)
+      const frames = getCallsiteFrames(maxDepth, getCallsiteFrames, () => callSiteList)
 
       reportStackTrace(rootSpan, stackId, frames)
 
@@ -362,7 +362,7 @@ describe('Stack trace reporter', () => {
         }
       ))
 
-      const frames = getCallsiteFrames(maxDepth, () => callSiteList)
+      const frames = getCallsiteFrames(maxDepth, getCallsiteFrames, () => callSiteList)
 
       reportStackTrace(rootSpan, stackId, frames)
 

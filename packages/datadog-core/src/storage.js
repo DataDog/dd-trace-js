@@ -47,15 +47,16 @@ class DatadogStorage extends AsyncLocalStorage {
    * key. This is useful if you've stashed a handle somewhere and want to
    * retrieve the store with it.
    *
-   * @param handle {{}}
+   * @param [handle] {{}}
    * @returns {T | undefined}
    */
   getStore (handle) {
     if (!handle) {
       handle = super.getStore()
     }
-
-    return stores.get(handle)
+    if (handle) {
+      return stores.get(handle)
+    }
   }
 
   /**

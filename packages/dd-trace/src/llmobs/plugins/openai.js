@@ -68,9 +68,8 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       return { modelProvider: 'azure_openai', client: 'AzureOpenAI' }
     } else if (baseUrl.includes('deepseek')) {
       return { modelProvider: 'deepseek', client: 'DeepSeek' }
-    } else {
-      return { modelProvider: 'openai', client: 'OpenAI' }
     }
+    return { modelProvider: 'openai', client: 'OpenAI' }
   }
 
   _extractMetrics (response) {
@@ -105,7 +104,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     const embeddingInput = embeddingInputs.map(input => ({ text: input }))
 
     if (error) {
-      this._tagger.tagEmbeddingIO(span, embeddingInput, undefined)
+      this._tagger.tagEmbeddingIO(span, embeddingInput)
       return
     }
 

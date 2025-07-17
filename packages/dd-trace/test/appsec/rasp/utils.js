@@ -4,7 +4,7 @@ const { assert } = require('chai')
 const { getWebSpan } = require('../utils')
 
 function checkRaspExecutedAndNotThreat (agent, checkRuleEval = true) {
-  return agent.use((traces) => {
+  return agent.assertSomeTraces((traces) => {
     const span = getWebSpan(traces)
     assert.notProperty(span.meta, '_dd.appsec.json')
     assert.notProperty(span.meta_struct || {}, '_dd.stack')
@@ -15,7 +15,7 @@ function checkRaspExecutedAndNotThreat (agent, checkRuleEval = true) {
 }
 
 function checkRaspExecutedAndHasThreat (agent, ruleId, ruleEvalCount = 1) {
-  return agent.use((traces) => {
+  return agent.assertSomeTraces((traces) => {
     const span = getWebSpan(traces)
     assert.property(span.meta, '_dd.appsec.json')
     assert(span.meta['_dd.appsec.json'].includes(ruleId))

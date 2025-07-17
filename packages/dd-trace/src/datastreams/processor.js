@@ -1,3 +1,5 @@
+'use strict'
+
 const os = require('os')
 const pkg = require('../../../../package.json')
 
@@ -13,16 +15,14 @@ const log = require('../log')
 
 const ENTRY_PARENT_HASH = Buffer.from('0000000000000000', 'hex')
 
-const HIGH_ACCURACY_DISTRIBUTION = 0.0075
-
 class StatsPoint {
   constructor (hash, parentHash, edgeTags) {
     this.hash = hash.readBigUInt64BE()
     this.parentHash = parentHash.readBigUInt64BE()
     this.edgeTags = edgeTags
-    this.edgeLatency = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
-    this.pathwayLatency = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
-    this.payloadSize = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
+    this.edgeLatency = new LogCollapsingLowestDenseDDSketch()
+    this.pathwayLatency = new LogCollapsingLowestDenseDDSketch()
+    this.payloadSize = new LogCollapsingLowestDenseDDSketch()
   }
 
   addLatencies (checkpoint) {
@@ -80,15 +80,14 @@ class StatsBucket {
     return this._backlogs
   }
 
-  forCheckpoint (checkpoint) {
-    const key = checkpoint.hash
-    if (!this._checkpoints.has(key)) {
-      this._checkpoints.set(
-        key, new StatsPoint(checkpoint.hash, checkpoint.parentHash, checkpoint.edgeTags)
-      )
+  forCheckpoint ({ hash, parentHash, edgeTags }) {
+    let checkpoint = this._checkpoints.get(hash)
+    if (!checkpoint) {
+      checkpoint = new StatsPoint(hash, parentHash, edgeTags)
+      this._checkpoints.set(hash, checkpoint)
     }
 
-    return this._checkpoints.get(key)
+    return checkpoint
   }
 
   /**
@@ -105,10 +104,8 @@ class StatsBucket {
   forBacklog (backlogData) {
     const backlog = new Backlog(backlogData)
     const existingBacklog = this._backlogs.get(backlog.hash)
-    if (existingBacklog !== undefined) {
-      if (existingBacklog.offset > backlog.offset) {
-        return existingBacklog
-      }
+    if (existingBacklog !== undefined && existingBacklog.offset > backlog.offset) {
+      return existingBacklog
     }
     this._backlogs.set(backlog.hash, backlog)
     return backlog
@@ -207,7 +204,9 @@ class DataStreamsProcessor {
     let parentHash = ENTRY_PARENT_HASH
     let closestOppositeDirectionHash = ENTRY_PARENT_HASH
     let closestOppositeDirectionEdgeStart = nowNs
-    if (ctx != null) {
+    if (ctx == null) {
+      log.debug('Setting DSM Checkpoint with empty parent context.')
+    } else {
       pathwayStartNs = ctx.pathwayStartNs
       edgeStartNs = ctx.edgeStartNs
       parentHash = ctx.hash
@@ -231,8 +230,6 @@ class DataStreamsProcessor {
       log.debug(
         () => `Setting DSM Checkpoint from extracted parent context with hash: ${parentHash} and edge tags: ${edgeTags}`
       )
-    } else {
-      log.debug(() => 'Setting DSM Checkpoint with empty parent context.')
     }
     const hash = computePathwayHash(this.service, this.env, edgeTags, parentHash)
     const edgeLatencyNs = nowNs - edgeStartNs

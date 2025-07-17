@@ -19,7 +19,7 @@ const maxActiveRequests = 8
 let activeRequests = 0
 
 function parseUrl (urlObjOrString) {
-  if (typeof urlObjOrString === 'object') return urlToHttpOptions(urlObjOrString)
+  if (urlObjOrString !== null && typeof urlObjOrString === 'object') return urlToHttpOptions(urlObjOrString)
 
   const url = urlToHttpOptions(new URL(urlObjOrString))
 
@@ -56,9 +56,12 @@ function request (data, options, callback) {
   const timeout = options.timeout || 2000
   const isSecure = options.protocol === 'https:'
   const client = isSecure ? https : http
-  const dataArray = [].concat(data)
+  let dataArray = data
 
   if (!isReadable) {
+    if (!Array.isArray(data)) {
+      dataArray = [data]
+    }
     options.headers['Content-Length'] = byteLength(dataArray)
   }
 
@@ -100,7 +103,7 @@ function request (data, options, callback) {
             options.url || options.hostname || `http://localhost:${options.port}`
           ).href
           errorMessage = `Error from ${fullUrl}: ${res.statusCode} ${http.STATUS_CODES[res.statusCode]}.`
-        } catch (e) {
+        } catch {
           // ignore error
         }
         const responseData = buffer.toString()

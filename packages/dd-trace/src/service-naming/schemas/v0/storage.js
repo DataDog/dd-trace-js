@@ -1,3 +1,5 @@
+'use strict'
+
 function getRedisService (pluginConfig, connectionName) {
   if (pluginConfig.splitByInstance && connectionName) {
     return pluginConfig.service
@@ -35,6 +37,13 @@ const redisConfig = {
   }
 }
 
+const valkeyConfig = {
+  opName: () => 'valkey.command',
+  serviceName: ({ tracerService, pluginConfig, system, connectionName }) => {
+    return getRedisService(pluginConfig, connectionName) || fromSystem(tracerService, system)
+  }
+}
+
 const storage = {
   client: {
     aerospike: {
@@ -57,6 +66,7 @@ const storage = {
         pluginConfig.service || `${tracerService}-elasticsearch`
     },
     ioredis: redisConfig,
+    iovalkey: valkeyConfig,
     mariadb: {
       opName: () => 'mariadb.query',
       serviceName: mysqlServiceName
@@ -91,6 +101,10 @@ const storage = {
     pg: {
       opName: () => 'pg.query',
       serviceName: withSuffixFunction('postgres')
+    },
+    prisma: {
+      opName: ({ operation }) => `prisma.${operation}`,
+      serviceName: withSuffixFunction('prisma')
     },
     redis: redisConfig,
     tedious: {

@@ -13,19 +13,50 @@ const {
   trackWafMetrics,
   incrementWafInit,
   incrementWafUpdates,
+  incrementWafConfigErrors,
   incrementWafRequests
 } = require('./waf')
+const telemetryMetrics = require('../../telemetry/metrics')
 
 const metricsStoreMap = new WeakMap()
 
-let enabled = false
+const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
 
-function enable (telemetryConfig) {
+let enabled = false
+let interval
+const SUPPORTED_ORIGINS = new Set(['env_var', 'code', 'remote_config', 'unknown'])
+
+function enable (config) {
+  const telemetryConfig = config.telemetry
   enabled = telemetryConfig?.enabled && telemetryConfig.metrics
+
+  if (enabled) {
+    let origin = 'remote_config'
+
+    if (config.appsec.enabled) {
+      origin = config.getOrigin('appsec.enabled')
+
+      if (!SUPPORTED_ORIGINS.has(origin)) {
+        origin = 'unknown'
+      }
+    }
+
+    const gauge = appsecMetrics.gauge('enabled', { origin })
+    gauge.track()
+
+    interval = setInterval(() => {
+      gauge.track()
+    }, telemetryConfig.heartbeatInterval)
+    interval.unref?.()
+  }
 }
 
 function disable () {
   enabled = false
+  if (interval) {
+    clearInterval(interval)
+    interval = undefined
+  }
 }
 
 function newStore () {
@@ -41,8 +72,7 @@ function newStore () {
       wafErrorCode: null,
       raspErrorCode: null,
       wafVersion: null,
-      rulesVersion: null,
-      ruleTriggered: null
+      rulesVersion: null
     }
   }
 }
@@ -122,6 +152,12 @@ function incrementWafUpdatesMetric (wafVersion, rulesVersion, success) {
   incrementWafUpdates(wafVersion, rulesVersion, success)
 }
 
+function incrementWafConfigErrorsMetric (wafVersion, rulesVersion) {
+  if (!enabled) return
+
+  incrementWafConfigErrors(wafVersion, rulesVersion)
+}
+
 function incrementWafRequestsMetric (req) {
   if (!req || !enabled) return
 
@@ -168,6 +204,7 @@ module.exports = {
   updateRaspRuleSkippedMetricTags,
   incrementWafInitMetric,
   incrementWafUpdatesMetric,
+  incrementWafConfigErrorsMetric,
   incrementWafRequestsMetric,
   incrementMissingUserLoginMetric,
   incrementMissingUserIdMetric,

@@ -61,13 +61,9 @@ function enable (config, appsec) {
 
 function enableOrDisableAppsec (action, rcConfig, config, appsec) {
   if (typeof rcConfig.asm?.enabled === 'boolean') {
-    let shouldEnable
-
-    if (action === 'apply' || action === 'modify') {
-      shouldEnable = rcConfig.asm.enabled // take control
-    } else {
-      shouldEnable = config.appsec.enabled // give back control to local config
-    }
+    const shouldEnable = action === 'apply' || action === 'modify'
+      ? rcConfig.asm.enabled // take control
+      : config.appsec.enabled // give back control to local config
 
     if (shouldEnable) {
       appsec.enable(config)
@@ -93,10 +89,12 @@ function enableWafUpdate (appsecConfig) {
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_RULES, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_TRUSTED_IPS, true)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_EXCLUSION_DATA, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_ENDPOINT_FINGERPRINT, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_SESSION_FINGERPRINT, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_NETWORK_FINGERPRINT, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_HEADER_FINGERPRINT, true)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_DD_MULTICONFIG, true)
 
     if (appsecConfig.rasp?.enabled) {
       rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SQLI, true)
@@ -128,10 +126,12 @@ function disableWafUpdate () {
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_RULES, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_TRUSTED_IPS, false)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_EXCLUSION_DATA, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_ENDPOINT_FINGERPRINT, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_SESSION_FINGERPRINT, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_NETWORK_FINGERPRINT, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_HEADER_FINGERPRINT, false)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_DD_MULTICONFIG, false)
 
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SQLI, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SSRF, false)

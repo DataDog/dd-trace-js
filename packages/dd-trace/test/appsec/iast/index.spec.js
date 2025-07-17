@@ -1,3 +1,5 @@
+'use strict'
+
 const proxyquire = require('proxyquire')
 const Config = require('../../../src/config')
 const agent = require('../../plugins/agent')
@@ -28,7 +30,7 @@ describe('IAST Index', () => {
 
         it('should not have any vulnerability', (done) => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0].meta['_dd.iast.json']).to.be.undefined
             })
             .then(done)
@@ -60,7 +62,7 @@ describe('IAST Index', () => {
 
         it('should detect vulnerability', (done) => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0].meta['_dd.iast.json']).to.include('"WEAK_HASH"')
             })
             .then(done)
@@ -72,7 +74,7 @@ describe('IAST Index', () => {
           const mockedCleanIastContext = sinon.stub()
           iastContextFunctions.cleanIastContext = mockedCleanIastContext
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0].meta['_dd.iast.json']).to.include('"WEAK_HASH"')
               expect(mockedCleanIastContext).to.have.been.calledOnce
             })
@@ -85,7 +87,7 @@ describe('IAST Index', () => {
           const releaseRequest = sinon.stub().callsFake(originalReleaseRequest)
           overheadController.releaseRequest = releaseRequest
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0].meta['_dd.iast.json']).to.include('"WEAK_HASH"')
               expect(releaseRequest).to.have.been.calledOnce
             })

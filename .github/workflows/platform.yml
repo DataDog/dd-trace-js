@@ -1,0 +1,337 @@
+name: Platform
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  schedule:
+    - cron: 0 4 * * *
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
+# TODO: upstream jobs
+
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/node/oldest-maintenance-lts
+      - uses: ./.github/actions/install
+      - run: yarn test:core:ci
+      - uses: ./.github/actions/node/active-lts
+      - run: yarn test:core:ci
+      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+
+  instrumentation-bluebird:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: bluebird
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/instrumentations/test
+
+  instrumentation-body-parser:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: body-parser
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/instrumentations/test
+
+  instrumentation-child_process:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: child_process
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/instrumentations/test
+
+  instrumentation-cookie-parser:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: cookie-parser
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/instrumentations/test
+
+  instrumentation-express-mongo-sanitize:
+    runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: circleci/mongo
+        ports:
+          - 27017:27017
+    env:
+      PLUGINS: express-mongo-sanitize
+      SERVICES: mongo
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/instrumentations/test
+
+  instrumentation-express-session:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: express-session
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/instrumentations/test
+
+  instrumentation-express:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: express
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/instrumentations/test
+
+  instrumentation-fs:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: fs
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/instrumentations/test
+
+  instrumentation-generic-pool:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: generic-pool
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/instrumentations/test
+
+  instrumentation-http:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: http
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/instrumentations/test
+
+  instrumentation-knex:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: knex
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/instrumentations/test
+
+  instrumentation-mongoose:
+    runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: circleci/mongo
+        ports:
+          - 27017:27017
+    env:
+      PLUGINS: mongoose
+      SERVICES: mongo
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/instrumentations/test
+
+  instrumentation-multer:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: multer
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/instrumentations/test
+
+  instrumentation-mysql2:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mariadb:10.4
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+          MYSQL_DATABASE: 'db'
+        ports:
+          - 3306:3306
+    env:
+      PLUGINS: mysql2
+      SERVICES: mysql2
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/instrumentations/test
+
+  instrumentation-passport:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: passport
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/instrumentations/test
+
+  instrumentation-passport-http:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: passport-http
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/instrumentations/test
+
+  instrumentation-passport-local:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: passport-local
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/instrumentations/test
+
+  instrumentation-pg:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:9.5
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+    env:
+      PG_TEST_NATIVE: 'true'
+      PLUGINS: pg
+      SERVICES: postgres
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/instrumentations/test
+
+  instrumentation-promise-js:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: promise-js
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/instrumentations/test
+
+  instrumentation-promise:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: promise
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/instrumentations/test
+
+  instrumentation-q:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: q
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/instrumentations/test
+
+  instrumentation-url:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: url
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/instrumentations/test
+
+  instrumentation-when:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: when
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/instrumentations/test
+
+  instrumentations-misc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/oldest-maintenance-lts
+      - uses: ./.github/actions/install
+      - run: yarn test:instrumentations:misc:ci
+        shell: bash
+      - uses: ./.github/actions/node/newest-maintenance-lts
+      - run: yarn test:instrumentations:misc:ci
+        shell: bash
+      - uses: ./.github/actions/node/active-lts
+      - run: yarn test:instrumentations:misc:ci
+        shell: bash
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:instrumentations:misc:ci
+        shell: bash
+      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+        with:
+          suffix: test-${{ github.job }}
+
+  # TODO: Split this up as it runs tests for multiple different teams.
+  integration:
+    strategy:
+      # when one version fails, say 14, all the other versions are stopped
+      # setting fail-fast to false in an attempt to prevent this from happening
+      fail-fast: false
+      matrix:
+        version: [oldest, maintenance, active, latest]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/node
+        with:
+          version: ${{ matrix.version }}
+      # Disable core dumps since some integration tests intentionally abort and core dump generation takes around 5-10s
+      - uses: ./.github/actions/install
+      - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
+      - run: yarn test:integration
+      - run: yarn test:integration:esbuild
+
+  unit-guardrails:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/install
+      - run: yarn test:trace:guardrails:ci
+      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+
+  # We'll run these separately for earlier (i.e. unsupported) versions
+  integration-guardrails:
+    strategy:
+      matrix:
+        version: [14.0.0, 14, 16.0.0, 18.0.0, 20.0.0, 22.0.0, 24.0.0]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/node
+        with:
+          version: ${{ matrix.version }}
+      - uses: ./.github/actions/install
+      - run: yarn add --ignore-scripts mocha@10 # Use older mocha to support old Node.js versions
+      - run: yarn add --ignore-scripts express@4 # Use older express to support old Node.js versions
+      - run: node node_modules/.bin/mocha --colors --timeout 30000 integration-tests/init.spec.js
+
+  integration-guardrails-unsupported:
+    strategy:
+      matrix:
+        version: ['0.8', '0.10', '0.12', '4', '6', '8', '10', '12']
+    runs-on: ubuntu-latest
+    env:
+      DD_TRACE_DEBUG: 'true' # This exercises more of the guardrails code
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/node
+        with:
+          version: ${{ matrix.version }}
+      - run: node ./init
+      - run: node ./init
+        env:
+          DD_INJECTION_ENABLED: 'true'
+
+  shimmer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/node/oldest-maintenance-lts
+      - uses: ./.github/actions/install
+      - run: yarn test:shimmer:ci
+      - uses: ./.github/actions/node/active-lts
+      - run: yarn test:shimmer:ci
+      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3

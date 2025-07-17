@@ -14,6 +14,7 @@ const Span = require('../opentracing/span')
 
 const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
+const { getEnvironmentVariable } = require('../config-helper')
 const telemetry = require('./telemetry')
 
 const LLMObsTagger = require('./tagger')
@@ -47,7 +48,7 @@ class LLMObs extends NoopLLMObs {
 
     const { mlApp, agentlessEnabled } = options
 
-    const { DD_LLMOBS_ENABLED } = process.env
+    const DD_LLMOBS_ENABLED = getEnvironmentVariable('DD_LLMOBS_ENABLED')
 
     const llmobsConfig = {
       mlApp,
@@ -121,7 +122,7 @@ class LLMObs extends NoopLLMObs {
     }
 
     const kind = validateKind(options.kind) // will throw if kind is undefined or not an expected kind
-    let name = options.name || (fn?.name ? fn.name : undefined) || kind
+    let name = options.name || fn?.name || kind
 
     if (!name) {
       logger.warn('No span name provided for `wrap`. Defaulting to "unnamed-anonymous-function".')
@@ -201,7 +202,7 @@ class LLMObs extends NoopLLMObs {
     return this._tracer.wrap(name, spanOptions, wrapped)
   }
 
-  annotate (span, options) {
+  annotate (span, options, autoinstrumented = false) {
     if (!this.enabled) return
 
     if (!span) {
@@ -213,150 +214,184 @@ class LLMObs extends NoopLLMObs {
       span = this._active()
     }
 
-    if (!span) {
-      throw new Error('No span provided and no active LLMObs-generated span found')
-    }
-    if (!options) {
-      throw new Error('No options provided for annotation.')
-    }
+    let err = ''
 
-    if (!LLMObsTagger.tagMap.has(span)) {
-      throw new Error('Span must be an LLMObs-generated span')
-    }
-    if (span._duration !== undefined) {
-      throw new Error('Cannot annotate a finished span')
-    }
-
-    const spanKind = LLMObsTagger.tagMap.get(span)[SPAN_KIND]
-    if (!spanKind) {
-      throw new Error('LLMObs span must have a span kind specified')
-    }
-
-    const { inputData, outputData, metadata, metrics, tags } = options
-
-    if (inputData || outputData) {
-      if (spanKind === 'llm') {
-        this._tagger.tagLLMIO(span, inputData, outputData)
-      } else if (spanKind === 'embedding') {
-        this._tagger.tagEmbeddingIO(span, inputData, outputData)
-      } else if (spanKind === 'retrieval') {
-        this._tagger.tagRetrievalIO(span, inputData, outputData)
-      } else {
-        this._tagger.tagTextIO(span, inputData, outputData)
+    try {
+      if (!span) {
+        err = 'invalid_span_no_active_spans'
+        throw new Error('No span provided and no active LLMObs-generated span found')
       }
-    }
+      if (!options) {
+        err = 'invalid_options'
+        throw new Error('No options provided for annotation.')
+      }
 
-    if (metadata) {
-      this._tagger.tagMetadata(span, metadata)
-    }
+      if (!LLMObsTagger.tagMap.has(span)) {
+        err = 'invalid_span_type'
+        throw new Error('Span must be an LLMObs-generated span')
+      }
+      if (span._duration !== undefined) {
+        err = 'invalid_finished_span'
+        throw new Error('Cannot annotate a finished span')
+      }
 
-    if (metrics) {
-      this._tagger.tagMetrics(span, metrics)
-    }
+      const spanKind = LLMObsTagger.tagMap.get(span)[SPAN_KIND]
+      if (!spanKind) {
+        err = 'invalid_no_span_kind'
+        throw new Error('LLMObs span must have a span kind specified')
+      }
 
-    if (tags) {
-      this._tagger.tagSpanTags(span, tags)
+      const { inputData, outputData, metadata, metrics, tags } = options
+
+      if (inputData || outputData) {
+        if (spanKind === 'llm') {
+          this._tagger.tagLLMIO(span, inputData, outputData)
+        } else if (spanKind === 'embedding') {
+          this._tagger.tagEmbeddingIO(span, inputData, outputData)
+        } else if (spanKind === 'retrieval') {
+          this._tagger.tagRetrievalIO(span, inputData, outputData)
+        } else {
+          this._tagger.tagTextIO(span, inputData, outputData)
+        }
+      }
+
+      if (metadata) {
+        this._tagger.tagMetadata(span, metadata)
+      }
+      if (metrics) {
+        this._tagger.tagMetrics(span, metrics)
+      }
+      if (tags) {
+        this._tagger.tagSpanTags(span, tags)
+      }
+    } catch (e) {
+      if (e.ddErrorTag) {
+        err = e.ddErrorTag
+      }
+      throw e
+    } finally {
+      if (autoinstrumented === false) {
+        telemetry.recordLLMObsAnnotate(span, err)
+      }
     }
   }
 
   exportSpan (span) {
     span = span || this._active()
-
-    if (!span) {
-      throw new Error('No span provided and no active LLMObs-generated span found')
+    let err = ''
+    try {
+      if (!span) {
+        err = 'no_active_span'
+        throw new Error('No span provided and no active LLMObs-generated span found')
+      }
+      if (!(span instanceof Span)) {
+        err = 'invalid_span'
+        throw new TypeError('Span must be a valid Span object.')
+      }
+      if (!LLMObsTagger.tagMap.has(span)) {
+        err = 'invalid_span'
+        throw new Error('Span must be an LLMObs-generated span')
+      }
+    } catch (e) {
+      telemetry.recordExportSpan(span, err)
+      throw e
     }
-
-    if (!(span instanceof Span)) {
-      throw new Error('Span must be a valid Span object.')
-    }
-
-    if (!LLMObsTagger.tagMap.has(span)) {
-      throw new Error('Span must be an LLMObs-generated span')
-    }
-
     try {
       return {
         traceId: span.context().toTraceId(true),
         spanId: span.context().toSpanId()
       }
     } catch {
-      logger.warn('Faild to export span. Span must be a valid Span object.')
+      err = 'invalid_span'
+      logger.warn('Failed to export span. Span must be a valid Span object.')
+    } finally {
+      telemetry.recordExportSpan(span, err)
     }
   }
 
   submitEvaluation (llmobsSpanContext, options = {}) {
     if (!this.enabled) return
 
+    let err = ''
     const { traceId, spanId } = llmobsSpanContext
-    if (!traceId || !spanId) {
-      throw new Error(
-        'spanId and traceId must both be specified for the given evaluation metric to be submitted.'
-      )
-    }
+    try {
+      if (!traceId || !spanId) {
+        err = 'invalid_span'
+        throw new Error(
+          'spanId and traceId must both be specified for the given evaluation metric to be submitted.'
+        )
+      }
+      const mlApp = options.mlApp || this._config.llmobs.mlApp
+      if (!mlApp) {
+        err = 'missing_ml_app'
+        throw new Error(
+          'ML App name is required for sending evaluation metrics. Evaluation metric data will not be sent.'
+        )
+      }
 
-    const mlApp = options.mlApp || this._config.llmobs.mlApp
-    if (!mlApp) {
-      throw new Error(
-        'ML App name is required for sending evaluation metrics. Evaluation metric data will not be sent.'
-      )
-    }
+      const timestampMs = options.timestampMs || Date.now()
+      if (typeof timestampMs !== 'number' || timestampMs < 0) {
+        err = 'invalid_timestamp'
+        throw new Error('timestampMs must be a non-negative integer. Evaluation metric data will not be sent')
+      }
 
-    const timestampMs = options.timestampMs || Date.now()
-    if (typeof timestampMs !== 'number' || timestampMs < 0) {
-      throw new Error('timestampMs must be a non-negative integer. Evaluation metric data will not be sent')
-    }
+      const { label, value, tags } = options
+      const metricType = options.metricType?.toLowerCase()
+      if (!label) {
+        err = 'invalid_metric_label'
+        throw new Error('label must be the specified name of the evaluation metric')
+      }
+      if (!metricType || !['categorical', 'score'].includes(metricType)) {
+        err = 'invalid_metric_type'
+        throw new Error('metricType must be one of "categorical" or "score"')
+      }
+      if (metricType === 'categorical' && typeof value !== 'string') {
+        err = 'invalid_metric_value'
+        throw new Error('value must be a string for a categorical metric.')
+      }
+      if (metricType === 'score' && typeof value !== 'number') {
+        err = 'invalid_metric_value'
+        throw new Error('value must be a number for a score metric.')
+      }
 
-    const { label, value, tags } = options
-    const metricType = options.metricType?.toLowerCase()
-    if (!label) {
-      throw new Error('label must be the specified name of the evaluation metric')
-    }
-    if (!metricType || !['categorical', 'score'].includes(metricType)) {
-      throw new Error('metricType must be one of "categorical" or "score"')
-    }
+      const evaluationTags = {
+        'ddtrace.version': tracerVersion,
+        ml_app: mlApp
+      }
 
-    if (metricType === 'categorical' && typeof value !== 'string') {
-      throw new Error('value must be a string for a categorical metric.')
-    }
-    if (metricType === 'score' && typeof value !== 'number') {
-      throw new Error('value must be a number for a score metric.')
-    }
-
-    const evaluationTags = {
-      'ddtrace.version': tracerVersion,
-      ml_app: mlApp
-    }
-
-    if (tags) {
-      for (const key in tags) {
-        const tag = tags[key]
-        if (typeof tag === 'string') {
-          evaluationTags[key] = tag
-        } else if (typeof tag.toString === 'function') {
-          evaluationTags[key] = tag.toString()
-        } else if (tag == null) {
-          evaluationTags[key] = Object.prototype.toString.call(tag)
-        } else {
-          // should be a rare case
-          // every object in JS has a toString, otherwise every primitive has its own toString
-          // null and undefined are handled above
-          throw new Error('Failed to parse tags. Tags for evaluation metrics must be strings')
+      if (tags) {
+        for (const key in tags) {
+          const tag = tags[key]
+          if (typeof tag === 'string') {
+            evaluationTags[key] = tag
+          } else if (typeof tag.toString === 'function') {
+            evaluationTags[key] = tag.toString()
+          } else if (tag == null) {
+            evaluationTags[key] = Object.prototype.toString.call(tag)
+          } else {
+            // should be a rare case
+            // every object in JS has a toString, otherwise every primitive has its own toString
+            // null and undefined are handled above
+            err = 'invalid_tags'
+            throw new Error('Failed to parse tags. Tags for evaluation metrics must be strings')
+          }
         }
       }
-    }
 
-    const payload = {
-      span_id: spanId,
-      trace_id: traceId,
-      label,
-      metric_type: metricType,
-      ml_app: mlApp,
-      [`${metricType}_value`]: value,
-      timestamp_ms: timestampMs,
-      tags: Object.entries(evaluationTags).map(([key, value]) => `${key}:${value}`)
+      const payload = {
+        span_id: spanId,
+        trace_id: traceId,
+        label,
+        metric_type: metricType,
+        ml_app: mlApp,
+        [`${metricType}_value`]: value,
+        timestamp_ms: timestampMs,
+        tags: Object.entries(evaluationTags).map(([key, value]) => `${key}:${value}`)
+      }
+      evalMetricAppendCh.publish(payload)
+    } finally {
+      telemetry.recordSubmitEvaluation(options, err)
     }
-
-    evalMetricAppendCh.publish(payload)
   }
 
   flush () {
@@ -375,7 +410,7 @@ class LLMObs extends NoopLLMObs {
       annotations.outputData = output
     }
 
-    this.annotate(span, annotations)
+    this.annotate(span, annotations, true)
   }
 
   _active () {

@@ -2,6 +2,7 @@
 
 const { expect } = require('chai')
 const semver = require('semver')
+const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
@@ -247,7 +248,7 @@ describe('Plugin', () => {
 
           it('should instrument graphql-yoga execution', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('service', expectedSchema.server.serviceName)
@@ -259,6 +260,7 @@ describe('Plugin', () => {
                 expect(spans[0].meta).to.have.property('graphql.operation.type', 'query')
                 expect(spans[0].meta).to.have.property('graphql.operation.name', 'MyQuery')
                 expect(spans[0].meta).to.have.property('component', 'graphql')
+                expect(spans[0].meta).to.have.property('_dd.integration', 'graphql')
               })
               .then(done)
 
@@ -309,7 +311,7 @@ describe('Plugin', () => {
           const variableValues = { who: 'world' }
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const span = traces[0][0]
 
               expect(span).to.have.property('service', 'test')
@@ -331,7 +333,7 @@ describe('Plugin', () => {
           const variableValues = { who: 'world' }
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const span = traces[0][0]
 
               expect(span).to.have.property('service', 'test')
@@ -353,7 +355,7 @@ describe('Plugin', () => {
           const variableValues = { who: 'world' }
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans[0]).to.have.property('service', expectedSchema.server.serviceName)
@@ -376,7 +378,7 @@ describe('Plugin', () => {
           const variableValues = { who: 'world' }
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = sort(traces[0])
               expect(spans[0].meta).to.not.have.property('graphql.variables')
             })
@@ -390,7 +392,7 @@ describe('Plugin', () => {
           const source = '{ hello(name: "world") }'
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans).to.have.length(2)
@@ -493,7 +495,7 @@ describe('Plugin', () => {
           `
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = sort(traces[0])
               expect(spans).to.have.length(6)
 
@@ -554,7 +556,7 @@ describe('Plugin', () => {
           }`
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans).to.have.length(5)
@@ -597,7 +599,7 @@ describe('Plugin', () => {
           const source = 'mutation { human { name } }'
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans[0].meta).to.have.property('graphql.operation.type', 'mutation')
@@ -612,7 +614,7 @@ describe('Plugin', () => {
           const source = 'subscription { human { name } }'
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans[0].meta).to.have.property('graphql.operation.type', 'subscription')
@@ -645,7 +647,7 @@ describe('Plugin', () => {
           const rootValue = { hello: 'world' }
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans).to.have.length(2)
@@ -674,7 +676,7 @@ describe('Plugin', () => {
           }
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans).to.have.length(2)
@@ -690,9 +692,9 @@ describe('Plugin', () => {
         it('should not instrument schema resolvers multiple times', done => {
           const source = '{ hello(name: "world") }'
 
-          agent.use(() => { // skip first call
+          agent.assertSomeTraces(() => { // skip first call
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans).to.have.length(2)
@@ -712,7 +714,7 @@ describe('Plugin', () => {
           const span = tracer.startSpan('test.request')
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans).to.have.length(5)
@@ -808,15 +810,15 @@ describe('Plugin', () => {
 
           Promise
             .all([
-              agent.use(traces => {
+              agent.assertSomeTraces(traces => {
                 const spans = sort(traces[0])
                 expect(spans[0]).to.have.property('name', 'graphql.parse')
               }),
-              agent.use(traces => {
+              agent.assertSomeTraces(traces => {
                 const spans = sort(traces[0])
                 expect(spans[0]).to.have.property('name', 'graphql.validate')
               }),
-              agent.use(traces => {
+              agent.assertSomeTraces(traces => {
                 const spans = sort(traces[0])
                 expect(spans[0]).to.have.property('name', expectedSchema.server.opName)
                 expect(spans[1]).to.have.property('name', 'graphql.resolve')
@@ -836,7 +838,7 @@ describe('Plugin', () => {
           const document = graphql.parse(new graphql.Source(source))
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans).to.have.length(2)
@@ -856,7 +858,7 @@ describe('Plugin', () => {
           let error
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans).to.have.length(1)
@@ -882,7 +884,7 @@ describe('Plugin', () => {
           let error
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans).to.have.length(1)
@@ -909,7 +911,7 @@ describe('Plugin', () => {
           const document = graphql.parse(source)
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans).to.have.length(1)
@@ -946,7 +948,7 @@ describe('Plugin', () => {
           let error
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans).to.have.length(1)
@@ -987,7 +989,7 @@ describe('Plugin', () => {
           let error
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans).to.have.length(2)
@@ -1039,7 +1041,7 @@ describe('Plugin', () => {
           }
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans).to.have.length(2)
@@ -1073,7 +1075,7 @@ describe('Plugin', () => {
           }
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans).to.have.length(2)
@@ -1158,7 +1160,7 @@ describe('Plugin', () => {
           const variableValues = { who: 'world' }
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans[0]).to.have.property('service', expectedSchema.server.serviceName)
@@ -1188,7 +1190,7 @@ describe('Plugin', () => {
           `
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               const resource = 'query WithFragments{human{...firstFields}}fragment firstFields on Human{name}'
@@ -1215,7 +1217,7 @@ describe('Plugin', () => {
           `
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans[0]).to.have.property('service', 'test')
@@ -1239,7 +1241,7 @@ describe('Plugin', () => {
             const variableValues = { who: 'world' }
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('service', expectedSchema.server.serviceName)
@@ -1268,7 +1270,7 @@ describe('Plugin', () => {
 
         // it('should not disable signature with invalid arguments', done => {
         //   agent
-        //     .use(traces => {
+        //     .assertSomeTraces(traces => {
         //       const spans = sort(traces[0])
 
         //       console.log(spans.map(span => `${span.name} | ${span.resource}`))
@@ -1328,7 +1330,7 @@ describe('Plugin', () => {
           const source = '{ hello(name: "world") }'
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans).to.have.length(2)
@@ -1354,7 +1356,7 @@ describe('Plugin', () => {
           const variableValues = { title: 'planet', who: 'world' }
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans[0].meta).to.have.property('graphql.variables.title', 'planet')
@@ -1396,7 +1398,7 @@ describe('Plugin', () => {
           const variableValues = { title: 'planet', who: 'world' }
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans[0].meta).to.have.property('graphql.variables.title', 'planet')
@@ -1439,7 +1441,7 @@ describe('Plugin', () => {
           `
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans).to.have.length(1)
@@ -1511,7 +1513,7 @@ describe('Plugin', () => {
           `
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = sort(traces[0])
               const ignored = spans.filter(span => {
                 return [
@@ -1550,7 +1552,7 @@ describe('Plugin', () => {
           const source = '{ friends { name } }'
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans).to.have.length(4)
@@ -1604,7 +1606,7 @@ describe('Plugin', () => {
           const source = 'query WithoutSignature { friends { name } }'
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans[0]).to.have.property('name', expectedSchema.server.opName)
@@ -1671,7 +1673,7 @@ describe('Plugin', () => {
           let result
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans).to.have.length(1)
@@ -1708,7 +1710,7 @@ describe('Plugin', () => {
           const document = graphql.parse(source)
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans).to.have.length(1)
@@ -1733,7 +1735,7 @@ describe('Plugin', () => {
           let document
 
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans).to.have.length(1)
@@ -1793,7 +1795,7 @@ describe('Plugin', () => {
 
           it('should support apollo-server schema stitching', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
                 expect(spans).to.have.length(3)

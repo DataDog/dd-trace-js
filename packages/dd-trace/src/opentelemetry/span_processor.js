@@ -5,8 +5,8 @@ class NoopSpanProcessor {
     return Promise.resolve()
   }
 
-  onStart (span, context) { }
-  onEnd (span) { }
+  onStart (span, context) {}
+  onEnd (span) {}
 
   shutdown () {
     return Promise.resolve()

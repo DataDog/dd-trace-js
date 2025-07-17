@@ -4,31 +4,21 @@ const { LOG } = require('../../../../ext/formats')
 const Plugin = require('./plugin')
 const { storage } = require('../../../datadog-core')
 
-const hasOwn = (obj, prop) => Object.prototype.hasOwnProperty.call(obj, prop)
-
 function messageProxy (message, holder) {
   return new Proxy(message, {
-    get (target, p, receiver) {
-      if (p === Symbol.toStringTag) {
-        return Object.prototype.toString.call(target).slice(8, -1)
-      }
-
-      if (shouldOverride(target, p)) {
+    get (target, key) {
+      if (shouldOverride(target, key)) {
         return holder.dd
       }
 
-      // This is a workaround for a V8 bug that surfaced in Node.js 22
-      if (p === 'stack') {
-        return target.stack
-      }
-
-      return Reflect.get(target, p, receiver)
+      return target[key]
     },
     ownKeys (target) {
       const ownKeys = Reflect.ownKeys(target)
-      return hasOwn(target, 'dd') || !Reflect.isExtensible(target)
-        ? ownKeys
-        : ['dd', ...ownKeys]
+      if (!Object.hasOwn(target, 'dd') && Reflect.isExtensible(target)) {
+        ownKeys.push('dd')
+      }
+      return ownKeys
     },
     getOwnPropertyDescriptor (target, p) {
       return Reflect.getOwnPropertyDescriptor(shouldOverride(target, p) ? holder : target, p)
@@ -37,7 +27,7 @@ function messageProxy (message, holder) {
 }
 
 function shouldOverride (target, p) {
-  return p === 'dd' && !Reflect.has(target, p) && Reflect.isExtensible(target)
+  return p === 'dd' && !Object.hasOwn(target, p) && Reflect.isExtensible(target)
 }
 
 module.exports = class LogPlugin extends Plugin {
@@ -45,8 +35,7 @@ module.exports = class LogPlugin extends Plugin {
     super(...args)
 
     this.addSub(`apm:${this.constructor.id}:log`, (arg) => {
-      const store = storage('legacy').getStore()
-      const span = store && store.span
+      const span = storage('legacy').getStore()?.span
 
       // NOTE: This needs to run whether or not there is a span
       // so service, version, and env will always get injected.
@@ -56,10 +45,14 @@ module.exports = class LogPlugin extends Plugin {
     })
   }
 
+  _isEnabled (config) {
+    return config.enabled && (config.logInjection === true || config.ciVisAgentlessLogSubmissionEnabled)
+  }
+
   configure (config) {
     return super.configure({
       ...config,
-      enabled: config.enabled && (config.logInjection || config.ciVisAgentlessLogSubmissionEnabled)
+      enabled: this._isEnabled(config)
     })
   }
 }

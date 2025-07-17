@@ -92,7 +92,7 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
     const coveragesCount = this._coveragesCount
 
     // update with number of coverages
-    bytes.buffer[coveragesOffset] = 0xdd
+    bytes.buffer[coveragesOffset] = 0xDD
     bytes.buffer[coveragesOffset + 1] = coveragesCount >> 24
     bytes.buffer[coveragesOffset + 2] = coveragesCount >> 16
     bytes.buffer[coveragesOffset + 3] = coveragesCount >> 8

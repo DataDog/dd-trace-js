@@ -1,3 +1,5 @@
+'use strict'
+
 const DNSPlugin = require('./dns')
 
 class DNSLookupServicePlugin extends DNSPlugin {
@@ -7,7 +9,7 @@ class DNSLookupServicePlugin extends DNSPlugin {
 
   extendEvent (event, startEvent) {
     event.name = 'lookupService'
-    event.detail = { host: startEvent[0], port: startEvent[1] }
+    event.detail = { host: startEvent.args[0], port: startEvent.args[1] }
 
     return event
   }

@@ -19,7 +19,7 @@ class WAFContextWrapper {
     this.rulesVersion = rulesVersion
     this.knownAddresses = knownAddresses
     this.addressesToSkip = new Set()
-    this.cachedUserIdActions = new Map()
+    this.cachedUserIdResults = new Map()
   }
 
   run ({ persistent, ephemeral }, raspRule) {
@@ -36,9 +36,9 @@ class WAFContextWrapper {
     // TODO: make this universal
     const userId = persistent?.[addresses.USER_ID] || ephemeral?.[addresses.USER_ID]
     if (userId) {
-      const cachedAction = this.cachedUserIdActions.get(userId)
-      if (cachedAction) {
-        return cachedAction
+      const cachedResults = this.cachedUserIdResults.get(userId)
+      if (cachedResults) {
+        return cachedResults
       }
     }
 
@@ -49,8 +49,10 @@ class WAFContextWrapper {
     if (persistent !== null && typeof persistent === 'object') {
       const persistentInputs = {}
 
+      let hasPersistentInputs = false
       for (const key of Object.keys(persistent)) {
         if (!this.addressesToSkip.has(key) && this.knownAddresses.has(key)) {
+          hasPersistentInputs = true
           persistentInputs[key] = persistent[key]
           if (preventDuplicateAddresses.has(key)) {
             newAddressesToSkip.add(key)
@@ -58,7 +60,7 @@ class WAFContextWrapper {
         }
       }
 
-      if (Object.keys(persistentInputs).length) {
+      if (hasPersistentInputs) {
         payload.persistent = persistentInputs
         payloadHasData = true
       }
@@ -67,13 +69,15 @@ class WAFContextWrapper {
     if (ephemeral !== null && typeof ephemeral === 'object') {
       const ephemeralInputs = {}
 
+      let hasEphemeral = false
       for (const key of Object.keys(ephemeral)) {
         if (this.knownAddresses.has(key)) {
+          hasEphemeral = true
           ephemeralInputs[key] = ephemeral[key]
         }
       }
 
-      if (Object.keys(ephemeralInputs).length) {
+      if (hasEphemeral) {
         payload.ephemeral = ephemeralInputs
         payloadHasData = true
       }
@@ -102,7 +106,7 @@ class WAFContextWrapper {
 
       const end = process.hrtime.bigint()
 
-      metrics.durationExt = parseInt(end - start) / 1e3
+      metrics.durationExt = Number.parseInt(end - start) / 1e3
 
       if (typeof result.errorCode === 'number' && result.errorCode < 0) {
         const error = new Error('WAF code error')
@@ -131,18 +135,18 @@ class WAFContextWrapper {
         this.setUserIdCache(userId, result)
       }
 
-      metrics.duration = result.totalRuntime / 1e3
+      metrics.duration = result.duration / 1e3
       metrics.blockTriggered = blockTriggered
       metrics.ruleTriggered = ruleTriggered
       metrics.wafTimeout = result.timeout
 
       if (ruleTriggered) {
-        Reporter.reportAttack(JSON.stringify(result.events))
+        Reporter.reportAttack(result.events)
       }
 
-      Reporter.reportDerivatives(result.derivatives)
+      Reporter.reportAttributes(result.attributes)
 
-      return result.actions
+      return result
     } catch (err) {
       log.error('[ASM] Error while running the AppSec WAF', err)
 
@@ -168,7 +172,7 @@ class WAFContextWrapper {
           const parameter = match.parameters[k]
 
           if (parameter?.address === addresses.USER_ID) {
-            this.cachedUserIdActions.set(userId, result.actions)
+            this.cachedUserIdResults.set(userId, result)
             return
           }
         }

@@ -3,8 +3,6 @@
 const { storage } = require('../../datadog-core')
 const MySQLPlugin = require('../../datadog-plugin-mysql/src')
 
-let skippedStore
-
 class MariadbPlugin extends MySQLPlugin {
   static get id () { return 'mariadb' }
   static get system () { return 'mariadb' }
@@ -12,14 +10,10 @@ class MariadbPlugin extends MySQLPlugin {
   constructor (...args) {
     super(...args)
 
-    this.addSub(`apm:${this.component}:pool:skip`, () => {
-      skippedStore = storage('legacy').getStore()
-      storage('legacy').enterWith({ noop: true })
-    })
+    this.addBind(`apm:${this.component}:pool:skip`, () => ({ noop: true }))
 
-    this.addSub(`apm:${this.component}:pool:unskip`, () => {
-      storage('legacy').enterWith(skippedStore)
-      skippedStore = undefined
+    this.addSub(`apm:${this.component}:command:add`, ctx => {
+      ctx.parentStore = storage('legacy').getStore()
     })
   }
 }

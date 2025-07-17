@@ -4,7 +4,6 @@
 const { performance } = require('perf_hooks')
 const now = performance.now.bind(performance)
 const dateNow = Date.now
-const satisfies = require('semifies')
 const SpanContext = require('./span_context')
 const id = require('../id')
 const tagger = require('../tagger')
@@ -14,19 +13,18 @@ const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
 const { channel } = require('dc-polyfill')
 const util = require('util')
+const { getEnvironmentVariable } = require('../config-helper')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
-const {
-  DD_TRACE_EXPERIMENTAL_STATE_TRACKING,
-  DD_TRACE_EXPERIMENTAL_SPAN_COUNTS
-} = process.env
+const DD_TRACE_EXPERIMENTAL_STATE_TRACKING = getEnvironmentVariable('DD_TRACE_EXPERIMENTAL_STATE_TRACKING')
+const DD_TRACE_EXPERIMENTAL_SPAN_COUNTS = getEnvironmentVariable('DD_TRACE_EXPERIMENTAL_SPAN_COUNTS')
 
 const unfinishedRegistry = createRegistry('unfinished')
 const finishedRegistry = createRegistry('finished')
 
-const OTEL_ENABLED = !!process.env.DD_TRACE_OTEL_ENABLED
-const ALLOWED = ['string', 'number', 'boolean']
+const OTEL_ENABLED = !!getEnvironmentVariable('DD_TRACE_OTEL_ENABLED')
+const ALLOWED = new Set(['string', 'number', 'boolean'])
 
 const integrationCounters = {
   spans_created: {},
@@ -57,6 +55,8 @@ class DatadogSpan {
   constructor (tracer, processor, prioritySampler, fields, debug) {
     const operationName = fields.operationName
     const parent = fields.parent || null
+    // TODO(BridgeAR): Investigate why this is causing a performance regression
+    // eslint-disable-next-line prefer-object-spread
     const tags = Object.assign({}, fields.tags)
     const hostname = fields.hostname
 
@@ -129,7 +129,7 @@ class DatadogSpan {
     const spanContext = this.context()
     const resourceName = spanContext._tags['resource.name'] || ''
     const resource = resourceName.length > 100
-      ? `${resourceName.substring(0, 97)}...`
+      ? `${resourceName.slice(0, 97)}...`
       : resourceName
     const json = JSON.stringify({
       traceId: spanContext._traceId,
@@ -198,7 +198,7 @@ class DatadogSpan {
 
   addLink (context, attributes) {
     this._links.push({
-      context: context._ddContext ? context._ddContext : context,
+      context: context._ddContext ?? context,
       attributes: this._sanitizeAttributes(attributes)
     })
   }
@@ -220,7 +220,7 @@ class DatadogSpan {
   addEvent (name, attributesOrStartTime, startTime) {
     const event = { name }
     if (attributesOrStartTime) {
-      if (typeof attributesOrStartTime === 'object') {
+      if (typeof attributesOrStartTime === 'object') { // eslint-disable-line eslint-rules/eslint-safe-typeof-object
         event.attributes = this._sanitizeEventAttributes(attributesOrStartTime)
       } else {
         startTime = attributesOrStartTime
@@ -235,13 +235,12 @@ class DatadogSpan {
       return
     }
 
-    if (DD_TRACE_EXPERIMENTAL_STATE_TRACKING === 'true') {
-      if (!this._spanContext._tags['service.name']) {
-        log.error('Finishing invalid span: %s', this)
-      }
+    if (DD_TRACE_EXPERIMENTAL_STATE_TRACKING === 'true' && !this._spanContext._tags['service.name']) {
+      log.error('Finishing invalid span: %s', this)
     }
 
     getIntegrationCounter('spans_finished', this._integrationName).inc()
+    this._spanContext._tags['_dd.integration'] = this._integrationName
 
     if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
       runtimeMetrics.decrement('runtime.node.spans.unfinished')
@@ -256,7 +255,7 @@ class DatadogSpan {
       finishedRegistry.register(this, this._name)
     }
 
-    finishTime = parseFloat(finishTime) || this._getTime()
+    finishTime = Number.parseFloat(finishTime) || this._getTime()
 
     this._duration = finishTime - this._startTime
     this._spanContext._trace.finished.push(this)
@@ -275,7 +274,7 @@ class DatadogSpan {
         }
       } else {
         const maybeScalar = maybeArray
-        if (ALLOWED.includes(typeof maybeScalar)) {
+        if (ALLOWED.has(typeof maybeScalar)) {
           // Wrap the value as a string if it's not already a string
           sanitizedAttributes[key] = typeof maybeScalar === 'string' ? maybeScalar : String(maybeScalar)
         } else {
@@ -299,14 +298,14 @@ class DatadogSpan {
       if (Array.isArray(value)) {
         const newArray = []
         for (const subkey in value) {
-          if (ALLOWED.includes(typeof value[subkey])) {
+          if (ALLOWED.has(typeof value[subkey])) {
             newArray.push(value[subkey])
           } else {
             log.warn('Dropping span event attribute. It is not of an allowed type')
           }
         }
         sanitizedAttributes[key] = newArray
-      } else if (ALLOWED.includes(typeof value)) {
+      } else if (ALLOWED.has(typeof value)) {
         sanitizedAttributes[key] = value
       } else {
         log.warn('Dropping span event attribute. It is not of an allowed type')
@@ -336,7 +335,7 @@ class DatadogSpan {
         spanId: id(),
         parentId: parent._spanId,
         sampling: parent._sampling,
-        baggageItems: Object.assign({}, parent._baggageItems),
+        baggageItems: { ...parent._baggageItems },
         trace: parent._trace,
         tracestate: parent._tracestate
       })
@@ -388,8 +387,6 @@ class DatadogSpan {
 }
 
 function createRegistry (type) {
-  if (!satisfies(process.version, '>=14.6')) return
-
   return new global.FinalizationRegistry(name => {
     runtimeMetrics.decrement(`runtime.node.spans.${type}`)
     runtimeMetrics.decrement(`runtime.node.spans.${type}.by.name`, [`span_name:${name}`])

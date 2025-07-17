@@ -17,7 +17,7 @@ describe('Dynamic Instrumentation', function () {
         t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { probe: { location } } } }] }) => {
           assert.deepEqual(location, {
             file: 'target-app/source-map-support/typescript.ts',
-            lines: ['9']
+            lines: ['11']
           })
           done()
         })
@@ -38,7 +38,31 @@ describe('Dynamic Instrumentation', function () {
         t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { probe: { location } } } }] }) => {
           assert.deepEqual(location, {
             file: 'target-app/source-map-support/minify.js',
-            lines: ['6']
+            lines: ['8']
+          })
+          done()
+        })
+
+        t.agent.addRemoteConfig(t.rcConfig)
+      })
+    })
+
+    // The source map for the bundled application contains a relative path in its `sources` array, which will fail this
+    // test if not properly handled
+    describe('Relative source paths', function () {
+      const t = setup({
+        testApp: 'target-app/source-map-support/bundle.js',
+        testAppSource: 'target-app/source-map-support/hello/world.ts',
+        dependencies: []
+      })
+
+      beforeEach(t.triggerBreakpoint)
+
+      it('should support relative source paths in source maps', function (done) {
+        t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { probe: { location } } } }] }) => {
+          assert.deepEqual(location, {
+            file: 'target-app/source-map-support/hello/world.ts',
+            lines: ['2']
           })
           done()
         })

@@ -10,7 +10,8 @@ const {
   SPAN_ID_LABEL,
   LOCAL_ROOT_SPAN_ID_LABEL,
   getNonJSThreadsLabels,
-  getThreadLabels
+  getThreadLabels,
+  encodeProfileAsync
 } = require('./shared')
 
 const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('../webspan-utils')
@@ -70,16 +71,12 @@ function ensureChannelsActivated () {
 class NativeWallProfiler {
   constructor (options = {}) {
     this.type = 'wall'
-    // Currently there's a crash sometimes on worker threads trying to collect async IDs so for the
-    // time being we'll constrain it to only the main thread.
-    this._asyncIdEnabled = !!options.asyncIdEnabled && require('worker_threads').isMainThread
-    this._codeHotspotsEnabled = !!options.codeHotspotsEnabled
-    this._cpuProfilingEnabled = !!options.cpuProfilingEnabled
-    this._endpointCollectionEnabled = !!options.endpointCollectionEnabled
-    this._flushIntervalMillis = options.flushInterval || 60 * 1e3 // 60 seconds
     this._samplingIntervalMicros = options.samplingInterval || 1e6 / 99 // 99hz
+    this._flushIntervalMillis = options.flushInterval || 60 * 1e3 // 60 seconds
+    this._codeHotspotsEnabled = !!options.codeHotspotsEnabled
+    this._endpointCollectionEnabled = !!options.endpointCollectionEnabled
     this._timelineEnabled = !!options.timelineEnabled
-    this._v8ProfilerBugWorkaroundEnabled = !!options.v8ProfilerBugWorkaroundEnabled
+    this._cpuProfilingEnabled = !!options.cpuProfilingEnabled
     // We need to capture span data into the sample context for either code hotspots
     // or endpoint collection.
     this._captureSpanData = this._codeHotspotsEnabled || this._endpointCollectionEnabled
@@ -88,15 +85,14 @@ class NativeWallProfiler {
     // timestamps require the sample contexts feature in the pprof wall profiler), or
     // cpu profiling is enabled.
     this._withContexts = this._captureSpanData || this._timelineEnabled || this._cpuProfilingEnabled
+    this._v8ProfilerBugWorkaroundEnabled = !!options.v8ProfilerBugWorkaroundEnabled
     this._mapper = undefined
     this._pprof = undefined
 
     // Bind these to this so they can be used as callbacks
-    if (this._withContexts) {
-      if (this._captureSpanData) {
-        this._enter = this._enter.bind(this)
-        this._spanFinished = this._spanFinished.bind(this)
-      }
+    if (this._withContexts && this._captureSpanData) {
+      this._enter = this._enter.bind(this)
+      this._spanFinished = this._spanFinished.bind(this)
     }
     this._generateLabels = this._generateLabels.bind(this)
 
@@ -128,14 +124,13 @@ class NativeWallProfiler {
     }
 
     this._pprof.time.start({
-      collectAsyncId: this._asyncIdEnabled,
-      collectCpuTime: this._cpuProfilingEnabled,
-      durationMillis: this._flushIntervalMillis,
       intervalMicros: this._samplingIntervalMicros,
-      lineNumbers: false,
+      durationMillis: this._flushIntervalMillis,
       sourceMapper: this._mapper,
       withContexts: this._withContexts,
-      workaroundV8Bug: this._v8ProfilerBugWorkaroundEnabled
+      lineNumbers: false,
+      workaroundV8Bug: this._v8ProfilerBugWorkaroundEnabled,
+      collectCpuTime: this._cpuProfilingEnabled
     })
 
     if (this._withContexts) {
@@ -218,10 +213,10 @@ class NativeWallProfiler {
   }
 
   _updateContext (context) {
-    if (typeof context.spanId === 'object') {
+    if (context.spanId !== null && typeof context.spanId === 'object') {
       context.spanId = context.spanId.toString(10)
     }
-    if (typeof context.rootSpanId === 'object') {
+    if (context.rootSpanId !== null && typeof context.rootSpanId === 'object') {
       context.rootSpanId = context.rootSpanId.toString(10)
     }
     if (context.webTags !== undefined && context.endpoint === undefined) {
@@ -330,7 +325,7 @@ class NativeWallProfiler {
   }
 
   encode (profile) {
-    return this._pprof.encode(profile)
+    return encodeProfileAsync(profile)
   }
 
   stop () {

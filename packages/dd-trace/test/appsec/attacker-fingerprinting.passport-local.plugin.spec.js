@@ -90,7 +90,7 @@ withVersions('passport-local', 'passport-local', version => {
         )
       } catch (e) {}
 
-      await agent.use(assertFingerprintInTraces)
+      await agent.assertSomeTraces(assertFingerprintInTraces)
     })
 
     it('should report http fingerprints on login successful', async () => {
@@ -102,7 +102,7 @@ withVersions('passport-local', 'passport-local', version => {
         }
       )
 
-      await agent.use(assertFingerprintInTraces)
+      await agent.assertSomeTraces(assertFingerprintInTraces)
     })
   })
 })

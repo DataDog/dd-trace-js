@@ -3,6 +3,8 @@
 require('../../setup/tap')
 
 const makeUtilities = require('../../../src/plugins/util/llm')
+const SpanContext = require('../../../src/opentracing/span_context')
+const id = require('../../../src/id')
 
 describe('llm utils', () => {
   let utils
@@ -30,7 +32,7 @@ describe('llm utils', () => {
     })
 
     it('should always sample prompt completion', () => {
-      expect(utils.isPromptCompletionSampled()).to.be.true
+      expect(utils.isPromptCompletionSampled(new SpanContext({ traceId: id() }))).to.be.true
     })
   })
 
@@ -49,31 +51,13 @@ describe('llm utils', () => {
       expect(utils.normalize(text)).to.equal('a'.repeat(100) + '...')
     })
 
-    describe('with a random value greater than 0.6', () => {
-      beforeEach(() => {
-        sinon.stub(Math, 'random').returns(0.7)
-      })
-
-      afterEach(() => {
-        Math.random.restore()
-      })
-
+    describe('with sampling rate 0.6', () => {
       it('should not sample prompt completion', () => {
-        expect(utils.isPromptCompletionSampled()).to.be.false
-      })
-    })
-
-    describe('with a random value less than 0.6', () => {
-      beforeEach(() => {
-        sinon.stub(Math, 'random').returns(0.5)
-      })
-
-      afterEach(() => {
-        Math.random.restore()
+        expect(utils.isPromptCompletionSampled(new SpanContext({ traceId: id('8081965455359722133', 10) }))).to.be.false
       })
 
       it('should sample prompt completion', () => {
-        expect(utils.isPromptCompletionSampled()).to.be.true
+        expect(utils.isPromptCompletionSampled(new SpanContext({ traceId: id('5533085789307409170', 10) }))).to.be.true
       })
     })
   })

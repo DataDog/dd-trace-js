@@ -135,8 +135,12 @@ describe('TracerProxy', () => {
       remoteConfig: {
         enabled: true
       },
+      runtimeMetrics: {
+        enabled: false
+      },
       configure: sinon.spy(),
-      llmobs: {}
+      llmobs: {},
+      heapSnapshot: {}
     }
     Config = sinon.stub().returns(config)
 
@@ -386,7 +390,7 @@ describe('TracerProxy', () => {
       })
 
       it('should start capturing runtimeMetrics when configured', () => {
-        config.runtimeMetrics = true
+        config.runtimeMetrics.enabled = true
 
         proxy.init()
 
@@ -621,6 +625,72 @@ describe('TracerProxy', () => {
 
         expect(noop.setUrl).to.have.been.calledWith('http://example.com')
         expect(returnValue).to.equal(proxy)
+      })
+    })
+
+    describe('baggage', () => {
+      afterEach(() => {
+        proxy.removeAllBaggageItems()
+      })
+
+      describe('setBaggageItem', () => {
+        it('should set a baggage item', () => {
+          const baggage = proxy.setBaggageItem('key', 'value')
+          expect(baggage).to.deep.equal({ key: 'value' })
+        })
+
+        it('should merge with existing baggage items', () => {
+          proxy.setBaggageItem('key1', 'value1')
+          const baggage = proxy.setBaggageItem('key2', 'value2')
+          expect(baggage).to.deep.equal({ key1: 'value1', key2: 'value2' })
+        })
+      })
+
+      describe('getBaggageItem', () => {
+        it('should get a baggage item', () => {
+          proxy.setBaggageItem('key', 'value')
+          expect(proxy.getBaggageItem('key')).to.equal('value')
+        })
+
+        it('should return undefined for non-existent items', () => {
+          expect(proxy.getBaggageItem('missing')).to.be.undefined
+        })
+      })
+
+      describe('getAllBaggageItems', () => {
+        it('should get all baggage items', () => {
+          proxy.setBaggageItem('key1', 'value1')
+          proxy.setBaggageItem('key2', 'value2')
+          expect(proxy.getAllBaggageItems()).to.deep.equal({ key1: 'value1', key2: 'value2' })
+        })
+
+        it('should return empty object when no items exist', () => {
+          expect(proxy.getAllBaggageItems()).to.deep.equal({})
+        })
+      })
+
+      describe('removeBaggageItem', () => {
+        it('should remove a specific baggage item', () => {
+          proxy.setBaggageItem('key1', 'value1')
+          proxy.setBaggageItem('key2', 'value2')
+          const baggage = proxy.removeBaggageItem('key1')
+          expect(baggage).to.deep.equal({ key2: 'value2' })
+        })
+
+        it('should handle removing non-existent items', () => {
+          proxy.setBaggageItem('key', 'value')
+          const baggage = proxy.removeBaggageItem('missing')
+          expect(baggage).to.deep.equal({ key: 'value' })
+        })
+      })
+
+      describe('removeAllBaggageItems', () => {
+        it('should remove all baggage items', () => {
+          proxy.setBaggageItem('key1', 'value1')
+          proxy.setBaggageItem('key2', 'value2')
+          const baggage = proxy.removeAllBaggageItems()
+          expect(baggage).to.be.undefined
+        })
       })
     })
 

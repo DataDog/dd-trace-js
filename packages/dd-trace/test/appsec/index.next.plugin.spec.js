@@ -2,13 +2,13 @@
 
 const { spawn, execSync } = require('child_process')
 const { cpSync, mkdirSync, rmdirSync, unlinkSync } = require('fs')
-const getPort = require('get-port')
 const axios = require('axios')
 const { writeFileSync } = require('fs')
 const { satisfies } = require('semver')
 const path = require('path')
 
 const agent = require('../plugins/agent')
+const { NODE_MAJOR, NODE_MINOR, NODE_PATCH } = require('../../../../version')
 
 describe('test suite', () => {
   let server
@@ -16,7 +16,12 @@ describe('test suite', () => {
 
   const satisfiesStandalone = version => satisfies(version, '>=12.0.0')
 
-  withVersions('next', 'next', '>=11.1', version => {
+  withVersions('next', 'next', '>=11.1 <15.4.1', version => {
+    if (version === '>=11.0.0 <13' && NODE_MAJOR === 24 &&
+      NODE_MINOR === 0 && NODE_PATCH === 0) {
+      return // node 24.0.0 fails, but 24.0.1 works
+    }
+
     const realVersion = require(`../../../../versions/next@${version}`).version()
 
     function initApp (appName) {
@@ -99,8 +104,6 @@ describe('test suite', () => {
       const appDir = path.join(__dirname, 'next', appName)
 
       before(async () => {
-        port = await getPort()
-
         return agent.load('next')
       })
 
@@ -113,7 +116,7 @@ describe('test suite', () => {
           env: {
             ...process.env,
             VERSION: version,
-            PORT: port,
+            PORT: 0,
             DD_TRACE_AGENT_PORT: agent.server.address().port,
             DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: schemaVersion,
             DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: defaultToGlobalService,
@@ -123,9 +126,20 @@ describe('test suite', () => {
         })
 
         server.once('error', done)
-        server.stdout.once('data', () => {
-          done()
-        })
+
+        function waitUntilServerStarted (chunk) {
+          const chunkStr = chunk.toString()
+          const match = chunkStr.match(/port:? (\d+)/) ||
+              chunkStr.match(/http:\/\/127\.0\.0\.1:(\d+)/)
+
+          if (match) {
+            port = Number(match[1])
+            server.stdout.off('data', waitUntilServerStarted)
+            done()
+          }
+        }
+        server.stdout.on('data', waitUntilServerStarted)
+
         server.stderr.on('data', chunk => process.stderr.write(chunk))
         server.stdout.on('data', chunk => process.stdout.write(chunk))
       })
@@ -146,7 +160,7 @@ describe('test suite', () => {
       }
     ]
 
-    if (satisfies(realVersion, '>=13.2')) {
+    if (satisfies(realVersion, '>=13.2') && (NODE_MAJOR < 24 || satisfies(realVersion, '!=13.2'))) {
       tests.push({
         appName: 'app-dir',
         serverPath: '.next/standalone/server.js'

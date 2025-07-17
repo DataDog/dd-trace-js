@@ -6,21 +6,19 @@ const v8 = require('v8')
 const os = require('os')
 const { DogStatsDClient, MetricsAggregationClient } = require('../dogstatsd')
 const log = require('../log')
-const Histogram = require('../histogram')
 const { performance, PerformanceObserver } = require('perf_hooks')
+const { getEnvironmentVariable } = require('../config-helper')
 
 const { NODE_MAJOR, NODE_MINOR } = require('../../../../version')
-const { DD_RUNTIME_METRICS_FLUSH_INTERVAL = '10000' } = process.env
-const INTERVAL = parseInt(DD_RUNTIME_METRICS_FLUSH_INTERVAL, 10)
+const DD_RUNTIME_METRICS_FLUSH_INTERVAL = getEnvironmentVariable('DD_RUNTIME_METRICS_FLUSH_INTERVAL') ?? '10000'
+const INTERVAL = Number.parseInt(DD_RUNTIME_METRICS_FLUSH_INTERVAL, 10)
 
 // Node >=16 has PerformanceObserver with `gc` type, but <16.7 had a critical bug.
 // See: https://github.com/nodejs/node/issues/39548
 const hasGCObserver = NODE_MAJOR >= 18 || (NODE_MAJOR === 16 && NODE_MINOR >= 7)
-const hasGCProfiler = NODE_MAJOR >= 20 || (NODE_MAJOR === 18 && NODE_MINOR >= 15)
 
 let nativeMetrics = null
 let gcObserver = null
-let gcProfiler = null
 
 let interval
 let client
@@ -33,15 +31,23 @@ reset()
 const runtimeMetrics = module.exports = {
   start (config) {
     const clientConfig = DogStatsDClient.generateClientConfig(config)
+    const watchers = []
+
+    if (config.runtimeMetrics.gc !== false) {
+      if (hasGCObserver) {
+        startGCObserver()
+      } else {
+        watchers.push('gc')
+      }
+    }
+
+    if (config.runtimeMetrics.eventLoop !== false) {
+      watchers.push('loop')
+    }
 
     try {
       nativeMetrics = require('@datadog/native-metrics')
-
-      if (hasGCObserver) {
-        nativeMetrics.start('loop') // Only add event loop watcher and not GC.
-      } else {
-        nativeMetrics.start()
-      }
+      nativeMetrics.start(...watchers)
     } catch (e) {
       log.error('Error starting native metrics', e)
       nativeMetrics = null
@@ -50,9 +56,6 @@ const runtimeMetrics = module.exports = {
     client = new MetricsAggregationClient(new DogStatsDClient(clientConfig))
 
     time = process.hrtime()
-
-    startGCObserver()
-    startGCProfiler()
 
     if (nativeMetrics) {
       interval = setInterval(() => {
@@ -128,8 +131,6 @@ function reset () {
   nativeMetrics = null
   gcObserver && gcObserver.disconnect()
   gcObserver = null
-  gcProfiler && gcProfiler.stop()
-  gcProfiler = null
 }
 
 function captureCpuUsage () {
@@ -141,7 +142,7 @@ function captureCpuUsage () {
   time = process.hrtime()
   cpuUsage = process.cpuUsage()
 
-  const elapsedMs = elapsedTime[0] * 1000 + elapsedTime[1] / 1000000
+  const elapsedMs = elapsedTime[0] * 1000 + elapsedTime[1] / 1_000_000
   const userPercent = 100 * elapsedUsage.user / 1000 / elapsedMs
   const systemPercent = 100 * elapsedUsage.system / 1000 / elapsedMs
   const totalPercent = userPercent + systemPercent
@@ -194,29 +195,6 @@ function captureHeapSpace () {
     client.gauge('runtime.node.heap.physical_size.by.space', stats[i].physical_space_size, tags)
   }
 }
-function captureGCMetrics () {
-  if (!gcProfiler) return
-
-  const profile = gcProfiler.stop()
-  const pauseAll = new Histogram()
-  const pause = {}
-
-  for (const stat of profile.statistics) {
-    const type = stat.gcType.replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase()
-
-    pause[type] = pause[type] || new Histogram()
-    pause[type].record(stat.cost)
-    pauseAll.record(stat.cost)
-  }
-
-  histogram('runtime.node.gc.pause', pauseAll)
-
-  for (const type in pause) {
-    histogram('runtime.node.gc.pause.by.type', pause[type], `gc_type:${type}`)
-  }
-
-  gcProfiler.start()
-}
 
 /**
  * Gathers and reports Event Loop Utilization (ELU) since last run
@@ -241,7 +219,6 @@ function captureCommonMetrics () {
   captureProcess()
   captureHeapStats()
   captureELU()
-  captureGCMetrics()
 }
 
 function captureNativeMetrics () {
@@ -292,7 +269,7 @@ function histogram (name, stats, tag) {
 }
 
 function startGCObserver () {
-  if (gcObserver || hasGCProfiler || !hasGCObserver) return
+  if (gcObserver) return
 
   gcObserver = new PerformanceObserver(list => {
     for (const entry of list.getEntries()) {
@@ -304,13 +281,6 @@ function startGCObserver () {
   })
 
   gcObserver.observe({ type: 'gc' })
-}
-
-function startGCProfiler () {
-  if (gcProfiler || !hasGCProfiler) return
-
-  gcProfiler = new v8.GCProfiler()
-  gcProfiler.start()
 }
 
 function gcType (kind) {

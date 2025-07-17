@@ -6,7 +6,7 @@ const { NODE_MAJOR } = require('../../version')
 
 describe('Dynamic Instrumentation', function () {
   describe('template evaluation', function () {
-    const t = setup()
+    const t = setup({ dependencies: ['fastify'] })
 
     beforeEach(t.triggerBreakpoint)
 
@@ -51,7 +51,9 @@ describe('Dynamic Instrumentation', function () {
             'foo: [Object], ' +
             'bar: true, ' +
             'baz: [Getter], ' +
-            '[Symbol(nodejs.util.inspect.custom)]: [Function: [nodejs.util.inspect.custom]] ' +
+            (NODE_MAJOR >= 24
+              ? 'Symbol(nodejs.util.inspect.custom): [Function: [nodejs.util.inspect.custom]] '
+              : '[Symbol(nodejs.util.inspect.custom)]: [Function: [nodejs.util.inspect.custom]] ') +
           '}'
         )
         assert.strictEqual(messages.shift(), obj) // a proxy should just be stringified to the wrapped object
@@ -61,14 +63,18 @@ describe('Dynamic Instrumentation', function () {
         // `util.inspect`, but it has not been considered a big side-effects issue, as anyone implementing this
         // function is doing so with the explicit intent of modifying the string representation of instances.
         assert.strictEqual(messages.shift(), 'CustomClass [foo] { b: 2, c: 3 }')
-        // Full promise example string (line breaks added for readability):
-        // Promise {
-        //   42,
-        //   [Symbol(async_id_symbol)]: 205,
-        //   [Symbol(trigger_async_id_symbol)]: 204,
-        //   [Symbol(kResourceStore)]: {}
-        // }
-        assert.ok(messages.shift().startsWith('Promise { 42, '))
+        if (NODE_MAJOR >= 24) {
+          assert.strictEqual(messages.shift(), 'Promise { 42 }')
+        } else {
+          // Full promise example string (line breaks added for readability):
+          // Promise {
+          //   42,
+          //   [Symbol(async_id_symbol)]: 205,
+          //   [Symbol(trigger_async_id_symbol)]: 204,
+          //   [Symbol(kResourceStore)]: {}
+          // }
+          assert.ok(messages.shift().startsWith('Promise { 42, '))
+        }
         assert.strictEqual(messages.shift(), '[Function: arrowFn]')
         assert.strictEqual(messages.shift(), '[Function: fn]')
         assert.strictEqual(

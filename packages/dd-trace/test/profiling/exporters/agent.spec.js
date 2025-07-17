@@ -10,9 +10,7 @@ const upload = require('multer')()
 const os = require('os')
 const path = require('path')
 const { request } = require('http')
-const getPort = require('get-port')
 const proxyquire = require('proxyquire')
-const { gunzipSync } = require('zlib')
 const WallProfiler = require('../../../src/profiling/profilers/wall')
 const SpaceProfiler = require('../../../src/profiling/profilers/space')
 const logger = require('../../../src/log')
@@ -129,14 +127,14 @@ describe('exporters/agent', function () {
     expect(req.files[2]).to.have.property('mimetype', 'application/octet-stream')
     expect(req.files[2]).to.have.property('size', req.files[2].buffer.length)
 
-    const wallProfile = Profile.decode(gunzipSync(req.files[1].buffer))
-    const spaceProfile = Profile.decode(gunzipSync(req.files[2].buffer))
+    const wallProfile = Profile.decode(req.files[1].buffer)
+    const spaceProfile = Profile.decode(req.files[2].buffer)
 
     expect(wallProfile).to.be.a.profile
     expect(spaceProfile).to.be.a.profile
 
-    expect(wallProfile).to.deep.equal(Profile.decode(gunzipSync(profiles.wall)))
-    expect(spaceProfile).to.deep.equal(Profile.decode(gunzipSync(profiles.space)))
+    expect(wallProfile).to.deep.equal(Profile.decode(profiles.wall))
+    expect(spaceProfile).to.deep.equal(Profile.decode(profiles.space))
   }
 
   beforeEach(() => {
@@ -172,13 +170,13 @@ describe('exporters/agent', function () {
 
   describe('using HTTP', () => {
     beforeEach(done => {
-      getPort().then(port => {
+      listener = app.listen(0, '127.0.0.1', () => {
+        const port = listener.address().port
         url = new URL(`http://127.0.0.1:${port}`)
-
-        listener = app.listen(port, '127.0.0.1', done)
-        listener.on('connection', socket => sockets.push(socket))
-        startSpan = sinon.spy(tracer._tracer, 'startSpan')
+        done()
       })
+      listener.on('connection', socket => sockets.push(socket))
+      startSpan = sinon.spy(tracer._tracer, 'startSpan')
     })
 
     afterEach(done => {
@@ -392,13 +390,13 @@ describe('exporters/agent', function () {
 
   describe('using ipv6', () => {
     beforeEach(done => {
-      getPort().then(port => {
+      listener = app.listen(0, '0:0:0:0:0:0:0:1', () => {
+        const port = listener.address().port
         url = new URL(`http://[0:0:0:0:0:0:0:1]:${port}`)
-
-        listener = app.listen(port, '0:0:0:0:0:0:0:1', done)
-        listener.on('connection', socket => sockets.push(socket))
-        startSpan = sinon.spy(tracer._tracer, 'startSpan')
+        done()
       })
+      listener.on('connection', socket => sockets.push(socket))
+      startSpan = sinon.spy(tracer._tracer, 'startSpan')
     })
 
     afterEach(done => {

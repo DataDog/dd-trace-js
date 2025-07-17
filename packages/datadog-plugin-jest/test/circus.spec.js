@@ -133,7 +133,7 @@ describe('Plugin', function () {
           ]
 
           const assertionPromises = tests.map(({ name, status, error, parameters, extraTags }) => {
-            return agent.use(trace => {
+            return agent.assertSomeTraces(trace => {
               const testSpan = trace[0][0]
               expect(testSpan.parent_id.toString()).to.equal('0')
               expect(testSpan.meta).to.contain({
@@ -199,7 +199,7 @@ describe('Plugin', function () {
             { name: 'jest-hook-failure-after will not run', error: 'hey, hook error after' }
           ]
           const assertionPromises = tests.map(({ name, error }) => {
-            return agent.use(trace => {
+            return agent.assertSomeTraces(trace => {
               const testSpan = trace[0][0]
               expect(testSpan.parent_id.toString()).to.equal('0')
               expect(testSpan.meta).to.contain({
@@ -250,7 +250,7 @@ describe('Plugin', function () {
           ]
 
           const assertionPromises = tests.map(({ name, status }) => {
-            return agent.use(trace => {
+            return agent.assertSomeTraces(trace => {
               const testSpan = trace[0].find(span => span.type === 'test')
               expect(testSpan.parent_id.toString()).to.equal('0')
               expect(testSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
@@ -287,7 +287,7 @@ describe('Plugin', function () {
         // https://github.com/facebook/jest/blob/7f2731ef8bebac7f226cfc0d2446854603a557a9/CHANGELOG.md#2650
         if (semver.intersects(version, '>=26.5.0')) {
           it('does not crash when injectGlobals is false', (done) => {
-            agent.use(trace => {
+            agent.assertSomeTraces(trace => {
               const testSpan = trace[0].find(span => span.type === 'test')
               expect(testSpan.meta).to.contain({
                 [TEST_NAME]: 'jest-inject-globals will be run',
@@ -346,7 +346,7 @@ describe('Plugin', function () {
             ]
 
             const assertionPromises = events.map(({ name, suite, status, type, spanResourceMatch }) => {
-              return agent.use((agentlessPayload, request) => {
+              return agent.assertSomeTraces((agentlessPayload, request) => {
                 if (option === 'evp proxy') {
                   expect(request.headers['x-datadog-evp-subdomain']).to.equal('citestcycle-intake')
                   expect(request.path).to.equal('/evp_proxy/v2/api/v2/citestcycle')

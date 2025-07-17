@@ -1,3 +1,5 @@
+'use strict'
+
 function extractModel (instance) {
   const model = instance.model || instance.resourcePath || instance.publisherModelEndpoint
   return model?.split('/').pop()

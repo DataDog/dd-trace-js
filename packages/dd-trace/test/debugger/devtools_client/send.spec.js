@@ -3,7 +3,8 @@
 require('../../setup/mocha')
 
 const { hostname: getHostname } = require('os')
-const { expectWithin, getRequestOptions } = require('./utils')
+const sinon = require('sinon')
+const { getRequestOptions } = require('./utils')
 const JSONBuffer = require('../../../src/debugger/devtools_client/json-buffer')
 const { version } = require('../../../../../package.json')
 
@@ -21,9 +22,11 @@ const dd = { dd: true }
 const snapshot = { snapshot: true }
 
 describe('input message http requests', function () {
-  let send, request, jsonBuffer
+  let clock, send, request, jsonBuffer
 
   beforeEach(function () {
+    clock = sinon.useFakeTimers()
+
     request = sinon.spy()
     request['@noCallThru'] = true
 
@@ -36,10 +39,24 @@ describe('input message http requests', function () {
     }
 
     send = proxyquire('../src/debugger/devtools_client/send', {
-      './config': { service, commitSHA, repositoryUrl, url, '@noCallThru': true },
+      './config': {
+        service,
+        commitSHA,
+        repositoryUrl,
+        url,
+        maxTotalPayloadSize: 5 * 1024 * 1024, // 5MB
+        dynamicInstrumentation: {
+          uploadIntervalSeconds: 1
+        },
+        '@noCallThru': true
+      },
       './json-buffer': JSONBufferSpy,
       '../../exporters/common/request': request
     })
+  })
+
+  afterEach(function () {
+    clock.restore()
   })
 
   it('should buffer instead of calling request directly', function () {
@@ -59,28 +76,28 @@ describe('input message http requests', function () {
     send({ message: 3 }, logger, dd, snapshot)
     expect(request).to.not.have.been.called
 
-    expectWithin(1200, () => {
-      expect(request).to.have.been.calledOnceWith(JSON.stringify([
-        getPayload({ message: 1 }),
-        getPayload({ message: 2 }),
-        getPayload({ message: 3 })
-      ]))
+    clock.tick(1000)
 
-      const opts = getRequestOptions(request)
-      expect(opts).to.have.property('method', 'POST')
-      expect(opts).to.have.property(
-        'path',
-        '/debugger/v1/input?ddtags=' +
-          `env%3A${process.env.DD_ENV}%2C` +
-          `version%3A${process.env.DD_VERSION}%2C` +
-          `debugger_version%3A${version}%2C` +
-          `host_name%3A${hostname}%2C` +
-          `git.commit.sha%3A${commitSHA}%2C` +
-          `git.repository_url%3A${repositoryUrl}`
-      )
+    expect(request).to.have.been.calledOnceWith(JSON.stringify([
+      getPayload({ message: 1 }),
+      getPayload({ message: 2 }),
+      getPayload({ message: 3 })
+    ]))
 
-      done()
-    })
+    const opts = getRequestOptions(request)
+    expect(opts).to.have.property('method', 'POST')
+    expect(opts).to.have.property(
+      'path',
+      '/debugger/v1/input?ddtags=' +
+        `env%3A${process.env.DD_ENV}%2C` +
+        `version%3A${process.env.DD_VERSION}%2C` +
+        `debugger_version%3A${version}%2C` +
+        `host_name%3A${hostname}%2C` +
+        `git.commit.sha%3A${commitSHA}%2C` +
+        `git.repository_url%3A${repositoryUrl}`
+    )
+
+    done()
   })
 })
 

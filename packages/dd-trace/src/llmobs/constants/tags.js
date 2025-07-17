@@ -10,6 +10,7 @@ module.exports = {
   METRICS: '_ml_obs.metrics',
   ML_APP: '_ml_obs.meta.ml_app',
   PROPAGATED_PARENT_ID_KEY: '_dd.p.llmobs_parent_id',
+  PROPAGATED_ML_APP_KEY: '_dd.p.llmobs_ml_app',
   PARENT_ID_KEY: '_ml_obs.llmobs_parent_id',
   TAGS: '_ml_obs.tags',
   NAME: '_ml_obs.name',

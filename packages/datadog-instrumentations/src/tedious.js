@@ -2,8 +2,7 @@
 
 const {
   channel,
-  addHook,
-  AsyncResource
+  addHook
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
@@ -22,30 +21,26 @@ addHook({ name: 'tedious', versions: ['>=1.0.0'] }, tedious => {
       return makeRequest.apply(this, arguments)
     }
 
-    const callbackResource = new AsyncResource('bound-anonymous-fn')
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-
     const connectionConfig = this.config
+    const ctx = { queryOrProcedure, connectionConfig }
 
-    return asyncResource.runInAsyncScope(() => {
-      const payload = { queryOrProcedure, connectionConfig }
-      startCh.publish(payload)
-      queryParent[queryField] = payload.sql
+    return startCh.runStores(ctx, () => {
+      queryParent[queryField] = ctx.sql
 
-      const cb = callbackResource.bind(request.callback, request)
-      request.callback = asyncResource.bind(function (error) {
+      const cb = request.callback
+      request.callback = function (error, ...args) {
         if (error) {
-          errorCh.publish(error)
+          ctx.error = error
+          errorCh.publish(ctx)
         }
-        finishCh.publish(undefined)
-
-        return cb.apply(this, arguments)
-      }, null, request)
+        return finishCh.runStores(ctx, cb, this, error, ...args)
+      }
 
       try {
         return makeRequest.apply(this, arguments)
       } catch (error) {
-        errorCh.publish(error)
+        ctx.error = error
+        errorCh.publish(ctx)
 
         throw error
       }
@@ -63,7 +58,6 @@ function getQueryOrProcedure (request) {
     return [request.parametersByName.statement.value, request.parametersByName.statement, 'value']
   } else if (request.parametersByName.stmt) {
     return [request.parametersByName.stmt.value, request.parametersByName.stmt, 'value']
-  } else {
-    return [request.sqlTextOrProcedure, request, 'sqlTextOrProcedure']
   }
+  return [request.sqlTextOrProcedure, request, 'sqlTextOrProcedure']
 }

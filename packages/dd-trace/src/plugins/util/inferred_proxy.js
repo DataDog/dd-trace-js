@@ -1,3 +1,5 @@
+'use strict'
+
 const log = require('../../log')
 const tags = require('../../../../../ext/tags')
 
@@ -37,7 +39,7 @@ function createInferredProxySpan (headers, childOf, tracer, context) {
 
   const proxySpanInfo = supportedProxies[proxyContext.proxySystemName]
 
-  log.debug(`Successfully extracted inferred span info ${proxyContext} for proxy: ${proxyContext.proxySystemName}`)
+  log.debug('Successfully extracted inferred span info %s for proxy:', proxyContext, proxyContext.proxySystemName)
 
   const span = tracer.startSpan(
     proxySpanInfo.spanName,
@@ -45,6 +47,7 @@ function createInferredProxySpan (headers, childOf, tracer, context) {
       childOf,
       type: 'web',
       startTime: proxyContext.requestTime,
+      integrationName: proxySpanInfo.component,
       tags: {
         service: proxyContext.domainName || tracer._config.service,
         component: proxySpanInfo.component,
@@ -79,13 +82,13 @@ function extractInferredProxyContext (headers) {
   }
 
   if (!(PROXY_HEADER_SYSTEM in headers && headers[PROXY_HEADER_SYSTEM] in supportedProxies)) {
-    log.debug(`Received headers to create inferred proxy span but headers include an unsupported proxy type ${headers}`)
+    log.debug('Received headers to create inferred proxy span but headers include an unsupported proxy type', headers)
     return null
   }
 
   return {
     requestTime: headers[PROXY_HEADER_START_TIME_MS]
-      ? parseInt(headers[PROXY_HEADER_START_TIME_MS], 10)
+      ? Number.parseInt(headers[PROXY_HEADER_START_TIME_MS], 10)
       : null,
     method: headers[PROXY_HEADER_HTTPMETHOD],
     path: headers[PROXY_HEADER_PATH],

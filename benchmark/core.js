@@ -93,7 +93,7 @@ suite
       sampler = new Sampler(0.5)
     },
     fn () {
-      sampler.isSampled()
+      sampler.isSampled(span)
     }
   })
   .add('format', {

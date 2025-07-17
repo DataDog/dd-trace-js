@@ -10,7 +10,7 @@ const SECURITY_CONTROL_ELEMENT_DELIMITER = ','
 const INPUT_VALIDATOR_TYPE = 'INPUT_VALIDATOR'
 const SANITIZER_TYPE = 'SANITIZER'
 
-const validTypes = [INPUT_VALIDATOR_TYPE, SANITIZER_TYPE]
+const validTypes = new Set([INPUT_VALIDATOR_TYPE, SANITIZER_TYPE])
 
 function parse (securityControlsConfiguration) {
   const controls = new Map()
@@ -42,7 +42,7 @@ function parseControl (control) {
   let [type, marks, file, method, parameters] = fields
 
   type = type.trim().toUpperCase()
-  if (!validTypes.includes(type)) {
+  if (!validTypes.has(type)) {
     log.warn('[ASM] Invalid security control type: %s', type)
     return
   }
@@ -60,7 +60,7 @@ function parseControl (control) {
 
   try {
     parameters = getParameters(parameters)
-  } catch (e) {
+  } catch {
     log.warn('[ASM] Invalid non-numeric security control parameter %s', parameters)
     return
   }
@@ -77,11 +77,11 @@ function getSecureMarks (marks) {
 function getParameters (parameters) {
   return parameters?.split(SECURITY_CONTROL_ELEMENT_DELIMITER)
     .map(param => {
-      const parsedParam = parseInt(param, 10)
+      const parsedParam = Number.parseInt(param, 10)
 
       // discard the securityControl if there is an incorrect parameter
-      if (isNaN(parsedParam)) {
-        throw new Error('Invalid non-numeric security control parameter')
+      if (Number.isNaN(parsedParam)) {
+        throw new TypeError('Invalid non-numeric security control parameter')
       }
 
       return parsedParam

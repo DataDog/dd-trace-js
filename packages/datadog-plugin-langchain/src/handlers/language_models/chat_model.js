@@ -5,7 +5,7 @@ const LangChainLanguageModelHandler = require('.')
 const COMPLETIONS = 'langchain.response.completions'
 
 class LangChainChatModelHandler extends LangChainLanguageModelHandler {
-  getSpanStartTags (ctx, provider) {
+  getSpanStartTags (ctx, provider, span) {
     const tags = {}
 
     const inputs = ctx.args?.[0]
@@ -15,7 +15,7 @@ class LangChainChatModelHandler extends LangChainLanguageModelHandler {
 
       for (const messageIndex in messageSet) {
         const message = messageSet[messageIndex]
-        if (this.isPromptCompletionSampled()) {
+        if (this.isPromptCompletionSampled(span)) {
           tags[`langchain.request.messages.${messageSetIndex}.${messageIndex}.content`] =
             this.normalize(message.content) || ''
         }
@@ -27,7 +27,7 @@ class LangChainChatModelHandler extends LangChainLanguageModelHandler {
     const identifyingParams = (typeof instance._identifyingParams === 'function' && instance._identifyingParams()) || {}
     for (const [param, val] of Object.entries(identifyingParams)) {
       if (param.toLowerCase().includes('apikey') || param.toLowerCase().includes('apitoken')) continue
-      if (typeof val === 'object') {
+      if (val !== null && typeof val === 'object') {
         for (const [key, value] of Object.entries(val)) {
           tags[`langchain.request.${provider}.parameters.${param}.${key}`] = value
         }
@@ -39,10 +39,12 @@ class LangChainChatModelHandler extends LangChainLanguageModelHandler {
     return tags
   }
 
-  getSpanEndTags (ctx) {
+  getSpanEndTags (ctx, span) {
     const { result } = ctx
 
     const tags = {}
+
+    const sampled = this.isPromptCompletionSampled(span)
 
     this.extractTokenMetrics(ctx.currentStore?.span, result)
 
@@ -56,7 +58,7 @@ class LangChainChatModelHandler extends LangChainLanguageModelHandler {
         const message = chatCompletion.message
         let toolCalls = message.tool_calls
 
-        if (text && this.isPromptCompletionSampled()) {
+        if (text && sampled) {
           tags[
           `${COMPLETIONS}.${messageSetIdx}.${chatCompletionIdx}.content`
           ] = this.normalize(text)

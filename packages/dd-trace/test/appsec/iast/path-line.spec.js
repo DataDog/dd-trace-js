@@ -1,3 +1,5 @@
+'use strict'
+
 const proxyquire = require('proxyquire')
 const path = require('path')
 const os = require('os')
@@ -36,27 +38,6 @@ describe('path-line', function () {
     pathLine = proxyquire('../../../src/appsec/iast/path-line', {
       path: mockPath,
       process: mockProcess
-    })
-  })
-
-  describe('calculateDDBasePath', () => {
-    it('/node_modules/dd-trace', () => {
-      const basePath = path.join(rootPath, 'node_modules', 'dd-trace', 'packages', path.sep)
-      const result = pathLine.calculateDDBasePath(path.join(basePath, PATH_LINE_PATH))
-      expect(result).to.be.equals(basePath)
-    })
-
-    it('/packages/project/path/node_modules/dd-trace', () => {
-      const basePath =
-        path.join(rootPath, 'packages', 'project', 'path', 'node_modules', 'dd-trace', 'packages', path.sep)
-      const result = pathLine.calculateDDBasePath(path.join(basePath, PATH_LINE_PATH))
-      expect(result).to.be.equals(basePath)
-    })
-
-    it('/project/path/node_modules/dd-trace', () => {
-      const basePath = path.join(rootPath, 'project', 'path', 'node_modules', 'dd-trace', 'packages', path.sep)
-      const result = pathLine.calculateDDBasePath(path.join(basePath, PATH_LINE_PATH))
-      expect(result).to.be.equals(basePath)
     })
   })
 
@@ -220,7 +201,7 @@ describe('path-line', function () {
       const basePath = pathLine.ddBasePath
       pathLine.ddBasePath = path.join('test', 'base', 'path')
 
-      const list = getCallsiteFrames(32, getCallSiteInfo)
+      const list = getCallsiteFrames(32, getCallSiteInfo, getCallSiteInfo)
       const firstNonDDPath = pathLine.getNonDDCallSiteFrames(list)[0]
 
       const expectedPath = path.join('node_modules', firstNonDDPath.path)
