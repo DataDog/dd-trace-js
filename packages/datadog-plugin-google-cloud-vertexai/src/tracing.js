@@ -29,15 +29,10 @@ class GoogleCloudVertexAITracingPlugin extends TracingPlugin {
       resource,
       kind: 'client',
       meta: {
-        [MEASURED]: 1
+        [MEASURED]: 1,
+        'vertexai.request.model': extractModel(instance)
       }
     }, false)
-
-    const model = extractModel(instance)
-    const tags = {
-      'vertexai.request.model': model
-    }
-    span.addTags(tags)
 
     const store = storage('legacy').getStore() || {}
     ctx.currentStore = { ...store, span }
