@@ -11,9 +11,6 @@ class LangChainHandler {
   }
 
   // no-op for default handler
-  extractApiKey (instance) {}
-
-  // no-op for default handler
   extractProvider (instance) {}
 
   // no-op for default handler

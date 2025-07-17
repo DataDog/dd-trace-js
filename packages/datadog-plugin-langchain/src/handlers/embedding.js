@@ -3,15 +3,6 @@
 const LangChainHandler = require('./default')
 
 class LangChainEmbeddingHandler extends LangChainHandler {
-  extractApiKey (instance) {
-    const apiKey =
-      instance.clientConfig?.apiKey ||
-      instance.apiKey ||
-      instance.client?.apiKey
-    if (!apiKey || apiKey.length < 4) return ''
-    return `...${apiKey.slice(-4)}`
-  }
-
   extractProvider (instance) {
     return instance.constructor.name.split('Embeddings')[0].toLowerCase()
   }
