@@ -22,9 +22,9 @@ const {
   GIT_COMMIT_HEAD_AUTHOR_DATE,
   GIT_COMMIT_HEAD_AUTHOR_EMAIL,
   GIT_COMMIT_HEAD_AUTHOR_NAME,
-  GIT_COMMIT_HEAD_COMMITER_DATE,
-  GIT_COMMIT_HEAD_COMMITER_EMAIL,
-  GIT_COMMIT_HEAD_COMMITER_NAME,
+  GIT_COMMIT_HEAD_COMMITTER_DATE,
+  GIT_COMMIT_HEAD_COMMITTER_EMAIL,
+  GIT_COMMIT_HEAD_COMMITTER_NAME,
   GIT_COMMIT_HEAD_MESSAGE
 } = require('./tags')
 const {
@@ -503,9 +503,9 @@ function getGitMetadata (ciMetadata) {
     tags[GIT_COMMIT_HEAD_AUTHOR_DATE] = headAuthorDate
     tags[GIT_COMMIT_HEAD_AUTHOR_EMAIL] = headAuthorEmail
     tags[GIT_COMMIT_HEAD_AUTHOR_NAME] = headAuthorName
-    tags[GIT_COMMIT_HEAD_COMMITER_DATE] = headCommitterDate
-    tags[GIT_COMMIT_HEAD_COMMITER_EMAIL] = headCommitterEmail
-    tags[GIT_COMMIT_HEAD_COMMITER_NAME] = headCommitterName
+    tags[GIT_COMMIT_HEAD_COMMITTER_DATE] = headCommitterDate
+    tags[GIT_COMMIT_HEAD_COMMITTER_EMAIL] = headCommitterEmail
+    tags[GIT_COMMIT_HEAD_COMMITTER_NAME] = headCommitterName
   }
 
   const entries = [
