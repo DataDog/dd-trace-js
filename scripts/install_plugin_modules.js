@@ -1,6 +1,6 @@
 'use strict'
 
-const { lstat, mkdir, readFile, readdir, writeFile } = require('fs/promises')
+const { lstat, mkdir, readdir, writeFile } = require('fs/promises')
 const { arch } = require('os')
 const { join } = require('path')
 const { createHash } = require('crypto')
