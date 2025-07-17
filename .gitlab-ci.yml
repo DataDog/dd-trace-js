@@ -12,6 +12,14 @@ check_config_inversion_local_file:
   variables:
     LOCAL_JSON_PATH: "packages/dd-trace/src/supported-configurations.json"
 
+config-inversion-update-supported-range:
+  extends: .config_inversion_update_central
+  variables:
+    LOCAL_REPO_NAME: "dd-trace-js"
+    LOCAL_JSON_PATH: "packages/dd-trace/src/supported-configurations.json"
+    LANGUAGE_NAME: "nodejs"
+    MULTIPLE_RELEASE_LINES: "true"
+
 include:
   - local: ".gitlab/one-pipeline.locked.yml"
   - local: ".gitlab/benchmarks.yml"
