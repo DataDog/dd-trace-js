@@ -1,12 +1,14 @@
 'use strict'
 
+require('../setup/tap')
+
+const RuleManager = require('../../src/appsec/rule_manager')
 const RemoteConfigCapabilities = require('../../src/remote_config/capabilities')
 const { kPreUpdate } = require('../../src/remote_config/manager')
 
 let config
 let rc
 let RemoteConfigManager
-let RuleManager
 let UserTracking
 let log
 let appsec
@@ -33,10 +35,6 @@ describe('Remote Config index', () => {
 
     RemoteConfigManager = sinon.stub().returns(rc)
 
-    RuleManager = {
-      updateWafFromRC: sinon.stub()
-    }
-
     UserTracking = {
       setCollectionMode: sinon.stub()
     }
@@ -52,10 +50,8 @@ describe('Remote Config index', () => {
 
     remoteConfig = proxyquire('../src/remote_config', {
       './manager': RemoteConfigManager,
-      '../rule_manager': RuleManager,
-      '../user_tracking': UserTracking,
-      '../../log': log,
-      '..': appsec
+      '../appsec/user_tracking': UserTracking,
+      '../log': log,
     })
   })
 
@@ -189,6 +185,48 @@ describe('Remote Config index', () => {
   })
 
   describe('enableWafUpdate', () => {
+    const expectCapabilitiesCalledWith = (capabilityList, expectedValue) => {
+      capabilityList.forEach(capability => {
+        expect(rc.updateCapabilities)
+          .to.have.been.calledWithExactly(capability, expectedValue)
+      })
+    }
+
+    const expectCapabilitiesNotCalled = (capabilityList) => {
+      capabilityList.forEach(capability => {
+        expect(rc.updateCapabilities)
+          .to.not.have.been.calledWith(capability)
+      })
+    }
+
+    const CORE_ASM_CAPABILITIES = [
+      RemoteConfigCapabilities.ASM_IP_BLOCKING,
+      RemoteConfigCapabilities.ASM_USER_BLOCKING,
+      RemoteConfigCapabilities.ASM_DD_RULES,
+      RemoteConfigCapabilities.ASM_EXCLUSIONS,
+      RemoteConfigCapabilities.ASM_REQUEST_BLOCKING,
+      RemoteConfigCapabilities.ASM_RESPONSE_BLOCKING,
+      RemoteConfigCapabilities.ASM_CUSTOM_RULES,
+      RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE,
+      RemoteConfigCapabilities.ASM_TRUSTED_IPS,
+      RemoteConfigCapabilities.ASM_EXCLUSION_DATA,
+      RemoteConfigCapabilities.ASM_ENDPOINT_FINGERPRINT,
+      RemoteConfigCapabilities.ASM_SESSION_FINGERPRINT,
+      RemoteConfigCapabilities.ASM_NETWORK_FINGERPRINT,
+      RemoteConfigCapabilities.ASM_HEADER_FINGERPRINT,
+      RemoteConfigCapabilities.ASM_DD_MULTICONFIG
+    ]
+
+    const RASP_CAPABILITIES = [
+      RemoteConfigCapabilities.ASM_RASP_SSRF,
+      RemoteConfigCapabilities.ASM_RASP_SQLI,
+      RemoteConfigCapabilities.ASM_RASP_LFI,
+      RemoteConfigCapabilities.ASM_RASP_SHI,
+      RemoteConfigCapabilities.ASM_RASP_CMDI
+    ]
+
+    const ALL_ASM_CAPABILITIES = [...CORE_ASM_CAPABILITIES, ...RASP_CAPABILITIES]
+
     describe('enable', () => {
       it('should not fail if remote config is not enabled before', () => {
         config.appsec = {}
@@ -212,44 +250,7 @@ describe('Remote Config index', () => {
         remoteConfig.enable(config)
         remoteConfig.enableWafUpdate(config.appsec)
 
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_IP_BLOCKING, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_USER_BLOCKING, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_DD_RULES, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_EXCLUSIONS, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_REQUEST_BLOCKING, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RESPONSE_BLOCKING, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_CUSTOM_RULES, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_TRUSTED_IPS, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_ENDPOINT_FINGERPRINT, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_SESSION_FINGERPRINT, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_NETWORK_FINGERPRINT, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_HEADER_FINGERPRINT, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_SSRF, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_SQLI, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_LFI, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_SHI, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_CMDI, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_DD_MULTICONFIG, true)
+        expectCapabilitiesCalledWith(ALL_ASM_CAPABILITIES, true)
 
         expect(rc.setProductHandler).to.have.been.calledWith('ASM_DATA')
         expect(rc.setProductHandler).to.have.been.calledWith('ASM_DD')
@@ -262,44 +263,7 @@ describe('Remote Config index', () => {
         remoteConfig.enable(config)
         remoteConfig.enableWafUpdate(config.appsec)
 
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_IP_BLOCKING, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_USER_BLOCKING, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_DD_RULES, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_EXCLUSIONS, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_REQUEST_BLOCKING, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RESPONSE_BLOCKING, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_CUSTOM_RULES, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_TRUSTED_IPS, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_ENDPOINT_FINGERPRINT, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_SESSION_FINGERPRINT, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_NETWORK_FINGERPRINT, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_HEADER_FINGERPRINT, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_SSRF, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_SQLI, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_LFI, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_SHI, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_CMDI, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_DD_MULTICONFIG, true)
+        expectCapabilitiesCalledWith(ALL_ASM_CAPABILITIES, true)
 
         expect(rc.setProductHandler).to.have.been.calledWith('ASM_DATA')
         expect(rc.setProductHandler).to.have.been.calledWith('ASM_DD')
@@ -314,44 +278,8 @@ describe('Remote Config index', () => {
 
         expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_ACTIVATION, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_IP_BLOCKING, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_USER_BLOCKING, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_DD_RULES, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_EXCLUSIONS, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_REQUEST_BLOCKING, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RESPONSE_BLOCKING, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_CUSTOM_RULES, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_TRUSTED_IPS, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_ENDPOINT_FINGERPRINT, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_SESSION_FINGERPRINT, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_NETWORK_FINGERPRINT, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_HEADER_FINGERPRINT, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_SSRF, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_SQLI, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_LFI, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_SHI, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_CMDI, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_DD_MULTICONFIG, true)
+
+        expectCapabilitiesCalledWith(ALL_ASM_CAPABILITIES, true)
       })
 
       it('should not activate rasp capabilities if rasp is disabled', () => {
@@ -361,44 +289,9 @@ describe('Remote Config index', () => {
 
         expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_ACTIVATION, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_IP_BLOCKING, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_USER_BLOCKING, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_DD_RULES, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_EXCLUSIONS, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_REQUEST_BLOCKING, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RESPONSE_BLOCKING, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_CUSTOM_RULES, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_TRUSTED_IPS, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_ENDPOINT_FINGERPRINT, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_SESSION_FINGERPRINT, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_NETWORK_FINGERPRINT, true)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_HEADER_FINGERPRINT, true)
-        expect(rc.updateCapabilities)
-          .to.not.have.been.calledWith(RemoteConfigCapabilities.ASM_RASP_SSRF)
-        expect(rc.updateCapabilities)
-          .to.not.have.been.calledWith(RemoteConfigCapabilities.ASM_RASP_SQLI)
-        expect(rc.updateCapabilities)
-          .to.not.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_LFI)
-        expect(rc.updateCapabilities)
-          .to.not.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_SHI)
-        expect(rc.updateCapabilities)
-          .to.not.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_CMDI)
-        expect(rc.updateCapabilities)
-          .to.not.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_DD_MULTICONFIG)
+
+        expectCapabilitiesCalledWith(CORE_ASM_CAPABILITIES, true)
+        expectCapabilitiesNotCalled(RASP_CAPABILITIES)
       })
     })
 
@@ -408,44 +301,7 @@ describe('Remote Config index', () => {
         rc.updateCapabilities.resetHistory()
         remoteConfig.disableWafUpdate()
 
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_IP_BLOCKING, false)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_USER_BLOCKING, false)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_DD_RULES, false)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_EXCLUSIONS, false)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_REQUEST_BLOCKING, false)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RESPONSE_BLOCKING, false)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_CUSTOM_RULES, false)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, false)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_TRUSTED_IPS, false)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_ENDPOINT_FINGERPRINT, false)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_SESSION_FINGERPRINT, false)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_NETWORK_FINGERPRINT, false)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_HEADER_FINGERPRINT, false)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_SSRF, false)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_SQLI, false)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_LFI, false)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_SHI, false)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_CMDI, false)
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_DD_MULTICONFIG, false)
+        expectCapabilitiesCalledWith(ALL_ASM_CAPABILITIES, false)
 
         expect(rc.removeProductHandler).to.have.been.calledWith('ASM_DATA')
         expect(rc.removeProductHandler).to.have.been.calledWith('ASM_DD')

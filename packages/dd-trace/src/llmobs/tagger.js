@@ -281,6 +281,7 @@ class LLMObsTagger {
 
       const { content = '', role } = message
       const toolCalls = message.toolCalls
+      const toolId = message.toolId
       const messageObj = { content }
 
       const valid = typeof content === 'string'
@@ -288,13 +289,21 @@ class LLMObsTagger {
         this.#handleFailure('Message content must be a string.', 'invalid_io_messages')
       }
 
-      const condition = this.#tagConditionalString(role, 'Message role', messageObj, 'role')
+      let condition = this.#tagConditionalString(role, 'Message role', messageObj, 'role')
 
       if (toolCalls) {
         const filteredToolCalls = this.#filterToolCalls(toolCalls)
 
         if (filteredToolCalls.length) {
           messageObj.tool_calls = filteredToolCalls
+        }
+      }
+
+      if (toolId) {
+        if (role === 'tool') {
+          condition = this.#tagConditionalString(toolId, 'Tool ID', messageObj, 'tool_id')
+        } else {
+          log.warn(`Tool ID for tool message not associated with a "tool" role, instead got "${role}"`)
         }
       }
 

@@ -43,6 +43,7 @@ export default [
       '**/versions', // This is effectively a node_modules tree.
       '**/acmeair-nodejs', // We don't own this.
       '**/vendor', // Generally, we didn't author this code.
+      'integration-tests/code-origin/typescript.js', // Generated
       'integration-tests/debugger/target-app/source-map-support/bundle.js', // Generated
       'integration-tests/debugger/target-app/source-map-support/hello/world.js', // Generated
       'integration-tests/debugger/target-app/source-map-support/minify.min.js', // Generated

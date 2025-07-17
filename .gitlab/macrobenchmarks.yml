@@ -19,8 +19,6 @@
       - platform/artifacts/
     expire_in: 3 months
   variables:
-    FF_USE_LEGACY_KUBERNETES_EXECUTION_STRATEGY: "true"
-
     K6_OPTIONS_WARMUP_RATE: 500
     K6_OPTIONS_WARMUP_DURATION: 1m
     K6_OPTIONS_WARMUP_GRACEFUL_STOP: 10s
