@@ -23,11 +23,7 @@ const internalsNames = Array.from(new Set(getInternals().map(n => n.name)))
 // Packages that should be ignored during version checking - these won't be included in latests.json
 const IGNORED_PACKAGES = [
   // Add package names here
-  'aerospike', // I think this is due to architecture issues?
   'dd-trace-api', // unsure what this is - can't be found
-  'mariadb', // mariadb esm tests were failing
-  'microgateway-core', // 'microgateway-core' was failing to find a directory
-  'winston' // winston esm tests were failing
 ]
 
 // Packages that should be pinned to specific versions
