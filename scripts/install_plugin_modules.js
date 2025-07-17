@@ -141,34 +141,6 @@ async function assertPackage (name, version, dependencyVersionRange, external) {
 }
 
 /**
- * @param {object} dependencies
- * @param {string} externalName
- * @param {string} versionRange
- */
-async function addDependencies (dependencies, externalName, versionRange) {
-  const versionList = await getVersionList(externalName)
-  const version = semver.maxSatisfying(versionList, versionRange)
-  const pkgJson = await npmView(`${externalName}@${version}`)
-  for (const { dep, name } of externalDeps.get(externalName)) {
-    // do stuff with dep
-    for (const section of ['devDependencies', 'peerDependencies']) {
-      if (pkgJson[section] && name in pkgJson[section]) {
-        if (dep === externalName) {
-          dependencies[name] = version
-        } else if (pkgJson[section][name].includes('||')) {
-          // Use the first version in the list (as npm does by default)
-          dependencies[name] = pkgJson[section][name].split('||')[0].trim()
-        } else {
-          // Only one version available so use that.
-          dependencies[name] = pkgJson[section][name]
-        }
-        break
-      }
-    }
-  }
-}
-
-/**
  * @param {object} rootFolder
  * @param {string} parent
  */
