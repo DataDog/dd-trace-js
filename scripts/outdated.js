@@ -24,6 +24,7 @@ const internalsNames = Array.from(new Set(getInternals().map(n => n.name)))
 const IGNORED_PACKAGES = [
   // Add package names here
   'aerospike', // I think this is due to architecture issues?
+  'dd-trace-api', // unsure what this is - can't be found
   'mariadb', // mariadb esm tests were failing
   'microgateway-core', // 'microgateway-core' was failing to find a directory
   'winston' // winston esm tests were failing
