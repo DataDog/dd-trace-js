@@ -4,7 +4,6 @@ const { MEASURED } = require('../../../ext/tags')
 const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
-const API_KEY = 'langchain.request.api_key'
 const MODEL = 'langchain.request.model'
 const PROVIDER = 'langchain.request.provider'
 const TYPE = 'langchain.request.type'
@@ -44,7 +43,6 @@ class BaseLangChainTracingPlugin extends TracingPlugin {
     const handler = this.handlers[type]
 
     const instance = ctx.instance
-    const apiKey = handler.extractApiKey(instance)
     const provider = handler.extractProvider(instance)
     const model = handler.extractModel(instance)
 
@@ -59,7 +57,6 @@ class BaseLangChainTracingPlugin extends TracingPlugin {
 
     const tags = handler.getSpanStartTags(ctx, provider, span) || []
 
-    if (apiKey) tags[API_KEY] = apiKey
     if (provider) tags[PROVIDER] = provider
     if (model) tags[MODEL] = model
     if (type) tags[TYPE] = type
