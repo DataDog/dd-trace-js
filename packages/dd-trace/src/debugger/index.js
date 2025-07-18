@@ -60,7 +60,7 @@ function start (config, rc) {
       execArgv: [], // Avoid worker thread inheriting the `-r` command line argument
       env, // Avoid worker thread inheriting the `NODE_OPTIONS` environment variable (in case it contains `-r`)
       workerData: {
-        config: config.serialize(),
+        config,
         parentThreadId,
         probePort: probeChannel.port1,
         configPort: configChannel.port1
@@ -100,7 +100,7 @@ function start (config, rc) {
 
 function configure (config) {
   if (configChannel === null) return
-  configChannel.port2.postMessage(config.serialize())
+  configChannel.port2.postMessage(config)
 }
 
 function readProbeFile (path, cb) {

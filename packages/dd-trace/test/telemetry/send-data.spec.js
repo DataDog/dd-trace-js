@@ -128,7 +128,7 @@ describe('sendData', () => {
     }, retryObjData]
 
     sendDataModule.sendData({ tags: { 'runtime-id': '123' } },
-      { language: 'js' }, 'test', 'message-batch', payload) /
+      { language: 'js' }, 'test', 'message-batch', payload)
 
     expect(request).to.have.been.calledOnce
 
@@ -150,7 +150,7 @@ describe('sendData', () => {
   })
 
   it('should also work in CI Visibility agentless mode', () => {
-    process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED = 1
+    process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED = '1'
     sendDataModule.sendData(
       {
         isCiVisibility: true,
@@ -168,7 +168,7 @@ describe('sendData', () => {
       path: '/api/v2/apmtelemetry'
     })
     const { url } = options
-    expect(url).to.eql(new URL('https://instrumentation-telemetry-intake.datadoghq.eu'))
+    expect(url).to.equal('https://instrumentation-telemetry-intake.datadoghq.eu')
     delete process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED
   })
 })
