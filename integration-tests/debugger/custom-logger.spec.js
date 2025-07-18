@@ -1,6 +1,6 @@
 'use strict'
 
-const { assert } = require('chai')
+const assert = require('node:assert')
 const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {

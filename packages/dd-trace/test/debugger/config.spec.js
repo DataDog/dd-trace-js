@@ -2,7 +2,7 @@
 
 require('../setup/mocha')
 
-const { assert } = require('chai')
+const assert = require('node:assert')
 const getDebuggerConfig = require('../../src/debugger/config')
 const Config = require('../../src/config')
 
