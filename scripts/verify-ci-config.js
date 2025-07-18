@@ -68,7 +68,7 @@ function checkPlugins (yamlPath) {
     const instRanges = Array.from(rangesPerPluginFromInst[pluginName])
     const yamlVersions = getMatchingVersions(pluginName, yamlRanges)
     const instVersions = getMatchingVersions(pluginName, instRanges)
-    if (pluginName !== 'next' && !util.isDeepStrictEqual(yamlVersions, instVersions)) {
+    if (!['next', 'apollo-server'].includes(pluginName) && !util.isDeepStrictEqual(yamlVersions, instVersions)) {
       const opts = { colors: true }
       const colors = x => util.inspect(x, opts)
       pluginErrorMsg(pluginName, 'Mismatch', `
