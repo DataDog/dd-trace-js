@@ -8,7 +8,7 @@ const {
   graphqlCommonTests
 } = require('./graphq.test-utils')
 
-withVersions('apollo-server', '@apollo/server', '>=4.0.0 <5.0.0', apolloServerVersion => {
+withVersions('apollo-server', '@apollo/server', apolloServerVersion => {
   const config = {}
   let ApolloServer, startStandaloneServer
   let server
