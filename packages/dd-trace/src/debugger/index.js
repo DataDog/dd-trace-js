@@ -4,6 +4,7 @@ const { readFile } = require('fs')
 const { types } = require('util')
 const { join } = require('path')
 const { Worker, MessageChannel, threadId: parentThreadId } = require('worker_threads')
+const getDebuggerConfig = require('./config')
 const log = require('../log')
 
 let worker = null
@@ -60,7 +61,7 @@ function start (config, rc) {
       execArgv: [], // Avoid worker thread inheriting the `-r` command line argument
       env, // Avoid worker thread inheriting the `NODE_OPTIONS` environment variable (in case it contains `-r`)
       workerData: {
-        config: config.serialize(),
+        config: getDebuggerConfig(config),
         parentThreadId,
         probePort: probeChannel.port1,
         configPort: configChannel.port1
@@ -100,7 +101,7 @@ function start (config, rc) {
 
 function configure (config) {
   if (configChannel === null) return
-  configChannel.port2.postMessage(config.serialize())
+  configChannel.port2.postMessage(getDebuggerConfig(config))
 }
 
 function readProbeFile (path, cb) {
