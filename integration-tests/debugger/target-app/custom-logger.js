@@ -2,10 +2,10 @@
 
 require('dd-trace').init({
   logger: {
-    error: err => console.error(err), // eslint-disable-line no-console
-    warn: message => console.warn(message), // eslint-disable-line no-console
-    info: message => console.info(message), // eslint-disable-line no-console
-    debug: message => console.debug(message) // eslint-disable-line no-console
+    error: (...args) => console.log('[CUSTOM LOGGER][ERROR]:', ...args), // eslint-disable-line no-console
+    warn: (...args) => console.log('[CUSTOM LOGGER][WARN]:', ...args), // eslint-disable-line no-console
+    info: (...args) => console.log('[CUSTOM LOGGER][INFO]:', ...args), // eslint-disable-line no-console
+    debug: (...args) => console.log('[CUSTOM LOGGER][DEBUG]:', ...args) // eslint-disable-line no-console
   }
 })
 

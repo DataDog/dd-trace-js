@@ -4,11 +4,26 @@ const assert = require('node:assert')
 const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
-  const t = setup()
+  const stdio = []
+  const stderr = []
+  const t = setup({
+    env: {
+      DD_TRACE_DEBUG: 'true'
+    },
+    silent: true,
+    stdioHandler (data) {
+      stdio.push(data.toString())
+    },
+    stderrHandler (data) {
+      stderr.push(data.toString())
+    },
+  })
 
-  it('should not abort if a custom logger is used', function (done) {
-    t.agent.on('debugger-input', ({ payload: [payload] }) => {
-      assert.strictEqual(payload.message, 'Hello World!')
+  it('should log to the custom logger from the worker thread', function (done) {
+    t.agent.on('debugger-input', () => {
+      assert(stdio.some((line) => line.startsWith('[CUSTOM LOGGER][DEBUG]: [debugger]')))
+      assert(stdio.some((line) => line.startsWith('[CUSTOM LOGGER][DEBUG]: [debugger:devtools_client]')))
+      assert.strictEqual(stderr.length, 0)
       done()
     })
 
