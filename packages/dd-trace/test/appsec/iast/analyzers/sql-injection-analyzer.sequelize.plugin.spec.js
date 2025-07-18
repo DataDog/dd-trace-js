@@ -33,6 +33,10 @@ describe('sql-injection-analyzer with sequelize', () => {
             return sequelize.authenticate()
           })
 
+          afterEach(() => {
+            sequelize.close()
+          })
+
           testThatRequestHasVulnerability(() => {
             const store = storage('legacy').getStore()
             const iastCtx = iastContextFunctions.getIastContext(store)
