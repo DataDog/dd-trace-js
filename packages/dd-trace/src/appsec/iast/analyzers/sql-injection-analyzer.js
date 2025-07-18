@@ -18,23 +18,32 @@ class SqlInjectionAnalyzer extends StoredInjectionAnalyzer {
     this.addSub('datadog:mysql2:outerquery:start', ({ sql }) => this.analyze(sql, undefined, 'MYSQL'))
     this.addSub('apm:pg:query:start', ({ query }) => this.analyze(query.text, undefined, 'POSTGRES'))
 
-    this.addSub(
+    this.addBind(
       'datadog:sequelize:query:start',
       ({ sql, dialect }) => this.getStoreAndAnalyze(sql, dialect.toUpperCase())
     )
     this.addSub('datadog:sequelize:query:finish', () => this.returnToParentStore())
 
-    this.addSub('datadog:pg:pool:query:start', ({ query }) => this.getStoreAndAnalyze(query.text, 'POSTGRES'))
+    this.addSub('datadog:pg:pool:query:start', ({ query }) => this.setStoreAndAnalyze(query.text, 'POSTGRES'))
     this.addSub('datadog:pg:pool:query:finish', () => this.returnToParentStore())
 
-    this.addSub('datadog:mysql:pool:query:start', ({ sql }) => this.getStoreAndAnalyze(sql, 'MYSQL'))
+    this.addSub('datadog:mysql:pool:query:start', ({ sql }) => this.setStoreAndAnalyze(sql, 'MYSQL'))
     this.addSub('datadog:mysql:pool:query:finish', () => this.returnToParentStore())
 
     this.addSub('datadog:knex:raw:start', ({ sql, dialect: knexDialect }) => {
       const dialect = this.normalizeKnexDialect(knexDialect)
-      this.getStoreAndAnalyze(sql, dialect)
+      this.setStoreAndAnalyze(sql, dialect)
     })
     this.addSub('datadog:knex:raw:finish', () => this.returnToParentStore())
+  }
+
+  setStoreAndAnalyze (query, dialect) {
+    const parentStore = storage('legacy').getStore()
+    if (parentStore) {
+      this.analyze(query, parentStore, dialect)
+
+      storage('legacy').enterWith({ ...parentStore, sqlAnalyzed: true, sqlParentStore: parentStore })
+    }
   }
 
   getStoreAndAnalyze (query, dialect) {
@@ -42,7 +51,7 @@ class SqlInjectionAnalyzer extends StoredInjectionAnalyzer {
     if (parentStore) {
       this.analyze(query, parentStore, dialect)
 
-      storage('legacy').enterWith({ ...parentStore, sqlAnalyzed: true, sqlParentStore: parentStore })
+      return { ...parentStore, sqlAnalyzed: true, sqlParentStore: parentStore }
     }
   }
 
