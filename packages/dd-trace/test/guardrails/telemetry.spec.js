@@ -7,6 +7,13 @@ const { telemetryForwarder, assertTelemetryPoints } = require('../../../../integ
 describe('sendTelemetry', () => {
   let cleanup, sendTelemetry
 
+  before(function () {
+    if (['1', 'true', 'True'].includes(process.env.DD_INJECT_FORCE)) {
+      // When DD_INJECT_FORCE is set, only telemetry with the name `error` or `complete` is sent
+      this.skip()
+    }
+  })
+
   beforeEach(() => {
     cleanup = telemetryForwarder()
     sendTelemetry = proxyquire('../src/guardrails/telemetry', {})
