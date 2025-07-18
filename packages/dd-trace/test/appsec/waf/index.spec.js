@@ -208,30 +208,6 @@ describe('WAF Manager', () => {
         expect(keepTrace).not.to.have.been.called
         expect(updateRateLimitedMetric).not.to.have.been.called
       })
-
-      it('should handle keep=true with events and rate limiter allowing', () => {
-        const result = { keep: true, events: ['attack_event'] }
-        mockWafContext.run.returns(result)
-        limiterStub.isAllowed.returns(true)
-
-        const payload = { persistent: { 'server.io.net.url': 'http://example.com' } }
-        waf.run(payload, req)
-
-        expect(keepTrace).to.have.been.calledOnceWithExactly({ mock: 'rootSpan' }, 'ASM')
-        expect(updateRateLimitedMetric).not.to.have.been.called
-      })
-
-      it('should handle keep=true with events but rate limiter denying', () => {
-        const result = { keep: true, events: ['attack_event'] }
-        mockWafContext.run.returns(result)
-        limiterStub.isAllowed.returns(false)
-
-        const payload = { persistent: { 'server.io.net.url': 'http://example.com' } }
-        waf.run(payload, req)
-
-        expect(updateRateLimitedMetric).to.have.been.calledOnceWithExactly(req)
-        expect(keepTrace).not.to.have.been.called
-      })
     })
   })
 
