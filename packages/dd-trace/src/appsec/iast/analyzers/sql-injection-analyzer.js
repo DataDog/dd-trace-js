@@ -22,6 +22,7 @@ class SqlInjectionAnalyzer extends StoredInjectionAnalyzer {
       'datadog:sequelize:query:start',
       ({ sql, dialect }) => this.getStoreAndAnalyze(sql, dialect.toUpperCase())
     )
+    this.addSub('datadog:sequelize:query:start', () => {}) // TODO delete when new dc-polyfill is released
     this.addSub('datadog:sequelize:query:finish', () => this.returnToParentStore())
 
     this.addSub('datadog:pg:pool:query:start', ({ query }) => this.setStoreAndAnalyze(query.text, 'POSTGRES'))
