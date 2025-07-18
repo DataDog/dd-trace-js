@@ -76,6 +76,9 @@ describe('ASM Trace Tagging rules', () => {
 
       await axios.get('/', { headers: { 'User-Agent': 'TraceTaggingTest/v1' } })
 
+      // With fastify, the 'fastify.request' is not the first message received by FakeAgent, unlike express.
+      // That's why expectedMessageCount is set to 10 and the fastifyRequestReceived flag is added to check
+      // that the ‘fastify.request’ message has been received and checked.
       await agent.assertMessageReceived(({ _, payload }) => {
         if (payload[0][0].name !== 'fastify.request') {
           throw new Error('Not the span we are looking for')
