@@ -14,8 +14,10 @@ describe('getDebuggerConfig', function () {
     const config = getDebuggerConfig(tracerConfig)
     assert.deepStrictEqual(Object.keys(config), [
       'commitSHA',
+      'debug',
       'dynamicInstrumentation',
       'hostname',
+      'logLevel',
       'port',
       'repositoryUrl',
       'runtimeId',
@@ -23,8 +25,10 @@ describe('getDebuggerConfig', function () {
       'url',
     ])
     assert.strictEqual(config.commitSHA, tracerConfig.commitSHA)
+    assert.strictEqual(config.debug, tracerConfig.debug)
     assert.deepStrictEqual(config.dynamicInstrumentation, tracerConfig.dynamicInstrumentation)
     assert.strictEqual(config.hostname, tracerConfig.hostname)
+    assert.strictEqual(config.logLevel, tracerConfig.logLevel)
     assert.strictEqual(config.port, tracerConfig.port)
     assert.strictEqual(config.repositoryUrl, tracerConfig.repositoryUrl)
     assert.strictEqual(config.runtimeId, tracerConfig.tags['runtime-id'])
