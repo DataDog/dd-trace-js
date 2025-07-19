@@ -6,16 +6,19 @@ class GraphQLParsePlugin extends TracingPlugin {
   static get id () { return 'graphql' }
   static get operation () { return 'parser' }
 
-  start () {
+  bindStart (ctx) {
     this.startSpan('graphql.parse', {
       service: this.config.service,
       type: 'graphql',
       meta: {}
-    })
+    }, ctx)
+
+    return ctx.currentStore
   }
 
-  finish ({ source, document, docSource }) {
-    const span = this.activeSpan
+  finish (ctx) {
+    const { source, document, docSource } = ctx
+    const span = ctx?.currentStore?.span || this.activeSpan
 
     if (this.config.source && document) {
       span.setTag('graphql.source', docSource)
@@ -23,7 +26,9 @@ class GraphQLParsePlugin extends TracingPlugin {
 
     this.config.hooks.parse(span, source, document)
 
-    super.finish()
+    super.finish(ctx)
+
+    return ctx.parentStore
   }
 }
 
