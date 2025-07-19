@@ -1,16 +1,18 @@
-'use strict'
+import childProcess from 'child_process'
 
-const sinon = require('sinon')
-const chai = require('chai')
-const sinonChai = require('sinon-chai')
-const proxyquire = require('../proxyquire')
-const { NODE_MAJOR } = require('../../../../version')
+import sinon from 'sinon'
+import { use, expect } from 'chai'
+import sinonChai from 'sinon-chai'
 
-chai.use(sinonChai)
-chai.use(require('../asserts/profile'))
+import proxyquire from '../proxyquire.js'
+import profile from '../asserts/profile.js'
+import version from '../../../../version.js'
+
+use(sinonChai)
+use(profile)
 
 global.sinon = sinon
-global.expect = chai.expect
+global.expect = expect
 global.proxyquire = proxyquire
 
 if (global.describe && typeof global.describe.skip !== 'function') {
@@ -28,8 +30,7 @@ if (/^v\d+\.x$/.test(process.env.GITHUB_BASE_REF || '')) {
 }
 
 // TODO(bengl): remove this block once we can properly support Node.js 24 without it
-if (NODE_MAJOR >= 24 && !process.env.OPTIONS_OVERRIDE) {
-  const childProcess = require('child_process')
+if (version.NODE_MAJOR >= 24 && !process.env.OPTIONS_OVERRIDE) {
   const { exec, fork } = childProcess
 
   function addAsyncContextFrame (fn, thisArg, args) {
