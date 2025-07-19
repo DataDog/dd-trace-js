@@ -2,9 +2,9 @@
 
 const LangChainHandler = require('./default')
 
-class LangChainEmbeddingHandler extends LangChainHandler {
+class LangChainLanguageModelHandler extends LangChainHandler {
   extractProvider (instance) {
-    return instance.constructor.name.split('Embeddings')[0].toLowerCase()
+    return typeof instance._llmType === 'function' && instance._llmType().split('-')[0]
   }
 
   extractModel (instance) {
@@ -15,4 +15,4 @@ class LangChainEmbeddingHandler extends LangChainHandler {
   }
 }
 
-module.exports = LangChainEmbeddingHandler
+module.exports = LangChainLanguageModelHandler

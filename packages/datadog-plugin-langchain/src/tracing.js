@@ -4,15 +4,12 @@ const { MEASURED } = require('../../../ext/tags')
 const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
-const API_KEY = 'langchain.request.api_key'
 const MODEL = 'langchain.request.model'
 const PROVIDER = 'langchain.request.provider'
 const TYPE = 'langchain.request.type'
 
 const LangChainHandler = require('./handlers/default')
-const LangChainChatModelHandler = require('./handlers/language_models/chat_model')
-const LangChainLLMHandler = require('./handlers/language_models/llm')
-const LangChainChainHandler = require('./handlers/chain')
+const LangChainLanguageModelHandler = require('./handlers/language_models')
 const LangChainEmbeddingHandler = require('./handlers/embedding')
 
 class BaseLangChainTracingPlugin extends TracingPlugin {
@@ -24,9 +21,9 @@ class BaseLangChainTracingPlugin extends TracingPlugin {
     super(...arguments)
 
     this.handlers = {
-      chain: new LangChainChainHandler(this._tracerConfig),
-      chat_model: new LangChainChatModelHandler(this._tracerConfig),
-      llm: new LangChainLLMHandler(this._tracerConfig),
+      chain: new LangChainHandler(this._tracerConfig),
+      chat_model: new LangChainLanguageModelHandler(this._tracerConfig),
+      llm: new LangChainLanguageModelHandler(this._tracerConfig),
       embedding: new LangChainEmbeddingHandler(this._tracerConfig),
       default: new LangChainHandler(this._tracerConfig)
     }
@@ -50,7 +47,6 @@ class BaseLangChainTracingPlugin extends TracingPlugin {
     const handler = this.handlers[type] || this.handlers.default
 
     const instance = ctx.instance
-    const apiKey = handler.extractApiKey(instance)
     const provider = handler.extractProvider(instance)
     const model = handler.extractModel(instance)
 
@@ -63,9 +59,8 @@ class BaseLangChainTracingPlugin extends TracingPlugin {
       }
     }, false)
 
-    const tags = handler.getSpanStartTags(ctx, provider, span) || []
+    const tags = {}
 
-    if (apiKey) tags[API_KEY] = apiKey
     if (provider) tags[PROVIDER] = provider
     if (model) tags[MODEL] = model
     if (type) tags[TYPE] = type
@@ -80,13 +75,6 @@ class BaseLangChainTracingPlugin extends TracingPlugin {
 
   asyncEnd (ctx) {
     const span = ctx.currentStore.span
-
-    const { type } = ctx
-
-    const handler = this.handlers[type] || this.handlers.default
-    const tags = handler.getSpanEndTags(ctx, span) || {}
-
-    span.addTags(tags)
 
     span.finish()
   }
