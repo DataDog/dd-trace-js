@@ -2,7 +2,7 @@
 
 const { getRuntimeObject } = require('./collector')
 const { processRawState } = require('./processor')
-const log = require('../../../log')
+const log = require('../log')
 
 const DEFAULT_MAX_REFERENCE_DEPTH = 3
 const DEFAULT_MAX_COLLECTION_SIZE = 100

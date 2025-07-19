@@ -9,7 +9,7 @@ const { getStackFromCallFrames } = require('./state')
 const { ackEmitting } = require('./status')
 const { parentThreadId } = require('./config')
 const { MAX_SNAPSHOTS_PER_SECOND_GLOBALLY } = require('./defaults')
-const log = require('../../log')
+const log = require('./log')
 const { version } = require('../../../../../package.json')
 const { NODE_MAJOR } = require('../../../../../version')
 

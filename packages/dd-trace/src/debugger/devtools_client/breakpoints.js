@@ -12,7 +12,7 @@ const {
   breakpointToProbes,
   probeToLocation
 } = require('./state')
-const log = require('../../log')
+const log = require('./log')
 
 let sessionStarted = false
 const probes = new Map()

@@ -4,7 +4,7 @@ const { join, dirname } = require('path')
 const { normalize } = require('source-map/lib/util')
 const { loadSourceMapSync } = require('./source-maps')
 const session = require('./session')
-const log = require('../../log')
+const log = require('./log')
 
 const WINDOWS_DRIVE_LETTER_REGEX = /[a-zA-Z]/
 

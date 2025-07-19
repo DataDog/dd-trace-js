@@ -5,7 +5,7 @@ const config = require('./config')
 const JSONBuffer = require('./json-buffer')
 const request = require('../../exporters/common/request')
 const FormData = require('../../exporters/common/form-data')
-const log = require('../../log')
+const log = require('./log')
 
 module.exports = {
   ackReceived,

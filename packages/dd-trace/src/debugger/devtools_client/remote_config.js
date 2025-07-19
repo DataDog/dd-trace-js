@@ -3,7 +3,7 @@
 const { workerData: { probePort } } = require('node:worker_threads')
 const { addBreakpoint, removeBreakpoint, modifyBreakpoint } = require('./breakpoints')
 const { ackReceived, ackInstalled, ackError } = require('./status')
-const log = require('../../log')
+const log = require('./log')
 
 // Example log line probe (simplified):
 // {

@@ -1546,22 +1546,6 @@ class Config {
       }
     }
   }
-
-  // TODO: Refactor the Config class so it never produces any config objects that are incompatible with MessageChannel
-  /**
-   * Serializes the config object so it can be passed over a Worker Thread MessageChannel.
-   * @returns {Object} The serialized config object.
-   */
-  serialize () {
-    // URL objects cannot be serialized over the MessageChannel, so we need to convert them to strings first
-    if (this.url instanceof URL) {
-      const config = { ...this }
-      config.url = this.url.toString()
-      return config
-    }
-
-    return this
-  }
 }
 
 function handleOtel (tagString) {

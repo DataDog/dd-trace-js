@@ -28,9 +28,9 @@ const {
   GIT_COMMIT_HEAD_AUTHOR_DATE,
   GIT_COMMIT_HEAD_AUTHOR_EMAIL,
   GIT_COMMIT_HEAD_AUTHOR_NAME,
-  GIT_COMMIT_HEAD_COMMITER_DATE,
-  GIT_COMMIT_HEAD_COMMITER_EMAIL,
-  GIT_COMMIT_HEAD_COMMITER_NAME
+  GIT_COMMIT_HEAD_COMMITTER_DATE,
+  GIT_COMMIT_HEAD_COMMITTER_EMAIL,
+  GIT_COMMIT_HEAD_COMMITTER_NAME
 } = require('../../../src/plugins/util/tags')
 
 const { getGitMetadata, unshallowRepository, getGitDiff } = proxyquire('../../../src/plugins/util/git',
@@ -153,9 +153,9 @@ describe('git', () => {
       [GIT_COMMIT_HEAD_AUTHOR_DATE]: '2022-02-14T16:22:03-05:00',
       [GIT_COMMIT_HEAD_AUTHOR_EMAIL]: 'git.head.author@email.com',
       [GIT_COMMIT_HEAD_AUTHOR_NAME]: 'git head author',
-      [GIT_COMMIT_HEAD_COMMITER_DATE]: '2022-02-14T16:23:03-05:00',
-      [GIT_COMMIT_HEAD_COMMITER_EMAIL]: 'git.head.committer@email.com',
-      [GIT_COMMIT_HEAD_COMMITER_NAME]: 'git head committer',
+      [GIT_COMMIT_HEAD_COMMITTER_DATE]: '2022-02-14T16:23:03-05:00',
+      [GIT_COMMIT_HEAD_COMMITTER_EMAIL]: 'git.head.committer@email.com',
+      [GIT_COMMIT_HEAD_COMMITTER_NAME]: 'git head committer',
       [CI_WORKSPACE_PATH]: 'ciWorkspacePath'
     })
 

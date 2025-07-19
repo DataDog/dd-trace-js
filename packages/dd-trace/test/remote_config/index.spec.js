@@ -214,7 +214,8 @@ describe('Remote Config index', () => {
       RemoteConfigCapabilities.ASM_SESSION_FINGERPRINT,
       RemoteConfigCapabilities.ASM_NETWORK_FINGERPRINT,
       RemoteConfigCapabilities.ASM_HEADER_FINGERPRINT,
-      RemoteConfigCapabilities.ASM_DD_MULTICONFIG
+      RemoteConfigCapabilities.ASM_DD_MULTICONFIG,
+      RemoteConfigCapabilities.ASM_TRACE_TAGGING_RULES
     ]
 
     const RASP_CAPABILITIES = [
