@@ -2,6 +2,7 @@
 
 const { LOG } = require('../../../../ext/formats')
 const Plugin = require('./plugin')
+const log = require('../log')
 const { storage } = require('../../../datadog-core')
 
 function messageProxy (message, holder) {
@@ -46,10 +47,17 @@ module.exports = class LogPlugin extends Plugin {
   }
 
   _isEnabled (config) {
-    return config.enabled && (config.logInjection === true || config.ciVisAgentlessLogSubmissionEnabled)
+    return config.enabled &&
+    (config.logInjection === 'all' || config.logInjection === true || config.ciVisAgentlessLogSubmissionEnabled)
   }
 
   configure (config) {
+    if (config.logInjection === true) {
+      log.warn('Boolean value for config.logInjection is deprecated. Use "all" or "structured" instead.')
+    }
+    if (config.logInjection === false) {
+      log.warn('Boolean value for config.logInjection is deprecated. Use "disabled" instead.')
+    }
     return super.configure({
       ...config,
       enabled: this._isEnabled(config)
