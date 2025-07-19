@@ -97,9 +97,11 @@ describe('unvalidated-redirect-analyzer', () => {
   unvalidatedRedirectAnalyzer.configure(true)
 
   it('should subscribe to set-header:finish channel', () => {
-    expect(unvalidatedRedirectAnalyzer._subscriptions).to.have.lengthOf(1)
+    expect(unvalidatedRedirectAnalyzer._subscriptions).to.have.lengthOf(2)
     expect(unvalidatedRedirectAnalyzer._subscriptions[0]._channel.name).to
       .equals('datadog:http:server:response:set-header:finish')
+    expect(unvalidatedRedirectAnalyzer._subscriptions[1]._channel.name).to
+      .equals('datadog:fastify:set-header:finish')
   })
 
   it('should not report headers other than Location', () => {

@@ -11,6 +11,7 @@ const queryParamsReadCh = channel('datadog:fastify:query-params:finish')
 const cookieParserReadCh = channel('datadog:fastify-cookie:read:finish')
 const responsePayloadReadCh = channel('datadog:fastify:response:finish')
 const pathParamsReadCh = channel('datadog:fastify:path-params:finish')
+const finishSetHeaderCh = channel('datadog:fastify:set-header:finish')
 
 const parsingResources = new WeakMap()
 const cookiesPublished = new WeakSet()
@@ -275,3 +276,19 @@ addHook({ name: 'fastify', versions: ['2'] }, fastify => {
 addHook({ name: 'fastify', versions: ['1'] }, fastify => {
   return shimmer.wrapFunction(fastify, fastify => wrapFastify(fastify, false))
 })
+
+function wrapReplyHeader (Reply) {
+  shimmer.wrap(Reply.prototype, 'header', header => function (key, value) {
+    const result = header.apply(this, arguments)
+
+    if (finishSetHeaderCh.hasSubscribers && key && value) {
+      finishSetHeaderCh.publish({ name: key, value, res: getRes(this) })
+    }
+
+    return result
+  })
+
+  return Reply
+}
+
+addHook({ name: 'fastify', file: 'lib/reply.js', versions: ['1', '2', '>=3'] }, wrapReplyHeader)

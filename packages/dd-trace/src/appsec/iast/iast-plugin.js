@@ -47,6 +47,10 @@ class IastPluginSubscription {
   }
 
   matchesModuleInstrumented (name) {
+    // Remove node: prefix if present
+    if (name.startsWith('node:')) {
+      name = name.slice(5)
+    }
     // https module is a special case because it's events are published as http
     name = name === 'https' ? 'http' : name
     return this.moduleName === name
