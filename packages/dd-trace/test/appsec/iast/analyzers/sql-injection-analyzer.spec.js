@@ -76,6 +76,9 @@ describe('sql-injection-analyzer', () => {
     expect(sqlInjectionAnalyzer._subscriptions[8]._channel.name).to.equals('datadog:mysql:pool:query:finish')
     expect(sqlInjectionAnalyzer._subscriptions[9]._channel.name).to.equals('datadog:knex:raw:start')
     expect(sqlInjectionAnalyzer._subscriptions[10]._channel.name).to.equals('datadog:knex:raw:finish')
+
+    expect(sqlInjectionAnalyzer._bindings).to.have.lengthOf(1)
+    expect(sqlInjectionAnalyzer._bindings[0]._channel.name).to.equals('datadog:sequelize:query:start')
   })
 
   it('should not detect vulnerability when no query', () => {
