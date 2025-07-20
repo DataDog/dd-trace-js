@@ -288,7 +288,7 @@ function telemetryForwarder (shouldExpectTelemetryPoints = true) {
   return cleanup
 }
 
-async function curl (url, useHttp2 = false) {
+async function curl (url) {
   if (url !== null && typeof url === 'object') {
     if (url.then) {
       return curl(await url)
