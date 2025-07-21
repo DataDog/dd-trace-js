@@ -49,9 +49,10 @@ function wrapEmit (emit) {
 
       const ctx = { req, res }
       return startServerCh.runStores(ctx, () => {
-        shimmer.wrap(res, 'emit', emit => responseCh.runStores(ctx, () => {
-          return wrapResponseEmit(emit, ctx)
-        }))
+        shimmer.wrap(res, 'emit', emit =>
+          responseCh.runStores(ctx, () => {
+            return wrapResponseEmit(emit, ctx)
+          }))
 
         try {
           return emit.apply(this, arguments)

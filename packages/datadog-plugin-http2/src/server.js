@@ -15,6 +15,10 @@ class Http2ServerPlugin extends ServerPlugin {
     return 'apm:http2:server:request'
   }
 
+  addTraceSub (eventName, handler) {
+    this.addSub('apm:http2:server:response:emit', () => {})
+  }
+
   bindStart (ctx) {
     const { req, res } = ctx
 
