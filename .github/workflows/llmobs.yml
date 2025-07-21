@@ -11,9 +11,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
   cancel-in-progress: true
 
-env:
-  _DD_LLMOBS_FLUSH_INTERVAL: 0
-
 jobs:
   sdk:
     strategy:
@@ -124,6 +121,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PLUGINS: ai
+      _DD_LLMOBS_FLUSH_INTERVAL: 0
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/testagent-llmobs/start
