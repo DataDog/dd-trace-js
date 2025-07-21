@@ -431,12 +431,16 @@ function createPoissonProcessSamplingFilter (samplingIntervalMillis) {
  * source with a sampling event filter and an event serializer.
  */
 class EventsProfiler {
+  #maxSamples
+  #eventSerializer
+  #eventSources
+
   constructor (options = {}) {
     this.type = 'events'
-    this.maxSamples = getMaxSamples(options)
-    this.eventSerializer = new EventSerializer(this.maxSamples)
+    this.#maxSamples = getMaxSamples(options)
+    this.#eventSerializer = new EventSerializer(this.#maxSamples)
 
-    const eventHandler = event => this.eventSerializer.addEvent(event)
+    const eventHandler = event => this.#eventSerializer.addEvent(event)
     const eventFilter = options.timelineSamplingEnabled
       // options.samplingInterval comes in microseconds, we need millis
       ? createPoissonProcessSamplingFilter(getSamplingIntervalMillis(options))
@@ -447,7 +451,7 @@ class EventsProfiler {
       }
     }
 
-    const eventSources = options.codeHotspotsEnabled
+    this.#eventSources = options.codeHotspotsEnabled
       // Use Datadog instrumentation to collect events with span IDs. Still use
       // Node API for GC events.
       ? [
@@ -459,24 +463,24 @@ class EventsProfiler {
           new NodeApiEventSource(filteringEventHandler)
         ]
     if (testEventChannel !== undefined) {
-      eventSources.push(new TestEventSource(filteringEventHandler))
+      this.#eventSources.push(new TestEventSource(filteringEventHandler))
     }
   }
 
   start () {
-    this.eventSources.forEach(s => s.start())
+    this.#eventSources.forEach(s => s.start())
   }
 
   stop () {
-    this.eventSources.forEach(s => s.stop())
+    this.#eventSources.forEach(s => s.stop())
   }
 
   profile (restart, startDate, endDate) {
     if (!restart) {
       this.stop()
     }
-    const thatEventSerializer = this.eventSerializer
-    this.eventSerializer = new EventSerializer(this.maxSamples)
+    const thatEventSerializer = this.#eventSerializer
+    this.#eventSerializer = new EventSerializer(this.#maxSamples)
     return () => thatEventSerializer.createProfile(startDate, endDate)
   }
 
