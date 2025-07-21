@@ -231,7 +231,7 @@ class EventSerializer {
 
   addEvent (item) {
     if (this.samples.length < this.maxSamples) {
-      const sample = this.createSample(item)
+      const sample = this.#createSample(item)
       if (sample !== undefined) {
         this.samples.push(sample)
       }
