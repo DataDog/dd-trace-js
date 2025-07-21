@@ -143,11 +143,13 @@ function instrument (req, res, handler, error) {
   const ctx = { req, res }
   // Parse query parameters from request URL
   if (queryParsedChannel.hasSubscribers && req.url) {
-    const url = new URL(req.url, 'http://n')
+    // req.url is only the relative path (/foo?bar=baz) and new URL() needs a full URL
+    // so we give it a dummy base
+    const { searchParams } = new URL(req.url, 'http://dummy')
     const query = {}
-    for (const key of url.searchParams.keys()) {
+    for (const key of searchParams.keys()) {
       if (!query[key]) {
-        query[key] = url.searchParams.getAll(key)
+        query[key] = searchParams.getAll(key)
       }
     }
 
