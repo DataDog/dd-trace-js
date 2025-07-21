@@ -5,7 +5,7 @@ on:
     inputs:
       authentication:
         type: choice
-        description: Authentication strategy to retrieve the GitHub token.
+        description: Retrieve GitHub token from
         options:
           - github-app
           - octo-sts
