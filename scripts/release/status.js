@@ -61,7 +61,6 @@ async function checkStatuses (contexts) {
 }
 
 checkStatuses(new Set([
-  'dd-gitlab/internal-publish-lib-init-tags',
-  'dd-gitlab/promote-oci-to-prod',
-  'dd-gitlab/publish-lib-init-pinned-tags'
+  'dd-gitlab/kubernetes-injection-test-ecr-publish',
+  'dd-gitlab/promote-oci-to-prod'
 ]))
