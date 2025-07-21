@@ -22,11 +22,13 @@ async function checkStatuses (contexts) {
   })
 
   if (response.status !== 200) {
+    const responseText = await response.text?.()
+
     console.log(response)
-    console.log(response.text())
+    console.log(responseText)
 
     throw new Error(
-      util.format('Could not get status from GitHub.\n\n%o\n\n%s', response, response.text?.())
+      util.format('Could not get status from GitHub.\n\n%o\n\n%s', response, responseText)
     )
   }
 
