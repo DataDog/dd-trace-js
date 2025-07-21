@@ -141,6 +141,18 @@ function instrument (req, res, handler, error) {
   requests.add(req)
 
   const ctx = { req, res }
+  // Parse query parameters from request URL
+  if (queryParsedChannel.hasSubscribers && req.url) {
+    const url = new URL(req.url, 'http://n')
+    const query = {}
+    for (const key of url.searchParams.keys()) {
+      if (!query[key]) {
+        query[key] = url.searchParams.getAll(key)
+      }
+    }
+
+    queryParsedChannel.publish({ query })
+  }
 
   return startChannel.runStores(ctx, () => {
     try {
@@ -280,24 +292,9 @@ addHook({
   versions: ['>=13'],
   file: 'dist/server/web/spec-extension/request.js'
 }, request => {
-  shimmer.wrap(request.NextRequest.prototype, 'nextUrl', function (originalGet) {
-    return function wrappedGet () {
-      const nextUrl = originalGet.apply(this, arguments)
-      if (queryParsedChannel.hasSubscribers) {
-        const query = {}
-        for (const key of nextUrl.searchParams.keys()) {
-          if (!query[key]) {
-            query[key] = nextUrl.searchParams.getAll(key)
-          }
-        }
+  const baseProto = Object.getPrototypeOf(request.NextRequest.prototype)
 
-        queryParsedChannel.publish({ query })
-      }
-      return nextUrl
-    }
-  })
-
-  shimmer.massWrap(request.NextRequest.prototype, ['text', 'json'], function (originalMethod) {
+  shimmer.massWrap(baseProto, ['text', 'json'], function (originalMethod) {
     return async function wrappedJson () {
       const body = await originalMethod.apply(this, arguments)
 
@@ -307,7 +304,7 @@ addHook({
     }
   })
 
-  shimmer.wrap(request.NextRequest.prototype, 'formData', function (originalFormData) {
+  shimmer.wrap(baseProto, 'formData', function (originalFormData) {
     return async function wrappedFormData () {
       const body = await originalFormData.apply(this, arguments)
 
