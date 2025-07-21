@@ -1,0 +1,8 @@
+name: "Start the APM Test Agent"
+description: "Starts the APM Test Agent image with environment, with LLM Observability cassettes attached."
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+    - run: docker compose up -d testagent-llmobs-vcr || docker compose up -d testagent-llmobs-vcr
+      shell: bash

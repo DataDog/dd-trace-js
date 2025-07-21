@@ -162,6 +162,16 @@ services:
       - TRACE_LANGUAGE=javascript
       - ENABLED_CHECKS=trace_stall,meta_tracer_version_header,trace_count_header,trace_peer_service
       - PORT=9126
+
+  testagent-llmobs-vcr:
+    image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.27.0
+    ports:
+      - "127.0.0.1:10126:10126"
+    environment:
+      - LOG_LEVEL=DEBUG
+      - TRACE_LANGUAGE=javascript
+      - ENABLED_CHECKS=trace_stall,meta_tracer_version_header,trace_count_header,trace_peer_service
+      - PORT=10126
       - VCR_CASSETTES_DIRECTORY=/vcr-cassettes
     volumes:
       - ./packages/dd-trace/test/llmobs/cassettes:/vcr-cassettes
