@@ -7,16 +7,17 @@ const web = require('../../dd-trace/src/plugins/util/web')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 
 class Http2ServerPlugin extends ServerPlugin {
+  constructor (tracer, config) {
+    super(tracer, config)
+    this.addBind('apm:http2:server:response:emit', this.bindEmit)
+  }
+
   static get id () {
     return 'http2'
   }
 
   static get prefix () {
     return 'apm:http2:server:request'
-  }
-
-  addTraceSub (eventName, handler) {
-    this.addSub('apm:http2:server:response:emit', () => {})
   }
 
   bindStart (ctx) {
@@ -50,7 +51,7 @@ class Http2ServerPlugin extends ServerPlugin {
     return ctx.currentStore
   }
 
-  bindFinish (ctx) {
+  bindEmit (ctx) {
     if (ctx.eventName !== 'close') return ctx.currentStore
 
     const { req } = ctx
@@ -62,11 +63,6 @@ class Http2ServerPlugin extends ServerPlugin {
     web.finishAll(context)
 
     return ctx.currentStore
-  }
-
-  finish (ctx) {
-    // we let bindFinish handle the finish, but keep this method because we don't want to finish the span
-    // early for a response event that is not a 'close' event, which prevents tags from being set during web.finishAll
   }
 
   error (error) {
