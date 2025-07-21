@@ -5,6 +5,7 @@ const { Worker, threadId: parentThreadId } = require('worker_threads')
 const { randomUUID } = require('crypto')
 const log = require('../../log')
 const { getEnvironmentVariables } = require('../../config-helper')
+const getDebuggerConfig = require('../../debugger/config')
 
 const probeIdToResolveBreakpointSet = new Map()
 const probeIdToResolveBreakpointRemove = new Map()
@@ -82,7 +83,7 @@ class TestVisDynamicInstrumentation {
           DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false'
         },
         workerData: {
-          config: this._config.serialize(),
+          config: getDebuggerConfig(this._config),
           parentThreadId,
           probePort: probeChannel.port1,
           configPort: configChannel.port1,

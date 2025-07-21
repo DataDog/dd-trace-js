@@ -5,7 +5,6 @@ const proxyquire = require('proxyquire')
 const Config = require('../../../src/config')
 const rules = require('../../../src/appsec/recommended.json')
 const Reporter = require('../../../src/appsec/reporter')
-const web = require('../../../src/plugins/util/web')
 
 describe('WAF Manager', () => {
   const knownAddresses = new Set([
@@ -20,9 +19,17 @@ describe('WAF Manager', () => {
   let DDWAF
   let config
   let webContext
+  let keepTrace, updateRateLimitedMetric, limiterStub
 
   beforeEach(() => {
     config = new Config()
+
+    limiterStub = {
+      isAllowed: sinon.stub().returns(true)
+    }
+
+    keepTrace = sinon.stub()
+    updateRateLimitedMetric = sinon.stub()
 
     DDWAF = sinon.stub()
     DDWAF.version = sinon.stub().returns('1.2.3')
@@ -41,8 +48,19 @@ describe('WAF Manager', () => {
     WAFManager = proxyquire('../../../src/appsec/waf/waf_manager', {
       '@datadog/native-appsec': { DDWAF }
     })
+
+    const webMock = {
+      root: sinon.stub().returns({ mock: 'rootSpan' }),
+      getContext: sinon.stub().returns(webContext)
+    }
+
     waf = proxyquire('../../../src/appsec/waf', {
-      './waf_manager': WAFManager
+      './waf_manager': WAFManager,
+      '../../rate_limiter': function () { return limiterStub },
+      '../../priority_sampler': { keepTrace },
+      '../../standalone/product': { ASM: 'ASM' },
+      '../../plugins/util/web': webMock,
+      '../telemetry': { updateRateLimitedMetric }
     })
     waf.destroy()
 
@@ -54,7 +72,6 @@ describe('WAF Manager', () => {
     sinon.spy(Reporter, 'reportWafConfigUpdate')
 
     webContext = {}
-    sinon.stub(web, 'getContext').returns(webContext)
   })
 
   afterEach(() => {
@@ -121,6 +138,76 @@ describe('WAF Manager', () => {
       waf.run(payload, req)
 
       expect(run).to.be.calledOnceWithExactly(payload, undefined)
+    })
+
+    describe('sampling priority', () => {
+      let mockWafContext, req
+
+      beforeEach(() => {
+        req = { mock: 'request' }
+        mockWafContext = { run: sinon.stub() }
+        WAFManager.prototype.getWAFContext = sinon.stub().returns(mockWafContext)
+        waf.init(rules, config.appsec)
+      })
+
+      it('should call keepTrace when result.keep is true and rate limiter allows', () => {
+        const result = { keep: true, events: [] }
+        mockWafContext.run.returns(result)
+        limiterStub.isAllowed.returns(true)
+
+        const payload = { persistent: { 'server.io.net.url': 'http://example.com' } }
+        waf.run(payload, req)
+
+        expect(keepTrace).to.have.been.calledOnceWithExactly({ mock: 'rootSpan' }, 'ASM')
+        expect(updateRateLimitedMetric).not.to.have.been.called
+      })
+
+      it('should call updateRateLimitedMetric when result.keep is true but rate limiter denies', () => {
+        const result = { keep: true, events: [] }
+        mockWafContext.run.returns(result)
+        limiterStub.isAllowed.returns(false)
+
+        const payload = { persistent: { 'server.io.net.url': 'http://example.com' } }
+        waf.run(payload, req)
+
+        expect(updateRateLimitedMetric).to.have.been.calledOnceWithExactly(req)
+        expect(keepTrace).not.to.have.been.called
+      })
+
+      it('should not call keepTrace or updateRateLimitedMetric when result.keep is false', () => {
+        const result = { keep: false, events: [] }
+        mockWafContext.run.returns(result)
+        limiterStub.isAllowed.returns(true)
+
+        const payload = { persistent: { 'server.io.net.url': 'http://example.com' } }
+        waf.run(payload, req)
+
+        expect(keepTrace).not.to.have.been.called
+        expect(updateRateLimitedMetric).not.to.have.been.called
+      })
+
+      it('should not call keepTrace or updateRateLimitedMetric when result.keep is undefined', () => {
+        const result = { events: [] }
+        mockWafContext.run.returns(result)
+        limiterStub.isAllowed.returns(true)
+
+        const payload = { persistent: { 'server.io.net.url': 'http://example.com' } }
+        waf.run(payload, req)
+
+        expect(keepTrace).not.to.have.been.called
+        expect(updateRateLimitedMetric).not.to.have.been.called
+      })
+
+      it('should not call keepTrace or updateRateLimitedMetric when result is null', () => {
+        mockWafContext.run.returns(null)
+        limiterStub.isAllowed.returns(true)
+
+        const payload = { persistent: { 'server.io.net.url': 'http://example.com' } }
+        waf.run(payload, req)
+
+        expect(keepTrace).not.to.have.been.called
+        expect(updateRateLimitedMetric).not.to.have.been.called
+      })
     })
   })
 
