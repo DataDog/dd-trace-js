@@ -23,10 +23,6 @@ variables:
     paths:
       - platform/artifacts/
     expire_in: 3 months
-  variables:
-    # Gitlab and BP specific env vars. Do not modify.
-    KUBERNETES_SERVICE_ACCOUNT_OVERWRITE: dd-trace-js
-    FF_USE_LEGACY_KUBERNETES_EXECUTION_STRATEGY: "true"
 
 benchmarks-pr-comment:
   stage: benchmarks-pr-comment
@@ -38,9 +34,6 @@ benchmarks-pr-comment:
     - cd platform && (git init && git remote add origin https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.ddbuild.io/DataDog/benchmarking-platform && git pull origin dd-trace-js)
     - bp-runner bp-runner.pr-comment.yml --debug
   allow_failure: true
-  variables:
-    # Gitlab and BP specific env vars. Do not modify.
-    KUBERNETES_SERVICE_ACCOUNT_OVERWRITE: dd-trace-js
 
 check-big-regressions:
   stage: benchmarks-pr-comment
@@ -51,9 +44,6 @@ check-big-regressions:
   script:
     - cd platform && (git init && git remote add origin https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.ddbuild.io/DataDog/benchmarking-platform && git pull origin dd-trace-js)
     - bp-runner bp-runner.fail-on-regression.yml --debug
-  variables:
-    # Gitlab and BP specific env vars. Do not modify.
-    KUBERNETES_SERVICE_ACCOUNT_OVERWRITE: dd-trace-js
 
 benchmark:
   extends: .benchmarks

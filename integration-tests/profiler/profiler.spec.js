@@ -22,16 +22,16 @@ if (process.platform !== 'win32') {
 const TIMEOUT = 30000
 
 function checkProfiles (agent, proc, timeout,
-  expectedProfileTypes = DEFAULT_PROFILE_TYPES, expectBadExit = false
+  expectedProfileTypes = DEFAULT_PROFILE_TYPES, expectBadExit = false, expectSeq = true
 ) {
   return Promise.all([
     processExitPromise(proc, timeout, expectBadExit),
-    expectProfileMessagePromise(agent, timeout, expectedProfileTypes)
+    expectProfileMessagePromise(agent, timeout, expectedProfileTypes, expectSeq)
   ])
 }
 
 function expectProfileMessagePromise (agent, timeout,
-  expectedProfileTypes = DEFAULT_PROFILE_TYPES
+  expectedProfileTypes = DEFAULT_PROFILE_TYPES, expectSeq = true
 ) {
   const fileNames = expectedProfileTypes.map(type => `${type}.pprof`)
   return agent.assertMessageReceived(({ headers, _, files }) => {
@@ -49,6 +49,9 @@ function expectProfileMessagePromise (agent, timeout,
       assert.sameMembers(attachments, fileNames)
       for (const [index, fileName] of attachments.entries()) {
         assert.propertyVal(files[index + 1], 'originalname', fileName)
+      }
+      if (expectSeq) {
+        assert(event.tags_profiler.indexOf(',profile_seq:') !== -1)
       }
     } catch (e) {
       e.message += ` ${JSON.stringify({ headers, files, event })}`
@@ -587,7 +590,7 @@ describe('profiler', () => {
           execArgv: oomExecArgv,
           env: oomEnv
         })
-        return checkProfiles(agent, proc, timeout, ['space'], true)
+        return checkProfiles(agent, proc, timeout, ['space'], true, false)
       })
 
       it('sends a heap profile on OOM in worker thread and exits successfully', () => {
@@ -611,7 +614,7 @@ describe('profiler', () => {
             DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: 3
           }
         })
-        return checkProfiles(agent, proc, timeout, ['space'], false)
+        return checkProfiles(agent, proc, timeout, ['space'], false, false)
       }).retries(3)
 
       it('sends a heap profile on OOM with async callback', () => {

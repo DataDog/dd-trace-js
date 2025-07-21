@@ -1,6 +1,6 @@
 'use strict'
 
-const { createSandbox, FakeAgent, spawnProc } = require('../../../../integration-tests/helpers')
+const { createSandbox, FakeAgent, spawnProc } = require('./helpers')
 const path = require('path')
 const Axios = require('axios')
 const { assert } = require('chai')
@@ -14,11 +14,11 @@ describe('Remote config client id', () => {
     sandbox = await createSandbox(
       ['express'],
       false,
-      [path.join(__dirname, 'resources')]
+      [path.join(__dirname, 'remote_config')]
     )
 
     cwd = sandbox.folder
-    appFile = path.join(cwd, 'resources', 'index.js')
+    appFile = path.join(cwd, 'remote_config', 'index.js')
   })
 
   after(async function () {
