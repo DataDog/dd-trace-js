@@ -6,6 +6,8 @@ on:
       - yarn.lock
   push:
     branches: [master]
+    paths:
+      - yarn.lock
   schedule:
     - cron: 0 4 * * *
 
