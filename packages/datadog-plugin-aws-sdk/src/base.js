@@ -44,12 +44,13 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         awsService
       } = ctx
 
-      const childOf = ctx.parentStore = this.tracer.scope().active()
+      const parentStore = ctx.parentStore = storage('legacy').getStore()
+      const childOf = parentStore?.span
 
-      this._parentMap.set(request, childOf)
+      this._parentMap.set(request, parentStore)
 
       if (!this.isEnabled(request)) {
-        return childOf
+        return parentStore
       }
 
       const meta = {
@@ -70,9 +71,11 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         integrationName: 'aws-sdk'
       }, ctx)
 
+      const currentStore = ctx.currentStore
+
       analyticsSampler.sample(span, this.config.measured)
 
-      storage('legacy').run(ctx.currentStore, () => {
+      storage('legacy').run(currentStore, () => {
         this.requestInject(span, request)
       })
 
@@ -82,9 +85,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         span.addTags(requestTags)
       }
 
-      const store = ctx.currentStore
-
-      if (!this._tracerConfig?._isInServerlessEnvironment()) return store
+      if (!this._tracerConfig?._isInServerlessEnvironment()) return currentStore
 
       const peerServerlessStorage = storage('peerServerless')
 
@@ -98,11 +99,11 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         span.setTag('peer.service', hostname)
         peerServerlessStore.peerHostname = hostname
       } else {
-        store.awsParams = request.params
-        store.awsService = awsService
+        currentStore.awsParams = request.params
+        currentStore.awsService = awsService
       }
 
-      return store
+      return currentStore
     })
 
     this.addSub(`apm:aws:request:region:${this.serviceIdentifier}`, ({ region }) => {
