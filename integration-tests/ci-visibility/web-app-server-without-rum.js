@@ -1,15 +1,19 @@
 'use strict'
 
-// File to spin an HTTP server that returns an HTML for playwright to visit
 const http = require('http')
 
-module.exports = http.createServer((req, res) => {
-  res.setHeader('Content-Type', 'text/html')
-  res.writeHead(200)
-  res.end(`
-    <!DOCTYPE html>
-    <html>
+const createSimpleServer = () => {
+  return http.createServer((req, res) => {
+    res.setHeader('Content-Type', 'text/html')
+    res.writeHead(200)
+    res.end(`
+      <!DOCTYPE html>
+      <html>
       <div class="hella-world">Hella World</div>
-    </html>
-  `)
-})
+      </html>
+      `)
+  })
+}
+
+// When this file gets imported, it will spin up an HTTP server that returns an HTML for cypress/playwright to visit
+module.exports = createSimpleServer()
