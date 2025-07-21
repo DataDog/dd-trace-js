@@ -71,11 +71,9 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         integrationName: 'aws-sdk'
       }, ctx)
 
-      const currentStore = ctx.currentStore
-
       analyticsSampler.sample(span, this.config.measured)
 
-      storage('legacy').run(currentStore, () => {
+      storage('legacy').run(ctx.currentStore, () => {
         this.requestInject(span, request)
       })
 
@@ -85,8 +83,13 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         span.addTags(requestTags)
       }
 
-      if (!this._tracerConfig?._isInServerlessEnvironment()) return currentStore
+      return ctx.currentStore
+    })
 
+    this.addSub(`apm:aws:request:start:${this.serviceIdentifier}`, (ctx) => {
+      if (!this._tracerConfig?._isInServerlessEnvironment()) return
+
+      const { awsRegion, awsService, currentStore, request } = ctx
       const peerServerlessStorage = storage('peerServerless')
 
       // Try to resolve the hostname immediately; if not possible, keep enough
@@ -96,14 +99,12 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       peerServerlessStorage.enterWith(peerServerlessStore)
 
       if (hostname) {
-        span.setTag('peer.service', hostname)
+        currentStore.span.setTag('peer.service', hostname)
         peerServerlessStore.peerHostname = hostname
       } else {
         currentStore.awsParams = request.params
         currentStore.awsService = awsService
       }
-
-      return currentStore
     })
 
     this.addSub(`apm:aws:request:region:${this.serviceIdentifier}`, ({ region }) => {
