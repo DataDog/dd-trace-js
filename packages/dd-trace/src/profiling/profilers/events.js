@@ -45,8 +45,12 @@ function labelFromStrStr (stringTable, keyStr, valStr) {
   return labelFromStr(stringTable, stringTable.dedup(keyStr), valStr)
 }
 
+function getSamplingIntervalMillis (options) {
+  return (options.samplingInterval || 1e3 / 99) // 99Hz
+}
+
 function getMaxSamples (options) {
-  const cpuSamplingInterval = (options.samplingInterval || 1e3 / 99) // 99hz
+  const cpuSamplingInterval = getSamplingIntervalMillis(options)
   const flushInterval = options.flushInterval || 65 * 1e3 // 60 seconds
   const maxCpuSamples = flushInterval / cpuSamplingInterval
 
@@ -449,7 +453,7 @@ class EventsProfiler {
     const eventHandler = event => this.eventSerializer.addEvent(event)
     const eventFilter = options.timelineSamplingEnabled
       // options.samplingInterval comes in microseconds, we need millis
-      ? createPoissonProcessSamplingFilter((options.samplingInterval ?? 1e6 / 99) / 1000)
+      ? createPoissonProcessSamplingFilter(getSamplingIntervalMillis(options))
       : _ => true
     const filteringEventHandler = event => {
       if (eventFilter(event)) {
