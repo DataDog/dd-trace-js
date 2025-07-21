@@ -292,9 +292,9 @@ addHook({
   versions: ['>=13'],
   file: 'dist/server/web/spec-extension/request.js'
 }, request => {
-  const baseProto = Object.getPrototypeOf(request.NextRequest.prototype)
+  const requestProto = Object.getPrototypeOf(request.NextRequest.prototype)
 
-  shimmer.massWrap(baseProto, ['text', 'json'], function (originalMethod) {
+  shimmer.massWrap(requestProto, ['text', 'json'], function (originalMethod) {
     return async function wrappedJson () {
       const body = await originalMethod.apply(this, arguments)
 
@@ -304,7 +304,7 @@ addHook({
     }
   })
 
-  shimmer.wrap(baseProto, 'formData', function (originalFormData) {
+  shimmer.wrap(requestProto, 'formData', function (originalFormData) {
     return async function wrappedFormData () {
       const body = await originalFormData.apply(this, arguments)
 
