@@ -144,7 +144,7 @@ async function assertPackage (name, version, dependencyVersionRange, external) {
  * @param {object} rootFolder
  * @param {string} parent
  */
-async function assertPeerDependencies (rootFolder, parent) {
+async function assertPeerDependencies (rootFolder, parent = '') {
   const entries = await readdir(rootFolder)
 
   for (const entry of entries) {
@@ -157,7 +157,7 @@ async function assertPeerDependencies (rootFolder, parent) {
       continue
     }
 
-    const externalName = [parent, entry.split('@')[0]].filter(v => v).join('/')
+    const externalName = join(parent, entry.split('@')[0])
 
     if (!externalDeps.has(externalName)) continue
 
@@ -169,7 +169,7 @@ async function assertPeerDependencies (rootFolder, parent) {
       const pkgJson = require(pkgJsonPath)
 
       for (const section of ['devDependencies', 'peerDependencies']) {
-        if (pkgJson[section] && name in pkgJson[section]) {
+        if (pkgJson[section]?.[name]) {
           if (dep === externalName) {
             versionPkgJson.dependencies[name] = pkgJson.version
           } else {
