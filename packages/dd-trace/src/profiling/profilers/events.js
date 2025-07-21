@@ -394,20 +394,6 @@ class TestEventSource {
   }
 }
 
-class CompositeEventSource {
-  constructor (sources) {
-    this.sources = sources
-  }
-
-  start () {
-    this.sources.forEach(s => s.start())
-  }
-
-  stop () {
-    this.sources.forEach(s => s.stop())
-  }
-}
-
 function createPoissonProcessSamplingFilter (samplingIntervalMillis) {
   let nextSamplingInstant = performance.now()
   let currentSamplingInstant = 0
@@ -475,15 +461,14 @@ class EventsProfiler {
     if (testEventChannel !== undefined) {
       eventSources.push(new TestEventSource(filteringEventHandler))
     }
-    this.eventSource = new CompositeEventSource(eventSources)
   }
 
   start () {
-    this.eventSource.start()
+    this.eventSources.forEach(s => s.start())
   }
 
   stop () {
-    this.eventSource.stop()
+    this.eventSources.forEach(s => s.stop())
   }
 
   profile (restart, startDate, endDate) {
