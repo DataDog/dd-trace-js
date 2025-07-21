@@ -39,11 +39,10 @@ class SqlInjectionAnalyzer extends StoredInjectionAnalyzer {
   }
 
   setStoreAndAnalyze (query, dialect) {
-    const parentStore = storage('legacy').getStore()
-    if (parentStore) {
-      this.analyze(query, parentStore, dialect)
+    const store = this.getStoreAndAnalyze(query, dialect)
 
-      storage('legacy').enterWith({ ...parentStore, sqlAnalyzed: true, sqlParentStore: parentStore })
+    if (store) {
+      storage('legacy').enterWith(store)
     }
   }
 
