@@ -76,7 +76,7 @@ describe('Plugin', () => {
           maxRetries: MOCK_NUMBER,
         },
         tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        tags: { ml_app: 'test', language: 'javascript', integration: 'vercel-ai' },
+        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' },
       })
 
       const expectedLlmSpan = expectedLLMObsLLMSpanEvent({
@@ -96,7 +96,7 @@ describe('Plugin', () => {
           temperature: 0.5,
         },
         tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        tags: { ml_app: 'test', language: 'javascript', integration: 'vercel-ai' },
+        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' },
       })
 
       expect(llmobsSpans[0]).to.deepEqualWithMockValues(expectedWorkflowSpan)
@@ -128,7 +128,7 @@ describe('Plugin', () => {
           maxRetries: MOCK_NUMBER,
         },
         tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        tags: { ml_app: 'test', language: 'javascript', integration: 'vercel-ai' },
+        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' },
       })
 
       const expectedLlmSpan = expectedLLMObsLLMSpanEvent({
@@ -141,7 +141,7 @@ describe('Plugin', () => {
         inputMessages: [{ content: 'Invent a character for a video game', role: 'user' }],
         outputMessages: [{ content: MOCK_STRING, role: 'assistant' }],
         tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        tags: { ml_app: 'test', language: 'javascript', integration: 'vercel-ai' }
+        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' }
       })
 
       expect(llmobsSpans[0]).to.deepEqualWithMockValues(expectedWorkflowSpan)
@@ -166,7 +166,7 @@ describe('Plugin', () => {
           maxSteps: MOCK_NUMBER,
           maxRetries: MOCK_NUMBER,
         },
-        tags: { ml_app: 'test', language: 'javascript', integration: 'vercel-ai' }
+        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' }
       })
 
       const expectedEmbeddingSpan = expectedLLMObsLLMSpanEvent({
@@ -179,7 +179,7 @@ describe('Plugin', () => {
         inputDocuments: [{ text: 'hello world' }],
         outputValue: '[1 embedding(s) returned with size 1536]',
         tokenMetrics: { input_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        tags: { ml_app: 'test', language: 'javascript', integration: 'vercel-ai' }
+        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' }
       })
 
       expect(llmobsSpans[0]).to.deepEqualWithMockValues(expectedWorkflowSpan)
@@ -204,7 +204,7 @@ describe('Plugin', () => {
           maxSteps: MOCK_NUMBER,
           maxRetries: MOCK_NUMBER,
         },
-        tags: { ml_app: 'test', language: 'javascript', integration: 'vercel-ai' }
+        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' }
       })
 
       const expectedEmbeddingSpan = expectedLLMObsLLMSpanEvent({
@@ -217,7 +217,7 @@ describe('Plugin', () => {
         inputDocuments: [{ text: 'hello world' }, { text: 'goodbye world' }],
         outputValue: '[2 embedding(s) returned with size 1536]',
         tokenMetrics: { input_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        tags: { ml_app: 'test', language: 'javascript', integration: 'vercel-ai' }
+        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' }
       })
 
       expect(llmobsSpans[0]).to.deepEqualWithMockValues(expectedWorkflowSpan)
@@ -249,7 +249,7 @@ describe('Plugin', () => {
           maxSteps: MOCK_NUMBER,
           maxRetries: MOCK_NUMBER,
         },
-        tags: { ml_app: 'test', language: 'javascript', integration: 'vercel-ai' }
+        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' }
       })
 
       const expectedLlmSpan = expectedLLMObsLLMSpanEvent({
@@ -269,7 +269,7 @@ describe('Plugin', () => {
         },
         outputMessages: [{ content: 'Hello! How can I assist you today?', role: 'assistant' }],
         tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        tags: { ml_app: 'test', language: 'javascript', integration: 'vercel-ai' }
+        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' }
       })
 
       expect(llmobsSpans[0]).to.deepEqualWithMockValues(expectedWorkflowSpan)
@@ -304,7 +304,7 @@ describe('Plugin', () => {
           output: 'object',
           maxRetries: MOCK_NUMBER,
         },
-        tags: { ml_app: 'test', language: 'javascript', integration: 'vercel-ai' }
+        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' }
       })
 
       const expectedLlmSpan = expectedLLMObsLLMSpanEvent({
@@ -317,7 +317,7 @@ describe('Plugin', () => {
         inputMessages: [{ content: 'Invent a character for a video game', role: 'user' }],
         outputMessages: [{ content: JSON.stringify({ name: 'Astra', age: 25, height: '5\'8"' }), role: 'assistant' }],
         tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        tags: { ml_app: 'test', language: 'javascript', integration: 'vercel-ai' }
+        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' }
       })
 
       expect(llmobsSpans[0]).to.deepEqualWithMockValues(expectedWorkflowSpan)
@@ -360,7 +360,7 @@ describe('Plugin', () => {
           maxRetries: MOCK_NUMBER,
         },
         tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        tags: { ml_app: 'test', language: 'javascript', integration: 'vercel-ai' },
+        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' },
       })
 
       const expectedLlmSpan = expectedLLMObsLLMSpanEvent({
@@ -391,7 +391,7 @@ describe('Plugin', () => {
           temperature: 0.5,
         },
         tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        tags: { ml_app: 'test', language: 'javascript', integration: 'vercel-ai' },
+        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' },
       })
 
       const expectedToolCallSpan = expectedLLMObsNonLLMSpanEvent({
@@ -401,7 +401,7 @@ describe('Plugin', () => {
         spanKind: 'tool',
         inputValue: '{"location":"Tokyo"}',
         outputValue: 'It is nice and sunny in Tokyo.',
-        tags: { ml_app: 'test', language: 'javascript', integration: 'vercel-ai' },
+        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' },
       })
 
       const expectedLlmSpan2 = expectedLLMObsLLMSpanEvent({
@@ -438,7 +438,7 @@ describe('Plugin', () => {
           temperature: 0.5,
         },
         tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        tags: { ml_app: 'test', language: 'javascript', integration: 'vercel-ai' },
+        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' },
       })
 
       expect(workflowSpan).to.deepEqualWithMockValues(expectedWorkflowSpan)
@@ -487,7 +487,7 @@ describe('Plugin', () => {
           maxRetries: MOCK_NUMBER,
         },
         tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        tags: { ml_app: 'test', language: 'javascript', integration: 'vercel-ai' },
+        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' },
       })
 
       const expectedLlmSpan = expectedLLMObsLLMSpanEvent({
@@ -518,7 +518,7 @@ describe('Plugin', () => {
           temperature: 0.5,
         },
         tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        tags: { ml_app: 'test', language: 'javascript', integration: 'vercel-ai' },
+        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' },
       })
 
       const expectedToolCallSpan = expectedLLMObsNonLLMSpanEvent({
@@ -537,7 +537,7 @@ describe('Plugin', () => {
         spanKind: 'tool',
         inputValue: '{"location":"Tokyo"}',
         outputValue: 'It is nice and sunny in Tokyo.',
-        tags: { ml_app: 'test', language: 'javascript', integration: 'vercel-ai' },
+        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' },
       })
 
       const expectedLlmSpan2 = expectedLLMObsLLMSpanEvent({
@@ -574,7 +574,7 @@ describe('Plugin', () => {
           temperature: 0.5,
         },
         tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        tags: { ml_app: 'test', language: 'javascript', integration: 'vercel-ai' },
+        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' },
       })
 
       expect(workflowSpan).to.deepEqualWithMockValues(expectedWorkflowSpan)

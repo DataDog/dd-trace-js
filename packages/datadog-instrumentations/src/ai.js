@@ -24,39 +24,17 @@ const noopTracer = {
     const fn = arguments[arguments.length - 1]
 
     const span = {
-      spanContext () {
-        return { traceId: '', spanId: '', traceFlags: 0 }
-      },
-      setAttribute () {
-        return this
-      },
-      setAttributes () {
-        return this
-      },
-      addEvent () {
-        return this
-      },
-      addLink () {
-        return this
-      },
-      addLinks () {
-        return this
-      },
-      setStatus () {
-        return this
-      },
-      updateName () {
-        return this
-      },
-      end () {
-        return this
-      },
-      isRecording () {
-        return false
-      },
-      recordException () {
-        return this
-      }
+      spanContext () { return { traceId: '', spanId: '', traceFlags: 0 } },
+      setAttribute () { return this },
+      setAttributes () { return this },
+      addEvent () { return this },
+      addLink () { return this },
+      addLinks () { return this },
+      setStatus () { return this },
+      updateName () { return this },
+      end () { return this },
+      isRecording () { return false },
+      recordException () { return this }
     }
 
     return fn(span)
