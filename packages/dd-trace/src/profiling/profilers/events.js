@@ -241,7 +241,7 @@ class EventSerializer {
       // any other sample.
       const replacementIndex = Math.floor(Math.random() * (this.maxSamples + 1)) - 1
       if (replacementIndex !== -1) {
-        const sample = this.createSample(item)
+        const sample = this.#createSample(item)
         if (sample !== undefined) {
           // This will cause the samples to no longer be sorted in their array
           // by their end time. This is fine as the backend has no ordering
@@ -252,7 +252,7 @@ class EventSerializer {
     }
   }
 
-  createSample (item) {
+  #createSample (item) {
     const { entryType, startTime, duration, _ddSpanId, _ddRootSpanId } = item
     let decorator = this.decorators[entryType]
     if (!decorator) {

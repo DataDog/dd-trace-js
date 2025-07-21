@@ -461,7 +461,7 @@ describe('profiler', () => {
       // Recreates getMaxSamples from packages/dd-trace/src/profiling/profilers/events.js
       const maxEvents = Math.floor((threads + 2) * uploadPeriodSec * 1000 / samplingPeriodMs)
 
-      // Test will try to force maxEvents + 10 events, we'll assert that only maxEvents are captured.
+      // Test will emit maxEvents + 10 events, we'll assert that only maxEvents are preserved.
       const proc = fork(path.join(cwd, 'profiler/eventlimits.js'), [String(maxEvents + 10)], {
         cwd,
         env: {
