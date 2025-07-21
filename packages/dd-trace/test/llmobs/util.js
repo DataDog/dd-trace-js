@@ -194,11 +194,16 @@ function fromBuffer (spanProperty, isNumber = false) {
   return isNumber ? Number(strVal) : strVal
 }
 
-const sinon = require('sinon')
 const agent = require('../plugins/agent')
-const LLMObsSpanWriter = require('../../src/llmobs/writers/spans')
 const assert = require('node:assert')
 
+/**
+ * @param {Object} options
+ * @param {string} options.plugin
+ * @param {Object} options.tracerConfigOptions
+ * @param {Object} options.closeOptions
+ * @returns {Function<Promise<{ apmSpans: Array, llmobsSpans: Array }>>}
+ */
 function useLlmobs ({
   plugin,
   tracerConfigOptions = {
@@ -207,7 +212,7 @@ function useLlmobs ({
       agentlessEnabled: false
     }
   },
-  closeOptions = { ritmReset: false }
+  closeOptions = { ritmReset: false, wipe: true }
 }) {
   if (!plugin) {
     throw new TypeError(
@@ -221,37 +226,37 @@ function useLlmobs ({
     )
   }
 
-  let agentPromise
-  let llmobsEvents = []
+  let apmTracesPromise
+  let llmobsTracesPromise
 
   before(() => {
-    sinon.stub(LLMObsSpanWriter.prototype, 'append').callsFake(event => {
-      llmobsEvents.push(event)
-    })
-
     return agent.load(plugin, {}, tracerConfigOptions)
   })
 
   beforeEach(() => {
-    agentPromise = agent.assertSomeTraces(traces => {
-      return traces.flatMap(trace => trace)
+    apmTracesPromise = agent.assertSomeTraces(apmTraces => {
+      return apmTraces
+        .flatMap(trace => trace)
+        .sort((a, b) => a.start < b.start ? -1 : (a.start > b.start ? 1 : 0))
+    })
+
+    llmobsTracesPromise = agent.useLlmobsTraces(llmobsTraces => {
+      return llmobsTraces
+        .flatMap(trace => trace)
+        .map(trace => trace.spans[0])
+        .sort((a, b) => a.start_ns - b.start_ns)
     })
   })
 
-  afterEach(() => {
-    llmobsEvents = []
-  })
-
   after(() => {
-    LLMObsSpanWriter.prototype.append.restore()
+    process.removeAllListeners()
     return agent.close(closeOptions)
   })
 
   return async function () {
-    const spans = await agentPromise
-    const llmobsSpans = llmobsEvents
+    const [apmSpans, llmobsSpans] = await Promise.all([apmTracesPromise, llmobsTracesPromise])
 
-    return { spans, llmobsSpans }
+    return { apmSpans, llmobsSpans }
   }
 }
 

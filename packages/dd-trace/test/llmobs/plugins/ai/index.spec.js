@@ -61,10 +61,10 @@ describe('Plugin', () => {
         temperature: 0.5
       })
 
-      const { spans, llmobsSpans } = await getEvents()
+      const { apmSpans, llmobsSpans } = await getEvents()
 
       const expectedWorkflowSpan = expectedLLMObsNonLLMSpanEvent({
-        span: spans[0],
+        span: apmSpans[0],
         name: 'generateText',
         spanKind: 'workflow',
         inputValue: 'Hello, OpenAI!',
@@ -80,7 +80,7 @@ describe('Plugin', () => {
       })
 
       const expectedLlmSpan = expectedLLMObsLLMSpanEvent({
-        span: spans[1],
+        span: apmSpans[1],
         parentId: llmobsSpans[0].span_id,
         spanKind: 'llm',
         modelName: 'gpt-3.5-turbo',
@@ -114,10 +114,10 @@ describe('Plugin', () => {
         prompt: 'Invent a character for a video game'
       })
 
-      const { spans, llmobsSpans } = await getEvents()
+      const { apmSpans, llmobsSpans } = await getEvents()
 
       const expectedWorkflowSpan = expectedLLMObsNonLLMSpanEvent({
-        span: spans[0],
+        span: apmSpans[0],
         name: 'generateObject',
         spanKind: 'workflow',
         inputValue: 'Invent a character for a video game',
@@ -132,7 +132,7 @@ describe('Plugin', () => {
       })
 
       const expectedLlmSpan = expectedLLMObsLLMSpanEvent({
-        span: spans[1],
+        span: apmSpans[1],
         parentId: llmobsSpans[0].span_id,
         spanKind: 'llm',
         modelName: 'gpt-3.5-turbo',
@@ -154,10 +154,10 @@ describe('Plugin', () => {
         value: 'hello world'
       })
 
-      const { spans, llmobsSpans } = await getEvents()
+      const { apmSpans, llmobsSpans } = await getEvents()
 
       const expectedWorkflowSpan = expectedLLMObsNonLLMSpanEvent({
-        span: spans[0],
+        span: apmSpans[0],
         name: 'embed',
         spanKind: 'workflow',
         inputValue: 'hello world',
@@ -170,7 +170,7 @@ describe('Plugin', () => {
       })
 
       const expectedEmbeddingSpan = expectedLLMObsLLMSpanEvent({
-        span: spans[1],
+        span: apmSpans[1],
         parentId: llmobsSpans[0].span_id,
         spanKind: 'embedding',
         modelName: 'text-embedding-ada-002',
@@ -192,10 +192,10 @@ describe('Plugin', () => {
         values: ['hello world', 'goodbye world']
       })
 
-      const { spans, llmobsSpans } = await getEvents()
+      const { apmSpans, llmobsSpans } = await getEvents()
 
       const expectedWorkflowSpan = expectedLLMObsNonLLMSpanEvent({
-        span: spans[0],
+        span: apmSpans[0],
         name: 'embedMany',
         spanKind: 'workflow',
         inputValue: JSON.stringify(['hello world', 'goodbye world']),
@@ -208,7 +208,7 @@ describe('Plugin', () => {
       })
 
       const expectedEmbeddingSpan = expectedLLMObsLLMSpanEvent({
-        span: spans[1],
+        span: apmSpans[1],
         parentId: llmobsSpans[0].span_id,
         spanKind: 'embedding',
         modelName: 'text-embedding-ada-002',
@@ -237,10 +237,10 @@ describe('Plugin', () => {
 
       for await (const part of textStream) {} // eslint-disable-line
 
-      const { spans, llmobsSpans } = await getEvents()
+      const { apmSpans, llmobsSpans } = await getEvents()
 
       const expectedWorkflowSpan = expectedLLMObsNonLLMSpanEvent({
-        span: spans[0],
+        span: apmSpans[0],
         name: 'streamText',
         spanKind: 'workflow',
         inputValue: 'Hello, OpenAI!',
@@ -253,7 +253,7 @@ describe('Plugin', () => {
       })
 
       const expectedLlmSpan = expectedLLMObsLLMSpanEvent({
-        span: spans[1],
+        span: apmSpans[1],
         parentId: llmobsSpans[0].span_id,
         spanKind: 'llm',
         modelName: 'gpt-3.5-turbo',
@@ -291,10 +291,10 @@ describe('Plugin', () => {
 
       for await (const part of partialObjectStream) {} // eslint-disable-line
 
-      const { spans, llmobsSpans } = await getEvents()
+      const { apmSpans, llmobsSpans } = await getEvents()
 
       const expectedWorkflowSpan = expectedLLMObsNonLLMSpanEvent({
-        span: spans[0],
+        span: apmSpans[0],
         name: 'streamObject',
         spanKind: 'workflow',
         inputValue: 'Invent a character for a video game',
@@ -308,7 +308,7 @@ describe('Plugin', () => {
       })
 
       const expectedLlmSpan = expectedLLMObsLLMSpanEvent({
-        span: spans[1],
+        span: apmSpans[1],
         parentId: llmobsSpans[0].span_id,
         spanKind: 'llm',
         modelName: 'gpt-3.5-turbo',
@@ -342,7 +342,7 @@ describe('Plugin', () => {
         maxSteps: 2,
       })
 
-      const { spans, llmobsSpans } = await getEvents()
+      const { apmSpans, llmobsSpans } = await getEvents()
 
       const workflowSpan = llmobsSpans[0]
       const llmSpan = llmobsSpans[1]
@@ -350,7 +350,7 @@ describe('Plugin', () => {
       const llmSpan2 = llmobsSpans[3]
 
       const expectedWorkflowSpan = expectedLLMObsNonLLMSpanEvent({
-        span: spans[0],
+        span: apmSpans[0],
         name: 'generateText',
         spanKind: 'workflow',
         inputValue: 'What is the weather in Tokyo?',
@@ -364,7 +364,7 @@ describe('Plugin', () => {
       })
 
       const expectedLlmSpan = expectedLLMObsLLMSpanEvent({
-        span: spans[1],
+        span: apmSpans[1],
         parentId: llmobsSpans[0].span_id,
         spanKind: 'llm',
         modelName: 'gpt-3.5-turbo',
@@ -395,7 +395,7 @@ describe('Plugin', () => {
       })
 
       const expectedToolCallSpan = expectedLLMObsNonLLMSpanEvent({
-        span: spans[2],
+        span: apmSpans[2],
         parentId: llmobsSpans[0].span_id,
         name: 'get_weather',
         spanKind: 'tool',
@@ -405,7 +405,7 @@ describe('Plugin', () => {
       })
 
       const expectedLlmSpan2 = expectedLLMObsLLMSpanEvent({
-        span: spans[3],
+        span: apmSpans[3],
         parentId: llmobsSpans[0].span_id,
         spanKind: 'llm',
         modelName: 'gpt-3.5-turbo',
@@ -469,7 +469,7 @@ describe('Plugin', () => {
 
       for await (const part of textStream) {} // eslint-disable-line
 
-      const { spans, llmobsSpans } = await getEvents()
+      const { apmSpans, llmobsSpans } = await getEvents()
 
       const workflowSpan = llmobsSpans[0]
       const llmSpan = llmobsSpans[1]
@@ -477,7 +477,7 @@ describe('Plugin', () => {
       const llmSpan2 = llmobsSpans[3]
 
       const expectedWorkflowSpan = expectedLLMObsNonLLMSpanEvent({
-        span: spans[0],
+        span: apmSpans[0],
         name: 'streamText',
         spanKind: 'workflow',
         inputValue: 'What is the weather in Tokyo?',
@@ -491,7 +491,7 @@ describe('Plugin', () => {
       })
 
       const expectedLlmSpan = expectedLLMObsLLMSpanEvent({
-        span: spans[1],
+        span: apmSpans[1],
         parentId: llmobsSpans[0].span_id,
         spanKind: 'llm',
         modelName: 'gpt-3.5-turbo',
@@ -522,7 +522,7 @@ describe('Plugin', () => {
       })
 
       const expectedToolCallSpan = expectedLLMObsNonLLMSpanEvent({
-        span: spans[2],
+        span: apmSpans[2],
         parentId: llmobsSpans[0].span_id,
         /**
          * MOCK_STRING used as the stream implementation for ai does not finish the initial llm spans
@@ -541,7 +541,7 @@ describe('Plugin', () => {
       })
 
       const expectedLlmSpan2 = expectedLLMObsLLMSpanEvent({
-        span: spans[3],
+        span: apmSpans[3],
         parentId: llmobsSpans[0].span_id,
         spanKind: 'llm',
         modelName: 'gpt-3.5-turbo',
