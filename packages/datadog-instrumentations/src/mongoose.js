@@ -6,15 +6,18 @@ const shimmer = require('../../datadog-shimmer')
 
 const startCh = channel('datadog:mongoose:model:filter:start')
 const finishCh = channel('datadog:mongoose:model:filter:finish')
-// this channel is for wrapping the callback of exec methods and handling store context, it doesn't have any subscribers
+// this channel is for wrapping the callback of exec methods and handling store context
 const callbackCh = channel('datadog:mongoose:model:exec:callback')
 
 function wrapAddQueue (addQueue) {
   return function (name, args, options) {
     if (typeof name === 'function') {
-      const ctx = {}
-      arguments[0] = callbackCh.runStores(ctx, addQueue, this, ...arguments)
+      arguments[0] = shimmer.wrapFunction(name, original => function () {
+        const ctx = {}
+        return callbackCh.runStores(ctx, original, this, ...arguments)
+      })
     }
+
     return addQueue.apply(this, arguments)
   }
 }
@@ -28,9 +31,13 @@ function wrapExec (exec) {
 
     if (typeof callback === 'function') {
       const ctx = {}
-      const bound = callbackCh.runStores(ctx, callback, this, ...arguments)
+      const wrappedCallback = shimmer.wrapFunction(callback, original => function () {
+        return callbackCh.runStores(ctx, original, this, ...arguments)
+      })
 
-      return op === undefined ? exec.call(this, bound) : exec.call(this, op, bound)
+      return op === undefined
+        ? exec.call(this, wrappedCallback)
+        : exec.call(this, op, wrappedCallback)
     }
 
     return exec.apply(this, arguments)
@@ -134,7 +141,7 @@ addHook({
             shimmer.wrap(res, 'exec', originalExec => {
               return function wrappedExec () {
                 if (!callbackWrapped) {
-                  wrapCallbackIfExist(arguments)
+                  wrapCallbackIfExist(arguments, ctx)
                 }
 
                 const execResult = originalExec.apply(this, arguments)
