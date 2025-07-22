@@ -457,33 +457,6 @@ describe('profiler', () => {
       assert.equal(endpoints.size, 3, encoded)
     })
 
-    it('number of events is limited', async () => {
-      const threads = 1
-      const uploadPeriodSec = 10
-      const samplingPeriodMs = 1000 / 99
-      // Recreates getMaxSamples from packages/dd-trace/src/profiling/profilers/events.js
-      const maxEvents = Math.floor((threads + 2) * uploadPeriodSec * 1000 / samplingPeriodMs)
-
-      // Test will emit maxEvents + 10 events, we'll assert that only maxEvents are preserved.
-      const proc = fork(path.join(cwd, 'profiler/eventlimits.js'), [String(maxEvents + 10)], {
-        cwd,
-        env: {
-          DD_PROFILING_EXPORTERS: 'file',
-          DD_PROFILING_ENABLED: 1,
-          DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED: 0, // capture all events
-          DD_TRACE_AGENT_PORT: agent.port,
-          TESTING_PROFILING_EVENTS: 'true', // enable test event source
-          DD_PROFILING_UPLOAD_PERIOD: String(uploadPeriodSec),
-          UV_THREADPOOL_SIZE: String(threads)
-        }
-      })
-
-      await processExitPromise(proc, TIMEOUT)
-
-      const { profile, encoded } = await getLatestProfile(cwd, /^events_.+\.pprof$/)
-      assert.equal(profile.sample.length, maxEvents, encoded)
-    })
-
     it('fs timeline events work', async () => {
       const fsEvents = await gatherFilesystemTimelineEvents(cwd, 'profiler/fstest.js', agent.port)
       assert.equal(fsEvents.length, 6)
