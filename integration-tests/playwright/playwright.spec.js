@@ -79,7 +79,7 @@ versions.forEach((version) => {
     before(async function () {
       // bump from 60 to 90 seconds because playwright is heavy
       this.timeout(90000)
-      sandbox = await createSandbox([`@playwright/test@${version}`, 'typescript'], true)
+      sandbox = await createSandbox([`@playwright/test@${version}`, 'typescript'])
       cwd = sandbox.folder
       const { NODE_OPTIONS, ...restOfEnv } = process.env
       // Install chromium (configured in integration-tests/playwright.config.js)
