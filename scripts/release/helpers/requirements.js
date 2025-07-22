@@ -32,7 +32,7 @@ function checkBranchDiff () {
     run('branch-diff --version', false)
   } catch (e) {
     const link = [
-      'https://datadoghq.atlassian.net/wiki/spaces/DL/pages/3125511269/Node.js+Tracer+Release+Process',
+      'https://datadoghq.atlassian.net/wiki/spaces/DL/pages/4987160870/Legacy+proposal+process',
       '#Install-and-Configure-branch-diff-to-automate-some-operations'
     ].join('')
     fatal(
@@ -57,11 +57,13 @@ function checkGitHub () {
   const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN
 
   if (!token) {
-    const link = 'https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-personal-access-token-classic'
+    const tokenLink = 'https://datadoghq.atlassian.net/wiki/spaces/ENG/pages/2396684402/ddtool#Retrieve-a-Github-Token'
+    const installLink = 'https://datadoghq.atlassian.net/wiki/spaces/ENG/pages/2396684402/ddtool#Installation'
 
     fatal(
       'The GITHUB_TOKEN | GH_TOKEN environment variable is missing.',
-      `Please visit ${link} for instructions to generate a personal access token.`,
+      `Please visit ${tokenLink} for instructions to generate a GitHub token.`,
+      `If ddtool is not installed, please visit ${installLink} to install it before generating the token.`
     )
   }
 
