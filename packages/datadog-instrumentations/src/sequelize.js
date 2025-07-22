@@ -24,18 +24,16 @@ addHook({ name: 'sequelize', versions: ['>=4'] }, Sequelize => {
         dialect = this.dialect.name
       }
 
-      const ctx = { sql, dialect }
-
       function onFinish (result) {
         const type = options?.type || 'RAW'
         if (type === 'RAW' && result?.length > 1) {
           result = result[0]
         }
 
-        finishCh.runStores({ ...ctx, result }, () => {})
+        finishCh.runStores({ result }, () => {})
       }
 
-      return startCh.runStores(ctx, () => {
+      return startCh.runStores({ sql, dialect }, () => {
         const promise = query.apply(this, arguments)
         promise.then(onFinish, () => { onFinish() })
 

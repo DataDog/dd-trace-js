@@ -22,7 +22,7 @@ class SqlInjectionAnalyzer extends StoredInjectionAnalyzer {
       'datadog:sequelize:query:start',
       ({ sql, dialect }) => this.getStoreAndAnalyze(sql, dialect.toUpperCase())
     )
-    this.addBind('datadog:sequelize:query:finish', (ctx) => ctx?.sqlParentStore)
+    this.addSub('datadog:sequelize:query:finish', () => this.returnToParentStore())
 
     this.addSub('datadog:pg:pool:query:start', ({ query }) => this.setStoreAndAnalyze(query.text, 'POSTGRES'))
     this.addSub('datadog:pg:pool:query:finish', () => this.returnToParentStore())
