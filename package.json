@@ -189,6 +189,7 @@
     "yarn-deduplicate": "^6.0.2"
   },
   "resolutions": {
-    "eslint-plugin-unicorn/@eslint/plugin-kit": "0.3.3"
+    "eslint-plugin-unicorn/@eslint/plugin-kit": "0.3.3",
+    "axios/form-data": "^4.0.4"
   }
 }
