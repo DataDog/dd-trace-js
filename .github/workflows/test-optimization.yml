@@ -68,6 +68,7 @@ jobs:
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.node-version }}
+      - run: npm install yarn
       - uses: ./.github/actions/install
       - run: yarn test:integration:playwright
         env:
