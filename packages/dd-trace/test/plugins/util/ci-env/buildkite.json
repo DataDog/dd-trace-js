@@ -1109,7 +1109,7 @@
       "git.commit.message": "buildkite-git-commit-message",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.pull_request.base_branch": "master",
-      "pr.number": 42
+      "pr.number": "42"
     }
   ]
 ]
