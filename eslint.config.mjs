@@ -124,7 +124,7 @@ export default [
       '@stylistic/quotes': [
         'error',
         'single',
-        { avoidEscape: true, allowTemplateLiterals: false }
+        { avoidEscape: true, allowTemplateLiterals: 'never' }
       ],
       '@stylistic/rest-spread-spacing': ['error', 'never'],
       '@stylistic/semi': ['error', 'never'],
