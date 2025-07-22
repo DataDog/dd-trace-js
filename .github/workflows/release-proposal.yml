@@ -2,13 +2,6 @@ name: '[Release Proposal]'
 
 on:
   workflow_dispatch:
-    inputs:
-      authentication:
-        type: choice
-        description: Retrieve GitHub token from
-        options:
-          - github-app
-          - octo-sts
   schedule:
     - cron: 0 5 * * *
 
@@ -17,38 +10,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # TODO: Remove this strategy entirely once Octo-STS works properly.
-  create-proposal-github-app:
-    if: inputs.authentication == 'github-app'
-    strategy:
-      fail-fast: false
-      matrix:
-        release-line: ['5']
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: read
-    steps:
-      - uses: actions/create-github-app-token@df432ceedc7162793a195dd1713ff69aefc7379e # v2.0.6
-        id: app-token
-        with:
-          app-id: ${{ vars.APP_ID }}
-          private-key: ${{ secrets.PRIVATE_KEY }}
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          fetch-depth: 0
-          token: ${{ steps.app-token.outputs.token }}
-      - uses: ./.github/actions/node
-        with:
-          version: ''
-      - uses: ./.github/actions/install/branch-diff
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - run: node scripts/release/proposal ${{ matrix.release-line }} -y ${{ github.event_name == 'workflow_dispatch' && '-f' || '' }}
-        env:
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
-
-  create-proposal-octo-sts:
+  create-proposal:
     if: inputs.authentication == 'octo-sts'
     strategy:
       fail-fast: false
@@ -58,12 +20,6 @@ jobs:
     permissions:
       id-token: write
     steps:
-      #<TESTING> Only required for debugging, remove afterwards
-      - name: Debug OIDC Claims
-        uses: github/actions-oidc-debugger@36a60c31d7af9b718b4ca7152ba24229a15241ad # main
-        with:
-          audience: "octo-debugger"
-      #</TESTING>
       - uses: DataDog/dd-octo-sts-action@08f2144903ced3254a3dafec2592563409ba2aa0 # v1.0.1
         id: octo-sts
         with:
