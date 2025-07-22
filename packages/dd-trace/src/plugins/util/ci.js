@@ -86,6 +86,13 @@ function resolveTilde (filePath) {
   return filePath
 }
 
+function normalizeNumber (number) {
+  if (!number) {
+    return number
+  }
+  return number.toString()
+}
+
 function getGitHubEventPayload () {
   if (!getEnvironmentVariable('GITHUB_EVENT_PATH')) {
     return
@@ -735,6 +742,7 @@ module.exports = {
     normalizeTag(tags, GIT_BRANCH, normalizeRef)
     normalizeTag(tags, GIT_TAG, normalizeRef)
     normalizeTag(tags, GIT_PULL_REQUEST_BASE_BRANCH, normalizeRef)
+    normalizeTag(tags, PR_NUMBER, normalizeNumber)
 
     return removeEmptyValues(tags)
   }
