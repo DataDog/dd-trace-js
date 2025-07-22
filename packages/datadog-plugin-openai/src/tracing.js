@@ -64,10 +64,8 @@ class OpenAiTracingPlugin extends TracingPlugin {
       if (chunks.length === 0) return
 
       const firstChunk = chunks[0]
-      // TODO(BridgeAR): It likely depends on the options being passed
-      // through if the stream returns buffers or not. By reading that,
-      // we don't have to do the instanceof check anymore, which is
-      // relatively expensive.
+      // OpenAI in legacy versions returns chunked buffers instead of objects.
+      // These buffers will need to be combined and coalesced into a list of object chunks.
       if (firstChunk instanceof Buffer) {
         chunks = convertBuffersToObjects(chunks)
       }

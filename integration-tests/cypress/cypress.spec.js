@@ -1,6 +1,5 @@
 'use strict'
 
-const http = require('http')
 const { exec, execSync } = require('child_process')
 const path = require('path')
 const fs = require('fs')
@@ -14,6 +13,7 @@ const {
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const webAppServer = require('../ci-visibility/web-app-server')
+const secondWebAppServer = require('../ci-visibility/web-app-server-without-rum')
 const coverageFixture = require('../ci-visibility/fixtures/coverage.json')
 const {
   TEST_STATUS,
@@ -113,7 +113,7 @@ moduleTypes.forEach(({
 
     this.retries(2)
     this.timeout(60000)
-    let sandbox, cwd, receiver, childProcess, webAppPort, secondWebAppServer, secondWebAppPort
+    let sandbox, cwd, receiver, childProcess, webAppPort, secondWebAppPort
 
     if (type === 'commonJS') {
       testCommand = testCommand(version)
@@ -127,16 +127,6 @@ moduleTypes.forEach(({
         webAppPort = webAppServer.address().port
       })
       if (version === 'latest') {
-        secondWebAppServer = http.createServer((req, res) => {
-          res.setHeader('Content-Type', 'text/html')
-          res.writeHead(200)
-          res.end(`
-            <!DOCTYPE html>
-            <html>
-              <div class="hella-world">Hella World</div>
-            </html>
-          `)
-        })
         secondWebAppServer.listen(0, 'localhost', () => {
           secondWebAppPort = secondWebAppServer.address().port
         })

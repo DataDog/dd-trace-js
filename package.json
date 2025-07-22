@@ -114,7 +114,7 @@
   ],
   "dependencies": {
     "@datadog/libdatadog": "0.7.0",
-    "@datadog/native-appsec": "10.0.0",
+    "@datadog/native-appsec": "10.0.1",
     "@datadog/native-iast-taint-tracking": "4.0.0",
     "@datadog/native-metrics": "3.1.1",
     "@datadog/pprof": "5.9.0",
@@ -187,5 +187,8 @@
     "workerpool": "^9.2.0",
     "yaml": "^2.8.0",
     "yarn-deduplicate": "^6.0.2"
+  },
+  "resolutions": {
+    "eslint-plugin-unicorn/@eslint/plugin-kit": "0.3.3"
   }
 }
