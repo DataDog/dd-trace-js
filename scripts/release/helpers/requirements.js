@@ -6,7 +6,7 @@ const os = require('os')
 const path = require('path')
 const { fatal, run } = require('./terminal')
 
-const { CI, HOME, LOCALAPPDATA, XDG_CONFIG_HOME, USERPROFILE } = process.env
+const { HOME, LOCALAPPDATA, XDG_CONFIG_HOME, USERPROFILE } = process.env
 
 function checkAll () {
   checkGit()
