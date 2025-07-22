@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  MOCHA_OPTIONS: ${{ github.ref == 'refs/head/master' && '-- retries 1' }}
+  MOCHA_OPTIONS: ${{ github.ref == 'refs/head/master' && '--retries 1' }}
 
 jobs:
   sdk:
