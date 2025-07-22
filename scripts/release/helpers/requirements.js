@@ -1,10 +1,10 @@
 'use strict'
 
 const { join } = require('path')
-const { existsSync, readFileSync } = require('fs')
+const { existsSync } = require('fs')
 const os = require('os')
 const path = require('path')
-const { capture, fatal, run } = require('./terminal')
+const { fatal, run } = require('./terminal')
 
 const { CI, HOME, LOCALAPPDATA, XDG_CONFIG_HOME, USERPROFILE } = process.env
 
@@ -50,17 +50,11 @@ function checkBranchDiff () {
       `Please visit ${link} for instructions to configure.`
     )
   }
-
-  const requiredScopes = ['public_repo']
-  const { token } = JSON.parse(readFileSync(branchDiffConfigPath, 'utf8'))
-
-  checkGitHubScopes(token, requiredScopes, 'branch-diff')
 }
 
 // Check that the `gh` CLI is installed and authenticated.
 function checkGitHub () {
   const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN
-  const requiredScopes = ['public_repo', 'read:org']
 
   if (!token) {
     const link = 'https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-personal-access-token-classic'
@@ -68,7 +62,6 @@ function checkGitHub () {
     fatal(
       'The GITHUB_TOKEN | GH_TOKEN environment variable is missing.',
       `Please visit ${link} for instructions to generate a personal access token.`,
-      `The following scopes are required when generating the token: ${requiredScopes.join(', ')}`
     )
   }
 
@@ -78,35 +71,6 @@ function checkGitHub () {
     fatal(
       'The "gh" CLI could not be found.',
       'Please visit https://github.com/cli/cli#installation for instructions to install.'
-    )
-  }
-
-  checkGitHubScopes(token, requiredScopes, 'GITHUB_TOKEN | GH_TOKEN')
-}
-
-function checkGitHubScopes (token, requiredScopes, source) {
-  if (CI) return
-
-  const url = 'https://api.github.com'
-  const headers = [
-    'Accept: application/vnd.github.v3+json',
-    `Authorization: Bearer ${token}`,
-    'X-GitHub-Api-Version: 2022-11-28'
-  ].map(h => `-H "${h}"`).join(' ')
-
-  const lines = capture(`curl -sS -I ${headers} ${url}`).split(/\r?\n/g)
-  const scopeLine = lines.find(line => line.startsWith('x-oauth-scopes:')) || ''
-  const scopes = scopeLine.replace('x-oauth-scopes:', '').trim().split(', ')
-  const missingScopes = []
-
-  for (const req of requiredScopes) {
-    if (!scopes.includes(req)) missingScopes.push(req)
-  }
-
-  if (missingScopes.length !== 0) {
-    fatal(
-      `Missing scopes for ${source}: ${missingScopes.join(', ')}`,
-      'Please visit https://github.com/settings/tokens and make sure they are enabled!'
     )
   }
 }
