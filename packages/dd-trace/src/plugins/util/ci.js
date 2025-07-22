@@ -87,7 +87,7 @@ function resolveTilde (filePath) {
 }
 
 function normalizeNumber (number) {
-  if (!number) {
+  if (typeof number !== 'number') {
     return number
   }
   return number.toString()
