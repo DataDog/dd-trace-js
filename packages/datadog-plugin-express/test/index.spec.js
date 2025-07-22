@@ -92,7 +92,7 @@ describe('Plugin', () => {
           express = require(`../../../versions/express@${version}`).get()
         })
 
-        it('should do automatic instrumentation on app routes', done => {
+        it.only('should do automatic instrumentation on app routes', done => {
           const app = express()
 
           app.get('/user', (req, res) => {
@@ -123,6 +123,8 @@ describe('Plugin', () => {
               .get(`http://localhost:${port}/user`)
               .catch(done)
           })
+
+          throw new Error('kaboom')
         })
 
         it('should do automatic instrumentation on routers', done => {
