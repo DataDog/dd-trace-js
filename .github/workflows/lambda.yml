@@ -11,6 +11,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
   cancel-in-progress: true
 
+env:
+  MOCHA_OPTIONS: ${{ github.ref == 'refs/head/master' && '--retries 1' }}
+
 jobs:
   ubuntu:
     runs-on: ubuntu-latest
