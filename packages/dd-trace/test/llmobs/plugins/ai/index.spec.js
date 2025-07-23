@@ -46,8 +46,7 @@ describe('Plugin', () => {
 
       const OpenAI = require('../../../../../../versions/@ai-sdk/openai').get()
       openai = OpenAI.createOpenAI({
-        baseURL: 'http://127.0.0.1:9126/vcr/openai',
-        compatibility: 'strict'
+        baseURL: 'http://127.0.0.1:9126/vcr/openai'
       })
 
       zod = require('../../../../../../versions/zod').get()
@@ -299,7 +298,7 @@ describe('Plugin', () => {
         name: 'streamObject',
         spanKind: 'workflow',
         inputValue: 'Invent a character for a video game',
-        outputValue: JSON.stringify({ name: 'Aria', age: 25, height: '5\'7"' }),
+        outputValue: JSON.stringify({ name: 'Astra', age: 25, height: '5\'8"' }),
         metadata: {
           schema: MOCK_OBJECT,
           output: 'object',
@@ -316,7 +315,7 @@ describe('Plugin', () => {
         modelProvider: 'openai',
         name: 'doStream',
         inputMessages: [{ content: 'Invent a character for a video game', role: 'user' }],
-        outputMessages: [{ content: JSON.stringify({ name: 'Aria', age: 25, height: '5\'7"' }), role: 'assistant' }],
+        outputMessages: [{ content: JSON.stringify({ name: 'Astra', age: 25, height: '5\'8"' }), role: 'assistant' }],
         tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
         tags: { ml_app: 'test', language: 'javascript', integration: 'ai' }
       })

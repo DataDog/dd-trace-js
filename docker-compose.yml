@@ -156,12 +156,23 @@ services:
   testagent:
     image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.27.0
     ports:
-      - "127.0.0.1:9126:9126"
+        - "127.0.0.1:9126:9126"
     environment:
-      - LOG_LEVEL=DEBUG
-      - TRACE_LANGUAGE=javascript
-      - ENABLED_CHECKS=trace_stall,meta_tracer_version_header,trace_count_header,trace_peer_service
-      - PORT=9126
-      - VCR_CASSETTES_DIRECTORY=/vcr-cassettes
-    volumes:
-      - ./packages/dd-trace/test/llmobs/cassettes:/vcr-cassettes
+        - LOG_LEVEL=DEBUG
+        - TRACE_LANGUAGE=javascript
+        - ENABLED_CHECKS=trace_stall,meta_tracer_version_header,trace_count_header,trace_peer_service
+        - PORT=9126
+
+  # Use this for local development when making new VCR cassettes to persist to the test agent
+  # Do not use the above testagent service if using this one.
+  # testagent-vcr:
+  #   image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.24.1
+  #   ports:
+  #     - "127.0.0.1:9126:9126"
+  #   environment:
+  #     - LOG_LEVEL=DEBUG
+  #     - TRACE_LANGUAGE=javascript
+  #     - ENABLED_CHECKS=trace_stall,meta_tracer_version_header,trace_count_header,trace_peer_service
+  #     - PORT=9126
+  #   volumes:
+  #     - ${VCR_CASSETTES_PATH:-/tmp/empty-vcr}:/vcr-cassettes:delegated
