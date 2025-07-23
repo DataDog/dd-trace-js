@@ -1,0 +1,119 @@
+interactions:
+- request:
+    body: "------formdata-undici-019869426906\r\nContent-Disposition: form-data; name=\"purpose\"\r\n\r\nfine-tune\r\n------formdata-undici-019869426906\r\nContent-Disposition:
+      form-data; name=\"file\"; filename=\"fine-tune.jsonl\"\r\nContent-Type: application/octet-stream\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"What
+      is the meaning of life?\"},{\"role\":\"assistant\",\"content\":\"The meaning
+      of life is 42\"}]}\n{\"messages\":[{\"role\":\"user\",\"content\":\"What is
+      5 + 5?\"},{\"role\":\"assistant\",\"content\":\"5 + 5 equals 10\"}]}\n{\"messages\":[{\"role\":\"user\",\"content\":\"What
+      is the capital of France?\"},{\"role\":\"assistant\",\"content\":\"The capital
+      of France is Paris\"}]}\n{\"messages\":[{\"role\":\"user\",\"content\":\"What
+      is the largest planet in our solar system?\"},{\"role\":\"assistant\",\"content\":\"Jupiter
+      is the largest planet in our solar system\"}]}\n{\"messages\":[{\"role\":\"user\",\"content\":\"How
+      many sides does a triangle have?\"},{\"role\":\"assistant\",\"content\":\"A
+      triangle has three sides\"}]}\n{\"messages\":[{\"role\":\"user\",\"content\":\"What
+      is the chemical symbol for gold?\"},{\"role\":\"assistant\",\"content\":\"The
+      chemical symbol for gold is Au\"}]}\n{\"messages\":[{\"role\":\"user\",\"content\":\"What
+      is the opposite of hot?\"},{\"role\":\"assistant\",\"content\":\"The opposite
+      of hot is cold\"}]}\n{\"messages\":[{\"role\":\"user\",\"content\":\"How many
+      days are in a week?\"},{\"role\":\"assistant\",\"content\":\"There are seven
+      days in a week\"}]}\n{\"messages\":[{\"role\":\"user\",\"content\":\"What color
+      is the sky on a clear day?\"},{\"role\":\"assistant\",\"content\":\"The sky
+      is blue on a clear day\"}]}\n{\"messages\":[{\"role\":\"user\",\"content\":\"What
+      is the square root of 16?\"},{\"role\":\"assistant\",\"content\":\"The square
+      root of 16 is 4\"}]}\r\n------formdata-undici-019869426906--"
+    headers:
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Encoding
+      : - gzip, deflate
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Language
+      : - '*'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Connection
+      : - keep-alive
+      Content-Length:
+      - '1672'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - multipart/form-data; boundary=----formdata-undici-019869426906
+      ? !!python/object/apply:multidict._multidict.istr
+      - User-Agent
+      : - OpenAI/JS 5.7.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Arch
+      : - arm64
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Lang
+      : - js
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-OS
+      : - MacOS
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Package-Version
+      : - 5.7.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Retry-Count
+      : - '0'
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Runtime
+      : - node
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Runtime-Version
+      : - v22.17.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - sec-fetch-mode
+      : - cors
+    method: POST
+    uri: https://api.openai.com/v1/files
+  response:
+    body:
+      string: "{\n  \"object\": \"file\",\n  \"id\": \"file-KosHDNPNvSvvV5Xq1in5RK\",\n
+        \ \"purpose\": \"fine-tune\",\n  \"filename\": \"fine-tune.jsonl\",\n  \"bytes\":
+        1386,\n  \"created_at\": 1750902244,\n  \"expires_at\": null,\n  \"status\":
+        \"processed\",\n  \"status_details\": null\n}\n"
+    headers:
+      CF-RAY:
+      - 955904733a914211-EWR
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 26 Jun 2025 01:44:04 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=rPZ7px8xcN.LDtylJwPG.QtAxyrSQVsHs1527kj7Y58-1750902244-1.0.1.1-qGfXxpT6DwAmxCavdOfrum7zuglO7FndapWfLd7Yyo20vuSkOapzLA5jJr2YpHLY1_sKFsQcrZ1cN1H1eNf2csjQIfmM7Xq.XiPaxHWO9GM;
+        path=/; expires=Thu, 26-Jun-25 02:14:04 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=4.enAXWn7AigEStGMkWkGlOxZrTNoMoZR8a8jpPLUEw-1750902244826-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-allow-origin:
+      - '*'
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - datadog-staging
+      openai-processing-ms:
+      - '255'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains; preload
+      x-request-id:
+      - req_63d4f896ba2a5c317425c17f29e97ccb
+    status:
+      code: 200
+      message: OK
+version: 1

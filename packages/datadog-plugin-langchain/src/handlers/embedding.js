@@ -3,54 +3,6 @@
 const LangChainHandler = require('./default')
 
 class LangChainEmbeddingHandler extends LangChainHandler {
-  getSpanStartTags (ctx, provider, span) {
-    const tags = {}
-
-    const inputTexts = ctx.args?.[0]
-
-    const sampled = this.isPromptCompletionSampled(span)
-    if (typeof inputTexts === 'string') {
-      // embed query
-      if (sampled) {
-        tags['langchain.request.inputs.0.text'] = this.normalize(inputTexts)
-      }
-      tags['langchain.request.input_counts'] = 1
-    } else {
-      // embed documents
-      if (sampled) {
-        for (const idx in inputTexts) {
-          const inputText = inputTexts[idx]
-          tags[`langchain.request.inputs.${idx}.text`] = this.normalize(inputText)
-        }
-      }
-      tags['langchain.request.input_counts'] = inputTexts.length
-    }
-
-    return tags
-  }
-
-  getSpanEndTags (ctx) {
-    const tags = {}
-
-    const { result } = ctx
-    if (!Array.isArray(result)) return
-
-    tags['langchain.response.outputs.embedding_length'] = (
-      Array.isArray(result[0]) ? result[0] : result
-    ).length
-
-    return tags
-  }
-
-  extractApiKey (instance) {
-    const apiKey =
-      instance.clientConfig?.apiKey ||
-      instance.apiKey ||
-      instance.client?.apiKey
-    if (!apiKey || apiKey.length < 4) return ''
-    return `...${apiKey.slice(-4)}`
-  }
-
   extractProvider (instance) {
     return instance.constructor.name.split('Embeddings')[0].toLowerCase()
   }
