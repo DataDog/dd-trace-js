@@ -202,7 +202,7 @@ const assert = require('node:assert')
  * @param {string} options.plugin
  * @param {Object} options.tracerConfigOptions
  * @param {Object} options.closeOptions
- * @returns {Function<Promise<{ apmSpans: Array, llmobsSpans: Array }>>}
+ * @returns {function(): Promise<{ apmSpans: Array, llmobsSpans: Array }>}
  */
 function useLlmobs ({
   plugin,
