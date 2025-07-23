@@ -10,6 +10,7 @@ const kinds = require('../../../../../ext/kinds')
 const urlFilter = require('./urlfilter')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../constants')
 const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred_proxy')
+const TracingPlugin = require('../tracing')
 
 let extractIp
 
@@ -37,19 +38,24 @@ const HTTP2_HEADER_PATH = ':path'
 const contexts = new WeakMap()
 const ends = new WeakMap()
 
-const TracingPlugin = require('../tracing')
+function createWebPlugin (tracer, config = {}) {
+  const plugin = new TracingPlugin(tracer, tracer._config)
+  plugin.component = 'web'
+  plugin.config = config
+  return plugin
+}
 
 function startSpanHelper (tracer, name, options, traceCtx, config = {}) {
-  return TracingPlugin.prototype.startSpan.call(
-    { component: 'web', config },
-    name,
-    { ...options, tracer },
-    traceCtx
-  )
+  if (!web.plugin) {
+    web.plugin = createWebPlugin(tracer, config)
+  }
+
+  return web.plugin.startSpan(name, { ...options, tracer }, traceCtx)
 }
 
 const web = {
   TYPE: WEB,
+  plugin: null,
 
   // Ensure the configuration has the correct structure and defaults.
   normalizeConfig (config) {
