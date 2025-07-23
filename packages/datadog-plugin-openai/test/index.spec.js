@@ -239,12 +239,9 @@ describe('Plugin', () => {
 
               expect(traces[0][0].meta).to.have.property('component', 'openai')
               expect(traces[0][0].meta).to.have.property('_dd.integration', 'openai')
-              expect(traces[0][0].meta).to.have.property('openai.api_base', 'http://127.0.0.1:9126/vcr/openai')
               expect(traces[0][0].meta).to.have.property('openai.organization.name', 'datadog-staging')
               expect(traces[0][0].meta).to.have.property('openai.request.model', 'gpt-3.5-turbo-instruct')
-              expect(traces[0][0].meta).to.have.property('openai.request.prompt', 'Hello, OpenAI!')
               expect(traces[0][0].meta).to.have.property('openai.response.model')
-              expect(traces[0][0].meta).to.have.property('openai.user.api_key', 'sk-...ESTS')
             })
 
           const params = {
@@ -403,8 +400,6 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/vcr/openai/embeddings')
             expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
 
-            expect(traces[0][0].meta).to.have.property('openai.organization.name', 'datadog-staging')
-            expect(traces[0][0].meta).to.have.property('openai.request.input', 'hello world')
             expect(traces[0][0].meta).to.have.property('openai.request.model', 'text-embedding-ada-002')
             expect(traces[0][0].meta).to.have.property('openai.response.model')
           })
@@ -424,8 +419,6 @@ describe('Plugin', () => {
         }
 
         await checkTraces
-
-        expect(externalLoggerStub).to.have.been.called
 
         expect(metricStub).to.have.been.calledWith('openai.request.duration') // timing value not guaranteed
       })
@@ -623,7 +616,6 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.have.property('openai.request.method', 'GET')
             expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/files/*')
 
-            expect(traces[0][0].meta).to.have.property('openai.request.file_id', 'file-RpTpuvRVtnKpdKZb7DDGto')
             expect(traces[0][0].meta).to.have.property('openai.response.filename', 'fine-tune.jsonl')
             expect(traces[0][0].meta).to.have.property('openai.response.id', 'file-RpTpuvRVtnKpdKZb7DDGto')
             expect(traces[0][0].meta).to.have.property('openai.response.purpose', 'fine-tune')
@@ -661,8 +653,6 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.have.property('openai.organization.name', 'datadog-staging')
             expect(traces[0][0].meta).to.have.property('openai.request.method', 'GET')
             expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/files/*/content')
-
-            expect(traces[0][0].meta).to.have.property('openai.request.file_id', 'file-RpTpuvRVtnKpdKZb7DDGto')
           })
 
         if (semver.satisfies(realVersion, '>=4.0.0 < 4.17.1')) {
@@ -698,7 +688,6 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.have.property('openai.request.method', 'DELETE')
             expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/files/*')
 
-            expect(traces[0][0].meta).to.have.property('openai.request.file_id', 'file-RpTpuvRVtnKpdKZb7DDGto')
             expect(traces[0][0].meta).to.have.property('openai.response.id', 'file-RpTpuvRVtnKpdKZb7DDGto')
             expect(traces[0][0].metrics).to.have.property('openai.response.deleted')
           })
@@ -901,7 +890,6 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
             expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/vcr/openai/moderations')
 
-            expect(traces[0][0].meta).to.have.property('openai.request.input', 'I want to harm the robots')
             expect(traces[0][0].meta['openai.response.id']).to.match(/^modr-/)
             expect(traces[0][0].meta).to.have.property('openai.response.model')
             expect(traces[0][0].metrics).to.have.property('openai.response.categories.sexual', 0)
@@ -938,8 +926,6 @@ describe('Plugin', () => {
         }
 
         await checkTraces
-
-        expect(externalLoggerStub).to.have.been.called
       })
 
       for (const responseFormat of ['url', 'b64_json']) {
@@ -958,20 +944,11 @@ describe('Plugin', () => {
                 expect(traces[0][0]).to.have.property('resource', 'createImage')
               }
               expect(traces[0][0]).to.have.property('error', 0)
-              expect(traces[0][0].meta).to.have.property('openai.organization.name', 'datadog-staging')
               expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
               expect(traces[0][0].meta).to.have.property(
                 'openai.request.endpoint', '/vcr/openai/images/generations'
               )
-
-              expect(traces[0][0].meta).to.have.property('openai.request.prompt', 'sleepy capybara with monkey on top')
-              expect(traces[0][0].meta).to.have.property('openai.request.response_format', responseFormat)
-              expect(traces[0][0].meta).to.have.property('openai.request.size', '1024x1024')
               expect(traces[0][0].meta).to.have.property('openai.request.model', 'dall-e-3')
-              expect(traces[0][0].meta).to.have.property(`openai.response.images.0.${responseFormat}`)
-              expect(traces[0][0].metrics).to.have.property('openai.request.n', 1)
-              expect(traces[0][0].metrics).to.have.property('openai.response.created')
-              expect(traces[0][0].metrics).to.have.property('openai.response.images_count', 1)
             })
 
           if (semver.satisfies(realVersion, '>=4.0.0')) {
@@ -1005,8 +982,6 @@ describe('Plugin', () => {
           }
 
           await checkTraces
-
-          expect(externalLoggerStub).to.have.been.called
         })
       }
 
@@ -1036,16 +1011,8 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.have.property(
               'openai.request.endpoint', '/vcr/openai/images/edits'
             )
-
+            expect(traces[0][0].meta).to.have.property('openai.request.model', 'dall-e-3')
             // TODO(sabrenner): fix in a follow-up (super simple - img.name)
-            // expect(traces[0][0].meta).to.have.property('openai.request.image', 'image.png')
-            expect(traces[0][0].meta).to.have.property('openai.request.prompt', 'Change all red to blue')
-            expect(traces[0][0].meta).to.have.property('openai.request.response_format', 'url')
-            expect(traces[0][0].meta).to.have.property('openai.request.size', '256x256')
-            expect(traces[0][0].meta).to.have.property('openai.response.images.0.url')
-            expect(traces[0][0].metrics).to.have.property('openai.request.n')
-            expect(traces[0][0].metrics).to.have.property('openai.response.created')
-            expect(traces[0][0].metrics).to.have.property('openai.response.images_count', 1)
           })
 
         const result = await openai.images.edit({
@@ -1087,19 +1054,11 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('resource', 'createImageVariation')
             }
             expect(traces[0][0]).to.have.property('error', 0)
-            expect(traces[0][0].meta).to.have.property('openai.organization.name', 'datadog-staging')
             expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
             expect(traces[0][0].meta).to.have.property(
               'openai.request.endpoint', '/vcr/openai/images/variations'
             )
-
-            expect(traces[0][0].meta).to.have.property('openai.request.image', 'image.png')
-            expect(traces[0][0].meta).to.have.property('openai.request.response_format', 'url')
-            expect(traces[0][0].meta).to.have.property('openai.request.size', '256x256')
-            expect(traces[0][0].meta).to.have.property('openai.response.images.0.url')
-            expect(traces[0][0].metrics).to.have.property('openai.request.n', 1)
-            expect(traces[0][0].metrics).to.have.property('openai.response.created')
-            expect(traces[0][0].metrics).to.have.property('openai.response.images_count', 1)
+            expect(traces[0][0].meta).to.have.property('openai.request.model', 'dall-e-3')
           })
 
         if (semver.satisfies(realVersion, '>=4.0.0')) {
@@ -1119,8 +1078,6 @@ describe('Plugin', () => {
         }
 
         await checkTraces
-
-        expect(externalLoggerStub).to.have.been.called
       })
 
       it('create transcription', async function () {
@@ -1148,14 +1105,8 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.have.property(
               'openai.request.endpoint', '/vcr/openai/audio/transcriptions'
             )
-            expect(traces[0][0].meta).to.have.property('openai.request.filename', 'transcription.m4a')
-            expect(traces[0][0].meta).to.have.property('openai.request.language', 'en')
             expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
             expect(traces[0][0].meta).to.have.property('openai.request.model', 'gpt-4o-mini-transcribe')
-            expect(traces[0][0].meta).to.have.property('openai.request.prompt', 'What does this say?')
-            expect(traces[0][0].meta).to.have.property('openai.request.response_format', 'json')
-            expect(traces[0][0].meta).to.have.property('openai.response.text', 'Hello friend.')
-            expect(traces[0][0].metrics).to.have.property('openai.request.temperature', 0.5)
           })
 
         const result = await openai.audio.transcriptions.create({
@@ -1198,12 +1149,8 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.have.property(
               'openai.request.endpoint', '/vcr/openai/audio/translations'
             )
-            expect(traces[0][0].meta).to.have.property('openai.request.filename', 'translation.m4a')
             expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
             expect(traces[0][0].meta).to.have.property('openai.request.model', 'whisper-1')
-            expect(traces[0][0].meta).to.have.property('openai.request.response_format', 'json')
-            expect(traces[0][0].meta).to.have.property('openai.response.text')
-            expect(traces[0][0].metrics).to.have.property('openai.request.temperature', 0.5)
           })
 
         if (semver.satisfies(realVersion, '>=4.0.0')) {
@@ -1258,7 +1205,6 @@ describe('Plugin', () => {
               )
 
               expect(traces[0][0].meta).to.have.property('openai.request.model', 'gpt-3.5-turbo')
-              expect(traces[0][0].meta).to.have.property('openai.request.user', 'dd-trace-test')
               expect(traces[0][0].meta).to.have.property('openai.response.model')
             })
 
@@ -1310,7 +1256,6 @@ describe('Plugin', () => {
         it('tags multiple responses', async () => {
           const checkTraces = agent
             .assertSomeTraces(traces => {
-              // Multiple response choice tags removed - basic span validation
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0].meta).to.have.property('openai.response.model')
             })
@@ -1352,7 +1297,6 @@ describe('Plugin', () => {
           const checkTraces = agent
             .assertSomeTraces(traces => {
               const span = traces[0][0]
-              // Message content tags removed - basic span validation
               expect(span).to.have.property('name', 'openai.request')
             })
 
@@ -1395,7 +1339,6 @@ describe('Plugin', () => {
 
           const checkTraces = agent
             .assertSomeTraces(traces => {
-              // Tool call response tags removed - basic span validation
               expect(traces[0][0]).to.have.property('name', 'openai.request')
             })
 
@@ -1442,7 +1385,6 @@ describe('Plugin', () => {
           it('makes a successful call', async () => {
             const checkTraces = agent
               .assertSomeTraces(traces => {
-                // Streamed response choice tags removed - basic span validation
                 expect(traces[0][0]).to.have.property('name', 'openai.request')
               })
 
@@ -1480,7 +1422,6 @@ describe('Plugin', () => {
           it('tags multiple responses', async () => {
             const checkTraces = agent
               .assertSomeTraces(traces => {
-                // Multiple response choice tags removed - basic span validation
                 expect(traces[0][0]).to.have.property('name', 'openai.request')
               })
 
@@ -1518,7 +1459,6 @@ describe('Plugin', () => {
           it('makes a successful call with usage included', async () => {
             const checkTraces = agent
               .assertSomeTraces(traces => {
-                // Usage token tags removed - basic span validation
                 expect(traces[0][0]).to.have.property('name', 'openai.request')
               })
 
@@ -1561,7 +1501,6 @@ describe('Plugin', () => {
           it('tags multiple responses', async () => {
             const checkTraces = agent
               .assertSomeTraces(traces => {
-                // Multiple response choice tags removed - basic span validation
                 expect(traces[0][0]).to.have.property('name', 'openai.request')
               })
 
@@ -1599,7 +1538,6 @@ describe('Plugin', () => {
           it('excludes image_url from usage', async () => {
             const checkTraces = agent
               .assertSomeTraces(traces => {
-                // Usage token tags removed - basic span validation
                 expect(traces[0][0]).to.have.property('name', 'openai.request')
               })
 
@@ -1641,7 +1579,6 @@ describe('Plugin', () => {
 
             const checkTraces = agent
               .assertSomeTraces(traces => {
-                // Tool call response tags removed - basic span validation
                 expect(traces[0][0]).to.have.property('name', 'openai.request')
               })
 

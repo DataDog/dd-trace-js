@@ -48,7 +48,7 @@ class OpenAiTracingPlugin extends TracingPlugin {
   }
 
   bindStart (ctx) {
-    const { methodName, args, basePath, apiKey } = ctx
+    const { methodName, args } = ctx
     const payload = normalizeRequestPayload(methodName, args)
     const normalizedMethodName = normalizeMethodName(methodName)
 
@@ -67,51 +67,17 @@ class OpenAiTracingPlugin extends TracingPlugin {
       kind: 'client',
       meta: {
         [MEASURED]: 1,
-        // Data that is always available with a request
-        'openai.user.api_key': truncateApiKey(apiKey),
-        'openai.api_base': basePath,
         // The openai.api_type (openai|azure) is present in Python but not in Node.js
         // Add support once https://github.com/openai/openai-node/issues/53 is closed
 
-        // Non-param data that can continue to be added to all requests
-        'openai.request.model': payload.model, // vague model
-        'openai.request.user': payload.user,
-        'openai.request.file_id': payload.file_id // deleteFile, retrieveFile, downloadFile
+        // Only model is added to all requests
+        'openai.request.model': payload.model
       }
     }, false)
 
     const openaiStore = Object.create(null)
 
     const tags = {} // The remaining tags are added one at a time
-
-    // createChatCompletion, createCompletion, createImage, createImageEdit, createTranscription, createTranslation
-    if (payload.prompt) {
-      const prompt = payload.prompt
-      openaiStore.prompt = prompt
-      if (typeof prompt === 'string' || (Array.isArray(prompt) && typeof prompt[0] === 'number')) {
-        // This is a single prompt, either String or [Number]
-        tags['openai.request.prompt'] = normalizeStringOrTokenArray(prompt, true)
-      } else if (Array.isArray(prompt)) {
-        // This is multiple prompts, either [String] or [[Number]]
-        for (let i = 0; i < prompt.length; i++) {
-          tags[`openai.request.prompt.${i}`] = normalizeStringOrTokenArray(prompt[i], true)
-        }
-      }
-    }
-
-    // createEdit, createEmbedding, createModeration
-    if (payload.input) {
-      const normalized = normalizeStringOrTokenArray(payload.input, false)
-      tags['openai.request.input'] = normalize(normalized)
-      openaiStore.input = normalized
-    }
-
-    // createChatCompletion, createCompletion
-    if (payload.logit_bias !== null && typeof payload.logit_bias === 'object') {
-      for (const [tokenId, bias] of Object.entries(payload.logit_bias)) {
-        tags[`openai.request.logit_bias.${tokenId}`] = bias
-      }
-    }
 
     if (payload.stream) {
       tags['openai.request.stream'] = payload.stream
@@ -125,7 +91,6 @@ class OpenAiTracingPlugin extends TracingPlugin {
       case 'createImage':
       case 'createImageEdit':
       case 'createImageVariation':
-        addCommonParameterTags(tags, payload)
         commonCreateImageRequestExtraction(tags, payload, openaiStore)
         break
 
@@ -140,7 +105,6 @@ class OpenAiTracingPlugin extends TracingPlugin {
 
       case 'createTranscription':
       case 'createTranslation':
-        addCommonParameterTags(tags, payload)
         commonCreateAudioRequestExtraction(tags, payload, openaiStore)
         break
 
@@ -156,8 +120,10 @@ class OpenAiTracingPlugin extends TracingPlugin {
         break
 
       case 'createEdit':
-        addCommonParameterTags(tags, payload)
         createEditRequestExtraction(tags, payload, openaiStore)
+        break
+
+      case 'createModeration':
         break
     }
 
@@ -652,26 +618,6 @@ function commonCreateResponseExtraction (tags, body, openaiStore, methodName) {
   openaiStore.choices = body.choices
 }
 
-function addCommonParameterTags (tags, payload) {
-  // Add common parameter tags that are shared across many OpenAI requests
-  // These should NOT be added to chats, completions, or embeddings
-  tags['openai.request.best_of'] = payload.best_of
-  tags['openai.request.echo'] = payload.echo
-  tags['openai.request.logprobs'] = payload.logprobs
-  tags['openai.request.max_tokens'] = payload.max_tokens
-  tags['openai.request.n'] = payload.n
-  tags['openai.request.presence_penalty'] = payload.presence_penalty
-  tags['openai.request.frequency_penalty'] = payload.frequency_penalty
-  tags['openai.request.stop'] = payload.stop
-  tags['openai.request.suffix'] = payload.suffix
-  tags['openai.request.temperature'] = payload.temperature
-  tags['openai.request.top_p'] = payload.top_p
-}
-
-function truncateApiKey (apiKey) {
-  return apiKey && `sk-...${apiKey.slice(-4)}`
-}
-
 // The server almost always responds with JSON
 function coerceResponseBody (body, methodName) {
   switch (methodName) {
@@ -825,23 +771,6 @@ function normalizeRequestPayload (methodName, args) {
 
   // Remaining OpenAI methods take a single object argument
   return args[0]
-}
-
-/**
- * Converts an array of tokens to a string
- * If input is already a string it's returned
- * In either case the value is truncated
-
- * It's intentional that the array be truncated arbitrarily, e.g. "[999, 888, 77..."
-
- * "foo" -> "foo"
- * [1,2,3] -> "[1, 2, 3]"
- */
-function normalizeStringOrTokenArray (input, truncate) {
-  const normalized = Array.isArray(input)
-    ? `[${input.join(', ')}]` // "[1, 2, 999]"
-    : input // "foo"
-  return truncate ? normalize(normalized) : normalized
 }
 
 function defensiveArrayLength (maybeArray) {
