@@ -113,6 +113,10 @@
     {
       "name": "multer",
       "versions": ["^1.4.4-lts.1"]
+    },
+    {
+      "name": "ejs",
+      "versions": ["3.1.10"]
     }
   ],
   "express-mongo-sanitize": [
@@ -333,11 +337,11 @@
       "versions": [">=0.1"]
     },
     {
-      "name": "@langchain/openai",
+      "name": "@langchain/cohere",
       "versions": [">=0.1"]
     },
     {
-      "name": "@langchain/cohere",
+      "name": "langchain",
       "versions": [">=0.1"]
     }
   ],

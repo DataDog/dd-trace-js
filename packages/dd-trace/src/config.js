@@ -516,6 +516,7 @@ class Config {
     defaults['dogstatsd.port'] = '8125'
     defaults.dsmEnabled = false
     defaults['dynamicInstrumentation.enabled'] = false
+    defaults['dynamicInstrumentation.probeFile'] = undefined
     defaults['dynamicInstrumentation.redactedIdentifiers'] = []
     defaults['dynamicInstrumentation.redactionExcludedIdentifiers'] = []
     defaults['dynamicInstrumentation.uploadIntervalSeconds'] = 1
@@ -707,6 +708,7 @@ class Config {
       DD_DOGSTATSD_HOST,
       DD_DOGSTATSD_PORT,
       DD_DYNAMIC_INSTRUMENTATION_ENABLED,
+      DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE,
       DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS,
       DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS,
       DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS,
@@ -883,6 +885,7 @@ class Config {
     this._setString(env, 'dogstatsd.port', DD_DOGSTATSD_PORT)
     this._setBoolean(env, 'dsmEnabled', DD_DATA_STREAMS_ENABLED)
     this._setBoolean(env, 'dynamicInstrumentation.enabled', DD_DYNAMIC_INSTRUMENTATION_ENABLED)
+    this._setString(env, 'dynamicInstrumentation.probeFile', DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE)
     this._setArray(env, 'dynamicInstrumentation.redactedIdentifiers', DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS)
     this._setArray(
       env,
@@ -1108,6 +1111,7 @@ class Config {
     }
     this._setBoolean(opts, 'dsmEnabled', options.dsmEnabled)
     this._setBoolean(opts, 'dynamicInstrumentation.enabled', options.dynamicInstrumentation?.enabled)
+    this._setString(opts, 'dynamicInstrumentation.probeFile', options.dynamicInstrumentation?.probeFile)
     this._setArray(
       opts,
       'dynamicInstrumentation.redactedIdentifiers',
@@ -1541,22 +1545,6 @@ class Config {
         return origin
       }
     }
-  }
-
-  // TODO: Refactor the Config class so it never produces any config objects that are incompatible with MessageChannel
-  /**
-   * Serializes the config object so it can be passed over a Worker Thread MessageChannel.
-   * @returns {Object} The serialized config object.
-   */
-  serialize () {
-    // URL objects cannot be serialized over the MessageChannel, so we need to convert them to strings first
-    if (this.url instanceof URL) {
-      const config = { ...this }
-      config.url = this.url.toString()
-      return config
-    }
-
-    return this
   }
 }
 

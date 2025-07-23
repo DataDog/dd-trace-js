@@ -395,7 +395,7 @@ describe('profiler', function () {
       sourceMapCreate.rejects(error)
       await profiler._start({ profilers, exporters, logger, sourceMap: true })
       expect(consoleLogger.error.args[0][0]).to.equal(error)
-      expect(profiler._enabled).to.equal(true)
+      expect(profiler.enabled).to.equal(true)
     })
   })
 
@@ -430,11 +430,11 @@ describe('profiler', function () {
 
     it('should increment profiled intervals after one interval elapses', async () => {
       await profiler._start({ profilers, exporters })
-      expect(profiler._profiledIntervals).to.equal(0)
+      expect(profiler.profiledIntervals).to.equal(0)
 
       clock.tick(interval)
 
-      expect(profiler._profiledIntervals).to.equal(1)
+      expect(profiler.profiledIntervals).to.equal(1)
       sinon.assert.notCalled(exporter.export)
     })
 

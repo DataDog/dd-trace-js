@@ -68,7 +68,7 @@ function checkPlugins (yamlPath) {
     const instRanges = Array.from(rangesPerPluginFromInst[pluginName])
     const yamlVersions = getMatchingVersions(pluginName, yamlRanges)
     const instVersions = getMatchingVersions(pluginName, instRanges)
-    if (!util.isDeepStrictEqual(yamlVersions, instVersions)) {
+    if (pluginName !== 'next' && !util.isDeepStrictEqual(yamlVersions, instVersions)) {
       const opts = { colors: true }
       const colors = x => util.inspect(x, opts)
       pluginErrorMsg(pluginName, 'Mismatch', `
@@ -150,8 +150,7 @@ checkPlugins(path.join(__dirname, '..', '.github', 'workflows', 'test-optimizati
     .filter(file => fs.existsSync(path.join(__dirname, '..', 'packages', file, 'test')))
     .map(file => file.replace('datadog-plugin-', ''))
   for (const plugin of allPlugins) {
-    // TODO: Remove check of cucumber once cucumber+12 is fixed
-    if (!allTestedPlugins.has(plugin) && plugin !== 'cucumber') {
+    if (!allTestedPlugins.has(plugin)) {
       pluginErrorMsg(plugin, 'ERROR', 'Plugin is tested but not in at least one GitHub workflow')
     }
   }

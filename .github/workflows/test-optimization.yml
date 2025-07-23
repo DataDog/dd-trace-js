@@ -12,6 +12,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
   cancel-in-progress: true
 
+env:
+  MOCHA_OPTIONS: ${{ github.ref == 'refs/head/master' && '--retries 1' }}
+
 jobs:
   benchmarks-e2e:
     name: Performance and correctness tests
@@ -75,9 +78,8 @@ jobs:
   integration-ci:
     strategy:
       matrix:
-        # TODO: Add cucumber and selenium once cucumber+12 is fixed
         version: [oldest, latest]
-        framework: [jest, mocha]
+        framework: [cucumber, selenium, jest, mocha]
     runs-on: ubuntu-latest
     env:
       DD_SERVICE: dd-trace-js-integration-tests
@@ -161,14 +163,13 @@ jobs:
         env:
           NODE_OPTIONS: '-r ./ci/init'
 
-  # TODO: Remove comment once cucumber+12 is fixed
-  # plugin-cucumber:
-  #   runs-on: ubuntu-latest
-  #   env:
-  #     PLUGINS: cucumber
-  #   steps:
-  #     - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-  #     - uses: ./.github/actions/plugins/test
+  plugin-cucumber:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: cucumber
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/plugins/test
 
   # TODO: fix performance issues and test more Node versions
   plugin-cypress:

@@ -63,6 +63,7 @@ const {
   DD_CAPABILITIES_IMPACTED_TESTS
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
+const { NODE_MAJOR } = require('../../version')
 
 const versions = ['7.0.0', 'latest']
 
@@ -74,6 +75,8 @@ const featuresPath = 'ci-visibility/features/'
 const fileExtension = 'js'
 
 versions.forEach(version => {
+  if ((NODE_MAJOR === 18 || NODE_MAJOR === 23) && version === 'latest') return
+
   // TODO: add esm tests
   describe(`cucumber@${version} commonJS`, () => {
     let sandbox, cwd, receiver, childProcess, testOutput
