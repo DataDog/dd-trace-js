@@ -1,0 +1,62 @@
+interactions:
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json, text/plain, */*
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '0'
+      User-Agent:
+      - OpenAI/NodeJS/3.0.0
+    method: DELETE
+    uri: https://api.openai.com/v1/files/file-RpTpuvRVtnKpdKZb7DDGto
+  response:
+    body:
+      string: "{\n  \"object\": \"file\",\n  \"deleted\": true,\n  \"id\": \"file-RpTpuvRVtnKpdKZb7DDGto\"\n}\n"
+    headers:
+      CF-RAY:
+      - 952d08ef7dc88fb5-BOS
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Fri, 20 Jun 2025 17:37:35 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=MCoPJ5omfnrx_gkAal1RafE3bxIY0oRvm3MFnLqZ6Rk-1750441055-1.0.1.1-rwYZM5vgXzvoLzO9sz74tXTKUI1e2.15eUEaDK1nDtgFxIIYs9VJM9EVkkG.NDMZHDCa1BTPrVFAk9tZaEXeM7eofW_BJala9n0I_h_welU;
+        path=/; expires=Fri, 20-Jun-25 18:07:35 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=DLn6ZZ1zb_07PDhRsO9LiZDU9FvXq6mnChI6qeIqM90-1750441055075-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-allow-origin:
+      - '*'
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - datadog-staging
+      openai-processing-ms:
+      - '150'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains; preload
+      x-request-id:
+      - req_81dd6e59809460874a67de5ab494362c
+    status:
+      code: 200
+      message: OK
+version: 1
