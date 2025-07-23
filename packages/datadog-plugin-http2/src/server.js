@@ -3,21 +3,26 @@
 // Plugin temporarily disabled. See https://github.com/DataDog/dd-trace-js/issues/312
 
 const ServerPlugin = require('../../dd-trace/src/plugins/server')
-const { storage } = require('../../datadog-core')
 const web = require('../../dd-trace/src/plugins/util/web')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 
 class Http2ServerPlugin extends ServerPlugin {
+  constructor (tracer, config) {
+    super(tracer, config)
+    this.addBind('apm:http2:server:response:emit', this.bindEmit)
+  }
+
   static get id () {
     return 'http2'
   }
 
-  addTraceSub (eventName, handler) {
-    this.addSub(`apm:${this.constructor.id}:server:${this.operation}:${eventName}`, handler)
+  static get prefix () {
+    return 'apm:http2:server:request'
   }
 
-  start ({ req, res }) {
-    const store = storage('legacy').getStore()
+  bindStart (ctx) {
+    const { req, res } = ctx
+
     const span = web.startSpan(
       this.tracer,
       {
@@ -26,13 +31,15 @@ class Http2ServerPlugin extends ServerPlugin {
       },
       req,
       res,
-      this.operationName()
+      this.operationName(),
+      ctx
     )
 
     span.setTag(COMPONENT, this.constructor.id)
     span._integrationName = this.constructor.id
 
-    this.enter(span, { ...store, req, res })
+    ctx.currentStore.req = req
+    ctx.currentStore.res = res
 
     const context = web.getContext(req)
 
@@ -40,14 +47,22 @@ class Http2ServerPlugin extends ServerPlugin {
       context.res.writeHead = web.wrapWriteHead(context)
       context.instrumented = true
     }
+
+    return ctx.currentStore
   }
 
-  finish ({ req }) {
+  bindEmit (ctx) {
+    if (ctx.eventName !== 'close') return ctx.currentStore
+
+    const { req } = ctx
+
     const context = web.getContext(req)
 
     if (!context || !context.res) return // Not created by a http.Server instance.
 
     web.finishAll(context)
+
+    return ctx.currentStore
   }
 
   error (error) {
