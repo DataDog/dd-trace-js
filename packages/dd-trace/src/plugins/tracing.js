@@ -102,7 +102,8 @@ class TracingPlugin extends Plugin {
     }
   }
 
-  startSpan (name, { childOf, kind, meta, metrics, service, resource, type } = {}, enterOrCtx = true) {
+  startSpan (name, options = {}, enterOrCtx = true) {
+    let { childOf, integrationName, kind, meta, metrics, service, resource, type } = options
     const store = storage('legacy').getStore()
     if (store && childOf === undefined) {
       childOf = store.span
@@ -119,7 +120,7 @@ class TracingPlugin extends Plugin {
         ...meta,
         ...metrics
       },
-      integrationName: this.component,
+      integrationName: integrationName || this.component,
       links: childOf?._links
     })
 
