@@ -245,9 +245,6 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('openai.request.prompt', 'Hello, OpenAI!')
               expect(traces[0][0].meta).to.have.property('openai.response.model')
               expect(traces[0][0].meta).to.have.property('openai.user.api_key', 'sk-...ESTS')
-              expect(traces[0][0].metrics).to.have.property('openai.request.max_tokens', 100)
-              expect(traces[0][0].metrics).to.have.property('openai.request.temperature', 0.5)
-              expect(traces[0][0].metrics).to.have.property('openai.request.n', 1)
             })
 
           const params = {
@@ -1263,9 +1260,6 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('openai.request.model', 'gpt-3.5-turbo')
               expect(traces[0][0].meta).to.have.property('openai.request.user', 'dd-trace-test')
               expect(traces[0][0].meta).to.have.property('openai.response.model')
-              expect(traces[0][0].metrics).to.have.property('openai.request.max_tokens', 100)
-              expect(traces[0][0].metrics).to.have.property('openai.request.n', 1)
-              expect(traces[0][0].metrics).to.have.property('openai.request.temperature', 0.5)
             })
 
           const params = {

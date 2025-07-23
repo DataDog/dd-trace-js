@@ -73,19 +73,8 @@ class OpenAiTracingPlugin extends TracingPlugin {
         // The openai.api_type (openai|azure) is present in Python but not in Node.js
         // Add support once https://github.com/openai/openai-node/issues/53 is closed
 
-        // Data that is common across many requests
-        'openai.request.best_of': payload.best_of,
-        'openai.request.echo': payload.echo,
-        'openai.request.logprobs': payload.logprobs,
-        'openai.request.max_tokens': payload.max_tokens,
+        // Non-param data that can continue to be added to all requests
         'openai.request.model': payload.model, // vague model
-        'openai.request.n': payload.n,
-        'openai.request.presence_penalty': payload.presence_penalty,
-        'openai.request.frequency_penalty': payload.frequency_penalty,
-        'openai.request.stop': payload.stop,
-        'openai.request.suffix': payload.suffix,
-        'openai.request.temperature': payload.temperature,
-        'openai.request.top_p': payload.top_p,
         'openai.request.user': payload.user,
         'openai.request.file_id': payload.file_id // deleteFile, retrieveFile, downloadFile
       }
@@ -136,6 +125,7 @@ class OpenAiTracingPlugin extends TracingPlugin {
       case 'createImage':
       case 'createImageEdit':
       case 'createImageVariation':
+        addCommonParameterTags(tags, payload)
         commonCreateImageRequestExtraction(tags, payload, openaiStore)
         break
 
@@ -150,6 +140,7 @@ class OpenAiTracingPlugin extends TracingPlugin {
 
       case 'createTranscription':
       case 'createTranslation':
+        addCommonParameterTags(tags, payload)
         commonCreateAudioRequestExtraction(tags, payload, openaiStore)
         break
 
@@ -165,6 +156,7 @@ class OpenAiTracingPlugin extends TracingPlugin {
         break
 
       case 'createEdit':
+        addCommonParameterTags(tags, payload)
         createEditRequestExtraction(tags, payload, openaiStore)
         break
     }
@@ -658,6 +650,22 @@ function commonCreateResponseExtraction (tags, body, openaiStore, methodName) {
   if (!body.choices) return
 
   openaiStore.choices = body.choices
+}
+
+function addCommonParameterTags (tags, payload) {
+  // Add common parameter tags that are shared across many OpenAI requests
+  // These should NOT be added to chats, completions, or embeddings
+  tags['openai.request.best_of'] = payload.best_of
+  tags['openai.request.echo'] = payload.echo
+  tags['openai.request.logprobs'] = payload.logprobs
+  tags['openai.request.max_tokens'] = payload.max_tokens
+  tags['openai.request.n'] = payload.n
+  tags['openai.request.presence_penalty'] = payload.presence_penalty
+  tags['openai.request.frequency_penalty'] = payload.frequency_penalty
+  tags['openai.request.stop'] = payload.stop
+  tags['openai.request.suffix'] = payload.suffix
+  tags['openai.request.temperature'] = payload.temperature
+  tags['openai.request.top_p'] = payload.top_p
 }
 
 function truncateApiKey (apiKey) {
