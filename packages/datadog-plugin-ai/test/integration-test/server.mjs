@@ -3,7 +3,7 @@ import { createOpenAI } from '@ai-sdk/openai'
 import assert from 'node:assert'
 
 const openai = createOpenAI({
-  baseURL: 'http://127.0.0.1:10126/vcr/openai',
+  baseURL: 'http://127.0.0.1:9126/vcr/openai',
   apiKey: '<not-a-real-key>'
 })
 
