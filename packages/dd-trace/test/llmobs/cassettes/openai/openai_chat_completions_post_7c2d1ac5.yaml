@@ -1,0 +1,107 @@
+interactions:
+- request:
+    body: '{"model":"gpt-3.5-turbo","temperature":0,"messages":[{"role":"user","content":"Invent
+      a character for a video game"}],"tool_choice":{"type":"function","function":{"name":"json"}},"tools":[{"type":"function","function":{"name":"json","description":"Respond
+      with a JSON object.","parameters":{"type":"object","properties":{"name":{"type":"string"},"age":{"type":"number"},"height":{"type":"string"}},"required":["name","age","height"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}}]}'
+    headers:
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept
+      : - '*/*'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Encoding
+      : - gzip, deflate
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Language
+      : - '*'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Connection
+      : - keep-alive
+      Content-Length:
+      - '518'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - User-Agent
+      : - node
+      ? !!python/object/apply:multidict._multidict.istr
+      - sec-fetch-mode
+      : - cors
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: "{\n  \"id\": \"chatcmpl-BwXpEPCzipv2l6oPu5mkEUyRPBoop\",\n  \"object\":
+        \"chat.completion\",\n  \"created\": 1753292748,\n  \"model\": \"gpt-3.5-turbo-0125\",\n
+        \ \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\":
+        \"assistant\",\n        \"content\": null,\n        \"tool_calls\": [\n          {\n
+        \           \"id\": \"call_o59nXbOtMaHSGAxSYkKvd6Yz\",\n            \"type\":
+        \"function\",\n            \"function\": {\n              \"name\": \"json\",\n
+        \             \"arguments\": \"{\\\"name\\\":\\\"Aria\\\",\\\"age\\\":25,\\\"height\\\":\\\"5'7\\\\\\\"\\\"}\"\n
+        \           }\n          }\n        ],\n        \"refusal\": null,\n        \"annotations\":
+        []\n      },\n      \"logprobs\": null,\n      \"finish_reason\": \"stop\"\n
+        \   }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 67,\n    \"completion_tokens\":
+        17,\n    \"total_tokens\": 84,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\":
+        0,\n      \"audio_tokens\": 0\n    },\n    \"completion_tokens_details\":
+        {\n      \"reasoning_tokens\": 0,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\":
+        0,\n      \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\":
+        \"default\",\n  \"system_fingerprint\": null\n}\n"
+    headers:
+      CF-RAY:
+      - 963cfe5f4d5ec8b9-EWR
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Wed, 23 Jul 2025 17:45:49 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=sh5C16RtI1iswI28E.ZT7ol5byjPQbm0Lp41t79Kq6I-1753292749-1.0.1.1-RcLrxouYyHbB2LMCg0ojEwDXoRUjre_wJqRjRt09g.VGMh6NrXLyHApHymcRts03BlPrRzu.qkwRf0FqToOOHNPHJQLWj5eFeMiYNESqrDY;
+        path=/; expires=Wed, 23-Jul-25 18:15:49 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=W5MAvDjaiKCobrZvq9nq2YkWOErP3ilPRdY2WTDY3ho-1753292749122-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - datadog-staging
+      openai-processing-ms:
+      - '372'
+      openai-project:
+      - proj_gt6TQZPRbZfoY2J9AQlEJMpd
+      openai-version:
+      - '2020-10-01'
+      x-envoy-upstream-service-time:
+      - '375'
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '50000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '49999989'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - af88f78f-5676-4ec4-b5b0-7afa83d02190
+    status:
+      code: 200
+      message: OK
+version: 1
