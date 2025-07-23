@@ -36,7 +36,7 @@ describe('Plugin', () => {
 
       const OpenAI = require('../../../versions/@ai-sdk/openai').get()
       openai = OpenAI.createOpenAI({
-        baseURL: 'http://127.0.0.1:10126/vcr/openai',
+        baseURL: 'http://127.0.0.1:9126/vcr/openai',
         compatibility: 'strict'
       })
 
