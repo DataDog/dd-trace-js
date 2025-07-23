@@ -7,23 +7,12 @@ const { storage } = require('../../datadog-core')
 const services = require('./services')
 const Sampler = require('../../dd-trace/src/sampler')
 const { MEASURED } = require('../../../ext/tags')
-const { estimateTokens } = require('./token-estimator')
 
 const makeUtilities = require('../../dd-trace/src/plugins/util/llm')
 
 let normalize
 
 const { DD_MAJOR } = require('../../../version')
-
-function safeRequire (path) {
-  try {
-    return require(path)
-  } catch {
-    return null
-  }
-}
-
-const encodingForModel = safeRequire('tiktoken')?.encoding_for_model
 
 class OpenAiTracingPlugin extends TracingPlugin {
   static get id () { return 'openai' }
@@ -418,83 +407,6 @@ function normalizeMethodName (methodName) {
   }
 }
 
-function countPromptTokens (methodName, payload, model) {
-  let promptTokens = 0
-  let promptEstimated = false
-  if (methodName === 'createChatCompletion') {
-    const messages = payload.messages
-    for (const message of messages) {
-      const content = message.content
-      if (typeof content === 'string') {
-        const { tokens, estimated } = countTokens(content, model)
-        promptTokens += tokens
-        promptEstimated = estimated
-      } else if (Array.isArray(content)) {
-        for (const c of content) {
-          if (c.type === 'text') {
-            const { tokens, estimated } = countTokens(c.text, model)
-            promptTokens += tokens
-            promptEstimated = estimated
-          }
-          // unsupported token computation for image_url
-          // as even though URL is a string, its true token count
-          // is based on the image itself, something onerous to do client-side
-        }
-      }
-    }
-  } else if (methodName === 'createCompletion') {
-    let prompt = payload.prompt
-    if (!Array.isArray(prompt)) prompt = [prompt]
-
-    for (const p of prompt) {
-      const { tokens, estimated } = countTokens(p, model)
-      promptTokens += tokens
-      promptEstimated = estimated
-    }
-  }
-
-  return { promptTokens, promptEstimated }
-}
-
-function countCompletionTokens (body, model) {
-  let completionTokens = 0
-  let completionEstimated = false
-  if (body?.choices) {
-    for (const choice of body.choices) {
-      const message = choice.message || choice.delta // delta for streamed responses
-      const text = choice.text
-      const content = text || message?.content
-
-      const { tokens, estimated } = countTokens(content, model)
-      completionTokens += tokens
-      completionEstimated = estimated
-    }
-  }
-
-  return { completionTokens, completionEstimated }
-}
-
-function countTokens (content, model) {
-  if (encodingForModel) {
-    try {
-      // try using tiktoken if it was available
-      const encoder = encodingForModel(model)
-      const tokens = encoder.encode(content).length
-      encoder.free()
-      return { tokens, estimated: false }
-    } catch {
-      // possible errors from tiktoken:
-      // * model not available for token counts
-      // * issue encoding content
-    }
-  }
-
-  return {
-    tokens: estimateTokens(content),
-    estimated: true
-  }
-}
-
 function createEditRequestExtraction (tags, payload, openaiStore) {
   const instruction = payload.instruction
   tags['openai.request.instruction'] = instruction
@@ -510,13 +422,6 @@ function createChatCompletionRequestExtraction (tags, payload, openaiStore) {
   if (!defensiveArrayLength(messages)) return
 
   openaiStore.messages = payload.messages
-  for (let i = 0; i < payload.messages.length; i++) {
-    const message = payload.messages[i]
-    tagChatCompletionRequestContent(message.content, i, tags)
-    tags[`openai.request.messages.${i}.role`] = message.role
-    tags[`openai.request.messages.${i}.name`] = message.name
-    tags[`openai.request.messages.${i}.finish_reason`] = message.finish_reason
-  }
 }
 
 function commonCreateImageRequestExtraction (tags, payload, openaiStore) {
@@ -559,7 +464,6 @@ function responseDataExtractionByMethod (methodName, tags, body, openaiStore) {
       break
 
     case 'createEmbedding':
-      createEmbeddingResponseExtraction(tags, body, openaiStore)
       break
 
     case 'createFile':
@@ -726,17 +630,6 @@ function createRetrieveFileResponseExtraction (tags, body) {
   tags['openai.response.status_details'] = body.status_details
 }
 
-function createEmbeddingResponseExtraction (tags, body, openaiStore) {
-  usageExtraction(tags, body, openaiStore)
-
-  if (!body.data) return
-
-  tags['openai.response.embeddings_count'] = body.data.length
-  for (let i = 0; i < body.data.length; i++) {
-    tags[`openai.response.embedding.${i}.embedding_length`] = body.data[i].embedding.length
-  }
-}
-
 function commonListCountResponseExtraction (tags, body) {
   if (!body.data) return
   tags['openai.response.count'] = body.data.length
@@ -762,104 +655,13 @@ function createModerationResponseExtraction (tags, body) {
 
 // createCompletion, createChatCompletion, createEdit
 function commonCreateResponseExtraction (tags, body, openaiStore, methodName) {
-  usageExtraction(tags, body, methodName, openaiStore)
-
   if (!body.choices) return
 
-  tags['openai.response.choices_count'] = body.choices.length
-
   openaiStore.choices = body.choices
-
-  for (let choiceIdx = 0; choiceIdx < body.choices.length; choiceIdx++) {
-    const choice = body.choices[choiceIdx]
-
-    // logprobs can be null and we still want to tag it as 'returned' even when set to 'null'
-    const specifiesLogProb = Object.keys(choice).includes('logprobs')
-
-    tags[`openai.response.choices.${choiceIdx}.finish_reason`] = choice.finish_reason
-    tags[`openai.response.choices.${choiceIdx}.logprobs`] = specifiesLogProb ? 'returned' : undefined
-    tags[`openai.response.choices.${choiceIdx}.text`] = normalize(choice.text)
-
-    // createChatCompletion only
-    const message = choice.message || choice.delta // delta for streamed responses
-    if (message) {
-      tags[`openai.response.choices.${choiceIdx}.message.role`] = message.role
-      tags[`openai.response.choices.${choiceIdx}.message.content`] = normalize(message.content)
-      tags[`openai.response.choices.${choiceIdx}.message.name`] = normalize(message.name)
-      if (message.tool_calls) {
-        const toolCalls = message.tool_calls
-        for (let toolIdx = 0; toolIdx < toolCalls.length; toolIdx++) {
-          tags[`openai.response.choices.${choiceIdx}.message.tool_calls.${toolIdx}.function.name`] =
-            toolCalls[toolIdx].function.name
-          tags[`openai.response.choices.${choiceIdx}.message.tool_calls.${toolIdx}.function.arguments`] =
-            toolCalls[toolIdx].function.arguments
-          tags[`openai.response.choices.${choiceIdx}.message.tool_calls.${toolIdx}.id`] =
-            toolCalls[toolIdx].id
-        }
-      }
-    }
-  }
-}
-
-// createCompletion, createChatCompletion, createEdit, createEmbedding
-function usageExtraction (tags, body, methodName, openaiStore) {
-  let promptTokens = 0
-  let completionTokens = 0
-  let totalTokens = 0
-  if (body && body.usage) {
-    promptTokens = body.usage.prompt_tokens
-    completionTokens = body.usage.completion_tokens
-    totalTokens = body.usage.total_tokens
-  } else if (body.model && ['createChatCompletion', 'createCompletion'].includes(methodName)) {
-    // estimate tokens based on method name for completions and chat completions
-    const { model } = body
-
-    // prompt tokens
-    const payload = openaiStore
-    const promptTokensCount = countPromptTokens(methodName, payload, model)
-    promptTokens = promptTokensCount.promptTokens
-    const promptEstimated = promptTokensCount.promptEstimated
-
-    // completion tokens
-    const completionTokensCount = countCompletionTokens(body, model)
-    completionTokens = completionTokensCount.completionTokens
-    const completionEstimated = completionTokensCount.completionEstimated
-
-    // total tokens
-    totalTokens = promptTokens + completionTokens
-    if (promptEstimated) tags['openai.response.usage.prompt_tokens_estimated'] = true
-    if (completionEstimated) tags['openai.response.usage.completion_tokens_estimated'] = true
-  }
-
-  if (promptTokens != null) tags['openai.response.usage.prompt_tokens'] = promptTokens
-  if (completionTokens != null) tags['openai.response.usage.completion_tokens'] = completionTokens
-  if (totalTokens != null) tags['openai.response.usage.total_tokens'] = totalTokens
 }
 
 function truncateApiKey (apiKey) {
   return apiKey && `sk-...${apiKey.slice(-4)}`
-}
-
-function tagChatCompletionRequestContent (contents, messageIdx, tags) {
-  if (typeof contents === 'string') {
-    tags[`openai.request.messages.${messageIdx}.content`] = normalize(contents)
-  } else if (Array.isArray(contents)) {
-    // content can also be an array of objects
-    // which represent text input or image url
-    for (const contentIdx in contents) {
-      const content = contents[contentIdx]
-      const type = content.type
-      tags[`openai.request.messages.${messageIdx}.content.${contentIdx}.type`] = content.type
-      if (type === 'text') {
-        tags[`openai.request.messages.${messageIdx}.content.${contentIdx}.text`] = normalize(content.text)
-      } else if (type === 'image_url') {
-        tags[`openai.request.messages.${messageIdx}.content.${contentIdx}.image_url.url`] =
-          normalize(content.image_url.url)
-      }
-      // unsupported type otherwise, won't be tagged
-    }
-  }
-  // unsupported type otherwise, won't be tagged
 }
 
 // The server almost always responds with JSON

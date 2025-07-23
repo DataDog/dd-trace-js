@@ -243,17 +243,11 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('openai.organization.name', 'datadog-staging')
               expect(traces[0][0].meta).to.have.property('openai.request.model', 'gpt-3.5-turbo-instruct')
               expect(traces[0][0].meta).to.have.property('openai.request.prompt', 'Hello, OpenAI!')
-              expect(traces[0][0].meta).to.have.property('openai.response.choices.0.finish_reason')
-              expect(traces[0][0].meta).to.have.property('openai.response.choices.0.logprobs')
-              expect(traces[0][0].meta).to.have.property('openai.response.choices.0.text')
               expect(traces[0][0].meta).to.have.property('openai.response.model')
               expect(traces[0][0].meta).to.have.property('openai.user.api_key', 'sk-...ESTS')
               expect(traces[0][0].metrics).to.have.property('openai.request.max_tokens', 100)
               expect(traces[0][0].metrics).to.have.property('openai.request.temperature', 0.5)
               expect(traces[0][0].metrics).to.have.property('openai.request.n', 1)
-              expect(traces[0][0].metrics).to.have.property('openai.response.usage.completion_tokens')
-              expect(traces[0][0].metrics).to.have.property('openai.response.usage.prompt_tokens')
-              expect(traces[0][0].metrics).to.have.property('openai.response.usage.total_tokens')
             })
 
           const params = {
@@ -284,11 +278,8 @@ describe('Plugin', () => {
         it('tags multiple responses', async () => {
           const checkTraces = agent
             .assertSomeTraces(traces => {
-              for (const choiceIdx of [0, 1, 2]) {
-                expect(traces[0][0].meta).to.have.property(`openai.response.choices.${choiceIdx}.finish_reason`)
-                expect(traces[0][0].meta).to.have.property(`openai.response.choices.${choiceIdx}.logprobs`)
-                expect(traces[0][0].meta).to.have.property(`openai.response.choices.${choiceIdx}.text`)
-              }
+              // Multiple response choice tags removed - basic span validation
+              expect(traces[0][0]).to.have.property('name', 'openai.request')
             })
 
           const params = {
@@ -321,16 +312,7 @@ describe('Plugin', () => {
           it('makes a successful call', async () => {
             const checkTraces = agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0].meta).to.have.property(
-                  'openai.response.choices.0.text', '\\n\\nHello! How can I assist you?'
-                )
-                expect(traces[0][0].meta).to.have.property('openai.response.choices.0.finish_reason', 'stop')
-                expect(traces[0][0].meta).to.have.property('openai.response.choices.0.logprobs')
                 expect(traces[0][0].meta).to.have.property('openai.response.model')
-
-                expect(traces[0][0].metrics).to.have.property('openai.response.usage.completion_tokens')
-                expect(traces[0][0].metrics).to.have.property('openai.response.usage.prompt_tokens')
-                expect(traces[0][0].metrics).to.have.property('openai.response.usage.total_tokens')
               })
 
             const params = {
@@ -350,25 +332,12 @@ describe('Plugin', () => {
             }
 
             await checkTraces
-
-            expect(metricStub).to.have.been.calledWith('openai.tokens.prompt')
-            expect(metricStub).to.have.been.calledWith('openai.tokens.completion')
-            expect(metricStub).to.have.been.calledWith('openai.tokens.total')
           })
 
           it('makes a successful call with usage included', async () => {
             const checkTraces = agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0].meta).to.have.property(
-                  'openai.response.choices.0.text', '\\n\\nHello! How can I assist you?'
-                )
-                expect(traces[0][0].meta).to.have.property('openai.response.choices.0.finish_reason', 'stop')
-                expect(traces[0][0].meta).to.have.property('openai.response.choices.0.logprobs')
                 expect(traces[0][0].meta).to.have.property('openai.response.model')
-
-                expect(traces[0][0].metrics).to.have.property('openai.response.usage.completion_tokens')
-                expect(traces[0][0].metrics).to.have.property('openai.response.usage.prompt_tokens')
-                expect(traces[0][0].metrics).to.have.property('openai.response.usage.total_tokens')
               })
 
             const params = {
@@ -393,24 +362,13 @@ describe('Plugin', () => {
             }
 
             await checkTraces
-
-            expect(metricStub).to.have.been.calledWith('openai.tokens.prompt')
-            expect(metricStub).to.have.been.calledWith('openai.tokens.completion')
-            expect(metricStub).to.have.been.calledWith('openai.tokens.total')
           })
 
           it('tags multiple responses', async () => {
             const checkTraces = agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0].meta).to.have.property(
-                  'openai.response.choices.0.text', '\\n\\nHello! How can I assist you?'
-                )
-                expect(traces[0][0].meta).to.have.property(
-                  'openai.response.choices.1.text', '\\n\\nHello! How can I assist you?'
-                )
-                expect(traces[0][0].meta).to.have.property(
-                  'openai.response.choices.2.text', '\\n\\nHello there! How can I assist you?'
-                )
+                // Multiple response choice tags removed - basic span validation
+                expect(traces[0][0]).to.have.property('name', 'openai.request')
               })
 
             const params = {
@@ -430,10 +388,6 @@ describe('Plugin', () => {
             }
 
             await checkTraces
-
-            expect(metricStub).to.have.been.calledWith('openai.tokens.prompt')
-            expect(metricStub).to.have.been.calledWith('openai.tokens.completion')
-            expect(metricStub).to.have.been.calledWith('openai.tokens.total')
           })
         })
       })
@@ -456,8 +410,6 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.have.property('openai.request.input', 'hello world')
             expect(traces[0][0].meta).to.have.property('openai.request.model', 'text-embedding-ada-002')
             expect(traces[0][0].meta).to.have.property('openai.response.model')
-            expect(traces[0][0].metrics).to.have.property('openai.response.embeddings_count', 1)
-            expect(traces[0][0].metrics).to.have.property('openai.response.embedding.0.embedding_length')
           })
 
         const params = {
@@ -479,9 +431,6 @@ describe('Plugin', () => {
         expect(externalLoggerStub).to.have.been.called
 
         expect(metricStub).to.have.been.calledWith('openai.request.duration') // timing value not guaranteed
-        expect(metricStub).to.have.been.calledWith('openai.tokens.prompt')
-        expect(metricStub).to.not.have.been.calledWith('openai.tokens.completion')
-        expect(metricStub).to.have.been.calledWith('openai.tokens.total')
       })
 
       it('list models', async () => {
@@ -1311,23 +1260,12 @@ describe('Plugin', () => {
                 'openai.request.endpoint', '/vcr/openai/chat/completions'
               )
 
-              expect(traces[0][0].meta).to.have.property('openai.request.messages.0.content',
-                'You are a helpful assistant.')
-              expect(traces[0][0].meta).to.have.property('openai.request.messages.0.role', 'system')
-              expect(traces[0][0].meta).to.have.property('openai.request.messages.1.content', 'Hello, OpenAI!')
-              expect(traces[0][0].meta).to.have.property('openai.request.messages.1.role', 'user')
               expect(traces[0][0].meta).to.have.property('openai.request.model', 'gpt-3.5-turbo')
               expect(traces[0][0].meta).to.have.property('openai.request.user', 'dd-trace-test')
-              expect(traces[0][0].meta).to.have.property('openai.response.choices.0.finish_reason')
-              expect(traces[0][0].meta).to.have.property('openai.response.choices.0.message.content')
-              expect(traces[0][0].meta).to.have.property('openai.response.choices.0.message.role', 'assistant')
               expect(traces[0][0].meta).to.have.property('openai.response.model')
               expect(traces[0][0].metrics).to.have.property('openai.request.max_tokens', 100)
               expect(traces[0][0].metrics).to.have.property('openai.request.n', 1)
               expect(traces[0][0].metrics).to.have.property('openai.request.temperature', 0.5)
-              expect(traces[0][0].metrics).to.have.property('openai.response.usage.completion_tokens')
-              expect(traces[0][0].metrics).to.have.property('openai.response.usage.prompt_tokens')
-              expect(traces[0][0].metrics).to.have.property('openai.response.usage.total_tokens')
             })
 
           const params = {
@@ -1378,13 +1316,8 @@ describe('Plugin', () => {
         it('tags multiple responses', async () => {
           const checkTraces = agent
             .assertSomeTraces(traces => {
-              for (const choiceIdx of [0, 1, 2]) {
-                expect(traces[0][0].meta).to.have.property(`openai.response.choices.${choiceIdx}.finish_reason`)
-                expect(traces[0][0].meta).to.have.property(`openai.response.choices.${choiceIdx}.message.content`)
-                expect(traces[0][0].meta).to.have.property(
-                  `openai.response.choices.${choiceIdx}.message.role`, 'assistant'
-                )
-              }
+              // Multiple response choice tags removed - basic span validation
+              expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0].meta).to.have.property('openai.response.model')
             })
 
@@ -1425,15 +1358,8 @@ describe('Plugin', () => {
           const checkTraces = agent
             .assertSomeTraces(traces => {
               const span = traces[0][0]
-              // image_url is only relevant on request/input, output has the same shape as a normal chat completion
-              expect(span.meta).to.have.property('openai.request.messages.0.content.0.type', 'text')
-              expect(span.meta).to.have.property(
-                'openai.request.messages.0.content.0.text', 'What is in this image?'
-              )
-              expect(span.meta).to.have.property('openai.request.messages.0.content.1.type', 'image_url')
-              expect(span.meta).to.have.property(
-                'openai.request.messages.0.content.1.image_url.url', 'https://tinyurl.com/4mfz54bx'
-              )
+              // Message content tags removed - basic span validation
+              expect(span).to.have.property('name', 'openai.request')
             })
 
           const params = {
@@ -1475,13 +1401,8 @@ describe('Plugin', () => {
 
           const checkTraces = agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0].meta)
-                .to.have.property('openai.response.choices.0.message.tool_calls.0.function.name',
-                  'get_weather')
-              expect(traces[0][0].meta)
-                .to.have.property('openai.response.choices.0.message.tool_calls.0.function.arguments',
-                  '{"city":"New York City"}')
-              expect(traces[0][0].meta).to.have.property('openai.response.choices.0.finish_reason', 'tool_calls')
+              // Tool call response tags removed - basic span validation
+              expect(traces[0][0]).to.have.property('name', 'openai.request')
             })
 
           const params = {
@@ -1527,15 +1448,8 @@ describe('Plugin', () => {
           it('makes a successful call', async () => {
             const checkTraces = agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0].meta).to.have.property(
-                  'openai.response.choices.0.message.content', 'Hello! How can I assist you today?'
-                )
-                expect(traces[0][0].meta).to.have.property('openai.response.choices.0.finish_reason', 'stop')
-                expect(traces[0][0].meta).to.have.property('openai.response.choices.0.logprobs', 'returned')
-                expect(traces[0][0].meta).to.have.property('openai.response.choices.0.message.role', 'assistant')
-                expect(traces[0][0].metrics).to.have.property('openai.response.usage.prompt_tokens')
-                expect(traces[0][0].metrics).to.have.property('openai.response.usage.completion_tokens')
-                expect(traces[0][0].metrics).to.have.property('openai.response.usage.total_tokens')
+                // Streamed response choice tags removed - basic span validation
+                expect(traces[0][0]).to.have.property('name', 'openai.request')
               })
 
             const params = {
@@ -1567,29 +1481,13 @@ describe('Plugin', () => {
             }
 
             await checkTraces
-
-            expect(metricStub).to.have.been.calledWith('openai.tokens.prompt')
-            expect(metricStub).to.have.been.calledWith('openai.tokens.completion')
-            expect(metricStub).to.have.been.calledWith('openai.tokens.total')
           })
 
           it('tags multiple responses', async () => {
             const checkTraces = agent
               .assertSomeTraces(traces => {
-                for (const choiceIdx of [0, 1, 2]) {
-                  expect(traces[0][0].meta).to.have.property(
-                    `openai.response.choices.${choiceIdx}.message.content`, 'Hello! How can I assist you today?'
-                  )
-                  expect(traces[0][0].meta).to.have.property(
-                    `openai.response.choices.${choiceIdx}.finish_reason`, 'stop'
-                  )
-                  expect(traces[0][0].meta).to.have.property(
-                    `openai.response.choices.${choiceIdx}.logprobs`, 'returned'
-                  )
-                  expect(traces[0][0].meta).to.have.property(
-                    `openai.response.choices.${choiceIdx}.message.role`, 'assistant'
-                  )
-                }
+                // Multiple response choice tags removed - basic span validation
+                expect(traces[0][0]).to.have.property('name', 'openai.request')
               })
 
             const params = {
@@ -1626,9 +1524,8 @@ describe('Plugin', () => {
           it('makes a successful call with usage included', async () => {
             const checkTraces = agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0].metrics).to.have.property('openai.response.usage.prompt_tokens', 22)
-                expect(traces[0][0].metrics).to.have.property('openai.response.usage.completion_tokens', 9)
-                expect(traces[0][0].metrics).to.have.property('openai.response.usage.total_tokens', 31)
+                // Usage token tags removed - basic span validation
+                expect(traces[0][0]).to.have.property('name', 'openai.request')
               })
 
             const params = {
@@ -1665,32 +1562,13 @@ describe('Plugin', () => {
             }
 
             await checkTraces
-
-            expect(metricStub).to.have.been.calledWith('openai.tokens.prompt')
-            expect(metricStub).to.have.been.calledWith('openai.tokens.completion')
-            expect(metricStub).to.have.been.calledWith('openai.tokens.total')
           })
 
           it('tags multiple responses', async () => {
             const checkTraces = agent
               .assertSomeTraces(traces => {
-                for (const choiceIdx of [0, 1, 2]) {
-                  expect(traces[0][0].meta).to.have.property(
-                    `openai.response.choices.${choiceIdx}.message.content`, 'Hello! How can I assist you today?'
-                  )
-                  expect(traces[0][0].meta).to.have.property(
-                    `openai.response.choices.${choiceIdx}.finish_reason`, 'stop'
-                  )
-                  expect(traces[0][0].meta).to.have.property(
-                    `openai.response.choices.${choiceIdx}.logprobs`, 'returned'
-                  )
-                  expect(traces[0][0].meta).to.have.property(
-                    `openai.response.choices.${choiceIdx}.message.role`, 'assistant'
-                  )
-                }
-                expect(traces[0][0].metrics).to.have.property('openai.response.usage.prompt_tokens')
-                expect(traces[0][0].metrics).to.have.property('openai.response.usage.completion_tokens')
-                expect(traces[0][0].metrics).to.have.property('openai.response.usage.total_tokens')
+                // Multiple response choice tags removed - basic span validation
+                expect(traces[0][0]).to.have.property('name', 'openai.request')
               })
 
             const params = {
@@ -1727,8 +1605,8 @@ describe('Plugin', () => {
           it('excludes image_url from usage', async () => {
             const checkTraces = agent
               .assertSomeTraces(traces => {
-                // we should only estimate the text input tokens
-                expect(traces[0][0].metrics).to.have.property('openai.response.usage.prompt_tokens', 6)
+                // Usage token tags removed - basic span validation
+                expect(traces[0][0]).to.have.property('name', 'openai.request')
               })
 
             const params = {
@@ -1769,13 +1647,8 @@ describe('Plugin', () => {
 
             const checkTraces = agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0].meta)
-                  .to.have.property('openai.response.choices.0.message.tool_calls.0.function.name',
-                    'get_weather')
-                expect(traces[0][0].meta)
-                  .to.have.property('openai.response.choices.0.message.tool_calls.0.function.arguments',
-                    '{"city":"New York City"}')
-                expect(traces[0][0].meta).to.have.property('openai.response.choices.0.finish_reason', 'tool_calls')
+                // Tool call response tags removed - basic span validation
+                expect(traces[0][0]).to.have.property('name', 'openai.request')
               })
 
             const params = {
