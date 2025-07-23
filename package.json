@@ -114,7 +114,7 @@
   ],
   "dependencies": {
     "@datadog/libdatadog": "0.7.0",
-    "@datadog/native-appsec": "10.0.0",
+    "@datadog/native-appsec": "10.0.1",
     "@datadog/native-iast-taint-tracking": "4.0.0",
     "@datadog/native-metrics": "3.1.1",
     "@datadog/pprof": "5.9.0",
@@ -124,7 +124,7 @@
     "@opentelemetry/api": "1.8.0",
     "@opentelemetry/core": "^1.14.0",
     "crypto-randomuuid": "^1.0.0",
-    "dc-polyfill": "^0.1.9",
+    "dc-polyfill": "^0.1.10",
     "ignore": "^7.0.5",
     "import-in-the-middle": "^1.14.2",
     "istanbul-lib-coverage": "^3.2.2",
@@ -173,7 +173,7 @@
     "graphql": "*",
     "jszip": "^3.10.1",
     "mocha": "^11.6.0",
-    "multer": "^2.0.1",
+    "multer": "^2.0.2",
     "nock": "^11.9.1",
     "nyc": "^15.1.0",
     "octokit": "^5.0.3",
@@ -187,5 +187,8 @@
     "workerpool": "^9.2.0",
     "yaml": "^2.8.0",
     "yarn-deduplicate": "^6.0.2"
+  },
+  "resolutions": {
+    "eslint-plugin-unicorn/@eslint/plugin-kit": "0.3.3"
   }
 }
