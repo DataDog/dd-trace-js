@@ -412,20 +412,14 @@ function commonCreateImageRequestExtraction (tags, payload, openaiStore) {
   const img = payload.file || payload.image
   if (img !== null && typeof img === 'object' && img.path) {
     const file = path.basename(img.path)
-    tags['openai.request.image'] = file
     openaiStore.file = file
   }
 
   // createImageEdit
   if (payload.mask !== null && typeof payload.mask === 'object' && payload.mask.path) {
     const mask = path.basename(payload.mask.path)
-    tags['openai.request.mask'] = mask
     openaiStore.mask = mask
   }
-
-  tags['openai.request.size'] = payload.size
-  tags['openai.request.response_format'] = payload.response_format
-  tags['openai.request.language'] = payload.language
 }
 
 function responseDataExtractionByMethod (methodName, tags, body, openaiStore) {
@@ -459,11 +453,6 @@ function responseDataExtractionByMethod (methodName, tags, body, openaiStore) {
     case 'retrieveFineTune':
     case 'cancelFineTune':
       commonFineTuneResponseExtraction(tags, body)
-      break
-
-    case 'createTranscription':
-    case 'createTranslation':
-      createAudioResponseExtraction(tags, body)
       break
 
     case 'listModels':
@@ -505,13 +494,6 @@ function listModelsResponseExtraction (tags, body) {
   if (!body.data) return
 
   tags['openai.response.count'] = body.data.length
-}
-
-function createAudioResponseExtraction (tags, body) {
-  tags['openai.response.text'] = body.text
-  tags['openai.response.language'] = body.language
-  tags['openai.response.duration'] = body.duration
-  tags['openai.response.segments_count'] = defensiveArrayLength(body.segments)
 }
 
 function createFineTuneRequestExtraction (tags, body) {
@@ -558,12 +540,8 @@ function deleteFileResponseExtraction (tags, body) {
 }
 
 function commonCreateAudioRequestExtraction (tags, body, openaiStore) {
-  tags['openai.request.response_format'] = body.response_format
-  tags['openai.request.language'] = body.language
-
   if (body.file !== null && typeof body.file === 'object' && body.file.path) {
     const filename = path.basename(body.file.path)
-    tags['openai.request.filename'] = filename
     openaiStore.file = filename
   }
 }
