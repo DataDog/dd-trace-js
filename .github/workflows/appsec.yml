@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  MOCHA_OPTIONS: ${{ github.ref == 'refs/head/master' && '--retries 1' }}
+  MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
 
 jobs:
   macos:
@@ -219,7 +219,7 @@ jobs:
         version:
           - oldest
           - latest
-        range: ['>=10.2.0 <11', '>=11.0.0 <13', '11.1.4', '>=13.0.0 <14', '13.2.0', '>=14.0.0 <=14.2.6', '>=14.2.7 <15', '>=15.0.0 <15.4.1']
+        range: ['>=10.2.0 <11', '>=11.0.0 <13', '11.1.4', '>=13.0.0 <14', '13.2.0', '>=14.0.0 <=14.2.6', '>=14.2.7 <15', '>=15.0.0']
         include:
           - range: '>=10.2.0 <11'
             range_clean: gte.10.2.0.and.lt.11
@@ -235,7 +235,7 @@ jobs:
             range_clean: gte.14.0.0.and.lte.14.2.6
           - range: '>=14.2.7 <15'
             range_clean: gte.14.2.7.and.lt.15
-          - range: '>=15.0.0 <15.4.1'
+          - range: '>=15.0.0'
             range_clean: gte.15.0.0
     runs-on: ubuntu-latest
     env:
