@@ -375,7 +375,6 @@ function normalizeMethodName (methodName) {
 
 function createEditRequestExtraction (tags, payload, openaiStore) {
   const instruction = payload.instruction
-  tags['openai.request.instruction'] = instruction
   openaiStore.instruction = instruction
 }
 
