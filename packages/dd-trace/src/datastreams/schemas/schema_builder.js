@@ -66,17 +66,13 @@ class SchemaBuilder {
 }
 
 class OpenApiSchema {
-  constructor () {
-    this.openapi = '3.0.0'
-    this.components = new OpenApiComponents()
-  }
+  openapi = '3.0.0'
+  components = new OpenApiComponents()
 }
 
 OpenApiSchema.SCHEMA = class {
-  constructor () {
-    this.type = 'object'
-    this.properties = {}
-  }
+  type = 'object'
+  properties = {}
 }
 
 OpenApiSchema.PROPERTY = class {
