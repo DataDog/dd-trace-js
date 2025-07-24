@@ -188,9 +188,6 @@ class OpenAiTracingPlugin extends TracingPlugin {
           'openai.request.endpoint': endpoint,
           'openai.request.method': method.toUpperCase(),
 
-          'openai.organization.id': body.organization_id, // only available in fine-tunes endpoints
-          'openai.organization.name': headers['openai-organization'],
-
           'openai.response.model': headers['openai-model'] || body.model, // specific model, often undefined
           'openai.response.id': body.id, // common creation value, numeric epoch
           'openai.response.deleted': body.deleted, // common boolean field in delete responses

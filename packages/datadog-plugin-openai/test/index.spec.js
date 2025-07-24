@@ -788,6 +788,7 @@ describe('Plugin', () => {
             }
 
             expect(traces[0][0]).to.have.property('error', 0)
+            expect(traces[0][0].meta).to.have.property('openai.organization.name', 'datadog-staging')
             expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
             expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/fine_tuning/jobs/*/cancel')
             expect(traces[0][0].meta).to.have.property('openai.response.id', 'ftjob-q9CUUUsHJemGUVQ1Ecc01zcf')
