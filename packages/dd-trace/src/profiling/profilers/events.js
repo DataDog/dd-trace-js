@@ -6,6 +6,8 @@ const { Function, Label, Line, Location, Profile, Sample, StringTable, ValueType
 
 // perf_hooks uses millis, with fractional part representing nanos. We emit nanos into the pprof file.
 const MS_TO_NS = 1_000_000
+// The number of sampling intervals that need to pass before we reset the Poisson process sampling instant.
+const POISSON_RESET_FACTOR = 2
 
 // While this is an "events profiler", meaning it emits a pprof file based on events observed as
 // perf_hooks events, the emitted pprof file uses the type "timeline".
@@ -345,8 +347,30 @@ function createPossionProcessSamplingFilter (samplingIntervalMillis) {
 
   return event => {
     const endTime = event.startTime + event.duration
-    while (endTime >= nextSamplingInstant) {
-      setNextSamplingInstant()
+    // We're using the end times of events as an approximation of current time as events are
+    // expected to be reported close to where they ended. If the end time (and thus, presumably, the
+    // current time) is past the next sampling instant, we make it the current sampling instant and
+    // compute the next sampling instant in its future.
+    if (endTime >= nextSamplingInstant) {
+      // All observed events are supposed to have happened in the past. For purposes of advancing
+      // the next sampling instant, we cap endTime to now(). This protects us from advancing it far
+      // into future if we receive an event with erroneously long duration, which would also take
+      // many iterations of the below "while" loop.
+      const cappedEndTime = Math.min(endTime, performance.now())
+
+      // If nextSamplingInstant is far in cappedEndTime's past, first advance it close to it. This
+      // can happen if we didn't receive any events for a while. Since a Poisson process has no
+      // memory, we can reset it anytime. This will ensure that the "while" loop below runs at most
+      // few iterations.
+      const furthestContinuousPast = cappedEndTime - samplingIntervalMillis * POISSON_RESET_FACTOR
+      if (nextSamplingInstant < furthestContinuousPast) {
+        nextSamplingInstant = furthestContinuousPast
+      }
+
+      // Advance the next sampling instant until it is in cappedEndTime's future.
+      while (cappedEndTime >= nextSamplingInstant) {
+        setNextSamplingInstant()
+      }
     }
     // An event is sampled if it started before, and ended on or after a sampling instant. The above
     // while loop will ensure that the ending invariant is always true for the current sampling
