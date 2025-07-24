@@ -25,7 +25,7 @@ const names = Object.keys(hooks)
 const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
 
 const disabledInstrumentations = new Set(
-  DD_TRACE_DISABLED_INSTRUMENTATIONS?.split(',') ?? []
+  DD_TRACE_DISABLED_INSTRUMENTATIONS?.split(',')
 )
 
 // Check for DD_TRACE_<INTEGRATION>_ENABLED environment variables
