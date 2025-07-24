@@ -8,14 +8,11 @@ const services = require('./services')
 const Sampler = require('../../dd-trace/src/sampler')
 const { MEASURED } = require('../../../ext/tags')
 
-const makeUtilities = require('../../dd-trace/src/plugins/util/llm')
 const {
   convertBuffersToObjects,
   constructCompletionResponseFromStreamedChunks,
   constructChatCompletionResponseFromStreamedChunks
 } = require('./stream-helpers')
-
-let normalize
 
 const { DD_MAJOR } = require('../../../version')
 
@@ -35,13 +32,6 @@ class OpenAiTracingPlugin extends TracingPlugin {
     this.logger = logger
 
     this.sampler = new Sampler(0.1) // default 10% log sampling
-
-    // hoist the normalize function to avoid making all of these functions a class method
-    if (this._tracerConfig) {
-      const utilities = makeUtilities('openai', this._tracerConfig)
-
-      normalize = utilities.normalize
-    }
 
     this.addSub('apm:openai:request:chunk', ({ ctx, chunk, done }) => {
       if (!ctx.chunks) ctx.chunks = []
@@ -486,7 +476,6 @@ function responseDataExtractionByMethod (methodName, tags, body, openaiStore) {
     case 'createImage':
     case 'createImageEdit':
     case 'createImageVariation':
-      commonImageResponseExtraction(tags, body)
       break
 
     case 'listModels':
@@ -528,19 +517,6 @@ function listModelsResponseExtraction (tags, body) {
   if (!body.data) return
 
   tags['openai.response.count'] = body.data.length
-}
-
-function commonImageResponseExtraction (tags, body) {
-  if (!body.data) return
-
-  tags['openai.response.images_count'] = body.data.length
-
-  for (let i = 0; i < body.data.length; i++) {
-    const image = body.data[i]
-    // exactly one of these two options is provided
-    tags[`openai.response.images.${i}.url`] = normalize(image.url)
-    tags[`openai.response.images.${i}.b64_json`] = image.b64_json && 'returned'
-  }
 }
 
 function createAudioResponseExtraction (tags, body) {
