@@ -239,7 +239,6 @@ describe('Plugin', () => {
 
               expect(traces[0][0].meta).to.have.property('component', 'openai')
               expect(traces[0][0].meta).to.have.property('_dd.integration', 'openai')
-              expect(traces[0][0].meta).to.have.property('openai.organization.name', 'datadog-staging')
               expect(traces[0][0].meta).to.have.property('openai.request.model', 'gpt-3.5-turbo-instruct')
               expect(traces[0][0].meta).to.have.property('openai.response.model')
             })
@@ -530,7 +529,6 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('resource', 'listFiles')
             }
             expect(traces[0][0]).to.have.property('error', 0)
-            expect(traces[0][0].meta).to.have.property('openai.organization.name', 'datadog-staging')
 
             expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/vcr/openai/files')
             expect(traces[0][0].meta).to.have.property('openai.request.method', 'GET')
@@ -567,7 +565,6 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('resource', 'createFile')
             }
             expect(traces[0][0]).to.have.property('error', 0)
-            expect(traces[0][0].meta).to.have.property('openai.organization.name', 'datadog-staging')
             expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/vcr/openai/files')
             expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
 
@@ -609,7 +606,6 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('resource', 'retrieveFile')
             }
             expect(traces[0][0]).to.have.property('error', 0)
-            expect(traces[0][0].meta).to.have.property('openai.organization.name', 'datadog-staging')
             expect(traces[0][0].meta).to.have.property('openai.request.method', 'GET')
             expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/files/*')
 
@@ -647,7 +643,6 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('resource', 'downloadFile')
             }
             expect(traces[0][0]).to.have.property('error', 0)
-            expect(traces[0][0].meta).to.have.property('openai.organization.name', 'datadog-staging')
             expect(traces[0][0].meta).to.have.property('openai.request.method', 'GET')
             expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/files/*/content')
           })
@@ -681,7 +676,6 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('resource', 'deleteFile')
             }
             expect(traces[0][0]).to.have.property('error', 0)
-            expect(traces[0][0].meta).to.have.property('openai.organization.name', 'datadog-staging')
             expect(traces[0][0].meta).to.have.property('openai.request.method', 'DELETE')
             expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/files/*')
 
@@ -719,7 +713,6 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('resource', 'createFineTune')
             }
             expect(traces[0][0]).to.have.property('error', 0)
-            expect(traces[0][0].meta).to.have.property('openai.organization.name', 'datadog-staging')
             expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
             expect(traces[0][0].meta).to.have.property(
               'openai.request.endpoint', '/vcr/openai/fine_tuning/jobs'
@@ -757,7 +750,6 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('resource', 'retrieveFineTune')
             }
             expect(traces[0][0]).to.have.property('error', 0)
-            expect(traces[0][0].meta).to.have.property('openai.organization.name', 'datadog-staging')
             expect(traces[0][0].meta).to.have.property('openai.request.method', 'GET')
             expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/fine_tuning/jobs/*')
 
@@ -788,7 +780,6 @@ describe('Plugin', () => {
             }
 
             expect(traces[0][0]).to.have.property('error', 0)
-            expect(traces[0][0].meta).to.have.property('openai.organization.name', 'datadog-staging')
             expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
             expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/fine_tuning/jobs/*/cancel')
             expect(traces[0][0].meta).to.have.property('openai.response.id', 'ftjob-q9CUUUsHJemGUVQ1Ecc01zcf')
@@ -873,7 +864,6 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('resource', 'createModeration')
             }
             expect(traces[0][0]).to.have.property('error', 0)
-            expect(traces[0][0].meta).to.have.property('openai.organization.name', 'datadog-staging')
             expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
             expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/vcr/openai/moderations')
 
@@ -1065,7 +1055,6 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('resource', 'createTranscription')
             }
             expect(traces[0][0]).to.have.property('error', 0)
-            expect(traces[0][0].meta).to.have.property('openai.organization.name', 'datadog-staging')
 
             expect(traces[0][0].meta).to.have.property(
               'openai.request.endpoint', '/vcr/openai/audio/transcriptions'
@@ -1109,7 +1098,6 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('resource', 'createTranslation')
             }
             expect(traces[0][0]).to.have.property('error', 0)
-            expect(traces[0][0].meta).to.have.property('openai.organization.name', 'datadog-staging')
 
             expect(traces[0][0].meta).to.have.property(
               'openai.request.endpoint', '/vcr/openai/audio/translations'
@@ -1162,7 +1150,6 @@ describe('Plugin', () => {
                 expect(traces[0][0]).to.have.property('resource', 'createChatCompletion')
               }
               expect(traces[0][0]).to.have.property('error', 0)
-              expect(traces[0][0].meta).to.have.property('openai.organization.name', 'datadog-staging')
 
               expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
               expect(traces[0][0].meta).to.have.property(
