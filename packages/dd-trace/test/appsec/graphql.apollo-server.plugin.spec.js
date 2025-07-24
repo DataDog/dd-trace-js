@@ -14,7 +14,7 @@ withVersions('apollo-server', '@apollo/server', apolloServerVersion => {
   let server
 
   before(() => {
-    return agent.load(['express', 'graphql', 'apollo-server', 'http'], { client: false })
+    return agent.load(['graphql', 'apollo-server', 'http'], { client: false })
   })
 
   before(() => {
