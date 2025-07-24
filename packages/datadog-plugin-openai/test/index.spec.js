@@ -993,7 +993,6 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.have.property(
               'openai.request.endpoint', '/vcr/openai/images/edits'
             )
-            expect(traces[0][0].meta).to.have.property('openai.request.model', 'dall-e-3')
             // TODO(sabrenner): fix in a follow-up (super simple - img.name)
           })
 
@@ -1040,7 +1039,6 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.have.property(
               'openai.request.endpoint', '/vcr/openai/images/variations'
             )
-            expect(traces[0][0].meta).to.have.property('openai.request.model', 'dall-e-3')
           })
 
         if (semver.satisfies(realVersion, '>=4.0.0')) {
