@@ -95,9 +95,6 @@ class OpenAiTracingPlugin extends TracingPlugin {
       kind: 'client',
       meta: {
         [MEASURED]: 1,
-        // The openai.api_type (openai|azure) is present in Python but not in Node.js
-        // Add support once https://github.com/openai/openai-node/issues/53 is closed
-
         // Only model is added to all requests
         'openai.request.model': payload.model
       }
