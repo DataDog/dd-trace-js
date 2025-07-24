@@ -375,10 +375,10 @@ function createPossionProcessSamplingFilter (samplingIntervalMillis) {
  * source with a sampling event filter and an event serializer.
  */
 class EventsProfiler {
-  constructor (options = {}) {
-    this.type = 'events'
-    this.eventSerializer = new EventSerializer()
+  type = 'events'
+  eventSerializer = new EventSerializer()
 
+  constructor (options = {}) {
     const eventHandler = event => this.eventSerializer.addEvent(event)
     const eventFilter = options.timelineSamplingEnabled
       // options.samplingInterval comes in microseconds, we need millis
