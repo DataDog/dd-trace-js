@@ -160,9 +160,6 @@ class OpenAiTracingPlugin extends TracingPlugin {
       case 'createEdit':
         createEditRequestExtraction(tags, payload, openaiStore)
         break
-
-      case 'createModeration':
-        break
     }
 
     span.addTags(tags)
