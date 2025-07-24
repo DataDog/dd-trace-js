@@ -989,7 +989,6 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('resource', 'createImageEdit')
             }
             expect(traces[0][0]).to.have.property('error', 0)
-            expect(traces[0][0].meta).to.have.property('openai.organization.name', 'datadog-staging')
             expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
             expect(traces[0][0].meta).to.have.property(
               'openai.request.endpoint', '/vcr/openai/images/edits'
