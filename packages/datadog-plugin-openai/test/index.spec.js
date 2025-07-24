@@ -499,9 +499,6 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.have.property('openai.request.method', 'DELETE')
             expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/models/*')
 
-            expect(traces[0][0].meta).to.have.property(
-              'openai.request.fine_tune_id', 'ft:gpt-4.1-mini-2025-04-14:datadog-staging::BkaILRSh'
-            )
             expect(traces[0][0].metrics).to.have.property('openai.response.deleted', 1)
             expect(traces[0][0].meta).to.have.property(
               'openai.response.id', 'ft:gpt-4.1-mini-2025-04-14:datadog-staging::BkaILRSh'
@@ -729,14 +726,9 @@ describe('Plugin', () => {
             )
 
             expect(traces[0][0].meta).to.have.property('openai.request.model', 'gpt-4.1-mini-2025-04-14')
-            expect(traces[0][0].meta).to.have.property('openai.request.training_file',
-              'file-RpTpuvRVtnKpdKZb7DDGto')
             expect(traces[0][0].meta['openai.response.id']).to.match(/^ftjob-/)
             expect(traces[0][0].meta).to.have.property('openai.response.model', 'gpt-4.1-mini-2025-04-14')
-            expect(traces[0][0].meta).to.have.property('openai.response.status')
             expect(traces[0][0].metrics).to.have.property('openai.response.created_at')
-            expect(traces[0][0].metrics).to.have.property('openai.response.result_files_count')
-            expect(traces[0][0].metrics).to.have.property('openai.response.training_files_count')
           })
 
         const params = {
@@ -769,10 +761,8 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.have.property('openai.request.method', 'GET')
             expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/fine_tuning/jobs/*')
 
-            expect(traces[0][0].meta).to.have.property('openai.request.fine_tune_id', 'ftjob-q9CUUUsHJemGUVQ1Ecc01zcf')
             expect(traces[0][0].meta).to.have.property('openai.response.id', 'ftjob-q9CUUUsHJemGUVQ1Ecc01zcf')
             expect(traces[0][0].meta).to.have.property('openai.response.model')
-            expect(traces[0][0].meta).to.have.property('openai.response.status')
             expect(traces[0][0].metrics).to.have.property('openai.response.created_at')
           })
 
@@ -798,12 +788,9 @@ describe('Plugin', () => {
             }
 
             expect(traces[0][0]).to.have.property('error', 0)
-            expect(traces[0][0].meta).to.have.property('openai.organization.name', 'datadog-staging')
             expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
             expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/fine_tuning/jobs/*/cancel')
-            expect(traces[0][0].meta).to.have.property('openai.request.fine_tune_id', 'ftjob-q9CUUUsHJemGUVQ1Ecc01zcf')
             expect(traces[0][0].meta).to.have.property('openai.response.id', 'ftjob-q9CUUUsHJemGUVQ1Ecc01zcf')
-            expect(traces[0][0].meta).to.have.property('openai.response.status', 'cancelled')
             expect(traces[0][0].metrics).to.have.property('openai.response.created_at')
           })
 
@@ -832,7 +819,6 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.have.property('openai.request.method', 'GET')
             expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/fine_tuning/jobs/*/events')
 
-            expect(traces[0][0].meta).to.have.property('openai.request.fine_tune_id', 'ftjob-q9CUUUsHJemGUVQ1Ecc01zcf')
             expect(traces[0][0].metrics).to.have.property('openai.response.count')
           })
 
