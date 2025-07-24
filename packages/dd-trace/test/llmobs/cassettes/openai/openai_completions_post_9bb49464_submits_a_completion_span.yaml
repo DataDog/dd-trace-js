@@ -1,0 +1,118 @@
+interactions:
+- request:
+    body: "{\n  \"model\": \"gpt-3.5-turbo-instruct\",\n  \"prompt\": \"Hello, OpenAI!\",\n
+      \ \"max_tokens\": 100,\n  \"temperature\": 0.5,\n  \"n\": 1,\n  \"stream\":
+      false\n}"
+    headers:
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Encoding
+      : - gzip,deflate
+      ? !!python/object/apply:multidict._multidict.istr
+      - Connection
+      : - keep-alive
+      Content-Length:
+      - '141'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - User-Agent
+      : - OpenAI/JS 4.0.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Arch
+      : - arm64
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Lang
+      : - js
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-OS
+      : - MacOS
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Package-Version
+      : - 4.0.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Runtime
+      : - node
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Runtime-Version
+      : - v22.17.0
+    method: POST
+    uri: https://api.openai.com/v1/completions
+  response:
+    body:
+      string: "{\n  \"id\": \"cmpl-BwwQDgTVpIws9NoJ6eazl93lG6kg7\",\n  \"object\":
+        \"text_completion\",\n  \"created\": 1753387297,\n  \"model\": \"gpt-3.5-turbo-instruct:20230824-v2\",\n
+        \ \"choices\": [\n    {\n      \"text\": \"\\n\\nHello! How can I assist you?\",\n
+        \     \"index\": 0,\n      \"logprobs\": null,\n      \"finish_reason\": \"stop\"\n
+        \   }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 5,\n    \"completion_tokens\":
+        9,\n    \"total_tokens\": 14\n  }\n}\n"
+    headers:
+      CF-RAY:
+      - 964602ab9ca02d26-IAD
+      Cache-Control:
+      - no-cache, must-revalidate
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 24 Jul 2025 20:01:37 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=iLWa0cCjRRi2QeIJmlnQ.DaP6VytscvaBqjl_0AsWpI-1753387297-1.0.1.1-mwzIQGx6s5GF3kRDZ_35nZhAhCCn0KdTGfY18wftOmpCxUuSgQTiUklVwYuAtCyNc6mo_.kEMnSsGL.6j_DLTb_GVboGT61.v3J8LQq6vV0;
+        path=/; expires=Thu, 24-Jul-25 20:31:37 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=gdzf0iY5hnoR5ZDxCakeMWN5AJrpgGg0NP2Z1ZCTl9k-1753387297448-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-allow-origin:
+      - '*'
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-model:
+      - gpt-3.5-turbo-instruct:20230824-v2
+      openai-organization:
+      - datadog-staging
+      openai-processing-ms:
+      - '562'
+      openai-project:
+      - proj_gt6TQZPRbZfoY2J9AQlEJMpd
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains; preload
+      via:
+      - envoy-router-56dcbcd47-dnhlc
+      x-envoy-upstream-service-time:
+      - '566'
+      x-ratelimit-limit-requests:
+      - '3500'
+      x-ratelimit-limit-tokens:
+      - '90000'
+      x-ratelimit-remaining-requests:
+      - '3499'
+      x-ratelimit-remaining-tokens:
+      - '89995'
+      x-ratelimit-reset-requests:
+      - 17ms
+      x-ratelimit-reset-tokens:
+      - 2ms
+      x-request-id:
+      - req_9a70133e7494d60d850bfd2973e77444
+    status:
+      code: 200
+      message: OK
+version: 1

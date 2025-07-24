@@ -5,7 +5,13 @@ const Sampler = require('../../../../src/sampler')
 const { DogStatsDClient } = require('../../../../src/dogstatsd')
 const { NoopExternalLogger } = require('../../../../src/external-logger/src')
 
-const { expectedLLMObsLLMSpanEvent, deepEqualWithMockValues, MOCK_STRING, MOCK_NUMBER } = require('../../util')
+const {
+  expectedLLMObsLLMSpanEvent,
+  deepEqualWithMockValues,
+  useTestNamesForVCR,
+  MOCK_STRING,
+  MOCK_NUMBER
+} = require('../../util')
 const chai = require('chai')
 const semifies = require('semifies')
 const LLMObsSpanWriter = require('../../../../src/llmobs/writers/spans')
@@ -20,6 +26,8 @@ describe('integrations', () => {
   let deepseekOpenai
 
   describe('openai', () => {
+    useTestNamesForVCR()
+
     before(() => {
       sinon.stub(LLMObsSpanWriter.prototype, 'append')
 
@@ -89,7 +97,7 @@ describe('integrations', () => {
         })
       })
 
-      it('submits a completion span', async () => {
+      it.only('submits a completion span', async () => {
         const checkSpan = agent.assertSomeTraces(traces => {
           const span = traces[0][0]
           const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]

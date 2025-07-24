@@ -1,5 +1,7 @@
 'use strict'
 
+const http = require('node:http')
+
 const chai = require('chai')
 
 const tracerVersion = require('../../../../package.json').version
@@ -190,10 +192,48 @@ function fromBuffer (spanProperty, isNumber = false) {
   return isNumber ? Number(strVal) : strVal
 }
 
+function useTestNamesForVCR () {
+  const startVcrTestURL = 'http://127.0.0.1:9126/vcr/test/start'
+  const stopVcrTestURL = 'http://127.0.0.1:9126/vcr/test/stop'
+
+  beforeEach(function () {
+    const currentTestName = this.currentTest?.title
+
+    const body = { test_name: currentTestName }
+
+    return new Promise((resolve, reject) => {
+      const req = http.request(startVcrTestURL, { method: 'POST' }, (res) => {
+        res.on('error', reject)
+        res.on('data', () => {}) // Consume response data
+        res.on('end', resolve)
+      })
+
+      req.on('error', reject)
+
+      req.write(JSON.stringify(body))
+      req.end()
+    })
+  })
+
+  afterEach(() => {
+    return new Promise((resolve, reject) => {
+      const req = http.request(stopVcrTestURL, { method: 'POST' }, (res) => {
+        res.on('error', reject)
+        res.on('data', () => {}) // Consume response data
+        res.on('end', resolve)
+      })
+
+      req.on('error', reject)
+      req.end()
+    })
+  })
+}
+
 module.exports = {
   expectedLLMObsLLMSpanEvent,
   expectedLLMObsNonLLMSpanEvent,
   deepEqualWithMockValues,
+  useTestNamesForVCR,
   MOCK_ANY,
   MOCK_NUMBER,
   MOCK_STRING
