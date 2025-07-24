@@ -409,7 +409,6 @@ class EventsProfiler {
   #eventSources
 
   constructor (options = {}) {
-    this.type = 'events'
     this.#maxSamples = getMaxSamples(options)
     this.#eventSerializer = new EventSerializer(this.#maxSamples)
 

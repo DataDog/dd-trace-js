@@ -75,7 +75,7 @@ class NativeWallProfiler {
   _started = false
 
   constructor (options = {}) {
-    this._samplingIntervalMicros = options.samplingInterval || 1e3 / 99 // 99hz
+    this._samplingIntervalMicros = (options.samplingInterval || 1e3 / 99) * 1000 // 99hz
     this._flushIntervalMillis = options.flushInterval || 60 * 1e3 // 60 seconds
     this._codeHotspotsEnabled = !!options.codeHotspotsEnabled
     this._endpointCollectionEnabled = !!options.endpointCollectionEnabled
