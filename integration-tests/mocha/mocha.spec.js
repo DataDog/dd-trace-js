@@ -91,6 +91,7 @@ describe('mocha CommonJS', function () {
   })
 
   afterEach(async () => {
+    console.log('-- afterEach', childProcess.exitCode)
     childProcess.kill()
     testOutput = ''
     await receiver.stop()
@@ -1702,6 +1703,7 @@ describe('mocha CommonJS', function () {
       })
 
       childProcess.on('exit', (exitCode) => {
+        console.log('-- child process exit', exitCode)
         assert.include(testOutput, '2 passing')
         assert.include(testOutput, '2 failing')
         assert.equal(exitCode, 0)
