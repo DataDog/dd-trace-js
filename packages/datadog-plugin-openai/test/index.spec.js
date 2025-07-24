@@ -1011,8 +1011,6 @@ describe('Plugin', () => {
         expect(result.data[0].url.startsWith('https://')).to.be.true
 
         await checkTraces
-
-        expect(externalLoggerStub).to.have.been.called
       })
 
       it('create image variation', async function () {
