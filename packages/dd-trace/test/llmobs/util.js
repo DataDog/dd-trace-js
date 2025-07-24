@@ -249,7 +249,6 @@ function useLlmobs ({
   })
 
   after(() => {
-    process.removeAllListeners()
     return agent.close(closeOptions)
   })
 

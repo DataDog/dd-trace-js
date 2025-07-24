@@ -4,8 +4,6 @@ const { useEnv } = require('../../../../../../integration-tests/helpers')
 const chai = require('chai')
 const { expect } = chai
 
-const semifies = require('semifies')
-
 const { NODE_MAJOR } = require('../../../../../../version')
 
 const {
@@ -20,13 +18,16 @@ const {
 
 chai.Assertion.addMethod('deepEqualWithMockValues', deepEqualWithMockValues)
 
+// ai<4.0.2 is not supported in CommonJS with Node.js < 22
+const range = NODE_MAJOR < 22 ? '>=4.0.2' : '>=4.0.0'
+
 describe('Plugin', () => {
   useEnv({
     OPENAI_API_KEY: '<not-a-real-key>',
     _DD_LLMOBS_FLUSH_INTERVAL: 0
   })
 
-  withVersions('ai', 'ai', (version, _, moduleVersion) => {
+  withVersions('ai', 'ai', range, version => {
     let ai
     let openai
     let zod
@@ -34,15 +35,6 @@ describe('Plugin', () => {
     const getEvents = useLlmobs({ plugin: 'ai' })
 
     beforeEach(function () {
-      if (semifies(moduleVersion, '<4.0.2') && NODE_MAJOR < 22) {
-        /**
-         * Resolves the following error:
-         *
-         * Error [ERR_REQUIRE_ESM]: require() of ES Module  from ... not supported.
-         */
-        this.skip()
-      }
-
       ai = require(`../../../../../../versions/ai@${version}`).get()
 
       const OpenAI = require('../../../../../../versions/@ai-sdk/openai').get()
