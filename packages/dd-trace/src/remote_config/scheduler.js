@@ -1,8 +1,9 @@
 'use strict'
 
 class Scheduler {
+  _timer = null
+
   constructor (callback, interval) {
-    this._timer = null
     this._callback = callback
     this._interval = interval
   }
