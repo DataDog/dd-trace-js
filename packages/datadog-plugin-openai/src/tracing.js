@@ -112,10 +112,6 @@ class OpenAiTracingPlugin extends TracingPlugin {
     }
 
     switch (normalizedMethodName) {
-      case 'createFineTune':
-        createFineTuneRequestExtraction(tags, payload)
-        break
-
       case 'createImage':
       case 'createImageEdit':
       case 'createImageVariation':
@@ -138,13 +134,6 @@ class OpenAiTracingPlugin extends TracingPlugin {
 
       case 'retrieveModel':
         retrieveModelRequestExtraction(tags, payload)
-        break
-
-      case 'listFineTuneEvents':
-      case 'retrieveFineTune':
-      case 'deleteModel':
-      case 'cancelFineTune':
-        commonLookupFineTuneRequestExtraction(tags, payload)
         break
 
       case 'createEdit':
@@ -449,12 +438,6 @@ function responseDataExtractionByMethod (methodName, tags, body, openaiStore) {
       downloadFileResponseExtraction(tags, body)
       break
 
-    case 'createFineTune':
-    case 'retrieveFineTune':
-    case 'cancelFineTune':
-      commonFineTuneResponseExtraction(tags, body)
-      break
-
     case 'listModels':
       listModelsResponseExtraction(tags, body)
       break
@@ -485,48 +468,10 @@ function retrieveModelResponseExtraction (tags, body) {
   tags['openai.response.permission.is_blocking'] = body.permission[0].is_blocking
 }
 
-function commonLookupFineTuneRequestExtraction (tags, body) {
-  tags['openai.request.fine_tune_id'] = body.fine_tune_id
-  tags['openai.request.stream'] = !!body.stream // listFineTuneEvents
-}
-
 function listModelsResponseExtraction (tags, body) {
   if (!body.data) return
 
   tags['openai.response.count'] = body.data.length
-}
-
-function createFineTuneRequestExtraction (tags, body) {
-  tags['openai.request.training_file'] = body.training_file
-  tags['openai.request.validation_file'] = body.validation_file
-  tags['openai.request.n_epochs'] = body.n_epochs
-  tags['openai.request.batch_size'] = body.batch_size
-  tags['openai.request.learning_rate_multiplier'] = body.learning_rate_multiplier
-  tags['openai.request.prompt_loss_weight'] = body.prompt_loss_weight
-  tags['openai.request.compute_classification_metrics'] = body.compute_classification_metrics
-  tags['openai.request.classification_n_classes'] = body.classification_n_classes
-  tags['openai.request.classification_positive_class'] = body.classification_positive_class
-  tags['openai.request.classification_betas_count'] = defensiveArrayLength(body.classification_betas)
-}
-
-function commonFineTuneResponseExtraction (tags, body) {
-  tags['openai.response.events_count'] = defensiveArrayLength(body.events)
-  tags['openai.response.fine_tuned_model'] = body.fine_tuned_model
-
-  const hyperparams = body.hyperparams || body.hyperparameters
-  const hyperparamsKey = body.hyperparams ? 'hyperparams' : 'hyperparameters'
-
-  if (hyperparams) {
-    tags[`openai.response.${hyperparamsKey}.n_epochs`] = hyperparams.n_epochs
-    tags[`openai.response.${hyperparamsKey}.batch_size`] = hyperparams.batch_size
-    tags[`openai.response.${hyperparamsKey}.prompt_loss_weight`] = hyperparams.prompt_loss_weight
-    tags[`openai.response.${hyperparamsKey}.learning_rate_multiplier`] = hyperparams.learning_rate_multiplier
-  }
-  tags['openai.response.training_files_count'] = defensiveArrayLength(body.training_files || body.training_file)
-  tags['openai.response.result_files_count'] = defensiveArrayLength(body.result_files)
-  tags['openai.response.validation_files_count'] = defensiveArrayLength(body.validation_files || body.validation_file)
-  tags['openai.response.updated_at'] = body.updated_at
-  tags['openai.response.status'] = body.status
 }
 
 // the OpenAI package appears to stream the content download then provide it all as a singular string
