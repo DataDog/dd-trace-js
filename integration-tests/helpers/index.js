@@ -288,7 +288,7 @@ function telemetryForwarder (shouldExpectTelemetryPoints = true) {
   return cleanup
 }
 
-async function curl (url, useHttp2 = false) {
+async function curl (url) {
   if (url !== null && typeof url === 'object') {
     if (url.then) {
       return curl(await url)
@@ -317,7 +317,8 @@ async function curlAndAssertMessage (agent, procOrUrl, fn, timeout, expectedMess
 
 function getCiVisAgentlessConfig (port) {
   // We remove GITHUB_WORKSPACE so the repository root is not assigned to dd-trace-js
-  const { GITHUB_WORKSPACE, ...rest } = process.env
+  // We remove MOCHA_OPTIONS so the test runner doesn't run the tests twice
+  const { GITHUB_WORKSPACE, MOCHA_OPTIONS, ...rest } = process.env
   return {
     ...rest,
     DD_API_KEY: '1',
@@ -330,7 +331,8 @@ function getCiVisAgentlessConfig (port) {
 
 function getCiVisEvpProxyConfig (port) {
   // We remove GITHUB_WORKSPACE so the repository root is not assigned to dd-trace-js
-  const { GITHUB_WORKSPACE, ...rest } = process.env
+  // We remove MOCHA_OPTIONS so the test runner doesn't run the tests twice
+  const { GITHUB_WORKSPACE, MOCHA_OPTIONS, ...rest } = process.env
   return {
     ...rest,
     DD_TRACE_AGENT_PORT: port,

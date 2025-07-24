@@ -485,27 +485,41 @@ function getGitMetadata (ciMetadata) {
 
   if (headCommitSha) {
     if (isShallowRepository()) {
-      unshallowRepository(true)
+      fetchHeadCommitSha(headCommitSha)
     }
 
-    tags[GIT_COMMIT_HEAD_MESSAGE] =
-      sanitizedExec('git', ['show', '-s', '--format=%B', headCommitSha], null, null, null, false)
-
     const [
+      gitHeadCommitSha,
+      headAuthorDate,
       headAuthorName,
       headAuthorEmail,
-      headAuthorDate,
+      headCommitterDate,
       headCommitterName,
       headCommitterEmail,
-      headCommitterDate
-    ] = sanitizedExec('git', ['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI', headCommitSha]).split(',')
+      headCommitMessage
+    ] = sanitizedExec(
+      'git',
+      [
+        'show',
+        '-s',
+        '--format=\'%H","%aI","%an","%ae","%cI","%cn","%ce","%B\'',
+        headCommitSha
+      ],
+      null,
+      null,
+      null,
+      false
+    ).split('","')
 
-    tags[GIT_COMMIT_HEAD_AUTHOR_DATE] = headAuthorDate
-    tags[GIT_COMMIT_HEAD_AUTHOR_EMAIL] = headAuthorEmail
-    tags[GIT_COMMIT_HEAD_AUTHOR_NAME] = headAuthorName
-    tags[GIT_COMMIT_HEAD_COMMITTER_DATE] = headCommitterDate
-    tags[GIT_COMMIT_HEAD_COMMITTER_EMAIL] = headCommitterEmail
-    tags[GIT_COMMIT_HEAD_COMMITTER_NAME] = headCommitterName
+    if (gitHeadCommitSha) {
+      tags[GIT_COMMIT_HEAD_AUTHOR_DATE] = headAuthorDate
+      tags[GIT_COMMIT_HEAD_AUTHOR_EMAIL] = headAuthorEmail
+      tags[GIT_COMMIT_HEAD_AUTHOR_NAME] = headAuthorName
+      tags[GIT_COMMIT_HEAD_COMMITTER_DATE] = headCommitterDate
+      tags[GIT_COMMIT_HEAD_COMMITTER_EMAIL] = headCommitterEmail
+      tags[GIT_COMMIT_HEAD_COMMITTER_NAME] = headCommitterName
+      tags[GIT_COMMIT_HEAD_MESSAGE] = headCommitMessage
+    }
   }
 
   const entries = [
@@ -544,6 +558,26 @@ function getGitInformationDiscrepancy () {
   return { gitRepositoryUrl, gitCommitSHA }
 }
 
+function fetchHeadCommitSha (headSha) {
+  const remoteName = getGitRemoteName()
+
+  sanitizedExec(
+    'git',
+    [
+      'fetch',
+      '--update-shallow',
+      '--filter=blob:none',
+      '--recurse-submodules=no',
+      '--no-write-fetch-head',
+      remoteName,
+      headSha
+    ],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'fetch_head_commit_sha' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'fetch_head_commit_sha' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'fetch_head_commit_sha' } }
+  )
+}
+
 module.exports = {
   getGitMetadata,
   getLatestCommits,
@@ -561,5 +595,6 @@ module.exports = {
   checkAndFetchBranch,
   getLocalBranches,
   getMergeBase,
-  getCounts
+  getCounts,
+  fetchHeadCommitSha
 }

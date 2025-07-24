@@ -410,6 +410,114 @@ function prepareTestServerForIastInExpress (description, expressVersion, loadMid
   })
 }
 
+function prepareTestServerForIastInFastify (description, fastifyVersion, tests, iastConfig) {
+  describe(description, () => {
+    const config = {}
+    let app, server
+
+    before(function () {
+      return agent.load(['fastify', 'http'], { client: false }, { flushInterval: 1 })
+    })
+
+    before(async () => {
+      const fastify = require(`../../../../../versions/fastify@${fastifyVersion}`).get()
+      const fastifyApp = fastify()
+
+      fastifyApp.all('/', (request, reply) => {
+        const headersSent = () => {
+          if (reply.raw && typeof reply.raw.headersSent !== 'undefined') {
+            return reply.raw.headersSent
+          }
+          // Fastify <3: use reply.sent
+          return reply.sent === true
+        }
+
+        try {
+          const result = app && app(request, reply.raw)
+
+          const finish = () => {
+            if (!headersSent()) {
+              reply.code(200).send()
+            }
+          }
+
+          if (result && typeof result.then === 'function') {
+            result.then(finish).catch(() => finish())
+          } else {
+            finish()
+          }
+        } catch (e) {
+          if (!headersSent()) {
+            reply.code(500).send()
+          } else if (reply.raw && typeof reply.raw.end === 'function') {
+            reply.raw.end()
+          }
+        }
+      })
+
+      await fastifyApp.listen({ port: 0 })
+
+      server = fastifyApp.server
+      config.port = server.address().port
+    })
+
+    beforeEachIastTest(iastConfig)
+
+    afterEach(() => {
+      iast.disable()
+      rewriter.disable()
+      app = null
+    })
+
+    after(() => {
+      server?.close()
+      return agent?.close({ ritmReset: false })
+    })
+
+    function testThatRequestHasVulnerability (fn, vulnerability, occurrencesAndLocation, cb, makeRequest) {
+      let testDescription
+      if (fn !== null && typeof fn === 'object') {
+        const obj = fn
+        fn = obj.fn
+        vulnerability = obj.vulnerability
+        occurrencesAndLocation = obj.occurrencesAndLocation || obj.occurrences
+        cb = obj.cb
+        makeRequest = obj.makeRequest
+        testDescription = obj.testDescription || testDescription
+      }
+
+      testDescription = testDescription || `should have ${vulnerability} vulnerability`
+
+      it(testDescription, function (done) {
+        this.timeout(5000)
+        app = fn
+
+        checkVulnerabilityInRequest(vulnerability, occurrencesAndLocation, cb, makeRequest, config, done)
+      })
+    }
+
+    function testThatRequestHasNoVulnerability (fn, vulnerability, makeRequest) {
+      let testDescription
+      if (fn !== null && typeof fn === 'object') {
+        const obj = fn
+        fn = obj.fn
+        vulnerability = obj.vulnerability
+        makeRequest = obj.makeRequest
+        testDescription = obj.testDescription || testDescription
+      }
+
+      testDescription = testDescription || `should not have ${vulnerability} vulnerability`
+
+      it(testDescription, function (done) {
+        app = fn
+        checkNoVulnerabilityInRequest(vulnerability, config, done, makeRequest)
+      })
+    }
+
+    tests(testThatRequestHasVulnerability, testThatRequestHasNoVulnerability, config)
+  })
+}
+
 function locationHasMatchingFrame (span, vulnerabilityType, vulnerabilities) {
   const stack = msgpack.decode(span.meta_struct['_dd.stack'])
   const matchingVulns = vulnerabilities.filter(vulnerability => vulnerability.type === vulnerabilityType)
@@ -438,5 +546,6 @@ module.exports = {
   testInRequest,
   copyFileToTmp,
   prepareTestServerForIast,
-  prepareTestServerForIastInExpress
+  prepareTestServerForIastInExpress,
+  prepareTestServerForIastInFastify
 }

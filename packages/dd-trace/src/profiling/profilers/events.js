@@ -403,6 +403,7 @@ function createPoissonProcessSamplingFilter (samplingIntervalMillis) {
  * source with a sampling event filter and an event serializer.
  */
 class EventsProfiler {
+  type = 'events'
   #maxSamples
   #eventSerializer
   #eventSources
