@@ -892,23 +892,6 @@ describe('Plugin', () => {
 
             expect(traces[0][0].meta['openai.response.id']).to.match(/^modr-/)
             expect(traces[0][0].meta).to.have.property('openai.response.model')
-            expect(traces[0][0].metrics).to.have.property('openai.response.categories.sexual', 0)
-            expect(traces[0][0].metrics).to.have.property('openai.response.categories.hate', 0)
-            expect(traces[0][0].metrics).to.have.property('openai.response.categories.violence', 1)
-            expect(traces[0][0].metrics).to.have.property('openai.response.categories.self-harm', 0)
-            expect(traces[0][0].metrics).to.have.property('openai.response.categories.sexual/minors', 0)
-            expect(traces[0][0].metrics).to.have.property('openai.response.categories.hate/threatening', 0)
-            expect(traces[0][0].metrics).to.have.property('openai.response.categories.violence/graphic', 0)
-            expect(traces[0][0].metrics).to.have.property('openai.response.category_scores.hate')
-            expect(traces[0][0].metrics).to.have.property('openai.response.category_scores.violence')
-            expect(traces[0][0].metrics).to.have.property('openai.response.category_scores.sexual')
-            expect(traces[0][0].metrics).to.have.property('openai.response.category_scores.hate')
-            expect(traces[0][0].metrics).to.have.property('openai.response.category_scores.violence')
-            expect(traces[0][0].metrics).to.have.property('openai.response.category_scores.self-harm')
-            expect(traces[0][0].metrics).to.have.property('openai.response.category_scores.sexual/minors')
-            expect(traces[0][0].metrics).to.have.property('openai.response.category_scores.hate/threatening')
-            expect(traces[0][0].metrics).to.have.property('openai.response.category_scores.violence/graphic')
-            expect(traces[0][0].metrics).to.have.property('openai.response.flagged', 1)
           })
 
         if (semver.satisfies(realVersion, '>=4.0.0')) {

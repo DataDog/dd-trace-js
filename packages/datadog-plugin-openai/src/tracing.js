@@ -430,10 +430,6 @@ function commonCreateImageRequestExtraction (tags, payload, openaiStore) {
 
 function responseDataExtractionByMethod (methodName, tags, body, openaiStore) {
   switch (methodName) {
-    case 'createModeration':
-      createModerationResponseExtraction(tags, body)
-      break
-
     case 'createCompletion':
     case 'createChatCompletion':
     case 'createEdit':
@@ -444,9 +440,6 @@ function responseDataExtractionByMethod (methodName, tags, body, openaiStore) {
     case 'listFineTunes':
     case 'listFineTuneEvents':
       commonListCountResponseExtraction(tags, body)
-      break
-
-    case 'createEmbedding':
       break
 
     case 'createFile':
@@ -471,11 +464,6 @@ function responseDataExtractionByMethod (methodName, tags, body, openaiStore) {
     case 'createTranscription':
     case 'createTranslation':
       createAudioResponseExtraction(tags, body)
-      break
-
-    case 'createImage':
-    case 'createImageEdit':
-    case 'createImageVariation':
       break
 
     case 'listModels':
@@ -602,24 +590,6 @@ function createRetrieveFileResponseExtraction (tags, body) {
 function commonListCountResponseExtraction (tags, body) {
   if (!body.data) return
   tags['openai.response.count'] = body.data.length
-}
-
-// TODO: Is there ever more than one entry in body.results?
-function createModerationResponseExtraction (tags, body) {
-  tags['openai.response.id'] = body.id
-  // tags[`openai.response.model`] = body.model // redundant, already extracted globally
-
-  if (!body.results) return
-
-  tags['openai.response.flagged'] = body.results[0].flagged
-
-  for (const [category, match] of Object.entries(body.results[0].categories)) {
-    tags[`openai.response.categories.${category}`] = match
-  }
-
-  for (const [category, score] of Object.entries(body.results[0].category_scores)) {
-    tags[`openai.response.category_scores.${category}`] = score
-  }
 }
 
 // createCompletion, createChatCompletion, createEdit
