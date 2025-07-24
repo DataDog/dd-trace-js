@@ -1,0 +1,136 @@
+interactions:
+- request:
+    body: !!binary |
+      LS0tLS0tZm9ybWRhdGEtdW5kaWNpLTA3Njc2MDEyMDM5MA0KQ29udGVudC1EaXNwb3NpdGlvbjog
+      Zm9ybS1kYXRhOyBuYW1lPSJuIg0KDQoxDQotLS0tLS1mb3JtZGF0YS11bmRpY2ktMDc2NzYwMTIw
+      MzkwDQpDb250ZW50LURpc3Bvc2l0aW9uOiBmb3JtLWRhdGE7IG5hbWU9InNpemUiDQoNCjI1Nngy
+      NTYNCi0tLS0tLWZvcm1kYXRhLXVuZGljaS0wNzY3NjAxMjAzOTANCkNvbnRlbnQtRGlzcG9zaXRp
+      b246IGZvcm0tZGF0YTsgbmFtZT0icmVzcG9uc2VfZm9ybWF0Ig0KDQp1cmwNCi0tLS0tLWZvcm1k
+      YXRhLXVuZGljaS0wNzY3NjAxMjAzOTANCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsg
+      bmFtZT0iaW1hZ2UiOyBmaWxlbmFtZT0iaW1hZ2UucG5nIg0KQ29udGVudC1UeXBlOiBhcHBsaWNh
+      dGlvbi9vY3RldC1zdHJlYW0NCg0KiVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAAG
+      V0lEQVR42u3cvY9cVx3H4e+5d978ksxgyRYCKRsFKhokgkhBR5eSFiFqqECioOAPSIGElIIuDUqb
+      wkjgkg6aFBEFDUjIQQSD1i/YO/buzp25h2KtiAazy8LqrPw81srNyP7tb879zN0tbrl9+/aQRtRa
+      s79/e3fr1s/7pGtipmfbN/L9J9/b3b/xhb40sqeyuVtrfpDMuiZGGp+O9d0P3s3eL/ZaWVEedB/t
+      luPP+kketvGeZcx73Y93vxq/2ifNrCmT5XI5aSkA6/WkXy5TkrGNBQ19DodrfV0uS20lAEfXk5LU
+      eRs7Spdcn13Pclw2c7APy5X+1VrLtI6NBCCZlav9OC5LUwEopZ1hSikpJaXrklrbmamWUlK6JM0M
+      dXKGmrklScrzP60MVE621MxE3advXJeWtDUNIACAAAACAAgAIACAAAACAAgAIACAAAACAAgAIACA
+      AAACAAgACAAgAIAAAAIACAAgAIAAAAIACAAgAIAAAAIACAAgAIAAAAIACAAgAIAAAAIACAAgAIAA
+      AAIACAAgAIAAAAIACAAgAIAAAAIACAAgAIAAAAIACAAIACAAgAAAAgAIACAAgAAAAgAIACAAgAAA
+      AgAIACAAgAAAAgAIACAAgAAAAgAIACAAgAAAAgAIACAAgAAAAgAIACAAgAAAAgAIACAAgAAAAgAI
+      AAgAIACAAAACAAgAIACAAAACAAgAIACAAAACAAgAIACAAAACAAgAIACAAAACAAgAIACAAAACAAgA
+      IACAAAACAAgAIACAAAACAAgAIACAAAACAAgACAAgAIAAAAIACAAgAIAAAAIACAAgAIAAAAIACAAg
+      AIAAAAIACAAgAIAAAAIACAAgAIAAAAIACAAgAIAAAAIACAAgAIAAAAIACAAgAIAAAAIACAAIAPAy
+      mmw2u6YG2m5LhiFJSiPz1Fwfxsw2u5TUNmYaxhx0Senb2FHd1gwZs7nRylkqGXY124OS0sg5KrUm
+      V8fcmLZ1vU3ef//PTQ00nc7y+utJrfMm5hm2NV//0/1c6RbN7OjR4m/59WeTTNrYUbep+eWVe1m9
+      3Tezo/Hh07zx4fVM1us2ArA9yuzNx3n7821db5M7d15raqDF4q9ZrfokV5uYZzku8u2HN/PF7V7S
+      yB3A3cWY3766TNc1csHtxvzmh59L2WvlLJVM/nicG395Jd0nT5qYaPNkyHe+scrX3notpTQUgAcP
+      +qYCMJ93OToqzfwI0NdkctBlPvSpjQRgOuuSw5LSyEmqu2Q96bKZNXKWSsl02mUo7ezocUom0y7z
+      eVvXm18CwktMAEAAAAEABAAQAEAAAAEABAAQAEAAAAEABAAQAEAAAAEABABoz6SVx1ydqEk5zTwl
+      XXcxT3optSQlqaWe7yFFNSdPFKr/iy3V5w+7LBfznpzqZfXkq5mjVJu72GqtqY3NNSnzB21tabrO
+      2N1MMvu3L7l1c5WvfPlLF7LMRRa5truWvp7vkWB1V/Pk909z+IfNua7bkuRR1pmNt3IRDawZsy0H
+      qWV4wVAl3Xqd/vHjNs5QKekODlKH4UwhOOvjw7ru9DfQs9ks6/U6j1vZ0afnae9bTSWplMOUHL3w
+      Nd/95lv56Ts/yjhezOh97c/9eOnj403e+8kHufPO79Kf998q2zwqRxfyvY/lOA9e+ShH/ScvDsXe
+      XnL1ajPnaDw4yHD37kkETnnxz+fzM0VgsVic6fWr1Sqr1aqxHwG6J00NVJPUvPjBidPpNPP5IpfJ
+      2I3ZTsf8PUeZnPfWvSZdnVzM+9FtU+p//qQrH3/c1ifbOKYOw//1LrGc8aGj+/v7uXfvXlN78ktA
+      eIkJAAgAIACAAAACAAgAIACAAAACAAgAIACAAAACAAgAIACAAAACAAgAIACAAAACAAgAIACAAAAC
+      AAgAIACAAAACAAgAIACAAAACAAgAIACAAAACAAJgBSAAgAAAAgAIACAAgAAAAgAIACAAgAAAAgAI
+      ACAAgAAAAgAIACAAgAAAAgAIACAAwAWZXMaha61JknEcL83M41hTU2tSy2Vb9798XSbljB9w/833
+      2T3/f059DFrb46Qbh+1lC8Dhs2d1f3+/XKYAbI6HHB0fjrscdaW7PDdeYzkek/ooyXDJojUvpXzm
+      DBfomOT+879P+TlUb9ZaT/shWpL8I8lhS4v6J4Xfa2+84a8tAAAAAElFTkSuQmCCDQotLS0tLS1m
+      b3JtZGF0YS11bmRpY2ktMDc2NzYwMTIwMzkwLS0=
+    headers:
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Encoding
+      : - gzip, deflate
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Language
+      : - '*'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Connection
+      : - keep-alive
+      Content-Length:
+      - '2138'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - multipart/form-data; boundary=----formdata-undici-076760120390
+      ? !!python/object/apply:multidict._multidict.istr
+      - User-Agent
+      : - OpenAI/JS 5.7.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Arch
+      : - arm64
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Lang
+      : - js
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-OS
+      : - MacOS
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Package-Version
+      : - 5.7.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Retry-Count
+      : - '0'
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Runtime
+      : - node
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Runtime-Version
+      : - v22.17.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - sec-fetch-mode
+      : - cors
+    method: POST
+    uri: https://api.openai.com/v1/images/variations
+  response:
+    body:
+      string: "{\n  \"created\": 1750902308,\n  \"data\": [\n    {\n      \"url\":
+        \"https://oaidalleapiprodscus.blob.core.windows.net/private/org-GKgUkEpTs8iJbqUCqnL6JW5H/user-DoUONI1dg5wtyS7luFo7MncN/img-6Wlu1ahBjzuEaaMvpaWivuj5.png?st=2025-06-26T00%3A45%3A07Z&se=2025-06-26T02%3A45%3A07Z&sp=r&sv=2024-08-04&sr=b&rscd=inline&rsct=image/png&skoid=d505667d-d6c1-4a0a-bac7-5c84a87759f8&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-06-26T01%3A45%3A07Z&ske=2025-06-27T01%3A45%3A07Z&sks=b&skv=2024-08-04&sig=8B6ctvsJ5ffxBMgd%2Bc1VjcOyYJh75CdiIyuIsUviaPE%3D\"\n
+        \   }\n  ]\n}\n"
+    headers:
+      CF-RAY:
+      - 955905c8bfad4f4e-EWR
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 26 Jun 2025 01:45:08 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=DEFgk0bkC.CpYvzub8z.fXT_qC7H9_9HzFbyHb51eVQ-1750902308-1.0.1.1-LnmhhYDa8w_50o8hl.p.Hrl7o3NByIzFTWDK8RZaYUErV6DUE.5WsCIThEBtU7Gg77Iy7tS8v7OpKe8kprJdFGwKPAmq8dflcyEQK2UkjKk;
+        path=/; expires=Thu, 26-Jun-25 02:15:08 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=kULG_SD2zvbmUDhOhqCS_EPUDtXawkwElX75uO5UssM-1750902308234-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-allow-origin:
+      - '*'
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - datadog-staging
+      openai-processing-ms:
+      - '9137'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains; preload
+      x-request-id:
+      - req_0843632d9ad93a554b8f909f4d559806
+    status:
+      code: 200
+      message: OK
+version: 1

@@ -69,8 +69,12 @@ function ensureChannelsActivated () {
 }
 
 class NativeWallProfiler {
+  type = 'wall'
+  _mapper
+  _pprof
+  _started = false
+
   constructor (options = {}) {
-    this.type = 'wall'
     this._samplingIntervalMicros = options.samplingInterval || 1e6 / 99 // 99hz
     this._flushIntervalMillis = options.flushInterval || 60 * 1e3 // 60 seconds
     this._codeHotspotsEnabled = !!options.codeHotspotsEnabled
@@ -86,8 +90,6 @@ class NativeWallProfiler {
     // cpu profiling is enabled.
     this._withContexts = this._captureSpanData || this._timelineEnabled || this._cpuProfilingEnabled
     this._v8ProfilerBugWorkaroundEnabled = !!options.v8ProfilerBugWorkaroundEnabled
-    this._mapper = undefined
-    this._pprof = undefined
 
     // Bind these to this so they can be used as callbacks
     if (this._withContexts && this._captureSpanData) {
@@ -97,7 +99,6 @@ class NativeWallProfiler {
     this._generateLabels = this._generateLabels.bind(this)
 
     this._logger = options.logger
-    this._started = false
   }
 
   codeHotspotsEnabled () {

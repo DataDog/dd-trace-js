@@ -124,7 +124,7 @@
     "@opentelemetry/api": "1.8.0",
     "@opentelemetry/core": "^1.14.0",
     "crypto-randomuuid": "^1.0.0",
-    "dc-polyfill": "^0.1.9",
+    "dc-polyfill": "^0.1.10",
     "ignore": "^7.0.5",
     "import-in-the-middle": "^1.14.2",
     "istanbul-lib-coverage": "^3.2.2",
@@ -155,7 +155,7 @@
     "@msgpack/msgpack": "^3.1.2",
     "@stylistic/eslint-plugin": "^5.0.0",
     "@types/node": "^18.19.106",
-    "axios": "^1.10.0",
+    "axios": "^1.11.0",
     "benchmark": "^2.1.4",
     "body-parser": "^2.2.0",
     "chai": "^4.5.0",
@@ -165,11 +165,11 @@
     "eslint-plugin-mocha": "^10.5.0",
     "eslint-plugin-n": "^17.20.0",
     "eslint-plugin-promise": "^7.2.1",
-    "eslint-plugin-unicorn": "^59.0.1",
+    "eslint-plugin-unicorn": "^60.0.0",
     "express": "^5.1.0",
     "get-port": "^5.1.1",
     "glob": "^7.2.3",
-    "globals": "^15.15.0",
+    "globals": "^16.3.0",
     "graphql": "*",
     "jszip": "^3.10.1",
     "mocha": "^11.6.0",
@@ -187,8 +187,5 @@
     "workerpool": "^9.2.0",
     "yaml": "^2.8.0",
     "yarn-deduplicate": "^6.0.2"
-  },
-  "resolutions": {
-    "eslint-plugin-unicorn/@eslint/plugin-kit": "0.3.3"
   }
 }
