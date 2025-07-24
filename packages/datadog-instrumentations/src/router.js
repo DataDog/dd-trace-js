@@ -146,7 +146,7 @@ function createWrapRouterMethod (name) {
       }
 
       if (routeAddedChannel.hasSubscribers) {
-        routeAddedChannel.publish({ topOfStackFunc: methodWithTrace, layer: this.stack[0] })
+        routeAddedChannel.publish({ topOfStackFunc: methodWithTrace, layer: this.stack.at(-1) })
       }
 
       if (this.stack.length > offset) {
