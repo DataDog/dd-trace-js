@@ -34,7 +34,13 @@ class StatsPoint {
   }
 
   encode () {
-    return {
+    // DEBUG: Track serialization
+    console.log(`DEBUG: StatsPoint.encode - this.hash (BigInt): ${this.hash}`)
+    console.log(`DEBUG: StatsPoint.encode - this.hash (typeof): ${typeof this.hash}`)
+    console.log(`DEBUG: StatsPoint.encode - this.parentHash (BigInt): ${this.parentHash}`)
+    console.log(`DEBUG: StatsPoint.encode - this.parentHash (typeof): ${typeof this.parentHash}`)
+
+    const encoded = {
       Hash: this.hash,
       ParentHash: this.parentHash,
       EdgeTags: this.edgeTags,
@@ -42,6 +48,11 @@ class StatsPoint {
       PathwayLatency: this.pathwayLatency.toProto(),
       PayloadSize: this.payloadSize.toProto()
     }
+
+    console.log(`DEBUG: StatsPoint.encode - encoded.Hash: ${encoded.Hash}`)
+    console.log(`DEBUG: StatsPoint.encode - encoded.Hash (typeof): ${typeof encoded.Hash}`)
+
+    return encoded
   }
 }
 
