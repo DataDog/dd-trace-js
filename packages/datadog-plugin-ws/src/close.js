@@ -3,17 +3,21 @@
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing.js')
 
 class WSClosePlugin extends TracingPlugin {
-  static get id () { return 'ws' }
+  static get id () { return 'websocket' }
   static get prefix () { return 'tracing:ws:close' }
   static get type () { return 'websocket' }
   static get kind () { return 'close' }
 
   bindStart (ctx) {
+    const { spanTags } = ctx.socket.spanContext
+    const path = spanTags['resource.name'].split(' ')[1]
+    const spanKind = ''
     const span = this.startSpan(this.operationName(), {
       meta: {
         service: this.serviceName({ pluginConfig: this.config }),
-        'resource.name': 'websocket.close',
+        'resource.name': `websocket ${path}`,
         'span.type': 'ws',
+        'span.kind': spanKind
 
       }
 
@@ -38,13 +42,11 @@ class WSClosePlugin extends TracingPlugin {
   // }
 
   end (ctx) {
-    console.log('end start in producer')
-    // if (!Object.hasOwn(ctx, 'result')) return
+    if (!Object.hasOwn(ctx, 'result')) return
 
-    // ctx.span.addLink(ctx.socket.spanContext)
+    ctx.span.addLink(ctx.socket.spanContext)
 
     ctx.span.finish()
-    // return ctx.parentStore
   }
 }
 
