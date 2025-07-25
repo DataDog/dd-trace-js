@@ -22,8 +22,6 @@ function wrapHandleUpgrade (handleUpgrade) {
 
     const ctx = { req, socket }
 
-    // console.log('in instrumentation', ctx.req.url)
-
     arguments[3] = function () {
       return serverCh.asyncStart.runStores(ctx, () => {
         try {
@@ -42,8 +40,6 @@ function wrapSend (send) {
     if (!producerCh.start.hasSubscribers) return send.apply(this, arguments)
 
     const [data, options, cb] = arguments
-    // const byteLength = Buffer.byteLength(data)
-    // console.log('otpions in send', this)
 
     const ctx = { data, socket: this._sender._socket }
 
@@ -72,9 +68,7 @@ function createWrapEmit (emit) {
 
 function createWrappedHandler (handler) {
   return function wrappedMessageHandler (data, binary) {
-    const byteLength = binary ? data.length : Buffer.byteLength(data)
-    // console.log('in wrap handler', dataType, byteLength, binary)
-    console.log('byte length', dataLength(data))
+    const byteLength = dataLength(data)
 
     const ctx = { data, binary, socket: this._sender._socket, byteLength }
 
@@ -93,8 +87,7 @@ function wrapListener (originalOn) {
 
 function wrapClose (close) {
   return function (code, data) {
-    const ctx = { code, data }
-    // console.log('arguments in wrap close', arguments)
+    const ctx = { code, data, socket: this._sender._socket }
     return closeCh.traceSync(close, ctx, this, ...arguments)
   }
 }
