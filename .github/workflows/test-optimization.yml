@@ -68,7 +68,7 @@ jobs:
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.node-version }}
-      - run: apk add git
+      - run: apk add bash git
       - uses: ./.github/actions/install
       - run: yarn test:integration:playwright
         env:
