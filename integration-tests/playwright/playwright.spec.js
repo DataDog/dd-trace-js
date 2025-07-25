@@ -81,10 +81,10 @@ versions.forEach((version) => {
       this.timeout(90000)
       sandbox = await createSandbox([`@playwright/test@${version}`, 'typescript'], true)
       cwd = sandbox.folder
-      const { NODE_OPTIONS, ...restOfEnv } = process.env
+      // const { NODE_OPTIONS, ...restOfEnv } = process.env
       // Install chromium (configured in integration-tests/playwright.config.js)
       // *Be advised*: this means that we'll only be using chromium for this test suite
-      execSync('npx playwright install chromium', { cwd, env: restOfEnv, stdio: 'inherit' })
+      // execSync('npx playwright install chromium', { cwd, env: restOfEnv, stdio: 'inherit' })
       webAppServer.listen(0, () => {
         webAppPort = webAppServer.address().port
       })
