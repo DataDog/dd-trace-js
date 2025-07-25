@@ -163,6 +163,7 @@ checkPlugins(path.join(__dirname, '..', '.github', 'workflows', 'test-optimizati
 const IGNORED_WORKFLOWS = {
   all: [
     'codeql-analysis.yml',
+    'dependabot-automation.yml',
     'flakiness.yml',
     'pr-labels.yml',
     'release-3.yml',
