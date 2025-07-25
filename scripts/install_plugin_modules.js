@@ -8,7 +8,7 @@ const semver = require('semver')
 const exec = require('./helpers/exec')
 const externals = require('../packages/dd-trace/test/plugins/externals.json')
 const { getInstrumentation } = require('../packages/dd-trace/test/setup/helpers/load-inst')
-const latests = require('../packages/dd-trace/test/plugins/package.json').dependencies
+const latests = require('../packages/dd-trace/test/plugins/versions/package.json').dependencies
 
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
 
