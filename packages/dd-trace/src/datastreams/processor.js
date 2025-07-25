@@ -186,12 +186,22 @@ class DataStreamsProcessor {
 
   recordCheckpoint (checkpoint, span = null) {
     if (!this.enabled) return
-    this.bucketFromTimestamp(checkpoint.currentTimestamp)
+    const statsPoint = this.bucketFromTimestamp(checkpoint.currentTimestamp)
       .forCheckpoint(checkpoint)
-      .addLatencies(checkpoint)
+    statsPoint.addLatencies(checkpoint)
+
+    // DEBUG: Track hash conversion for checkpoint recording
+    console.log(`DEBUG: Checkpoint recording - Original hash (hex): ${checkpoint.hash.toString('hex')}`)
+    console.log(`DEBUG: Checkpoint recording - Original hash (decimal): ${checkpoint.hash.readBigUInt64BE()}`)
+    console.log(`DEBUG: Checkpoint recording - StatsPoint hash (BigInt): ${statsPoint.hash}`)
+    console.log(`DEBUG: Checkpoint recording - StatsPoint hash (decimal): ${statsPoint.hash.toString()}`)
+
     // set DSM pathway hash on span to enable related traces feature on DSM tab, convert from buffer to uint64
     if (span) {
-      span.setTag(PATHWAY_HASH, checkpoint.hash.readBigUInt64BE(0).toString())
+      // Use the StatsPoint hash which is already a BigInt
+      const pathwayHashValue = statsPoint.hash.toString()
+      console.log(`DEBUG: Checkpoint recording - Setting span tag: ${pathwayHashValue}`)
+      span.setTag(PATHWAY_HASH, pathwayHashValue)
     }
   }
 
@@ -232,6 +242,11 @@ class DataStreamsProcessor {
       )
     }
     const hash = computePathwayHash(this.service, this.env, edgeTags, parentHash)
+
+    // DEBUG: Track hash for context propagation
+    console.log(`DEBUG: Context propagation - Generated hash (hex): ${hash.toString('hex')}`)
+    console.log(`DEBUG: Context propagation - Generated hash (decimal): ${hash.readBigUInt64BE()}`)
+
     const edgeLatencyNs = nowNs - edgeStartNs
     const pathwayLatencyNs = nowNs - pathwayStartNs
     const dataStreamsContext = {
@@ -242,6 +257,11 @@ class DataStreamsProcessor {
       closestOppositeDirectionHash,
       closestOppositeDirectionEdgeStart
     }
+
+    // DEBUG: Track context being propagated
+    console.log(`DEBUG: Context propagation - Context hash (hex): ${dataStreamsContext.hash.toString('hex')}`)
+    console.log(`DEBUG: Context propagation - Context hash (decimal): ${dataStreamsContext.hash.readBigUInt64BE()}`)
+
     if (direction === 'direction:out') {
       // Add the header for this now, as the callee doesn't have access to context when producing
       // - 1 to account for extra byte for {
