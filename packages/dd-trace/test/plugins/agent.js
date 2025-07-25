@@ -12,6 +12,7 @@ const { expect } = require('chai')
 
 const traceHandlers = new Set()
 const statsHandlers = new Set()
+const llmobsHandlers = new Set()
 let sockets = []
 let agent = null
 let listener = null
@@ -331,6 +332,7 @@ module.exports = {
     tracer = require('../..')
     agent = express()
     agent.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
+    agent.use(bodyParser.text({ limit: Infinity, type: 'application/json' }))
     agent.use((req, res, next) => {
       if (req.is('application/msgpack')) {
         if (!req.body.length) return res.status(200).send()
@@ -366,6 +368,14 @@ module.exports = {
 
     // EVP proxy endpoint
     agent.post('/evp_proxy/v2/api/v2/citestcycle', ciVisRequestHandler)
+
+    // LLM Observability traces endpoint
+    agent.post('/evp_proxy/v2/api/v2/llmobs', (req, res) => {
+      llmobsHandlers.forEach(({ handler }) => {
+        handler(JSON.parse(req.body))
+      })
+      res.status(200).send()
+    })
 
     // DSM Checkpoint endpoint
     dsmStats = []
@@ -512,11 +522,22 @@ module.exports = {
   },
 
   /**
+   * Use a callback handler for LLM Observability traces.
+   * @param {Function} callback
+   * @param {Record<string, any>} options
+   * @returns
+   */
+  useLlmobsTraces (callback, options) {
+    return runCallbackAgainstTraces(callback, options, llmobsHandlers)
+  },
+
+  /**
    * Unregister any outstanding expectation callbacks.
    */
   reset () {
     traceHandlers.clear()
     statsHandlers.clear()
+    llmobsHandlers.clear()
   },
 
   /**
@@ -540,6 +561,7 @@ module.exports = {
     agent = null
     traceHandlers.clear()
     statsHandlers.clear()
+    llmobsHandlers.clear()
     for (const plugin of plugins) {
       tracer.use(plugin, { enabled: false })
     }
@@ -551,6 +573,8 @@ module.exports = {
     }
     this.setAvailableEndpoints(DEFAULT_AVAILABLE_ENDPOINTS)
     currentIntegrationName = null
+
+    tracer.llmobs.disable()
 
     return new Promise((resolve, reject) => {
       this.server.on('close', () => {
