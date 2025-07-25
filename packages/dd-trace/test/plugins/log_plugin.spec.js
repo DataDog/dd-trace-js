@@ -3,7 +3,6 @@
 require('../setup/tap')
 
 const LogPlugin = require('../../src/plugins/log_plugin')
-const BunyanPlugin = require('../../../datadog-plugin-bunyan/src/index')
 const Tracer = require('../../src/tracer')
 const Config = require('../../src/config')
 
