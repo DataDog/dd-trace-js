@@ -8,7 +8,7 @@ const WSReceiverPlugin = require('./receiver')
 const WSClosePlugin = require('./close')
 
 class WSPlugin extends CompositePlugin {
-  static get id () { return 'ws' }
+  static get id () { return 'websocket' }
   static get plugins () {
     return {
       server: WSServerPlugin,
