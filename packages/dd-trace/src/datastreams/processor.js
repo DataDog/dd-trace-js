@@ -81,10 +81,19 @@ class StatsBucket {
   }
 
   forCheckpoint ({ hash, parentHash, edgeTags }) {
+    // DEBUG: Track what hash is being used as the key
+    console.log(`DEBUG: forCheckpoint - Input hash (hex): ${hash.toString('hex')}`)
+    console.log(`DEBUG: forCheckpoint - Input hash (decimal): ${hash.readBigUInt64BE()}`)
+    console.log(`DEBUG: forCheckpoint - Input parentHash (hex): ${parentHash.toString('hex')}`)
+    console.log(`DEBUG: forCheckpoint - Input parentHash (decimal): ${parentHash.readBigUInt64BE()}`)
+
     let checkpoint = this._checkpoints.get(hash)
     if (!checkpoint) {
       checkpoint = new StatsPoint(hash, parentHash, edgeTags)
       this._checkpoints.set(hash, checkpoint)
+      console.log(`DEBUG: forCheckpoint - Created new StatsPoint with hash: ${checkpoint.hash}`)
+    } else {
+      console.log(`DEBUG: forCheckpoint - Reused existing StatsPoint with hash: ${checkpoint.hash}`)
     }
 
     return checkpoint
