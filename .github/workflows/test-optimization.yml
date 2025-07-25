@@ -56,7 +56,6 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: rochdev/playwright-tools
-      options: --user root
     env:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
