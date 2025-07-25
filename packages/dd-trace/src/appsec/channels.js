@@ -6,6 +6,7 @@ const dc = require('dc-polyfill')
 module.exports = {
   apolloChannel: dc.tracingChannel('datadog:apollo:request'),
   apolloServerCoreChannel: dc.tracingChannel('datadog:apollo-server-core:request'),
+  apolloHttpServerChannel: dc.tracingChannel('datadog:apollo:httpserver'),
   bodyParser: dc.channel('datadog:body-parser:read:finish'),
   childProcessExecutionTracingChannel: dc.tracingChannel('datadog:child_process:execution'),
   cookieParser: dc.channel('datadog:cookie-parser:read:finish'),
