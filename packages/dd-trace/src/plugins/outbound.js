@@ -28,6 +28,7 @@ class OutboundPlugin extends TracingPlugin {
   }
 
   bindFinish (ctx) {
+    console.log('bindFinish', 'query')
     return ctx.parentStore
   }
 
@@ -92,6 +93,7 @@ class OutboundPlugin extends TracingPlugin {
   }
 
   finish (ctx) {
+    console.log('finish', 'query')
     const span = ctx?.currentStore?.span || this.activeSpan
     this.tagPeerService(span)
 
