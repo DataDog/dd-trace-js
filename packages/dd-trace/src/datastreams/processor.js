@@ -191,15 +191,7 @@ class DataStreamsProcessor {
       .addLatencies(checkpoint)
     // set DSM pathway hash on span to enable related traces feature on DSM tab, convert from buffer to uint64
     if (span) {
-      // DEBUG: Log the checkpoint hash type and value
-      console.log(`DEBUG: checkpoint.hash type: ${typeof checkpoint.hash}, value: ${checkpoint.hash}`)
-      console.log(`DEBUG: checkpoint.hash constructor: ${checkpoint.hash.constructor.name}`)
-
-      // FIX: checkpoint.hash is now a BigInt from StatsPoint constructor, not a Buffer
-      const pathwayHashValue = checkpoint.hash.toString()
-      console.log(`DEBUG: Using pathway hash value: ${pathwayHashValue}`)
-
-      span.setTag(PATHWAY_HASH, pathwayHashValue)
+      span.setTag(PATHWAY_HASH, checkpoint.hash.readBigUInt64BE(0).toString())
     }
   }
 
@@ -240,10 +232,6 @@ class DataStreamsProcessor {
       )
     }
     const hash = computePathwayHash(this.service, this.env, edgeTags, parentHash)
-
-    // DEBUG: Log the generated hash
-    console.log(`DEBUG: Generated hash (hex): ${hash.toString('hex')}, (decimal): ${hash.readBigUInt64BE()}`)
-
     const edgeLatencyNs = nowNs - edgeStartNs
     const pathwayLatencyNs = nowNs - pathwayStartNs
     const dataStreamsContext = {
@@ -254,9 +242,6 @@ class DataStreamsProcessor {
       closestOppositeDirectionHash,
       closestOppositeDirectionEdgeStart
     }
-
-    // DEBUG: Log the context being returned
-    console.log(`DEBUG: Returning context with hash: ${hash.toString('hex')}`)
     if (direction === 'direction:out') {
       // Add the header for this now, as the callee doesn't have access to context when producing
       // - 1 to account for extra byte for {
