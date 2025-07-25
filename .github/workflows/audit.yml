@@ -2,14 +2,8 @@ name: Audit
 
 on:
   pull_request:
-    paths:
-      - yarn.lock
-  push:
-    branches: [master]
-    paths:
-      - yarn.lock
-  schedule:
-    - cron: 0 4 * * *
+    branches:
+      - dependabot/*
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
