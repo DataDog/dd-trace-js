@@ -55,7 +55,7 @@ jobs:
     name: integration-playwright (${{ matrix.playwright-version}}, node-${{ matrix.node-version }})
     runs-on: ubuntu-latest
     container:
-      image: playwright/chromium
+      image: rochdev/playwright-tools
       options: --user root
     env:
       DD_SERVICE: dd-trace-js-integration-tests
@@ -68,8 +68,6 @@ jobs:
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.node-version }}
-      - run: apt-get update && apt-get install -y git
-      - run: npm install -g yarn
       - uses: ./.github/actions/install
       - run: yarn test:integration:playwright
         env:
