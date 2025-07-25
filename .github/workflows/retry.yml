@@ -3,7 +3,6 @@ name: Retry
 on:
   workflow_run:
     branches:
-      - bot/test-package-versions-bump
       - master
       - v[0-9]+.[0-9]+.[0-9]+-proposal
       - v[0-9]+.x
@@ -21,7 +20,6 @@ on:
       - Project
       - System Tests
       - Test Optimization
-      - Update test versions
 
 jobs:
   retry:
