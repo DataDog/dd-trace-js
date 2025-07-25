@@ -11,6 +11,7 @@ const https = require('https')
 const url = require('url')
 const { once } = require('events')
 const { expect } = require('chai')
+const latests = require('../plugins/versions/package.json').dependencies
 
 process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'false'
 
@@ -18,13 +19,9 @@ const mkdtemp = util.promisify(fs.mkdtemp)
 
 const ddTraceInit = path.resolve(__dirname, '../../../../init')
 
-const latestCache = []
 async function getLatest (modName, repoUrl) {
-  if (latestCache[modName]) {
-    return latestCache[modName]
-  }
-  const { stdout } = await retry(() => exec(`npm view ${modName} dist-tags --json`), 1000)
-  const { latest } = JSON.parse(stdout)
+  const latest = latests[modName]
+  // TODO: Avoid calling GitHub API.
   const tags = await get(`https://api.github.com/repos/${repoUrl}/git/refs/tags`)
   for (const tag of tags) {
     if (tag.ref.includes(latest)) {
@@ -68,19 +65,6 @@ function get (theUrl) {
       })
     }).on('error', reject)
   })
-}
-
-async function retry (fn, delay) {
-  let result
-  try {
-    result = fn()
-  } catch (e) {
-    console.log(e)
-    console.log('Retrying after', delay, 'ms')
-    await new Promise(resolve => setTimeout(resolve, delay))
-    result = retry(fn, delay)
-  }
-  return result
 }
 
 function exec (cmd, opts = {}) {
