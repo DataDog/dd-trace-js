@@ -183,14 +183,14 @@ async function createSandbox (dependencies = [], isGitRepo = false,
     return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
   }
   const folder = path.join(os.tmpdir(), id().toString())
-  const out = path.join(folder, `dd-trace-${version}.tgz`)
+  const out = path.join(process.cwd(), `dd-trace-${version}.tgz`)
   const allDependencies = [`file:${out}`].concat(dependencies)
 
   fs.mkdirSync(folder)
   const preferOfflineFlag = process.env.OFFLINE === '1' || process.env.OFFLINE === 'true' ? ' --prefer-offline' : ''
   const addCommand = `yarn add ${allDependencies.join(' ')} --ignore-engines${preferOfflineFlag}`
   const addOptions = { cwd: folder, env: restOfEnv }
-  await exec(`npm pack --silent --pack-destination ${folder}`, { env: restOfEnv }) // TODO: cache this
+  await exec('npm pack --silent', { env: restOfEnv }) // TODO: cache this
 
   try {
     await exec(addCommand, addOptions)
