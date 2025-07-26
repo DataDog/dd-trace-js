@@ -55,7 +55,7 @@ jobs:
     name: integration-playwright (${{ matrix.playwright-version}}, node-${{ matrix.node-version }})
     runs-on: ubuntu-latest
     container:
-      image: rochdev/playwright-tools@sha256:1b353e3de1e29e456b69e4fad043d75f840078d67d07e3d5e0a850ec4bf0d943 # 1.54.1-0
+      image: rochdev/playwright-tools@sha256:4903e8078c956b04d3190973732de99eea4e0fd5074188e007c8f6c7af066504 # 1.54.1-2
     env:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
