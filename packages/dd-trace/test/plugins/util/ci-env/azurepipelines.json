@@ -658,7 +658,7 @@
       "BUILD_REQUESTEDFOREMAIL": "azure-pipelines-commit-author-email@datadoghq.com",
       "BUILD_REQUESTEDFORID": "azure-pipelines-commit-author",
       "BUILD_SOURCEVERSIONMESSAGE": "azure-pipelines-commit-message",
-      "TESTING_TEST_OPTIMIZATION_TEST_CASE_NAME": "http-repository-url-no-git-suffix",
+      "DD_TEST_CASE_NAME": "http-repository-url-no-git-suffix",
       "SYSTEM_JOBID": "azure-pipelines-job-id",
       "SYSTEM_TASKINSTANCEID": "azure-pipelines-task-id",
       "SYSTEM_TEAMFOUNDATIONSERVERURI": "https://azure-pipelines-server-uri.com/",
@@ -687,7 +687,7 @@
       "BUILD_REQUESTEDFOREMAIL": "azure-pipelines-commit-author-email@datadoghq.com",
       "BUILD_REQUESTEDFORID": "azure-pipelines-commit-author",
       "BUILD_SOURCEVERSIONMESSAGE": "azure-pipelines-commit-message",
-      "TESTING_TEST_OPTIMIZATION_TEST_CASE_NAME": "ssh-repository-url-no-git-suffix",
+      "DD_TEST_CASE_NAME": "ssh-repository-url-no-git-suffix",
       "SYSTEM_JOBID": "azure-pipelines-job-id",
       "SYSTEM_TASKINSTANCEID": "azure-pipelines-task-id",
       "SYSTEM_TEAMFOUNDATIONSERVERURI": "https://azure-pipelines-server-uri.com/",
@@ -959,7 +959,7 @@
       "git.commit.author.name": "azure-pipelines-commit-author",
       "git.commit.message": "azure-pipelines-commit-message",
       "git.pull_request.base_branch": "target-branch",
-      "pr.number": 42
+      "pr.number": "42"
     }
   ]
 ]

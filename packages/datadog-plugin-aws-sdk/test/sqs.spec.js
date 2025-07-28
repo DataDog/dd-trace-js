@@ -1,14 +1,14 @@
 'use strict'
 
+const { randomUUID } = require('crypto')
 const sinon = require('sinon')
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const semver = require('semver')
 const { rawExpectedSchema } = require('./sqs-naming')
-
-const queueName = 'SQS_QUEUE_NAME'
-const queueNameDSM = 'SQS_QUEUE_NAME_DSM'
-const queueNameDSMConsumerOnly = 'SQS_QUEUE_NAME_DSM_CONSUMER_ONLY'
+const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
+const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
 
 const getQueueParams = (queueName) => {
   return {
@@ -19,10 +19,6 @@ const getQueueParams = (queueName) => {
   }
 }
 
-const queueOptions = getQueueParams(queueName)
-const queueOptionsDsm = getQueueParams(queueNameDSM)
-const queueOptionsDsmConsumerOnly = getQueueParams(queueNameDSMConsumerOnly)
-
 describe('Plugin', () => {
   describe('aws-sdk (sqs)', function () {
     setup()
@@ -30,12 +26,34 @@ describe('Plugin', () => {
     withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
       let AWS
       let sqs
-      const QueueUrl = 'http://127.0.0.1:4566/00000000000000000000/SQS_QUEUE_NAME'
-      const QueueUrlDsm = 'http://127.0.0.1:4566/00000000000000000000/SQS_QUEUE_NAME_DSM'
-      const QueueUrlDsmConsumerOnly = 'http://127.0.0.1:4566/00000000000000000000/SQS_QUEUE_NAME_DSM_CONSUMER_ONLY'
+      let queueName
+      let queueNameDSM
+      let queueNameDSMConsumerOnly
+      let queueOptions
+      let queueOptionsDsm
+      let queueOptionsDsmConsumerOnly
+      let QueueUrl
+      let QueueUrlDsm
+      let QueueUrlDsmConsumerOnly
       let tracer
 
       const sqsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sqs' : 'aws-sdk'
+
+      beforeEach(() => {
+        const id = randomUUID()
+
+        queueName = `SQS_QUEUE_NAME-${id}`
+        queueNameDSM = `SQS_QUEUE_NAME_DSM-${id}`
+        queueNameDSMConsumerOnly = `SQS_QUEUE_NAME_DSM_CONSUMER_ONLY-${id}`
+
+        queueOptions = getQueueParams(queueName)
+        queueOptionsDsm = getQueueParams(queueNameDSM)
+        queueOptionsDsmConsumerOnly = getQueueParams(queueNameDSMConsumerOnly)
+
+        QueueUrl = `http://127.0.0.1:4566/00000000000000000000/SQS_QUEUE_NAME-${id}`
+        QueueUrlDsm = `http://127.0.0.1:4566/00000000000000000000/SQS_QUEUE_NAME_DSM-${id}`
+        QueueUrlDsmConsumerOnly = `http://127.0.0.1:4566/00000000000000000000/SQS_QUEUE_NAME_DSM_CONSUMER_ONLY-${id}`
+      })
 
       describe('without configuration', () => {
         before(() => {
@@ -48,10 +66,12 @@ describe('Plugin', () => {
           )
         })
 
-        before(done => {
+        before(() => {
           AWS = require(`../../../versions/${sqsClientName}@${version}`).get()
-
           sqs = new AWS.SQS({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' })
+        })
+
+        beforeEach(done => {
           sqs.createQueue(queueOptions, (err, res) => {
             if (err) return done(err)
 
@@ -59,7 +79,7 @@ describe('Plugin', () => {
           })
         })
 
-        after(done => {
+        afterEach(done => {
           sqs.deleteQueue({ QueueUrl }, done)
         })
 
@@ -73,16 +93,16 @@ describe('Plugin', () => {
           (done) => sqs.sendMessage({
             MessageBody: 'test body',
             QueueUrl
-          }, (err) => err && done(err)),
-          'SQS_QUEUE_NAME',
+          }, done),
+          () => queueName,
           'queuename'
         )
 
         withNamingSchema(
-          (done) => sqs.sendMessage({
+          () => new Promise((resolve, reject) => sqs.sendMessage({
             MessageBody: 'test body',
             QueueUrl
-          }, (err) => err && done(err)),
+          }, (err) => err ? reject(err) : resolve())),
           rawExpectedSchema.producer,
           {
             desc: 'producer'
@@ -90,17 +110,17 @@ describe('Plugin', () => {
         )
 
         withNamingSchema(
-          (done) => sqs.sendMessage({
+          () => new Promise((resolve, reject) => sqs.sendMessage({
             MessageBody: 'test body',
             QueueUrl
           }, (err) => {
-            if (err) return done(err)
+            if (err) return reject(err)
 
             sqs.receiveMessage({
               QueueUrl,
               MessageAttributeNames: ['.*']
-            }, (err) => err && done(err))
-          }),
+            }, (err) => err ? reject(err) : resolve())
+          })),
           rawExpectedSchema.consumer,
           {
             desc: 'consumer'
@@ -108,7 +128,9 @@ describe('Plugin', () => {
         )
 
         withNamingSchema(
-          (done) => sqs.listQueues({}, (err) => err && done(err)),
+          () => new Promise((resolve, reject) => {
+            sqs.listQueues({}, (err) => err ? reject(err) : resolve())
+          }),
           rawExpectedSchema.client,
           {
             desc: 'client'
@@ -124,7 +146,7 @@ describe('Plugin', () => {
 
             expect(span.resource.startsWith('sendMessage')).to.equal(true)
             expect(span.meta).to.include({
-              queuename: 'SQS_QUEUE_NAME'
+              queuename: queueName
             })
 
             parentId = span.span_id.toString()
@@ -154,72 +176,72 @@ describe('Plugin', () => {
           })
         })
 
-        it('should propagate the tracing context from the producer to the consumer in batch operations', (done) => {
+        it('should propagate the tracing context from the producer to the consumer in batch operations', async () => {
           let parentId
           let traceId
 
-          agent.assertSomeTraces(traces => {
+          const sendPromise = new Promise((resolve, reject) => {
+            sqs.sendMessageBatch({
+              Entries: [
+                { Id: '1', MessageBody: 'test batch propagation 1' },
+                { Id: '2', MessageBody: 'test batch propagation 2' },
+                { Id: '3', MessageBody: 'test batch propagation 3' }
+              ],
+              QueueUrl
+            }, (err) => err ? reject(err) : resolve())
+          })
+
+          const parentPromise = agent.assertSomeTraces(traces => {
             const span = traces[0][0]
 
             expect(span.resource.startsWith('sendMessageBatch')).to.equal(true)
             expect(span.meta).to.include({
-              queuename: 'SQS_QUEUE_NAME'
+              queuename: queueName
             })
 
             parentId = span.span_id.toString()
             traceId = span.trace_id.toString()
           })
 
-          let batchChildSpans = 0
-          agent.assertSomeTraces(traces => {
-            const span = traces[0][0]
+          await Promise.all([sendPromise, parentPromise])
 
-            expect(parentId).to.be.a('string')
-            expect(span.parent_id.toString()).to.equal(parentId)
-            expect(span.trace_id.toString()).to.equal(traceId)
-            batchChildSpans += 1
-            expect(batchChildSpans).to.equal(3)
-          }, { timeoutMs: 2000 }).then(done, done)
+          async function receiveAndAssertMessage () {
+            const childPromise = agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
 
-          sqs.sendMessageBatch(
-            {
-              Entries: [
-                {
-                  Id: '1',
-                  MessageBody: 'test batch propagation 1'
-                },
-                {
-                  Id: '2',
-                  MessageBody: 'test batch propagation 2'
-                },
-                {
-                  Id: '3',
-                  MessageBody: 'test batch propagation 3'
-                }
-              ],
-              QueueUrl
-            }, (err) => {
-              if (err) return done(err)
+              expect(parentId).to.be.a('string')
+              expect(span.parent_id.toString()).to.equal(parentId)
+              expect(span.trace_id.toString()).to.equal(traceId)
+            })
 
-              function receiveMessage () {
-                sqs.receiveMessage({
-                  QueueUrl,
-                  MaxNumberOfMessages: 1
-                }, (err, data) => {
-                  if (err) return done(err)
+            const receiveMessage = new Promise((resolve, reject) => {
+              sqs.receiveMessage({
+                QueueUrl,
+                MaxNumberOfMessages: 1
+              }, (err, data) => {
+                if (err) return reject(err)
 
+                try {
                   for (const message in data.Messages) {
                     const recordData = data.Messages[message].MessageAttributes
                     expect(recordData).to.have.property('_datadog')
                     const traceContext = JSON.parse(recordData._datadog.StringValue)
                     expect(traceContext).to.have.property('x-datadog-trace-id')
                   }
-                })
-              }
-              receiveMessage()
-              receiveMessage()
-              receiveMessage()
+
+                  resolve()
+                } catch (e) {
+                  reject(e)
+                }
+              })
             })
+
+            await Promise.all([childPromise, receiveMessage])
+          }
+
+          await receiveAndAssertMessage()
+          await receiveAndAssertMessage()
+          await receiveAndAssertMessage()
         })
 
         it('should run the consumer in the context of its span', (done) => {
@@ -313,10 +335,12 @@ describe('Plugin', () => {
           )
         })
 
-        before(done => {
+        before(() => {
           AWS = require(`../../../versions/${sqsClientName}@${version}`).get()
-
           sqs = new AWS.SQS({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' })
+        })
+
+        beforeEach(done => {
           sqs.createQueue(queueOptions, (err, res) => {
             if (err) return done(err)
 
@@ -324,7 +348,7 @@ describe('Plugin', () => {
           })
         })
 
-        after(done => {
+        afterEach(done => {
           sqs.deleteQueue({ QueueUrl }, done)
         })
 
@@ -344,7 +368,7 @@ describe('Plugin', () => {
             })
 
             expect(span.meta).to.include({
-              queuename: 'SQS_QUEUE_NAME',
+              queuename: queueName,
               aws_service: 'SQS',
               region: 'us-east-1'
             })
@@ -384,8 +408,8 @@ describe('Plugin', () => {
       })
 
       describe('data stream monitoring', () => {
-        const expectedProducerHash = '4673734031235697865'
-        const expectedConsumerHash = '9749472979704578383'
+        let expectedProducerHash
+        let expectedConsumerHash
         let nowStub
 
         before(() => {
@@ -397,40 +421,47 @@ describe('Plugin', () => {
         before(async () => {
           return agent.load('aws-sdk', {
             sqs: {
-              consumer: false,
               dsmEnabled: true
             }
           },
           { dsmEnabled: true })
         })
 
-        before(done => {
+        before(() => {
           AWS = require(`../../../versions/${sqsClientName}@${version}`).get()
-
           sqs = new AWS.SQS({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' })
-          sqs.createQueue(queueOptionsDsm, (err, res) => {
-            if (err) return done(err)
-
-            done()
-          })
         })
 
-        before(done => {
-          AWS = require(`../../../versions/${sqsClientName}@${version}`).get()
+        beforeEach(() => {
+          const producerHash = computePathwayHash(
+            'test',
+            'tester',
+            ['direction:out', 'topic:' + queueNameDSM, 'type:sqs'],
+            ENTRY_PARENT_HASH
+          )
 
-          sqs = new AWS.SQS({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' })
-          sqs.createQueue(queueOptionsDsmConsumerOnly, (err, res) => {
-            if (err) return done(err)
-
-            done()
-          })
+          expectedProducerHash = producerHash.readBigUInt64BE(0).toString()
+          expectedConsumerHash = computePathwayHash(
+            'test',
+            'tester',
+            ['direction:in', 'topic:' + queueNameDSM, 'type:sqs'],
+            producerHash
+          ).readBigUInt64BE(0).toString()
         })
 
-        after(done => {
+        beforeEach(done => {
+          sqs.createQueue(queueOptionsDsm, (err, res) => err ? done(err) : done())
+        })
+
+        beforeEach(done => {
+          sqs.createQueue(queueOptionsDsmConsumerOnly, (err, res) => err ? done(err) : done())
+        })
+
+        afterEach(done => {
           sqs.deleteQueue({ QueueUrl: QueueUrlDsm }, done)
         })
 
-        after(done => {
+        afterEach(done => {
           sqs.deleteQueue({ QueueUrl: QueueUrlDsmConsumerOnly }, done)
         })
 
@@ -501,28 +532,23 @@ describe('Plugin', () => {
         if (sqsClientName === 'aws-sdk' && semver.intersects(version, '>=2.3')) {
           it('Should set pathway hash tag on a span when consuming and promise() was used over a callback',
             async () => {
-              await sqs.sendMessage({ MessageBody: 'test DSM', QueueUrl: QueueUrlDsm })
-              await sqs.receiveMessage({ QueueUrl: QueueUrlDsm }).promise()
-
               let consumeSpanMeta = {}
-              return new Promise((resolve, reject) => {
-                agent.assertSomeTraces(traces => {
-                  const span = traces[0][0]
+              const tracePromise = agent.assertSomeTraces(traces => {
+                const span = traces[0][0]
 
-                  if (span.name === 'aws.request' && span.meta['aws.operation'] === 'receiveMessage') {
-                    consumeSpanMeta = span.meta
-                  }
+                if (span.name === 'aws.request' && span.meta['aws.operation'] === 'receiveMessage') {
+                  consumeSpanMeta = span.meta
+                }
 
-                  try {
-                    expect(consumeSpanMeta).to.include({
-                      'pathway.hash': expectedConsumerHash
-                    })
-                    resolve()
-                  } catch (error) {
-                    reject(error)
-                  }
+                expect(consumeSpanMeta).to.include({
+                  'pathway.hash': expectedConsumerHash
                 })
               })
+
+              await sqs.sendMessage({ MessageBody: 'test DSM', QueueUrl: QueueUrlDsm }).promise()
+              await sqs.receiveMessage({ QueueUrl: QueueUrlDsm }).promise()
+
+              return tracePromise
             })
         }
 

@@ -1,3 +1,5 @@
+'use strict'
+
 const { SCI_COMMIT_SHA, SCI_REPOSITORY_URL } = require('./constants')
 
 class GitMetadataTagger {

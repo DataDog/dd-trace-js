@@ -1,3 +1,5 @@
+'use strict'
+
 const fs = require('fs')
 const path = require('path')
 
@@ -287,7 +289,7 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
     // Otherwise we unshallow and get commits to upload again
     log.debug('It is shallow clone, unshallowing...')
     if (!isFalse(getEnvironmentVariable('DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED'))) {
-      unshallowRepository()
+      unshallowRepository(false)
     }
 
     // The latest commits change after unshallowing

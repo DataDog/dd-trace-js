@@ -1,3 +1,5 @@
+'use strict'
+
 const EventPlugin = require('./event')
 
 // Values taken from parameter names in datadog-instrumentations/src/fs.js.

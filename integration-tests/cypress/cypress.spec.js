@@ -1,11 +1,9 @@
 'use strict'
 
-const http = require('http')
 const { exec, execSync } = require('child_process')
 const path = require('path')
 const fs = require('fs')
 
-const getPort = require('get-port')
 const { assert } = require('chai')
 
 const {
@@ -15,6 +13,7 @@ const {
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const webAppServer = require('../ci-visibility/web-app-server')
+const secondWebAppServer = require('../ci-visibility/web-app-server-without-rum')
 const coverageFixture = require('../ci-visibility/fixtures/coverage.json')
 const {
   TEST_STATUS,
@@ -55,6 +54,7 @@ const {
   DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
   DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
   DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
+  DD_CAPABILITIES_FAILED_TEST_REPLAY,
   TEST_RETRY_REASON_TYPES,
   TEST_IS_MODIFIED
 } = require('../../packages/dd-trace/src/plugins/util/test')
@@ -113,7 +113,7 @@ moduleTypes.forEach(({
 
     this.retries(2)
     this.timeout(60000)
-    let sandbox, cwd, receiver, childProcess, webAppPort, secondWebAppServer
+    let sandbox, cwd, receiver, childProcess, webAppPort, secondWebAppPort
 
     if (type === 'commonJS') {
       testCommand = testCommand(version)
@@ -123,8 +123,14 @@ moduleTypes.forEach(({
       // cypress-fail-fast is required as an incompatible plugin
       sandbox = await createSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0'], true)
       cwd = sandbox.folder
-      webAppPort = await getPort()
-      webAppServer.listen(webAppPort)
+      webAppServer.listen(0, 'localhost', () => {
+        webAppPort = webAppServer.address().port
+      })
+      if (version === 'latest') {
+        secondWebAppServer.listen(0, 'localhost', () => {
+          secondWebAppPort = secondWebAppServer.address().port
+        })
+      }
     })
 
     after(async () => {
@@ -1731,21 +1737,6 @@ moduleTypes.forEach(({
           ...restEnvVars
         } = getCiVisEvpProxyConfig(receiver.port)
 
-        const secondWebAppPort = await getPort()
-
-        secondWebAppServer = http.createServer((req, res) => {
-          res.setHeader('Content-Type', 'text/html')
-          res.writeHead(200)
-          res.end(`
-            <!DOCTYPE html>
-            <html>
-              <div class="hella-world">Hella World</div>
-            </html>
-          `)
-        })
-
-        secondWebAppServer.listen(secondWebAppPort)
-
         const specToRun = 'cypress/e2e/multi-origin.js'
 
         childProcess = exec(
@@ -2263,7 +2254,8 @@ moduleTypes.forEach(({
               assert.equal(metadata.test[DD_CAPABILITIES_IMPACTED_TESTS], '1')
               assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
               assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
-              assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '4')
+              assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
+              assert.equal(metadata.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], '1')
               // capabilities logic does not overwrite test session name
               assert.equal(metadata.test[TEST_SESSION_NAME], 'my-test-session-name')
             })

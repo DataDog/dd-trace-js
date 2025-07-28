@@ -2,12 +2,12 @@
 
 /* eslint import/no-extraneous-dependencies: ["error", {"packageDir": ['./']}] */
 
-const path = require('path')
+const path = require('node:path')
 const axios = require('axios')
-const getPort = require('get-port')
-const { execSync, spawn } = require('child_process')
+const { execSync, spawn } = require('node:child_process')
+const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { writeFileSync, readdirSync } = require('fs')
+const { writeFileSync, readdirSync } = require('node:fs')
 const { satisfies } = require('semver')
 const { rawExpectedSchema } = require('./naming')
 
@@ -19,13 +19,11 @@ describe('Plugin', function () {
     const satisfiesStandalone = version => satisfies(version, '>=12.0.0')
 
     // TODO: Figure out why 10.x tests are failing.
-    withVersions('next', 'next', '>=11.1', version => {
+    withVersions('next', 'next', '>=11.1 <15.4.1', version => {
       const pkg = require(`../../../versions/next@${version}/node_modules/next/package.json`)
 
       const startServer = ({ withConfig, standalone }, schemaVersion = 'v0', defaultToGlobalService = false) => {
         before(async () => {
-          port = await getPort()
-
           return agent.load('next')
         })
 
@@ -40,7 +38,7 @@ describe('Plugin', function () {
             env: {
               ...process.env,
               VERSION: version,
-              PORT: port,
+              PORT: 0,
               DD_TRACE_AGENT_PORT: agent.server.address().port,
               WITH_CONFIG: withConfig,
               DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: schemaVersion,
@@ -55,8 +53,12 @@ describe('Plugin', function () {
           server.once('error', done)
 
           function waitUntilServerStarted (chunk) {
-            const chunkString = chunk.toString()
-            if (chunkString?.includes(port) || chunkString?.includes('Ready ')) {
+            const chunkStr = chunk.toString()
+            const match = chunkStr.match(/port:? (\d+)/) ||
+              chunkStr.match(/http:\/\/127\.0\.0\.1:(\d+)/)
+
+            if (match) {
+              port = Number(match[1])
               server.stdout.off('data', waitUntilServerStarted)
               done()
             }
@@ -167,6 +169,7 @@ describe('Plugin', function () {
                 expect(spans[1].meta).to.have.property('http.method', 'GET')
                 expect(spans[1].meta).to.have.property('http.status_code', '200')
                 expect(spans[1].meta).to.have.property('component', 'next')
+                expect(spans[1].meta).to.have.property('_dd.integration', 'next')
               })
               .then(done)
               .catch(done)

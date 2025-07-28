@@ -87,6 +87,7 @@ describe('Plugin', () => {
               expect(spans[0].meta).to.have.property('http.method', 'GET')
               expect(spans[0].meta).to.have.property('http.status_code', '200')
               expect(spans[0].meta).to.have.property('component', 'microgateway')
+              expect(spans[0].meta).to.have.property('_dd.integration', 'microgateway')
             })
             .then(done)
             .catch(done)

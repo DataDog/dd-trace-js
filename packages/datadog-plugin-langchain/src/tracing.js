@@ -4,15 +4,12 @@ const { MEASURED } = require('../../../ext/tags')
 const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
-const API_KEY = 'langchain.request.api_key'
 const MODEL = 'langchain.request.model'
 const PROVIDER = 'langchain.request.provider'
 const TYPE = 'langchain.request.type'
 
 const LangChainHandler = require('./handlers/default')
-const LangChainChatModelHandler = require('./handlers/language_models/chat_model')
-const LangChainLLMHandler = require('./handlers/language_models/llm')
-const LangChainChainHandler = require('./handlers/chain')
+const LangChainLanguageModelHandler = require('./handlers/language_models')
 const LangChainEmbeddingHandler = require('./handlers/embedding')
 
 class BaseLangChainTracingPlugin extends TracingPlugin {
@@ -24,9 +21,9 @@ class BaseLangChainTracingPlugin extends TracingPlugin {
     super(...arguments)
 
     this.handlers = {
-      chain: new LangChainChainHandler(this._tracerConfig),
-      chat_model: new LangChainChatModelHandler(this._tracerConfig),
-      llm: new LangChainLLMHandler(this._tracerConfig),
+      chain: new LangChainHandler(this._tracerConfig),
+      chat_model: new LangChainLanguageModelHandler(this._tracerConfig),
+      llm: new LangChainLanguageModelHandler(this._tracerConfig),
       embedding: new LangChainEmbeddingHandler(this._tracerConfig),
       default: new LangChainHandler(this._tracerConfig)
     }
@@ -40,12 +37,16 @@ class BaseLangChainTracingPlugin extends TracingPlugin {
 
     // Runnable interfaces have an `lc_namespace` property
     const ns = ctx.self.lc_namespace || ctx.namespace
-    const resource = ctx.resource = [...ns, ctx.self.constructor.name].join('.')
 
-    const handler = this.handlers[type]
+    const resourceParts = [...ns, ctx.self.constructor.name]
+    if (type === 'tool') {
+      resourceParts.push(ctx.instance.name)
+    }
+    const resource = ctx.resource = resourceParts.join('.')
+
+    const handler = this.handlers[type] || this.handlers.default
 
     const instance = ctx.instance
-    const apiKey = handler.extractApiKey(instance)
     const provider = handler.extractProvider(instance)
     const model = handler.extractModel(instance)
 
@@ -58,9 +59,8 @@ class BaseLangChainTracingPlugin extends TracingPlugin {
       }
     }, false)
 
-    const tags = handler.getSpanStartTags(ctx, provider, span) || []
+    const tags = {}
 
-    if (apiKey) tags[API_KEY] = apiKey
     if (provider) tags[PROVIDER] = provider
     if (model) tags[MODEL] = model
     if (type) tags[TYPE] = type
@@ -75,13 +75,6 @@ class BaseLangChainTracingPlugin extends TracingPlugin {
 
   asyncEnd (ctx) {
     const span = ctx.currentStore.span
-
-    const { type } = ctx
-
-    const handler = this.handlers[type]
-    const tags = handler.getSpanEndTags(ctx, span) || {}
-
-    span.addTags(tags)
 
     span.finish()
   }
@@ -139,11 +132,38 @@ class EmbeddingsEmbedDocumentsPlugin extends BaseLangChainTracingPlugin {
   }
 }
 
+class ToolInvokePlugin extends BaseLangChainTracingPlugin {
+  static get id () { return 'langchain_tool_invoke' }
+  static get lcType () { return 'tool' }
+  static get prefix () {
+    return 'tracing:orchestrion:@langchain/core:Tool_invoke'
+  }
+}
+
+class VectorStoreSimilaritySearchPlugin extends BaseLangChainTracingPlugin {
+  static get id () { return 'langchain_vectorstore_similarity_search' }
+  static get lcType () { return 'similarity_search' }
+  static get prefix () {
+    return 'tracing:orchestrion:@langchain/core:VectorStore_similaritySearch'
+  }
+}
+
+class VectorStoreSimilaritySearchWithScorePlugin extends BaseLangChainTracingPlugin {
+  static get id () { return 'langchain_vectorstore_similarity_search_with_score' }
+  static get lcType () { return 'similarity_search' }
+  static get prefix () {
+    return 'tracing:orchestrion:@langchain/core:VectorStore_similaritySearchWithScore'
+  }
+}
+
 module.exports = [
   RunnableSequenceInvokePlugin,
   RunnableSequenceBatchPlugin,
   BaseChatModelGeneratePlugin,
   BaseLLMGeneratePlugin,
   EmbeddingsEmbedQueryPlugin,
-  EmbeddingsEmbedDocumentsPlugin
+  EmbeddingsEmbedDocumentsPlugin,
+  ToolInvokePlugin,
+  VectorStoreSimilaritySearchPlugin,
+  VectorStoreSimilaritySearchWithScorePlugin
 ]

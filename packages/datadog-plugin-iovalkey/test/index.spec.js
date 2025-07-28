@@ -1,5 +1,6 @@
 'use strict'
 
+const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -37,6 +38,7 @@ describe('Plugin', () => {
             expect(traces[0][0]).to.have.property('resource', 'get')
             expect(traces[0][0]).to.have.property('type', 'valkey')
             expect(traces[0][0].meta).to.have.property('component', 'iovalkey')
+            expect(traces[0][0].meta).to.have.property('_dd.integration', 'iovalkey')
             expect(traces[0][0].meta).to.have.property('db.name', '0')
             expect(traces[0][0].meta).to.have.property('db.type', 'valkey')
             expect(traces[0][0].meta).to.have.property('span.kind', 'client')

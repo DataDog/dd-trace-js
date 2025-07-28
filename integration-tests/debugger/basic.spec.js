@@ -1,6 +1,8 @@
 'use strict'
 
+const { writeFileSync } = require('fs')
 const os = require('os')
+const { join } = require('path')
 
 const { assert } = require('chai')
 const { pollInterval, setup } = require('./utils')
@@ -188,7 +190,7 @@ describe('Dynamic Instrumentation', function () {
 
       it(
         'should send expected error diagnostics messages if probe doesn\'t conform to expected schema',
-        unsupporedOrInvalidProbesTest('bad config!!!', { status: 'ERROR' })
+        unsupporedOrInvalidProbesTest({ invalid: 'config' }, { status: 'ERROR' })
       )
 
       it(
@@ -493,10 +495,7 @@ describe('Dynamic Instrumentation', function () {
     })
 
     describe('input messages', function () {
-      it(
-        'should capture and send expected payload when a log line probe is triggered',
-        testBasicInputWithDD.bind(null, t)
-      )
+      it('should capture and send expected payload when a log line probe is triggered', testBasicInput.bind(null, t))
 
       it('should respond with updated message if probe message is updated', function (done) {
         const expectedMessages = ['Hello World!', 'Hello Updated World!']
@@ -674,10 +673,17 @@ describe('Dynamic Instrumentation', function () {
       })
 
       it('should report error if condition cannot be compiled', function (done) {
+        const rcConfig = t.generateRemoteConfig({
+          when: { dsl: 'original dsl', json: { ref: 'this is not a valid ref' } }
+        })
+
         t.agent.on('debugger-diagnostics', ({ payload }) => {
           payload.forEach(({ debugger: { diagnostics } }) => {
             if (diagnostics.status === 'ERROR') {
-              assert.strictEqual(diagnostics.exception.message, 'Cannot compile expression: original dsl')
+              assert.strictEqual(
+                diagnostics.exception.message,
+                `Cannot compile expression: original dsl (probe: ${rcConfig.config.id}, version: 0)`
+              )
               done()
             } else if (diagnostics.status === 'INSTALLED') {
               assert.fail('Should not install when condition cannot be compiled')
@@ -685,9 +691,7 @@ describe('Dynamic Instrumentation', function () {
           })
         })
 
-        t.agent.addRemoteConfig(t.generateRemoteConfig({
-          when: { dsl: 'original dsl', json: { ref: 'this is not a valid ref' } }
-        }))
+        t.agent.addRemoteConfig(rcConfig)
       })
     })
 
@@ -738,6 +742,18 @@ describe('Dynamic Instrumentation', function () {
     })
   })
 
+  describe('probe file', function () {
+    const probeFile = join(os.tmpdir(), 'probes.json')
+    const t = setup({
+      env: { DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE: probeFile },
+      dependencies: ['fastify']
+    })
+    const probe = t.generateProbeConfig()
+    writeFileSync(probeFile, JSON.stringify([probe]))
+
+    it('should install probes from a probe file', testBasicInputWithoutRC.bind(null, t, probe))
+  })
+
   describe('DD_TRACING_ENABLED=true, DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED=true', function () {
     const t = setup({
       env: { DD_TRACING_ENABLED: true, DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED: true },
@@ -745,10 +761,7 @@ describe('Dynamic Instrumentation', function () {
     })
 
     describe('input messages', function () {
-      it(
-        'should capture and send expected payload when a log line probe is triggered',
-        testBasicInputWithDD.bind(null, t)
-      )
+      it('should capture and send expected payload when a log line probe is triggered', testBasicInput.bind(null, t))
     })
   })
 
@@ -759,10 +772,7 @@ describe('Dynamic Instrumentation', function () {
     })
 
     describe('input messages', function () {
-      it(
-        'should capture and send expected payload when a log line probe is triggered',
-        testBasicInputWithDD.bind(null, t)
-      )
+      it('should capture and send expected payload when a log line probe is triggered', testBasicInput.bind(null, t))
     })
   })
 
@@ -781,10 +791,19 @@ describe('Dynamic Instrumentation', function () {
   })
 })
 
-function testBasicInputWithDD (t, done) {
-  let traceId, spanId, dd
-
+function testBasicInput (t, done) {
   t.triggerBreakpoint()
+  setupAssertionListeners(t, done)
+  t.agent.addRemoteConfig(t.rcConfig)
+}
+
+function testBasicInputWithoutRC (t, probe, done) {
+  t.triggerBreakpoint(false)
+  setupAssertionListeners(t, done, probe)
+}
+
+function setupAssertionListeners (t, done, probe) {
+  let traceId, spanId, dd
 
   t.agent.on('message', ({ payload }) => {
     const span = payload.find((arr) => arr[0].name === 'fastify.request')?.[0]
@@ -797,7 +816,7 @@ function testBasicInputWithDD (t, done) {
   })
 
   t.agent.on('debugger-input', ({ payload }) => {
-    assertBasicInputPayload(t, payload)
+    assertBasicInputPayload(t, payload, probe)
 
     payload = payload[0]
     assert.isObject(payload.dd)
@@ -810,8 +829,6 @@ function testBasicInputWithDD (t, done) {
 
     assertDD()
   })
-
-  t.agent.addRemoteConfig(t.rcConfig)
 
   function assertDD () {
     if (!traceId || !spanId || !dd) return
@@ -833,7 +850,7 @@ function testBasicInputWithoutDD (t, done) {
   t.agent.addRemoteConfig(t.rcConfig)
 }
 
-function assertBasicInputPayload (t, payload) {
+function assertBasicInputPayload (t, payload, probe = t.rcConfig.config) {
   assert.isArray(payload)
   assert.lengthOf(payload, 1)
   payload = payload[0]
@@ -852,7 +869,7 @@ function assertBasicInputPayload (t, payload) {
     debugger: {
       snapshot: {
         probe: {
-          id: t.rcConfig.config.id,
+          id: probe.id,
           version: 0,
           location: { file: t.breakpoint.deployedFile, lines: [String(t.breakpoint.line)] }
         },

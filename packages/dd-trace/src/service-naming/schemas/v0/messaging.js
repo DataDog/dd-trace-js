@@ -1,3 +1,5 @@
+'use strict'
+
 const { identityService, awsServiceV0 } = require('../util')
 
 function amqpServiceName ({ tracerService }) {
@@ -13,6 +15,10 @@ const messaging = {
     amqp10: {
       opName: () => 'amqp.send',
       serviceName: amqpServiceName
+    },
+    'azure-service-bus': {
+      opName: () => 'azure.servicebus.send',
+      serviceName: ({ tracerService }) => `${tracerService}-azure-service-bus`
     },
     'google-cloud-pubsub': {
       opName: () => 'pubsub.request',

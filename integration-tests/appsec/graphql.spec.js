@@ -14,7 +14,7 @@ describe('graphql', () => {
   let sandbox, cwd, agent, webFile, proc
 
   before(async function () {
-    sandbox = await createSandbox(['@apollo/server', 'graphql', 'koalas'])
+    sandbox = await createSandbox(['@apollo/server@4', 'graphql', 'koalas'])
     cwd = sandbox.folder
     webFile = path.join(cwd, 'graphql/index.js')
   })
@@ -72,15 +72,15 @@ describe('graphql', () => {
     const result = {
       triggers: [
         {
-          rule:
-          {
+          rule: {
             id: 'test-rule-id-1',
             name: 'test-rule-name-1',
             tags:
             {
-              category: 'attack_attempt',
-              type: 'security_scanner'
-            }
+              type: 'security_scanner',
+              category: 'attack_attempt'
+            },
+            on_match: []
           },
           rule_matches: [
             {
@@ -109,7 +109,7 @@ describe('graphql', () => {
       assert.property(payload[1][0].metrics, '_dd.appsec.waf.duration')
       assert.propertyVal(payload[1][0].meta, 'appsec.event', 'true')
       assert.property(payload[1][0].meta, '_dd.appsec.json')
-      assert.propertyVal(payload[1][0].meta, '_dd.appsec.json', JSON.stringify(result))
+      assert.deepStrictEqual(JSON.parse(payload[1][0].meta['_dd.appsec.json']), result)
     })
 
     await axios({

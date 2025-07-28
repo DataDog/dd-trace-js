@@ -61,6 +61,12 @@
       "versions": ["^4"]
     }
   ],
+  "child_process": [
+    {
+      "name": "bluebird",
+      "versions": ["^3"]
+    }
+  ],
   "cookie-parser": [
     {
       "name": "express",
@@ -93,6 +99,10 @@
     {
       "name": "multer",
       "versions": ["^1.4.4-lts.1"]
+    },
+    {
+      "name": "ejs",
+      "versions": ["3.1.10"]
     }
   ],
   "express-mongo-sanitize": [
@@ -154,6 +164,10 @@
     },
     {
       "name": "@fastify/cookie",
+      "versions": [">=6"]
+    },
+    {
+      "name": "@fastify/multipart",
       "versions": [">=6"]
     }
   ],
@@ -251,6 +265,12 @@
       "versions": ["9.1.4"]
     }
   ],
+  "hono": [
+    {
+      "name": "@hono/node-server",
+      "versions": ["1.15.0"]
+    }
+  ],
   "jest": [
     {
       "name": "jest",
@@ -303,11 +323,11 @@
       "versions": [">=0.1"]
     },
     {
-      "name": "@langchain/openai",
+      "name": "@langchain/cohere",
       "versions": [">=0.1"]
     },
     {
-      "name": "@langchain/cohere",
+      "name": "langchain",
       "versions": [">=0.1"]
     }
   ],
