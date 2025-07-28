@@ -17,7 +17,9 @@ const CONTEXT_PROPAGATION_KEY_BASE64 = 'dd-pathway-ctx-base64'
 const logKeys = [CONTEXT_PROPAGATION_KEY, CONTEXT_PROPAGATION_KEY_BASE64]
 
 function shaHash (checkpointString) {
+  console.log('in shaHash checkpointString', checkpointString)
   const hash = crypto.createHash('md5').update(checkpointString).digest('hex').slice(0, 16)
+  console.log('in shaHash hash', hash)
   return Buffer.from(hash, 'hex')
 }
 
@@ -33,11 +35,14 @@ function computeHash (service, env, edgeTags, parentHash) {
   const currentHash = shaHash(`${service}${env}` + hashableEdgeTags.join(''))
   const buf = Buffer.concat([currentHash, parentHash], 16)
   value = shaHash(buf.toString())
+  console.log('in computeHash value', value)
   cache.set(key, value)
   return value
 }
 
 function encodePathwayContext (dataStreamsContext) {
+  console.log('in encodePathwayContext dataStreamsContext', dataStreamsContext)
+  console.log('in encodePathwayContext dataStreamsContext.hash', dataStreamsContext.hash)
   return Buffer.concat([
     dataStreamsContext.hash,
     Buffer.from(encodeVarint(Math.round(dataStreamsContext.pathwayStartNs / 1e6))),
