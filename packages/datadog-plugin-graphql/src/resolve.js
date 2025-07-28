@@ -10,13 +10,13 @@ class GraphQLResolvePlugin extends TracingPlugin {
   static get operation () { return 'resolve' }
 
   start (fieldCtx) {
-    const { info, ctx: parentCtx, args } = fieldCtx
+    const { info, rootCtx, args } = fieldCtx
 
     const path = getPath(info, this.config)
 
     // we need to get the parent span to the field if it exists for correct span parenting
     // of nested fields
-    const parentField = getParentField(parentCtx, pathToArray(info && info.path))
+    const parentField = getParentField(rootCtx, pathToArray(info && info.path))
     const childOf = parentField?.ctx?.currentStore?.span
 
     fieldCtx.parent = parentField
@@ -25,18 +25,18 @@ class GraphQLResolvePlugin extends TracingPlugin {
     const computedPathString = path.join('.')
 
     if (this.config.collapse) {
-      if (parentCtx.fields[computedPathString]) return
+      if (rootCtx.fields[computedPathString]) return
 
-      if (!parentCtx[collapsedPathSym]) {
-        parentCtx[collapsedPathSym] = {}
-      } else if (parentCtx[collapsedPathSym][computedPathString]) {
+      if (!rootCtx[collapsedPathSym]) {
+        rootCtx[collapsedPathSym] = {}
+      } else if (rootCtx[collapsedPathSym][computedPathString]) {
         return
       }
 
-      parentCtx[collapsedPathSym][computedPathString] = true
+      rootCtx[collapsedPathSym][computedPathString] = true
     }
 
-    const document = parentCtx.source
+    const document = rootCtx.source
     const fieldNode = info.fieldNodes.find(fieldNode => fieldNode.kind === 'Field')
     const loc = this.config.source && document && fieldNode && fieldNode.loc
     const source = loc && document.slice(loc.start, loc.end)
@@ -66,7 +66,7 @@ class GraphQLResolvePlugin extends TracingPlugin {
     }
 
     if (this.resolverStartCh.hasSubscribers) {
-      this.resolverStartCh.publish({ ctx: parentCtx, resolverInfo: getResolverInfo(info, args) })
+      this.resolverStartCh.publish({ ctx: rootCtx, resolverInfo: getResolverInfo(info, args) })
     }
 
     return fieldCtx.currentStore

@@ -160,6 +160,10 @@ function wrapExecute (execute) {
       const contextValue = args.contextValue
       const operation = getOperation(document, args.operationName)
 
+      if (contexts.has(contextValue)) {
+        return exe.apply(this, arguments)
+      }
+
       const ctx = {
         operation,
         args,
@@ -168,11 +172,8 @@ function wrapExecute (execute) {
         fields: {},
         abortController: new AbortController()
       }
-      return startExecuteCh.runStores(ctx, () => {
-        if (contexts.has(contextValue)) {
-          return exe.apply(this, arguments)
-        }
 
+      return startExecuteCh.runStores(ctx, () => {
         if (schema) {
           wrapFields(schema._queryType)
           wrapFields(schema._mutationType)
@@ -259,18 +260,18 @@ function pathToArray (path) {
   return flattened.reverse()
 }
 
-function assertField (parentCtx, info, args) {
+function assertField (rootCtx, info, args) {
   const pathInfo = info && info.path
 
   const path = pathToArray(pathInfo)
 
   const pathString = path.join('.')
-  const fields = parentCtx.fields
+  const fields = rootCtx.fields
 
   let field = fields[pathString]
 
   if (!field) {
-    const fieldCtx = { info, ctx: parentCtx, args }
+    const fieldCtx = { info, rootCtx, args }
     startResolveCh.publish(fieldCtx)
     field = fields[pathString] = {
       error: null,
