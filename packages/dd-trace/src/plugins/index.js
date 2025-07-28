@@ -74,7 +74,6 @@ module.exports = {
   get workerpool () { return require('../../../datadog-plugin-mocha/src') },
   get moleculer () { return require('../../../datadog-plugin-moleculer/src') },
   get mongodb () { return require('../../../datadog-plugin-mongodb-core/src') },
-  get mongoose () { return require('../../../datadog-plugin-mongoose/src') },
   get 'mongodb-core' () { return require('../../../datadog-plugin-mongodb-core/src') },
   get mysql () { return require('../../../datadog-plugin-mysql/src') },
   get mysql2 () { return require('../../../datadog-plugin-mysql2/src') },

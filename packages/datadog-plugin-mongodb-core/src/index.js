@@ -12,6 +12,12 @@ class MongodbCorePlugin extends DatabasePlugin {
   // should be removed if one day this will be fixed
   static get peerServicePrecursors () { return [] }
 
+  constructor (tracer, config) {
+    super(tracer, config)
+    // this channel is for wrapping the callback of mongoose exec methods and handling store context, no handler needed
+    this.addBind('datadog:mongodb-core:collection:addQueue', () => {})
+  }
+
   configure (config) {
     super.configure(config)
 

@@ -7,41 +7,15 @@ const shimmer = require('../../datadog-shimmer')
 const startCh = channel('datadog:mongoose:model:filter:start')
 const finishCh = channel('datadog:mongoose:model:filter:finish')
 // this channel is for wrapping the callback of exec methods and handling store context
-const callbackCh = channel('datadog:mongoose:model:exec:callback')
+const addQueueCh = channel('datadog:mongoose:collection:addQueue')
 
 function wrapAddQueue (addQueue) {
-  return function (name, args, options) {
-    if (typeof name === 'function') {
-      arguments[0] = shimmer.wrapFunction(name, original => function () {
-        const ctx = {}
-        return callbackCh.runStores(ctx, original, this, ...arguments)
-      })
+  const ctx = {}
+  return addQueueCh.runStores(ctx, () => {
+    return function addQueueWithTrace (name) {
+      return addQueue.apply(this, arguments)
     }
-
-    return addQueue.apply(this, arguments)
-  }
-}
-
-function wrapExec (exec) {
-  return function (op, callback) {
-    if (typeof op === 'function') {
-      callback = op
-      op = undefined
-    }
-
-    if (typeof callback === 'function') {
-      const ctx = {}
-      const wrappedCallback = shimmer.wrapFunction(callback, original => function () {
-        return callbackCh.runStores(ctx, original, this, ...arguments)
-      })
-
-      return op === undefined
-        ? exec.call(this, wrappedCallback)
-        : exec.call(this, op, wrappedCallback)
-    }
-
-    return exec.apply(this, arguments)
-  }
+  })
 }
 
 addHook({
@@ -53,17 +27,7 @@ addHook({
     shimmer.wrap(mongoose.Promise.prototype, 'then', wrapThen)
   }
 
-  if (mongoose.Query) {
-    shimmer.wrap(mongoose.Query.prototype, 'exec', wrapExec)
-  }
-
-  if (mongoose.Aggregate) {
-    shimmer.wrap(mongoose.Aggregate.prototype, 'exec', wrapExec)
-  }
-
-  if (mongoose.Collection) {
-    shimmer.wrap(mongoose.Collection.prototype, 'addQueue', wrapAddQueue)
-  }
+  shimmer.wrap(mongoose.Collection.prototype, 'addQueue', wrapAddQueue)
 
   return mongoose
 })
