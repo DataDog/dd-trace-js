@@ -90,12 +90,12 @@ function getMetaForTrigger ({ functionName, methodName, invocationContext }) {
   } else if (triggerMap[methodName] === 'EventHub') {
     const partitionContext = invocationContext.triggerMetadata.triggerPartitionContext
     meta = {
-    ...meta,
-    'messaging.destination.name': partitionContext.eventHubName,
-    'messaging.operation': 'receive',
-    'messaging.system': 'eventhub',
-    'resource.name': `EventHub ${functionName}`,
-    'span.kind': 'consumer'
+      ...meta,
+      'messaging.destination.name': partitionContext.eventHubName,
+      'messaging.operation': 'receive',
+      'messaging.system': 'eventhub',
+      'resource.name': `EventHub ${functionName}`,
+      'span.kind': 'consumer'
     }
   }
 
