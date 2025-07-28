@@ -34,9 +34,10 @@ class DataStreamsCheckpointer {
    *                       Examples include kafka, kinesis, sns etc.
    * @param {string} source - The source of data. This can be a topic, exchange or stream name.
    * @param {Object} carrier - The carrier object to extract context from.
-   * @param {boolean} [manualCheckpoint=true] - Whether this checkpoint was manually set. Keep true if manually instrumenting.
-   *                                           Manual instrumentation always overrides automatic instrumentation in the case a call is both
-   *                                           manually and automatically instrumented.
+   * @param {boolean} [manualCheckpoint=true] - Whether this checkpoint was manually set. Keep true if manually
+   *                                           instrumenting. Manual instrumentation always overrides automatic
+   *                                           instrumentation in the case a call is both manually and automatically
+   *                                           instrumented.
    */
   setConsumeCheckpoint (type, source, carrier, manualCheckpoint = true) {
     if (!this.config.dsmEnabled) return
