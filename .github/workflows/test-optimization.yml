@@ -57,6 +57,8 @@ jobs:
         playwright-version: [oldest, latest]
     name: integration-playwright (${{ matrix.playwright-version}}, node-${{ matrix.node-version }})
     runs-on: ubuntu-latest
+    container:
+      image: rochdev/playwright-tools@sha256:4903e8078c956b04d3190973732de99eea4e0fd5074188e007c8f6c7af066504 # 1.54.1-2
     env:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
@@ -69,8 +71,6 @@ jobs:
         with:
           version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
-      # Install system dependencies for playwright
-      - run: npx playwright install-deps
       - run: yarn test:integration:playwright
         env:
           NODE_OPTIONS: '-r ./ci/init'
