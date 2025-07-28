@@ -396,8 +396,6 @@ describe('reporter', () => {
         '_dd.origin': 'appsec',
         '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}'
       })
-      expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, ASM)
-      expect(telemetry.updateRateLimitedMetric).to.not.have.been.called
     })
 
     it('should add tags to request span', () => {
@@ -416,40 +414,6 @@ describe('reporter', () => {
         '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}',
         'network.client.ip': '8.8.8.8'
       })
-      expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, ASM)
-      expect(telemetry.updateRateLimitedMetric).to.not.have.been.called
-    })
-
-    it('should not add manual.keep when rate limit is reached', (done) => {
-      const addTags = span.addTags
-
-      expect(Reporter.reportAttack([])).to.not.be.false
-      expect(Reporter.reportAttack([])).to.not.be.false
-      expect(Reporter.reportAttack([])).to.not.be.false
-
-      expect(prioritySampler.setPriority).to.have.callCount(3)
-      expect(telemetry.updateRateLimitedMetric).to.not.have.been.called
-
-      const reporterConfigWithRateLimit1 = Object.assign({}, defaultReporterConfig)
-      reporterConfigWithRateLimit1.rateLimit = 1
-      Reporter.init(reporterConfigWithRateLimit1)
-
-      expect(Reporter.reportAttack([])).to.not.be.false
-      expect(addTags.getCall(3).firstArg).to.have.property('appsec.event').that.equals('true')
-      expect(prioritySampler.setPriority).to.have.callCount(4)
-      expect(telemetry.updateRateLimitedMetric).to.not.have.been.called
-
-      expect(Reporter.reportAttack([])).to.not.be.false
-      expect(addTags.getCall(4).firstArg).to.have.property('appsec.event').that.equals('true')
-      expect(prioritySampler.setPriority).to.have.callCount(4)
-      expect(telemetry.updateRateLimitedMetric).to.be.calledOnceWithExactly(req)
-
-      setTimeout(() => {
-        expect(Reporter.reportAttack([])).to.not.be.false
-        expect(prioritySampler.setPriority).to.have.callCount(5)
-        expect(telemetry.updateRateLimitedMetric).to.be.calledOnceWithExactly(req)
-        done()
-      }, 1020)
     })
 
     it('should not overwrite origin tag', () => {
@@ -464,8 +428,6 @@ describe('reporter', () => {
         '_dd.appsec.json': '{"triggers":[]}',
         'network.client.ip': '8.8.8.8'
       })
-      expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, ASM)
-      expect(telemetry.updateRateLimitedMetric).to.not.have.been.called
     })
 
     it('should merge attacks json', () => {
@@ -489,8 +451,6 @@ describe('reporter', () => {
         '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]},{"rule":{}},{"rule":{},"rule_matches":[{}]}]}',
         'network.client.ip': '8.8.8.8'
       })
-      expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, ASM)
-      expect(telemetry.updateRateLimitedMetric).to.not.have.been.called
     })
 
     it('should call standalone sample', () => {
@@ -514,9 +474,6 @@ describe('reporter', () => {
         '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]},{"rule":{}},{"rule":{},"rule_matches":[{}]}]}',
         'network.client.ip': '8.8.8.8'
       })
-
-      expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, ASM)
-      expect(telemetry.updateRateLimitedMetric).to.not.have.been.called
     })
 
     describe('extended collection', () => {
@@ -696,20 +653,20 @@ describe('reporter', () => {
     })
   })
 
-  describe('reportDerivatives', () => {
+  describe('reportAttributes', () => {
     it('should not call addTags if parameter is undefined', () => {
-      Reporter.reportDerivatives(undefined)
+      Reporter.reportAttributes(undefined)
       expect(span.addTags).not.to.be.called
     })
 
     it('should call addTags with an empty array', () => {
-      Reporter.reportDerivatives([])
+      Reporter.reportAttributes([])
       expect(span.addTags).to.be.calledOnceWithExactly({})
     })
 
     it('should call addTags', () => {
       const schemaValue = [{ key: [8] }]
-      const derivatives = {
+      const attributes = {
         '_dd.appsec.fp.http.endpoint': 'endpoint_fingerprint',
         '_dd.appsec.fp.http.header': 'header_fingerprint',
         '_dd.appsec.fp.http.network': 'network_fingerprint',
@@ -719,10 +676,11 @@ describe('reporter', () => {
         '_dd.appsec.s.req.params': schemaValue,
         '_dd.appsec.s.req.cookies': schemaValue,
         '_dd.appsec.s.req.body': schemaValue,
-        'custom.processor.output': schemaValue
+        'custom.processor.output': 'custom_attribute',
+        'custom.processor.output_int': 42
       }
 
-      Reporter.reportDerivatives(derivatives)
+      Reporter.reportAttributes(attributes)
 
       const schemaEncoded = zlib.gzipSync(JSON.stringify(schemaValue)).toString('base64')
       expect(span.addTags).to.be.calledOnceWithExactly({
@@ -735,7 +693,8 @@ describe('reporter', () => {
         '_dd.appsec.s.req.params': schemaEncoded,
         '_dd.appsec.s.req.cookies': schemaEncoded,
         '_dd.appsec.s.req.body': schemaEncoded,
-        'custom.processor.output': schemaEncoded
+        'custom.processor.output': 'custom_attribute',
+        'custom.processor.output_int': 42
       })
     })
   })

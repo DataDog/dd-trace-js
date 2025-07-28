@@ -672,7 +672,7 @@
       "BUILD_TAG": "jenkins-pipeline-id",
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
-      "TESTING_TEST_OPTIMIZATION_TEST_CASE_NAME": "http-repository-url-no-git-suffix",
+      "DD_TEST_CASE_NAME": "http-repository-url-no-git-suffix",
       "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "GIT_URL_1": "https://github.com/DataDog/dogweb",
       "JENKINS_URL": "jenkins",
@@ -694,7 +694,7 @@
       "BUILD_TAG": "jenkins-pipeline-id",
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
-      "TESTING_TEST_OPTIMIZATION_TEST_CASE_NAME": "ssh-repository-url-no-git-suffix",
+      "DD_TEST_CASE_NAME": "ssh-repository-url-no-git-suffix",
       "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "GIT_URL_1": "ssh://host.xz:54321/path/to/repo/",
       "JENKINS_URL": "jenkins",
@@ -921,7 +921,7 @@
       "ci.provider.name": "jenkins",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.pull_request.base_branch": "target-branch",
-      "pr.number": 42
+      "pr.number": "42"
     }
   ]
 ]

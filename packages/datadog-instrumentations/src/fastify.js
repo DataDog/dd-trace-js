@@ -11,9 +11,11 @@ const queryParamsReadCh = channel('datadog:fastify:query-params:finish')
 const cookieParserReadCh = channel('datadog:fastify-cookie:read:finish')
 const responsePayloadReadCh = channel('datadog:fastify:response:finish')
 const pathParamsReadCh = channel('datadog:fastify:path-params:finish')
+const finishSetHeaderCh = channel('datadog:fastify:set-header:finish')
 
 const parsingResources = new WeakMap()
 const cookiesPublished = new WeakSet()
+const bodyPublished = new WeakSet()
 
 function wrapFastify (fastify, hasParsingEvents) {
   if (typeof fastify !== 'function') return fastify
@@ -124,6 +126,20 @@ function preHandler (request, reply, done) {
   if (!reply || typeof reply.send !== 'function') return done()
 
   const req = getReq(request)
+  const res = getRes(reply)
+
+  const hasBody = request.body && Object.keys(request.body).length > 0
+
+  // For multipart/form-data, the body is not available until after preValidation hook
+  if (bodyParserReadCh.hasSubscribers && hasBody && !bodyPublished.has(req)) {
+    const abortController = new AbortController()
+
+    bodyParserReadCh.publish({ req, res, body: request.body, abortController })
+
+    bodyPublished.add(req)
+
+    if (abortController.signal.aborted) return
+  }
 
   reply.send = wrapSend(reply.send, req)
 
@@ -151,10 +167,13 @@ function preValidation (request, reply, done) {
       if (abortController.signal.aborted) return
     }
 
-    if (bodyParserReadCh.hasSubscribers && request.body) {
+    // Analyze body before schema validation
+    if (bodyParserReadCh.hasSubscribers && request.body && !bodyPublished.has(req)) {
       abortController ??= new AbortController()
 
       bodyParserReadCh.publish({ req, res, body: request.body, abortController })
+
+      bodyPublished.add(req)
 
       if (abortController.signal.aborted) return
     }
@@ -257,3 +276,19 @@ addHook({ name: 'fastify', versions: ['2'] }, fastify => {
 addHook({ name: 'fastify', versions: ['1'] }, fastify => {
   return shimmer.wrapFunction(fastify, fastify => wrapFastify(fastify, false))
 })
+
+function wrapReplyHeader (Reply) {
+  shimmer.wrap(Reply.prototype, 'header', header => function (key, value) {
+    const result = header.apply(this, arguments)
+
+    if (finishSetHeaderCh.hasSubscribers && key && value) {
+      finishSetHeaderCh.publish({ name: key, value, res: getRes(this) })
+    }
+
+    return result
+  })
+
+  return Reply
+}
+
+addHook({ name: 'fastify', file: 'lib/reply.js', versions: ['1', '2', '>=3'] }, wrapReplyHeader)

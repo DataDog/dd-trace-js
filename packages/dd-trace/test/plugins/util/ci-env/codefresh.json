@@ -176,7 +176,7 @@
       "ci.pipeline.url": "https://g.codefresh.io/build/6410367cee516146a4c4c66e",
       "ci.provider.name": "codefresh",
       "git.pull_request.base_branch": "target-branch",
-      "pr.number": 42
+      "pr.number": "42"
     }
   ]
 ]

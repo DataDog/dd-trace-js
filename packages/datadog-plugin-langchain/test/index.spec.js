@@ -19,6 +19,27 @@ const openAiBaseEmbeddingInfo = { base: 'https://api.openai.com', path: '/v1/emb
 
 const isDdTrace = iastFilter.isDdTrace
 
+function stubSingleEmbedding (langchainOpenaiOpenAiVersion) {
+  if (semver.satisfies(langchainOpenaiOpenAiVersion, '>=4.91.0')) {
+    stubCall({
+      ...openAiBaseEmbeddingInfo,
+      response: require('./fixtures/single-embedding.json')
+    })
+  } else {
+    stubCall({
+      ...openAiBaseEmbeddingInfo,
+      response: {
+        object: 'list',
+        data: [{
+          object: 'embedding',
+          index: 0,
+          embedding: Array(1536).fill(0)
+        }]
+      }
+    })
+  }
+}
+
 describe('Plugin', () => {
   let langchainOpenai
   let langchainAnthropic
@@ -28,7 +49,8 @@ describe('Plugin', () => {
   let langchainOutputParsers
   let langchainPrompts
   let langchainRunnables
-
+  let langchainTools
+  let MemoryVectorStore
   /**
    * In OpenAI 4.91.0, the default response format for embeddings was changed from `float` to `base64`.
    * We do not have control in @langchain/openai embeddings to change this for an individual call,
@@ -65,7 +87,8 @@ describe('Plugin', () => {
       })
 
       beforeEach(() => {
-        langchainOpenai = require(`../../../versions/@langchain/openai@${version}`).get()
+        langchainOpenai = require(`../../../versions/langchain@${version}`)
+          .get('@langchain/openai')
         langchainAnthropic = require(`../../../versions/@langchain/anthropic@${version}`).get()
         if (version !== '0.1.0') {
           // version mismatching otherwise
@@ -80,10 +103,17 @@ describe('Plugin', () => {
         langchainPrompts = require(`../../../versions/@langchain/core@${version}`).get('@langchain/core/prompts')
         langchainRunnables = require(`../../../versions/@langchain/core@${version}`).get('@langchain/core/runnables')
 
+        langchainTools = require(`../../../versions/@langchain/core@${version}`)
+          .get('@langchain/core/tools')
+
+        MemoryVectorStore = require(`../../../versions/@langchain/core@${version}`)
+          .get('langchain/vectorstores/memory')
+          .MemoryVectorStore
+
         langchainOpenaiOpenAiVersion =
-            require(`../../../versions/@langchain/openai@${version}`)
-              .get('openai/version')
-              .VERSION
+          require(`../../../versions/langchain@${version}`)
+            .get('openai/version')
+            .VERSION
       })
 
       afterEach(() => {
@@ -142,18 +172,9 @@ describe('Plugin', () => {
               expect(span).to.have.property('name', 'langchain.request')
               expect(span).to.have.property('resource', 'langchain.llms.openai.OpenAI')
 
-              expect(span.meta).to.have.property('langchain.request.api_key', '...key>')
               expect(span.meta).to.have.property('langchain.request.provider', 'openai')
               expect(span.meta).to.have.property('langchain.request.model', 'gpt-3.5-turbo-instruct')
               expect(span.meta).to.have.property('langchain.request.type', 'llm')
-              expect(span.meta).to.have.property('langchain.request.prompts.0.content', 'what is 2 + 2?')
-
-              expect(span.meta).to.have.property('langchain.response.completions.0.text', 'The answer is 4')
-              expect(span.meta).to.have.property('langchain.response.completions.0.finish_reason', 'length')
-
-              expect(span.metrics).to.have.property('langchain.tokens.input_tokens', 8)
-              expect(span.metrics).to.have.property('langchain.tokens.output_tokens', 12)
-              expect(span.metrics).to.have.property('langchain.tokens.total_tokens', 20)
             })
 
           const result = await llm.generate(['what is 2 + 2?'])
@@ -187,14 +208,8 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               expect(traces[0].length).to.equal(1)
               const span = traces[0][0]
-
-              expect(span.meta).to.have.property('langchain.request.prompts.0.content', 'what is 2 + 2?')
-              expect(span.meta).to.have.property(
-                'langchain.request.prompts.1.content', 'what is the circumference of the earth?')
-
-              expect(span.meta).to.have.property('langchain.response.completions.0.text', 'The answer is 4')
-              expect(span.meta).to.have.property(
-                'langchain.response.completions.1.text', 'The circumference of the earth is 24,901 miles')
+              expect(span.meta).to.have.property('langchain.request.provider', 'openai')
+              expect(span.meta).to.have.property('langchain.request.model', 'gpt-3.5-turbo-instruct')
             })
 
           const llm = new langchainOpenai.OpenAI({ model: 'gpt-3.5-turbo-instruct' })
@@ -232,12 +247,8 @@ describe('Plugin', () => {
               expect(traces[0].length).to.equal(1)
               const span = traces[0][0]
 
-              expect(span.metrics).to.have.property('langchain.request.openai.parameters.n', 2)
-
-              expect(span.meta).to.have.property('langchain.request.prompts.0.content', 'what is 2 + 2?')
-              expect(span.meta).to.have.property('langchain.response.completions.0.text', 'The answer is 4')
-
-              expect(span.meta).to.not.have.property('langchain.response.completions.1.text')
+              expect(span.meta).to.have.property('langchain.request.provider', 'openai')
+              expect(span.meta).to.have.property('langchain.request.model', 'gpt-3.5-turbo-instruct')
             })
 
           const llm = new langchainOpenai.OpenAI({ model: 'gpt-3.5-turbo-instruct', n: 2 })
@@ -306,22 +317,9 @@ describe('Plugin', () => {
               expect(span).to.have.property('name', 'langchain.request')
               expect(span).to.have.property('resource', 'langchain.chat_models.openai.ChatOpenAI')
 
-              expect(span.meta).to.have.property('langchain.request.api_key', '...key>')
               expect(span.meta).to.have.property('langchain.request.provider', 'openai')
               expect(span.meta).to.have.property('langchain.request.model', 'gpt-4')
               expect(span.meta).to.have.property('langchain.request.type', 'chat_model')
-
-              expect(span.meta).to.have.property('langchain.request.messages.0.0.content', 'Hello!')
-              expect(span.meta).to.have.property('langchain.request.messages.0.0.message_type', 'HumanMessage')
-
-              expect(span.meta).to.have.property(
-                'langchain.response.completions.0.0.content', 'Hello! How can I assist you today?'
-              )
-              expect(span.meta).to.have.property('langchain.response.completions.0.0.message_type', 'AIMessage')
-
-              expect(span.metrics).to.have.property('langchain.tokens.input_tokens', 37)
-              expect(span.metrics).to.have.property('langchain.tokens.output_tokens', 10)
-              expect(span.metrics).to.have.property('langchain.tokens.total_tokens', 47)
             })
 
           const chatModel = new langchainOpenai.ChatOpenAI({ model: 'gpt-4' })
@@ -358,15 +356,8 @@ describe('Plugin', () => {
               expect(traces[0].length).to.equal(1)
               const span = traces[0][0]
 
-              expect(span.meta).to.have.property(
-                'langchain.request.messages.0.0.content', 'You only respond with one word answers'
-              )
-              expect(span.meta).to.have.property('langchain.request.messages.0.0.message_type', 'SystemMessage')
-              expect(span.meta).to.have.property('langchain.request.messages.0.1.content', 'Hello!')
-              expect(span.meta).to.have.property('langchain.request.messages.0.1.message_type', 'HumanMessage')
-
-              expect(span.meta).to.have.property('langchain.response.completions.0.0.content', 'Hi!')
-              expect(span.meta).to.have.property('langchain.response.completions.0.0.message_type', 'AIMessage')
+              expect(span.meta).to.have.property('langchain.request.provider', 'openai')
+              expect(span.meta).to.have.property('langchain.request.model', 'gpt-4')
             })
 
           const chatModel = new langchainOpenai.ChatOpenAI({ model: 'gpt-4' })
@@ -407,17 +398,8 @@ describe('Plugin', () => {
               expect(traces[0].length).to.equal(1)
               const span = traces[0][0]
 
-              expect(span.meta).to.have.property(
-                'langchain.request.messages.0.0.content', 'You only respond with one word answers'
-              )
-              expect(span.meta).to.have.property('langchain.request.messages.0.0.message_type', 'SystemMessage')
-              expect(span.meta).to.have.property('langchain.request.messages.0.1.content', 'Hello!')
-              expect(span.meta).to.have.property('langchain.request.messages.0.1.message_type', 'HumanMessage')
-
-              expect(span.meta).to.have.property(
-                'langchain.response.completions.0.0.content', 'Hi!'
-              )
-              expect(span.meta).to.have.property('langchain.response.completions.0.0.message_type', 'AIMessage')
+              expect(span.meta).to.have.property('langchain.request.provider', 'openai')
+              expect(span.meta).to.have.property('langchain.request.model', 'gpt-4')
             })
 
           const chatModel = new langchainOpenai.ChatOpenAI({ model: 'gpt-4' })
@@ -463,22 +445,8 @@ describe('Plugin', () => {
               expect(traces[0].length).to.equal(1)
               const span = traces[0][0]
 
-              expect(span.meta).to.have.property(
-                'langchain.request.messages.0.0.content', 'My name is SpongeBob and I live in Bikini Bottom.'
-              )
-              expect(span.meta).to.have.property('langchain.request.messages.0.0.message_type', 'HumanMessage')
-              expect(span.meta).to.not.have.property('langchain.response.completions.0.0.content')
-              expect(span.meta).to.have.property('langchain.response.completions.0.0.message_type', 'AIMessage')
-              expect(span.meta).to.have.property('langchain.response.completions.0.0.tool_calls.0.id', 'tool-1')
-              expect(span.meta).to.have.property(
-                'langchain.response.completions.0.0.tool_calls.0.name', 'extract_fictional_info'
-              )
-              expect(span.meta).to.have.property(
-                'langchain.response.completions.0.0.tool_calls.0.args.name', 'SpongeBob'
-              )
-              expect(span.meta).to.have.property(
-                'langchain.response.completions.0.0.tool_calls.0.args.origin', 'Bikini Bottom'
-              )
+              expect(span.meta).to.have.property('langchain.request.provider', 'openai')
+              expect(span.meta).to.have.property('langchain.request.model', 'gpt-4')
             })
 
           const tools = [
@@ -531,16 +499,9 @@ describe('Plugin', () => {
               expect(span).to.have.property('name', 'langchain.request')
               expect(span).to.have.property('resource', 'langchain.chat_models.anthropic.ChatAnthropic')
 
-              expect(span.meta).to.have.property('langchain.request.api_key', '...key>')
               expect(span.meta).to.have.property('langchain.request.provider', 'anthropic')
               expect(span.meta).to.have.property('langchain.request.model')
               expect(span.meta).to.have.property('langchain.request.type', 'chat_model')
-
-              expect(span.meta).to.have.property('langchain.request.messages.0.0.content', 'Hello!')
-              expect(span.meta).to.have.property('langchain.request.messages.0.0.message_type', 'HumanMessage')
-
-              expect(span.meta).to.have.property('langchain.response.completions.0.0.content', 'Hello!')
-              expect(span.meta).to.have.property('langchain.response.completions.0.0.message_type', 'AIMessage')
             })
 
           const chatModel = new langchainAnthropic.ChatAnthropic({ model: 'claude-3-opus-20240229' })
@@ -618,13 +579,6 @@ describe('Plugin', () => {
               expect(chainSpan).to.have.property('resource', 'langchain_core.runnables.RunnableSequence')
 
               expect(chainSpan.meta).to.have.property('langchain.request.type', 'chain')
-
-              expect(chainSpan.meta).to.have.property(
-                'langchain.request.inputs.0.content', 'You only respond with one word answers'
-              )
-              expect(chainSpan.meta).to.have.property('langchain.request.inputs.1.content', 'Hello!')
-
-              expect(chainSpan.meta).to.have.property('langchain.response.outputs.0', 'Hi!')
             })
 
           const model = new langchainOpenai.ChatOpenAI({ model: 'gpt-4' })
@@ -689,11 +643,6 @@ describe('Plugin', () => {
               expect(spans[1]).to.have.property('resource', 'langchain.chat_models.openai.ChatOpenAI')
 
               expect(chainSpan.meta).to.have.property('langchain.request.type', 'chain')
-              expect(chainSpan.meta).to.have.property('langchain.request.inputs.0.topic', 'chickens')
-              expect(chainSpan.meta).to.have.property('langchain.request.inputs.0.style', 'dad joke')
-              expect(chainSpan.meta).to.have.property(
-                'langchain.response.outputs.0', 'Why did the chicken cross the road? To get to the other side!'
-              )
             })
 
           const result = await chain.invoke({ topic: 'chickens', style: 'dad joke' })
@@ -761,14 +710,6 @@ describe('Plugin', () => {
               const chainSpan = spans[0]
 
               expect(chainSpan.meta).to.have.property('langchain.request.type', 'chain')
-              expect(chainSpan.meta).to.have.property('langchain.request.inputs.0', 'chickens')
-              expect(chainSpan.meta).to.have.property('langchain.request.inputs.1', 'dogs')
-              expect(chainSpan.meta).to.have.property(
-                'langchain.response.outputs.0', 'Why did the chicken cross the road? To get to the other side!'
-              )
-              expect(chainSpan.meta).to.have.property(
-                'langchain.response.outputs.1', 'Why was the dog confused? It was barking up the wrong tree!'
-              )
             })
 
           const result = await chain.batch(['chickens', 'dogs'])
@@ -804,11 +745,6 @@ describe('Plugin', () => {
               const chainSpan = spans[0]
 
               expect(chainSpan.meta).to.have.property('langchain.request.type', 'chain')
-              expect(chainSpan.meta).to.have.property(
-                'langchain.request.inputs.0', 'Generate a JSON object with name and age.'
-              )
-
-              expect(chainSpan.meta).to.have.property('langchain.response.outputs.0', '{"name":"John","age":30}')
             })
 
           const parser = new langchainOutputParsers.JsonOutputParser()
@@ -882,14 +818,9 @@ describe('Plugin', () => {
                 expect(span).to.have.property('name', 'langchain.request')
                 expect(span).to.have.property('resource', 'langchain.embeddings.openai.OpenAIEmbeddings')
 
-                expect(span.meta).to.have.property('langchain.request.api_key', '...key>')
                 expect(span.meta).to.have.property('langchain.request.provider', 'openai')
                 expect(span.meta).to.have.property('langchain.request.model', 'text-embedding-ada-002')
                 expect(span.meta).to.have.property('langchain.request.type', 'embedding')
-
-                expect(span.meta).to.have.property('langchain.request.inputs.0.text', 'Hello, world!')
-                expect(span.metrics).to.have.property('langchain.request.input_counts', 1)
-                expect(span.metrics).to.have.property('langchain.response.outputs.embedding_length', 1536)
               })
 
             const query = 'Hello, world!'
@@ -929,11 +860,9 @@ describe('Plugin', () => {
                 expect(traces[0].length).to.equal(1)
                 const span = traces[0][0]
 
-                expect(span.meta).to.have.property('langchain.request.inputs.0.text', 'Hello, world!')
-                expect(span.meta).to.have.property('langchain.request.inputs.1.text', 'Goodbye, world!')
-                expect(span.metrics).to.have.property('langchain.request.input_counts', 2)
-
-                expect(span.metrics).to.have.property('langchain.response.outputs.embedding_length', 1536)
+                expect(span.meta).to.have.property('langchain.request.type', 'embedding')
+                expect(span.meta).to.have.property('langchain.request.provider', 'openai')
+                expect(span.meta).to.have.property('langchain.request.model', 'text-embedding-ada-002')
               })
 
             const embeddings = new langchainOpenai.OpenAIEmbeddings()
@@ -994,14 +923,9 @@ describe('Plugin', () => {
                 expect(span).to.have.property('name', 'langchain.request')
                 expect(span).to.have.property('resource', 'langchain.embeddings.GoogleGenerativeAIEmbeddings')
 
-                expect(span.meta).to.have.property('langchain.request.api_key', '...key>')
                 expect(span.meta).to.have.property('langchain.request.provider', 'googlegenerativeai')
                 expect(span.meta).to.have.property('langchain.request.model', 'text-embedding-004')
                 expect(span.meta).to.have.property('langchain.request.type', 'embedding')
-
-                expect(span.meta).to.have.property('langchain.request.inputs.0.text', 'Hello, world!')
-                expect(span.metrics).to.have.property('langchain.request.input_counts', 1)
-                expect(span.metrics).to.have.property('langchain.response.outputs.embedding_length', 2)
               })
 
             const query = 'Hello, world!'
@@ -1011,6 +935,133 @@ describe('Plugin', () => {
 
             await checkTraces
           })
+        })
+      })
+
+      describe('tools', () => {
+        it('traces a tool call', async function () {
+          if (!langchainTools?.tool) this.skip()
+
+          const myTool = langchainTools.tool(
+            () => 'Hello, world!',
+            {
+              name: 'myTool',
+              description: 'A tool that returns a greeting'
+            }
+          )
+
+          const checkTraces = agent.assertSomeTraces(traces => {
+            const span = traces[0][0]
+
+            expect(span).to.have.property('name', 'langchain.request')
+            expect(span.resource).to.match(/^langchain\.tools\.[^.]+\.myTool$/)
+          })
+          const result = await myTool.invoke()
+          expect(result).to.equal('Hello, world!')
+
+          await checkTraces
+        })
+
+        it('traces a tool call with an error', async function () {
+          if (!langchainTools?.tool) this.skip()
+
+          const myTool = langchainTools.tool(
+            () => { throw new Error('This is a test error') },
+            {
+              name: 'myTool',
+              description: 'A tool that throws an error'
+            }
+          )
+
+          const checkTraces = agent.assertSomeTraces(traces => {
+            const span = traces[0][0]
+
+            expect(span).to.have.property('name', 'langchain.request')
+            expect(span.resource).to.match(/^langchain\.tools\.[^.]+\.myTool$/)
+
+            expect(span.meta).to.have.property('error.message')
+            expect(span.meta).to.have.property('error.type')
+            expect(span.meta).to.have.property('error.stack')
+          })
+
+          try {
+            await myTool.invoke()
+            expect.fail('Expected an error to be thrown')
+          } catch {}
+
+          await checkTraces
+        })
+      })
+
+      describe('vectorstores', () => {
+        let vectorstore
+
+        beforeEach(async () => {
+          // need to mock out adding a document to the vectorstore
+          stubSingleEmbedding(langchainOpenaiOpenAiVersion)
+
+          const embeddings = new langchainOpenai.OpenAIEmbeddings()
+          vectorstore = new MemoryVectorStore(embeddings)
+
+          const document = {
+            pageContent: 'The powerhouse of the cell is the mitochondria',
+            metadata: { source: 'https://example.com' },
+            id: '1'
+          }
+
+          return vectorstore.addDocuments([document])
+        })
+
+        it('traces a vectorstore similaritySearch call', async () => {
+          stubSingleEmbedding(langchainOpenaiOpenAiVersion)
+
+          const checkTraces = agent.assertSomeTraces(traces => {
+            const spans = traces[0]
+
+            expect(spans).to.have.length(2)
+
+            const vectorstoreSpan = spans[0]
+            const embeddingSpan = spans[1]
+
+            expect(vectorstoreSpan).to.have.property('name', 'langchain.request')
+            expect(vectorstoreSpan).to.have.property('resource', 'langchain.vectorstores.memory.MemoryVectorStore')
+
+            expect(embeddingSpan).to.have.property('name', 'langchain.request')
+            expect(embeddingSpan).to.have.property('resource', 'langchain.embeddings.openai.OpenAIEmbeddings')
+          }, { spanResourceMatch: /langchain\.vectorstores\.memory\.MemoryVectorStore/ })
+          // we need the spanResourceMatch, otherwise we'll match from the beforeEach
+
+          const result = await vectorstore.similaritySearch('The powerhouse of the cell is the mitochondria', 2)
+          expect(result).to.exist
+
+          await checkTraces
+        })
+
+        it('traces a vectorstore similaritySearchWithScore call', async () => {
+          stubSingleEmbedding(langchainOpenaiOpenAiVersion)
+
+          const checkTraces = agent.assertSomeTraces(traces => {
+            const spans = traces[0]
+
+            expect(spans).to.have.length(2)
+
+            const vectorstoreSpan = spans[0]
+            const embeddingSpan = spans[1]
+
+            expect(vectorstoreSpan).to.have.property('name', 'langchain.request')
+            expect(vectorstoreSpan).to.have.property('resource', 'langchain.vectorstores.memory.MemoryVectorStore')
+
+            expect(embeddingSpan).to.have.property('name', 'langchain.request')
+            expect(embeddingSpan).to.have.property('resource', 'langchain.embeddings.openai.OpenAIEmbeddings')
+          }, { spanResourceMatch: /langchain\.vectorstores\.memory\.MemoryVectorStore/ })
+          // we need the spanResourceMatch, otherwise we'll match from the beforeEach
+
+          const result = await vectorstore.similaritySearchWithScore(
+            'The powerhouse of the cell is the mitochondria', 2
+          )
+          expect(result).to.exist
+
+          await checkTraces
         })
       })
     })

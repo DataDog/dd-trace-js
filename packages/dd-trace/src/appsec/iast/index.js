@@ -1,3 +1,5 @@
+'use strict'
+
 const vulnerabilityReporter = require('./vulnerability-reporter')
 const { enableAllAnalyzers, disableAllAnalyzers } = require('./analyzers')
 const web = require('../../plugins/util/web')
@@ -16,11 +18,12 @@ const { IAST_ENABLED_TAG_KEY } = require('./tags')
 const iastTelemetry = require('./telemetry')
 const { enable: enableFsPlugin, disable: disableFsPlugin, IAST_MODULE } = require('../rasp/fs-plugin')
 const securityControls = require('./security-controls')
+const { incomingHttpRequestStart, incomingHttpRequestEnd, responseWriteHead } = require('../channels')
+
+const collectedResponseHeaders = new WeakMap()
 
 // TODO Change to `apm:http:server:request:[start|close]` when the subscription
 //  order of the callbacks can be enforce
-const requestStart = dc.channel('dd-trace:incomingHttpRequestStart')
-const requestClose = dc.channel('dd-trace:incomingHttpRequestEnd')
 const iastResponseEnd = dc.channel('datadog:iast:response-end')
 let isEnabled = false
 
@@ -31,8 +34,9 @@ function enable (config, _tracer) {
   enableFsPlugin(IAST_MODULE)
   enableAllAnalyzers(config)
   enableTaintTracking(config.iast, iastTelemetry.verbosity)
-  requestStart.subscribe(onIncomingHttpRequestStart)
-  requestClose.subscribe(onIncomingHttpRequestEnd)
+  incomingHttpRequestStart.subscribe(onIncomingHttpRequestStart)
+  incomingHttpRequestEnd.subscribe(onIncomingHttpRequestEnd)
+  responseWriteHead.subscribe(onResponseWriteHeadCollect)
   overheadController.configure(config.iast)
   overheadController.startGlobalContext()
   securityControls.configure(config.iast)
@@ -51,8 +55,9 @@ function disable () {
   disableAllAnalyzers()
   disableTaintTracking()
   overheadController.finishGlobalContext()
-  if (requestStart.hasSubscribers) requestStart.unsubscribe(onIncomingHttpRequestStart)
-  if (requestClose.hasSubscribers) requestClose.unsubscribe(onIncomingHttpRequestEnd)
+  if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(onIncomingHttpRequestStart)
+  if (incomingHttpRequestEnd.hasSubscribers) incomingHttpRequestEnd.unsubscribe(onIncomingHttpRequestEnd)
+  if (responseWriteHead.hasSubscribers) responseWriteHead.unsubscribe(onResponseWriteHeadCollect)
   vulnerabilityReporter.stop()
 }
 
@@ -87,7 +92,13 @@ function onIncomingHttpRequestEnd (data) {
     const topContext = web.getContext(data.req)
     const iastContext = iastContextFunctions.getIastContext(store, topContext)
     if (iastContext?.rootSpan) {
-      iastResponseEnd.publish(data)
+      const storedHeaders = collectedResponseHeaders.get(data.res) || {}
+
+      iastResponseEnd.publish({ ...data, storedHeaders })
+
+      if (Object.keys(storedHeaders).length) {
+        collectedResponseHeaders.delete(data.res)
+      }
 
       const vulnerabilities = iastContext.vulnerabilities
       const rootSpan = iastContext.rootSpan
@@ -100,6 +111,15 @@ function onIncomingHttpRequestEnd (data) {
     if (iastContextFunctions.cleanIastContext(store, topContext, iastContext)) {
       overheadController.releaseRequest()
     }
+  }
+}
+
+// Response headers are collected here because they are not available in the onIncomingHttpRequestEnd when using Fastify
+function onResponseWriteHeadCollect ({ res, responseHeaders = {} }) {
+  if (!res) return
+
+  if (Object.keys(responseHeaders).length) {
+    collectedResponseHeaders.set(res, responseHeaders)
   }
 }
 

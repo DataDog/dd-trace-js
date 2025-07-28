@@ -5,7 +5,6 @@ const proxyquire = require('proxyquire')
 const Config = require('../../../src/config')
 const rules = require('../../../src/appsec/recommended.json')
 const Reporter = require('../../../src/appsec/reporter')
-const web = require('../../../src/plugins/util/web')
 
 describe('WAF Manager', () => {
   const knownAddresses = new Set([
@@ -20,9 +19,17 @@ describe('WAF Manager', () => {
   let DDWAF
   let config
   let webContext
+  let keepTrace, updateRateLimitedMetric, limiterStub
 
   beforeEach(() => {
     config = new Config()
+
+    limiterStub = {
+      isAllowed: sinon.stub().returns(true)
+    }
+
+    keepTrace = sinon.stub()
+    updateRateLimitedMetric = sinon.stub()
 
     DDWAF = sinon.stub()
     DDWAF.version = sinon.stub().returns('1.2.3')
@@ -41,20 +48,30 @@ describe('WAF Manager', () => {
     WAFManager = proxyquire('../../../src/appsec/waf/waf_manager', {
       '@datadog/native-appsec': { DDWAF }
     })
+
+    const webMock = {
+      root: sinon.stub().returns({ mock: 'rootSpan' }),
+      getContext: sinon.stub().returns(webContext)
+    }
+
     waf = proxyquire('../../../src/appsec/waf', {
-      './waf_manager': WAFManager
+      './waf_manager': WAFManager,
+      '../../rate_limiter': function () { return limiterStub },
+      '../../priority_sampler': { keepTrace },
+      '../../standalone/product': { ASM: 'ASM' },
+      '../../plugins/util/web': webMock,
+      '../telemetry': { updateRateLimitedMetric }
     })
     waf.destroy()
 
     sinon.stub(Reporter.metricsQueue, 'set')
     sinon.stub(Reporter, 'reportMetrics')
     sinon.stub(Reporter, 'reportAttack')
-    sinon.stub(Reporter, 'reportDerivatives')
+    sinon.stub(Reporter, 'reportAttributes')
     sinon.spy(Reporter, 'reportWafInit')
     sinon.spy(Reporter, 'reportWafConfigUpdate')
 
     webContext = {}
-    sinon.stub(web, 'getContext').returns(webContext)
   })
 
   afterEach(() => {
@@ -121,6 +138,76 @@ describe('WAF Manager', () => {
       waf.run(payload, req)
 
       expect(run).to.be.calledOnceWithExactly(payload, undefined)
+    })
+
+    describe('sampling priority', () => {
+      let mockWafContext, req
+
+      beforeEach(() => {
+        req = { mock: 'request' }
+        mockWafContext = { run: sinon.stub() }
+        WAFManager.prototype.getWAFContext = sinon.stub().returns(mockWafContext)
+        waf.init(rules, config.appsec)
+      })
+
+      it('should call keepTrace when result.keep is true and rate limiter allows', () => {
+        const result = { keep: true, events: [] }
+        mockWafContext.run.returns(result)
+        limiterStub.isAllowed.returns(true)
+
+        const payload = { persistent: { 'server.io.net.url': 'http://example.com' } }
+        waf.run(payload, req)
+
+        expect(keepTrace).to.have.been.calledOnceWithExactly({ mock: 'rootSpan' }, 'ASM')
+        expect(updateRateLimitedMetric).not.to.have.been.called
+      })
+
+      it('should call updateRateLimitedMetric when result.keep is true but rate limiter denies', () => {
+        const result = { keep: true, events: [] }
+        mockWafContext.run.returns(result)
+        limiterStub.isAllowed.returns(false)
+
+        const payload = { persistent: { 'server.io.net.url': 'http://example.com' } }
+        waf.run(payload, req)
+
+        expect(updateRateLimitedMetric).to.have.been.calledOnceWithExactly(req)
+        expect(keepTrace).not.to.have.been.called
+      })
+
+      it('should not call keepTrace or updateRateLimitedMetric when result.keep is false', () => {
+        const result = { keep: false, events: [] }
+        mockWafContext.run.returns(result)
+        limiterStub.isAllowed.returns(true)
+
+        const payload = { persistent: { 'server.io.net.url': 'http://example.com' } }
+        waf.run(payload, req)
+
+        expect(keepTrace).not.to.have.been.called
+        expect(updateRateLimitedMetric).not.to.have.been.called
+      })
+
+      it('should not call keepTrace or updateRateLimitedMetric when result.keep is undefined', () => {
+        const result = { events: [] }
+        mockWafContext.run.returns(result)
+        limiterStub.isAllowed.returns(true)
+
+        const payload = { persistent: { 'server.io.net.url': 'http://example.com' } }
+        waf.run(payload, req)
+
+        expect(keepTrace).not.to.have.been.called
+        expect(updateRateLimitedMetric).not.to.have.been.called
+      })
+
+      it('should not call keepTrace or updateRateLimitedMetric when result is null', () => {
+        mockWafContext.run.returns(null)
+        limiterStub.isAllowed.returns(true)
+
+        const payload = { persistent: { 'server.io.net.url': 'http://example.com' } }
+        waf.run(payload, req)
+
+        expect(keepTrace).not.to.have.been.called
+        expect(updateRateLimitedMetric).not.to.have.been.called
+      })
     })
   })
 
@@ -333,7 +420,7 @@ describe('WAF Manager', () => {
       })
 
       it('should call ddwafContext.run with params', () => {
-        ddwafContext.run.returns({ totalRuntime: 1, durationExt: 1 })
+        ddwafContext.run.returns({ duration: 1, durationExt: 1 })
 
         wafContextWrapper.run({
           persistent: {
@@ -354,7 +441,7 @@ describe('WAF Manager', () => {
 
       it('should report attack when ddwafContext returns events', () => {
         const result = {
-          totalRuntime: 1,
+          duration: 1,
           durationExt: 1,
           events: ['ATTACK DATA']
         }
@@ -373,7 +460,7 @@ describe('WAF Manager', () => {
 
       it('should report if rule is triggered', () => {
         const result = {
-          totalRuntime: 1,
+          duration: 1,
           durationExt: 1,
           events: ['ruleTriggered']
         }
@@ -395,7 +482,7 @@ describe('WAF Manager', () => {
 
       it('should report raspRuleType', () => {
         const result = {
-          totalRuntime: 1,
+          duration: 1,
           durationExt: 1
         }
 
@@ -414,7 +501,7 @@ describe('WAF Manager', () => {
 
       it('should not report raspRuleType when it is not provided', () => {
         const result = {
-          totalRuntime: 1,
+          duration: 1,
           durationExt: 1
         }
 
@@ -432,7 +519,7 @@ describe('WAF Manager', () => {
       })
 
       it('should not report attack when ddwafContext does not return events', () => {
-        ddwafContext.run.returns({ totalRuntime: 1, durationExt: 1 })
+        ddwafContext.run.returns({ duration: 1, durationExt: 1 })
         const params = {
           persistent: {
             'server.request.headers.no_cookies': { header: 'value' }
@@ -445,7 +532,7 @@ describe('WAF Manager', () => {
       })
 
       it('should not report attack when ddwafContext returns empty data', () => {
-        ddwafContext.run.returns({ totalRuntime: 1, durationExt: 1, events: [] })
+        ddwafContext.run.returns({ duration: 1, durationExt: 1, events: [] })
         const params = {
           persistent: {
             'server.request.headers.no_cookies': { header: 'value' }
@@ -459,7 +546,7 @@ describe('WAF Manager', () => {
 
       it('should return waf result', () => {
         const result = {
-          totalRuntime: 1, durationExt: 1, events: [], actions: ['block']
+          duration: 1, durationExt: 1, events: [], actions: ['block']
         }
         ddwafContext.run.returns(result)
 
@@ -474,11 +561,11 @@ describe('WAF Manager', () => {
         expect(wafResult).to.be.equals(result)
       })
 
-      it('should report schemas when ddwafContext returns schemas in the derivatives', () => {
+      it('should report schemas when ddwafContext returns schemas in the attributes', () => {
         const result = {
-          totalRuntime: 1,
+          duration: 1,
           durationExt: 1,
-          derivatives: [{ '_dd.appsec.s.req.body': [8] }]
+          attributes: [{ '_dd.appsec.s.req.body': [8] }]
         }
         const params = {
           persistent: {
@@ -492,14 +579,14 @@ describe('WAF Manager', () => {
         ddwafContext.run.returns(result)
 
         wafContextWrapper.run(params)
-        expect(Reporter.reportDerivatives).to.be.calledOnceWithExactly(result.derivatives)
+        expect(Reporter.reportAttributes).to.be.calledOnceWithExactly(result.attributes)
       })
 
-      it('should report fingerprints when ddwafContext returns fingerprints in results derivatives', () => {
+      it('should report fingerprints when ddwafContext returns fingerprints in results attributes', () => {
         const result = {
-          totalRuntime: 1,
+          duration: 1,
           durationExt: 1,
-          derivatives: {
+          attributes: {
             '_dd.appsec.s.req.body': [8],
             '_dd.appsec.fp.http.endpoint': 'http-post-abcdefgh-12345678-abcdefgh',
             '_dd.appsec.fp.http.network': 'net-1-0100000000',
@@ -514,7 +601,7 @@ describe('WAF Manager', () => {
             'server.request.body': 'foo'
           }
         })
-        sinon.assert.calledOnceWithExactly(Reporter.reportDerivatives, result.derivatives)
+        sinon.assert.calledOnceWithExactly(Reporter.reportAttributes, result.attributes)
       })
     })
   })

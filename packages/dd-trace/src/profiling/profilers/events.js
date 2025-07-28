@@ -1,3 +1,5 @@
+'use strict'
+
 const { performance, constants, PerformanceObserver } = require('perf_hooks')
 const { END_TIMESTAMP_LABEL, SPAN_ID_LABEL, LOCAL_ROOT_SPAN_ID_LABEL, encodeProfileAsync } = require('./shared')
 const { Function, Label, Line, Location, Profile, Sample, StringTable, ValueType } = require('pprof-format')
@@ -373,10 +375,10 @@ function createPossionProcessSamplingFilter (samplingIntervalMillis) {
  * source with a sampling event filter and an event serializer.
  */
 class EventsProfiler {
-  constructor (options = {}) {
-    this.type = 'events'
-    this.eventSerializer = new EventSerializer()
+  type = 'events'
+  eventSerializer = new EventSerializer()
 
+  constructor (options = {}) {
     const eventHandler = event => this.eventSerializer.addEvent(event)
     const eventFilter = options.timelineSamplingEnabled
       // options.samplingInterval comes in microseconds, we need millis

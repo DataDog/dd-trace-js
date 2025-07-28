@@ -14,7 +14,7 @@ describe('graphql', () => {
   let sandbox, cwd, agent, webFile, proc
 
   before(async function () {
-    sandbox = await createSandbox(['@apollo/server', 'graphql', 'koalas'])
+    sandbox = await createSandbox(['@apollo/server@4', 'graphql', 'koalas'])
     cwd = sandbox.folder
     webFile = path.join(cwd, 'graphql/index.js')
   })
@@ -72,15 +72,15 @@ describe('graphql', () => {
     const result = {
       triggers: [
         {
-          rule:
-          {
+          rule: {
             id: 'test-rule-id-1',
             name: 'test-rule-name-1',
             tags:
             {
-              category: 'attack_attempt',
-              type: 'security_scanner'
-            }
+              type: 'security_scanner',
+              category: 'attack_attempt'
+            },
+            on_match: []
           },
           rule_matches: [
             {

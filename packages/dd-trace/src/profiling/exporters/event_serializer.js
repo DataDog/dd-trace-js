@@ -1,3 +1,7 @@
+'use strict'
+
+/* eslint n/no-unsupported-features/node-builtins: ['error', { ignores: ['os.availableParallelism'] }] */
+
 const os = require('os')
 const perf = require('perf_hooks').performance
 const version = require('../../../../../package.json').version

@@ -1,3 +1,5 @@
+'use strict'
+
 const { storage } = require('../../../datadog-core')
 const {
   getTestEnvironmentMetadata,
@@ -53,7 +55,8 @@ const {
   GIT_TAG,
   GIT_PULL_REQUEST_BASE_BRANCH_SHA,
   GIT_COMMIT_HEAD_SHA,
-  GIT_PULL_REQUEST_BASE_BRANCH
+  GIT_PULL_REQUEST_BASE_BRANCH,
+  GIT_COMMIT_HEAD_MESSAGE
 } = require('./util/tags')
 const { OS_VERSION, OS_PLATFORM, OS_ARCHITECTURE, RUNTIME_NAME, RUNTIME_VERSION } = require('./util/env')
 const getDiClient = require('../ci-visibility/dynamic-instrumentation')
@@ -311,7 +314,8 @@ module.exports = class CiPlugin extends Plugin {
       [GIT_COMMIT_MESSAGE]: commitMessage,
       [GIT_TAG]: tag,
       [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseSha,
-      [GIT_COMMIT_HEAD_SHA]: commitHeadSha
+      [GIT_COMMIT_HEAD_SHA]: commitHeadSha,
+      [GIT_COMMIT_HEAD_MESSAGE]: commitHeadMessage
     } = this.testEnvironmentMetadata
 
     this.repositoryRoot = repositoryRoot || process.cwd()
@@ -333,7 +337,8 @@ module.exports = class CiPlugin extends Plugin {
       commitMessage,
       tag,
       pullRequestBaseSha,
-      commitHeadSha
+      commitHeadSha,
+      commitHeadMessage
     }
   }
 
