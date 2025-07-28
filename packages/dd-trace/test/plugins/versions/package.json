@@ -36,6 +36,7 @@
     "apollo-server-core": "3.13.0",
     "avsc": "5.7.9",
     "aws-sdk": "2.1692.0",
+    "axios": "1.11.0",
     "bluebird": "3.7.2",
     "body-parser": "2.2.0",
     "bunyan": "2.0.5",
