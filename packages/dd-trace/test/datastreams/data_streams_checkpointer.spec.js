@@ -70,4 +70,21 @@ describe('data streams checkpointer manual api', () => {
 
     expect(DSM_CONTEXT_HEADER in headers).to.equal(true)
   })
+
+  it('should test manual checkpoint behavior', function () {
+    const headers = {}
+    const mockSetCheckpoint = sinon.stub().returns({ hash: Buffer.from([1, 2, 3, 4]) })
+
+    tracer._tracer._dataStreamsProcessor.setCheckpoint = mockSetCheckpoint
+
+    tracer.dataStreamsCheckpointer.setConsumeCheckpoint('kinesis', 'stream-123', headers)
+    let calledTags = mockSetCheckpoint.getCall(0).args[0]
+    expect(calledTags).to.include('manual_checkpoint:true')
+
+    mockSetCheckpoint.resetHistory()
+
+    tracer.dataStreamsCheckpointer.setConsumeCheckpoint('kinesis', 'stream-123', headers, false)
+    calledTags = mockSetCheckpoint.getCall(0).args[0]
+    expect(calledTags).to.not.include('manual_checkpoint:true')
+  })
 })
