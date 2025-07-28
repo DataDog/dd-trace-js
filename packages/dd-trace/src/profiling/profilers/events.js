@@ -3,6 +3,7 @@
 const { performance, constants, PerformanceObserver } = require('perf_hooks')
 const { END_TIMESTAMP_LABEL, SPAN_ID_LABEL, LOCAL_ROOT_SPAN_ID_LABEL, encodeProfileAsync } = require('./shared')
 const { Function, Label, Line, Location, Profile, Sample, StringTable, ValueType } = require('pprof-format')
+const PoissonProcessSamplingFilter = require('./poisson')
 
 // perf_hooks uses millis, with fractional part representing nanos. We emit nanos into the pprof file.
 const MS_TO_NS = 1_000_000
@@ -341,57 +342,12 @@ class CompositeEventSource {
 }
 
 function createPossionProcessSamplingFilter (samplingIntervalMillis) {
-  let nextSamplingInstant = performance.now()
-  let currentSamplingInstant = 0
-  setNextSamplingInstant()
-
-  return event => {
-    const endTime = event.startTime + event.duration
-    // We're using the end times of events as an approximation of current time as events are
-    // expected to be reported close to where they ended. If the end time (and thus, presumably, the
-    // current time) is past the next sampling instant, we make it the current sampling instant and
-    // compute the next sampling instant in its future.
-    if (endTime >= nextSamplingInstant) {
-      // All observed events are supposed to have happened in the past. For purposes of advancing
-      // the next sampling instant, we cap endTime to now(). This protects us from advancing it far
-      // into future if we receive an event with erroneously long duration, which would also take
-      // many iterations of the below "while" loop.
-      const cappedEndTime = Math.min(endTime, performance.now())
-
-      // If nextSamplingInstant is far in cappedEndTime's past, first advance it close to it. This
-      // can happen if we didn't receive any events for a while. Since a Poisson process has no
-      // memory, we can reset it anytime. This will ensure that the "while" loop below runs at most
-      // few iterations.
-      const furthestContinuousPast = cappedEndTime - samplingIntervalMillis * POISSON_RESET_FACTOR
-      if (nextSamplingInstant < furthestContinuousPast) {
-        nextSamplingInstant = furthestContinuousPast
-      }
-
-      // Advance the next sampling instant until it is in cappedEndTime's future.
-      while (cappedEndTime >= nextSamplingInstant) {
-        setNextSamplingInstant()
-      }
-    }
-    // An event is sampled if it started before, and ended on or after a sampling instant. The above
-    // while loop will ensure that the ending invariant is always true for the current sampling
-    // instant so we don't have to test for it below. Across calls, the invariant also holds as long
-    // as the events arrive in endTime order. This is true for events coming from
-    // DatadogInstrumentationEventSource; they will be ordered by endTime by virtue of this method
-    // being invoked synchronously with the plugins' finish() handler which evaluates
-    // performance.now(). OTOH, events coming from NodeAPIEventSource (GC in typical setup) might be
-    // somewhat delayed as they are queued by Node, so they can arrive out of order with regard to
-    // events coming from the non-queued source. By omitting the endTime check, we will pass through
-    // some short events that started and ended before the current sampling instant. OTOH, if we
-    // were to check for this.currentSamplingInstant <= endTime, we would discard some long events
-    // that also ended before the current sampling instant. We'd rather err on the side of including
-    // some short events than excluding some long events.
-    return event.startTime < currentSamplingInstant
-  }
-
-  function setNextSamplingInstant () {
-    currentSamplingInstant = nextSamplingInstant
-    nextSamplingInstant -= Math.log(1 - Math.random()) * samplingIntervalMillis
-  }
+  const poissonFilter = new PoissonProcessSamplingFilter({
+    samplingInterval: samplingIntervalMillis,
+    resetInterval: samplingIntervalMillis * POISSON_RESET_FACTOR,
+    now: performance.now.bind(performance)
+  })
+  return poissonFilter.filter.bind(poissonFilter)
 }
 
 /**
