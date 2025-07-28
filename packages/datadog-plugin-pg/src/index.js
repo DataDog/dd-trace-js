@@ -8,7 +8,14 @@ class PGPlugin extends DatabasePlugin {
   static get operation () { return 'query' }
   static get system () { return 'postgres' }
 
-  start ({ params = {}, query, processId, stream }) {
+  constructor (tracer, config) {
+    super(tracer, config)
+    this.addBind('apm:pg:query:callback', () => {})
+  }
+
+  start (ctx) {
+    const { params = {}, query, processId, stream } = ctx
+
     const service = this.serviceName({ pluginConfig: this.config, params })
     const originalStatement = this.maybeTruncate(query.text)
 
@@ -25,13 +32,15 @@ class PGPlugin extends DatabasePlugin {
         'out.host': params.host,
         [CLIENT_PORT_KEY]: params.port
       }
-    })
+    }, ctx)
 
     if (stream) {
       span.setTag('db.stream', 1)
     }
 
     query.__ddInjectableQuery = this.injectDbmQuery(span, query.text, service, !!query.name)
+
+    return ctx.currentStore
   }
 }
 

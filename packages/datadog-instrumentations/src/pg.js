@@ -3,13 +3,13 @@
 const {
   channel,
   addHook,
-  AsyncResource
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
 const startCh = channel('apm:pg:query:start')
 const finishCh = channel('apm:pg:query:finish')
 const errorCh = channel('apm:pg:query:error')
+const callbackCh = channel('apm:pg:query:callback')
 
 const startPoolQueryCh = channel('datadog:pg:pool:query:start')
 const finishPoolQueryCh = channel('datadog:pg:pool:query:finish')
@@ -27,14 +27,23 @@ addHook({ name: 'pg', file: 'lib/native/index.js', versions: ['>=8.0.3'] }, Clie
   return Client
 })
 
+function wrapCallback (originalCallback, finish) {
+  const ctx = {}
+
+  return callbackCh.runStores(ctx, () => {
+    return function (err, res) {
+      finish(err, res)
+      return originalCallback.apply(this, arguments)
+    }
+  })
+}
+
 function wrapQuery (query) {
   return function () {
     if (!startCh.hasSubscribers) {
       return query.apply(this, arguments)
     }
 
-    const callbackResource = new AsyncResource('bound-anonymous-fn')
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
     const processId = this.processID
 
     const pgQuery = arguments[0] !== null && typeof arguments[0] === 'object'
@@ -56,26 +65,26 @@ function wrapQuery (query) {
       })
     }
 
-    return asyncResource.runInAsyncScope(() => {
-      const abortController = new AbortController()
+    const ctx = {
+      params: this.connectionParameters,
+      query: textPropObj,
+      processId,
+      abortController: new AbortController(),
+      stream
+    }
 
-      startCh.publish({
-        params: this.connectionParameters,
-        query: textPropObj,
-        processId,
-        abortController,
-        stream
-      })
-
-      const finish = asyncResource.bind(function (error, res) {
+    return startCh.runStores(ctx, () => {
+      function finish (error, res) {
         if (error) {
-          errorCh.publish(error)
+          ctx.error = error
+          errorCh.publish(ctx)
         }
-        finishCh.publish({ result: res?.rows })
-      })
+        ctx.result = res?.rows
+        finishCh.publish(ctx)
+      }
 
-      if (abortController.signal.aborted) {
-        const error = abortController.signal.reason || new Error('Aborted')
+      if (ctx.abortController.signal.aborted) {
+        const error = ctx.abortController.signal.reason || new Error('Aborted')
 
         // Based on: https://github.com/brianc/node-postgres/blob/54eb0fa216aaccd727765641e7d1cf5da2bc483d/packages/pg/lib/client.js#L510
         const reusingQuery = typeof pgQuery.submit === 'function'
@@ -121,11 +130,9 @@ function wrapQuery (query) {
       }
 
       if (newQuery.callback) {
-        const originalCallback = callbackResource.bind(newQuery.callback)
-        newQuery.callback = function (err, res) {
-          finish(err, res)
-          return originalCallback.apply(this, arguments)
-        }
+        newQuery.callback = shimmer.wrapFunction(newQuery.callback, (originalCallback) =>
+          wrapCallback(originalCallback, finish)
+        )
       } else if (newQuery.once) {
         newQuery
           .once(errorMonitor, finish)
@@ -140,7 +147,8 @@ function wrapQuery (query) {
       try {
         return retval
       } catch (err) {
-        errorCh.publish(err)
+        ctx.error = err
+        errorCh.publish(ctx)
       }
     })
   }
@@ -152,26 +160,22 @@ function wrapPoolQuery (query) {
       return query.apply(this, arguments)
     }
 
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-
     const pgQuery = arguments[0] !== null && typeof arguments[0] === 'object' ? arguments[0] : { text: arguments[0] }
 
-    return asyncResource.runInAsyncScope(() => {
-      const abortController = new AbortController()
+    const ctx = {
+      query: pgQuery,
+      abortController: new AbortController()
+    }
 
-      startPoolQueryCh.publish({
-        query: pgQuery,
-        abortController
-      })
-
-      const finish = asyncResource.bind(function () {
-        finishPoolQueryCh.publish()
-      })
+    return startPoolQueryCh.runStores(ctx, () => {
+      function finish () {
+        finishPoolQueryCh.publish(ctx)
+      }
 
       const cb = arguments[arguments.length - 1]
 
-      if (abortController.signal.aborted) {
-        const error = abortController.signal.reason || new Error('Aborted')
+      if (ctx.abortController.signal.aborted) {
+        const error = ctx.abortController.signal.reason || new Error('Aborted')
         finish()
 
         if (typeof cb === 'function') {
