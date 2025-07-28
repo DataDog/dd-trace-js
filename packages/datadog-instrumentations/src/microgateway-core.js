@@ -49,7 +49,10 @@ function wrapNext (req, res, next) {
     }
 
     if (res.proxy && res.proxy.base_path) {
-      return routeChannel.publish({ req, res, route: res.proxy.base_path, ...ctx }, next, this, ...arguments)
+      ctx.req = req
+      ctx.res = res
+      ctx.route = res.proxy.base_path
+      return routeChannel.runStores(ctx, next, this, ...arguments)
     }
     return next.apply(this, arguments)
   })
