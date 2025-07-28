@@ -1,0 +1,81 @@
+interactions:
+- request:
+    body: '{"model":"gpt-3.5-turbo","prompt":"Hello, OpenAI!","max_tokens":100,"temperature":0.5,"n":1,"stream":false}'
+    headers:
+      Accept:
+      - application/json, text/plain, */*
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '107'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - OpenAI/NodeJS/3.0.0
+    method: POST
+    uri: https://api.openai.com/v1/completions
+  response:
+    body:
+      string: "{\n  \"error\": {\n    \"message\": \"This is a chat model and not
+        supported in the v1/completions endpoint. Did you mean to use v1/chat/completions?\",\n
+        \   \"type\": \"invalid_request_error\",\n    \"param\": \"model\",\n    \"code\":
+        null\n  }\n}"
+    headers:
+      CF-RAY:
+      - 952d0d4dbddc4cd9-BOS
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Fri, 20 Jun 2025 17:40:33 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=4qRBBQ2tClOn.HUfMDi0I6kdldko0XllOhgwqCZSmVk-1750441233-1.0.1.1-nmAFxZAQIPn7TDmIq09ZzrN3KSC1_RYkuGq.1ecMgUIbp0I7NNlFyT54wr2G4cOA6tA2aKl3tUdUCi3Q5FmJ1lqgYXo3L9VdExXf3s4BlkU;
+        path=/; expires=Fri, 20-Jun-25 18:10:33 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=o.Qm9FQMaV0x_UdplrdzScU4H6ggFdobpAgWA.47qTg-1750441233686-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - datadog-staging
+      openai-processing-ms:
+      - '18'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains; preload
+      x-envoy-upstream-service-time:
+      - '22'
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '50000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '49999995'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_80b3ab0bd1abceca50643613ae87c9dd
+    status:
+      code: 404
+      message: Not Found
+version: 1

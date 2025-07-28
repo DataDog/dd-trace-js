@@ -42,15 +42,20 @@ function findWebSpan (startedSpans, spanId) {
 }
 
 class Profiler extends EventEmitter {
+  #compressionFn
+  #compressionOptions
+  #enabled = false
+  #endpointCounts = new Map()
+  #lastStart
+  #logger
+  #profileSeq = 0
+  #spanFinishListener
+  #timer
+
   constructor () {
     super()
-    this._enabled = false
-    this._logger = undefined
     this._config = undefined
-    this._timer = undefined
-    this._lastStart = undefined
     this._timeoutInterval = undefined
-    this.endpointCounts = new Map()
   }
 
   start (options) {
@@ -61,17 +66,21 @@ class Profiler extends EventEmitter {
     })
   }
 
-  _logError (err) {
-    logError(this._logger, err)
+  get enabled () {
+    return this.#enabled
+  }
+
+  #logError (err) {
+    logError(this.#logger, err)
   }
 
   async _start (options) {
-    if (this._enabled) return true
+    if (this.enabled) return true
 
     const config = this._config = new Config(options)
 
-    this._logger = config.logger
-    this._enabled = true
+    this.#logger = config.logger
+    this.#enabled = true
     this._setInterval()
 
     // Log errors if the source map finder fails, but don't prevent the rest
@@ -83,7 +92,7 @@ class Profiler extends EventEmitter {
 
       mapper = await maybeSourceMap(config.sourceMap, SourceMapper, config.debugSourceMaps)
       if (config.sourceMap && config.debugSourceMaps) {
-        this._logger.debug(() => {
+        this.#logger.debug(() => {
           return mapper.infoMap.size === 0
             ? 'Found no source maps'
             : `Found source maps for following files: [${[...mapper.infoMap.keys()].join(', ')}]`
@@ -93,18 +102,18 @@ class Profiler extends EventEmitter {
       const clevel = config.uploadCompression.level
       switch (config.uploadCompression.method) {
         case 'gzip':
-          this._compressionFn = promisify(zlib.gzip)
+          this.#compressionFn = promisify(zlib.gzip)
           if (clevel !== undefined) {
-            this._compressionOptions = {
+            this.#compressionOptions = {
               level: clevel
             }
           }
           break
         case 'zstd':
           if (typeof zlib.zstdCompress === 'function') {
-            this._compressionFn = promisify(zlib.zstdCompress)
+            this.#compressionFn = promisify(zlib.zstdCompress)
             if (clevel !== undefined) {
-              this._compressionOptions = {
+              this.#compressionOptions = {
                 params: {
                   [zlib.constants.ZSTD_c_compressionLevel]: clevel
                 }
@@ -113,43 +122,44 @@ class Profiler extends EventEmitter {
           } else {
             const zstdCompress = require('@datadog/libdatadog').load('datadog-js-zstd').zstd_compress
             const level = clevel ?? 0 // 0 is zstd default compression level
-            this._compressionFn = (buffer) => Promise.resolve(Buffer.from(zstdCompress(buffer, level)))
+            this.#compressionFn = (buffer) => Promise.resolve(Buffer.from(zstdCompress(buffer, level)))
           }
           break
       }
     } catch (err) {
-      this._logError(err)
+      this.#logError(err)
     }
 
     try {
       const start = new Date()
+      const nearOOMCallback = this.#nearOOMExport.bind(this)
       for (const profiler of config.profilers) {
         // TODO: move this out of Profiler when restoring sourcemap support
         profiler.start({
           mapper,
-          nearOOMCallback: this._nearOOMExport.bind(this)
+          nearOOMCallback
         })
-        this._logger.debug(`Started ${profiler.type} profiler in ${threadNamePrefix} thread`)
+        this.#logger.debug(`Started ${profiler.type} profiler in ${threadNamePrefix} thread`)
       }
 
       if (config.endpointCollectionEnabled) {
-        this._spanFinishListener = this._onSpanFinish.bind(this)
-        spanFinishedChannel.subscribe(this._spanFinishListener)
+        this.#spanFinishListener = this.#onSpanFinish.bind(this)
+        spanFinishedChannel.subscribe(this.#spanFinishListener)
       }
 
       this._capture(this._timeoutInterval, start)
       return true
     } catch (e) {
-      this._logError(e)
-      this._stop()
+      this.#logError(e)
+      this.#stop()
       return false
     }
   }
 
-  _nearOOMExport (profileType, encodedProfile) {
-    const start = this._lastStart
+  #nearOOMExport (profileType, encodedProfile) {
+    const start = this.#lastStart
     const end = new Date()
-    this._submit({
+    this.#submit({
       [profileType]: encodedProfile
     }, start, end, snapshotKinds.ON_OUT_OF_MEMORY)
   }
@@ -159,45 +169,45 @@ class Profiler extends EventEmitter {
   }
 
   stop () {
-    if (!this._enabled) return
+    if (!this.enabled) return
 
     // collect and export current profiles
     // once collect returns, profilers can be safely stopped
     this._collect(snapshotKinds.ON_SHUTDOWN, false)
-    this._stop()
+    this.#stop()
   }
 
-  _stop () {
-    if (!this._enabled) return
+  #stop () {
+    if (!this.enabled) return
 
-    this._enabled = false
+    this.#enabled = false
 
-    if (this._spanFinishListener !== undefined) {
-      spanFinishedChannel.unsubscribe(this._spanFinishListener)
-      this._spanFinishListener = undefined
+    if (this.#spanFinishListener !== undefined) {
+      spanFinishedChannel.unsubscribe(this.#spanFinishListener)
+      this.#spanFinishListener = undefined
     }
 
     for (const profiler of this._config.profilers) {
       profiler.stop()
-      this._logger.debug(`Stopped ${profiler.type} profiler in ${threadNamePrefix} thread`)
+      this.#logger.debug(`Stopped ${profiler.type} profiler in ${threadNamePrefix} thread`)
     }
 
-    clearTimeout(this._timer)
-    this._timer = undefined
+    clearTimeout(this.#timer)
+    this.#timer = undefined
   }
 
   _capture (timeout, start) {
-    if (!this._enabled) return
-    this._lastStart = start
-    if (!this._timer || timeout !== this._timeoutInterval) {
-      this._timer = setTimeout(() => this._collect(snapshotKinds.PERIODIC), timeout)
-      this._timer.unref()
+    if (!this.enabled) return
+    this.#lastStart = start
+    if (!this.#timer || timeout !== this._timeoutInterval) {
+      this.#timer = setTimeout(() => this._collect(snapshotKinds.PERIODIC), timeout)
+      this.#timer.unref()
     } else {
-      this._timer.refresh()
+      this.#timer.refresh()
     }
   }
 
-  _onSpanFinish (span) {
+  #onSpanFinish (span) {
     const context = span.context()
     const tags = context._tags
     if (!isWebServerSpan(tags)) return
@@ -208,19 +218,19 @@ class Profiler extends EventEmitter {
     // Make sure this is the outermost web span, just in case so we don't overcount
     if (findWebSpan(getStartedSpans(context), context._parentId)) return
 
-    let counter = this.endpointCounts.get(endpointName)
+    let counter = this.#endpointCounts.get(endpointName)
     if (counter === undefined) {
       counter = { count: 1 }
-      this.endpointCounts.set(endpointName, counter)
+      this.#endpointCounts.set(endpointName, counter)
     } else {
       counter.count++
     }
   }
 
   async _collect (snapshotKind, restart = true) {
-    if (!this._enabled) return
+    if (!this.enabled) return
 
-    const startDate = this._lastStart
+    const startDate = this.#lastStart
     const endDate = new Date()
     const profiles = []
     const encodedProfiles = {}
@@ -235,7 +245,7 @@ class Profiler extends EventEmitter {
         for (const profiler of this._config.profilers) {
           const profile = profiler.profile(restart, startDate, endDate)
           if (!restart) {
-            this._logger.debug(`Stopped ${profiler.type} profiler in ${threadNamePrefix} thread`)
+            this.#logger.debug(`Stopped ${profiler.type} profiler in ${threadNamePrefix} thread`)
           }
           if (!profile) continue
           profiles.push({ profiler, profile })
@@ -252,11 +262,11 @@ class Profiler extends EventEmitter {
       await Promise.all(profiles.map(async ({ profiler, profile }) => {
         try {
           const encoded = await profiler.encode(profile)
-          const compressed = encoded instanceof Buffer && this._compressionFn !== undefined
-            ? await this._compressionFn(encoded, this._compressionOptions)
+          const compressed = encoded instanceof Buffer && this.#compressionFn !== undefined
+            ? await this.#compressionFn(encoded, this.#compressionOptions)
             : encoded
           encodedProfiles[profiler.type] = compressed
-          this._logger.debug(() => {
+          this.#logger.debug(() => {
             const profileJson = JSON.stringify(profile, (key, value) => {
               return typeof value === 'bigint' ? value.toString() : value
             })
@@ -266,37 +276,38 @@ class Profiler extends EventEmitter {
         } catch (err) {
           // If encoding one of the profile types fails, we should still try to
           // encode and submit the other profile types.
-          this._logError(err)
+          this.#logError(err)
         }
       }))
 
       if (hasEncoded) {
-        await this._submit(encodedProfiles, startDate, endDate, snapshotKind)
+        await this.#submit(encodedProfiles, startDate, endDate, snapshotKind)
         profileSubmittedChannel.publish()
-        this._logger.debug('Submitted profiles')
+        this.#logger.debug('Submitted profiles')
       }
     } catch (err) {
-      this._logError(err)
-      this._stop()
+      this.#logError(err)
+      this.#stop()
     }
   }
 
-  _submit (profiles, start, end, snapshotKind) {
+  #submit (profiles, start, end, snapshotKind) {
     const { tags } = this._config
 
     // Flatten endpoint counts
     const endpointCounts = {}
-    for (const [endpoint, { count }] of this.endpointCounts) {
+    for (const [endpoint, { count }] of this.#endpointCounts) {
       endpointCounts[endpoint] = count
     }
-    this.endpointCounts.clear()
+    this.#endpointCounts.clear()
 
     tags.snapshot = snapshotKind
+    tags.profile_seq = this.#profileSeq++
     const exportSpec = { profiles, start, end, tags, endpointCounts }
     const tasks = this._config.exporters.map(exporter =>
       exporter.export(exportSpec).catch(err => {
-        if (this._logger) {
-          this._logger.warn(err)
+        if (this.#logger) {
+          this.#logger.warn(err)
         }
       })
     )
@@ -306,24 +317,32 @@ class Profiler extends EventEmitter {
 }
 
 class ServerlessProfiler extends Profiler {
+  #profiledIntervals = 0
+  #interval = 1 // seconds
+  #flushAfterIntervals
+
   constructor () {
     super()
-    this._profiledIntervals = 0
-    this._interval = 1
-    this._flushAfterIntervals = undefined
+    this.#profiledIntervals = 0
+    this.#interval = 1
+    this.#flushAfterIntervals = undefined
+  }
+
+  get profiledIntervals () {
+    return this.#profiledIntervals
   }
 
   _setInterval () {
-    this._timeoutInterval = this._interval * 1000
-    this._flushAfterIntervals = this._config.flushInterval / 1000
+    this._timeoutInterval = this.#interval * 1000
+    this.#flushAfterIntervals = this._config.flushInterval / 1000
   }
 
   async _collect (snapshotKind, restart = true) {
-    if (this._profiledIntervals >= this._flushAfterIntervals || !restart) {
-      this._profiledIntervals = 0
+    if (this.#profiledIntervals >= this.#flushAfterIntervals || !restart) {
+      this.#profiledIntervals = 0
       await super._collect(snapshotKind, restart)
     } else {
-      this._profiledIntervals += 1
+      this.#profiledIntervals += 1
       this._capture(this._timeoutInterval, new Date())
       // Don't submit profile until 65 (flushAfterIntervals) intervals have elapsed
     }
