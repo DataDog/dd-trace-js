@@ -1,0 +1,91 @@
+interactions:
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip,deflate
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json
+      User-Agent:
+      - OpenAI/JS 4.17.0
+      X-Stainless-Arch:
+      - arm64
+      X-Stainless-Lang:
+      - js
+      X-Stainless-Os:
+      - MacOS
+      X-Stainless-Package-Version:
+      - 4.17.0
+      X-Stainless-Runtime:
+      - node
+      X-Stainless-Runtime-Version:
+      - v22.13.1
+    method: GET
+    uri: https://api.openai.com/v1/fine_tuning/jobs/ftjob-q9CUUUsHJemGUVQ1Ecc01zcf/events
+  response:
+    body:
+      string: "{\n  \"object\": \"list\",\n  \"data\": [\n    {\n      \"object\":
+        \"fine_tuning.job.event\",\n      \"id\": \"ftevent-Cx5ZK5J7luO94qrNem4VPvgC\",\n
+        \     \"created_at\": 1750424922,\n      \"level\": \"warn\",\n      \"message\":
+        \"The job was stopped due to a cancellation request\",\n      \"data\": null,\n
+        \     \"type\": \"message\"\n    },\n    {\n      \"object\": \"fine_tuning.job.event\",\n
+        \     \"id\": \"ftevent-5KrghIsIPhIjF04a6Dgge4fb\",\n      \"created_at\":
+        1750424800,\n      \"level\": \"info\",\n      \"message\": \"Fine-tuning
+        job started\",\n      \"data\": null,\n      \"type\": \"message\"\n    },\n
+        \   {\n      \"object\": \"fine_tuning.job.event\",\n      \"id\": \"ftevent-BPfhTk63npLjsE1sC61hMui2\",\n
+        \     \"created_at\": 1750424795,\n      \"level\": \"info\",\n      \"message\":
+        \"Files validated, moving job to queued state\",\n      \"data\": {},\n      \"type\":
+        \"message\"\n    },\n    {\n      \"object\": \"fine_tuning.job.event\",\n
+        \     \"id\": \"ftevent-azRJ5VTezaTOaP6g16NcHR17\",\n      \"created_at\":
+        1750424715,\n      \"level\": \"info\",\n      \"message\": \"Validating training
+        file: file-RpTpuvRVtnKpdKZb7DDGto\",\n      \"data\": {},\n      \"type\":
+        \"message\"\n    },\n    {\n      \"object\": \"fine_tuning.job.event\",\n
+        \     \"id\": \"ftevent-1046aVlktddmVhWzAxcC2z0X\",\n      \"created_at\":
+        1750424715,\n      \"level\": \"info\",\n      \"message\": \"Created fine-tuning
+        job: ftjob-q9CUUUsHJemGUVQ1Ecc01zcf\",\n      \"data\": {},\n      \"type\":
+        \"message\"\n    }\n  ],\n  \"has_more\": false\n}"
+    headers:
+      CF-RAY:
+      - 952b829358018f85-BOS
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Fri, 20 Jun 2025 13:11:05 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=IXZa8aHNVV8cz_Y4qAqMecqx7_.vyqYkoRg..En5Ry4-1750425065-1.0.1.1-VRH_gqQr2SpG.0gAD_dW3pZ97Fw5KnDQ1SPyHqAkbiT6vUV4t03tizPxD6PjiuiHDCewEOv6fKGN1pnnq05CQ5hQ8y_YCG1ZM8A4_pHdGPk;
+        path=/; expires=Fri, 20-Jun-25 13:41:05 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=jvGW6q5kCbZxJc_KMlWW.Suje7ZSAVedBKpd2Jc1M54-1750425065627-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - datadog-staging
+      openai-processing-ms:
+      - '54'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains; preload
+      x-request-id:
+      - req_9f0b6dc8bde4df07193394349e722e68
+    status:
+      code: 200
+      message: OK
+version: 1

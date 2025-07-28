@@ -27,7 +27,8 @@ const {
   GIT_COMMIT_COMMITTER_EMAIL,
   CI_NODE_LABELS,
   CI_NODE_NAME,
-  PR_NUMBER
+  PR_NUMBER,
+  CI_JOB_ID
 } = require('./tags')
 const { filterSensitiveInfoFromRepository } = require('./url')
 const { getEnvironmentVariable, getEnvironmentVariables } = require('../../config-helper')
@@ -83,6 +84,13 @@ function resolveTilde (filePath) {
     return filePath.replace('~', getEnvironmentVariable('HOME'))
   }
   return filePath
+}
+
+function normalizeNumber (number) {
+  if (typeof number !== 'number') {
+    return number
+  }
+  return number.toString()
 }
 
 function getGitHubEventPayload () {
@@ -210,7 +218,8 @@ module.exports = {
         [CI_NODE_LABELS]: CI_RUNNER_TAGS,
         [CI_NODE_NAME]: CI_RUNNER_ID,
         [GIT_PULL_REQUEST_BASE_BRANCH]: CI_MERGE_REQUEST_TARGET_BRANCH_NAME,
-        [PR_NUMBER]: CI_MERGE_REQUEST_IID
+        [PR_NUMBER]: CI_MERGE_REQUEST_IID,
+        [CI_JOB_ID]: GITLAB_CI_JOB_ID
       }
     }
 
@@ -247,7 +256,8 @@ module.exports = {
           CIRCLE_WORKFLOW_ID,
           CIRCLE_BUILD_NUM,
         }),
-        [PR_NUMBER]: CIRCLE_PR_NUMBER
+        [PR_NUMBER]: CIRCLE_PR_NUMBER,
+        [CI_JOB_ID]: CIRCLE_BUILD_NUM
       }
     }
 
@@ -298,7 +308,8 @@ module.exports = {
           GITHUB_REPOSITORY,
           GITHUB_RUN_ID,
           GITHUB_RUN_ATTEMPT
-        })
+        }),
+        [CI_JOB_ID]: GITHUB_JOB
       }
       if (GITHUB_BASE_REF) { // `pull_request` or `pull_request_target` event
         tags[GIT_PULL_REQUEST_BASE_BRANCH] = GITHUB_BASE_REF
@@ -407,7 +418,8 @@ module.exports = {
         [CI_JOB_NAME]: SYSTEM_JOBDISPLAYNAME,
         [CI_ENV_VARS]: JSON.stringify({ SYSTEM_TEAMPROJECTID, BUILD_BUILDID, SYSTEM_JOBID }),
         [PR_NUMBER]: SYSTEM_PULLREQUEST_PULLREQUESTNUMBER,
-        [GIT_PULL_REQUEST_BASE_BRANCH]: SYSTEM_PULLREQUEST_TARGETBRANCH
+        [GIT_PULL_REQUEST_BASE_BRANCH]: SYSTEM_PULLREQUEST_TARGETBRANCH,
+        [CI_JOB_ID]: SYSTEM_JOBID
       }
 
       if (SYSTEM_TEAMFOUNDATIONSERVERURI && SYSTEM_TEAMPROJECTID && BUILD_BUILDID) {
@@ -542,6 +554,7 @@ module.exports = {
         [CI_NODE_NAME]: BUILDKITE_AGENT_ID,
         [CI_NODE_LABELS]: JSON.stringify(extraTags),
         [PR_NUMBER]: BUILDKITE_PULL_REQUEST,
+        [CI_JOB_ID]: BUILDKITE_JOB_ID
       }
 
       if (BUILDKITE_PULL_REQUEST) {
@@ -682,7 +695,8 @@ module.exports = {
           CODEBUILD_BUILD_ARN,
           DD_PIPELINE_EXECUTION_ID,
           DD_ACTION_EXECUTION_ID
-        })
+        }),
+        [CI_JOB_ID]: DD_ACTION_EXECUTION_ID
       }
     }
 
@@ -727,6 +741,7 @@ module.exports = {
     normalizeTag(tags, GIT_BRANCH, normalizeRef)
     normalizeTag(tags, GIT_TAG, normalizeRef)
     normalizeTag(tags, GIT_PULL_REQUEST_BASE_BRANCH, normalizeRef)
+    normalizeTag(tags, PR_NUMBER, normalizeNumber)
 
     return removeEmptyValues(tags)
   }

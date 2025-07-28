@@ -11,6 +11,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
   cancel-in-progress: true
 
+env:
+  MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
+
 # TODO: upstream jobs
 
 jobs:
@@ -306,6 +309,7 @@ jobs:
       - uses: ./.github/actions/install
       - run: yarn add --ignore-scripts mocha@10 # Use older mocha to support old Node.js versions
       - run: yarn add --ignore-scripts express@4 # Use older express to support old Node.js versions
+      - run: npm i -g npm@8 # Recent enough to support `--pack-destination` and old enough for old Node.js versions
       - run: node node_modules/.bin/mocha --colors --timeout 30000 integration-tests/init.spec.js
 
   integration-guardrails-unsupported:

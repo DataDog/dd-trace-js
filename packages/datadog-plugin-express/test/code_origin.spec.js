@@ -87,6 +87,17 @@ describe('Plugin', () => {
               await assertCodeOrigin('/v1/user', { line, method: 'testCase', type: 'Context' })
             })
 
+            it('should support .use() routes', async function testCase () {
+              app.get('/route_before', (req, res) => res.end())
+              const line = getNextLineNumber()
+              app.use('/foo', (req, res) => {
+                res.end()
+              })
+              app.get('/route_after', (req, res) => res.end())
+
+              await assertCodeOrigin('/foo/bar', { line, method: 'testCase', type: 'Context' })
+            })
+
             it('should point to route handler even if passed through a middleware', async function testCase () {
               app.use((req, res, next) => {
                 next()
