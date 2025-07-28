@@ -121,12 +121,12 @@ class TracingPlugin extends Plugin {
       childOf = store.span
     }
 
-    const span = this._tracer.startSpan(name, {
+    const span = this.tracer.startSpan(name, {
       startTime,
       childOf,
       tags: {
         [COMPONENT]: component,
-        'service.name': service || meta?.service || this._tracer._service,
+        'service.name': service || meta?.service || this.tracer._service,
         'resource.name': resource,
         'span.kind': kind,
         'span.type': type,
