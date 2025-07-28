@@ -644,6 +644,7 @@ describe('Plugin', () => {
               // wait for the message to be processed before continuing
               await sendMessages(kafka, testTopic, messages)
               await messageProcessedPromise
+              await consumer.disconnect()
 
               for (const call of setOffsetSpy.getCalls()) {
                 expect(call.args[0]).to.not.have.property('type', 'kafka_commit')
