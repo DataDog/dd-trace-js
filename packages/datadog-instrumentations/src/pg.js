@@ -2,8 +2,7 @@
 
 const {
   channel,
-  addHook,
-  AsyncResource
+  addHook
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
@@ -33,8 +32,6 @@ function wrapQuery (query) {
       return query.apply(this, arguments)
     }
 
-    const callbackResource = new AsyncResource('bound-anonymous-fn')
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
     const processId = this.processID
 
     const pgQuery = arguments[0] !== null && typeof arguments[0] === 'object'
@@ -55,24 +52,24 @@ function wrapQuery (query) {
         }
       })
     }
-
-    return asyncResource.runInAsyncScope(() => {
-      const abortController = new AbortController()
-
-      startCh.publish({
-        params: this.connectionParameters,
-        query: textPropObj,
-        processId,
-        abortController,
-        stream
-      })
-
-      const finish = asyncResource.bind(function (error, res) {
+    const abortController = new AbortController()
+    const ctx = {
+      pgQuery,
+      params: this.connectionParameters,
+      query: textPropObj,
+      processId,
+      abortController,
+      stream
+    }
+    return startCh.runStores(ctx, () => {
+      const finish = (error, res) => {
         if (error) {
-          errorCh.publish(error)
+          ctx.error = error
+          errorCh.publish(ctx)
         }
-        finishCh.publish({ result: res?.rows })
-      })
+        ctx.result = res?.rows
+        return finishCh.publish(ctx)
+      }
 
       if (abortController.signal.aborted) {
         const error = abortController.signal.reason || new Error('Aborted')
@@ -121,10 +118,10 @@ function wrapQuery (query) {
       }
 
       if (newQuery.callback) {
-        const originalCallback = callbackResource.bind(newQuery.callback)
-        newQuery.callback = function (err, res) {
-          finish(err, res)
-          return originalCallback.apply(this, arguments)
+        const originalCallback = newQuery.callback
+        newQuery.callback = function (err, ...args) {
+          finish(err, ...args)
+          return finishCh.runStores(ctx, originalCallback, this, err, ...args)
         }
       } else if (newQuery.once) {
         newQuery
@@ -139,8 +136,9 @@ function wrapQuery (query) {
 
       try {
         return retval
-      } catch (err) {
-        errorCh.publish(err)
+      } catch (error) {
+        ctx.error = error
+        errorCh.publish(ctx)
       }
     })
   }
@@ -152,21 +150,15 @@ function wrapPoolQuery (query) {
       return query.apply(this, arguments)
     }
 
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-
     const pgQuery = arguments[0] !== null && typeof arguments[0] === 'object' ? arguments[0] : { text: arguments[0] }
+    const abortController = new AbortController()
 
-    return asyncResource.runInAsyncScope(() => {
-      const abortController = new AbortController()
+    const ctx = { pgQuery, abortController }
 
-      startPoolQueryCh.publish({
-        query: pgQuery,
-        abortController
-      })
-
-      const finish = asyncResource.bind(function () {
-        finishPoolQueryCh.publish()
-      })
+    return startPoolQueryCh.runStores(ctx, () => {
+      const finish = () => {
+        finishPoolQueryCh.publish(ctx)
+      }
 
       const cb = arguments[arguments.length - 1]
 
