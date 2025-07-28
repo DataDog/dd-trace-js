@@ -425,7 +425,8 @@
     "OTEL_SERVICE_NAME": ["A"],
     "OTEL_TRACES_EXPORTER": ["A"],
     "OTEL_TRACES_SAMPLER_ARG": ["A"],
-    "OTEL_TRACES_SAMPLER": ["A"]
+    "OTEL_TRACES_SAMPLER": ["A"],
+    "DD_MATT_TEST": ["A"]
   },
   "aliases": {
     "DD_AGENT_HOST": ["DD_TRACE_AGENT_HOSTNAME"],
