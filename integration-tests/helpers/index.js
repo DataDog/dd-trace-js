@@ -171,7 +171,7 @@ function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
 async function createSandbox (dependencies = [], isGitRepo = false,
   integrationTestsPaths = ['./integration-tests/*'], followUpCommand) {
   const cappedDependencies = dependencies.map(dep => {
-    const match = dep.replaceAll('\'', '').match(/^@?([^@]+)(@(.+))?$/)
+    const match = dep.replaceAll('\'', '').match(/^(@?[^@]+)(@(.+))?$/)
     const name = match[1]
     const range = match[3] || ''
     const cappedRange = getCappedRange(name, range)
