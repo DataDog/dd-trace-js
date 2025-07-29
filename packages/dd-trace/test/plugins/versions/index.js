@@ -21,7 +21,7 @@ function getCappedRange (name, range) {
   console.log(range, latests[name])
   console.trace()
 
-  return `${range} <=${latests[name]}`
+  return range ? `${range} <=${latests[name]}` : latests[name]
 }
 
 module.exports = {

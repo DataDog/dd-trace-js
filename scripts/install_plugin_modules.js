@@ -113,7 +113,7 @@ async function assertFolder (name, version) {
  */
 async function assertPackage (name, version, dependencyVersionRange, external) {
   const dependencies = {
-    [name]: getCappedRange(name, dependencyVersionRange, external)
+    [name]: getCappedRange(name, dependencyVersionRange)
   }
   const pkg = {
     name: [name, sha1(name).slice(0, 8), sha1(version)].filter(val => val).join('-'),
