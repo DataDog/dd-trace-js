@@ -81,6 +81,7 @@
     "graphql": "16.11.0",
     "graphql-tag": "2.12.6",
     "graphql-tools": "9.0.20",
+    "graphql-yoga": "5.15.1",
     "handlebars": "4.7.8",
     "hapi": "18.1.0",
     "hono": "4.8.5",
