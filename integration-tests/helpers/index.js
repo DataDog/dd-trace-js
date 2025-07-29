@@ -171,10 +171,10 @@ function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
 async function createSandbox (dependencies = [], isGitRepo = false,
   integrationTestsPaths = ['./integration-tests/*'], followUpCommand) {
   const cappedDependencies = dependencies.map(dep => {
-    const [name, range = ''] = dep.split('@')
+    const [name, range = ''] = dep.replaceAll('\'', '').split('@')
     const cappedRange = getCappedRange(name, range)
 
-    return `${name}@${cappedRange}`
+    return `'${name}@${cappedRange}'`
   })
 
   // We might use NODE_OPTIONS to init the tracer. We don't want this to affect this operations
