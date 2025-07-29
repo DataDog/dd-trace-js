@@ -150,6 +150,7 @@
     "pino-pretty": "13.0.0",
     "playwright": "1.54.1",
     "playwright-core": "1.54.1",
+    "pnpm": "10.13.1",
     "promise": "8.3.0",
     "promise-js": "0.0.7",
     "protobufjs": "7.5.3",
