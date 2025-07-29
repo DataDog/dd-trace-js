@@ -17,8 +17,15 @@ const ENTRY_PARENT_HASH = Buffer.from('0000000000000000', 'hex')
 
 class StatsPoint {
   constructor (hash, parentHash, edgeTags) {
+    console.log("[NODEJS DEBUG] StatsPoint hash buffer:", hash.toString("hex"));
+    console.log("[NODEJS DEBUG] StatsPoint parentHash buffer:", parentHash.toString("hex"));
+
     this.hash = hash.readBigUInt64LE()
     this.parentHash = parentHash.readBigUInt64LE()
+
+    console.log("[NODEJS DEBUG] StatsPoint hash as LE uint64:", this.hash.toString());
+    console.log("[NODEJS DEBUG] StatsPoint parentHash as LE uint64:", this.parentHash.toString());
+
     this.edgeTags = edgeTags
     this.edgeLatency = new LogCollapsingLowestDenseDDSketch()
     this.pathwayLatency = new LogCollapsingLowestDenseDDSketch()
