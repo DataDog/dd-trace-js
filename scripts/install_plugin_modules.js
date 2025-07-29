@@ -112,18 +112,9 @@ async function assertFolder (name, version) {
  * @param {boolean} external
  */
 async function assertPackage (name, version, dependencyVersionRange, external) {
-  if (!latests[name]) {
-    throw new Error(
-      `Latest version for '${name}' needs to be defined in 'packages/dd-trace/test/plugins/versions/package.json'.`
-    )
+  const dependencies = {
+    [name]: getCappedRange(name, dependencyVersionRange, external)
   }
-
-  const alreadyCapped = dependencyVersionRange.includes('-')
-  const cappedVersionRange = external || alreadyCapped
-    ? dependencyVersionRange
-    : `${dependencyVersionRange} <=${latests[name]}`
-
-  const dependencies = { [name]: cappedVersionRange }
   const pkg = {
     name: [name, sha1(name).slice(0, 8), sha1(version)].filter(val => val).join('-'),
     version: '1.0.0',
@@ -231,6 +222,19 @@ async function assertWorkspaces () {
       packages: Array.from(workspaces)
     }
   }, null, 2) + '\n')
+}
+
+function getCappedRange (name, range, external) {
+  const alreadyCapped = range.includes('-')
+
+  if (external || alreadyCapped) return range
+  if (!latests[name]) {
+    throw new Error(
+      `Latest version for '${name}' needs to be defined in 'packages/dd-trace/test/plugins/versions/package.json'.`
+    )
+  }
+
+  return `${range} <=${latests[name]}`
 }
 
 /**
