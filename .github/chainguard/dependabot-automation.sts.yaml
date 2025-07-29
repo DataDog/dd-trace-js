@@ -9,5 +9,5 @@ claim_pattern:
   job_workflow_ref: DataDog/dd-trace-js/.github/workflows/dependabot-automation.yml@refs/heads/master
 
 permissions:
-  contents: read
+  contents: write
   pull_requests: write
