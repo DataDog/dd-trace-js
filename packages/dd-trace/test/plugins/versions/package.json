@@ -137,6 +137,7 @@
     "node-serialize": "0.0.4",
     "npm": "11.5.1",
     "nyc": "17.1.0",
+    "office-addin-mock": "3.0.3",
     "openai": "5.10.2",
     "oracledb": "6.9.0",
     "passport": "0.7.0",
