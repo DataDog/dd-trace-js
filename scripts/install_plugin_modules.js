@@ -8,7 +8,7 @@ const semver = require('semver')
 const exec = require('./helpers/exec')
 const externals = require('../packages/dd-trace/test/plugins/externals.json')
 const { getInstrumentation } = require('../packages/dd-trace/test/setup/helpers/load-inst')
-const latests = require('../packages/dd-trace/test/plugins/versions/package.json').dependencies
+const { getCappedRange } = require('../packages/dd-trace/test/plugins/versions')
 
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
 
@@ -222,19 +222,6 @@ async function assertWorkspaces () {
       packages: Array.from(workspaces)
     }
   }, null, 2) + '\n')
-}
-
-function getCappedRange (name, range, external) {
-  const alreadyCapped = range.includes('-')
-
-  if (external || alreadyCapped) return range
-  if (!latests[name]) {
-    throw new Error(
-      `Latest version for '${name}' needs to be defined in 'packages/dd-trace/test/plugins/versions/package.json'.`
-    )
-  }
-
-  return `${range} <=${latests[name]}`
 }
 
 /**

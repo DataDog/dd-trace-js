@@ -13,6 +13,7 @@ const rimraf = promisify(require('rimraf'))
 const FakeAgent = require('./fake-agent')
 const id = require('../../packages/dd-trace/src/id')
 const { version } = require('../../package.json')
+const { getCappedRange } = require('../../packages/dd-trace/test/plugins/versions')
 
 const hookFile = 'dd-trace/loader-hook.mjs'
 
@@ -169,6 +170,13 @@ function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
 
 async function createSandbox (dependencies = [], isGitRepo = false,
   integrationTestsPaths = ['./integration-tests/*'], followUpCommand) {
+  const cappedDependencies = dependencies.map(dep => {
+    const [name, range = ''] = dep.split('@')
+    const cappedRange = getCappedRange(name, range)
+
+    return `${name}@${cappedRange}`
+  })
+
   // We might use NODE_OPTIONS to init the tracer. We don't want this to affect this operations
   const { NODE_OPTIONS, ...restOfEnv } = process.env
   const noSandbox = String(process.env.TESTING_NO_INTEGRATION_SANDBOX)
@@ -184,7 +192,7 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   }
   const folder = path.join(os.tmpdir(), id().toString())
   const out = path.join(folder, `dd-trace-${version}.tgz`)
-  const allDependencies = [`file:${out}`].concat(dependencies)
+  const allDependencies = [`file:${out}`].concat(cappedDependencies)
 
   fs.mkdirSync(folder)
   const preferOfflineFlag = process.env.OFFLINE === '1' || process.env.OFFLINE === 'true' ? ' --prefer-offline' : ''
