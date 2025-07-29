@@ -6,6 +6,7 @@ const { fork, spawn } = childProcess
 const exec = promisify(childProcess.exec)
 const http = require('http')
 const fs = require('fs')
+const { builtinModules } = require('module')
 const os = require('os')
 const path = require('path')
 const assert = require('assert')
@@ -171,6 +172,8 @@ function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
 async function createSandbox (dependencies = [], isGitRepo = false,
   integrationTestsPaths = ['./integration-tests/*'], followUpCommand) {
   const cappedDependencies = dependencies.map(dep => {
+    if (builtinModules.includes(dep)) return dep
+
     const match = dep.replaceAll('\'', '').match(/^(@?[^@]+)(@(.+))?$/)
     const name = match[1]
     const range = match[3] || ''
