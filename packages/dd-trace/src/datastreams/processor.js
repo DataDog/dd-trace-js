@@ -17,8 +17,8 @@ const ENTRY_PARENT_HASH = Buffer.from('0000000000000000', 'hex')
 
 class StatsPoint {
   constructor (hash, parentHash, edgeTags) {
-    this.hash = hash.readBigUInt64BE()
-    this.parentHash = parentHash.readBigUInt64BE()
+    this.hash = hash.readBigUInt64LE()
+    this.parentHash = parentHash.readBigUInt64LE()
     this.edgeTags = edgeTags
     this.edgeLatency = new LogCollapsingLowestDenseDDSketch()
     this.pathwayLatency = new LogCollapsingLowestDenseDDSketch()
