@@ -362,7 +362,7 @@ class EventsProfiler {
     const eventHandler = event => this.eventSerializer.addEvent(event)
     const eventFilter = options.timelineSamplingEnabled
       // options.samplingInterval comes in microseconds, we need millis
-      ? createPossionProcessSamplingFilter((options.samplingInterval ?? 1e6 / 99) / 1000)
+      ? createPoissonProcessSamplingFilter((options.samplingInterval ?? 1e6 / 99) / 1000)
       : _ => true
     const filteringEventHandler = event => {
       if (eventFilter(event)) {
