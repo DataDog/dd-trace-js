@@ -77,6 +77,7 @@
     "mariadb": "3.4.4",
     "memcached": "2.2.2",
     "microgateway-core": "3.3.7",
+    "mocha": "11.7.1",
     "moleculer": "0.14.35",
     "mongodb": "6.18.0",
     "mongodb-core": "3.2.7",
