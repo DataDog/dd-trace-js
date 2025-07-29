@@ -112,6 +112,12 @@ async function assertFolder (name, version) {
  * @param {boolean} external
  */
 async function assertPackage (name, version, dependencyVersionRange, external) {
+  if (!latests[name]) {
+    throw new Error(
+      `Latest version for '${name}' needs to be defined in 'packages/dd-trace/test/plugins/versions/package.json'.`
+    )
+  }
+
   const alreadyCapped = dependencyVersionRange.includes('-')
   const cappedVersionRange = external || alreadyCapped
     ? dependencyVersionRange
