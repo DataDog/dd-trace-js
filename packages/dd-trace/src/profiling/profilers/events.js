@@ -341,7 +341,7 @@ class CompositeEventSource {
   }
 }
 
-function createPossionProcessSamplingFilter (samplingIntervalMillis) {
+function createPoissonProcessSamplingFilter (samplingIntervalMillis) {
   const poissonFilter = new PoissonProcessSamplingFilter({
     samplingInterval: samplingIntervalMillis,
     resetInterval: samplingIntervalMillis * POISSON_RESET_FACTOR,
