@@ -179,7 +179,7 @@ async function createSandbox (dependencies = [], isGitRepo = false,
     const range = match[3] || ''
     const cappedRange = getCappedRange(name, range)
 
-    return `'${name}@${cappedRange}'`
+    return `"${name}@${cappedRange}"`
   })
 
   // We might use NODE_OPTIONS to init the tracer. We don't want this to affect this operations
