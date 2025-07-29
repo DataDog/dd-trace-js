@@ -9,7 +9,7 @@ const latests = require('./package.json').dependencies
  */
 function getCappedRange (name, range, external = false) {
   const alreadyCapped = range.split('||').every(r => {
-    return r.includes('-') || r.includes('<') || r.test(/^=?\d+\.\d+\.\d+$/)
+    return r.includes('-') || r.includes('<') || /^=?\d+\.\d+\.\d+$/.test(r)
   })
 
   if (external || alreadyCapped) return range
