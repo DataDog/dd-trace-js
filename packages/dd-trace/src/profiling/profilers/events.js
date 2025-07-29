@@ -199,6 +199,8 @@ const decoratorTypes = {
 
 // Translates performance entries into pprof samples.
 class EventSerializer {
+  #sampleCount = 0
+
   constructor (maxSamples) {
     this.stringTable = new StringTable()
     this.samples = []
@@ -227,15 +229,17 @@ class EventSerializer {
       const sample = this.#createSample(item)
       if (sample !== undefined) {
         this.samples.push(sample)
+        this.#sampleCount++
       }
     } else {
-      // Choose one sample to be dropped. Using rnd(max + 1) - 1 we allow the
-      // current sample too to be the dropped one, with the equal likelihood as
-      // any other sample.
-      const replacementIndex = Math.floor(Math.random() * (this.maxSamples + 1)) - 1
-      if (replacementIndex !== -1) {
+      this.#sampleCount++
+      // Reservoir sampling
+      const replacementIndex = Math.floor(Math.random() * this.#sampleCount)
+      if (replacementIndex < this.maxSamples) {
         const sample = this.#createSample(item)
-        if (sample !== undefined) {
+        if (sample === undefined) {
+          this.#sampleCount-- // unlikely
+        } else {
           // This will cause the samples to no longer be sorted in their array
           // by their end time. This is fine as the backend has no ordering
           // expectations.
