@@ -57,8 +57,8 @@ function handleResult (result, req, res, abortController, config, raspRule) {
 
   if (abortController && !abortOnUncaughtException) {
     const blockingAction = getBlockingAction(result?.actions)
-
     const rootSpanName = rootSpan?.context()._name
+
     if (blockingAction && ALLOWED_ROOTSPAN_NAMES.has(rootSpanName)) {
       const abortError = new DatadogRaspAbortError(req, res, blockingAction, raspRule, ruleTriggered)
       abortController.abort(abortError)
