@@ -1,5 +1,7 @@
 'use strict'
 
+require('../setup/tap')
+
 const Capabilities = require('../../src/remote_config/capabilities')
 const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('../../src/remote_config/apply_states')
 
@@ -42,11 +44,11 @@ describe('RemoteConfigManager', () => {
     RemoteConfigManager = proxyquire('../src/remote_config/manager', {
       'crypto-randomuuid': uuid,
       './scheduler': Scheduler,
-      '../../../../../package.json': { version: '3.0.0' },
-      '../../exporters/common/request': request,
-      '../../log': log,
+      '../../../../package.json': { version: '3.0.0' },
+      '../exporters/common/request': request,
+      '../log': log,
       '../tagger': tagger,
-      '../../service-naming/extra-services': {
+      '../service-naming/extra-services': {
         getExtraServices: () => extraServices
       }
     })

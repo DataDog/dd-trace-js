@@ -11,7 +11,9 @@ class GraphQLExecutePlugin extends TracingPlugin {
   static get type () { return 'graphql' }
   static get kind () { return 'server' }
 
-  start ({ operation, args, docSource }) {
+  bindStart (ctx) {
+    const { operation, args, docSource } = ctx
+
     const type = operation && operation.operation
     const name = operation && operation.name && operation.name.value
     const document = args.document
@@ -27,20 +29,25 @@ class GraphQLExecutePlugin extends TracingPlugin {
         'graphql.operation.name': name,
         'graphql.source': source
       }
-    })
+    }, ctx)
 
     addVariableTags(this.config, span, args.variableValues)
+
+    return ctx.currentStore
   }
 
-  finish ({ res, args }) {
-    const span = this.activeSpan
+  finish (ctx) {
+    const { res, args } = ctx
+    const span = ctx?.currentStore?.span || this.activeSpan
     this.config.hooks.execute(span, args, res)
     if (res?.errors) {
       for (const err of res.errors) {
         extractErrorIntoSpanEvent(this._tracerConfig, span, err)
       }
     }
-    super.finish()
+    super.finish(ctx)
+
+    return ctx.parentStore
   }
 }
 
