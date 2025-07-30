@@ -17,7 +17,8 @@ class NextPlugin extends ServerPlugin {
     this.addSub('apm:next:page:load', message => this.pageLoad(message))
   }
 
-  bindStart ({ req, res }) {
+  bindStart (ctx) {
+    const { req } = ctx
     const store = storage('legacy').getStore()
     const childOf = store ? store.span : store
     const span = this.tracer.startSpan(this.operationName(), {
@@ -31,13 +32,14 @@ class NextPlugin extends ServerPlugin {
         'http.method': req.method
       },
       integrationName: this.constructor.id
-    })
+    }, ctx)
 
     analyticsSampler.sample(span, this.config.measured, true)
 
     this._requests.set(span, req)
 
-    return { ...store, span }
+    // return { ...store, span }
+    return ctx.currentStore
   }
 
   error ({ span, error }) {
@@ -51,7 +53,8 @@ class NextPlugin extends ServerPlugin {
     this.addError(error, span)
   }
 
-  finish ({ req, res, nextRequest = {} }) {
+  bindFinish (ctx) {
+    const { req, res, nextRequest = {} } = ctx
     const store = storage('legacy').getStore()
 
     if (!store) return
@@ -80,7 +83,9 @@ class NextPlugin extends ServerPlugin {
 
     this.config.hooks.request(span, req, res)
 
-    span.finish()
+    span.finish(ctx) // TODO: check if this is correct
+
+    return ctx.currentStore
   }
 
   pageLoad ({ page, isAppPath = false, isStatic = false }) {
