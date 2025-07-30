@@ -11,18 +11,15 @@ class MicrogatewayCorePlugin extends RouterPlugin {
   constructor (...args) {
     super(...args)
 
-    this.addSub('apm:microgateway-core:request:handle', (ctx) => {
-      const { req } = ctx
+    this.addSub('apm:microgateway-core:request:handle', ({ req }) => {
       this.setFramework(req, 'microgateway', this.config)
     })
 
-    this.addSub('apm:microgateway-core:request:route', (ctx) => {
-      const { req, route } = ctx
+    this.addSub('apm:microgateway-core:request:route', ({ req, route }) => {
       web.setRoute(req, route)
     })
 
-    this.addSub('apm:microgateway-core:request:error', (ctx) => {
-      const { error } = ctx
+    this.addSub('apm:microgateway-core:request:error', ({ error }) => {
       this.addError(error)
     })
   }

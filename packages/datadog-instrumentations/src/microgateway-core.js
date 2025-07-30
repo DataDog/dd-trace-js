@@ -22,7 +22,9 @@ function wrapConfigProxyFactory (configProxyFactory) {
 
       requestContexts.set(req, ctx)
 
-      return handleChannel.runStores(ctx, configProxy, this, ...arguments)
+      handleChannel.publish(ctx)
+
+      return configProxy.apply(this, arguments)
     }
   }
 }
@@ -52,7 +54,7 @@ function wrapNext (req, res, next) {
       ctx.req = req
       ctx.res = res
       ctx.route = res.proxy.base_path
-      return routeChannel.runStores(ctx, next, this, ...arguments)
+      routeChannel.publish(ctx)
     }
     return next.apply(this, arguments)
   })
