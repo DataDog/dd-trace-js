@@ -7,9 +7,7 @@ const latests = require('./package.json').dependencies
  * @param {string} range
  */
 function getCappedRange (name, range) {
-  const alreadyCapped = range.split('||').every(r => {
-    return r.includes('-') || r.includes('<') || /^=?\d+\.\d+\.\d+$/.test(r)
-  })
+  const alreadyCapped = range.split('||').every(r => /^=?\d+\.\d+\.\d+$/.test(r))
 
   if (alreadyCapped) return range
   if (!latests[name]) {
