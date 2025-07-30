@@ -5,9 +5,9 @@ var spawn = require('child_process').spawn
 var tracerVersion = require('../../../../package.json').version
 var log = require('./log')
 var resultMetadata = {
-  result: "unknown",
-  result_class: "unknown", 
-  result_reason: "unknown"
+  result: 'unknown',
+  result_class: 'unknown',
+  result_reason: 'unknown'
 }
 
 module.exports = sendTelemetry
@@ -75,23 +75,23 @@ function sendTelemetry (name, tags) {
   })
   proc.on('error', function () {
     log.error('Failed to spawn telemetry forwarder')
-    resultMetadata.result = "error"
-    resultMetadata.result_class = "internal_error"
-    resultMetadata.result_reason = "Failed to spawn telemetry forwarder"
+    resultMetadata.result = 'error'
+    resultMetadata.result_class = 'internal_error'
+    resultMetadata.result_reason = 'Failed to spawn telemetry forwarder'
   })
   proc.on('exit', function (code) {
     if (code !== 0) {
       log.error('Telemetry forwarder exited with code', code)
-      resultMetadata.result = "error"
-      resultMetadata.result_class = "internal_error"
-      resultMetadata.result_reason = "Telemetry forwarder exited with code " + code
+      resultMetadata.result = 'error'
+      resultMetadata.result_class = 'internal_error'
+      resultMetadata.result_reason = 'Telemetry forwarder exited with code ' + code
     }
   })
   proc.stdin.on('error', function () {
     log.error('Failed to write telemetry data to telemetry forwarder')
-    resultMetadata.result = "error"
-    resultMetadata.result_class = "internal_error"
-    resultMetadata.result_reason = "Failed to write telemetry data to telemetry forwarder"
+    resultMetadata.result = 'error'
+    resultMetadata.result_class = 'internal_error'
+    resultMetadata.result_reason = 'Failed to write telemetry data to telemetry forwarder'
   })
   proc.stdin.end(JSON.stringify({ metadata: metadata, points: points }))
 }

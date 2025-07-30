@@ -113,7 +113,7 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
       tracer_version: require('../../package.json').version,
       pid: Number(pid),
       result: 'unknown',
-      result_reason: 'unknown', 
+      result_reason: 'unknown',
       result_class: 'unknown'
     }
   }
