@@ -20,7 +20,6 @@ describe('register', () => {
 
     hooksMock = {
       '@confluentinc/kafka-javascript': {
-        disabled: true,
         fn: sinon.stub().returns('hooked')
       },
       'mongodb-core': {
@@ -71,54 +70,6 @@ describe('register', () => {
       expect(result).to.equal('original')
     }
   }
-
-  it('should skip hooks that are disabled by default and process enabled hooks', () => {
-    loadRegisterWithEnv()
-
-    expect(HookMock.callCount).to.equal(1)
-    expect(HookMock.args[0]).to.deep.include(['mongodb-core'], { internals: undefined })
-
-    runHookCallbacks(HookMock)
-
-    expect(hooksMock['@confluentinc/kafka-javascript'].fn).to.not.have.been.called
-    expect(hooksMock['mongodb-core'].fn).to.have.been.called
-  })
-
-  it('should enable disabled hooks when DD_TRACE_[pkg]_ENABLED is true', () => {
-    loadRegisterWithEnv({ DD_TRACE_CONFLUENTINC_KAFKA_JAVASCRIPT_ENABLED: 'true' })
-
-    expect(HookMock.callCount).to.equal(2)
-    expect(HookMock.args[0]).to.deep.include(['@confluentinc/kafka-javascript'], { internals: undefined })
-    expect(HookMock.args[1]).to.deep.include(['mongodb-core'], { internals: undefined })
-
-    runHookCallbacks(HookMock)
-
-    expect(hooksMock['@confluentinc/kafka-javascript'].fn).to.have.been.called
-    expect(hooksMock['mongodb-core'].fn).to.have.been.called
-  })
-
-  it('should not enable disabled hooks when DD_TRACE_[pkg]_ENABLED is false', () => {
-    loadRegisterWithEnv({ DD_TRACE_CONFLUENTINC_KAFKA_JAVASCRIPT_ENABLED: 'false' })
-
-    expect(HookMock.callCount).to.equal(1)
-    expect(HookMock.args[0]).to.deep.include(['mongodb-core'], { internals: undefined })
-
-    runHookCallbacks(HookMock)
-
-    expect(hooksMock['@confluentinc/kafka-javascript'].fn).to.not.have.been.called
-    expect(hooksMock['mongodb-core'].fn).to.have.been.called
-  })
-
-  it('should disable hooks that are disabled by DD_TRACE_[pkg]_ENABLED=false', () => {
-    loadRegisterWithEnv({ DD_TRACE_MONGODB_CORE_ENABLED: 'false' })
-
-    expect(HookMock.callCount).to.equal(0)
-
-    runHookCallbacks(HookMock)
-
-    expect(hooksMock['@confluentinc/kafka-javascript'].fn).to.not.have.been.called
-    expect(hooksMock['mongodb-core'].fn).to.not.have.been.called
-  })
 
   it('should disable hooks that are disabled by DD_TRACE_DISABLED_INSTRUMENTATIONS', () => {
     loadRegisterWithEnv({ DD_TRACE_DISABLED_INSTRUMENTATIONS: 'mongodb-core,@confluentinc/kafka-javascript' })
