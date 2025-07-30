@@ -3,7 +3,7 @@
 const { subset } = require('semver')
 const latests = require('./package.json').dependencies
 
-const exactVersionExp = /^=?\d+\.\d+\.\d+$/
+const exactVersionExp = /^=?\d+\.\d+\.\d+/
 
 /**
  * @param {string} name
@@ -33,8 +33,8 @@ function capSubrange (name, subrange) {
 
   if (!subrange) return latests[name]
   if (subset(subrange, `<=${latests[name]}`)) return subrange
-  if (subrange.includes('-')) {
-    const minRange = subrange.split('-')[0].trim()
+  if (subrange.includes(' - ')) {
+    const minRange = subrange.split(' - ')[0].trim()
 
     return `${minRange} - ${latests[name]}`
   }
