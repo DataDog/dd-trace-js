@@ -4,6 +4,7 @@ const Plugin = require('./plugin')
 const { storage } = require('../../../datadog-core')
 const analyticsSampler = require('../analytics_sampler')
 const { COMPONENT } = require('../constants')
+const { detectedDependencyToVersion } = require('../telemetry/dependencies')
 
 class TracingPlugin extends Plugin {
   constructor (...args) {
@@ -109,6 +110,8 @@ class TracingPlugin extends Plugin {
       childOf = store.span
     }
 
+    const dependencyVersion = detectedDependencyToVersion[this.component]
+
     const span = this.tracer.startSpan(name, {
       childOf,
       tags: {
@@ -117,6 +120,8 @@ class TracingPlugin extends Plugin {
         'resource.name': resource,
         'span.kind': kind,
         'span.type': type,
+        '_dd.dependency_name': this.component,
+        '_dd.dependency_version': dependencyVersion,
         ...meta,
         ...metrics
       },
