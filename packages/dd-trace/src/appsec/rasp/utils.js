@@ -33,6 +33,11 @@ class DatadogRaspAbortError extends Error {
     this.blockingAction = blockingAction
     this.raspRule = raspRule
     this.ruleTriggered = ruleTriggered
+
+    Object.defineProperties(this, {
+      req: { enumerable: false },
+      res: { enumerable: false },
+    })
   }
 }
 
