@@ -15,7 +15,7 @@ class MongodbCorePlugin extends DatabasePlugin {
   constructor (tracer, config) {
     super(tracer, config)
     // this channel is for wrapping the callback of mongoose exec methods and handling store context, no handler needed
-    this.addBind('datadog:mongooose:queue:start', (ctx) => {
+    this.addBind('datadog:mongooose:exec:start', (ctx) => {
       return ctx.currentStore
     })
   }

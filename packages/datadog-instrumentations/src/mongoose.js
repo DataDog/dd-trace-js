@@ -7,15 +7,16 @@ const shimmer = require('../../datadog-shimmer')
 const startCh = channel('datadog:mongoose:model:filter:start')
 const finishCh = channel('datadog:mongoose:model:filter:finish')
 // this channel is for wrapping the callback of exec methods and handling store context
-const addQueueCh = channel('datadog:mongoose:queue:start')
+const execCh = channel('datadog:mongoose:exec:start')
 
 function wrapAddQueue (addQueue) {
   const ctx = {}
-  return addQueueCh.runStores(ctx, () => {
-    return function addQueueWithTrace (name) {
+
+  return function addQueueWithTrace (name) {
+    return execCh.runStores(ctx, () => {
       return addQueue.apply(this, arguments)
-    }
-  })
+    })
+  }
 }
 
 addHook({
