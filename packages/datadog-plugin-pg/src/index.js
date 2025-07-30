@@ -34,7 +34,6 @@ class PGPlugin extends DatabasePlugin {
 
     query.__ddInjectableQuery = this.injectDbmQuery(span, query.text, service, !!query.name)
 
-    ctx.query = query
     return ctx.currentStore
   }
 }

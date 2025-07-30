@@ -67,7 +67,7 @@ function wrapQuery (query) {
           errorCh.publish(ctx)
         }
         ctx.result = res?.rows
-        return finishCh.publish({ result: res?.rows })
+        return finishCh.publish(ctx)
       }
 
       if (abortController.signal.aborted) {
