@@ -1,8 +1,12 @@
 'use strict'
 
 const web = require('../../plugins/util/web')
-const { setUncaughtExceptionCaptureCallbackStart, expressMiddlewareError } = require('../channels')
-const { block, isBlocked } = require('../blocking')
+const {
+  setUncaughtExceptionCaptureCallbackStart,
+  expressMiddlewareError,
+  fastifyMiddlewareError
+} = require('../channels')
+const { delegateBlock, isBlocked } = require('../blocking')
 const ssrf = require('./ssrf')
 const sqli = require('./sql_injection')
 const lfi = require('./lfi')
@@ -103,8 +107,9 @@ function enable (config) {
   cmdi.enable(config)
 
   process.on('uncaughtExceptionMonitor', handleUncaughtExceptionMonitor)
+
   expressMiddlewareError.subscribe(blockOnDatadogRaspAbortError)
-  require('dc-polyfill').channel('apm:fastify:middleware:error').subscribe(blockOnDatadogRaspAbortError)
+  fastifyMiddlewareError.subscribe(blockOnDatadogRaspAbortError)
 }
 
 function disable () {
@@ -114,7 +119,9 @@ function disable () {
   cmdi.disable()
 
   process.off('uncaughtExceptionMonitor', handleUncaughtExceptionMonitor)
-  if (expressMiddlewareError.hasSubscribers) expressMiddlewareError.unsubscribe(blockOnDatadogRaspAbortError)
+
+  expressMiddlewareError.unsubscribe(blockOnDatadogRaspAbortError)
+  fastifyMiddlewareError.unsubscribe(blockOnDatadogRaspAbortError)
 }
 
 module.exports = {

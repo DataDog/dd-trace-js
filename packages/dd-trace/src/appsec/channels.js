@@ -14,6 +14,7 @@ module.exports = {
   expressSession: dc.channel('datadog:express-session:middleware:finish'),
   fastifyBodyParser: dc.channel('datadog:fastify:body-parser:finish'),
   fastifyCookieParser: dc.channel('datadog:fastify-cookie:read:finish'),
+  fastifyMiddlewareError: dc.channel('apm:fastify:middleware:error'),
   fastifyPathParams: dc.channel('datadog:fastify:path-params:finish'),
   fastifyQueryParams: dc.channel('datadog:fastify:query-params:finish'),
   fastifyResponseChannel: dc.channel('datadog:fastify:response:finish'),
