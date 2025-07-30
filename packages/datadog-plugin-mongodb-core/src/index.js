@@ -4,6 +4,7 @@ const { isTrue } = require('../../dd-trace/src/util')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 const coalesce = require('koalas')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
+const { storage } = require('../../datadog-core')
 
 class MongodbCorePlugin extends DatabasePlugin {
   static get id () { return 'mongodb-core' }
@@ -14,9 +15,12 @@ class MongodbCorePlugin extends DatabasePlugin {
 
   constructor (tracer, config) {
     super(tracer, config)
-    // this channel is for wrapping the callback of mongoose exec methods and handling store context, no handler needed
     this.addBind('datadog:mongooose:exec:start', (ctx) => {
-      return ctx.currentStore
+      ctx.parentStore = storage('legacy').getStore()
+      return ctx.parentStore
+    })
+    this.addBind('datadog:mongooose:exec:finish', (ctx) => {
+      return ctx.parentStore
     })
   }
 
