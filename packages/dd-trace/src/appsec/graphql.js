@@ -56,25 +56,8 @@ function enterInApolloMiddleware (data) {
   if (!req) return
 
   graphqlRequestData.set(req, {
-    inApolloMiddleware: true,
     blocked: false
   })
-}
-
-function enterInApolloHttpServer (data) {
-  const req = data?.req || storage('legacy').getStore()?.req
-  if (!req) return
-
-  graphqlRequestData.set(req, {
-    inApolloHttpServer: true,
-    blocked: false
-  })
-}
-
-function exitFromApolloHttpServer (data) {
-  const req = data?.req || storage('legacy').getStore()?.req
-  const requestData = graphqlRequestData.get(req)
-  if (requestData) requestData.inApolloHttpServer = false
 }
 
 function enterInApolloServerCoreRequest () {
@@ -85,12 +68,6 @@ function enterInApolloServerCoreRequest () {
     isInGraphqlRequest: true,
     blocked: false
   })
-}
-
-function exitFromApolloMiddleware (data) {
-  const req = data?.req || storage('legacy').getStore()?.req
-  const requestData = graphqlRequestData.get(req)
-  if (requestData) requestData.inApolloMiddleware = false
 }
 
 function enterInApolloRequest () {
@@ -137,8 +114,7 @@ function beforeWriteApolloGraphqlResponse ({ abortController, abortData }) {
 
 function enableApollo () {
   graphqlMiddlewareChannel.subscribe({
-    start: enterInApolloMiddleware,
-    end: exitFromApolloMiddleware
+    start: enterInApolloMiddleware
   })
 
   apolloServerCoreChannel.subscribe({
@@ -152,15 +128,13 @@ function enableApollo () {
   })
 
   apolloHttpServerChannel.subscribe({
-    start: enterInApolloHttpServer,
-    end: exitFromApolloHttpServer
+    start: enterInApolloMiddleware
   })
 }
 
 function disableApollo () {
   graphqlMiddlewareChannel.unsubscribe({
-    start: enterInApolloMiddleware,
-    end: exitFromApolloMiddleware
+    start: enterInApolloMiddleware
   })
 
   apolloServerCoreChannel.unsubscribe({
@@ -174,8 +148,7 @@ function disableApollo () {
   })
 
   apolloHttpServerChannel.unsubscribe({
-    start: enterInApolloHttpServer,
-    end: exitFromApolloHttpServer
+    start: enterInApolloMiddleware
   })
 }
 
