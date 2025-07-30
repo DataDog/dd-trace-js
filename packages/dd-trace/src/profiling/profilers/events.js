@@ -3,7 +3,7 @@
 const { performance, constants, PerformanceObserver } = require('perf_hooks')
 const { END_TIMESTAMP_LABEL, SPAN_ID_LABEL, LOCAL_ROOT_SPAN_ID_LABEL, encodeProfileAsync } = require('./shared')
 const { Function, Label, Line, Location, Profile, Sample, StringTable, ValueType } = require('pprof-format')
-
+const { availableParallelism, effectiveLibuvThreadCount } = require('../libuv-size')
 // perf_hooks uses millis, with fractional part representing nanos. We emit nanos into the pprof file.
 const MS_TO_NS = 1_000_000
 
@@ -36,6 +36,24 @@ function safeToString (val) {
 
 function labelFromStrStr (stringTable, keyStr, valStr) {
   return labelFromStr(stringTable, stringTable.dedup(keyStr), valStr)
+}
+
+function getSamplingIntervalMillis (options) {
+  return (options.samplingInterval || 1e3 / 99) // 99Hz
+}
+
+function getMaxSamples (options) {
+  const cpuSamplingInterval = getSamplingIntervalMillis(options)
+  const flushInterval = options.flushInterval || 65 * 1e3 // 60 seconds
+  const maxCpuSamples = flushInterval / cpuSamplingInterval
+
+  // The lesser of max parallelism and libuv thread pool size, plus one so we can detect
+  // oversubscription on libuv thread pool, plus another one for GC.
+  const factor = Math.max(1, Math.min(availableParallelism(), effectiveLibuvThreadCount)) + 2
+
+  // Let's not go overboard with too large limit and cap it at 100k. With current defaults, the
+  // value will be 65000/10.1*(4+2) = 38613.
+  return Math.min(100_000, Math.floor(maxCpuSamples * factor))
 }
 
 class GCDecorator {
@@ -181,12 +199,15 @@ const decoratorTypes = {
 
 // Translates performance entries into pprof samples.
 class EventSerializer {
-  constructor () {
+  #sampleCount = 0
+
+  constructor (maxSamples) {
     this.stringTable = new StringTable()
     this.samples = []
     this.locations = []
     this.functions = []
     this.decorators = {}
+    this.maxSamples = maxSamples
 
     // A synthetic single-frame location to serve as the location for timeline
     // samples. We need these as the profiling backend (mimicking official pprof
@@ -204,6 +225,31 @@ class EventSerializer {
   }
 
   addEvent (item) {
+    if (this.samples.length < this.maxSamples) {
+      const sample = this.#createSample(item)
+      if (sample !== undefined) {
+        this.samples.push(sample)
+        this.#sampleCount++
+      }
+    } else {
+      this.#sampleCount++
+      // Reservoir sampling
+      const replacementIndex = Math.floor(Math.random() * this.#sampleCount)
+      if (replacementIndex < this.maxSamples) {
+        const sample = this.#createSample(item)
+        if (sample === undefined) {
+          this.#sampleCount-- // unlikely
+        } else {
+          // This will cause the samples to no longer be sorted in their array
+          // by their end time. This is fine as the backend has no ordering
+          // expectations.
+          this.samples[replacementIndex] = sample
+        }
+      }
+    }
+  }
+
+  #createSample (item) {
     const { entryType, startTime, duration, _ddSpanId, _ddRootSpanId } = item
     let decorator = this.decorators[entryType]
     if (!decorator) {
@@ -236,7 +282,7 @@ class EventSerializer {
       label
     }
     decorator.decorateSample(sampleInput, item)
-    this.samples.push(new Sample(sampleInput))
+    return new Sample(sampleInput)
   }
 
   createProfile (startDate, endDate) {
@@ -324,21 +370,7 @@ class DatadogInstrumentationEventSource {
   }
 }
 
-class CompositeEventSource {
-  constructor (sources) {
-    this.sources = sources
-  }
-
-  start () {
-    this.sources.forEach(s => s.start())
-  }
-
-  stop () {
-    this.sources.forEach(s => s.stop())
-  }
-}
-
-function createPossionProcessSamplingFilter (samplingIntervalMillis) {
+function createPoissonProcessSamplingFilter (samplingIntervalMillis) {
   let nextSamplingInstant = performance.now()
   let currentSamplingInstant = 0
   setNextSamplingInstant()
@@ -376,45 +408,51 @@ function createPossionProcessSamplingFilter (samplingIntervalMillis) {
  */
 class EventsProfiler {
   type = 'events'
-  eventSerializer = new EventSerializer()
+  #maxSamples
+  #eventSerializer
+  #eventSources
 
   constructor (options = {}) {
-    const eventHandler = event => this.eventSerializer.addEvent(event)
+    this.#maxSamples = getMaxSamples(options)
+    this.#eventSerializer = new EventSerializer(this.#maxSamples)
+
+    const eventHandler = event => this.#eventSerializer.addEvent(event)
     const eventFilter = options.timelineSamplingEnabled
-      // options.samplingInterval comes in microseconds, we need millis
-      ? createPossionProcessSamplingFilter((options.samplingInterval ?? 1e6 / 99) / 1000)
-      : _ => true
+      ? createPoissonProcessSamplingFilter(getSamplingIntervalMillis(options))
+      : () => true
     const filteringEventHandler = event => {
       if (eventFilter(event)) {
         eventHandler(event)
       }
     }
 
-    this.eventSource = options.codeHotspotsEnabled
+    this.#eventSources = options.codeHotspotsEnabled
       // Use Datadog instrumentation to collect events with span IDs. Still use
       // Node API for GC events.
-      ? new CompositeEventSource([
-        new DatadogInstrumentationEventSource(eventHandler, eventFilter),
-        new NodeApiEventSource(filteringEventHandler, ['gc'])
-      ])
+      ? [
+          new DatadogInstrumentationEventSource(eventHandler, eventFilter),
+          new NodeApiEventSource(filteringEventHandler, ['gc']),
+        ]
       // Use Node API instrumentation to collect events without span IDs
-      : new NodeApiEventSource(filteringEventHandler)
+      : [
+          new NodeApiEventSource(filteringEventHandler)
+        ]
   }
 
   start () {
-    this.eventSource.start()
+    this.#eventSources.forEach(s => s.start())
   }
 
   stop () {
-    this.eventSource.stop()
+    this.#eventSources.forEach(s => s.stop())
   }
 
   profile (restart, startDate, endDate) {
     if (!restart) {
       this.stop()
     }
-    const thatEventSerializer = this.eventSerializer
-    this.eventSerializer = new EventSerializer()
+    const thatEventSerializer = this.#eventSerializer
+    this.#eventSerializer = new EventSerializer(this.#maxSamples)
     return () => thatEventSerializer.createProfile(startDate, endDate)
   }
 
