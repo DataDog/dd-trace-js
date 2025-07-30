@@ -19,7 +19,9 @@ class MicrogatewayCorePlugin extends RouterPlugin {
       web.setRoute(req, route)
     })
 
-    this.addSub('apm:microgateway-core:request:error', this.addError)
+    this.addSub('apm:microgateway-core:request:error', ({ error }) => {
+      this.addError(error)
+    })
   }
 }
 
