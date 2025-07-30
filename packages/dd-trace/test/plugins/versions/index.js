@@ -3,42 +3,43 @@
 const { subset } = require('semver')
 const latests = require('./package.json').dependencies
 
+const exactVersionExp = /^=?\d+\.\d+\.\d+$/
+
 /**
  * @param {string} name
  * @param {string} range
  */
 function getCappedRange (name, range) {
-  const subranges = range.split('||')
-  const alreadyCapped = subranges.every(r => /^=?\d+\.\d+\.\d+$/.test(r))
+  if (exactVersionExp.test(range)) return range
 
-  let cappedRanges = []
+  return range
+    .split('||')
+    .map(sub => capSubrange(name, sub.trim()))
+    .join(' || ')
+}
 
-  for (const subrange in subranges) {
-    if (/^=?\d+\.\d+\.\d+$/.test(subrange)) {
-      cappedRanges.push(subrange)
-      continue
-    }
+/**
+ * @param {string} name
+ * @param {string} subrange
+ */
+function capSubrange (name, subrange) {
+  if (exactVersionExp.test(subrange)) return subrange
 
-    if (!latests[name]) {
-      throw new Error(
-        `Latest version for '${name}' needs to be defined in 'packages/dd-trace/test/plugins/versions/package.json'.`
-      )
-    }
-
-    if (subrange.includes('-')) {
-      const parts = subrange.split('-').map(p => p.trim())
-
-      if (subset(parts[1], `<=${latests[name]}`)) {
-        cappedRanges.push(subrange)
-      } else {
-        cappedRanges.push(`${parts[0]} - ${latests[name]}`)
-      }
-    } else {
-      cappedRanges.push(subrange ? `${subrange} <=${latests[name]}` : latests[name])
-    }
+  if (!latests[name]) {
+    throw new Error(
+      `Latest version for '${name}' needs to be defined in 'packages/dd-trace/test/plugins/versions/package.json'.`
+    )
   }
 
-  return cappedRanges.join(' || ')
+  if (!subrange) return latests[name]
+  if (subset(subrange, `<=${latests[name]}`)) return subrange
+  if (subrange.includes('-')) {
+    const minRange = subrange.split('-')[0].trim()
+
+    return `${minRange} - ${latests[name]}`
+  }
+
+  return `${subrange} <=${latests[name]}`
 }
 
 module.exports = {
