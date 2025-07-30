@@ -2,6 +2,7 @@
 
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
+const semifies = require('semifies')
 
 const errorChannel = channel('apm:fastify:middleware:error')
 const handleChannel = channel('apm:fastify:request:handle')
@@ -11,13 +12,13 @@ const queryParamsReadCh = channel('datadog:fastify:query-params:finish')
 const cookieParserReadCh = channel('datadog:fastify-cookie:read:finish')
 const responsePayloadReadCh = channel('datadog:fastify:response:finish')
 const pathParamsReadCh = channel('datadog:fastify:path-params:finish')
-const finishSetHeaderCh = channel('datadog:fastify:set-header:finish')
+const unhandledErrorChannel = channel('datadog:fastify:unhandledError')
 
 const parsingResources = new WeakMap()
 const cookiesPublished = new WeakSet()
 const bodyPublished = new WeakSet()
 
-function wrapFastify (fastify, hasParsingEvents) {
+function wrapFastify (fastify, { hasParsingEvents, wrapAppErrorHandler, wrapContextErrorHandler } = {}) {
   if (typeof fastify !== 'function') return fastify
 
   return function fastifyWithTrace () {
@@ -38,6 +39,25 @@ function wrapFastify (fastify, hasParsingEvents) {
     }
 
     app.addHook = wrapAddHook(app.addHook)
+
+    if (wrapAppErrorHandler) {
+      // get and wrap the default fastify error handler
+      const wrappedErrorHandler = shimmer.wrapFunction(app.errorHandler, wrapErrorHandler)
+      // and set it as the new error handler
+      app.setErrorHandler(wrappedErrorHandler)
+    }
+
+    if (wrapContextErrorHandler) {
+      // to get the default fastify error handler, we need the context instance
+      // and to get the context instance, we need the reply instance
+      app.addHook('onRequest', (request, reply, done) => {
+        // if _errorHandler is already set, it means the user has set a custom error handler
+        if (app._errorHandler === undefined && typeof reply?.context?.errorHandler === 'function') {
+          shimmer.wrap(reply.context, 'errorHandler', wrapErrorHandler)
+        }
+        done?.()
+      })
+    }
 
     return app
   }
@@ -260,8 +280,11 @@ function canPublishResponsePayload (payload) {
     !ArrayBuffer.isView(payload) // TypedArray
 }
 
-addHook({ name: 'fastify', versions: ['>=3'] }, fastify => {
-  const wrapped = shimmer.wrapFunction(fastify, fastify => wrapFastify(fastify, true))
+addHook({ name: 'fastify', versions: ['>=3 <3.7.0', '>=3.7.0'] }, (fastify, version) => {
+  const wrapped = shimmer.wrapFunction(fastify, fastify => wrapFastify(fastify, {
+    hasParsingEvents: true,
+    wrapAppErrorHandler: semifies(version, '^3.7.0')
+  }))
 
   wrapped.fastify = wrapped
   wrapped.default = wrapped
@@ -269,12 +292,15 @@ addHook({ name: 'fastify', versions: ['>=3'] }, fastify => {
   return wrapped
 })
 
-addHook({ name: 'fastify', versions: ['2'] }, fastify => {
-  return shimmer.wrapFunction(fastify, fastify => wrapFastify(fastify, true))
+addHook({ name: 'fastify', versions: ['>=2.0.0 <2.2.0', '^2.2.0'] }, (fastify, version) => {
+  return shimmer.wrapFunction(fastify, fastify => wrapFastify(fastify, {
+    hasParsingEvents: true,
+    wrapContextErrorHandler: semifies(version, '>=2.0.0 <2.2.0')
+  }))
 })
 
 addHook({ name: 'fastify', versions: ['1'] }, fastify => {
-  return shimmer.wrapFunction(fastify, fastify => wrapFastify(fastify, false))
+  return shimmer.wrapFunction(fastify, fastify => wrapFastify(fastify))
 })
 
 function wrapReplyHeader (Reply) {
@@ -292,3 +318,51 @@ function wrapReplyHeader (Reply) {
 }
 
 addHook({ name: 'fastify', file: 'lib/reply.js', versions: ['1', '2', '>=3'] }, wrapReplyHeader)
+
+function wrapErrorHandler (errorHandler) {
+  return function wrappedErrorHandler (error, request, reply) {
+    if (unhandledErrorChannel.hasSubscribers) {
+      const abortController = new AbortController()
+
+      unhandledErrorChannel.publish({ error, abortController })
+
+      if (abortController.signal.aborted) return
+    }
+
+    return errorHandler.apply(this, arguments)
+  }
+}
+
+function wrapContext (Context) {
+  return function wrappedContext (schema, handler, Reply, Request, contentTypeParser, config, errorHandler) {
+    Context.apply(this, arguments)
+
+    // if errorHandler is passed in the arguments, it's a custom handler from the user
+    // we should not wrap it
+    if (errorHandler) return
+
+    // only wrap context.errorHandler when it's set to the default fastify error handler
+    return shimmer.wrap(this, 'errorHandler', wrapErrorHandler)
+  }
+}
+
+addHook({ name: 'fastify', file: ['lib/context.js'], versions: ['>=2.2.0 <3.7.0'] }, Context => {
+  return shimmer.wrapFunction(Context, wrapContext)
+})
+
+function wrapBuildErrorHandler (buildErrorHandler) {
+  return function wrappedBuildErrorHandler (parent, func) {
+    const errorHandler = buildErrorHandler.apply(this, arguments)
+
+    // if parent is passed in the arguments, it's not building the default fastify error handler
+    // we should not wrap it
+    if (parent !== undefined) return errorHandler
+
+    // only wrap errorHandler when it's set to the default fastify error handler
+    return shimmer.wrap(errorHandler, 'func', wrapErrorHandler)
+  }
+}
+
+addHook({ name: 'fastify', file: ['lib/error-handler.js'], versions: ['>=4.0.0'] }, ErrorHandler => {
+  return shimmer.wrap(ErrorHandler, 'buildErrorHandler', wrapBuildErrorHandler)
+})
