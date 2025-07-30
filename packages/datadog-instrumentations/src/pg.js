@@ -54,7 +54,6 @@ function wrapQuery (query) {
     }
     const abortController = new AbortController()
     const ctx = {
-      pgQuery,
       params: this.connectionParameters,
       query: textPropObj,
       processId,
@@ -68,7 +67,7 @@ function wrapQuery (query) {
           errorCh.publish(ctx)
         }
         ctx.result = res?.rows
-        return finishCh.publish(ctx)
+        return finishCh.publish({ result: res?.rows })
       }
 
       if (abortController.signal.aborted) {
@@ -143,7 +142,9 @@ function wrapQuery (query) {
     })
   }
 }
-
+const finish = () => {
+  finishPoolQueryCh.publish()
+}
 function wrapPoolQuery (query) {
   return function () {
     if (!startPoolQueryCh.hasSubscribers) {
@@ -153,13 +154,9 @@ function wrapPoolQuery (query) {
     const pgQuery = arguments[0] !== null && typeof arguments[0] === 'object' ? arguments[0] : { text: arguments[0] }
     const abortController = new AbortController()
 
-    const ctx = { pgQuery, abortController }
+    const ctx = { query: pgQuery, abortController }
 
     return startPoolQueryCh.runStores(ctx, () => {
-      const finish = () => {
-        finishPoolQueryCh.publish(ctx)
-      }
-
       const cb = arguments[arguments.length - 1]
 
       if (abortController.signal.aborted) {
