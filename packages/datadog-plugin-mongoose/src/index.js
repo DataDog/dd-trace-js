@@ -4,21 +4,16 @@ const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 const { storage } = require('../../datadog-core')
 
 class MongoosePlugin extends DatabasePlugin {
-  static get id () {
-    return 'mongoose'
+  static get id () { return 'mongoose' }
+  static get operation () { return 'exec' }
+
+  bindStart (ctx) {
+    ctx.parentStore = storage('legacy').getStore()
+    return ctx.parentStore
   }
 
-  constructor (...args) {
-    super(...args)
-
-    this.addBind('datadog:mongooose:exec:start', (ctx) => {
-      ctx.parentStore = storage('legacy').getStore()
-      return ctx.parentStore
-    })
-
-    this.addBind('datadog:mongooose:exec:finish', (ctx) => {
-      return ctx.parentStore
-    })
+  bindFinish (ctx) {
+    return ctx.parentStore
   }
 }
 
