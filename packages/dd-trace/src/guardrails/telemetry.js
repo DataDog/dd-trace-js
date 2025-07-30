@@ -4,6 +4,9 @@ var fs = require('fs')
 var spawn = require('child_process').spawn
 var tracerVersion = require('../../../../package.json').version
 var log = require('./log')
+var result = "unknown"
+var result_class = "unknown"
+var result_reason = "unknown"
 
 module.exports = sendTelemetry
 
@@ -22,7 +25,10 @@ var metadata = {
   runtime_name: 'nodejs',
   runtime_version: process.versions.node,
   tracer_version: tracerVersion,
-  pid: process.pid
+  pid: process.pid,
+  result: result,
+  result_reason: result_reason,
+  result_class: result_class
 }
 
 var seen = {}
@@ -64,14 +70,23 @@ function sendTelemetry (name, tags) {
   })
   proc.on('error', function () {
     log.error('Failed to spawn telemetry forwarder')
+    result = "error"
+    result_class = "internal_error"
+    result_reason = "Failed to spawn telemetry forwarder"
   })
   proc.on('exit', function (code) {
     if (code !== 0) {
       log.error('Telemetry forwarder exited with code', code)
+      result = "error"
+      result_class = "internal_error"
+      result_reason = "Telemetry forwarder exited with code " + code
     }
   })
   proc.stdin.on('error', function () {
     log.error('Failed to write telemetry data to telemetry forwarder')
+    result = "error"
+    result_class = "internal_error"
+    result_reason = "Failed to write telemetry data to telemetry forwarder"
   })
   proc.stdin.end(JSON.stringify({ metadata: metadata, points: points }))
 }
