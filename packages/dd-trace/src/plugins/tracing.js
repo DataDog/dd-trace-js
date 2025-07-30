@@ -103,6 +103,7 @@ class TracingPlugin extends Plugin {
   }
 
   startSpan (name, options = {}, enterOrCtx = true) {
+    // TODO: modularize this code to a helper function
     let {
       component = this.component,
       childOf,

@@ -38,6 +38,7 @@ const HTTP2_HEADER_PATH = ':path'
 const contexts = new WeakMap()
 const ends = new WeakMap()
 
+// TODO: change this to no longer rely on creating a dummy plugin to be able to access startSpan
 function createWebPlugin (tracer, config = {}) {
   const plugin = new TracingPlugin(tracer, tracer._config)
   plugin.component = 'web'
