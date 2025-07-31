@@ -174,7 +174,7 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   const cappedDependencies = dependencies.map(dep => {
     if (builtinModules.includes(dep)) return dep
 
-    const match = dep.replaceAll('\'', '').match(/^(@?[^@]+)(@(.+))?$/)
+    const match = dep.replaceAll(/['"]/g, '').match(/^(@?[^@]+)(@(.+))?$/)
     const name = match[1]
     const range = match[3] || ''
     const cappedRange = getCappedRange(name, range)
