@@ -3,7 +3,7 @@ name: Audit
 on:
   pull_request:
     branches:
-      - dependabot/*
+      - dependabot/**
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
