@@ -56,7 +56,7 @@ function createInferredProxySpan (headers, childOf, tracer, context) {
         [HTTP_URL]: proxyContext.domainName + proxyContext.path,
         stage: proxyContext.stage,
         'peer.service': proxyContext.domainName,
-        'span.kind': 'server'
+        'span.kind': 'client'
       }
     }
   )
