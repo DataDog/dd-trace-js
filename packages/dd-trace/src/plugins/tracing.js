@@ -117,17 +117,20 @@ class TracingPlugin extends Plugin {
       type
     } = options
 
+    const tracer = options.tracer || this.tracer
+    const config = options.config || this.config
+
     const store = storage('legacy').getStore()
     if (store && childOf === undefined) {
       childOf = store.span
     }
 
-    const span = this.tracer.startSpan(name, {
+    const span = tracer.startSpan(name, {
       startTime,
       childOf,
       tags: {
         [COMPONENT]: component,
-        'service.name': service || meta?.service || this.tracer._service,
+        'service.name': service || meta?.service || tracer._service,
         'resource.name': resource,
         'span.kind': kind,
         'span.type': type,
@@ -138,7 +141,7 @@ class TracingPlugin extends Plugin {
       links: childOf?._links
     })
 
-    analyticsSampler.sample(span, this.config.measured)
+    analyticsSampler.sample(span, config.measured)
 
     // TODO: Remove this after migration to TracingChannel is done.
     if (enterOrCtx === true) {

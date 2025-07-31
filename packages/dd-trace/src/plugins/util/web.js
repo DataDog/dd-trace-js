@@ -51,7 +51,7 @@ function startSpanHelper (tracer, name, options, traceCtx, config = {}) {
     web.plugin = createWebPlugin(tracer, config)
   }
 
-  return web.plugin.startSpan(name, options, traceCtx)
+  return web.plugin.startSpan(name, { ...options, tracer, config }, traceCtx)
 }
 
 const web = {
