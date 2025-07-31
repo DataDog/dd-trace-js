@@ -120,7 +120,7 @@ const web = {
       context.span.context()._name = name
       span = context.span
     } else {
-      span = web.startChildSpan(tracer, name, req, traceCtx)
+      span = web.startChildSpan(tracer, config, name, req, traceCtx)
     }
 
     context.tracer = tracer
@@ -277,20 +277,20 @@ const web = {
   },
 
   // Extract the parent span from the headers and start a new span as its child
-  startChildSpan (tracer, name, req, traceCtx) {
+  startChildSpan (tracer, config, name, req, traceCtx) {
     const headers = req.headers
     const reqCtx = contexts.get(req)
     let childOf = tracer.extract(FORMAT_HTTP_HEADERS, headers)
 
     // we may have headers signaling a router proxy span should be created (such as for AWS API Gateway)
     if (tracer._config?.inferredProxyServicesEnabled) {
-      const proxySpan = createInferredProxySpan(headers, childOf, tracer, reqCtx, traceCtx, startSpanHelper)
+      const proxySpan = createInferredProxySpan(headers, childOf, tracer, reqCtx, traceCtx, config, startSpanHelper)
       if (proxySpan) {
         childOf = proxySpan
       }
     }
 
-    const span = startSpanHelper(tracer, name, { childOf }, traceCtx)
+    const span = startSpanHelper(tracer, name, { childOf }, traceCtx, config)
 
     return span
   },

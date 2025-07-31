@@ -22,7 +22,7 @@ const supportedProxies = {
   }
 }
 
-function createInferredProxySpan (headers, childOf, tracer, reqCtx, traceCtx, startSpanHelper) {
+function createInferredProxySpan (headers, childOf, tracer, reqCtx, traceCtx, config, startSpanHelper) {
   if (!headers) {
     return null
   }
@@ -54,7 +54,7 @@ function createInferredProxySpan (headers, childOf, tracer, reqCtx, traceCtx, st
       [HTTP_URL]: proxyContext.domainName + proxyContext.path,
       stage: proxyContext.stage
     }
-  }, traceCtx)
+  }, traceCtx, config)
 
   reqCtx.inferredProxySpan = span
   childOf = span
