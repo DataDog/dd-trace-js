@@ -91,7 +91,7 @@ describe('Inferred Proxy Spans', function () {
       appListener = null
     }
 
-    await agent.close({ ritmReset: false, wipe: true })
+    await agent.close()
   }
 
   const inferredHeaders = {
