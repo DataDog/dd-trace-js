@@ -651,6 +651,11 @@ addHook({
   versions: ['>=24.8.0']
 }, getTestEnvironment)
 
+addHook({
+  name: '@happy-dom/jest-environment',
+  versions: ['>=14.0.0']
+}, getTestEnvironment)
+
 function getWrappedScheduleTests (scheduleTests, frameworkVersion) {
   // `scheduleTests` is an async function
   return function (tests) {
