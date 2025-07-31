@@ -10,8 +10,6 @@ const exactVersionExp = /^=?\d+\.\d+\.\d+/
  * @param {string} range
  */
 function getCappedRange (name, range) {
-  if (exactVersionExp.test(range)) return range
-
   return range
     .split('||')
     .map(sub => capSubrange(name, sub.trim()))
