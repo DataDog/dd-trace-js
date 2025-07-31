@@ -49,6 +49,9 @@
 /integration-tests/vitest/vitest.spec.js @DataDog/ci-app-libraries
 /integration-tests/vitest.config.mjs @DataDog/ci-app-libraries
 /integration-tests/test-api-manual.spec.js @DataDog/ci-app-libraries
+/integration-tests/telemetry.spec.js @DataDog/apm-sdk-api-js
+/integration-tests/opentelemetry/ @DataDog/apm-sdk-api-js
+/integration-tests/remote_config.spec.js @DataDog/apm-sdk-api-js
 
 /packages/dd-trace/src/service-naming/ @Datadog/apm-idm-js
 /packages/dd-trace/test/service-naming/ @Datadog/apm-idm-js
@@ -63,6 +66,19 @@
 /packages/datadog-instrumentations/src/google-cloud-vertexai.js @DataDog/ml-observability
 /packages/datadog-plugin-aws-sdk/src/services/bedrockruntime @DataDog/ml-observability
 /packages/datadog-plugin-aws-sdk/test/bedrockruntime.spec.js @DataDog/ml-observability
+
+# API SDK
+/packages/dd-trace/src/telemetry/ @DataDog/apm-sdk-api-js
+/packages/dd-trace/test/telemetry/ @DataDog/apm-sdk-api-js
+/packages/dd-trace/src/config.js @DataDog/apm-sdk-api-js
+/packages/dd-trace/test/config.spec.js @DataDog/apm-sdk-api-js
+/packages/dd-trace/src/opentelemetry/ @DataDog/apm-sdk-api-js
+/packages/dd-trace/test/opentelemetry/ @DataDog/apm-sdk-api-js
+/packages/dd-trace/src/opentracing/ @DataDog/apm-sdk-api-js
+/packages/dd-trace/test/opentracing/ @DataDog/apm-sdk-api-js
+/packages/dd-trace/src/remote_config/ @DataDog/apm-sdk-api-js
+/packages/dd-trace/test/remote_config/ @DataDog/apm-sdk-api-js
+/packages/dd-trace/src/baggage.js @DataDog/apm-sdk-api-js
 
 # CI
 /.github/workflows/apm-capabilities.yml @DataDog/apm-sdk-api-js
