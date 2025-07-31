@@ -60,16 +60,15 @@ function wrapQuery (query) {
       abortController,
       stream
     }
-    return startCh.runStores(ctx, () => {
-      const finish = (error, res) => {
-        if (error) {
-          ctx.error = error
-          errorCh.publish(ctx)
-        }
-        ctx.result = res?.rows
-        return finishCh.publish(ctx)
+    const finish = (error, res) => {
+      if (error) {
+        ctx.error = error
+        errorCh.publish(ctx)
       }
-
+      ctx.result = res?.rows
+      return finishCh.publish(ctx)
+    }
+    return startCh.runStores(ctx, () => {
       if (abortController.signal.aborted) {
         const error = abortController.signal.reason || new Error('Aborted')
 
