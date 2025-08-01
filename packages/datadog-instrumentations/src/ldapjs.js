@@ -2,10 +2,12 @@
 
 const {
   channel,
-  addHook,
-  AsyncResource
+  addHook
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+
+const bindStartCh = channel('datadog:ldapjs:function:bind:start')
+const bindFinishCh = channel('datadog:ldapjs:function:bind:finish')
 
 function isString (value) {
   // eslint-disable-next-line unicorn/no-instanceof-builtins
@@ -30,8 +32,14 @@ function wrapEmitter (corkedEmitter) {
     if (typeof fn === 'function') {
       let bindedFn = callbackMap.get(fn)
       if (!bindedFn) {
-        const callbackResource = new AsyncResource('bound-anonymous-fn')
-        bindedFn = callbackResource.bind(fn)
+        const ctx = {}
+        bindedFn = bindStartCh.runStores(ctx, () => {
+          return function () {
+            return bindFinishCh.runStores(ctx, () => {
+              return fn.apply(this, arguments)
+            })
+          }
+        })
         callbackMap.set(fn, bindedFn)
       }
       arguments[1] = bindedFn
@@ -88,10 +96,23 @@ addHook({ name: 'ldapjs', versions: ['>=2'] }, ldapjs => {
   })
 
   shimmer.wrap(ldapjs.Client.prototype, 'bind', bind => function (dn, password, controls, callback) {
+    const ctx = {}
     if (typeof controls === 'function') {
-      arguments[2] = AsyncResource.bind(controls)
+      arguments[2] = bindStartCh.runStores(ctx, () => {
+        return function () {
+          return bindFinishCh.runStores(ctx, () => {
+            return controls.apply(this, arguments)
+          })
+        }
+      })
     } else if (typeof callback === 'function') {
-      arguments[3] = AsyncResource.bind(callback)
+      arguments[3] = bindStartCh.runStores(ctx, () => {
+        return function () {
+          return bindFinishCh.runStores(ctx, () => {
+            return callback.apply(this, arguments)
+          })
+        }
+      })
     }
 
     return bind.apply(this, arguments)
