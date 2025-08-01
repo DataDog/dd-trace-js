@@ -3,9 +3,7 @@
 const RedisPlugin = require('../../datadog-plugin-redis/src')
 
 class IOValkeyPlugin extends RedisPlugin {
-  static get id () {
-    return 'iovalkey'
-  }
+  static id = 'iovalkey'
 
   static system = 'valkey'
 

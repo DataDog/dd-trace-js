@@ -7,13 +7,9 @@ const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('../../dd-t
 const { COMPONENT } = require('../../dd-trace/src/constants')
 
 class HttpServerPlugin extends ServerPlugin {
-  static get id () {
-    return 'http'
-  }
+  static id = 'http'
 
-  static get prefix () {
-    return 'apm:http:server:request'
-  }
+  static prefix = 'apm:http:server:request'
 
   constructor (...args) {
     super(...args)

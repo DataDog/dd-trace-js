@@ -17,7 +17,7 @@ const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 
 class HttpClientPlugin extends ClientPlugin {
   static id = 'http'
-  static get prefix () { return 'apm:http:client:request' }
+  static prefix = 'apm:http:client:request'
 
   bindStart (message) {
     const { args, http = {} } = message

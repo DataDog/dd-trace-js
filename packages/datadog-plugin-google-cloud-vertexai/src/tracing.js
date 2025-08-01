@@ -11,9 +11,7 @@ const {
 
 class GoogleCloudVertexAITracingPlugin extends TracingPlugin {
   static id = 'google-cloud-vertexai'
-  static get prefix () {
-    return 'tracing:apm:vertexai:request'
-  }
+  static prefix = 'tracing:apm:vertexai:request'
 
   constructor () {
     super(...arguments)

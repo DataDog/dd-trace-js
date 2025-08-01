@@ -67,9 +67,7 @@ function withTimeout (promise, timeoutMs) {
 }
 
 class JestPlugin extends CiPlugin {
-  static get id () {
-    return 'jest'
-  }
+  static id = 'jest'
 
   // The lists are the same for every test suite, so we can cache them
   getUnskippableSuites (unskippableSuitesList) {
