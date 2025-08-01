@@ -7,81 +7,15 @@ const fs = require('fs')
 const util = require('util')
 const os = require('os')
 const path = require('path')
-const https = require('https')
-const url = require('url')
 const { once } = require('events')
 const { expect } = require('chai')
+const latests = require('../plugins/versions/package.json').dependencies
 
 process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'false'
 
 const mkdtemp = util.promisify(fs.mkdtemp)
 
 const ddTraceInit = path.resolve(__dirname, '../../../../init')
-
-const latestCache = []
-async function getLatest (modName, repoUrl) {
-  if (latestCache[modName]) {
-    return latestCache[modName]
-  }
-  const { stdout } = await retry(() => exec(`npm view ${modName} dist-tags --json`), 1000)
-  const { latest } = JSON.parse(stdout)
-  const tags = await get(`https://api.github.com/repos/${repoUrl}/git/refs/tags`)
-  for (const tag of tags) {
-    if (tag.ref.includes(latest)) {
-      return tag.ref.split('/').pop()
-    }
-  }
-}
-
-function get (theUrl) {
-  return new Promise((resolve, reject) => {
-    // eslint-disable-next-line n/no-deprecated-api
-    const options = url.parse(theUrl)
-    options.headers = {
-      'user-agent': 'dd-trace plugin test suites'
-    }
-    https.get(options, res => {
-      if (res.statusCode === 403) {
-        console.log('403')
-        for (const header in res.headers) {
-          if (header.startsWith('x-ratelimit')) {
-            console.log(header, res.headers[header])
-          }
-        }
-        const resetTime = Number(res.headers['x-ratelimit-reset']) * 1000
-        const waitTime = 1000 + resetTime - Date.now()
-        console.log('Waiting', waitTime / 1000, 'seconds for retry')
-        setTimeout(() => {
-          get(theUrl).then(resolve, reject)
-        }, waitTime)
-        return
-      }
-      if (res.statusCode >= 300) {
-        res.pipe(process.stderr)
-        reject(new Error(res.statusCode))
-        return
-      }
-      const data = []
-      res.on('data', d => data.push(d))
-      res.on('end', () => {
-        resolve(JSON.parse(Buffer.concat(data).toString('utf8')))
-      })
-    }).on('error', reject)
-  })
-}
-
-async function retry (fn, delay) {
-  let result
-  try {
-    result = fn()
-  } catch (e) {
-    console.log(e)
-    console.log('Retrying after', delay, 'ms')
-    await new Promise(resolve => setTimeout(resolve, delay))
-    result = retry(fn, delay)
-  }
-  return result
-}
 
 function exec (cmd, opts = {}) {
   const date = new Date()
@@ -127,11 +61,18 @@ function getTmpDir () {
 
 async function setup (modName, repoName, commitish) {
   if (commitish === 'latest') {
-    commitish = await getLatest(modName, repoName)
+    commitish = latests[modName]
   }
   const repoUrl = `https://github.com/${repoName}.git`
   const cwd = await getTmpDir()
-  await execOrError(`git clone ${repoUrl} --branch ${commitish} --single-branch ${cwd}`)
+  const clone = `git clone ${repoUrl} --single-branch ${cwd}`
+
+  try {
+    await execOrError(`${clone} --branch ${commitish}`)
+  } catch {
+    // Exact version doesn't exist, try with a `v` prefix for example `v1.2.3`.
+    await execOrError(`${clone} --branch v${commitish}`)
+  }
 
   try {
     await execOrError('npm install --legacy-peer-deps', { cwd })

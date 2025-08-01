@@ -26,7 +26,7 @@ class LLMObsSpanWriter extends BaseWriter {
   }
 
   append (event) {
-    const eventSizeBytes = Buffer.from(JSON.stringify(event)).byteLength
+    const eventSizeBytes = Buffer.byteLength(JSON.stringify(event))
     telemetry.recordLLMObsRawSpanSize(event, eventSizeBytes)
 
     const shouldTruncate = eventSizeBytes > EVP_EVENT_SIZE_LIMIT

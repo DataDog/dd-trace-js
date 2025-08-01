@@ -8,8 +8,10 @@ const handleChannel = channel('apm:fastify:request:handle')
 const routeAddedChannel = channel('apm:fastify:route:added')
 const bodyParserReadCh = channel('datadog:fastify:body-parser:finish')
 const queryParamsReadCh = channel('datadog:fastify:query-params:finish')
+const cookieParserReadCh = channel('datadog:fastify-cookie:read:finish')
 const responsePayloadReadCh = channel('datadog:fastify:response:finish')
 const pathParamsReadCh = channel('datadog:fastify:path-params:finish')
+const finishSetHeaderCh = channel('datadog:fastify:set-header:finish')
 
 // context management channels
 const preParsingCh = channel('datadog:fastify:pre-parsing:start')
@@ -18,6 +20,8 @@ const addHookStartCh = channel('datadog:fastify:add-hook:start')
 const addHookFinishCh = channel('datadog:fastify:add-hook:finish')
 
 const parsingContexts = new WeakMap()
+const cookiesPublished = new WeakSet()
+const bodyPublished = new WeakSet()
 
 function wrapFastify (fastify, hasParsingEvents) {
   if (typeof fastify !== 'function') return fastify
@@ -56,27 +60,42 @@ function wrapAddHook (addHook) {
       const ctx = { req }
 
       try {
-        if (typeof done === 'function') {
-          done = arguments[arguments.length - 1]
+        // done callback is always the last argument
+        const doneCallback = arguments[arguments.length - 1]
 
+        if (typeof doneCallback === 'function') {
           arguments[arguments.length - 1] = addHookStartCh.runStores(ctx, () => {
             return function (err) {
               ctx.error = err
               publishError(ctx)
 
+              const hasCookies = request.cookies && Object.keys(request.cookies).length > 0
+
+              if (cookieParserReadCh.hasSubscribers && hasCookies && !cookiesPublished.has(req)) {
+                ctx.res = getRes(reply)
+                ctx.abortController = new AbortController()
+                ctx.cookies = request.cookies
+
+                cookieParserReadCh.publish(ctx)
+                cookiesPublished.add(req)
+
+                if (ctx.abortController.signal.aborted) return
+              }
+
               if (name === 'onRequest' || name === 'preParsing') {
                 parsingContexts.set(req, ctx)
 
                 return addHookFinishCh.runStores(ctx, () => {
-                  return done.apply(this, arguments)
+                  return doneCallback.apply(this, arguments)
                 })
               }
-              return done.apply(this, arguments)
+              return doneCallback.apply(this, arguments)
             }
           })
 
           return fn.apply(this, arguments)
         }
+
         const promise = fn.apply(this, arguments)
 
         if (promise && typeof promise.catch === 'function') {
@@ -115,6 +134,20 @@ function preHandler (request, reply, done) {
   if (!reply || typeof reply.send !== 'function') return done()
 
   const req = getReq(request)
+  const res = getRes(reply)
+  const ctx = { req, res }
+
+  const hasBody = request.body && Object.keys(request.body).length > 0
+
+  // For multipart/form-data, the body is not available until after preValidation hook
+  if (bodyParserReadCh.hasSubscribers && hasBody && !bodyPublished.has(req)) {
+    ctx.abortController = new AbortController()
+    ctx.body = request.body
+    bodyParserReadCh.publish(ctx)
+    bodyPublished.add(req)
+
+    if (ctx.abortController.signal.aborted) return
+  }
 
   reply.send = wrapSend(reply.send, req)
 
@@ -139,11 +172,14 @@ function preValidation (request, reply, done) {
       if (abortController.signal.aborted) return
     }
 
-    if (bodyParserReadCh.hasSubscribers && request.body) {
+    // Analyze body before schema validation
+    if (bodyParserReadCh.hasSubscribers && request.body && !bodyPublished.has(req)) {
       abortController ??= new AbortController()
       ctx.abortController = abortController
       ctx.body = request.body
       bodyParserReadCh.publish(ctx)
+
+      bodyPublished.add(req)
 
       if (abortController.signal.aborted) return
     }
@@ -248,3 +284,20 @@ addHook({ name: 'fastify', versions: ['2'] }, fastify => {
 addHook({ name: 'fastify', versions: ['1'] }, fastify => {
   return shimmer.wrapFunction(fastify, fastify => wrapFastify(fastify, false))
 })
+
+function wrapReplyHeader (Reply) {
+  shimmer.wrap(Reply.prototype, 'header', header => function (key, value) {
+    const result = header.apply(this, arguments)
+
+    if (finishSetHeaderCh.hasSubscribers && key && value) {
+      const ctx = { name: key, value, res: getRes(this) }
+      finishSetHeaderCh.publish(ctx)
+    }
+
+    return result
+  })
+
+  return Reply
+}
+
+addHook({ name: 'fastify', file: 'lib/reply.js', versions: ['1', '2', '>=3'] }, wrapReplyHeader)

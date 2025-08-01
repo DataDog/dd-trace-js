@@ -1,22 +1,24 @@
 'use strict'
 
-const Limiter = require('../rate_limiter')
+const dc = require('dc-polyfill')
+const zlib = require('zlib')
+
 const { storage } = require('../../../datadog-core')
 const web = require('../plugins/util/web')
 const { ipHeaderList } = require('../plugins/util/ip_extractor')
 const {
   incrementWafInitMetric,
   incrementWafUpdatesMetric,
+  incrementWafConfigErrorsMetric,
   incrementWafRequestsMetric,
   updateWafRequestsMetricTags,
   updateRaspRequestsMetricTags,
   updateRaspRuleSkippedMetricTags,
-  updateRateLimitedMetric,
   getRequestMetrics
 } = require('./telemetry')
-const zlib = require('zlib')
 const { keepTrace } = require('../priority_sampler')
 const { ASM } = require('../standalone/product')
+const { DIAGNOSTIC_KEYS } = require('./waf/diagnostics')
 
 const REQUEST_HEADER_TAG_PREFIX = 'http.request.headers.'
 const RESPONSE_HEADER_TAG_PREFIX = 'http.response.headers.'
@@ -25,8 +27,7 @@ const COLLECTED_REQUEST_BODY_MAX_STRING_LENGTH = 4096
 const COLLECTED_REQUEST_BODY_MAX_DEPTH = 20
 const COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE = 256
 
-// default limiter, configurable with setRateLimit()
-let limiter = new Limiter(100)
+const telemetryLogCh = dc.channel('datadog:telemetry:log')
 
 const config = {
   headersExtendedCollectionEnabled: false,
@@ -85,7 +86,6 @@ const NON_EXTENDED_REQUEST_HEADERS = new Set([...requestHeadersList, ...eventHea
 const NON_EXTENDED_RESPONSE_HEADERS = new Set(contentHeaderList)
 
 function init (_config) {
-  limiter = new Limiter(_config.rateLimit)
   config.headersExtendedCollectionEnabled = _config.extendedHeadersCollection.enabled
   config.maxHeadersCollected = _config.extendedHeadersCollection.maxHeaders
   config.headersRedaction = _config.extendedHeadersCollection.redaction
@@ -216,15 +216,62 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders, storedRespons
 function reportWafInit (wafVersion, rulesVersion, diagnosticsRules = {}, success = false) {
   if (success) {
     metricsQueue.set('_dd.appsec.waf.version', wafVersion)
-
-    metricsQueue.set('_dd.appsec.event_rules.loaded', diagnosticsRules.loaded?.length || 0)
-    metricsQueue.set('_dd.appsec.event_rules.error_count', diagnosticsRules.failed?.length || 0)
-    if (diagnosticsRules.failed?.length) {
-      metricsQueue.set('_dd.appsec.event_rules.errors', JSON.stringify(diagnosticsRules.errors))
-    }
   }
 
   incrementWafInitMetric(wafVersion, rulesVersion, success)
+}
+
+function logWafDiagnosticMessage (product, rcConfigId, configKey, message, level) {
+  const tags =
+    `log_type:rc::${product.toLowerCase()}::diagnostic,appsec_config_key:${configKey},rc_config_id:${rcConfigId}`
+  telemetryLogCh.publish({
+    message,
+    level,
+    tags
+  })
+}
+
+function reportWafConfigUpdate (product, rcConfigId, diagnostics, wafVersion) {
+  if (diagnostics.error) {
+    logWafDiagnosticMessage(product, rcConfigId, '', diagnostics.error, 'ERROR')
+    incrementWafConfigErrorsMetric(wafVersion, diagnostics.ruleset_version)
+  }
+
+  for (const configKey of DIAGNOSTIC_KEYS) {
+    const configDiagnostics = diagnostics[configKey]
+    if (!configDiagnostics) continue
+
+    if (configDiagnostics.error) {
+      logWafDiagnosticMessage(product, rcConfigId, configKey, configDiagnostics.error, 'ERROR')
+      incrementWafConfigErrorsMetric(wafVersion, diagnostics.ruleset_version)
+      continue
+    }
+
+    if (configDiagnostics.errors) {
+      for (const [errorMessage, errorIds] of Object.entries(configDiagnostics.errors)) {
+        logWafDiagnosticMessage(
+          product,
+          rcConfigId,
+          configKey,
+          `"${errorMessage}": ${JSON.stringify(errorIds)}`,
+          'ERROR'
+        )
+        incrementWafConfigErrorsMetric(wafVersion, diagnostics.ruleset_version)
+      }
+    }
+
+    if (configDiagnostics.warnings) {
+      for (const [warningMessage, warningIds] of Object.entries(configDiagnostics.warnings)) {
+        logWafDiagnosticMessage(
+          product,
+          rcConfigId,
+          configKey,
+          `"${warningMessage}": ${JSON.stringify(warningIds)}`,
+          'WARN'
+        )
+      }
+    }
+  }
 }
 
 function reportMetrics (metrics, raspRule) {
@@ -270,12 +317,6 @@ function reportAttack (attackData) {
 
   const newTags = {
     'appsec.event': 'true'
-  }
-
-  if (limiter.isAllowed()) {
-    keepTrace(rootSpan, ASM)
-  } else {
-    updateRateLimitedMetric(req)
   }
 
   // TODO: maybe add this to format.js later (to take decision as late as possible)
@@ -377,12 +418,12 @@ function isRaspAttack (events) {
   return events.some(e => e.rule?.tags?.module === 'rasp')
 }
 
-function isFingerprintDerivative (derivative) {
-  return derivative.startsWith('_dd.appsec.fp')
+function isSchemaAttribute (attribute) {
+  return attribute.startsWith('_dd.appsec.s.')
 }
 
-function reportDerivatives (derivatives) {
-  if (!derivatives) return
+function reportAttributes (attributes) {
+  if (!attributes) return
 
   const req = storage('legacy').getStore()?.req
   const rootSpan = web.root(req)
@@ -390,8 +431,8 @@ function reportDerivatives (derivatives) {
   if (!rootSpan) return
 
   const tags = {}
-  for (let [tag, value] of Object.entries(derivatives)) {
-    if (!isFingerprintDerivative(tag)) {
+  for (let [tag, value] of Object.entries(attributes)) {
+    if (isSchemaAttribute(tag)) {
       const gzippedValue = zlib.gzipSync(JSON.stringify(value))
       value = gzippedValue.toString('base64')
     }
@@ -485,11 +526,12 @@ module.exports = {
   filterExtendedHeaders,
   formatHeaderName,
   reportWafInit,
+  reportWafConfigUpdate,
   reportMetrics,
   reportAttack,
   reportWafUpdate: incrementWafUpdatesMetric,
   reportRaspRuleSkipped: updateRaspRuleSkippedMetricTags,
-  reportDerivatives,
+  reportAttributes,
   finishRequest,
   mapHeaderAndTags,
   truncateRequestBody

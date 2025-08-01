@@ -31,7 +31,8 @@ class NextPlugin extends ServerPlugin {
         'span.type': 'web',
         'span.kind': 'server',
         'http.method': req.method
-      }
+      },
+      integrationName: this.constructor.id
     })
 
     analyticsSampler.sample(span, this.config.measured, true)

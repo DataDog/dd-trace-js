@@ -22,11 +22,13 @@ async function checkStatuses (contexts) {
   })
 
   if (response.status !== 200) {
+    const responseText = await response.text?.()
+
     console.log(response)
-    console.log(response.text())
+    console.log(responseText)
 
     throw new Error(
-      util.format('Could not get status from GitHub.\n\n%o\n\n%s', response, response.text?.())
+      util.format('Could not get status from GitHub.\n\n%o\n\n%s', response, responseText)
     )
   }
 
@@ -52,13 +54,13 @@ async function checkStatuses (contexts) {
   attempts++
 
   if (attempts >= MAX_ATTEMPTS) {
-    throw new Error(`Jobs did not finish before timeout: ${contexts.join(', ')}.`)
+    throw new Error(`Jobs did not finish before timeout: ${[...contexts].join(', ')}.`)
   }
 
   setTimeout(() => checkStatuses(contexts), TIMEOUT)
 }
 
 checkStatuses(new Set([
-  'dd-gitlab/promote-oci-to-prod',
-  'dd-gitlab/publish-lib-init-ghcr-tags'
+  'dd-gitlab/kubernetes-injection-test-ecr-publish',
+  'dd-gitlab/promote-oci-to-prod'
 ]))

@@ -6,12 +6,15 @@ const { fork, spawn } = childProcess
 const exec = promisify(childProcess.exec)
 const http = require('http')
 const fs = require('fs')
+const { builtinModules } = require('module')
 const os = require('os')
 const path = require('path')
 const assert = require('assert')
 const rimraf = promisify(require('rimraf'))
 const FakeAgent = require('./fake-agent')
 const id = require('../../packages/dd-trace/src/id')
+const { version } = require('../../package.json')
+const { getCappedRange } = require('../../packages/dd-trace/test/plugins/versions')
 
 const hookFile = 'dd-trace/loader-hook.mjs'
 
@@ -58,34 +61,35 @@ let sandbox
 // This _must_ be used with the useSandbox function
 async function runAndCheckWithTelemetry (filename, expectedOut, expectedTelemetryPoints, expectedSource) {
   const cwd = sandbox.folder
-  const cleanup = telemetryForwarder(expectedTelemetryPoints)
+  const cleanup = telemetryForwarder(expectedTelemetryPoints.length > 0)
   const pid = await runAndCheckOutput(filename, cwd, expectedOut, expectedSource)
   const msgs = await cleanup()
   if (expectedTelemetryPoints.length === 0) {
     // assert no telemetry sent
-    try {
-      assert.deepStrictEqual(msgs.length, 0)
-    } catch (e) {
-      // This console.log is useful for debugging telemetry. Plz don't remove.
-      // eslint-disable-next-line no-console
-      console.error('Expected no telemetry, but got:\n', msgs.map(msg => JSON.stringify(msg[1].points)).join('\n'))
-      throw e
-    }
-    return
+    assert.strictEqual(msgs.length, 0, `Expected no telemetry, but got:\n${
+      msgs.map(msg => JSON.stringify(msg[1].points)).join('\n')
+    }`)
+  } else {
+    assertTelemetryPoints(pid, msgs, expectedTelemetryPoints)
   }
+}
+
+function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
   let points = []
   for (const [telemetryType, data] of msgs) {
     assert.strictEqual(telemetryType, 'library_entrypoint')
     assert.deepStrictEqual(data.metadata, meta(pid))
     points = points.concat(data.points)
   }
-  let expectedPoints = getPoints(...expectedTelemetryPoints)
-  // We now have to sort both the expected and actual telemetry points.
-  // This is because data can come in in any order.
-  // We'll just contatenate all the data together for each point and sort them.
-  points = points.map(p => p.name + '\t' + p.tags.join(',')).sort().join('\n')
-  expectedPoints = expectedPoints.map(p => p.name + '\t' + p.tags.join(',')).sort().join('\n')
-  assert.strictEqual(points, expectedPoints)
+  const expectedPoints = getPoints(...expectedTelemetryPoints)
+  // Sort since data can come in in any order.
+  assert.deepStrictEqual(points.sort(pointsSorter), expectedPoints.sort(pointsSorter))
+
+  function pointsSorter (a, b) {
+    a = a.name + '\t' + a.tags.join(',')
+    b = b.name + '\t' + b.tags.join(',')
+    return a === b ? 0 : a < b ? -1 : 1
+  }
 
   function getPoints (...args) {
     const expectedPoints = []
@@ -94,7 +98,7 @@ async function runAndCheckWithTelemetry (filename, expectedOut, expectedTelemetr
       if (!currentPoint.name) {
         currentPoint.name = 'library_entrypoint.' + arg
       } else {
-        currentPoint.tags = arg.split(',')
+        currentPoint.tags = arg.split(',').filter(Boolean)
         expectedPoints.push(currentPoint)
         currentPoint = {}
       }
@@ -167,6 +171,17 @@ function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
 
 async function createSandbox (dependencies = [], isGitRepo = false,
   integrationTestsPaths = ['./integration-tests/*'], followUpCommand) {
+  const cappedDependencies = dependencies.map(dep => {
+    if (builtinModules.includes(dep)) return dep
+
+    const match = dep.replaceAll(/['"]/g, '').match(/^(@?[^@]+)(@(.+))?$/)
+    const name = match[1]
+    const range = match[3] || ''
+    const cappedRange = getCappedRange(name, range)
+
+    return `"${name}@${cappedRange}"`
+  })
+
   // We might use NODE_OPTIONS to init the tracer. We don't want this to affect this operations
   const { NODE_OPTIONS, ...restOfEnv } = process.env
   const noSandbox = String(process.env.TESTING_NO_INTEGRATION_SANDBOX)
@@ -181,13 +196,14 @@ async function createSandbox (dependencies = [], isGitRepo = false,
     return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
   }
   const folder = path.join(os.tmpdir(), id().toString())
-  const out = path.join(folder, 'dd-trace.tgz')
-  const allDependencies = [`file:${out}`].concat(dependencies)
+  const out = path.join(folder, `dd-trace-${version}.tgz`)
+  const allDependencies = [`file:${out}`].concat(cappedDependencies)
 
   fs.mkdirSync(folder)
-  const addCommand = `yarn add ${allDependencies.join(' ')} --ignore-engines`
+  const preferOfflineFlag = process.env.OFFLINE === '1' || process.env.OFFLINE === 'true' ? ' --prefer-offline' : ''
+  const addCommand = `yarn add ${allDependencies.join(' ')} --ignore-engines${preferOfflineFlag}`
   const addOptions = { cwd: folder, env: restOfEnv }
-  await exec(`yarn pack --filename ${out}`, { env: restOfEnv }) // TODO: cache this
+  await exec(`npm pack --silent --pack-destination ${folder}`, { env: restOfEnv }) // TODO: cache this
 
   try {
     await exec(addCommand, addOptions)
@@ -238,7 +254,7 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   }
 }
 
-function telemetryForwarder (expectedTelemetryPoints) {
+function telemetryForwarder (shouldExpectTelemetryPoints = true) {
   process.env.DD_TELEMETRY_FORWARDER_PATH =
     path.join(__dirname, '..', 'telemetry-forwarder.sh')
   process.env.FORWARDER_OUT = path.join(__dirname, `forwarder-${Date.now()}.out`)
@@ -256,7 +272,7 @@ function telemetryForwarder (expectedTelemetryPoints) {
     try {
       msgs = fs.readFileSync(process.env.FORWARDER_OUT, 'utf8').trim().split('\n')
     } catch (e) {
-      if (expectedTelemetryPoints.length && e.code === 'ENOENT' && retries < 10) {
+      if (shouldExpectTelemetryPoints && e.code === 'ENOENT' && retries < 10) {
         return tryAgain()
       }
       return []
@@ -286,7 +302,7 @@ function telemetryForwarder (expectedTelemetryPoints) {
   return cleanup
 }
 
-async function curl (url, useHttp2 = false) {
+async function curl (url) {
   if (url !== null && typeof url === 'object') {
     if (url.then) {
       return curl(await url)
@@ -315,7 +331,8 @@ async function curlAndAssertMessage (agent, procOrUrl, fn, timeout, expectedMess
 
 function getCiVisAgentlessConfig (port) {
   // We remove GITHUB_WORKSPACE so the repository root is not assigned to dd-trace-js
-  const { GITHUB_WORKSPACE, ...rest } = process.env
+  // We remove MOCHA_OPTIONS so the test runner doesn't run the tests twice
+  const { GITHUB_WORKSPACE, MOCHA_OPTIONS, ...rest } = process.env
   return {
     ...rest,
     DD_API_KEY: '1',
@@ -328,7 +345,8 @@ function getCiVisAgentlessConfig (port) {
 
 function getCiVisEvpProxyConfig (port) {
   // We remove GITHUB_WORKSPACE so the repository root is not assigned to dd-trace-js
-  const { GITHUB_WORKSPACE, ...rest } = process.env
+  // We remove MOCHA_OPTIONS so the test runner doesn't run the tests twice
+  const { GITHUB_WORKSPACE, MOCHA_OPTIONS, ...rest } = process.env
   return {
     ...rest,
     DD_TRACE_AGENT_PORT: port,
@@ -437,6 +455,8 @@ module.exports = {
   assertObjectContains,
   assertUUID,
   spawnProc,
+  telemetryForwarder,
+  assertTelemetryPoints,
   runAndCheckWithTelemetry,
   createSandbox,
   curl,

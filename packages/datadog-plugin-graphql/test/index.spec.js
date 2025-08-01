@@ -2,6 +2,7 @@
 
 const { expect } = require('chai')
 const semver = require('semver')
+const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
@@ -259,6 +260,7 @@ describe('Plugin', () => {
                 expect(spans[0].meta).to.have.property('graphql.operation.type', 'query')
                 expect(spans[0].meta).to.have.property('graphql.operation.name', 'MyQuery')
                 expect(spans[0].meta).to.have.property('component', 'graphql')
+                expect(spans[0].meta).to.have.property('_dd.integration', 'graphql')
               })
               .then(done)
 

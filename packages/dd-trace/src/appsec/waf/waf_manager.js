@@ -7,11 +7,14 @@ const WAFContextWrapper = require('./waf_context_wrapper')
 const contexts = new WeakMap()
 
 class WAFManager {
+  static get defaultWafConfigPath () { return 'datadog/00/ASM_DD/default/config' }
+
   constructor (rules, config) {
     this.config = config
     this.wafTimeout = config.wafTimeout
     this.ddwaf = this._loadDDWAF(rules)
     this.rulesVersion = this.ddwaf.diagnostics.ruleset_version
+    this.defaultRules = rules
 
     Reporter.reportWafInit(this.ddwafVersion, this.rulesVersion, this.ddwaf.diagnostics.rules, true)
   }
@@ -23,7 +26,7 @@ class WAFManager {
       this.ddwafVersion = DDWAF.version()
 
       const { obfuscatorKeyRegex, obfuscatorValueRegex } = this.config
-      return new DDWAF(rules, { obfuscatorKeyRegex, obfuscatorValueRegex })
+      return new DDWAF(rules, WAFManager.defaultWafConfigPath, { obfuscatorKeyRegex, obfuscatorValueRegex })
     } catch (err) {
       this.ddwafVersion = this.ddwafVersion || 'unknown'
       Reporter.reportWafInit(this.ddwafVersion, 'unknown')
@@ -51,20 +54,27 @@ class WAFManager {
     return wafContext
   }
 
-  update (newRules) {
-    try {
-      this.ddwaf.update(newRules)
-
-      if (this.ddwaf.diagnostics.ruleset_version) {
-        this.rulesVersion = this.ddwaf.diagnostics.ruleset_version
-      }
-
-      Reporter.reportWafUpdate(this.ddwafVersion, this.rulesVersion, true)
-    } catch (error) {
-      Reporter.reportWafUpdate(this.ddwafVersion, 'unknown', false)
-
-      throw error
+  setRulesVersion () {
+    if (this.ddwaf.diagnostics.ruleset_version) {
+      this.rulesVersion = this.ddwaf.diagnostics.ruleset_version
     }
+  }
+
+  setAsmDdFallbackConfig () {
+    if (!this.ddwaf.configPaths.some(cp => cp.includes('ASM_DD'))) {
+      this.updateConfig(WAFManager.defaultWafConfigPath, this.defaultRules)
+    }
+  }
+
+  updateConfig (path, rules) {
+    const updateResult = this.ddwaf.createOrUpdateConfig(rules, path)
+    this.setRulesVersion()
+    return updateResult
+  }
+
+  removeConfig (path) {
+    this.ddwaf.removeConfig(path)
+    this.setRulesVersion()
   }
 
   destroy () {

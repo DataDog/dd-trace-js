@@ -5,7 +5,6 @@ const { exec, execSync } = require('child_process')
 const path = require('path')
 const fs = require('fs')
 
-const getPort = require('get-port')
 const { assert } = require('chai')
 
 const {
@@ -55,6 +54,7 @@ const {
   DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
   DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
   DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
+  DD_CAPABILITIES_FAILED_TEST_REPLAY,
   TEST_RETRY_REASON_TYPES,
   TEST_IS_MODIFIED
 } = require('../../packages/dd-trace/src/plugins/util/test')
@@ -123,8 +123,10 @@ moduleTypes.forEach(({
       // cypress-fail-fast is required as an incompatible plugin
       sandbox = await createSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0'], true)
       cwd = sandbox.folder
-      webAppPort = await getPort()
-      webAppServer.listen(webAppPort)
+      await new Promise(resolve => webAppServer.listen(0, 'localhost', () => {
+        webAppPort = webAppServer.address().port
+        resolve()
+      }))
     })
 
     after(async () => {
@@ -1731,8 +1733,6 @@ moduleTypes.forEach(({
           ...restEnvVars
         } = getCiVisEvpProxyConfig(receiver.port)
 
-        const secondWebAppPort = await getPort()
-
         secondWebAppServer = http.createServer((req, res) => {
           res.setHeader('Content-Type', 'text/html')
           res.writeHead(200)
@@ -1744,7 +1744,9 @@ moduleTypes.forEach(({
           `)
         })
 
-        secondWebAppServer.listen(secondWebAppPort)
+        const secondWebAppPort = await new Promise(resolve => {
+          secondWebAppServer.listen(0, 'localhost', () => resolve(secondWebAppServer.address().port))
+        })
 
         const specToRun = 'cypress/e2e/multi-origin.js'
 
@@ -1756,11 +1758,16 @@ moduleTypes.forEach(({
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               CYPRESS_BASE_URL_SECOND: `http://localhost:${secondWebAppPort}`,
-              SPEC_PATTERN: specToRun
+              SPEC_PATTERN: specToRun,
+              DD_TRACE_DEBUG: true
             },
             stdio: 'pipe'
           }
         )
+
+        // TODO: remove once we find the source of flakiness
+        childProcess.stdout.pipe(process.stdout)
+        childProcess.stderr.pipe(process.stderr)
 
         await receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
@@ -2263,7 +2270,8 @@ moduleTypes.forEach(({
               assert.equal(metadata.test[DD_CAPABILITIES_IMPACTED_TESTS], '1')
               assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
               assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
-              assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '4')
+              assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
+              assert.equal(metadata.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], '1')
               // capabilities logic does not overwrite test session name
               assert.equal(metadata.test[TEST_SESSION_NAME], 'my-test-session-name')
             })

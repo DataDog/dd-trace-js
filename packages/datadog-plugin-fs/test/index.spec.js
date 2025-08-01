@@ -1534,10 +1534,10 @@ describe('Plugin', () => {
             })
 
             it('should handle errors', () =>
-              testHandleErrors(fs, 'dir.read', (_1, _2, _3, cb) => {
+              testHandleErrors(fs, 'dir.read', async (_1, _2, _3, cb) => {
                 dir.closeSync()
                 try {
-                  dir.read()
+                  await dir.read()
                 } catch (e) {
                   cb(e)
                 }
@@ -1557,7 +1557,7 @@ describe('Plugin', () => {
               testHandleErrors(fs, 'dir.read', (_1, _2, _3, cb) => {
                 dir.closeSync()
                 try {
-                  dir.read(cb)
+                  dir.read(() => {})
                 } catch (e) {
                   cb(e)
                 }

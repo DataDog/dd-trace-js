@@ -52,6 +52,7 @@ describe('Child process plugin', () => {
         expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
           'command_execution',
           {
+            startTime: undefined,
             childOf: undefined,
             tags: {
               component: 'subprocess',
@@ -61,7 +62,7 @@ describe('Child process plugin', () => {
               'span.type': 'system',
               'cmd.exec': JSON.stringify(['ls', '-l'])
             },
-            integrationName: 'system',
+            integrationName: 'child_process',
             links: undefined
           }
         )
@@ -75,6 +76,7 @@ describe('Child process plugin', () => {
         expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
           'command_execution',
           {
+            startTime: undefined,
             childOf: undefined,
             tags: {
               component: 'subprocess',
@@ -84,7 +86,7 @@ describe('Child process plugin', () => {
               'span.type': 'system',
               'cmd.shell': 'ls -l'
             },
-            integrationName: 'system',
+            integrationName: 'child_process',
             links: undefined
           }
         )
@@ -100,6 +102,7 @@ describe('Child process plugin', () => {
         expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
           'command_execution',
           {
+            startTime: undefined,
             childOf: undefined,
             tags: {
               component: 'subprocess',
@@ -110,7 +113,7 @@ describe('Child process plugin', () => {
               'cmd.exec': JSON.stringify(['echo', arg, '']),
               'cmd.truncated': 'true'
             },
-            integrationName: 'system',
+            integrationName: 'child_process',
             links: undefined
           }
         )
@@ -126,6 +129,7 @@ describe('Child process plugin', () => {
         expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
           'command_execution',
           {
+            startTime: undefined,
             childOf: undefined,
             tags: {
               component: 'subprocess',
@@ -136,7 +140,7 @@ describe('Child process plugin', () => {
               'cmd.shell': 'ls -l /h ',
               'cmd.truncated': 'true'
             },
-            integrationName: 'system',
+            integrationName: 'child_process',
             links: undefined
           }
         )
@@ -153,6 +157,7 @@ describe('Child process plugin', () => {
         expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
           'command_execution',
           {
+            startTime: undefined,
             childOf: undefined,
             tags: {
               component: 'subprocess',
@@ -163,7 +168,7 @@ describe('Child process plugin', () => {
               'cmd.exec': JSON.stringify(['ls', '-l', '', '']),
               'cmd.truncated': 'true'
             },
-            integrationName: 'system',
+            integrationName: 'child_process',
             links: undefined
           }
         )
@@ -180,6 +185,7 @@ describe('Child process plugin', () => {
         expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
           'command_execution',
           {
+            startTime: undefined,
             childOf: undefined,
             tags: {
               component: 'subprocess',
@@ -190,7 +196,7 @@ describe('Child process plugin', () => {
               'cmd.shell': 'ls -l /home -t',
               'cmd.truncated': 'true'
             },
-            integrationName: 'system',
+            integrationName: 'child_process',
             links: undefined
           }
         )
@@ -361,6 +367,114 @@ describe('Child process plugin', () => {
         expect(tracer.scope().active()).to.equal(parent)
         done()
       })
+    })
+  })
+
+  describe('Bluebird Promise Compatibility', () => {
+    // BLUEBIRD REGRESSION TEST - Prevents "this._then is not a function" bug
+
+    let childProcess, tracer, util
+    let originalPromise
+    let Bluebird
+
+    beforeEach(() => {
+      return agent.load('child_process', undefined, { flushInterval: 1 }).then(() => {
+        tracer = require('../../dd-trace')
+        childProcess = require('child_process')
+        util = require('util')
+        tracer.use('child_process', { enabled: true })
+        Bluebird = require('../../../versions/bluebird').get()
+
+        originalPromise = global.Promise
+        global.Promise = Bluebird
+      })
+    })
+
+    afterEach(() => {
+      global.Promise = originalPromise
+      return agent.close({ ritmReset: false })
+    })
+
+    it('should not crash with "this._then is not a function" when using Bluebird promises', async () => {
+      const execFileAsync = util.promisify(childProcess.execFile)
+
+      expect(global.Promise).to.equal(Bluebird)
+      expect(global.Promise.version).to.exist
+
+      const expectedPromise = expectSomeSpan(agent, {
+        type: 'system',
+        name: 'command_execution',
+        error: 0,
+        meta: {
+          component: 'subprocess',
+          'cmd.exec': '["echo","bluebird-test"]',
+        }
+      })
+
+      const result = await execFileAsync('echo', ['bluebird-test'])
+      expect(result).to.exist
+      expect(result.stdout).to.contain('bluebird-test')
+
+      return expectedPromise
+    })
+
+    it('should work with concurrent Bluebird promise calls', async () => {
+      const execFileAsync = util.promisify(childProcess.execFile)
+
+      const promises = []
+      for (let i = 0; i < 5; i++) {
+        promises.push(
+          execFileAsync('echo', [`concurrent-test-${i}`])
+            .then(result => {
+              expect(result.stdout).to.contain(`concurrent-test-${i}`)
+              return result
+            })
+        )
+      }
+
+      const results = await Promise.all(promises)
+      expect(results).to.have.length(5)
+    })
+
+    it('should handle Bluebird promise rejection properly', async () => {
+      global.Promise = Bluebird
+
+      const execFileAsync = util.promisify(childProcess.execFile)
+
+      const expectedPromise = expectSomeSpan(agent, {
+        type: 'system',
+        name: 'command_execution',
+        error: 1,
+        meta: {
+          component: 'subprocess',
+          'cmd.exec': '["node","-invalidFlag"]'
+        }
+      })
+
+      try {
+        await execFileAsync('node', ['-invalidFlag'], { stdio: 'pipe' })
+        throw new Error('Expected command to fail')
+      } catch (error) {
+        expect(error).to.exist
+        expect(error.code).to.exist
+      }
+
+      return expectedPromise
+    })
+
+    it('should work with util.promisify when global Promise is Bluebird', async () => {
+      // Re-require util to get Bluebird-aware promisify
+      delete require.cache[require.resolve('util')]
+      const utilWithBluebird = require('util')
+
+      const execFileAsync = utilWithBluebird.promisify(childProcess.execFile)
+
+      const promise = execFileAsync('echo', ['util-promisify-test'])
+      expect(promise.constructor).to.equal(Bluebird)
+      expect(promise.constructor.version).to.exist
+
+      const result = await promise
+      expect(result.stdout).to.contain('util-promisify-test')
     })
   })
 

@@ -11,14 +11,14 @@ class HttpServerPlugin extends ServerPlugin {
     return 'http'
   }
 
+  static get prefix () {
+    return 'apm:http:server:request'
+  }
+
   constructor (...args) {
     super(...args)
     this._parentStore = undefined
     this.addTraceSub('exit', message => this.exit(message))
-  }
-
-  addTraceSub (eventName, handler) {
-    this.addSub(`apm:${this.constructor.id}:server:${this.operation}:${eventName}`, handler)
   }
 
   start ({ req, res, abortController }) {
@@ -27,13 +27,14 @@ class HttpServerPlugin extends ServerPlugin {
       this.tracer,
       {
         ...this.config,
-        service: this.config.service || this.serviceName()
+        service: this.config.service || this.serviceName(),
       },
       req,
       res,
       this.operationName()
     )
     span.setTag(COMPONENT, this.constructor.id)
+    span._integrationName = this.constructor.id
 
     this._parentStore = store
     this.enter(span, { ...store, req, res })

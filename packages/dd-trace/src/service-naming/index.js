@@ -1,3 +1,5 @@
+'use strict'
+
 class SchemaManager {
   constructor () {
     this.schemas = {}

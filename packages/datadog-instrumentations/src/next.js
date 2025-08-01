@@ -51,7 +51,9 @@ function wrapHandleApiRequest (handleApiRequest) {
 function wrapHandleApiRequestWithMatch (handleApiRequest) {
   return function (req, res, query, match) {
     return instrument(req, res, () => {
-      const page = (match !== null && typeof match === 'object' && typeof match.definition === 'object')
+      const page = (
+        match !== null && typeof match === 'object' && match.definition !== null && typeof match.definition === 'object'
+      )
         ? match.definition.pathname
         : undefined
 
@@ -139,6 +141,20 @@ function instrument (req, res, handler, error) {
   requests.add(req)
 
   const ctx = { req, res }
+  // Parse query parameters from request URL
+  if (queryParsedChannel.hasSubscribers && req.url) {
+    // req.url is only the relative path (/foo?bar=baz) and new URL() needs a full URL
+    // so we give it a dummy base
+    const { searchParams } = new URL(req.url, 'http://dummy')
+    const query = {}
+    for (const key of searchParams.keys()) {
+      if (!query[key]) {
+        query[key] = searchParams.getAll(key)
+      }
+    }
+
+    queryParsedChannel.publish({ query })
+  }
 
   return startChannel.runStores(ctx, () => {
     try {
@@ -278,24 +294,9 @@ addHook({
   versions: ['>=13'],
   file: 'dist/server/web/spec-extension/request.js'
 }, request => {
-  shimmer.wrap(request.NextRequest.prototype, 'nextUrl', function (originalGet) {
-    return function wrappedGet () {
-      const nextUrl = originalGet.apply(this, arguments)
-      if (queryParsedChannel.hasSubscribers) {
-        const query = {}
-        for (const key of nextUrl.searchParams.keys()) {
-          if (!query[key]) {
-            query[key] = nextUrl.searchParams.getAll(key)
-          }
-        }
+  const requestProto = Object.getPrototypeOf(request.NextRequest.prototype)
 
-        queryParsedChannel.publish({ query })
-      }
-      return nextUrl
-    }
-  })
-
-  shimmer.massWrap(request.NextRequest.prototype, ['text', 'json'], function (originalMethod) {
+  shimmer.massWrap(requestProto, ['text', 'json'], function (originalMethod) {
     return async function wrappedJson () {
       const body = await originalMethod.apply(this, arguments)
 
@@ -305,7 +306,7 @@ addHook({
     }
   })
 
-  shimmer.wrap(request.NextRequest.prototype, 'formData', function (originalFormData) {
+  shimmer.wrap(requestProto, 'formData', function (originalFormData) {
     return async function wrappedFormData () {
       const body = await originalFormData.apply(this, arguments)
 

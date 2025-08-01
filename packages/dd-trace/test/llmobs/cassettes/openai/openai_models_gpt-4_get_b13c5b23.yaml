@@ -1,0 +1,57 @@
+interactions:
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json, text/plain, */*
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      User-Agent:
+      - OpenAI/NodeJS/3.0.0
+    method: GET
+    uri: https://api.openai.com/v1/models/gpt-4
+  response:
+    body:
+      string: "{\n  \"id\": \"gpt-4\",\n  \"object\": \"model\",\n  \"created\": 1687882411,\n
+        \ \"owned_by\": \"openai\"\n}"
+    headers:
+      CF-RAY:
+      - 951540766be938dd-IAD
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Tue, 17 Jun 2025 20:21:11 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=hTLEdkQKk_HOs8DnXPLfgXlnmK6u6HqZMwSkHwWcIDI-1750191671-1.0.1.1-E6GEEMQHZ4Fw89j8QE3jbYGBqNytQ7_P2tCX9KhC.ZxCI7DgYjNdbEePerNf20jWPsCBfSnFp3EJcbtOGNdV7.g55V1xcm1H6Pb2d0tmeTA;
+        path=/; expires=Tue, 17-Jun-25 20:51:11 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=4mKS2ZVVbbgOhcxLUtSnrVT50sE1QKhSr9XNcHEbzxs-1750191671971-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-processing-ms:
+      - '71'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains; preload
+      x-request-id:
+      - 8d21e05f908d4a94606a18cda0956050
+    status:
+      code: 200
+      message: OK
+version: 1

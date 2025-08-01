@@ -8,8 +8,11 @@ const TraceState = require('./tracestate')
 const tags = require('../../../../../ext/tags')
 const { channel } = require('dc-polyfill')
 const { setBaggageItem, getAllBaggageItems, removeAllBaggageItems } = require('../../baggage')
+const telemetryMetrics = require('../../telemetry/metrics')
 
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
+
+const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
 const injectCh = channel('dd-trace:span:inject')
 const extractCh = channel('dd-trace:span:extract')
@@ -141,13 +144,28 @@ class TextMapPropagator {
       for (const [key, value] of Object.entries(baggageItems)) {
         const item = `${this._encodeOtelBaggageKey(String(key).trim())}=${encodeURIComponent(String(value).trim())},`
         itemCounter += 1
-        byteCounter += item.length
-        if (itemCounter > this._config.baggageMaxItems || byteCounter > this._config.baggageMaxBytes) break
+        byteCounter += Buffer.byteLength(item)
+
+        // Check for item count limit exceeded
+        if (itemCounter > this._config.baggageMaxItems) {
+          tracerMetrics.count('context_header_style.truncated', ['truncation_reason:baggage_item_count_exceeded']).inc()
+          break
+        }
+
+        // Check for byte count limit exceeded
+        if (byteCounter > this._config.baggageMaxBytes) {
+          tracerMetrics.count('context_header_style.truncated', ['truncation_reason:baggage_byte_count_exceeded']).inc()
+          break
+        }
+
         baggage += item
       }
 
       baggage = baggage.slice(0, -1)
-      if (baggage) carrier.baggage = baggage
+      if (baggage) {
+        carrier.baggage = baggage
+        tracerMetrics.count('context_header_style.injected', ['header_style:baggage']).inc()
+      }
     }
   }
 
@@ -635,6 +653,7 @@ class TextMapPropagator {
       : new Set(this._config.baggageTagKeys.split(','))
     for (const keyValue of baggages) {
       if (!keyValue.includes('=')) {
+        tracerMetrics.count('context_header_style.malformed', ['header_style:baggage']).inc()
         removeAllBaggageItems()
         return
       }
@@ -642,6 +661,7 @@ class TextMapPropagator {
       key = this._decodeOtelBaggageKey(key.trim())
       value = decodeURIComponent(value.trim())
       if (!key || !value) {
+        tracerMetrics.count('context_header_style.malformed', ['header_style:baggage']).inc()
         removeAllBaggageItems()
         return
       }
@@ -650,6 +670,9 @@ class TextMapPropagator {
       }
       setBaggageItem(key, value)
     }
+
+    // Successfully extracted baggage
+    tracerMetrics.count('context_header_style.extracted', ['header_style:baggage']).inc()
   }
 
   _extractSamplingPriority (carrier, spanContext) {

@@ -66,7 +66,7 @@ describe('profilers/native/wall', () => {
   })
 
   it('should use the provided configuration options', () => {
-    const samplingInterval = 500
+    const samplingInterval = 0.5
     const profiler = new NativeWallProfiler({ samplingInterval })
 
     profiler.start()
