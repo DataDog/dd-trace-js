@@ -2284,7 +2284,7 @@ describe('jest CommonJS', () => {
       })
     })
 
-    it.only('works with happy-dom', (done) => {
+    it('works with happy-dom', (done) => {
       // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
       receiver.setKnownTests({
         jest: {

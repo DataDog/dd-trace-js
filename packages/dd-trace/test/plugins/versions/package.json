@@ -18,6 +18,7 @@
     "@graphql-tools/executor": "1.4.9",
     "@grpc/grpc-js": "1.13.4",
     "@hapi/hapi": "21.4.0",
+    "@happy-dom/jest-environment": "18.0.1",
     "@jest/core": "30.0.5",
     "@jest/reporters": "30.0.5",
     "@jest/test-sequencer": "30.0.5",
