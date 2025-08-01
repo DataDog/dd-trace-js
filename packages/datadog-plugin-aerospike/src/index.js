@@ -6,16 +6,12 @@ const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 const AEROSPIKE_PEER_SERVICE = 'aerospike.namespace'
 
 class AerospikePlugin extends DatabasePlugin {
-  static get id () { return 'aerospike' }
-  static get operation () { return 'command' }
-  static get system () { return 'aerospike' }
-  static get prefix () {
-    return 'tracing:apm:aerospike:command'
-  }
+  static id = 'aerospike'
+  static operation = 'command'
+  static system = 'aerospike'
+  static prefix = 'tracing:apm:aerospike:command'
 
-  static get peerServicePrecursors () {
-    return [AEROSPIKE_PEER_SERVICE]
-  }
+  static peerServicePrecursors = [AEROSPIKE_PEER_SERVICE]
 
   bindStart (ctx) {
     const { commandName, commandArgs } = ctx

@@ -3,9 +3,7 @@
 const ElasticsearchPlugin = require('../../datadog-plugin-elasticsearch/src')
 
 class OpenSearchPlugin extends ElasticsearchPlugin {
-  static get id () {
-    return 'opensearch'
-  }
+  static id = 'opensearch'
 }
 
 module.exports = OpenSearchPlugin

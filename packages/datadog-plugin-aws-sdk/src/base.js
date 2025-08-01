@@ -9,8 +9,8 @@ const { tagsFromRequest, tagsFromResponse } = require('../../dd-trace/src/payloa
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
 class BaseAwsSdkPlugin extends ClientPlugin {
-  static get id () { return 'aws' }
-  static get isPayloadReporter () { return false }
+  static id = 'aws'
+  static isPayloadReporter = false
 
   get serviceIdentifier () {
     const id = this.constructor.id.toLowerCase()

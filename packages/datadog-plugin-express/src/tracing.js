@@ -3,9 +3,7 @@
 const RouterPlugin = require('../../datadog-plugin-router/src')
 
 class ExpressTracingPlugin extends RouterPlugin {
-  static get id () {
-    return 'express'
-  }
+  static id = 'express'
 
   constructor (...args) {
     super(...args)

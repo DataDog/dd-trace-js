@@ -6,9 +6,9 @@ const { DYNAMODB_PTR_KIND, SPAN_POINTER_DIRECTION } = require('../../../dd-trace
 const { extractPrimaryKeys, generatePointerHash } = require('../util')
 
 class DynamoDb extends BaseAwsSdkPlugin {
-  static get id () { return 'dynamodb' }
-  static get peerServicePrecursors () { return ['tablename'] }
-  static get isPayloadReporter () { return true }
+  static id = 'dynamodb'
+  static peerServicePrecursors = ['tablename']
+  static isPayloadReporter = true
 
   generateTags (params, operation, response) {
     const tags = {}
