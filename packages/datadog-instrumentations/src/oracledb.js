@@ -90,6 +90,25 @@ addHook({ name: 'oracledb', versions: ['>=5'] }, oracledb => {
       })
     }
   })
+  shimmer.wrap(oracledb, 'getConnection', getConnection => {
+    return function wrappedGetConnection (connAttrs, callback) {
+      if (callback) {
+        arguments[1] = shimmer.wrapFunction(callback, callback => (err, connection) => {
+          if (connection) {
+            connectionAttributes.set(connection, connAttrs)
+          }
+          callback(err, connection)
+        })
+
+        getConnection.apply(this, arguments)
+      } else {
+        return getConnection.apply(this, arguments).then((connection) => {
+          connectionAttributes.set(connection, connAttrs)
+          return connection
+        })
+      }
+    }
+  })
   shimmer.wrap(oracledb, 'createPool', createPool => {
     return function wrappedCreatePool (poolAttrs, callback) {
       if (callback) {
