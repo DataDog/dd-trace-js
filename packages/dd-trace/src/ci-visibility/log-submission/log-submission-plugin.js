@@ -36,9 +36,7 @@ function getWinstonLogSubmissionParameters (config) {
 }
 
 class LogSubmissionPlugin extends Plugin {
-  static get id () {
-    return 'log-submission'
-  }
+  static id = 'log-submission'
 
   constructor (...args) {
     super(...args)

@@ -10,7 +10,7 @@ const ApolloGatewayValidatePlugin = require('./validate')
 const ApolloGatewayFetchPlugin = require('./fetch')
 
 class ApolloGatewayPlugin extends CompositePlugin {
-  static get id () { return 'gateway' }
+  static id = 'gateway'
   static get plugins () {
     return {
       execute: ApolloGatewayExecutePlugin,
