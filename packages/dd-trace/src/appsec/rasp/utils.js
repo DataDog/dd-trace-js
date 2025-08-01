@@ -19,6 +19,11 @@ const RULE_TYPES = {
   SSRF: 'ssrf'
 }
 
+const ALLOWED_ROOTSPAN_NAMES = new Set([
+  'express.request',
+  'fastify.request'
+])
+
 class DatadogRaspAbortError extends Error {
   constructor (req, res, blockingAction, raspRule, ruleTriggered) {
     super('DatadogRaspAbortError')
@@ -28,6 +33,11 @@ class DatadogRaspAbortError extends Error {
     this.blockingAction = blockingAction
     this.raspRule = raspRule
     this.ruleTriggered = ruleTriggered
+
+    Object.defineProperties(this, {
+      req: { enumerable: false },
+      res: { enumerable: false },
+    })
   }
 }
 
@@ -52,9 +62,9 @@ function handleResult (result, req, res, abortController, config, raspRule) {
 
   if (abortController && !abortOnUncaughtException) {
     const blockingAction = getBlockingAction(result?.actions)
+    const rootSpanName = rootSpan?.context()._name
 
-    // Should block only in express
-    if (blockingAction && rootSpan?.context()._name === 'express.request') {
+    if (blockingAction && ALLOWED_ROOTSPAN_NAMES.has(rootSpanName)) {
       const abortError = new DatadogRaspAbortError(req, res, blockingAction, raspRule, ruleTriggered)
       abortController.abort(abortError)
 
