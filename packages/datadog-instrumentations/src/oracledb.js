@@ -15,14 +15,13 @@ const finishChannel = channel('apm:oracledb:query:finish')
 
 function finish (ctx) {
   if (ctx.error) {
-    errorChannel.publish(ctx.error)
+    errorChannel.publish(ctx)
   }
   finishChannel.publish(ctx)
 }
 
 addHook({ name: 'oracledb', versions: ['>=5'] }, oracledb => {
   shimmer.wrap(oracledb.Connection.prototype, 'execute', execute => {
-    const ctx = {}
     return function wrappedExecute (dbQuery, ...args) {
       if (!startChannel.hasSubscribers) {
         return execute.apply(this, arguments)
@@ -32,7 +31,8 @@ addHook({ name: 'oracledb', versions: ['>=5'] }, oracledb => {
         const cb = arguments[arguments.length - 1]
         arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => function wrappedCb (err, result) {
           if (err) {
-            errorChannel.publish(err)
+            ctx.error = err
+            errorChannel.publish(ctx)
           }
           return finishChannel.runStores(ctx, () => {
             return cb.apply(this, arguments)
@@ -57,11 +57,13 @@ addHook({ name: 'oracledb', versions: ['>=5'] }, oracledb => {
         port = String(details.port ?? details.nscon?.ntAdapter?.port ?? '')
       }
 
-      ctx.dbInstance = dbInstance
-      ctx.port = port
-      ctx.hostname = hostname
-      ctx.query = dbQuery
-      ctx.connAttrs = connAttrs
+      const ctx = {
+        dbInstance,
+        port,
+        hostname,
+        query: dbQuery,
+        connAttrs
+      }
 
       return startChannel.runStores(ctx, () => {
         try {
