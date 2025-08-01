@@ -13,6 +13,7 @@ const rimraf = promisify(require('rimraf'))
 const FakeAgent = require('./fake-agent')
 const id = require('../../packages/dd-trace/src/id')
 const { version } = require('../../package.json')
+const telemetryModule = require('../../packages/dd-trace/src/guardrails/telemetry')
 
 const hookFile = 'dd-trace/loader-hook.mjs'
 
@@ -112,9 +113,9 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
       runtime_version: process.versions.node,
       tracer_version: require('../../package.json').version,
       pid: Number(pid),
-      result: 'unknown',
-      result_reason: 'unknown',
-      result_class: 'unknown'
+      result: telemetryModule.resultMetadata.result,
+      result_reason: telemetryModule.resultMetadata.result_reason,
+      result_class: telemetryModule.resultMetadata.result_class
     }
   }
 }
