@@ -3,9 +3,7 @@
 const RouterPlugin = require('../../datadog-plugin-router/src')
 
 class FastifyTracingPlugin extends RouterPlugin {
-  static get id () {
-    return 'fastify'
-  }
+  static id = 'fastify'
 
   constructor (...args) {
     super(...args)

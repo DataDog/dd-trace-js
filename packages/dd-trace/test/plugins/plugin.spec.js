@@ -10,7 +10,7 @@ describe('Plugin', () => {
   let plugin
 
   class BadPlugin extends Plugin {
-    static get id () { return 'badPlugin' }
+    static id = 'badPlugin'
 
     constructor () {
       super()
@@ -23,7 +23,7 @@ describe('Plugin', () => {
   }
 
   class GoodPlugin extends Plugin {
-    static get id () { return 'goodPlugin' }
+    static id = 'goodPlugin'
 
     constructor () {
       super()
@@ -63,7 +63,7 @@ describe('Plugin', () => {
 
   it('should run binding transforms with an undefined current store', () => {
     class TestPlugin extends Plugin {
-      static get id () { return 'test' }
+      static id = 'test'
 
       constructor () {
         super()

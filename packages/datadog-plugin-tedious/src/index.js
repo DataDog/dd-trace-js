@@ -4,9 +4,9 @@ const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 
 class TediousPlugin extends DatabasePlugin {
-  static get id () { return 'tedious' }
-  static get operation () { return 'request' } // TODO: change to match other database plugins
-  static get system () { return 'mssql' }
+  static id = 'tedious'
+  static operation = 'request' // TODO: change to match other database plugins
+  static system = 'mssql'
 
   bindStart (ctx) {
     const service = this.serviceName({ pluginConfig: this.config, system: this.system })

@@ -19,8 +19,8 @@ for (const Plugin of langChainTracingPlugins) {
 }
 
 class LangChainPlugin extends CompositePlugin {
-  static get id () { return 'langchain' }
-  static get plugins () { return plugins }
+  static id = 'langchain'
+  static plugins = plugins
 }
 
 module.exports = LangChainPlugin

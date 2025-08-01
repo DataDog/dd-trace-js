@@ -1,12 +1,10 @@
 'use strict'
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 class PrismaClientPlugin extends DatabasePlugin {
-  static get id () { return 'prisma' }
-  static get operation () { return 'client' }
-  static get system () { return 'prisma' }
-  static get prefix () {
-    return 'tracing:apm:prisma:client'
-  }
+  static id = 'prisma'
+  static operation = 'client'
+  static system = 'prisma'
+  static prefix = 'tracing:apm:prisma:client'
 
   bindStart (ctx) {
     const service = this.serviceName({ pluginConfig: this.config })

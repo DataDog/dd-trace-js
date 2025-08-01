@@ -17,12 +17,10 @@ const {
 const { DD_MAJOR } = require('../../../version')
 
 class OpenAiTracingPlugin extends TracingPlugin {
-  static get id () { return 'openai' }
-  static get operation () { return 'request' }
-  static get system () { return 'openai' }
-  static get prefix () {
-    return 'tracing:apm:openai:request'
-  }
+  static id = 'openai'
+  static operation = 'request'
+  static system = 'openai'
+  static prefix = 'tracing:apm:openai:request'
 
   constructor (...args) {
     super(...args)
