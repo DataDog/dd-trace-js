@@ -653,7 +653,7 @@ addHook({
 
 addHook({
   name: '@happy-dom/jest-environment',
-  versions: ['>=14.0.0']
+  versions: ['>=10.0.0']
 }, getTestEnvironment)
 
 function getWrappedScheduleTests (scheduleTests, frameworkVersion) {

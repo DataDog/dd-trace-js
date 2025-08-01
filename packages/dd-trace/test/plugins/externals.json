@@ -268,7 +268,7 @@
   "happy-dom": [
     {
       "name": "@happy-dom/jest-environment",
-      "versions": [">=14.0.0"]
+      "versions": [">=10.0.0"]
     }
   ],
   "hono": [
