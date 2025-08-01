@@ -14,6 +14,7 @@ const web = require('../plugins/util/web')
 const {
   startGraphqlResolve,
   graphqlMiddlewareChannel,
+  apolloHttpServerChannel,
   apolloChannel,
   apolloServerCoreChannel
 } = require('./channels')
@@ -55,7 +56,6 @@ function enterInApolloMiddleware (data) {
   if (!req) return
 
   graphqlRequestData.set(req, {
-    inApolloMiddleware: true,
     blocked: false
   })
 }
@@ -70,17 +70,13 @@ function enterInApolloServerCoreRequest () {
   })
 }
 
-function exitFromApolloMiddleware (data) {
-  const req = data?.req || storage('legacy').getStore()?.req
-  const requestData = graphqlRequestData.get(req)
-  if (requestData) requestData.inApolloMiddleware = false
-}
-
 function enterInApolloRequest () {
   const req = storage('legacy').getStore()?.req
 
   const requestData = graphqlRequestData.get(req)
-  if (requestData?.inApolloMiddleware) {
+  if (requestData) {
+    // Set isInGraphqlRequest=true since this function only runs for GraphQL requests
+    // This works for both Apollo v4 (middleware) and v5 (HTTP server) contexts
     requestData.isInGraphqlRequest = true
     addSpecificEndpoint(req.method, req.originalUrl || req.url, specificBlockingTypes.GRAPHQL)
   }
@@ -118,8 +114,7 @@ function beforeWriteApolloGraphqlResponse ({ abortController, abortData }) {
 
 function enableApollo () {
   graphqlMiddlewareChannel.subscribe({
-    start: enterInApolloMiddleware,
-    end: exitFromApolloMiddleware
+    start: enterInApolloMiddleware
   })
 
   apolloServerCoreChannel.subscribe({
@@ -131,12 +126,15 @@ function enableApollo () {
     start: enterInApolloRequest,
     asyncEnd: beforeWriteApolloGraphqlResponse
   })
+
+  apolloHttpServerChannel.subscribe({
+    start: enterInApolloMiddleware
+  })
 }
 
 function disableApollo () {
   graphqlMiddlewareChannel.unsubscribe({
-    start: enterInApolloMiddleware,
-    end: exitFromApolloMiddleware
+    start: enterInApolloMiddleware
   })
 
   apolloServerCoreChannel.unsubscribe({
@@ -147,6 +145,10 @@ function disableApollo () {
   apolloChannel.unsubscribe({
     start: enterInApolloRequest,
     asyncEnd: beforeWriteApolloGraphqlResponse
+  })
+
+  apolloHttpServerChannel.unsubscribe({
+    start: enterInApolloMiddleware
   })
 }
 

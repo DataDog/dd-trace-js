@@ -7,6 +7,9 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const helpers = require('./kinesis_helpers')
 const { rawExpectedSchema } = require('./kinesis-naming')
+const id = require('../../dd-trace/src/id')
+const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
+const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
 
 describe('Kinesis', function () {
   this.timeout(10000)
@@ -17,8 +20,6 @@ describe('Kinesis', function () {
     let kinesis
     let tracer
 
-    const streamName = 'MyStream'
-    const streamNameDSM = 'MyStreamDSM'
     const kinesisClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-kinesis' : 'aws-sdk'
 
     function createResources (streamName, cb) {
@@ -52,15 +53,18 @@ describe('Kinesis', function () {
     })
 
     describe('no configuration', () => {
-      before(() => {
+      let streamName
+
+      beforeEach(() => {
         return agent.load('aws-sdk', { kinesis: { dsmEnabled: false, batchPropagationEnabled: true } }, { dsmEnabled: true })
       })
 
-      before(done => {
+      beforeEach(done => {
+        streamName = `MyStream-${id()}`
         createResources(streamName, done)
       })
 
-      after(done => {
+      afterEach(done => {
         kinesis.deleteStream({
           StreamName: streamName
         }, (err, res) => {
@@ -184,22 +188,40 @@ describe('Kinesis', function () {
     })
 
     describe('DSM Context Propagation', () => {
-      const expectedProducerHash = '15481393933680799703'
-      const expectedConsumerHash = '10538746554122257118'
+      let expectedProducerHash
+      let expectedConsumerHash
       let nowStub
+      let streamNameDSM
 
-      before(() => {
+      beforeEach(() => {
         return agent.load('aws-sdk', { kinesis: { dsmEnabled: true } }, { dsmEnabled: true })
       })
 
-      before(done => {
+      beforeEach(done => {
         tracer = require('../../dd-trace')
         tracer.use('aws-sdk', { kinesis: { dsmEnabled: true } }, { dsmEnabled: true })
+
+        streamNameDSM = `MyStreamDSM-${id()}`
+
+        const producerHash = computePathwayHash(
+          'test',
+          'tester',
+          ['direction:out', 'topic:' + streamNameDSM, 'type:kinesis'],
+          ENTRY_PARENT_HASH
+        )
+
+        expectedProducerHash = producerHash.readBigUInt64BE(0).toString()
+        expectedConsumerHash = computePathwayHash(
+          'test',
+          'tester',
+          ['direction:in', 'topic:' + streamNameDSM, 'type:kinesis'],
+          producerHash
+        ).readBigUInt64BE(0).toString()
 
         createResources(streamNameDSM, done)
       })
 
-      after(done => {
+      afterEach(done => {
         kinesis.deleteStream({
           StreamName: streamNameDSM
         }, (err, res) => {

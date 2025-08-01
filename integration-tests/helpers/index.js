@@ -6,12 +6,15 @@ const { fork, spawn } = childProcess
 const exec = promisify(childProcess.exec)
 const http = require('http')
 const fs = require('fs')
+const { builtinModules } = require('module')
 const os = require('os')
 const path = require('path')
 const assert = require('assert')
 const rimraf = promisify(require('rimraf'))
 const FakeAgent = require('./fake-agent')
 const id = require('../../packages/dd-trace/src/id')
+const { version } = require('../../package.json')
+const { getCappedRange } = require('../../packages/dd-trace/test/plugins/versions')
 
 const hookFile = 'dd-trace/loader-hook.mjs'
 
@@ -168,6 +171,17 @@ function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
 
 async function createSandbox (dependencies = [], isGitRepo = false,
   integrationTestsPaths = ['./integration-tests/*'], followUpCommand) {
+  const cappedDependencies = dependencies.map(dep => {
+    if (builtinModules.includes(dep)) return dep
+
+    const match = dep.replaceAll(/['"]/g, '').match(/^(@?[^@]+)(@(.+))?$/)
+    const name = match[1]
+    const range = match[3] || ''
+    const cappedRange = getCappedRange(name, range)
+
+    return `"${name}@${cappedRange}"`
+  })
+
   // We might use NODE_OPTIONS to init the tracer. We don't want this to affect this operations
   const { NODE_OPTIONS, ...restOfEnv } = process.env
   const noSandbox = String(process.env.TESTING_NO_INTEGRATION_SANDBOX)
@@ -182,14 +196,14 @@ async function createSandbox (dependencies = [], isGitRepo = false,
     return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
   }
   const folder = path.join(os.tmpdir(), id().toString())
-  const out = path.join(folder, 'dd-trace.tgz')
-  const allDependencies = [`file:${out}`].concat(dependencies)
+  const out = path.join(folder, `dd-trace-${version}.tgz`)
+  const allDependencies = [`file:${out}`].concat(cappedDependencies)
 
   fs.mkdirSync(folder)
   const preferOfflineFlag = process.env.OFFLINE === '1' || process.env.OFFLINE === 'true' ? ' --prefer-offline' : ''
   const addCommand = `yarn add ${allDependencies.join(' ')} --ignore-engines${preferOfflineFlag}`
   const addOptions = { cwd: folder, env: restOfEnv }
-  await exec(`yarn pack --filename ${out}`, { env: restOfEnv }) // TODO: cache this
+  await exec(`npm pack --silent --pack-destination ${folder}`, { env: restOfEnv }) // TODO: cache this
 
   try {
     await exec(addCommand, addOptions)

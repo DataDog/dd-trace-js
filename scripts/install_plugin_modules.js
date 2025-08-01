@@ -8,6 +8,7 @@ const semver = require('semver')
 const exec = require('./helpers/exec')
 const externals = require('../packages/dd-trace/test/plugins/externals.json')
 const { getInstrumentation } = require('../packages/dd-trace/test/setup/helpers/load-inst')
+const { getCappedRange } = require('../packages/dd-trace/test/plugins/versions')
 
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
 
@@ -111,7 +112,9 @@ async function assertFolder (name, version) {
  * @param {boolean} external
  */
 async function assertPackage (name, version, dependencyVersionRange, external) {
-  const dependencies = { [name]: dependencyVersionRange }
+  const dependencies = {
+    [name]: getCappedRange(name, dependencyVersionRange)
+  }
   const pkg = {
     name: [name, sha1(name).slice(0, 8), sha1(version)].filter(val => val).join('-'),
     version: '1.0.0',
