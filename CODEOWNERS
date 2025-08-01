@@ -79,6 +79,14 @@
 /packages/dd-trace/src/remote_config/ @DataDog/apm-sdk-api-js
 /packages/dd-trace/test/remote_config/ @DataDog/apm-sdk-api-js
 /packages/dd-trace/src/baggage.js @DataDog/apm-sdk-api-js
+/packages/dd-trace/src/sampler.js @DataDog/apm-sdk-api-js
+/packages/dd-trace/test/sampler.spec.js @DataDog/apm-sdk-api-js
+/packages/dd-trace/src/priority_sampler.js @DataDog/apm-sdk-api-js
+/packages/dd-trace/test/priority_sampler.spec.js @DataDog/apm-sdk-api-js
+/packages/dd-trace/src/sampling_rule.js @DataDog/apm-sdk-api-js
+/packages/dd-trace/test/sampling_rule.spec.js @DataDog/apm-sdk-api-js
+/packages/dd-trace/src/span_sampler.js @DataDog/apm-sdk-api-js
+/packages/dd-trace/test/span_sampler.spec.js @DataDog/apm-sdk-api-js
 
 # CI
 /.github/workflows/apm-capabilities.yml @DataDog/apm-sdk-api-js
