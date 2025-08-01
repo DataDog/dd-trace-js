@@ -19,7 +19,7 @@ describe('sendTelemetry', () => {
 
   beforeEach(() => {
     cleanup = telemetryForwarder()
-    sendTelemetry = proxyquire('../src/guardrails/telemetry', {})
+    sendTelemetry = proxyquire('../../src/guardrails/telemetry', {})
   })
 
   it('should send telemetry', async () => {
@@ -84,7 +84,7 @@ describe('sendTelemetry', () => {
       spawnStub = function () { return mockProc }
 
       telemetryModule = proxyquire('../../src/guardrails/telemetry', {
-        'child_process': { spawn: spawnStub }
+        child_process: { spawn: spawnStub }
       })
     })
 
@@ -112,7 +112,10 @@ describe('sendTelemetry', () => {
 
       assert.strictEqual(telemetryModule.resultMetadata.result, 'error')
       assert.strictEqual(telemetryModule.resultMetadata.result_class, 'internal_error')
-      assert.strictEqual(telemetryModule.resultMetadata.result_reason, 'Failed to write telemetry data to telemetry forwarder')
+      assert.strictEqual(
+        telemetryModule.resultMetadata.result_reason,
+        'Failed to write telemetry data to telemetry forwarder'
+      )
     })
 
     it('should set success metadata when telemetry forwarder exits successfully', () => {

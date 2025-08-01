@@ -80,15 +80,15 @@ function sendTelemetry (name, tags) {
     resultMetadata.result_reason = 'Failed to spawn telemetry forwarder'
   })
   proc.on('exit', function (code) {
-    if (code !== 0) {
+    if (code === 0) {
+      resultMetadata.result = 'success'
+      resultMetadata.result_class = 'success'
+      resultMetadata.result_reason = 'Successfully configured ddtrace package'
+    } else {
       log.error('Telemetry forwarder exited with code', code)
       resultMetadata.result = 'error'
       resultMetadata.result_class = 'internal_error'
       resultMetadata.result_reason = 'Telemetry forwarder exited with code ' + code
-    } else {
-      resultMetadata.result = 'success'
-      resultMetadata.result_class = 'success'
-      resultMetadata.result_reason = 'Successfully configured ddtrace package'
     }
   })
   proc.stdin.on('error', function () {
