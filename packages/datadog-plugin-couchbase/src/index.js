@@ -7,13 +7,13 @@ class CouchBasePlugin extends StoragePlugin {
   static id = 'couchbase'
   static peerServicePrecursors = ['db.couchbase.seed.nodes']
 
-  addSubs (func, start) {
-    this.addSub(`apm:couchbase:${func}:start`, start)
-    this.addSub(`apm:couchbase:${func}:error`, error => this.addError(error))
-    this.addSub(`apm:couchbase:${func}:finish`, message => this.finish(message))
+  addBinds (func, start) {
+    this.addBind(`apm:couchbase:${func}:start`, start)
+    this.addBind(`apm:couchbase:${func}:error`, error => this.addError(error))
+    this.addBind(`apm:couchbase:${func}:finish`, message => this.finish(message))
   }
 
-  startSpan (operation, customTags, store, { bucket, collection, seedNodes }) {
+  startSpan (operation, customTags, { bucket, collection, seedNodes }, ctx) {
     const tags = {
       'db.type': 'couchbase',
       component: 'couchbase',
@@ -34,25 +34,30 @@ class CouchBasePlugin extends StoragePlugin {
       {
         service: this.serviceName({ pluginConfig: this.config }),
         meta: tags
-      }
+      },
+      ctx
     )
   }
 
   constructor (...args) {
     super(...args)
 
-    this.addSubs('query', ({ resource, bucket, seedNodes }) => {
-      const store = storage('legacy').getStore()
-      const span = this.startSpan(
-        'query', {
+    this.addBinds('query', (ctx) => {
+      const { resource, bucket, seedNodes } = ctx
+      console.log('startSpan', 'query')
+
+      this.startSpan(
+        'query',
+        {
           'span.type': 'sql',
           'resource.name': resource,
           'span.kind': this.constructor.kind
         },
-        store,
-        { bucket, seedNodes }
+        { bucket, seedNodes },
+        ctx
       )
-      this.enter(span, store)
+
+      return ctx.currentStore
     })
 
     this._addCommandSubs('upsert')
@@ -63,9 +68,12 @@ class CouchBasePlugin extends StoragePlugin {
   }
 
   _addCommandSubs (name) {
-    this.addSubs(name, ({ bucket, collection, seedNodes }) => {
+    this.addBinds(name, (ctx) => {
+      const { bucket, collection, seedNodes } = ctx
+
       const store = storage('legacy').getStore()
-      const span = this.startSpan(name, {}, store, { bucket, collection, seedNodes })
+      const span = this.startSpan(name, {}, store, { bucket, collection, seedNodes }, ctx)
+
       this.enter(span, store)
     })
   }
