@@ -85,6 +85,10 @@ function sendTelemetry (name, tags) {
       resultMetadata.result = 'error'
       resultMetadata.result_class = 'internal_error'
       resultMetadata.result_reason = 'Telemetry forwarder exited with code ' + code
+    } else {
+      resultMetadata.result = 'success'
+      resultMetadata.result_class = 'success'
+      resultMetadata.result_reason = 'Successfully configured ddtrace package'
     }
   })
   proc.stdin.on('error', function () {
