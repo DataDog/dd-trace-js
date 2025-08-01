@@ -1802,6 +1802,12 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [limitd-client]
+     */
+    interface limitd_client extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
      * [mariadb](https://github.com/mariadb-corporation/mariadb-connector-nodejs) module.
      */
     interface mariadb extends mysql {}

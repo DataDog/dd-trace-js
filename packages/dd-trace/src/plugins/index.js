@@ -64,6 +64,7 @@ module.exports = {
   get '@confluentinc/kafka-javascript' () {
     return require('../../../datadog-plugin-confluentinc-kafka-javascript/src')
   },
+  get 'limitd-client' () { return require('../../../datadog-plugin-limitd-client/src') },
   get langchain () { return require('../../../datadog-plugin-langchain/src') },
   get mariadb () { return require('../../../datadog-plugin-mariadb/src') },
   get memcached () { return require('../../../datadog-plugin-memcached/src') },
