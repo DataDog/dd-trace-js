@@ -7,7 +7,7 @@ class IOValkeyPlugin extends RedisPlugin {
     return 'iovalkey'
   }
 
-  static get system () { return 'valkey' }
+  static system = 'valkey'
 
   constructor (...args) {
     super(...args)
