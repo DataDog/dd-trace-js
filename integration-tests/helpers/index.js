@@ -14,6 +14,7 @@ const rimraf = promisify(require('rimraf'))
 const FakeAgent = require('./fake-agent')
 const id = require('../../packages/dd-trace/src/id')
 const { version } = require('../../package.json')
+const telemetryModule = require('../../packages/dd-trace/src/guardrails/telemetry')
 const { getCappedRange } = require('../../packages/dd-trace/test/plugins/versions')
 
 const hookFile = 'dd-trace/loader-hook.mjs'
@@ -113,7 +114,10 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
       runtime_name: 'nodejs',
       runtime_version: process.versions.node,
       tracer_version: require('../../package.json').version,
-      pid: Number(pid)
+      pid: Number(pid),
+      result: telemetryModule.resultMetadata.result,
+      result_reason: telemetryModule.resultMetadata.result_reason,
+      result_class: telemetryModule.resultMetadata.result_class
     }
   }
 }

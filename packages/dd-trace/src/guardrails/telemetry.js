@@ -4,16 +4,24 @@ var fs = require('fs')
 var spawn = require('child_process').spawn
 var tracerVersion = require('../../../../package.json').version
 var log = require('./log')
+var resultMetadata = {
+  result: 'unknown',
+  result_class: 'unknown',
+  result_reason: 'unknown'
+}
 
 module.exports = sendTelemetry
+module.exports.resultMetadata = resultMetadata
 
 if (!process.env.DD_INJECTION_ENABLED) {
   module.exports = function noop () {}
+  module.exports.resultMetadata = resultMetadata
 }
 
 var telemetryForwarderPath = process.env.DD_TELEMETRY_FORWARDER_PATH
 if (typeof telemetryForwarderPath !== 'string' || !fs.existsSync(telemetryForwarderPath)) {
   module.exports = function noop () {}
+  module.exports.resultMetadata = resultMetadata
 }
 
 var metadata = {
@@ -22,7 +30,10 @@ var metadata = {
   runtime_name: 'nodejs',
   runtime_version: process.versions.node,
   tracer_version: tracerVersion,
-  pid: process.pid
+  pid: process.pid,
+  result: resultMetadata.result,
+  result_reason: resultMetadata.result_reason,
+  result_class: resultMetadata.result_class
 }
 
 var seen = {}
@@ -64,14 +75,27 @@ function sendTelemetry (name, tags) {
   })
   proc.on('error', function () {
     log.error('Failed to spawn telemetry forwarder')
+    resultMetadata.result = 'error'
+    resultMetadata.result_class = 'internal_error'
+    resultMetadata.result_reason = 'Failed to spawn telemetry forwarder'
   })
   proc.on('exit', function (code) {
-    if (code !== 0) {
+    if (code === 0) {
+      resultMetadata.result = 'success'
+      resultMetadata.result_class = 'success'
+      resultMetadata.result_reason = 'Successfully configured ddtrace package'
+    } else {
       log.error('Telemetry forwarder exited with code', code)
+      resultMetadata.result = 'error'
+      resultMetadata.result_class = 'internal_error'
+      resultMetadata.result_reason = 'Telemetry forwarder exited with code ' + code
     }
   })
   proc.stdin.on('error', function () {
     log.error('Failed to write telemetry data to telemetry forwarder')
+    resultMetadata.result = 'error'
+    resultMetadata.result_class = 'internal_error'
+    resultMetadata.result_reason = 'Failed to write telemetry data to telemetry forwarder'
   })
   proc.stdin.end(JSON.stringify({ metadata: metadata, points: points }))
 }
