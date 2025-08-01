@@ -16,6 +16,7 @@ module.exports = {
   '@graphql-tools/executor': () => require('../graphql'),
   '@grpc/grpc-js': () => require('../grpc'),
   '@hapi/hapi': () => require('../hapi'),
+  '@happy-dom/jest-environment': () => require('../jest'),
   '@jest/core': () => require('../jest'),
   '@jest/reporters': () => require('../jest'),
   '@jest/test-sequencer': () => require('../jest'),
