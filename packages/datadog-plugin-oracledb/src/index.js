@@ -10,7 +10,9 @@ class OracledbPlugin extends DatabasePlugin {
   static system = 'oracle'
   static peerServicePrecursors = ['db.instance', 'db.hostname']
 
-  start ({ query, connAttrs, port, hostname, dbInstance }) {
+  bindStart (ctx) {
+    let { query, connAttrs, port, hostname, dbInstance } = ctx
+
     const service = this.serviceName({ pluginConfig: this.config, params: connAttrs })
 
     if (hostname === undefined) {
@@ -33,7 +35,9 @@ class OracledbPlugin extends DatabasePlugin {
         'db.hostname': hostname,
         [CLIENT_PORT_KEY]: port,
       }
-    })
+    }, ctx)
+
+    return ctx.currentStore
   }
 }
 
