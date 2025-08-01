@@ -68,5 +68,4 @@ describe('sendTelemetry', () => {
       assertTelemetryPoints(process.pid, msgs, ['abort.integration', '1'])
     })
   })
-
 })
