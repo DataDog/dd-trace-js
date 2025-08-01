@@ -4,6 +4,7 @@
   "license": "BSD-3-Clause",
   "private": true,
   "dependencies": {
+    "@ai-sdk/openai": "2.0.0",
     "@apollo/gateway": "2.11.2",
     "@apollo/server": "5.0.0",
     "@apollo/subgraph": "2.11.2",
