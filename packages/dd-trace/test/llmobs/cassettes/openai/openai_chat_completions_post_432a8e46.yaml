@@ -1,0 +1,107 @@
+interactions:
+- request:
+    body: '{"model":"gpt-3.5-turbo","temperature":0,"messages":[{"role":"system","content":"You
+      are a helpful assistant"},{"role":"user","content":"What is the weather in Tokyo?"}],"tools":[{"type":"function","function":{"name":"0","description":"Get
+      the weather in a given location","parameters":{"type":"object","properties":{"location":{"type":"string"}},"required":["location"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}}],"tool_choice":"auto"}'
+    headers:
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept
+      : - '*/*'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Encoding
+      : - gzip, deflate
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Language
+      : - '*'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Connection
+      : - keep-alive
+      Content-Length:
+      - '477'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - User-Agent
+      : - node
+      ? !!python/object/apply:multidict._multidict.istr
+      - sec-fetch-mode
+      : - cors
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: "{\n  \"id\": \"chatcmpl-BwXpJ4bsMOqN7ysiNx2KR8VAM7AYl\",\n  \"object\":
+        \"chat.completion\",\n  \"created\": 1753292753,\n  \"model\": \"gpt-3.5-turbo-0125\",\n
+        \ \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\":
+        \"assistant\",\n        \"content\": null,\n        \"tool_calls\": [\n          {\n
+        \           \"id\": \"call_LFHSrYmooFzerd6PWD9dLyFG\",\n            \"type\":
+        \"function\",\n            \"function\": {\n              \"name\": \"0\",\n
+        \             \"arguments\": \"{\\\"location\\\":\\\"Tokyo\\\"}\"\n            }\n
+        \         }\n        ],\n        \"refusal\": null,\n        \"annotations\":
+        []\n      },\n      \"logprobs\": null,\n      \"finish_reason\": \"tool_calls\"\n
+        \   }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 59,\n    \"completion_tokens\":
+        15,\n    \"total_tokens\": 74,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\":
+        0,\n      \"audio_tokens\": 0\n    },\n    \"completion_tokens_details\":
+        {\n      \"reasoning_tokens\": 0,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\":
+        0,\n      \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\":
+        \"default\",\n  \"system_fingerprint\": null\n}\n"
+    headers:
+      CF-RAY:
+      - 963cfe7e7e2541d8-EWR
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Wed, 23 Jul 2025 17:45:54 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=KJL79y8Th_s36MdnbLRCQpT3il_3opAzUBT5XotkUzA-1753292754-1.0.1.1-Ns27LRxgTrqd1K_Yy5UgS5l_4D.qyrueCY8qK06c_vQytx98ufhtHbT0Ft1ZuezOx1r1l5.h4NdJfG45uz0Al7twNhlrVHQe0Er6do.bHUk;
+        path=/; expires=Wed, 23-Jul-25 18:15:54 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=qOem6kD_t2VXr4d3FO7KbL938KMtL5m4ieNQxbAvAvE-1753292754250-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - datadog-staging
+      openai-processing-ms:
+      - '476'
+      openai-project:
+      - proj_gt6TQZPRbZfoY2J9AQlEJMpd
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains; preload
+      x-envoy-upstream-service-time:
+      - '485'
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '50000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '49999983'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_804e3a6d6e25ccebd3da845f7f5fc6fe
+    status:
+      code: 200
+      message: OK
+version: 1

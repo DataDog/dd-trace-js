@@ -61,9 +61,11 @@
 /packages/datadog-plugin-openai/ @DataDog/ml-observability
 /packages/datadog-plugin-langchain/ @DataDog/ml-observability
 /packages/datadog-plugin-google-cloud-vertexai/ @DataDog/ml-observability
+/packages/datadog-plugin-ai/ @DataDog/ml-observability
 /packages/datadog-instrumentations/src/openai.js @DataDog/ml-observability
 /packages/datadog-instrumentations/src/langchain.js @DataDog/ml-observability
 /packages/datadog-instrumentations/src/google-cloud-vertexai.js @DataDog/ml-observability
+/packages/datadog-instrumentations/src/ai.js @DataDog/ml-observability
 /packages/datadog-plugin-aws-sdk/src/services/bedrockruntime @DataDog/ml-observability
 /packages/datadog-plugin-aws-sdk/test/bedrockruntime.spec.js @DataDog/ml-observability
 

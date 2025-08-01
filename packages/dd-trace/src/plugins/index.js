@@ -26,6 +26,7 @@ module.exports = {
   get '@smithy/smithy-client' () { return require('../../../datadog-plugin-aws-sdk/src') },
   get '@vitest/runner' () { return require('../../../datadog-plugin-vitest/src') },
   get aerospike () { return require('../../../datadog-plugin-aerospike/src') },
+  get ai () { return require('../../../datadog-plugin-ai/src') },
   get amqp10 () { return require('../../../datadog-plugin-amqp10/src') },
   get amqplib () { return require('../../../datadog-plugin-amqplib/src') },
   get avsc () { return require('../../../datadog-plugin-avsc/src') },
