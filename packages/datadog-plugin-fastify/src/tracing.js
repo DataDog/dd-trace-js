@@ -17,7 +17,6 @@ class FastifyTracingPlugin extends RouterPlugin {
 
     this.addBind('datadog:fastify:pre-parsing:start', getParentStore)
     this.addBind('datadog:fastify:pre-validation:start', getParentStore)
-    this.addBind('datadog:fastify:add-hook:start', getParentStore)
 
     this.addSub('datadog:fastify:pre-parsing:finish', (ctx) => {
       return ctx.parentStore
@@ -25,9 +24,7 @@ class FastifyTracingPlugin extends RouterPlugin {
     this.addSub('datadog:fastify:pre-validation:finish', (ctx) => {
       return ctx.parentStore
     })
-    this.addSub('datadog:fastify:add-hook:finish', (ctx) => {
-      return ctx.parentStore
-    })
+    this.addSub('datadog:fastify:callback:execute', getParentStore)
   }
 }
 

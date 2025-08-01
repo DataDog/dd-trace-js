@@ -16,8 +16,7 @@ const finishSetHeaderCh = channel('datadog:fastify:set-header:finish')
 // context management channels
 const preParsingCh = channel('datadog:fastify:pre-parsing:start')
 const preValidationCh = channel('datadog:fastify:pre-validation:start')
-const addHookStartCh = channel('datadog:fastify:add-hook:start')
-const addHookFinishCh = channel('datadog:fastify:add-hook:finish')
+const callbackFinishCh = channel('datadog:fastify:callback:execute')
 
 const parsingContexts = new WeakMap()
 const cookiesPublished = new WeakSet()
@@ -64,34 +63,32 @@ function wrapAddHook (addHook) {
         const doneCallback = arguments[arguments.length - 1]
 
         if (typeof doneCallback === 'function') {
-          arguments[arguments.length - 1] = addHookStartCh.runStores(ctx, () => {
-            return function (err) {
-              ctx.error = err
-              publishError(ctx)
+          arguments[arguments.length - 1] = function (err) {
+            ctx.error = err
+            publishError(ctx)
 
-              const hasCookies = request.cookies && Object.keys(request.cookies).length > 0
+            const hasCookies = request.cookies && Object.keys(request.cookies).length > 0
 
-              if (cookieParserReadCh.hasSubscribers && hasCookies && !cookiesPublished.has(req)) {
-                ctx.res = getRes(reply)
-                ctx.abortController = new AbortController()
-                ctx.cookies = request.cookies
+            if (cookieParserReadCh.hasSubscribers && hasCookies && !cookiesPublished.has(req)) {
+              ctx.res = getRes(reply)
+              ctx.abortController = new AbortController()
+              ctx.cookies = request.cookies
 
-                cookieParserReadCh.publish(ctx)
-                cookiesPublished.add(req)
+              cookieParserReadCh.publish(ctx)
+              cookiesPublished.add(req)
 
-                if (ctx.abortController.signal.aborted) return
-              }
-
-              if (name === 'onRequest' || name === 'preParsing') {
-                parsingContexts.set(req, ctx)
-
-                return addHookFinishCh.runStores(ctx, () => {
-                  return doneCallback.apply(this, arguments)
-                })
-              }
-              return doneCallback.apply(this, arguments)
+              if (ctx.abortController.signal.aborted) return
             }
-          })
+
+            if (name === 'onRequest' || name === 'preParsing') {
+              parsingContexts.set(req, ctx)
+
+              return callbackFinishCh.runStores(ctx, () => {
+                return doneCallback.apply(this, arguments)
+              })
+            }
+            return doneCallback.apply(this, arguments)
+          }
 
           return fn.apply(this, arguments)
         }
