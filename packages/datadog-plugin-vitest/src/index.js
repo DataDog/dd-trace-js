@@ -47,9 +47,7 @@ const { DD_MAJOR } = require('../../../version')
 const MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION = 5
 
 class VitestPlugin extends CiPlugin {
-  static get id () {
-    return 'vitest'
-  }
+  static id = 'vitest'
 
   constructor (...args) {
     super(...args)

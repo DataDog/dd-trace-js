@@ -55,7 +55,6 @@ describe('GraphQL', () => {
 
     it('Should subscribe to all channels', () => {
       expect(graphqlMiddlewareChannel.start.hasSubscribers).to.be.false
-      expect(graphqlMiddlewareChannel.end.hasSubscribers).to.be.false
       expect(apolloChannel.start.hasSubscribers).to.be.false
       expect(apolloChannel.asyncEnd.hasSubscribers).to.be.false
       expect(apolloServerCoreChannel.start.hasSubscribers).to.be.false
@@ -65,7 +64,6 @@ describe('GraphQL', () => {
       graphql.enable()
 
       expect(graphqlMiddlewareChannel.start.hasSubscribers).to.be.true
-      expect(graphqlMiddlewareChannel.end.hasSubscribers).to.be.true
       expect(apolloChannel.start.hasSubscribers).to.be.true
       expect(apolloChannel.asyncEnd.hasSubscribers).to.be.true
       expect(apolloServerCoreChannel.start.hasSubscribers).to.be.true
@@ -79,7 +77,6 @@ describe('GraphQL', () => {
       graphql.enable()
 
       expect(graphqlMiddlewareChannel.start.hasSubscribers).to.be.true
-      expect(graphqlMiddlewareChannel.end.hasSubscribers).to.be.true
       expect(apolloChannel.start.hasSubscribers).to.be.true
       expect(apolloChannel.asyncEnd.hasSubscribers).to.be.true
       expect(apolloServerCoreChannel.start.hasSubscribers).to.be.true
@@ -89,7 +86,6 @@ describe('GraphQL', () => {
       graphql.disable()
 
       expect(graphqlMiddlewareChannel.start.hasSubscribers).to.be.false
-      expect(graphqlMiddlewareChannel.end.hasSubscribers).to.be.false
       expect(apolloChannel.start.hasSubscribers).to.be.false
       expect(apolloChannel.asyncEnd.hasSubscribers).to.be.false
       expect(apolloServerCoreChannel.start.hasSubscribers).to.be.false
@@ -190,7 +186,6 @@ describe('GraphQL', () => {
     })
 
     afterEach(() => {
-      graphqlMiddlewareChannel.end.publish({ req })
       graphql.disable()
       sinon.restore()
     })

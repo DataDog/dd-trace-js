@@ -6,7 +6,7 @@ const { parseModelId } = require('./utils')
 const enabledOperations = new Set(['invokeModel'])
 
 class BedrockRuntime extends BaseAwsSdkPlugin {
-  static get id () { return 'bedrockruntime' }
+  static id = 'bedrockruntime'
 
   isEnabled (request) {
     const operation = request.operation

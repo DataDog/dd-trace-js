@@ -6,10 +6,10 @@ const { TEXT_MAP } = require('../../../ext/formats')
 const { addMetadataTags, getFilter, getMethodMetadata } = require('./util')
 
 class GrpcClientPlugin extends ClientPlugin {
-  static get id () { return 'grpc' }
-  static get operation () { return 'client:request' }
-  static get prefix () { return 'apm:grpc:client:request' }
-  static get peerServicePrecursors () { return ['rpc.service'] }
+  static id = 'grpc'
+  static operation = 'client:request'
+  static prefix = 'apm:grpc:client:request'
+  static peerServicePrecursors = ['rpc.service']
 
   constructor (...args) {
     super(...args)

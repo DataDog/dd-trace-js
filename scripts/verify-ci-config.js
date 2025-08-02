@@ -162,7 +162,9 @@ checkPlugins(path.join(__dirname, '..', '.github', 'workflows', 'test-optimizati
 
 const IGNORED_WORKFLOWS = {
   all: [
+    'audit.yml',
     'codeql-analysis.yml',
+    'dependabot-automation.yml',
     'flakiness.yml',
     'pr-labels.yml',
     'release-3.yml',
@@ -174,7 +176,6 @@ const IGNORED_WORKFLOWS = {
     'retry.yml'
   ],
   trigger_pull_request: [
-    'audit.yml',
     'eslint-rules.yml',
     'stale.yml'
   ],

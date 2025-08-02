@@ -91,7 +91,7 @@ describe('OuboundPlugin', () => {
 
     it('should use specific tags in order of precedence if they are available', () => {
       class WithPrecursors extends OutboundPlugin {
-        static get peerServicePrecursors () { return ['foo', 'bar'] }
+        static peerServicePrecursors = ['foo', 'bar']
       }
       const res = new WithPrecursors().getPeerService({
         fooIsNotAPrecursor: 'bar',

@@ -5,7 +5,7 @@ const GoogleVertexAITracingPlugin = require('./tracing')
 const VertexAILLMObsPlugin = require('../../dd-trace/src/llmobs/plugins/vertexai')
 
 class GoogleCloudVertexAIPlugin extends CompositePlugin {
-  static get id () { return 'google-cloud-vertexai' }
+  static id = 'google-cloud-vertexai'
   static get plugins () {
     return {
       llmobs: VertexAILLMObsPlugin,

@@ -5,8 +5,8 @@ const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 const { getAmqpMessageSize, DsmPathwayCodec } = require('../../dd-trace/src/datastreams')
 
 class RheaProducerPlugin extends ProducerPlugin {
-  static get id () { return 'rhea' }
-  static get operation () { return 'send' }
+  static id = 'rhea'
+  static operation = 'send'
 
   constructor (...args) {
     super(...args)

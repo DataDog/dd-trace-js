@@ -10,11 +10,9 @@ function isIterable (obj) {
 }
 
 class OpenAiLLMObsPlugin extends LLMObsPlugin {
-  static get id () { return 'openai' }
-  static get integration () { return 'openai' }
-  static get prefix () {
-    return 'tracing:apm:openai:request'
-  }
+  static id = 'openai'
+  static integration = 'openai'
+  static prefix = 'tracing:apm:openai:request'
 
   getLLMObsSpanRegisterOptions (ctx) {
     const resource = ctx.methodName

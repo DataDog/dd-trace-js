@@ -33,25 +33,17 @@ describe('Plugin Manager', () => {
     const plugins = {
       one: {},
       two: class Two extends FakePlugin {
-        static get id () {
-          return 'two'
-        }
+        static id = 'two'
       },
       three: {},
       four: class Four extends FakePlugin {
-        static get id () {
-          return 'four'
-        }
+        static id = 'four'
       },
       five: class Five extends FakePlugin {
-        static get id () {
-          return 'five'
-        }
+        static id = 'five'
       },
       six: class Six extends FakePlugin {
-        static get id () {
-          return 'six'
-        }
+        static id = 'six'
       },
       seven: {}
     }

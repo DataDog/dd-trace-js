@@ -3,8 +3,8 @@
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
 class FsPlugin extends TracingPlugin {
-  static get id () { return 'fs' }
-  static get operation () { return 'operation' }
+  static id = 'fs'
+  static operation = 'operation'
 
   configure (...args) {
     return super.configure(...args)

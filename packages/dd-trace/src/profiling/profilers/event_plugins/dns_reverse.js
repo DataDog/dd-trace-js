@@ -3,9 +3,7 @@
 const DNSPlugin = require('./dns')
 
 class DNSReversePlugin extends DNSPlugin {
-  static get operation () {
-    return 'reverse'
-  }
+  static operation = 'reverse'
 
   extendEvent (event, startEvent) {
     event.name = 'getHostByAddr'

@@ -7,18 +7,14 @@ const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('../../dd-t
 const { COMPONENT } = require('../../dd-trace/src/constants')
 
 class HttpServerPlugin extends ServerPlugin {
-  static get id () {
-    return 'http'
-  }
+  static id = 'http'
+
+  static prefix = 'apm:http:server:request'
 
   constructor (...args) {
     super(...args)
     this._parentStore = undefined
     this.addTraceSub('exit', message => this.exit(message))
-  }
-
-  addTraceSub (eventName, handler) {
-    this.addSub(`apm:${this.constructor.id}:server:${this.operation}:${eventName}`, handler)
   }
 
   start ({ req, res, abortController }) {

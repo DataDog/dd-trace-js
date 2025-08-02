@@ -5,8 +5,8 @@ const { getMessageSize } = require('../../dd-trace/src/datastreams')
 const { convertToTextMap } = require('./utils')
 
 class KafkajsBatchConsumerPlugin extends ConsumerPlugin {
-  static get id () { return 'kafkajs' }
-  static get operation () { return 'consume-batch' }
+  static id = 'kafkajs'
+  static operation = 'consume-batch'
 
   start (ctx) {
     const { topic, messages, groupId, clusterId } = ctx.extractedArgs || ctx

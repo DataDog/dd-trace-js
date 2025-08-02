@@ -4,10 +4,11 @@ const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const { extractErrorIntoSpanEvent } = require('./utils')
 
 class GraphQLValidatePlugin extends TracingPlugin {
-  static get id () { return 'graphql' }
-  static get operation () { return 'validate' }
+  static id = 'graphql'
+  static operation = 'validate'
 
-  start ({ docSource, document }) {
+  bindStart (ctx) {
+    const { docSource, document } = ctx
     const source = this.config.source && document && docSource
 
     this.startSpan('graphql.validate', {
@@ -16,18 +17,23 @@ class GraphQLValidatePlugin extends TracingPlugin {
       meta: {
         'graphql.source': source
       }
-    })
+    }, ctx)
+
+    return ctx.currentStore
   }
 
-  finish ({ document, errors }) {
-    const span = this.activeSpan
+  finish (ctx) {
+    const { document, errors } = ctx
+    const span = ctx?.currentStore?.span || this.activeSpan
     this.config.hooks.validate(span, document, errors)
     if (errors) {
       for (const err of errors) {
         extractErrorIntoSpanEvent(this._tracerConfig, span, err)
       }
     }
-    super.finish()
+    super.finish(ctx)
+
+    return ctx.parentStore
   }
 }
 

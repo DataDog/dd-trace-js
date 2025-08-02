@@ -3,9 +3,7 @@
 const KafkajsConsumerPlugin = require('../../datadog-plugin-kafkajs/src/consumer')
 
 class ConfluentKafkaJsConsumerPlugin extends KafkajsConsumerPlugin {
-  static get id () {
-    return 'confluentinc-kafka-javascript'
-  }
+  static id = 'confluentinc-kafka-javascript'
 }
 
 module.exports = ConfluentKafkaJsConsumerPlugin

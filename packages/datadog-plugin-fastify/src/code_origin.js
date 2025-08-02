@@ -7,9 +7,7 @@ const web = require('../../dd-trace/src/plugins/util/web')
 const kCodeOriginForSpansTagsSym = Symbol('datadog.codeOriginForSpansTags')
 
 class FastifyCodeOriginForSpansPlugin extends Plugin {
-  static get id () {
-    return 'fastify'
-  }
+  static id = 'fastify'
 
   constructor (...args) {
     super(...args)

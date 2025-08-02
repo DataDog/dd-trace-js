@@ -4,7 +4,7 @@ const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 
 class Lambda extends BaseAwsSdkPlugin {
-  static get id () { return 'lambda' }
+  static id = 'lambda'
 
   generateTags (params, operation, response) {
     if (!params?.FunctionName) return {}

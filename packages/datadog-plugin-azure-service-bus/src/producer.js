@@ -3,8 +3,8 @@
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 
 class AzureServiceBusProducerPlugin extends ProducerPlugin {
-  static get id () { return 'azure-service-bus' }
-  static get operation () { return 'send' }
+  static id = 'azure-service-bus'
+  static operation = 'send'
 
   bindStart (ctx) {
     const { sender, msg } = ctx

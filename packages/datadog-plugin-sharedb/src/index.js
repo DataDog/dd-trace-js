@@ -3,7 +3,7 @@
 const ServerPlugin = require('../../dd-trace/src/plugins/server')
 
 class SharedbPlugin extends ServerPlugin {
-  static get id () { return 'sharedb' }
+  static id = 'sharedb'
 
   bindStart (ctx) {
     const { actionName, request } = ctx

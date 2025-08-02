@@ -2,8 +2,7 @@
 
 const {
   channel,
-  addHook,
-  AsyncResource
+  addHook
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
@@ -14,11 +13,11 @@ const startChannel = channel('apm:oracledb:query:start')
 const errorChannel = channel('apm:oracledb:query:error')
 const finishChannel = channel('apm:oracledb:query:finish')
 
-function finish (err) {
-  if (err) {
-    errorChannel.publish(err)
+function finish (ctx) {
+  if (ctx.error) {
+    errorChannel.publish(ctx)
   }
-  finishChannel.publish()
+  finishChannel.publish(ctx)
 }
 
 addHook({ name: 'oracledb', versions: ['>=5'] }, oracledb => {
@@ -30,49 +29,55 @@ addHook({ name: 'oracledb', versions: ['>=5'] }, oracledb => {
 
       if (arguments.length && typeof arguments[arguments.length - 1] === 'function') {
         const cb = arguments[arguments.length - 1]
-        const outerAr = new AsyncResource('apm:oracledb:outer-scope')
         arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => function wrappedCb (err, result) {
-          finish(err)
-          return outerAr.runInAsyncScope(() => cb.apply(this, arguments))
+          if (err) {
+            ctx.error = err
+            errorChannel.publish(ctx)
+          }
+          return finishChannel.runStores(ctx, () => {
+            return cb.apply(this, arguments)
+          })
         })
       }
 
-      return new AsyncResource('apm:oracledb:inner-scope').runInAsyncScope(() => {
-        // The connAttrs are used to pass through the argument to the potential
-        // serviceName method a user might have passed through as well as parsing
-        // the connection string in v5.
-        const connAttrs = connectionAttributes.get(this)
+      // The connAttrs are used to pass through the argument to the potential
+      // serviceName method a user might have passed through as well as parsing
+      // the connection string in v5.
+      const connAttrs = connectionAttributes.get(this)
 
-        const details = typeof this.hostName === 'string' ? this : this._impl
+      const details = typeof this.hostName === 'string' ? this : this._impl
 
-        let hostname
-        let port
-        let dbInstance
+      let hostname
+      let port
+      let dbInstance
 
-        if (details) {
-          dbInstance = details.serviceName
-          hostname = details.hostName ?? details.nscon?.ntAdapter?.hostName
-          port = String(details.port ?? details.nscon?.ntAdapter?.port ?? '')
-        }
+      if (details) {
+        dbInstance = details.serviceName
+        hostname = details.hostName ?? details.nscon?.ntAdapter?.hostName
+        port = String(details.port ?? details.nscon?.ntAdapter?.port ?? '')
+      }
 
-        startChannel.publish({
-          query: dbQuery,
-          connAttrs,
-          dbInstance,
-          port,
-          hostname,
-        })
+      const ctx = {
+        dbInstance,
+        port,
+        hostname,
+        query: dbQuery,
+        connAttrs
+      }
+
+      return startChannel.runStores(ctx, () => {
         try {
           let result = execute.apply(this, arguments)
 
           if (typeof result?.then === 'function') {
             result = result.then(
               x => {
-                finish()
+                finish(ctx)
                 return x
               },
               e => {
-                finish(e)
+                ctx.error = e
+                finish(ctx)
                 throw e
               }
             )
@@ -80,7 +85,8 @@ addHook({ name: 'oracledb', versions: ['>=5'] }, oracledb => {
 
           return result
         } catch (err) {
-          errorChannel.publish(err)
+          ctx.error = err
+          finish(ctx)
           throw err
         }
       })

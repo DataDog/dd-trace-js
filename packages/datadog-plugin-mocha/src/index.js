@@ -74,9 +74,7 @@ function getTestSuiteLevelVisibilityTags (testSuiteSpan) {
 }
 
 class MochaPlugin extends CiPlugin {
-  static get id () {
-    return 'mocha'
-  }
+  static id = 'mocha'
 
   constructor (...args) {
     super(...args)

@@ -151,7 +151,6 @@ addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0 <4'] }, expor
         methodName,
         args: arguments,
         basePath: this.basePath,
-        apiKey: this.configuration.apiKey
       }
 
       return ch.tracePromise(fn, ctx, this, ...arguments)
@@ -224,7 +223,6 @@ for (const extension of extensions) {
             methodName: `${baseResource}.${methodName}`,
             args: arguments,
             basePath: client.baseURL,
-            apiKey: client.apiKey
           }
 
           return ch.start.runStores(ctx, () => {

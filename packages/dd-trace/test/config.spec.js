@@ -437,7 +437,7 @@ describe('Config', () => {
       { name: 'ciVisibilityTestSessionName', value: '', origin: 'default' },
       { name: 'ciVisAgentlessLogSubmissionEnabled', value: false, origin: 'default' },
       { name: 'isTestDynamicInstrumentationEnabled', value: false, origin: 'default' },
-      { name: 'logInjection', value: 'structured', origin: 'default' },
+      { name: 'logInjection', value: true, origin: 'default' },
       { name: 'lookup', value: undefined, origin: 'default' },
       { name: 'middlewareTracingEnabled', value: true, origin: 'default' },
       { name: 'openai.spanCharLimit', value: 128, origin: 'default' },

@@ -3,8 +3,8 @@
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
 
 class DNSResolvePlugin extends ClientPlugin {
-  static get id () { return 'dns' }
-  static get operation () { return 'resolve' }
+  static id = 'dns'
+  static operation = 'resolve'
 
   bindStart (ctx) {
     const [hostname, maybeType] = ctx.args

@@ -1,7 +1,7 @@
 'use strict'
 const Stepfunctions = require('./stepfunctions')
 class Sfn extends Stepfunctions {
-  static get id () { return 'sfn' }
+  static id = 'sfn'
 }
 
 module.exports = Sfn

@@ -52,6 +52,7 @@ describe('Child process plugin', () => {
         expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
           'command_execution',
           {
+            startTime: undefined,
             childOf: undefined,
             tags: {
               component: 'subprocess',
@@ -75,6 +76,7 @@ describe('Child process plugin', () => {
         expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
           'command_execution',
           {
+            startTime: undefined,
             childOf: undefined,
             tags: {
               component: 'subprocess',
@@ -100,6 +102,7 @@ describe('Child process plugin', () => {
         expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
           'command_execution',
           {
+            startTime: undefined,
             childOf: undefined,
             tags: {
               component: 'subprocess',
@@ -126,6 +129,7 @@ describe('Child process plugin', () => {
         expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
           'command_execution',
           {
+            startTime: undefined,
             childOf: undefined,
             tags: {
               component: 'subprocess',
@@ -153,6 +157,7 @@ describe('Child process plugin', () => {
         expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
           'command_execution',
           {
+            startTime: undefined,
             childOf: undefined,
             tags: {
               component: 'subprocess',
@@ -180,6 +185,7 @@ describe('Child process plugin', () => {
         expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
           'command_execution',
           {
+            startTime: undefined,
             childOf: undefined,
             tags: {
               component: 'subprocess',

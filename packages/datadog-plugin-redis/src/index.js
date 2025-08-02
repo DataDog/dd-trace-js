@@ -5,8 +5,8 @@ const CachePlugin = require('../../dd-trace/src/plugins/cache')
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 
 class RedisPlugin extends CachePlugin {
-  static get id () { return 'redis' }
-  static get system () { return 'redis' }
+  static id = 'redis'
+  static system = 'redis'
 
   constructor (...args) {
     super(...args)

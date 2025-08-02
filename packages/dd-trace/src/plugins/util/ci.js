@@ -28,7 +28,8 @@ const {
   CI_NODE_LABELS,
   CI_NODE_NAME,
   PR_NUMBER,
-  CI_JOB_ID
+  CI_JOB_ID,
+  GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA
 } = require('./tags')
 const { filterSensitiveInfoFromRepository } = require('./url')
 const { getEnvironmentVariable, getEnvironmentVariables } = require('../../config-helper')
@@ -187,7 +188,9 @@ module.exports = {
         CI_RUNNER_ID,
         CI_RUNNER_TAGS,
         CI_MERGE_REQUEST_TARGET_BRANCH_NAME,
-        CI_MERGE_REQUEST_IID
+        CI_MERGE_REQUEST_IID,
+        CI_MERGE_REQUEST_TARGET_BRANCH_SHA,
+        CI_MERGE_REQUEST_DIFF_BASE_SHA
       } = env
 
       const { name, email } = parseEmailAndName(CI_COMMIT_AUTHOR)
@@ -219,7 +222,9 @@ module.exports = {
         [CI_NODE_NAME]: CI_RUNNER_ID,
         [GIT_PULL_REQUEST_BASE_BRANCH]: CI_MERGE_REQUEST_TARGET_BRANCH_NAME,
         [PR_NUMBER]: CI_MERGE_REQUEST_IID,
-        [CI_JOB_ID]: GITLAB_CI_JOB_ID
+        [CI_JOB_ID]: GITLAB_CI_JOB_ID,
+        [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: CI_MERGE_REQUEST_DIFF_BASE_SHA,
+        [GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA]: CI_MERGE_REQUEST_TARGET_BRANCH_SHA
       }
     }
 
@@ -315,7 +320,7 @@ module.exports = {
         tags[GIT_PULL_REQUEST_BASE_BRANCH] = GITHUB_BASE_REF
         try {
           const eventContent = getGitHubEventPayload()
-          tags[GIT_PULL_REQUEST_BASE_BRANCH_SHA] = eventContent.pull_request.base.sha
+          tags[GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA] = eventContent.pull_request.base.sha
           tags[GIT_COMMIT_HEAD_SHA] = eventContent.pull_request.head.sha
         } catch {
           // ignore malformed event content
@@ -522,8 +527,7 @@ module.exports = {
         BUILDKITE_MESSAGE,
         BUILDKITE_AGENT_ID,
         BUILDKITE_PULL_REQUEST,
-        BUILDKITE_PULL_REQUEST_BASE_BRANCH,
-        BUILDKITE_CI_JOB_ID
+        BUILDKITE_PULL_REQUEST_BASE_BRANCH
       } = env
 
       const extraTags = Object.keys(env).filter(envVar =>
@@ -555,7 +559,7 @@ module.exports = {
         [CI_NODE_NAME]: BUILDKITE_AGENT_ID,
         [CI_NODE_LABELS]: JSON.stringify(extraTags),
         [PR_NUMBER]: BUILDKITE_PULL_REQUEST,
-        [CI_JOB_ID]: BUILDKITE_CI_JOB_ID
+        [CI_JOB_ID]: BUILDKITE_JOB_ID
       }
 
       if (BUILDKITE_PULL_REQUEST) {

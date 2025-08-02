@@ -320,20 +320,20 @@ describe('Plugin', () => {
               'type:rabbitmq'
             ], ENTRY_PARENT_HASH)
 
-            expectedProducerHashWithTopic = producerHashWithTopic.readBigUInt64BE(0).toString()
+            expectedProducerHashWithTopic = producerHashWithTopic.readBigUInt64LE(0).toString()
 
             expectedProducerHashWithExchange = computePathwayHash('test', 'tester', [
               'direction:out',
               'exchange:namedExchange',
               'has_routing_key:true',
               'type:rabbitmq'
-            ], ENTRY_PARENT_HASH).readBigUInt64BE(0).toString()
+            ], ENTRY_PARENT_HASH).readBigUInt64LE(0).toString()
 
             expectedConsumerHash = computePathwayHash('test', 'tester', [
               'direction:in',
               `topic:${queue}`,
               'type:rabbitmq'
-            ], producerHashWithTopic).readBigUInt64BE(0).toString()
+            ], producerHashWithTopic).readBigUInt64LE(0).toString()
           })
 
           it('Should emit DSM stats to the agent when sending a message on an unnamed exchange', done => {

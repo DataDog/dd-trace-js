@@ -7,8 +7,8 @@ const { DsmPathwayCodec, getAmqpMessageSize } = require('../../dd-trace/src/data
 const { getResourceName } = require('./util')
 
 class AmqplibProducerPlugin extends ProducerPlugin {
-  static get id () { return 'amqplib' }
-  static get operation () { return 'publish' }
+  static id = 'amqplib'
+  static operation = 'publish'
 
   bindStart (ctx) {
     const { channel = {}, method, fields, message } = ctx

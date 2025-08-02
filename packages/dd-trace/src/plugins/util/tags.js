@@ -21,6 +21,7 @@ const GIT_COMMIT_HEAD_COMMITTER_EMAIL = 'git.commit.head.committer.email'
 const GIT_COMMIT_HEAD_COMMITTER_NAME = 'git.commit.head.committer.name'
 
 const GIT_PULL_REQUEST_BASE_BRANCH_SHA = 'git.pull_request.base_branch_sha'
+const GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA = 'git.pull_request.base_branch_head_sha'
 const GIT_PULL_REQUEST_BASE_BRANCH = 'git.pull_request.base_branch'
 
 const CI_PIPELINE_ID = 'ci.pipeline.id'
@@ -61,6 +62,7 @@ module.exports = {
   GIT_COMMIT_HEAD_COMMITTER_EMAIL,
   GIT_COMMIT_HEAD_COMMITTER_NAME,
   GIT_PULL_REQUEST_BASE_BRANCH_SHA,
+  GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA,
   GIT_PULL_REQUEST_BASE_BRANCH,
   CI_PIPELINE_ID,
   CI_PIPELINE_NAME,

@@ -4,7 +4,7 @@ const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const { getAmqpMessageSize } = require('../../dd-trace/src/datastreams')
 
 class RheaConsumerPlugin extends ConsumerPlugin {
-  static get id () { return 'rhea' }
+  static id = 'rhea'
 
   constructor (...args) {
     super(...args)

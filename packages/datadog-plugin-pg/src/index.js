@@ -4,9 +4,9 @@ const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 
 class PGPlugin extends DatabasePlugin {
-  static get id () { return 'pg' }
-  static get operation () { return 'query' }
-  static get system () { return 'postgres' }
+  static id = 'pg'
+  static operation = 'query'
+  static system = 'postgres'
 
   start ({ params = {}, query, processId, stream }) {
     const service = this.serviceName({ pluginConfig: this.config, params })

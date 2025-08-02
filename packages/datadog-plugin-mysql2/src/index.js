@@ -4,7 +4,7 @@ const { storage } = require('../../datadog-core')
 const MySQLPlugin = require('../../datadog-plugin-mysql/src')
 
 class MySQL2Plugin extends MySQLPlugin {
-  static get id () { return 'mysql2' }
+  static id = 'mysql2'
 
   constructor () {
     super(...arguments)
