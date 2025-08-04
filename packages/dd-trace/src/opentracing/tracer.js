@@ -54,7 +54,8 @@ class DatadogTracer {
 
     // as per spec, allow the setting of service name through options
     const tags = {
-      'service.name': options?.tags?.service ? String(options.tags.service) : this._service
+      'service.name': options?.tags?.service ? String(options.tags.service) : this._service,
+      ...options.tags
     }
 
     // As per unified service tagging spec if a span is created with a service name different from the global
@@ -75,7 +76,6 @@ class DatadogTracer {
     }, this._debug)
 
     span.addTags(this._config.tags)
-    span.addTags(options.tags)
 
     return span
   }
