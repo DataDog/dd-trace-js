@@ -132,7 +132,7 @@ function wrapCBandPromise (fn, name, startData, thisArg, args) {
       if (cbIndex >= 0) {
         // v3 offers callback or promises event handling
         // NOTE: this does not work with v3.2.0-3.2.1 cluster.query, as there is a bug in the couchbase source code
-        args[cbIndex] = shimmer.wrapFunction(args[cbIndex], wrapCallbackFinish(args[cbIndex], thisArg, arguments, errorCh, finishCh, ctx))
+        args[cbIndex] = shimmer.wrapFunction(args[cbIndex], wrapCallbackFinish(args[cbIndex], thisArg, args, errorCh, finishCh, ctx))
       }
       const res = fn.apply(thisArg, args)
 
