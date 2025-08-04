@@ -72,63 +72,51 @@ describe('sendTelemetry', () => {
     })
   })
 
-  describe('error scenarios and metadata', () => {
-    let mockProc, telemetryModule, spawnStub
+    describe('error scenarios and metadata', () => {
+    let mockProc, telemetryModule
 
     beforeEach(() => {
       mockProc = new EventEmitter()
       mockProc.stdin = new EventEmitter()
-      mockProc.stdin.end = function () {}
-      mockProc.pid = 12345
-
-      spawnStub = function () { return mockProc }
+      mockProc.stdin.end = () => {}
 
       telemetryModule = proxyquire('../../src/guardrails/telemetry', {
-        child_process: { spawn: spawnStub }
+        child_process: { spawn: () => mockProc }
       })
     })
+
+    function assertMetadata (result, result_class, result_reason) {
+      assert.strictEqual(telemetryModule.result, result)
+      assert.strictEqual(telemetryModule.result_class, result_class)
+      assert.strictEqual(telemetryModule.result_reason, result_reason)
+    }
 
     it('should set error metadata when telemetry forwarder fails to spawn', () => {
       telemetryModule([{ name: 'test', tags: [] }])
       mockProc.emit('error', new Error('Spawn failed'))
 
-      assert.strictEqual(telemetryModule.result, 'error')
-      assert.strictEqual(telemetryModule.result_class, 'internal_error')
-      assert.strictEqual(telemetryModule.result_reason, 'Failed to spawn telemetry forwarder')
+      assertMetadata('error', 'internal_error', 'Failed to spawn telemetry forwarder')
     })
 
     it('should set error metadata when telemetry forwarder exits with non-zero code', () => {
       telemetryModule([{ name: 'test', tags: [] }])
       mockProc.emit('exit', 1)
 
-      assert.strictEqual(telemetryModule.result, 'error')
-      assert.strictEqual(telemetryModule.result_class, 'internal_error')
-      assert.strictEqual(telemetryModule.result_reason, 'Telemetry forwarder exited with code 1')
+      assertMetadata('error', 'internal_error', 'Telemetry forwarder exited with code 1')
     })
 
     it('should set error metadata when writing to telemetry forwarder fails', () => {
       telemetryModule([{ name: 'test', tags: [] }])
       mockProc.stdin.emit('error', new Error('Write failed'))
 
-      assert.strictEqual(telemetryModule.result, 'error')
-      assert.strictEqual(telemetryModule.result_class, 'internal_error')
-      assert.strictEqual(
-        telemetryModule.result_reason,
-        'Failed to write telemetry data to telemetry forwarder'
-      )
+      assertMetadata('error', 'internal_error', 'Failed to write telemetry data to telemetry forwarder')
     })
 
     it('should set success metadata when telemetry forwarder exits successfully', () => {
-      telemetryModule.result = 'unknown'
-      telemetryModule.result_class = 'unknown'
-      telemetryModule.result_reason = 'unknown'
-
       telemetryModule([{ name: 'test', tags: [] }])
       mockProc.emit('exit', 0)
 
-      assert.strictEqual(telemetryModule.result, 'success')
-      assert.strictEqual(telemetryModule.result_class, 'success')
-      assert.strictEqual(telemetryModule.result_reason, 'Successfully configured ddtrace package')
+      assertMetadata('success', 'success', 'Successfully configured ddtrace package')
     })
   })
 })
