@@ -28,12 +28,10 @@ function wrapAllNames (names, action) {
 }
 
 function wrapCallback (callback, ctx) {
-  return callbackStartCh.runStores(ctx, () => {
-    return function (...args) {
-      return callbackFinishCh.runStores(ctx, () => {
-        return callback.apply(this, args)
-      })
-    }
+  return callbackStartCh.runStores(ctx, function (...args) {
+    return callbackFinishCh.runStores(ctx, () => {
+      return callback.apply(this, args)
+    })
   })
 }
 
