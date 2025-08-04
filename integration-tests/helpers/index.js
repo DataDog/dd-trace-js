@@ -115,9 +115,9 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
       runtime_version: process.versions.node,
       tracer_version: require('../../package.json').version,
       pid: Number(pid),
-      result: telemetryModule.resultMetadata.result,
-      result_reason: telemetryModule.resultMetadata.result_reason,
-      result_class: telemetryModule.resultMetadata.result_class
+      result: telemetryModule.result,
+      result_reason: telemetryModule.result_reason,
+      result_class: telemetryModule.result_class
     }
   }
 }

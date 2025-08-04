@@ -43,9 +43,9 @@ function guard (fn) {
   // should not initialize the tracer.
   if (!clobberBailout && NODE_MAJOR < minMajor) {
     initBailout = true
-    telemetryModule.resultMetadata.result = 'abort'
-    telemetryModule.resultMetadata.result_reason = 'Aborting application instrumentation due to incompatible_runtime.'
-    telemetryModule.resultMetadata.result_class = 'incompatible_runtime'
+    telemetryModule.result = 'abort'
+    telemetryModule.result_reason = 'Aborting application instrumentation due to incompatible_runtime.'
+    telemetryModule.result_class = 'incompatible_runtime'
     telemetry([
       { name: 'abort', tags: ['reason:incompatible_runtime'] },
       { name: 'abort.runtime', tags: [] }
@@ -54,18 +54,18 @@ function guard (fn) {
     log.info('Found incompatible runtime nodejs %s, Supported runtimes: nodejs %s.', version, engines.node)
     if (forced) {
       log.info('DD_INJECT_FORCE enabled, allowing unsupported runtimes and continuing.')
-      telemetryModule.resultMetadata.result = 'success'
-      telemetryModule.resultMetadata.result_reason = 'DD_INJECT_FORCE enabled, allowing unsupported runtimes'
-      telemetryModule.resultMetadata.result_class = 'success_forced'
+      telemetryModule.result = 'success'
+      telemetryModule.result_reason = 'DD_INJECT_FORCE enabled, allowing unsupported runtimes'
+      telemetryModule.result_class = 'success_forced'
     }
   }
 
   if (!clobberBailout && (!initBailout || forced)) {
     // Ensure the instrumentation source is set for the current process and potential child processes.
     var result = fn()
-    telemetryModule.resultMetadata.result = 'success'
-    telemetryModule.resultMetadata.result_reason = 'Successfully configured ddtrace package'
-    telemetryModule.resultMetadata.result_class = 'success'
+    telemetryModule.result = 'success'
+    telemetryModule.result_reason = 'Successfully configured ddtrace package'
+    telemetryModule.result_class = 'success'
     telemetry('complete', ['injection_forced:' + (forced && initBailout ? 'true' : 'false')])
     log.info('Application instrumentation bootstrapping complete')
     return result
