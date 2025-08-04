@@ -3,9 +3,9 @@
 const InboundPlugin = require('./inbound')
 
 class ConsumerPlugin extends InboundPlugin {
-  static get operation () { return 'receive' }
-  static get kind () { return 'consumer' }
-  static get type () { return 'messaging' }
+  static operation = 'receive'
+  static kind = 'consumer'
+  static type = 'messaging'
 
   startSpan (options, enterOrCtx) {
     if (!options.service) {

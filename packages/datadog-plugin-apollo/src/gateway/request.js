@@ -9,10 +9,8 @@ const OPERATION_DEFINITION = 'OperationDefinition'
 const FRAGMENT_DEFINITION = 'FragmentDefinition'
 
 class ApolloGatewayRequestPlugin extends ApolloBasePlugin {
-  static get operation () { return 'request' }
-  static get prefix () {
-    return 'tracing:apm:apollo:gateway:request'
-  }
+  static operation = 'request'
+  static prefix = 'tracing:apm:apollo:gateway:request'
 
   bindStart (ctx) {
     const store = storage('legacy').getStore()

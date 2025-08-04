@@ -3,8 +3,8 @@
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
 
 class DNSLookupServicePlugin extends ClientPlugin {
-  static get id () { return 'dns' }
-  static get operation () { return 'lookup_service' }
+  static id = 'dns'
+  static operation = 'lookup_service'
 
   bindStart (ctx) {
     const [address, port] = ctx.args

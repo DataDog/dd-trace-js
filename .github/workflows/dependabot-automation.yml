@@ -21,7 +21,7 @@ jobs:
           github-token: "${{ steps.octo-sts.outputs.token }}"
       - name: Enable auto-merge for Dependabot PRs
         if: steps.metadata.outputs.dependency-group == 'test-versions'
-        run: gh pr merge --auto --merge "$PR_URL"
+        run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
