@@ -151,6 +151,7 @@ function wrapCBandPromise (fn, name, startData, thisArg, args) {
             callbackFinishCh.runStores(ctx, () => {
               ctx.error = err
               errorCh.publish(ctx)
+              finishCh.publish(ctx)
             })
           }
         )
@@ -207,12 +208,14 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.12'] }, Buc
       callbackStartCh.runStores(ctx, () => {
         emitter.once('rows', () => {
           callbackFinishCh.runStores(ctx, () => {
+            console.log('running bucket prototype finish ch', ctx)
             finishCh.publish(ctx)
           })
         })
 
         emitter.once(errorMonitor, (error) => {
           callbackFinishCh.runStores(ctx, () => {
+            console.log('running bucket prototype error ch', ctx)
             ctx.error = error
             errorCh.publish(ctx)
             finishCh.publish(ctx)
