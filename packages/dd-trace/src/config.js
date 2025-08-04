@@ -483,6 +483,7 @@ class Config {
     defaults.apmTracingEnabled = true
     defaults['appsec.apiSecurity.enabled'] = true
     defaults['appsec.apiSecurity.sampleDelay'] = 30
+    defaults['appsec.TEEEEESSSST'] = 'bonjour'
     defaults['appsec.blockedTemplateGraphql'] = undefined
     defaults['appsec.blockedTemplateHtml'] = undefined
     defaults['appsec.blockedTemplateJson'] = undefined
