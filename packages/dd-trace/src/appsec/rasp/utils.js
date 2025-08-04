@@ -34,9 +34,10 @@ class DatadogRaspAbortError extends Error {
     this.raspRule = raspRule
     this.ruleTriggered = ruleTriggered
 
+    // hide thees props to not pollute app logs
     Object.defineProperties(this, {
       req: { enumerable: false },
-      res: { enumerable: false },
+      res: { enumerable: false }
     })
   }
 }
