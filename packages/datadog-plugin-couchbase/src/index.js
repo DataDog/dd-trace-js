@@ -4,8 +4,8 @@ const StoragePlugin = require('../../dd-trace/src/plugins/storage')
 const { storage } = require('../../datadog-core')
 
 class CouchBasePlugin extends StoragePlugin {
-  static get id () { return 'couchbase' }
-  static get peerServicePrecursors () { return ['db.couchbase.seed.nodes'] }
+  static id = 'couchbase'
+  static peerServicePrecursors = ['db.couchbase.seed.nodes']
 
   addSubs (func, start) {
     this.addSub(`apm:couchbase:${func}:start`, start)

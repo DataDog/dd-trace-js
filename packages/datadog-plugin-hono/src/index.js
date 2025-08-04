@@ -4,9 +4,7 @@ const RouterPlugin = require('../../datadog-plugin-router/src')
 const web = require('../../dd-trace/src/plugins/util/web')
 
 class HonoPlugin extends RouterPlugin {
-  static get id () {
-    return 'hono'
-  }
+  static id = 'hono'
 
   constructor (...args) {
     super(...args)

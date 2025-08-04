@@ -3,8 +3,8 @@
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
 
 class NetIPCPlugin extends ClientPlugin {
-  static get id () { return 'net' }
-  static get operation () { return 'ipc' }
+  static id = 'net'
+  static operation = 'ipc'
 
   bindStart (ctx) {
     this.startSpan('ipc.connect', {

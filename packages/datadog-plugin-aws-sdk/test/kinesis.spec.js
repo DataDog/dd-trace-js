@@ -210,13 +210,13 @@ describe('Kinesis', function () {
           ENTRY_PARENT_HASH
         )
 
-        expectedProducerHash = producerHash.readBigUInt64BE(0).toString()
+        expectedProducerHash = producerHash.readBigUInt64LE(0).toString()
         expectedConsumerHash = computePathwayHash(
           'test',
           'tester',
           ['direction:in', 'topic:' + streamNameDSM, 'type:kinesis'],
           producerHash
-        ).readBigUInt64BE(0).toString()
+        ).readBigUInt64LE(0).toString()
 
         createResources(streamNameDSM, done)
       })

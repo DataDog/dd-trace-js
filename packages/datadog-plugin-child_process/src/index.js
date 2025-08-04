@@ -28,8 +28,8 @@ function truncateCommand (cmdFields) {
 }
 
 class ChildProcessPlugin extends TracingPlugin {
-  static get id () { return 'child_process' }
-  static get prefix () { return 'tracing:datadog:child_process:execution' }
+  static id = 'child_process'
+  static prefix = 'tracing:datadog:child_process:execution'
 
   get tracer () {
     return this._tracer
