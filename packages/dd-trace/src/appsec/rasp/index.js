@@ -6,7 +6,7 @@ const {
   expressMiddlewareError,
   fastifyMiddlewareError
 } = require('../channels')
-const { delegateBlock, isBlocked } = require('../blocking')
+const { block, delegateBlock, isBlocked } = require('../blocking')
 const ssrf = require('./ssrf')
 const sqli = require('./sql_injection')
 const lfi = require('./lfi')
@@ -43,7 +43,7 @@ function findDatadogRaspAbortError (err, deep = 10) {
 }
 
 function handleUncaughtExceptionMonitor (error) {
-  if (!blockOnDatadogRaspAbortError({ error })) return
+  if (!blockOnDatadogRaspAbortError({ error, isTopLevel: true })) return
 
   if (process.hasUncaughtExceptionCaptureCallback()) {
     // uncaughtException event is not executed when hasUncaughtExceptionCaptureCallback is true
@@ -85,13 +85,14 @@ function handleUncaughtExceptionMonitor (error) {
   }
 }
 
-function blockOnDatadogRaspAbortError ({ error }) {
+function blockOnDatadogRaspAbortError ({ error, isTopLevel }) {
   const abortError = findDatadogRaspAbortError(error)
   if (!abortError) return false
 
   const { req, res, blockingAction, raspRule, ruleTriggered } = abortError
   if (!isBlocked(res)) {
-    const blocked = delegateBlock(req, res, web.root(req), null, blockingAction, true)
+    const blockingFn = isTopLevel ? block : delegateBlock
+    const blocked = blockingFn(req, res, web.root(req), null, blockingAction, true)
     if (ruleTriggered) {
       updateRaspRuleMatchMetricTags(req, raspRule, true, blocked)
     }
