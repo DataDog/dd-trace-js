@@ -10,7 +10,6 @@ const shimmer = require('../../datadog-shimmer')
 // these channels are for maintaining store context for their respective methods
 const callbackStartCh = channel('apm:couchbase:query:callback:start')
 const callbackFinishCh = channel('apm:couchbase:query:callback:finish')
-const queryCh = channel('apm:couchbase:query')
 
 function findCallbackIndex (args, lowerbound = 2) {
   for (let i = args.length - 1; i >= lowerbound; i--) {

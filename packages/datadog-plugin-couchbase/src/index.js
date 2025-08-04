@@ -11,6 +11,11 @@ class CouchBasePlugin extends StoragePlugin {
     this.addBind(`apm:couchbase:${func}:start`, start)
     this.addBind(`apm:couchbase:${func}:error`, error => this.addError(error))
     this.addBind(`apm:couchbase:${func}:finish`, message => this.finish(message))
+    this.addBind(`apm:couchbase:callback:start`, ctx => {
+      ctx.parentStore = storage('legacy').getStore()
+      return ctx.parentStore
+    })
+    this.addBind(`apm:couchbase:callback:finish`, ctx => ctx.parentStore)
   }
 
   startSpan (operation, customTags, { bucket, collection, seedNodes }, ctx) {
