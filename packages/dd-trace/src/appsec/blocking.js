@@ -135,14 +135,20 @@ function block (req, res, rootSpan, abortController, actionParameters = defaultB
 const blockDelegations = new WeakMap()
 
 function delegateBlock (req, res) {
-  blockDelegations.set(res, arguments)
+  const args = arguments
+
+  return new Promise((resolve) => {
+    blockDelegations.set(res, { args, resolve })
+  })
 }
 
 function blockDelegates (res) {
-  const args = blockDelegations.get(res)
-  if (args) {
+  const delegation = blockDelegations.get(res)
+  if (delegation) {
     blockDelegations.delete(res)
-    return block.apply(this, args)
+
+    const result = block.apply(this, delegation.args)
+    delegation.resolve(result)
   }
 }
 

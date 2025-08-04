@@ -91,10 +91,13 @@ function blockOnDatadogRaspAbortError ({ error, isTopLevel }) {
 
   const { req, res, blockingAction, raspRule, ruleTriggered } = abortError
   if (!isBlocked(res)) {
-    const blockingFn = isTopLevel ? block : delegateBlock
-    const blocked = blockingFn(req, res, web.root(req), null, blockingAction, true)
+    const blockFn = isTopLevel ? block : delegateBlock
+    const blocked = blockFn(req, res, web.root(req), null, blockingAction)
+
     if (ruleTriggered) {
-      updateRaspRuleMatchMetricTags(req, raspRule, true, blocked)
+      Promise.resolve(blocked).then(blocked => {
+        updateRaspRuleMatchMetricTags(req, raspRule, true, blocked)
+      })
     }
   }
 
