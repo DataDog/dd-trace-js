@@ -140,16 +140,22 @@ function wrapCBandPromise (fn, name, startData, thisArg, args) {
       const res = fn.apply(thisArg, args)
 
       // semver >=3 will always return promise by default
-      res.then(
-        (result) => {
-          ctx.result = result
-          finishCh.publish(ctx)
-        },
-        (err) => {
-          ctx.error = err
-          errorCh.publish(ctx)
-        }
-      )
+      callbackStartCh.runStores(ctx, () => {
+        res.then(
+          (result) => {
+            callbackFinishCh.runStores(ctx, () => {
+              ctx.result = result
+              finishCh.publish(ctx)
+            })
+          },
+          (err) => {
+            callbackFinishCh.runStores(ctx, () => {
+              ctx.error = err
+              errorCh.publish(ctx)
+            })
+          }
+        )
+      })
       return res
     } catch (e) {
       e.stack
@@ -185,8 +191,8 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.12'] }, Buc
   const finishCh = channel('apm:couchbase:query:finish')
   const errorCh = channel('apm:couchbase:query:error')
 
-  shimmer.wrap(Bucket.prototype, '_maybeInvoke', wrapMaybeInvoke)
-  shimmer.wrap(Bucket.prototype, 'query', wrapQuery)
+  shimmer.wrap(Bucket.prototype, '_maybeInvoke', maybeInvoke => wrapMaybeInvoke(maybeInvoke))
+  shimmer.wrap(Bucket.prototype, 'query', query => wrapQuery(query))
 
   shimmer.wrap(Bucket.prototype, '_n1qlReq', _n1qlReq => function (host, q, adhoc, emitter) {
     if (!startCh.hasSubscribers) {
@@ -199,14 +205,20 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.12'] }, Buc
 
     const ctx = { resource: n1qlQuery, bucket: { name: this.name || this._name }, seedNodes: this._dd_hosts }
     return startCh.runStores(ctx, () => {
-      emitter.once('rows', () => {
-        finishCh.publish(ctx)
-      })
+      callbackStartCh.runStores(ctx, () => {
+        emitter.once('rows', () => {
+          callbackFinishCh.runStores(ctx, () => {
+            finishCh.publish(ctx)
+          })
+        })
 
-      emitter.once(errorMonitor, (error) => {
-        ctx.error = error
-        errorCh.publish(ctx)
-        finishCh.publish(ctx)
+        emitter.once(errorMonitor, (error) => {
+          callbackFinishCh.runStores(ctx, () => {
+            ctx.error = error
+            errorCh.publish(ctx)
+            finishCh.publish(ctx)
+          })
+        })
       })
 
       try {
@@ -229,8 +241,8 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.12'] }, Buc
 })
 
 addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^2.6.12'] }, Cluster => {
-  shimmer.wrap(Cluster.prototype, '_maybeInvoke', wrapMaybeInvoke)
-  shimmer.wrap(Cluster.prototype, 'query', wrapQuery)
+  shimmer.wrap(Cluster.prototype, '_maybeInvoke', maybeInvoke => wrapMaybeInvoke(maybeInvoke))
+  shimmer.wrap(Cluster.prototype, 'query', query => wrapQuery(query))
 
   shimmer.wrap(Cluster.prototype, 'openBucket', openBucket => {
     return function () {
