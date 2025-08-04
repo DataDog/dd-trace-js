@@ -27,7 +27,7 @@ describe('Plugin', () => {
       }
 
       beforeEach(() => {
-        return agent.load(['mongodb-core'])
+        return agent.load(['mongodb-core', 'mongoose'])
       })
 
       beforeEach(async () => {

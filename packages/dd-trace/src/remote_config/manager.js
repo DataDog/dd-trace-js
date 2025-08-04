@@ -22,7 +22,7 @@ const kSupportsAckCallback = Symbol('kSupportsAckCallback')
 // There MUST NOT exist separate instances of RC clients in a tracer making separate ClientGetConfigsRequest
 // with their own separated Client.ClientState.
 class RemoteConfigManager extends EventEmitter {
-  static get kPreUpdate () { return kPreUpdate }
+  static kPreUpdate = kPreUpdate
 
   constructor (config) {
     super()

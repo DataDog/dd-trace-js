@@ -27,9 +27,7 @@ function getTestSpanFromTrace (trace) {
 }
 
 class SeleniumPlugin extends CiPlugin {
-  static get id () {
-    return 'selenium'
-  }
+  static id = 'selenium'
 
   constructor (...args) {
     super(...args)
