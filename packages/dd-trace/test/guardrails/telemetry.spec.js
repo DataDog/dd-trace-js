@@ -80,7 +80,7 @@ describe('sendTelemetry', () => {
       mockProc.stdin = new EventEmitter()
       mockProc.stdin.end = () => {}
 
-      telemetryModule = proxyquire('../../src/guardrails/telemetry', {
+      telemetryModule = proxyquire('../src/guardrails/telemetry', {
         child_process: { spawn: () => mockProc }
       })
     })

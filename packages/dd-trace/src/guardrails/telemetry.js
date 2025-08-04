@@ -4,6 +4,7 @@ var fs = require('fs')
 var spawn = require('child_process').spawn
 var tracerVersion = require('../../../../package.json').version
 var log = require('./log')
+
 module.exports = sendTelemetry
 module.exports.result = 'unknown'
 module.exports.resultClass = 'unknown'
@@ -25,15 +26,15 @@ if (typeof telemetryForwarderPath !== 'string' || !fs.existsSync(telemetryForwar
 }
 
 var metadata = {
-    language_name: 'nodejs',
-    language_version: process.versions.node,
-    runtime_name: 'nodejs',
-    runtime_version: process.versions.node,
-    tracer_version: tracerVersion,
-    pid: process.pid,
-    result: module.exports.result,
-    resultReason: module.exports.resultReason,
-    resultClass: module.exports.resultClass
+  language_name: 'nodejs',
+  language_version: process.versions.node,
+  runtime_name: 'nodejs',
+  runtime_version: process.versions.node,
+  tracer_version: tracerVersion,
+  pid: process.pid,
+  result: module.exports.result,
+  resultReason: module.exports.resultReason,
+  resultClass: module.exports.resultClass
 }
 
 var seen = {}
