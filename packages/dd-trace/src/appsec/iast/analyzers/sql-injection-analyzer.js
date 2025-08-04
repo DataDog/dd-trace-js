@@ -24,7 +24,7 @@ class SqlInjectionAnalyzer extends StoredInjectionAnalyzer {
     )
     this.addSub('datadog:sequelize:query:finish', () => this.returnToParentStore())
 
-    this.addSub('datadog:pg:pool:query:start', ({ query }) => this.setStoreAndAnalyze(query.text, 'POSTGRES'))
+    this.addBind('datadog:pg:pool:query:start', ({ query }) => this.getStoreAndAnalyze(query.text, 'POSTGRES'))
     this.addSub('datadog:pg:pool:query:finish', () => this.returnToParentStore())
 
     this.addSub('datadog:mysql:pool:query:start', ({ sql }) => this.setStoreAndAnalyze(sql, 'MYSQL'))
