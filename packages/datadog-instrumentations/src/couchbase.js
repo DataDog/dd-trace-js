@@ -30,9 +30,9 @@ function wrapAllNames (names, action) {
 function wrapCallback (callback) {
   const ctx = {}
   return callbackStartCh.runStores(ctx, () => {
-    return function () {
+    return function (...args) {
       return callbackFinishCh.runStores(ctx, () => {
-        return callback.apply(this, arguments)
+        return callback.apply(this, args)
       })
     }
   })
