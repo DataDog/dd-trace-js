@@ -92,8 +92,8 @@ class OutboundPlugin extends TracingPlugin {
   }
 
   finish (ctx) {
-    console.log('finish', 'query')
     const span = ctx?.currentStore?.span || this.activeSpan
+    console.log('finish', 'query', span)
     this.tagPeerService(span)
     super.finish(...arguments)
   }
