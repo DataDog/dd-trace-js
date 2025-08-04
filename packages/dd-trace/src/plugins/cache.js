@@ -3,7 +3,7 @@
 const StoragePlugin = require('./storage')
 
 class CachePlugin extends StoragePlugin {
-  static get operation () { return 'command' }
+  static operation = 'command'
 
   startSpan (options, ctx) {
     if (!options.kind) {

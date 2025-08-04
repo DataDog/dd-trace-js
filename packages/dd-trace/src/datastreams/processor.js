@@ -17,8 +17,9 @@ const ENTRY_PARENT_HASH = Buffer.from('0000000000000000', 'hex')
 
 class StatsPoint {
   constructor (hash, parentHash, edgeTags) {
-    this.hash = hash.readBigUInt64BE()
-    this.parentHash = parentHash.readBigUInt64BE()
+    this.hash = hash.readBigUInt64LE()
+    this.parentHash = parentHash.readBigUInt64LE()
+
     this.edgeTags = edgeTags
     this.edgeLatency = new LogCollapsingLowestDenseDDSketch()
     this.pathwayLatency = new LogCollapsingLowestDenseDDSketch()
@@ -191,7 +192,7 @@ class DataStreamsProcessor {
       .addLatencies(checkpoint)
     // set DSM pathway hash on span to enable related traces feature on DSM tab, convert from buffer to uint64
     if (span) {
-      span.setTag(PATHWAY_HASH, checkpoint.hash.readBigUInt64BE(0).toString())
+      span.setTag(PATHWAY_HASH, checkpoint.hash.readBigUInt64LE(0).toString())
     }
   }
 

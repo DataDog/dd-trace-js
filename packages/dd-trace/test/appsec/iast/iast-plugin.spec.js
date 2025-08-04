@@ -381,7 +381,7 @@ describe('IAST Plugin', () => {
 
   describe('Add sub to iast plugin', () => {
     class BadPlugin extends IastPlugin {
-      static get id () { return 'badPlugin' }
+      static id = 'badPlugin'
 
       constructor () {
         super()
@@ -393,7 +393,7 @@ describe('IAST Plugin', () => {
       }
     }
     class GoodPlugin extends IastPlugin {
-      static get id () { return 'goodPlugin' }
+      static id = 'goodPlugin'
 
       constructor () {
         super()

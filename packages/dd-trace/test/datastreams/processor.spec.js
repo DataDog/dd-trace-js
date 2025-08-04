@@ -65,8 +65,8 @@ describe('StatsPoint', () => {
     payloadSize.accept(100)
 
     const encoded = aggStats.encode()
-    expect(encoded.Hash.toString(16)).to.equal(DEFAULT_CURRENT_HASH.toString('hex'))
-    expect(encoded.ParentHash.toString(16)).to.equal(DEFAULT_PARENT_HASH.toString('hex'))
+    expect(encoded.Hash).to.equal(DEFAULT_CURRENT_HASH.readBigUInt64LE())
+    expect(encoded.ParentHash).to.equal(DEFAULT_PARENT_HASH.readBigUInt64LE())
     expect(encoded.EdgeTags).to.deep.equal(aggStats.edgeTags)
     expect(encoded.EdgeLatency).to.deep.equal(edgeLatency.toProto())
     expect(encoded.PathwayLatency).to.deep.equal(pathwayLatency.toProto())
@@ -277,8 +277,8 @@ describe('DataStreamsProcessor', () => {
     payloadSize.accept(mockCheckpoint.payloadSize)
 
     const encoded = checkpointBucket.encode()
-    expect(encoded.Hash.toString(16)).to.equal(DEFAULT_CURRENT_HASH.toString('hex'))
-    expect(encoded.ParentHash.toString(16)).to.equal(DEFAULT_PARENT_HASH.toString('hex'))
+    expect(encoded.Hash).to.equal(DEFAULT_CURRENT_HASH.readBigUInt64LE())
+    expect(encoded.ParentHash).to.equal(DEFAULT_PARENT_HASH.readBigUInt64LE())
     expect(encoded.EdgeTags).to.deep.equal(mockCheckpoint.edgeTags)
     expect(encoded.EdgeLatency).to.deep.equal(edgeLatency.toProto())
     expect(encoded.PathwayLatency).to.deep.equal(pathwayLatency.toProto())
@@ -296,8 +296,8 @@ describe('DataStreamsProcessor', () => {
         Start: 1680000000000n,
         Duration: 10000000000n,
         Stats: [{
-          Hash: DEFAULT_CURRENT_HASH.readBigUInt64BE(),
-          ParentHash: DEFAULT_PARENT_HASH.readBigUInt64BE(),
+          Hash: DEFAULT_CURRENT_HASH.readBigUInt64LE(),
+          ParentHash: DEFAULT_PARENT_HASH.readBigUInt64LE(),
           EdgeTags: mockCheckpoint.edgeTags,
           EdgeLatency: edgeLatency.toProto(),
           PathwayLatency: pathwayLatency.toProto(),

@@ -85,7 +85,7 @@ describe('Plugin', () => {
             const meta = {
               'span.kind': 'producer',
               component: 'kafkajs',
-              'pathway.hash': expectedProducerHash.readBigUInt64BE(0).toString(),
+              'pathway.hash': expectedProducerHash.readBigUInt64LE(0).toString(),
               'messaging.destination.name': testTopic,
               'messaging.kafka.bootstrap.servers': '127.0.0.1:9092'
             }
@@ -253,7 +253,7 @@ describe('Plugin', () => {
               meta: {
                 'span.kind': 'consumer',
                 component: 'kafkajs',
-                'pathway.hash': expectedConsumerHash.readBigUInt64BE(0).toString(),
+                'pathway.hash': expectedConsumerHash.readBigUInt64LE(0).toString(),
                 'messaging.destination.name': testTopic
               },
               resource: testTopic,

@@ -12,9 +12,7 @@ const injectionEnabledTag =
   `injection_enabled:${getEnvironmentVariable('DD_INJECTION_ENABLED') ? 'yes' : 'no'}`
 
 module.exports = class DdTraceApiPlugin extends Plugin {
-  static get id () {
-    return 'dd-trace-api'
-  }
+  static id = 'dd-trace-api'
 
   constructor (...args) {
     super(...args)

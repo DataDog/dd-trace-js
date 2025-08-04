@@ -12,13 +12,9 @@ class Http2ServerPlugin extends ServerPlugin {
     this.addBind('apm:http2:server:response:emit', this.bindEmit)
   }
 
-  static get id () {
-    return 'http2'
-  }
+  static id = 'http2'
 
-  static get prefix () {
-    return 'apm:http2:server:request'
-  }
+  static prefix = 'apm:http2:server:request'
 
   bindStart (ctx) {
     const { req, res } = ctx

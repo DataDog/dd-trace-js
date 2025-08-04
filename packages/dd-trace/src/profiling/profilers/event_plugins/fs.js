@@ -19,17 +19,11 @@ const allowedParams = new Set([
 ])
 
 class FilesystemPlugin extends EventPlugin {
-  static get id () {
-    return 'fs'
-  }
+  static id = 'fs'
 
-  static get operation () {
-    return 'operation'
-  }
+  static operation = 'operation'
 
-  static get entryType () {
-    return 'fs'
-  }
+  static entryType = 'fs'
 
   ignoreEvent (event) {
     // Don't care about sync events, they show up in the event loop samples anyway

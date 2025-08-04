@@ -5,9 +5,9 @@ const BaseAwsSdkPlugin = require('../base')
 const { DsmPathwayCodec, getHeadersSize } = require('../../../dd-trace/src/datastreams')
 
 class Sqs extends BaseAwsSdkPlugin {
-  static get id () { return 'sqs' }
-  static get peerServicePrecursors () { return ['queuename'] }
-  static get isPayloadReporter () { return true }
+  static id = 'sqs'
+  static peerServicePrecursors = ['queuename']
+  static isPayloadReporter = true
 
   constructor (...args) {
     super(...args)

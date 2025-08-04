@@ -6,11 +6,11 @@ const coalesce = require('koalas')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
 class MongodbCorePlugin extends DatabasePlugin {
-  static get id () { return 'mongodb-core' }
-  static get component () { return 'mongodb' }
+  static id = 'mongodb-core'
+  static component = 'mongodb'
   // avoid using db.name for peer.service since it includes the collection name
   // should be removed if one day this will be fixed
-  static get peerServicePrecursors () { return [] }
+  static peerServicePrecursors = []
 
   configure (config) {
     super.configure(config)

@@ -17,7 +17,7 @@ const COMMON_PEER_SVC_SOURCE_TAGS = [
 
 // TODO: Exit span on finish when AsyncResource instances are removed.
 class OutboundPlugin extends TracingPlugin {
-  static get peerServicePrecursors () { return [] }
+  static peerServicePrecursors = []
 
   constructor (...args) {
     super(...args)
