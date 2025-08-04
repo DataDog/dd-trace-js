@@ -99,7 +99,9 @@ function wrap (prefix, fn) {
     return startCh.runStores(ctx, () => {
       const cb = arguments[callbackIndex]
 
-      arguments[callbackIndex] = shimmer.wrapFunction(cb, wrapCallbackFinish(cb, this, arguments, errorCh, finishCh, ctx))
+      arguments[callbackIndex] = shimmer.wrapFunction(cb, (cb) => {
+        return wrapCallbackFinish(cb, this, arguments, errorCh, finishCh, ctx)
+      })
 
       try {
         return fn.apply(this, arguments)
@@ -131,7 +133,9 @@ function wrapCBandPromise (fn, name, startData, thisArg, args) {
       if (cbIndex >= 0) {
         // v3 offers callback or promises event handling
         // NOTE: this does not work with v3.2.0-3.2.1 cluster.query, as there is a bug in the couchbase source code
-        args[cbIndex] = shimmer.wrapFunction(args[cbIndex], wrapCallbackFinish(args[cbIndex], thisArg, args, errorCh, finishCh, ctx))
+        args[cbIndex] = shimmer.wrapFunction(args[cbIndex], (cb) => {
+          return wrapCallbackFinish(cb, thisArg, args, errorCh, finishCh, ctx)
+        })
       }
       const res = fn.apply(thisArg, args)
 
