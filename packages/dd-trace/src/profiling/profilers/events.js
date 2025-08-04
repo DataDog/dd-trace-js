@@ -3,9 +3,12 @@
 const { performance, constants, PerformanceObserver } = require('perf_hooks')
 const { END_TIMESTAMP_LABEL, SPAN_ID_LABEL, LOCAL_ROOT_SPAN_ID_LABEL, encodeProfileAsync } = require('./shared')
 const { Function, Label, Line, Location, Profile, Sample, StringTable, ValueType } = require('pprof-format')
+const PoissonProcessSamplingFilter = require('./poisson')
 const { availableParallelism, effectiveLibuvThreadCount } = require('../libuv-size')
 // perf_hooks uses millis, with fractional part representing nanos. We emit nanos into the pprof file.
 const MS_TO_NS = 1_000_000
+// The number of sampling intervals that need to pass before we reset the Poisson process sampling instant.
+const POISSON_RESET_FACTOR = 2
 
 // While this is an "events profiler", meaning it emits a pprof file based on events observed as
 // perf_hooks events, the emitted pprof file uses the type "timeline".
@@ -371,35 +374,12 @@ class DatadogInstrumentationEventSource {
 }
 
 function createPoissonProcessSamplingFilter (samplingIntervalMillis) {
-  let nextSamplingInstant = performance.now()
-  let currentSamplingInstant = 0
-  setNextSamplingInstant()
-
-  return event => {
-    const endTime = event.startTime + event.duration
-    while (endTime >= nextSamplingInstant) {
-      setNextSamplingInstant()
-    }
-    // An event is sampled if it started before, and ended on or after a sampling instant. The above
-    // while loop will ensure that the ending invariant is always true for the current sampling
-    // instant so we don't have to test for it below. Across calls, the invariant also holds as long
-    // as the events arrive in endTime order. This is true for events coming from
-    // DatadogInstrumentationEventSource; they will be ordered by endTime by virtue of this method
-    // being invoked synchronously with the plugins' finish() handler which evaluates
-    // performance.now(). OTOH, events coming from NodeAPIEventSource (GC in typical setup) might be
-    // somewhat delayed as they are queued by Node, so they can arrive out of order with regard to
-    // events coming from the non-queued source. By omitting the endTime check, we will pass through
-    // some short events that started and ended before the current sampling instant. OTOH, if we
-    // were to check for this.currentSamplingInstant <= endTime, we would discard some long events
-    // that also ended before the current sampling instant. We'd rather err on the side of including
-    // some short events than excluding some long events.
-    return event.startTime < currentSamplingInstant
-  }
-
-  function setNextSamplingInstant () {
-    currentSamplingInstant = nextSamplingInstant
-    nextSamplingInstant -= Math.log(1 - Math.random()) * samplingIntervalMillis
-  }
+  const poissonFilter = new PoissonProcessSamplingFilter({
+    samplingInterval: samplingIntervalMillis,
+    resetInterval: samplingIntervalMillis * POISSON_RESET_FACTOR,
+    now: performance.now.bind(performance)
+  })
+  return poissonFilter.filter.bind(poissonFilter)
 }
 
 /**
