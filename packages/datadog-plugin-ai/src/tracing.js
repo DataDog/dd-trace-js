@@ -4,8 +4,8 @@ const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const { getModelProvider } = require('./utils')
 
 class VercelAITracingPlugin extends TracingPlugin {
-  static get id () { return 'ai' }
-  static get prefix () { return 'tracing:dd-trace:vercel-ai' }
+  static id = 'ai'
+  static prefix = 'tracing:dd-trace:vercel-ai'
 
   bindStart (ctx) {
     const attributes = ctx.attributes

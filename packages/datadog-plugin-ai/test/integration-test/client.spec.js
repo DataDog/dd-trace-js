@@ -6,19 +6,27 @@ const {
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
+const semifies = require('semifies')
+
+function getOpenaiVersion (realVersion) {
+  if (semifies(realVersion, '>=5.0.0')) {
+    return '2.0.0'
+  }
+  return '1.3.23'
+}
 
 describe('esm', () => {
   let agent
   let proc
   let sandbox
 
-  withVersions('ai', 'ai', version => {
+  withVersions('ai', 'ai', (version, _, realVersion) => {
     before(async function () {
       this.timeout(20000)
       sandbox = await createSandbox([
         `ai@${version}`,
-        '@ai-sdk/openai',
-        'zod'
+        `@ai-sdk/openai@${getOpenaiVersion(realVersion)}`,
+        'zod@3.25.75'
       ], false, [
         './packages/datadog-plugin-ai/test/integration-test/*'
       ])

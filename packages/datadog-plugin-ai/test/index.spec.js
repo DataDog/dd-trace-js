@@ -3,18 +3,23 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const { useEnv } = require('../../../integration-tests/helpers')
 const assert = require('node:assert')
+const semifies = require('semifies')
 
 const { NODE_MAJOR } = require('../../../version')
 
 // ai<4.0.2 is not supported in CommonJS with Node.js < 22
 const range = NODE_MAJOR < 22 ? '>=4.0.2' : '>=4.0.0'
 
+function getOpenaiVersion (vercelAiVersion) {
+  return semifies(vercelAiVersion, '>=5.0.0') ? '@ai-sdk/openai@2.0.0' : '@ai-sdk/openai@1.3.23'
+}
+
 describe('Plugin', () => {
   useEnv({
     OPENAI_API_KEY: '<not-a-real-key>'
   })
 
-  withVersions('ai', 'ai', range, version => {
+  withVersions('ai', 'ai', range, (version, _, realVersion) => {
     let ai
     let openai
     let zod
@@ -26,7 +31,7 @@ describe('Plugin', () => {
     beforeEach(function () {
       ai = require(`../../../versions/ai@${version}`).get()
 
-      const OpenAI = require('../../../versions/@ai-sdk/openai').get()
+      const OpenAI = require(`../../../versions/${getOpenaiVersion(realVersion)}`).get()
       openai = OpenAI.createOpenAI({
         baseURL: 'http://127.0.0.1:9126/vcr/openai',
         compatibility: 'strict'
@@ -42,17 +47,17 @@ describe('Plugin', () => {
 
         assert.strictEqual(generateTextSpan.name, 'ai.generateText')
         assert.strictEqual(generateTextSpan.resource, 'ai.generateText')
-        assert.strictEqual(generateTextSpan.meta['ai.request.model'], 'gpt-3.5-turbo')
+        assert.strictEqual(generateTextSpan.meta['ai.request.model'], 'gpt-4o-mini')
         assert.strictEqual(generateTextSpan.meta['ai.request.model_provider'], 'openai')
 
         assert.strictEqual(doGenerateSpan.name, 'ai.generateText.doGenerate')
         assert.strictEqual(doGenerateSpan.resource, 'ai.generateText.doGenerate')
-        assert.strictEqual(doGenerateSpan.meta['ai.request.model'], 'gpt-3.5-turbo')
+        assert.strictEqual(doGenerateSpan.meta['ai.request.model'], 'gpt-4o-mini')
         assert.strictEqual(doGenerateSpan.meta['ai.request.model_provider'], 'openai')
       })
 
       const result = await ai.generateText({
-        model: openai('gpt-3.5-turbo'),
+        model: openai('gpt-4o-mini'),
         system: 'You are a helpful assistant',
         prompt: 'Hello, OpenAI!',
         maxTokens: 100,
@@ -71,17 +76,17 @@ describe('Plugin', () => {
 
         assert.strictEqual(generateObjectSpan.name, 'ai.generateObject')
         assert.strictEqual(generateObjectSpan.resource, 'ai.generateObject')
-        assert.strictEqual(generateObjectSpan.meta['ai.request.model'], 'gpt-3.5-turbo')
+        assert.strictEqual(generateObjectSpan.meta['ai.request.model'], 'gpt-4o-mini')
         assert.strictEqual(generateObjectSpan.meta['ai.request.model_provider'], 'openai')
 
         assert.strictEqual(doGenerateSpan.name, 'ai.generateObject.doGenerate')
         assert.strictEqual(doGenerateSpan.resource, 'ai.generateObject.doGenerate')
-        assert.strictEqual(doGenerateSpan.meta['ai.request.model'], 'gpt-3.5-turbo')
+        assert.strictEqual(doGenerateSpan.meta['ai.request.model'], 'gpt-4o-mini')
         assert.strictEqual(doGenerateSpan.meta['ai.request.model_provider'], 'openai')
       })
 
       const result = await ai.generateObject({
-        model: openai('gpt-3.5-turbo'),
+        model: openai('gpt-4o-mini'),
         schema: zod.object({
           name: zod.string(),
           age: zod.number(),
@@ -154,17 +159,17 @@ describe('Plugin', () => {
 
         assert.strictEqual(streamTextSpan.name, 'ai.streamText')
         assert.strictEqual(streamTextSpan.resource, 'ai.streamText')
-        assert.strictEqual(streamTextSpan.meta['ai.request.model'], 'gpt-3.5-turbo')
+        assert.strictEqual(streamTextSpan.meta['ai.request.model'], 'gpt-4o-mini')
         assert.strictEqual(streamTextSpan.meta['ai.request.model_provider'], 'openai')
 
         assert.strictEqual(doStreamSpan.name, 'ai.streamText.doStream')
         assert.strictEqual(doStreamSpan.resource, 'ai.streamText.doStream')
-        assert.strictEqual(doStreamSpan.meta['ai.request.model'], 'gpt-3.5-turbo')
+        assert.strictEqual(doStreamSpan.meta['ai.request.model'], 'gpt-4o-mini')
         assert.strictEqual(doStreamSpan.meta['ai.request.model_provider'], 'openai')
       })
 
       const result = await ai.streamText({
-        model: openai('gpt-3.5-turbo'),
+        model: openai('gpt-4o-mini'),
         system: 'You are a helpful assistant',
         prompt: 'Hello, OpenAI!',
         maxTokens: 100,
@@ -189,17 +194,17 @@ describe('Plugin', () => {
 
         assert.strictEqual(streamObjectSpan.name, 'ai.streamObject')
         assert.strictEqual(streamObjectSpan.resource, 'ai.streamObject')
-        assert.strictEqual(streamObjectSpan.meta['ai.request.model'], 'gpt-3.5-turbo')
+        assert.strictEqual(streamObjectSpan.meta['ai.request.model'], 'gpt-4o-mini')
         assert.strictEqual(streamObjectSpan.meta['ai.request.model_provider'], 'openai')
 
         assert.strictEqual(doStreamSpan.name, 'ai.streamObject.doStream')
         assert.strictEqual(doStreamSpan.resource, 'ai.streamObject.doStream')
-        assert.strictEqual(doStreamSpan.meta['ai.request.model'], 'gpt-3.5-turbo')
+        assert.strictEqual(doStreamSpan.meta['ai.request.model'], 'gpt-4o-mini')
         assert.strictEqual(doStreamSpan.meta['ai.request.model_provider'], 'openai')
       })
 
       const result = await ai.streamObject({
-        model: openai('gpt-3.5-turbo'),
+        model: openai('gpt-4o-mini'),
         schema: zod.object({
           name: zod.string(),
           age: zod.number(),
@@ -228,12 +233,12 @@ describe('Plugin', () => {
 
         assert.strictEqual(toolCallSpan.name, 'ai.generateText')
         assert.strictEqual(toolCallSpan.resource, 'ai.generateText')
-        assert.strictEqual(toolCallSpan.meta['ai.request.model'], 'gpt-3.5-turbo')
+        assert.strictEqual(toolCallSpan.meta['ai.request.model'], 'gpt-4o-mini')
         assert.strictEqual(toolCallSpan.meta['ai.request.model_provider'], 'openai')
 
         assert.strictEqual(doGenerateSpan.name, 'ai.generateText.doGenerate')
         assert.strictEqual(doGenerateSpan.resource, 'ai.generateText.doGenerate')
-        assert.strictEqual(doGenerateSpan.meta['ai.request.model'], 'gpt-3.5-turbo')
+        assert.strictEqual(doGenerateSpan.meta['ai.request.model'], 'gpt-4o-mini')
         assert.strictEqual(doGenerateSpan.meta['ai.request.model_provider'], 'openai')
 
         assert.strictEqual(toolCallSpan2.name, 'ai.toolCall')
@@ -241,25 +246,49 @@ describe('Plugin', () => {
 
         assert.strictEqual(doGenerateSpan2.name, 'ai.generateText.doGenerate')
         assert.strictEqual(doGenerateSpan2.resource, 'ai.generateText.doGenerate')
-        assert.strictEqual(doGenerateSpan2.meta['ai.request.model'], 'gpt-3.5-turbo')
+        assert.strictEqual(doGenerateSpan2.meta['ai.request.model'], 'gpt-4o-mini')
         assert.strictEqual(doGenerateSpan2.meta['ai.request.model_provider'], 'openai')
       })
 
-      const getWeather = ai.tool({
-        id: 'get_weather',
-        description: 'Get the weather in a given location',
-        parameters: zod.object({
-          location: zod.string()
-        }),
-        execute: async ({ location }) => `It is nice and sunny in ${location}.`
-      })
+      let tools
+      let maxStepsArg = {}
+      if (semifies(realVersion, '>=5.0.0')) {
+        tools = {
+          weather: ai.tool({
+            description: 'Get the weather in a given location',
+            inputSchema: zod.object({
+              location: zod.string().describe('The location to get the weather for')
+            }),
+            execute: async ({ location }) => ({
+              location,
+              temperature: 72
+            })
+          })
+        }
+
+        maxStepsArg = { stopWhen: ai.stepCountIs(5) }
+      } else {
+        tools = [ai.tool({
+          id: 'weather',
+          description: 'Get the weather in a given location',
+          parameters: zod.object({
+            location: zod.string().describe('The location to get the weather for')
+          }),
+          execute: async ({ location }) => ({
+            location,
+            temperature: 72
+          })
+        })]
+
+        maxStepsArg = { maxSteps: 5 }
+      }
 
       const result = await ai.generateText({
-        model: openai('gpt-3.5-turbo'),
+        model: openai('gpt-4o-mini'),
         system: 'You are a helpful assistant',
         prompt: 'What is the weather in Tokyo?',
-        tools: [getWeather],
-        maxSteps: 2,
+        tools,
+        ...maxStepsArg,
       })
 
       assert.ok(result.text, 'Expected result to be truthy')

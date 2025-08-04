@@ -4,7 +4,7 @@
   "license": "BSD-3-Clause",
   "private": true,
   "dependencies": {
-    "@ai-sdk/openai": "2.0.0",
+    "@ai-sdk/openai": "2.0.1",
     "@apollo/gateway": "2.11.2",
     "@apollo/server": "5.0.0",
     "@apollo/subgraph": "2.11.2",
@@ -60,7 +60,7 @@
     "@vitest/coverage-v8": "3.2.4",
     "@vitest/runner": "3.2.4",
     "aerospike": "6.2.0",
-    "ai": "5.0.0",
+    "ai": "5.0.2",
     "amqp10": "3.6.0",
     "amqplib": "0.10.8",
     "apollo-server-core": "3.13.0",
@@ -182,6 +182,7 @@
     "winston": "3.17.0",
     "workerpool": "9.3.3",
     "ws": "8.18.3",
-    "yarn": "1.22.22"
+    "yarn": "1.22.22",
+    "zod": "4.0.14"
   }
 }

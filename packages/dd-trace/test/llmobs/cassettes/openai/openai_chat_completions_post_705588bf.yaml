@@ -1,9 +1,7 @@
 interactions:
 - request:
-    body: '{"model":"gpt-3.5-turbo","temperature":0,"messages":[{"role":"system","content":"You
-      are a helpful assistant"},{"role":"user","content":"What is the weather in Tokyo?"},{"role":"assistant","content":"","tool_calls":[{"id":"call_LFHSrYmooFzerd6PWD9dLyFG","type":"function","function":{"name":"0","arguments":"{\"location\":\"Tokyo\"}"}}]},{"role":"tool","tool_call_id":"call_LFHSrYmooFzerd6PWD9dLyFG","content":"\"It
-      is nice and sunny in Tokyo.\""}],"tools":[{"type":"function","function":{"name":"0","description":"Get
-      the weather in a given location","parameters":{"type":"object","properties":{"location":{"type":"string"}},"required":["location"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}}],"tool_choice":"auto"}'
+    body: '{"model":"gpt-4o-mini","max_tokens":100,"temperature":0.5,"messages":[{"role":"system","content":"You
+      are a helpful assistant"},{"role":"user","content":"Hello, OpenAI!"}]}'
     headers:
       ? !!python/object/apply:multidict._multidict.istr
       - Accept
@@ -18,7 +16,7 @@ interactions:
       - Connection
       : - keep-alive
       Content-Length:
-      - '756'
+      - '172'
       ? !!python/object/apply:multidict._multidict.istr
       - Content-Type
       : - application/json
@@ -32,20 +30,20 @@ interactions:
     uri: https://api.openai.com/v1/chat/completions
   response:
     body:
-      string: "{\n  \"id\": \"chatcmpl-BwXpK5li3gFhYl0TxjvqkJFJC875J\",\n  \"object\":
-        \"chat.completion\",\n  \"created\": 1753292754,\n  \"model\": \"gpt-3.5-turbo-0125\",\n
+      string: "{\n  \"id\": \"chatcmpl-C0qBOZaDUGhDJNfzKZOzLpprdHajy\",\n  \"object\":
+        \"chat.completion\",\n  \"created\": 1754316626,\n  \"model\": \"gpt-4o-mini-2024-07-18\",\n
         \ \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\":
-        \"assistant\",\n        \"content\": \"The weather in Tokyo is nice and sunny.\",\n
+        \"assistant\",\n        \"content\": \"Hello! How can I assist you today?\",\n
         \       \"refusal\": null,\n        \"annotations\": []\n      },\n      \"logprobs\":
         null,\n      \"finish_reason\": \"stop\"\n    }\n  ],\n  \"usage\": {\n    \"prompt_tokens\":
-        89,\n    \"completion_tokens\": 10,\n    \"total_tokens\": 99,\n    \"prompt_tokens_details\":
+        21,\n    \"completion_tokens\": 9,\n    \"total_tokens\": 30,\n    \"prompt_tokens_details\":
         {\n      \"cached_tokens\": 0,\n      \"audio_tokens\": 0\n    },\n    \"completion_tokens_details\":
         {\n      \"reasoning_tokens\": 0,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\":
         0,\n      \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\":
-        \"default\",\n  \"system_fingerprint\": null\n}\n"
+        \"default\",\n  \"system_fingerprint\": \"fp_34a54ae93c\"\n}\n"
     headers:
       CF-RAY:
-      - 963cfe825b507cea-EWR
+      - 969ea35e89e00cef-IAD
       Connection:
       - keep-alive
       Content-Encoding:
@@ -53,14 +51,14 @@ interactions:
       Content-Type:
       - application/json
       Date:
-      - Wed, 23 Jul 2025 17:45:54 GMT
+      - Mon, 04 Aug 2025 14:10:26 GMT
       Server:
       - cloudflare
       Set-Cookie:
-      - __cf_bm=CblgrLf9Q4RKJg0DgloVeux6OltETj7a3sAGkH8tr04-1753292754-1.0.1.1-dXRu8QDnXGAoyD04_dDv1Sc50SCbZ_p3mGaqL8xwfyQYDyb4DSATccgULtesVvvo33qYhGGG0Dht0QXCiLZzKZ9wFUBFh70uClTrs6VZb1w;
-        path=/; expires=Wed, 23-Jul-25 18:15:54 GMT; domain=.api.openai.com; HttpOnly;
+      - __cf_bm=_R.E6SW0mC79XP_9Zb8wTiH3EW8FP7wJh2_edesYnjM-1754316626-1.0.1.1-3A4BMwvEC0a2FpLJAjHW6arKEnFvDPC0deARMMp8UQFJv2q4HOa1djnWyMnlfwAqORCr.nKdyos8lVSFPyvDMD9_x5hXvZrsmuYhX5Wtq00;
+        path=/; expires=Mon, 04-Aug-25 14:40:26 GMT; domain=.api.openai.com; HttpOnly;
         Secure; SameSite=None
-      - _cfuvid=jdudQGAxHn5PfJ_rmblmsQMNtBwOTfjPeNO8tYPQsm0-1753292754844-0.0.1.1-604800000;
+      - _cfuvid=a_AMgGEqpHvzq3xZf6tN58QkiQyEagF.fODHFqos574-1754316626439-0.0.1.1-604800000;
         path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
       Transfer-Encoding:
       - chunked
@@ -75,29 +73,31 @@ interactions:
       openai-organization:
       - datadog-staging
       openai-processing-ms:
-      - '292'
+      - '647'
       openai-project:
       - proj_gt6TQZPRbZfoY2J9AQlEJMpd
       openai-version:
       - '2020-10-01'
       strict-transport-security:
       - max-age=31536000; includeSubDomains; preload
+      x-envoy-decorator-operation:
+      - router.openai.svc.cluster.local:5004/*
       x-envoy-upstream-service-time:
-      - '304'
+      - '685'
       x-ratelimit-limit-requests:
-      - '10000'
+      - '30000'
       x-ratelimit-limit-tokens:
-      - '50000000'
+      - '150000000'
       x-ratelimit-remaining-requests:
-      - '9999'
+      - '29999'
       x-ratelimit-remaining-tokens:
-      - '49999972'
+      - '149999987'
       x-ratelimit-reset-requests:
-      - 6ms
+      - 2ms
       x-ratelimit-reset-tokens:
       - 0s
       x-request-id:
-      - req_8002876edd7485a7f093f15e7aa1cde6
+      - req_324b39ab10a0886eb8af5c960f1fc57a
     status:
       code: 200
       message: OK

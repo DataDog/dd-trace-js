@@ -119,11 +119,61 @@ function getGenerationMetadata (tags) {
   return Object.keys(metadata).length ? metadata : null
 }
 
+/**
+ * Get the tool name from the span tags.
+ * If the tool name is a parsable number, or is not found, null is returned.
+ * Older versions of the ai sdk would tag the tool name as its index in the tools array.
+ *
+ * @param {Record<string, string>} tags
+ * @returns {string | null}
+ */
+function getToolNameFromTags (tags) {
+  const toolName = tags['ai.toolCall.name']
+  if (!toolName) return null
+
+  const parsedToolName = Number.parseInt(toolName)
+  if (!Number.isNaN(parsedToolName)) return null
+
+  return toolName
+}
+
+/**
+ * Get the content of a tool call result.
+ * Version 5 of the ai sdk sets this tag as `content.output`, with a `
+ * @param {Record<string, any>} content
+ * @returns {string}
+ */
+function getToolCallResultContent (content) {
+  const { output, result } = content
+  if (output) {
+    if (output.type === 'text') {
+      return output.value
+    } else if (output.type === 'json') {
+      return JSON.stringify(output.value)
+    }
+    return '[Unparsable Tool Result]'
+  } else if (result) {
+    if (typeof result === 'string') {
+      return result
+    }
+
+    try {
+      return JSON.stringify(result)
+    } catch {
+      return '[Unparsable Tool Result]'
+    }
+  } else {
+    return '[Unsupported Tool Result]'
+  }
+}
+
 module.exports = {
   getSpanTags,
   getOperation,
   getUsage,
   getJsonStringValue,
   getModelMetadata,
-  getGenerationMetadata
+  getGenerationMetadata,
+  getToolNameFromTags,
+  getToolCallResultContent
 }

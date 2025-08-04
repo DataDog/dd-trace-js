@@ -15,7 +15,9 @@ const {
   getUsage,
   getJsonStringValue,
   getModelMetadata,
-  getGenerationMetadata
+  getGenerationMetadata,
+  getToolNameFromTags,
+  getToolCallResultContent
 } = require('./util')
 
 const SPAN_NAME_TO_KIND_MAPPING = {
@@ -37,9 +39,9 @@ const SPAN_NAME_TO_KIND_MAPPING = {
 }
 
 class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
-  static get id () { return 'ai' }
-  static get integration () { return 'ai' }
-  static get prefix () { return 'tracing:dd-trace:vercel-ai' }
+  static id = 'ai'
+  static integration = 'ai'
+  static prefix = 'tracing:dd-trace:vercel-ai'
 
   /**
    * The available tools within the runtime scope of this integration.
@@ -232,11 +234,11 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
 
   setToolTags (span, tags) {
     const toolCallId = tags['ai.toolCall.id']
-    const name = this.#toolCallIdsToName[toolCallId]
+    const name = getToolNameFromTags(tags) ?? this.#toolCallIdsToName[toolCallId]
     if (name) this._tagger._setTag(span, NAME, name)
 
-    const input = getJsonStringValue(tags['ai.toolCall.args'])
-    const output = getJsonStringValue(tags['ai.toolCall.result'])
+    const input = tags['ai.toolCall.args']
+    const output = tags['ai.toolCall.result']
 
     this._tagger.tagTextIO(span, input, output)
   }
@@ -329,16 +331,7 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
       const finalMessages = []
       for (const part of content) {
         if (part.type === 'tool-result') {
-          let safeResult
-          if (typeof part.result === 'string') {
-            safeResult = part.result
-          } else {
-            try {
-              safeResult = JSON.stringify(part.result)
-            } catch {
-              safeResult = '[Unparsable Tool Result]'
-            }
-          }
+          const safeResult = getToolCallResultContent(part)
 
           finalMessages.push({
             role,

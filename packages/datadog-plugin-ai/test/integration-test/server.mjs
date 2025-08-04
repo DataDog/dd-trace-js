@@ -8,7 +8,7 @@ const openai = createOpenAI({
 })
 
 const result = await generateText({
-  model: openai('gpt-3.5-turbo'),
+  model: openai('gpt-4o-mini'),
   system: 'You are a helpful assistant',
   prompt: 'Hello, OpenAI!',
   maxTokens: 100,

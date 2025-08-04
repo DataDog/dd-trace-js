@@ -804,7 +804,7 @@ interactions:
         {\n    \"prompt_tokens\": 5,\n    \"total_tokens\": 5\n  }\n}\n"
     headers:
       CF-RAY:
-      - 963cfe6bbdac8c7b-EWR
+      - 969ea36e5ad9c943-IAD
       Connection:
       - keep-alive
       Content-Encoding:
@@ -812,14 +812,14 @@ interactions:
       Content-Type:
       - application/json
       Date:
-      - Wed, 23 Jul 2025 17:45:50 GMT
+      - Mon, 04 Aug 2025 14:10:28 GMT
       Server:
       - cloudflare
       Set-Cookie:
-      - __cf_bm=s8sY34HPx4dj.HnBAopauaNyl3wiahi1xqMKTqJgERw-1753292750-1.0.1.1-3YNok8t2WqgFyMhVwgAB3KejdZNKmnJQ8FPqmJkbsVOKzX5crC9ZzJa3dRHvZjEgRby8XtiQ5NrrjhQr9dFd98Q7SPEjT4jCfojj0vLoWh8;
-        path=/; expires=Wed, 23-Jul-25 18:15:50 GMT; domain=.api.openai.com; HttpOnly;
+      - __cf_bm=IAcrBsk7rPIUNQ7fIBET8Cw2EoahoWu6eDc6wmx6eQo-1754316628-1.0.1.1-lx37JlUjjc3dG6wwMo8r8UdvDivOuVqYyqjSLLGLCJqb5Wj1tlXfMKBIaDASGhJnuRS_ohMJEDN4j_pcRv7yoyFsCfsFGcRPqosfLL2s9H8;
+        path=/; expires=Mon, 04-Aug-25 14:40:28 GMT; domain=.api.openai.com; HttpOnly;
         Secure; SameSite=None
-      - _cfuvid=Zw4dGKZ0AJiBrvgpSw7ocKcQsxne46dbly.GDJidc.4-1753292750995-0.0.1.1-604800000;
+      - _cfuvid=lw.EQ_IRoBeWlT4wnK0SEHUIFjAOzsekqPmhfa_tX9A-1754316628313-0.0.1.1-604800000;
         path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
       Transfer-Encoding:
       - chunked
@@ -838,7 +838,7 @@ interactions:
       openai-organization:
       - datadog-staging
       openai-processing-ms:
-      - '187'
+      - '35'
       openai-project:
       - proj_gt6TQZPRbZfoY2J9AQlEJMpd
       openai-version:
@@ -846,9 +846,11 @@ interactions:
       strict-transport-security:
       - max-age=31536000; includeSubDomains; preload
       via:
-      - envoy-router-7dd65bcdf9-tdrpq
+      - envoy-router-db85d774-x7nnj
+      x-envoy-decorator-operation:
+      - router.openai.svc.cluster.local:5004/*
       x-envoy-upstream-service-time:
-      - '202'
+      - '67'
       x-ratelimit-limit-requests:
       - '10000'
       x-ratelimit-limit-tokens:
@@ -856,13 +858,13 @@ interactions:
       x-ratelimit-remaining-requests:
       - '9999'
       x-ratelimit-remaining-tokens:
-      - '9999993'
+      - '9999994'
       x-ratelimit-reset-requests:
       - 6ms
       x-ratelimit-reset-tokens:
       - 0s
       x-request-id:
-      - req_e2afd839dbefeff99a2ac52d4d9f2a8d
+      - req_fcffb4009c8d4c71bff3b28ebe06c7e2
     status:
       code: 200
       message: OK
