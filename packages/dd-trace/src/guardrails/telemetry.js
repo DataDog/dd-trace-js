@@ -4,19 +4,24 @@ var fs = require('fs')
 var spawn = require('child_process').spawn
 var tracerVersion = require('../../../../package.json').version
 var log = require('./log')
-var result = 'unknown'
-var resultClass = 'unknown'
-var resultReason = 'unknown'
-
 module.exports = sendTelemetry
+module.exports.result = 'unknown'
+module.exports.resultClass = 'unknown'
+module.exports.resultReason = 'unknown'
 
 if (!process.env.DD_INJECTION_ENABLED) {
   module.exports = function noop () {}
+  module.exports.result = 'unknown'
+  module.exports.resultClass = 'unknown'
+  module.exports.resultReason = 'unknown'
 }
 
 var telemetryForwarderPath = process.env.DD_TELEMETRY_FORWARDER_PATH
 if (typeof telemetryForwarderPath !== 'string' || !fs.existsSync(telemetryForwarderPath)) {
   module.exports = function noop () {}
+  module.exports.result = 'unknown'
+  module.exports.resultClass = 'unknown'
+  module.exports.resultReason = 'unknown'
 }
 
 var metadata = {
@@ -70,30 +75,27 @@ function sendTelemetry (name, tags) {
   })
   proc.on('error', function () {
     log.error('Failed to spawn telemetry forwarder')
-    result = 'error'
-    resultClass = 'internal_error'
-    resultReason = 'Failed to spawn telemetry forwarder'
+    module.exports.result = 'error'
+    module.exports.resultClass = 'internal_error'
+    module.exports.resultReason = 'Failed to spawn telemetry forwarder'
   })
   proc.on('exit', function (code) {
     if (code === 0) {
-      result = 'success'
-      resultClass = 'success'
-      resultReason = 'Successfully configured ddtrace package'
+      module.exports.result = 'success'
+      module.exports.resultClass = 'success'
+      module.exports.resultReason = 'Successfully configured ddtrace package'
     } else {
       log.error('Telemetry forwarder exited with code', code)
-      result = 'error'
-      resultClass = 'internal_error'
-      resultReason = 'Telemetry forwarder exited with code ' + code
+      module.exports.result = 'error'
+      module.exports.resultClass = 'internal_error'
+      module.exports.resultReason = 'Telemetry forwarder exited with code ' + code
     }
   })
   proc.stdin.on('error', function () {
     log.error('Failed to write telemetry data to telemetry forwarder')
-    result = 'error'
-    result_class = 'internal_error'
-    result_reason = 'Failed to write telemetry data to telemetry forwarder'
+    module.exports.result = 'error'
+    module.exports.resultClass = 'internal_error'
+    module.exports.resultReason = 'Failed to write telemetry data to telemetry forwarder'
   })
-  module.exports.result = result
-  module.exports.resultClass = resultClass
-  module.exports.resultReason = resultReason
   proc.stdin.end(JSON.stringify({ metadata: metadata, points: points }))
 }
