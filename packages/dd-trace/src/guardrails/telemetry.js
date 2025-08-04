@@ -5,39 +5,41 @@ var spawn = require('child_process').spawn
 var tracerVersion = require('../../../../package.json').version
 var log = require('./log')
 var result = 'unknown'
-var result_class = 'unknown'
-var result_reason = 'unknown'
+var resultClass = 'unknown'
+var resultReason = 'unknown'
 
 module.exports = sendTelemetry
 module.exports.result = result
-module.exports.result_class = result_class
-module.exports.result_reason = result_reason
+module.exports.resultClass = resultClass
+module.exports.resultReason = resultReason
 
 if (!process.env.DD_INJECTION_ENABLED) {
   module.exports = function noop () {}
   module.exports.result = result
-  module.exports.result_class = result_class
-  module.exports.result_reason = result_reason
+  module.exports.resultClass = resultClass
+  module.exports.resultReason = resultReason
 }
 
 var telemetryForwarderPath = process.env.DD_TELEMETRY_FORWARDER_PATH
 if (typeof telemetryForwarderPath !== 'string' || !fs.existsSync(telemetryForwarderPath)) {
   module.exports = function noop () {}
   module.exports.result = result
-  module.exports.result_class = result_class
-  module.exports.result_reason = result_reason
+  module.exports.resultClass = resultClass
+  module.exports.resultReason = resultReason
 }
 
-var metadata = {
-  language_name: 'nodejs',
-  language_version: process.versions.node,
-  runtime_name: 'nodejs',
-  runtime_version: process.versions.node,
-  tracer_version: tracerVersion,
-  pid: process.pid,
-  result: module.exports.result,
-  result_reason: module.exports.result_reason,
-  result_class: module.exports.result_class
+function getMetadata () {
+  return {
+    language_name: 'nodejs',
+    language_version: process.versions.node,
+    runtime_name: 'nodejs',
+    runtime_version: process.versions.node,
+    tracer_version: tracerVersion,
+    pid: process.pid,
+    result: result,
+    resultReason: resultReason,
+    resultClass: resultClass
+  }
 }
 
 var seen = {}
@@ -79,27 +81,36 @@ function sendTelemetry (name, tags) {
   })
   proc.on('error', function () {
     log.error('Failed to spawn telemetry forwarder')
-    module.exports.result = 'error'
-    module.exports.result_class = 'internal_error'
-    module.exports.result_reason = 'Failed to spawn telemetry forwarder'
+    result = 'error'
+    resultClass = 'internal_error'
+    resultReason = 'Failed to spawn telemetry forwarder'
+    module.exports.result = result
+    module.exports.resultClass = resultClass
+    module.exports.resultReason = resultReason
   })
   proc.on('exit', function (code) {
     if (code === 0) {
-      module.exports.result = 'success'
-      module.exports.result_class = 'success'
-      module.exports.result_reason = 'Successfully configured ddtrace package'
+      result = 'success'
+      resultClass = 'success'
+      resultReason = 'Successfully configured ddtrace package'
     } else {
       log.error('Telemetry forwarder exited with code', code)
-      module.exports.result = 'error'
-      module.exports.result_class = 'internal_error'
-      module.exports.result_reason = 'Telemetry forwarder exited with code ' + code
+      result = 'error'
+      resultClass = 'internal_error'
+      resultReason = 'Telemetry forwarder exited with code ' + code
     }
+    module.exports.result = result
+    module.exports.resultClass = resultClass
+    module.exports.resultReason = resultReason
   })
   proc.stdin.on('error', function () {
     log.error('Failed to write telemetry data to telemetry forwarder')
-    module.exports.result = 'error'
-    module.exports.result_class = 'internal_error'
-    module.exports.result_reason = 'Failed to write telemetry data to telemetry forwarder'
+    result = 'error'
+    resultClass = 'internal_error'
+    resultReason = 'Failed to write telemetry data to telemetry forwarder'
+    module.exports.result = result
+    module.exports.resultClass = resultClass
+    module.exports.resultReason = resultReason
   })
-  proc.stdin.end(JSON.stringify({ metadata: metadata, points: points }))
+  proc.stdin.end(JSON.stringify({ metadata: getMetadata(), points: points }))
 }

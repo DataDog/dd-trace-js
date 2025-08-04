@@ -72,7 +72,7 @@ describe('sendTelemetry', () => {
     })
   })
 
-    describe('error scenarios and metadata', () => {
+  describe('error scenarios and metadata', () => {
     let mockProc, telemetryModule
 
     beforeEach(() => {
@@ -85,10 +85,10 @@ describe('sendTelemetry', () => {
       })
     })
 
-    function assertMetadata (result, result_class, result_reason) {
+    function assertMetadata (result, resultClass, resultReason) {
       assert.strictEqual(telemetryModule.result, result)
-      assert.strictEqual(telemetryModule.result_class, result_class)
-      assert.strictEqual(telemetryModule.result_reason, result_reason)
+      assert.strictEqual(telemetryModule.resultClass, resultClass)
+      assert.strictEqual(telemetryModule.resultReason, resultReason)
     }
 
     it('should set error metadata when telemetry forwarder fails to spawn', () => {
