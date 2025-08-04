@@ -4,7 +4,7 @@ interactions:
       assistant"},{"role":"user","content":[{"type":"input_text","text":"What is the
       weather in Tokyo?"}]}],"tools":[{"type":"function","name":"weather","description":"Get
       the weather in a given location","parameters":{"type":"object","properties":{"location":{"type":"string","description":"The
-      location to get the weather for"}},"required":["location"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"},"strict":false}],"tool_choice":"auto"}'
+      location to get the weather for"}},"required":["location"]},"strict":false}],"tool_choice":"auto"}'
     headers:
       ? !!python/object/apply:multidict._multidict.istr
       - Accept
@@ -19,7 +19,7 @@ interactions:
       - Connection
       : - keep-alive
       Content-Length:
-      - '547'
+      - '466'
       ? !!python/object/apply:multidict._multidict.istr
       - Content-Type
       : - application/json
@@ -33,14 +33,14 @@ interactions:
     uri: https://api.openai.com/v1/responses
   response:
     body:
-      string: "{\n  \"id\": \"resp_6890bf845e4c819eaa3498b0351897270f7dca4b6391b522\",\n
-        \ \"object\": \"response\",\n  \"created_at\": 1754316676,\n  \"status\":
+      string: "{\n  \"id\": \"resp_6890dda5262081a38e828ea23bacd43f0968ebea286633f4\",\n
+        \ \"object\": \"response\",\n  \"created_at\": 1754324389,\n  \"status\":
         \"completed\",\n  \"background\": false,\n  \"error\": null,\n  \"incomplete_details\":
         null,\n  \"instructions\": null,\n  \"max_output_tokens\": null,\n  \"max_tool_calls\":
         null,\n  \"model\": \"gpt-4o-mini-2024-07-18\",\n  \"output\": [\n    {\n
-        \     \"id\": \"fc_6890bf84f5b8819eb8089403f333e23b0f7dca4b6391b522\",\n      \"type\":
+        \     \"id\": \"fc_6890dda5c0cc81a3902d41b559596c960968ebea286633f4\",\n      \"type\":
         \"function_call\",\n      \"status\": \"completed\",\n      \"arguments\":
-        \"{\\\"location\\\":\\\"Tokyo\\\"}\",\n      \"call_id\": \"call_Huzd5xupjjAnVgee4JlMTKEy\",\n
+        \"{\\\"location\\\":\\\"Tokyo\\\"}\",\n      \"call_id\": \"call_5FgaK8XzVdjNfZbXfMwZNaTu\",\n
         \     \"name\": \"weather\"\n    }\n  ],\n  \"parallel_tool_calls\": true,\n
         \ \"previous_response_id\": null,\n  \"prompt_cache_key\": null,\n  \"reasoning\":
         {\n    \"effort\": null,\n    \"summary\": null\n  },\n  \"safety_identifier\":
@@ -52,15 +52,15 @@ interactions:
         \       \"properties\": {\n          \"location\": {\n            \"type\":
         \"string\",\n            \"description\": \"The location to get the weather
         for\"\n          }\n        },\n        \"required\": [\n          \"location\"\n
-        \       ],\n        \"additionalProperties\": false\n      },\n      \"strict\":
-        false\n    }\n  ],\n  \"top_logprobs\": 0,\n  \"top_p\": 1.0,\n  \"truncation\":
-        \"disabled\",\n  \"usage\": {\n    \"input_tokens\": 63,\n    \"input_tokens_details\":
-        {\n      \"cached_tokens\": 0\n    },\n    \"output_tokens\": 14,\n    \"output_tokens_details\":
-        {\n      \"reasoning_tokens\": 0\n    },\n    \"total_tokens\": 77\n  },\n
-        \ \"user\": null,\n  \"metadata\": {}\n}"
+        \       ]\n      },\n      \"strict\": false\n    }\n  ],\n  \"top_logprobs\":
+        0,\n  \"top_p\": 1.0,\n  \"truncation\": \"disabled\",\n  \"usage\": {\n    \"input_tokens\":
+        63,\n    \"input_tokens_details\": {\n      \"cached_tokens\": 0\n    },\n
+        \   \"output_tokens\": 14,\n    \"output_tokens_details\": {\n      \"reasoning_tokens\":
+        0\n    },\n    \"total_tokens\": 77\n  },\n  \"user\": null,\n  \"metadata\":
+        {}\n}"
     headers:
       CF-RAY:
-      - 969ea49affe28275-IAD
+      - 969f60e7dbf7f4e3-IAD
       Connection:
       - keep-alive
       Content-Encoding:
@@ -68,14 +68,14 @@ interactions:
       Content-Type:
       - application/json
       Date:
-      - Mon, 04 Aug 2025 14:11:17 GMT
+      - Mon, 04 Aug 2025 16:19:49 GMT
       Server:
       - cloudflare
       Set-Cookie:
-      - __cf_bm=ZFOCngAU22InReF2KcGYNvPUA.N7nLDSw_oIyeyI24s-1754316677-1.0.1.1-slE44KfigU2fI60IHsUc6pWE0yiHE5QNXiAHLmqxAe189QeULE5lwMkWTVFYHnfj80wLQ9Eix4kvMX9ctTxLH.trMge0nuRvj0zWU7HUks4;
-        path=/; expires=Mon, 04-Aug-25 14:41:17 GMT; domain=.api.openai.com; HttpOnly;
+      - __cf_bm=O0j8BE01sWwkrcnYaXPx7_DWF5oUoV79f7zLHwEsDMk-1754324389-1.0.1.1-30gfwA4Mbs95koe9lWxs_1bRQRpxANpyUDsEw04WbOtoVUCW0pq1bFU1gInwg6GJK2smLJ1CzcbWEHqdZd34Ry.YNxMQPgGjhZMdAZgyDKY;
+        path=/; expires=Mon, 04-Aug-25 16:49:49 GMT; domain=.api.openai.com; HttpOnly;
         Secure; SameSite=None
-      - _cfuvid=yKoGB4BC7kqwe0zZ4CogfkyVgFaaNfldICi8nyQczCc-1754316677092-0.0.1.1-604800000;
+      - _cfuvid=8KBp.taNQYpDUWZni29izFf8KAWWplb0dHWWicDZjyU-1754324389837-0.0.1.1-604800000;
         path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
       Transfer-Encoding:
       - chunked
@@ -88,7 +88,7 @@ interactions:
       openai-organization:
       - datadog-staging
       openai-processing-ms:
-      - '724'
+      - '690'
       openai-project:
       - proj_gt6TQZPRbZfoY2J9AQlEJMpd
       openai-version:
@@ -98,7 +98,7 @@ interactions:
       x-envoy-decorator-operation:
       - tasksapi.openai.svc.cluster.local:8081/*
       x-envoy-upstream-service-time:
-      - '731'
+      - '695'
       x-ratelimit-limit-requests:
       - '30000'
       x-ratelimit-limit-tokens:
@@ -112,7 +112,7 @@ interactions:
       x-ratelimit-reset-tokens:
       - 0s
       x-request-id:
-      - req_2fd591f72fbc2dcd1d2db937b510867b
+      - req_99881424daf150f99e716b54f058b123
     status:
       code: 200
       message: OK

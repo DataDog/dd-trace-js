@@ -6,15 +6,11 @@
     },
     {
       "name": "@ai-sdk/openai",
-      "versions": ["1.3.23"]
+      "versions": [">=1.3.23"]
     },
     {
       "name": "zod",
-      "versions": ["3.25.75"]
-    },
-    {
-      "name": "@ai-sdk/openai",
-      "versions": ["2.0.0"]
+      "versions": [">=3.25.75"]
     }
   ],
   "apollo": [

@@ -30,12 +30,12 @@ interactions:
     uri: https://api.openai.com/v1/responses
   response:
     body:
-      string: "{\n  \"id\": \"resp_6890bf8005a88192a8e408839b0426d40bb7632d7119d367\",\n
-        \ \"object\": \"response\",\n  \"created_at\": 1754316672,\n  \"status\":
+      string: "{\n  \"id\": \"resp_6890dd9f1e9881919f41af478b79e59c0d556fcda7cbde08\",\n
+        \ \"object\": \"response\",\n  \"created_at\": 1754324383,\n  \"status\":
         \"completed\",\n  \"background\": false,\n  \"error\": null,\n  \"incomplete_details\":
         null,\n  \"instructions\": null,\n  \"max_output_tokens\": null,\n  \"max_tool_calls\":
         null,\n  \"model\": \"gpt-4o-mini-2024-07-18\",\n  \"output\": [\n    {\n
-        \     \"id\": \"msg_6890bf806cdc8192ba6f605a9f07148a0bb7632d7119d367\",\n
+        \     \"id\": \"msg_6890dd9f766c81918be4034f94e9bcf70d556fcda7cbde08\",\n
         \     \"type\": \"message\",\n      \"status\": \"completed\",\n      \"content\":
         [\n        {\n          \"type\": \"output_text\",\n          \"annotations\":
         [],\n          \"logprobs\": [],\n          \"text\": \"Hello! How can I assist
@@ -52,7 +52,7 @@ interactions:
         \ \"user\": null,\n  \"metadata\": {}\n}"
     headers:
       CF-RAY:
-      - 969ea47fedb8c99c-IAD
+      - 969f60c23a6da6c0-IAD
       Connection:
       - keep-alive
       Content-Encoding:
@@ -60,14 +60,14 @@ interactions:
       Content-Type:
       - application/json
       Date:
-      - Mon, 04 Aug 2025 14:11:12 GMT
+      - Mon, 04 Aug 2025 16:19:43 GMT
       Server:
       - cloudflare
       Set-Cookie:
-      - __cf_bm=bmtszL3j2pTWUMGA0wnvfmTpoYqxnJtFqLA0EAbdxGU-1754316672-1.0.1.1-7PL12OTmKeqpGmo5mUhfbDnnpS3PPAN6Q25htYNQHwYpP380lqTA1ewmjDVFx3QaBhpe7Gc1pR4BdlNdWPuSySQwLclyPH5ff7L8ndvhy5M;
-        path=/; expires=Mon, 04-Aug-25 14:41:12 GMT; domain=.api.openai.com; HttpOnly;
+      - __cf_bm=HGzHN5K4RBUMb4sCI_iM_s6qP7OO5bpiRl6XB7ygB2s-1754324383-1.0.1.1-rLGkghC6xTPA9XFiSmoxdT8nhuTGUh91LvbqFHLS84vOHNyAKPYQIC6yhJrU6J1iC0dX84LHm_gejTo6a1Jo9nPI37oOcZfmRGGcAHwNmzc;
+        path=/; expires=Mon, 04-Aug-25 16:49:43 GMT; domain=.api.openai.com; HttpOnly;
         Secure; SameSite=None
-      - _cfuvid=5OZLzH4TPNxneaYfHHtvTeFnwVCDlf2d6yQo7ug0fgM-1754316672671-0.0.1.1-604800000;
+      - _cfuvid=lAsnejWJkkLEwww_9CLd0yn7WE83vhtUTE3B87K4LwQ-1754324383666-0.0.1.1-604800000;
         path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
       Transfer-Encoding:
       - chunked
@@ -80,7 +80,7 @@ interactions:
       openai-organization:
       - datadog-staging
       openai-processing-ms:
-      - '647'
+      - '536'
       openai-project:
       - proj_gt6TQZPRbZfoY2J9AQlEJMpd
       openai-version:
@@ -90,7 +90,7 @@ interactions:
       x-envoy-decorator-operation:
       - tasksapi.openai.svc.cluster.local:8081/*
       x-envoy-upstream-service-time:
-      - '657'
+      - '558'
       x-ratelimit-limit-requests:
       - '30000'
       x-ratelimit-limit-tokens:
@@ -104,7 +104,7 @@ interactions:
       x-ratelimit-reset-tokens:
       - 0s
       x-request-id:
-      - req_8e24b59c83acf3ce0d00b70b35d6d016
+      - req_798bf0f9b1bb6b72657cc9ce020feae8
     status:
       code: 200
       message: OK

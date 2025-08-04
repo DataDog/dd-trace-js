@@ -1,9 +1,9 @@
 interactions:
 - request:
     body: '{"model":"gpt-4o-mini","temperature":0,"messages":[{"role":"system","content":"You
-      are a helpful assistant"},{"role":"user","content":"What is the weather in Tokyo?"},{"role":"assistant","content":"","tool_calls":[{"id":"call_r4lWurxtetbQSxwQyc40LEpO","type":"function","function":{"name":"0","arguments":"{\"location\":\"Tokyo\"}"}}]},{"role":"tool","tool_call_id":"call_r4lWurxtetbQSxwQyc40LEpO","content":"{\"location\":\"Tokyo\",\"temperature\":72}"}],"tools":[{"type":"function","function":{"name":"0","description":"Get
+      are a helpful assistant"},{"role":"user","content":"What is the weather in Tokyo?"},{"role":"assistant","content":"","tool_calls":[{"id":"call_5V49F97Lpy8KEEjkSXxrPzp0","type":"function","function":{"name":"0","arguments":"{\"location\":\"Tokyo\"}"}}]},{"role":"tool","tool_call_id":"call_5V49F97Lpy8KEEjkSXxrPzp0","content":"{\"location\":\"Tokyo\",\"temperature\":72}"}],"tools":[{"type":"function","function":{"name":"0","description":"Get
       the weather in a given location","parameters":{"type":"object","properties":{"location":{"type":"string","description":"The
-      location to get the weather for"}},"required":["location"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}}],"tool_choice":"auto"}'
+      location to get the weather for"}},"required":["location"]}}}],"tool_choice":"auto"}'
     headers:
       ? !!python/object/apply:multidict._multidict.istr
       - Accept
@@ -18,7 +18,7 @@ interactions:
       - Connection
       : - keep-alive
       Content-Length:
-      - '815'
+      - '734'
       ? !!python/object/apply:multidict._multidict.istr
       - Content-Type
       : - application/json
@@ -32,8 +32,8 @@ interactions:
     uri: https://api.openai.com/v1/chat/completions
   response:
     body:
-      string: "{\n  \"id\": \"chatcmpl-C0qBSc86oR2IUciq6mOaKCEsJPQ2f\",\n  \"object\":
-        \"chat.completion\",\n  \"created\": 1754316630,\n  \"model\": \"gpt-4o-mini-2024-07-18\",\n
+      string: "{\n  \"id\": \"chatcmpl-C0sCCDLhKcmpHbW1EoDcKqFw1gZG7\",\n  \"object\":
+        \"chat.completion\",\n  \"created\": 1754324364,\n  \"model\": \"gpt-4o-mini-2024-07-18\",\n
         \ \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\":
         \"assistant\",\n        \"content\": \"The current weather in Tokyo is 72\xB0F.\",\n
         \       \"refusal\": null,\n        \"annotations\": []\n      },\n      \"logprobs\":
@@ -45,7 +45,7 @@ interactions:
         \"default\",\n  \"system_fingerprint\": \"fp_34a54ae93c\"\n}\n"
     headers:
       CF-RAY:
-      - 969ea37e1b72c998-IAD
+      - 969f604d7f746529-IAD
       Connection:
       - keep-alive
       Content-Encoding:
@@ -53,14 +53,14 @@ interactions:
       Content-Type:
       - application/json
       Date:
-      - Mon, 04 Aug 2025 14:10:31 GMT
+      - Mon, 04 Aug 2025 16:19:25 GMT
       Server:
       - cloudflare
       Set-Cookie:
-      - __cf_bm=7AFCwnKw5ghcN__VWJkPI7RR4F3yAOMWDbCsbO1SMoo-1754316631-1.0.1.1-qESoffEU4_qtp33g9Nt4tCk9iR.xFPrv36uYK.XY0TxS9YLtIwdUdXPf8HHhqXxZ8TxGeKE8zHqxrLMdUXmAES4nVF.N4Zzu0K7h417Tj2U;
-        path=/; expires=Mon, 04-Aug-25 14:40:31 GMT; domain=.api.openai.com; HttpOnly;
+      - __cf_bm=2ueANsVPDICcOk8cNtWQ1t2trYc2AyyuA6EEGrL6I50-1754324365-1.0.1.1-686uZKXF9N4ZaM.p6GB.umCBwGPhGeeqKWxbdXlhm1jlp_hbPGC14mFWc6BVciV2FJt.wSuB7epckfSlch3SXEOLw9lpXo7.RxHeFBfKj5w;
+        path=/; expires=Mon, 04-Aug-25 16:49:25 GMT; domain=.api.openai.com; HttpOnly;
         Secure; SameSite=None
-      - _cfuvid=sGZzCIC2XQlp0DJBFwNui2exEfeEVDfEAhGlKRRxqxc-1754316631380-0.0.1.1-604800000;
+      - _cfuvid=41GBNLv0H5xwHbdsb1j3xJj_J.ZswwljOW3hgggXCHE-1754324365143-0.0.1.1-604800000;
         path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
       Strict-Transport-Security:
       - max-age=31536000; includeSubDomains; preload
@@ -77,7 +77,7 @@ interactions:
       openai-organization:
       - datadog-staging
       openai-processing-ms:
-      - '545'
+      - '577'
       openai-project:
       - proj_gt6TQZPRbZfoY2J9AQlEJMpd
       openai-version:
@@ -85,7 +85,7 @@ interactions:
       x-envoy-decorator-operation:
       - router.openai.svc.cluster.local:5004/*
       x-envoy-upstream-service-time:
-      - '589'
+      - '683'
       x-ratelimit-limit-requests:
       - '30000'
       x-ratelimit-limit-tokens:
@@ -93,13 +93,13 @@ interactions:
       x-ratelimit-remaining-requests:
       - '29999'
       x-ratelimit-remaining-tokens:
-      - '149999972'
+      - '149999970'
       x-ratelimit-reset-requests:
       - 2ms
       x-ratelimit-reset-tokens:
       - 0s
       x-request-id:
-      - req_fc9c7056bb134fda8fa0133a1ca173ce
+      - req_665c1ec83e2f4f7984a84df606ee6cb3
     status:
       code: 200
       message: OK

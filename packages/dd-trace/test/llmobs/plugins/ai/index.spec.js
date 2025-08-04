@@ -22,8 +22,8 @@ chai.Assertion.addMethod('deepEqualWithMockValues', deepEqualWithMockValues)
 // ai<4.0.2 is not supported in CommonJS with Node.js < 22
 const range = NODE_MAJOR < 22 ? '>=4.0.2' : '>=4.0.0'
 
-function getOpenaiVersion (vercelAiVersion) {
-  return semifies(vercelAiVersion, '<5.0.0') ? '@ai-sdk/openai@1.3.23' : '@ai-sdk/openai@2.0.0'
+function getAiSdkOpenAiPackage (vercelAiVersion) {
+  return semifies(vercelAiVersion, '>=5.0.0') ? '@ai-sdk/openai' : '@ai-sdk/openai@1.3.23'
 }
 
 describe('Plugin', () => {
@@ -35,20 +35,17 @@ describe('Plugin', () => {
   withVersions('ai', 'ai', range, (version, _, realVersion) => {
     let ai
     let openai
-    let zod
 
     const getEvents = useLlmobs({ plugin: 'ai' })
 
     beforeEach(function () {
       ai = require(`../../../../../../versions/ai@${version}`).get()
 
-      const OpenAI = require(`../../../../../../versions/${getOpenaiVersion(realVersion)}`).get()
+      const OpenAI = require(`../../../../../../versions/${getAiSdkOpenAiPackage(realVersion)}`).get()
       openai = OpenAI.createOpenAI({
         baseURL: 'http://127.0.0.1:9126/vcr/openai',
         compatibility: 'strict'
       })
-
-      zod = require('../../../../../../versions/zod').get()
     })
 
     it('creates a span for generateText', async () => {
@@ -103,13 +100,19 @@ describe('Plugin', () => {
     })
 
     it('creates a span for generateObject', async () => {
+      const schema = ai.jsonSchema({
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          age: { type: 'number' },
+          height: { type: 'string' }
+        },
+        required: ['name', 'age', 'height']
+      })
+
       await ai.generateObject({
         model: openai('gpt-4o-mini'),
-        schema: zod.object({
-          name: zod.string(),
-          age: zod.number(),
-          height: zod.string()
-        }),
+        schema,
         prompt: 'Invent a character for a video game'
       })
 
@@ -276,13 +279,19 @@ describe('Plugin', () => {
     })
 
     it('creates a span for streamObject', async () => {
+      const schema = ai.jsonSchema({
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          age: { type: 'number' },
+          height: { type: 'string' }
+        },
+        required: ['name', 'age', 'height']
+      })
+
       const result = await ai.streamObject({
         model: openai('gpt-4o-mini'),
-        schema: zod.object({
-          name: zod.string(),
-          age: zod.number(),
-          height: zod.string()
-        }),
+        schema,
         prompt: 'Invent a character for a video game'
       })
 
@@ -292,9 +301,7 @@ describe('Plugin', () => {
 
       const { apmSpans, llmobsSpans } = await getEvents()
 
-      const expectedCharacter = semifies(realVersion, '<5.0.0')
-        ? { name: 'Zara Nightshade', age: 28, height: "5'7\"" }
-        : { name: 'Kaelin Emberforge', age: 28, height: "5'8\"" }
+      const expectedCharacter = { name: 'Zara Nightshade', age: 28, height: "5'7\"" }
 
       const expectedWorkflowSpan = expectedLLMObsNonLLMSpanEvent({
         span: apmSpans[0],
@@ -333,13 +340,19 @@ describe('Plugin', () => {
     it('creates a span for a tool call', async () => {
       let tools
       let maxStepsArg = {}
+      const toolSchema = ai.jsonSchema({
+        type: 'object',
+        properties: {
+          location: { type: 'string', description: 'The location to get the weather for' }
+        },
+        required: ['location']
+      })
+
       if (semifies(realVersion, '>=5.0.0')) {
         tools = {
           weather: ai.tool({
             description: 'Get the weather in a given location',
-            inputSchema: zod.object({
-              location: zod.string().describe('The location to get the weather for')
-            }),
+            inputSchema: toolSchema,
             execute: async ({ location }) => ({
               location,
               temperature: 72
@@ -352,9 +365,7 @@ describe('Plugin', () => {
         tools = [ai.tool({
           id: 'weather',
           description: 'Get the weather in a given location',
-          parameters: zod.object({
-            location: zod.string().describe('The location to get the weather for')
-          }),
+          parameters: toolSchema,
           execute: async ({ location }) => ({
             location,
             temperature: 72
@@ -380,7 +391,7 @@ describe('Plugin', () => {
       const llmSpan2 = llmobsSpans[3]
 
       const expectedFinalOutput = semifies(realVersion, '>=5.0.0')
-        ? 'The weather in Tokyo is currently 72°F. If you need more details or a forecast, let me know!'
+        ? 'The current temperature in Tokyo is 72°F. If you need more details about the weather, just let me know!'
         : 'The current weather in Tokyo is 72°F.'
 
       const expectedWorkflowSpan = expectedLLMObsNonLLMSpanEvent({
@@ -484,13 +495,19 @@ describe('Plugin', () => {
     it('created a span for a tool call from a stream', async () => {
       let tools
       let maxStepsArg = {}
+      const toolSchema = ai.jsonSchema({
+        type: 'object',
+        properties: {
+          location: { type: 'string', description: 'The location to get the weather for' }
+        },
+        required: ['location']
+      })
+
       if (semifies(realVersion, '>=5.0.0')) {
         tools = {
           weather: ai.tool({
             description: 'Get the weather in a given location',
-            inputSchema: zod.object({
-              location: zod.string().describe('The location to get the weather for')
-            }),
+            inputSchema: toolSchema,
             execute: async ({ location }) => ({
               location,
               temperature: 72
@@ -503,9 +520,7 @@ describe('Plugin', () => {
         tools = [ai.tool({
           id: 'weather',
           description: 'Get the weather in a given location',
-          parameters: zod.object({
-            location: zod.string().describe('The location to get the weather for')
-          }),
+          parameters: toolSchema,
           execute: async ({ location }) => ({
             location,
             temperature: 72
@@ -535,7 +550,7 @@ describe('Plugin', () => {
       const llmSpan2 = llmobsSpans[3]
 
       const expectedFinalOutput = semifies(realVersion, '>=5.0.0')
-        ? 'The current temperature in Tokyo is 72°F. If you need any more specific weather details, feel free to ask!'
+        ? 'The current temperature in Tokyo is 72°F. If you need more details or specific forecasts, feel free to ask!'
         : 'The current weather in Tokyo is 72°F.'
 
       const expectedWorkflowSpan = expectedLLMObsNonLLMSpanEvent({

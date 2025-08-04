@@ -1,7 +1,7 @@
 interactions:
 - request:
     body: '{"model":"gpt-4o-mini","input":[{"role":"user","content":[{"type":"input_text","text":"Invent
-      a character for a video game"}]}],"text":{"format":{"type":"json_schema","strict":false,"name":"response","schema":{"type":"object","properties":{"name":{"type":"string"},"age":{"type":"number"},"height":{"type":"string"}},"required":["name","age","height"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}}}'
+      a character for a video game"}]}],"text":{"format":{"type":"json_schema","strict":false,"name":"response","schema":{"type":"object","properties":{"name":{"type":"string"},"age":{"type":"number"},"height":{"type":"string"}},"required":["name","age","height"]}}}}'
     headers:
       ? !!python/object/apply:multidict._multidict.istr
       - Accept
@@ -16,7 +16,7 @@ interactions:
       - Connection
       : - keep-alive
       Content-Length:
-      - '436'
+      - '355'
       ? !!python/object/apply:multidict._multidict.istr
       - Content-Type
       : - application/json
@@ -30,16 +30,16 @@ interactions:
     uri: https://api.openai.com/v1/responses
   response:
     body:
-      string: "{\n  \"id\": \"resp_6890bf811a9881a0a7c78d6b5de936ca00ef7fc1bcf6c37a\",\n
-        \ \"object\": \"response\",\n  \"created_at\": 1754316673,\n  \"status\":
+      string: "{\n  \"id\": \"resp_6890dda009cc81a08285f7be102389890ed73be03fe4ca87\",\n
+        \ \"object\": \"response\",\n  \"created_at\": 1754324384,\n  \"status\":
         \"completed\",\n  \"background\": false,\n  \"error\": null,\n  \"incomplete_details\":
         null,\n  \"instructions\": null,\n  \"max_output_tokens\": null,\n  \"max_tool_calls\":
         null,\n  \"model\": \"gpt-4o-mini-2024-07-18\",\n  \"output\": [\n    {\n
-        \     \"id\": \"msg_6890bf81674481a0855f6d011798ab6b00ef7fc1bcf6c37a\",\n
+        \     \"id\": \"msg_6890dda1da4c81a0a6427d70cef778700ed73be03fe4ca87\",\n
         \     \"type\": \"message\",\n      \"status\": \"completed\",\n      \"content\":
         [\n        {\n          \"type\": \"output_text\",\n          \"annotations\":
-        [],\n          \"logprobs\": [],\n          \"text\": \"{\\\"name\\\":\\\"Kael
-        Windrider\\\",\\\"age\\\":28,\\\"height\\\":\\\"6'2\\\\\\\"\\\"}\"\n        }\n
+        [],\n          \"logprobs\": [],\n          \"text\": \"{\\\"name\\\":\\\"Zara
+        Windrider\\\",\\\"age\\\":28,\\\"height\\\":\\\"5'7\\\\\\\"\\\"}\"\n        }\n
         \     ],\n      \"role\": \"assistant\"\n    }\n  ],\n  \"parallel_tool_calls\":
         true,\n  \"previous_response_id\": null,\n  \"prompt_cache_key\": null,\n
         \ \"reasoning\": {\n    \"effort\": null,\n    \"summary\": null\n  },\n  \"safety_identifier\":
@@ -50,17 +50,16 @@ interactions:
         {\n            \"type\": \"string\"\n          },\n          \"age\": {\n
         \           \"type\": \"number\"\n          },\n          \"height\": {\n
         \           \"type\": \"string\"\n          }\n        },\n        \"required\":
-        [\n          \"name\",\n          \"age\",\n          \"height\"\n        ],\n
-        \       \"additionalProperties\": false\n      },\n      \"strict\": false\n
-        \   }\n  },\n  \"tool_choice\": \"auto\",\n  \"tools\": [],\n  \"top_logprobs\":
-        0,\n  \"top_p\": 1.0,\n  \"truncation\": \"disabled\",\n  \"usage\": {\n    \"input_tokens\":
-        50,\n    \"input_tokens_details\": {\n      \"cached_tokens\": 0\n    },\n
-        \   \"output_tokens\": 21,\n    \"output_tokens_details\": {\n      \"reasoning_tokens\":
-        0\n    },\n    \"total_tokens\": 71\n  },\n  \"user\": null,\n  \"metadata\":
-        {}\n}"
+        [\n          \"name\",\n          \"age\",\n          \"height\"\n        ]\n
+        \     },\n      \"strict\": false\n    }\n  },\n  \"tool_choice\": \"auto\",\n
+        \ \"tools\": [],\n  \"top_logprobs\": 0,\n  \"top_p\": 1.0,\n  \"truncation\":
+        \"disabled\",\n  \"usage\": {\n    \"input_tokens\": 50,\n    \"input_tokens_details\":
+        {\n      \"cached_tokens\": 0\n    },\n    \"output_tokens\": 21,\n    \"output_tokens_details\":
+        {\n      \"reasoning_tokens\": 0\n    },\n    \"total_tokens\": 71\n  },\n
+        \ \"user\": null,\n  \"metadata\": {}\n}"
     headers:
       CF-RAY:
-      - 969ea4867d627ad2-IAD
+      - 969f60c65c8cd69b-IAD
       Connection:
       - keep-alive
       Content-Encoding:
@@ -68,14 +67,14 @@ interactions:
       Content-Type:
       - application/json
       Date:
-      - Mon, 04 Aug 2025 14:11:13 GMT
+      - Mon, 04 Aug 2025 16:19:46 GMT
       Server:
       - cloudflare
       Set-Cookie:
-      - __cf_bm=Oy.zZJahfRtg112zfvK2n6AimpDX9S9UchTl5Nsaz10-1754316673-1.0.1.1-N.XHofuT00YLyah.K.pg5D1v3sHoVIeUq8yWz2o_vqAYLGmaF8M9dvqhncSHwr5JPpuTj1IyJddXktdmz8n8si6dPORdJUA8.okvmOyuH2Q;
-        path=/; expires=Mon, 04-Aug-25 14:41:13 GMT; domain=.api.openai.com; HttpOnly;
+      - __cf_bm=SoAoijKRaYUZK70HzVIlnH6UVC.Y7EeohrHGd6vXCmI-1754324386-1.0.1.1-HH0yfGn0wwFrshCmJivBqOT5nPDyOcyw9eH3Phwmrrc5ZpLElUdoKfAJeB1HCVDbH1.Po53nm6SJ6AqUlUaH.ttKCGtOKpTwTMitb5ZGjLc;
+        path=/; expires=Mon, 04-Aug-25 16:49:46 GMT; domain=.api.openai.com; HttpOnly;
         Secure; SameSite=None
-      - _cfuvid=q79eFFn0FJqFlIiXrsLpbBVhzmyDVQ31kuYdC.JhX2w-1754316673798-0.0.1.1-604800000;
+      - _cfuvid=htFg.7nuKLc8JeCyYD3vYk.nwsfapb.i.SNcIoCgZ8I-1754324386331-0.0.1.1-604800000;
         path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
       Transfer-Encoding:
       - chunked
@@ -88,7 +87,7 @@ interactions:
       openai-organization:
       - datadog-staging
       openai-processing-ms:
-      - '712'
+      - '2294'
       openai-project:
       - proj_gt6TQZPRbZfoY2J9AQlEJMpd
       openai-version:
@@ -98,7 +97,7 @@ interactions:
       x-envoy-decorator-operation:
       - tasksapi.openai.svc.cluster.local:8081/*
       x-envoy-upstream-service-time:
-      - '727'
+      - '2552'
       x-ratelimit-limit-requests:
       - '30000'
       x-ratelimit-limit-tokens:
@@ -106,13 +105,13 @@ interactions:
       x-ratelimit-remaining-requests:
       - '29999'
       x-ratelimit-remaining-tokens:
-      - '149999932'
+      - '149999930'
       x-ratelimit-reset-requests:
       - 2ms
       x-ratelimit-reset-tokens:
       - 0s
       x-request-id:
-      - req_24657a45c20cf96406cd67a725adb7d7
+      - req_5530377b7d89bbed0b33fb8a3f89a832
     status:
       code: 200
       message: OK

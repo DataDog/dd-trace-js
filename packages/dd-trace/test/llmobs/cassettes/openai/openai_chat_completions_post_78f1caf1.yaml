@@ -1,9 +1,8 @@
 interactions:
 - request:
-    body: '{"model":"gpt-4o-mini","temperature":0,"messages":[{"role":"system","content":"You
-      are a helpful assistant"},{"role":"user","content":"What is the weather in Tokyo?"}],"tools":[{"type":"function","function":{"name":"0","description":"Get
-      the weather in a given location","parameters":{"type":"object","properties":{"location":{"type":"string","description":"The
-      location to get the weather for"}},"required":["location"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}}],"tool_choice":"auto"}'
+    body: '{"model":"gpt-4o-mini","temperature":0,"messages":[{"role":"user","content":"Invent
+      a character for a video game"}],"tool_choice":{"type":"function","function":{"name":"json"}},"tools":[{"type":"function","function":{"name":"json","description":"Respond
+      with a JSON object.","parameters":{"type":"object","properties":{"name":{"type":"string"},"age":{"type":"number"},"height":{"type":"string"}},"required":["name","age","height"]}}}]}'
     headers:
       ? !!python/object/apply:multidict._multidict.istr
       - Accept
@@ -18,7 +17,7 @@ interactions:
       - Connection
       : - keep-alive
       Content-Length:
-      - '527'
+      - '435'
       ? !!python/object/apply:multidict._multidict.istr
       - Content-Type
       : - application/json
@@ -32,24 +31,24 @@ interactions:
     uri: https://api.openai.com/v1/chat/completions
   response:
     body:
-      string: "{\n  \"id\": \"chatcmpl-C0qBSi7YZngH7u0bLuYaLduoDVtWE\",\n  \"object\":
-        \"chat.completion\",\n  \"created\": 1754316630,\n  \"model\": \"gpt-4o-mini-2024-07-18\",\n
+      string: "{\n  \"id\": \"chatcmpl-C0sC8H4t1i6R2ahId5TX8yQNs110B\",\n  \"object\":
+        \"chat.completion\",\n  \"created\": 1754324360,\n  \"model\": \"gpt-4o-mini-2024-07-18\",\n
         \ \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\":
         \"assistant\",\n        \"content\": null,\n        \"tool_calls\": [\n          {\n
-        \           \"id\": \"call_r4lWurxtetbQSxwQyc40LEpO\",\n            \"type\":
-        \"function\",\n            \"function\": {\n              \"name\": \"0\",\n
-        \             \"arguments\": \"{\\\"location\\\":\\\"Tokyo\\\"}\"\n            }\n
-        \         }\n        ],\n        \"refusal\": null,\n        \"annotations\":
-        []\n      },\n      \"logprobs\": null,\n      \"finish_reason\": \"tool_calls\"\n
-        \   }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 67,\n    \"completion_tokens\":
-        14,\n    \"total_tokens\": 81,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\":
+        \           \"id\": \"call_hiOEW6ZvAnrNkT4pRZjPkNWe\",\n            \"type\":
+        \"function\",\n            \"function\": {\n              \"name\": \"json\",\n
+        \             \"arguments\": \"{\\\"name\\\":\\\"Zara Nightshade\\\",\\\"age\\\":28,\\\"height\\\":\\\"5'7\\\\\\\"\\\"}\"\n
+        \           }\n          }\n        ],\n        \"refusal\": null,\n        \"annotations\":
+        []\n      },\n      \"logprobs\": null,\n      \"finish_reason\": \"stop\"\n
+        \   }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 65,\n    \"completion_tokens\":
+        19,\n    \"total_tokens\": 84,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\":
         0,\n      \"audio_tokens\": 0\n    },\n    \"completion_tokens_details\":
         {\n      \"reasoning_tokens\": 0,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\":
         0,\n      \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\":
         \"default\",\n  \"system_fingerprint\": \"fp_34a54ae93c\"\n}\n"
     headers:
       CF-RAY:
-      - 969ea3795fb328c4-IAD
+      - 969f60366d419c52-IAD
       Connection:
       - keep-alive
       Content-Encoding:
@@ -57,14 +56,14 @@ interactions:
       Content-Type:
       - application/json
       Date:
-      - Mon, 04 Aug 2025 14:10:30 GMT
+      - Mon, 04 Aug 2025 16:19:21 GMT
       Server:
       - cloudflare
       Set-Cookie:
-      - __cf_bm=Eo8ATtJcGKvf3Ck7BN_TawUw2cQ6.P2EzlVcDvZ4n44-1754316630-1.0.1.1-L9aDvxygMQpanh.8k8.c.kkdgb3WISGha.kPJwwdg_hzRJ5oEyBFtB8cKXMKj9Z8jHw8xpkjLS8tNqojkeFQKFQgOTMdD1ZFNSrykLEk2CM;
-        path=/; expires=Mon, 04-Aug-25 14:40:30 GMT; domain=.api.openai.com; HttpOnly;
+      - __cf_bm=e4ZpDUJL81RNQ3Su6hSHPCgXTryaYKymk5.w1zneqCc-1754324361-1.0.1.1-WPFB4BvfQXLJeh4GU19Qa2y9xhAvVOhbaDwwzGNIIZmk4xrUkW2XiSkwfubQcBCUReXB5VlMogyZkIPP7ctuv27Pd1LPS0gCmyMq0RJ.1uY;
+        path=/; expires=Mon, 04-Aug-25 16:49:21 GMT; domain=.api.openai.com; HttpOnly;
         Secure; SameSite=None
-      - _cfuvid=3ISlylATXAZiyeUeReJziRY8kaF016WUWKJvN72rQzQ-1754316630639-0.0.1.1-604800000;
+      - _cfuvid=GZ4w0CqeLSO4ioY8pYFPfOtSWWCGaZjVh3WPppTtB1s-1754324361299-0.0.1.1-604800000;
         path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
       Strict-Transport-Security:
       - max-age=31536000; includeSubDomains; preload
@@ -81,7 +80,7 @@ interactions:
       openai-organization:
       - datadog-staging
       openai-processing-ms:
-      - '550'
+      - '518'
       openai-project:
       - proj_gt6TQZPRbZfoY2J9AQlEJMpd
       openai-version:
@@ -89,7 +88,7 @@ interactions:
       x-envoy-decorator-operation:
       - router.openai.svc.cluster.local:5004/*
       x-envoy-upstream-service-time:
-      - '580'
+      - '530'
       x-ratelimit-limit-requests:
       - '30000'
       x-ratelimit-limit-tokens:
@@ -97,13 +96,13 @@ interactions:
       x-ratelimit-remaining-requests:
       - '29999'
       x-ratelimit-remaining-tokens:
-      - '149999982'
+      - '149999987'
       x-ratelimit-reset-requests:
       - 2ms
       x-ratelimit-reset-tokens:
       - 0s
       x-request-id:
-      - req_b55c0cdac4a44c74a77c34a520d458aa
+      - req_b3be7a24dfa54d619fad0eab3f15ccb8
     status:
       code: 200
       message: OK

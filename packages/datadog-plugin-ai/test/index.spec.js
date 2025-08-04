@@ -10,8 +10,8 @@ const { NODE_MAJOR } = require('../../../version')
 // ai<4.0.2 is not supported in CommonJS with Node.js < 22
 const range = NODE_MAJOR < 22 ? '>=4.0.2' : '>=4.0.0'
 
-function getOpenaiVersion (vercelAiVersion) {
-  return semifies(vercelAiVersion, '>=5.0.0') ? '@ai-sdk/openai@2.0.0' : '@ai-sdk/openai@1.3.23'
+function getAiSdkOpenAiPackage (vercelAiVersion) {
+  return semifies(vercelAiVersion, '>=5.0.0') ? '@ai-sdk/openai' : '@ai-sdk/openai@1.3.23'
 }
 
 describe('Plugin', () => {
@@ -22,7 +22,6 @@ describe('Plugin', () => {
   withVersions('ai', 'ai', range, (version, _, realVersion) => {
     let ai
     let openai
-    let zod
 
     before(() => agent.load('ai'))
 
@@ -31,13 +30,11 @@ describe('Plugin', () => {
     beforeEach(function () {
       ai = require(`../../../versions/ai@${version}`).get()
 
-      const OpenAI = require(`../../../versions/${getOpenaiVersion(realVersion)}`).get()
+      const OpenAI = require(`../../../versions/${getAiSdkOpenAiPackage(realVersion)}`).get()
       openai = OpenAI.createOpenAI({
         baseURL: 'http://127.0.0.1:9126/vcr/openai',
         compatibility: 'strict'
       })
-
-      zod = require('../../../versions/zod').get()
     })
 
     it('creates a span for generateText', async () => {
@@ -85,13 +82,19 @@ describe('Plugin', () => {
         assert.strictEqual(doGenerateSpan.meta['ai.request.model_provider'], 'openai')
       })
 
+      const schema = ai.jsonSchema({
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          age: { type: 'number' },
+          height: { type: 'string' }
+        },
+        required: ['name', 'age', 'height']
+      })
+
       const result = await ai.generateObject({
         model: openai('gpt-4o-mini'),
-        schema: zod.object({
-          name: zod.string(),
-          age: zod.number(),
-          height: zod.string()
-        }),
+        schema,
         prompt: 'Invent a character for a video game'
       })
 
@@ -203,13 +206,19 @@ describe('Plugin', () => {
         assert.strictEqual(doStreamSpan.meta['ai.request.model_provider'], 'openai')
       })
 
+      const schema = ai.jsonSchema({
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          age: { type: 'number' },
+          height: { type: 'string' }
+        },
+        required: ['name', 'age', 'height']
+      })
+
       const result = await ai.streamObject({
         model: openai('gpt-4o-mini'),
-        schema: zod.object({
-          name: zod.string(),
-          age: zod.number(),
-          height: zod.string()
-        }),
+        schema,
         prompt: 'Invent a character for a video game'
       })
 
@@ -252,13 +261,18 @@ describe('Plugin', () => {
 
       let tools
       let maxStepsArg = {}
+      const toolSchema = ai.jsonSchema({
+        type: 'object',
+        properties: {
+          location: { type: 'string', description: 'The location to get the weather for' }
+        },
+        required: ['location']
+      })
       if (semifies(realVersion, '>=5.0.0')) {
         tools = {
           weather: ai.tool({
             description: 'Get the weather in a given location',
-            inputSchema: zod.object({
-              location: zod.string().describe('The location to get the weather for')
-            }),
+            inputSchema: toolSchema,
             execute: async ({ location }) => ({
               location,
               temperature: 72
@@ -271,9 +285,7 @@ describe('Plugin', () => {
         tools = [ai.tool({
           id: 'weather',
           description: 'Get the weather in a given location',
-          parameters: zod.object({
-            location: zod.string().describe('The location to get the weather for')
-          }),
+          parameters: toolSchema,
           execute: async ({ location }) => ({
             location,
             temperature: 72
