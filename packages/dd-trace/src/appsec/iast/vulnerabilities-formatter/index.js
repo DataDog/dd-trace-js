@@ -4,9 +4,7 @@ const sensitiveHandler = require('./evidence-redaction/sensitive-handler')
 const { stringifyWithRanges } = require('./utils')
 
 class VulnerabilityFormatter {
-  constructor () {
-    this._redactVulnearbilities = true
-  }
+  _redactVulnearbilities = true
 
   setRedactVulnerabilities (shouldRedactVulnerabilities, redactionNamePattern, redactionValuePattern) {
     this._redactVulnearbilities = shouldRedactVulnerabilities

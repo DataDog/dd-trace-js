@@ -3,8 +3,8 @@
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
 
 class DNSReversePlugin extends ClientPlugin {
-  static get id () { return 'dns' }
-  static get operation () { return 'reverse' }
+  static id = 'dns'
+  static operation = 'reverse'
 
   bindStart (ctx) {
     const [ip] = ctx.args

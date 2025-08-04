@@ -4,8 +4,8 @@ const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
 
 class NetTCPPlugin extends ClientPlugin {
-  static get id () { return 'net' }
-  static get operation () { return 'tcp' }
+  static id = 'net'
+  static operation = 'tcp'
 
   constructor (...args) {
     super(...args)

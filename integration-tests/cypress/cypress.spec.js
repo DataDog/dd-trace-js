@@ -113,7 +113,7 @@ moduleTypes.forEach(({
 
     this.retries(2)
     this.timeout(60000)
-    let sandbox, cwd, receiver, childProcess, webAppPort, secondWebAppServer, secondWebAppPort
+    let sandbox, cwd, receiver, childProcess, webAppPort, secondWebAppServer
 
     if (type === 'commonJS') {
       testCommand = testCommand(version)
@@ -123,24 +123,10 @@ moduleTypes.forEach(({
       // cypress-fail-fast is required as an incompatible plugin
       sandbox = await createSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0'], true)
       cwd = sandbox.folder
-      webAppServer.listen(0, 'localhost', () => {
+      await new Promise(resolve => webAppServer.listen(0, 'localhost', () => {
         webAppPort = webAppServer.address().port
-      })
-      if (version === 'latest') {
-        secondWebAppServer = http.createServer((req, res) => {
-          res.setHeader('Content-Type', 'text/html')
-          res.writeHead(200)
-          res.end(`
-            <!DOCTYPE html>
-            <html>
-              <div class="hella-world">Hella World</div>
-            </html>
-          `)
-        })
-        secondWebAppServer.listen(0, 'localhost', () => {
-          secondWebAppPort = secondWebAppServer.address().port
-        })
-      }
+        resolve()
+      }))
     })
 
     after(async () => {
@@ -1747,6 +1733,21 @@ moduleTypes.forEach(({
           ...restEnvVars
         } = getCiVisEvpProxyConfig(receiver.port)
 
+        secondWebAppServer = http.createServer((req, res) => {
+          res.setHeader('Content-Type', 'text/html')
+          res.writeHead(200)
+          res.end(`
+            <!DOCTYPE html>
+            <html>
+              <div class="hella-world">Hella World</div>
+            </html>
+          `)
+        })
+
+        const secondWebAppPort = await new Promise(resolve => {
+          secondWebAppServer.listen(0, 'localhost', () => resolve(secondWebAppServer.address().port))
+        })
+
         const specToRun = 'cypress/e2e/multi-origin.js'
 
         childProcess = exec(
@@ -1757,11 +1758,16 @@ moduleTypes.forEach(({
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               CYPRESS_BASE_URL_SECOND: `http://localhost:${secondWebAppPort}`,
-              SPEC_PATTERN: specToRun
+              SPEC_PATTERN: specToRun,
+              DD_TRACE_DEBUG: true
             },
             stdio: 'pipe'
           }
         )
+
+        // TODO: remove once we find the source of flakiness
+        childProcess.stdout.pipe(process.stdout)
+        childProcess.stderr.pipe(process.stderr)
 
         await receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {

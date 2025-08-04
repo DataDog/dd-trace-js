@@ -22,7 +22,7 @@ describe('esm', () => {
       this.timeout(50000)
       sandbox = await createSandbox([
         `@azure/functions@${version}`,
-        'azure-functions-core-tools@4',
+        'azure-functions-core-tools@4.1.0',
         '@azure/service-bus@7.9.2'
       ],
       false,
