@@ -72,7 +72,7 @@ describe('sendTelemetry', () => {
     })
   })
 
-  describe('error scenarios and metadata', () => {
+  describe('Error scenarios and metadata', () => {
     let mockProc, telemetryModule
 
     beforeEach(() => {
