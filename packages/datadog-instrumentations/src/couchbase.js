@@ -27,8 +27,7 @@ function wrapAllNames (names, action) {
   names.forEach(name => action(name))
 }
 
-function wrapCallback (callback) {
-  const ctx = {}
+function wrapCallback (callback, ctx) {
   return callbackStartCh.runStores(ctx, () => {
     return function (...args) {
       return callbackFinishCh.runStores(ctx, () => {
@@ -40,34 +39,34 @@ function wrapCallback (callback) {
 
 // semver >=2 <3
 function wrapMaybeInvoke (_maybeInvoke) {
-  const wrapped = function (fn, args) {
+  return function (fn, args) {
     if (!Array.isArray(args)) return _maybeInvoke.apply(this, arguments)
 
     const callbackIndex = args.length - 1
     const callback = args[callbackIndex]
 
     if (typeof callback === 'function') {
-      args[callbackIndex] = wrapCallback(callback)
+      const ctx = {}
+      args[callbackIndex] = wrapCallback(callback, ctx)
     }
 
     return _maybeInvoke.apply(this, arguments)
   }
-  return wrapped
 }
 
 function wrapQuery (query) {
-  const wrapped = function (q, params, callback) {
+  return function (q, params, callback) {
     const cb = arguments[arguments.length - 1]
     if (typeof cb === 'function') {
-      arguments[arguments.length - 1] = wrapCallback(cb)
+      const ctx = {}
+      arguments[arguments.length - 1] = wrapCallback(cb, ctx)
     }
 
     return query.apply(this, arguments)
   }
-  return wrapped
 }
 
-function wrapCallbackFinish (callback, thisArg, args, errorCh, finishCh, ctx) {
+function wrapCallbackFinish (callback, thisArg, _args, errorCh, finishCh, ctx) {
   return callbackStartCh.runStores(ctx, () => {
     return function finish (error, result) {
       return callbackFinishCh.runStores(ctx, () => {
@@ -75,7 +74,7 @@ function wrapCallbackFinish (callback, thisArg, args, errorCh, finishCh, ctx) {
           ctx.error = error
           errorCh.publish(ctx)
         }
-        return finishCh.runStores(ctx, callback, thisArg, ...args)
+        return finishCh.runStores(ctx, () => callback.apply(thisArg, [error, result]))
       })
     }
   })
