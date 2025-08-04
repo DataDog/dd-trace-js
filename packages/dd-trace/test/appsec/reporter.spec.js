@@ -381,16 +381,14 @@ describe('reporter', () => {
     it('should add tags to request span when socket is not there', () => {
       delete req.socket
 
-      const result = Reporter.reportAttack([
+      Reporter.reportAttack([
         {
           rule: {},
           rule_matches: [{}]
         }
       ])
 
-      expect(result).to.not.be.false
       expect(web.root).to.have.been.calledOnceWith(req)
-
       expect(span.addTags).to.have.been.calledOnceWithExactly({
         'appsec.event': 'true',
         '_dd.origin': 'appsec',
@@ -399,15 +397,14 @@ describe('reporter', () => {
     })
 
     it('should add tags to request span', () => {
-      const result = Reporter.reportAttack([
+      Reporter.reportAttack([
         {
           rule: {},
           rule_matches: [{}]
         }
       ])
-      expect(result).to.not.be.false
-      expect(web.root).to.have.been.calledOnceWith(req)
 
+      expect(web.root).to.have.been.calledOnceWith(req)
       expect(span.addTags).to.have.been.calledOnceWithExactly({
         'appsec.event': 'true',
         '_dd.origin': 'appsec',
@@ -419,10 +416,9 @@ describe('reporter', () => {
     it('should not overwrite origin tag', () => {
       span.context()._tags = { '_dd.origin': 'tracer' }
 
-      const result = Reporter.reportAttack([])
-      expect(result).to.not.be.false
-      expect(web.root).to.have.been.calledOnceWith(req)
+      Reporter.reportAttack([])
 
+      expect(web.root).to.have.been.calledOnceWith(req)
       expect(span.addTags).to.have.been.calledOnceWithExactly({
         'appsec.event': 'true',
         '_dd.appsec.json': '{"triggers":[]}',
@@ -433,7 +429,7 @@ describe('reporter', () => {
     it('should merge attacks json', () => {
       span.context()._tags = { '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}' }
 
-      const result = Reporter.reportAttack([
+      Reporter.reportAttack([
         {
           rule: {}
         },
@@ -442,9 +438,8 @@ describe('reporter', () => {
           rule_matches: [{}]
         }
       ])
-      expect(result).to.not.be.false
-      expect(web.root).to.have.been.calledOnceWith(req)
 
+      expect(web.root).to.have.been.calledOnceWith(req)
       expect(span.addTags).to.have.been.calledOnceWithExactly({
         'appsec.event': 'true',
         '_dd.origin': 'appsec',
@@ -456,7 +451,7 @@ describe('reporter', () => {
     it('should call standalone sample', () => {
       span.context()._tags = { '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}' }
 
-      const result = Reporter.reportAttack([
+      Reporter.reportAttack([
         {
           rule: {}
         },
@@ -465,9 +460,8 @@ describe('reporter', () => {
           rule_matches: [{}]
         }
       ])
-      expect(result).to.not.be.false
-      expect(web.root).to.have.been.calledOnceWith(req)
 
+      expect(web.root).to.have.been.calledOnceWith(req)
       expect(span.addTags).to.have.been.calledOnceWithExactly({
         'appsec.event': 'true',
         '_dd.origin': 'appsec',
