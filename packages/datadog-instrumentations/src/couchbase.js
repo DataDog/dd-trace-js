@@ -28,13 +28,13 @@ function wrapAllNames (names, action) {
 }
 
 function wrapCallback (callback, ctx) {
-  const wrapped = function (...args) {
-    return callbackStartCh.runStores(ctx, () => {
+  const wrapped = callbackStartCh.runStores(ctx, () => {
+    return function (...args) {
       return callbackFinishCh.runStores(ctx, () => {
         return callback.apply(this, args)
       })
-    })
-  }
+    }
+  })
   Object.defineProperty(wrapped, '_dd_wrapped', { value: true })
   return wrapped
 }
