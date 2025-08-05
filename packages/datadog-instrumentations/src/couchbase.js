@@ -214,6 +214,7 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.12'] }, Buc
         })
 
         emitter.once(errorMonitor, (error) => {
+          if (!error) return
           callbackFinishCh.runStores(ctx, () => {
             ctx.error = error
             errorCh.publish(ctx)
@@ -270,6 +271,7 @@ addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^2.6.12'] }, Cl
         })
 
         emitter.once(errorMonitor, (error) => {
+          if (!error) return
           callbackFinishCh.runStores(ctx, () => {
             ctx.error = error
             errorCh.publish(ctx)
