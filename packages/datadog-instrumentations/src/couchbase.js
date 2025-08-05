@@ -55,7 +55,8 @@ function wrapCallbackFinish (callback, thisArg, _args, errorCh, finishCh, ctx) {
           ctx.error = error
           errorCh.publish(ctx)
         }
-        return finishCh.runStores(ctx, () => callback.apply(thisArg, [error, result]))
+        finishCh.publish(ctx)
+        return callback.apply(thisArg, [error, result])
       })
     }
   })
