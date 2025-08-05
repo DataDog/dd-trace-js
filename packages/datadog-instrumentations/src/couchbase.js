@@ -28,11 +28,13 @@ function wrapAllNames (names, action) {
 }
 
 function wrapCallback (callback, ctx) {
-  return callbackStartCh.runStores(ctx, function (...args) {
+  const wrapped = callbackStartCh.runStores(ctx, function (...args) {
     return callbackFinishCh.runStores(ctx, () => {
       return callback.apply(this, args)
     })
   })
+  Object.defineProperty(wrapped, '_dd_wrapped', { value: true })
+  return wrapped
 }
 
 function wrapQuery (query) {
@@ -48,7 +50,7 @@ function wrapQuery (query) {
 }
 
 function wrapCallbackFinish (callback, thisArg, _args, errorCh, finishCh, ctx) {
-  return callbackStartCh.runStores(ctx, () => {
+  const wrapped = callbackStartCh.runStores(ctx, () => {
     return function finish (error, result) {
       return callbackFinishCh.runStores(ctx, () => {
         if (error) {
@@ -60,6 +62,8 @@ function wrapCallbackFinish (callback, thisArg, _args, errorCh, finishCh, ctx) {
       })
     }
   })
+  Object.defineProperty(wrapped, '_dd_wrapped', { value: true })
+  return wrapped
 }
 
 function wrap (prefix, fn) {
@@ -109,9 +113,9 @@ function wrapMaybeInvoke (_maybeInvoke) {
 
     const callback = args[callbackIndex]
 
-    if (typeof callback === 'function') {
+    if (typeof callback === 'function' && !callback._dd_wrapped) {
       const ctx = {}
-      arguments[callbackIndex] = wrapCallback(callback, ctx)
+      args[callbackIndex] = wrapCallback(callback, ctx)
     }
 
     return _maybeInvoke.apply(this, arguments)
