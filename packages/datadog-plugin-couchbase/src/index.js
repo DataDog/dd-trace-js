@@ -76,8 +76,8 @@ class CouchBasePlugin extends StoragePlugin {
     this.addBinds(name, (ctx) => {
       const { bucket, collection, seedNodes } = ctx
 
-      const span = this.startSpan(name, {}, { bucket, collection, seedNodes }, ctx)
-      this.enter(span, ctx.currentStore)
+      this.startSpan(name, {}, { bucket, collection, seedNodes }, ctx)
+      return ctx.currentStore
     })
   }
 }
