@@ -222,54 +222,7 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.12'] }, Buc
 })
 
 addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^2.6.12'] }, Cluster => {
-  const startCh = channel('apm:couchbase:query:start')
-  const finishCh = channel('apm:couchbase:query:finish')
-  const errorCh = channel('apm:couchbase:query:error')
-
   shimmer.wrap(Cluster.prototype, 'query', query => wrapQuery(query))
-
-  shimmer.wrap(Cluster.prototype, '_n1ql', _n1ql => function (host, q, adhoc, emitter) {
-    if (!startCh.hasSubscribers) {
-      return _n1ql.apply(this, arguments)
-    }
-    if (!emitter || !emitter.once) return _n1ql.apply(this, arguments)
-
-    const n1qlQuery = getQueryResource(q)
-
-    const hosts = this.dsnObj.hosts
-    const seedNodes = hosts.map(hostAndPort => hostAndPort.join(':')).join(',')
-
-    const ctx = { resource: n1qlQuery, seedNodes }
-    return startCh.runStores(ctx, () => {
-      callbackStartCh.runStores(ctx, () => {
-        emitter.once('rows', () => {
-          callbackFinishCh.runStores(ctx, () => {
-            finishCh.publish(ctx)
-          })
-        })
-
-        emitter.once(errorMonitor, (error) => {
-          if (!error) return
-          callbackFinishCh.runStores(ctx, () => {
-            ctx.error = error
-            errorCh.publish(ctx)
-            finishCh.publish(ctx)
-          })
-        })
-      })
-
-      try {
-        return _n1ql.apply(this, arguments)
-      } catch (err) {
-        err.stack // trigger getting the stack at the original throwing point
-        ctx.error = err
-        errorCh.publish(ctx)
-
-        throw err
-      }
-    })
-  })
-
   shimmer.wrap(Cluster.prototype, 'openBucket', openBucket => {
     return function () {
       const bucket = openBucket.apply(this, arguments)
