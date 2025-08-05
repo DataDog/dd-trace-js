@@ -91,7 +91,7 @@ function wrap (prefix, fn) {
       return fn.apply(this, arguments)
     }
 
-    const callbackIndex = findCallbackIndex(arguments)
+    const callbackIndex = findCallbackIndex(arguments, 1)
 
     if (callbackIndex < 0) return fn.apply(this, arguments)
 
