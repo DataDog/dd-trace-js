@@ -9,7 +9,7 @@ class CouchBasePlugin extends StoragePlugin {
 
   addBinds (func, start) {
     this.addBind(`apm:couchbase:${func}:start`, start)
-    this.addSub(`apm:couchbase:${func}:error`, error => this.addError(error))
+    this.addSub(`apm:couchbase:${func}:error`, ({ error }) => this.addError(error))
     this.addSub(`apm:couchbase:${func}:finish`, ctx => this.finish(ctx))
     this.addBind('apm:couchbase:query:callback:start', ctx => {
       ctx.parentStore = storage('legacy').getStore()
