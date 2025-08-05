@@ -96,7 +96,7 @@
 /.github/workflows/appsec.yml @DataDog/asm-js
 /.github/workflows/codeql-analysis.yml @DataDog/dd-trace-js
 /.github/workflows/debugger.yml @DataDog/debugger
-/.github/workflows/lambda.yml @DataDog/serverless-aws
+/.github/workflows/serverless.yml @DataDog/serverless-aws
 /.github/workflows/llmobs.yml @DataDog/ml-observability
 /.github/workflows/platform.yml @DataDog/dd-trace-js
 /.github/workflows/pr-labels.yml @DataDog/dd-trace-js
