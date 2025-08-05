@@ -300,14 +300,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        range: ["=4.0.0", ">4.0.0"]
-        node-version: ["oldest-maintenance-lts", "latest"]
-        exclude:
-          - range: "=4.0.0"
-            node-version: "latest"
+        node-version: [eol]
+        range: ["<=4.3.0", ">4.3.0"]
         include:
-          - range: "=4.0.0"
-            node-version: "active-lts"
+          - range: ">=4.3.0"
+            node-version: latest
     runs-on: ubuntu-latest
     env:
       PLUGINS: express
