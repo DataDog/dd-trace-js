@@ -64,20 +64,20 @@ describe('sql-injection-analyzer', () => {
   sqlInjectionAnalyzer.configure(true)
 
   it('should subscribe to mysql, mysql2 and pg start query channel', () => {
-    expect(sqlInjectionAnalyzer._subscriptions).to.have.lengthOf(10)
+    expect(sqlInjectionAnalyzer._subscriptions).to.have.lengthOf(9)
     expect(sqlInjectionAnalyzer._subscriptions[0]._channel.name).to.equals('apm:mysql:query:start')
     expect(sqlInjectionAnalyzer._subscriptions[1]._channel.name).to.equals('datadog:mysql2:outerquery:start')
     expect(sqlInjectionAnalyzer._subscriptions[2]._channel.name).to.equals('apm:pg:query:start')
     expect(sqlInjectionAnalyzer._subscriptions[3]._channel.name).to.equals('datadog:sequelize:query:finish')
-    expect(sqlInjectionAnalyzer._subscriptions[4]._channel.name).to.equals('datadog:pg:pool:query:start')
-    expect(sqlInjectionAnalyzer._subscriptions[5]._channel.name).to.equals('datadog:pg:pool:query:finish')
-    expect(sqlInjectionAnalyzer._subscriptions[6]._channel.name).to.equals('datadog:mysql:pool:query:start')
-    expect(sqlInjectionAnalyzer._subscriptions[7]._channel.name).to.equals('datadog:mysql:pool:query:finish')
-    expect(sqlInjectionAnalyzer._subscriptions[8]._channel.name).to.equals('datadog:knex:raw:start')
-    expect(sqlInjectionAnalyzer._subscriptions[9]._channel.name).to.equals('datadog:knex:raw:finish')
+    expect(sqlInjectionAnalyzer._subscriptions[4]._channel.name).to.equals('datadog:pg:pool:query:finish')
+    expect(sqlInjectionAnalyzer._subscriptions[5]._channel.name).to.equals('datadog:mysql:pool:query:start')
+    expect(sqlInjectionAnalyzer._subscriptions[6]._channel.name).to.equals('datadog:mysql:pool:query:finish')
+    expect(sqlInjectionAnalyzer._subscriptions[7]._channel.name).to.equals('datadog:knex:raw:start')
+    expect(sqlInjectionAnalyzer._subscriptions[8]._channel.name).to.equals('datadog:knex:raw:finish')
 
-    expect(sqlInjectionAnalyzer._bindings).to.have.lengthOf(1)
+    expect(sqlInjectionAnalyzer._bindings).to.have.lengthOf(2)
     expect(sqlInjectionAnalyzer._bindings[0]._channel.name).to.equals('datadog:sequelize:query:start')
+    expect(sqlInjectionAnalyzer._bindings[1]._channel.name).to.equals('datadog:pg:pool:query:start')
   })
 
   it('should not detect vulnerability when no query', () => {
@@ -206,23 +206,23 @@ describe('sql-injection-analyzer', () => {
     it('should call analyze on apm:mysql:query:start', () => {
       const onMysqlQueryStart = sqlInjectionAnalyzer._subscriptions[0]._handler
 
-      onMysqlQueryStart({ sql: 'SELECT 1', name: 'apm:mysql:query:start' })
+      onMysqlQueryStart({ sql: 'SELECT 1' })
 
       expect(analyze).to.be.calledOnceWith('SELECT 1')
     })
 
     it('should call analyze on apm:mysql2:query:start', () => {
-      const onMysql2QueryStart = sqlInjectionAnalyzer._subscriptions[0]._handler
+      const onMysql2QueryStart = sqlInjectionAnalyzer._subscriptions[1]._handler
 
-      onMysql2QueryStart({ sql: 'SELECT 1', name: 'apm:mysql2:query:start' })
+      onMysql2QueryStart({ sql: 'SELECT 1' })
 
       expect(analyze).to.be.calledOnceWith('SELECT 1')
     })
 
     it('should call analyze on apm:pg:query:start', () => {
-      const onPgQueryStart = sqlInjectionAnalyzer._subscriptions[0]._handler
+      const onPgQueryStart = sqlInjectionAnalyzer._subscriptions[2]._handler
 
-      onPgQueryStart({ sql: 'SELECT 1', name: 'apm:pg:query:start' })
+      onPgQueryStart({ originalText: 'SELECT 1', query: { text: 'modified-query SELECT 1' } })
 
       expect(analyze).to.be.calledOnceWith('SELECT 1')
     })

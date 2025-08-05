@@ -43,8 +43,9 @@ function wrapQuery (query) {
     const stream = typeof textPropObj.read === 'function'
 
     // Only alter `text` property if safe to do so. Initially, it's a property, not a getter.
+    let originalText
     if (!textProp || textProp.configurable) {
-      const originalText = textPropObj.text
+      originalText = textPropObj.text
 
       Object.defineProperty(textPropObj, 'text', {
         get () {
@@ -56,6 +57,7 @@ function wrapQuery (query) {
     const ctx = {
       params: this.connectionParameters,
       query: textPropObj,
+      originalText,
       processId,
       abortController,
       stream

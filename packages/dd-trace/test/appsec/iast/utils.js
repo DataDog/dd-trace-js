@@ -239,7 +239,7 @@ function checkVulnerabilityInRequest (
   }
 }
 
-function prepareTestServerForIast (description, tests, iastConfig) {
+function prepareTestServerForIast (description, tests, iastConfig, pluginsToConfigure = []) {
   describe(description, () => {
     const config = {}
     let http
@@ -254,7 +254,7 @@ function prepareTestServerForIast (description, tests, iastConfig) {
     })
 
     before(() => {
-      return agent.load('http', undefined, { flushInterval: 1 })
+      return agent.load(['http', ...pluginsToConfigure], { client: false }, { flushInterval: 1 })
         .then(() => {
           http = require('http')
         })
@@ -308,7 +308,14 @@ function prepareTestServerForIast (description, tests, iastConfig) {
   })
 }
 
-function prepareTestServerForIastInExpress (description, expressVersion, loadMiddlewares, tests, iastConfig) {
+function prepareTestServerForIastInExpress (
+  description,
+  expressVersion,
+  loadMiddlewares,
+  tests,
+  iastConfig,
+  pluginsToConfigure = []
+) {
   if (arguments.length === 3) {
     tests = loadMiddlewares
     loadMiddlewares = undefined
@@ -319,7 +326,7 @@ function prepareTestServerForIastInExpress (description, expressVersion, loadMid
     let listener, app, server
 
     before(() => {
-      return agent.load(['express', 'http'], { client: false }, { flushInterval: 1 })
+      return agent.load(['express', 'http', ...pluginsToConfigure], { client: false }, { flushInterval: 1 })
     })
 
     before(() => {
