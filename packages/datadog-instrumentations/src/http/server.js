@@ -19,6 +19,207 @@ const requestFinishedSet = new WeakSet()
 const httpNames = ['http', 'node:http']
 const httpsNames = ['https', 'node:https']
 
+function handlePubSubOrCloudEvent(req, res, emit, server, originalArgs) {
+  const isCloudEvent = req.headers['content-type']?.includes('application/cloudevents+json') ||
+    req.headers['ce-specversion']
+  const eventType = isCloudEvent ? 'Cloud Event' : 'PubSub push'
+  console.log(`[DD-TRACE] HTTP server handling ${eventType} request (framework-agnostic)`)
+
+  // Get tracer from global reference (avoids circular dependencies)
+  const tracer = global._ddtrace
+  if (!tracer) {
+    console.warn('[DD-TRACE] Tracer not available, skipping PubSub handling')
+    return emit.apply(server, originalArgs)
+  }
+
+  // Collect raw body for PubSub message parsing with error handling
+  const chunks = []
+  const MAX_BODY_SIZE = 10 * 1024 * 1024 // 10MB limit for large Pub/Sub payloads
+  let bodySize = 0
+
+  const cleanup = () => {
+    req.removeAllListeners('data')
+    req.removeAllListeners('end')
+    req.removeAllListeners('error')
+  }
+
+  const handleError = (error) => {
+    console.warn(`[DD-TRACE] Error processing ${eventType}:`, error.message)
+    cleanup()
+    emit.apply(server, originalArgs)
+  }
+
+  req.on('error', handleError)
+
+  req.on('data', chunk => {
+    bodySize += chunk.length
+    if (bodySize > MAX_BODY_SIZE) {
+      handleError(new Error(`Request body too large: ${bodySize} bytes (limit: ${MAX_BODY_SIZE})`))
+      return
+    }
+    chunks.push(chunk)
+  })
+
+  req.on('end', () => {
+    try {
+      // Efficiently combine chunks for large payloads
+      const body = Buffer.concat(chunks).toString('utf8')
+
+      // Log large payload handling for monitoring
+      if (bodySize > 10 * 1024 * 1024) { // Log if > 10MB
+        console.log(`[DD-TRACE] Processing large ${eventType} payload: ${(bodySize / 1024 / 1024).toFixed(1)}MB`)
+      }
+
+      const json = JSON.parse(body)
+      req.body = json // Set parsed body for framework use
+      req._pubsubBodyParsed = true // Flag to skip body-parser
+
+      // Extract message and attributes based on format
+      let message, subscription, attrs
+
+      if (isCloudEvent) {
+        if (req.headers['ce-specversion']) {
+          // Binary Content Mode - message in body, trace context in headers
+          message = json
+          attrs = { ...message?.attributes }
+          subscription = req.headers['ce-subscription'] || 'cloud-event-subscription'
+
+          // Merge trace context from headers
+          const ceTraceParent = req.headers['ce-traceparent'] || req.headers['traceparent']
+          const ceTraceState = req.headers['ce-tracestate'] || req.headers['tracestate']
+          if (ceTraceParent) attrs.traceparent = ceTraceParent
+          if (ceTraceState) attrs.tracestate = ceTraceState
+        } else {
+          // Structured Content Mode - message in data field
+          message = json.data?.message || json
+          subscription = json.data?.subscription || json.subscription || 'cloud-event-subscription'
+          attrs = { ...message?.attributes }
+
+          // Add Cloud Events context
+          if (json.source) attrs['ce-source'] = json.source
+          if (json.type) attrs['ce-type'] = json.type
+        }
+      } else {
+        // Traditional PubSub push format
+        message = json.message
+        subscription = json.subscription
+        attrs = message?.attributes || {}
+      }
+
+      if (!attrs || typeof attrs !== 'object' || Object.keys(attrs).length === 0) {
+        console.warn('[DD-TRACE] No valid message attributes found')
+        cleanup()
+        return emit.apply(server, originalArgs)
+      }
+
+      console.log(`[DD-TRACE] Creating span with distributed trace context (${eventType})`)
+
+      // Extract trace context from PubSub message attributes (optimized)
+      const carrier = {}
+      const traceHeaders = ['traceparent', 'tracestate', 'x-datadog-trace-id', 'x-datadog-parent-id', 'x-datadog-sampling-priority', 'x-datadog-tags']
+      for (const header of traceHeaders) {
+        if (attrs[header]) {
+          carrier[header] = attrs[header]
+        }
+      }
+
+      // Extract parent span context (key for distributed tracing!)
+      const parent = tracer.extract('text_map', carrier)
+
+      // Extract project ID and topic from subscription path if not in attributes
+      let projectId = attrs['gcloud.project_id']
+      let topicName = attrs['pubsub.topic']
+
+      if (!projectId && subscription) {
+        // Extract from subscription path: projects/PROJECT_ID/subscriptions/SUBSCRIPTION_NAME
+        const match = subscription.match(/projects\/([^\/]+)\/subscriptions/)
+        if (match) projectId = match[1]
+      }
+
+      if (!topicName) {
+        topicName = 'push-subscription-topic'
+      }
+
+      console.log(`[DD-TRACE] Using project_id: ${projectId}, topic: ${topicName}`)
+
+      // Create PubSub consumer span with error handling
+      let span
+      try {
+        span = tracer.startSpan('google-cloud-pubsub.receive', {
+          childOf: parent, // ✅ This creates the distributed trace link!
+          tags: {
+            'component': 'google-cloud-pubsub',
+            'span.kind': 'consumer',
+            'span.type': 'worker',
+            'gcloud.project_id': projectId || 'unknown',
+            'pubsub.topic': topicName || 'unknown',
+            'pubsub.subscription': subscription,
+            'pubsub.message_id': message?.messageId,
+            'pubsub.delivery_method': isCloudEvent ? 'cloud-event' : 'push',
+            'pubsub.ack': 1 // Push subscriptions auto-ack
+          }
+        })
+
+        console.log('[DD-TRACE] Created PubSub span with type: worker, parent trace:', parent ? parent.toTraceId() : 'none')
+      } catch (spanError) {
+        console.warn('[DD-TRACE] Failed to create PubSub span:', spanError.message)
+        cleanup()
+        return emit.apply(server, originalArgs)
+      }
+
+      // Attach span to request for application code
+      req._datadog = { span }
+      req._eventType = eventType
+
+      // Activate span scope and continue with error handling
+      const scope = tracer.scope()
+      try {
+        scope.activate(span, () => {
+          // Finish span when response completes (with error handling)
+          const finishSpan = () => {
+            try {
+              console.log('[DD-TRACE] Finishing PubSub span')
+              if (span && !span.finished) {
+                span.finish()
+              }
+            } catch (finishError) {
+              console.warn('[DD-TRACE] Error finishing span:', finishError.message)
+            }
+            cleanup()
+          }
+
+          // Handle both success and error cases
+          res.on('finish', finishSpan)
+          res.on('close', finishSpan)
+          res.on('error', (resError) => {
+            console.warn('[DD-TRACE] Response error:', resError.message)
+            if (span && !span.finished) {
+              span.setTag('error', true)
+              span.setTag('error.message', resError.message)
+            }
+            finishSpan()
+          })
+
+          // Continue with normal request processing
+          emit.apply(server, originalArgs)
+        })
+      } catch (activationError) {
+        console.warn('[DD-TRACE] Error activating span scope:', activationError.message)
+        if (span && !span.finished) {
+          span.finish()
+        }
+        cleanup()
+        emit.apply(server, originalArgs)
+      }
+
+    } catch (e) {
+      console.warn('[DD-TRACE] Failed to parse PubSub push body:', e.message)
+      cleanup()
+      emit.apply(server, originalArgs)
+    }
+  })
+}
+
 addHook({ name: httpNames }, http => {
   shimmer.wrap(http.ServerResponse.prototype, 'emit', wrapResponseEmit)
   shimmer.wrap(http.Server.prototype, 'emit', wrapEmit)
@@ -54,6 +255,7 @@ function wrapResponseEmit (emit) {
     return emit.apply(this, arguments)
   }
 }
+
 function wrapEmit (emit) {
   return function (eventName, req, res) {
     if (!startServerCh.hasSubscribers) {
@@ -61,6 +263,20 @@ function wrapEmit (emit) {
     }
 
     if (eventName === 'request') {
+      // Handle PubSub push AND Cloud Events at HTTP server level - works with ANY framework
+      const isPubSubOrCloudEvent = req.method === 'POST' && (
+        // Traditional PubSub push
+        (req.headers['content-type']?.includes('application/json') &&
+          req.headers['user-agent']?.includes('APIs-Google')) ||
+        // Cloud Events
+        req.headers['content-type']?.includes('application/cloudevents+json') ||
+        req.headers['ce-specversion'] // Binary Content Mode
+      )
+
+      if (isPubSubOrCloudEvent) {
+        return handlePubSubOrCloudEvent(req, res, emit, this, arguments)
+      }
+
       res.req = req
 
       const abortController = new AbortController()
