@@ -72,7 +72,7 @@ jobs:
       - uses: ./.github/actions/install
       - run: yarn test:integration:playwright
         env:
-          NODE_OPTIONS: '-r ./ci/init'
+          NODE_OPTIONS: "-r ./ci/init"
 
   integration-ci:
     strategy:
@@ -112,7 +112,7 @@ jobs:
       - uses: ./.github/actions/install
       - run: yarn test:integration:${{ matrix.framework }}
         env:
-          NODE_OPTIONS: '-r ./ci/init'
+          NODE_OPTIONS: "-r ./ci/init"
 
   integration-cypress:
     strategy:
@@ -122,7 +122,7 @@ jobs:
         # 10.2.0 is the minimum version we support in >=6
         # The logic to decide whether the tests run lives in integration-tests/cypress/cypress.spec.js
         cypress-version: [6.7.0, 10.2.0, latest]
-        module-type: ['commonJS', 'esm']
+        module-type: ["commonJS", "esm"]
     runs-on: ubuntu-latest
     env:
       DD_SERVICE: dd-trace-js-integration-tests
@@ -138,7 +138,7 @@ jobs:
       - run: yarn test:integration:cypress --ignore-engines
         env:
           CYPRESS_VERSION: ${{ matrix.cypress-version }}
-          NODE_OPTIONS: '-r ./ci/init'
+          NODE_OPTIONS: "-r ./ci/init"
           CYPRESS_MODULE_TYPE: ${{ matrix.module-type }}
           OPTIONS_OVERRIDE: 1
 
@@ -160,7 +160,7 @@ jobs:
       - uses: ./.github/actions/install
       - run: yarn test:integration:vitest
         env:
-          NODE_OPTIONS: '-r ./ci/init'
+          NODE_OPTIONS: "-r ./ci/init"
 
   plugin-cucumber:
     runs-on: ubuntu-latest
@@ -178,7 +178,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
       - if: always()
@@ -195,7 +195,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
       - if: always()

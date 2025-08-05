@@ -19,7 +19,7 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:appsec:ci
       - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
@@ -33,7 +33,7 @@ jobs:
       - run: yarn test:appsec:ci
       - uses: ./.github/actions/node/newest-maintenance-lts
       - run: yarn test:appsec:ci
-      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:ci
@@ -43,10 +43,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
         with:
-          cache: 'true'
+          cache: "true"
       - run: yarn test:appsec:ci
       - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
 
@@ -58,19 +58,19 @@ jobs:
       openldap:
         image: bitnami/openldap:latest
         ports:
-          - '1389:1389'
-          - '1636:1636'
+          - "1389:1389"
+          - "1636:1636"
         env:
-          LDAP_ADMIN_USERNAME: 'admin'
-          LDAP_ADMIN_PASSWORD: 'adminpassword'
-          LDAP_USERS: 'user01,user02'
-          LDAP_PASSWORDS: 'password1,password2'
+          LDAP_ADMIN_USERNAME: "admin"
+          LDAP_ADMIN_PASSWORD: "adminpassword"
+          LDAP_USERS: "user01,user02"
+          LDAP_PASSWORDS: "password1,password2"
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
-      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
 
@@ -84,7 +84,7 @@ jobs:
         ports:
           - 5432:5432
     env:
-      PG_TEST_NATIVE: 'true'
+      PG_TEST_NATIVE: "true"
       PLUGINS: pg|knex
       SERVICES: postgres
     steps:
@@ -102,8 +102,8 @@ jobs:
       mysql:
         image: mariadb:10.4
         env:
-          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
-          MYSQL_DATABASE: 'db'
+          MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+          MYSQL_DATABASE: "db"
         ports:
           - 3306:3306
     env:
@@ -127,7 +127,7 @@ jobs:
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
-      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
 
@@ -140,7 +140,7 @@ jobs:
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
-      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
 
@@ -153,7 +153,7 @@ jobs:
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
-      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
 
@@ -172,7 +172,7 @@ jobs:
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
-      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
 
@@ -191,7 +191,7 @@ jobs:
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
-      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
 
@@ -206,7 +206,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/newest-maintenance-lts
       - run: yarn test:appsec:plugins:ci
-      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
@@ -219,23 +219,33 @@ jobs:
         version:
           - oldest
           - latest
-        range: ['>=10.2.0 <11', '>=11.0.0 <13', '11.1.4', '>=13.0.0 <14', '13.2.0', '>=14.0.0 <=14.2.6', '>=14.2.7 <15', '>=15.0.0']
+        range:
+          [
+            ">=10.2.0 <11",
+            ">=11.0.0 <13",
+            "11.1.4",
+            ">=13.0.0 <14",
+            "13.2.0",
+            ">=14.0.0 <=14.2.6",
+            ">=14.2.7 <15",
+            ">=15.0.0",
+          ]
         include:
-          - range: '>=10.2.0 <11'
+          - range: ">=10.2.0 <11"
             range_clean: gte.10.2.0.and.lt.11
-          - range: '>=11.0.0 <13'
+          - range: ">=11.0.0 <13"
             range_clean: gte.11.0.0.and.lt.13
-          - range: '11.1.4'
+          - range: "11.1.4"
             range_clean: 11.1.4
-          - range: '>=13.0.0 <14'
+          - range: ">=13.0.0 <14"
             range_clean: gte.13.0.0.and.lt.14
-          - range: '13.2.0'
+          - range: "13.2.0"
             range_clean: 13.2.0
-          - range: '>=14.0.0 <=14.2.6'
+          - range: ">=14.0.0 <=14.2.6"
             range_clean: gte.14.0.0.and.lte.14.2.6
-          - range: '>=14.2.7 <15'
+          - range: ">=14.2.7 <15"
             range_clean: gte.14.2.7.and.lt.15
-          - range: '>=15.0.0'
+          - range: ">=15.0.0"
             range_clean: gte.15.0.0
     runs-on: ubuntu-latest
     env:
@@ -264,7 +274,7 @@ jobs:
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
-      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
 
@@ -290,7 +300,7 @@ jobs:
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
-      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
 
@@ -303,7 +313,7 @@ jobs:
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
-      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
 
@@ -316,7 +326,7 @@ jobs:
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
-      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
 
@@ -327,7 +337,7 @@ jobs:
         image: apache/kafka-native:3.8.0-rc2
         env:
           KAFKA_PROCESS_ROLES: broker,controller
-          KAFKA_NODE_ID: '1'
+          KAFKA_NODE_ID: "1"
           KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
           KAFKA_CONTROLLER_QUORUM_VOTERS: 1@127.0.0.1:9093
           KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
@@ -335,8 +345,8 @@ jobs:
           KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://127.0.0.1:9092
           KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
           KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
-          KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: '1'
-          KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: '0'
+          KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+          KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
         ports:
           - 9092:9092
           - 9093:9093
@@ -348,6 +358,6 @@ jobs:
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
-      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3

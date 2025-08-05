@@ -24,7 +24,7 @@ jobs:
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:core:ci
-      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/node/latest
       - run: yarn test:core:ci
       - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
 
@@ -158,8 +158,8 @@ jobs:
       mysql:
         image: mariadb:10.4
         env:
-          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
-          MYSQL_DATABASE: 'db'
+          MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+          MYSQL_DATABASE: "db"
         ports:
           - 3306:3306
     env:
@@ -203,7 +203,7 @@ jobs:
         ports:
           - 5432:5432
     env:
-      PG_TEST_NATIVE: 'true'
+      PG_TEST_NATIVE: "true"
       PLUGINS: pg
       SERVICES: postgres
     steps:
@@ -298,7 +298,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:trace:guardrails:ci
       - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
@@ -323,10 +323,10 @@ jobs:
   integration-guardrails-unsupported:
     strategy:
       matrix:
-        version: ['0.8', '0.10', '0.12', '4', '6', '8', '10', '12']
+        version: ["0.8", "0.10", "0.12", "4", "6", "8", "10", "12"]
     runs-on: ubuntu-latest
     env:
-      DD_TRACE_DEBUG: 'true' # This exercises more of the guardrails code
+      DD_TRACE_DEBUG: "true" # This exercises more of the guardrails code
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/node
@@ -335,7 +335,7 @@ jobs:
       - run: node ./init
       - run: node ./init
         env:
-          DD_INJECTION_ENABLED: 'true'
+          DD_INJECTION_ENABLED: "true"
 
   shimmer:
     runs-on: ubuntu-latest
@@ -344,6 +344,6 @@ jobs:
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:shimmer:ci
-      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/node/latest
       - run: yarn test:shimmer:ci
       - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
