@@ -206,23 +206,23 @@ describe('sql-injection-analyzer', () => {
     it('should call analyze on apm:mysql:query:start', () => {
       const onMysqlQueryStart = sqlInjectionAnalyzer._subscriptions[0]._handler
 
-      onMysqlQueryStart({ sql: 'SELECT 1', name: 'apm:mysql:query:start' })
+      onMysqlQueryStart({ sql: 'SELECT 1' })
 
       expect(analyze).to.be.calledOnceWith('SELECT 1')
     })
 
     it('should call analyze on apm:mysql2:query:start', () => {
-      const onMysql2QueryStart = sqlInjectionAnalyzer._subscriptions[0]._handler
+      const onMysql2QueryStart = sqlInjectionAnalyzer._subscriptions[1]._handler
 
-      onMysql2QueryStart({ sql: 'SELECT 1', name: 'apm:mysql2:query:start' })
+      onMysql2QueryStart({ sql: 'SELECT 1' })
 
       expect(analyze).to.be.calledOnceWith('SELECT 1')
     })
 
     it('should call analyze on apm:pg:query:start', () => {
-      const onPgQueryStart = sqlInjectionAnalyzer._subscriptions[0]._handler
+      const onPgQueryStart = sqlInjectionAnalyzer._subscriptions[2]._handler
 
-      onPgQueryStart({ sql: 'SELECT 1', name: 'apm:pg:query:start' })
+      onPgQueryStart({ originalText: 'SELECT 1', query: { text: 'modified-query SELECT 1' } })
 
       expect(analyze).to.be.calledOnceWith('SELECT 1')
     })
