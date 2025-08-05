@@ -2,7 +2,6 @@
 
 process.env.DD_INJECTION_ENABLED = 'true'
 
-const assert = require('assert')
 const proxyquire = require('proxyquire')
 const { EventEmitter } = require('events')
 const { telemetryForwarder, assertTelemetryPoints } = require('../../../../integration-tests/helpers')
@@ -71,11 +70,11 @@ describe('sendTelemetry', () => {
       assertTelemetryPoints(process.pid, msgs, ['abort.integration', '1'])
     })
   })
-    
+
   describe('Error scenarios and metadata', () => {
     let mockProc, telemetryModule, capturedStdinData
 
-    function createMockProcess() {
+    function createMockProcess () {
       const proc = new EventEmitter()
       proc.stdin = new EventEmitter()
       proc.stdin.end = (data) => {
@@ -84,13 +83,13 @@ describe('sendTelemetry', () => {
       return proc
     }
 
-    function loadTelemetryModuleWithMockProc() {
+    function loadTelemetryModuleWithMockProc () {
       return proxyquire('../../src/guardrails/telemetry', {
         child_process: { spawn: () => mockProc }
       })
     }
 
-    function runTelemetry(eventType, value) {
+    function runTelemetry (eventType, value) {
       const originalStringify = JSON.stringify
       JSON.stringify = function (obj) {
         if (obj && obj.metadata && obj.points) {
@@ -112,7 +111,7 @@ describe('sendTelemetry', () => {
       }
     }
 
-    function assertStdinMetadata(expected) {
+    function assertStdinMetadata (expected) {
       expect(capturedStdinData).to.exist
       const parsed = JSON.parse(capturedStdinData)
       expect(parsed.metadata.result).to.equal(expected.result)
@@ -165,5 +164,5 @@ describe('sendTelemetry', () => {
         result_reason: 'Successfully configured ddtrace package'
       })
     })
-  }) 
+  })
 })

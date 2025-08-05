@@ -14,7 +14,6 @@ const rimraf = promisify(require('rimraf'))
 const FakeAgent = require('./fake-agent')
 const id = require('../../packages/dd-trace/src/id')
 const { version } = require('../../package.json')
-const telemetryModule = require('../../packages/dd-trace/src/guardrails/telemetry')
 const { getCappedRange } = require('../../packages/dd-trace/test/plugins/versions')
 
 const hookFile = 'dd-trace/loader-hook.mjs'
