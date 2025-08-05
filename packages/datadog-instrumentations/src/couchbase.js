@@ -35,26 +35,6 @@ function wrapCallback (callback, ctx) {
   })
 }
 
-// semver >=2 <3
-function wrapMaybeInvoke (_maybeInvoke) {
-  return function (fn, args) {
-    if (!Array.isArray(args)) return _maybeInvoke.apply(this, arguments)
-
-    const callbackIndex = findCallbackIndex(args, 0)
-
-    if (callbackIndex === -1) return _maybeInvoke.apply(this, arguments)
-
-    const callback = args[callbackIndex]
-
-    if (typeof callback === 'function') {
-      const ctx = {}
-      args[callbackIndex] = wrapCallback(callback, ctx)
-    }
-
-    return _maybeInvoke.apply(this, arguments)
-  }
-}
-
 function wrapQuery (query) {
   return function (q, params, callback) {
     const cb = arguments[arguments.length - 1]
@@ -192,7 +172,6 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.12'] }, Buc
   const finishCh = channel('apm:couchbase:query:finish')
   const errorCh = channel('apm:couchbase:query:error')
 
-  shimmer.wrap(Bucket.prototype, '_maybeInvoke', maybeInvoke => wrapMaybeInvoke(maybeInvoke))
   shimmer.wrap(Bucket.prototype, 'query', query => wrapQuery(query))
 
   shimmer.wrap(Bucket.prototype, '_n1qlReq', _n1qlReq => function (host, q, adhoc, emitter) {
@@ -247,7 +226,6 @@ addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^2.6.12'] }, Cl
   const finishCh = channel('apm:couchbase:query:finish')
   const errorCh = channel('apm:couchbase:query:error')
 
-  shimmer.wrap(Cluster.prototype, '_maybeInvoke', maybeInvoke => wrapMaybeInvoke(maybeInvoke))
   shimmer.wrap(Cluster.prototype, 'query', query => wrapQuery(query))
 
   shimmer.wrap(Cluster.prototype, '_n1ql', _n1ql => function (host, q, adhoc, emitter) {
