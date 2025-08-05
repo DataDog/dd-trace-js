@@ -26,6 +26,11 @@ addHook({
   versions: ['>=1.4.0 <1.20.0']
 }, read => {
   return shimmer.wrapFunction(read, read => function (req, res, next) {
+    // Skip body parsing if PubSub/Cloud Event middleware already parsed it
+    if (req._pubsubBodyParsed) {
+      console.log('[DD-TRACE] Skipping body-parser for PubSub/Cloud Event request - already parsed')
+      return next()
+    }
     const nextResource = new AsyncResource('bound-anonymous-fn')
     arguments[2] = nextResource.bind(publishRequestBodyAndNext(req, res, next))
     return read.apply(this, arguments)
@@ -38,6 +43,11 @@ addHook({
   versions: ['>=1.20.0']
 }, read => {
   return shimmer.wrapFunction(read, read => function (req, res, next) {
+    // Skip body parsing if PubSub/Cloud Event middleware already parsed it
+    if (req._pubsubBodyParsed) {
+      console.log('[DD-TRACE] Skipping body-parser for PubSub/Cloud Event request - already parsed')
+      return next()
+    }
     arguments[2] = publishRequestBodyAndNext(req, res, next)
     return read.apply(this, arguments)
   })
