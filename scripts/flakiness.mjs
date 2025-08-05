@@ -17,11 +17,11 @@ const workflows = [
   '.github/workflows/apm-integrations.yml',
   '.github/workflows/appsec.yml',
   '.github/workflows/debugger.yml',
-  '.github/workflows/lambda.yml',
   '.github/workflows/llmobs.yml',
   '.github/workflows/platform.yml',
   '.github/workflows/profiling.yml',
   '.github/workflows/project.yml',
+  '.github/workflows/serverless.yml',
   '.github/workflows/system-tests.yml',
   '.github/workflows/test-optimization.yml'
 ]
