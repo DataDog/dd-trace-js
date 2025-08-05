@@ -11,11 +11,6 @@ class CouchBasePlugin extends StoragePlugin {
     this.addBind(`apm:couchbase:${func}:start`, start)
     this.addSub(`apm:couchbase:${func}:error`, ({ error }) => this.addError(error))
     this.addSub(`apm:couchbase:${func}:finish`, ctx => this.finish(ctx))
-    this.addBind('apm:couchbase:query:callback:start', ctx => {
-      ctx.parentStore = storage('legacy').getStore()
-      return ctx.parentStore
-    })
-    this.addBind('apm:couchbase:query:callback:finish', ctx => ctx.parentStore)
   }
 
   startSpan (operation, customTags, { bucket, collection, seedNodes }, ctx) {
@@ -63,6 +58,12 @@ class CouchBasePlugin extends StoragePlugin {
 
       return ctx.currentStore
     })
+
+    this.addBind('apm:couchbase:query:callback:start', ctx => {
+      ctx.parentStore = storage('legacy').getStore()
+      return ctx.parentStore
+    })
+    this.addBind('apm:couchbase:query:callback:finish', ctx => ctx.parentStore)
 
     this._addCommandSubs('upsert')
     this._addCommandSubs('insert')

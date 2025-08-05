@@ -7,7 +7,6 @@ const {
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
-// these channels are for maintaining store context for their respective methods
 const callbackStartCh = channel('apm:couchbase:query:callback:start')
 const callbackFinishCh = channel('apm:couchbase:query:callback:finish')
 
@@ -147,23 +146,17 @@ function wrapCBandPromise (fn, name, startData, thisArg, args) {
       const res = fn.apply(thisArg, args)
 
       // semver >=3 will always return promise by default
-      callbackStartCh.runStores(ctx, () => {
-        res.then(
-          (result) => {
-            callbackFinishCh.runStores(ctx, () => {
-              ctx.result = result
-              finishCh.publish(ctx)
-            })
-          },
-          (err) => {
-            callbackFinishCh.runStores(ctx, () => {
-              ctx.error = err
-              errorCh.publish(ctx)
-              finishCh.publish(ctx)
-            })
-          }
-        )
-      })
+      res.then(
+        (result) => {
+          ctx.result = result
+          finishCh.publish(ctx)
+        },
+        (err) => {
+          ctx.error = err
+          errorCh.publish(ctx)
+          finishCh.publish(ctx)
+        }
+      )
       return res
     } catch (e) {
       e.stack
@@ -214,21 +207,15 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.12'] }, Buc
 
     const ctx = { resource: n1qlQuery, bucket: { name: this.name || this._name }, seedNodes: this._dd_hosts }
     return startCh.runStores(ctx, () => {
-      callbackStartCh.runStores(ctx, () => {
-        emitter.once('rows', () => {
-          callbackFinishCh.runStores(ctx, () => {
-            finishCh.publish(ctx)
-          })
-        })
+      emitter.once('rows', () => {
+        finishCh.publish(ctx)
+      })
 
-        emitter.once(errorMonitor, (error) => {
-          if (!error) return
-          callbackFinishCh.runStores(ctx, () => {
-            ctx.error = error
-            errorCh.publish(ctx)
-            finishCh.publish(ctx)
-          })
-        })
+      emitter.once(errorMonitor, (error) => {
+        if (!error) return
+        ctx.error = error
+        errorCh.publish(ctx)
+        finishCh.publish(ctx)
       })
 
       try {
