@@ -84,7 +84,7 @@
   "mongodb-core": ">=2",
   "mongoose": ">=4.6.4",
   "mquery": ">=5",
-  "multer": ">=1.4.4",
+  "multer": ">=1.4.4-lts.1",
   "mysql": ">=2",
   "mysql2": ">=1",
   "net": null,
