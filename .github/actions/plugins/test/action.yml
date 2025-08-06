@@ -1,5 +1,12 @@
 name: Plugin Tests
 description: Run plugin tests
+
+inputs:
+  latest-node-version:
+    description: 'the node version to use'
+    required: false
+    default: 'latest'
+
 runs:
   using: composite
   steps:
@@ -8,7 +15,9 @@ runs:
     - uses: ./.github/actions/install
     - run: yarn test:plugins:ci
       shell: bash
-    - uses: ./.github/actions/node/latest
+    - uses: ./.github/actions/node
+      with:
+        version: ${{ inputs.latest-node-version }}
     - run: yarn test:plugins:ci
       shell: bash
     - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3

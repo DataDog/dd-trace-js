@@ -51,7 +51,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
         with:
-          cache: "true"
+          cache: 'true'
       - run: yarn test:profiler:ci
       - run: yarn test:integration:profiler
       - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3

@@ -3,11 +3,11 @@ name: ESLint Rules
 on:
   pull_request:
     paths:
-      - "eslint-rules/**"
+      - 'eslint-rules/**'
   push:
     branches: [master]
     paths:
-      - "eslint-rules/**"
+      - 'eslint-rules/**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
