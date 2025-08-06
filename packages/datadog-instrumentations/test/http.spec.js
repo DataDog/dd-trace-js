@@ -238,7 +238,7 @@ describe('server', () => {
 
       const req = http.request({
         hostname: 'localhost',
-        port: port,
+        port,
         path: '/',
         method: 'POST',
         headers: {
@@ -276,7 +276,7 @@ describe('server', () => {
 
       const req = http.request({
         hostname: 'localhost',
-        port: port,
+        port,
         path: '/',
         method: 'POST',
         headers: {
@@ -304,7 +304,7 @@ describe('server', () => {
     it('should publish to startServerCh for regular HTTP requests', (done) => {
       const req = http.request({
         hostname: 'localhost',
-        port: port,
+        port,
         path: '/',
         method: 'GET'
       }, (res) => {
@@ -336,7 +336,7 @@ describe('server', () => {
     it('should handle request errors gracefully', (done) => {
       const req = http.request({
         hostname: 'localhost',
-        port: port,
+        port,
         path: '/',
         method: 'POST',
         headers: {
