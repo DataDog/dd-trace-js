@@ -47,6 +47,8 @@ function capSubrange (name, subrange) {
  * @param {string} subrange
  */
 function assertSupported (name, subrange) {
+  if (supported[name] === null) return
+
   if (!supported[name]) {
     throw new Error(
       `Supported version range for '${name}' needs to be defined in '${dir}/supported.json'.`
