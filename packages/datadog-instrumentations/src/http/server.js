@@ -19,16 +19,111 @@ const requestFinishedSet = new WeakSet()
 const httpNames = ['http', 'node:http']
 const httpsNames = ['https', 'node:https']
 
-function handlePubSubOrCloudEvent (req, res, emit, server, originalArgs) {
-  const isCloudEvent = req.headers['content-type']?.includes('application/cloudevents+json') ||
-    req.headers['ce-specversion']
-  const eventType = isCloudEvent ? 'Cloud Event' : 'PubSub push'
+function parseCloudEventMessage (json, req) {
+  // Eventarc only uses Binary Content Mode with ce-specversion header
+  // Payload structure: {"message": {...}, "subscription": "..."}
+  const message = json.message || json
+  const attrs = { ...message?.attributes }
+  const subscription = json.subscription || req.headers['ce-subscription'] || 'cloud-event-subscription'
 
+  // For Eventarc: prioritize message attributes (original trace) over transport headers
+  // Only use CE headers if message attributes don't have trace context
+  if (!attrs.traceparent) {
+    const ceTraceParent = req.headers['ce-traceparent'] || req.headers.traceparent
+    if (ceTraceParent) attrs.traceparent = ceTraceParent
+  }
+  if (!attrs.tracestate) {
+    const ceTraceState = req.headers['ce-tracestate'] || req.headers.tracestate
+    if (ceTraceState) attrs.tracestate = ceTraceState
+  }
+
+  // Add Cloud Event context from headers to attributes for span tags
+  if (req.headers['ce-source']) attrs['ce-source'] = req.headers['ce-source']
+  if (req.headers['ce-type']) attrs['ce-type'] = req.headers['ce-type']
+  return { message, subscription, attrs }
+}
+
+function parsePubSubMessage (json) {
+  // Traditional PubSub push format
+  const message = json.message
+  const subscription = json.subscription
+  const attrs = message?.attributes || {}
+  return { message, subscription, attrs }
+}
+
+function createCloudEventSpan (tracer, parent, topicName, projectId, subscription, message, attrs, req) {
+  const spanTags = {
+    component: 'google-cloud-pubsub',
+    'span.kind': 'consumer',
+    'gcloud.project_id': projectId || 'unknown',
+    'pubsub.topic': topicName || 'unknown',
+    'pubsub.subscription': subscription,
+    'pubsub.message_id': message?.messageId,
+    'pubsub.delivery_method': 'eventarc',
+    'eventarc.trigger': 'pubsub',
+  }
+
+  // Add Cloud Event specific tags
+  if (attrs['ce-source']) spanTags['eventarc.source'] = attrs['ce-source']
+  if (attrs['ce-type']) spanTags['eventarc.type'] = attrs['ce-type']
+  if (req.headers['ce-id']) spanTags['eventarc.id'] = req.headers['ce-id']
+  if (req.headers['ce-specversion']) spanTags['eventarc.specversion'] = req.headers['ce-specversion']
+  if (req.headers['ce-time']) spanTags['eventarc.time'] = req.headers['ce-time']
+
+  return tracer.startSpan('google-cloud-pubsub.receive', {
+    childOf: parent,
+    resource: topicName,
+    type: 'worker',
+    tags: spanTags,
+    metrics: {
+      'pubsub.ack': 1
+    }
+  })
+}
+
+function createPubSubSpan (tracer, parent, topicName, projectId, subscription, message, attrs) {
+  const spanTags = {
+    component: 'google-cloud-pubsub',
+    'span.kind': 'consumer',
+    'gcloud.project_id': projectId || 'unknown',
+    'pubsub.topic': topicName || 'unknown',
+    'pubsub.subscription': subscription,
+    'pubsub.message_id': message?.messageId,
+    'pubsub.delivery_method': 'push'
+  }
+  return tracer.startSpan('google-cloud-pubsub.receive', {
+    childOf: parent,
+    resource: topicName,
+    type: 'worker',
+    tags: spanTags,
+    metrics: {
+      'pubsub.ack': 1
+    }
+  })
+}
+
+function handleCloudEvent (req, res, emit, server, originalArgs) {
   // Get tracer from global reference (avoids circular dependencies)
   const tracer = global._ddtrace
   if (!tracer) {
     return emit.apply(server, originalArgs)
   }
+
+  return processEventRequest(req, res, emit, server, originalArgs, tracer, true)
+}
+
+function handlePubSubPush (req, res, emit, server, originalArgs) {
+  // Get tracer from global reference (avoids circular dependencies)
+  const tracer = global._ddtrace
+  if (!tracer) {
+    return emit.apply(server, originalArgs)
+  }
+
+  return processEventRequest(req, res, emit, server, originalArgs, tracer, false)
+}
+
+function processEventRequest (req, res, emit, server, originalArgs, tracer, isCloudEvent) {
+  const eventType = isCloudEvent ? 'Cloud Event' : 'PubSub push'
 
   // Collect raw body for PubSub message parsing with error handling
   const chunks = []
@@ -66,37 +161,17 @@ function handlePubSubOrCloudEvent (req, res, emit, server, originalArgs) {
       req.body = json // Set parsed body for framework use
       req._pubsubBodyParsed = true // Flag to skip body-parser
 
-      // Extract message and attributes based on format
-      let message, subscription, attrs
+      // Parse message based on event type
+      const parsedEvent = isCloudEvent
+        ? parseCloudEventMessage(json, req)
+        : parsePubSubMessage(json)
 
-      if (isCloudEvent) {
-        if (req.headers['ce-specversion']) {
-          // Binary Content Mode - message in body, trace context in headers
-          message = json
-          attrs = { ...message?.attributes }
-          subscription = req.headers['ce-subscription'] || 'cloud-event-subscription'
-
-          // Merge trace context from headers
-          const ceTraceParent = req.headers['ce-traceparent'] || req.headers.traceparent
-          const ceTraceState = req.headers['ce-tracestate'] || req.headers.tracestate
-          if (ceTraceParent) attrs.traceparent = ceTraceParent
-          if (ceTraceState) attrs.tracestate = ceTraceState
-        } else {
-          // Structured Content Mode - message in data field
-          message = json.data?.message || json
-          subscription = json.data?.subscription || json.subscription || 'cloud-event-subscription'
-          attrs = { ...message?.attributes }
-
-          // Add Cloud Events context
-          if (json.source) attrs['ce-source'] = json.source
-          if (json.type) attrs['ce-type'] = json.type
-        }
-      } else {
-        // Traditional PubSub push format
-        message = json.message
-        subscription = json.subscription
-        attrs = message?.attributes || {}
+      if (!parsedEvent) {
+        cleanup()
+        return emit.apply(server, originalArgs)
       }
+
+      const { message, subscription, attrs } = parsedEvent
 
       if (!attrs || typeof attrs !== 'object' || Object.keys(attrs).length === 0) {
         cleanup()
@@ -113,7 +188,6 @@ function handlePubSubOrCloudEvent (req, res, emit, server, originalArgs) {
           carrier[header] = attrs[header]
         }
       }
-
       // Extract parent span context (key for distributed tracing!)
       const parent = tracer.extract('text_map', carrier)
 
@@ -131,23 +205,12 @@ function handlePubSubOrCloudEvent (req, res, emit, server, originalArgs) {
         topicName = 'push-subscription-topic'
       }
 
-      // Create PubSub consumer span with error handling
+      // Create span based on event type
       let span
       try {
-        span = tracer.startSpan('google-cloud-pubsub.receive', {
-          childOf: parent,
-          tags: {
-            component: 'google-cloud-pubsub',
-            'span.kind': 'consumer',
-            'span.type': 'worker',
-            'gcloud.project_id': projectId || 'unknown',
-            'pubsub.topic': topicName || 'unknown',
-            'pubsub.subscription': subscription,
-            'pubsub.message_id': message?.messageId,
-            'pubsub.delivery_method': isCloudEvent ? 'cloud-event' : 'push',
-            'pubsub.ack': 1 // Push subscriptions auto-ack
-          }
-        })
+        span = isCloudEvent
+          ? createCloudEventSpan(tracer, parent, topicName, projectId, subscription, message, attrs, req)
+          : createPubSubSpan(tracer, parent, topicName, projectId, subscription, message, attrs)
       } catch {
         cleanup()
         return emit.apply(server, originalArgs)
@@ -241,17 +304,19 @@ function wrapEmit (emit) {
 
     if (eventName === 'request') {
       // Handle PubSub push AND Cloud Events at HTTP server level - works with ANY framework
-      const isPubSubOrCloudEvent = req.method === 'POST' && (
-        // Traditional PubSub push
-        (req.headers['content-type']?.includes('application/json') &&
-          req.headers['user-agent']?.includes('APIs-Google')) ||
-        // Cloud Events
-        req.headers['content-type']?.includes('application/cloudevents+json') ||
-        req.headers['ce-specversion'] // Binary Content Mode
-      )
+      if (req.method === 'POST') {
+        // Cloud Events detection (Eventarc uses Binary Content Mode with ce-specversion header)
+        const isCloudEvent = req.headers['ce-specversion']
 
-      if (isPubSubOrCloudEvent) {
-        return handlePubSubOrCloudEvent(req, res, emit, this, arguments)
+        // Traditional PubSub push detection
+        const isPubSubPush = req.headers['content-type']?.includes('application/json') &&
+          req.headers['user-agent']?.includes('APIs-Google')
+
+        if (isCloudEvent) {
+          return handleCloudEvent(req, res, emit, this, arguments)
+        } else if (isPubSubPush) {
+          return handlePubSubPush(req, res, emit, this, arguments)
+        }
       }
 
       res.req = req
