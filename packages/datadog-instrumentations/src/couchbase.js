@@ -7,9 +7,6 @@ const {
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
-const callbackStartCh = channel('apm:couchbase:query:callback:start')
-const callbackFinishCh = channel('apm:couchbase:query:callback:finish')
-
 function findCallbackIndex (args, lowerbound = 2) {
   for (let i = args.length - 1; i >= lowerbound; i--) {
     if (typeof args[i] === 'function') return i
@@ -26,7 +23,10 @@ function wrapAllNames (names, action) {
   names.forEach(name => action(name))
 }
 
-function wrapCallback (callback, ctx) {
+function wrapCallback (callback, ctx, channelPrefix) {
+  const callbackStartCh = channel(`${channelPrefix}:callback:start`)
+  const callbackFinishCh = channel(`${channelPrefix}:callback:finish`)
+
   const wrapped = callbackStartCh.runStores(ctx, () => {
     return function (...args) {
       return callbackFinishCh.runStores(ctx, () => {
@@ -43,14 +43,17 @@ function wrapQuery (query) {
     const cb = arguments[arguments.length - 1]
     if (typeof cb === 'function') {
       const ctx = {}
-      arguments[arguments.length - 1] = wrapCallback(cb, ctx)
+      arguments[arguments.length - 1] = wrapCallback(cb, ctx, 'apm:couchbase:query')
     }
 
     return query.apply(this, arguments)
   }
 }
 
-function wrapCallbackFinish (callback, thisArg, _args, errorCh, finishCh, ctx) {
+function wrapCallbackFinish (callback, thisArg, _args, errorCh, finishCh, ctx, channelPrefix) {
+  const callbackStartCh = channel(`${channelPrefix}:callback:start`)
+  const callbackFinishCh = channel(`${channelPrefix}:callback:finish`)
+
   const wrapped = callbackStartCh.runStores(ctx, () => {
     return function finish (error, result) {
       return callbackFinishCh.runStores(ctx, () => {
@@ -86,7 +89,7 @@ function wrap (prefix, fn) {
       const cb = arguments[callbackIndex]
 
       arguments[callbackIndex] = shimmer.wrapFunction(cb, (cb) => {
-        return wrapCallbackFinish(cb, this, arguments, errorCh, finishCh, ctx)
+        return wrapCallbackFinish(cb, this, arguments, errorCh, finishCh, ctx, prefix)
       })
 
       try {
@@ -104,7 +107,7 @@ function wrap (prefix, fn) {
 }
 
 // semver >=2 <3
-function wrapMaybeInvoke (_maybeInvoke) {
+function wrapMaybeInvoke (_maybeInvoke, channelPrefix) {
   return function (fn, args) {
     if (!Array.isArray(args)) return _maybeInvoke.apply(this, arguments)
 
@@ -116,7 +119,7 @@ function wrapMaybeInvoke (_maybeInvoke) {
 
     if (typeof callback === 'function' && !callback._dd_wrapped) {
       const ctx = {}
-      args[callbackIndex] = wrapCallback(callback, ctx)
+      args[callbackIndex] = wrapCallback(callback, ctx, channelPrefix)
     }
 
     return _maybeInvoke.apply(this, arguments)
@@ -140,7 +143,7 @@ function wrapCBandPromise (fn, name, startData, thisArg, args) {
         // v3 offers callback or promises event handling
         // NOTE: this does not work with v3.2.0-3.2.1 cluster.query, as there is a bug in the couchbase source code
         args[cbIndex] = shimmer.wrapFunction(args[cbIndex], (cb) => {
-          return wrapCallbackFinish(cb, thisArg, args, errorCh, finishCh, ctx)
+          return wrapCallbackFinish(cb, thisArg, args, errorCh, finishCh, ctx, `apm:couchbase:${name}`)
         })
       }
       const res = fn.apply(thisArg, args)
@@ -188,7 +191,7 @@ function wrapV3Query (query) {
 
 // semver >=2 <3
 addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.12'] }, Bucket => {
-  shimmer.wrap(Bucket.prototype, '_maybeInvoke', maybeInvoke => wrapMaybeInvoke(maybeInvoke))
+  shimmer.wrap(Bucket.prototype, '_maybeInvoke', maybeInvoke => wrapMaybeInvoke(maybeInvoke, 'apm:couchbase:bucket:maybeInvoke'))
 
   const startCh = channel('apm:couchbase:query:start')
   const finishCh = channel('apm:couchbase:query:finish')
@@ -238,7 +241,7 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.12'] }, Buc
 })
 
 addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^2.6.12'] }, Cluster => {
-  shimmer.wrap(Cluster.prototype, '_maybeInvoke', maybeInvoke => wrapMaybeInvoke(maybeInvoke))
+  shimmer.wrap(Cluster.prototype, '_maybeInvoke', maybeInvoke => wrapMaybeInvoke(maybeInvoke, 'apm:couchbase:cluster:maybeInvoke'))
 
   shimmer.wrap(Cluster.prototype, 'query', query => wrapQuery(query))
   shimmer.wrap(Cluster.prototype, 'openBucket', openBucket => {
