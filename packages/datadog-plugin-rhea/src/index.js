@@ -5,7 +5,7 @@ const ConsumerPlugin = require('./consumer')
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 
 class RheaPlugin extends CompositePlugin {
-  static get id () { return 'rhea' }
+  static id = 'rhea'
   static get plugins () {
     return {
       producer: ProducerPlugin,

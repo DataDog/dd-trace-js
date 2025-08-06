@@ -6,11 +6,11 @@ const coalesce = require('koalas')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
 class MongodbCorePlugin extends DatabasePlugin {
-  static get id () { return 'mongodb-core' }
-  static get component () { return 'mongodb' }
+  static id = 'mongodb-core'
+  static component = 'mongodb'
   // avoid using db.name for peer.service since it includes the collection name
   // should be removed if one day this will be fixed
-  static get peerServicePrecursors () { return [] }
+  static peerServicePrecursors = []
 
   configure (config) {
     super.configure(config)
@@ -24,7 +24,9 @@ class MongodbCorePlugin extends DatabasePlugin {
     )
   }
 
-  start ({ ns, ops, options = {}, name }) {
+  bindStart (ctx) {
+    const { ns, ops, options = {}, name } = ctx
+
     // heartbeat commands can be disabled if this.config.heartbeatEnabled is false
     if (!this.config.heartbeatEnabled && isHeartbeat(ops, this.config)) {
       return
@@ -44,11 +46,13 @@ class MongodbCorePlugin extends DatabasePlugin {
         'out.host': options.host,
         'out.port': options.port
       }
-    })
+    }, ctx)
     const comment = this.injectDbmComment(span, ops.comment, service)
     if (comment) {
       ops.comment = comment
     }
+
+    return ctx.currentStore
   }
 
   getPeerService (tags) {

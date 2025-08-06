@@ -1,5 +1,3 @@
-'use strict'
-
 export function validate (input) {
   return true
 }

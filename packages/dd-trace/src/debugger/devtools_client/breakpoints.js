@@ -12,7 +12,7 @@ const {
   breakpointToProbes,
   probeToLocation
 } = require('./state')
-const log = require('../../log')
+const log = require('./log')
 
 let sessionStarted = false
 const probes = new Map()
@@ -87,7 +87,10 @@ async function addBreakpoint (probe) {
   try {
     probe.condition = probe.when?.json && compileCondition(probe.when.json)
   } catch (err) {
-    throw new Error(`Cannot compile expression: ${probe.when.dsl}`, { cause: err })
+    throw new Error(
+      `Cannot compile expression: ${probe.when.dsl} (probe: ${probe.id}, version: ${probe.version})`,
+      { cause: err }
+    )
   }
 
   const locationKey = generateLocationKey(scriptId, lineNumber, columnNumber)
@@ -115,7 +118,7 @@ async function addBreakpoint (probe) {
         condition: probe.condition
       })
     } catch (err) {
-      throw new Error(`Error setting breakpoint for probe ${probe.id}`, { cause: err })
+      throw new Error(`Error setting breakpoint for probe ${probe.id} (version: ${probe.version})`, { cause: err })
     }
     probeToLocation.set(probe.id, locationKey)
     locationToBreakpoint.set(locationKey, { id: result.breakpointId, location, locationKey })
@@ -192,7 +195,7 @@ async function updateBreakpointInternal (breakpoint, probe) {
         condition
       })
     } catch (err) {
-      throw new Error(`Error setting breakpoint for probe ${probe.id}`, { cause: err })
+      throw new Error(`Error setting breakpoint for probe ${probe.id} (version: ${probe.version})`, { cause: err })
     }
     breakpointToProbes.set(result.breakpointId, probesAtLocation)
   }

@@ -3,9 +3,9 @@
 const OutboundPlugin = require('./outbound')
 
 class ProducerPlugin extends OutboundPlugin {
-  static get operation () { return 'publish' }
-  static get kind () { return 'producer' }
-  static get type () { return 'messaging' }
+  static operation = 'publish'
+  static kind = 'producer'
+  static type = 'messaging'
 
   startSpan (options, enterOrCtx) {
     const spanDefaults = {

@@ -2,14 +2,10 @@
 
 const { workerData: { config: parentConfig, parentThreadId, configPort } } = require('node:worker_threads')
 const { format } = require('node:url')
-const log = require('../../log')
+const log = require('./log')
 
 const config = module.exports = {
-  dynamicInstrumentation: parentConfig.dynamicInstrumentation,
-  runtimeId: parentConfig.tags['runtime-id'],
-  service: parentConfig.service,
-  commitSHA: parentConfig.commitSHA,
-  repositoryUrl: parentConfig.repositoryUrl,
+  ...parentConfig,
   parentThreadId,
   maxTotalPayloadSize: 5 * 1024 * 1024 // 5MB
 }

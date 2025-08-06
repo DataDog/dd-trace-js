@@ -1,10 +1,12 @@
+'use strict'
+
 const TracingPlugin = require('./tracing')
 const { storage } = require('../../../datadog-core')
 
 class ApolloBasePlugin extends TracingPlugin {
-  static get id () { return 'apollo.gateway' }
-  static get type () { return 'web' }
-  static get kind () { return 'server' }
+  static id = 'apollo.gateway'
+  static type = 'web'
+  static kind = 'server'
 
   bindStart (ctx) {
     const store = storage('legacy').getStore()

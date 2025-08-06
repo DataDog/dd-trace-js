@@ -1,6 +1,7 @@
 'use strict'
 
 const semver = require('semver')
+const { withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const id = require('../../dd-trace/src/id')
 
@@ -26,7 +27,7 @@ describe('Plugin', () => {
       }
 
       beforeEach(() => {
-        return agent.load(['mongodb-core'])
+        return agent.load(['mongodb-core', 'mongoose'])
       })
 
       beforeEach(async () => {
@@ -50,11 +51,12 @@ describe('Plugin', () => {
       withPeerService(
         () => tracer,
         'mongodb-core',
-        (done) => {
+        () => {
           const PeerCat = mongoose.model('PeerCat', { name: String })
-          new PeerCat({ name: 'PeerCat' }).save().catch(done)
+          return new PeerCat({ name: 'PeerCat' }).save()
         },
-        () => dbName, 'peer.service')
+        () => dbName,
+        'peer.service')
 
       it('should propagate context with write operations', () => {
         const Cat = mongoose.model('Cat1', { name: String })

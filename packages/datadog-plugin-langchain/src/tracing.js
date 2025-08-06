@@ -4,29 +4,26 @@ const { MEASURED } = require('../../../ext/tags')
 const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
-const API_KEY = 'langchain.request.api_key'
 const MODEL = 'langchain.request.model'
 const PROVIDER = 'langchain.request.provider'
 const TYPE = 'langchain.request.type'
 
 const LangChainHandler = require('./handlers/default')
-const LangChainChatModelHandler = require('./handlers/language_models/chat_model')
-const LangChainLLMHandler = require('./handlers/language_models/llm')
-const LangChainChainHandler = require('./handlers/chain')
+const LangChainLanguageModelHandler = require('./handlers/language_models')
 const LangChainEmbeddingHandler = require('./handlers/embedding')
 
 class BaseLangChainTracingPlugin extends TracingPlugin {
-  static get id () { return 'langchain' }
-  static get operation () { return 'invoke' }
-  static get system () { return 'langchain' }
+  static id = 'langchain'
+  static operation = 'invoke'
+  static system = 'langchain'
 
   constructor () {
     super(...arguments)
 
     this.handlers = {
-      chain: new LangChainChainHandler(this._tracerConfig),
-      chat_model: new LangChainChatModelHandler(this._tracerConfig),
-      llm: new LangChainLLMHandler(this._tracerConfig),
+      chain: new LangChainHandler(this._tracerConfig),
+      chat_model: new LangChainLanguageModelHandler(this._tracerConfig),
+      llm: new LangChainLanguageModelHandler(this._tracerConfig),
       embedding: new LangChainEmbeddingHandler(this._tracerConfig),
       default: new LangChainHandler(this._tracerConfig)
     }
@@ -40,12 +37,16 @@ class BaseLangChainTracingPlugin extends TracingPlugin {
 
     // Runnable interfaces have an `lc_namespace` property
     const ns = ctx.self.lc_namespace || ctx.namespace
-    const resource = ctx.resource = [...ns, ctx.self.constructor.name].join('.')
 
-    const handler = this.handlers[type]
+    const resourceParts = [...ns, ctx.self.constructor.name]
+    if (type === 'tool') {
+      resourceParts.push(ctx.instance.name)
+    }
+    const resource = ctx.resource = resourceParts.join('.')
+
+    const handler = this.handlers[type] || this.handlers.default
 
     const instance = ctx.instance
-    const apiKey = handler.extractApiKey(instance)
     const provider = handler.extractProvider(instance)
     const model = handler.extractModel(instance)
 
@@ -58,9 +59,8 @@ class BaseLangChainTracingPlugin extends TracingPlugin {
       }
     }, false)
 
-    const tags = handler.getSpanStartTags(ctx, provider, span) || []
+    const tags = {}
 
-    if (apiKey) tags[API_KEY] = apiKey
     if (provider) tags[PROVIDER] = provider
     if (model) tags[MODEL] = model
     if (type) tags[TYPE] = type
@@ -76,13 +76,6 @@ class BaseLangChainTracingPlugin extends TracingPlugin {
   asyncEnd (ctx) {
     const span = ctx.currentStore.span
 
-    const { type } = ctx
-
-    const handler = this.handlers[type]
-    const tags = handler.getSpanEndTags(ctx, span) || {}
-
-    span.addTags(tags)
-
     span.finish()
   }
 
@@ -92,51 +85,57 @@ class BaseLangChainTracingPlugin extends TracingPlugin {
 }
 
 class RunnableSequenceInvokePlugin extends BaseLangChainTracingPlugin {
-  static get id () { return 'langchain_rs_invoke' }
-  static get lcType () { return 'chain' }
-  static get prefix () {
-    return 'tracing:orchestrion:@langchain/core:RunnableSequence_invoke'
-  }
+  static id = 'langchain_rs_invoke'
+  static lcType = 'chain'
+  static prefix = 'tracing:orchestrion:@langchain/core:RunnableSequence_invoke'
 }
 
 class RunnableSequenceBatchPlugin extends BaseLangChainTracingPlugin {
-  static get id () { return 'langchain_rs_batch' }
-  static get lcType () { return 'chain' }
-  static get prefix () {
-    return 'tracing:orchestrion:@langchain/core:RunnableSequence_batch'
-  }
+  static id = 'langchain_rs_batch'
+  static lcType = 'chain'
+  static prefix = 'tracing:orchestrion:@langchain/core:RunnableSequence_batch'
 }
 
 class BaseChatModelGeneratePlugin extends BaseLangChainTracingPlugin {
-  static get id () { return 'langchain_chat_model_generate' }
-  static get lcType () { return 'chat_model' }
-  static get prefix () {
-    return 'tracing:orchestrion:@langchain/core:BaseChatModel_generate'
-  }
+  static id = 'langchain_chat_model_generate'
+  static lcType = 'chat_model'
+  static prefix = 'tracing:orchestrion:@langchain/core:BaseChatModel_generate'
 }
 
 class BaseLLMGeneratePlugin extends BaseLangChainTracingPlugin {
-  static get id () { return 'langchain_llm_generate' }
-  static get lcType () { return 'llm' }
-  static get prefix () {
-    return 'tracing:orchestrion:@langchain/core:BaseLLM_generate'
-  }
+  static id = 'langchain_llm_generate'
+  static lcType = 'llm'
+  static prefix = 'tracing:orchestrion:@langchain/core:BaseLLM_generate'
 }
 
 class EmbeddingsEmbedQueryPlugin extends BaseLangChainTracingPlugin {
-  static get id () { return 'langchain_embeddings_embed_query' }
-  static get lcType () { return 'embedding' }
-  static get prefix () {
-    return 'tracing:apm:@langchain/core:Embeddings_embedQuery'
-  }
+  static id = 'langchain_embeddings_embed_query'
+  static lcType = 'embedding'
+  static prefix = 'tracing:apm:@langchain/core:Embeddings_embedQuery'
 }
 
 class EmbeddingsEmbedDocumentsPlugin extends BaseLangChainTracingPlugin {
-  static get id () { return 'langchain_embeddings_embed_documents' }
-  static get lcType () { return 'embedding' }
-  static get prefix () {
-    return 'tracing:apm:@langchain/core:Embeddings_embedDocuments'
-  }
+  static id = 'langchain_embeddings_embed_documents'
+  static lcType = 'embedding'
+  static prefix = 'tracing:apm:@langchain/core:Embeddings_embedDocuments'
+}
+
+class ToolInvokePlugin extends BaseLangChainTracingPlugin {
+  static id = 'langchain_tool_invoke'
+  static lcType = 'tool'
+  static prefix = 'tracing:orchestrion:@langchain/core:Tool_invoke'
+}
+
+class VectorStoreSimilaritySearchPlugin extends BaseLangChainTracingPlugin {
+  static id = 'langchain_vectorstore_similarity_search'
+  static lcType = 'similarity_search'
+  static prefix = 'tracing:orchestrion:@langchain/core:VectorStore_similaritySearch'
+}
+
+class VectorStoreSimilaritySearchWithScorePlugin extends BaseLangChainTracingPlugin {
+  static id = 'langchain_vectorstore_similarity_search_with_score'
+  static lcType = 'similarity_search'
+  static prefix = 'tracing:orchestrion:@langchain/core:VectorStore_similaritySearchWithScore'
 }
 
 module.exports = [
@@ -145,5 +144,8 @@ module.exports = [
   BaseChatModelGeneratePlugin,
   BaseLLMGeneratePlugin,
   EmbeddingsEmbedQueryPlugin,
-  EmbeddingsEmbedDocumentsPlugin
+  EmbeddingsEmbedDocumentsPlugin,
+  ToolInvokePlugin,
+  VectorStoreSimilaritySearchPlugin,
+  VectorStoreSimilaritySearchWithScorePlugin
 ]

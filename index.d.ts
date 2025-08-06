@@ -167,6 +167,7 @@ interface Plugins {
   "avsc": tracer.plugins.avsc;
   "aws-sdk": tracer.plugins.aws_sdk;
   "azure-functions": tracer.plugins.azure_functions;
+  "azure-service-bus": tracer.plugins.azure_service_bus;
   "bunyan": tracer.plugins.bunyan;
   "cassandra-driver": tracer.plugins.cassandra_driver;
   "child_process": tracer.plugins.child_process;
@@ -186,6 +187,7 @@ interface Plugins {
   "graphql": tracer.plugins.graphql;
   "grpc": tracer.plugins.grpc;
   "hapi": tracer.plugins.hapi;
+  "hono": tracer.plugins.hono;
   "http": tracer.plugins.http;
   "http2": tracer.plugins.http2;
   "ioredis": tracer.plugins.ioredis;
@@ -484,10 +486,14 @@ declare namespace tracer {
     flushMinSpans?: number;
 
     /**
-     * Whether to enable runtime metrics.
+     * Whether to enable runtime metrics, or an object specifying whether to enable specific metric types.
      * @default false
      */
-    runtimeMetrics?: boolean
+    runtimeMetrics?: boolean | {
+      enabled?: boolean,
+      gc?: boolean,
+      eventLoop?: boolean
+    }
 
     /**
      * Custom function for DNS lookups when sending requests to the agent.
@@ -1377,6 +1383,11 @@ declare namespace tracer {
     interface azure_functions extends Instrumentation {}
 
     /**
+     * This plugin automatically instruments the
+     * @azure/service-bus module
+     */
+    interface azure_service_bus extends Integration {}
+    /**
      * This plugin patches the [bunyan](https://github.com/trentm/node-bunyan)
      * to automatically inject trace identifiers in log records when the
      * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled
@@ -1598,6 +1609,12 @@ declare namespace tracer {
      * [hapi](https://hapijs.com/) module.
      */
     interface hapi extends HttpServer {}
+
+    /**
+     * This plugin automatically instruments the
+     * [hono](https://hono.dev/) module.
+     */
+    interface hono extends HttpServer {}
 
     /**
      * This plugin automatically instruments the
@@ -1935,6 +1952,10 @@ declare namespace tracer {
        * The database monitoring propagation mode to be used for this plugin.
        */
       dbmPropagationMode?: string;
+      /**
+       * Appends the SQL comment propagation to the query string. Prepends the comment if `false`. For long query strings, the appended propagation comment might be truncated, causing loss of correlation between the query and trace.
+       */
+      appendComment?: boolean;
     }
 
     /**

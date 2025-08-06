@@ -2,12 +2,11 @@
 const { DsmPathwayCodec, getSizeOrZero } = require('../../../dd-trace/src/datastreams')
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
-const { storage } = require('../../../datadog-core')
 
 class Kinesis extends BaseAwsSdkPlugin {
-  static get id () { return 'kinesis' }
-  static get peerServicePrecursors () { return ['streamname'] }
-  static get isPayloadReporter () { return true }
+  static id = 'kinesis'
+  static peerServicePrecursors = ['streamname']
+  static isPayloadReporter = true
 
   constructor (...args) {
     super(...args)
@@ -16,47 +15,50 @@ class Kinesis extends BaseAwsSdkPlugin {
     // in the base class
     this.requestTags = new WeakMap()
 
-    this.addSub('apm:aws:response:start:kinesis', obj => {
-      const { request, response } = obj
-      const store = storage('legacy').getStore()
+    this.addBind('apm:aws:response:start:kinesis', ctx => {
+      const { request, response } = ctx
       const plugin = this
+
+      let store = this._parentMap.get(request)
 
       // if we have either of these operations, we want to store the streamName param
       // since it is not typically available during get/put records requests
       if (request.operation === 'getShardIterator' || request.operation === 'listShards') {
-        this.storeStreamName(request.params, request.operation, store)
-        return
+        return this.storeStreamName(request.params, request.operation, store)
       }
 
       if (request.operation === 'getRecords') {
         let span
         const responseExtraction = this.responseExtract(request.params, request.operation, response)
         if (responseExtraction && responseExtraction.maybeChildOf) {
-          obj.needsFinish = true
+          ctx.needsFinish = true
           const options = {
             childOf: responseExtraction.maybeChildOf,
-            tags: {
+            meta: {
               ...this.requestTags.get(request),
               'span.kind': 'server'
-            }
+            },
+            integrationName: 'aws-sdk'
           }
-          span = plugin.tracer.startSpan('aws.response', options)
-          this.enter(span, store)
+          span = plugin.startSpan('aws.response', options, ctx)
+          store = ctx.currentStore
         }
 
         // get the stream name that should have been stored previously
-        const { streamName } = storage('legacy').getStore()
+        const { streamName } = store
 
         // extract DSM context after as we might not have a parent-child but may have a DSM context
         this.responseExtractDSMContext(
           request.operation, request.params, response, span || null, { streamName }
         )
       }
+
+      return store
     })
 
-    this.addSub('apm:aws:response:finish:kinesis', err => {
-      const { span } = storage('legacy').getStore()
-      this.finish(span, null, err)
+    this.addSub('apm:aws:response:finish:kinesis', ctx => {
+      if (!ctx.needsFinish) return
+      this.finish(ctx)
     })
   }
 
@@ -71,11 +73,12 @@ class Kinesis extends BaseAwsSdkPlugin {
   }
 
   storeStreamName (params, operation, store) {
-    if (!operation || (operation !== 'getShardIterator' && operation !== 'listShards')) return
-    if (!params || !params.StreamName) return
+    if (!operation) return store
+    if (operation !== 'getShardIterator' && operation !== 'listShards') return store
+    if (!params || !params.StreamName) return store
 
     const streamName = params.StreamName
-    storage('legacy').enterWith({ ...store, streamName })
+    return { ...store, streamName }
   }
 
   responseExtract (params, operation, response) {
@@ -201,7 +204,7 @@ class Kinesis extends BaseAwsSdkPlugin {
 
   setDSMCheckpoint (span, parsedData, stream) {
     // get payload size of request data
-    const payloadSize = Buffer.from(JSON.stringify(parsedData)).byteLength
+    const payloadSize = Buffer.byteLength(JSON.stringify(parsedData))
     const dataStreamsContext = this.tracer
       .setCheckpoint(['direction:out', `topic:${stream}`, 'type:kinesis'], span, payloadSize)
     return dataStreamsContext

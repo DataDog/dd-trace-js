@@ -1,4 +1,4 @@
-'use strinct'
+'use strict'
 
 const DD_TELEMETRY_REQUEST_METRICS = Symbol('_dd.appsec.telemetry.request.metrics')
 
@@ -17,7 +17,7 @@ const tags = {
 function getVersionsTags (wafVersion, rulesVersion) {
   return {
     [tags.WAF_VERSION]: wafVersion,
-    [tags.EVENT_RULES_VERSION]: rulesVersion
+    [tags.EVENT_RULES_VERSION]: rulesVersion || 'unknown'
   }
 }
 

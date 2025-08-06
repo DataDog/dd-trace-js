@@ -6,8 +6,8 @@ const { getAmqpMessageSize } = require('../../dd-trace/src/datastreams')
 const { getResourceName } = require('./util')
 
 class AmqplibConsumerPlugin extends ConsumerPlugin {
-  static get id () { return 'amqplib' }
-  static get operation () { return 'consume' }
+  static id = 'amqplib'
+  static operation = 'consume'
 
   bindStart (ctx) {
     const { method, fields, message, queue } = ctx

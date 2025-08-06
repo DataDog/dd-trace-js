@@ -1,5 +1,5 @@
-/* eslint-disable unicorn/no-abusive-eslint-disable */
-/* eslint-disable */
+'use strict'
+
 let isEarlyFlakeDetectionEnabled = false
 let isKnownTestsEnabled = false
 let knownTestsForSuite = []
@@ -20,7 +20,7 @@ let originalWindow
 function safeGetRum (window) {
   try {
     return window.DD_RUM
-  } catch (e) {
+  } catch {
     return null
   }
 }
@@ -30,12 +30,13 @@ function isNewTest (test) {
 }
 
 function getTestProperties (testName) {
-  // We neeed to do it in this way because of compatibility with older versions as '?' is not supported in older versions of Cypress
-  const properties = testManagementTests[testName] && testManagementTests[testName].properties || {};
+  // TODO: Use optional chaining when we drop support for older Cypress versions, which will happen when dd-trace@5 is
+  // EoL. Until then, this files needs to support Node.js 16.
+  const properties = testManagementTests[testName] && testManagementTests[testName].properties || {}
 
-  const { attempt_to_fix: isAttemptToFix, disabled: isDisabled, quarantined: isQuarantined } = properties;
+  const { attempt_to_fix: isAttemptToFix, disabled: isDisabled, quarantined: isQuarantined } = properties
 
-  return { isAttemptToFix, isDisabled, isQuarantined };
+  return { isAttemptToFix, isDisabled, isQuarantined }
 }
 
 function retryTest (test, suiteTests, numRetries, tags) {
@@ -63,11 +64,9 @@ Cypress.mocha.getRunner().runTests = function (suite, fn) {
 
     const { isAttemptToFix } = getTestProperties(testName)
 
-    if (isTestManagementEnabled) {
-      if (isAttemptToFix && !test.isPending()) {
-        test._ddIsAttemptToFix = true
-        retryTest(test, suite.tests, testManagementAttemptToFixRetries, ['_ddIsAttemptToFix'])
-      }
+    if (isTestManagementEnabled && isAttemptToFix && !test.isPending()) {
+      test._ddIsAttemptToFix = true
+      retryTest(test, suite.tests, testManagementAttemptToFixRetries, ['_ddIsAttemptToFix'])
     }
     if (isImpactedTestsEnabled && isModifiedTest) {
       test._ddIsModified = true
@@ -80,15 +79,13 @@ Cypress.mocha.getRunner().runTests = function (suite, fn) {
         )
       }
     }
-    if (isKnownTestsEnabled) {
-      if (!test._ddIsNew && !test.isPending() && isNewTest(test)) {
-        test._ddIsNew = true
-        if (isImpactedTestsEnabled && isModifiedTest) {
-          test._ddIsModified = true
-        }
-        if (isEarlyFlakeDetectionEnabled && !isAttemptToFix && !isModifiedTest) {
-          retryTest(test, suite.tests, earlyFlakeDetectionNumRetries, ['_ddIsNew', '_ddIsEfdRetry'])
-        }
+    if (isKnownTestsEnabled && !test._ddIsNew && !test.isPending() && isNewTest(test)) {
+      test._ddIsNew = true
+      if (isImpactedTestsEnabled && isModifiedTest) {
+        test._ddIsModified = true
+      }
+      if (isEarlyFlakeDetectionEnabled && !isAttemptToFix && !isModifiedTest) {
+        retryTest(test, suite.tests, earlyFlakeDetectionNumRetries, ['_ddIsNew', '_ddIsEfdRetry'])
       }
     }
   })
@@ -135,11 +132,10 @@ after(() => {
     if (safeGetRum(originalWindow)) {
       originalWindow.dispatchEvent(new Event('beforeunload'))
     }
-  } catch (e) {
+  } catch {
     // ignore error. It's usually a multi origin issue.
   }
 })
-
 
 afterEach(function () {
   const currentTest = Cypress.mocha.getRunner().suite.ctx.currentTest
@@ -156,7 +152,7 @@ afterEach(function () {
   }
   try {
     testInfo.testSourceLine = Cypress.mocha.getRunner().currentRunnable.invocationDetails.line
-  } catch (e) {}
+  } catch {}
 
   if (safeGetRum(originalWindow)) {
     testInfo.isRUMActive = true
@@ -164,7 +160,7 @@ afterEach(function () {
   let coverage
   try {
     coverage = originalWindow.__coverage__
-  } catch (e) {
+  } catch {
     // ignore error and continue
   }
   cy.task('dd:afterEach', { test: testInfo, coverage })

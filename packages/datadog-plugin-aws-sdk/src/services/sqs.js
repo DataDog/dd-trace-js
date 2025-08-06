@@ -2,13 +2,12 @@
 
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
-const { storage } = require('../../../datadog-core')
 const { DsmPathwayCodec, getHeadersSize } = require('../../../dd-trace/src/datastreams')
 
 class Sqs extends BaseAwsSdkPlugin {
-  static get id () { return 'sqs' }
-  static get peerServicePrecursors () { return ['queuename'] }
-  static get isPayloadReporter () { return true }
+  static id = 'sqs'
+  static peerServicePrecursors = ['queuename']
+  static isPayloadReporter = true
 
   constructor (...args) {
     super(...args)
@@ -17,35 +16,39 @@ class Sqs extends BaseAwsSdkPlugin {
     // in the base class
     this.requestTags = new WeakMap()
 
-    this.addSub('apm:aws:response:start:sqs', obj => {
-      const { request, response } = obj
-      const store = storage('legacy').getStore()
+    this.addBind('apm:aws:response:start:sqs', ctx => {
+      const { request, response } = ctx
       const contextExtraction = this.responseExtract(request.params, request.operation, response)
+
+      let store = this._parentMap.get(request)
       let span
       let parsedMessageAttributes = null
       if (contextExtraction && contextExtraction.datadogContext) {
-        obj.needsFinish = true
+        ctx.needsFinish = true
         const options = {
           childOf: contextExtraction.datadogContext,
-          tags: {
+          meta: {
             ...this.requestTags.get(request),
             'span.kind': 'server'
-          }
+          },
+          integrationName: 'aws-sdk'
         }
         parsedMessageAttributes = contextExtraction.parsedAttributes
-        span = this.tracer.startSpan('aws.response', options)
-        this.enter(span, store)
+        span = this.startSpan('aws.response', options, ctx)
+        store = ctx.currentStore
       }
-      // extract DSM context after as we might not have a parent-child but may have a DSM context
 
+      // extract DSM context after as we might not have a parent-child but may have a DSM context
       this.responseExtractDSMContext(
         request.operation, request.params, response, span || null, { parsedAttributes: parsedMessageAttributes }
       )
+
+      return store
     })
 
-    this.addSub('apm:aws:response:finish:sqs', err => {
-      const { span } = storage('legacy').getStore()
-      this.finish(span, null, err)
+    this.addSub('apm:aws:response:finish:sqs', ctx => {
+      if (!ctx.needsFinish) return
+      this.finish(ctx)
     })
   }
 

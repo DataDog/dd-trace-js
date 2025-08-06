@@ -1,9 +1,9 @@
+'use strict'
+
 const DNSPlugin = require('./dns')
 
 class DNSLookupServicePlugin extends DNSPlugin {
-  static get operation () {
-    return 'lookup_service'
-  }
+  static operation = 'lookup_service'
 
   extendEvent (event, startEvent) {
     event.name = 'lookupService'

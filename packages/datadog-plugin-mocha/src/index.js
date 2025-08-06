@@ -74,9 +74,7 @@ function getTestSuiteLevelVisibilityTags (testSuiteSpan) {
 }
 
 class MochaPlugin extends CiPlugin {
-  static get id () {
-    return 'mocha'
-  }
+  static id = 'mocha'
 
   constructor (...args) {
     super(...args)
@@ -152,7 +150,8 @@ class MochaPlugin extends CiPlugin {
           [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,
           ...testSuiteMetadata
-        }
+        },
+        integrationName: this.constructor.id
       })
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
       if (this.libraryConfig?.isCodeCoverageEnabled) {

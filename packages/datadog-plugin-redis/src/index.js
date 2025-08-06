@@ -5,18 +5,22 @@ const CachePlugin = require('../../dd-trace/src/plugins/cache')
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 
 class RedisPlugin extends CachePlugin {
-  static get id () { return 'redis' }
-  static get system () { return 'redis' }
+  static id = 'redis'
+  static system = 'redis'
 
   constructor (...args) {
     super(...args)
     this._spanType = 'redis'
   }
 
-  start ({ db, command, args, connectionOptions = {}, connectionName }) {
+  bindStart (ctx) {
+    const { db, command, args, connectionOptions, connectionName } = ctx
+
     const resource = command
     const normalizedCommand = command.toUpperCase()
-    if (!this.config.filter(normalizedCommand)) return this.skip()
+    if (!this.config.filter(normalizedCommand)) {
+      return { noop: true }
+    }
 
     this.startSpan({
       resource,
@@ -29,7 +33,9 @@ class RedisPlugin extends CachePlugin {
         'out.host': connectionOptions.host,
         [CLIENT_PORT_KEY]: connectionOptions.port
       }
-    })
+    }, ctx)
+
+    return ctx.currentStore
   }
 
   configure (config) {

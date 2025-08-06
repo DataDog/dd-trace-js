@@ -43,7 +43,8 @@ describe('graphql', () => {
       assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
       assert.isArray(payload)
       assert.strictEqual(payload.length, 2)
-      assert.propertyVal(payload[1][0], 'name', 'express.request')
+      // Apollo server 5 is using Node.js http server instead of express
+      assert.propertyVal(payload[1][0], 'name', 'web.request')
       assert.propertyVal(payload[1][0].metrics, '_dd.appsec.enabled', 1)
       assert.property(payload[1][0].metrics, '_dd.appsec.waf.duration')
       assert.notProperty(payload[1][0].meta, '_dd.appsec.event')
@@ -72,15 +73,15 @@ describe('graphql', () => {
     const result = {
       triggers: [
         {
-          rule:
-          {
+          rule: {
             id: 'test-rule-id-1',
             name: 'test-rule-name-1',
             tags:
             {
-              category: 'attack_attempt',
-              type: 'security_scanner'
-            }
+              type: 'security_scanner',
+              category: 'attack_attempt'
+            },
+            on_match: []
           },
           rule_matches: [
             {
@@ -104,12 +105,13 @@ describe('graphql', () => {
       assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
       assert.isArray(payload)
       assert.strictEqual(payload.length, 2)
-      assert.propertyVal(payload[1][0], 'name', 'express.request')
+      // Apollo server 5 is using Node.js http server instead of express
+      assert.propertyVal(payload[1][0], 'name', 'web.request')
       assert.propertyVal(payload[1][0].metrics, '_dd.appsec.enabled', 1)
       assert.property(payload[1][0].metrics, '_dd.appsec.waf.duration')
       assert.propertyVal(payload[1][0].meta, 'appsec.event', 'true')
       assert.property(payload[1][0].meta, '_dd.appsec.json')
-      assert.propertyVal(payload[1][0].meta, '_dd.appsec.json', JSON.stringify(result))
+      assert.deepStrictEqual(JSON.parse(payload[1][0].meta['_dd.appsec.json']), result)
     })
 
     await axios({

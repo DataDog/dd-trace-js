@@ -11,12 +11,17 @@ const azureFunctionsChannel = dc.tracingChannel('datadog:azure:functions:invoke'
 addHook({ name: '@azure/functions', versions: ['>=4'] }, azureFunction => {
   const { app } = azureFunction
 
+  // Http triggers
   shimmer.wrap(app, 'deleteRequest', wrapHandler)
   shimmer.wrap(app, 'http', wrapHandler)
   shimmer.wrap(app, 'get', wrapHandler)
   shimmer.wrap(app, 'patch', wrapHandler)
   shimmer.wrap(app, 'post', wrapHandler)
   shimmer.wrap(app, 'put', wrapHandler)
+
+  // Service Bus triggers
+  shimmer.wrap(app, 'serviceBusQueue', wrapHandler)
+  shimmer.wrap(app, 'serviceBusTopic', wrapHandler)
 
   return azureFunction
 })
@@ -25,7 +30,7 @@ addHook({ name: '@azure/functions', versions: ['>=4'] }, azureFunction => {
 // The arguments are either an object with a handler property or the handler function itself
 function wrapHandler (method) {
   return function (name, arg) {
-    if (typeof arg === 'object' && arg.hasOwnProperty('handler')) {
+    if (arg !== null && typeof arg === 'object' && arg.hasOwnProperty('handler')) {
       const options = arg
       shimmer.wrap(options, 'handler', handler => traceHandler(handler, name, method.name))
     } else if (typeof arg === 'function') {
