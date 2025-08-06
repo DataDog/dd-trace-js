@@ -15,9 +15,7 @@ runs:
     - uses: ./.github/actions/install
     - run: yarn test:plugins:ci
       shell: bash
-    - uses: ./.github/actions/node
-      with:
-        version: ${{ inputs.latest-node-version }}
+    - uses: ./.github/actions/node/${{ inputs.latest-node-version }}
     - run: yarn test:plugins:ci
       shell: bash
     - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3

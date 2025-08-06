@@ -300,11 +300,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: [oldest, active]
-        range: ['<=4.3.0', '>4.3.0']
         include:
+          - range: '>=0'
+            range_clean: 'gte.0'
+            node-version: 'oldest'
+          - range: '>=0'
+            range_clean: 'gte.0'
+            node-version: 'active'
           - range: '>4.3.0'
-            node-version: latest
+            range_clean: 'gt.4.3.0'
+            node-version: 'latest'
     runs-on: ubuntu-latest
     env:
       PLUGINS: express
@@ -322,7 +327,7 @@ jobs:
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
-          suffix: test-${{ github.job }}-${{ matrix.range }}-${{ matrix.node-version }}
+          suffix: test-${{ github.job }}-${{ matrix.range_clean }}-${{ matrix.node-version }}
 
   fastify:
     runs-on: ubuntu-latest
