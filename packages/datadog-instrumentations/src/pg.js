@@ -143,8 +143,8 @@ function wrapQuery (query) {
     })
   }
 }
-const finish = () => {
-  finishPoolQueryCh.publish()
+const finish = (ctx) => {
+  finishPoolQueryCh.publish(ctx)
 }
 function wrapPoolQuery (query) {
   return function () {
@@ -162,7 +162,7 @@ function wrapPoolQuery (query) {
 
       if (abortController.signal.aborted) {
         const error = abortController.signal.reason || new Error('Aborted')
-        finish()
+        finish(ctx)
 
         if (typeof cb === 'function') {
           cb(error)
@@ -174,7 +174,7 @@ function wrapPoolQuery (query) {
 
       if (typeof cb === 'function') {
         arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => function () {
-          finish()
+          finish(ctx)
           return cb.apply(this, arguments)
         })
       }
@@ -183,9 +183,9 @@ function wrapPoolQuery (query) {
 
       if (retval?.then) {
         retval.then(() => {
-          finish()
+          finish(ctx)
         }).catch(() => {
-          finish()
+          finish(ctx)
         })
       }
 
