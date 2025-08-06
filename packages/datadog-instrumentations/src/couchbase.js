@@ -191,7 +191,9 @@ function wrapV3Query (query) {
 
 // semver >=2 <3
 addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.12'] }, Bucket => {
-  shimmer.wrap(Bucket.prototype, '_maybeInvoke', maybeInvoke => wrapMaybeInvoke(maybeInvoke, 'apm:couchbase:bucket:maybeInvoke'))
+  shimmer.wrap(Bucket.prototype, '_maybeInvoke', maybeInvoke => {
+    return wrapMaybeInvoke(maybeInvoke, 'apm:couchbase:bucket:maybeInvoke')
+  })
 
   const startCh = channel('apm:couchbase:query:start')
   const finishCh = channel('apm:couchbase:query:finish')
@@ -241,7 +243,9 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.12'] }, Buc
 })
 
 addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^2.6.12'] }, Cluster => {
-  shimmer.wrap(Cluster.prototype, '_maybeInvoke', maybeInvoke => wrapMaybeInvoke(maybeInvoke, 'apm:couchbase:cluster:maybeInvoke'))
+  shimmer.wrap(Cluster.prototype, '_maybeInvoke', maybeInvoke => {
+    return wrapMaybeInvoke(maybeInvoke, 'apm:couchbase:cluster:maybeInvoke')
+  })
 
   shimmer.wrap(Cluster.prototype, 'query', query => wrapQuery(query))
   shimmer.wrap(Cluster.prototype, 'openBucket', openBucket => {
