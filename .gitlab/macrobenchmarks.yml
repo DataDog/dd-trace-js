@@ -1,5 +1,14 @@
+stages:
+  - test
+  - gate
+  - notify
+
+include:
+  project: 'DataDog/benchmarking-platform-tools'
+  file: 'images/templates/gitlab/notify-slo-breaches.template.yml'
+
 .macrobenchmarks:
-  stage: macrobenchmarks
+  stage: test
   rules:
     - if: ($NIGHTLY_BENCHMARKS || $CI_PIPELINE_SOURCE != "schedule") && $CI_COMMIT_REF_NAME == "master"
       when: always
@@ -69,3 +78,26 @@ only-tracing-with-runtime-metrics-enabled:
   variables:
     DD_BENCHMARKS_CONFIGURATION: only-tracing
     DD_RUNTIME_METRICS_ENABLED: "true"
+
+check-slo-breaches:
+  stage: gate
+  when: always
+  tags: ["arch:amd64"]
+  image: registry.ddbuild.io/images/benchmarking-platform-tools-ubuntu:latest
+  artifacts:
+    name: "artifacts"
+    when: always
+    paths:
+      - platform/artifacts/
+    expire_in: 3 months
+  script:
+    - cd platform && (git init && git remote add origin https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.ddbuild.io/DataDog/benchmarking-platform && git pull origin js/hapi)
+    - bp-runner bp-runner.fail-on-breach.yml
+
+notify-slo-breaches:
+  extends: .notify-slo-breaches
+  stage: notify
+  needs: ["check-slo-breaches"]
+  when: always
+  variables:
+    CHANNEL: "guild-dd-node-js"
