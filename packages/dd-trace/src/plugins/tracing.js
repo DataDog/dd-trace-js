@@ -4,6 +4,7 @@ const Plugin = require('./plugin')
 const { storage } = require('../../../datadog-core')
 const analyticsSampler = require('../analytics_sampler')
 const { COMPONENT } = require('../constants')
+const DatadogSpanContext = require('../opentracing/span_context')
 
 class TracingPlugin extends Plugin {
   constructor (...args) {
@@ -123,6 +124,15 @@ class TracingPlugin extends Plugin {
     const store = storage('legacy').getStore()
     if (store && childOf === undefined) {
       childOf = store.span
+    }
+
+    if (!childOf && process.env.DD_TRACE_PARENT_ID) {
+      childOf = new DatadogSpanContext({
+        traceId: process.env.DD_TRACE_TRACE_ID,
+        spanId: process.env.DD_TRACE_PARENT_ID,
+        isRemote: true,
+      })
+      process.env.DD_TRACE_PARENT_ID = undefined
     }
 
     const span = tracer.startSpan(name, {
