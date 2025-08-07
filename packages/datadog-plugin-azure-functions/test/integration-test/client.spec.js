@@ -110,7 +110,7 @@ async function spawnPluginIntegrationTestProc (cwd, command, args, agentPort, st
     NODE_OPTIONS: `--loader=${hookFile}`,
     DD_TRACE_AGENT_PORT: agentPort
   }
-  env = { ...env, ...additionalEnvArgs }
+  env = { ...env, ...additionalEnvArgs, ...process.env }
   return spawnProc(command, args, {
     cwd,
     env
