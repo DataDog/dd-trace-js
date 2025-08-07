@@ -18,11 +18,13 @@ describe('esm', () => {
   // TODO: Allow newer versions in Node.js 18 when their breaking change is reverted.
   // See https://github.com/Azure/azure-functions-nodejs-library/pull/357
   withVersions('azure-functions', '@azure/functions', NODE_MAJOR < 20 ? '<4.7.3' : '*', version => {
+    const startArgs = ['azure-functions-core-tools', 'start']
+    const startFunc = () => spawnPluginIntegrationTestProc(sandbox.folder, 'npx', startArgs, agent.port)
+
     before(async function () {
       this.timeout(120_000)
       sandbox = await createSandbox([
         `@azure/functions@${version}`,
-        'azure-functions-core-tools@4.1.0',
         '@azure/service-bus@7.9.2'
       ],
       false,
@@ -45,9 +47,12 @@ describe('esm', () => {
 
     it('is instrumented', async () => {
       const envArgs = {
-        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+        // PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
       }
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'npx', [
+        'azure-functions-core-tools',
+        'start'
+      ], agent.port, undefined, envArgs)
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest', ({ headers, payload }) => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
@@ -60,10 +65,7 @@ describe('esm', () => {
     }).timeout(60_000)
 
     it('propagates context to child http requests', async () => {
-      const envArgs = {
-        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
-      }
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
+      proc = await startFunc()
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest2', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 2)
@@ -72,10 +74,7 @@ describe('esm', () => {
     }).timeout(60_000)
 
     it('propagates context through a service bus queue', async () => {
-      const envArgs = {
-        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
-      }
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
+      proc = await startFunc()
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest3', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 3)
@@ -90,10 +89,7 @@ describe('esm', () => {
     }).timeout(60_000)
 
     it('propagates context through a service bus topic', async () => {
-      const envArgs = {
-        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
-      }
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
+      proc = await startFunc()
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest4', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 3)

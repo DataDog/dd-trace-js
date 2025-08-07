@@ -4,6 +4,6 @@
   "description": "",
   "main": "src/functions/server.mjs",
   "scripts": {
-    "start": "func start"
+    "start": "npx azure-functions-core-tools start"
   }
 }
