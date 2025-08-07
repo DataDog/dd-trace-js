@@ -33,11 +33,18 @@ class SqlInjectionAnalyzer extends StoredInjectionAnalyzer {
     this.addSub('datadog:mysql:pool:query:start', ({ sql }) => this.setStoreAndAnalyze(sql, 'MYSQL'))
     this.addSub('datadog:mysql:pool:query:finish', () => this.returnToParentStore())
 
-    this.addSub('datadog:knex:raw:start', ({ sql, dialect: knexDialect }) => {
+    this.addBind('datadog:knex:raw:start', (context) => {
+      const { sql, dialect: knexDialect } = context
       const dialect = this.normalizeKnexDialect(knexDialect)
-      this.setStoreAndAnalyze(sql, dialect)
+      const newStore = this.getStoreAndAnalyze(sql, dialect)
+      context.currentStore = newStore
+      return newStore
     })
-    this.addSub('datadog:knex:raw:finish', () => this.returnToParentStore())
+
+    this.addBind('datadog:knex:raw:subscribes', (context) => {
+      return context.currentStore
+    })
+    this.addBind('datadog:knex:raw:finish', ({ currentStore }) => currentStore?.sqlParentStore)
   }
 
   setStoreAndAnalyze (query, dialect) {
@@ -57,8 +64,7 @@ class SqlInjectionAnalyzer extends StoredInjectionAnalyzer {
     }
   }
 
-  returnToParentStore () {
-    const store = storage('legacy').getStore()
+  returnToParentStore (store = storage('legacy').getStore()) {
     if (store && store.sqlParentStore) {
       storage('legacy').enterWith(store.sqlParentStore)
     }
