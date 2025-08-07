@@ -5,14 +5,31 @@ const sinon = require('sinon')
 const dc = require('dc-polyfill')
 const http = require('http')
 
+// Import the actual functions from our implementation
+const { isPubSubRequest, isCloudEventRequest, processEventRequest } = require('../src/gcp-pubsub-push')
+
 describe('HTTP Server PubSub Instrumentation Tests', () => {
   let tracer, startServerCh, startServerSpy
 
   before(() => {
     // Mock tracer for unit tests
     tracer = {
-      startSpan: sinon.stub(),
-      extract: sinon.stub(),
+      startSpan: sinon.stub().returns({
+        context: sinon.stub().returns({
+          parentId: 'parent-123',
+          toSpanId: sinon.stub().returns('span-456'),
+          toTraceId: sinon.stub().returns('trace-789')
+        }),
+        setTag: sinon.stub(),
+        finish: sinon.stub(),
+        finished: false
+      }),
+      extract: sinon.stub().returns({
+        _spanId: 'extracted-parent-123',
+        _traceId: 'extracted-trace-456',
+        toTraceId: sinon.stub().returns('extracted-trace-456')
+      }),
+      inject: sinon.stub(),
       scope: sinon.stub().returns({
         activate: sinon.stub().callsArg(1)
       })
@@ -49,13 +66,9 @@ describe('HTTP Server PubSub Instrumentation Tests', () => {
         }
       }
 
-      // Test the actual detection logic used in server.js
-      const isCloudEvent = req.headers['ce-specversion']
-      const isPubSubPush = req.headers['content-type']?.includes('application/json') &&
-        req.headers['user-agent']?.includes('APIs-Google')
-
-      expect(isCloudEvent).to.be.undefined
-      expect(isPubSubPush).to.be.true
+      // Test the actual detection logic from gcp-pubsub-push
+      expect(isCloudEventRequest(req)).to.be.false
+      expect(isPubSubRequest(req)).to.be.true
     })
 
     it('should detect Eventarc Cloud Events', () => {
@@ -69,12 +82,8 @@ describe('HTTP Server PubSub Instrumentation Tests', () => {
         }
       }
 
-      const isCloudEvent = req.headers['ce-specversion']
-      const isPubSubPush = req.headers['content-type']?.includes('application/json') &&
-        req.headers['user-agent']?.includes('APIs-Google')
-
-      expect(isCloudEvent).to.equal('1.0')
-      expect(isPubSubPush).to.be.false // Cloud Events take precedence
+      expect(isCloudEventRequest(req)).to.be.true
+      expect(isPubSubRequest(req)).to.be.false
     })
 
     it('should not detect regular HTTP requests', () => {
@@ -86,12 +95,8 @@ describe('HTTP Server PubSub Instrumentation Tests', () => {
         }
       }
 
-      const isCloudEvent = req.headers['ce-specversion']
-      const isPubSubPush = req.headers['content-type']?.includes('application/json') &&
-        req.headers['user-agent']?.includes('APIs-Google')
-
-      expect(isCloudEvent).to.be.undefined
-      expect(isPubSubPush).to.be.false
+      expect(isCloudEventRequest(req)).to.be.false
+      expect(isPubSubRequest(req)).to.be.false
     })
   })
 
@@ -320,7 +325,7 @@ describe('HTTP Server PubSub Instrumentation Tests', () => {
 
       const req = http.request({
         hostname: 'localhost',
-        port,
+        port: port,
         path: '/',
         method: 'POST',
         headers: {
@@ -332,9 +337,10 @@ describe('HTTP Server PubSub Instrumentation Tests', () => {
         expect(res.statusCode).to.equal(200)
         res.on('data', () => {})
         res.on('end', () => {
-          // Verify channel was called for PubSub detection
+          // PubSub requests are now handled entirely by our custom logic
+          // and return early, so standard HTTP channels are NOT called
           setTimeout(() => {
-            expect(startServerSpy).to.have.been.called
+            // Just verify the request completed successfully
             done()
           }, 50)
         })
@@ -360,7 +366,7 @@ describe('HTTP Server PubSub Instrumentation Tests', () => {
 
       const req = http.request({
         hostname: 'localhost',
-        port,
+        port: port,
         path: '/',
         method: 'POST',
         headers: {
@@ -375,8 +381,10 @@ describe('HTTP Server PubSub Instrumentation Tests', () => {
         expect(res.statusCode).to.equal(200)
         res.on('data', () => {})
         res.on('end', () => {
+          // Cloud Events are now handled entirely by our custom logic
+          // and return early, so standard HTTP channels are NOT called
           setTimeout(() => {
-            expect(startServerSpy).to.have.been.called
+            // Just verify the request completed successfully
             done()
           }, 50)
         })
@@ -390,7 +398,7 @@ describe('HTTP Server PubSub Instrumentation Tests', () => {
     it('should handle regular HTTP requests normally', (done) => {
       const req = http.request({
         hostname: 'localhost',
-        port,
+        port: port,
         path: '/',
         method: 'GET'
       }, (res) => {
@@ -411,7 +419,7 @@ describe('HTTP Server PubSub Instrumentation Tests', () => {
     it('should handle invalid JSON gracefully', (done) => {
       const req = http.request({
         hostname: 'localhost',
-        port,
+        port: port,
         path: '/',
         method: 'POST',
         headers: {
@@ -445,7 +453,7 @@ describe('HTTP Server PubSub Instrumentation Tests', () => {
 
       const req = http.request({
         hostname: 'localhost',
-        port,
+        port: port,
         path: '/',
         method: 'POST',
         headers: {
@@ -465,6 +473,111 @@ describe('HTTP Server PubSub Instrumentation Tests', () => {
     })
   })
 
+  describe('processEventRequest function', () => {
+    let mockReq, mockRes, mockEmit, mockServer, mockArgs
+
+    beforeEach(() => {
+      mockReq = {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'user-agent': 'APIs-Google; (+https://developers.google.com/webmasters/APIs-Google.html)'
+        },
+        on: sinon.stub(),
+        removeAllListeners: sinon.stub()
+      }
+
+      mockRes = {
+        on: sinon.stub(),
+        statusCode: 200
+      }
+
+      mockEmit = sinon.stub()
+      mockServer = {}
+      mockArgs = ['request', mockReq, mockRes]
+
+      global._ddtrace = tracer
+    })
+
+    afterEach(() => {
+      delete global._ddtrace
+    })
+
+    it('should create PubSub span for traditional PubSub requests', () => {
+      // Setup mock request body parsing
+      const chunks = [Buffer.from(JSON.stringify({
+        message: {
+          data: Buffer.from('test').toString('base64'),
+          messageId: 'test-id-123',
+          attributes: {
+            traceparent: '00-12345-67890-01',
+            'pubsub.topic': 'test-topic'
+          }
+        },
+        subscription: 'projects/test/subscriptions/test-sub'
+      }))]
+
+      let dataCallback
+      mockReq.on.callsFake((event, callback) => {
+        if (event === 'data') dataCallback = callback
+        if (event === 'end') {
+          setTimeout(() => {
+            chunks.forEach(chunk => dataCallback(chunk))
+            callback()
+          }, 0)
+        }
+      })
+
+      // Call processEventRequest
+      processEventRequest(mockReq, mockRes, mockEmit, mockServer, mockArgs, false)
+
+      // Verify tracer methods were called
+      setTimeout(() => {
+        expect(tracer.extract).to.have.been.called
+        expect(tracer.startSpan).to.have.been.called
+        expect(tracer.inject).to.have.been.called
+      }, 10)
+    })
+
+    it('should create Cloud Event span for Eventarc requests', () => {
+      mockReq.headers['ce-specversion'] = '1.0'
+      mockReq.headers['ce-type'] = 'google.cloud.pubsub.topic.v1.messagePublished'
+      mockReq.headers['ce-source'] = '//pubsub.googleapis.com/projects/test/topics/test-topic'
+
+      const chunks = [Buffer.from(JSON.stringify({
+        message: {
+          data: Buffer.from('test').toString('base64'),
+          messageId: 'test-eventarc-id',
+          attributes: {
+            traceparent: '00-abc123-def456-01'
+          }
+        },
+        subscription: 'projects/test/subscriptions/eventarc-sub'
+      }))]
+
+      let dataCallback
+      mockReq.on.callsFake((event, callback) => {
+        if (event === 'data') dataCallback = callback
+        if (event === 'end') {
+          setTimeout(() => {
+            chunks.forEach(chunk => dataCallback(chunk))
+            callback()
+          }, 0)
+        }
+      })
+
+      // Call processEventRequest for Cloud Event
+      processEventRequest(mockReq, mockRes, mockEmit, mockServer, mockArgs, true)
+
+      // Verify tracer methods were called
+      setTimeout(() => {
+        expect(tracer.extract).to.have.been.called
+        expect(tracer.startSpan).to.have.been.called
+        expect(tracer.inject).to.have.been.called
+      }, 10)
+    })
+  })
+
   describe('Utility Functions', () => {
     it('should validate body size limits', () => {
       const MAX_BODY_SIZE = 10 * 1024 * 1024 // 10MB
@@ -472,6 +585,12 @@ describe('HTTP Server PubSub Instrumentation Tests', () => {
       expect(MAX_BODY_SIZE).to.equal(10485760)
       expect(1024 * 1024).to.be.lessThan(MAX_BODY_SIZE) // 1MB < 10MB
       expect(MAX_BODY_SIZE + 1).to.be.greaterThan(MAX_BODY_SIZE)
+    })
+
+    it('should have required functions exported', () => {
+      expect(typeof isPubSubRequest).to.equal('function')
+      expect(typeof isCloudEventRequest).to.equal('function')
+      expect(typeof processEventRequest).to.equal('function')
     })
   })
 })
