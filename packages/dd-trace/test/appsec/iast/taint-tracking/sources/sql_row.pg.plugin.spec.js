@@ -108,6 +108,6 @@ describe('db sources with pg', () => {
           res.end('OK')
         }, 'COMMAND_INJECTION', null, 'Should not detect COMMAND_INJECTION with database source')
       })
-    })
+    }, undefined, ['pg'])
   })
 })
