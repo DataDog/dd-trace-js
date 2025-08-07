@@ -26,7 +26,7 @@ jobs:
         test-image: [ubuntu-22.04]
         include:
           - node-version: 18
-            range: '>=5.2.0'
+            range: '>=5.2.0 <6.3.0'
             range_clean: gte.5.2.0
             aerospike-image: ce-6.4.0.3
             test-image: ubuntu-latest
