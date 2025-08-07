@@ -14,8 +14,7 @@ describe('sql-injection-analyzer with knex', () => {
   withVersions('knex', 'knex', knexVersion => {
     if (!semver.satisfies(knexVersion, '>=2')) return
 
-    withVersions('pg', 'pg', pgVersion => {
-      if (pgVersion !== '8.0.3') return
+    withVersions('pg', 'pg', () => {
       let knex
 
       prepareTestServerForIast('knex + pg',

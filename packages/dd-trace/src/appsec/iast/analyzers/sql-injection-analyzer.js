@@ -36,14 +36,12 @@ class SqlInjectionAnalyzer extends StoredInjectionAnalyzer {
     this.addBind('datadog:knex:raw:start', (context) => {
       const { sql, dialect: knexDialect } = context
       const dialect = this.normalizeKnexDialect(knexDialect)
-      const newStore = this.getStoreAndAnalyze(sql, dialect)
-      context.currentStore = newStore
-      return newStore
+      const currentStore = this.getStoreAndAnalyze(sql, dialect)
+      context.currentStore = currentStore
+      return currentStore
     })
 
-    this.addBind('datadog:knex:raw:subscribes', (context) => {
-      return context.currentStore
-    })
+    this.addBind('datadog:knex:raw:subscribes', ({ currentStore }) => currentStore)
     this.addBind('datadog:knex:raw:finish', ({ currentStore }) => currentStore?.sqlParentStore)
   }
 
