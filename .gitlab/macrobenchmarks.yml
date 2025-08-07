@@ -1,5 +1,5 @@
 stages:
-  - test
+  - macrobenchmarks
   - gate
   - notify
 
@@ -8,7 +8,7 @@ include:
   file: 'images/templates/gitlab/notify-slo-breaches.template.yml'
 
 .macrobenchmarks:
-  stage: test
+  stage: macrobenchmarks
   rules:
     - if: ($NIGHTLY_BENCHMARKS || $CI_PIPELINE_SOURCE != "schedule") && $CI_COMMIT_REF_NAME == "master"
       when: always
