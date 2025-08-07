@@ -82,8 +82,6 @@ jobs:
           version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
-        env:
-          NODE_OPTIONS: ${{ matrix.node-opts }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
