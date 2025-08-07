@@ -38,11 +38,7 @@ jobs:
   aws-sdk:
     strategy:
       matrix:
-        include:
-          - node-version: latest
-            node-opts: --no-async-context-frame
-          - node-version: oldest
-            node-opts: ''
+        node-version: [oldest, latest]
     runs-on: ubuntu-latest
     services:
       localstack:
