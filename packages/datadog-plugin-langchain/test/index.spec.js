@@ -24,12 +24,6 @@ describe('Plugin', () => {
     GOOGLE_API_KEY: '<not-a-real-key>'
   })
 
-  /**
-   * Gets a LangChain OpenAI client with the given type and options.
-   * @param {'llm' | 'chat' | 'embedding'} type
-   * @param {Object} options
-   * @returns {any}
-   */
   function getLangChainOpenAiClient (type = 'llm', options = {}) {
     Object.assign(options, {
       configuration: {
