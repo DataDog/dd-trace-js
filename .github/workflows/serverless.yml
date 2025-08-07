@@ -97,6 +97,12 @@ jobs:
   azure-functions:
     runs-on: ubuntu-latest
     services:
+        azurite:
+          image: mcr.microsoft.com/azure-storage/azurite:3.34.0
+          ports:
+              - "127.0.0.1:10000:10000"
+              - "127.0.0.1:10001:10001"
+              - "127.0.0.1:10002:10002"
         azureservicebusemulator:
           image: mcr.microsoft.com/azure-messaging/servicebus-emulator:1.1.2
           ports:
