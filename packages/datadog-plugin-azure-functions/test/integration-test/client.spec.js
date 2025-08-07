@@ -44,7 +44,7 @@ describe('esm', () => {
 
     it('is instrumented', async () => {
       const envArgs = {
-        PATH: `/usr/bin:${process.env.PATH}`
+        PATH: process.env.PATH
       }
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 
@@ -60,7 +60,7 @@ describe('esm', () => {
 
     it('propagates context to child http requests', async () => {
       const envArgs = {
-        PATH: `/usr/bin:${process.env.PATH}`
+        PATH: process.env.PATH
       }
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 
@@ -72,7 +72,7 @@ describe('esm', () => {
 
     it('propagates context through a service bus queue', async () => {
       const envArgs = {
-        PATH: `/usr/bin:${process.env.PATH}`
+        PATH: process.env.PATH
       }
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 
@@ -90,7 +90,7 @@ describe('esm', () => {
 
     it('propagates context through a service bus topic', async () => {
       const envArgs = {
-        PATH: `/usr/bin:${process.env.PATH}`
+        PATH: process.env.PATH
       }
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 

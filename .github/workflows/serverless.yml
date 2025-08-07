@@ -118,13 +118,9 @@ jobs:
       SERVICES: azureservicebusemulator,azuresqledge
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ca-certificates curl gpg
-      - run: |
-          curl https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > microsoft.gpg \
-          && sudo mv microsoft.gpg /etc/apt/trusted.gpg.d/microsoft.gpg \
-          && sudo bash -c 'echo "deb [arch=amd64] https://packages.microsoft.com/repos/microsoft-ubuntu-noble-prod noble main" > /etc/apt/sources.list.d/dotnetdev.list' \
-          && sudo apt-get update \
-          && sudo apt-get install -y --no-install-recommends azure-functions-core-tools-4=4.1.0-1
+      - uses: ./.github/actions/node
+      - run: npm install -g azure-functions-core-tools@4.1.0
+      - run: echo "$(dirname $(which func))" >> $GITHUB_PATH
       - uses: ./.github/actions/plugins/test
 
   azure-service-bus:
