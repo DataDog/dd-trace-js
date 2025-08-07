@@ -78,8 +78,8 @@ function createSpan (tracer, parent, topicName, projectId, subscription, message
   const spanTags = {
     component: 'google-cloud-pubsub',
     'span.kind': 'consumer',
-    'gcloud.project_id': projectId || 'unknown',
-    'pubsub.topic': topicName || 'unknown',
+    'gcloud.project_id': projectId,
+    'pubsub.topic': topicName,
     'pubsub.subscription': subscription,
     'pubsub.message_id': message?.messageId,
     'pubsub.delivery_method': isCloudEvent ? 'eventarc' : 'push'
