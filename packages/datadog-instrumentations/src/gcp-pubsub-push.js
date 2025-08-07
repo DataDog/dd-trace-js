@@ -3,8 +3,8 @@
 // Detection functions
 function isPubSubRequest (req) {
   return req.method === 'POST' &&
-    req.headers['content-type']?.includes('application/json') &&
-    req.headers['user-agent']?.includes('APIs-Google')
+    !!req.headers['content-type']?.includes('application/json') &&
+    !!req.headers['user-agent']?.includes('APIs-Google')
 }
 
 function isCloudEventRequest (req) {

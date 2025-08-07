@@ -325,7 +325,7 @@ describe('HTTP Server PubSub Instrumentation Tests', () => {
 
       const req = http.request({
         hostname: 'localhost',
-        port: port,
+        port,
         path: '/',
         method: 'POST',
         headers: {
@@ -366,7 +366,7 @@ describe('HTTP Server PubSub Instrumentation Tests', () => {
 
       const req = http.request({
         hostname: 'localhost',
-        port: port,
+        port,
         path: '/',
         method: 'POST',
         headers: {
@@ -398,7 +398,7 @@ describe('HTTP Server PubSub Instrumentation Tests', () => {
     it('should handle regular HTTP requests normally', (done) => {
       const req = http.request({
         hostname: 'localhost',
-        port: port,
+        port,
         path: '/',
         method: 'GET'
       }, (res) => {
@@ -419,7 +419,7 @@ describe('HTTP Server PubSub Instrumentation Tests', () => {
     it('should handle invalid JSON gracefully', (done) => {
       const req = http.request({
         hostname: 'localhost',
-        port: port,
+        port,
         path: '/',
         method: 'POST',
         headers: {
@@ -453,7 +453,7 @@ describe('HTTP Server PubSub Instrumentation Tests', () => {
 
       const req = http.request({
         hostname: 'localhost',
-        port: port,
+        port,
         path: '/',
         method: 'POST',
         headers: {
