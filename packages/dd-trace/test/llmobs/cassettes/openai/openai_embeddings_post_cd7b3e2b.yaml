@@ -1,0 +1,92 @@
+interactions:
+- request:
+    body: "{\n  \"model\": \"gpt-3.5-turbo-instruct\",\n  \"input\": \"Hello, world!\",\n
+      \ \"encoding_format\": \"base64\"\n}"
+    headers:
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Encoding
+      : - gzip,deflate
+      ? !!python/object/apply:multidict._multidict.istr
+      - Connection
+      : - keep-alive
+      Content-Length:
+      - '98'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - User-Agent
+      : - OpenAI/JS 4.104.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-arch
+      : - arm64
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-lang
+      : - js
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-os
+      : - MacOS
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-package-version
+      : - 4.104.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-retry-count
+      : - '0'
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-runtime
+      : - node
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-runtime-version
+      : - v22.17.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-timeout
+      : - '600'
+    method: POST
+    uri: https://api.openai.com/v1/embeddings
+  response:
+    body:
+      string: "{\n    \"error\": {\n        \"message\": \"You are not allowed to
+        generate embeddings from this model\",\n        \"type\": \"invalid_request_error\",\n
+        \       \"param\": null,\n        \"code\": null\n    }\n}\n"
+    headers:
+      CF-RAY:
+      - 96b7ae3bcabeffbc-IAD
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=utf-8
+      Date:
+      - Thu, 07 Aug 2025 15:06:55 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=GR6aThVvhO2dMyITZ7OMQ3gPWnwC5cVlnyej3BuwHSg-1754579215-1.0.1.1-F5HVWIT3q_4AMKecL7C3zEbuTFVR5eiNr9gs.ItwoJgy7U9zZkS9htzZCR2Aj6bcpxq87KLgc_S4LYl9fL6dF4HSyEcJKO3kTZiqAiIeeO4;
+        path=/; expires=Thu, 07-Aug-25 15:36:55 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=PgU7tVnNfGWWmBNHUf2QRKAL3yD8a7ibKzDGFoz1Ago-1754579215543-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      vary:
+      - Origin
+      x-envoy-upstream-service-time:
+      - '4'
+      x-request-id:
+      - req_77208fc5c6e649d88a5daea48c90a299
+    status:
+      code: 403
+      message: Forbidden
+version: 1
