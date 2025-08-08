@@ -75,11 +75,9 @@ function extractPublicOrPrivateIp (ip) {
   if (!type) return {}
 
   if (isPublicIp(ip, type)) {
-    // it's public, return it immediately
     return { public: true }
   }
 
-  // it's private, only save the first one found
   return { private: true }
 }
 
@@ -96,10 +94,12 @@ function findFirstIp (str) {
 
     const currentIpInfo = extractPublicOrPrivateIp(chunk)
     if (currentIpInfo.public) {
+      // it's public, return it immediately
       result.public = chunk
       break
     }
 
+    // it's private, only save the first one found
     if (currentIpInfo.private && !result.private) result.private = chunk
   }
 
@@ -124,10 +124,12 @@ function findFirstIpForwardedFormat (str) {
 
       const tempResult = extractPublicOrPrivateIp(ip)
       if (tempResult.public) {
+        // it's public, return it immediately
         result.public = ip
         break
       }
 
+      // it's private, only save the first one found
       if (tempResult.private && !result.private) result.private = ip
     }
 
