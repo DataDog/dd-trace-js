@@ -8,10 +8,11 @@ const telemetry = require('../telemetry')
 const {
   extractRequestParams,
   extractTextAndResponseReason,
-  parseModelId
+  parseModelId,
+  coerceResponseChunks
 } = require('../../../../datadog-plugin-aws-sdk/src/services/bedrockruntime/utils')
 
-const ENABLED_OPERATIONS = new Set(['invokeModel'])
+const ENABLED_OPERATIONS = new Set(['invokeModel', 'invokeModelWithResponseStream'])
 
 const requestIdsToTokens = {}
 
@@ -19,7 +20,8 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
   constructor () {
     super(...arguments)
 
-    this.addSub('apm:aws:request:complete:bedrockruntime', ({ response }) => {
+    this.addSub('apm:aws:request:complete:bedrockruntime', (ctx) => {
+      const { response } = ctx
       const request = response.request
       const operation = request.operation
       // avoids instrumenting other non supported runtime operations
@@ -32,7 +34,7 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
       if (modelName.includes('embed')) {
         return
       }
-      const span = storage('legacy').getStore()?.span
+      const span = ctx.currentStore?.span
       this.setLLMObsTags({ request, span, response, modelProvider, modelName })
     })
 
@@ -45,6 +47,22 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
         inputTokensFromHeaders: inputTokenCount && Number.parseInt(inputTokenCount),
         outputTokensFromHeaders: outputTokenCount && Number.parseInt(outputTokenCount)
       }
+    })
+
+    this.addSub('apm:aws:response:streamed-chunk:bedrockruntime', ({ ctx, chunk, done }) => {
+      if (!ctx.chunks) ctx.chunks = []
+
+      if (chunk) ctx.chunks.push(chunk)
+      if (!done) return
+
+      const chunks = ctx.chunks
+      if (chunks.length === 0) return
+
+      const modelId = ctx.request.params.modelId
+      const { modelProvider, modelName } = parseModelId(modelId)
+
+      const response = coerceResponseChunks(chunks, modelProvider, modelName)
+      Object.assign(ctx.response, { body: response })
     })
   }
 

@@ -23,6 +23,81 @@ const PROVIDER = {
   MISTRAL: 'MISTRAL'
 }
 
+/**
+ * Coerce the chunks into a single response body.
+ *
+ * @param {Array<{ chunk: { bytes: Buffer } }>} chunks
+ * @param {string} provider
+ * @returns {Object}
+ */
+function coerceResponseChunks (chunks, provider, modelId) {
+  let response = {}
+
+  // streaming unsupported for AI21, AMAZON embedding models, COHERE embedding models, STABILITY
+  if (
+    provider.toUpperCase() === PROVIDER.AI21 ||
+    (provider.toUpperCase() === PROVIDER.AMAZON && modelId.includes('embed')) ||
+    (provider.toUpperCase() === PROVIDER.COHERE && modelId.includes('embed')) ||
+    provider.toUpperCase() === PROVIDER.STABILITY
+  ) {
+    return response
+  }
+
+  const choices = new Map() // map choice indices to choice objects
+  // const usage = {}
+
+  for (const { chunk: { bytes } } of chunks) {
+    const body = JSON.parse(Buffer.from(bytes).toString('utf8'))
+
+    Object.assign(response, body)
+
+    if (provider.toUpperCase() === PROVIDER.AMAZON) {
+      const choiceText = choices.get(body?.index) ?? ''
+      choices.set(body?.index, choiceText + body?.outputText)
+    } else if (provider.toUpperCase() === PROVIDER.ANTHROPIC) {
+      const { type } = body // for the whole response, we'll only ever hit one of these cases
+      if (type === 'content_block_delta' && body?.delta?.type === 'text_delta') {
+        const choiceText = choices.get(body?.index) ?? ''
+        choices.set(body?.index, choiceText + body?.delta?.text)
+      } else if (type === 'completion') { // completions do not have choices
+        const choiceText = choices.get(0) ?? ''
+        choices.set(0, choiceText + body?.completion)
+      }
+    } else if (provider.toUpperCase() === PROVIDER.COHERE && body?.event_type === 'stream-end') {
+      response = body.response
+    } else if (provider.toUpperCase() === PROVIDER.META) {
+      const index = body?.index ?? 0
+      const choiceText = choices.get(index) ?? ''
+      choices.set(index, choiceText + body?.generation)
+    } else if (provider.toUpperCase() === PROVIDER.MISTRAL) {
+      const outputs = body?.outputs ?? []
+      for (const [index, output] of outputs.entries()) {
+        if (!output?.text) continue
+        const choiceText = choices.get(index) ?? ''
+        choices.set(index, choiceText + output?.text)
+      }
+    }
+  }
+
+  if (provider.toUpperCase() === PROVIDER.AMAZON) {
+    response.results = [...choices.values()]
+  } else if (provider.toUpperCase() === PROVIDER.ANTHROPIC) {
+    if (choices.size < 2) {
+      response.completion = choices.get(0)
+    } else {
+      response.content = [...choices.values()] // TODO: check this
+    }
+  } else if (provider.toUpperCase() === PROVIDER.META) {
+    response.generation = choices.get(0)
+  } else if (provider.toUpperCase() === PROVIDER.MISTRAL) {
+    response.outputs = [...choices.values()].map(choice => ({
+      text: choice
+    }))
+  }
+
+  return response
+}
+
 class Generation {
   constructor ({
     message = '',
@@ -204,7 +279,8 @@ function extractRequestParams (params, provider) {
 }
 
 function extractTextAndResponseReason (response, provider, modelName) {
-  const body = JSON.parse(Buffer.from(response.body).toString('utf8'))
+  const body = Buffer.isBuffer(response.body) ? JSON.parse(Buffer.from(response.body).toString('utf8')) : response.body
+  console.log('body in extractTextAndResponseReason', body)
   const shouldSetChoiceIds = provider.toUpperCase() === PROVIDER.COHERE && !modelName.includes('embed')
   try {
     switch (provider.toUpperCase()) {
@@ -307,6 +383,7 @@ function extractTextAndResponseReason (response, provider, modelName) {
 module.exports = {
   Generation,
   RequestParams,
+  coerceResponseChunks,
   parseModelId,
   extractRequestParams,
   extractTextAndResponseReason,
