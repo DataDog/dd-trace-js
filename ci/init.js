@@ -10,6 +10,8 @@ const isJestWorker = !!getEnvironmentVariable('JEST_WORKER_ID')
 const isCucumberWorker = !!getEnvironmentVariable('CUCUMBER_WORKER_ID')
 const isMochaWorker = !!getEnvironmentVariable('MOCHA_WORKER_ID')
 
+// We can't use VITEST_WORKER_ID because it's set _after_ the worker is initialized
+const isVitestWorker = !!getEnvironmentVariable('TINYPOOL_WORKER_ID')
 const isPlaywrightWorker = !!getEnvironmentVariable('DD_PLAYWRIGHT_WORKER')
 
 const packageManagers = [
@@ -75,6 +77,12 @@ if (isMochaWorker) {
 if (isPlaywrightWorker) {
   options.experimental = {
     exporter: 'playwright_worker'
+  }
+}
+
+if (isVitestWorker) {
+  options.experimental = {
+    exporter: 'vitest_worker'
   }
 }
 
