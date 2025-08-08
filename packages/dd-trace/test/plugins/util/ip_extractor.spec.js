@@ -1,6 +1,6 @@
 'use strict'
 
-// require('../../setup/tap')
+require('../../setup/tap')
 
 const { extractIp } = require('../../../src/plugins/util/ip_extractor')
 const http = require('http')
