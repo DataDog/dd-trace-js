@@ -26,16 +26,17 @@ jobs:
         with:
           version: ''
       - run: npm install octokit
-      - id: report
+      - id: markdown
         run: |
           {
-            echo 'markdown<<EOF'
+            echo 'report<<EOF'
             node scripts/flakiness.mjs
             echo EOF
           } >> $GITHUB_OUTPUT
-      - run: echo "${{ steps.report.outputs.markdown }}" >> $GITHUB_STEP_SUMMARY
-      - run: echo "slack=${{ steps.report.outputs.markdown }}" | sed 's/$/\\n/g' | tr -d '\n' >> $GITHUB_OUTPUT
-      - run: echo "slack=${{ steps.report.outputs.slack }}"
+      - run: echo "${{ steps.markdown.outputs.report }}" >> $GITHUB_STEP_SUMMARY
+      - id: slack
+        run: echo "report=${{ steps.markdown.outputs.report }}" | sed 's/$/\\n/g' | tr -d '\n' >> $GITHUB_OUTPUT
+      - run: echo "${{ steps.slack.outputs.report }}"
       - uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a # v2.1.0
         if: github.event_name == 'schedule'
         with:
@@ -43,4 +44,4 @@ jobs:
           token: ${{ secrets.SLACK_BOT_TOKEN }}
           payload: |
             channel: ${{ secrets.SLACK_CHANNEL_ID }}
-            text: ${{ steps.report.outputs.slack }}
+            text: ${{ steps.slack.outputs.report }}
