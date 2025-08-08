@@ -132,6 +132,7 @@ if (Object.keys(flaky).length === 0) {
       console.log(`    * ${job} (${links.join(', ')})${runsBadge}`)
     }
   }
+  console.log()
   console.log('*Flakiness stats*')
   console.log(`* Total runs: ${totalCount}`)
   console.log(`* Flaky runs: ${flakeCount}`)
