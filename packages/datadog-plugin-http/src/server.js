@@ -1,12 +1,11 @@
 'use strict'
 
-const ServerPlugin = require('../../dd-trace/src/plugins/server')
+const WebPlugin = require('../../datadog-plugin-web/src')
 const { storage } = require('../../datadog-core')
-const web = require('../../dd-trace/src/plugins/util/web')
 const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('../../dd-trace/src/appsec/channels')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 
-class HttpServerPlugin extends ServerPlugin {
+class HttpServerPlugin extends WebPlugin {
   static id = 'http'
 
   static prefix = 'apm:http:server:request'
@@ -19,7 +18,7 @@ class HttpServerPlugin extends ServerPlugin {
 
   start ({ req, res, abortController }) {
     const store = storage('legacy').getStore()
-    const span = web.startSpan(
+    const span = this.startSpan(
       this.tracer,
       {
         ...this.config,
@@ -35,10 +34,10 @@ class HttpServerPlugin extends ServerPlugin {
     this._parentStore = store
     this.enter(span, { ...store, req, res })
 
-    const context = web.getContext(req)
+    const context = this.getContext(req)
 
     if (!context.instrumented) {
-      context.res.writeHead = web.wrapWriteHead(context)
+      context.res.writeHead = this.wrapWriteHead(context)
       context.instrumented = true
     }
 
@@ -48,11 +47,11 @@ class HttpServerPlugin extends ServerPlugin {
   }
 
   error (error) {
-    web.addError(error)
+    this.addError(error)
   }
 
   finish ({ req }) {
-    const context = web.getContext(req)
+    const context = this.getContext(req)
 
     if (!context || !context.res) return // Not created by a http.Server instance.
 
@@ -60,7 +59,7 @@ class HttpServerPlugin extends ServerPlugin {
       incomingHttpRequestEnd.publish({ req, res: context.res })
     }
 
-    web.finishAll(context)
+    this.finishAll(context)
   }
 
   exit ({ req }) {
@@ -70,7 +69,7 @@ class HttpServerPlugin extends ServerPlugin {
   }
 
   configure (config) {
-    return super.configure(web.normalizeConfig(config))
+    return super.configure(this.normalizeConfig(config))
   }
 }
 

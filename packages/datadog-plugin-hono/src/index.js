@@ -1,7 +1,6 @@
 'use strict'
 
 const RouterPlugin = require('../../datadog-plugin-router/src')
-const web = require('../../dd-trace/src/plugins/util/web')
 
 class HonoPlugin extends RouterPlugin {
   static id = 'hono'
@@ -14,11 +13,11 @@ class HonoPlugin extends RouterPlugin {
     })
 
     this.addSub('apm:hono:request:route', ({ req, route }) => {
-      web.setRoute(req, route)
+      this.setRoute(req, route)
     })
 
     this.addSub('apm:hono:request:error', ({ req, error }) => {
-      web.addError(req, error)
+      this.addError(req, error)
     })
   }
 }

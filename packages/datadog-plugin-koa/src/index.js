@@ -1,7 +1,6 @@
 'use strict'
 
 const RouterPlugin = require('../../datadog-plugin-router/src')
-const web = require('../../dd-trace/src/plugins/util/web')
 
 class KoaPlugin extends RouterPlugin {
   static id = 'koa'
@@ -14,7 +13,7 @@ class KoaPlugin extends RouterPlugin {
     })
 
     this.addSub('apm:koa:request:route', ({ req, route }) => {
-      web.setRoute(req, route)
+      this.setRoute(req, route)
     })
   }
 }

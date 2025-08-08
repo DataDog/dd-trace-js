@@ -1,12 +1,11 @@
 'use strict'
 
 const { entryTags } = require('../../datadog-code-origin')
-const Plugin = require('../../dd-trace/src/plugins/plugin')
-const web = require('../../dd-trace/src/plugins/util/web')
+const WebPlugin = require('../../datadog-plugin-web/src')
 
 const kCodeOriginForSpansTagsSym = Symbol('datadog.codeOriginForSpansTags')
 
-class FastifyCodeOriginForSpansPlugin extends Plugin {
+class FastifyCodeOriginForSpansPlugin extends WebPlugin {
   static id = 'fastify'
 
   constructor (...args) {
@@ -15,7 +14,7 @@ class FastifyCodeOriginForSpansPlugin extends Plugin {
     this.addSub('apm:fastify:request:handle', ({ req, routeConfig }) => {
       const tags = routeConfig?.[kCodeOriginForSpansTagsSym]
       if (!tags) return
-      const context = web.getContext(req)
+      const context = this.getContext(req)
       context.span?.addTags(tags)
     })
 

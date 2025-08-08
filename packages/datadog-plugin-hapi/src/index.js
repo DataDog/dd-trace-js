@@ -2,7 +2,6 @@
 
 const { storage } = require('../../datadog-core')
 const RouterPlugin = require('../../datadog-plugin-router/src')
-const web = require('../../dd-trace/src/plugins/util/web')
 
 class HapiPlugin extends RouterPlugin {
   static id = 'hapi'
@@ -21,7 +20,7 @@ class HapiPlugin extends RouterPlugin {
     })
 
     this.addSub('apm:hapi:request:route', ({ req, route }) => {
-      web.setRoute(req, route)
+      this.setRoute(req, route)
     })
 
     this.addSub('apm:hapi:request:error', error => {
