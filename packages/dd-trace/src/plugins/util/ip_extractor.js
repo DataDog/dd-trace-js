@@ -135,7 +135,6 @@ function findFirstIpForwardedFormat (str) {
   }
 
   return result
-
 }
 
 module.exports = {

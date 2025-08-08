@@ -292,7 +292,7 @@ describe('ip extractor', () => {
   })
 
   describe('Forwarded header', () => {
-    it(`should detect ip in header 'Forwarded' in for`, (done) => {
+    it('should detect ip in header \'Forwarded\' in for', (done) => {
       const expectedIp = '1.2.3.4'
       controller = function (req) {
         const ip = extractIp({}, req)
@@ -310,7 +310,7 @@ describe('ip extractor', () => {
       }).catch(done)
     })
 
-    it(`should detect ip in header 'Forwarded' in by`, (done) => {
+    it('should detect ip in header \'Forwarded\' in by', (done) => {
       const expectedIp = '1.2.3.4'
       controller = function (req) {
         const ip = extractIp({}, req)
@@ -328,7 +328,7 @@ describe('ip extractor', () => {
       }).catch(done)
     })
 
-    it(`should detect ipv6 in header 'Forwarded' in for`, (done) => {
+    it('should detect ipv6 in header \'Forwarded\' in for', (done) => {
       const expectedIp = '5a54:f844:006c:b8f1:0e96:9e54:54ac:4a2d'
       controller = function (req) {
         const ip = extractIp({}, req)
@@ -346,7 +346,7 @@ describe('ip extractor', () => {
       }).catch(done)
     })
 
-    it(`should detect ipv6 in header 'Forwarded' in by`, (done) => {
+    it('should detect ipv6 in header \'Forwarded\' in by', (done) => {
       const expectedIp = '5a54:f844:006c:b8f1:0e96:9e54:54ac:4a2d'
       controller = function (req) {
         const ip = extractIp({}, req)
@@ -364,7 +364,7 @@ describe('ip extractor', () => {
       }).catch(done)
     })
 
-    it(`should detect ip in header 'Forwarded' in by when for is private`, (done) => {
+    it('should detect ip in header \'Forwarded\' in by when for is private', (done) => {
       const expectedIp = '1.2.3.4'
       controller = function (req) {
         const ip = extractIp({}, req)
@@ -382,7 +382,7 @@ describe('ip extractor', () => {
       }).catch(done)
     })
 
-    it(`should detect ip in header 'Forwarded' in for when for and by are public`, (done) => {
+    it('should detect ip in header \'Forwarded\' in for when for and by are public', (done) => {
       const expectedIp = '1.2.3.4'
       controller = function (req) {
         const ip = extractIp({}, req)
@@ -400,7 +400,7 @@ describe('ip extractor', () => {
       }).catch(done)
     })
 
-    it(`should detect ip in header 'x-client-ip' when 'Forwarded' is also set`, (done) => {
+    it('should detect ip in header \'x-client-ip\' when \'Forwarded\' is also set', (done) => {
       const expectedIp = '1.2.3.4'
       controller = function (req) {
         const ip = extractIp({}, req)
@@ -419,7 +419,7 @@ describe('ip extractor', () => {
       }).catch(done)
     })
 
-    it(`should detect ip in header 'Forwarded' when 'forwarded-for' is also set`, (done) => {
+    it('should detect ip in header \'Forwarded\' when \'forwarded-for\' is also set', (done) => {
       const expectedIp = '1.2.3.4'
       controller = function (req) {
         const ip = extractIp({}, req)
