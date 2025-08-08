@@ -29,8 +29,6 @@ jobs:
       - uses: ./.github/actions/install
       - run: yarn test:debugger:ci
       - run: yarn test:integration:debugger
-        env:
-          OPTIONS_OVERRIDE: 1
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
