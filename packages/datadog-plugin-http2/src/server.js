@@ -2,11 +2,10 @@
 
 // Plugin temporarily disabled. See https://github.com/DataDog/dd-trace-js/issues/312
 
-const ServerPlugin = require('../../dd-trace/src/plugins/server')
-const web = require('../../dd-trace/src/plugins/util/web')
+const WebPlugin = require('../../datadog-plugin-web/src')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 
-class Http2ServerPlugin extends ServerPlugin {
+class Http2ServerPlugin extends WebPlugin {
   constructor (tracer, config) {
     super(tracer, config)
     this.addBind('apm:http2:server:response:emit', this.bindEmit)
@@ -19,7 +18,7 @@ class Http2ServerPlugin extends ServerPlugin {
   bindStart (ctx) {
     const { req, res } = ctx
 
-    const span = web.startSpan(
+    const span = this.startSpan(
       this.tracer,
       {
         ...this.config,
@@ -37,10 +36,10 @@ class Http2ServerPlugin extends ServerPlugin {
     ctx.currentStore.req = req
     ctx.currentStore.res = res
 
-    const context = web.getContext(req)
+    const context = this.getContext(req)
 
     if (!context.instrumented) {
-      context.res.writeHead = web.wrapWriteHead(context)
+      context.res.writeHead = this.wrapWriteHead(context)
       context.instrumented = true
     }
 
@@ -52,21 +51,21 @@ class Http2ServerPlugin extends ServerPlugin {
 
     const { req } = ctx
 
-    const context = web.getContext(req)
+    const context = this.getContext(req)
 
     if (!context || !context.res) return // Not created by a http.Server instance.
 
-    web.finishAll(context)
+    this.finishAll(context)
 
     return ctx.currentStore
   }
 
   error (error) {
-    web.addError(error)
+    this.addError(error)
   }
 
   configure (config) {
-    return super.configure(web.normalizeConfig(config))
+    return super.configure(this.normalizeConfig(config))
   }
 }
 

@@ -1,16 +1,15 @@
 'use strict'
 
-const Plugin = require('../../dd-trace/src/plugins/plugin')
-const web = require('../../dd-trace/src/plugins/util/web')
+const WebPlugin = require('../../datadog-plugin-web/src')
 
-class FindMyWayPlugin extends Plugin {
+class FindMyWayPlugin extends WebPlugin {
   static id = 'find-my-way'
 
   constructor (...args) {
     super(...args)
 
     this.addSub('apm:find-my-way:request:route', ({ req, route }) => {
-      web.setRoute(req, route)
+      this.setRoute(req, route)
     })
   }
 }

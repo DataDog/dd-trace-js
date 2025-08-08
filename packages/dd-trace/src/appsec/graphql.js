@@ -10,7 +10,7 @@ const {
 const log = require('../log')
 const waf = require('./waf')
 const addresses = require('./addresses')
-const web = require('../plugins/util/web')
+const WebPlugin = require('../../../datadog-plugin-web/src')
 const {
   startGraphqlResolve,
   graphqlMiddlewareChannel,
@@ -89,7 +89,7 @@ function beforeWriteApolloGraphqlResponse ({ abortController, abortData }) {
   const requestData = graphqlRequestData.get(req)
 
   if (requestData?.blocked) {
-    const rootSpan = web.root(req)
+    const rootSpan = WebPlugin.root(req)
     if (!rootSpan) return
 
     try {

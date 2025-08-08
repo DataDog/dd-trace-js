@@ -1,7 +1,6 @@
 'use strict'
 
 const RouterPlugin = require('../../datadog-plugin-router/src')
-const web = require('../../dd-trace/src/plugins/util/web')
 
 class MicrogatewayCorePlugin extends RouterPlugin {
   static id = 'microgateway-core'
@@ -14,7 +13,7 @@ class MicrogatewayCorePlugin extends RouterPlugin {
     })
 
     this.addSub('apm:microgateway-core:request:route', ({ req, route }) => {
-      web.setRoute(req, route)
+      this.setRoute(req, route)
     })
 
     this.addSub('apm:microgateway-core:request:error', ({ error }) => {

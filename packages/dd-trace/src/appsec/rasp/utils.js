@@ -1,6 +1,6 @@
 'use strict'
 
-const web = require('../../plugins/util/web')
+const WebPlugin = require('../../../../datadog-plugin-web/src')
 const { getCallsiteFrames, reportStackTrace, canReportStackTrace } = require('../stack_trace')
 const { getBlockingAction } = require('../blocking')
 const log = require('../../log')
@@ -36,7 +36,7 @@ function handleResult (result, req, res, abortController, config, raspRule) {
 
   const { enabled, maxDepth, maxStackTraces } = config.appsec.stackTrace
 
-  const rootSpan = web.root(req)
+  const rootSpan = WebPlugin.root(req)
 
   const ruleTriggered = !!result?.events?.length
 

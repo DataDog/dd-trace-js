@@ -1,30 +1,29 @@
 'use strict'
 
-const ServerPlugin = require('../../dd-trace/src/plugins/server')
+const WebPlugin = require('../../datadog-plugin-web/src')
 const { storage } = require('../../datadog-core')
-const web = require('../../dd-trace/src/plugins/util/web')
 const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('../../dd-trace/src/appsec/channels')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 
-class HttpServerPlugin extends ServerPlugin {
+class HttpServerPlugin extends WebPlugin {
   static id = 'http'
-
   static prefix = 'apm:http:server:request'
+  static type = 'web'
+  static kind = 'server'
 
   constructor (...args) {
     super(...args)
     this._parentStore = undefined
     this.addTraceSub('exit', message => this.exit(message))
+    this.config = {
+      ...this.config,
+      service: this.config.service || this.serviceName(),
+    }
   }
 
   start ({ req, res, abortController }) {
     const store = storage('legacy').getStore()
-    const span = web.startSpan(
-      this.tracer,
-      {
-        ...this.config,
-        service: this.config.service || this.serviceName(),
-      },
+    const span = this.startSpan(
       req,
       res,
       this.operationName()
@@ -35,10 +34,10 @@ class HttpServerPlugin extends ServerPlugin {
     this._parentStore = store
     this.enter(span, { ...store, req, res })
 
-    const context = web.getContext(req)
+    const context = this.getContext(req)
 
     if (!context.instrumented) {
-      context.res.writeHead = web.wrapWriteHead(context)
+      context.res.writeHead = this.wrapWriteHead(context)
       context.instrumented = true
     }
 
@@ -48,11 +47,11 @@ class HttpServerPlugin extends ServerPlugin {
   }
 
   error (error) {
-    web.addError(error)
+    this.addError(error)
   }
 
   finish ({ req }) {
-    const context = web.getContext(req)
+    const context = this.getContext(req)
 
     if (!context || !context.res) return // Not created by a http.Server instance.
 
@@ -60,7 +59,7 @@ class HttpServerPlugin extends ServerPlugin {
       incomingHttpRequestEnd.publish({ req, res: context.res })
     }
 
-    web.finishAll(context)
+    this.finishAll(context)
   }
 
   exit ({ req }) {
@@ -70,7 +69,7 @@ class HttpServerPlugin extends ServerPlugin {
   }
 
   configure (config) {
-    return super.configure(web.normalizeConfig(config))
+    return super.configure(this.normalizeConfig(config))
   }
 }
 

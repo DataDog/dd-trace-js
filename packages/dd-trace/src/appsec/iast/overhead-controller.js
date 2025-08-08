@@ -1,7 +1,7 @@
 'use strict'
 
 const { LRUCache } = require('lru-cache')
-const web = require('../../plugins/util/web')
+const WebPlugin = require('../../../../datadog-plugin-web/src')
 const vulnerabilities = require('./vulnerabilities')
 
 const OVERHEAD_CONTROLLER_CONTEXT_KEY = 'oce'
@@ -97,7 +97,7 @@ function _getContext (iastContext) {
   if (iastContext?.[OVERHEAD_CONTROLLER_CONTEXT_KEY]) {
     const oceContext = iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY]
     if (!oceContext.webContext) {
-      oceContext.webContext = web.getContext(iastContext.req)
+      oceContext.webContext = WebPlugin.getContext(iastContext.req)
       oceContext.method = iastContext.req?.method
     }
 
