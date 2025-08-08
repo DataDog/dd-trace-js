@@ -6,6 +6,16 @@ const {
 } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 
+const httpNames = ['http', 'node:http']
+const httpsNames = ['https', 'node:https']
+
+// Import GCP PubSub Push & Cloud Events functionality
+const {
+  isPubSubRequest,
+  isCloudEventRequest,
+  processEventRequest
+} = require('../gcp-pubsub-push')
+
 const startServerCh = channel('apm:http:server:request:start')
 const exitServerCh = channel('apm:http:server:request:exit')
 const errorServerCh = channel('apm:http:server:request:error')
@@ -16,12 +26,11 @@ const startSetHeaderCh = channel('datadog:http:server:response:set-header:start'
 
 const requestFinishedSet = new WeakSet()
 
-const httpNames = ['http', 'node:http']
-const httpsNames = ['https', 'node:https']
-
 addHook({ name: httpNames }, http => {
   shimmer.wrap(http.ServerResponse.prototype, 'emit', wrapResponseEmit)
+  shimmer.wrap(http.Server.prototype, 'emit', wrapEmitForGcp)
   shimmer.wrap(http.Server.prototype, 'emit', wrapEmit)
+
   shimmer.wrap(http.ServerResponse.prototype, 'writeHead', wrapWriteHead)
   shimmer.wrap(http.ServerResponse.prototype, 'write', wrapWrite)
   shimmer.wrap(http.ServerResponse.prototype, 'end', wrapEnd)
@@ -36,6 +45,7 @@ addHook({ name: httpNames }, http => {
 
 addHook({ name: httpsNames }, http => {
   // http.ServerResponse not present on https
+  shimmer.wrap(http.Server.prototype, 'emit', wrapEmitForGcp)
   shimmer.wrap(http.Server.prototype, 'emit', wrapEmit)
   return http
 })
@@ -54,6 +64,37 @@ function wrapResponseEmit (emit) {
     return emit.apply(this, arguments)
   }
 }
+
+// GCP PubSub/Cloud Events wrapper (first priority)
+function wrapEmitForGcp (emit) {
+  return function (eventName, req, res) {
+    // Only process 'request' events
+    if (eventName !== 'request') {
+      return emit.apply(this, arguments)
+    }
+
+    // Prioritize Cloud Events over PubSub push (Cloud Events can be delivered via PubSub)
+    if (isCloudEventRequest(req)) {
+      // Add Cloud Event specific flag for downstream processing
+      req._isCloudEvent = true
+      // Delegate entirely to processEventRequest - it handles emit internally, so we return early
+      processEventRequest(req, res, emit, this, arguments, true)
+      // Return early to prevent double emit - processEventRequest already called emit.apply()
+      return true
+    } else if (isPubSubRequest(req)) {
+      // Add PubSub specific flag for downstream processing
+      req._isPubSubPush = true
+      // Delegate entirely to processEventRequest - it handles emit internally, so we return early
+      processEventRequest(req, res, emit, this, arguments, false)
+      // Return early to prevent double emit - processEventRequest already called emit.apply()
+      return true
+    }
+
+    // Continue to next wrapper (shimmer chains) - for regular HTTP only
+    return emit.apply(this, arguments)
+  }
+}
+
 function wrapEmit (emit) {
   return function (eventName, req, res) {
     if (!startServerCh.hasSubscribers) {
@@ -62,7 +103,11 @@ function wrapEmit (emit) {
 
     if (eventName === 'request') {
       res.req = req
+      if (req._isPubSubPush || req._isCloudEvent) {
+        return emit.apply(this, arguments)
+      }
 
+      // Normal HTTP request processing (not PubSub/Cloud Events)
       const abortController = new AbortController()
 
       startServerCh.publish({ req, res, abortController })
