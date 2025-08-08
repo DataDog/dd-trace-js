@@ -1,7 +1,7 @@
 'use strict'
 
 const TTLCache = require('@isaacs/ttlcache')
-const web = require('../plugins/util/web')
+const WebPlugin = require('../../../datadog-plugin-web/src')
 const log = require('../log')
 const { AUTO_REJECT, USER_REJECT } = require('../../../../ext/priority')
 const { keepTrace } = require('../priority_sampler')
@@ -42,7 +42,7 @@ function sampleRequest (req, res, force = false) {
   const key = computeKey(req, res)
   if (!key || isSampled(key)) return false
 
-  const rootSpan = web.root(req)
+  const rootSpan = WebPlugin.root(req)
   if (!rootSpan) return false
 
   if (asmStandaloneEnabled) {
@@ -71,7 +71,7 @@ function isSampled (key) {
 }
 
 function computeKey (req, res) {
-  const route = web.getContext(req)?.paths?.join('') || ''
+  const route = WebPlugin.getContext(req)?.paths?.join('') || ''
   const method = req.method
   const status = res.statusCode
 

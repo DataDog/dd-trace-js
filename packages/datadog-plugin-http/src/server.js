@@ -7,23 +7,23 @@ const { COMPONENT } = require('../../dd-trace/src/constants')
 
 class HttpServerPlugin extends WebPlugin {
   static id = 'http'
-
   static prefix = 'apm:http:server:request'
+  static type = 'web'
+  static kind = 'server'
 
   constructor (...args) {
     super(...args)
     this._parentStore = undefined
     this.addTraceSub('exit', message => this.exit(message))
+    this.config = {
+      ...this.config,
+      service: this.config.service || this.serviceName(),
+    }
   }
 
   start ({ req, res, abortController }) {
     const store = storage('legacy').getStore()
     const span = this.startSpan(
-      this.tracer,
-      {
-        ...this.config,
-        service: this.config.service || this.serviceName(),
-      },
       req,
       res,
       this.operationName()

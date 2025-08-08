@@ -1,7 +1,5 @@
 'use strict'
 
-require('../../setup/tap')
-
 const types = require('../../../ext/types')
 const kinds = require('../../../ext/kinds')
 const tags = require('../../../ext/tags')
@@ -57,7 +55,8 @@ describe('plugins/util/web', () => {
     config = { hooks: {} }
 
     tracer = require('../../..').init({ plugins: false })
-    web = require('../../../src/plugins/util/web')
+    const WebPlugin = require('../src')
+    web = new WebPlugin(tracer, config)
   })
 
   beforeEach(() => {

@@ -106,7 +106,7 @@ class WebPlugin extends TracingPlugin {
     analyticsSampler.sample(span, config.measured, true)
   }
 
-  startSpan (tracer, config, req, res, name, traceCtx) {
+  startSpan (req, res, name, traceCtx) {
     const context = this.patch(req)
 
     let span
@@ -115,15 +115,15 @@ class WebPlugin extends TracingPlugin {
       context.span.context()._name = name
       span = context.span
     } else {
-      span = this.startChildSpan(tracer, config, name, req, traceCtx)
+      span = this.startChildSpan(name, req, traceCtx)
     }
 
-    context.tracer = tracer
+    context.tracer = this.tracer
     context.span = span
     context.res = res
 
-    this.setConfig(req, config)
-    addRequestTags(context, this.constructor.id)
+    this.setConfig(req, this.config)
+    this._addRequestTags(context, this.constructor.id)
 
     return span
   }
@@ -137,12 +137,12 @@ class WebPlugin extends TracingPlugin {
   }
 
   // Start a span and activate a scope for a request.
-  instrument (tracer, config, req, res, name, callback) {
-    const span = this.startSpan(tracer, config, req, res, name)
+  instrument (req, res, name, callback) {
+    const span = this.startSpan(req, res, name)
 
     this.wrap(req)
 
-    return callback && tracer.scope().activate(span, () => callback(span))
+    return callback && this.tracer.scope().activate(span, () => callback(span))
   }
 
   // Reactivate the request scope in case it was changed by a middleware.
@@ -258,9 +258,13 @@ class WebPlugin extends TracingPlugin {
   }
 
   // Return the request root span.
-  root (req) {
+  static root (req) {
     const context = contexts.get(req)
     return context ? context.span : null
+  }
+
+  root (req) {
+    return WebPlugin.root(req)
   }
 
   // Return the active span.
@@ -274,9 +278,9 @@ class WebPlugin extends TracingPlugin {
   }
 
   // Extract the parent span from the headers and start a new span as its child
-  startChildSpan (tracer, config, name, req, traceCtx) {
+  startChildSpan (name, req, traceCtx) {
     const headers = req.headers
-    const childOf = tracer.extract(FORMAT_HTTP_HEADERS, headers)
+    const childOf = this.tracer.extract(FORMAT_HTTP_HEADERS, headers)
 
     const span = super.startSpan(name, { childOf }, traceCtx)
 
@@ -329,8 +333,8 @@ class WebPlugin extends TracingPlugin {
 
     if (context.finished && !req.stream) return
 
-    addRequestTags(context, this.constructor.id)
-    addResponseTags(context)
+    this._addRequestTags(context, this.constructor.id)
+    this._addResponseTags(context)
 
     context.config.hooks.request(context.span, req, res)
     addResourceTag(context)
@@ -349,8 +353,8 @@ class WebPlugin extends TracingPlugin {
     this.finishSpan(context)
   }
 
-  obfuscateQs (config, url) {
-    const { queryStringObfuscation } = config
+  _obfuscateQs (url) {
+    const { queryStringObfuscation } = this.config
 
     if (queryStringObfuscation === false) return url
 
@@ -383,12 +387,16 @@ class WebPlugin extends TracingPlugin {
     }
   }
 
-  getContext (req) {
+  static getContext (req) {
     return contexts.get(req)
   }
 
+  getContext (req) {
+    return WebPlugin.getContext(req)
+  }
+
   wrapRes (context, req, res, end) {
-    return function () {
+    return () => {
       this.finishAll(context)
 
       return end.apply(res, arguments)
@@ -414,6 +422,49 @@ class WebPlugin extends TracingPlugin {
         ends.set(this, scope.bind(value, context.span))
       }
     })
+  }
+
+  _addRequestTags (context, spanType) {
+    const { req, span, inferredProxySpan } = context
+    const url = extractURL(req)
+
+    span.addTags({
+      [HTTP_URL]: this._obfuscateQs(url),
+      [HTTP_METHOD]: req.method,
+      [SPAN_KIND]: SERVER,
+      [SPAN_TYPE]: spanType,
+      [HTTP_USERAGENT]: req.headers['user-agent']
+    })
+
+    // if client ip has already been set by appsec, no need to run it again
+    if (extractIp && !span.context()._tags.hasOwnProperty(HTTP_CLIENT_IP)) {
+      const clientIp = extractIp(this.config, req)
+
+      if (clientIp) {
+        span.setTag(HTTP_CLIENT_IP, clientIp)
+        inferredProxySpan?.setTag(HTTP_CLIENT_IP, clientIp)
+      }
+    }
+
+    addHeaders(context)
+  }
+
+  _addResponseTags (context) {
+    const { req, res, paths, span, inferredProxySpan } = context
+
+    const route = paths.join('')
+    if (route) {
+      span.setTag(HTTP_ROUTE, route)
+    }
+
+    span.addTags({
+      [HTTP_STATUS_CODE]: res.statusCode
+    })
+    inferredProxySpan?.addTags({
+      [HTTP_STATUS_CODE]: res.statusCode
+    })
+
+    this.addStatusError(req, res.statusCode)
   }
 }
 
@@ -457,49 +508,6 @@ function reactivate (req, fn) {
   return context
     ? context.tracer.scope().activate(context.span, fn)
     : fn()
-}
-
-function addRequestTags (context, spanType) {
-  const { req, span, inferredProxySpan, config } = context
-  const url = extractURL(req)
-
-  span.addTags({
-    [HTTP_URL]: this.obfuscateQs(config, url),
-    [HTTP_METHOD]: req.method,
-    [SPAN_KIND]: SERVER,
-    [SPAN_TYPE]: spanType,
-    [HTTP_USERAGENT]: req.headers['user-agent']
-  })
-
-  // if client ip has already been set by appsec, no need to run it again
-  if (extractIp && !span.context()._tags.hasOwnProperty(HTTP_CLIENT_IP)) {
-    const clientIp = extractIp(config, req)
-
-    if (clientIp) {
-      span.setTag(HTTP_CLIENT_IP, clientIp)
-      inferredProxySpan?.setTag(HTTP_CLIENT_IP, clientIp)
-    }
-  }
-
-  addHeaders(context)
-}
-
-function addResponseTags (context) {
-  const { req, res, paths, span, inferredProxySpan } = context
-
-  const route = paths.join('')
-  if (route) {
-    span.setTag(HTTP_ROUTE, route)
-  }
-
-  span.addTags({
-    [HTTP_STATUS_CODE]: res.statusCode
-  })
-  inferredProxySpan?.addTags({
-    [HTTP_STATUS_CODE]: res.statusCode
-  })
-
-  this.addStatusError(req, res.statusCode)
 }
 
 function addResourceTag (context) {
