@@ -1,0 +1,111 @@
+interactions:
+- request:
+    body: '{"model":"gpt-4o-mini","input":[{"role":"system","content":"You are a helpful
+      assistant"},{"role":"user","content":[{"type":"input_text","text":"Hello, OpenAI!"}]}],"temperature":0.5}'
+    headers:
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept
+      : - '*/*'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Encoding
+      : - gzip, deflate
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Language
+      : - '*'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Connection
+      : - keep-alive
+      Content-Length:
+      - '183'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - User-Agent
+      : - node
+      ? !!python/object/apply:multidict._multidict.istr
+      - sec-fetch-mode
+      : - cors
+    method: POST
+    uri: https://api.openai.com/v1/responses
+  response:
+    body:
+      string: "{\n  \"id\": \"resp_6890dd9f1e9881919f41af478b79e59c0d556fcda7cbde08\",\n
+        \ \"object\": \"response\",\n  \"created_at\": 1754324383,\n  \"status\":
+        \"completed\",\n  \"background\": false,\n  \"error\": null,\n  \"incomplete_details\":
+        null,\n  \"instructions\": null,\n  \"max_output_tokens\": null,\n  \"max_tool_calls\":
+        null,\n  \"model\": \"gpt-4o-mini-2024-07-18\",\n  \"output\": [\n    {\n
+        \     \"id\": \"msg_6890dd9f766c81918be4034f94e9bcf70d556fcda7cbde08\",\n
+        \     \"type\": \"message\",\n      \"status\": \"completed\",\n      \"content\":
+        [\n        {\n          \"type\": \"output_text\",\n          \"annotations\":
+        [],\n          \"logprobs\": [],\n          \"text\": \"Hello! How can I assist
+        you today?\"\n        }\n      ],\n      \"role\": \"assistant\"\n    }\n
+        \ ],\n  \"parallel_tool_calls\": true,\n  \"previous_response_id\": null,\n
+        \ \"prompt_cache_key\": null,\n  \"reasoning\": {\n    \"effort\": null,\n
+        \   \"summary\": null\n  },\n  \"safety_identifier\": null,\n  \"service_tier\":
+        \"default\",\n  \"store\": false,\n  \"temperature\": 0.5,\n  \"text\": {\n
+        \   \"format\": {\n      \"type\": \"text\"\n    }\n  },\n  \"tool_choice\":
+        \"auto\",\n  \"tools\": [],\n  \"top_logprobs\": 0,\n  \"top_p\": 1.0,\n  \"truncation\":
+        \"disabled\",\n  \"usage\": {\n    \"input_tokens\": 21,\n    \"input_tokens_details\":
+        {\n      \"cached_tokens\": 0\n    },\n    \"output_tokens\": 10,\n    \"output_tokens_details\":
+        {\n      \"reasoning_tokens\": 0\n    },\n    \"total_tokens\": 31\n  },\n
+        \ \"user\": null,\n  \"metadata\": {}\n}"
+    headers:
+      CF-RAY:
+      - 969f60c23a6da6c0-IAD
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Mon, 04 Aug 2025 16:19:43 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=HGzHN5K4RBUMb4sCI_iM_s6qP7OO5bpiRl6XB7ygB2s-1754324383-1.0.1.1-rLGkghC6xTPA9XFiSmoxdT8nhuTGUh91LvbqFHLS84vOHNyAKPYQIC6yhJrU6J1iC0dX84LHm_gejTo6a1Jo9nPI37oOcZfmRGGcAHwNmzc;
+        path=/; expires=Mon, 04-Aug-25 16:49:43 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=lAsnejWJkkLEwww_9CLd0yn7WE83vhtUTE3B87K4LwQ-1754324383666-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - datadog-staging
+      openai-processing-ms:
+      - '536'
+      openai-project:
+      - proj_gt6TQZPRbZfoY2J9AQlEJMpd
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains; preload
+      x-envoy-decorator-operation:
+      - tasksapi.openai.svc.cluster.local:8081/*
+      x-envoy-upstream-service-time:
+      - '558'
+      x-ratelimit-limit-requests:
+      - '30000'
+      x-ratelimit-limit-tokens:
+      - '150000000'
+      x-ratelimit-remaining-requests:
+      - '29999'
+      x-ratelimit-remaining-tokens:
+      - '149999960'
+      x-ratelimit-reset-requests:
+      - 2ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_798bf0f9b1bb6b72657cc9ce020feae8
+    status:
+      code: 200
+      message: OK
+version: 1
