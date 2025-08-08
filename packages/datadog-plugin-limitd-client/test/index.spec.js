@@ -2,6 +2,7 @@
 
 const { storage } = require('../../datadog-core')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 describe('Plugin', () => {
   let LimitdClient

@@ -191,9 +191,7 @@ describe('AppSec Rule Manager', () => {
         }]
       }
 
-      assert.doesNotThrow(() => {
-        RuleManager.updateWafFromRC(rcConfigsForNonAsmProducts)
-      })
+      RuleManager.updateWafFromRC(rcConfigsForNonAsmProducts)
 
       assert.strictEqual(rcConfigsForNonAsmProducts.toUnapply[0].apply_state, UNACKNOWLEDGED)
       assert.notProperty(rcConfigsForNonAsmProducts.toUnapply[0], 'apply_error')

@@ -10,6 +10,7 @@ const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking
 const { SQL_ROW_VALUE } = require('../../../../src/appsec/iast/taint-tracking/source-types')
 const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
+const { withVersions } = require('../../../setup/mocha')
 
 describe('Code injection vulnerability', () => {
   withVersions('express', 'express', version => {

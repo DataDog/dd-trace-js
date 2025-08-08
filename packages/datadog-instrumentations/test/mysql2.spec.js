@@ -2,6 +2,7 @@
 
 const { channel } = require('../src/helpers/instrument')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { assert } = require('chai')
 const semver = require('semver')
 const { once } = require('events')

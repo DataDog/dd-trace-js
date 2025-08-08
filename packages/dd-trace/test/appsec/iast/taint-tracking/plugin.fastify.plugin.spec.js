@@ -1,6 +1,7 @@
 'use strict'
 
 const { prepareTestServerForIastInFastify } = require('../utils')
+const { withVersions } = require('../../../setup/mocha')
 const axios = require('axios')
 const { URL } = require('url')
 

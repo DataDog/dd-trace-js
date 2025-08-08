@@ -19,6 +19,7 @@ const {
   TEST_CODE_OWNERS,
   LIBRARY_VERSION
 } = require('../../dd-trace/src/plugins/util/test')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 const { version: ddTraceVersion } = require('../../../package.json')
 

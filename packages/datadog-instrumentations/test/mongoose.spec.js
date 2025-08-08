@@ -2,6 +2,7 @@
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { channel } = require('../src/helpers/instrument')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const semver = require('semver')
 
 const startCh = channel('datadog:mongoose:model:filter:start')

@@ -12,6 +12,7 @@ const { DogStatsDClient } = require('../../dd-trace/src/dogstatsd')
 const { NoopExternalLogger } = require('../../dd-trace/src/external-logger/src')
 const Sampler = require('../../dd-trace/src/sampler')
 const { useEnv } = require('../../../integration-tests/helpers')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 const tracerRequirePath = '../../dd-trace'
 

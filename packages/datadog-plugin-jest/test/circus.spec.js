@@ -7,6 +7,7 @@ const semver = require('semver')
 
 const { ORIGIN_KEY, COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const {
   TEST_FRAMEWORK,
   TEST_TYPE,

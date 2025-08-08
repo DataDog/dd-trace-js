@@ -6,6 +6,7 @@ const os = require('os')
 const path = require('path')
 const { prepareTestServerForIastInExpress } = require('../utils')
 const agent = require('../../../plugins/agent')
+const { withVersions } = require('../../../setup/mocha')
 
 describe('nosql injection detection in mongodb - whole feature', () => {
   // https://github.com/fiznool/express-mongo-sanitize/issues/200
