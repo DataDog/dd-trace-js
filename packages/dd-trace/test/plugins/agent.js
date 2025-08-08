@@ -9,6 +9,7 @@ const ritm = require('../../src/ritm')
 const { storage } = require('../../../datadog-core')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { expect } = require('chai')
+const { detectedDependencyToVersion } = require('../../src/telemetry/dependencies')
 
 const traceHandlers = new Set()
 const statsHandlers = new Set()
@@ -246,6 +247,16 @@ function assertIntegrationName (args) {
                 currentIntegrationName,
                  `Expected span to have "_dd.integration" tag "${currentIntegrationName}"
                  but found "${span.meta['_dd.integration']}" for span ID ${span.span_id}`
+              )
+              expect(span.meta['_dd.dependency_version']).to.equal(
+                detectedDependencyToVersion[span.meta['_dd.dependency_name']],
+                `Expected span to have "_dd.dependency_version" tag "${detectedDependencyToVersion[span.meta['_dd.dependency_name']]}"
+                 but found "${span.meta['_dd.dependency_version']}" for span ID ${span.span_id}`
+              )
+              expect(span.meta['_dd.dependency_name']).to.equal(
+                span.meta['_dd.integration'],
+                `Expected span to have "_dd.dependency_name" tag "${span.meta['_dd.integration']}"
+                 but found "${span.meta['_dd.dependency_name']}" for span ID ${span.span_id}`
               )
             }
           })
