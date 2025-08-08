@@ -60,7 +60,7 @@ describe('Plugin', () => {
     throw new Error(`Invalid type: ${type}`)
   }
 
-  function getLangChainGoogleGenAIClient (type = 'chat', options = {}) {
+  function getLangChainGoogleGenAIClient (type = 'embedding', options = {}) {
     Object.assign(options, {
       baseUrl: 'http://127.0.0.1:9126/vcr/genai'
     })
@@ -73,7 +73,6 @@ describe('Plugin', () => {
   }
 
   describe('langchain', () => {
-    // TODO(sabrenner): remove this once we have the more robust mocking merged
     withVersions('langchain', ['@langchain/core'], (version, _, realVersion) => {
       before(() => {
         iastFilter.isDdTrace = file => {
