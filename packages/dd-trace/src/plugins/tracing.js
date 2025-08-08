@@ -5,6 +5,7 @@ const { storage } = require('../../../datadog-core')
 const analyticsSampler = require('../analytics_sampler')
 const { COMPONENT } = require('../constants')
 const DatadogSpanContext = require('../opentracing/span_context')
+const id = require('../id')
 
 class TracingPlugin extends Plugin {
   constructor (...args) {
@@ -126,13 +127,15 @@ class TracingPlugin extends Plugin {
       childOf = store.span
     }
 
-    if (!childOf && process.env.DD_TRACE_PARENT_ID) {
+    console.log(process.env.DD_TRACE_ID, process.env.DD_PARENT_SPAN_ID)
+    if (!childOf && process.env.DD_PARENT_SPAN_ID) {
+      console.log("starting spans from remote trace")
       childOf = new DatadogSpanContext({
-        traceId: process.env.DD_TRACE_TRACE_ID,
-        spanId: process.env.DD_TRACE_PARENT_ID,
+        traceId: id(process.env.DD_TRACE_ID, 16),
+        spanId: id(process.env.DD_PARENT_SPAN_ID, 16),
         isRemote: true,
+        sampling: { priority: 1 },
       })
-      process.env.DD_TRACE_PARENT_ID = undefined
     }
 
     const span = tracer.startSpan(name, {
