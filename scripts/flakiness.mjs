@@ -125,7 +125,7 @@ if (Object.keys(flaky).length === 0) {
   let markdown = ''
   let slack = ''
 
-  markdown += `*Flaky ${logString}*\n`
+  markdown += `**Flaky ${logString}**\n`
   slack += `*Flaky ${logString}*\\n`
 
   for (const [workflow, jobs] of Object.entries(flaky).sort()) {
@@ -146,7 +146,7 @@ if (Object.keys(flaky).length === 0) {
   }
 
   markdown += '\n'
-  markdown += '*Flakiness stats*\n'
+  markdown += '**Flakiness stats**\n'
   markdown += `* Total runs: ${totalCount}\n`
   markdown += `* Flaky runs: ${flakeCount}\n`
   markdown += `* Workflow success rate: ${workflowSuccessRate}%\n`
