@@ -26,8 +26,8 @@ addHook({
   versions: ['>=1.4.0 <1.20.0']
 }, read => {
   return shimmer.wrapFunction(read, read => function (req, res, next) {
-    // Skip body parsing if PubSub/Cloud Event middleware already parsed it
-    if (req._pubsubBodyParsed) {
+    // Skip body parsing if body has already been parsed by any middleware
+    if (req.body !== undefined) {
       return next()
     }
     const nextResource = new AsyncResource('bound-anonymous-fn')
@@ -42,8 +42,8 @@ addHook({
   versions: ['>=1.20.0']
 }, read => {
   return shimmer.wrapFunction(read, read => function (req, res, next) {
-    // Skip body parsing if PubSub/Cloud Event middleware already parsed it
-    if (req._pubsubBodyParsed) {
+    // Skip body parsing if body has already been parsed by any middleware
+    if (req.body !== undefined) {
       return next()
     }
     arguments[2] = publishRequestBodyAndNext(req, res, next)

@@ -158,7 +158,6 @@ function processEventRequest (req, res, emit, server, originalArgs, isCloudEvent
       const body = Buffer.concat(chunks).toString('utf8')
       const json = JSON.parse(body)
       req.body = json
-      req._pubsubBodyParsed = true
 
       // Parse message based on event type
       const parsedEvent = isCloudEvent
