@@ -3,6 +3,7 @@
 const { useEnv } = require('../../../integration-tests/helpers')
 const agent = require('../../dd-trace/test/plugins/agent')
 const iastFilter = require('../../dd-trace/src/appsec/iast/taint-tracking/filter')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 const nock = require('nock')
 const semver = require('semver')

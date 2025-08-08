@@ -8,6 +8,7 @@ const {
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
 const version = require('../../../../version.js')
+const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
 // tedious does not support node 20
 const describe = version.NODE_MAJOR >= 20
