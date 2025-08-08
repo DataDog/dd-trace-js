@@ -38,7 +38,7 @@ jobs:
         run: echo "report=${{ steps.markdown.outputs.report }}" | sed 's/$/\\n/g' | tr -d '\n' >> $GITHUB_OUTPUT
       - run: echo "${{ steps.slack.outputs.report }}"
       - uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a # v2.1.0
-        if: github.event_name == 'schedule'
+        # if: github.event_name == 'schedule'
         with:
           method: chat.postMessage
           token: ${{ secrets.SLACK_BOT_TOKEN }}
