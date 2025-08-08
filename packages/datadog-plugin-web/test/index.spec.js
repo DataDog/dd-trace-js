@@ -59,10 +59,6 @@ describe('plugins/util/web', () => {
     web = new WebPlugin(tracer, config)
   })
 
-  beforeEach(() => {
-    config = web.normalizeConfig(config)
-  })
-
   describe('normalizeConfig', () => {
     it('should set the correct defaults', () => {
       const config = web.normalizeConfig({})
@@ -146,22 +142,22 @@ describe('plugins/util/web', () => {
           'x-datadog-parent-id': '456'
         }
 
-        web.instrument(tracer, config, req, res, 'test.request', span => {
+        web.instrument(req, res, 'test.request', span => {
           expect(span.context()._traceId.toString(10)).to.equal('123')
           expect(span.context()._parentId.toString(10)).to.equal('456')
         })
       })
 
       it('should set the service name', () => {
-        config.service = 'custom'
+        web.configure({ service: 'custom' })
 
-        web.instrument(tracer, config, req, res, 'test.request', span => {
+        web.instrument(req, res, 'test.request', span => {
           expect(span.context()._tags).to.have.property(SERVICE_NAME, 'custom')
         })
       })
 
       it('should activate a scope with the span', () => {
-        web.instrument(tracer, config, req, res, 'test.request', span => {
+        web.instrument(req, res, 'test.request', span => {
           expect(tracer.scope().active()).to.equal(span)
         })
       })
@@ -173,7 +169,7 @@ describe('plugins/util/web', () => {
         req.headers['x-forwarded-for'] = '8.8.8.8'
         res.statusCode = '200'
 
-        web.instrument(tracer, config, req, res, 'test.request', span => {
+        web.instrument(req, res, 'test.request', span => {
           const tags = span.context()._tags
 
           res.end()
@@ -191,10 +187,9 @@ describe('plugins/util/web', () => {
       it('should add client ip tag to the span when enabled', () => {
         req.headers['x-forwarded-for'] = '8.8.8.8'
 
-        config.clientIpEnabled = true
+        web.configure({ clientIpEnabled: true })
 
-        web.normalizeConfig(config)
-        web.instrument(tracer, config, req, res, 'test.request', span => {
+        web.instrument(req, res, 'test.request', span => {
           const tags = span.context()._tags
 
           res.end()
@@ -208,11 +203,9 @@ describe('plugins/util/web', () => {
       it('should add custom client ip tag to the span when it is configured', () => {
         req.headers['X-Forwad-For'] = '8.8.8.8'
 
-        config.clientIpEnabled = true
-        config.clientIpHeader = 'X-Forwad-For'
+        web.configure({ clientIpEnabled: true, clientIpHeader: 'X-Forwad-For' })
 
-        web.normalizeConfig(config)
-        web.instrument(tracer, config, req, res, 'test.request', span => {
+        web.instrument(req, res, 'test.request', span => {
           const tags = span.context()._tags
 
           res.end()
@@ -226,10 +219,9 @@ describe('plugins/util/web', () => {
       it('should not add custom client ip tag to the span when it is not configured', () => {
         req.headers['X-Forwad-For'] = '8.8.8.8'
 
-        config.clientIpEnabled = true
+        web.configure({ clientIpEnabled: true })
 
-        web.normalizeConfig(config)
-        web.instrument(tracer, config, req, res, 'test.request', span => {
+        web.instrument(req, res, 'test.request', span => {
           const tags = span.context()._tags
 
           res.end()
@@ -241,10 +233,9 @@ describe('plugins/util/web', () => {
       it('should not add client ip tag to the span when disabled', () => {
         req.headers['x-forwarded-for'] = '8.8.8.8'
 
-        config.clientIpEnabled = false
+        web.configure({ clientIpEnabled: false })
 
-        web.normalizeConfig(config)
-        web.instrument(tracer, config, req, res, 'test.request', span => {
+        web.instrument(req, res, 'test.request', span => {
           const tags = span.context()._tags
 
           res.end()
@@ -256,9 +247,9 @@ describe('plugins/util/web', () => {
       it('should not replace client ip when it exists', () => {
         req.headers['x-forwarded-for'] = '8.8.8.8'
 
-        config.clientIpEnabled = true
+        web.configure({ clientIpEnabled: true })
 
-        web.instrument(tracer, config, req, res, 'test.request', span => {
+        web.instrument(req, res, 'test.request', span => {
           const tags = span.context()._tags
 
           span.setTag(HTTP_CLIENT_IP, '1.1.1.1')
@@ -272,9 +263,9 @@ describe('plugins/util/web', () => {
       })
 
       it('should not add client ip tag when no candidate header is present in request', () => {
-        config.clientIpEnabled = true
+        web.configure({ clientIpEnabled: true })
 
-        web.instrument(tracer, config, req, res, 'test.request', span => {
+        web.instrument(req, res, 'test.request', span => {
           const tags = span.context()._tags
 
           res.end()
@@ -286,10 +277,10 @@ describe('plugins/util/web', () => {
       it('should add configured headers to the span tags', () => {
         req.headers.req = 'incoming'
         req.headers.res = 'outgoing'
-        config.headers = ['host', 'req:http.req', 'server', 'res:http.res']
-        config = web.normalizeConfig(config)
 
-        web.instrument(tracer, config, req, res, 'test.request', span => {
+        web.configure({ headers: ['host', 'req:http.req', 'server', 'res:http.res'] })
+
+        web.instrument(req, res, 'test.request', span => {
           const tags = span.context()._tags
 
           res.end()
@@ -304,47 +295,44 @@ describe('plugins/util/web', () => {
       })
 
       it('should only start one span for the entire request', () => {
-        web.instrument(tracer, config, req, res, 'test.request', span1 => {
-          web.instrument(tracer, config, req, res, 'test.request', span2 => {
+        web.instrument(req, res, 'test.request', span1 => {
+          web.instrument(req, res, 'test.request', span2 => {
             expect(span1).to.equal(span2)
           })
         })
       })
 
       it('should allow overriding the span name', () => {
-        web.instrument(tracer, config, req, res, 'test.request', () => {
-          web.instrument(tracer, config, req, res, 'test2.request', span => {
+        web.instrument(req, res, 'test.request', () => {
+          web.instrument(req, res, 'test2.request', span => {
             expect(span.context()._name).to.equal('test2.request')
           })
         })
       })
 
       it('should allow overriding the span service name', () => {
-        web.instrument(tracer, config, req, res, 'test.request', span => {
-          config.service = 'test2'
-          web.instrument(tracer, config, req, res, 'test.request')
+        web.instrument(req, res, 'test.request', span => {
+          web.configure({ service: 'test2' })
+          web.instrument(req, res, 'test.request')
 
           expect(span.context()._tags).to.have.property('service.name', 'test2')
         })
       })
 
       it('should only wrap res.end once', () => {
-        web.instrument(tracer, config, req, res, 'test.request')
+        web.instrument(req, res, 'test.request')
         const end = res.end
-        web.instrument(tracer, config, req, res, 'test.request')
+        web.instrument(req, res, 'test.request')
 
         expect(end).to.equal(res.end)
       })
 
       it('should use the config from the last call', () => {
-        config.headers = ['host']
+        web.configure({ headers: ['host'] })
 
-        const override = web.normalizeConfig({
-          headers: ['date']
-        })
-
-        web.instrument(tracer, config, req, res, 'test.request', () => {
-          web.instrument(tracer, override, req, res, 'test.request', span => {
+        web.instrument(req, res, 'test.request', () => {
+          web.configure({ headers: ['date'] })
+          web.instrument(req, res, 'test.request', span => {
             const tags = span.context()._tags
 
             res.end()
@@ -357,15 +345,13 @@ describe('plugins/util/web', () => {
       })
 
       it('should obfuscate the query string from the URL', () => {
-        const config = web.normalizeConfig({
-          queryStringObfuscation: 'secret=.*?(&|$)'
-        })
+        web.configure({ queryStringObfuscation: 'secret=.*?(&|$)' })
 
         req.method = 'GET'
         req.url = '/user/123?secret=password&foo=bar'
         res.statusCode = '200'
 
-        web.instrument(tracer, config, req, res, 'test.request', span => {
+        web.instrument(req, res, 'test.request', span => {
           const tags = span.context()._tags
 
           res.end()
@@ -394,7 +380,7 @@ describe('plugins/util/web', () => {
           'access-control-allow-origin': 'http://test.com'
         })
 
-        web.instrument(tracer, config, req, res, 'test.request')
+        web.instrument(req, res, 'test.request')
 
         res.writeHead()
 
@@ -415,7 +401,7 @@ describe('plugins/util/web', () => {
           'access-control-allow-origin': 'http://test.com'
         })
 
-        web.instrument(tracer, config, req, res, 'test.request')
+        web.instrument(req, res, 'test.request')
 
         res.writeHead()
 
@@ -429,7 +415,7 @@ describe('plugins/util/web', () => {
         req.headers.origin = 'http://test.com'
         req.headers['access-control-request-headers'] = headers
 
-        web.instrument(tracer, config, req, res, 'test.request')
+        web.instrument(req, res, 'test.request')
 
         res.writeHead()
 
@@ -444,7 +430,7 @@ describe('plugins/util/web', () => {
           'access-control-allow-origin': 'http://test.com'
         })
 
-        web.instrument(tracer, config, req, res, 'test.request')
+        web.instrument(req, res, 'test.request')
 
         res.writeHead()
 
@@ -457,7 +443,7 @@ describe('plugins/util/web', () => {
         req.headers['x-forwarded-for'] = '8.8.8.8'
         req.socket = { encrypted: true }
 
-        web.instrument(tracer, config, req, res, 'test.request', span => {
+        web.instrument(req, res, 'test.request', span => {
           const tags = span.context()._tags
 
           res.end()
@@ -485,7 +471,7 @@ describe('plugins/util/web', () => {
         }
         res.statusCode = '200'
 
-        web.instrument(tracer, config, req, res, 'test.request', span => {
+        web.instrument(req, res, 'test.request', span => {
           const tags = span.context()._tags
 
           res.end()
@@ -501,9 +487,9 @@ describe('plugins/util/web', () => {
       })
 
       it('should drop filtered out requests', () => {
-        config.filter = () => false
+        web.configure({ filter: () => false })
 
-        web.instrument(tracer, config, req, res, 'test.request', span => {
+        web.instrument(req, res, 'test.request', span => {
           const sampling = span.context()._sampling
 
           res.end()
@@ -515,7 +501,7 @@ describe('plugins/util/web', () => {
 
     describe('on request end', () => {
       beforeEach(() => {
-        web.instrument(tracer, config, req, res, 'test.request', reqSpan => {
+        web.instrument(req, res, 'test.request', reqSpan => {
           span = reqSpan
           tags = span.context()._tags
         })
@@ -593,7 +579,7 @@ describe('plugins/util/web', () => {
       })
 
       it('should set the error tag if the configured validator returns false', () => {
-        config.validateStatus = () => false
+        web.configure({ validateStatus: () => false })
 
         res.end()
 
@@ -613,31 +599,34 @@ describe('plugins/util/web', () => {
       })
 
       it('should execute the request end hook', () => {
-        config.hooks.request = sinon.spy()
+        const hook = sinon.spy()
+
+        web.configure({ hooks: { request: hook } })
 
         res.end()
 
-        expect(config.hooks.request).to.have.been.calledWith(span, req, res)
+        expect(hook).to.have.been.calledWith(span, req, res)
       })
 
       it('should execute multiple end hooks', () => {
-        config.hooks = {
-          request: sinon.spy()
-        }
+        const hook = sinon.spy()
+        web.configure({ hooks: { request: hook } })
 
-        web.instrument(tracer, config, req, res, 'test.request', span => {
+        web.instrument(req, res, 'test.request', span => {
           res.end()
 
-          expect(config.hooks.request).to.have.been.calledWith(span, req, res)
+          expect(hook).to.have.been.calledWith(span, req, res)
         })
       })
 
       it('should set the resource name from the http.route tag set in the hooks', () => {
-        config.hooks = {
-          request: span => span.setTag('http.route', '/custom/route')
-        }
+        web.configure({
+          hooks: {
+            request: span => span.setTag('http.route', '/custom/route')
+          }
+        })
 
-        web.instrument(tracer, config, req, res, 'test.request', span => {
+        web.instrument(req, res, 'test.request', span => {
           res.end()
 
           expect(tags).to.have.property('resource.name', 'GET /custom/route')
@@ -648,8 +637,7 @@ describe('plugins/util/web', () => {
 
   describe('enterRoute', () => {
     beforeEach(() => {
-      config = web.normalizeConfig(config)
-      web.instrument(tracer, config, req, res, 'test.request', () => {
+      web.instrument(req, res, 'test.request', () => {
         span = tracer.scope().active()
         tags = span.context()._tags
       })
@@ -680,8 +668,7 @@ describe('plugins/util/web', () => {
 
   describe('exitRoute', () => {
     beforeEach(() => {
-      config = web.normalizeConfig(config)
-      web.instrument(tracer, config, req, res, 'test.request', reqSpan => {
+      web.instrument(req, res, 'test.request', reqSpan => {
         span = reqSpan
         tags = span.context()._tags
       })
@@ -701,8 +688,7 @@ describe('plugins/util/web', () => {
 
   describe('wrapMiddleware', () => {
     beforeEach(() => {
-      config = web.normalizeConfig(config)
-      web.instrument(tracer, config, req, res, 'test.request', () => {
+      web.instrument(req, res, 'test.request', () => {
         span = tracer.scope().active()
         tags = span.context()._tags
       })
@@ -720,8 +706,7 @@ describe('plugins/util/web', () => {
 
   describe('finish', () => {
     beforeEach(() => {
-      config = web.normalizeConfig(config)
-      web.instrument(tracer, config, req, res, 'test.request', () => {
+      web.instrument(req, res, 'test.request', () => {
         span = tracer.scope().active()
         tags = span.context()._tags
       })
@@ -764,7 +749,7 @@ describe('plugins/util/web', () => {
 
   describe('root', () => {
     it('should return the request root span', () => {
-      web.instrument(tracer, config, req, res, 'test.request', () => {
+      web.instrument(req, res, 'test.request', () => {
         const span = tracer.scope().active()
 
         web.wrapMiddleware(req, () => {}, 'express.middleware', () => {
@@ -780,13 +765,13 @@ describe('plugins/util/web', () => {
 
   describe('active', () => {
     it('should return the request span by default', () => {
-      web.instrument(tracer, config, req, res, 'test.request', () => {
+      web.instrument(req, res, 'test.request', () => {
         expect(web.active(req)).to.equal(tracer.scope().active())
       })
     })
 
     it('should return the active middleware span', () => {
-      web.instrument(tracer, config, req, res, 'test.request', () => {
+      web.instrument(req, res, 'test.request', () => {
         const span = tracer.scope().active()
 
         web.wrapMiddleware(req, () => {}, 'express.middleware', () => {
@@ -803,8 +788,7 @@ describe('plugins/util/web', () => {
 
   describe('addError', () => {
     beforeEach(() => {
-      config = web.normalizeConfig(config)
-      web.instrument(tracer, config, req, res, 'test.request', () => {
+      web.instrument(req, res, 'test.request', () => {
         span = tracer.scope().active()
         tags = span.context()._tags
       })
@@ -836,8 +820,7 @@ describe('plugins/util/web', () => {
 
   describe('addStatusError', () => {
     beforeEach(() => {
-      config = web.normalizeConfig(config)
-      web.instrument(tracer, config, req, res, 'test.request', () => {
+      web.instrument(req, res, 'test.request', () => {
         span = tracer.scope().active()
         tags = span.context()._tags
       })
@@ -852,7 +835,7 @@ describe('plugins/util/web', () => {
     })
 
     it('should only flag requests as an error for configured status codes', () => {
-      config.validateStatus = () => true
+      web.configure({ validateStatus: () => true })
 
       web.addStatusError(req, 500)
 
@@ -862,68 +845,64 @@ describe('plugins/util/web', () => {
 
   describe('allowlistFilter', () => {
     beforeEach(() => {
-      config = { allowlist: ['/_okay'] }
-      config = web.normalizeConfig(config)
+      web.configure({ allowlist: ['/_okay'] })
     })
 
     it('should not filter the url', () => {
-      const filtered = config.filter('/_okay')
+      const filtered = web.config.filter('/_okay')
       expect(filtered).to.equal(true)
     })
 
     it('should filter the url', () => {
-      const filtered = config.filter('/_notokay')
+      const filtered = web.config.filter('/_notokay')
       expect(filtered).to.equal(false)
     })
   })
 
   describe('whitelistFilter', () => {
     beforeEach(() => {
-      config = { whitelist: ['/_okay'] }
-      config = web.normalizeConfig(config)
+      web.configure({ whitelist: ['/_okay'] })
     })
 
     it('should not filter the url', () => {
-      const filtered = config.filter('/_okay')
+      const filtered = web.config.filter('/_okay')
       expect(filtered).to.equal(true)
     })
 
     it('should filter the url', () => {
-      const filtered = config.filter('/_notokay')
+      const filtered = web.config.filter('/_notokay')
       expect(filtered).to.equal(false)
     })
   })
 
   describe('blocklistFilter', () => {
     beforeEach(() => {
-      config = { blocklist: ['/_notokay'] }
-      config = web.normalizeConfig(config)
+      web.configure({ blocklist: ['/_notokay'] })
     })
 
     it('should not filter the url', () => {
-      const filtered = config.filter('/_okay')
+      const filtered = web.config.filter('/_okay')
       expect(filtered).to.equal(true)
     })
 
     it('should filter the url', () => {
-      const filtered = config.filter('/_notokay')
+      const filtered = web.config.filter('/_notokay')
       expect(filtered).to.equal(false)
     })
   })
 
   describe('blacklistFilter', () => {
     beforeEach(() => {
-      config = { blacklist: ['/_notokay'] }
-      config = web.normalizeConfig(config)
+      web.configure({ blacklist: ['/_notokay'] })
     })
 
     it('should not filter the url', () => {
-      const filtered = config.filter('/_okay')
+      const filtered = web.config.filter('/_okay')
       expect(filtered).to.equal(true)
     })
 
     it('should filter the url', () => {
-      const filtered = config.filter('/_notokay')
+      const filtered = web.config.filter('/_notokay')
       expect(filtered).to.equal(false)
     })
   })
@@ -932,38 +911,36 @@ describe('plugins/util/web', () => {
     const url = 'http://perdu.com/path/'
     const qs = '?data=secret'
 
-    let config
-
     beforeEach(() => {
-      config = {
+      web.configure({
         queryStringObfuscation: /secret/gi
-      }
+      })
     })
 
     it('should not obfuscate when passed false', () => {
-      config.queryStringObfuscation = false
+      web.configure({ queryStringObfuscation: false })
 
-      const result = web.obfuscateQs(config, url + qs)
+      const result = web._obfuscateQs(url + qs)
 
       expect(result).to.equal(url + qs)
     })
 
     it('should not obfuscate when no querystring is found', () => {
-      const result = web.obfuscateQs(config, url)
+      const result = web._obfuscateQs(url)
 
       expect(result).to.equal(url)
     })
 
     it('should remove the querystring if passed true', () => {
-      config.queryStringObfuscation = true
+      web.configure({ queryStringObfuscation: true })
 
-      const result = web.obfuscateQs(config, url + qs)
+      const result = web._obfuscateQs(url + qs, web.config)
 
       expect(result).to.equal(url)
     })
 
     it('should obfuscate only the querystring part of the url', () => {
-      const result = web.obfuscateQs(config, url + 'secret/' + qs)
+      const result = web._obfuscateQs(url + 'secret/' + qs, web.config)
 
       expect(result).to.equal(url + 'secret/?data=<redacted>')
     })

@@ -51,6 +51,12 @@ class WebPlugin extends TracingPlugin {
     this.addSub('apm:http:server:request:end', ({ req }) => {
       this.finish(req)
     })
+
+    this.configure(this.config)
+  }
+
+  configure (config) {
+    return super.configure(this.normalizeConfig(config))
   }
 
   // Ensure the configuration has the correct structure and defaults.
@@ -88,22 +94,25 @@ class WebPlugin extends TracingPlugin {
     this.setConfig(req, config)
   }
 
-  setConfig (req, config) {
+  setConfig (req, config = {}) {
     const context = contexts.get(req)
+    if (!context) return
+
+    context.config = { ...this.config, ...config }
+
     const span = context.span
+    if (!span) return
 
-    context.config = config
-
-    if (!config.filter(req.url)) {
+    if (!context.config.filter(req.url)) {
       span.setTag(MANUAL_DROP, true)
       span.context()._trace.isRecording = false
     }
 
-    if (config.service) {
-      span.setTag(SERVICE_NAME, config.service)
+    if (context.config.service) {
+      span.setTag(SERVICE_NAME, context.config.service)
     }
 
-    analyticsSampler.sample(span, config.measured, true)
+    analyticsSampler.sample(span, context.config.measured, true)
   }
 
   startSpan (req, res, name, traceCtx) {
@@ -122,7 +131,7 @@ class WebPlugin extends TracingPlugin {
     context.span = span
     context.res = res
 
-    this.setConfig(req, this.config)
+    this.setConfig(req)
     this._addRequestTags(context, this.constructor.id)
 
     return span
@@ -249,7 +258,7 @@ class WebPlugin extends TracingPlugin {
       paths: [],
       middleware: [],
       beforeEnd: [],
-      config: {}
+      config: this.config
     }
 
     contexts.set(req, context)
@@ -353,8 +362,8 @@ class WebPlugin extends TracingPlugin {
     this.finishSpan(context)
   }
 
-  _obfuscateQs (url) {
-    const { queryStringObfuscation } = this.config
+  _obfuscateQs (url, config) {
+    const { queryStringObfuscation } = config
 
     if (queryStringObfuscation === false) return url
 
@@ -429,7 +438,7 @@ class WebPlugin extends TracingPlugin {
     const url = extractURL(req)
 
     span.addTags({
-      [HTTP_URL]: this._obfuscateQs(url),
+      [HTTP_URL]: this._obfuscateQs(url, context.config),
       [HTTP_METHOD]: req.method,
       [SPAN_KIND]: SERVER,
       [SPAN_TYPE]: spanType,
@@ -438,7 +447,7 @@ class WebPlugin extends TracingPlugin {
 
     // if client ip has already been set by appsec, no need to run it again
     if (extractIp && !span.context()._tags.hasOwnProperty(HTTP_CLIENT_IP)) {
-      const clientIp = extractIp(this.config, req)
+      const clientIp = extractIp(context.config, req)
 
       if (clientIp) {
         span.setTag(HTTP_CLIENT_IP, clientIp)
