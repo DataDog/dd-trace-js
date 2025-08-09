@@ -132,6 +132,26 @@ function block (req, res, rootSpan, abortController, actionParameters = defaultB
   }
 }
 
+const blockDelegations = new WeakMap()
+
+function delegateBlock (req, res) {
+  const args = arguments
+
+  return new Promise((resolve) => {
+    blockDelegations.set(res, { args, resolve })
+  })
+}
+
+function blockDelegates (res) {
+  const delegation = blockDelegations.get(res)
+  if (delegation) {
+    blockDelegations.delete(res)
+
+    const result = block.apply(this, delegation.args)
+    delegation.resolve(result)
+  }
+}
+
 function getBlockingAction (actions) {
   // waf only returns one action, but it prioritizes redirect over block
   return actions?.redirect_request || actions?.block_request
@@ -146,7 +166,7 @@ function setTemplates (config) {
 }
 
 function isBlocked (res) {
-  return responseBlockedSet.has(res)
+  return responseBlockedSet.has(res) || blockDelegations.has(res)
 }
 
 function setDefaultBlockingActionParameters (actions) {
@@ -158,6 +178,8 @@ function setDefaultBlockingActionParameters (actions) {
 module.exports = {
   addSpecificEndpoint,
   block,
+  delegateBlock,
+  blockDelegates,
   specificBlockingTypes,
   getBlockingData,
   getBlockingAction,

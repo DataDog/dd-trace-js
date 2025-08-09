@@ -35,6 +35,7 @@ class AppsecFsPlugin extends Plugin {
     this.addBind('apm:fs:operation:finish', this._onFsOperationFinishOrRenderEnd)
     this.addBind('tracing:datadog:express:response:render:start', this._onResponseRenderStart)
     this.addBind('tracing:datadog:express:response:render:end', this._onFsOperationFinishOrRenderEnd)
+    // We might have to add the same subscribers for fastify later
 
     super.configure(true)
   }
