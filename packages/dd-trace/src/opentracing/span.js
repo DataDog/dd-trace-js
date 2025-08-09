@@ -34,7 +34,7 @@ const integrationCounters = {
 const startCh = channel('dd-trace:span:start')
 const finishCh = channel('dd-trace:span:finish')
 
-function getIntegrationCounter (event, integration) {
+function getIntegrationCounter (event, integration, version) {
   const counters = integrationCounters[event]
 
   if (integration in counters) {
@@ -43,7 +43,9 @@ function getIntegrationCounter (event, integration) {
 
   const counter = tracerMetrics.count(event, [
     `integration_name:${integration.toLowerCase()}`,
-    `otel_enabled:${OTEL_ENABLED}`
+    `otel_enabled:${OTEL_ENABLED}`,
+    `dependency_name:${integration}`,
+    `dependency_version:${version}`
   ])
 
   integrationCounters[event][integration] = counter
@@ -75,7 +77,7 @@ class DatadogSpan {
     this._name = operationName
     this._integrationName = fields.integrationName || 'opentracing'
 
-    getIntegrationCounter('spans_created', this._integrationName).inc()
+    getIntegrationCounter('spans_created', this._integrationName, tags['_dd.dependency_version']).inc()
 
     this._spanContext = this._createContext(parent, fields)
     this._spanContext._name = operationName
@@ -239,7 +241,7 @@ class DatadogSpan {
       log.error('Finishing invalid span: %s', this)
     }
 
-    getIntegrationCounter('spans_finished', this._integrationName).inc()
+    getIntegrationCounter('spans_finished', this._integrationName, this._spanContext._tags['_dd.dependency_version']).inc()
     this._spanContext._tags['_dd.integration'] = this._integrationName
 
     if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
