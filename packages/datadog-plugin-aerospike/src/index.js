@@ -64,8 +64,12 @@ class AerospikePlugin extends DatabasePlugin {
 function getMeta (resourceName, commandArgs) {
   let meta = {}
   if (resourceName.includes('Index')) {
-    const [ns, set, bin, index] = commandArgs
-    meta = getMetaForIndex(ns, set, bin, index)
+    const [ns, set, bin, exp, index] = commandArgs
+
+    // The `ext` argument was added to IndexCreate in 6.3.0
+    meta = commandArgs.length > 8
+      ? getMetaForIndex(ns, set, bin, index)
+      : getMetaForIndex(ns, set, bin, exp)
   } else if (resourceName === 'Query') {
     const { ns, set } = commandArgs[2]
     meta = getMetaForQuery({ ns, set })

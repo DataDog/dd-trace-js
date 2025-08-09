@@ -367,7 +367,7 @@ describe('AppSec Rule Manager', () => {
               id: 'asm_dd.test.failed',
               product: 'ASM_DD',
               path: 'test/rule_manager/updateWafFromRC/ASM_DD/01',
-              file: {}
+              file: { rules: [{ name: 'rule_with_missing_id' }] }
             }
           ],
           toModify: [],

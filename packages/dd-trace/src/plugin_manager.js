@@ -1,7 +1,7 @@
 'use strict'
 
 const { channel } = require('dc-polyfill')
-const { isFalse, normalizePluginEnvName } = require('./util')
+const { isFalse, isTrue, normalizePluginEnvName } = require('./util')
 const plugins = require('./plugins')
 const log = require('./log')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
@@ -32,8 +32,7 @@ loadChannel.subscribe(({ name }) => {
 function maybeEnable (Plugin) {
   if (!Plugin || typeof Plugin !== 'function') return
   if (!pluginClasses[Plugin.id]) {
-    const envName = `DD_TRACE_${Plugin.id.toUpperCase()}_ENABLED`
-    const enabled = getEnvironmentVariable(normalizePluginEnvName(envName))
+    const enabled = getEnvEnabled(Plugin)
 
     // TODO: remove the need to load the plugin class in order to disable the plugin
     if (isFalse(enabled) || disabledPlugins.has(Plugin.id)) {
@@ -44,6 +43,11 @@ function maybeEnable (Plugin) {
       pluginClasses[Plugin.id] = Plugin
     }
   }
+}
+
+function getEnvEnabled (Plugin) {
+  const envName = `DD_TRACE_${Plugin.id.toUpperCase()}_ENABLED`
+  return getEnvironmentVariable(normalizePluginEnvName(envName))
 }
 
 // TODO this must always be a singleton.
@@ -74,7 +78,7 @@ module.exports = class PluginManager {
       this._pluginsByName[name] = new Plugin(this._tracer, this._tracerConfig)
     }
     const pluginConfig = this._configsByName[name] || {
-      enabled: this._tracerConfig.plugins !== false
+      enabled: this._tracerConfig.plugins !== false && (!Plugin.experimental || isTrue(getEnvEnabled(Plugin)))
     }
 
     // extracts predetermined configuration from tracer and combines it with plugin-specific config
