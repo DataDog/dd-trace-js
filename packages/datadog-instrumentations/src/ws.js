@@ -94,7 +94,8 @@ function wrapClose (close) {
 
 addHook({
   name: 'ws',
-  file: 'lib/websocket-server.js'
+  file: 'lib/websocket-server.js',
+  versions: ['>=8.0.0']
 }, ws => {
   shimmer.wrap(ws.prototype, 'handleUpgrade', wrapHandleUpgrade)
 
@@ -103,7 +104,8 @@ addHook({
 
 addHook({
   name: 'ws',
-  file: 'lib/websocket.js'
+  file: 'lib/websocket.js',
+  versions: ['>=8.0.0']
 }, ws => {
   shimmer.wrap(ws.prototype, 'send', wrapSend)
 
@@ -112,7 +114,8 @@ addHook({
 
 addHook({
   name: 'ws',
-  file: 'lib/websocket-server.js'
+  file: 'lib/websocket-server.js',
+  versions: ['>=8.0.0']
 }, ws => {
   shimmer.wrap(ws.prototype, 'emit', createWrapEmit)
 
@@ -121,7 +124,8 @@ addHook({
 
 addHook({
   name: 'ws',
-  file: 'lib/websocket.js'
+  file: 'lib/websocket.js',
+  versions: ['>=8.0.0']
 }, ws => {
   shimmer.wrap(ws.prototype, 'on', wrapListener)
   return ws
@@ -129,7 +133,8 @@ addHook({
 
 addHook({
   name: 'ws',
-  file: 'lib/websocket.js'
+  file: 'lib/websocket.js',
+  versions: ['>=8.0.0']
 }, ws => {
   shimmer.wrap(ws.prototype, 'close', wrapClose)
   return ws
