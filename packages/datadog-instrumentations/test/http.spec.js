@@ -6,8 +6,20 @@ const dc = require('dc-polyfill')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 
-// Import the GCP PubSub Push functions for testing
-const { isPubSubRequest, isCloudEventRequest } = require('../src/gcp-pubsub-push')
+// Import the HTTP handler plugin
+const GoogleCloudPubsubHttpHandlerPlugin = require('../../datadog-plugin-google-cloud-pubsub/src/http-handler')
+
+// Create helper functions for testing
+const mockTracer = {
+  startSpan: () => ({ setTag: () => {}, finish: () => {} }),
+  extract: () => null,
+  scope: () => ({ activate: (span, cb) => cb() })
+}
+const pluginInstance = new GoogleCloudPubsubHttpHandlerPlugin(mockTracer)
+
+// Extract the functions we want to test
+const isPubSubRequest = pluginInstance.isPubSubRequest.bind(pluginInstance)
+const isCloudEventRequest = pluginInstance.isCloudEventRequest.bind(pluginInstance)
 describe('client', () => {
   let url, http, startChannelCb, endChannelCb, asyncStartChannelCb, errorChannelCb
 

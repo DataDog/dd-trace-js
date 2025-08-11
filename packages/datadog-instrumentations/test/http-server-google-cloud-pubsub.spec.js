@@ -5,10 +5,23 @@ const sinon = require('sinon')
 const dc = require('dc-polyfill')
 const http = require('http')
 
-// Import the actual functions from our implementation
-const { isPubSubRequest, isCloudEventRequest, processEventRequest } = require('../src/gcp-pubsub-push')
+// Import the HTTP handler plugin
+const GoogleCloudPubsubHttpHandlerPlugin = require('../../datadog-plugin-google-cloud-pubsub/src/http-handler')
 
-describe('HTTP Server PubSub Instrumentation Tests', () => {
+// Create helper functions for testing
+const mockTracer = {
+  startSpan: () => ({ setTag: () => {}, finish: () => {} }),
+  extract: () => null,
+  scope: () => ({ activate: (span, cb) => cb() })
+}
+const pluginInstance = new GoogleCloudPubsubHttpHandlerPlugin(mockTracer)
+
+// Extract the functions we want to test
+const isPubSubRequest = pluginInstance.isPubSubRequest.bind(pluginInstance)
+const isCloudEventRequest = pluginInstance.isCloudEventRequest.bind(pluginInstance)
+const processEventRequest = pluginInstance.processPubSubRequest.bind(pluginInstance)
+
+describe('HTTP Server Google Cloud Pub/Sub Integration Tests', () => {
   let tracer, startServerCh, startServerSpy
 
   before(() => {
@@ -177,7 +190,10 @@ describe('HTTP Server PubSub Instrumentation Tests', () => {
 
       // Optimized extraction logic
       const carrier = {}
-      const traceHeaders = ['traceparent', 'tracestate', 'x-datadog-trace-id', 'x-datadog-parent-id', 'x-datadog-sampling-priority', 'x-datadog-tags']
+      const traceHeaders = [
+        'traceparent', 'tracestate', 'x-datadog-trace-id', 'x-datadog-parent-id',
+        'x-datadog-sampling-priority', 'x-datadog-tags'
+      ]
       for (const header of traceHeaders) {
         if (attrs[header]) {
           carrier[header] = attrs[header]
@@ -201,7 +217,7 @@ describe('HTTP Server PubSub Instrumentation Tests', () => {
     it('should extract project ID from subscription path', () => {
       const subscription = 'projects/my-gcp-project/subscriptions/my-subscription'
 
-      const match = subscription.match(/projects\/([^\/]+)\/subscriptions/)
+      const match = subscription.match(/projects\/([^/]+)\/subscriptions/)
       const projectId = match ? match[1] : null
 
       expect(projectId).to.equal('my-gcp-project')
@@ -210,7 +226,7 @@ describe('HTTP Server PubSub Instrumentation Tests', () => {
     it('should handle invalid subscription paths', () => {
       const subscription = 'invalid-subscription-format'
 
-      const match = subscription.match(/projects\/([^\/]+)\/subscriptions/)
+      const match = subscription.match(/projects\/([^/]+)\/subscriptions/)
       const projectId = match ? match[1] : null
 
       expect(projectId).to.be.null

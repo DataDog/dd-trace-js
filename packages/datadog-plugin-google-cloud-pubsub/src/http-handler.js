@@ -3,7 +3,6 @@
 // Datadog plugin for Google Cloud PubSub HTTP handler
 // This subscribes to request intercept channel and handles PubSub requests
 
-const { channel } = require('dc-polyfill')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const web = require('../../dd-trace/src/plugins/util/web')
 const { getSharedChannel } = require('../../datadog-instrumentations/src/shared-channels')
@@ -56,8 +55,6 @@ class GoogleCloudPubsubHttpHandlerPlugin extends TracingPlugin {
 
   // Process PubSub/Cloud Event request directly in plugin
   processPubSubRequest (req, res, emit, server, originalArgs, isCloudEvent) {
-    const tracer = this.tracer
-
     // Collect request body
     const chunks = []
     let bodySize = 0
@@ -107,21 +104,16 @@ class GoogleCloudPubsubHttpHandlerPlugin extends TracingPlugin {
         }
 
         // Extract trace context and create span
-        if (this.tracer) {}
         const parent = this.extractTraceContext(this.tracer, attrs)
         const { projectId, topicName } = this.extractProjectAndTopic(attrs, subscription)
-        const span = this.createSpan(this.tracer, parent, topicName, projectId, subscription, message, attrs, req, isCloudEvent)
+        const span = this.createSpan(
+          this.tracer, parent, topicName, projectId, subscription, message, attrs, req, isCloudEvent
+        )
 
-        // SIMPLE APPROACH: Add parsed body directly to req and mark as parsed
+        // SIMPLE APPROACH: Add parsed body directly to req
         // This prevents body-parser from trying to read the stream again
         req.body = json
-        req._body = true // Indicates body has been parsed
-        req._pubsubBodyParsed = true
-
         req._datadog = { span }
-        req._eventType = isCloudEvent ? 'Cloud Event' : 'PubSub push'
-        req._pubsubSpanCreated = true
-        req._parentSpan = span
 
         // Set up span finishing
         const finishSpan = () => {
