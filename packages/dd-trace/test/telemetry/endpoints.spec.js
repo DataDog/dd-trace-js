@@ -86,6 +86,20 @@ describe('endpoints telemetry', () => {
       expect(resources).to.include('POST /api')
     })
 
+    it('should set is_first=true only for the first payload', () => {
+      fastifyRouteCh.publish({ routeOptions: { method: 'GET', path: '/one' } })
+      fastifyRouteCh.publish({ routeOptions: { method: 'POST', path: '/two' } })
+
+      scheduledCallbacks.forEach(cb => cb())
+
+      expect(sendData.callCount).to.equal(2)
+      const firstPayload = sendData.firstCall.args[4]
+      const secondPayload = sendData.secondCall.args[4]
+
+      expect(firstPayload).to.have.property('is_first', true)
+      expect(Boolean(secondPayload.is_first)).to.equal(false)
+    })
+
     it('should record fastify wildcard when all methods provided', () => {
       fastifyRouteCh.publish({
         routeOptions: {
