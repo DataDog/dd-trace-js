@@ -15,12 +15,8 @@ class HapiPlugin extends RouterPlugin {
       const store = storage('legacy').getStore()
       const span = store && store.span
 
-      this.setFramework(req, 'hapi', this.config)
+      this.setFramework(req, 'hapi')
       this._requestSpans.set(req, span)
-    })
-
-    this.addSub('apm:hapi:request:route', ({ req, route }) => {
-      this.setRoute(req, route)
     })
 
     this.addSub('apm:hapi:request:error', error => {

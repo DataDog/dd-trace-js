@@ -52,6 +52,18 @@ class WebPlugin extends TracingPlugin {
       this.finish(req)
     })
 
+    this.addSub(`apm:${this.constructor.id}:request:handle`, ({ req }) => {
+      this.setFramework(req, this.constructor.framework || this.constructor.id)
+    })
+
+    this.addSub(`apm:${this.constructor.id}:request:route`, ({ req, route }) => {
+      this.setRoute(req, route)
+    })
+
+    this.addSub(`apm:${this.constructor.id}:request:error`, ({ req, error }) => {
+      this.addError(req, error)
+    })
+
     this.configure(this.config)
   }
 
@@ -81,7 +93,7 @@ class WebPlugin extends TracingPlugin {
     }
   }
 
-  setFramework (req, name, config) {
+  setFramework (req, name) {
     const context = this.patch(req)
     const span = context.span
 
@@ -91,14 +103,12 @@ class WebPlugin extends TracingPlugin {
     span.context()._tags.component = name
     span._integrationName = name
 
-    this.setConfig(req, config)
+    this.setConfig(req)
   }
 
-  setConfig (req, config = {}) {
+  setConfig (req) {
     const context = contexts.get(req)
     if (!context) return
-
-    context.config = { ...this.config, ...config }
 
     const span = context.span
     if (!span) return

@@ -63,10 +63,6 @@ class Http2ServerPlugin extends WebPlugin {
   error (error) {
     this.addError(error)
   }
-
-  configure (config) {
-    return super.configure(this.normalizeConfig(config))
-  }
 }
 
 module.exports = Http2ServerPlugin
