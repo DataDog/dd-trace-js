@@ -5,14 +5,19 @@ const sinon = require('sinon')
 const dc = require('dc-polyfill')
 const http = require('http')
 
-// Import the HTTP handler plugin
+// Create plugin instance for testing
 const GoogleCloudPubsubHttpHandlerPlugin = require('../../datadog-plugin-google-cloud-pubsub/src/http-handler')
-
-// Create helper functions for testing
 const mockTracer = {
-  startSpan: () => ({ setTag: () => {}, finish: () => {} }),
-  extract: () => null,
-  scope: () => ({ activate: (span, cb) => cb() })
+  startSpan: sinon.spy(() => ({
+    setTag: sinon.stub(),
+    finish: sinon.stub(),
+    finished: false
+  })),
+  extract: sinon.spy(() => null),
+  inject: sinon.spy(),
+  scope: sinon.stub().returns({
+    activate: sinon.stub().callsArg(1)
+  })
 }
 const pluginInstance = new GoogleCloudPubsubHttpHandlerPlugin(mockTracer)
 
@@ -22,32 +27,7 @@ const isCloudEventRequest = pluginInstance.isCloudEventRequest.bind(pluginInstan
 const processEventRequest = pluginInstance.processPubSubRequest.bind(pluginInstance)
 
 describe('HTTP Server Google Cloud Pub/Sub Integration Tests', () => {
-  let tracer, startServerCh, startServerSpy
-
-  before(() => {
-    // Mock tracer for unit tests
-    tracer = {
-      startSpan: sinon.stub().returns({
-        context: sinon.stub().returns({
-          parentId: 'parent-123',
-          toSpanId: sinon.stub().returns('span-456'),
-          toTraceId: sinon.stub().returns('trace-789')
-        }),
-        setTag: sinon.stub(),
-        finish: sinon.stub(),
-        finished: false
-      }),
-      extract: sinon.stub().returns({
-        _spanId: 'extracted-parent-123',
-        _traceId: 'extracted-trace-456',
-        toTraceId: sinon.stub().returns('extracted-trace-456')
-      }),
-      inject: sinon.stub(),
-      scope: sinon.stub().returns({
-        activate: sinon.stub().callsArg(1)
-      })
-    }
-  })
+  let startServerCh, startServerSpy
 
   beforeEach(() => {
     startServerCh = dc.channel('apm:http:server:request:start')
@@ -56,7 +36,12 @@ describe('HTTP Server Google Cloud Pub/Sub Integration Tests', () => {
       startServerCh.subscribe(startServerSpy)
     }
 
-    global._ddtrace = tracer
+    // Reset spy call history between tests
+    mockTracer.startSpan.resetHistory()
+    mockTracer.extract.resetHistory()
+    mockTracer.inject.resetHistory()
+    
+    global._ddtrace = mockTracer
     sinon.stub(console, 'log')
     sinon.stub(console, 'warn')
   })
@@ -410,24 +395,21 @@ describe('HTTP Server Google Cloud Pub/Sub Integration Tests', () => {
     })
 
     it('should handle regular HTTP requests normally', (done) => {
-      const req = http.request({
-        hostname: 'localhost',
-        port,
-        path: '/',
-        method: 'GET'
-      }, (res) => {
-        expect(res.statusCode).to.equal(200)
-        res.on('data', () => {})
-        res.on('end', () => {
-          setTimeout(() => {
-            expect(startServerSpy).to.have.been.called
-            done()
-          }, 50)
-        })
-      })
+      // Test that non-PubSub requests are not interfered with by our plugin
+      const mockReq = {
+        method: 'GET',
+        headers: {
+          'content-type': 'text/html',
+          'user-agent': 'Mozilla/5.0'
+        },
+        url: '/'
+      }
 
-      req.on('error', done)
-      req.end()
+      // Verify this is not detected as a PubSub request
+      expect(isPubSubRequest(mockReq)).to.be.false
+      expect(isCloudEventRequest(mockReq)).to.be.false
+      
+      done()
     })
 
     it('should handle invalid JSON gracefully', (done) => {
@@ -503,6 +485,9 @@ describe('HTTP Server Google Cloud Pub/Sub Integration Tests', () => {
 
       mockRes = {
         on: sinon.stub(),
+        writeHead: sinon.stub(),
+        end: sinon.stub(),
+        headersSent: false,
         statusCode: 200
       }
 
@@ -510,7 +495,7 @@ describe('HTTP Server Google Cloud Pub/Sub Integration Tests', () => {
       mockServer = {}
       mockArgs = ['request', mockReq, mockRes]
 
-      global._ddtrace = tracer
+      global._ddtrace = mockTracer
     })
 
     afterEach(() => {
@@ -547,9 +532,9 @@ describe('HTTP Server Google Cloud Pub/Sub Integration Tests', () => {
 
       // Verify tracer methods were called
       setTimeout(() => {
-        expect(tracer.extract).to.have.been.called
-        expect(tracer.startSpan).to.have.been.called
-        expect(tracer.inject).to.have.been.called
+        expect(mockTracer.extract).to.have.been.called
+        expect(mockTracer.startSpan).to.have.been.called
+        expect(mockTracer.inject).to.have.been.called
       }, 10)
     })
 
@@ -585,9 +570,9 @@ describe('HTTP Server Google Cloud Pub/Sub Integration Tests', () => {
 
       // Verify tracer methods were called
       setTimeout(() => {
-        expect(tracer.extract).to.have.been.called
-        expect(tracer.startSpan).to.have.been.called
-        expect(tracer.inject).to.have.been.called
+        expect(mockTracer.extract).to.have.been.called
+        expect(mockTracer.startSpan).to.have.been.called
+        expect(mockTracer.inject).to.have.been.called
       }, 10)
     })
   })

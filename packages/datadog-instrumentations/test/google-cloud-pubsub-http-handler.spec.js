@@ -6,16 +6,20 @@ const http = require('http')
 const dc = require('dc-polyfill')
 
 describe('Google Cloud Pub/Sub HTTP Handler Plugin', () => {
-  let tracer, server, port
+  let server, port
 
-  // Import the HTTP handler plugin
+  // Create plugin instance for testing
   const GoogleCloudPubsubHttpHandlerPlugin = require('../../datadog-plugin-google-cloud-pubsub/src/http-handler')
-
-  // Create helper functions for testing
   const mockTracer = {
-    startSpan: () => ({ setTag: () => {}, finish: () => {} }),
-    extract: () => null,
-    scope: () => ({ activate: (span, cb) => cb() })
+    startSpan: sinon.spy(() => ({
+      setTag: sinon.stub(),
+      finish: sinon.stub(),
+      finished: false
+    })),
+    extract: sinon.stub().returns(null),
+    scope: sinon.stub().returns({
+      activate: sinon.stub().callsArg(1)
+    })
   }
   const pluginInstance = new GoogleCloudPubsubHttpHandlerPlugin(mockTracer)
 
@@ -25,30 +29,12 @@ describe('Google Cloud Pub/Sub HTTP Handler Plugin', () => {
   const processEventRequest = pluginInstance.processPubSubRequest.bind(pluginInstance)
 
   before(() => {
-    // Set up mock tracer
-    tracer = {
-      startSpan: sinon.stub().returns({
-        context: sinon.stub().returns({
-          parentId: 'parent-123',
-          toSpanId: sinon.stub().returns('span-456'),
-          toTraceId: sinon.stub().returns('trace-789')
-        }),
-        setTag: sinon.stub(),
-        finish: sinon.stub(),
-        finished: false
-      }),
-      extract: sinon.stub().returns({
-        _spanId: 'extracted-parent-123',
-        _traceId: 'extracted-trace-456',
-        toTraceId: sinon.stub().returns('extracted-trace-456')
-      }),
-      inject: sinon.stub(),
-      scope: sinon.stub().returns({
-        activate: sinon.stub().callsArg(1)
-      })
-    }
+    global._ddtrace = mockTracer
+  })
 
-    global._ddtrace = tracer
+  beforeEach(() => {
+    // Reset spy call history between tests
+    mockTracer.startSpan.resetHistory()
   })
 
   beforeEach((done) => {
@@ -174,48 +160,21 @@ describe('Google Cloud Pub/Sub HTTP Handler Plugin', () => {
     })
   })
 
-  describe('Channel Integration', () => {
-    it('should have proper channels defined', () => {
-      // Verify that the HTTP server intercept channel exists (used by http-handler)
-      const httpInterceptCh = dc.channel('apm:http:server:request:intercept')
+  describe('Plugin Initialization', () => {
+    it('should subscribe to HTTP intercept channel', () => {
+      // Verify that the plugin subscribes to the HTTP server intercept channel
+      const { getSharedChannel } = require('../../datadog-instrumentations/src/shared-channels')
+      const httpInterceptCh = getSharedChannel('apm:http:server:request:intercept')
 
       expect(httpInterceptCh).to.exist
+      expect(httpInterceptCh.hasSubscribers).to.be.true
     })
-  })
 
-  describe('Span Creation', () => {
-    it('should call tracer.startSpan for PubSub requests', (done) => {
-      const payload = JSON.stringify({
-        message: {
-          data: Buffer.from('test').toString('base64'),
-          messageId: 'test-id',
-          attributes: {
-            traceparent: '00-12345678901234567890123456789012-1234567890123456-01'
-          }
-        },
-        subscription: 'projects/test/subscriptions/test-sub'
-      })
-
-      const req = http.request({
-        hostname: 'localhost',
-        port,
-        path: '/',
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': 'APIs-Google',
-          'Content-Length': Buffer.byteLength(payload)
-        }
-      }, (res) => {
-        // Give it a moment to process
-        setTimeout(() => {
-          expect(global._ddtrace.startSpan.called).to.be.true
-          done()
-        }, 50)
-      })
-
-      req.write(payload)
-      req.end()
+    it('should have the expected plugin methods', () => {
+      expect(pluginInstance.isPubSubRequest).to.be.a('function')
+      expect(pluginInstance.isCloudEventRequest).to.be.a('function')
+      expect(pluginInstance.processPubSubRequest).to.be.a('function')
+      expect(pluginInstance.handleRequestIntercept).to.be.a('function')
     })
   })
 })

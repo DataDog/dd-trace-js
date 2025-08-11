@@ -66,16 +66,22 @@ class GoogleCloudPubsubHttpHandlerPlugin extends TracingPlugin {
       req.removeAllListeners('error')
     }
 
-    req.on('error', () => {
+    req.on('error', (err) => {
       cleanup()
-      emit.apply(server, originalArgs)
+      if (!res.headersSent) {
+        res.writeHead(400, { 'Content-Type': 'text/plain' })
+        res.end('Bad Request')
+      }
     })
 
     req.on('data', chunk => {
       bodySize += chunk.length
       if (bodySize > MAX_BODY_SIZE) {
         cleanup()
-        emit.apply(server, originalArgs)
+        if (!res.headersSent) {
+          res.writeHead(413, { 'Content-Type': 'text/plain' })
+          res.end('Payload Too Large')
+        }
         return
       }
       chunks.push(chunk)
@@ -170,9 +176,12 @@ class GoogleCloudPubsubHttpHandlerPlugin extends TracingPlugin {
             emit.call(server, 'request', req, res)
           })
         })
-      } catch {
+      } catch (parseError) {
         cleanup()
-        emit.apply(server, originalArgs)
+        if (!res.headersSent) {
+          res.writeHead(400, { 'Content-Type': 'text/plain' })
+          res.end('Invalid JSON')
+        }
       }
     })
   }
