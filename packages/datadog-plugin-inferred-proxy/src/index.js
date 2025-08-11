@@ -1,8 +1,9 @@
 'use strict'
 
-const WebPlugin = require('../../datadog-plugin-web/src')
 const log = require('../../dd-trace/src/log')
 const tags = require('../../../ext/tags')
+const dc = require('dc-polyfill')
+const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
 const RESOURCE_NAME = tags.RESOURCE_NAME
 const SPAN_TYPE = tags.SPAN_TYPE
@@ -16,40 +17,42 @@ const PROXY_HEADER_HTTPMETHOD = 'x-dd-proxy-httpmethod'
 const PROXY_HEADER_DOMAIN = 'x-dd-proxy-domain-name'
 const PROXY_HEADER_STAGE = 'x-dd-proxy-stage'
 
-class InferredProxyPlugin extends WebPlugin {
+const loadChannel = dc.channel('dd-trace:instrumentation:load')
+
+class InferredProxyPlugin extends TracingPlugin {
   static id = 'inferred-proxy'
-
-  constructor (...args) {
-    super(...args)
-
-    this.supportedProxies = {
-      'aws-apigateway': {
-        spanName: 'aws.apigateway',
-        component: 'aws-apigateway'
-      }
+  static supportedProxies = {
+    'aws-apigateway': {
+      spanName: 'aws.apigateway',
+      component: 'aws-apigateway'
     }
   }
 
-  startChildSpan (tracer, config, name, req, traceCtx) {
-    const headers = req.headers
-    const reqCtx = this.getContext(req)
-    let childOf = super.startChildSpan(tracer, config, name, req, traceCtx)
+  constructor (...args) {
+    super(...args)
+    this.addSub(`apm:${this.constructor.id}:request:handle`, this.startSpan.bind(this))
+  }
 
-    if (!headers) {
-      return childOf
+  static maybeCreateInferredProxySpan (config, req, reqCtx, childOf, traceCtx) {
+    if (!config?.inferredProxyServicesEnabled) {
+      return
     }
-
-    if (!tracer._config?.inferredProxyServicesEnabled) {
-      return childOf
-    }
-
-    const proxyContext = this.extractInferredProxyContext(headers)
-
+    const proxyContext = InferredProxyPlugin.extractInferredProxyContext(req.headers)
     if (!proxyContext) {
-      return childOf
+      return
     }
 
-    const proxySpanInfo = this.supportedProxies[proxyContext.proxySystemName]
+    const channel = dc.channel(`apm:${proxyContext.proxySystemName}:request:handle`)
+
+    if (!channel.hasSubscribers) {
+      loadChannel.publish({ name: proxyContext.proxySystemName })
+    }
+
+    return channel.publish({ reqCtx, proxyContext, childOf, traceCtx })
+  }
+
+  startSpan ({ reqCtx, proxyContext, childOf, traceCtx }) {
+    const proxySpanInfo = InferredProxyPlugin.supportedProxies[proxyContext.proxySystemName]
 
     log.debug('Successfully extracted inferred span info %s for proxy:', proxyContext, proxyContext.proxySystemName)
 
@@ -59,14 +62,14 @@ class InferredProxyPlugin extends WebPlugin {
       startTime: proxyContext.requestTime,
       integrationName: proxySpanInfo.component,
       meta: {
-        service: proxyContext.domainName || tracer._config.service,
+        service: proxyContext.domainName || this.config.service,
         component: proxySpanInfo.component,
         [SPAN_TYPE]: 'web',
         [HTTP_METHOD]: proxyContext.method,
         [HTTP_URL]: proxyContext.domainName + proxyContext.path,
         stage: proxyContext.stage
       }
-    }, traceCtx, config)
+    }, traceCtx)
 
     reqCtx.inferredProxySpan = span
     childOf = span
@@ -84,12 +87,12 @@ class InferredProxyPlugin extends WebPlugin {
     return span
   }
 
-  extractInferredProxyContext (headers) {
+  static extractInferredProxyContext (headers) {
     if (!(PROXY_HEADER_START_TIME_MS in headers)) {
       return null
     }
 
-    if (!(PROXY_HEADER_SYSTEM in headers && headers[PROXY_HEADER_SYSTEM] in this.supportedProxies)) {
+    if (!(PROXY_HEADER_SYSTEM in headers && headers[PROXY_HEADER_SYSTEM] in InferredProxyPlugin.supportedProxies)) {
       log.debug('Received headers to create inferred proxy span but headers include an unsupported proxy type', headers)
       return null
     }
@@ -106,12 +109,7 @@ class InferredProxyPlugin extends WebPlugin {
     }
   }
 
-  finishAll (context) {
-    super.finishAll(context)
-    this.finishInferredProxySpan(context)
-  }
-
-  finishInferredProxySpan (context) {
+  static finishInferredProxySpan (context) {
     const { req } = context
 
     if (!context.inferredProxySpan) return

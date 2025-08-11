@@ -7,7 +7,7 @@ class HapiPlugin extends RouterPlugin {
   static id = 'hapi'
 
   constructor (...args) {
-    super(...args)
+    super(...args, false)
 
     this._requestSpans = new WeakMap()
 
@@ -19,9 +19,9 @@ class HapiPlugin extends RouterPlugin {
       this._requestSpans.set(req, span)
     })
 
-    this.addSub('apm:hapi:request:error', error => {
+    this.addSub('apm:hapi:request:error', ({ req, error }) => {
       if (!error || !error.isBoom || !this.config.validateStatus(error.output.statusCode)) {
-        this.addError(error)
+        this.addError(req, error)
       }
     })
 

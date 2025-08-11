@@ -1,7 +1,6 @@
 'use strict'
 
 const WebPlugin = require('../../datadog-plugin-web/src')
-const serverless = require('../../dd-trace/src/plugins/util/serverless')
 
 const triggerMap = {
   deleteRequest: 'Http',
@@ -56,7 +55,7 @@ class AzureFunctionsPlugin extends WebPlugin {
       context.res = { statusCode: result.status }
       context.span = ctx.currentStore.span
 
-      serverless.finishSpan(context)
+      this.finishSpan(context)
     // Fallback for other trigger types
     } else {
       super.finish()

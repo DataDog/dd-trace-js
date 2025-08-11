@@ -10,6 +10,7 @@ const kinds = require('../../../ext/kinds')
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
+const InferredProxyPlugin = require('../../datadog-plugin-inferred-proxy/src')
 
 let extractIp
 
@@ -42,7 +43,7 @@ class WebPlugin extends TracingPlugin {
   static kind = SERVER
   static type = WEB
 
-  constructor (tracer, config) {
+  constructor (tracer, config, bindError = true) {
     super(tracer, config)
     this.addSub('apm:http:server:request:error', ({ req, error }) => {
       if (error) {
@@ -62,9 +63,11 @@ class WebPlugin extends TracingPlugin {
       this.setRoute(req, route)
     })
 
-    this.addSub(`apm:${this.constructor.id}:request:error`, ({ req, error }) => {
-      this.addError(req, error)
-    })
+    if (bindError) {
+      this.addSub(`apm:${this.constructor.id}:request:error`, ({ req, error }) => {
+        this.addError(req, error)
+      })
+    }
 
     this.configure(config)
   }
@@ -303,7 +306,13 @@ class WebPlugin extends TracingPlugin {
   // Extract the parent span from the headers and start a new span as its child
   startChildSpan (name, req, traceCtx) {
     const headers = req.headers
-    const childOf = this.tracer.extract(FORMAT_HTTP_HEADERS, headers)
+    const reqCtx = this.getContext(req)
+    let childOf = this.tracer.extract(FORMAT_HTTP_HEADERS, headers)
+
+    InferredProxyPlugin.maybeCreateInferredProxySpan(this._tracerConfig, req, reqCtx, childOf, traceCtx)
+    if (reqCtx.inferredProxySpan) {
+      childOf = reqCtx.inferredProxySpan
+    }
 
     const span = super.startSpan(name, { childOf, kind: this.constructor.kind, type: this.constructor.type }, traceCtx)
 
@@ -374,6 +383,8 @@ class WebPlugin extends TracingPlugin {
     this.finishMiddleware(context)
 
     this.finishSpan(context)
+
+    InferredProxyPlugin.finishInferredProxySpan(context)
   }
 
   _obfuscateQs (url, config) {

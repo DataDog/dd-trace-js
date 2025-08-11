@@ -232,7 +232,7 @@ describe('Plugin', function () {
 
       // we can't force re-init the tracer, so we have to set the config manually
       const tracer = require('../../dd-trace').init(options)
-      tracer._config.inferredProxyServicesEnabled = false
+      tracer._tracer._config.inferredProxyServicesEnabled = false
 
       await agent.load(
         ['http', 'dns', 'net', 'aws-apigateway'],
