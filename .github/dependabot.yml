@@ -43,6 +43,12 @@ updates:
         update-types: ["version-update:semver-major"]
         # The path-to-regexp version has to be the same as used in express v4.
         # Consider vendoring it instead.
+      - dependency-name: "nock"
+        # Latest version breaks our tests.
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "nyc"
+        # Latest version breaks our tests.
+        update-types: ["version-update:semver-major"]
       - dependency-name: "path-to-regexp"
       - dependency-name: "lru-cache"
         # 11.0.0 onwards only supports Node.js 20 and above
@@ -77,6 +83,7 @@ updates:
           - "@datadog/sketches-js"
           - "@datadog/wasm-js-rewriter"
           - "@opentelemetry/api"
+          - "@opentelemetry/core"
   - package-ecosystem: "npm"
     directory: "/packages/dd-trace/test/plugins/versions"
     schedule:
