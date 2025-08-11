@@ -72,11 +72,12 @@ describe('Endpoints collection', () => {
 
       const expectedEndpoints = getExpectedEndpoints(framework)
       const endpointsFound = []
+      const isFirstFlags = []
 
       await agent.assertTelemetryReceived(msg => {
         const { payload } = msg
         if (payload.request_type === 'app-endpoints') {
-          expect(payload.payload.is_first).to.be.true
+          isFirstFlags.push(Boolean(payload.payload.is_first))
 
           if (payload.payload.endpoints) {
             payload.payload.endpoints.forEach(endpoint => {
@@ -91,6 +92,9 @@ describe('Endpoints collection', () => {
           }
         }
       }, 'app-endpoints', 5_000, 2)
+
+      const trueCount = isFirstFlags.filter(v => v === true).length
+      expect(trueCount).to.equal(1)
 
       // Check that all expected endpoints were found
       expectedEndpoints.forEach(expected => {

@@ -17,6 +17,7 @@ let updateRetryData
  */
 const pendingEndpoints = new Map()
 let flushScheduled = false
+let isFirstPayload = true
 
 function endpointKey (method, path) {
   return `${method} ${path}`
@@ -81,7 +82,7 @@ function flushAndSend () {
   }
 
   const payloadObj = {
-    is_first: true,
+    is_first: isFirstPayload,
     endpoints: buildEndpointObjects(batchEndpoints)
   }
 
@@ -98,6 +99,10 @@ function flushAndSend () {
   }
 
   sendData(config, application, host, reqType, payload, updateRetryData)
+
+  if (isFirstPayload) {
+    isFirstPayload = false
+  }
 
   // If more endpoints accumulated while sending, schedule another flush.
   if (pendingEndpoints.size) scheduleFlush()
