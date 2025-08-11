@@ -4,6 +4,7 @@ const axios = require('axios')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { assertCodeOriginFromTraces } = require('../../datadog-code-origin/test/helpers')
 const { getNextLineNumber } = require('../../dd-trace/test/plugins/helpers')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 const host = 'localhost'
 

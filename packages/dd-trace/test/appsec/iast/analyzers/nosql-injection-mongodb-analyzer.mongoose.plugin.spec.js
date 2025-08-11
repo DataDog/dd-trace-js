@@ -3,6 +3,7 @@
 const { prepareTestServerForIastInExpress } = require('../utils')
 const axios = require('axios')
 const agent = require('../../../plugins/agent')
+const { withVersions } = require('../../../setup/mocha')
 const semver = require('semver')
 const os = require('os')
 const path = require('path')

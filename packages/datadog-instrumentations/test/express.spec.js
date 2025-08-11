@@ -3,6 +3,7 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const axios = require('axios')
 const dc = require('dc-polyfill')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 withVersions('express', 'express', version => {
   describe('express query instrumentation', () => {
