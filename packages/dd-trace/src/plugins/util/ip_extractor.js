@@ -66,8 +66,8 @@ function extractIp (config, req) {
   return firstPrivateIp || req.socket?.remoteAddress
 }
 
-function isPublicIp (chunk, type) {
-  return !privateIPMatcher.check(chunk, type === 6 ? 'ipv6' : 'ipv4')
+function isPublicIp (ip, type) {
+  return !privateIPMatcher.check(ip, type === 6 ? 'ipv6' : 'ipv4')
 }
 
 function extractPublicOrPrivateIp (ip) {
