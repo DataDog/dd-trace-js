@@ -145,7 +145,7 @@ class WebPlugin extends TracingPlugin {
     context.span = span
     context.res = res
 
-    // this.setConfig(req)
+    this.setConfig(req)
     this._addRequestTags(context, this.constructor.type)
 
     return span
