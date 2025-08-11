@@ -4,6 +4,7 @@ const { useEnv } = require('../../../../../../integration-tests/helpers')
 const chai = require('chai')
 const { expect } = chai
 const semifies = require('semifies')
+const { withVersions } = require('../../../setup/mocha')
 
 const { NODE_MAJOR } = require('../../../../../../version')
 

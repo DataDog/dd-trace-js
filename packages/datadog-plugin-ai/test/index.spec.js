@@ -4,6 +4,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { useEnv } = require('../../../integration-tests/helpers')
 const assert = require('node:assert')
 const semifies = require('semifies')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 const { NODE_MAJOR } = require('../../../version')
 
