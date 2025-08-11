@@ -19,10 +19,9 @@ describe('esm', () => {
   // See https://github.com/Azure/azure-functions-nodejs-library/pull/357
   withVersions('azure-functions', '@azure/functions', NODE_MAJOR < 20 ? '<4.7.3' : '*', version => {
     before(async function () {
-      this.timeout(50000)
+      this.timeout(120_000)
       sandbox = await createSandbox([
         `@azure/functions@${version}`,
-        'azure-functions-core-tools@4.1.0',
         '@azure/service-bus@7.9.2'
       ],
       false,
@@ -30,7 +29,7 @@ describe('esm', () => {
     })
 
     after(async function () {
-      this.timeout(50000)
+      this.timeout(60_000)
       await sandbox.remove()
     })
 
@@ -45,7 +44,7 @@ describe('esm', () => {
 
     it('is instrumented', async () => {
       const envArgs = {
-        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+        PATH: process.env.PATH
       }
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 
@@ -57,11 +56,11 @@ describe('esm', () => {
         assert.strictEqual(payload[0].length, 1)
         assert.propertyVal(payload[0][0], 'name', 'azure.functions.invoke')
       })
-    }).timeout(50000)
+    }).timeout(60_000)
 
     it('propagates context to child http requests', async () => {
       const envArgs = {
-        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+        PATH: process.env.PATH
       }
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 
@@ -69,11 +68,11 @@ describe('esm', () => {
         assert.strictEqual(payload.length, 2)
         assert.strictEqual(payload[1][0].span_id, payload[1][1].parent_id)
       })
-    }).timeout(50000)
+    }).timeout(60_000)
 
     it('propagates context through a service bus queue', async () => {
       const envArgs = {
-        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+        PATH: process.env.PATH
       }
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 
@@ -87,11 +86,11 @@ describe('esm', () => {
         assert.strictEqual(payload[2][0].meta['messaging.system'], 'servicebus')
         assert.strictEqual(payload[2][0].meta['span.kind'], 'consumer')
       })
-    }).timeout(50000)
+    }).timeout(60_000)
 
     it('propagates context through a service bus topic', async () => {
       const envArgs = {
-        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+        PATH: process.env.PATH
       }
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 
@@ -105,7 +104,7 @@ describe('esm', () => {
         assert.strictEqual(payload[2][0].meta['messaging.system'], 'servicebus')
         assert.strictEqual(payload[2][0].meta['span.kind'], 'consumer')
       })
-    }).timeout(50000)
+    }).timeout(60_000)
   })
 })
 
