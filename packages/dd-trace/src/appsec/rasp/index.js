@@ -95,6 +95,8 @@ function blockOnDatadogRaspAbortError ({ error, isTopLevel }) {
     const blocked = blockFn(req, res, web.root(req), null, blockingAction)
 
     if (ruleTriggered) {
+      // block() returns a bool, and delegateBlock() returns a promise
+      // we use Promise.resolve() to handle both cases
       Promise.resolve(blocked).then(blocked => {
         updateRaspRuleMatchMetricTags(req, raspRule, true, blocked)
       })
