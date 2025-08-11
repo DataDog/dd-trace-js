@@ -87,7 +87,7 @@ function findFirstIp (str) {
     if (isPublicIp(chunk, type)) {
       // it's public, return it immediately
       result.public = chunk
-      break
+      return result
     }
 
     // it's private, only save the first one found
