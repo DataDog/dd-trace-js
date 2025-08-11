@@ -70,17 +70,6 @@ function isPublicIp (ip, type) {
   return !privateIPMatcher.check(ip, type === 6 ? 'ipv6' : 'ipv4')
 }
 
-function extractPublicOrPrivateIp (ip) {
-  const type = net.isIP(ip)
-  if (!type) return {}
-
-  if (isPublicIp(ip, type)) {
-    return { public: true }
-  }
-
-  return { private: true }
-}
-
 function findFirstIp (str) {
   const result = {}
   if (!str) return result
@@ -92,15 +81,17 @@ function findFirstIp (str) {
 
     // TODO: strip port and interface data ?
 
-    const currentIpInfo = extractPublicOrPrivateIp(chunk)
-    if (currentIpInfo.public) {
+    const type = net.isIP(chunk)
+    if (!type) continue
+
+    if (isPublicIp(chunk, type)) {
       // it's public, return it immediately
       result.public = chunk
       break
     }
 
     // it's private, only save the first one found
-    if (currentIpInfo.private && !result.private) result.private = chunk
+    if (!result.private) result.private = chunk
   }
 
   return result
@@ -122,18 +113,18 @@ function findFirstIpForwardedFormat (str) {
     for (const regex of forwardedRegexps) {
       const ip = regex.exec(chunk)?.[1]
 
-      const tempResult = extractPublicOrPrivateIp(ip)
-      if (tempResult.public) {
+      const type = net.isIP(ip)
+      if (!type) continue
+
+      if (isPublicIp(ip, type)) {
         // it's public, return it immediately
         result.public = ip
-        break
+        return result
       }
 
       // it's private, only save the first one found
-      if (tempResult.private && !result.private) result.private = ip
+      if (!result.private) result.private = ip
     }
-
-    if (result.public) break
   }
 
   return result
