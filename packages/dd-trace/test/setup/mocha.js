@@ -16,9 +16,6 @@ const { getInstrumentation } = require('./helpers/load-inst')
 
 const NODE_PATH_SEP = platform() === 'win32' ? ';' : ':'
 
-// TODO: Remove global
-global.withVersions = withVersions
-
 exports.withVersions = withVersions
 exports.withExports = withExports
 exports.withNamingSchema = withNamingSchema

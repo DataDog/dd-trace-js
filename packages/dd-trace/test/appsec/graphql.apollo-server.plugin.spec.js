@@ -7,6 +7,7 @@ const {
   resolvers,
   graphqlCommonTests
 } = require('./graphql.test-utils')
+const { withVersions } = require('../setup/mocha')
 
 withVersions('apollo-server', '@apollo/server', apolloServerVersion => {
   const config = {}

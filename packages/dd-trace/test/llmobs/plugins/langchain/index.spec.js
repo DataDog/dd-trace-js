@@ -4,6 +4,7 @@ const LLMObsSpanWriter = require('../../../../src/llmobs/writers/spans')
 const { useEnv } = require('../../../../../../integration-tests/helpers')
 const agent = require('../../../../../dd-trace/test/plugins/agent')
 const iastFilter = require('../../../../src/appsec/iast/taint-tracking/filter')
+const { withVersions } = require('../../../setup/mocha')
 
 const {
   expectedLLMObsLLMSpanEvent,
