@@ -22,7 +22,10 @@ var metadata = {
   runtime_name: 'nodejs',
   runtime_version: process.versions.node,
   tracer_version: tracerVersion,
-  pid: process.pid
+  pid: process.pid,
+  result: 'unknown',
+  result_reason: 'unknown',
+  result_class: 'unknown'
 }
 
 var seen = {}
@@ -64,14 +67,27 @@ function sendTelemetry (name, tags) {
   })
   proc.on('error', function () {
     log.error('Failed to spawn telemetry forwarder')
+    metadata.result = 'error'
+    metadata.result_class = 'internal_error'
+    metadata.result_reason = 'Failed to spawn telemetry forwarder'
   })
   proc.on('exit', function (code) {
-    if (code !== 0) {
+    if (code === 0) {
+      metadata.result = 'success'
+      metadata.result_class = 'success'
+      metadata.result_reason = 'Successfully configured ddtrace package'
+    } else {
       log.error('Telemetry forwarder exited with code', code)
+      metadata.result = 'error'
+      metadata.result_class = 'internal_error'
+      metadata.result_reason = 'Telemetry forwarder exited with code ' + code
     }
   })
   proc.stdin.on('error', function () {
     log.error('Failed to write telemetry data to telemetry forwarder')
+    metadata.result = 'error'
+    metadata.result_class = 'internal_error'
+    metadata.result_reason = 'Failed to write telemetry data to telemetry forwarder'
   })
   proc.stdin.end(JSON.stringify({ metadata: metadata, points: points }))
 }
