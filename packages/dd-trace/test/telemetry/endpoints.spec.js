@@ -88,8 +88,9 @@ describe('endpoints telemetry', () => {
 
     it('should set is_first=true only for the first payload', () => {
       fastifyRouteCh.publish({ routeOptions: { method: 'GET', path: '/one' } })
-      fastifyRouteCh.publish({ routeOptions: { method: 'POST', path: '/two' } })
+      scheduledCallbacks.forEach(cb => cb())
 
+      fastifyRouteCh.publish({ routeOptions: { method: 'POST', path: '/two' } })
       scheduledCallbacks.forEach(cb => cb())
 
       expect(sendData.callCount).to.equal(2)
