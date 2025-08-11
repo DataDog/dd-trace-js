@@ -1,6 +1,9 @@
 name: 'Dependabot Automation'
 
-on: pull_request_target
+on:
+  pull_request_target:
+    types:
+      - opened
 
 jobs:
   dependabot:
@@ -9,7 +12,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: DataDog/dd-octo-sts-action@08f2144903ced3254a3dafec2592563409ba2aa0 # v1.0.1
+      - uses: DataDog/dd-octo-sts-action@acaa02eee7e3bb0839e4272dacb37b8f3b58ba80 # v1.0.3
         id: octo-sts
         with:
           scope: DataDog/dd-trace-js
