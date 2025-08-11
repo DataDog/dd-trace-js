@@ -93,7 +93,6 @@ function blockOnDatadogRaspAbortError ({ error, isTopLevel }) {
   if (!isBlocked(res)) {
     const blockFn = isTopLevel ? block : delegateBlock
     const blocked = blockFn(req, res, web.root(req), null, blockingAction)
-
     if (ruleTriggered) {
       // block() returns a bool, and delegateBlock() returns a promise
       // we use Promise.resolve() to handle both cases
