@@ -4,8 +4,8 @@ const { storage } = require('../../datadog-core')
 const MySQLPlugin = require('../../datadog-plugin-mysql/src')
 
 class MariadbPlugin extends MySQLPlugin {
-  static get id () { return 'mariadb' }
-  static get system () { return 'mariadb' }
+  static id = 'mariadb'
+  static system = 'mariadb'
 
   constructor (...args) {
     super(...args)

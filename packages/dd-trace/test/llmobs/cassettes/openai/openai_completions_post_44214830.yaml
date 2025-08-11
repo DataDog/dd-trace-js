@@ -1,0 +1,127 @@
+interactions:
+- request:
+    body: "{\n  \"model\": \"gpt-3.5-turbo-instruct\",\n  \"temperature\": 0.7,\n
+      \ \"max_tokens\": 256,\n  \"top_p\": 1,\n  \"frequency_penalty\": 0,\n  \"presence_penalty\":
+      0,\n  \"n\": 2,\n  \"stream\": false,\n  \"prompt\": [\n    \"what is 2 + 2?\"\n
+      \ ]\n}"
+    headers:
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Encoding
+      : - gzip,deflate
+      ? !!python/object/apply:multidict._multidict.istr
+      - Connection
+      : - keep-alive
+      Content-Length:
+      - '216'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - User-Agent
+      : - OpenAI/JS 4.104.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-arch
+      : - arm64
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-lang
+      : - js
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-os
+      : - MacOS
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-package-version
+      : - 4.104.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-retry-count
+      : - '0'
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-runtime
+      : - node
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-runtime-version
+      : - v22.17.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-timeout
+      : - '600'
+    method: POST
+    uri: https://api.openai.com/v1/completions
+  response:
+    body:
+      string: "{\n  \"id\": \"cmpl-C1vO9voH4vUAq1GGSUJYWuttIbjcs\",\n  \"object\":
+        \"text_completion\",\n  \"created\": 1754574965,\n  \"model\": \"gpt-3.5-turbo-instruct:20230824-v2\",\n
+        \ \"choices\": [\n    {\n      \"text\": \"\\n\\n2 + 2 is equal to 4.\",\n
+        \     \"index\": 0,\n      \"logprobs\": null,\n      \"finish_reason\": \"stop\"\n
+        \   },\n    {\n      \"text\": \"\\n\\n2 + 2 is 4.\",\n      \"index\": 1,\n
+        \     \"logprobs\": null,\n      \"finish_reason\": \"stop\"\n    }\n  ],\n
+        \ \"usage\": {\n    \"prompt_tokens\": 8,\n    \"completion_tokens\": 20,\n
+        \   \"total_tokens\": 28\n  }\n}\n"
+    headers:
+      CF-RAY:
+      - 96b7467bfc7a399a-IAD
+      Cache-Control:
+      - no-cache, must-revalidate
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 07 Aug 2025 13:56:05 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=27OHyTatUTv2cpjJFk8Xts0X94MWg28Mcirkj8vy9Ws-1754574965-1.0.1.1-HgocaUr9ILNuPOu2yIeONSpZlqNCwmZSGLcly_aREClIJKObeqotU1LsHGmknv.wGksDeT7xshlB_GJI5XeyjBt8vMP99YGdCbNyxbUAIUU;
+        path=/; expires=Thu, 07-Aug-25 14:26:05 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=jqu5F7mBu243YgTsFOsOzwiNnvUJsK7s0VBRgGfBh_I-1754574965539-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-allow-origin:
+      - '*'
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-model:
+      - gpt-3.5-turbo-instruct:20230824-v2
+      openai-organization:
+      - datadog-staging
+      openai-processing-ms:
+      - '323'
+      openai-project:
+      - proj_gt6TQZPRbZfoY2J9AQlEJMpd
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains; preload
+      via:
+      - envoy-router-769c5f49f9-4zbjv
+      x-envoy-upstream-service-time:
+      - '362'
+      x-ratelimit-limit-requests:
+      - '3500'
+      x-ratelimit-limit-tokens:
+      - '90000'
+      x-ratelimit-remaining-requests:
+      - '3498'
+      x-ratelimit-remaining-tokens:
+      - '89995'
+      x-ratelimit-reset-requests:
+      - 17ms
+      x-ratelimit-reset-tokens:
+      - 3ms
+      x-request-id:
+      - req_daca03c47d9447428deaf3f73730005e
+    status:
+      code: 200
+      message: OK
+version: 1

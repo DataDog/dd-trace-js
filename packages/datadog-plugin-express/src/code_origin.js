@@ -5,9 +5,7 @@ const Plugin = require('../../dd-trace/src/plugins/plugin')
 const web = require('../../dd-trace/src/plugins/util/web')
 
 class ExpressCodeOriginForSpansPlugin extends Plugin {
-  static get id () {
-    return 'express'
-  }
+  static id = 'express'
 
   constructor (...args) {
     super(...args)

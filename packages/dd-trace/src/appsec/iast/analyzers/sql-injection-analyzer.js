@@ -16,7 +16,10 @@ class SqlInjectionAnalyzer extends StoredInjectionAnalyzer {
   onConfigure () {
     this.addSub('apm:mysql:query:start', ({ sql }) => this.analyze(sql, undefined, 'MYSQL'))
     this.addSub('datadog:mysql2:outerquery:start', ({ sql }) => this.analyze(sql, undefined, 'MYSQL'))
-    this.addSub('apm:pg:query:start', ({ query }) => this.analyze(query.text, undefined, 'POSTGRES'))
+    this.addSub(
+      'apm:pg:query:start',
+      ({ originalText, query }) => this.analyze(originalText || query.text, undefined, 'POSTGRES')
+    )
 
     this.addBind(
       'datadog:sequelize:query:start',
@@ -24,17 +27,22 @@ class SqlInjectionAnalyzer extends StoredInjectionAnalyzer {
     )
     this.addSub('datadog:sequelize:query:finish', () => this.returnToParentStore())
 
-    this.addSub('datadog:pg:pool:query:start', ({ query }) => this.setStoreAndAnalyze(query.text, 'POSTGRES'))
+    this.addBind('datadog:pg:pool:query:start', ({ query }) => this.getStoreAndAnalyze(query.text, 'POSTGRES'))
     this.addSub('datadog:pg:pool:query:finish', () => this.returnToParentStore())
 
     this.addSub('datadog:mysql:pool:query:start', ({ sql }) => this.setStoreAndAnalyze(sql, 'MYSQL'))
     this.addSub('datadog:mysql:pool:query:finish', () => this.returnToParentStore())
 
-    this.addSub('datadog:knex:raw:start', ({ sql, dialect: knexDialect }) => {
+    this.addBind('datadog:knex:raw:start', (context) => {
+      const { sql, dialect: knexDialect } = context
       const dialect = this.normalizeKnexDialect(knexDialect)
-      this.setStoreAndAnalyze(sql, dialect)
+      const currentStore = this.getStoreAndAnalyze(sql, dialect)
+      context.currentStore = currentStore
+      return currentStore
     })
-    this.addSub('datadog:knex:raw:finish', () => this.returnToParentStore())
+
+    this.addBind('datadog:knex:raw:subscribes', ({ currentStore }) => currentStore)
+    this.addBind('datadog:knex:raw:finish', ({ currentStore }) => currentStore?.sqlParentStore)
   }
 
   setStoreAndAnalyze (query, dialect) {
@@ -54,8 +62,7 @@ class SqlInjectionAnalyzer extends StoredInjectionAnalyzer {
     }
   }
 
-  returnToParentStore () {
-    const store = storage('legacy').getStore()
+  returnToParentStore (store = storage('legacy').getStore()) {
     if (store && store.sqlParentStore) {
       storage('legacy').enterWith(store.sqlParentStore)
     }

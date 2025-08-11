@@ -48,9 +48,7 @@ const {
 const { appClosing: appClosingTelemetry } = require('../../dd-trace/src/telemetry')
 
 class PlaywrightPlugin extends CiPlugin {
-  static get id () {
-    return 'playwright'
-  }
+  static id = 'playwright'
 
   constructor (...args) {
     super(...args)

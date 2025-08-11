@@ -3,17 +3,11 @@
 const EventPlugin = require('./event')
 
 class NetPlugin extends EventPlugin {
-  static get id () {
-    return 'net'
-  }
+  static id = 'net'
 
-  static get operation () {
-    return 'tcp'
-  }
+  static operation = 'tcp'
 
-  static get entryType () {
-    return 'net'
-  }
+  static entryType = 'net'
 
   extendEvent (event, { options }) {
     event.name = 'connect'

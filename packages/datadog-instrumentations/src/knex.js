@@ -1,10 +1,11 @@
 'use strict'
 
-const { addHook, channel, AsyncResource } = require('./helpers/instrument')
+const { addHook, channel } = require('./helpers/instrument')
 const { wrapThen } = require('./helpers/promise')
 const shimmer = require('../../datadog-shimmer')
 
 const startRawQueryCh = channel('datadog:knex:raw:start')
+const rawQuerySubscribes = channel('datadog:knex:raw:subscribes')
 const finishRawQueryCh = channel('datadog:knex:raw:finish')
 
 patch('lib/query/builder.js')
@@ -22,8 +23,8 @@ function patch (file) {
   })
 }
 
-function finish () {
-  finishRawQueryCh.publish()
+function finish (context, cb) {
+  finishRawQueryCh.runStores(context, cb)
 }
 
 addHook({
@@ -43,21 +44,18 @@ addHook({
       return raw.apply(this, arguments)
     }
 
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-
-    return asyncResource.runInAsyncScope(() => {
-      startRawQueryCh.publish({ sql, dialect: this.dialect })
-
+    const context = { sql, dialect: this.dialect }
+    return startRawQueryCh.runStores(context, () => {
       const rawResult = raw.apply(this, arguments)
       shimmer.wrap(rawResult, 'then', originalThen => function () {
-        return asyncResource.runInAsyncScope(() => {
-          arguments[0] = wrapCallbackWithFinish(arguments[0], finish)
-          if (arguments[1]) arguments[1] = wrapCallbackWithFinish(arguments[1], finish)
+        return rawQuerySubscribes.runStores(context, () => {
+          arguments[0] = wrapCallbackWithFinish(arguments[0], finish, context)
+          if (arguments[1]) arguments[1] = wrapCallbackWithFinish(arguments[1], finish, context)
 
           const originalThenResult = originalThen.apply(this, arguments)
 
           shimmer.wrap(originalThenResult, 'catch', originalCatch => function () {
-            arguments[0] = wrapCallbackWithFinish(arguments[0], finish)
+            arguments[0] = wrapCallbackWithFinish(arguments[0], finish, context)
             return originalCatch.apply(this, arguments)
           })
 
@@ -66,8 +64,8 @@ addHook({
       })
 
       shimmer.wrap(rawResult, 'asCallback', originalAsCallback => function () {
-        return asyncResource.runInAsyncScope(() => {
-          arguments[0] = wrapCallbackWithFinish(arguments[0], finish)
+        return rawQuerySubscribes.runStores(context, () => {
+          arguments[0] = wrapCallbackWithFinish(arguments[0], finish, context)
           return originalAsCallback.apply(this, arguments)
         })
       })
@@ -75,14 +73,14 @@ addHook({
       return rawResult
     })
   })
+
   return Knex
 })
 
-function wrapCallbackWithFinish (callback, finish) {
+function wrapCallbackWithFinish (callback, finish, context) {
   if (typeof callback !== 'function') return callback
 
   return shimmer.wrapFunction(callback, callback => function () {
-    finish()
-    callback.apply(this, arguments)
+    finish(context, () => callback.apply(this, arguments))
   })
 }
