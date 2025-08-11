@@ -3,7 +3,6 @@
 const { expect } = require('chai')
 const sinon = require('sinon')
 const http = require('http')
-const dc = require('dc-polyfill')
 
 describe('Google Cloud Pub/Sub HTTP Handler Plugin', () => {
   let server, port

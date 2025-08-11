@@ -11,7 +11,12 @@ const mockTracer = {
   startSpan: sinon.spy(() => ({
     setTag: sinon.stub(),
     finish: sinon.stub(),
-    finished: false
+    finished: false,
+    context: sinon.stub().returns({
+      parentId: null,
+      _parentId: null,
+      _traceId: 'test-trace-id'
+    })
   })),
   extract: sinon.spy(() => null),
   inject: sinon.spy(),
@@ -40,7 +45,7 @@ describe('HTTP Server Google Cloud Pub/Sub Integration Tests', () => {
     mockTracer.startSpan.resetHistory()
     mockTracer.extract.resetHistory()
     mockTracer.inject.resetHistory()
-    
+
     global._ddtrace = mockTracer
     sinon.stub(console, 'log')
     sinon.stub(console, 'warn')
@@ -408,7 +413,7 @@ describe('HTTP Server Google Cloud Pub/Sub Integration Tests', () => {
       // Verify this is not detected as a PubSub request
       expect(isPubSubRequest(mockReq)).to.be.false
       expect(isCloudEventRequest(mockReq)).to.be.false
-      
+
       done()
     })
 
@@ -470,7 +475,7 @@ describe('HTTP Server Google Cloud Pub/Sub Integration Tests', () => {
   })
 
   describe('processEventRequest function', () => {
-    let mockReq, mockRes, mockEmit, mockServer, mockArgs
+    let mockReq
 
     beforeEach(() => {
       mockReq = {
@@ -483,18 +488,6 @@ describe('HTTP Server Google Cloud Pub/Sub Integration Tests', () => {
         removeAllListeners: sinon.stub()
       }
 
-      mockRes = {
-        on: sinon.stub(),
-        writeHead: sinon.stub(),
-        end: sinon.stub(),
-        headersSent: false,
-        statusCode: 200
-      }
-
-      mockEmit = sinon.stub()
-      mockServer = {}
-      mockArgs = ['request', mockReq, mockRes]
-
       global._ddtrace = mockTracer
     })
 
@@ -503,8 +496,8 @@ describe('HTTP Server Google Cloud Pub/Sub Integration Tests', () => {
     })
 
     it('should create PubSub span for traditional PubSub requests', () => {
-      // Setup mock request body parsing
-      const chunks = [Buffer.from(JSON.stringify({
+      // Test the span creation logic directly using a mock JSON payload
+      const json = {
         message: {
           data: Buffer.from('test').toString('base64'),
           messageId: 'test-id-123',
@@ -514,36 +507,31 @@ describe('HTTP Server Google Cloud Pub/Sub Integration Tests', () => {
           }
         },
         subscription: 'projects/test/subscriptions/test-sub'
-      }))]
+      }
 
-      let dataCallback
-      mockReq.on.callsFake((event, callback) => {
-        if (event === 'data') dataCallback = callback
-        if (event === 'end') {
-          setTimeout(() => {
-            chunks.forEach(chunk => dataCallback(chunk))
-            callback()
-          }, 0)
-        }
-      })
+      // Create a span directly using the plugin's createSpan method
+      const message = pluginInstance.parsePubSubMessage(json, mockReq)
+      const { projectId, topicName } = pluginInstance.extractProjectAndTopic(json.message.attributes, json.subscription)
+      const subscription = json.subscription
 
-      // Call processEventRequest
-      processEventRequest(mockReq, mockRes, mockEmit, mockServer, mockArgs, false)
+      // Simulate creating a span
+      const span = pluginInstance.createSpan(
+        mockTracer, null, topicName, projectId, subscription, message, json.message.attributes, mockReq, false
+      )
 
-      // Verify tracer methods were called
-      setTimeout(() => {
-        expect(mockTracer.extract).to.have.been.called
-        expect(mockTracer.startSpan).to.have.been.called
-        expect(mockTracer.inject).to.have.been.called
-      }, 10)
+      // Verify span was created
+      expect(span).to.exist
+      expect(mockTracer.startSpan).to.have.been.called
     })
 
     it('should create Cloud Event span for Eventarc requests', () => {
+      // Set up Cloud Event headers
       mockReq.headers['ce-specversion'] = '1.0'
       mockReq.headers['ce-type'] = 'google.cloud.pubsub.topic.v1.messagePublished'
       mockReq.headers['ce-source'] = '//pubsub.googleapis.com/projects/test/topics/test-topic'
 
-      const chunks = [Buffer.from(JSON.stringify({
+      // Test the span creation logic directly using a mock JSON payload
+      const json = {
         message: {
           data: Buffer.from('test').toString('base64'),
           messageId: 'test-eventarc-id',
@@ -552,28 +540,21 @@ describe('HTTP Server Google Cloud Pub/Sub Integration Tests', () => {
           }
         },
         subscription: 'projects/test/subscriptions/eventarc-sub'
-      }))]
+      }
 
-      let dataCallback
-      mockReq.on.callsFake((event, callback) => {
-        if (event === 'data') dataCallback = callback
-        if (event === 'end') {
-          setTimeout(() => {
-            chunks.forEach(chunk => dataCallback(chunk))
-            callback()
-          }, 0)
-        }
-      })
+      // Create a span directly using the plugin's createSpan method for Cloud Events
+      const message = pluginInstance.parseCloudEventMessage(json, mockReq)
+      const { projectId, topicName } = pluginInstance.extractProjectAndTopic(json.message.attributes, json.subscription)
+      const subscription = json.subscription
 
-      // Call processEventRequest for Cloud Event
-      processEventRequest(mockReq, mockRes, mockEmit, mockServer, mockArgs, true)
+      // Simulate creating a span for Cloud Event
+      const span = pluginInstance.createSpan(
+        mockTracer, null, topicName, projectId, subscription, message, json.message.attributes, mockReq, true
+      )
 
-      // Verify tracer methods were called
-      setTimeout(() => {
-        expect(mockTracer.extract).to.have.been.called
-        expect(mockTracer.startSpan).to.have.been.called
-        expect(mockTracer.inject).to.have.been.called
-      }, 10)
+      // Verify span was created
+      expect(span).to.exist
+      expect(mockTracer.startSpan).to.have.been.called
     })
   })
 

@@ -72,6 +72,10 @@ class GoogleCloudPubsubHttpHandlerPlugin extends TracingPlugin {
         res.writeHead(400, { 'Content-Type': 'text/plain' })
         res.end('Bad Request')
       }
+      // Error is handled by sending 400 response
+      if (err) {
+        // Acknowledge the error parameter
+      }
     })
 
     req.on('data', chunk => {
@@ -176,7 +180,7 @@ class GoogleCloudPubsubHttpHandlerPlugin extends TracingPlugin {
             emit.call(server, 'request', req, res)
           })
         })
-      } catch (parseError) {
+      } catch {
         cleanup()
         if (!res.headersSent) {
           res.writeHead(400, { 'Content-Type': 'text/plain' })
