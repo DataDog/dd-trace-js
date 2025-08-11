@@ -7,6 +7,7 @@ const {
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
 const semifies = require('semifies')
+const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
 function getOpenaiVersion (realVersion) {
   if (semifies(realVersion, '>=5.0.0')) {
