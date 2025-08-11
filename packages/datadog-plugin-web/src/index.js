@@ -42,8 +42,8 @@ class WebPlugin extends TracingPlugin {
   static kind = SERVER
   static type = WEB
 
-  constructor (...args) {
-    super(...args)
+  constructor (tracer, config) {
+    super(tracer, config)
     this.addSub('apm:http:server:request:error', ({ req, error }) => {
       if (error) {
         this.addError(req, error)
@@ -66,7 +66,7 @@ class WebPlugin extends TracingPlugin {
       this.addError(req, error)
     })
 
-    this.configure(this.config)
+    this.configure(config)
   }
 
   configure (config) {
@@ -112,6 +112,8 @@ class WebPlugin extends TracingPlugin {
     const context = contexts.get(req)
     if (!context) return
 
+    context.config = this.config
+
     const span = context.span
     if (!span) return
 
@@ -143,7 +145,7 @@ class WebPlugin extends TracingPlugin {
     context.span = span
     context.res = res
 
-    this.setConfig(req)
+    // this.setConfig(req)
     this._addRequestTags(context, this.constructor.type)
 
     return span
