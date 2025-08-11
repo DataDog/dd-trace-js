@@ -7,6 +7,7 @@ const http = require('http')
 const { once } = require('events')
 const agent = require('../../dd-trace/test/plugins/agent')
 const web = require('../../datadog-plugin-web/src')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
 

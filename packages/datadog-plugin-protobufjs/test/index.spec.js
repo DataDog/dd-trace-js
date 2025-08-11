@@ -1,9 +1,10 @@
 'use strict'
 
 const fs = require('fs')
+const path = require('path')
 const { expect } = require('chai')
 const agent = require('../../dd-trace/test/plugins/agent')
-const path = require('path')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const {
   SCHEMA_DEFINITION,
   SCHEMA_ID,

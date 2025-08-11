@@ -4,6 +4,7 @@ const { assert } = require('chai')
 const dc = require('dc-polyfill')
 const axios = require('axios')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 withVersions('cookie-parser', 'cookie-parser', version => {
   describe('cookie parser instrumentation', () => {
