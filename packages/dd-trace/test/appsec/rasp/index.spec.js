@@ -1,7 +1,6 @@
 'use strict'
 
 const proxyquire = require('proxyquire')
-const { handleUncaughtExceptionMonitor } = require('../../../src/appsec/rasp')
 const { DatadogRaspAbortError } = require('../../../src/appsec/rasp/utils')
 
 describe('RASP', () => {
@@ -30,6 +29,8 @@ describe('RASP', () => {
         hasSubscribers: true
       }
     }
+
+    blocked = false
 
     blocking = {
       block: sinon.stub().returns(true),
@@ -60,7 +61,7 @@ describe('RASP', () => {
       const err = new Error()
       err.cause = err
 
-      handleUncaughtExceptionMonitor(err)
+      rasp.handleUncaughtExceptionMonitor(err)
     })
   })
 
@@ -131,6 +132,17 @@ describe('RASP', () => {
 
       setImmediate(() => {
         sinon.assert.calledOnce(updateRaspRuleMatchMetricTags)
+        done()
+      })
+    })
+
+    it('should block without delegate when called by handleUncaughtExceptionMonitor', (done) => {
+      rasp.handleUncaughtExceptionMonitor(new DatadogRaspAbortError(req, res, blockingAction, raspRule, true))
+
+      sinon.assert.calledOnce(blocking.block)
+
+      setImmediate(() => {
+        sinon.assert.calledOnceWithExactly(updateRaspRuleMatchMetricTags, req, raspRule, true, true)
         done()
       })
     })
