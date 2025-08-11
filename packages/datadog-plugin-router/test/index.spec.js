@@ -6,7 +6,7 @@ const axios = require('axios')
 const http = require('http')
 const { once } = require('events')
 const agent = require('../../dd-trace/test/plugins/agent')
-const web = require('../../dd-trace/src/plugins/util/web')
+const web = require('../../datadog-plugin-web/src')
 
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
 

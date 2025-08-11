@@ -23,7 +23,7 @@ describe('Overhead controller', () => {
       }
 
       overheadController = proxyquire('../../../src/appsec/iast/overhead-controller', {
-        '../../plugins/util/web': web
+        '../../../../datadog-plugin-web/src/index': web
       })
       oceContextKey = overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY
 

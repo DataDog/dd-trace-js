@@ -22,7 +22,7 @@ const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 const HTTP_USERAGENT = tags.HTTP_USERAGENT
 const HTTP_CLIENT_IP = tags.HTTP_CLIENT_IP
 
-describe('plugins/util/web', () => {
+describe('Plugin', () => {
   let web
   let tracer
   let span

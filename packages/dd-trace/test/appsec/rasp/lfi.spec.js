@@ -34,7 +34,7 @@ describe('RASP - lfi.js', () => {
     lfi = proxyquire('../../../src/appsec/rasp/lfi', {
       '../../../../datadog-core': { storage: () => legacyStorage },
       '../waf': waf,
-      '../../plugins/util/web': web,
+      '../../../../datadog-plugin-web/src/index': web,
       '../blocking': blocking,
       './fs-plugin': appsecFsPlugin
     })

@@ -124,7 +124,7 @@ describe('AppSec Index', function () {
     }
 
     apiSecuritySampler = proxyquire('../../src/appsec/api_security_sampler', {
-      '../plugins/util/web': web
+      '../../../datadog-plugin-web/src/index': web
     })
     sinon.spy(apiSecuritySampler, 'sampleRequest')
 
@@ -145,7 +145,7 @@ describe('AppSec Index', function () {
 
     AppSec = proxyquire('../../src/appsec', {
       '../log': log,
-      '../plugins/util/web': web,
+      '../../../datadog-plugin-web/src/index': web,
       './blocking': blocking,
       './user_tracking': UserTracking,
       './telemetry': appsecTelemetry,

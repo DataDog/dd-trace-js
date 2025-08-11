@@ -24,7 +24,7 @@ describe('RASP - utils.js', () => {
     }
 
     utils = proxyquire('../../../src/appsec/rasp/utils', {
-      '../../plugins/util/web': web,
+      '../../../../datadog-plugin-web/src/index': web,
       '../stack_trace': stackTrace,
       '../telemetry': telemetry,
       '../blocking': {

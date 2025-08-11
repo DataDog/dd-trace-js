@@ -23,7 +23,7 @@ describe('API Security Sampler', () => {
     }
 
     apiSecuritySampler = proxyquire('../../src/appsec/api_security_sampler', {
-      '../plugins/util/web': webStub
+      '../../../datadog-plugin-web/src/index': webStub
     })
 
     span = {
@@ -204,7 +204,7 @@ describe('API Security Sampler', () => {
     beforeEach(() => {
       keepTraceStub = sinon.stub()
       apiSecuritySampler = proxyquire('../../src/appsec/api_security_sampler', {
-        '../plugins/util/web': webStub,
+        '../../../datadog-plugin-web/src/index': webStub,
         '../priority_sampler': {
           keepTrace: keepTraceStub
         },

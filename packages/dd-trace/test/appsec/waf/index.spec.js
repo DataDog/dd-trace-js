@@ -59,7 +59,7 @@ describe('WAF Manager', () => {
       '../../rate_limiter': function () { return limiterStub },
       '../../priority_sampler': { keepTrace },
       '../../standalone/product': { ASM: 'ASM' },
-      '../../plugins/util/web': webMock,
+      '../../../../datadog-plugin-web/src/index': webMock,
       '../telemetry': { updateRateLimitedMetric }
     })
     waf.destroy()

@@ -39,6 +39,8 @@ const ends = new WeakMap()
 
 class WebPlugin extends TracingPlugin {
   static id = WEB
+  static kind = SERVER
+  static type = WEB
 
   constructor (...args) {
     super(...args)
@@ -142,7 +144,7 @@ class WebPlugin extends TracingPlugin {
     context.res = res
 
     this.setConfig(req)
-    this._addRequestTags(context, this.constructor.id)
+    this._addRequestTags(context, this.constructor.type)
 
     return span
   }
@@ -301,7 +303,7 @@ class WebPlugin extends TracingPlugin {
     const headers = req.headers
     const childOf = this.tracer.extract(FORMAT_HTTP_HEADERS, headers)
 
-    const span = super.startSpan(name, { childOf }, traceCtx)
+    const span = super.startSpan(name, { childOf, kind: this.constructor.kind, type: this.constructor.type }, traceCtx)
 
     return span
   }
@@ -352,7 +354,7 @@ class WebPlugin extends TracingPlugin {
 
     if (context.finished && !req.stream) return
 
-    this._addRequestTags(context, this.constructor.id)
+    this._addRequestTags(context, this.constructor.type)
     this._addResponseTags(context)
 
     context.config.hooks.request(context.span, req, res)

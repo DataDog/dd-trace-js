@@ -6,24 +6,20 @@ const WebPlugin = require('../../datadog-plugin-web/src')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 
 class Http2ServerPlugin extends WebPlugin {
+  static id = 'http2'
+  static prefix = 'apm:http2:server:request'
+
   constructor (tracer, config) {
     super(tracer, config)
-    this.addBind('apm:http2:server:response:emit', this.bindEmit)
+    this.addBind('apm:http2:server:response:emit', this.bindEmit.bind(this))
+
+    this.configure({ service: config.service || this.serviceName() })
   }
-
-  static id = 'http2'
-
-  static prefix = 'apm:http2:server:request'
 
   bindStart (ctx) {
     const { req, res } = ctx
 
     const span = this.startSpan(
-      this.tracer,
-      {
-        ...this.config,
-        service: this.config.service || this.serviceName()
-      },
       req,
       res,
       this.operationName(),
