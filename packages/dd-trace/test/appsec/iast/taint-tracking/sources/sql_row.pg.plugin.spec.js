@@ -1,6 +1,7 @@
 'use strict'
 
 const { prepareTestServerForIast } = require('../../utils')
+const { withVersions } = require('../../../../setup/mocha')
 
 const connectionData = {
   host: '127.0.0.1',
@@ -108,6 +109,6 @@ describe('db sources with pg', () => {
           res.end('OK')
         }, 'COMMAND_INJECTION', null, 'Should not detect COMMAND_INJECTION with database source')
       })
-    })
+    }, undefined, ['pg'])
   })
 })

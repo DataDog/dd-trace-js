@@ -60,7 +60,7 @@ module.exports = class Plugin {
   }
 
   get tracer () {
-    return this._tracer._tracer
+    return this._tracer?._tracer || this._tracer
   }
 
   enter (span, store) {

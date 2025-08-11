@@ -28,9 +28,9 @@ const {
   GIT_COMMIT_HEAD_AUTHOR_DATE,
   GIT_COMMIT_HEAD_AUTHOR_EMAIL,
   GIT_COMMIT_HEAD_AUTHOR_NAME,
-  GIT_COMMIT_HEAD_COMMITER_DATE,
-  GIT_COMMIT_HEAD_COMMITER_EMAIL,
-  GIT_COMMIT_HEAD_COMMITER_NAME
+  GIT_COMMIT_HEAD_COMMITTER_DATE,
+  GIT_COMMIT_HEAD_COMMITTER_EMAIL,
+  GIT_COMMIT_HEAD_COMMITTER_NAME
 } = require('../../../src/plugins/util/tags')
 
 const { getGitMetadata, unshallowRepository, getGitDiff } = proxyquire('../../../src/plugins/util/git',
@@ -91,10 +91,9 @@ describe('git', () => {
     expect(execFileSyncStub).not.to.have.been.calledWith('git', ['rev-parse', 'HEAD'])
     expect(execFileSyncStub).not.to.have.been.calledWith('git', ['rev-parse', '--abbrev-ref', 'HEAD'])
     expect(execFileSyncStub).not.to.have.been.calledWith('git', ['rev-parse', '--show-toplevel'])
-    expect(execFileSyncStub).to.have.been.calledWith('git', ['show', '-s', '--format=%B', ciMetadata.headCommitSha])
     expect(execFileSyncStub).to.have.been.calledWith(
       'git',
-      ['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI', ciMetadata.headCommitSha]
+      ['show', '-s', '--format=\'%H","%aI","%an","%ae","%cI","%cn","%ce","%B\'', ciMetadata.headCommitSha]
     )
   })
 
@@ -128,12 +127,13 @@ describe('git', () => {
       .onCall(3).returns('gitCommitSHA')
       .onCall(4).returns('ciWorkspacePath')
       .onCall(5).returns(false)
-      .onCall(6).returns(headCommitMessage)
-      .onCall(7).returns(
-        'git head author,git.head.author@email.com,2022-02-14T16:22:03-05:00,' +
-        'git head committer,git.head.committer@email.com,2022-02-14T16:23:03-05:00'
+      .onCall(6).returns(
+        'headCommitSha",' +
+        '"2022-02-14T16:22:03-05:00","git head author","git.head.author@email.com",' +
+        '"2022-02-14T16:23:03-05:00","git head committer","git.head.committer@email.com",' +
+        '"' + headCommitMessage
       )
-      .onCall(8).returns('https://github.com/datadog/safe-repository.git')
+      .onCall(7).returns('https://github.com/datadog/safe-repository.git')
 
     const metadata = getGitMetadata({ tag: 'ciTag', headCommitSha: 'headCommitSha' })
 
@@ -153,9 +153,9 @@ describe('git', () => {
       [GIT_COMMIT_HEAD_AUTHOR_DATE]: '2022-02-14T16:22:03-05:00',
       [GIT_COMMIT_HEAD_AUTHOR_EMAIL]: 'git.head.author@email.com',
       [GIT_COMMIT_HEAD_AUTHOR_NAME]: 'git head author',
-      [GIT_COMMIT_HEAD_COMMITER_DATE]: '2022-02-14T16:23:03-05:00',
-      [GIT_COMMIT_HEAD_COMMITER_EMAIL]: 'git.head.committer@email.com',
-      [GIT_COMMIT_HEAD_COMMITER_NAME]: 'git head committer',
+      [GIT_COMMIT_HEAD_COMMITTER_DATE]: '2022-02-14T16:23:03-05:00',
+      [GIT_COMMIT_HEAD_COMMITTER_EMAIL]: 'git.head.committer@email.com',
+      [GIT_COMMIT_HEAD_COMMITTER_NAME]: 'git head committer',
       [CI_WORKSPACE_PATH]: 'ciWorkspacePath'
     })
 
@@ -830,5 +830,40 @@ describe('getGitInformationDiscrepancy', () => {
       gitRepositoryUrl: '',
       gitCommitSHA: ''
     })
+  })
+})
+
+describe('fetchHeadCommitSha', () => {
+  const { fetchHeadCommitSha } = proxyquire('../../../src/plugins/util/git',
+    {
+      child_process: {
+        execFileSync: execFileSyncStub
+      }
+    }
+  )
+
+  it('fetches the head commit SHA', () => {
+    const headSha = 'abc123'
+    const remoteName = 'origin'
+
+    execFileSyncStub
+      .onCall(0).returns(null)
+      .onCall(1).returns(null)
+      .onCall(2).returns('')
+
+    fetchHeadCommitSha(headSha)
+
+    expect(execFileSyncStub).to.have.been.calledWith(
+      'git',
+      [
+        'fetch',
+        '--update-shallow',
+        '--filter=blob:none',
+        '--recurse-submodules=no',
+        '--no-write-fetch-head',
+        remoteName,
+        headSha
+      ]
+    )
   })
 })

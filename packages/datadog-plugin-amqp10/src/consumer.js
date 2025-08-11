@@ -4,8 +4,8 @@ const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const { getAddress, getShortName } = require('./util')
 
 class Amqp10ConsumerPlugin extends ConsumerPlugin {
-  static get id () { return 'amqp10' }
-  static get system () { return 'amqp' }
+  static id = 'amqp10'
+  static system = 'amqp'
 
   bindStart (ctx) {
     const { link } = ctx

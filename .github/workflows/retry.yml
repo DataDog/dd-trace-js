@@ -3,6 +3,7 @@ name: Retry
 on:
   workflow_run:
     branches:
+      - dependabot/**
       - master
       - v[0-9]+.[0-9]+.[0-9]+-proposal
       - v[0-9]+.x
@@ -13,11 +14,11 @@ on:
       - APM Integrations
       - AppSec
       - Debugger
-      - Lambda
       - LLMObs
       - Platform
       - Profiling
       - Project
+      - Serverless
       - System Tests
       - Test Optimization
 

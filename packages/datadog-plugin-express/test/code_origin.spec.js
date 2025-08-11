@@ -4,6 +4,7 @@ const axios = require('axios')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { assertCodeOriginFromTraces } = require('../../datadog-code-origin/test/helpers')
 const { getNextLineNumber } = require('../../dd-trace/test/plugins/helpers')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 const host = 'localhost'
 
@@ -85,6 +86,17 @@ describe('Plugin', () => {
               app.get('/route_after', (req, res) => res.end())
 
               await assertCodeOrigin('/v1/user', { line, method: 'testCase', type: 'Context' })
+            })
+
+            it('should support .use() routes', async function testCase () {
+              app.get('/route_before', (req, res) => res.end())
+              const line = getNextLineNumber()
+              app.use('/foo', (req, res) => {
+                res.end()
+              })
+              app.get('/route_after', (req, res) => res.end())
+
+              await assertCodeOrigin('/foo/bar', { line, method: 'testCase', type: 'Context' })
             })
 
             it('should point to route handler even if passed through a middleware', async function testCase () {

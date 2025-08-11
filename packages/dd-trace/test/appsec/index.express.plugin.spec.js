@@ -3,11 +3,12 @@
 const Axios = require('axios')
 const { assert } = require('chai')
 const path = require('path')
+const zlib = require('node:zlib')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
 const { json } = require('../../src/appsec/blocked_templates')
-const zlib = require('zlib')
+const { withVersions } = require('../setup/mocha')
 
 withVersions('express', 'express', version => {
   describe('Suspicious request blocking - path parameters', () => {

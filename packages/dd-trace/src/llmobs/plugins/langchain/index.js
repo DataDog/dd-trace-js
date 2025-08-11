@@ -25,11 +25,9 @@ const ToolHandler = require('./handlers/tool')
 const VectorStoreHandler = require('./handlers/vectorstore')
 
 class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
-  static get integration () { return 'langchain' }
-  static get id () { return 'langchain' }
-  static get prefix () {
-    return 'tracing:apm:langchain:invoke'
-  }
+  static integration = 'langchain'
+  static id = 'langchain'
+  static prefix = 'tracing:apm:langchain:invoke'
 
   constructor () {
     super(...arguments)
@@ -150,75 +148,57 @@ class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
 }
 
 class RunnableSequenceInvokePlugin extends BaseLangChainLLMObsPlugin {
-  static get id () { return 'llmobs_langchain_rs_invoke' }
-  static get lcType () { return 'chain' }
-  static get prefix () {
-    return 'tracing:orchestrion:@langchain/core:RunnableSequence_invoke'
-  }
+  static id = 'llmobs_langchain_rs_invoke'
+  static lcType = 'chain'
+  static prefix = 'tracing:orchestrion:@langchain/core:RunnableSequence_invoke'
 }
 
 class RunnableSequenceBatchPlugin extends BaseLangChainLLMObsPlugin {
-  static get id () { return 'llmobs_langchain_rs_batch' }
-  static get lcType () { return 'chain' }
-  static get prefix () {
-    return 'tracing:orchestrion:@langchain/core:RunnableSequence_batch'
-  }
+  static id = 'llmobs_langchain_rs_batch'
+  static lcType = 'chain'
+  static prefix = 'tracing:orchestrion:@langchain/core:RunnableSequence_batch'
 }
 
 class BaseChatModelGeneratePlugin extends BaseLangChainLLMObsPlugin {
-  static get id () { return 'llmobs_langchain_chat_model_generate' }
-  static get lcType () { return 'chat_model' }
-  static get prefix () {
-    return 'tracing:orchestrion:@langchain/core:BaseChatModel_generate'
-  }
+  static id = 'llmobs_langchain_chat_model_generate'
+  static lcType = 'chat_model'
+  static prefix = 'tracing:orchestrion:@langchain/core:BaseChatModel_generate'
 }
 
 class BaseLLMGeneratePlugin extends BaseLangChainLLMObsPlugin {
-  static get id () { return 'llmobs_langchain_llm_generate' }
-  static get lcType () { return 'llm' }
-  static get prefix () {
-    return 'tracing:orchestrion:@langchain/core:BaseLLM_generate'
-  }
+  static id = 'llmobs_langchain_llm_generate'
+  static lcType = 'llm'
+  static prefix = 'tracing:orchestrion:@langchain/core:BaseLLM_generate'
 }
 
 class EmbeddingsEmbedQueryPlugin extends BaseLangChainLLMObsPlugin {
-  static get id () { return 'llmobs_langchain_embeddings_embed_query' }
-  static get lcType () { return 'embedding' }
-  static get prefix () {
-    return 'tracing:apm:@langchain/core:Embeddings_embedQuery'
-  }
+  static id = 'llmobs_langchain_embeddings_embed_query'
+  static lcType = 'embedding'
+  static prefix = 'tracing:apm:@langchain/core:Embeddings_embedQuery'
 }
 
 class EmbeddingsEmbedDocumentsPlugin extends BaseLangChainLLMObsPlugin {
-  static get id () { return 'llmobs_langchain_embeddings_embed_documents' }
-  static get lcType () { return 'embedding' }
-  static get prefix () {
-    return 'tracing:apm:@langchain/core:Embeddings_embedDocuments'
-  }
+  static id = 'llmobs_langchain_embeddings_embed_documents'
+  static lcType = 'embedding'
+  static prefix = 'tracing:apm:@langchain/core:Embeddings_embedDocuments'
 }
 
 class ToolInvokePlugin extends BaseLangChainLLMObsPlugin {
-  static get id () { return 'llmobs_langchain_tool_invoke' }
-  static get lcType () { return 'tool' }
-  static get prefix () {
-    return 'tracing:orchestrion:@langchain/core:Tool_invoke'
-  }
+  static id = 'llmobs_langchain_tool_invoke'
+  static lcType = 'tool'
+  static prefix = 'tracing:orchestrion:@langchain/core:Tool_invoke'
 }
 
 class VectorStoreSimilaritySearchPlugin extends BaseLangChainLLMObsPlugin {
-  static get id () { return 'llmobs_langchain_vectorstore_similarity_search' }
-  static get lcType () { return 'similarity_search' }
-  static get prefix () {
-    return 'tracing:orchestrion:@langchain/core:VectorStore_similaritySearch'
-  }
+  static id = 'llmobs_langchain_vectorstore_similarity_search'
+  static lcType = 'similarity_search'
+  static prefix = 'tracing:orchestrion:@langchain/core:VectorStore_similaritySearch'
 }
 
 class VectorStoreSimilaritySearchWithScorePlugin extends BaseLangChainLLMObsPlugin {
-  static get id () { return 'llmobs_langchain_vectorstore_similarity_search_with_score' }
-  static get lcType () { return 'similarity_search' }
-  static get prefix () {
-    return 'tracing:orchestrion:@langchain/core:VectorStore_similaritySearchWithScore'
-  }
+  static id = 'llmobs_langchain_vectorstore_similarity_search_with_score'
+  static lcType = 'similarity_search'
+  static prefix = 'tracing:orchestrion:@langchain/core:VectorStore_similaritySearchWithScore'
 }
 
 module.exports = [

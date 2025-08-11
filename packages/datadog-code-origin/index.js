@@ -38,9 +38,12 @@ function exitTags (topOfStackFunc) {
 function tag (type, topOfStackFunc, limit) {
   // The `Error.prepareStackTrace` API doesn't support resolving source maps.
   // Fall back to manually parsing the stack trace.
+  const originalLimit = Error.stackTraceLimit
+  Error.stackTraceLimit = Infinity
   const dummy = {}
   Error.captureStackTrace(dummy, topOfStackFunc)
   const frames = parseUserLandFrames(dummy.stack, limit)
+  Error.stackTraceLimit = originalLimit
 
   const tags = {
     '_dd.code_origin.type': type

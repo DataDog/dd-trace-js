@@ -35,10 +35,6 @@ class AppsecFsPlugin extends Plugin {
     this.addBind('apm:fs:operation:finish', this._onFsOperationFinishOrRenderEnd)
     this.addBind('tracing:datadog:express:response:render:start', this._onResponseRenderStart)
     this.addBind('tracing:datadog:express:response:render:end', this._onFsOperationFinishOrRenderEnd)
-    // TODO Remove this when dc-polyfill is fixed&updated
-    //  hack to node 18 and early 20.x
-    //  with dc-polyfill addBind is not enough to force a channel.hasSubscribers === true
-    this.addSub('tracing:datadog:express:response:render:start', () => {})
 
     super.configure(true)
   }

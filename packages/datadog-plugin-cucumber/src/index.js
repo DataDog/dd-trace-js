@@ -75,9 +75,7 @@ function getTestSuiteTags (testSuiteSpan) {
 }
 
 class CucumberPlugin extends CiPlugin {
-  static get id () {
-    return 'cucumber'
-  }
+  static id = 'cucumber'
 
   constructor (...args) {
     super(...args)

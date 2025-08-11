@@ -5,6 +5,7 @@ const axios = require('axios')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE } = require('../../dd-trace/src/constants')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 describe('Plugin', () => {
   let tracer

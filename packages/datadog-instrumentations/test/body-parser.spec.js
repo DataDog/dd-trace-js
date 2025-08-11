@@ -4,6 +4,7 @@ const dc = require('dc-polyfill')
 const axios = require('axios')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { storage } = require('../../datadog-core')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 withVersions('body-parser', 'body-parser', version => {
   describe('body parser instrumentation', () => {

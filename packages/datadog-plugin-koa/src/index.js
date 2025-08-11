@@ -4,9 +4,7 @@ const RouterPlugin = require('../../datadog-plugin-router/src')
 const web = require('../../dd-trace/src/plugins/util/web')
 
 class KoaPlugin extends RouterPlugin {
-  static get id () {
-    return 'koa'
-  }
+  static id = 'koa'
 
   constructor (...args) {
     super(...args)
