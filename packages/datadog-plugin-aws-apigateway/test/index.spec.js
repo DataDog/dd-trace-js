@@ -59,14 +59,13 @@ describe('Plugin', function () {
         service: 'aws-server'
       }
 
-      require('../../dd-trace').init(options)
-
       await agent.load(
-        ['http', 'dns', 'net', 'aws-apigateway'],
-        [{ client: false }, { enabled: false }, { enabled: false }, { enabled: true }],
+        ['http', 'dns', 'net', 'tcp', 'aws-apigateway'],
+        [{ client: false }, { enabled: false }, { enabled: false }, { enabled: false }, { enabled: true }],
         options
       )
 
+      require('../../dd-trace').init(options)
       http = require('http')
 
       const server = new http.Server(async (req, res) => {

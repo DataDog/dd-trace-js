@@ -257,7 +257,7 @@ class WebPlugin extends TracingPlugin {
   }
 
   // Prepare the request for instrumentation.
-  patch (req) {
+  static patch (req) {
     let context = contexts.get(req)
 
     if (context) return context
@@ -281,6 +281,10 @@ class WebPlugin extends TracingPlugin {
     contexts.set(req, context)
 
     return context
+  }
+
+  patch (req) {
+    return WebPlugin.patch(req)
   }
 
   // Return the request root span.
