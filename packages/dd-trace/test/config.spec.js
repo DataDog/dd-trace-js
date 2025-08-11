@@ -1555,7 +1555,7 @@ describe('Config', () => {
 
     expect(config).to.have.nested.property('apmTracingEnabled', true)
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
-    expect(config).to.have.nested.property('appsec.apiSecurity.endpointCollectionEnabled', false)
+    expect(config).to.have.nested.property('appsec.apiSecurity.endpointCollectionEnabled', true)
     expect(config).to.have.nested.property('appsec.apiSecurity.endpointCollectionMessageLimit', 150)
     expect(config).to.have.nested.property('appsec.blockedTemplateGraphql', BLOCKED_TEMPLATE_GRAPHQL)
     expect(config).to.have.nested.property('appsec.blockedTemplateHtml', BLOCKED_TEMPLATE_HTML)
@@ -1720,7 +1720,9 @@ describe('Config', () => {
     expect(config).to.have.deep.property('appsec', {
       apiSecurity: {
         enabled: true,
-        sampleDelay: 30
+        sampleDelay: 30,
+        endpointCollectionEnabled: true,
+        endpointCollectionMessageLimit: 300
       },
       blockedTemplateGraphql: undefined,
       blockedTemplateHtml: undefined,
