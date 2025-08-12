@@ -33,7 +33,7 @@ jobs:
       - run: yarn test:trace:core:ci
       - uses: ./.github/actions/node/newest-maintenance-lts
       - run: yarn test:trace:core:ci
-      - uses: ./.github/actions/node/latest
+      - uses: ./.github/actions/node/active-lts
       - run: yarn test:trace:core:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:trace:core:ci
