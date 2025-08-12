@@ -15,14 +15,13 @@ class HttpServerPlugin extends WebPlugin {
     super(...args)
     this._parentStore = undefined
     this.addTraceSub('exit', message => this.exit(message))
-    this.config = {
-      ...this.config,
-      service: this.config.service || this.serviceName(),
-    }
   }
 
   start ({ req, res, abortController }) {
     const store = storage('legacy').getStore()
+
+    this.config.service = this.config.service || this.getServiceName()
+
     const span = this.startSpan(
       req,
       res,
