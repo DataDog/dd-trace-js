@@ -104,13 +104,13 @@ function flushAndSend () {
 }
 
 function start (_config = {}, _application, _host, getRetryDataFunction, updateRetryDatafunction) {
+  if (!_config?.appsec?.apiSecurity?.endpointCollectionEnabled) return
+
   config = _config
   application = _application
   host = _host
   getRetryData = getRetryDataFunction
   updateRetryData = updateRetryDatafunction
-
-  if (!config?.appsec?.apiSecurity?.endpointCollectionEnabled) return
 
   fastifyRouteCh.subscribe(onFastifyRoute)
 }
