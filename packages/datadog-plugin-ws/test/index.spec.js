@@ -34,6 +34,14 @@ describe('Plugin', () => {
           httpServer = http.createServer()
           wsServer = new ws.Server({ server: httpServer })
 
+          wsServer.on('connection', ws => {
+            ws.on('message', msg => {
+              console.log('echo')
+              // Echo back the message with "server:" prefix
+              ws.send('echo')
+            })
+          })
+
           httpServer.listen(0, 'localhost', () => {
             done()
           })
@@ -46,6 +54,38 @@ describe('Plugin', () => {
           if (httpServer) {
             httpServer.close()
           }
+        })
+
+        it('should do automatic instrumentatio', done => {
+          console.log('trace', agent.assertFirstTraceSpan())
+          agent.assertSomeTraces(traces => {
+            // expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+            // expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
+            // expect(traces[0][0]).to.have.property('resource', 'SELECT $1::text as message')
+            // expect(traces[0][0]).to.have.property('type', 'sql')
+            // expect(traces[0][0].meta).to.have.property('span.kind', 'client')
+            // expect(traces[0][0].meta).to.have.property('db.name', 'postgres')
+            // expect(traces[0][0].meta).to.have.property('db.user', 'postgres')
+            // expect(traces[0][0].meta).to.have.property('db.type', 'postgres')
+            // expect(traces[0][0].meta).to.have.property('component', 'pg')
+            // expect(traces[0][0].metrics).to.have.property('network.destination.port', 5432)
+          })
+            .then(done)
+            .catch(done)
+
+          const client = new WebSocket(`ws://localhost:${httpServer.address().port}`)
+
+          client.on('open', () => {
+            client.send('hello')
+          })
+
+          client.on('message', msg => {
+            console.log('message', msg.toString())
+            expect(msg.toString()).to.equal('echo')
+            done()
+          })
+
+          client.on('error', done)
         })
 
         it('should do automatic instrumentation for server connections', done => {
@@ -170,14 +210,27 @@ describe('Plugin', () => {
         })
 
         it('should work with custom service configuration', done => {
+          agent.assertSomeTraces(traces => {
+            console.log('assert some')
+            expect(traces[0][0]).to.have.property('service', 'custom-ws-service')
+            expect(traces[0][0]).to.have.property('name', 'websocket.request')
+            expect(traces[0][0]).to.have.property('type', 'websocket')
+          })
+            .then(done)
+            .catch(done)
+
+          let messageReceived = false
+
           wsServer.on('connection', (ws) => {
-            ws.close()
+            ws.send('test message')
+            setTimeout(() => ws.close(), 10)
           })
 
           const client = new WebSocket(`ws://localhost:${httpServer.address().port}`)
 
-          client.on('close', () => {
-            done()
+          client.on('message', (data) => {
+            expect(data.toString()).to.equal('test message')
+            messageReceived = true
           })
 
           client.on('error', done)
