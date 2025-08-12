@@ -37,8 +37,7 @@ jobs:
       contents: read
       packages: write
     with:
-      _system_tests_dev_mode: true
-      _system_tests_library_target_branch: conti/fix-js-web-err
+      ref: conti/fix-js-web-err
       library: nodejs
       binaries_artifact: system_tests_binaries
       desired_execution_time: 300 # 5 minutes
