@@ -133,8 +133,14 @@ function block (req, res, rootSpan, abortController, actionParameters = defaultB
 }
 
 const blockDelegations = new WeakMap()
+const noop = () => {}
 
 function delegateBlock (req, res) {
+  if (blockDelegations.has(res)) {
+    // ignore all subsequent delegations
+    return new Promise(noop)
+  }
+
   const args = arguments
 
   return new Promise((resolve) => {
