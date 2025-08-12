@@ -135,6 +135,7 @@ checkPlugins(path.join(__dirname, '..', '.github', 'workflows', 'appsec.yml'))
 checkPlugins(path.join(__dirname, '..', '.github', 'workflows', 'llmobs.yml'))
 checkPlugins(path.join(__dirname, '..', '.github', 'workflows', 'platform.yml'))
 checkPlugins(path.join(__dirname, '..', '.github', 'workflows', 'test-optimization.yml'))
+checkPlugins(path.join(__dirname, '..', '.github', 'workflows', 'serverless.yml'))
 {
   const testDir = path.join(__dirname, '..', 'packages', 'datadog-instrumentations', 'test')
   const testedInstrumentations = fs.readdirSync(testDir)
