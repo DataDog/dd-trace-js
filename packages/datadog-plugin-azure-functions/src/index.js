@@ -50,7 +50,7 @@ class AzureFunctionsPlugin extends TracingPlugin {
         headers: Object.fromEntries(httpRequest.headers),
         url: path
       }
-      const context = web.patch(req)
+      const context = web.patch(req, this.config)
       context.config = this.config
       context.paths = [path]
       context.res = { statusCode: result.status }

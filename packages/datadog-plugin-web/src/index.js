@@ -9,6 +9,9 @@ const {
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const InferredProxyPlugin = require('../../datadog-plugin-inferred-proxy/src')
 const web = require('./utils')
+const tags = require('../../../ext/tags')
+const types = require('../../../ext/types')
+const kinds = require('../../../ext/kinds')
 
 const {
   contexts,
@@ -23,13 +26,14 @@ const {
   addAllowHeaders,
   isOriginAllowed,
   reactivate,
-  WEB,
-  SERVER,
-  RESOURCE_NAME,
-  MANUAL_DROP,
-  SERVICE_NAME,
-  FORMAT_HTTP_HEADERS,
 } = web
+
+const WEB = types.WEB
+const SERVER = kinds.SERVER
+const RESOURCE_NAME = tags.RESOURCE_NAME
+const MANUAL_DROP = tags.MANUAL_DROP
+const SERVICE_NAME = tags.SERVICE_NAME
+const FORMAT_HTTP_HEADERS = 'http_headers'
 
 class WebPlugin extends TracingPlugin {
   static id = WEB
@@ -231,7 +235,7 @@ class WebPlugin extends TracingPlugin {
   }
 
   patch (req) {
-    return patch(req)
+    return patch(req, this.config)
   }
 
   // Return the request root span.

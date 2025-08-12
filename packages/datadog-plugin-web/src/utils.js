@@ -61,7 +61,7 @@ function setRoute (req, path) {
   context.paths = [path]
 }
 
-function patch (req) {
+function patch (req, config) {
   let context = contexts.get(req)
 
   if (context) return context
@@ -79,7 +79,7 @@ function patch (req) {
     paths: [],
     middleware: [],
     beforeEnd: [],
-    config: this.config
+    config
   }
 
   contexts.set(req, context)
@@ -373,5 +373,5 @@ module.exports = {
   isOriginAllowed,
   reactivate,
   contexts,
-  ends
+  ends,
 }

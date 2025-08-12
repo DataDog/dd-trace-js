@@ -413,7 +413,7 @@ describe('AppSec Index', function () {
         statusCode: 201
       }
 
-      web.patch(req)
+      web.patch(req, config)
 
       sinon.stub(Reporter, 'finishRequest')
 
@@ -451,7 +451,7 @@ describe('AppSec Index', function () {
         'content-length': '15'
       }
 
-      web.patch(req)
+      web.patch(req, config)
 
       sinon.stub(Reporter, 'finishRequest')
       sinon.stub(waf, 'disposeContext')
@@ -496,7 +496,7 @@ describe('AppSec Index', function () {
         statusCode: 201
       }
 
-      web.patch(req)
+      web.patch(req, config)
 
       sinon.stub(Reporter, 'finishRequest')
 
@@ -542,7 +542,7 @@ describe('AppSec Index', function () {
         statusCode: 201
       }
 
-      web.patch(req)
+      web.patch(req, config)
 
       sinon.stub(Reporter, 'finishRequest')
       AppSec.incomingHttpEndTranslator({ req, res })
@@ -608,7 +608,7 @@ describe('AppSec Index', function () {
         statusCode: 201
       }
 
-      web.patch(req)
+      web.patch(req, config)
 
       sinon.stub(Reporter, 'finishRequest')
       AppSec.incomingHttpEndTranslator({ req, res })
