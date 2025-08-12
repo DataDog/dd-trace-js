@@ -97,6 +97,7 @@ function blockOnDatadogRaspAbortError ({ error, isTopLevel }) {
       // block() returns a bool, and delegateBlock() returns a promise
       // we use Promise.resolve() to handle both cases
       Promise.resolve(blocked).then(blocked => {
+        // TODO: bug: this should probably be called for each match even without block
         updateRaspRuleMatchMetricTags(req, raspRule, true, blocked)
       })
     }
