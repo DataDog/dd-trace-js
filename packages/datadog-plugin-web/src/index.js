@@ -149,7 +149,7 @@ class WebPlugin extends TracingPlugin {
     context.res = res
 
     this.setConfig(req)
-    this._addRequestTags(context, this.constructor.type)
+    _addRequestTags(context)
 
     return span
   }
@@ -327,26 +327,6 @@ class WebPlugin extends TracingPlugin {
     return span
   }
 
-  // Validate a request's status code and then add error tags if necessary
-  addStatusError (req, statusCode) {
-    const context = contexts.get(req)
-    const { span, inferredProxySpan, error } = context
-
-    const spanHasExistingError = span.context()._tags.error || span.context()._tags[ERROR_MESSAGE]
-    const inferredSpanContext = inferredProxySpan?.context()
-    const inferredSpanHasExistingError = inferredSpanContext?._tags.error || inferredSpanContext?._tags[ERROR_MESSAGE]
-
-    const isValidStatusCode = context.config.validateStatus(statusCode)
-
-    if (!spanHasExistingError && !isValidStatusCode) {
-      span.setTag(ERROR, error || true)
-    }
-
-    if (inferredProxySpan && !inferredSpanHasExistingError && !isValidStatusCode) {
-      inferredProxySpan.setTag(ERROR, error || true)
-    }
-  }
-
   // Add an error to the request
   addError (req, error) {
     WebPlugin.addError(req, error)
@@ -381,8 +361,8 @@ class WebPlugin extends TracingPlugin {
 
     if (context.finished && !req.stream) return
 
-    this._addRequestTags(context, this.constructor.type)
-    this._addResponseTags(context)
+    _addRequestTags(context)
+    _addResponseTags(context)
 
     context.config.hooks.request(context.span, req, res)
     addResourceTag(context)
@@ -401,24 +381,6 @@ class WebPlugin extends TracingPlugin {
     this.finishSpan(context)
 
     InferredProxyPlugin.finishInferredProxySpan(context)
-  }
-
-  _obfuscateQs (url, config) {
-    const { queryStringObfuscation } = config
-
-    if (queryStringObfuscation === false) return url
-
-    const i = url.indexOf('?')
-    if (i === -1) return url
-
-    const path = url.slice(0, i)
-    if (queryStringObfuscation === true) return path
-
-    let qs = url.slice(i + 1)
-
-    qs = qs.replace(queryStringObfuscation, '<redacted>')
-
-    return `${path}?${qs}`
   }
 
   wrapWriteHead (context) {
@@ -473,48 +435,86 @@ class WebPlugin extends TracingPlugin {
       }
     })
   }
+}
 
-  _addRequestTags (context, spanType) {
-    const { req, span, inferredProxySpan } = context
-    const url = extractURL(req)
+function _obfuscateQs (url, config) {
+  const { queryStringObfuscation } = config
 
-    span.addTags({
-      [HTTP_URL]: this._obfuscateQs(url, context.config),
-      [HTTP_METHOD]: req.method,
-      [SPAN_KIND]: SERVER,
-      [SPAN_TYPE]: spanType,
-      [HTTP_USERAGENT]: req.headers['user-agent']
-    })
+  if (queryStringObfuscation === false) return url
 
-    // if client ip has already been set by appsec, no need to run it again
-    if (extractIp && !span.context()._tags.hasOwnProperty(HTTP_CLIENT_IP)) {
-      const clientIp = extractIp(context.config, req)
+  const i = url.indexOf('?')
+  if (i === -1) return url
 
-      if (clientIp) {
-        span.setTag(HTTP_CLIENT_IP, clientIp)
-        inferredProxySpan?.setTag(HTTP_CLIENT_IP, clientIp)
-      }
+  const path = url.slice(0, i)
+  if (queryStringObfuscation === true) return path
+
+  let qs = url.slice(i + 1)
+
+  qs = qs.replace(queryStringObfuscation, '<redacted>')
+
+  return `${path}?${qs}`
+}
+
+function _addRequestTags (context) {
+  const { req, span, inferredProxySpan } = context
+  const url = extractURL(req)
+
+  span.addTags({
+    [HTTP_URL]: _obfuscateQs(url, context.config),
+    [HTTP_METHOD]: req.method,
+    [SPAN_KIND]: SERVER,
+    [SPAN_TYPE]: SPAN_TYPE,
+    [HTTP_USERAGENT]: req.headers['user-agent']
+  })
+
+  // if client ip has already been set by appsec, no need to run it again
+  if (extractIp && !span.context()._tags.hasOwnProperty(HTTP_CLIENT_IP)) {
+    const clientIp = extractIp(context.config, req)
+
+    if (clientIp) {
+      span.setTag(HTTP_CLIENT_IP, clientIp)
+      inferredProxySpan?.setTag(HTTP_CLIENT_IP, clientIp)
     }
-
-    addHeaders(context)
   }
 
-  _addResponseTags (context) {
-    const { req, res, paths, span, inferredProxySpan } = context
+  addHeaders(context)
+}
 
-    const route = paths.join('')
-    if (route) {
-      span.setTag(HTTP_ROUTE, route)
-    }
+function _addResponseTags (context) {
+  const { req, res, paths, span, inferredProxySpan } = context
 
-    span.addTags({
-      [HTTP_STATUS_CODE]: res.statusCode
-    })
-    inferredProxySpan?.addTags({
-      [HTTP_STATUS_CODE]: res.statusCode
-    })
+  const route = paths.join('')
+  if (route) {
+    span.setTag(HTTP_ROUTE, route)
+  }
 
-    this.addStatusError(req, res.statusCode)
+  span.addTags({
+    [HTTP_STATUS_CODE]: res.statusCode
+  })
+  inferredProxySpan?.addTags({
+    [HTTP_STATUS_CODE]: res.statusCode
+  })
+
+  addStatusError(req, res.statusCode)
+}
+
+// Validate a request's status code and then add error tags if necessary
+function addStatusError (req, statusCode) {
+  const context = contexts.get(req)
+  const { span, inferredProxySpan, error } = context
+
+  const spanHasExistingError = span.context()._tags.error || span.context()._tags[ERROR_MESSAGE]
+  const inferredSpanContext = inferredProxySpan?.context()
+  const inferredSpanHasExistingError = inferredSpanContext?._tags.error || inferredSpanContext?._tags[ERROR_MESSAGE]
+
+  const isValidStatusCode = context.config.validateStatus(statusCode)
+
+  if (!spanHasExistingError && !isValidStatusCode) {
+    span.setTag(ERROR, error || true)
+  }
+
+  if (inferredProxySpan && !inferredSpanHasExistingError && !isValidStatusCode) {
+    inferredProxySpan.setTag(ERROR, error || true)
   }
 }
 
