@@ -4,14 +4,14 @@ const { assert } = require('chai')
 const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
-  const t = setup()
+  const t = setup({ dependencies: ['fastify'] })
 
   describe('input messages', function () {
     describe('with snapshot', function () {
       beforeEach(t.triggerBreakpoint)
 
       it('should capture a snapshot', function (done) {
-        t.agent.on('debugger-input', ({ payload: [{ 'debugger.snapshot': { captures } }] }) => {
+        t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { captures } } }] }) => {
           assert.deepEqual(Object.keys(captures), ['lines'])
           assert.deepEqual(Object.keys(captures.lines), [String(t.breakpoint.line)])
 
@@ -31,7 +31,7 @@ describe('Dynamic Instrumentation', function () {
             str: { type: 'string', value: 'foo' },
             lstr: {
               type: 'string',
-              // eslint-disable-next-line @stylistic/js/max-len
+              // eslint-disable-next-line @stylistic/max-len
               value: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor i',
               truncated: true,
               size: 445
@@ -87,7 +87,8 @@ describe('Dynamic Instrumentation', function () {
           // There's no reason to test the `request` object 100%, instead just check its fingerprint
           assert.deepEqual(Object.keys(request), ['type', 'fields'])
           assert.equal(request.type, 'Request')
-          assert.deepEqual(request.fields.id, { type: 'string', value: 'req-1' })
+          assert.equal(request.fields.id.type, 'string')
+          assert.match(request.fields.id.value, /^req-\d+$/)
           assert.deepEqual(request.fields.params, {
             type: 'NullObject', fields: { name: { type: 'string', value: 'foo' } }
           })
@@ -114,7 +115,7 @@ describe('Dynamic Instrumentation', function () {
       })
 
       it('should respect maxReferenceDepth', function (done) {
-        t.agent.on('debugger-input', ({ payload: [{ 'debugger.snapshot': { captures } }] }) => {
+        t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { captures } } }] }) => {
           const { locals } = captures.lines[t.breakpoint.line]
           delete locals.request
           delete locals.fastify
@@ -129,7 +130,7 @@ describe('Dynamic Instrumentation', function () {
             str: { type: 'string', value: 'foo' },
             lstr: {
               type: 'string',
-              // eslint-disable-next-line @stylistic/js/max-len
+              // eslint-disable-next-line @stylistic/max-len
               value: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor i',
               truncated: true,
               size: 445
@@ -150,7 +151,7 @@ describe('Dynamic Instrumentation', function () {
       })
 
       it('should respect maxLength', function (done) {
-        t.agent.on('debugger-input', ({ payload: [{ 'debugger.snapshot': { captures } }] }) => {
+        t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { captures } } }] }) => {
           const { locals } = captures.lines[t.breakpoint.line]
 
           assert.deepEqual(locals.lstr, {
@@ -167,7 +168,7 @@ describe('Dynamic Instrumentation', function () {
       })
 
       it('should respect maxCollectionSize', function (done) {
-        t.agent.on('debugger-input', ({ payload: [{ 'debugger.snapshot': { captures } }] }) => {
+        t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { captures } } }] }) => {
           const { locals } = captures.lines[t.breakpoint.line]
 
           assert.deepEqual(locals.arr, {
@@ -205,14 +206,14 @@ describe('Dynamic Instrumentation', function () {
           }
         }
 
-        t.agent.on('debugger-input', ({ payload: [{ 'debugger.snapshot': { captures } }] }) => {
+        t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { captures } } }] }) => {
           const { locals } = captures.lines[t.breakpoint.line]
 
-          assert.deepEqual(Object.keys(locals), [
-            // Up to 3 properties from the local scope
-            'request', 'nil', 'undef',
+          assert.deepStrictEqual(Object.keys(locals), [
             // Up to 3 properties from the closure scope
-            'fastify', 'getUndefined'
+            'fastify', 'getUndefined',
+            // Up to 3 properties from the local scope
+            'request', 'nil', 'undef'
           ])
 
           assert.strictEqual(locals.request.type, 'Request')

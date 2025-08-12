@@ -2,10 +2,11 @@
 
 const path = require('path')
 
-const { _extractModuleNameAndHandlerPath, _extractModuleRootAndHandler, _getLambdaFilePath } = require('./ritm')
+const { _extractModuleNameAndHandlerPath, _extractModuleRootAndHandler, _getLambdaFilePaths } = require('./ritm')
 const { datadog } = require('../handler')
 const { addHook } = require('../../../../datadog-instrumentations/src/helpers/instrument')
 const shimmer = require('../../../../datadog-shimmer')
+const { getEnvironmentVariable } = require('../../config-helper')
 
 /**
  * Patches a Datadog Lambda module by calling `patchDatadogLambdaHandler`
@@ -57,18 +58,20 @@ function patchLambdaHandler (lambdaHandler) {
   return datadog(lambdaHandler)
 }
 
-const lambdaTaskRoot = process.env.LAMBDA_TASK_ROOT
-const originalLambdaHandler = process.env.DD_LAMBDA_HANDLER
+const lambdaTaskRoot = getEnvironmentVariable('LAMBDA_TASK_ROOT')
+const originalLambdaHandler = getEnvironmentVariable('DD_LAMBDA_HANDLER')
 
-if (originalLambdaHandler !== undefined) {
+if (originalLambdaHandler === undefined) {
+  // Instrumentation is done manually.
+  addHook({ name: 'datadog-lambda-js' }, patchDatadogLambdaModule)
+} else {
   const [moduleRoot, moduleAndHandler] = _extractModuleRootAndHandler(originalLambdaHandler)
   const [_module, handlerPath] = _extractModuleNameAndHandlerPath(moduleAndHandler)
 
   const lambdaStylePath = path.resolve(lambdaTaskRoot, moduleRoot, _module)
-  const lambdaFilePath = _getLambdaFilePath(lambdaStylePath)
+  const lambdaFilePaths = _getLambdaFilePaths(lambdaStylePath)
 
-  addHook({ name: lambdaFilePath }, patchLambdaModule(handlerPath))
-} else {
-  // Instrumentation is done manually.
-  addHook({ name: 'datadog-lambda-js' }, patchDatadogLambdaModule)
+  for (const lambdaFilePath of lambdaFilePaths) {
+    addHook({ name: lambdaFilePath }, patchLambdaModule(handlerPath))
+  }
 }

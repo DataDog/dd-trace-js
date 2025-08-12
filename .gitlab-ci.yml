@@ -5,28 +5,42 @@ stages:
   - single-step-instrumentation-tests
   - macrobenchmarks
 
+check_config_inversion_local_file:
+  rules:
+    - when: on_success
+  extends: .check_config_inversion_local_file
+  variables:
+    LOCAL_JSON_PATH: "packages/dd-trace/src/supported-configurations.json"
+
+config-inversion-update-supported-range:
+  extends: .config_inversion_update_central
+  variables:
+    LOCAL_REPO_NAME: "dd-trace-js"
+    LOCAL_JSON_PATH: "packages/dd-trace/src/supported-configurations.json"
+    LANGUAGE_NAME: "nodejs"
+    MULTIPLE_RELEASE_LINES: "true"
+
 include:
-  - remote: https://gitlab-templates.ddbuild.io/libdatadog/include/one-pipeline.yml
+  - local: ".gitlab/one-pipeline.locked.yml"
   - local: ".gitlab/benchmarks.yml"
   - local: ".gitlab/macrobenchmarks.yml"
+
+workflow:
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v?[0-9]+\.[0-9]+\.[0-9]+$/
+      variables:
+        DANGEROUSLY_SKIP_SHARED_PIPELINE_TESTS: "true"
+    - when: always
 
 variables:
   # dd-trace-js has some exceptions to the default names
   AGENT_REPO_PRODUCT_NAME: auto_inject-node
   SYSTEM_TESTS_LIBRARY: nodejs
+  REPO_NOTIFICATION_CHANNEL: "#notifications-apm-js"
 
-onboarding_tests_installer:
-  parallel:
-    matrix:
-      - ONBOARDING_FILTER_WEBLOG: [test-app-nodejs,test-app-nodejs-container]
-        SCENARIO: [ SIMPLE_INSTALLER_AUTO_INJECTION, SIMPLE_AUTO_INJECTION_PROFILING ]
-
-onboarding_tests_k8s_injection:
-  parallel:
-    matrix:
-      - WEBLOG_VARIANT: [sample-app]
-        SCENARIO: [K8S_LIB_INJECTION, K8S_LIB_INJECTION_UDS, K8S_LIB_INJECTION_NO_AC, K8S_LIB_INJECTION_NO_AC_UDS, K8S_LIB_INJECTION_PROFILING_DISABLED, K8S_LIB_INJECTION_PROFILING_ENABLED, K8S_LIB_INJECTION_PROFILING_OVERRIDE]
-        K8S_CLUSTER_VERSION: ['7.56.2', '7.57.0', '7.59.0']
+configure_system_tests:
+  variables:
+    SYSTEM_TESTS_SCENARIOS_GROUPS: "simple_onboarding,simple_onboarding_profiling,simple_onboarding_appsec,docker-ssi,lib-injection"
 
 requirements_json_test:
   rules:

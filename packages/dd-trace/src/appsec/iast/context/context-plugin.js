@@ -11,7 +11,7 @@ const { TagKey } = require('../telemetry/iast-metric')
 
 class IastContextPlugin extends IastPlugin {
   startCtxOn (channelName, tag) {
-    super.addSub(channelName, (message) => this.startContext())
+    super.addSub(channelName, (message) => this.startContext(message?.currentStore))
 
     this._getAndRegisterSubscription({
       channelName,
@@ -44,11 +44,10 @@ class IastContextPlugin extends IastPlugin {
     }
   }
 
-  startContext () {
+  startContext (store = storage('legacy').getStore()) {
     let isRequestAcquired = false
     let iastContext
 
-    const store = storage.getStore()
     if (store) {
       const topContext = this.getTopContext()
       const rootSpan = this.getRootSpan(store)
@@ -70,7 +69,7 @@ class IastContextPlugin extends IastPlugin {
   }
 
   finishContext () {
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
     if (store) {
       const topContext = this.getTopContext()
       const iastContext = iastContextFunctions.getIastContext(store, topContext)

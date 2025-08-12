@@ -6,8 +6,10 @@ const { sanitizeAttributes } = require('@opentelemetry/core')
 const Sampler = require('./sampler')
 const Span = require('./span')
 const id = require('../id')
+const log = require('../log')
 const SpanContext = require('./span_context')
 const TextMapPropagator = require('../opentracing/propagation/text_map')
+const TraceState = require('../opentracing/propagation/tracestate')
 
 class Tracer {
   constructor (library, config, tracerProvider) {
@@ -30,7 +32,7 @@ class Tracer {
       spanId: id(),
       parentId: parentSpanContext._spanId,
       sampling: parentSpanContext._sampling,
-      baggageItems: Object.assign({}, parentSpanContext._baggageItems),
+      baggageItems: { ...parentSpanContext._baggageItems },
       trace: parentSpanContext._trace,
       tracestate: parentSpanContext._tracestate
     })
@@ -39,7 +41,53 @@ class Tracer {
   // Extracted method to create span context for a new span
   _createSpanContextForNewSpan (context) {
     const { traceId, spanId, traceFlags, traceState } = context
-    return TextMapPropagator._convertOtelContextToDatadog(traceId, spanId, traceFlags, traceState)
+    return this._convertOtelContextToDatadog(traceId, spanId, traceFlags, traceState)
+  }
+
+  _convertOtelContextToDatadog (traceId, spanId, traceFlag, ts, meta = {}) {
+    const origin = null
+    let samplingPriority = traceFlag
+
+    ts = ts?.traceparent || null
+
+    if (ts) {
+      // Use TraceState.fromString to parse the tracestate header
+      const traceState = TraceState.fromString(ts)
+      let ddTraceStateData = null
+
+      // Extract Datadog specific trace state data
+      traceState.forVendor('dd', (state) => {
+        ddTraceStateData = state
+        return state // You might need to adjust this part based on actual logic needed
+      })
+
+      if (ddTraceStateData) {
+        // Assuming ddTraceStateData is now a Map or similar structure containing Datadog trace state data
+        // Extract values as needed, similar to the original logic
+        const samplingPriorityTs = ddTraceStateData.get('s')
+        const origin = ddTraceStateData.get('o')
+        // Convert Map to object for meta
+        const otherPropagatedTags = Object.fromEntries(ddTraceStateData.entries())
+
+        // Update meta and samplingPriority based on extracted values
+        Object.assign(meta, otherPropagatedTags)
+        samplingPriority = TextMapPropagator._getSamplingPriority(
+          traceFlag,
+          Number.parseInt(samplingPriorityTs, 10),
+          origin
+        )
+      } else {
+        log.debug('no dd list member in tracestate from incoming request:', ts)
+      }
+    }
+
+    const spanContext = new SpanContext({
+      traceId: id(traceId, 16), spanId: id(), tags: meta, parentId: id(spanId, 16)
+    })
+
+    spanContext._sampling = { priority: samplingPriority }
+    spanContext._trace = { origin }
+    return spanContext
   }
 
   startSpan (name, options = {}, context = api.context.active()) {
@@ -100,10 +148,7 @@ class Tracer {
 
       // Set initial span attributes. The attributes object may have been mutated
       // by the sampler, so we sanitize the merged attributes before setting them.
-      sanitizeAttributes(
-        // Object.assign(attributes, samplingResult.attributes)
-        attributes
-      )
+      sanitizeAttributes(attributes)
     )
   }
 

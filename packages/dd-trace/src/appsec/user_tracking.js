@@ -5,9 +5,8 @@ const log = require('../log')
 const telemetry = require('./telemetry')
 const addresses = require('./addresses')
 const { keepTrace } = require('../priority_sampler')
-const { SAMPLING_MECHANISM_APPSEC } = require('../constants')
-const standalone = require('./standalone')
 const waf = require('./waf')
+const { ASM } = require('../standalone/product')
 
 // the RFC doesn't include '_id', but it's common in MongoDB
 const USER_ID_FIELDS = ['id', '_id', 'email', 'username', 'login', 'user']
@@ -41,18 +40,18 @@ function setCollectionMode (mode, overwrite = true) {
 }
 
 function obfuscateIfNeeded (str) {
-  if (collectionMode === 'anonymization') {
+  return collectionMode === 'anonymization'
     // get first 16 bytes of sha256 hash in lowercase hex
-    return 'anon_' + crypto.createHash('sha256').update(str).digest().toString('hex', 0, 16).toLowerCase()
-  } else {
-    return str
-  }
+    ? 'anon_' + crypto.createHash('sha256').update(str).digest().toString('hex', 0, 16).toLowerCase()
+    : str
 }
 
 // TODO: should we find other ways to get the user ID ?
 function getUserId (user) {
   if (!user) return
 
+  // should we iterate on user keys instead to be case insensitive ?
+  // but if we iterate over user then we're missing the inherited props ?
   for (const field of USER_ID_FIELDS) {
     let id = user[field]
 
@@ -72,11 +71,6 @@ function getUserId (user) {
 
 function trackLogin (framework, login, user, success, rootSpan) {
   if (!collectionMode || collectionMode === 'disabled') return
-
-  if (!rootSpan) {
-    log.error('[ASM] No rootSpan found in AppSec trackLogin')
-    return
-  }
 
   if (typeof login !== 'string') {
     log.error('[ASM] Invalid login provided to AppSec trackLogin')
@@ -154,15 +148,43 @@ function trackLogin (framework, login, user, success, rootSpan) {
     persistent[addresses.LOGIN_FAILURE] = null
   }
 
-  keepTrace(rootSpan, SAMPLING_MECHANISM_APPSEC)
-  standalone.sample(rootSpan)
+  keepTrace(rootSpan, ASM)
 
   rootSpan.addTags(newTags)
 
   return waf.run({ persistent })
 }
 
+function trackUser (user, rootSpan) {
+  if (!collectionMode || collectionMode === 'disabled') return
+
+  const userId = getUserId(user)
+  if (!userId) {
+    log.error('[ASM] No valid user ID found in AppSec trackUser')
+    telemetry.incrementMissingUserIdMetric('passport', 'authenticated_request')
+    return
+  }
+
+  rootSpan.setTag('_dd.appsec.usr.id', userId)
+
+  const isSdkCalled = rootSpan.context()._tags['_dd.appsec.user.collection_mode'] === 'sdk'
+  // do not override SDK
+  if (!isSdkCalled) {
+    rootSpan.addTags({
+      'usr.id': userId,
+      '_dd.appsec.user.collection_mode': collectionMode
+    })
+
+    return waf.run({
+      persistent: {
+        [addresses.USER_ID]: userId
+      }
+    })
+  }
+}
+
 module.exports = {
   setCollectionMode,
-  trackLogin
+  trackLogin,
+  trackUser
 }

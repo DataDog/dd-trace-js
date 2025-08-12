@@ -4,8 +4,6 @@ const types = require('./types')
 const { channel, addHook } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 
-const nodeMajor = parseInt(process.versions.node.split('.')[0])
-
 const startChannel = channel('apm:grpc:server:request:start')
 const asyncStartChannel = channel('apm:grpc:server:request:asyncStart')
 const errorChannel = channel('apm:grpc:server:request:error')
@@ -17,17 +15,14 @@ const emitChannel = channel('apm:grpc:server:request:emit')
 const OK = 0
 const CANCELLED = 1
 
+const isValid = (server, args) => {
+  return Boolean(startChannel.hasSubscribers &&
+    server?.type &&
+    args[0] &&
+    (server.type === 'unary' ? typeof args[1] === 'function' : isEmitter(args[0])))
+}
+
 function wrapHandler (func, name) {
-  const isValid = (server, args) => {
-    if (!startChannel.hasSubscribers) return false
-    if (!server || !server.type) return false
-    if (!args[0]) return false
-    if (server.type !== 'unary' && !isEmitter(args[0])) return false
-    if (server.type === 'unary' && typeof args[1] !== 'function') return false
-
-    return true
-  }
-
   return function (call, callback) {
     if (!isValid(this, arguments)) return func.apply(this, arguments)
 
@@ -150,14 +145,6 @@ function wrapSendStatus (sendStatus, ctx) {
 
 function isEmitter (obj) {
   return typeof obj.emit === 'function' && typeof obj.once === 'function'
-}
-
-if (nodeMajor <= 14) {
-  addHook({ name: 'grpc', versions: ['>=1.24.3'], file: 'src/server.js' }, server => {
-    shimmer.wrap(server.Server.prototype, 'register', wrapRegister)
-
-    return server
-  })
 }
 
 addHook({ name: '@grpc/grpc-js', versions: ['>=1.0.3'], file: 'build/src/server.js' }, server => {

@@ -12,9 +12,7 @@ const { expect } = require('chai')
 const testLogChannel = channel('apm:test:log')
 
 class TestLog extends LogPlugin {
-  static get id () {
-    return 'test'
-  }
+  static id = 'test'
 }
 
 const config = {
@@ -61,7 +59,7 @@ describe('LogPlugin', () => {
       expect(message.dd).to.contain(config)
 
       // Should have trace/span data when none is active
-      expect(message.dd).to.have.property('trace_id', span.context().toTraceId())
+      expect(message.dd).to.have.property('trace_id', span.context().toTraceId(true))
       expect(message.dd).to.have.property('span_id', span.context().toSpanId())
     })
   })

@@ -24,38 +24,50 @@ const PROVIDER = {
 }
 
 class Generation {
-  constructor ({ message = '', finishReason = '', choiceId = '' } = {}) {
+  constructor ({
+    message = '',
+    finishReason = '',
+    choiceId = '',
+    role,
+    inputTokens,
+    outputTokens
+  } = {}) {
     // stringify message as it could be a single generated message as well as a list of embeddings
     this.message = typeof message === 'string' ? message : JSON.stringify(message) || ''
     this.finishReason = finishReason || ''
     this.choiceId = choiceId || undefined
+    this.role = role
+    this.usage = {
+      inputTokens,
+      outputTokens
+    }
   }
 }
 
 class RequestParams {
   constructor ({
     prompt = '',
-    temperature = undefined,
-    topP = undefined,
-    topK = undefined,
-    maxTokens = undefined,
+    temperature,
+    topP,
+    topK,
+    maxTokens,
     stopSequences = [],
     inputType = '',
     truncate = '',
     stream = '',
-    n = undefined
+    n
   } = {}) {
     // stringify prompt as it could be a single prompt as well as a list of message objects
     this.prompt = typeof prompt === 'string' ? prompt : JSON.stringify(prompt) || ''
-    this.temperature = temperature !== undefined ? temperature : undefined
-    this.topP = topP !== undefined ? topP : undefined
-    this.topK = topK !== undefined ? topK : undefined
-    this.maxTokens = maxTokens !== undefined ? maxTokens : undefined
+    this.temperature = temperature === undefined ? undefined : temperature
+    this.topP = topP === undefined ? undefined : topP
+    this.topK = topK === undefined ? undefined : topK
+    this.maxTokens = maxTokens === undefined ? undefined : maxTokens
     this.stopSequences = stopSequences || []
     this.inputType = inputType || ''
     this.truncate = truncate || ''
     this.stream = stream || ''
-    this.n = n !== undefined ? n : undefined
+    this.n = n === undefined ? undefined : n
   }
 }
 
@@ -80,7 +92,7 @@ function parseModelId (modelId) {
     if (modelMeta.length < 2) {
       return { modelProvider: 'custom', modelName: modelMeta[0] }
     }
-    return { modelProvider: modelMeta[modelMeta.length - 2], modelName: modelMeta[modelMeta.length - 1] }
+    return { modelProvider: modelMeta.at(-2), modelName: modelMeta.at(-1) }
   }
 
   for (const identifier of MODEL_TYPE_IDENTIFIERS) {
@@ -93,7 +105,7 @@ function parseModelId (modelId) {
       if (modelMeta.length < 2) {
         return { modelProvider: 'custom', modelName: modelId }
       }
-      return { modelProvider: modelMeta[modelMeta.length - 2], modelName: modelMeta[modelMeta.length - 1] }
+      return { modelProvider: modelMeta.at(-2), modelName: modelMeta.at(-1) }
     }
     return { modelProvider: 'custom', modelName: modelId }
   }
@@ -202,9 +214,12 @@ function extractTextAndResponseReason (response, provider, modelName) {
           if (generations.length > 0) {
             const generation = generations[0]
             return new Generation({
-              message: generation.message,
+              message: generation.message.content,
               finishReason: generation.finish_reason,
-              choiceId: shouldSetChoiceIds ? generation.id : undefined
+              choiceId: shouldSetChoiceIds ? generation.id : undefined,
+              role: generation.message.role,
+              inputTokens: body.usage?.prompt_tokens,
+              outputTokens: body.usage?.completion_tokens
             })
           }
         }
@@ -214,7 +229,9 @@ function extractTextAndResponseReason (response, provider, modelName) {
           return new Generation({
             message: completion.data?.text,
             finishReason: completion?.finishReason,
-            choiceId: shouldSetChoiceIds ? completion?.id : undefined
+            choiceId: shouldSetChoiceIds ? completion?.id : undefined,
+            inputTokens: body.usage?.prompt_tokens,
+            outputTokens: body.usage?.completion_tokens
           })
         }
         return new Generation()
@@ -226,7 +243,12 @@ function extractTextAndResponseReason (response, provider, modelName) {
         const results = body.results || []
         if (results.length > 0) {
           const result = results[0]
-          return new Generation({ message: result.outputText, finishReason: result.completionReason })
+          return new Generation({
+            message: result.outputText,
+            finishReason: result.completionReason,
+            inputTokens: body.inputTextTokenCount,
+            outputTokens: result.tokenCount
+          })
         }
         break
       }
@@ -252,7 +274,12 @@ function extractTextAndResponseReason (response, provider, modelName) {
         break
       }
       case PROVIDER.META: {
-        return new Generation({ message: body.generation, finishReason: body.stop_reason })
+        return new Generation({
+          message: body.generation,
+          finishReason: body.stop_reason,
+          inputTokens: body.prompt_token_count,
+          outputTokens: body.generation_token_count
+        })
       }
       case PROVIDER.MISTRAL: {
         const mistralGenerations = body.outputs || []
@@ -269,7 +296,7 @@ function extractTextAndResponseReason (response, provider, modelName) {
         return new Generation()
       }
     }
-  } catch (error) {
+  } catch {
     log.warn('Unable to extract text/finishReason from response body. Defaulting to empty text/finishReason.')
     return new Generation()
   }

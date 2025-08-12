@@ -5,6 +5,7 @@ const axios = require('axios')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE } = require('../../dd-trace/src/constants')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 describe('Plugin', () => {
   let tracer
@@ -39,7 +40,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0]).to.have.property('name', 'restify.request')
                 expect(traces[0][0]).to.have.property('service', 'test')
                 expect(traces[0][0]).to.have.property('type', 'web')
@@ -49,6 +50,7 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('http.method', 'GET')
                 expect(traces[0][0].meta).to.have.property('http.status_code', '404')
                 expect(traces[0][0].meta).to.have.property('component', 'restify')
+                expect(traces[0][0].meta).to.have.property('_dd.integration', 'restify')
               })
               .then(done)
               .catch(done)
@@ -71,7 +73,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0]).to.have.property('resource', 'GET /user/:id')
                 expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
                 expect(traces[0][0].meta).to.have.property('component', 'restify')
@@ -100,7 +102,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0]).to.have.property('resource', 'GET /user/:id')
                 expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
                 expect(traces[0][0].meta).to.have.property('component', 'restify')
@@ -139,7 +141,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(warningSpy).to.not.have.been.called
               })
               .then(done)
@@ -205,7 +207,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0]).to.have.property('resource', 'GET /user/:id')
                 expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
                 expect(traces[0][0].meta).to.have.property('component', 'restify')
@@ -268,7 +270,7 @@ describe('Plugin', () => {
             const port = appListener.address().port
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 expect(traces[0][0]).to.have.property('resource', 'GET /error')
                 expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, 'uncaught')
                 expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/error`)

@@ -2,8 +2,8 @@
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { channel } = require('../src/helpers/instrument')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const semver = require('semver')
-const { NODE_MAJOR } = require('../../../version')
 
 const startCh = channel('datadog:mongoose:model:filter:start')
 const finishCh = channel('datadog:mongoose:model:filter:finish')
@@ -16,7 +16,6 @@ describe('mongoose instrumentations', () => {
     describe(range, () => {
       withVersions('mongoose', ['mongoose'], range, (version) => {
         const specificVersion = require(`../../../versions/mongoose@${version}`).version()
-        if (NODE_MAJOR === 14 && semver.satisfies(specificVersion, '>=8')) return
 
         let Test, dbName, id, mongoose
 
@@ -178,7 +177,6 @@ describe('mongoose instrumentations', () => {
                   Test.deleteOne({ type: 'test' }, (err) => {
                     expect(err).to.be.null
 
-                    // eslint-disable-next-line n/handle-callback-err
                     Test.count({ type: 'test' }, (err, res) => {
                       expect(res).to.be.equal(2) // 3 -> delete 1 -> 2
 
@@ -259,7 +257,6 @@ describe('mongoose instrumentations', () => {
                     expect(item).not.to.be.null
                     expect(item.name).to.be.equal('test1')
 
-                    // eslint-disable-next-line n/handle-callback-err
                     Test.count({ type: 'test' }, (err, res) => {
                       expect(res).to.be.equal(2) // 3 -> delete 1 -> 2
 
@@ -425,7 +422,6 @@ describe('mongoose instrumentations', () => {
                   $set: {
                     other: 'modified-other'
                   }
-                // eslint-disable-next-line n/handle-callback-err
                 }).then((err) => {
                   Test.find({ type: 'test' }).then((items) => {
                     expect(items.length).to.be.equal(3)

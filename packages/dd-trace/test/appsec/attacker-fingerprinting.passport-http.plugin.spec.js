@@ -6,11 +6,12 @@ const { assert } = require('chai')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
+const { withVersions } = require('../setup/mocha')
 
 function assertFingerprintInTraces (traces) {
   const span = traces[0][0]
   assert.property(span.meta, '_dd.appsec.fp.http.header')
-  assert.equal(span.meta['_dd.appsec.fp.http.header'], 'hdr-0110000110-6431a3e6-5-e58aa9dd')
+  assert.equal(span.meta['_dd.appsec.fp.http.header'], 'hdr-0110000110-74c2908f-5-e58aa9dd')
   assert.property(span.meta, '_dd.appsec.fp.http.network')
   assert.equal(span.meta['_dd.appsec.fp.http.network'], 'net-0-0000000000')
   assert.property(span.meta, '_dd.appsec.fp.http.endpoint')
@@ -61,7 +62,10 @@ withVersions('passport-http', 'passport-http', version => {
       server = app.listen(port, () => {
         port = server.address().port
         axios = Axios.create({
-          baseURL: `http://localhost:${port}`
+          baseURL: `http://localhost:${port}`,
+          headers: {
+            'User-Agent': 'test-user-agent'
+          }
         })
         done()
       })
@@ -88,7 +92,7 @@ withVersions('passport-http', 'passport-http', version => {
         )
       } catch (e) {}
 
-      await agent.use(assertFingerprintInTraces)
+      await agent.assertSomeTraces(assertFingerprintInTraces)
     })
 
     it('should report http fingerprints on login successful', async () => {
@@ -101,7 +105,7 @@ withVersions('passport-http', 'passport-http', version => {
         }
       )
 
-      await agent.use(assertFingerprintInTraces)
+      await agent.assertSomeTraces(assertFingerprintInTraces)
     })
   })
 })

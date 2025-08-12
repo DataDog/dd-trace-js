@@ -9,7 +9,7 @@ const DNSReversePlugin = require('./reverse')
 // TODO: Are DNS spans really client spans?
 
 class DNSPlugin extends CompositePlugin {
-  static get id () { return 'dns' }
+  static id = 'dns'
   static get plugins () {
     return {
       lookup: DNSLookupPlugin,

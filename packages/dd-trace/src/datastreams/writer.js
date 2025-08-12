@@ -1,3 +1,5 @@
+'use strict'
+
 const pkg = require('../../../../package.json')
 const log = require('../log')
 const request = require('../exporters/common/request')
@@ -20,7 +22,7 @@ function makeRequest (data, url, cb) {
     url
   }
 
-  log.debug(() => `Request to the intake: ${JSON.stringify(options)}`)
+  log.debug('Request to the intake: %j', options)
 
   request(data, options, (err, res) => {
     cb(err, res)
@@ -39,7 +41,7 @@ class DataStreamsWriter {
 
   flush (payload) {
     if (!request.writable) {
-      log.debug(() => `Maximum number of active requests reached. Payload discarded: ${JSON.stringify(payload)}`)
+      log.debug('Maximum number of active requests reached. Payload discarded: %j', payload)
       return
     }
     const encodedPayload = msgpack.encode(payload)
@@ -50,7 +52,7 @@ class DataStreamsWriter {
         return
       }
       makeRequest(compressedData, this._url, (err, res) => {
-        log.debug(`Response from the agent: ${res}`)
+        log.debug('Response from the agent:', res)
         if (err) {
           log.error('Error sending datastream', err)
         }

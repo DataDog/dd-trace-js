@@ -2,8 +2,7 @@
 
 const {
   channel,
-  addHook,
-  AsyncResource
+  addHook
 } = require('./helpers/instrument')
 
 const shimmer = require('../../datadog-shimmer')
@@ -18,8 +17,6 @@ addHook({ name: 'sequelize', versions: ['>=4'] }, Sequelize => {
         return query.apply(this, arguments)
       }
 
-      const asyncResource = new AsyncResource('bound-anonymous-fn')
-
       let dialect
       if (this.options && this.options.dialect) {
         dialect = this.options.dialect
@@ -33,22 +30,15 @@ addHook({ name: 'sequelize', versions: ['>=4'] }, Sequelize => {
           result = result[0]
         }
 
-        asyncResource.bind(function () {
-          finishCh.publish({ result })
-        }, this).apply(this)
+        finishCh.runStores({ result }, () => {})
       }
 
-      return asyncResource.bind(function () {
-        startCh.publish({
-          sql,
-          dialect
-        })
-
+      return startCh.runStores({ sql, dialect }, () => {
         const promise = query.apply(this, arguments)
         promise.then(onFinish, () => { onFinish() })
 
         return promise
-      }, this).apply(this, arguments)
+      })
     }
   })
 

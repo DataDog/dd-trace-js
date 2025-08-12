@@ -6,12 +6,10 @@ const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const web = require('../../dd-trace/src/plugins/util/web')
 
-const errorPages = ['/404', '/500', '/_error', '/_not-found', '/_not-found/page']
+const errorPages = new Set(['/404', '/500', '/_error', '/_not-found', '/_not-found/page'])
 
 class NextPlugin extends ServerPlugin {
-  static get id () {
-    return 'next'
-  }
+  static id = 'next'
 
   constructor (...args) {
     super(...args)
@@ -20,7 +18,7 @@ class NextPlugin extends ServerPlugin {
   }
 
   bindStart ({ req, res }) {
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
     const childOf = store ? store.span : store
     const span = this.tracer.startSpan(this.operationName(), {
       childOf,
@@ -31,7 +29,8 @@ class NextPlugin extends ServerPlugin {
         'span.type': 'web',
         'span.kind': 'server',
         'http.method': req.method
-      }
+      },
+      integrationName: this.constructor.id
     })
 
     analyticsSampler.sample(span, this.config.measured, true)
@@ -43,7 +42,7 @@ class NextPlugin extends ServerPlugin {
 
   error ({ span, error }) {
     if (!span) {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       if (!store) return
 
       span = store.span
@@ -53,7 +52,7 @@ class NextPlugin extends ServerPlugin {
   }
 
   finish ({ req, res, nextRequest = {} }) {
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
 
     if (!store) return
 
@@ -85,7 +84,7 @@ class NextPlugin extends ServerPlugin {
   }
 
   pageLoad ({ page, isAppPath = false, isStatic = false }) {
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
 
     if (!store) return
 
@@ -97,7 +96,7 @@ class NextPlugin extends ServerPlugin {
 
     // Only use error page names if there's not already a name
     const current = span.context()._tags['next.page']
-    const isErrorPage = errorPages.includes(page)
+    const isErrorPage = errorPages.has(page)
 
     if (current && isErrorPage) {
       return
@@ -106,7 +105,7 @@ class NextPlugin extends ServerPlugin {
     // remove ending /route or /page for appDir projects
     // need to check if not an error page too, as those are marked as app directory
     // in newer versions
-    if (isAppPath && !isErrorPage) page = page.substring(0, page.lastIndexOf('/'))
+    if (isAppPath && !isErrorPage) page = page.slice(0, Math.max(0, page.lastIndexOf('/')))
 
     // handle static resource
     if (isStatic) {
@@ -134,12 +133,13 @@ function normalizeConfig (config) {
     ? config.validateStatus
     : code => code < 500
 
-  return Object.assign({}, config, { hooks, validateStatus })
+  return { ...config, hooks, validateStatus }
 }
 
+const noop = () => {}
+
 function getHooks (config) {
-  const noop = () => {}
-  const request = (config.hooks && config.hooks.request) || noop
+  const request = config.hooks?.request ?? noop
 
   return { request }
 }

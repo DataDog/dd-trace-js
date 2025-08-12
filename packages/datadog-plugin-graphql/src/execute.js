@@ -1,16 +1,19 @@
 'use strict'
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
+const { extractErrorIntoSpanEvent } = require('./utils')
 
 let tools
 
 class GraphQLExecutePlugin extends TracingPlugin {
-  static get id () { return 'graphql' }
-  static get operation () { return 'execute' }
-  static get type () { return 'graphql' }
-  static get kind () { return 'server' }
+  static id = 'graphql'
+  static operation = 'execute'
+  static type = 'graphql'
+  static kind = 'server'
 
-  start ({ operation, args, docSource }) {
+  bindStart (ctx) {
+    const { operation, args, docSource } = ctx
+
     const type = operation && operation.operation
     const name = operation && operation.name && operation.name.value
     const document = args.document
@@ -26,15 +29,25 @@ class GraphQLExecutePlugin extends TracingPlugin {
         'graphql.operation.name': name,
         'graphql.source': source
       }
-    })
+    }, ctx)
 
     addVariableTags(this.config, span, args.variableValues)
+
+    return ctx.currentStore
   }
 
-  finish ({ res, args }) {
-    const span = this.activeSpan
+  finish (ctx) {
+    const { res, args } = ctx
+    const span = ctx?.currentStore?.span || this.activeSpan
     this.config.hooks.execute(span, args, res)
-    super.finish()
+    if (res?.errors) {
+      for (const err of res.errors) {
+        extractErrorIntoSpanEvent(this._tracerConfig, span, err)
+      }
+    }
+    super.finish(ctx)
+
+    return ctx.parentStore
   }
 }
 
@@ -64,12 +77,12 @@ function getSignature (document, operationName, operationType, calculate) {
       }
 
       return tools.defaultEngineReportingSignature(document, operationName)
-    } catch (e) {
+    } catch {
       // safety net
     }
   }
 
-  return [operationType, operationName].filter(val => val).join(' ')
+  return [operationType, operationName].filter(Boolean).join(' ')
 }
 
 module.exports = GraphQLExecutePlugin

@@ -3,13 +3,16 @@
 const proxyquire = require('proxyquire')
 const agent = require('../../plugins/agent')
 const tracer = require('../../../../../index')
+const appsec = require('../../../src/appsec')
+const Config = require('../../../src/config')
 const axios = require('axios')
+const path = require('path')
 
 describe('set_user', () => {
   describe('Internal API', () => {
     const tracer = {}
 
-    let rootSpan, getRootSpan, log, setUser
+    let rootSpan, getRootSpan, log, waf, setUser
 
     beforeEach(() => {
       rootSpan = {
@@ -21,9 +24,14 @@ describe('set_user', () => {
         warn: sinon.stub()
       }
 
+      waf = {
+        run: sinon.stub()
+      }
+
       const setUserModule = proxyquire('../../../src/appsec/sdk/set_user', {
         './utils': { getRootSpan },
-        '../../log': log
+        '../../log': log,
+        '../waf': waf
       })
 
       setUser = setUserModule.setUser
@@ -34,6 +42,7 @@ describe('set_user', () => {
         setUser(tracer)
         expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] Invalid user provided to setUser')
         expect(rootSpan.setTag).to.not.have.been.called
+        expect(waf.run).to.not.have.been.called
       })
 
       it('should not call setTag when user is empty', () => {
@@ -41,6 +50,7 @@ describe('set_user', () => {
         setUser(tracer, user)
         expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] Invalid user provided to setUser')
         expect(rootSpan.setTag).to.not.have.been.called
+        expect(waf.run).to.not.have.been.called
       })
 
       it('should not call setTag when rootSpan is not available', () => {
@@ -50,26 +60,43 @@ describe('set_user', () => {
         expect(getRootSpan).to.be.calledOnceWithExactly(tracer)
         expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] Root span not available in setUser')
         expect(rootSpan.setTag).to.not.have.been.called
+        expect(waf.run).to.not.have.been.called
       })
 
       it('should call setTag with every attribute', () => {
         const user = {
           id: '123',
           email: 'a@b.c',
-          custom: 'hello'
+          custom: 'hello',
+          session_id: '133769'
         }
 
         setUser(tracer, user)
         expect(log.warn).to.not.have.been.called
-        expect(rootSpan.setTag).to.have.been.calledThrice
-        expect(rootSpan.setTag.firstCall).to.have.been.calledWithExactly('usr.id', '123')
-        expect(rootSpan.setTag.secondCall).to.have.been.calledWithExactly('usr.email', 'a@b.c')
-        expect(rootSpan.setTag.thirdCall).to.have.been.calledWithExactly('usr.custom', 'hello')
+        expect(rootSpan.setTag.callCount).to.equal(5)
+        expect(rootSpan.setTag.getCall(0)).to.have.been.calledWithExactly('usr.id', '123')
+        expect(rootSpan.setTag.getCall(1)).to.have.been.calledWithExactly('usr.email', 'a@b.c')
+        expect(rootSpan.setTag.getCall(2)).to.have.been.calledWithExactly('usr.custom', 'hello')
+        expect(rootSpan.setTag.getCall(3)).to.have.been.calledWithExactly('usr.session_id', '133769')
+        expect(rootSpan.setTag.getCall(4)).to.have.been.calledWithExactly('_dd.appsec.user.collection_mode', 'sdk')
+        expect(waf.run).to.have.been.calledOnceWithExactly({
+          persistent: {
+            'usr.id': '123',
+            'usr.session_id': '133769'
+          }
+        })
       })
     })
   })
 
   describe('Integration with the tracer', () => {
+    const config = new Config({
+      appsec: {
+        enabled: true,
+        rules: path.join(__dirname, './user_blocking_rules.json')
+      }
+    })
+
     let http
     let controller
     let appListener
@@ -93,9 +120,13 @@ describe('set_user', () => {
           port = appListener.address().port
           done()
         })
+
+      appsec.enable(config)
     })
 
     after(() => {
+      appsec.disable()
+
       appListener.close()
       return agent.close({ ritmReset: false })
     })
@@ -104,16 +135,22 @@ describe('set_user', () => {
       it('should set a proper user', (done) => {
         controller = (req, res) => {
           tracer.appsec.setUser({
-            id: 'testUser',
+            id: 'blockedUser',
             email: 'a@b.c',
-            custom: 'hello'
+            custom: 'hello',
+            session_id: '133769'
           })
           res.end()
         }
-        agent.use(traces => {
-          expect(traces[0][0].meta).to.have.property('usr.id', 'testUser')
+        agent.assertSomeTraces(traces => {
+          expect(traces[0][0].meta).to.have.property('usr.id', 'blockedUser')
           expect(traces[0][0].meta).to.have.property('usr.email', 'a@b.c')
           expect(traces[0][0].meta).to.have.property('usr.custom', 'hello')
+          expect(traces[0][0].meta).to.have.property('usr.session_id', '133769')
+          expect(traces[0][0].meta).to.have.property('_dd.appsec.user.collection_mode', 'sdk')
+          expect(traces[0][0].meta).to.have.property('appsec.event', 'true')
+          expect(traces[0][0].meta).to.not.have.property('appsec.blocked')
+          expect(traces[0][0].meta).to.have.property('http.status_code', '200')
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)
       })
@@ -121,11 +158,15 @@ describe('set_user', () => {
       it('should override user on consecutive callings', (done) => {
         controller = (req, res) => {
           tracer.appsec.setUser({ id: 'testUser' })
-          tracer.appsec.setUser({ id: 'testUser2' })
+          tracer.appsec.setUser({ id: 'blockedUser' })
           res.end()
         }
-        agent.use(traces => {
-          expect(traces[0][0].meta).to.have.property('usr.id', 'testUser2')
+        agent.assertSomeTraces(traces => {
+          expect(traces[0][0].meta).to.have.property('usr.id', 'blockedUser')
+          expect(traces[0][0].meta).to.have.property('_dd.appsec.user.collection_mode', 'sdk')
+          expect(traces[0][0].meta).to.have.property('appsec.event', 'true')
+          expect(traces[0][0].meta).to.not.have.property('appsec.blocked')
+          expect(traces[0][0].meta).to.have.property('http.status_code', '200')
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)
       })

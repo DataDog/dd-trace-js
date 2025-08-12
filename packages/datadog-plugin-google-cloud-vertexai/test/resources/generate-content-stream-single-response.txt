@@ -1,0 +1,10 @@
+data: {"candidates": [{"content": {"role": "model","parts": [{"text": "Hi, how"}]}}],"usageMetadata": {},"modelVersion": "gemini-1.5-flash-002","createTime": "2025-03-05T16:59:45.373757Z","responseId": "AYPIZ_3nFtShmecPqaXa6As"}
+
+data: {"candidates": [{"content": {"role": "model","parts": [{"text": " are you"}]}}],"modelVersion": "gemini-1.5-flash-002","createTime": "2025-03-05T16:59:45.373757Z","responseId": "AYPIZ_3nFtShmecPqaXa6As"}
+
+data: {"candidates": [{"content": {"role": "model","parts": [{"text": " doing "}]}}],"modelVersion": "gemini-1.5-flash-002","createTime": "2025-03-05T16:59:45.373757Z","responseId": "AYPIZ_3nFtShmecPqaXa6As"}
+
+data: {"candidates": [{"content": {"role": "model","parts": [{"text": "today"}]}}],"modelVersion": "gemini-1.5-flash-002","createTime": "2025-03-05T16:59:45.373757Z","responseId": "AYPIZ_3nFtShmecPqaXa6As"}
+
+data: {"candidates": [{"content": {"role": "model","parts": [{"text": " my friend?"}]},"finishReason": "STOP"}],"usageMetadata": {"promptTokenCount": 5,"candidatesTokenCount": 10,"totalTokenCount": 15,"promptTokensDetails": [{"modality": "TEXT","tokenCount": 5}],"candidatesTokensDetails": [{"modality": "TEXT","tokenCount": 10}]},"modelVersion": "gemini-1.5-flash-002","createTime": "2025-03-05T16:59:45.373757Z","responseId": "AYPIZ_3nFtShmecPqaXa6As"}
+

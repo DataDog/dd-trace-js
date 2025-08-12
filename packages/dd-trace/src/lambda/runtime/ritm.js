@@ -7,10 +7,10 @@
  */
 'use strict'
 
-const fs = require('fs')
 const path = require('path')
 
 const log = require('../../log')
+const { getEnvironmentVariable } = require('../../config-helper')
 const Hook = require('../../../../datadog-instrumentations/src/helpers/hook')
 const instrumentations = require('../../../../datadog-instrumentations/src/helpers/instrumentations')
 const {
@@ -32,7 +32,7 @@ const {
  */
 function _extractModuleRootAndHandler (fullHandler) {
   const handlerString = path.basename(fullHandler)
-  const moduleRoot = fullHandler.substring(0, fullHandler.indexOf(handlerString))
+  const moduleRoot = fullHandler.slice(0, Math.max(0, fullHandler.indexOf(handlerString)))
 
   return [moduleRoot, handlerString]
 }
@@ -60,23 +60,18 @@ function _extractModuleNameAndHandlerPath (handler) {
 }
 
 /**
- * Returns the correct path of the file to be patched
- * when required.
+ * Returns all possible paths of the files to be patched when required.
  *
  * @param {*} lambdaStylePath the path comprised of the `LAMBDA_TASK_ROOT`,
  * the root of the module of the Lambda handler, and the module name.
- * @returns the lambdaStylePath with the appropiate extension for the hook.
+ * @returns the lambdaStylePath with appropiate extensions for the hook.
  */
-function _getLambdaFilePath (lambdaStylePath) {
-  let lambdaFilePath = lambdaStylePath
-  if (fs.existsSync(lambdaStylePath + '.js')) {
-    lambdaFilePath += '.js'
-  } else if (fs.existsSync(lambdaStylePath + '.mjs')) {
-    lambdaFilePath += '.mjs'
-  } else if (fs.existsSync(lambdaStylePath + '.cjs')) {
-    lambdaFilePath += '.cjs'
-  }
-  return lambdaFilePath
+function _getLambdaFilePaths (lambdaStylePath) {
+  return [
+    `${lambdaStylePath}.js`,
+    `${lambdaStylePath}.mjs`,
+    `${lambdaStylePath}.cjs`
+  ]
 }
 
 /**
@@ -84,20 +79,21 @@ function _getLambdaFilePath (lambdaStylePath) {
  * the file is required.
  */
 const registerLambdaHook = () => {
-  const lambdaTaskRoot = process.env.LAMBDA_TASK_ROOT
-  const originalLambdaHandler = process.env.DD_LAMBDA_HANDLER
+  const lambdaTaskRoot = getEnvironmentVariable('LAMBDA_TASK_ROOT')
+  const originalLambdaHandler = getEnvironmentVariable('DD_LAMBDA_HANDLER')
 
   if (originalLambdaHandler !== undefined && lambdaTaskRoot !== undefined) {
     const [moduleRoot, moduleAndHandler] = _extractModuleRootAndHandler(originalLambdaHandler)
     const [_module] = _extractModuleNameAndHandlerPath(moduleAndHandler)
 
     const lambdaStylePath = path.resolve(lambdaTaskRoot, moduleRoot, _module)
-    const lambdaFilePath = _getLambdaFilePath(lambdaStylePath)
+    const lambdaFilePaths = _getLambdaFilePaths(lambdaStylePath)
 
-    Hook([lambdaFilePath], (moduleExports) => {
+    // TODO: Redo this like any other instrumentation.
+    Hook(lambdaFilePaths, (moduleExports, name) => {
       require('./patch')
 
-      for (const { hook } of instrumentations[lambdaFilePath]) {
+      for (const { hook } of instrumentations[name]) {
         try {
           moduleExports = hook(moduleExports)
         } catch (e) {
@@ -133,6 +129,6 @@ const registerLambdaHook = () => {
 module.exports = {
   _extractModuleRootAndHandler,
   _extractModuleNameAndHandlerPath,
-  _getLambdaFilePath,
+  _getLambdaFilePaths,
   registerLambdaHook
 }

@@ -51,7 +51,9 @@ function wrapHandleApiRequest (handleApiRequest) {
 function wrapHandleApiRequestWithMatch (handleApiRequest) {
   return function (req, res, query, match) {
     return instrument(req, res, () => {
-      const page = (match !== null && typeof match === 'object' && typeof match.definition === 'object')
+      const page = (
+        match !== null && typeof match === 'object' && match.definition !== null && typeof match.definition === 'object'
+      )
         ? match.definition.pathname
         : undefined
 
@@ -70,7 +72,7 @@ function wrapRenderToHTML (renderToHTML) {
 
 function wrapRenderErrorToHTML (renderErrorToHTML) {
   return function (err, req, res, pathname, query) {
-    return instrument(req, res, err, () => renderErrorToHTML.apply(this, arguments))
+    return instrument(req, res, () => renderErrorToHTML.apply(this, arguments), err)
   }
 }
 
@@ -82,7 +84,7 @@ function wrapRenderToResponse (renderToResponse) {
 
 function wrapRenderErrorToResponse (renderErrorToResponse) {
   return function (ctx, err) {
-    return instrument(ctx.req, ctx.res, err, () => renderErrorToResponse.apply(this, arguments))
+    return instrument(ctx.req, ctx.res, () => renderErrorToResponse.apply(this, arguments), err)
   }
 }
 
@@ -108,6 +110,7 @@ function getPagePath (maybePage) {
 
 function getPageFromPath (page, dynamicRoutes = []) {
   for (const dynamicRoute of dynamicRoutes) {
+    // eslint-disable-next-line unicorn/prefer-regexp-test
     if (dynamicRoute.page.startsWith('/api') && dynamicRoute.match(page)) {
       return getPagePath(dynamicRoute.page)
     }
@@ -121,12 +124,7 @@ function getRequestMeta (req, key) {
   return typeof key === 'string' ? meta[key] : meta
 }
 
-function instrument (req, res, error, handler) {
-  if (typeof error === 'function') {
-    handler = error
-    error = null
-  }
-
+function instrument (req, res, handler, error) {
   req = req.originalRequest || req
   res = res.originalResponse || res
 
@@ -143,6 +141,20 @@ function instrument (req, res, error, handler) {
   requests.add(req)
 
   const ctx = { req, res }
+  // Parse query parameters from request URL
+  if (queryParsedChannel.hasSubscribers && req.url) {
+    // req.url is only the relative path (/foo?bar=baz) and new URL() needs a full URL
+    // so we give it a dummy base
+    const { searchParams } = new URL(req.url, 'http://dummy')
+    const query = {}
+    for (const key of searchParams.keys()) {
+      if (!query[key]) {
+        query[key] = searchParams.getAll(key)
+      }
+    }
+
+    queryParsedChannel.publish({ query })
+  }
 
   return startChannel.runStores(ctx, () => {
     try {
@@ -216,13 +228,13 @@ addHook({
   name: 'next',
   versions: ['>=11.1'],
   file: 'dist/server/serve-static.js'
-}, serveStatic => shimmer.wrap(serveStatic, 'serveStatic', wrapServeStatic))
+}, serveStatic => shimmer.wrap(serveStatic, 'serveStatic', wrapServeStatic, { replaceGetter: true }))
 
 addHook({
   name: 'next',
   versions: ['>=10.2 <11.1'],
   file: 'dist/next-server/server/serve-static.js'
-}, serveStatic => shimmer.wrap(serveStatic, 'serveStatic', wrapServeStatic))
+}, serveStatic => shimmer.wrap(serveStatic, 'serveStatic', wrapServeStatic, { replaceGetter: true }))
 
 addHook({ name: 'next', versions: ['>=11.1'], file: 'dist/server/next-server.js' }, nextServer => {
   const Server = nextServer.default
@@ -282,27 +294,9 @@ addHook({
   versions: ['>=13'],
   file: 'dist/server/web/spec-extension/request.js'
 }, request => {
-  const nextUrlDescriptor = Object.getOwnPropertyDescriptor(request.NextRequest.prototype, 'nextUrl')
-  shimmer.wrap(nextUrlDescriptor, 'get', function (originalGet) {
-    return function wrappedGet () {
-      const nextUrl = originalGet.apply(this, arguments)
-      if (queryParsedChannel.hasSubscribers) {
-        const query = {}
-        for (const key of nextUrl.searchParams.keys()) {
-          if (!query[key]) {
-            query[key] = nextUrl.searchParams.getAll(key)
-          }
-        }
+  const requestProto = Object.getPrototypeOf(request.NextRequest.prototype)
 
-        queryParsedChannel.publish({ query })
-      }
-      return nextUrl
-    }
-  })
-
-  Object.defineProperty(request.NextRequest.prototype, 'nextUrl', nextUrlDescriptor)
-
-  shimmer.massWrap(request.NextRequest.prototype, ['text', 'json'], function (originalMethod) {
+  shimmer.massWrap(requestProto, ['text', 'json'], function (originalMethod) {
     return async function wrappedJson () {
       const body = await originalMethod.apply(this, arguments)
 
@@ -312,7 +306,7 @@ addHook({
     }
   })
 
-  shimmer.wrap(request.NextRequest.prototype, 'formData', function (originalFormData) {
+  shimmer.wrap(requestProto, 'formData', function (originalFormData) {
     return async function wrappedFormData () {
       const body = await originalFormData.apply(this, arguments)
 

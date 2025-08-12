@@ -1,9 +1,9 @@
 'use strict'
 
+const { errorMonitor } = require('events')
 const {
   channel,
-  addHook,
-  AsyncResource
+  addHook
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
@@ -23,34 +23,50 @@ function wrapAllNames (names, action) {
   names.forEach(name => action(name))
 }
 
-// semver >=2 <3
-function wrapMaybeInvoke (_maybeInvoke) {
-  const wrapped = function (fn, args) {
-    if (!Array.isArray(args)) return _maybeInvoke.apply(this, arguments)
+function wrapCallback (callback, ctx, channelPrefix) {
+  const callbackStartCh = channel(`${channelPrefix}:callback:start`)
+  const callbackFinishCh = channel(`${channelPrefix}:callback:finish`)
 
-    const callbackIndex = args.length - 1
-    const callback = args[callbackIndex]
-
-    if (callback instanceof Function) {
-      args[callbackIndex] = AsyncResource.bind(callback)
+  const wrapped = callbackStartCh.runStores(ctx, () => {
+    return function (...args) {
+      return callbackFinishCh.runStores(ctx, () => {
+        return callback.apply(this, args)
+      })
     }
-
-    return _maybeInvoke.apply(this, arguments)
-  }
+  })
+  Object.defineProperty(wrapped, '_dd_wrapped', { value: true })
   return wrapped
 }
 
 function wrapQuery (query) {
-  const wrapped = function (q, params, callback) {
-    callback = AsyncResource.bind(arguments[arguments.length - 1])
-
-    if (typeof callback === 'function') {
-      arguments[arguments.length - 1] = callback
+  return function (q, params, callback) {
+    const cb = arguments[arguments.length - 1]
+    if (typeof cb === 'function') {
+      const ctx = {}
+      arguments[arguments.length - 1] = wrapCallback(cb, ctx, 'apm:couchbase:query')
     }
 
-    const res = query.apply(this, arguments)
-    return res
+    return query.apply(this, arguments)
   }
+}
+
+function wrapCallbackFinish (callback, thisArg, _args, errorCh, finishCh, ctx, channelPrefix) {
+  const callbackStartCh = channel(`${channelPrefix}:callback:start`)
+  const callbackFinishCh = channel(`${channelPrefix}:callback:finish`)
+
+  const wrapped = callbackStartCh.runStores(ctx, () => {
+    return function finish (error, result) {
+      return callbackFinishCh.runStores(ctx, () => {
+        if (error) {
+          ctx.error = error
+          errorCh.publish(ctx)
+        }
+        finishCh.publish(ctx)
+        return callback.apply(thisArg, [error, result])
+      })
+    }
+  })
+  Object.defineProperty(wrapped, '_dd_wrapped', { value: true })
   return wrapped
 }
 
@@ -64,37 +80,50 @@ function wrap (prefix, fn) {
       return fn.apply(this, arguments)
     }
 
-    const callbackIndex = findCallbackIndex(arguments)
+    const callbackIndex = findCallbackIndex(arguments, 1)
 
     if (callbackIndex < 0) return fn.apply(this, arguments)
 
-    const callbackResource = new AsyncResource('bound-anonymous-fn')
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
+    const ctx = { bucket: { name: this.name || this._name }, seedNodes: this._dd_hosts }
+    return startCh.runStores(ctx, () => {
+      const cb = arguments[callbackIndex]
 
-    return asyncResource.runInAsyncScope(() => {
-      const cb = callbackResource.bind(arguments[callbackIndex])
-
-      startCh.publish({ bucket: { name: this.name || this._name }, seedNodes: this._dd_hosts })
-
-      arguments[callbackIndex] = shimmer.wrapFunction(cb, cb => asyncResource.bind(function (error, result) {
-        if (error) {
-          errorCh.publish(error)
-        }
-        finishCh.publish(result)
-        return cb.apply(this, arguments)
-      }))
+      arguments[callbackIndex] = shimmer.wrapFunction(cb, (cb) => {
+        return wrapCallbackFinish(cb, this, arguments, errorCh, finishCh, ctx, prefix)
+      })
 
       try {
         return fn.apply(this, arguments)
       } catch (error) {
+        ctx.error = error
         error.stack // trigger getting the stack at the original throwing point
-        errorCh.publish(error)
+        errorCh.publish(ctx)
 
         throw error
       }
     })
   }
   return wrapped
+}
+
+// semver >=2 <3
+function wrapMaybeInvoke (_maybeInvoke, channelPrefix) {
+  return function (fn, args) {
+    if (!Array.isArray(args)) return _maybeInvoke.apply(this, arguments)
+
+    const callbackIndex = findCallbackIndex(args, 0)
+
+    if (callbackIndex === -1) return _maybeInvoke.apply(this, arguments)
+
+    const callback = args[callbackIndex]
+
+    if (typeof callback === 'function' && !callback._dd_wrapped) {
+      const ctx = {}
+      args[callbackIndex] = wrapCallback(callback, ctx, channelPrefix)
+    }
+
+    return _maybeInvoke.apply(this, arguments)
+  }
 }
 
 // semver >=3
@@ -106,36 +135,36 @@ function wrapCBandPromise (fn, name, startData, thisArg, args) {
 
   if (!startCh.hasSubscribers) return fn.apply(thisArg, args)
 
-  const asyncResource = new AsyncResource('bound-anonymous-fn')
-  const callbackResource = new AsyncResource('bound-anonymous-fn')
-
-  return asyncResource.runInAsyncScope(() => {
-    startCh.publish(startData)
-
+  const ctx = startData
+  return startCh.runStores(ctx, () => {
     try {
       const cbIndex = findCallbackIndex(args, 1)
       if (cbIndex >= 0) {
         // v3 offers callback or promises event handling
         // NOTE: this does not work with v3.2.0-3.2.1 cluster.query, as there is a bug in the couchbase source code
-        const cb = callbackResource.bind(args[cbIndex])
-        args[cbIndex] = shimmer.wrapFunction(cb, cb => asyncResource.bind(function (error, result) {
-          if (error) {
-            errorCh.publish(error)
-          }
-          finishCh.publish({ result })
-          return cb.apply(thisArg, arguments)
-        }))
+        args[cbIndex] = shimmer.wrapFunction(args[cbIndex], (cb) => {
+          return wrapCallbackFinish(cb, thisArg, args, errorCh, finishCh, ctx, `apm:couchbase:${name}`)
+        })
       }
       const res = fn.apply(thisArg, args)
 
       // semver >=3 will always return promise by default
       res.then(
-        asyncResource.bind((result) => finishCh.publish({ result })),
-        asyncResource.bind((err) => errorCh.publish(err)))
+        (result) => {
+          ctx.result = result
+          finishCh.publish(ctx)
+        },
+        (err) => {
+          ctx.error = err
+          errorCh.publish(ctx)
+          finishCh.publish(ctx)
+        }
+      )
       return res
     } catch (e) {
       e.stack
-      errorCh.publish(e)
+      ctx.error = e
+      errorCh.publish(ctx)
       throw e
     }
   })
@@ -162,11 +191,14 @@ function wrapV3Query (query) {
 
 // semver >=2 <3
 addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.12'] }, Bucket => {
+  shimmer.wrap(Bucket.prototype, '_maybeInvoke', maybeInvoke => {
+    return wrapMaybeInvoke(maybeInvoke, 'apm:couchbase:bucket:maybeInvoke')
+  })
+
   const startCh = channel('apm:couchbase:query:start')
   const finishCh = channel('apm:couchbase:query:finish')
   const errorCh = channel('apm:couchbase:query:error')
 
-  shimmer.wrap(Bucket.prototype, '_maybeInvoke', maybeInvoke => wrapMaybeInvoke(maybeInvoke))
   shimmer.wrap(Bucket.prototype, 'query', query => wrapQuery(query))
 
   shimmer.wrap(Bucket.prototype, '_n1qlReq', _n1qlReq => function (host, q, adhoc, emitter) {
@@ -178,24 +210,25 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.12'] }, Buc
 
     const n1qlQuery = getQueryResource(q)
 
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-    return asyncResource.runInAsyncScope(() => {
-      startCh.publish({ resource: n1qlQuery, bucket: { name: this.name || this._name }, seedNodes: this._dd_hosts })
+    const ctx = { resource: n1qlQuery, bucket: { name: this.name || this._name }, seedNodes: this._dd_hosts }
+    return startCh.runStores(ctx, () => {
+      emitter.once('rows', () => {
+        finishCh.publish(ctx)
+      })
 
-      emitter.once('rows', asyncResource.bind(() => {
-        finishCh.publish(undefined)
-      }))
-
-      emitter.once('error', asyncResource.bind((error) => {
-        errorCh.publish(error)
-        finishCh.publish(undefined)
-      }))
+      emitter.once(errorMonitor, (error) => {
+        if (!error) return
+        ctx.error = error
+        errorCh.publish(ctx)
+        finishCh.publish(ctx)
+      })
 
       try {
         return _n1qlReq.apply(this, arguments)
       } catch (err) {
         err.stack // trigger getting the stack at the original throwing point
-        errorCh.publish(err)
+        ctx.error = err
+        errorCh.publish(ctx)
 
         throw err
       }
@@ -210,9 +243,11 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.12'] }, Buc
 })
 
 addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^2.6.12'] }, Cluster => {
-  shimmer.wrap(Cluster.prototype, '_maybeInvoke', maybeInvoke => wrapMaybeInvoke(maybeInvoke))
-  shimmer.wrap(Cluster.prototype, 'query', query => wrapQuery(query))
+  shimmer.wrap(Cluster.prototype, '_maybeInvoke', maybeInvoke => {
+    return wrapMaybeInvoke(maybeInvoke, 'apm:couchbase:cluster:maybeInvoke')
+  })
 
+  shimmer.wrap(Cluster.prototype, 'query', query => wrapQuery(query))
   shimmer.wrap(Cluster.prototype, 'openBucket', openBucket => {
     return function () {
       const bucket = openBucket.apply(this, arguments)

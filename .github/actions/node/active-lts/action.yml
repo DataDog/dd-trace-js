@@ -1,0 +1,8 @@
+name: Node.js Active LTS
+description: Install the current Active LTS version of Node.js
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/node
+      with:
+        version: active

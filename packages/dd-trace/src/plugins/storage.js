@@ -3,7 +3,7 @@
 const ClientPlugin = require('./client')
 
 class StoragePlugin extends ClientPlugin {
-  static get type () { return 'storage' }
+  static type = 'storage'
 
   constructor (...args) {
     super(...args)
@@ -11,12 +11,12 @@ class StoragePlugin extends ClientPlugin {
     this.system = this.constructor.system || this.component
   }
 
-  startSpan (name, options) {
+  startSpan (name, options, ctx) {
     if (!options.service && this.system) {
       options.service = `${this.tracer._service}-${this.system}`
     }
 
-    return super.startSpan(name, options)
+    return super.startSpan(name, options, ctx)
   }
 }
 

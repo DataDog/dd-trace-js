@@ -14,11 +14,10 @@ class LogPropagator {
     carrier.dd = {}
 
     if (spanContext) {
-      if (this._config.traceId128BitLoggingEnabled && spanContext._trace.tags['_dd.p.tid']) {
-        carrier.dd.trace_id = spanContext.toTraceId(true)
-      } else {
-        carrier.dd.trace_id = spanContext.toTraceId()
-      }
+      carrier.dd.trace_id = this._config.traceId128BitGenerationEnabled &&
+        this._config.traceId128BitLoggingEnabled && spanContext._trace.tags['_dd.p.tid']
+        ? spanContext.toTraceId(true)
+        : spanContext.toTraceId()
 
       carrier.dd.span_id = spanContext.toSpanId()
     }
@@ -34,8 +33,8 @@ class LogPropagator {
     }
 
     if (carrier.dd.trace_id.length === 32) {
-      const hi = carrier.dd.trace_id.substring(0, 16)
-      const lo = carrier.dd.trace_id.substring(16, 32)
+      const hi = carrier.dd.trace_id.slice(0, 16)
+      const lo = carrier.dd.trace_id.slice(16, 32)
       const spanContext = new DatadogSpanContext({
         traceId: id(lo, 16),
         spanId: id(carrier.dd.span_id, 10)
@@ -44,12 +43,11 @@ class LogPropagator {
       spanContext._trace.tags['_dd.p.tid'] = hi
 
       return spanContext
-    } else {
-      return new DatadogSpanContext({
-        traceId: id(carrier.dd.trace_id, 10),
-        spanId: id(carrier.dd.span_id, 10)
-      })
     }
+    return new DatadogSpanContext({
+      traceId: id(carrier.dd.trace_id, 10),
+      spanId: id(carrier.dd.span_id, 10)
+    })
   }
 }
 

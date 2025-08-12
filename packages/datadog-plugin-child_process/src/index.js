@@ -17,7 +17,7 @@ function truncateCommand (cmdFields) {
 
     const argLen = cmdFields[i].length
     if (size < MAX_ARG_SIZE && size + argLen > MAX_ARG_SIZE) {
-      cmdFields[i] = cmdFields[i].substring(0, 2)
+      cmdFields[i] = cmdFields[i].slice(0, 2)
       truncated = true
     }
 
@@ -28,14 +28,16 @@ function truncateCommand (cmdFields) {
 }
 
 class ChildProcessPlugin extends TracingPlugin {
-  static get id () { return 'child_process' }
-  static get prefix () { return 'tracing:datadog:child_process:execution' }
+  static id = 'child_process'
+  static prefix = 'tracing:datadog:child_process:execution'
 
   get tracer () {
     return this._tracer
   }
 
-  start ({ command, shell }) {
+  start (ctx) {
+    const { command, shell } = ctx
+
     if (typeof command !== 'string') {
       return
     }
@@ -58,33 +60,51 @@ class ChildProcessPlugin extends TracingPlugin {
       resource: (shell === true) ? 'sh' : cmdFields[0],
       type: 'system',
       meta
-    })
+    }, ctx)
+
+    return ctx.currentStore
   }
 
-  end ({ result, error }) {
+  end (ctx) {
+    const { result, error } = ctx
     let exitCode
 
     if (result !== undefined) {
       exitCode = result?.status || 0
-    } else if (error !== undefined) {
-      exitCode = error?.status || error?.code || 0
-    } else {
+    } else if (error === undefined) {
       // TracingChannels call start, end synchronously. Later when the promise is resolved then asyncStart asyncEnd.
       // Therefore in the case of calling end with neither result nor error means that they will come in the asyncEnd.
       return
+    } else {
+      exitCode = error?.status || error?.code || 0
     }
 
-    this.activeSpan?.setTag('cmd.exit_code', `${exitCode}`)
-    this.activeSpan?.finish()
+    const span = ctx.currentStore?.span || this.activeSpan
+
+    span?.setTag('cmd.exit_code', `${exitCode}`)
+    span?.finish()
+
+    return ctx.parentStore
   }
 
-  error (error) {
-    this.addError(error)
+  error (ctx) {
+    const { error } = ctx
+
+    const span = ctx.currentStore?.span || this.activeSpan
+    this.addError(error, span)
+
+    return ctx.parentStore
   }
 
-  asyncEnd ({ result }) {
-    this.activeSpan?.setTag('cmd.exit_code', `${result}`)
-    this.activeSpan?.finish()
+  asyncEnd (ctx) {
+    const { result } = ctx
+
+    const span = ctx.currentStore?.span || this.activeSpan
+
+    span?.setTag('cmd.exit_code', `${result}`)
+    span?.finish()
+
+    return ctx.parentStore
   }
 }
 

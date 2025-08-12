@@ -4,8 +4,7 @@ const log = require('./log')
 const format = require('./format')
 const SpanSampler = require('./span_sampler')
 const GitMetadataTagger = require('./git_metadata_tagger')
-
-const { SpanStatsProcessor } = require('./span_stats')
+const { getEnvironmentVariable } = require('./config-helper')
 
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
@@ -20,7 +19,12 @@ class SpanProcessor {
     this._config = config
     this._killAll = false
 
-    this._stats = new SpanStatsProcessor(config)
+    // TODO: This should already have been calculated in `config.js`.
+    if (config.stats?.enabled && !config.appsec?.standalone?.enabled) {
+      const { SpanStatsProcessor } = require('./span_stats')
+      this._stats = new SpanStatsProcessor(config)
+    }
+
     this._spanSampler = new SpanSampler(config.sampler)
     this._gitMetadataTagger = new GitMetadataTagger(config)
   }
@@ -44,14 +48,14 @@ class SpanProcessor {
       this._gitMetadataTagger.tagGitMetadata(spanContext)
 
       for (const span of started) {
-        if (span._duration !== undefined) {
+        if (span._duration === undefined) {
+          active.push(span)
+        } else {
           const formattedSpan = format(span)
-          this._stats.onSpanFinished(formattedSpan)
+          this._stats?.onSpanFinished(formattedSpan)
           formatted.push(formattedSpan)
 
           spanProcessCh.publish({ span })
-        } else {
-          active.push(span)
         }
       }
 
@@ -76,7 +80,7 @@ class SpanProcessor {
   }
 
   _erase (trace, active) {
-    if (process.env.DD_TRACE_EXPERIMENTAL_STATE_TRACKING === 'true') {
+    if (getEnvironmentVariable('DD_TRACE_EXPERIMENTAL_STATE_TRACKING') === 'true') {
       const started = new Set()
       const startedIds = new Set()
       const finished = new Set()

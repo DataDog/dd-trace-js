@@ -1,3 +1,5 @@
+'use strict'
+
 const telemetryMetrics = require('../telemetry/metrics')
 
 const ciVisibilityMetrics = telemetryMetrics.manager.namespace('civisibility')
@@ -13,7 +15,8 @@ const formattedTags = {
   isUnsupportedCIProvider: 'is_unsupported_ci',
   isNew: 'is_new',
   isRum: 'is_rum',
-  browserDriver: 'browser_driver'
+  browserDriver: 'browser_driver',
+  autoInjected: 'auto_injected'
 }
 
 // Transform tags dictionary to array of strings.
@@ -80,6 +83,8 @@ const TELEMETRY_GIT_REQUESTS_SETTINGS = 'git_requests.settings'
 const TELEMETRY_GIT_REQUESTS_SETTINGS_MS = 'git_requests.settings_ms'
 const TELEMETRY_GIT_REQUESTS_SETTINGS_ERRORS = 'git_requests.settings_errors'
 const TELEMETRY_GIT_REQUESTS_SETTINGS_RESPONSE = 'git_requests.settings_response'
+const TELEMETRY_GIT_SHA_MATCH = 'git.commit_sha_match'
+const TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY = 'git.commit_sha_discrepancy'
 const TELEMETRY_ITR_SKIPPABLE_TESTS = 'itr_skippable_tests.request'
 const TELEMETRY_ITR_SKIPPABLE_TESTS_MS = 'itr_skippable_tests.request_ms'
 const TELEMETRY_ITR_SKIPPABLE_TESTS_ERRORS = 'itr_skippable_tests.request_errors'
@@ -143,6 +148,8 @@ module.exports = {
   TELEMETRY_GIT_REQUESTS_SETTINGS_MS,
   TELEMETRY_GIT_REQUESTS_SETTINGS_ERRORS,
   TELEMETRY_GIT_REQUESTS_SETTINGS_RESPONSE,
+  TELEMETRY_GIT_SHA_MATCH,
+  TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY,
   TELEMETRY_ITR_SKIPPABLE_TESTS,
   TELEMETRY_ITR_SKIPPABLE_TESTS_MS,
   TELEMETRY_ITR_SKIPPABLE_TESTS_ERRORS,

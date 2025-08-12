@@ -3,7 +3,10 @@
 const proxyquire = require('proxyquire')
 
 describe('RASP - utils.js', () => {
-  let web, utils, stackTrace, config
+  let web, utils, stackTrace, config, telemetry
+  const raspRule = { type: 'type', variant: 'variant' }
+  const req = {}
+  const res = {}
 
   beforeEach(() => {
     web = {
@@ -11,12 +14,22 @@ describe('RASP - utils.js', () => {
     }
 
     stackTrace = {
-      reportStackTrace: sinon.stub()
+      reportStackTrace: sinon.stub(),
+      getCallsiteFrames: sinon.stub().returns([]),
+      canReportStackTrace: sinon.stub().returns(false)
+    }
+
+    telemetry = {
+      updateRaspRuleMatchMetricTags: sinon.stub()
     }
 
     utils = proxyquire('../../../src/appsec/rasp/utils', {
       '../../plugins/util/web': web,
-      '../stack_trace': stackTrace
+      '../stack_trace': stackTrace,
+      '../telemetry': telemetry,
+      '../blocking': {
+        getBlockingAction: sinon.spy((actions) => actions?.blocking_action)
+      }
     })
 
     config = {
@@ -32,23 +45,25 @@ describe('RASP - utils.js', () => {
 
   describe('handleResult', () => {
     it('should report stack trace when generate_stack action is present in waf result', () => {
-      const req = {}
       const rootSpan = {}
       const stackId = 'test_stack_id'
       const result = {
-        generate_stack: {
-          stack_id: stackId
-        }
+        actions: {
+          generate_stack: {
+            stack_id: stackId
+          }
+        },
+        events: [{ a: [1] }]
       }
 
       web.root.returns(rootSpan)
+      stackTrace.canReportStackTrace.returns(true)
 
-      utils.handleResult(result, req, undefined, undefined, config)
+      utils.handleResult(result, req, undefined, undefined, config, raspRule)
       sinon.assert.calledOnceWithExactly(stackTrace.reportStackTrace, rootSpan, stackId, sinon.match.array)
     })
 
     it('should not report stack trace when max stack traces limit is reached', () => {
-      const req = {}
       const rootSpan = {
         meta_struct: {
           '_dd.stack': {
@@ -57,19 +72,20 @@ describe('RASP - utils.js', () => {
         }
       }
       const result = {
-        generate_stack: {
-          stack_id: 'stackId'
+        actions: {
+          generate_stack: {
+            stack_id: 'stackId'
+          }
         }
       }
 
       web.root.returns(rootSpan)
 
-      utils.handleResult(result, req, undefined, undefined, config)
+      utils.handleResult(result, req, undefined, undefined, config, raspRule)
       sinon.assert.notCalled(stackTrace.reportStackTrace)
     })
 
     it('should not report stack trace when rootSpan is null', () => {
-      const req = {}
       const result = {
         generate_stack: {
           stack_id: 'stackId'
@@ -78,23 +94,23 @@ describe('RASP - utils.js', () => {
 
       web.root.returns(null)
 
-      utils.handleResult(result, req, undefined, undefined, config)
+      utils.handleResult(result, req, undefined, undefined, config, raspRule)
       sinon.assert.notCalled(stackTrace.reportStackTrace)
     })
 
     it('should not report stack trace when no action is present in waf result', () => {
-      const req = {}
       const result = {}
 
-      utils.handleResult(result, req, undefined, undefined, config)
+      utils.handleResult(result, req, undefined, undefined, config, raspRule)
       sinon.assert.notCalled(stackTrace.reportStackTrace)
     })
 
     it('should not report stack trace when stack trace reporting is disabled', () => {
-      const req = {}
       const result = {
-        generate_stack: {
-          stack_id: 'stackId'
+        actions: {
+          generate_stack: {
+            stack_id: 'stackId'
+          }
         }
       }
       const config = {
@@ -107,8 +123,64 @@ describe('RASP - utils.js', () => {
         }
       }
 
-      utils.handleResult(result, req, undefined, undefined, config)
+      utils.handleResult(result, req, undefined, undefined, config, raspRule)
       sinon.assert.notCalled(stackTrace.reportStackTrace)
+    })
+
+    it('should create DatadogRaspAbortError when blockingAction is present', () => {
+      const rootSpan = {
+        context: sinon.stub().returns({ _name: 'express.request' })
+      }
+      const abortController = {
+        abort: sinon.stub(),
+        signal: {}
+      }
+      const result = {
+        actions: {
+          blocking_action: { type: 'block_request' }
+        }
+      }
+
+      web.root.returns(rootSpan)
+
+      utils.handleResult(result, req, res, abortController, config, raspRule)
+
+      sinon.assert.calledOnce(abortController.abort)
+      const abortError = abortController.abort.firstCall.args[0]
+      expect(abortError).to.be.instanceOf(utils.DatadogRaspAbortError)
+      expect(abortError.raspRule).to.equal(raspRule)
+      expect(abortError.blockingAction).to.equal(result.actions.blocking_action)
+    })
+
+    it('should call updateRaspRuleMatchMetricTags when no blockingAction is present', () => {
+      const rootSpan = {}
+      const abortController = {
+        abort: sinon.stub(),
+        signal: {}
+      }
+      const result = {
+        events: [{ a: [1] }]
+      }
+
+      web.root.returns(rootSpan)
+
+      utils.handleResult(result, req, res, abortController, config, raspRule)
+
+      sinon.assert.notCalled(abortController.abort)
+      sinon.assert.calledOnceWithExactly(telemetry.updateRaspRuleMatchMetricTags, req, raspRule, false, false)
+    })
+  })
+
+  describe('DatadogRaspAbortError', () => {
+    it('should store all provided parameters', () => {
+      const blockingAction = { type: 'block_request' }
+
+      const error = new utils.DatadogRaspAbortError(req, res, blockingAction, raspRule)
+
+      expect(error.name).to.equal('DatadogRaspAbortError')
+      expect(error.message).to.equal('DatadogRaspAbortError')
+      expect(error.blockingAction).to.equal(blockingAction)
+      expect(error.raspRule).to.equal(raspRule)
     })
   })
 })

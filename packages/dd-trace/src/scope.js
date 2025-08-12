@@ -8,7 +8,7 @@ const originals = new WeakMap()
 
 class Scope {
   active () {
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
 
     return (store && store.span) || null
   }
@@ -16,10 +16,10 @@ class Scope {
   activate (span, callback) {
     if (typeof callback !== 'function') return callback
 
-    const oldStore = storage.getStore()
-    const newStore = span ? storage.getStore(span._store) : oldStore
+    const oldStore = storage('legacy').getStore()
+    const newStore = span ? storage('legacy').getStore(span._store) : oldStore
 
-    storage.enterWith({ ...newStore, span })
+    storage('legacy').enterWith({ ...newStore, span })
 
     try {
       return callback()
@@ -30,7 +30,7 @@ class Scope {
 
       throw e
     } finally {
-      storage.enterWith(oldStore)
+      storage('legacy').enterWith(oldStore)
     }
   }
 
@@ -52,7 +52,7 @@ class Scope {
   }
 
   _spanOrActive (span) {
-    return span !== undefined ? span : this.active()
+    return span === undefined ? this.active() : span
   }
 
   _isPromise (promise) {

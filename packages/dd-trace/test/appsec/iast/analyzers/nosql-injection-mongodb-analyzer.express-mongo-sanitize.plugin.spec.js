@@ -4,24 +4,15 @@ const axios = require('axios')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
-const semver = require('semver')
 const { prepareTestServerForIastInExpress } = require('../utils')
 const agent = require('../../../plugins/agent')
+const { withVersions } = require('../../../setup/mocha')
 
 describe('nosql injection detection in mongodb - whole feature', () => {
   // https://github.com/fiznool/express-mongo-sanitize/issues/200
-  withVersions('mongodb', 'express', '>4.18.0 <5.0.0', expressVersion => {
-    withVersions('mongodb', 'mongodb', mongodbVersion => {
+  withVersions('express-mongo-sanitize', 'express', '>4.18.0 <5.0.0', expressVersion => {
+    withVersions('express-mongo-sanitize', 'mongodb', mongodbVersion => {
       const mongodb = require(`../../../../../../versions/mongodb@${mongodbVersion}`)
-
-      const satisfiesNodeVersionForMongo3and4 =
-        (semver.satisfies(process.version, '<14.20.1') && semver.satisfies(mongodb.version(), '>=3.3 <5'))
-      const satisfiesNodeVersionForMongo5 =
-        (semver.satisfies(process.version, '>=14.20.1 <16.20.1') && semver.satisfies(mongodb.version(), '5'))
-      const satisfiesNodeVersionForMongo6 =
-        (semver.satisfies(process.version, '>=16.20.1') && semver.satisfies(mongodb.version(), '>=6'))
-
-      if (!satisfiesNodeVersionForMongo3and4 && !satisfiesNodeVersionForMongo5 && !satisfiesNodeVersionForMongo6) return
 
       const vulnerableMethodFilename = 'mongodb-vulnerable-method.js'
       let collection, tmpFilePath
@@ -79,6 +70,94 @@ describe('nosql injection detection in mongodb - whole feature', () => {
               })
 
               expect(someRedacted).to.be.true
+            }
+          })
+
+          testThatRequestHasVulnerability({
+            testDescription: 'should have NOSQL_MONGODB_INJECTION vulnerability in $or clause',
+            fn: async (req, res) => {
+              await collection.find({
+                key: {
+                  $or: [req.query.key, 'test']
+                }
+              })
+              res.end()
+            },
+            vulnerability: 'NOSQL_MONGODB_INJECTION',
+            makeRequest: (done, config) => {
+              axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
+            },
+            cb: function (vulnerabilities) {
+              const vulnerability = vulnerabilities[0]
+              let someRedacted = false
+              vulnerability.evidence.valueParts.forEach(valuePart => {
+                if (valuePart.redacted) {
+                  someRedacted = true
+                }
+              })
+
+              expect(someRedacted).to.be.true
+            }
+          })
+
+          testThatRequestHasNoVulnerability({
+            testDescription: 'should not have NOSQL_MONGODB_INJECTION vulnerability using $eq',
+            fn: async (req, res) => {
+              await collection.find({
+                key: {
+                  $eq: req.query.key
+                }
+              })
+              res.end()
+            },
+            vulnerability: 'NOSQL_MONGODB_INJECTION',
+            makeRequest: (done, config) => {
+              axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
+            }
+          })
+
+          testThatRequestHasNoVulnerability({
+            testDescription: 'should not have NOSQL_MONGODB_INJECTION vulnerability with modified tainted string',
+            fn: async (req, res) => {
+              const data = req.query.key
+              // eslint-disable-next-line no-undef
+              const modifiedData = _ddiast.plusOperator('modified' + data, 'modified', data)
+
+              await collection.find({
+                key: modifiedData
+              })
+
+              res.end()
+            },
+            vulnerability: 'NOSQL_MONGODB_INJECTION',
+            makeRequest: (done, config) => {
+              axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
+            }
+          })
+
+          testThatRequestHasNoVulnerability({
+            testDescription: 'should not have NOSQL_MONGODB_INJECTION vulnerability in too deep property',
+            fn: async (req, res) => {
+              const deep = 11
+              const obj = {}
+              let next = obj
+
+              for (let i = 0; i <= deep; i++) {
+                if (i === deep) {
+                  next.key = req.query.key
+                  break
+                }
+
+                next.key = {}
+                next = next.key
+              }
+
+              await collection.find(obj)
+              res.end()
+            },
+            vulnerability: 'NOSQL_MONGODB_INJECTION',
+            makeRequest: (done, config) => {
+              axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
             }
           })
 

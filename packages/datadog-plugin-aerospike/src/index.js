@@ -6,21 +6,17 @@ const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 const AEROSPIKE_PEER_SERVICE = 'aerospike.namespace'
 
 class AerospikePlugin extends DatabasePlugin {
-  static get id () { return 'aerospike' }
-  static get operation () { return 'command' }
-  static get system () { return 'aerospike' }
-  static get prefix () {
-    return 'tracing:apm:aerospike:command'
-  }
+  static id = 'aerospike'
+  static operation = 'command'
+  static system = 'aerospike'
+  static prefix = 'tracing:apm:aerospike:command'
 
-  static get peerServicePrecursors () {
-    return [AEROSPIKE_PEER_SERVICE]
-  }
+  static peerServicePrecursors = [AEROSPIKE_PEER_SERVICE]
 
   bindStart (ctx) {
     const { commandName, commandArgs } = ctx
     const resourceName = commandName.slice(0, commandName.indexOf('Command'))
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
     const childOf = store ? store.span : null
     const meta = getMeta(resourceName, commandArgs)
 
@@ -68,8 +64,12 @@ class AerospikePlugin extends DatabasePlugin {
 function getMeta (resourceName, commandArgs) {
   let meta = {}
   if (resourceName.includes('Index')) {
-    const [ns, set, bin, index] = commandArgs
-    meta = getMetaForIndex(ns, set, bin, index)
+    const [ns, set, bin, exp, index] = commandArgs
+
+    // The `ext` argument was added to IndexCreate in 6.3.0
+    meta = commandArgs.length > 8
+      ? getMetaForIndex(ns, set, bin, index)
+      : getMetaForIndex(ns, set, bin, exp)
   } else if (resourceName === 'Query') {
     const { ns, set } = commandArgs[2]
     meta = getMetaForQuery({ ns, set })

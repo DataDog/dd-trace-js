@@ -5,7 +5,8 @@ const {
   schema,
   resolvers,
   graphqlCommonTests
-} = require('./graphq.test-utils')
+} = require('./graphql.test-utils')
+const { withVersions } = require('../setup/mocha')
 
 withVersions('apollo-server-core', 'fastify', '3', fastifyVersion => {
   withVersions('apollo-server-core', 'apollo-server-fastify', apolloServerFastifyVersion => {

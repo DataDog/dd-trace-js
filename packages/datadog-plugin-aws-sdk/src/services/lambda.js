@@ -4,18 +4,16 @@ const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 
 class Lambda extends BaseAwsSdkPlugin {
-  static get id () { return 'lambda' }
+  static id = 'lambda'
 
   generateTags (params, operation, response) {
-    const tags = {}
+    if (!params?.FunctionName) return {}
 
-    if (!params || !params.FunctionName) return tags
-
-    return Object.assign(tags, {
+    return {
       'resource.name': `${operation} ${params.FunctionName}`,
       functionname: params.FunctionName,
       'aws.lambda': params.FunctionName
-    })
+    }
   }
 
   requestInject (span, request) {
@@ -33,7 +31,7 @@ class Lambda extends BaseAwsSdkPlugin {
           // Check to see if there's already a config on the request
           let clientContext = {}
           if (request.params.ClientContext) {
-            const clientContextJson = Buffer.from(request.params.ClientContext, 'base64').toString('utf-8')
+            const clientContextJson = Buffer.from(request.params.ClientContext, 'base64').toString('utf8')
             clientContext = JSON.parse(clientContextJson)
           }
           if (!clientContext.custom) {

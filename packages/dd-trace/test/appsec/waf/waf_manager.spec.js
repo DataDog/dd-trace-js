@@ -8,7 +8,7 @@ describe('WAFManager', () => {
 
   beforeEach(() => {
     DDWAF = sinon.stub()
-    DDWAF.prototype.constructor.version = sinon.stub()
+    DDWAF.version = sinon.stub()
     DDWAF.prototype.knownAddresses = knownAddresses
     DDWAF.prototype.diagnostics = {}
     DDWAF.prototype.createContext = sinon.stub()

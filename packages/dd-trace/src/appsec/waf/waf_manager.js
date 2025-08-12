@@ -7,24 +7,30 @@ const WAFContextWrapper = require('./waf_context_wrapper')
 const contexts = new WeakMap()
 
 class WAFManager {
+  static defaultWafConfigPath = 'datadog/00/ASM_DD/default/config'
+
   constructor (rules, config) {
     this.config = config
     this.wafTimeout = config.wafTimeout
     this.ddwaf = this._loadDDWAF(rules)
-    this.ddwafVersion = this.ddwaf.constructor.version()
     this.rulesVersion = this.ddwaf.diagnostics.ruleset_version
+    this.defaultRules = rules
 
-    Reporter.reportWafInit(this.ddwafVersion, this.rulesVersion, this.ddwaf.diagnostics.rules)
+    Reporter.reportWafInit(this.ddwafVersion, this.rulesVersion, this.ddwaf.diagnostics.rules, true)
   }
 
   _loadDDWAF (rules) {
     try {
       // require in `try/catch` because this can throw at require time
       const { DDWAF } = require('@datadog/native-appsec')
+      this.ddwafVersion = DDWAF.version()
 
       const { obfuscatorKeyRegex, obfuscatorValueRegex } = this.config
-      return new DDWAF(rules, { obfuscatorKeyRegex, obfuscatorValueRegex })
+      return new DDWAF(rules, WAFManager.defaultWafConfigPath, { obfuscatorKeyRegex, obfuscatorValueRegex })
     } catch (err) {
+      this.ddwafVersion = this.ddwafVersion || 'unknown'
+      Reporter.reportWafInit(this.ddwafVersion, 'unknown')
+
       log.error('[ASM] AppSec could not load native package. In-app WAF features will not be available.')
 
       throw err
@@ -48,14 +54,27 @@ class WAFManager {
     return wafContext
   }
 
-  update (newRules) {
-    this.ddwaf.update(newRules)
-
+  setRulesVersion () {
     if (this.ddwaf.diagnostics.ruleset_version) {
       this.rulesVersion = this.ddwaf.diagnostics.ruleset_version
     }
+  }
 
-    Reporter.reportWafUpdate(this.ddwafVersion, this.rulesVersion)
+  setAsmDdFallbackConfig () {
+    if (!this.ddwaf.configPaths.some(cp => cp.includes('ASM_DD'))) {
+      this.updateConfig(WAFManager.defaultWafConfigPath, this.defaultRules)
+    }
+  }
+
+  updateConfig (path, rules) {
+    const updateResult = this.ddwaf.createOrUpdateConfig(rules, path)
+    this.setRulesVersion()
+    return updateResult
+  }
+
+  removeConfig (path) {
+    this.ddwaf.removeConfig(path)
+    this.setRulesVersion()
   }
 
   destroy () {

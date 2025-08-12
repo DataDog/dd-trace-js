@@ -7,9 +7,9 @@ const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('../../dd-t
 const { COMPONENT } = require('../../dd-trace/src/constants')
 
 class HttpServerPlugin extends ServerPlugin {
-  static get id () {
-    return 'http'
-  }
+  static id = 'http'
+
+  static prefix = 'apm:http:server:request'
 
   constructor (...args) {
     super(...args)
@@ -17,23 +17,20 @@ class HttpServerPlugin extends ServerPlugin {
     this.addTraceSub('exit', message => this.exit(message))
   }
 
-  addTraceSub (eventName, handler) {
-    this.addSub(`apm:${this.constructor.id}:server:${this.operation}:${eventName}`, handler)
-  }
-
   start ({ req, res, abortController }) {
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
     const span = web.startSpan(
       this.tracer,
       {
         ...this.config,
-        service: this.config.service || this.serviceName()
+        service: this.config.service || this.serviceName(),
       },
       req,
       res,
       this.operationName()
     )
     span.setTag(COMPONENT, this.constructor.id)
+    span._integrationName = this.constructor.id
 
     this._parentStore = store
     this.enter(span, { ...store, req, res })

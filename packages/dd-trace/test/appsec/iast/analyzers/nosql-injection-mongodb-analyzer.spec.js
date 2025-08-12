@@ -10,6 +10,8 @@ const {
   getRanges
 } = require('../../../../src/appsec/iast/taint-tracking/operations')
 
+const { NOSQL_MONGODB_INJECTION_MARK } = require('../../../../src/appsec/iast/taint-tracking/secure-marks')
+
 const sanitizeMiddlewareFinished = channel('datadog:express-mongo-sanitize:filter:finish')
 const sanitizeMethodFinished = channel('datadog:express-mongo-sanitize:sanitize:finish')
 
@@ -17,7 +19,7 @@ describe('nosql injection detection in mongodb', () => {
   describe('SECURE_MARKS', () => {
     let iastContext
     const tid = 'transaction_id'
-    let nosqlInjectionMongodbAnalyzer, MONGODB_NOSQL_SECURE_MARK
+    let nosqlInjectionMongodbAnalyzer
 
     before(() => {
       nosqlInjectionMongodbAnalyzer =
@@ -29,7 +31,6 @@ describe('nosql injection detection in mongodb', () => {
               }
             }
           })
-      MONGODB_NOSQL_SECURE_MARK = nosqlInjectionMongodbAnalyzer.MONGODB_NOSQL_SECURE_MARK
     })
 
     beforeEach(() => {
@@ -61,7 +62,7 @@ describe('nosql injection detection in mongodb', () => {
           expect(sanitizedRanges.length).to.be.equal(1)
           expect(notSanitizedRanges.length).to.be.equal(1)
 
-          expect(sanitizedRanges[0].secureMarks).to.be.equal(MONGODB_NOSQL_SECURE_MARK)
+          expect(sanitizedRanges[0].secureMarks).to.be.equal(NOSQL_MONGODB_INJECTION_MARK)
           expect(notSanitizedRanges[0].secureMarks).to.be.equal(0)
         })
 
@@ -80,7 +81,7 @@ describe('nosql injection detection in mongodb', () => {
           expect(sanitizedRanges.length).to.be.equal(1)
           expect(notSanitizedRanges.length).to.be.equal(1)
 
-          expect(sanitizedRanges[0].secureMarks).to.be.equal(MONGODB_NOSQL_SECURE_MARK)
+          expect(sanitizedRanges[0].secureMarks).to.be.equal(NOSQL_MONGODB_INJECTION_MARK)
           expect(notSanitizedRanges[0].secureMarks).to.be.equal(0)
         })
       })
@@ -101,7 +102,7 @@ describe('nosql injection detection in mongodb', () => {
           expect(notSanitizedRanges.length).to.be.equal(1)
 
           expect(notSanitizedRanges[0].secureMarks).to.be.equal(0)
-          expect(sanitizedRanges[0].secureMarks).to.be.equal(MONGODB_NOSQL_SECURE_MARK)
+          expect(sanitizedRanges[0].secureMarks).to.be.equal(NOSQL_MONGODB_INJECTION_MARK)
         })
 
         it('Secure mark is added in nested objects', () => {
@@ -118,7 +119,7 @@ describe('nosql injection detection in mongodb', () => {
           expect(sanitizedRanges.length).to.be.equal(1)
           expect(notSanitizedRanges.length).to.be.equal(1)
 
-          expect(sanitizedRanges[0].secureMarks).to.be.equal(MONGODB_NOSQL_SECURE_MARK)
+          expect(sanitizedRanges[0].secureMarks).to.be.equal(NOSQL_MONGODB_INJECTION_MARK)
           expect(notSanitizedRanges[0].secureMarks).to.be.equal(0)
         })
       })

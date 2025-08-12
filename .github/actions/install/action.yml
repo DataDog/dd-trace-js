@@ -1,8 +1,26 @@
 name: Install dependencies
 description: Install dependencies
+inputs:
+  cache:
+    description: "Whether to enable caching of node_modules."
+    required: false
+    default: 'false'
 runs:
   using: composite
-  steps: # retry in case of server error from registry
-    - run: yarn install --ignore-engines || yarn install --ignore-engines
+  steps:
+    - id: yarn-cache
+      uses: actions/cache@v4
+      with:
+        key: yarn-cache-${{ github.workflow }}-${{ github.job }}-${{ hashFiles('yarn.lock') }}-v2
+        path: node_modules.tar
+      if: inputs.cache == 'true'
+    - run: tar -xf node_modules.tar
       shell: bash
-
+      if: inputs.cache == 'true' && steps.yarn-cache.outputs.cache-hit == 'true'
+      # Retry in case of server error from registry.
+      # Wait 60 seconds to give the registry server time to heal.
+    - run: yarn install --frozen-lockfile --ignore-engines || sleep 60 && yarn install --frozen-lockfile --ignore-engines
+      shell: bash
+    - run: tar -cf node_modules.tar node_modules
+      shell: bash
+      if: inputs.cache == 'true' && steps.yarn-cache.outputs.cache-hit != 'true'

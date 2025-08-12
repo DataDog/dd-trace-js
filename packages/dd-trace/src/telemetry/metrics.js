@@ -19,27 +19,25 @@ function now () {
   return Date.now() / 1e3
 }
 
-function mapToJsonArray (map) {
-  return Array.from(map.values()).map(v => v.toJSON())
+function mapToJsonArray (map, filter) {
+  const array = []
+  for (const value of map.values()) {
+    if (!filter || filter(value)) {
+      array.push(value.toJSON())
+    }
+  }
+  return array
 }
 
 function hasPoints (metric) {
   return metric.points.length > 0
 }
 
-let versionTag
-
 class Metric {
   constructor (namespace, metric, common, tags) {
     this.namespace = namespace.toString()
     this.metric = common ? metric : `nodejs.${metric}`
     this.tags = tagArray(tags)
-    if (common) {
-      if (versionTag === undefined) {
-        versionTag = `version:${process.version}`
-      }
-      this.tags.push(versionTag)
-    }
     this.common = common
 
     this.points = []
@@ -146,7 +144,7 @@ class RateMetric extends Metric {
 
   track (value = 1) {
     this.rate += value
-    const rate = this.interval ? (this.rate / this.interval) : 0.0
+    const rate = this.interval ? (this.rate / this.interval) : 0
     this.points = [[now(), rate]]
   }
 }
@@ -177,8 +175,7 @@ class MetricsCollection extends Map {
   toJSON () {
     if (!this.size) return
 
-    const series = mapToJsonArray(this)
-      .filter(hasPoints)
+    const series = mapToJsonArray(this, hasPoints)
 
     if (!series.length) return
 

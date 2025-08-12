@@ -1,4 +1,5 @@
-// eslint-disable-next-line
+'use strict'
+
 require('dd-trace').init({
   service: 'dd-trace-bad-init'
 })

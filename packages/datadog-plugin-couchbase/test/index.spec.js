@@ -2,6 +2,7 @@
 
 const { expect } = require('chai')
 const semver = require('semver')
+const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const proxyquire = require('proxyquire').noPreserveCache()
 const { expectedSchema, rawExpectedSchema } = require('./naming')
@@ -75,7 +76,7 @@ describe('Plugin', () => {
             const query = 'SELECT 1+1'
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
                 expect(span).to.have.property('name', expectedSchema.query.opName)
                 expect(span).to.have.property('service', expectedSchema.query.serviceName)
@@ -84,6 +85,7 @@ describe('Plugin', () => {
                 expect(span.meta).to.have.property('span.kind', 'client')
                 expect(span.meta).to.have.property('couchbase.bucket.name', 'datadog-test')
                 expect(span.meta).to.have.property('component', 'couchbase')
+                expect(span.meta).to.have.property('_dd.integration', 'couchbase')
               })
               .then(done)
               .catch(done)
@@ -104,7 +106,7 @@ describe('Plugin', () => {
 
           it('should handle storage queries', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
                 expect(span).to.have.property('name', expectedSchema.upsert.opName)
                 expect(span).to.have.property('service', expectedSchema.upsert.serviceName)
@@ -136,7 +138,7 @@ describe('Plugin', () => {
             const query = 'SELECT 1+2'
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
                 expect(span).to.have.property('name', expectedSchema.query.opName)
                 expect(span).to.have.property('service', expectedSchema.query.serviceName)
@@ -217,7 +219,7 @@ describe('Plugin', () => {
             const query = 'SELECT 1+1'
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
                 expect(span).to.have.property('name', expectedSchema.query.opName)
                 expect(span).to.have.property('service', expectedSchema.query.serviceName)
@@ -234,7 +236,7 @@ describe('Plugin', () => {
 
           it('should handle storage queries', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
                 expect(span).to.have.property('name', expectedSchema.upsert.opName)
                 expect(span).to.have.property('service', expectedSchema.upsert.serviceName)
@@ -272,7 +274,7 @@ describe('Plugin', () => {
         describe('operations still work with callbacks', () => {
           it('should perform normal cluster query operation with callback', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
                 expect(span).to.have.property('name', expectedSchema.query.opName)
                 expect(span).to.have.property('service', expectedSchema.query.serviceName)
@@ -302,7 +304,7 @@ describe('Plugin', () => {
                 const invalidQuery = 'SELECT'
                 const cb = sinon.spy()
                 agent
-                  .use(traces => {
+                  .assertSomeTraces(traces => {
                     const span = traces[0][0]
                     expect(cb).to.have.been.calledOnce
                     // different couchbase sdk versions will have different error messages/types

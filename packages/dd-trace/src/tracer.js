@@ -3,16 +3,11 @@
 const Tracer = require('./opentracing/tracer')
 const tags = require('../../../ext/tags')
 const Scope = require('./scope')
-const { storage } = require('../../datadog-core')
 const { isError } = require('./util')
 const { setStartupLogConfig } = require('./startup-log')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const { DataStreamsProcessor } = require('./datastreams/processor')
-const { DsmPathwayCodec } = require('./datastreams/pathway')
-const { DD_MAJOR } = require('../../../version')
-const DataStreamsContext = require('./data_streams_context')
-const { DataStreamsCheckpointer } = require('./data_streams')
-const { flushStartupLogs } = require('../../datadog-instrumentations/src/check_require_cache')
+const { DataStreamsCheckpointer, DataStreamsManager, DataStreamsProcessor } = require('./datastreams')
+const { flushStartupLogs } = require('../../datadog-instrumentations/src/helpers/check-require-cache')
 const log = require('./log/writer')
 
 const SPAN_TYPE = tags.SPAN_TYPE
@@ -24,31 +19,37 @@ class DatadogTracer extends Tracer {
   constructor (config, prioritySampler) {
     super(config, prioritySampler)
     this._dataStreamsProcessor = new DataStreamsProcessor(config)
+    this._dataStreamsManager = new DataStreamsManager(this._dataStreamsProcessor)
     this.dataStreamsCheckpointer = new DataStreamsCheckpointer(this)
     this._scope = new Scope()
     setStartupLogConfig(config)
     flushStartupLogs(log)
+
+    if (!config._isInServerlessEnvironment()) {
+      const storeConfig = require('./tracer_metadata')
+      // Keep a reference to the handle, to keep the memfd alive in memory.
+      // It is read by the service discovery feature.
+      const metadata = storeConfig(config)
+      if (metadata === undefined) {
+        log.warn('Could not store tracer configuration for service discovery')
+      }
+      this._inmem_cfg = metadata
+    }
   }
 
-  configure ({ env, sampler }) {
-    this._prioritySampler.configure(env, sampler)
+  configure (config) {
+    const { env, sampler } = config
+    this._prioritySampler.configure(env, sampler, config)
   }
 
   // todo[piochelepiotr] These two methods are not related to the tracer, but to data streams monitoring.
   // They should be moved outside of the tracer in the future.
   setCheckpoint (edgeTags, span, payloadSize = 0) {
-    const ctx = this._dataStreamsProcessor.setCheckpoint(
-      edgeTags, span, DataStreamsContext.getDataStreamsContext(), payloadSize
-    )
-    DataStreamsContext.setDataStreamsContext(ctx)
-    return ctx
+    return this._dataStreamsManager.setCheckpoint(edgeTags, span, payloadSize)
   }
 
   decodeDataStreamsContext (carrier) {
-    const ctx = DsmPathwayCodec.decode(carrier)
-    // we erase the previous context everytime we decode a new one
-    DataStreamsContext.setDataStreamsContext(ctx)
-    return ctx
+    return this._dataStreamsManager.decodeDataStreamsContext(carrier)
   }
 
   setOffset (offsetData) {
@@ -56,13 +57,7 @@ class DatadogTracer extends Tracer {
   }
 
   trace (name, options, fn) {
-    options = Object.assign({
-      childOf: this.scope().active()
-    }, options)
-
-    if (!options.childOf && options.orphanable === false && DD_MAJOR < 4) {
-      return fn(null, () => {})
-    }
+    options = { childOf: this.scope().active(), ...options }
 
     const span = this.startSpan(name, options)
 
@@ -90,9 +85,8 @@ class DatadogTracer extends Tracer {
             throw err
           }
         )
-      } else {
-        span.finish()
       }
+      span.finish()
 
       return result
     } catch (e) {
@@ -106,17 +100,9 @@ class DatadogTracer extends Tracer {
     const tracer = this
 
     return function () {
-      const store = storage.getStore()
-
-      if (store && store.noop) return fn.apply(this, arguments)
-
       let optionsObj = options
       if (typeof optionsObj === 'function' && typeof fn === 'function') {
         optionsObj = optionsObj.apply(this, arguments)
-      }
-
-      if (optionsObj && optionsObj.orphanable === false && !tracer.scope().active() && DD_MAJOR < 4) {
-        return fn.apply(this, arguments)
       }
 
       const lastArgId = arguments.length - 1
@@ -132,9 +118,8 @@ class DatadogTracer extends Tracer {
 
           return fn.apply(this, arguments)
         })
-      } else {
-        return tracer.trace(name, optionsObj, () => fn.apply(this, arguments))
       }
+      return tracer.trace(name, optionsObj, () => fn.apply(this, arguments))
     }
   }
 

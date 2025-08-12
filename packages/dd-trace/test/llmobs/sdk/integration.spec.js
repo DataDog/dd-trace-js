@@ -10,10 +10,15 @@ const tags = {
   language: 'javascript'
 }
 
-const AgentProxyWriter = require('../../../src/llmobs/writers/spans/agentProxy')
+const SpanWriter = require('../../../src/llmobs/writers/spans')
 const EvalMetricsWriter = require('../../../src/llmobs/writers/evaluations')
 
 const tracerVersion = require('../../../../../package.json').version
+
+function getTag (llmobsSpan, tagName) {
+  const tag = llmobsSpan.tags.find(tag => tag.split(':')[0] === tagName)
+  return tag?.split(':')[1]
+}
 
 describe('end to end sdk integration tests', () => {
   let tracer
@@ -24,7 +29,7 @@ describe('end to end sdk integration tests', () => {
     payloadGenerator()
     return {
       spans: tracer._tracer._processor.process.args.map(args => args[0]).reverse(), // spans finish in reverse order
-      llmobsSpans: AgentProxyWriter.prototype.append.args?.map(args => args[0]),
+      llmobsSpans: SpanWriter.prototype.append.args?.map(args => args[0]),
       evaluationMetrics: EvalMetricsWriter.prototype.append.args?.map(args => args[0])
     }
   }
@@ -41,7 +46,8 @@ describe('end to end sdk integration tests', () => {
     tracer = require('../../../../dd-trace')
     tracer.init({
       llmobs: {
-        mlApp: 'test'
+        mlApp: 'test',
+        agentlessEnabled: false
       }
     })
 
@@ -52,20 +58,21 @@ describe('end to end sdk integration tests', () => {
     llmobs = tracer.llmobs
     if (!llmobs.enabled) {
       llmobs.enable({
-        mlApp: 'test'
+        mlApp: 'test',
+        agentlessEnabled: false
       })
     }
 
     tracer._tracer._config.apiKey = 'test'
 
     sinon.spy(tracer._tracer._processor, 'process')
-    sinon.stub(AgentProxyWriter.prototype, 'append')
+    sinon.stub(SpanWriter.prototype, 'append')
     sinon.stub(EvalMetricsWriter.prototype, 'append')
   })
 
   afterEach(() => {
     tracer._tracer._processor.process.resetHistory()
-    AgentProxyWriter.prototype.append.resetHistory()
+    SpanWriter.prototype.append.resetHistory()
     EvalMetricsWriter.prototype.append.resetHistory()
 
     process.removeAllListeners('beforeExit')
@@ -197,7 +204,7 @@ describe('end to end sdk integration tests', () => {
     expect(evaluationMetrics).to.have.lengthOf(1)
 
     // check eval metrics content
-    const exptected = [
+    const expected = [
       {
         trace_id: spans[0].context().toTraceId(true),
         span_id: spans[0].context().toSpanId(),
@@ -210,8 +217,110 @@ describe('end to end sdk integration tests', () => {
       }
     ]
 
-    check(exptected, evaluationMetrics)
+    check(expected, evaluationMetrics)
 
     Date.now.restore()
+  })
+
+  describe('distributed', () => {
+    it('injects and extracts the proper llmobs context', () => {
+      payloadGenerator = function () {
+        const carrier = {}
+        llmobs.trace({ kind: 'workflow', name: 'parent' }, workflow => {
+          tracer.inject(workflow, 'text_map', carrier)
+        })
+
+        const spanContext = tracer.extract('text_map', carrier)
+        tracer.trace('new-service-root', { childOf: spanContext }, () => {
+          llmobs.trace({ kind: 'workflow', name: 'child' }, () => {})
+        })
+      }
+
+      const { llmobsSpans } = run(payloadGenerator)
+      expect(llmobsSpans).to.have.lengthOf(2)
+
+      expect(getTag(llmobsSpans[0], 'ml_app')).to.equal('test')
+      expect(getTag(llmobsSpans[1], 'ml_app')).to.equal('test')
+    })
+
+    it('injects the local mlApp', () => {
+      payloadGenerator = function () {
+        const carrier = {}
+        llmobs.trace({ kind: 'workflow', name: 'parent', mlApp: 'span-level-ml-app' }, workflow => {
+          tracer.inject(workflow, 'text_map', carrier)
+        })
+
+        const spanContext = tracer.extract('text_map', carrier)
+        tracer.trace('new-service-root', { childOf: spanContext }, () => {
+          llmobs.trace({ kind: 'workflow', name: 'child' }, () => {})
+        })
+      }
+
+      const { llmobsSpans } = run(payloadGenerator)
+      expect(llmobsSpans).to.have.lengthOf(2)
+
+      expect(getTag(llmobsSpans[0], 'ml_app')).to.equal('span-level-ml-app')
+      expect(getTag(llmobsSpans[1], 'ml_app')).to.equal('span-level-ml-app')
+    })
+
+    it('injects a distributed mlApp', () => {
+      payloadGenerator = function () {
+        let carrier = {}
+        llmobs.trace({ kind: 'workflow', name: 'parent' }, workflow => {
+          tracer.inject(workflow, 'text_map', carrier)
+        })
+
+        // distributed call to service 2
+        let spanContext = tracer.extract('text_map', carrier)
+        carrier = {}
+        tracer.trace('new-service-root', { childOf: spanContext }, () => {
+          llmobs.trace({ kind: 'workflow', name: 'child-1' }, child => {
+            tracer.inject(child, 'text_map', carrier)
+          })
+        })
+
+        // distributed call to service 3
+        spanContext = tracer.extract('text_map', carrier)
+        tracer.trace('new-service-root', { childOf: spanContext }, () => {
+          llmobs.trace({ kind: 'workflow', name: 'child-2' }, () => {})
+        })
+      }
+
+      const { llmobsSpans } = run(payloadGenerator)
+      expect(llmobsSpans).to.have.lengthOf(3)
+
+      expect(getTag(llmobsSpans[0], 'ml_app')).to.equal('test')
+      expect(getTag(llmobsSpans[1], 'ml_app')).to.equal('test')
+      expect(getTag(llmobsSpans[2], 'ml_app')).to.equal('test')
+    })
+  })
+
+  describe('with no global mlApp', () => {
+    let originalMlApp
+
+    before(() => {
+      originalMlApp = tracer._tracer._config.llmobs.mlApp
+      tracer._tracer._config.llmobs.mlApp = null
+    })
+
+    after(() => {
+      tracer._tracer._config.llmobs.mlApp = originalMlApp
+    })
+
+    it('does not submit a span if there is no mlApp', () => {
+      payloadGenerator = function () {
+        let error
+        try {
+          llmobs.trace({ kind: 'workflow', name: 'myWorkflow' }, () => {})
+        } catch (e) {
+          error = e
+        }
+
+        expect(error).to.exist
+      }
+
+      const { llmobsSpans } = run(payloadGenerator)
+      expect(llmobsSpans).to.have.lengthOf(0)
+    })
   })
 })

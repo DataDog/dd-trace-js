@@ -6,10 +6,10 @@ const { TEXT_MAP } = require('../../../ext/formats')
 const { addMetadataTags, getFilter, getMethodMetadata } = require('./util')
 
 class GrpcClientPlugin extends ClientPlugin {
-  static get id () { return 'grpc' }
-  static get operation () { return 'client:request' }
-  static get prefix () { return 'apm:grpc:client:request' }
-  static get peerServicePrecursors () { return ['rpc.service'] }
+  static id = 'grpc'
+  static operation = 'client:request'
+  static prefix = 'apm:grpc:client:request'
+  static peerServicePrecursors = ['rpc.service']
 
   constructor (...args) {
     super(...args)
@@ -20,7 +20,7 @@ class GrpcClientPlugin extends ClientPlugin {
   }
 
   bindStart (message) {
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
     const { metadata, path, type } = message
     const metadataFilter = this.config.metadataFilter
     const method = getMethodMetadata(path, type)
@@ -87,8 +87,8 @@ class GrpcClientPlugin extends ClientPlugin {
       // more are supported by the library
       // https://github.com/grpc/grpc/blob/v1.60.0/doc/naming.md
       const parts = peer.split(':')
-      if (parts[parts.length - 1].match(/^\d+/)) {
-        const port = parts[parts.length - 1]
+      if (/^\d+/.test(parts.at(-1))) {
+        const port = parts.at(-1)
         const ip = parts.slice(0, -1).join(':')
         span.setTag('network.destination.ip', ip)
         span.setTag('network.destination.port', port)

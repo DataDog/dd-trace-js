@@ -2,6 +2,7 @@
 
 require('..')
 const { storage } = require('../../datadog-core')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 describe('Instrumentation', () => {
   let genericPool
@@ -27,11 +28,10 @@ describe('Instrumentation', () => {
       it('should run the acquire() callback in context where acquire() was called', done => {
         const store = 'store'
 
-        storage.run(store, () => {
-          // eslint-disable-next-line n/handle-callback-err
+        storage('legacy').run(store, () => {
           pool.acquire((err, resource) => {
             pool.release(resource)
-            expect(storage.getStore()).to.equal(store)
+            expect(storage('legacy').getStore()).to.equal(store)
             done()
           })
         })
@@ -56,20 +56,20 @@ describe('Instrumentation', () => {
         const store = 'store'
         const store2 = 'store2'
 
-        storage.run(store, () => {
+        storage('legacy').run(store, () => {
           pool.acquire()
             .then(resource => {
               pool.release(resource)
-              expect(storage.getStore()).to.equal(store)
+              expect(storage('legacy').getStore()).to.equal(store)
             })
             .catch(done)
         })
 
-        storage.run(store2, () => {
+        storage('legacy').run(store2, () => {
           pool.acquire()
             .then(resource => {
               pool.release(resource)
-              expect(storage.getStore()).to.equal(store2)
+              expect(storage('legacy').getStore()).to.equal(store2)
               done()
             })
             .catch(done)

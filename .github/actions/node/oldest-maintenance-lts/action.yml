@@ -1,0 +1,8 @@
+name: Node.js Oldest Maintenance LTS
+description: Install the oldest Maintenance LTS version of Node.js
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/node
+      with:
+        version: oldest

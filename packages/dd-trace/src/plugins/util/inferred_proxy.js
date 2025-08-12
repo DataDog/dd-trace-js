@@ -1,8 +1,9 @@
+'use strict'
+
 const log = require('../../log')
 const tags = require('../../../../../ext/tags')
 
 const RESOURCE_NAME = tags.RESOURCE_NAME
-const SPAN_KIND = tags.SPAN_KIND
 const SPAN_TYPE = tags.SPAN_TYPE
 const HTTP_URL = tags.HTTP_URL
 const HTTP_METHOD = tags.HTTP_METHOD
@@ -21,7 +22,7 @@ const supportedProxies = {
   }
 }
 
-function createInferredProxySpan (headers, childOf, tracer, context) {
+function createInferredProxySpan (headers, childOf, tracer, reqCtx, traceCtx, config, startSpanHelper) {
   if (!headers) {
     return null
   }
@@ -38,28 +39,24 @@ function createInferredProxySpan (headers, childOf, tracer, context) {
 
   const proxySpanInfo = supportedProxies[proxyContext.proxySystemName]
 
-  log.debug(`Successfully extracted inferred span info ${proxyContext} for proxy: ${proxyContext.proxySystemName}`)
+  log.debug('Successfully extracted inferred span info %s for proxy:', proxyContext, proxyContext.proxySystemName)
 
-  const span = tracer.startSpan(
-    proxySpanInfo.spanName,
-    {
-      childOf,
-      type: 'web',
-      startTime: proxyContext.requestTime,
-      tags: {
-        service: proxyContext.domainName || tracer._config.service,
-        component: proxySpanInfo.component,
-        [SPAN_KIND]: 'internal',
-        [SPAN_TYPE]: 'web',
-        [HTTP_METHOD]: proxyContext.method,
-        [HTTP_URL]: proxyContext.domainName + proxyContext.path,
-        stage: proxyContext.stage
-      }
+  const span = startSpanHelper(tracer, proxySpanInfo.spanName, {
+    childOf,
+    type: 'web',
+    startTime: proxyContext.requestTime,
+    integrationName: proxySpanInfo.component,
+    meta: {
+      service: proxyContext.domainName || tracer._config.service,
+      component: proxySpanInfo.component,
+      [SPAN_TYPE]: 'web',
+      [HTTP_METHOD]: proxyContext.method,
+      [HTTP_URL]: proxyContext.domainName + proxyContext.path,
+      stage: proxyContext.stage
     }
-  )
+  }, traceCtx, config)
 
-  tracer.scope().activate(span)
-  context.inferredProxySpan = span
+  reqCtx.inferredProxySpan = span
   childOf = span
 
   log.debug('Successfully created inferred proxy span.')
@@ -71,7 +68,7 @@ function createInferredProxySpan (headers, childOf, tracer, context) {
 
 function setInferredProxySpanTags (span, proxyContext) {
   span.setTag(RESOURCE_NAME, `${proxyContext.method} ${proxyContext.path}`)
-  span.setTag('_dd.inferred_span', '1')
+  span.setTag('_dd.inferred_span', 1)
   return span
 }
 
@@ -81,13 +78,13 @@ function extractInferredProxyContext (headers) {
   }
 
   if (!(PROXY_HEADER_SYSTEM in headers && headers[PROXY_HEADER_SYSTEM] in supportedProxies)) {
-    log.debug(`Received headers to create inferred proxy span but headers include an unsupported proxy type ${headers}`)
+    log.debug('Received headers to create inferred proxy span but headers include an unsupported proxy type', headers)
     return null
   }
 
   return {
     requestTime: headers[PROXY_HEADER_START_TIME_MS]
-      ? parseInt(headers[PROXY_HEADER_START_TIME_MS], 10)
+      ? Number.parseInt(headers[PROXY_HEADER_START_TIME_MS], 10)
       : null,
     method: headers[PROXY_HEADER_HTTPMETHOD],
     path: headers[PROXY_HEADER_PATH],

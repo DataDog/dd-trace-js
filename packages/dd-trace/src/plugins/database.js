@@ -4,8 +4,8 @@ const StoragePlugin = require('./storage')
 const { PEER_SERVICE_KEY, PEER_SERVICE_SOURCE_KEY } = require('../constants')
 
 class DatabasePlugin extends StoragePlugin {
-  static get operation () { return 'query' }
-  static get peerServicePrecursors () { return ['db.name'] }
+  static operation = 'query'
+  static peerServicePrecursors = ['db.name']
 
   constructor (...args) {
     super(...args)
@@ -63,23 +63,35 @@ class DatabasePlugin extends StoragePlugin {
     return tracerService
   }
 
-  injectDbmQuery (span, query, serviceName, isPreparedStatement = false) {
+  createDbmComment (span, serviceName, disableFullMode = false) {
     const mode = this.config.dbmPropagationMode
     const dbmService = this.getDbmServiceName(span, serviceName)
 
     if (mode === 'disabled') {
-      return query
+      return null
     }
 
     const servicePropagation = this.createDBMPropagationCommentService(dbmService, span)
 
-    if (isPreparedStatement || mode === 'service') {
-      return `/*${servicePropagation}*/ ${query}`
+    if (disableFullMode || mode === 'service') {
+      return servicePropagation
     } else if (mode === 'full') {
       span.setTag('_dd.dbm_trace_injected', 'true')
       const traceparent = span._spanContext.toTraceparent()
-      return `/*${servicePropagation},traceparent='${traceparent}'*/ ${query}`
+      return `${servicePropagation},traceparent='${traceparent}'`
     }
+  }
+
+  injectDbmQuery (span, query, serviceName, disableFullMode = false) {
+    const dbmTraceComment = this.createDbmComment(span, serviceName, disableFullMode)
+
+    if (!dbmTraceComment) {
+      return query
+    }
+
+    return this.config.appendComment
+      ? `${query} /*${dbmTraceComment}*/`
+      : `/*${dbmTraceComment}*/ ${query}`
   }
 
   maybeTruncate (query) {

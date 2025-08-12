@@ -3,18 +3,16 @@
 const BaseAwsSdkPlugin = require('../base')
 
 class Redshift extends BaseAwsSdkPlugin {
-  static get id () { return 'redshift' }
+  static id = 'redshift'
 
   generateTags (params, operation, response) {
-    const tags = {}
+    if (!params?.ClusterIdentifier) return {}
 
-    if (!params || !params.ClusterIdentifier) return tags
-
-    return Object.assign(tags, {
+    return {
       'resource.name': `${operation} ${params.ClusterIdentifier}`,
       'aws.redshift.cluster_identifier': params.ClusterIdentifier,
       clusteridentifier: params.ClusterIdentifier
-    })
+    }
   }
 }
 

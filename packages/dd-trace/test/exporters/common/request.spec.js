@@ -3,13 +3,12 @@
 require('../../setup/tap')
 
 const nock = require('nock')
-const getPort = require('get-port')
 const http = require('http')
 const zlib = require('zlib')
 
 const FormData = require('../../../src/exporters/common/form-data')
 
-const initHTTPServer = (port) => {
+const initHTTPServer = () => {
   return new Promise(resolve => {
     const sockets = []
     const requestListener = function (req, res) {
@@ -23,11 +22,13 @@ const initHTTPServer = (port) => {
 
     server.on('connection', socket => sockets.push(socket))
 
-    server.listen(port, () => {
-      resolve(() => {
+    server.listen(0, () => {
+      const shutdown = () => {
         sockets.forEach(socket => socket.end())
         server.close()
-      })
+      }
+      shutdown.port = server.address().port
+      resolve(shutdown)
     })
   })
 }
@@ -43,7 +44,9 @@ describe('request', function () {
       debug: sinon.spy()
     }
     docker = {
-      id: sinon.stub().returns('abcd')
+      inject (carrier) {
+        carrier['datadog-container-id'] = 'abcd'
+      }
     }
     request = proxyquire('../src/exporters/common/request', {
       './docker': docker,
@@ -163,7 +166,6 @@ describe('request', function () {
       hostname: 'test',
       port: 123,
       path: '/'
-    // eslint-disable-next-line n/handle-callback-err
     }, (err, res) => {
       expect(res).to.equal('OK')
     })
@@ -179,7 +181,6 @@ describe('request', function () {
     request(Buffer.from(''), {
       path: '/path',
       method: 'PUT'
-    // eslint-disable-next-line n/handle-callback-err
     }, (err, res) => {
       expect(res).to.equal('OK')
       done()
@@ -216,7 +217,6 @@ describe('request', function () {
     request(form, {
       path: '/path',
       method: 'PUT'
-    // eslint-disable-next-line n/handle-callback-err
     }, (err, res) => {
       expect(res).to.equal('OK')
       done()
@@ -224,38 +224,33 @@ describe('request', function () {
   })
 
   it('should be able to send concurrent requests to different hosts', function (done) {
-    // TODO: try to simplify the setup here. I haven't been able to reproduce the
-    // concurrent socket issue using nock
-    Promise.all([getPort(), getPort()]).then(([port1, port2]) => {
-      Promise.all([initHTTPServer(port1), initHTTPServer(port2)]).then(([shutdownFirst, shutdownSecond]) => {
-        // this interval is blocking a socket for the other request
-        const intervalId = setInterval(() => {
-          request(Buffer.from(''), {
-            path: '/',
-            method: 'POST',
-            hostname: 'localhost',
-            protocol: 'http:',
-            port: port1
-          }, () => {})
-        }, 1000)
+    Promise.all([initHTTPServer(), initHTTPServer()]).then(([shutdownFirst, shutdownSecond]) => {
+      // this interval is blocking a socket for the other request
+      const intervalId = setInterval(() => {
+        request(Buffer.from(''), {
+          path: '/',
+          method: 'POST',
+          hostname: 'localhost',
+          protocol: 'http:',
+          port: shutdownFirst.port
+        }, () => {})
+      }, 1000)
 
-        setTimeout(() => {
-          request(Buffer.from(''), {
-            path: '/',
-            method: 'POST',
-            hostname: 'localhost',
-            protocol: 'http:',
-            port: port2
-          // eslint-disable-next-line n/handle-callback-err
-          }, (err, res) => {
-            expect(res).to.equal('OK')
-            shutdownFirst()
-            shutdownSecond()
-            clearInterval(intervalId)
-            done()
-          })
-        }, 2000)
-      })
+      setTimeout(() => {
+        request(Buffer.from(''), {
+          path: '/',
+          method: 'POST',
+          hostname: 'localhost',
+          protocol: 'http:',
+          port: shutdownSecond.port
+        }, (err, res) => {
+          expect(res).to.equal('OK')
+          shutdownFirst()
+          shutdownSecond()
+          clearInterval(intervalId)
+          done()
+        })
+      }, 2000)
     })
   })
 

@@ -94,5 +94,13 @@
     ],
     "expand": [
     ]
+  },
+  "dynamodb": {
+    "request": [
+    ],
+    "response": [
+    ],
+    "expand": [
+    ]
   }
 }

@@ -8,6 +8,7 @@ const {
 } = require('../constants')
 const TracingPlugin = require('./tracing')
 const { exitTags } = require('../../../datadog-code-origin')
+const { storage } = require('../../../datadog-core')
 
 const COMMON_PEER_SVC_SOURCE_TAGS = [
   'net.peer.name',
@@ -16,19 +17,26 @@ const COMMON_PEER_SVC_SOURCE_TAGS = [
 
 // TODO: Exit span on finish when AsyncResource instances are removed.
 class OutboundPlugin extends TracingPlugin {
-  static get peerServicePrecursors () { return [] }
+  static peerServicePrecursors = []
 
   constructor (...args) {
     super(...args)
 
-    this.addTraceSub('connect', message => {
-      this.connect(message)
+    this.addTraceSub('connect', ctx => {
+      this.connect(ctx)
     })
+  }
+
+  bindFinish (ctx) {
+    return ctx.parentStore
   }
 
   startSpan (...args) {
     const span = super.startSpan(...args)
-    if (this._tracerConfig.codeOriginForSpans.enabled) {
+    if (
+      this._tracerConfig.codeOriginForSpans.enabled &&
+      this._tracerConfig.codeOriginForSpans.experimental.exit_spans.enabled
+    ) {
       span.addTags(exitTags(this.startSpan))
     }
     return span
@@ -64,7 +72,6 @@ class OutboundPlugin extends TracingPlugin {
         }
       }
     }
-    return undefined
   }
 
   getPeerServiceRemap (peerData) {
@@ -84,8 +91,15 @@ class OutboundPlugin extends TracingPlugin {
     return peerData
   }
 
-  finish () {
-    this.tagPeerService(this.activeSpan)
+  finish (ctx) {
+    const span = ctx?.currentStore?.span || this.activeSpan
+    this.tagPeerService(span)
+
+    if (this._tracerConfig?._isInServerlessEnvironment()) {
+      const peerHostname = storage('peerServerless').getStore()?.peerHostname
+      if (peerHostname) span.setTag('peer.service', peerHostname)
+    }
+
     super.finish(...arguments)
   }
 
@@ -98,12 +112,14 @@ class OutboundPlugin extends TracingPlugin {
     }
   }
 
-  connect (url) {
-    this.addHost(url.hostname, url.port)
+  connect (ctx) {
+    this.addHost(ctx)
   }
 
-  addHost (hostname, port) {
-    const span = this.activeSpan
+  addHost (ctx) {
+    const { hostname, port } = ctx
+
+    const span = ctx?.currentStore?.span || this.activeSpan
 
     if (!span) return
 

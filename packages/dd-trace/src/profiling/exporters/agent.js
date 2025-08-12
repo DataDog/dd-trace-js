@@ -16,8 +16,6 @@ const perf = require('perf_hooks').performance
 const telemetryMetrics = require('../../telemetry/metrics')
 const profilersNamespace = telemetryMetrics.manager.namespace('profilers')
 
-const containerId = docker.id()
-
 const statusCodeCounters = []
 const requestCounter = profilersNamespace.count('profile_api.requests', [])
 const sizeDistribution = profilersNamespace.distribution('profile_api.bytes', [])
@@ -40,8 +38,8 @@ function countStatusCode (statusCode) {
 function sendRequest (options, form, callback) {
   const request = options.protocol === 'https:' ? httpsRequest : httpRequest
 
-  const store = storage.getStore()
-  storage.enterWith({ noop: true })
+  const store = storage('legacy').getStore()
+  storage('legacy').enterWith({ noop: true })
   requestCounter.inc()
   const start = perf.now()
   const req = request(options, res => {
@@ -65,7 +63,7 @@ function sendRequest (options, form, callback) {
     sizeDistribution.track(form.size())
     form.pipe(req)
   }
-  storage.enterWith(store)
+  storage('legacy').enterWith(store)
 }
 
 function getBody (stream, callback) {
@@ -152,12 +150,10 @@ class AgentExporter extends EventSerializer {
             'DD-EVP-ORIGIN-VERSION': version,
             ...form.getHeaders()
           },
-          timeout: this._backoffTime * Math.pow(2, attempt)
+          timeout: this._backoffTime * 2 ** attempt
         }
 
-        if (containerId) {
-          options.headers['Datadog-Container-ID'] = containerId
-        }
+        docker.inject(options.headers)
 
         if (this._url.protocol === 'unix:') {
           options.socketPath = this._url.pathname

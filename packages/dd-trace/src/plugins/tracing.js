@@ -16,7 +16,7 @@ class TracingPlugin extends Plugin {
   }
 
   get activeSpan () {
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
 
     return store && store.span
   }
@@ -53,8 +53,9 @@ class TracingPlugin extends Plugin {
 
   start () {} // implemented by individual plugins
 
-  finish () {
-    this.activeSpan?.finish()
+  finish (ctx) {
+    const span = ctx?.currentStore?.span || this.activeSpan
+    span?.finish()
   }
 
   error (ctxOrError) {
@@ -101,32 +102,53 @@ class TracingPlugin extends Plugin {
     }
   }
 
-  startSpan (name, { childOf, kind, meta, metrics, service, resource, type } = {}, enter = true) {
-    const store = storage.getStore()
+  startSpan (name, options = {}, enterOrCtx = true) {
+    // TODO: modularize this code to a helper function
+    let {
+      component = this.component,
+      childOf,
+      integrationName,
+      kind,
+      meta,
+      metrics,
+      service,
+      startTime,
+      resource,
+      type
+    } = options
+
+    const tracer = options.tracer || this.tracer
+    const config = options.config || this.config
+
+    const store = storage('legacy').getStore()
     if (store && childOf === undefined) {
       childOf = store.span
     }
 
-    const span = this.tracer.startSpan(name, {
+    const span = tracer.startSpan(name, {
+      startTime,
       childOf,
       tags: {
-        [COMPONENT]: this.component,
-        'service.name': service || this.tracer._service,
+        [COMPONENT]: component,
+        'service.name': service || meta?.service || tracer._service,
         'resource.name': resource,
         'span.kind': kind,
         'span.type': type,
         ...meta,
         ...metrics
       },
-      integrationName: type,
+      integrationName: integrationName || component,
       links: childOf?._links
     })
 
-    analyticsSampler.sample(span, this.config.measured)
+    analyticsSampler.sample(span, config.measured)
 
     // TODO: Remove this after migration to TracingChannel is done.
-    if (enter) {
-      storage.enterWith({ ...store, span })
+    if (enterOrCtx === true) {
+      storage('legacy').enterWith({ ...store, span })
+    } else if (enterOrCtx) {
+      enterOrCtx.parentStore = store
+      enterOrCtx.currentStore = { ...store, span }
     }
 
     return span

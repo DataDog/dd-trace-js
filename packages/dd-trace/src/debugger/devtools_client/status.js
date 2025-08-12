@@ -5,7 +5,7 @@ const config = require('./config')
 const JSONBuffer = require('./json-buffer')
 const request = require('../../exporters/common/request')
 const FormData = require('../../exporters/common/form-data')
-const log = require('../../log')
+const log = require('./log')
 
 module.exports = {
   ackReceived,
@@ -20,7 +20,11 @@ const runtimeId = config.runtimeId
 
 const cache = new TTLSet(60 * 60 * 1000) // 1 hour
 
-const jsonBuffer = new JSONBuffer({ size: config.maxTotalPayloadSize, timeout: 1000, onFlush })
+const jsonBuffer = new JSONBuffer({
+  size: config.maxTotalPayloadSize,
+  timeout: config.dynamicInstrumentation.uploadIntervalSeconds * 1000,
+  onFlush
+})
 
 const STATUSES = {
   RECEIVED: 'RECEIVED',

@@ -6,11 +6,8 @@ const {
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
+const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const { assert } = require('chai')
-const { NODE_MAJOR } = require('../../../../version')
-
-// TODO: update this to skip based on package version and tracer version
-const describe = NODE_MAJOR < 16 ? globalThis.describe.skip : globalThis.describe
 
 describe('esm', () => {
   let agent

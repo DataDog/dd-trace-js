@@ -5,46 +5,50 @@ on:
   push:
     branches: [master]
   schedule:
-    - cron: '0 4 * * *'
+    - cron: 0 4 * * *
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
   cancel-in-progress: true
 
+env:
+  MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
+
 jobs:
   macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/node/setup
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:ci
-      - uses: codecov/codecov-action@v5
+      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
 
   ubuntu:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/node/setup
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - uses: ./.github/actions/node/oldest
       - run: yarn test:appsec:ci
-      - uses: ./.github/actions/node/20
+      - uses: ./.github/actions/node/newest-maintenance-lts
+      - run: yarn test:appsec:ci
+      - uses: ./.github/actions/node/active-lts
       - run: yarn test:appsec:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:ci
-      - uses: codecov/codecov-action@v5
+      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
 
   windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '18'
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
+        with:
+          cache: 'true'
       - run: yarn test:appsec:ci
-      - uses: codecov/codecov-action@v5
+      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
 
   ldapjs:
     runs-on: ubuntu-latest
@@ -62,14 +66,13 @@ jobs:
           LDAP_USERS: 'user01,user02'
           LDAP_PASSWORDS: 'password1,password2'
     steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/node/setup
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - uses: ./.github/actions/node/oldest
       - run: yarn test:appsec:plugins:ci
-      - uses: ./.github/actions/node/latest
+      - uses: ./.github/actions/node/active-lts
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@v5
+      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
 
   postgres:
     runs-on: ubuntu-latest
@@ -85,16 +88,13 @@ jobs:
       PLUGINS: pg|knex
       SERVICES: postgres
     steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/node/setup
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - uses: ./.github/actions/node/oldest
       - run: yarn test:appsec:plugins:ci
-      - uses: ./.github/actions/node/18
+      - uses: ./.github/actions/node/newest-maintenance-lts
       - run: yarn test:appsec:plugins:ci
-      - uses: ./.github/actions/node/20
-      - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@v5
+      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
 
   mysql:
     runs-on: ubuntu-latest
@@ -110,42 +110,52 @@ jobs:
       PLUGINS: mysql|mysql2|sequelize
       SERVICES: mysql
     steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/node/setup
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - uses: ./.github/actions/node/18
       - run: yarn test:appsec:plugins:ci
-      - uses: ./.github/actions/node/20
+      - uses: ./.github/actions/node/newest-maintenance-lts
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@v5
+      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
 
   express:
     runs-on: ubuntu-latest
     env:
       PLUGINS: express|body-parser|cookie-parser|multer
     steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/node/setup
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - uses: ./.github/actions/node/oldest
       - run: yarn test:appsec:plugins:ci
-      - uses: ./.github/actions/node/latest
+      - uses: ./.github/actions/node/active-lts
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@v5
+      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+
+  fastify:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: fastify
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/node/oldest-maintenance-lts
+      - uses: ./.github/actions/install
+      - run: yarn test:appsec:plugins:ci
+      - uses: ./.github/actions/node/active-lts
+      - run: yarn test:appsec:plugins:ci
+      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
 
   graphql:
     runs-on: ubuntu-latest
     env:
       PLUGINS: apollo-server|apollo-server-express|apollo-server-fastify|apollo-server-core
     steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/node/setup
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - uses: ./.github/actions/node/oldest
       - run: yarn test:appsec:plugins:ci
-      - uses: ./.github/actions/node/latest
+      - uses: ./.github/actions/node/active-lts
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@v5
+      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
 
   mongodb-core:
     runs-on: ubuntu-latest
@@ -158,14 +168,13 @@ jobs:
       PLUGINS: express-mongo-sanitize|mquery
       SERVICES: mongo
     steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/node/setup
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - uses: ./.github/actions/node/oldest
       - run: yarn test:appsec:plugins:ci
-      - uses: ./.github/actions/node/latest
+      - uses: ./.github/actions/node/active-lts
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@v5
+      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
 
   mongoose:
     runs-on: ubuntu-latest
@@ -178,37 +187,37 @@ jobs:
       PLUGINS: mongoose
       SERVICES: mongo
     steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/node/setup
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - uses: ./.github/actions/node/oldest
       - run: yarn test:appsec:plugins:ci
-      - uses: ./.github/actions/node/latest
+      - uses: ./.github/actions/node/active-lts
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@v5
+      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
 
   sourcing:
     runs-on: ubuntu-latest
     env:
       PLUGINS: cookie
     steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/node/setup
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - uses: ./.github/actions/node/18
       - run: yarn test:appsec:plugins:ci
-      - uses: ./.github/actions/node/20
+      - uses: ./.github/actions/node/newest-maintenance-lts
+      - run: yarn test:appsec:plugins:ci
+      - uses: ./.github/actions/node/active-lts
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@v5
+      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
 
   next:
     strategy:
       fail-fast: false
       matrix:
         version:
-          - 18
+          - oldest
           - latest
         range: ['>=10.2.0 <11', '>=11.0.0 <13', '11.1.4', '>=13.0.0 <14', '13.2.0', '>=14.0.0 <=14.2.6', '>=14.2.7 <15', '>=15.0.0']
         include:
@@ -233,42 +242,43 @@ jobs:
       PLUGINS: next
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/testagent/start
-      - uses: actions/setup-node@v4
+      - uses: ./.github/actions/node
         with:
-          cache: yarn
-          node-version: ${{ matrix.version }}
+          version: ${{ matrix.version }}
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
           suffix: appsec-${{ github.job }}-${{ matrix.version }}-${{ matrix.range_clean }}
-      - uses: codecov/codecov-action@v5
+      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
 
   lodash:
     runs-on: ubuntu-latest
     env:
       PLUGINS: lodash
     steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/node/setup
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - uses: ./.github/actions/node/oldest
       - run: yarn test:appsec:plugins:ci
-      - uses: ./.github/actions/node/latest
+      - uses: ./.github/actions/node/active-lts
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@v5
+      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
 
   integration:
+    strategy:
+      matrix:
+        version: [oldest, maintenance, active, latest]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - run: yarn install
-      - uses: ./.github/actions/node/oldest
-      - run: yarn test:integration:appsec
-      - uses: ./.github/actions/node/latest
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/install
+      - uses: ./.github/actions/node
+        with:
+          version: ${{ matrix.version }}
       - run: yarn test:integration:appsec
 
   passport:
@@ -276,39 +286,68 @@ jobs:
     env:
       PLUGINS: passport-local|passport-http
     steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/node/setup
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - uses: ./.github/actions/node/oldest
       - run: yarn test:appsec:plugins:ci
-      - uses: ./.github/actions/node/latest
+      - uses: ./.github/actions/node/active-lts
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@v5
+      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
 
   template:
     runs-on: ubuntu-latest
     env:
       PLUGINS: handlebars|pug
     steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/node/setup
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - uses: ./.github/actions/node/oldest
       - run: yarn test:appsec:plugins:ci
-      - uses: ./.github/actions/node/latest
+      - uses: ./.github/actions/node/active-lts
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@v5
+      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
 
   node-serialize:
     runs-on: ubuntu-latest
     env:
       PLUGINS: node-serialize
     steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/node/setup
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - uses: ./.github/actions/node/oldest
       - run: yarn test:appsec:plugins:ci
-      - uses: ./.github/actions/node/latest
+      - uses: ./.github/actions/node/active-lts
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@v5
+      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+
+  kafka:
+    runs-on: ubuntu-latest
+    services:
+      kafka:
+        image: apache/kafka-native:3.8.0-rc2
+        env:
+          KAFKA_PROCESS_ROLES: broker,controller
+          KAFKA_NODE_ID: '1'
+          KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+          KAFKA_CONTROLLER_QUORUM_VOTERS: 1@127.0.0.1:9093
+          KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+          KAFKA_CLUSTER_ID: r4zt_wrqTRuT7W2NJsB_GA
+          KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://127.0.0.1:9092
+          KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+          KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+          KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: '1'
+          KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: '0'
+        ports:
+          - 9092:9092
+          - 9093:9093
+    env:
+      PLUGINS: kafkajs
+      SERVICES: kafka
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/node/oldest-maintenance-lts
+      - uses: ./.github/actions/install
+      - run: yarn test:appsec:plugins:ci
+      - uses: ./.github/actions/node/active-lts
+      - run: yarn test:appsec:plugins:ci
+      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3

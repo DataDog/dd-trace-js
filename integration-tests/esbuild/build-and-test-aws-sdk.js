@@ -1,5 +1,8 @@
 #!/usr/bin/env node
+'use strict'
+
 /* eslint-disable no-console */
+const fs = require('fs')
 const { spawnSync } = require('child_process')
 
 const ddPlugin = require('../../esbuild') // dd-trace/esbuild
@@ -31,5 +34,5 @@ esbuild.build({
   console.error(err)
   process.exit(1)
 }).finally(() => {
-  // fs.rmSync(SCRIPT)
+  fs.rmSync(SCRIPT, { force: true })
 })

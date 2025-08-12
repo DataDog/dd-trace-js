@@ -2,6 +2,7 @@
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup, sort } = require('./spec_helpers')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const semver = require('semver')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 
@@ -25,7 +26,7 @@ describe('Plugin', () => {
         })
 
         it('should instrument service methods with a callback', (done) => {
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             const span = sort(traces[0])[0]
 
             expect(span).to.include({
@@ -48,7 +49,7 @@ describe('Plugin', () => {
         })
 
         it('should instrument service methods using promise()', (done) => {
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             const span = sort(traces[0])[0]
 
             expect(span).to.include({
@@ -92,7 +93,7 @@ describe('Plugin', () => {
         })
 
         it('should instrument service methods with a callback', (done) => {
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             const span = sort(traces[0])[0]
 
             expect(span).to.include({
@@ -117,7 +118,7 @@ describe('Plugin', () => {
         it('should mark error responses', (done) => {
           let error
 
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             const span = sort(traces[0])[0]
 
             expect(span).to.include({
@@ -148,7 +149,7 @@ describe('Plugin', () => {
 
         if (!semver.intersects(version, '<3')) {
           it('should instrument service methods using promises', (done) => {
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               const span = sort(traces[0])[0]
 
               expect(span).to.include({
@@ -162,7 +163,7 @@ describe('Plugin', () => {
           })
         } else if (!semver.intersects(version, '<2.3.0')) {
           it('should instrument service methods using promise()', (done) => {
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               const span = sort(traces[0])[0]
 
               expect(span).to.include({
@@ -178,7 +179,7 @@ describe('Plugin', () => {
           it('should instrument service methods using promise() with custom promises', (done) => {
             AWS.config.setPromisesDependency(null)
 
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               const span = sort(traces[0])[0]
 
               expect(span).to.include({
@@ -235,7 +236,7 @@ describe('Plugin', () => {
         })
 
         it('should be configured', (done) => {
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             const span = sort(traces[0])[0]
             expect(span).to.include({
               name: 'aws.request',
@@ -277,7 +278,7 @@ describe('Plugin', () => {
         it('should allow disabling a specific service', (done) => {
           let total = 0
 
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             const span = sort(traces[0])[0]
 
             expect(span).to.include({
@@ -289,7 +290,7 @@ describe('Plugin', () => {
             total++
           }).catch(() => {}, { timeoutMs: 100 })
 
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             const span = sort(traces[0])[0]
 
             expect(span).to.include({

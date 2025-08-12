@@ -6,19 +6,8 @@ const { isTrue } = require('../util')
 const { traceChannel, debugChannel, infoChannel, warnChannel, errorChannel } = require('./channels')
 const logWriter = require('./writer')
 const { Log } = require('./log')
-
-const memoize = func => {
-  const cache = {}
-  const memoized = function (key) {
-    if (!cache[key]) {
-      cache[key] = func.apply(this, arguments)
-    }
-
-    return cache[key]
-  }
-
-  return memoized
-}
+const { memoize } = require('./utils')
+const { getEnvironmentVariable } = require('../config-helper')
 
 const config = {
   enabled: false,
@@ -105,23 +94,38 @@ const log = {
 
   deprecate (code, message) {
     return this._deprecate(code, message)
+  },
+
+  isEnabled (fleetStableConfigValue, localStableConfigValue) {
+    return isTrue(coalesce(
+      fleetStableConfigValue,
+      getEnvironmentVariable('DD_TRACE_DEBUG'),
+      getEnvironmentVariable('OTEL_LOG_LEVEL') === 'debug' || undefined,
+      localStableConfigValue,
+      config.enabled
+    ))
+  },
+
+  getLogLevel (
+    optionsValue,
+    fleetStableConfigValue,
+    localStableConfigValue
+  ) {
+    return coalesce(
+      optionsValue,
+      fleetStableConfigValue,
+      getEnvironmentVariable('DD_TRACE_LOG_LEVEL'),
+      getEnvironmentVariable('OTEL_LOG_LEVEL'),
+      localStableConfigValue,
+      config.logLevel
+    )
   }
 }
 
+logWriter.setStackTraceLimitFunction(log.error)
+
 log.reset()
 
-const enabled = isTrue(coalesce(
-  process.env.DD_TRACE_DEBUG,
-  process.env.OTEL_LOG_LEVEL === 'debug',
-  config.enabled
-))
-
-const logLevel = coalesce(
-  process.env.DD_TRACE_LOG_LEVEL,
-  process.env.OTEL_LOG_LEVEL,
-  config.logLevel
-)
-
-log.toggle(enabled, logLevel)
+log.toggle(log.isEnabled(), log.getLogLevel())
 
 module.exports = log

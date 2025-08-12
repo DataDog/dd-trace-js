@@ -1,3 +1,5 @@
+'use strict'
+
 const PROTOBUF = 'protobuf'
 const {
   SCHEMA_DEFINITION,
@@ -10,7 +12,7 @@ const {
 const log = require('../../dd-trace/src/log')
 const {
   SchemaBuilder
-} = require('../../dd-trace/src/datastreams/schemas/schema_builder')
+} = require('../../dd-trace/src/datastreams')
 
 class SchemaExtractor {
   constructor (schema) {
@@ -102,17 +104,16 @@ class SchemaExtractor {
         }
       }
       return true
-    } else {
-      if (!builder.shouldExtractSchema(schemaName, depth)) {
-        return false
-      }
-      for (const field of schema.fieldsArray) {
-        if (!this.extractProperty(field, schemaName, field.name, builder, depth)) {
-          log.warn(`DSM: Unable to extract field with name: ${field.name} from Avro schema with name: ${schemaName}`)
-        }
-      }
-      return true
     }
+    if (!builder.shouldExtractSchema(schemaName, depth)) {
+      return false
+    }
+    for (const field of schema.fieldsArray) {
+      if (!this.extractProperty(field, schemaName, field.name, builder, depth)) {
+        log.warn('DSM: Unable to extract field with name: %s from Avro schema with name:', field.name, schemaName)
+      }
+    }
+    return true
   }
 
   static extractSchemas (descriptor, dataStreamsProcessor) {

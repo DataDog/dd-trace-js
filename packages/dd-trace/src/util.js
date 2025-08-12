@@ -13,19 +13,15 @@ function isFalse (str) {
 }
 
 function isError (value) {
-  if (value instanceof Error) {
-    return true
-  }
-  if (value && value.message) {
-    return true
-  }
-  return false
+  return Boolean(value?.message || value instanceof Error)
 }
 
 // Matches a glob pattern to a given subject string
 function globMatch (pattern, subject) {
   if (typeof pattern === 'string') pattern = pattern.toLowerCase()
   if (typeof subject === 'string') subject = subject.toLowerCase()
+  if (typeof subject === 'number' && Number.isInteger(subject)) subject = String(subject)
+
   let px = 0 // [p]attern inde[x]
   let sx = 0 // [s]ubject inde[x]
   let nextPx = 0
@@ -65,16 +61,26 @@ function globMatch (pattern, subject) {
   return true
 }
 
-// TODO: this adds stack traces relative to packages/
-// shouldn't paths be relative to the root of dd-trace?
 function calculateDDBasePath (dirname) {
   const dirSteps = dirname.split(path.sep)
   const packagesIndex = dirSteps.lastIndexOf('packages')
-  return dirSteps.slice(0, packagesIndex + 1).join(path.sep) + path.sep
+  return dirSteps.slice(0, packagesIndex).join(path.sep) + path.sep
 }
 
-function hasOwn (object, prop) {
-  return Object.prototype.hasOwnProperty.call(object, prop)
+function normalizeProfilingEnabledValue (configValue) {
+  return isTrue(configValue)
+    ? 'true'
+    : isFalse(configValue)
+      ? 'false'
+      : configValue === 'auto' ? 'auto' : undefined
+}
+
+function normalizePluginEnvName (envPluginName, makeLowercase = false) {
+  if (envPluginName.startsWith('@')) {
+    envPluginName = envPluginName.slice(1)
+  }
+  envPluginName = envPluginName.replaceAll(/[^a-z0-9_]/ig, '_')
+  return makeLowercase ? envPluginName.toLowerCase() : envPluginName
 }
 
 module.exports = {
@@ -82,6 +88,7 @@ module.exports = {
   isFalse,
   isError,
   globMatch,
-  calculateDDBasePath,
-  hasOwn
+  ddBasePath: calculateDDBasePath(__dirname),
+  normalizeProfilingEnabledValue,
+  normalizePluginEnvName
 }

@@ -1,10 +1,11 @@
+'use strict'
+
 const { identityService, httpPluginClientService, awsServiceV0 } = require('../util')
-const { DD_MAJOR } = require('../../../../../../version')
 
 const web = {
   client: {
     grpc: {
-      opName: () => DD_MAJOR <= 2 ? 'grpc.request' : 'grpc.client',
+      opName: () => 'grpc.client',
       serviceName: identityService
     },
     moleculer: {
@@ -62,7 +63,7 @@ const web = {
       serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService
     },
     grpc: {
-      opName: () => DD_MAJOR <= 2 ? 'grpc.request' : 'grpc.server',
+      opName: () => 'grpc.server',
       serviceName: identityService
     },
     moleculer: {

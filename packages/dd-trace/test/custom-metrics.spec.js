@@ -53,7 +53,6 @@ describe('Custom Metrics', () => {
       if (stdout) console.log(stdout)
       if (stderr) console.error(stderr)
 
-      // eslint-disable-next-line no-undef
       expect(metricsData.split('#')[0]).to.equal('page.views.data:1|c|')
 
       done()

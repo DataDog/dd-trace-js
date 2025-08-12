@@ -1,4 +1,5 @@
 'use strict'
+
 const _tracer = require('../../../../dd-trace')
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
@@ -23,7 +24,7 @@ const handler = async (_event, _context) => {
 const callbackHandler = (_event, _context, callback) => {
   const response = sampleResponse
 
-  callback('', response)
+  callback('', response) // eslint-disable-line n/no-callback-literal
 }
 
 const timeoutHandler = async (...args) => {

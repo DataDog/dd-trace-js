@@ -158,12 +158,48 @@ describe('tagger', () => {
 
         expect(Tagger.tagMap.get(span)).to.be.undefined
       })
+
+      it('uses the propagated mlApp over the global mlApp if both are provided', () => {
+        spanContext._trace.tags['_dd.p.llmobs_ml_app'] = 'my-propagated-ml-app'
+
+        tagger.registerLLMObsSpan(span, { kind: 'llm' })
+
+        const tags = Tagger.tagMap.get(span)
+        expect(tags['_ml_obs.meta.ml_app']).to.equal('my-propagated-ml-app')
+      })
+
+      describe('with no global mlApp configured', () => {
+        beforeEach(() => {
+          tagger = new Tagger({ llmobs: { enabled: true } })
+        })
+
+        it('uses the mlApp from the propagated mlApp if no mlApp is provided', () => {
+          spanContext._trace.tags['_dd.p.llmobs_ml_app'] = 'my-propagated-ml-app'
+
+          tagger.registerLLMObsSpan(span, { kind: 'llm' })
+
+          const tags = Tagger.tagMap.get(span)
+          expect(tags['_ml_obs.meta.ml_app']).to.equal('my-propagated-ml-app')
+        })
+
+        it('throws an error if no mlApp is provided and no propagated mlApp is provided', () => {
+          expect(() => tagger.registerLLMObsSpan(span, { kind: 'llm' })).to.throw()
+        })
+      })
     })
 
     describe('tagMetadata', () => {
       it('tags a span with metadata', () => {
         tagger._register(span)
         tagger.tagMetadata(span, { a: 'foo', b: 'bar' })
+        expect(Tagger.tagMap.get(span)).to.deep.equal({
+          '_ml_obs.meta.metadata': { a: 'foo', b: 'bar' }
+        })
+      })
+
+      it('updates instead of overriding', () => {
+        Tagger.tagMap.set(span, { '_ml_obs.meta.metadata': { a: 'foo' } })
+        tagger.tagMetadata(span, { b: 'bar' })
         expect(Tagger.tagMap.get(span)).to.deep.equal({
           '_ml_obs.meta.metadata': { a: 'foo', b: 'bar' }
         })
@@ -202,6 +238,14 @@ describe('tagger', () => {
         tagger._register(span)
         expect(() => tagger.tagMetrics(span, metrics)).to.throw()
       })
+
+      it('updates instead of overriding', () => {
+        Tagger.tagMap.set(span, { '_ml_obs.metrics': { a: 1 } })
+        tagger.tagMetrics(span, { b: 2 })
+        expect(Tagger.tagMap.get(span)).to.deep.equal({
+          '_ml_obs.metrics': { a: 1, b: 2 }
+        })
+      })
     })
 
     describe('tagSpanTags', () => {
@@ -214,12 +258,12 @@ describe('tagger', () => {
         })
       })
 
-      it('merges tags so they do not overwrite', () => {
+      it('merges tags so they update', () => {
         Tagger.tagMap.set(span, { '_ml_obs.tags': { a: 1 } })
         const tags = { a: 2, b: 1 }
         tagger.tagSpanTags(span, tags)
         expect(Tagger.tagMap.get(span)).to.deep.equal({
-          '_ml_obs.tags': { a: 1, b: 1 }
+          '_ml_obs.tags': { a: 2, b: 1 }
         })
       })
     })
@@ -345,6 +389,44 @@ describe('tagger', () => {
           ]
 
           expect(() => tagger.tagLLMIO(span, messages, undefined)).to.throw()
+        })
+      })
+
+      describe('tool message tagging', () => {
+        it('tags a span with a tool message', () => {
+          const messages = [
+            { role: 'tool', content: 'The weather in San Francisco is sunny', toolId: '123' }
+          ]
+
+          tagger._register(span)
+          tagger.tagLLMIO(span, messages, undefined)
+          expect(Tagger.tagMap.get(span)).to.deep.equal({
+            '_ml_obs.meta.input.messages': [
+              { role: 'tool', content: 'The weather in San Francisco is sunny', tool_id: '123' }
+            ]
+          })
+        })
+
+        it('throws if the tool id is not a string', () => {
+          const messages = [
+            { role: 'tool', content: 'The weather in San Francisco is sunny', toolId: 123 }
+          ]
+
+          expect(() => tagger.tagLLMIO(span, messages, undefined)).to.throw()
+        })
+
+        it('logs a warning if the tool id is not associated with a tool role', () => {
+          const messages = [
+            { role: 'user', content: 'The weather in San Francisco is sunny', toolId: '123' }
+          ]
+
+          tagger._register(span)
+          tagger.tagLLMIO(span, messages, undefined)
+
+          const messageTags = Tagger.tagMap.get(span)['_ml_obs.meta.input.messages']
+          expect(messageTags[0]).to.not.have.property('tool_id')
+
+          expect(logger.warn).to.have.been.calledOnce
         })
       })
     })
@@ -595,6 +677,17 @@ describe('tagger', () => {
           tagger.tagLLMIO(span, messages, undefined)
           expect(logger.warn.callCount).to.equal(5) // 4 for tool call + 1 for role
         })
+      })
+
+      it('logs a warning if the tool id is not a string', () => {
+        const messages = [
+          { role: 'tool', content: 'The weather in San Francisco is sunny', toolId: 123 }
+        ]
+
+        tagger._register(span)
+        tagger.tagLLMIO(span, messages, undefined)
+        expect(Tagger.tagMap.get(span)).to.not.have.property('_ml_obs.meta.input.messages')
+        expect(logger.warn).to.have.been.calledOnce
       })
     })
   })

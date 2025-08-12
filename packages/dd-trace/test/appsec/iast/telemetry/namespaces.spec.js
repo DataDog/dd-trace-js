@@ -149,7 +149,7 @@ describe('IastNamespace', () => {
       expect(metric.metric).to.be.equal('metric.name')
       expect(metric.namespace).to.be.equal('iast')
       expect(metric.type).to.be.equal('count')
-      expect(metric.tags).to.be.deep.equal(['key:tag1', `version:${process.version}`])
+      expect(metric.tags).to.be.deep.equal(['key:tag1'])
     })
 
     it('should register a new count type metric and store it in the map supporting non array tags', () => {
@@ -161,7 +161,7 @@ describe('IastNamespace', () => {
       expect(metric.metric).to.be.equal('metric.name')
       expect(metric.namespace).to.be.equal('iast')
       expect(metric.type).to.be.equal('count')
-      expect(metric.tags).to.be.deep.equal(['key:tag1', `version:${process.version}`])
+      expect(metric.tags).to.be.deep.equal(['key:tag1'])
     })
 
     it('should register a new distribution type metric and store it in the map', () => {
@@ -173,7 +173,7 @@ describe('IastNamespace', () => {
       expect(metric.metric).to.be.equal('metric.name')
       expect(metric.namespace).to.be.equal('iast')
       expect(metric.type).to.be.equal('distribution')
-      expect(metric.tags).to.be.deep.equal(['key:tag1', `version:${process.version}`])
+      expect(metric.tags).to.be.deep.equal(['key:tag1'])
     })
 
     it('should not add the version tags to the tags array', () => {
@@ -183,7 +183,7 @@ describe('IastNamespace', () => {
       const metric = namespace.getMetric('metric.name', tags)
 
       expect(tags).to.be.deep.equal(['key:tag1'])
-      expect(metric.tags).to.be.deep.equal(['key:tag1', `version:${process.version}`])
+      expect(metric.tags).to.be.deep.equal(['key:tag1'])
     })
 
     it('should not create a previously created metric', () => {

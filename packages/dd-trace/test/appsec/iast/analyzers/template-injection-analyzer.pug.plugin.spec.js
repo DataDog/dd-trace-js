@@ -2,6 +2,7 @@
 
 const { prepareTestServerForIast } = require('../utils')
 const { storage } = require('../../../../../datadog-core')
+const { withVersions } = require('../../../setup/mocha')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
 const { SQL_ROW_VALUE } = require('../../../../src/appsec/iast/taint-tracking/source-types')
@@ -22,14 +23,14 @@ describe('template-injection-analyzer with pug', () => {
           })
 
           testThatRequestHasVulnerability(() => {
-            const store = storage.getStore()
+            const store = storage('legacy').getStore()
             const iastContext = iastContextFunctions.getIastContext(store)
             const template = newTaintedString(iastContext, source, 'param', 'Request')
             lib.compile(template)
           }, 'TEMPLATE_INJECTION')
 
           testThatRequestHasVulnerability(() => {
-            const store = storage.getStore()
+            const store = storage('legacy').getStore()
             const iastContext = iastContextFunctions.getIastContext(store)
             const template = newTaintedString(iastContext, source, 'param', SQL_ROW_VALUE)
             lib.compile(template)
@@ -52,14 +53,14 @@ describe('template-injection-analyzer with pug', () => {
           })
 
           testThatRequestHasVulnerability(() => {
-            const store = storage.getStore()
+            const store = storage('legacy').getStore()
             const iastContext = iastContextFunctions.getIastContext(store)
             const template = newTaintedString(iastContext, source, 'param', 'Request')
             lib.compileClient(template)
           }, 'TEMPLATE_INJECTION')
 
           testThatRequestHasVulnerability(() => {
-            const store = storage.getStore()
+            const store = storage('legacy').getStore()
             const iastContext = iastContextFunctions.getIastContext(store)
             const template = newTaintedString(iastContext, source, 'param', SQL_ROW_VALUE)
             lib.compileClient(template)
@@ -81,14 +82,14 @@ describe('template-injection-analyzer with pug', () => {
           })
 
           testThatRequestHasVulnerability(() => {
-            const store = storage.getStore()
+            const store = storage('legacy').getStore()
             const iastContext = iastContextFunctions.getIastContext(store)
             const template = newTaintedString(iastContext, source, 'param', 'Request')
             lib.compileClientWithDependenciesTracked(template, {})
           }, 'TEMPLATE_INJECTION')
 
           testThatRequestHasVulnerability(() => {
-            const store = storage.getStore()
+            const store = storage('legacy').getStore()
             const iastContext = iastContextFunctions.getIastContext(store)
             const template = newTaintedString(iastContext, source, 'param', SQL_ROW_VALUE)
             lib.compileClientWithDependenciesTracked(template, {})
@@ -110,14 +111,14 @@ describe('template-injection-analyzer with pug', () => {
           })
 
           testThatRequestHasVulnerability(() => {
-            const store = storage.getStore()
+            const store = storage('legacy').getStore()
             const iastContext = iastContextFunctions.getIastContext(store)
             const str = newTaintedString(iastContext, source, 'param', 'Request')
             lib.render(str)
           }, 'TEMPLATE_INJECTION')
 
           testThatRequestHasVulnerability(() => {
-            const store = storage.getStore()
+            const store = storage('legacy').getStore()
             const iastContext = iastContextFunctions.getIastContext(store)
             const str = newTaintedString(iastContext, source, 'param', SQL_ROW_VALUE)
             lib.render(str)

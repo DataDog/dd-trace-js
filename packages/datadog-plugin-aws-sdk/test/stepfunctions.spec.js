@@ -1,8 +1,8 @@
-/* eslint-disable @stylistic/js/max-len */
 'use strict'
 
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { setup } = require('./spec_helpers')
 
 const helloWorldSMD = {
@@ -107,7 +107,7 @@ describe('Sfn', () => {
             stateMachineArn,
             input: JSON.stringify({ moduleName })
           }
-          const expectSpanPromise = agent.use(traces => {
+          const expectSpanPromise = agent.assertSomeTraces(traces => {
             const span = traces[0][0]
             expect(span).to.have.property('resource', 'startExecution')
             expect(span.meta).to.have.property('statemachinearn', stateMachineArn)

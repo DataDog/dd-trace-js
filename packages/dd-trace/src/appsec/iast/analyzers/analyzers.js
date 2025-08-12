@@ -5,7 +5,6 @@ module.exports = {
   COMMAND_INJECTION_ANALYZER: require('./command-injection-analyzer'),
   HARCODED_PASSWORD_ANALYZER: require('./hardcoded-password-analyzer'),
   HARCODED_SECRET_ANALYZER: require('./hardcoded-secret-analyzer'),
-  HEADER_INJECTION_ANALYZER: require('./header-injection-analyzer'),
   HSTS_HEADER_MISSING_ANALYZER: require('./hsts-header-missing-analyzer'),
   INSECURE_COOKIE_ANALYZER: require('./insecure-cookie-analyzer'),
   LDAP_ANALYZER: require('./ldap-injection-analyzer'),

@@ -1,8 +1,10 @@
 'use strict'
 
-const { exec } = require('child_process')
+const http = require('http')
+const { exec, execSync } = require('child_process')
+const path = require('path')
+const fs = require('fs')
 
-const getPort = require('get-port')
 const { assert } = require('chai')
 
 const {
@@ -36,11 +38,29 @@ const {
   TEST_CODE_OWNERS,
   TEST_SESSION_NAME,
   TEST_LEVEL_EVENT_TYPES,
-  TEST_RETRY_REASON
+  TEST_RETRY_REASON,
+  DD_TEST_IS_USER_PROVIDED_SERVICE,
+  TEST_MANAGEMENT_IS_QUARANTINED,
+  TEST_MANAGEMENT_ENABLED,
+  TEST_MANAGEMENT_IS_DISABLED,
+  TEST_NAME,
+  TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
+  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
+  TEST_HAS_FAILED_ALL_RETRIES,
+  DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
+  DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
+  DD_CAPABILITIES_AUTO_TEST_RETRIES,
+  DD_CAPABILITIES_IMPACTED_TESTS,
+  DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
+  DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
+  DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
+  DD_CAPABILITIES_FAILED_TEST_REPLAY,
+  TEST_RETRY_REASON_TYPES,
+  TEST_IS_MODIFIED
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
-const { NODE_MAJOR } = require('../../version')
+const { DD_MAJOR, NODE_MAJOR } = require('../../version')
 
 const version = process.env.CYPRESS_VERSION
 const hookFile = 'dd-trace/loader-hook.mjs'
@@ -60,21 +80,40 @@ const moduleTypes = [
   }
 ].filter(moduleType => !process.env.CYPRESS_MODULE_TYPE || process.env.CYPRESS_MODULE_TYPE === moduleType.type)
 
+function shouldTestsRun (type) {
+  if (DD_MAJOR === 5) {
+    if (NODE_MAJOR <= 16) {
+      return version === '6.7.0' && type === 'commonJS'
+    }
+    if (NODE_MAJOR > 16) {
+      return version === 'latest'
+    }
+  }
+  if (DD_MAJOR === 6) {
+    if (NODE_MAJOR <= 16) {
+      return false
+    }
+    if (NODE_MAJOR > 16) {
+      return version === '10.2.0' || version === 'latest'
+    }
+  }
+  return false
+}
+
 moduleTypes.forEach(({
   type,
   testCommand
 }) => {
-  // cypress only supports esm on versions >= 10.0.0
-  if (type === 'esm' && version === '6.7.0') {
-    return
-  }
-  if (version === '6.7.0' && NODE_MAJOR > 16) {
-    return
-  }
   describe(`cypress@${version} ${type}`, function () {
+    if (!shouldTestsRun(type)) {
+      // eslint-disable-next-line no-console
+      console.log(`Skipping tests for cypress@${version} ${type} for dd-trace@${DD_MAJOR} node@${NODE_MAJOR}`)
+      return
+    }
+
     this.retries(2)
     this.timeout(60000)
-    let sandbox, cwd, receiver, childProcess, webAppPort
+    let sandbox, cwd, receiver, childProcess, webAppPort, secondWebAppServer
 
     if (type === 'commonJS') {
       testCommand = testCommand(version)
@@ -84,13 +123,18 @@ moduleTypes.forEach(({
       // cypress-fail-fast is required as an incompatible plugin
       sandbox = await createSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0'], true)
       cwd = sandbox.folder
-      webAppPort = await getPort()
-      webAppServer.listen(webAppPort)
+      await new Promise(resolve => webAppServer.listen(0, 'localhost', () => {
+        webAppPort = webAppServer.address().port
+        resolve()
+      }))
     })
 
     after(async () => {
       await sandbox.remove()
       await new Promise(resolve => webAppServer.close(resolve))
+      if (secondWebAppServer) {
+        await new Promise(resolve => secondWebAppServer.close(resolve))
+      }
     })
 
     beforeEach(async function () {
@@ -101,6 +145,42 @@ moduleTypes.forEach(({
       childProcess.kill()
       await receiver.stop()
     })
+
+    if (version === '6.7.0') {
+      // to be removed when we drop support for cypress@6.7.0
+      it('logs a warning if using a deprecated version of cypress', (done) => {
+        let stdout = ''
+        const {
+          NODE_OPTIONS,
+          ...restEnvVars
+        } = getCiVisEvpProxyConfig(receiver.port)
+
+        childProcess = exec(
+          `${testCommand} --spec cypress/e2e/spec.cy.js`,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.stdout.on('data', (chunk) => {
+          stdout += chunk.toString()
+        })
+
+        childProcess.on('exit', () => {
+          assert.include(
+            stdout,
+            'WARNING: dd-trace support for Cypress<10.2.0 is deprecated' +
+            ' and will not be supported in future versions of dd-trace.'
+          )
+          done()
+        })
+      })
+    }
 
     it('does not crash if badly init', (done) => {
       const {
@@ -322,6 +402,7 @@ moduleTypes.forEach(({
             assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
             assert.equal(meta[TEST_SOURCE_FILE].startsWith('cypress/e2e/'), true)
             // Can read DD_TAGS
+            assert.propertyVal(meta, DD_TEST_IS_USER_PROVIDED_SERVICE, 'false')
             assert.propertyVal(meta, 'test.customtag', 'customvalue')
             assert.propertyVal(meta, 'test.customtag2', 'customvalue2')
             assert.exists(metrics[DD_HOST_CPU_COUNT])
@@ -341,7 +422,8 @@ moduleTypes.forEach(({
             ...restEnvVars,
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
             DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
-            DD_TEST_SESSION_NAME: 'my-test-session'
+            DD_TEST_SESSION_NAME: 'my-test-session',
+            DD_SERVICE: undefined
           },
           stdio: 'pipe'
         }
@@ -1051,7 +1133,7 @@ moduleTypes.forEach(({
             assert.equal(retriedTests.length, NUM_RETRIES_EFD)
 
             retriedTests.forEach((retriedTest) => {
-              assert.equal(retriedTest.meta[TEST_RETRY_REASON], 'efd')
+              assert.equal(retriedTest.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
             })
 
             newTests.forEach(newTest => {
@@ -1376,6 +1458,9 @@ moduleTypes.forEach(({
             assert.equal(eventuallyPassingTest.filter(test => test.meta[TEST_STATUS] === 'fail').length, 2)
             assert.equal(eventuallyPassingTest.filter(test => test.meta[TEST_STATUS] === 'pass').length, 1)
             assert.equal(eventuallyPassingTest.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 2)
+            assert.equal(eventuallyPassingTest.filter(test =>
+              test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+            ).length, 2)
 
             const neverPassingTest = tests.filter(
               test => test.resource === 'cypress/e2e/flaky-test-retries.js.flaky test retry never passes'
@@ -1384,6 +1469,9 @@ moduleTypes.forEach(({
             assert.equal(neverPassingTest.filter(test => test.meta[TEST_STATUS] === 'fail').length, 6)
             assert.equal(neverPassingTest.filter(test => test.meta[TEST_STATUS] === 'pass').length, 0)
             assert.equal(neverPassingTest.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 5)
+            assert.equal(neverPassingTest.filter(
+              test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+            ).length, 5)
           })
 
         const {
@@ -1439,7 +1527,7 @@ moduleTypes.forEach(({
               'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
               'cypress/e2e/flaky-test-retries.js.flaky test retry always passes'
             ])
-            assert.equal(tests.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 0)
+            assert.equal(tests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr).length, 0)
           })
 
         const {
@@ -1497,7 +1585,7 @@ moduleTypes.forEach(({
               'cypress/e2e/flaky-test-retries.js.flaky test retry always passes'
             ])
 
-            assert.equal(tests.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 2)
+            assert.equal(tests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr).length, 2)
           })
 
         const {
@@ -1633,6 +1721,763 @@ moduleTypes.forEach(({
           receiverPromise.then(() => {
             done()
           }).catch(done)
+        })
+      })
+    })
+
+    // cy.origin is not available in old versions of Cypress
+    if (version === 'latest') {
+      it('does not crash for multi origin tests', async () => {
+        const {
+          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+          ...restEnvVars
+        } = getCiVisEvpProxyConfig(receiver.port)
+
+        secondWebAppServer = http.createServer((req, res) => {
+          res.setHeader('Content-Type', 'text/html')
+          res.writeHead(200)
+          res.end(`
+            <!DOCTYPE html>
+            <html>
+              <div class="hella-world">Hella World</div>
+            </html>
+          `)
+        })
+
+        const secondWebAppPort = await new Promise(resolve => {
+          secondWebAppServer.listen(0, 'localhost', () => resolve(secondWebAppServer.address().port))
+        })
+
+        const specToRun = 'cypress/e2e/multi-origin.js'
+
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              CYPRESS_BASE_URL_SECOND: `http://localhost:${secondWebAppPort}`,
+              SPEC_PATTERN: specToRun,
+              DD_TRACE_DEBUG: true
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        // TODO: remove once we find the source of flakiness
+        childProcess.stdout.pipe(process.stdout)
+        childProcess.stderr.pipe(process.stderr)
+
+        await receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            assert.equal(events.length, 4)
+
+            const test = events.find(event => event.type === 'test').content
+            assert.equal(test.resource, 'cypress/e2e/multi-origin.js.tests multiple origins')
+            assert.equal(test.meta[TEST_STATUS], 'pass')
+          })
+      })
+    }
+
+    it('sets _dd.test.is_user_provided_service to true if DD_SERVICE is used', (done) => {
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const testEvents = events.filter(event => event.type === 'test')
+
+          testEvents.forEach(({ content: { meta } }) => {
+            assert.propertyVal(meta, DD_TEST_IS_USER_PROVIDED_SERVICE, 'true')
+          })
+        }, 25000)
+
+      const {
+        NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+        ...restEnvVars
+      } = getCiVisEvpProxyConfig(receiver.port)
+
+      childProcess = exec(
+        testCommand,
+        {
+          cwd,
+          env: {
+            ...restEnvVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            DD_SERVICE: 'my-service'
+          },
+          stdio: 'pipe'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        receiverPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
+
+    context('test management', () => {
+      context('attempt to fix', () => {
+        beforeEach(() => {
+          receiver.setTestManagementTests({
+            cypress: {
+              suites: {
+                'cypress/e2e/attempt-to-fix.js': {
+                  tests: {
+                    'attempt to fix is attempt to fix': {
+                      properties: {
+                        attempt_to_fix: true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          })
+        })
+
+        const getTestAssertions = ({
+          isAttemptToFix,
+          shouldAlwaysPass,
+          shouldFailSometimes,
+          isQuarantined,
+          isDisabled
+        }) =>
+          receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+
+              if (isAttemptToFix) {
+                assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
+              } else {
+                assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+              }
+
+              const resourceNames = tests.map(span => span.resource)
+
+              assert.includeMembers(resourceNames,
+                [
+                  'cypress/e2e/attempt-to-fix.js.attempt to fix is attempt to fix'
+                ]
+              )
+
+              const attemptToFixTests = tests.filter(
+                test => test.meta[TEST_NAME] === 'attempt to fix is attempt to fix'
+              )
+
+              if (isAttemptToFix) {
+                assert.equal(attemptToFixTests.length, 4)
+              } else {
+                assert.equal(attemptToFixTests.length, 1)
+              }
+
+              for (let i = attemptToFixTests.length - 1; i >= 0; i--) {
+                const test = attemptToFixTests[i]
+                if (!isAttemptToFix) {
+                  assert.notProperty(test.meta, TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX)
+                  assert.notProperty(test.meta, TEST_IS_RETRY)
+                  assert.notProperty(test.meta, TEST_RETRY_REASON)
+                  continue
+                }
+                if (isQuarantined) {
+                  assert.propertyVal(test.meta, TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+                  assert.notPropertyVal(test.meta, TEST_STATUS, 'skip')
+                }
+                if (isDisabled) {
+                  assert.propertyVal(test.meta, TEST_MANAGEMENT_IS_DISABLED, 'true')
+                  assert.notPropertyVal(test.meta, TEST_STATUS, 'skip')
+                }
+
+                const isLastAttempt = i === attemptToFixTests.length - 1
+                const isFirstAttempt = i === 0
+                assert.propertyVal(test.meta, TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX, 'true')
+                if (isFirstAttempt) {
+                  assert.notProperty(test.meta, TEST_IS_RETRY)
+                  assert.notProperty(test.meta, TEST_RETRY_REASON)
+                } else {
+                  assert.propertyVal(test.meta, TEST_IS_RETRY, 'true')
+                  assert.propertyVal(test.meta, TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atf)
+                }
+                if (isLastAttempt) {
+                  if (shouldFailSometimes) {
+                    assert.notProperty(test.meta, TEST_HAS_FAILED_ALL_RETRIES)
+                    assert.propertyVal(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
+                  } else if (shouldAlwaysPass) {
+                    assert.propertyVal(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
+                    assert.notProperty(test.meta, TEST_HAS_FAILED_ALL_RETRIES)
+                  } else {
+                    assert.propertyVal(test.meta, TEST_HAS_FAILED_ALL_RETRIES, 'true')
+                    assert.propertyVal(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
+                  }
+                }
+              }
+            })
+
+        const runAttemptToFixTest = (done, {
+          isAttemptToFix,
+          shouldAlwaysPass,
+          shouldFailSometimes,
+          isQuarantined,
+          isDisabled,
+          extraEnvVars = {}
+        } = {}) => {
+          const testAssertionsPromise = getTestAssertions({
+            isAttemptToFix,
+            shouldAlwaysPass,
+            shouldFailSometimes,
+            isQuarantined,
+            isDisabled
+          })
+
+          const {
+            NODE_OPTIONS,
+            ...restEnvVars
+          } = getCiVisEvpProxyConfig(receiver.port)
+
+          const specToRun = 'cypress/e2e/attempt-to-fix.js'
+
+          childProcess = exec(
+            version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+            {
+              cwd,
+              env: {
+                ...restEnvVars,
+                CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+                SPEC_PATTERN: specToRun,
+                ...extraEnvVars,
+                ...(shouldAlwaysPass ? { CYPRESS_SHOULD_ALWAYS_PASS: '1' } : {}),
+                ...(shouldFailSometimes ? { CYPRESS_SHOULD_FAIL_SOMETIMES: '1' } : {})
+              },
+              stdio: 'pipe'
+            }
+          )
+
+          childProcess.on('exit', (exitCode) => {
+            testAssertionsPromise.then(() => {
+              if (shouldAlwaysPass) {
+                assert.equal(exitCode, 0)
+              } else {
+                // TODO: we need to figure out how to trick cypress into returning exit code 0
+                // even if there are failed tests
+                assert.equal(exitCode, 1)
+              }
+              done()
+            }).catch(done)
+          })
+        }
+
+        it('can attempt to fix and mark last attempt as failed if every attempt fails', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+          runAttemptToFixTest(done, { isAttemptToFix: true })
+        })
+
+        it('can attempt to fix and mark last attempt as passed if every attempt passes', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+          runAttemptToFixTest(done, { isAttemptToFix: true, shouldAlwaysPass: true })
+        })
+
+        it('can attempt to fix and not mark last attempt if attempts both pass and fail', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+          runAttemptToFixTest(done, { isAttemptToFix: true, shouldFailSometimes: true })
+        })
+
+        it('does not attempt to fix tests if test management is not enabled', (done) => {
+          receiver.setSettings({ test_management: { enabled: false, attempt_to_fix_retries: 3 } })
+
+          runAttemptToFixTest(done)
+        })
+
+        it('does not enable attempt to fix tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+          runAttemptToFixTest(done, { extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' } })
+        })
+
+        /**
+         * TODO:
+         * The spec says that quarantined tests that are not attempted to fix should be run and their result ignored.
+         * Cypress will skip the test instead.
+         *
+         * When a test is quarantined and attempted to fix, the spec is to run the test and ignore its result.
+         * Cypress will run the test, but it won't ignore its result.
+         */
+        it('can mark tests as quarantined and tests are not skipped', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+          receiver.setTestManagementTests({
+            cypress: {
+              suites: {
+                'cypress/e2e/attempt-to-fix.js': {
+                  tests: {
+                    'attempt to fix is attempt to fix': {
+                      properties: {
+                        attempt_to_fix: true,
+                        quarantined: true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          })
+
+          runAttemptToFixTest(done, { isAttemptToFix: true, isQuarantined: true })
+        })
+
+        /**
+         * TODO:
+         * When a test is disabled and attempted to fix, the spec is to run the test and ignore its result.
+         * Cypress will run the test, but it won't ignore its result.
+         */
+        it('can mark tests as disabled and tests are not skipped', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+          receiver.setTestManagementTests({
+            cypress: {
+              suites: {
+                'cypress/e2e/attempt-to-fix.js': {
+                  tests: {
+                    'attempt to fix is attempt to fix': {
+                      properties: {
+                        attempt_to_fix: true,
+                        disabled: true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          })
+
+          runAttemptToFixTest(done, { isAttemptToFix: true, isDisabled: true })
+        })
+      })
+
+      context('disabled', () => {
+        beforeEach(() => {
+          receiver.setTestManagementTests({
+            cypress: {
+              suites: {
+                'cypress/e2e/disable.js': {
+                  tests: {
+                    'disable is disabled': {
+                      properties: {
+                        disabled: true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          })
+        })
+
+        const getTestAssertions = (isDisabling) =>
+          receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const failedTest = events.find(event => event.type === 'test').content
+              const testSession = events.find(event => event.type === 'test_session_end').content
+
+              if (isDisabling) {
+                assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
+              } else {
+                assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+              }
+
+              assert.equal(failedTest.resource, 'cypress/e2e/disable.js.disable is disabled')
+
+              if (isDisabling) {
+                assert.propertyVal(failedTest.meta, TEST_STATUS, 'skip')
+                assert.propertyVal(failedTest.meta, TEST_MANAGEMENT_IS_DISABLED, 'true')
+              } else {
+                assert.propertyVal(failedTest.meta, TEST_STATUS, 'fail')
+                assert.notProperty(failedTest.meta, TEST_MANAGEMENT_IS_DISABLED)
+              }
+            })
+
+        const runDisableTest = (done, isDisabling, extraEnvVars) => {
+          const testAssertionsPromise = getTestAssertions(isDisabling)
+
+          const {
+            NODE_OPTIONS,
+            ...restEnvVars
+          } = getCiVisEvpProxyConfig(receiver.port)
+
+          const specToRun = 'cypress/e2e/disable.js'
+
+          childProcess = exec(
+            version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+            {
+              cwd,
+              env: {
+                ...restEnvVars,
+                CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+                SPEC_PATTERN: specToRun,
+                ...extraEnvVars
+              },
+              stdio: 'pipe'
+            }
+          )
+
+          childProcess.on('exit', (exitCode) => {
+            testAssertionsPromise.then(() => {
+              if (isDisabling) {
+                assert.equal(exitCode, 0)
+              } else {
+                assert.equal(exitCode, 1)
+              }
+              done()
+            }).catch(done)
+          })
+        }
+
+        it('can disable tests', (done) => {
+          receiver.setSettings({ test_management: { enabled: true } })
+
+          runDisableTest(done, true)
+        })
+
+        it('fails if disable is not enabled', (done) => {
+          receiver.setSettings({ test_management: { enabled: false } })
+
+          runDisableTest(done, false)
+        })
+
+        it('does not disable tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+          receiver.setSettings({ test_management: { enabled: true } })
+
+          runDisableTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
+        })
+      })
+
+      context('quarantine', () => {
+        beforeEach(() => {
+          receiver.setTestManagementTests({
+            cypress: {
+              suites: {
+                'cypress/e2e/quarantine.js': {
+                  tests: {
+                    'quarantine is quarantined': {
+                      properties: {
+                        quarantined: true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          })
+        })
+
+        const getTestAssertions = (isQuarantining) =>
+          receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const failedTest = events.find(event => event.type === 'test').content
+              const testSession = events.find(event => event.type === 'test_session_end').content
+
+              if (isQuarantining) {
+                assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
+              } else {
+                assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+              }
+
+              assert.equal(failedTest.resource, 'cypress/e2e/quarantine.js.quarantine is quarantined')
+
+              if (isQuarantining) {
+                // TODO: run instead of skipping, but ignore its result
+                assert.propertyVal(failedTest.meta, TEST_STATUS, 'skip')
+                assert.propertyVal(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+              } else {
+                assert.propertyVal(failedTest.meta, TEST_STATUS, 'fail')
+                assert.notProperty(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED)
+              }
+            })
+
+        const runQuarantineTest = (done, isQuarantining, extraEnvVars) => {
+          const testAssertionsPromise = getTestAssertions(isQuarantining)
+
+          const {
+            NODE_OPTIONS,
+            ...restEnvVars
+          } = getCiVisEvpProxyConfig(receiver.port)
+
+          const specToRun = 'cypress/e2e/quarantine.js'
+
+          childProcess = exec(
+            version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+            {
+              cwd,
+              env: {
+                ...restEnvVars,
+                CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+                SPEC_PATTERN: specToRun,
+                ...extraEnvVars
+              },
+              stdio: 'pipe'
+            }
+          )
+
+          childProcess.on('exit', (exitCode) => {
+            testAssertionsPromise.then(() => {
+              if (isQuarantining) {
+                assert.equal(exitCode, 0)
+              } else {
+                assert.equal(exitCode, 1)
+              }
+              done()
+            }).catch(done)
+          })
+        }
+
+        it('can quarantine tests', (done) => {
+          receiver.setSettings({ test_management: { enabled: true } })
+
+          runQuarantineTest(done, true)
+        })
+
+        it('fails if quarantine is not enabled', (done) => {
+          receiver.setSettings({ test_management: { enabled: false } })
+
+          runQuarantineTest(done, false)
+        })
+
+        it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+          receiver.setSettings({ test_management: { enabled: true } })
+
+          runQuarantineTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
+        })
+      })
+    })
+
+    context('libraries capabilities', () => {
+      it('adds capabilities to tests', (done) => {
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+
+            assert.isNotEmpty(metadataDicts)
+            metadataDicts.forEach(metadata => {
+              assert.equal(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], '1')
+              assert.equal(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')
+              assert.equal(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
+              assert.equal(metadata.test[DD_CAPABILITIES_IMPACTED_TESTS], '1')
+              assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
+              assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
+              assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
+              assert.equal(metadata.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], '1')
+              // capabilities logic does not overwrite test session name
+              assert.equal(metadata.test[TEST_SESSION_NAME], 'my-test-session-name')
+            })
+          }, 25000)
+
+        const {
+          NODE_OPTIONS,
+          ...restEnvVars
+        } = getCiVisEvpProxyConfig(receiver.port)
+
+        childProcess = exec(
+          testCommand,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              DD_TEST_SESSION_NAME: 'my-test-session-name'
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          receiverPromise.then(() => {
+            done()
+          }).catch(done)
+        })
+      })
+    })
+
+    context('impacted tests', () => {
+      beforeEach(() => {
+        receiver.setKnownTests({
+          cypress: {
+            'cypress/e2e/impacted-test.js': ['impacted test is impacted test']
+          }
+        })
+      })
+
+      // Add git setup before running impacted tests
+      before(function () {
+        execSync('git checkout -b feature-branch', { cwd, stdio: 'ignore' })
+        fs.writeFileSync(
+          path.join(cwd, 'cypress/e2e/impacted-test.js'),
+          `/* eslint-disable */
+          describe('impacted test', () => {
+            it('is impacted test', () => {
+              cy.visit('/')
+                .get('.hello-world')
+                .should('have.text', 'Hello Worldd')
+            })
+          })`
+        )
+        execSync('git add cypress/e2e/impacted-test.js', { cwd, stdio: 'ignore' })
+        execSync('git commit -m "modify impacted-test.js"', { cwd, stdio: 'ignore' })
+      })
+
+      after(function () {
+        execSync('git checkout -', { cwd, stdio: 'ignore' })
+        execSync('git branch -D feature-branch', { cwd, stdio: 'ignore' })
+      })
+
+      const getTestAssertions = ({ isModified, isEfd, isNew }) =>
+        receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+
+            if (isEfd) {
+              assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
+            } else {
+              assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
+            }
+
+            const resourceNames = tests.map(span => span.resource)
+
+            assert.includeMembers(resourceNames,
+              [
+                'cypress/e2e/impacted-test.js.impacted test is impacted test'
+              ]
+            )
+
+            const impactedTests = tests.filter(test =>
+              test.meta[TEST_SOURCE_FILE] === 'cypress/e2e/impacted-test.js' &&
+              test.meta[TEST_NAME] === 'impacted test is impacted test')
+
+            if (isEfd) {
+              assert.equal(impactedTests.length, NUM_RETRIES_EFD + 1) // Retries + original test
+            } else {
+              assert.equal(impactedTests.length, 1)
+            }
+
+            for (const impactedTest of impactedTests) {
+              if (isModified) {
+                assert.propertyVal(impactedTest.meta, TEST_IS_MODIFIED, 'true')
+              } else {
+                assert.notProperty(impactedTest.meta, TEST_IS_MODIFIED)
+              }
+              if (isNew) {
+                assert.propertyVal(impactedTest.meta, TEST_IS_NEW, 'true')
+              } else {
+                assert.notProperty(impactedTest.meta, TEST_IS_NEW)
+              }
+            }
+
+            if (isEfd) {
+              const retriedTests = tests.filter(
+                test => test.meta[TEST_IS_RETRY] === 'true' &&
+                test.meta[TEST_NAME] === 'impacted test is impacted test'
+              )
+              assert.equal(retriedTests.length, NUM_RETRIES_EFD)
+              let retriedTestNew = 0
+              let retriedTestsWithReason = 0
+              retriedTests.forEach(test => {
+                if (test.meta[TEST_IS_NEW] === 'true') {
+                  retriedTestNew++
+                }
+                if (test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd) {
+                  retriedTestsWithReason++
+                }
+              })
+              assert.equal(retriedTestNew, isNew ? NUM_RETRIES_EFD : 0)
+              assert.equal(
+                retriedTestsWithReason,
+                NUM_RETRIES_EFD
+              )
+            }
+          })
+
+      const runImpactedTest = (
+        done,
+        { isModified, isEfd = false, isNew = false },
+        extraEnvVars = {}
+      ) => {
+        const testAssertionsPromise = getTestAssertions({ isModified, isEfd, isNew })
+
+        const {
+          NODE_OPTIONS,
+          ...restEnvVars
+        } = getCiVisEvpProxyConfig(receiver.port)
+
+        const specToRun = 'cypress/e2e/impacted-test.js'
+
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              SPEC_PATTERN: specToRun,
+              GITHUB_BASE_REF: '',
+              ...extraEnvVars
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          testAssertionsPromise.then(done).catch(done)
+        })
+      }
+
+      context('test is not new', () => {
+        it('should be detected as impacted', (done) => {
+          receiver.setSettings({ impacted_tests_enabled: true })
+
+          runImpactedTest(done, { isModified: true })
+        })
+
+        it('should not be detected as impacted if disabled', (done) => {
+          receiver.setSettings({ impacted_tests_enabled: false })
+
+          runImpactedTest(done, { isModified: false })
+        })
+
+        it('should not be detected as impacted if DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED is false',
+          (done) => {
+            receiver.setSettings({ impacted_tests_enabled: true })
+
+            runImpactedTest(done,
+              { isModified: false },
+              { DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0' }
+            )
+          })
+      })
+
+      context('test is new', () => {
+        it('should be retried and marked both as new and modified', (done) => {
+          receiver.setKnownTests({})
+          receiver.setSettings({
+            impacted_tests_enabled: true,
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': NUM_RETRIES_EFD
+              }
+            },
+            known_tests_enabled: true
+          })
+          runImpactedTest(
+            done,
+            { isModified: true, isEfd: true, isNew: true }
+          )
         })
       })
     })

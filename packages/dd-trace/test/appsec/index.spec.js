@@ -11,6 +11,8 @@ const {
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
   passportVerify,
+  passportUser,
+  expressSession,
   queryParser,
   nextBodyParsed,
   nextQueryParsed,
@@ -30,10 +32,12 @@ const telemetryMetrics = require('../../src/telemetry/metrics')
 const addresses = require('../../src/appsec/addresses')
 
 const resultActions = {
-  block_request: {
-    status_code: '401',
-    type: 'auto',
-    grpc_status_code: '10'
+  actions: {
+    block_request: {
+      status_code: '401',
+      type: 'auto',
+      grpc_status_code: '10'
+    }
   }
 }
 
@@ -50,6 +54,8 @@ describe('AppSec Index', function () {
   let graphql
   let apiSecuritySampler
   let rasp
+  let standalone
+  let serverless
 
   const RULES = { rules: [{ a: 1 }] }
 
@@ -72,7 +78,13 @@ describe('AppSec Index', function () {
           sampleDelay: 10
         },
         rasp: {
-          enabled: true
+          enabled: true,
+          bodyCollection: true
+        },
+        extendedHeadersCollection: {
+          enabled: true,
+          redaction: false,
+          maxHeaders: 42
         }
       }
     }
@@ -91,7 +103,8 @@ describe('AppSec Index', function () {
 
     UserTracking = {
       setCollectionMode: sinon.stub(),
-      trackLogin: sinon.stub()
+      trackLogin: sinon.stub(),
+      trackUser: sinon.stub()
     }
 
     log = {
@@ -120,6 +133,16 @@ describe('AppSec Index', function () {
       disable: sinon.stub()
     }
 
+    standalone = {
+      configure: sinon.stub(),
+      disable: sinon.stub()
+    }
+
+    serverless = {
+      isInServerlessEnvironment: sinon.stub()
+    }
+    serverless.isInServerlessEnvironment.returns(false)
+
     AppSec = proxyquire('../../src/appsec', {
       '../log': log,
       '../plugins/util/web': web,
@@ -128,13 +151,15 @@ describe('AppSec Index', function () {
       './telemetry': appsecTelemetry,
       './graphql': graphql,
       './api_security_sampler': apiSecuritySampler,
-      './rasp': rasp
+      './rasp': rasp,
+      './standalone': standalone,
+      '../serverless': serverless
     })
 
     sinon.stub(fs, 'readFileSync').returns(JSON.stringify(RULES))
     sinon.stub(waf, 'init').callThrough()
     sinon.stub(RuleManager, 'loadRules')
-    sinon.stub(Reporter, 'setRateLimit')
+    sinon.stub(Reporter, 'init')
     sinon.stub(incomingHttpRequestStart, 'subscribe')
     sinon.stub(incomingHttpRequestEnd, 'subscribe')
   })
@@ -151,7 +176,7 @@ describe('AppSec Index', function () {
 
       expect(blocking.setTemplates).to.have.been.calledOnceWithExactly(config)
       expect(RuleManager.loadRules).to.have.been.calledOnceWithExactly(config.appsec)
-      expect(Reporter.setRateLimit).to.have.been.calledOnceWithExactly(42)
+      expect(Reporter.init).to.have.been.calledOnceWithExactly(config.appsec)
       expect(UserTracking.setCollectionMode).to.have.been.calledOnceWithExactly('anon', false)
       expect(incomingHttpRequestStart.subscribe)
         .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
@@ -172,10 +197,26 @@ describe('AppSec Index', function () {
       expect(incomingHttpRequestEnd.subscribe).to.not.have.been.called
     })
 
+    it('should not log when enable fails in serverless', () => {
+      RuleManager.loadRules.restore()
+
+      const err = new Error('Invalid Rules')
+      sinon.stub(RuleManager, 'loadRules').throws(err)
+      serverless.isInServerlessEnvironment.returns(true)
+
+      AppSec.enable(config)
+
+      expect(log.error).to.not.have.been.called
+      expect(incomingHttpRequestStart.subscribe).to.not.have.been.called
+      expect(incomingHttpRequestEnd.subscribe).to.not.have.been.called
+    })
+
     it('should subscribe to blockable channels', () => {
       expect(bodyParser.hasSubscribers).to.be.false
       expect(cookieParser.hasSubscribers).to.be.false
       expect(passportVerify.hasSubscribers).to.be.false
+      expect(passportUser.hasSubscribers).to.be.false
+      expect(expressSession.hasSubscribers).to.be.false
       expect(queryParser.hasSubscribers).to.be.false
       expect(nextBodyParsed.hasSubscribers).to.be.false
       expect(nextQueryParsed.hasSubscribers).to.be.false
@@ -189,6 +230,8 @@ describe('AppSec Index', function () {
       expect(bodyParser.hasSubscribers).to.be.true
       expect(cookieParser.hasSubscribers).to.be.true
       expect(passportVerify.hasSubscribers).to.be.true
+      expect(passportUser.hasSubscribers).to.be.true
+      expect(expressSession.hasSubscribers).to.be.true
       expect(queryParser.hasSubscribers).to.be.true
       expect(nextBodyParsed.hasSubscribers).to.be.true
       expect(nextQueryParsed.hasSubscribers).to.be.true
@@ -214,7 +257,7 @@ describe('AppSec Index', function () {
       }
       AppSec.enable(config)
 
-      expect(appsecTelemetry.enable).to.be.calledOnceWithExactly(config.telemetry)
+      expect(appsecTelemetry.enable).to.be.calledOnceWithExactly(config)
     })
 
     it('should call rasp enable', () => {
@@ -271,6 +314,8 @@ describe('AppSec Index', function () {
       expect(bodyParser.hasSubscribers).to.be.false
       expect(cookieParser.hasSubscribers).to.be.false
       expect(passportVerify.hasSubscribers).to.be.false
+      expect(passportUser.hasSubscribers).to.be.false
+      expect(expressSession.hasSubscribers).to.be.false
       expect(queryParser.hasSubscribers).to.be.false
       expect(nextBodyParsed.hasSubscribers).to.be.false
       expect(nextQueryParsed.hasSubscribers).to.be.false
@@ -379,7 +424,52 @@ describe('AppSec Index', function () {
 
       expect(waf.run).to.have.not.been.called
 
-      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
+      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res, {})
+    })
+
+    it('should pass stored response headers to Reporter.finishRequest', () => {
+      const req = {
+        url: '/path',
+        headers: {
+          'user-agent': 'Arachni',
+          host: 'localhost'
+        },
+        method: 'POST',
+        socket: {
+          remoteAddress: '127.0.0.1',
+          remotePort: 8080
+        }
+      }
+      const res = {
+        getHeaders: () => ({
+          'content-type': 'application/json',
+          'content-length': 42
+        }),
+        statusCode: 200
+      }
+
+      const storedHeaders = {
+        'content-type': 'text/plain',
+        'content-language': 'en-US',
+        'content-length': '15'
+      }
+
+      web.patch(req)
+
+      sinon.stub(Reporter, 'finishRequest')
+      sinon.stub(waf, 'disposeContext')
+
+      responseWriteHead.publish({
+        req,
+        res,
+        abortController: { abort: sinon.stub() },
+        statusCode: 200,
+        responseHeaders: storedHeaders
+      })
+
+      AppSec.incomingHttpEndTranslator({ req, res })
+
+      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res, storedHeaders)
     })
 
     it('should not propagate incoming http end data with invalid framework properties', () => {
@@ -417,7 +507,7 @@ describe('AppSec Index', function () {
 
       expect(waf.run).to.have.not.been.called
 
-      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
+      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res, {})
     })
 
     it('should propagate incoming http end data with express', () => {
@@ -467,7 +557,7 @@ describe('AppSec Index', function () {
           'server.request.query': { b: '2' }
         }
       }, req)
-      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
+      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res, {})
     })
   })
 
@@ -630,7 +720,7 @@ describe('AppSec Index', function () {
         responseBody.publish({ req, res, body })
 
         expect(apiSecuritySampler.sampleRequest).to.have.been.calledOnceWith(req, res)
-        expect(waf.run).to.been.calledOnceWith({
+        expect(waf.run).to.have.been.calledOnceWith({
           persistent: {
             [addresses.HTTP_INCOMING_RESPONSE_BODY]: body
           }
@@ -643,8 +733,12 @@ describe('AppSec Index', function () {
     let abortController, req, res, rootSpan
 
     beforeEach(() => {
+      sinon.stub(waf, 'run')
+
       rootSpan = {
-        addTags: sinon.stub()
+        setTag: sinon.stub(),
+        _tags: {},
+        context: () => ({ _tags: rootSpan._tags })
       }
       web.root.returns(rootSpan)
 
@@ -656,10 +750,13 @@ describe('AppSec Index', function () {
           'content-length': 42
         }),
         writeHead: sinon.stub(),
-        end: sinon.stub(),
-        getHeaderNames: sinon.stub().returns([])
+        getHeaderNames: sinon.stub().returns([]),
+        constructor: {
+          prototype: {
+            end: sinon.stub()
+          }
+        }
       }
-      res.writeHead.returns(res)
 
       req = {
         url: '/path',
@@ -676,24 +773,20 @@ describe('AppSec Index', function () {
       }
 
       AppSec.enable(config)
-      AppSec.incomingHttpStartTranslator({ req, res })
     })
 
     describe('onRequestBodyParsed', () => {
       it('Should not block without body', () => {
-        sinon.stub(waf, 'run')
-
         bodyParser.publish({ req, res, abortController })
 
         expect(waf.run).not.to.have.been.called
         expect(abortController.abort).not.to.have.been.called
-        expect(res.end).not.to.have.been.called
+        expect(res.constructor.prototype.end).not.to.have.been.called
       })
 
       it('Should not block with body by default', () => {
         const body = { key: 'value' }
         req.body = body
-        sinon.stub(waf, 'run')
 
         bodyParser.publish({ req, res, body, abortController })
 
@@ -703,13 +796,13 @@ describe('AppSec Index', function () {
           }
         })
         expect(abortController.abort).not.to.have.been.called
-        expect(res.end).not.to.have.been.called
+        expect(res.constructor.prototype.end).not.to.have.been.called
       })
 
       it('Should block when it is detected as attack', () => {
         const body = { key: 'value' }
         req.body = body
-        sinon.stub(waf, 'run').returns(resultActions)
+        waf.run.returns(resultActions)
 
         bodyParser.publish({ req, res, body, abortController })
 
@@ -719,24 +812,21 @@ describe('AppSec Index', function () {
           }
         })
         expect(abortController.abort).to.have.been.called
-        expect(res.end).to.have.been.called
+        expect(res.constructor.prototype.end).to.have.been.called
       })
     })
 
     describe('onRequestCookieParsed', () => {
       it('Should not block without cookie', () => {
-        sinon.stub(waf, 'run')
-
         cookieParser.publish({ req, res, abortController })
 
         expect(waf.run).not.to.have.been.called
         expect(abortController.abort).not.to.have.been.called
-        expect(res.end).not.to.have.been.called
+        expect(res.constructor.prototype.end).not.to.have.been.called
       })
 
       it('Should not block with cookie by default', () => {
         const cookies = { key: 'value' }
-        sinon.stub(waf, 'run')
 
         cookieParser.publish({ req, res, abortController, cookies })
 
@@ -746,12 +836,12 @@ describe('AppSec Index', function () {
           }
         })
         expect(abortController.abort).not.to.have.been.called
-        expect(res.end).not.to.have.been.called
+        expect(res.constructor.prototype.end).not.to.have.been.called
       })
 
       it('Should block when it is detected as attack', () => {
         const cookies = { key: 'value' }
-        sinon.stub(waf, 'run').returns(resultActions)
+        waf.run.returns(resultActions)
 
         cookieParser.publish({ req, res, abortController, cookies })
 
@@ -761,25 +851,22 @@ describe('AppSec Index', function () {
           }
         })
         expect(abortController.abort).to.have.been.called
-        expect(res.end).to.have.been.called
+        expect(res.constructor.prototype.end).to.have.been.called
       })
     })
 
     describe('onRequestQueryParsed', () => {
       it('Should not block without query', () => {
-        sinon.stub(waf, 'run')
-
         queryParser.publish({ req, res, abortController })
 
         expect(waf.run).not.to.have.been.called
         expect(abortController.abort).not.to.have.been.called
-        expect(res.end).not.to.have.been.called
+        expect(res.constructor.prototype.end).not.to.have.been.called
       })
 
       it('Should not block with query by default', () => {
         const query = { key: 'value' }
         req.query = query
-        sinon.stub(waf, 'run')
 
         queryParser.publish({ req, res, query, abortController })
 
@@ -789,13 +876,13 @@ describe('AppSec Index', function () {
           }
         })
         expect(abortController.abort).not.to.have.been.called
-        expect(res.end).not.to.have.been.called
+        expect(res.constructor.prototype.end).not.to.have.been.called
       })
 
       it('Should block when it is detected as attack', () => {
         const query = { key: 'value' }
         req.query = query
-        sinon.stub(waf, 'run').returns(resultActions)
+        waf.run.returns(resultActions)
 
         queryParser.publish({ req, res, query, abortController })
 
@@ -805,17 +892,16 @@ describe('AppSec Index', function () {
           }
         })
         expect(abortController.abort).to.have.been.called
-        expect(res.end).to.have.been.called
+        expect(res.constructor.prototype.end).to.have.been.called
       })
     })
 
     describe('onPassportVerify', () => {
       beforeEach(() => {
-        web.root.resetHistory()
-        sinon.stub(storage, 'getStore').returns({ req })
+        sinon.stub(storage('legacy'), 'getStore').returns({ req })
       })
 
-      it('should block when UserTracking.login() returns action', () => {
+      it('should block when UserTracking.trackLogin() returns action', () => {
         UserTracking.trackLogin.returns(resultActions)
 
         const abortController = new AbortController()
@@ -829,7 +915,7 @@ describe('AppSec Index', function () {
 
         passportVerify.publish(payload)
 
-        expect(storage.getStore).to.have.been.calledOnce
+        expect(storage('legacy').getStore).to.have.been.calledOnce
         expect(web.root).to.have.been.calledOnceWithExactly(req)
         expect(UserTracking.trackLogin).to.have.been.calledOnceWithExactly(
           payload.framework,
@@ -839,10 +925,10 @@ describe('AppSec Index', function () {
           rootSpan
         )
         expect(abortController.signal.aborted).to.be.true
-        expect(res.end).to.have.been.called
+        expect(res.constructor.prototype.end).to.have.been.called
       })
 
-      it('should not block when UserTracking.login() returns nothing', () => {
+      it('should not block when UserTracking.trackLogin() returns nothing', () => {
         UserTracking.trackLogin.returns(undefined)
 
         const abortController = new AbortController()
@@ -856,7 +942,7 @@ describe('AppSec Index', function () {
 
         passportVerify.publish(payload)
 
-        expect(storage.getStore).to.have.been.calledOnce
+        expect(storage('legacy').getStore).to.have.been.calledOnce
         expect(web.root).to.have.been.calledOnceWithExactly(req)
         expect(UserTracking.trackLogin).to.have.been.calledOnceWithExactly(
           payload.framework,
@@ -866,11 +952,11 @@ describe('AppSec Index', function () {
           rootSpan
         )
         expect(abortController.signal.aborted).to.be.false
-        expect(res.end).to.not.have.been.called
+        expect(res.constructor.prototype.end).to.not.have.been.called
       })
 
       it('should not block and call log if no rootSpan is found', () => {
-        storage.getStore.returns(undefined)
+        storage('legacy').getStore.returns(undefined)
 
         const abortController = new AbortController()
         const payload = {
@@ -883,17 +969,139 @@ describe('AppSec Index', function () {
 
         passportVerify.publish(payload)
 
-        expect(storage.getStore).to.have.been.calledOnce
+        expect(storage('legacy').getStore).to.have.been.calledOnce
         expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] No rootSpan found in onPassportVerify')
         expect(UserTracking.trackLogin).to.not.have.been.called
         expect(abortController.signal.aborted).to.be.false
-        expect(res.end).to.not.have.been.called
+        expect(res.constructor.prototype.end).to.not.have.been.called
+      })
+    })
+
+    describe('onPassportDeserializeUser', () => {
+      beforeEach(() => {
+        sinon.stub(storage('legacy'), 'getStore').returns({ req })
+      })
+
+      it('should block when UserTracking.trackUser() returns action', () => {
+        UserTracking.trackUser.returns(resultActions)
+
+        const abortController = new AbortController()
+        const payload = {
+          user: { _id: 1, username: 'test', password: '1234' },
+          abortController
+        }
+
+        passportUser.publish(payload)
+
+        expect(storage('legacy').getStore).to.have.been.calledOnce
+        expect(web.root).to.have.been.calledOnceWithExactly(req)
+        expect(UserTracking.trackUser).to.have.been.calledOnceWithExactly(
+          payload.user,
+          rootSpan
+        )
+        expect(abortController.signal.aborted).to.be.true
+        expect(res.constructor.prototype.end).to.have.been.called
+      })
+
+      it('should not block when UserTracking.trackUser() returns nothing', () => {
+        UserTracking.trackUser.returns(undefined)
+
+        const abortController = new AbortController()
+        const payload = {
+          user: { _id: 1, username: 'test', password: '1234' },
+          abortController
+        }
+
+        passportUser.publish(payload)
+
+        expect(storage('legacy').getStore).to.have.been.calledOnce
+        expect(web.root).to.have.been.calledOnceWithExactly(req)
+        expect(UserTracking.trackUser).to.have.been.calledOnceWithExactly(
+          payload.user,
+          rootSpan
+        )
+        expect(abortController.signal.aborted).to.be.false
+        expect(res.constructor.prototype.end).to.not.have.been.called
+      })
+
+      it('should not block and call log if no rootSpan is found', () => {
+        storage('legacy').getStore.returns(undefined)
+
+        const abortController = new AbortController()
+        const payload = {
+          user: { _id: 1, username: 'test', password: '1234' },
+          abortController
+        }
+
+        passportUser.publish(payload)
+
+        expect(storage('legacy').getStore).to.have.been.calledOnce
+        expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] No rootSpan found in onPassportDeserializeUser')
+        expect(UserTracking.trackUser).to.not.have.been.called
+        expect(abortController.signal.aborted).to.be.false
+        expect(res.constructor.prototype.end).to.not.have.been.called
+      })
+    })
+
+    describe('onExpressSession', () => {
+      it('should not call waf and call log if no rootSpan is found', () => {
+        web.root.returns(null)
+
+        expressSession.publish({ req, res, sessionId: '1234', abortController })
+
+        expect(web.root).to.have.been.calledOnceWithExactly(req)
+        expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] No rootSpan found in onExpressSession')
+        expect(waf.run).to.not.have.been.called
+        expect(abortController.abort).to.not.have.been.called
+        expect(res.constructor.prototype.end).to.not.have.been.called
+      })
+
+      it('should not call waf when sessionID was set by SDK', () => {
+        rootSpan._tags['usr.session_id'] = 'sdk_sessid'
+
+        expressSession.publish({ req, res, sessionId: '1234', abortController })
+
+        expect(web.root).to.have.been.calledOnceWithExactly(req)
+        expect(log.warn).to.not.have.been.called
+        expect(waf.run).to.not.have.been.called
+        expect(abortController.abort).to.not.have.been.called
+        expect(res.constructor.prototype.end).to.not.have.been.called
+      })
+
+      it('should call waf and not block with no attack', () => {
+        expressSession.publish({ req, res, sessionId: '1234', abortController })
+
+        expect(web.root).to.have.been.calledOnceWithExactly(req)
+        expect(log.warn).to.not.have.been.called
+        expect(waf.run).to.have.been.calledOnceWithExactly({
+          persistent: {
+            'usr.session_id': '1234'
+          }
+        }, req)
+        expect(abortController.abort).to.not.have.been.called
+        expect(res.constructor.prototype.end).to.not.have.been.called
+      })
+
+      it('should call waf and block with attack', () => {
+        waf.run.returns(resultActions)
+
+        expressSession.publish({ req, res, sessionId: '1234', abortController })
+
+        expect(web.root).to.have.been.calledOnceWithExactly(req)
+        expect(log.warn).to.not.have.been.called
+        expect(waf.run).to.have.been.calledOnceWithExactly({
+          persistent: {
+            'usr.session_id': '1234'
+          }
+        }, req)
+        expect(abortController.abort).to.have.been.called
+        expect(res.constructor.prototype.end).to.have.been.called
       })
     })
 
     describe('onResponseWriteHead', () => {
       it('should call abortController if response was already blocked', () => {
-        sinon.stub(waf, 'run').returns(resultActions)
+        waf.run.returns(resultActions)
 
         const responseHeaders = {
           'content-type': 'application/json',
@@ -913,7 +1121,7 @@ describe('AppSec Index', function () {
           }
         }, req)
         expect(abortController.abort).to.have.been.calledOnce
-        expect(res.end).to.have.been.calledOnce
+        expect(res.constructor.prototype.end).to.have.been.calledOnce
 
         abortController.abort.resetHistory()
 
@@ -921,11 +1129,11 @@ describe('AppSec Index', function () {
 
         expect(waf.run).to.have.been.calledOnce
         expect(abortController.abort).to.have.been.calledOnce
-        expect(res.end).to.have.been.calledOnce
+        expect(res.constructor.prototype.end).to.have.been.calledOnce
       })
 
       it('should not call the WAF if response was already analyzed', () => {
-        sinon.stub(waf, 'run').returns(null)
+        waf.run.returns(null)
 
         const responseHeaders = {
           'content-type': 'application/json',
@@ -945,18 +1153,18 @@ describe('AppSec Index', function () {
           }
         }, req)
         expect(abortController.abort).to.have.not.been.called
-        expect(res.end).to.have.not.been.called
+        expect(res.constructor.prototype.end).to.have.not.been.called
 
         responseWriteHead.publish({ req, res, abortController, statusCode: 404, responseHeaders })
 
         expect(waf.run).to.have.been.calledOnce
         expect(abortController.abort).to.have.not.been.called
-        expect(res.end).to.have.not.been.called
+        expect(res.constructor.prototype.end).to.have.not.been.called
       })
 
       it('should not do anything without a root span', () => {
         web.root.returns(null)
-        sinon.stub(waf, 'run').returns(null)
+        waf.run.returns(null)
 
         const responseHeaders = {
           'content-type': 'application/json',
@@ -968,11 +1176,11 @@ describe('AppSec Index', function () {
 
         expect(waf.run).to.have.not.been.called
         expect(abortController.abort).to.have.not.been.called
-        expect(res.end).to.have.not.been.called
+        expect(res.constructor.prototype.end).to.have.not.been.called
       })
 
       it('should call the WAF with responde code and headers', () => {
-        sinon.stub(waf, 'run').returns(resultActions)
+        waf.run.returns(resultActions)
 
         const responseHeaders = {
           'content-type': 'application/json',
@@ -992,14 +1200,14 @@ describe('AppSec Index', function () {
           }
         }, req)
         expect(abortController.abort).to.have.been.calledOnce
-        expect(res.end).to.have.been.calledOnce
+        expect(res.constructor.prototype.end).to.have.been.calledOnce
       })
     })
 
     describe('onResponseSetHeader', () => {
       it('should call abortController if response was already blocked', () => {
         // First block the request
-        sinon.stub(waf, 'run').returns(resultActions)
+        waf.run.returns(resultActions)
 
         const responseHeaders = {
           'content-type': 'application/json',
@@ -1057,8 +1265,9 @@ describe('AppSec Index', function () {
 
       const metrics = appsecNamespace.metrics.toJSON()
 
-      expect(metrics.series.length).to.equal(1)
-      expect(metrics.series[0].metric).to.equal('waf.init')
+      expect(metrics.series.length).to.equal(2)
+      expect(metrics.series[0].metric).to.equal('enabled')
+      expect(metrics.series[1].metric).to.equal('waf.init')
     })
 
     it('should not increment waf.init metric if metrics are not enabled', () => {
@@ -1103,6 +1312,7 @@ describe('IP blocking', function () {
   const toModify = [{
     product: 'ASM_DATA',
     id: '1',
+    path: 'datadog/00/ASM_DATA/test/IP blocking',
     file: ruleData
   }]
   const htmlDefaultContent = blockedTemplate.html
@@ -1225,6 +1435,7 @@ describe('IP blocking', function () {
       const toModifyCustomActions = [{
         product: 'ASM',
         id: 'custom-actions',
+        path: 'datadog/00/ASM/test/Custom actions/Default content with custom status',
         file: {
           actions: [
             {
@@ -1285,6 +1496,7 @@ describe('IP blocking', function () {
       const toModifyCustomActions = [{
         product: 'ASM',
         id: 'custom-actions',
+        path: 'datadog/00/ASM/test/Custom actions/Redirect on error',
         file: {
           actions: [
             {

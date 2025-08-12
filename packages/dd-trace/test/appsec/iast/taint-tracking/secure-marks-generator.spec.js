@@ -12,7 +12,7 @@ describe('test secure marks generator', () => {
 
   it('should generate numbers in order', () => {
     for (let i = 0; i < 100; i++) {
-      expect(getNextSecureMark()).to.be.equal(1 << i)
+      expect(getNextSecureMark()).to.be.equal((1 << i) >>> 0)
     }
   })
 })

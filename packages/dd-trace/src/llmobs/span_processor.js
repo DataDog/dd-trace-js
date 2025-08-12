@@ -7,6 +7,7 @@ const {
   METADATA,
   INPUT_MESSAGES,
   INPUT_VALUE,
+  INTEGRATION,
   OUTPUT_MESSAGES,
   INPUT_DOCUMENTS,
   OUTPUT_DOCUMENTS,
@@ -25,6 +26,8 @@ const {
   ERROR_TYPE,
   ERROR_STACK
 } = require('../constants')
+
+const telemetry = require('./telemetry')
 
 const LLMObsTagger = require('./tagger')
 
@@ -48,6 +51,7 @@ class LLMObsSpanProcessor {
 
     try {
       const formattedEvent = this.format(span)
+      telemetry.incrementLLMObsSpanFinishedCount(span)
       this._writer.append(formattedEvent)
     } catch (e) {
       // this should be a rare case
@@ -154,14 +158,14 @@ class LLMObsSpanProcessor {
     const add = (obj, carrier) => {
       for (const key in obj) {
         const value = obj[key]
-        if (!Object.prototype.hasOwnProperty.call(obj, key)) continue
+        if (!Object.hasOwn(obj, key)) continue
         if (typeof value === 'bigint' || isCircular(value)) {
           // mark as unserializable instead of dropping
           logger.warn(`Unserializable property found in metadata: ${key}`)
           carrier[key] = UNSERIALIZABLE_VALUE_TEXT
           continue
         }
-        if (typeof value === 'object') {
+        if (value !== null && typeof value === 'object') {
           add(value, carrier[key] = {})
         } else {
           carrier[key] = value
@@ -186,6 +190,8 @@ class LLMObsSpanProcessor {
     const errType = span.context()._tags[ERROR_TYPE] || error?.name
     if (errType) tags.error_type = errType
     if (sessionId) tags.session_id = sessionId
+    const integration = LLMObsTagger.tagMap.get(span)?.[INTEGRATION]
+    if (integration) tags.integration = integration
     const existingTags = LLMObsTagger.tagMap.get(span)?.[TAGS] || {}
     if (existingTags) tags = { ...tags, ...existingTags }
     return Object.entries(tags).map(([key, value]) => `${key}:${value ?? ''}`)

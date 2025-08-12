@@ -9,13 +9,11 @@ const OPERATION_DEFINITION = 'OperationDefinition'
 const FRAGMENT_DEFINITION = 'FragmentDefinition'
 
 class ApolloGatewayRequestPlugin extends ApolloBasePlugin {
-  static get operation () { return 'request' }
-  static get prefix () {
-    return 'tracing:apm:apollo:gateway:request'
-  }
+  static operation = 'request'
+  static prefix = 'tracing:apm:apollo:gateway:request'
 
   bindStart (ctx) {
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
     const childOf = store ? store.span : null
     const spanData = {
       childOf,
@@ -58,9 +56,8 @@ class ApolloGatewayRequestPlugin extends ApolloBasePlugin {
     const errors = ctx?.result?.errors
     // apollo gateway catches certain errors and returns them in the result object
     // we want to capture these errors as spans
-    if (errors instanceof Array &&
-      errors[errors.length - 1] && errors[errors.length - 1].stack && errors[errors.length - 1].message) {
-      ctx.currentStore.span.setTag('error', errors[errors.length - 1])
+    if (Array.isArray(errors) && errors.at(-1)?.stack && errors.at(-1).message) {
+      ctx.currentStore.span.setTag('error', errors.at(-1))
     }
     ctx.currentStore.span.finish()
     return ctx.parentStore
@@ -91,7 +88,7 @@ function buildOperationContext (schema, operationDocument, operationName) {
           break
       }
     })
-  } catch (e) {
+  } catch {
     // safety net
   }
 
@@ -113,12 +110,12 @@ function getSignature (document, operationName, operationType, calculate) {
       }
 
       return tools.defaultEngineReportingSignature(document, operationName)
-    } catch (e) {
+    } catch {
       // safety net
     }
   }
 
-  return [operationType, operationName].filter(val => val).join(' ')
+  return [operationType, operationName].filter(Boolean).join(' ')
 }
 
 module.exports = ApolloGatewayRequestPlugin

@@ -1,9 +1,12 @@
+'use strict'
+
 const semver = require('semver')
 const {
   runAndCheckWithTelemetry: testFile,
   useEnv,
   useSandbox,
-  sandboxCwd
+  sandboxCwd,
+  setShouldKill
 } = require('./helpers')
 const path = require('path')
 const fs = require('fs')
@@ -35,18 +38,18 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
 
       if (currentVersionIsSupported) {
         context('without DD_INJECTION_ENABLED', () => {
-          it('should initialize the tracer', () => doTest('init/trace.js', 'true\n'))
-          it('should initialize instrumentation', () => doTest('init/instrument.js', 'true\n'))
+          it('should initialize the tracer', () => doTest('init/trace.js', 'true\n', [], 'manual'))
+          it('should initialize instrumentation', () => doTest('init/instrument.js', 'true\n', [], 'manual'))
           it(`should ${esmWorks ? '' : 'not '}initialize ESM instrumentation`, () =>
-            doTest('init/instrument.mjs', `${esmWorks}\n`))
+            doTest('init/instrument.mjs', `${esmWorks}\n`, [], 'manual'))
         })
       }
       context('with DD_INJECTION_ENABLED', () => {
         useEnv({ DD_INJECTION_ENABLED })
 
-        it('should not initialize the tracer', () => doTest('init/trace.js', 'false\n'))
-        it('should not initialize instrumentation', () => doTest('init/instrument.js', 'false\n'))
-        it('should not initialize ESM instrumentation', () => doTest('init/instrument.mjs', 'false\n'))
+        it('should not initialize the tracer', () => doTest('init/trace.js', 'false\n', []))
+        it('should not initialize instrumentation', () => doTest('init/instrument.js', 'false\n', []))
+        it('should not initialize ESM instrumentation', () => doTest('init/instrument.mjs', 'false\n', []))
       })
     })
     context('when dd-trace in the app dir', () => {
@@ -54,18 +57,18 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
       useEnv({ NODE_OPTIONS })
 
       context('without DD_INJECTION_ENABLED', () => {
-        it('should initialize the tracer', () => doTest('init/trace.js', 'true\n'))
-        it('should initialize instrumentation', () => doTest('init/instrument.js', 'true\n'))
+        it('should initialize the tracer', () => doTest('init/trace.js', 'true\n', [], 'manual'))
+        it('should initialize instrumentation', () => doTest('init/instrument.js', 'true\n', [], 'manual'))
         it(`should ${esmWorks ? '' : 'not '}initialize ESM instrumentation`, () =>
-          doTest('init/instrument.mjs', `${esmWorks}\n`))
+          doTest('init/instrument.mjs', `${esmWorks}\n`, [], 'manual'))
       })
       context('with DD_INJECTION_ENABLED', () => {
-        useEnv({ DD_INJECTION_ENABLED })
+        useEnv({ DD_INJECTION_ENABLED, DD_TRACE_DEBUG })
 
-        it('should initialize the tracer', () => doTest('init/trace.js', 'true\n', ...telemetryGood))
-        it('should initialize instrumentation', () => doTest('init/instrument.js', 'true\n', ...telemetryGood))
+        it('should initialize the tracer', () => doTest('init/trace.js', 'true\n', telemetryGood, 'ssi'))
+        it('should initialize instrumentation', () => doTest('init/instrument.js', 'true\n', telemetryGood, 'ssi'))
         it(`should ${esmWorks ? '' : 'not '}initialize ESM instrumentation`, () =>
-          doTest('init/instrument.mjs', `${esmWorks}\n`, ...telemetryGood))
+          doTest('init/instrument.mjs', `${esmWorks}\n`, telemetryGood, 'ssi'))
       })
     })
   })
@@ -89,13 +92,13 @@ function testRuntimeVersionChecks (arg, filename) {
         useEnv({ NODE_OPTIONS })
 
         it('should not initialize the tracer', () =>
-          doTest('false\n'))
+          doTest('false\n', []))
         context('with DD_INJECTION_ENABLED', () => {
           useEnv({ DD_INJECTION_ENABLED })
 
           context('without debug', () => {
-            it('should not initialize the tracer', () => doTest('false\n', ...telemetryAbort))
-            it('should initialize the tracer, if DD_INJECT_FORCE', () => doTestForced('true\n', ...telemetryForced))
+            it('should not initialize the tracer', () => doTest('false\n', telemetryAbort))
+            it('should initialize the tracer, if DD_INJECT_FORCE', () => doTestForced('true\n', telemetryForced))
           })
           context('with debug', () => {
             useEnv({ DD_TRACE_DEBUG })
@@ -105,7 +108,7 @@ function testRuntimeVersionChecks (arg, filename) {
 Found incompatible runtime nodejs ${process.versions.node}, Supported runtimes: nodejs \
 >=18.
 false
-`, ...telemetryAbort))
+`, telemetryAbort))
             it('should initialize the tracer, if DD_INJECT_FORCE', () =>
               doTestForced(`Aborting application instrumentation due to incompatible_runtime.
 Found incompatible runtime nodejs ${process.versions.node}, Supported runtimes: nodejs \
@@ -113,7 +116,7 @@ Found incompatible runtime nodejs ${process.versions.node}, Supported runtimes: 
 DD_INJECT_FORCE enabled, allowing unsupported runtimes and continuing.
 Application instrumentation bootstrapping complete
 true
-`, ...telemetryForced))
+`, telemetryForced))
           })
         })
       })
@@ -121,22 +124,22 @@ true
       context('when node version is more than engines field', () => {
         useEnv({ NODE_OPTIONS })
 
-        it('should initialize the tracer, if no DD_INJECTION_ENABLED', () => doTest('true\n'))
+        it('should initialize the tracer, if no DD_INJECTION_ENABLED', () => doTest('true\n', [], 'manual'))
         context('with DD_INJECTION_ENABLED', () => {
           useEnv({ DD_INJECTION_ENABLED })
 
           context('without debug', () => {
-            it('should initialize the tracer', () => doTest('true\n', ...telemetryGood))
+            it('should initialize the tracer', () => doTest('true\n', telemetryGood, 'ssi'))
             it('should initialize the tracer, if DD_INJECT_FORCE', () =>
-              doTestForced('true\n', ...telemetryGood))
+              doTestForced('true\n', telemetryGood, 'ssi'))
           })
           context('with debug', () => {
             useEnv({ DD_TRACE_DEBUG })
 
             it('should initialize the tracer', () =>
-              doTest('Application instrumentation bootstrapping complete\ntrue\n', ...telemetryGood))
+              doTest('Application instrumentation bootstrapping complete\ntrue\n', telemetryGood, 'ssi'))
             it('should initialize the tracer, if DD_INJECT_FORCE', () =>
-              doTestForced('Application instrumentation bootstrapping complete\ntrue\n', ...telemetryGood))
+              doTestForced('Application instrumentation bootstrapping complete\ntrue\n', telemetryGood, 'ssi'))
           })
         })
       })
@@ -159,6 +162,7 @@ function stubTracerIfNeeded () {
 }
 
 describe('init.js', () => {
+  setShouldKill(false)
   useSandbox()
   stubTracerIfNeeded()
 
@@ -166,13 +170,11 @@ describe('init.js', () => {
   testRuntimeVersionChecks('require', 'init.js')
 })
 
-// ESM is not supportable prior to Node.js 12.17.0, 14.13.1 on the 14.x line,
+// ESM is not supportable prior to Node.js 14.13.1 on the 14.x line,
 // or on 18.0.0 in particular.
-if (
-  semver.satisfies(process.versions.node, '>=12.17.0') &&
-  semver.satisfies(process.versions.node, '>=14.13.1')
-) {
+if (semver.satisfies(process.versions.node, '>=14.13.1')) {
   describe('initialize.mjs', () => {
+    setShouldKill(false)
     useSandbox()
     stubTracerIfNeeded()
 

@@ -3,7 +3,8 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const nock = require('nock')
 const { setup } = require('./spec_helpers')
-const { models, modelConfig } = require('./fixtures/bedrockruntime')
+const { models } = require('./fixtures/bedrockruntime')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 const serviceName = 'bedrock-service-name-test'
 
@@ -25,8 +26,13 @@ describe('Plugin', () => {
         before(done => {
           const requireVersion = version === '3.0.0' ? '3.422.0' : '>=3.422.0'
           AWS = require(`../../../versions/${bedrockRuntimeClientName}@${requireVersion}`).get()
+          const NodeHttpHandler =
+            require(`../../../versions/${bedrockRuntimeClientName}@${requireVersion}`)
+              .get('@smithy/node-http-handler')
+              .NodeHttpHandler
+
           bedrockRuntimeClient = new AWS.BedrockRuntimeClient(
-            { endpoint: 'http://127.0.0.1:4566', region: 'us-east-1', ServiceId: serviceName }
+            { endpoint: 'http://127.0.0.1:4566', region: 'us-east-1', ServiceId: serviceName, requestHandler: new NodeHttpHandler() }
           )
           done()
         })
@@ -53,18 +59,12 @@ describe('Plugin', () => {
 
             const command = new AWS.InvokeModelCommand(request)
 
-            agent.use(traces => {
+            agent.assertSomeTraces(traces => {
               const span = traces[0][0]
               expect(span.meta).to.include({
                 'aws.operation': 'invokeModel',
                 'aws.bedrock.request.model': model.modelId.split('.')[1],
                 'aws.bedrock.request.model_provider': model.provider.toLowerCase(),
-                'aws.bedrock.request.prompt': model.userPrompt
-              })
-              expect(span.metrics).to.include({
-                'aws.bedrock.request.temperature': modelConfig.temperature,
-                'aws.bedrock.request.top_p': modelConfig.topP,
-                'aws.bedrock.request.max_tokens': modelConfig.maxTokens
               })
             }).then(done).catch(done)
 

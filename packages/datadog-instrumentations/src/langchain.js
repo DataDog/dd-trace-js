@@ -1,31 +1,24 @@
 'use strict'
-
 const { addHook } = require('./helpers/instrument')
+
 const shimmer = require('../../datadog-shimmer')
 
 const tracingChannel = require('dc-polyfill').tracingChannel
 
-const invokeTracingChannel = tracingChannel('apm:langchain:invoke')
-
-function wrapLangChainPromise (fn, type, namespace = []) {
-  return function () {
-    if (!invokeTracingChannel.start.hasSubscribers) {
-      return fn.apply(this, arguments)
+function wrap (obj, name, channelName, namespace) {
+  const channel = tracingChannel(channelName)
+  shimmer.wrap(obj, name, function (original) {
+    return function () {
+      if (!channel.start.hasSubscribers) {
+        return original.apply(this, arguments)
+      }
+      const ctx = { self: this, arguments }
+      if (namespace) {
+        ctx.namespace = namespace
+      }
+      return channel.tracePromise(original, ctx, this, ...arguments)
     }
-
-    // Runnable interfaces have an `lc_namespace` property
-    const ns = this.lc_namespace || namespace
-    const resource = [...ns, this.constructor.name].join('.')
-
-    const ctx = {
-      args: arguments,
-      instance: this,
-      type,
-      resource
-    }
-
-    return invokeTracingChannel.tracePromise(fn, ctx, this, ...arguments)
-  }
+  })
 }
 
 // langchain compiles into ESM and CommonJS, with ESM being the default and landing in the `.js` files
@@ -35,9 +28,10 @@ const extensions = ['js', 'cjs']
 
 for (const extension of extensions) {
   addHook({ name: '@langchain/core', file: `dist/runnables/base.${extension}`, versions: ['>=0.1'] }, exports => {
-    const RunnableSequence = exports.RunnableSequence
-    shimmer.wrap(RunnableSequence.prototype, 'invoke', invoke => wrapLangChainPromise(invoke, 'chain'))
-    shimmer.wrap(RunnableSequence.prototype, 'batch', batch => wrapLangChainPromise(batch, 'chain'))
+    if (extension === 'cjs') {
+      wrap(exports.RunnableSequence.prototype, 'invoke', 'orchestrion:@langchain/core:RunnableSequence_invoke')
+      wrap(exports.RunnableSequence.prototype, 'batch', 'orchestrion:@langchain/core:RunnableSequence_batch')
+    }
     return exports
   })
 
@@ -46,32 +40,74 @@ for (const extension of extensions) {
     file: `dist/language_models/chat_models.${extension}`,
     versions: ['>=0.1']
   }, exports => {
-    const BaseChatModel = exports.BaseChatModel
-    shimmer.wrap(
-      BaseChatModel.prototype,
-      'generate',
-      generate => wrapLangChainPromise(generate, 'chat_model')
-    )
+    if (extension === 'cjs') {
+      wrap(exports.BaseChatModel.prototype, 'generate', 'orchestrion:@langchain/core:BaseChatModel_generate')
+    }
     return exports
   })
 
   addHook({ name: '@langchain/core', file: `dist/language_models/llms.${extension}`, versions: ['>=0.1'] }, exports => {
-    const BaseLLM = exports.BaseLLM
-    shimmer.wrap(BaseLLM.prototype, 'generate', generate => wrapLangChainPromise(generate, 'llm'))
+    if (extension === 'cjs') {
+      wrap(exports.BaseLLM.prototype, 'generate', 'orchestrion:@langchain/core:BaseLLM_generate')
+    }
     return exports
   })
 
-  addHook({ name: '@langchain/openai', file: `dist/embeddings.${extension}`, versions: ['>=0.1'] }, exports => {
-    const OpenAIEmbeddings = exports.OpenAIEmbeddings
+  addHook({ name: '@langchain/core', file: `dist/tools/index.${extension}`, versions: ['>=0.1'] }, exports => {
+    if (extension === 'cjs') {
+      wrap(exports.StructuredTool.prototype, 'invoke', 'orchestrion:@langchain/core:Tool_invoke')
+    }
+    return exports
+  })
 
-    // OpenAI (and Embeddings in general) do not define an lc_namespace
-    const namespace = ['langchain', 'embeddings', 'openai']
-    shimmer.wrap(OpenAIEmbeddings.prototype, 'embedDocuments', embedDocuments =>
-      wrapLangChainPromise(embedDocuments, 'embedding', namespace)
-    )
-    shimmer.wrap(OpenAIEmbeddings.prototype, 'embedQuery', embedQuery =>
-      wrapLangChainPromise(embedQuery, 'embedding', namespace)
-    )
+  addHook({ name: '@langchain/core', file: `dist/vectorstores.${extension}`, versions: ['>=0.1'] }, exports => {
+    if (extension === 'cjs') {
+      wrap(
+        exports.VectorStore.prototype, 'similaritySearch', 'orchestrion:@langchain/core:VectorStore_similaritySearch'
+      )
+      wrap(
+        exports.VectorStore.prototype, 'similaritySearchWithScore',
+        'orchestrion:@langchain/core:VectorStore_similaritySearchWithScore'
+      )
+    }
+
+    return exports
+  })
+
+  addHook({ name: '@langchain/core', file: `dist/embeddings.${extension}`, versions: ['>=0.1'] }, exports => {
+    if (extension === 'cjs') {
+      shimmer.wrap(exports, 'Embeddings', Embeddings => {
+        return class extends Embeddings {
+          constructor (...args) {
+            super(...args)
+
+            const namespace = ['langchain', 'embeddings']
+
+            if (this.constructor.name === 'OpenAIEmbeddings') {
+              namespace.push('openai')
+            }
+
+            wrap(this, 'embedQuery', 'apm:@langchain/core:Embeddings_embedQuery', namespace)
+            wrap(this, 'embedDocuments', 'apm:@langchain/core:Embeddings_embedDocuments', namespace)
+          }
+        }
+      })
+    } else {
+      const channel = tracingChannel('orchestrion:@langchain/core:Embeddings_constructor')
+      channel.subscribe({
+        end (ctx) {
+          const { self } = ctx
+          const namespace = ['langchain', 'embeddings']
+
+          if (self.constructor.name === 'OpenAIEmbeddings') {
+            namespace.push('openai')
+          }
+
+          wrap(self, 'embedQuery', 'apm:@langchain/core:Embeddings_embedQuery', namespace)
+          wrap(self, 'embedDocuments', 'apm:@langchain/core:Embeddings_embedDocuments', namespace)
+        }
+      })
+    }
     return exports
   })
 }

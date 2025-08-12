@@ -5,11 +5,23 @@ const { Chunk, MsgpackEncoder } = require('../msgpack')
 const log = require('../log')
 const { isTrue } = require('../util')
 const coalesce = require('koalas')
+const { memoize } = require('../log/utils')
+const { getEnvironmentVariable } = require('../config-helper')
 
 const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
 
-function formatSpan (span) {
-  return normalizeSpan(truncateSpan(span, false))
+function formatSpan (span, config) {
+  span = normalizeSpan(truncateSpan(span, false))
+  if (span.span_events) {
+    // ensure span events are encoded as tags if agent doesn't support native top level span events
+    if (config?.trace?.nativeSpanEvents) {
+      formatSpanEvents(span)
+    } else {
+      span.meta.events = JSON.stringify(span.span_events)
+      delete span.span_events
+    }
+  }
+  return span
 }
 
 class AgentEncoder {
@@ -21,9 +33,10 @@ class AgentEncoder {
     this._writer = writer
     this._reset()
     this._debugEncoding = isTrue(coalesce(
-      process.env.DD_TRACE_ENCODING_DEBUG,
+      getEnvironmentVariable('DD_TRACE_ENCODING_DEBUG'),
       false
     ))
+    this._config = this._writer?._config
   }
 
   count () {
@@ -74,16 +87,18 @@ class AgentEncoder {
     this._encodeArrayPrefix(bytes, trace)
 
     for (let span of trace) {
-      span = formatSpan(span)
+      span = formatSpan(span, this._config)
       bytes.reserve(1)
 
-      if (span.type && span.meta_struct) {
-        bytes.buffer[bytes.length - 1] = 0x8d
-      } else if (span.type || span.meta_struct) {
-        bytes.buffer[bytes.length - 1] = 0x8c
-      } else {
-        bytes.buffer[bytes.length - 1] = 0x8b
-      }
+      // this is the original size of the fixed map for span attributes that always exist
+      let mapSize = 11
+
+      // increment the payload map size depending on if some optional fields exist
+      if (span.type) mapSize += 1
+      if (span.meta_struct) mapSize += 1
+      if (span.span_events) mapSize += 1
+
+      bytes.buffer[bytes.length - 1] = 0x80 + mapSize
 
       if (span.type) {
         this._encodeString(bytes, 'type')
@@ -112,6 +127,10 @@ class AgentEncoder {
       this._encodeMap(bytes, span.meta)
       this._encodeString(bytes, 'metrics')
       this._encodeMap(bytes, span.metrics)
+      if (span.span_events) {
+        this._encodeString(bytes, 'span_events')
+        this._encodeObjectAsArray(bytes, span.span_events, new Set())
+      }
       if (span.meta_struct) {
         this._encodeString(bytes, 'meta_struct')
         this._encodeMetaStruct(bytes, span.meta_struct)
@@ -157,7 +176,7 @@ class AgentEncoder {
 
     id = id.toArray()
 
-    bytes.buffer[offset] = 0xcf
+    bytes.buffer[offset] = 0xCF
     bytes.buffer[offset + 1] = id[0]
     bytes.buffer[offset + 2] = id[1]
     bytes.buffer[offset + 3] = id[2]
@@ -199,6 +218,9 @@ class AgentEncoder {
         break
       case 'number':
         this._encodeFloat(bytes, value)
+        break
+      case 'boolean':
+        this._encodeBool(bytes, value)
         break
       default:
         // should not happen
@@ -245,7 +267,7 @@ class AgentEncoder {
 
     // we should do it after encoding the object to know the real length
     const length = bytes.length - offset - prefixLength
-    bytes.buffer[offset] = 0xc6
+    bytes.buffer[offset] = 0xC6
     bytes.buffer[offset + 1] = length >> 24
     bytes.buffer[offset + 2] = length >> 16
     bytes.buffer[offset + 3] = length >> 8
@@ -258,7 +280,7 @@ class AgentEncoder {
       this._encodeObjectAsArray(bytes, value, circularReferencesDetector)
     } else if (value !== null && typeof value === 'object') {
       this._encodeObjectAsMap(bytes, value, circularReferencesDetector)
-    } else if (typeof value === 'string' || typeof value === 'number') {
+    } else if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
       this._encodeValue(bytes, value)
     }
   }
@@ -268,7 +290,7 @@ class AgentEncoder {
     const validKeys = keys.filter(key => {
       const v = value[key]
       return typeof v === 'string' ||
-        typeof v === 'number' ||
+        typeof v === 'number' || typeof v === 'boolean' ||
         (v !== null && typeof v === 'object' && !circularReferencesDetector.has(v))
     })
 
@@ -305,7 +327,7 @@ class AgentEncoder {
   }
 
   _writeArrayPrefix (buffer, offset, count) {
-    buffer[offset++] = 0xdd
+    buffer[offset++] = 0xDD
     buffer.writeUInt32BE(count, offset)
 
     return offset + 4
@@ -316,6 +338,90 @@ class AgentEncoder {
     offset += this._traceBytes.buffer.copy(buffer, offset, 0, this._traceBytes.length)
 
     return offset
+  }
+}
+
+const memoizedLogDebug = memoize((key, message) => {
+  log.debug(message)
+  // return something to store in memoize cache
+  return true
+})
+
+function formatSpanEvents (span) {
+  for (const spanEvent of span.span_events) {
+    if (spanEvent.attributes) {
+      let hasAttributes = false
+      for (const [key, value] of Object.entries(spanEvent.attributes)) {
+        const newValue = convertSpanEventAttributeValues(key, value)
+        if (newValue === undefined) {
+          delete spanEvent.attributes[key] // delete from attributes if undefined
+        } else {
+          hasAttributes = true
+          spanEvent.attributes[key] = newValue
+        }
+      }
+      if (!hasAttributes) {
+        delete spanEvent.attributes
+      }
+    }
+  }
+}
+
+function convertSpanEventAttributeValues (key, value, depth = 0) {
+  if (typeof value === 'string') {
+    return {
+      type: 0,
+      string_value: value
+    }
+  }
+
+  if (typeof value === 'boolean') {
+    return {
+      type: 1,
+      bool_value: value
+    }
+  }
+
+  if (typeof value === 'number') {
+    if (Number.isInteger(value)) {
+      return {
+        type: 2,
+        int_value: value
+      }
+    }
+    return {
+      type: 3,
+      double_value: value
+    }
+  }
+
+  if (Array.isArray(value)) {
+    if (depth === 0) {
+      const convertedArray = []
+      for (const val of value) {
+        const convertedVal = convertSpanEventAttributeValues(key, val, 1)
+        if (convertedVal !== undefined) {
+          convertedArray.push(convertedVal)
+        }
+      }
+
+      // Only include array_value if there are valid elements
+      if (convertedArray.length > 0) {
+        return {
+          type: 4,
+          array_value: { values: convertedArray }
+        }
+      }
+      // If all elements were unsupported, return undefined
+    } else {
+      memoizedLogDebug(key, 'Encountered nested array data type for span event v0.4 encoding. ' +
+        `Skipping encoding key: ${key}: with value: ${typeof value}.`
+      )
+    }
+  } else {
+    memoizedLogDebug(key, 'Encountered unsupported data type for span event v0.4 encoding, key: ' +
+       `${key}: with value: ${typeof value}. Skipping encoding of pair.`
+    )
   }
 }
 

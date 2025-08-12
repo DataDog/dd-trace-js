@@ -1,3 +1,5 @@
+'use strict'
+
 const {
   addHook,
   channel
@@ -16,20 +18,15 @@ const CHANNELS = {
 
 const generalErrorCh = channel('apm:apollo:gateway:general:error')
 
-function wrapExecutor (executor) {
-  return function (...args) {
-    const channel = CHANNELS['gateway.request']
-    const ctx = { requestContext: args[0], gateway: this }
-
-    return channel.tracePromise(executor, ctx, this, ...args)
-  }
-}
-
 function wrapApolloGateway (ApolloGateway) {
   class ApolloGatewayWrapper extends ApolloGateway {
     constructor (...args) {
       super(...args)
-      shimmer.wrap(this, 'executor', wrapExecutor)
+      shimmer.wrap(this, 'executor', (originalExecutor) => (...args) => {
+        const channel = CHANNELS['gateway.request']
+        const ctx = { requestContext: args[0], gateway: this }
+        return channel.tracePromise(originalExecutor, ctx, this, ...args)
+      })
     }
   }
   return ApolloGatewayWrapper
@@ -42,7 +39,7 @@ function wrapRecordExceptions (recordExceptions) {
     // this is mimicking apollo-gateways internal instrumentation
     // TODO: should we consider a mechanism to report all exceptions? since this method aggregates all exceptions
     // where as a span can only have one exception set on it at a time
-    generalErrorCh.publish({ error: errors[errors.length - 1] })
+    generalErrorCh.publish({ error: errors.at(-1) })
     return recordExceptions.apply(this, args)
   }
 }
@@ -50,7 +47,7 @@ function wrapRecordExceptions (recordExceptions) {
 function wrapStartActiveSpan (startActiveSpan) {
   return function (...args) {
     const firstArg = args[0]
-    const cb = args[args.length - 1]
+    const cb = args.at(-1)
     if (typeof firstArg !== 'string' || typeof cb !== 'function') return startActiveSpan.apply(this, args)
 
     const method = CHANNELS[firstArg]

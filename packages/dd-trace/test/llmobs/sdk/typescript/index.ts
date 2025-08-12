@@ -4,6 +4,7 @@ import tracer from 'dd-trace';
 const llmobs = tracer.init({
   llmobs: {
     mlApp: 'test',
+    agentlessEnabled: false
   }
 }).llmobs;
 

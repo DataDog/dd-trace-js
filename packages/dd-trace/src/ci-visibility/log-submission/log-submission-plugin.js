@@ -1,5 +1,8 @@
+'use strict'
+
 const Plugin = require('../../plugins/plugin')
 const log = require('../../log')
+const { getEnvironmentVariable } = require('../../config-helper')
 
 function getWinstonLogSubmissionParameters (config) {
   const { site, service } = config
@@ -9,16 +12,16 @@ function getWinstonLogSubmissionParameters (config) {
     path: `/api/v2/logs?ddsource=winston&service=${service}`,
     ssl: true,
     headers: {
-      'DD-API-KEY': process.env.DD_API_KEY
+      'DD-API-KEY': getEnvironmentVariable('DD_API_KEY')
     }
   }
 
-  if (!process.env.DD_AGENTLESS_LOG_SUBMISSION_URL) {
+  if (!getEnvironmentVariable('DD_AGENTLESS_LOG_SUBMISSION_URL')) {
     return defaultParameters
   }
 
   try {
-    const url = new URL(process.env.DD_AGENTLESS_LOG_SUBMISSION_URL)
+    const url = new URL(getEnvironmentVariable('DD_AGENTLESS_LOG_SUBMISSION_URL'))
     return {
       host: url.hostname,
       port: url.port,
@@ -26,16 +29,14 @@ function getWinstonLogSubmissionParameters (config) {
       path: defaultParameters.path,
       headers: defaultParameters.headers
     }
-  } catch (e) {
+  } catch {
     log.error('Could not parse DD_AGENTLESS_LOG_SUBMISSION_URL')
     return defaultParameters
   }
 }
 
 class LogSubmissionPlugin extends Plugin {
-  static get id () {
-    return 'log-submission'
-  }
+  static id = 'log-submission'
 
   constructor (...args) {
     super(...args)

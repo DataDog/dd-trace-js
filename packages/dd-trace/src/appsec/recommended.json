@@ -1,7 +1,7 @@
 {
   "version": "2.2",
   "metadata": {
-    "rules_version": "1.13.3"
+    "rules_version": "1.15.1"
   },
   "rules": [
     {
@@ -2985,7 +2985,7 @@
                 "address": "graphql.server.resolver"
               }
             ],
-            "regex": "\\b(?:(?:l(?:(?:utimes|chmod)(?:Sync)?|(?:stat|ink)Sync)|w(?:rite(?:(?:File|v)(?:Sync)?|Sync)|atchFile)|u(?:n(?:watchFile|linkSync)|times(?:Sync)?)|s(?:(?:ymlink|tat)Sync|pawn(?:File|Sync))|ex(?:ec(?:File(?:Sync)?|Sync)|istsSync)|a(?:ppendFile|ccess)(?:Sync)?|(?:Caveat|Inode)s|open(?:dir)?Sync|new\\s+Function|Availability|\\beval)\\s*\\(|m(?:ain(?:Module\\s*(?:\\W*\\s*(?:constructor|require)|\\[)|\\s*(?:\\W*\\s*(?:constructor|require)|\\[))|kd(?:temp(?:Sync)?|irSync)\\s*\\(|odule\\.exports\\s*=)|c(?:(?:(?:h(?:mod|own)|lose)Sync|reate(?:Write|Read)Stream|p(?:Sync)?)\\s*\\(|o(?:nstructor\\s*(?:\\W*\\s*_load|\\[)|pyFile(?:Sync)?\\s*\\())|f(?:(?:(?:s(?:(?:yncS)?|tatS)|datas(?:yncS)?)ync|ch(?:mod|own)(?:Sync)?)\\s*\\(|u(?:nction\\s*\\(\\s*\\)\\s*{|times(?:Sync)?\\s*\\())|r(?:e(?:(?:ad(?:(?:File|link|dir)?Sync|v(?:Sync)?)|nameSync)\\s*\\(|quire\\s*(?:\\W*\\s*main|\\[))|m(?:Sync)?\\s*\\()|process\\s*(?:\\W*\\s*(?:mainModule|binding)|\\[)|t(?:his\\.constructor|runcateSync\\s*\\()|_(?:\\$\\$ND_FUNC\\$\\$_|_js_function)|global\\s*(?:\\W*\\s*process|\\[)|String\\s*\\.\\s*fromCharCode|binding\\s*\\[)",
+            "regex": "\\b(?:(?:l(?:(?:utimes|chmod)(?:Sync)?|(?:stat|ink)Sync)|w(?:rite(?:(?:File|v)(?:Sync)?|Sync)|atchFile)|u(?:n(?:watchFile|linkSync)|times(?:Sync)?)|s(?:(?:ymlink|tat)Sync|pawn(?:File|Sync))|ex(?:ec(?:File(?:Sync)?|Sync)|istsSync)|a(?:ppendFile|ccess)(?:Sync)?|(?:Caveat|Inode)s|open(?:dir)?Sync|new\\s+Function|Availability|\\beval)\\s*\\(|m(?:ain(?:Module\\s*(?:\\W*\\s*(?:constructor|require)|\\[)|\\s*(?:\\W*\\s*(?:constructor|require)|\\[))|kd(?:temp(?:Sync)?|irSync)\\s*\\(|odule\\.exports\\s*=)|c(?:(?:(?:h(?:mod|own)|lose)Sync|reate(?:Write|Read)Stream|p(?:Sync)?)\\s*\\(|o(?:nstructor\\s*(?:\\W*\\s*_load|\\[)|pyFile(?:Sync)?\\s*\\())|f(?:(?:(?:s(?:(?:yncS)?|tatS)|datas(?:yncS)?)ync|ch(?:mod|own)(?:Sync)?)\\s*\\(|u(?:nction\\s*\\(\\s*\\)\\s*{|times(?:Sync)?\\s*\\())|r(?:e(?:(?:ad(?:(?:File|link|dir)?Sync|v(?:Sync)?)|nameSync)\\s*\\(|quire\\s*(?:\\W*\\s*main\\b|\\[))|m(?:Sync)?\\s*\\()|process\\s*(?:\\W*\\s*(?:mainModule|binding)|\\[)|t(?:his\\.constructor|runcateSync\\s*\\()|_(?:\\$\\$ND_FUNC\\$\\$_|_js_function)|global\\s*(?:\\W*\\s*process|\\[)|String\\s*\\.\\s*fromCharCode|binding\\s*\\[)",
             "options": {
               "case_sensitive": true,
               "min_length": 3
@@ -4865,6 +4865,36 @@
       "transformers": []
     },
     {
+      "id": "ua0-600-68x",
+      "name": "xorbot",
+      "tags": {
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "cwe": "200",
+        "capec": "1000/118/169",
+        "tool_name": "xorbot",
+        "confidence": "0",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "user-agent"
+                ]
+              }
+            ],
+            "regex": "\\bmasjesu\\b"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
       "id": "dog-913-001",
       "name": "BurpCollaborator OOB domain",
       "tags": {
@@ -5423,6 +5453,82 @@
       "transformers": []
     },
     {
+      "id": "dog-913-013",
+      "name": "Public PoC for CVE-2025-24813",
+      "tags": {
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "cwe": "200",
+        "capec": "1000/118/169",
+        "confidence": "1",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.uri.raw"
+              }
+            ],
+            "regex": "/iSee857/session",
+            "options": {
+              "case_sensitive": false,
+              "min_length": 16
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-913-014",
+      "name": "Exploit attempt for Next.js Middleware Exploit (CVE-2025-29927)",
+      "tags": {
+        "type": "security_scanner",
+        "category": "attack_attempt",
+        "cwe": "200",
+        "capec": "1000/118/169",
+        "confidence": "0",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "x-middleware-subrequest"
+                ]
+              }
+            ],
+            "regex": ".*",
+            "options": {
+              "min_length": 1
+            }
+          },
+          "operator": "match_regex"
+        },
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "x-middleware-subrequest"
+                ]
+              }
+            ],
+            "regex": "[0-9a-fA-F]{40}|\\[\\w+\\]"
+          },
+          "operator": "!match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
       "id": "dog-920-001",
       "name": "JWT authentication bypass",
       "tags": {
@@ -5433,6 +5539,7 @@
         "confidence": "0",
         "module": "waf"
       },
+      "max_version": "1.24.9",
       "conditions": [
         {
           "parameters": {
@@ -5543,6 +5650,52 @@
             "options": {
               "case_sensitive": true,
               "min_length": 5
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-932-110",
+      "name": "Python: Subprocess-based command injection",
+      "tags": {
+        "type": "command_injection",
+        "category": "attack_attempt",
+        "confidence": "0",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
+                "address": "grpc.server.request.message"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "(?s)\\bsubprocess\\b.*\\b(?:check_output|run|Popen|call|check_call)\\b",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 14
             }
           },
           "operator": "match_regex"
@@ -6314,7 +6467,7 @@
                 "address": "server.request.uri.raw"
               }
             ],
-            "regex": "(?:/swagger\\b|/api[-/]docs?\\b)",
+            "regex": "(?:^|/)(?:swagger|api[-/]?docs?|openapi)\\b",
             "options": {
               "case_sensitive": false
             }
@@ -6331,7 +6484,7 @@
         "category": "vulnerability_trigger",
         "cwe": "22",
         "capec": "1000/255/153/126",
-        "confidence": "0",
+        "confidence": "1",
         "module": "rasp"
       },
       "conditions": [
@@ -6379,7 +6532,7 @@
         "category": "vulnerability_trigger",
         "cwe": "77",
         "capec": "1000/152/248/88",
-        "confidence": "0",
+        "confidence": "1",
         "module": "rasp"
       },
       "conditions": [
@@ -6427,7 +6580,7 @@
         "category": "vulnerability_trigger",
         "cwe": "77",
         "capec": "1000/152/248/88",
-        "confidence": "0",
+        "confidence": "1",
         "module": "rasp"
       },
       "conditions": [
@@ -6481,6 +6634,20 @@
       "conditions": [
         {
           "parameters": {
+            "inputs": [
+              {
+                "address": "server.io.net.url"
+              }
+            ],
+            "regex": "^(jar:)?https?:\\/\\/\\W*([0-9oq]{1,5}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}|[0-9]{1,10}|(\\[)?[:0-9a-f\\.x]{2,}(\\])?|metadata\\.google\\.internal|(?:[a-z0-9:@\\.\\-]*\\.)?(?:burpcollaborator\\.net|localtest\\.me|mail\\.ebc\\.apple\\.com|bugbounty\\.dod\\.network|.*\\.[nx]ip\\.io|oastify\\.com|oast\\.(?:pro|live|site|online|fun|me)|sslip\\.io|requestbin\\.com|requestbin\\.net|hookbin\\.com|webhook\\.site|canarytokens\\.com|interact\\.sh|ngrok\\.io|bugbounty\\.click|prbly\\.win|qualysperiscope\\.com|vii\\.one|act1on3\\.ru|ifconfig\\.pro|dnslog\\.\\w+))(:[0-9]{1,5})?(\\/[^:@]*)?$",
+            "options": {
+              "case_sensitive": false
+            }
+          },
+          "operator": "match_regex"
+        },
+        {
+          "parameters": {
             "resource": [
               {
                 "address": "server.io.net.url"
@@ -6505,7 +6672,10 @@
               {
                 "address": "graphql.server.resolver"
               }
-            ]
+            ],
+            "options": {
+              "path-inspection": true
+            }
           },
           "operator": "ssrf_detector"
         }
@@ -6523,7 +6693,7 @@
         "category": "vulnerability_trigger",
         "cwe": "89",
         "capec": "1000/152/248/66",
-        "confidence": "0",
+        "confidence": "1",
         "module": "rasp"
       },
       "conditions": [
@@ -6957,7 +7127,7 @@
                 "address": "graphql.server.resolver"
               }
             ],
-            "regex": "(http|https):\\/\\/(?:.*\\.)?(?:burpcollaborator\\.net|localtest\\.me|mail\\.ebc\\.apple\\.com|bugbounty\\.dod\\.network|.*\\.[nx]ip\\.io|oastify\\.com|oast\\.(?:pro|live|site|online|fun|me)|sslip\\.io|requestbin\\.com|requestbin\\.net|hookbin\\.com|webhook\\.site|canarytokens\\.com|interact\\.sh|ngrok\\.io|bugbounty\\.click|prbly\\.win|qualysperiscope\\.com|vii\\.one|act1on3\\.ru)"
+            "regex": "(http|https):\\/\\/(?:.*\\.)?(?:burpcollaborator\\.net|localtest\\.me|mail\\.ebc\\.apple\\.com|bugbounty\\.dod\\.network|.*\\.[nx]ip\\.io|oastify\\.com|oast\\.(?:pro|live|site|online|fun|me)|sslip\\.io|requestbin\\.com|requestbin\\.net|hookbin\\.com|webhook\\.site|canarytokens\\.com|interact\\.sh|ngrok\\.io|bugbounty\\.click|prbly\\.win|qualysperiscope\\.com|vii\\.one|act1on3\\.ru|dnslog\\.\\w+)"
           },
           "operator": "match_regex"
         }
@@ -7765,7 +7935,7 @@
                 ]
               }
             ],
-            "regex": "nmap (nse|scripting engine)"
+            "regex": "nmap (nse|scripting engine|icap-client/)"
           },
           "operator": "match_regex"
         }
@@ -8538,6 +8708,126 @@
       "transformers": []
     },
     {
+      "id": "ua0-600-64x",
+      "name": "ddg_win",
+      "tags": {
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "cwe": "200",
+        "capec": "1000/118/169",
+        "tool_name": "ddg_win",
+        "confidence": "1",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "user-agent"
+                ]
+              }
+            ],
+            "regex": "\\bddg_win\\b"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "ua0-600-65x",
+      "name": "ISS",
+      "tags": {
+        "type": "commercial_scanner",
+        "category": "attack_attempt",
+        "cwe": "200",
+        "capec": "1000/118/169",
+        "tool_name": "iss",
+        "confidence": "0",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "user-agent"
+                ]
+              }
+            ],
+            "regex": "\\bisscyberriskcrawler/\\d\\.\\d"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "ua0-600-66x",
+      "name": "BountyBot",
+      "tags": {
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "cwe": "200",
+        "capec": "1000/118/169",
+        "tool_name": "bountybot",
+        "confidence": "1",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "user-agent"
+                ]
+              }
+            ],
+            "regex": "\\bbountybot\\b"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "ua0-600-67x",
+      "name": "ZumBot",
+      "tags": {
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "cwe": "200",
+        "capec": "1000/118/169",
+        "tool_name": "zumbot",
+        "confidence": "1",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "user-agent"
+                ]
+              }
+            ],
+            "regex": "\\bzumbot\\b"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
       "id": "ua0-600-6xx",
       "name": "Stealthy scanner",
       "tags": {
@@ -8630,28 +8920,276 @@
       "transformers": []
     }
   ],
+  "rules_compat": [
+    {
+      "id": "api-001-100",
+      "name": "JWT: No expiry is present",
+      "tags": {
+        "type": "jwt",
+        "category": "api_security",
+        "confidence": "0",
+        "module": "business-logic"
+      },
+      "min_version": "1.25.0",
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.jwt",
+                "key_path": [
+                  "payload",
+                  "exp"
+                ]
+              }
+            ]
+          },
+          "operator": "!exists"
+        }
+      ],
+      "transformers": [],
+      "output": {
+        "event": false,
+        "keep": false,
+        "attributes": {
+          "_dd.appsec.api.jwt.no_expiry": {
+            "value": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "api-001-110",
+      "name": "JWT: Collect algorithm used",
+      "tags": {
+        "type": "jwt",
+        "category": "api_security",
+        "confidence": "0",
+        "module": "business-logic"
+      },
+      "min_version": "1.25.0",
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.jwt",
+                "key_path": [
+                  "header",
+                  "alg"
+                ]
+              }
+            ]
+          },
+          "operator": "exists"
+        }
+      ],
+      "transformers": [],
+      "output": {
+        "event": false,
+        "keep": false,
+        "attributes": {
+          "_dd.appsec.api.jwt_alg": {
+            "address": "server.request.jwt",
+            "key_path": [
+              "header",
+              "alg"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "api-001-120",
+      "name": "JWT: No audience is specified",
+      "tags": {
+        "type": "jwt",
+        "category": "api_security",
+        "confidence": "0",
+        "module": "business-logic"
+      },
+      "min_version": "1.25.0",
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.jwt",
+                "key_path": [
+                  "payload",
+                  "aud"
+                ]
+              }
+            ]
+          },
+          "operator": "!exists"
+        }
+      ],
+      "transformers": [],
+      "output": {
+        "event": false,
+        "keep": false,
+        "attributes": {
+          "_dd.appsec.api.jwt.no_audience": {
+            "value": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "api-001-130",
+      "name": "JWT: None algorithm used",
+      "tags": {
+        "type": "jwt",
+        "category": "api_security",
+        "confidence": "0",
+        "module": "business-logic"
+      },
+      "min_version": "1.25.0",
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.jwt",
+                "key_path": [
+                  "header",
+                  "alg"
+                ]
+              }
+            ],
+            "list": [
+              "none",
+              "nonE",
+              "noNe",
+              "noNE",
+              "nOne",
+              "nOnE",
+              "nONe",
+              "nONE",
+              "None",
+              "NonE",
+              "NoNe",
+              "NoNE",
+              "NOne",
+              "NOnE",
+              "NONe",
+              "NONE"
+            ]
+          },
+          "operator": "exact_match"
+        }
+      ],
+      "transformers": [],
+      "output": {
+        "event": false,
+        "keep": true,
+        "attributes": {
+          "_dd.appsec.api.jwt.none_alg": {
+            "value": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "ua0-600-551",
+      "name": "Datadog test scanner - scalar trace-tagging version: user-agent",
+      "tags": {
+        "type": "security_scanner",
+        "category": "attack_attempt",
+        "cwe": "200",
+        "capec": "1000/118/169",
+        "tool_name": "Datadog Canary Test",
+        "confidence": "1",
+        "module": "waf"
+      },
+      "min_version": "1.25.0",
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "user-agent"
+                ]
+              },
+              {
+                "address": "grpc.server.request.metadata",
+                "key_path": [
+                  "dd-canary"
+                ]
+              }
+            ],
+            "regex": "^dd-test-scanner-tag-scalar(?:$|/|\\s)"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": [],
+      "output": {
+        "event": false,
+        "attributes": {
+          "_dd.appsec.test.scanner.scalar": {
+            "value": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "ua0-600-552",
+      "name": "Datadog test scanner - reference trace-tagging version: user-agent",
+      "tags": {
+        "type": "security_scanner",
+        "category": "attack_attempt",
+        "cwe": "200",
+        "capec": "1000/118/169",
+        "tool_name": "Datadog Canary Test",
+        "confidence": "1",
+        "module": "waf"
+      },
+      "min_version": "1.25.0",
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "user-agent"
+                ]
+              },
+              {
+                "address": "grpc.server.request.metadata",
+                "key_path": [
+                  "dd-canary"
+                ]
+              }
+            ],
+            "regex": "^dd-test-scanner-tag-ref(?:$|/|\\s)"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": [],
+      "output": {
+        "event": false,
+        "attributes": {
+          "_dd.appsec.test.scanner.reference": {
+            "address": "server.request.headers.no_cookies",
+            "key_path": [
+              "user-agent"
+            ]
+          }
+        }
+      }
+    }
+  ],
   "processors": [
     {
       "id": "http-endpoint-fingerprint",
       "generator": "http_endpoint_fingerprint",
-      "conditions": [
-        {
-          "operator": "exists",
-          "parameters": {
-            "inputs": [
-              {
-                "address": "waf.context.event"
-              },
-              {
-                "address": "server.business_logic.users.login.failure"
-              },
-              {
-                "address": "server.business_logic.users.login.success"
-              }
-            ]
-          }
-        }
-      ],
+      "conditions": [],
       "parameters": {
         "mappings": [
           {
@@ -8679,7 +9217,7 @@
           }
         ]
       },
-      "evaluate": false,
+      "evaluate": true,
       "output": true
     },
     {
@@ -8835,24 +9373,7 @@
     {
       "id": "http-header-fingerprint",
       "generator": "http_header_fingerprint",
-      "conditions": [
-        {
-          "operator": "exists",
-          "parameters": {
-            "inputs": [
-              {
-                "address": "waf.context.event"
-              },
-              {
-                "address": "server.business_logic.users.login.failure"
-              },
-              {
-                "address": "server.business_logic.users.login.success"
-              }
-            ]
-          }
-        }
-      ],
+      "conditions": [],
       "parameters": {
         "mappings": [
           {
@@ -8865,30 +9386,35 @@
           }
         ]
       },
-      "evaluate": false,
+      "evaluate": true,
       "output": true
+    },
+    {
+      "id": "decode-auth-jwt",
+      "generator": "jwt_decode",
+      "min_version": "1.25.0",
+      "parameters": {
+        "mappings": [
+          {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "authorization"
+                ]
+              }
+            ],
+            "output": "server.request.jwt"
+          }
+        ]
+      },
+      "evaluate": true,
+      "output": false
     },
     {
       "id": "http-network-fingerprint",
       "generator": "http_network_fingerprint",
-      "conditions": [
-        {
-          "operator": "exists",
-          "parameters": {
-            "inputs": [
-              {
-                "address": "waf.context.event"
-              },
-              {
-                "address": "server.business_logic.users.login.failure"
-              },
-              {
-                "address": "server.business_logic.users.login.success"
-              }
-            ]
-          }
-        }
-      ],
+      "conditions": [],
       "parameters": {
         "mappings": [
           {
@@ -8901,30 +9427,13 @@
           }
         ]
       },
-      "evaluate": false,
+      "evaluate": true,
       "output": true
     },
     {
       "id": "session-fingerprint",
       "generator": "session_fingerprint",
-      "conditions": [
-        {
-          "operator": "exists",
-          "parameters": {
-            "inputs": [
-              {
-                "address": "waf.context.event"
-              },
-              {
-                "address": "server.business_logic.users.login.failure"
-              },
-              {
-                "address": "server.business_logic.users.login.success"
-              }
-            ]
-          }
-        }
-      ],
+      "conditions": [],
       "parameters": {
         "mappings": [
           {
@@ -8947,7 +9456,7 @@
           }
         ]
       },
-      "evaluate": false,
+      "evaluate": true,
       "output": true
     }
   ],
@@ -9744,6 +10253,24 @@
         "type": "card",
         "card_type": "mastercard",
         "category": "payment"
+      }
+    },
+    {
+      "id": "c542c147-3883-43d6-a067-178e4a7bd65d",
+      "name": "Password",
+      "key": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\bpass(?:[_-]?word|wd)?\\b|\\bpwd\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 3
+          }
+        }
+      },
+      "tags": {
+        "type": "password",
+        "category": "credentials"
       }
     },
     {

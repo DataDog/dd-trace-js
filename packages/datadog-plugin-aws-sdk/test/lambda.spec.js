@@ -1,6 +1,7 @@
 'use strict'
 
 const JSZip = require('jszip')
+const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const { rawExpectedSchema } = require('./lambda-naming')
@@ -84,7 +85,7 @@ describe('Plugin', () => {
         it('should propagate the tracing context with existing ClientContext and `custom` key', (done) => {
           let receivedContext
 
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             const span = traces[0][0]
             const clientContextSent = Buffer.from(receivedContext, 'base64').toString('utf-8')
             const injectedTraceData = JSON.parse(clientContextSent).custom
@@ -115,7 +116,7 @@ describe('Plugin', () => {
         it('should propagate the tracing context with existing ClientContext and no `custom` key', (done) => {
           let receivedContext
 
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             const span = traces[0][0]
             const clientContextSent = Buffer.from(receivedContext, 'base64').toString('utf-8')
             const injectedTraceData = JSON.parse(clientContextSent).custom
@@ -142,7 +143,7 @@ describe('Plugin', () => {
         it('should propagate the tracing context without an existing ClientContext', (done) => {
           let receivedContext
 
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             const span = traces[0][0]
             const clientContextSent = Buffer.from(receivedContext, 'base64').toString('utf-8')
             const injectedTraceData = JSON.parse(clientContextSent).custom

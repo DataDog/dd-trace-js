@@ -1,7 +1,8 @@
-/* eslint-disable @stylistic/js/max-len */
+/* eslint-disable @stylistic/max-len */
 'use strict'
 
 const EventBridge = require('../src/services/eventbridge')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const tracer = require('../../dd-trace')
 const { randomBytes } = require('crypto')
 

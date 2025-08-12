@@ -5,13 +5,11 @@ const { httpClientRequestStart } = require('../../../src/appsec/channels')
 const addresses = require('../../../src/appsec/addresses')
 
 describe('RASP - ssrf.js', () => {
-  let waf, datadogCore, ssrf
+  let waf, legacyStorage, ssrf
 
   beforeEach(() => {
-    datadogCore = {
-      storage: {
-        getStore: sinon.stub()
-      }
+    legacyStorage = {
+      getStore: sinon.stub()
     }
 
     waf = {
@@ -19,7 +17,7 @@ describe('RASP - ssrf.js', () => {
     }
 
     ssrf = proxyquire('../../../src/appsec/rasp/ssrf', {
-      '../../../../datadog-core': datadogCore,
+      '../../../../datadog-core': { storage: () => legacyStorage },
       '../waf': waf
     })
 
@@ -49,12 +47,12 @@ describe('RASP - ssrf.js', () => {
         }
       }
       const req = {}
-      datadogCore.storage.getStore.returns({ req })
+      legacyStorage.getStore.returns({ req })
 
       httpClientRequestStart.publish(ctx)
 
-      const persistent = { [addresses.HTTP_OUTGOING_URL]: 'http://example.com' }
-      sinon.assert.calledOnceWithExactly(waf.run, { persistent }, req, { type: 'ssrf' })
+      const ephemeral = { [addresses.HTTP_OUTGOING_URL]: 'http://example.com' }
+      sinon.assert.calledOnceWithExactly(waf.run, { ephemeral }, req, { type: 'ssrf' })
     })
 
     it('should not analyze ssrf if rasp is disabled', () => {
@@ -65,7 +63,7 @@ describe('RASP - ssrf.js', () => {
         }
       }
       const req = {}
-      datadogCore.storage.getStore.returns({ req })
+      legacyStorage.getStore.returns({ req })
 
       httpClientRequestStart.publish(ctx)
 
@@ -78,7 +76,7 @@ describe('RASP - ssrf.js', () => {
           uri: 'http://example.com'
         }
       }
-      datadogCore.storage.getStore.returns(undefined)
+      legacyStorage.getStore.returns(undefined)
 
       httpClientRequestStart.publish(ctx)
 
@@ -91,7 +89,7 @@ describe('RASP - ssrf.js', () => {
           uri: 'http://example.com'
         }
       }
-      datadogCore.storage.getStore.returns({})
+      legacyStorage.getStore.returns({})
 
       httpClientRequestStart.publish(ctx)
 
@@ -102,7 +100,7 @@ describe('RASP - ssrf.js', () => {
       const ctx = {
         args: {}
       }
-      datadogCore.storage.getStore.returns({})
+      legacyStorage.getStore.returns({})
 
       httpClientRequestStart.publish(ctx)
 

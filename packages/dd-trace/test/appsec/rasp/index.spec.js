@@ -5,7 +5,7 @@ const { handleUncaughtExceptionMonitor } = require('../../../src/appsec/rasp')
 const { DatadogRaspAbortError } = require('../../../src/appsec/rasp/utils')
 
 describe('RASP', () => {
-  let rasp, subscribe, unsubscribe, block, blocked
+  let rasp, subscribe, unsubscribe, block, blocked, updateRaspRuleMatchMetricTags
 
   beforeEach(() => {
     const config = {
@@ -21,7 +21,8 @@ describe('RASP', () => {
     subscribe = sinon.stub()
     unsubscribe = sinon.stub()
 
-    block = sinon.stub()
+    block = sinon.stub().returns(true)
+    updateRaspRuleMatchMetricTags = sinon.stub()
 
     rasp = proxyquire('../../../src/appsec/rasp', {
       '../blocking': {
@@ -34,6 +35,9 @@ describe('RASP', () => {
           unsubscribe,
           hasSubscribers: true
         }
+      },
+      '../telemetry': {
+        updateRaspRuleMatchMetricTags
       }
     })
 
@@ -67,12 +71,13 @@ describe('RASP', () => {
   })
 
   describe('blockOnDatadogRaspAbortError', () => {
-    let req, res, blockingAction
+    let req, res, blockingAction, raspRule
 
     beforeEach(() => {
       req = {}
       res = {}
       blockingAction = {}
+      raspRule = { type: 'type' }
     })
 
     afterEach(() => {
@@ -83,23 +88,34 @@ describe('RASP', () => {
       rasp.blockOnDatadogRaspAbortError({ error: new Error() })
 
       sinon.assert.notCalled(block)
+      sinon.assert.notCalled(updateRaspRuleMatchMetricTags)
     })
 
-    it('should block DatadogRaspAbortError first time', () => {
-      rasp.blockOnDatadogRaspAbortError({ error: new DatadogRaspAbortError(req, res, blockingAction) })
+    it('should block DatadogRaspAbortError first time and update metrics', () => {
+      rasp.blockOnDatadogRaspAbortError({
+        error: new DatadogRaspAbortError(req, res, blockingAction, raspRule, true)
+      })
 
       sinon.assert.calledOnce(block)
+      sinon.assert.calledOnceWithExactly(updateRaspRuleMatchMetricTags, req, raspRule, true, true)
     })
 
     it('should skip calling block if blocked before', () => {
-      rasp.blockOnDatadogRaspAbortError({ error: new DatadogRaspAbortError(req, res, blockingAction) })
+      rasp.blockOnDatadogRaspAbortError({
+        error: new DatadogRaspAbortError(req, res, blockingAction, raspRule, true)
+      })
 
       blocked = true
 
-      rasp.blockOnDatadogRaspAbortError({ error: new DatadogRaspAbortError(req, res, blockingAction) })
-      rasp.blockOnDatadogRaspAbortError({ error: new DatadogRaspAbortError(req, res, blockingAction) })
+      rasp.blockOnDatadogRaspAbortError({
+        error: new DatadogRaspAbortError(req, res, blockingAction, raspRule, true)
+      })
+      rasp.blockOnDatadogRaspAbortError({
+        error: new DatadogRaspAbortError(req, res, blockingAction, raspRule, true)
+      })
 
       sinon.assert.calledOnce(block)
+      sinon.assert.calledOnce(updateRaspRuleMatchMetricTags)
     })
   })
 })

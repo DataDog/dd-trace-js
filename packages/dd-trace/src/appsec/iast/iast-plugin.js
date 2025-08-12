@@ -47,6 +47,10 @@ class IastPluginSubscription {
   }
 
   matchesModuleInstrumented (name) {
+    // Remove node: prefix if present
+    if (name.startsWith('node:')) {
+      name = name.slice(5)
+    }
     // https module is a special case because it's events are published as http
     name = name === 'https' ? 'http' : name
     return this.moduleName === name
@@ -62,12 +66,12 @@ class IastPlugin extends Plugin {
 
   _getTelemetryHandler (iastSub) {
     return () => {
-      const iastContext = getIastContext(storage.getStore())
+      const iastContext = getIastContext(storage('legacy').getStore())
       iastSub.increaseExecuted(iastContext)
     }
   }
 
-  _execHandlerAndIncMetric ({ handler, metric, tags, iastContext = getIastContext(storage.getStore()) }) {
+  _execHandlerAndIncMetric ({ handler, metric, tags, iastContext = getIastContext(storage('legacy').getStore()) }) {
     try {
       const result = handler()
       if (iastTelemetry.isEnabled()) {
@@ -114,7 +118,7 @@ class IastPlugin extends Plugin {
       config = { enabled: config }
     }
     if (config.enabled && !this.configured) {
-      this.onConfigure(config.tracerConfig)
+      this.onConfigure()
       this.configured = true
     }
 
@@ -130,9 +134,9 @@ class IastPlugin extends Plugin {
   }
 
   _getAndRegisterSubscription ({ moduleName, channelName, tag, tagKey }) {
-    if (!channelName && !moduleName) return
-
     if (!moduleName) {
+      if (!channelName) return
+
       let firstSep = channelName.indexOf(':')
       if (firstSep === -1) {
         moduleName = channelName
@@ -141,7 +145,7 @@ class IastPlugin extends Plugin {
           firstSep = channelName.indexOf(':', 'tracing:'.length + 1)
         }
         const lastSep = channelName.indexOf(':', firstSep + 1)
-        moduleName = channelName.substring(firstSep + 1, lastSep !== -1 ? lastSep : channelName.length)
+        moduleName = channelName.slice(firstSep + 1, lastSep === -1 ? channelName.length : lastSep)
       }
     }
 

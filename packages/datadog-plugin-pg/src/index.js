@@ -4,11 +4,12 @@ const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 
 class PGPlugin extends DatabasePlugin {
-  static get id () { return 'pg' }
-  static get operation () { return 'query' }
-  static get system () { return 'postgres' }
+  static id = 'pg'
+  static operation = 'query'
+  static system = 'postgres'
 
-  start ({ params = {}, query, processId }) {
+  bindStart (ctx) {
+    const { params = {}, query, processId, stream } = ctx
     const service = this.serviceName({ pluginConfig: this.config, params })
     const originalStatement = this.maybeTruncate(query.text)
 
@@ -25,9 +26,15 @@ class PGPlugin extends DatabasePlugin {
         'out.host': params.host,
         [CLIENT_PORT_KEY]: params.port
       }
-    })
+    }, ctx)
+
+    if (stream) {
+      span.setTag('db.stream', 1)
+    }
 
     query.__ddInjectableQuery = this.injectDbmQuery(span, query.text, service, !!query.name)
+
+    return ctx.currentStore
   }
 }
 

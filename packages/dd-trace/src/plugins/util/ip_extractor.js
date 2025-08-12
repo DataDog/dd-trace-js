@@ -3,11 +3,14 @@
 const { BlockList } = require('net')
 const net = require('net')
 
+const FORWARED_HEADER_NAME = 'forwarded'
+
 const ipHeaderList = [
   'x-forwarded-for',
   'x-real-ip',
   'true-client-ip',
   'x-client-ip',
+  FORWARED_HEADER_NAME,
   'forwarded-for',
   'x-cluster-client-ip',
   'fastly-client-ip',
@@ -21,6 +24,7 @@ const privateCIDRs = [
   '172.16.0.0/12',
   '192.168.0.0/16',
   '169.254.0.0/16',
+  '100.65.0.0/10',
   '::1/128',
   'fec0::/10',
   'fe80::/10',
@@ -33,7 +37,7 @@ const privateIPMatcher = new BlockList()
 for (const cidr of privateCIDRs) {
   const [address, prefix] = cidr.split('/')
 
-  privateIPMatcher.addSubnet(address, parseInt(prefix), net.isIPv6(address) ? 'ipv6' : 'ipv4')
+  privateIPMatcher.addSubnet(address, Number.parseInt(prefix), net.isIPv6(address) ? 'ipv6' : 'ipv4')
 }
 
 function extractIp (config, req) {
@@ -48,7 +52,8 @@ function extractIp (config, req) {
   let firstPrivateIp
   if (headers) {
     for (const ipHeaderName of ipHeaderList) {
-      const firstIp = findFirstIp(headers[ipHeaderName])
+      const header = headers[ipHeaderName]
+      const firstIp = ipHeaderName === FORWARED_HEADER_NAME ? findFirstIpForwardedFormat(header) : findFirstIp(header)
 
       if (firstIp.public) {
         return firstIp.public
@@ -59,6 +64,10 @@ function extractIp (config, req) {
   }
 
   return firstPrivateIp || req.socket?.remoteAddress
+}
+
+function isPublicIp (ip, type) {
+  return !privateIPMatcher.check(ip, type === 6 ? 'ipv6' : 'ipv4')
 }
 
 function findFirstIp (str) {
@@ -75,14 +84,47 @@ function findFirstIp (str) {
     const type = net.isIP(chunk)
     if (!type) continue
 
-    if (!privateIPMatcher.check(chunk, type === 6 ? 'ipv6' : 'ipv4')) {
+    if (isPublicIp(chunk, type)) {
       // it's public, return it immediately
       result.public = chunk
-      break
+      return result
     }
 
     // it's private, only save the first one found
     if (!result.private) result.private = chunk
+  }
+
+  return result
+}
+
+const forwardedForRegexp = /for="?\[?(([0-9]+\.)+[0-9]+|[0-9a-f:]*:[0-9a-f]*)/i
+const forwardedByRegexp = /by="?\[?(([0-9]+\.)+[0-9]+|[0-9a-f:]*:[0-9a-f]*)/i
+const forwardedRegexps = [forwardedForRegexp, forwardedByRegexp]
+
+function findFirstIpForwardedFormat (str) {
+  const result = {}
+  if (!str) return result
+
+  const splitted = str.split(',')
+
+  for (const part of splitted) {
+    const chunk = part.trim()
+
+    for (const regex of forwardedRegexps) {
+      const ip = regex.exec(chunk)?.[1]
+
+      const type = net.isIP(ip)
+      if (!type) continue
+
+      if (isPublicIp(ip, type)) {
+        // it's public, return it immediately
+        result.public = ip
+        return result
+      }
+
+      // it's private, only save the first one found
+      if (!result.private) result.private = ip
+    }
   }
 
   return result

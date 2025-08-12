@@ -35,8 +35,8 @@ describe('common Plugin behaviour', () => {
 
   after(() => agent.close({ ritmReset: false }))
   class CommonPlugin extends TracingPlugin {
-    static get id () { return 'commonPlugin' }
-    static get operation () { return 'dothings' }
+    static id = 'commonPlugin'
+    static operation = 'dothings'
 
     start () {
       return this.startSpan('common.operation', {
@@ -46,8 +46,8 @@ describe('common Plugin behaviour', () => {
   }
 
   class SuffixPlugin extends TracingPlugin {
-    static get id () { return 'suffixPlugin' }
-    static get operation () { return 'dothings' }
+    static id = 'suffixPlugin'
+    static operation = 'dothings'
     start () {
       return this.startSpan('common.operation', {
         service: this.config.service || `${this.tracer._service}-suffix`
@@ -78,7 +78,7 @@ describe('common Plugin behaviour', () => {
 
       agent.reload(pluginName, pluginConf)
 
-      agent.use(
+      agent.assertSomeTraces(
         traces => {
           const span = traces[0][0]
           spanExpectations(span)

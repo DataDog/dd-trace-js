@@ -14,7 +14,7 @@ module.exports = {
       debug: (message) => log.debug(message),
       info: (message) => log.info(message),
       warn: (message) => log.warn(message),
-      error: (message) => log.error(message)
+      error: (...args) => log.error(...args)
     }
 
     const libraryInjected = injectionEnabled.length > 0
@@ -23,8 +23,6 @@ module.exports = {
       activation = 'auto'
     } else if (enabled === 'true') {
       activation = 'manual'
-    } else if (injectionEnabled.includes('profiler')) {
-      activation = 'injection'
     } // else activation = undefined
 
     return profiler.start({

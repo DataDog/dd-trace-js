@@ -1,28 +1,40 @@
 'use strict'
 
 const { createHash } = require('crypto')
-const EventEmitter = require('events')
+const { EventEmitter, once } = require('events')
 const http = require('http')
 const express = require('express')
 const bodyParser = require('body-parser')
-const msgpack = require('msgpack-lite')
-const codec = msgpack.createCodec({ int64: true })
+const msgpack = require('@msgpack/msgpack')
 const upload = require('multer')()
+
+const noop = () => {}
 
 module.exports = class FakeAgent extends EventEmitter {
   constructor (port = 0) {
-    super()
+    // Redirect rejections to the error event
+    super({ captureRejections: true })
     this.port = port
     this.resetRemoteConfig()
+    this._sockets = new Set()
   }
 
-  async start () {
+  start () {
     return new Promise((resolve, reject) => {
       const timeoutObj = setTimeout(() => {
         reject(new Error('agent timed out starting up'))
-      }, 10000)
+      }, 10_000)
       this.server = http.createServer(buildExpressServer(this))
       this.server.on('error', reject)
+
+      // Track connections to force close them later
+      this.server.on('connection', (socket) => {
+        this._sockets.add(socket)
+        socket.on('close', () => {
+          this._sockets.delete(socket)
+        })
+      })
+
       this.server.listen(this.port, () => {
         this.port = this.server.address().port
         clearTimeout(timeoutObj)
@@ -32,10 +44,15 @@ module.exports = class FakeAgent extends EventEmitter {
   }
 
   stop () {
-    return new Promise((resolve) => {
-      this.server.on('close', resolve)
-      this.server.close()
-    })
+    if (!this.server?.listening) return
+
+    for (const socket of this._sockets) {
+      socket.destroy()
+    }
+    this._sockets.clear()
+    this.server.close()
+
+    return once(this.server, 'close')
   }
 
   /**
@@ -146,8 +163,32 @@ module.exports = class FakeAgent extends EventEmitter {
     return resultPromise
   }
 
-  assertTelemetryReceived (fn, timeout, requestType, expectedMessageCount = 1) {
-    timeout = timeout || 30000
+  /**
+   * Assert that a telemetry message is received.
+   *
+   * @overload
+   * @param {string} requestType - The request type to assert.
+   * @param {number} [timeout=30_000] - The timeout in milliseconds.
+   * @param {number} [expectedMessageCount=1] - The number of messages to expect.
+   * @returns {Promise<void>} A promise that resolves when the telemetry message of type `requestType` is received.
+   *
+   * @overload
+   * @param {Function} fn - The function to call with the telemetry message of type `requestType`.
+   * @param {string} requestType - The request type to assert.
+   * @param {number} [timeout=30_000] - The timeout in milliseconds.
+   * @param {number} [expectedMessageCount=1] - The number of messages to expect.
+   * @returns {Promise<void>} A promise that resolves when the telemetry message of type `requestType` is received and
+   *     the function `fn` has finished running. If `fn` throws an error, the promise will be rejected once `timeout`
+   *     is reached.
+   */
+  assertTelemetryReceived (fn, requestType, timeout = 30_000, expectedMessageCount = 1) {
+    if (typeof fn !== 'function') {
+      expectedMessageCount = timeout
+      timeout = requestType
+      requestType = fn
+      fn = noop
+    }
+
     let resultResolve
     let resultReject
     let msgCount = 0
@@ -241,7 +282,7 @@ function buildExpressServer (agent) {
     res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
     agent.emit('message', {
       headers: req.headers,
-      payload: msgpack.decode(req.body, { codec })
+      payload: msgpack.decode(req.body, { useBigInt64: true })
     })
   })
 

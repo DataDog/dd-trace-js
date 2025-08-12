@@ -14,6 +14,69 @@ const DEFAULT_HEARTBEAT_INTERVAL = 60000
 
 let traceAgent
 
+describe('telemetry (proxy)', () => {
+  let telemetry
+  let proxy
+
+  beforeEach(() => {
+    telemetry = sinon.spy({
+      start () {},
+      stop () {},
+      updateIntegrations () {},
+      updateConfig () {},
+      appClosing () {}
+    })
+
+    proxy = proxyquire('../../src/telemetry', {
+      './telemetry': telemetry
+    })
+  })
+
+  it('should be noop when disabled', () => {
+    proxy.start()
+    proxy.updateIntegrations()
+    proxy.updateConfig([])
+    proxy.appClosing()
+    proxy.stop()
+
+    expect(telemetry.start).to.not.have.been.called
+    expect(telemetry.updateIntegrations).to.not.have.been.called
+    expect(telemetry.updateConfig).to.not.have.been.called
+    expect(telemetry.appClosing).to.not.have.been.called
+    expect(telemetry.stop).to.not.have.been.called
+  })
+
+  it('should proxy when enabled', () => {
+    const config = { telemetry: { enabled: true } }
+
+    proxy.start(config)
+    proxy.updateIntegrations()
+    proxy.updateConfig()
+    proxy.appClosing()
+    proxy.stop()
+
+    expect(telemetry.start).to.have.been.calledWith(config)
+    expect(telemetry.updateIntegrations).to.have.been.called
+    expect(telemetry.updateConfig).to.have.been.called
+    expect(telemetry.appClosing).to.have.been.called
+    expect(telemetry.stop).to.have.been.called
+  })
+
+  it('should proxy when enabled from updateConfig', () => {
+    const config = { telemetry: { enabled: true } }
+
+    proxy.updateConfig([], config)
+    proxy.updateIntegrations()
+    proxy.appClosing()
+    proxy.stop()
+
+    expect(telemetry.updateIntegrations).to.have.been.called
+    expect(telemetry.updateConfig).to.have.been.calledWith([], config)
+    expect(telemetry.appClosing).to.have.been.called
+    expect(telemetry.stop).to.have.been.called
+  })
+})
+
 describe('telemetry', () => {
   let telemetry
   let pluginsByName
@@ -24,7 +87,7 @@ describe('telemetry', () => {
     // If we don't no-op the server inside it, it will trace it, which will
     // screw up this test file entirely. -- bengl
 
-    storage.run({ noop: true }, () => {
+    storage('legacy').run({ noop: true }, () => {
       traceAgent = http.createServer(async (req, res) => {
         const chunks = []
         for await (const chunk of req) {
@@ -39,7 +102,7 @@ describe('telemetry', () => {
 
     traceAgent.reqs = []
 
-    telemetry = proxyquire('../../src/telemetry', {
+    telemetry = proxyquire('../../src/telemetry/telemetry', {
       '../exporters/common/docker': {
         id () {
           return 'test docker id'
@@ -171,7 +234,7 @@ describe('telemetry', () => {
 
   it('should not send app-closing if telemetry is not enabled', () => {
     const sendDataStub = sinon.stub()
-    const notEnabledTelemetry = proxyquire('../../src/telemetry', {
+    const notEnabledTelemetry = proxyquire('../../src/telemetry/telemetry', {
       './send-data': {
         sendData: sendDataStub
       }
@@ -213,7 +276,7 @@ describe('telemetry app-heartbeat', () => {
         }
       }
     }
-    telemetry = proxyquire('../../src/telemetry', {
+    telemetry = proxyquire('../../src/telemetry/telemetry', {
       '../exporters/common/docker': {
         id () {
           return 'test docker id'
@@ -278,7 +341,7 @@ describe('Telemetry extended heartbeat', () => {
       }
 
     }
-    telemetry = proxyquire('../../src/telemetry', {
+    telemetry = proxyquire('../../src/telemetry/telemetry', {
       '../exporters/common/docker': {
         id () {
           return 'test docker id'
@@ -312,15 +375,16 @@ describe('Telemetry extended heartbeat', () => {
 
   it('be sent with up-to-date configuration values', (done) => {
     let configuration
+
     const sendDataRequest = {
       sendData: (config, application, host, reqType, payload, cb = () => {}) => {
         if (reqType === 'app-extended-heartbeat') {
           configuration = payload.configuration
         }
       }
-
     }
-    telemetry = proxyquire('../../src/telemetry', {
+
+    telemetry = proxyquire('../../src/telemetry/telemetry', {
       '../exporters/common/docker': {
         id () {
           return 'test docker id'
@@ -349,40 +413,25 @@ describe('Telemetry extended heartbeat', () => {
     expect(configuration).to.deep.equal([])
 
     const changes = [
-      {
-        name: 'test',
-        value: true,
-        origin: 'code'
-      }
+      { name: 'test', value: true, origin: 'code', seq_id: 0 }
     ]
     telemetry.updateConfig(changes, config)
     clock.tick(86400000)
     expect(configuration).to.deep.equal(changes)
 
     const updatedChanges = [
-      {
-        name: 'test',
-        value: false,
-        origin: 'code'
-      }
+      { name: 'test', value: false, origin: 'code', seq_id: 1 }
     ]
     telemetry.updateConfig(updatedChanges, config)
     clock.tick(86400000)
     expect(configuration).to.deep.equal(updatedChanges)
 
     const changeNeedingNameRemapping = [
-      {
-        name: 'sampleRate', // one of the config names that require a remapping
-        value: 0,
-        origin: 'code'
-      }
+      { name: 'sampleRate', value: 0, origin: 'code', seq_id: 2 }
     ]
     const expectedConfigList = [
       updatedChanges[0],
-      {
-        ...changeNeedingNameRemapping[0],
-        name: 'DD_TRACE_SAMPLE_RATE' // remapped name
-      }
+      { ...changeNeedingNameRemapping[0], name: 'DD_TRACE_SAMPLE_RATE' }
     ]
     telemetry.updateConfig(changeNeedingNameRemapping, config)
     clock.tick(86400000)
@@ -390,7 +439,7 @@ describe('Telemetry extended heartbeat', () => {
 
     const samplingRule = [
       {
-        name: 'sampler.rules', // one of the config names that require a remapping
+        name: 'sampler.rules',
         value: [
           { service: '*', sampling_rate: 1 },
           {
@@ -401,22 +450,37 @@ describe('Telemetry extended heartbeat', () => {
             sample_rate: 0.5
           }
         ],
-        origin: 'code'
+        origin: 'code',
+        seq_id: 3
       }
     ]
-    const expectedConfigListWithSamplingRules =
-      expectedConfigList.concat([
-        {
-          name: 'DD_TRACE_SAMPLING_RULES',
-          value:
-          // eslint-disable-next-line @stylistic/js/max-len
-          '[{"service":"*","sampling_rate":1},{"service":"svc*","resource":"*abc","name":"op-??","tags":{"tag-a":"ta-v*","tag-b":"tb-v?","tag-c":"tc-v"},"sample_rate":0.5}]',
-          origin: 'code'
-        }
-      ])
+    const expectedConfigListWithSamplingRules = expectedConfigList.concat([
+      {
+        name: 'DD_TRACE_SAMPLING_RULES',
+        value: '[{"service":"*","sampling_rate":1},' +
+          '{"service":"svc*","resource":"*abc","name":"op-??",' +
+          '"tags":{"tag-a":"ta-v*","tag-b":"tb-v?","tag-c":"tc-v"},"sample_rate":0.5}]',
+        origin: 'code',
+        seq_id: 3
+      }
+    ])
     telemetry.updateConfig(samplingRule, config)
     clock.tick(86400000)
     expect(configuration).to.deep.equal(expectedConfigListWithSamplingRules)
+
+    const chainedChanges = expectedConfigListWithSamplingRules.concat([
+      { name: 'test', value: true, origin: 'env', seq_id: 4 },
+      { name: 'test', value: false, origin: 'remote_config', seq_id: 5 }
+    ])
+    const samplingRule2 = [
+      { name: 'test', value: true, origin: 'env' },
+      { name: 'test', value: false, origin: 'remote_config' }
+    ]
+
+    telemetry.updateConfig(samplingRule2, config)
+    clock.tick(86400000)
+    expect(configuration).to.deep.equal(chainedChanges)
+
     done()
   })
 })
@@ -463,7 +527,7 @@ describe('Telemetry retry', () => {
       }
 
     }
-    telemetry = proxyquire('../../src/telemetry', {
+    telemetry = proxyquire('../../src/telemetry/telemetry', {
       '../exporters/common/docker': {
         id () {
           return 'test docker id'
@@ -549,7 +613,7 @@ describe('Telemetry retry', () => {
       }
 
     }
-    telemetry = proxyquire('../../src/telemetry', {
+    telemetry = proxyquire('../../src/telemetry/telemetry', {
       '../exporters/common/docker': {
         id () {
           return 'test docker id'
@@ -618,7 +682,7 @@ describe('Telemetry retry', () => {
       }
 
     }
-    telemetry = proxyquire('../../src/telemetry', {
+    telemetry = proxyquire('../../src/telemetry/telemetry', {
       '../exporters/common/docker': {
         id () {
           return 'test docker id'
@@ -678,7 +742,7 @@ describe('Telemetry retry', () => {
       }
 
     }
-    telemetry = proxyquire('../../src/telemetry', {
+    telemetry = proxyquire('../../src/telemetry/telemetry', {
       '../exporters/common/docker': {
         id () {
           return 'test docker id'
@@ -760,7 +824,7 @@ describe('Telemetry retry', () => {
       }
 
     }
-    telemetry = proxyquire('../../src/telemetry', {
+    telemetry = proxyquire('../../src/telemetry/telemetry', {
       '../exporters/common/docker': {
         id () {
           return 'test docker id'
@@ -832,7 +896,7 @@ describe('AVM OSS', () => {
         before((done) => {
           clock = sinon.useFakeTimers()
 
-          storage.run({ noop: true }, () => {
+          storage('legacy').run({ noop: true }, () => {
             traceAgent = http.createServer(async (req, res) => {
               const chunks = []
               for await (const chunk of req) {
@@ -848,8 +912,8 @@ describe('AVM OSS', () => {
           traceAgent.reqs = []
 
           delete require.cache[require.resolve('../../src/telemetry/send-data')]
-          delete require.cache[require.resolve('../../src/telemetry')]
-          telemetry = require('../../src/telemetry')
+          delete require.cache[require.resolve('../../src/telemetry/telemetry')]
+          telemetry = require('../../src/telemetry/telemetry')
 
           telemetryConfig = {
             telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
@@ -883,7 +947,7 @@ describe('AVM OSS', () => {
         it('in app-started message', () => {
           return testSeq(1, 'app-started', payload => {
             expect(payload).to.have.property('configuration').that.deep.equal([
-              { name: 'appsec.sca.enabled', value: scaValue, origin: scaValueOrigin }
+              { name: 'appsec.sca.enabled', value: scaValue, origin: scaValueOrigin, seq_id: 0 }
             ])
           }, true)
         })
@@ -893,7 +957,7 @@ describe('AVM OSS', () => {
           clock.tick(86400000)
           return testSeq(2, 'app-extended-heartbeat', payload => {
             expect(payload).to.have.property('configuration').that.deep.equal([
-              { name: 'appsec.sca.enabled', value: scaValue, origin: scaValueOrigin }
+              { name: 'appsec.sca.enabled', value: scaValue, origin: scaValueOrigin, seq_id: 0 }
             ])
           }, true)
         })
@@ -909,7 +973,7 @@ describe('AVM OSS', () => {
     }
 
     before(() => {
-      telemetry = proxyquire('../../src/telemetry', {
+      telemetry = proxyquire('../../src/telemetry/telemetry', {
         '../log': logSpy
       })
     })

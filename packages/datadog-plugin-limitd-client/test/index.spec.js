@@ -2,6 +2,7 @@
 
 const { storage } = require('../../datadog-core')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 describe('Plugin', () => {
   let LimitdClient
@@ -29,12 +30,12 @@ describe('Plugin', () => {
       it('should propagate context', done => {
         const span = {}
 
-        storage.run(span, () => {
+        storage('legacy').run(span, () => {
           limitd.take('user', 'test', function (err, resp) {
             if (err) return done(err)
 
             try {
-              expect(storage.getStore()).to.equal(span)
+              expect(storage('legacy').getStore()).to.equal(span)
               done()
             } catch (e) {
               done(e)

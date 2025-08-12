@@ -22,7 +22,10 @@ const {
   ROOT_PARENT_ID,
   INPUT_TOKENS_METRIC_KEY,
   OUTPUT_TOKENS_METRIC_KEY,
-  TOTAL_TOKENS_METRIC_KEY
+  TOTAL_TOKENS_METRIC_KEY,
+  INTEGRATION,
+  DECORATOR,
+  PROPAGATED_ML_APP_KEY
 } = require('./constants/tags')
 
 // global registry of LLMObs spans
@@ -51,12 +54,29 @@ class LLMObsTagger {
     mlApp,
     parent,
     kind,
-    name
+    name,
+    integration,
+    _decorator
   } = {}) {
     if (!this._config.llmobs.enabled) return
     if (!kind) return // do not register it in the map if it doesn't have an llmobs span kind
 
+    const spanMlApp =
+      mlApp ||
+      registry.get(parent)?.[ML_APP] ||
+      span.context()._trace.tags[PROPAGATED_ML_APP_KEY] ||
+      this._config.llmobs.mlApp
+
+    if (!spanMlApp) {
+      throw new Error(
+        '[LLMObs] Cannot start an LLMObs span without an mlApp configured.' +
+        'Ensure this configuration is set before running your application.'
+      )
+    }
+
     this._register(span)
+
+    this._setTag(span, ML_APP, spanMlApp)
 
     if (name) this._setTag(span, NAME, name)
 
@@ -66,13 +86,12 @@ class LLMObsTagger {
 
     sessionId = sessionId || registry.get(parent)?.[SESSION_ID]
     if (sessionId) this._setTag(span, SESSION_ID, sessionId)
-
-    if (!mlApp) mlApp = registry.get(parent)?.[ML_APP] || this._config.llmobs.mlApp
-    this._setTag(span, ML_APP, mlApp)
+    if (integration) this._setTag(span, INTEGRATION, integration)
+    if (_decorator) this._setTag(span, DECORATOR, _decorator)
 
     const parentId =
-      parent?.context().toSpanId() ||
-      span.context()._trace.tags[PROPAGATED_PARENT_ID_KEY] ||
+      parent?.context().toSpanId() ??
+      span.context()._trace.tags[PROPAGATED_PARENT_ID_KEY] ??
       ROOT_PARENT_ID
     this._setTag(span, PARENT_ID_KEY, parentId)
   }
@@ -80,27 +99,32 @@ class LLMObsTagger {
   // TODO: similarly for the following `tag` methods,
   // how can we transition from a span weakmap to core API functionality
   tagLLMIO (span, inputData, outputData) {
-    this._tagMessages(span, inputData, INPUT_MESSAGES)
-    this._tagMessages(span, outputData, OUTPUT_MESSAGES)
+    this.#tagMessages(span, inputData, INPUT_MESSAGES)
+    this.#tagMessages(span, outputData, OUTPUT_MESSAGES)
   }
 
   tagEmbeddingIO (span, inputData, outputData) {
-    this._tagDocuments(span, inputData, INPUT_DOCUMENTS)
-    this._tagText(span, outputData, OUTPUT_VALUE)
+    this.#tagDocuments(span, inputData, INPUT_DOCUMENTS)
+    this.#tagText(span, outputData, OUTPUT_VALUE)
   }
 
   tagRetrievalIO (span, inputData, outputData) {
-    this._tagText(span, inputData, INPUT_VALUE)
-    this._tagDocuments(span, outputData, OUTPUT_DOCUMENTS)
+    this.#tagText(span, inputData, INPUT_VALUE)
+    this.#tagDocuments(span, outputData, OUTPUT_DOCUMENTS)
   }
 
   tagTextIO (span, inputData, outputData) {
-    this._tagText(span, inputData, INPUT_VALUE)
-    this._tagText(span, outputData, OUTPUT_VALUE)
+    this.#tagText(span, inputData, INPUT_VALUE)
+    this.#tagText(span, outputData, OUTPUT_VALUE)
   }
 
   tagMetadata (span, metadata) {
-    this._setTag(span, METADATA, metadata)
+    const existingMetadata = registry.get(span)?.[METADATA]
+    if (existingMetadata) {
+      Object.assign(existingMetadata, metadata)
+    } else {
+      this._setTag(span, METADATA, metadata)
+    }
   }
 
   tagMetrics (span, metrics) {
@@ -124,27 +148,32 @@ class LLMObsTagger {
       if (typeof value === 'number') {
         filterdMetrics[processedKey] = value
       } else {
-        this._handleFailure(`Value for metric '${key}' must be a number, instead got ${value}`)
+        this.#handleFailure(`Value for metric '${key}' must be a number, instead got ${value}`, 'invalid_metrics')
       }
     }
 
-    this._setTag(span, METRICS, filterdMetrics)
+    const existingMetrics = registry.get(span)?.[METRICS]
+    if (existingMetrics) {
+      Object.assign(existingMetrics, filterdMetrics)
+    } else {
+      this._setTag(span, METRICS, filterdMetrics)
+    }
   }
 
   tagSpanTags (span, tags) {
-    // new tags will be merged with existing tags
     const currentTags = registry.get(span)?.[TAGS]
     if (currentTags) {
-      Object.assign(tags, currentTags)
+      Object.assign(currentTags, tags)
+    } else {
+      this._setTag(span, TAGS, tags)
     }
-    this._setTag(span, TAGS, tags)
   }
 
   changeKind (span, newKind) {
     this._setTag(span, SPAN_KIND, newKind)
   }
 
-  _tagText (span, data, key) {
+  #tagText (span, data, key) {
     if (data) {
       if (typeof data === 'string') {
         this._setTag(span, key, data)
@@ -153,142 +182,165 @@ class LLMObsTagger {
           this._setTag(span, key, JSON.stringify(data))
         } catch {
           const type = key === INPUT_VALUE ? 'input' : 'output'
-          this._handleFailure(`Failed to parse ${type} value, must be JSON serializable.`)
+          this.#handleFailure(`Failed to parse ${type} value, must be JSON serializable.`, 'invalid_io_text')
         }
       }
     }
   }
 
-  _tagDocuments (span, data, key) {
-    if (data) {
-      if (!Array.isArray(data)) {
-        data = [data]
+  #tagDocuments (span, data, key) {
+    if (!data) {
+      return
+    }
+
+    if (!Array.isArray(data)) {
+      data = [data]
+    }
+
+    const documents = []
+    for (const document of data) {
+      if (typeof document === 'string') {
+        documents.push({ text: document })
+        continue
       }
 
-      const documents = data.map(document => {
-        if (typeof document === 'string') {
-          return { text: document }
-        }
-
-        if (document == null || typeof document !== 'object') {
-          this._handleFailure('Documents must be a string, object, or list of objects.')
-          return undefined
-        }
-
-        const { text, name, id, score } = document
-        let validDocument = true
-
-        if (typeof text !== 'string') {
-          this._handleFailure('Document text must be a string.')
-          validDocument = false
-        }
-
-        const documentObj = { text }
-
-        validDocument = this._tagConditionalString(name, 'Document name', documentObj, 'name') && validDocument
-        validDocument = this._tagConditionalString(id, 'Document ID', documentObj, 'id') && validDocument
-        validDocument = this._tagConditionalNumber(score, 'Document score', documentObj, 'score') && validDocument
-
-        return validDocument ? documentObj : undefined
-      }).filter(doc => !!doc)
-
-      if (documents.length) {
-        this._setTag(span, key, documents)
+      if (document == null || typeof document !== 'object') {
+        this.#handleFailure('Documents must be a string, object, or list of objects.', 'invalid_embedding_io')
+        continue
       }
+
+      const { text, name, id, score } = document
+
+      const valid = typeof text === 'string'
+      if (!valid) {
+        this.#handleFailure('Document text must be a string.', 'invalid_embedding_io')
+      }
+
+      const documentObj = { text }
+
+      const condition1 = this.#tagConditionalString(name, 'Document name', documentObj, 'name')
+      const condition2 = this.#tagConditionalString(id, 'Document ID', documentObj, 'id')
+      const condition3 = this.#tagConditionalNumber(score, 'Document score', documentObj, 'score')
+
+      if (valid && condition1 && condition2 && condition3) {
+        documents.push(documentObj)
+      }
+    }
+
+    if (documents.length) {
+      this._setTag(span, key, documents)
     }
   }
 
-  _tagMessages (span, data, key) {
-    if (data) {
-      if (!Array.isArray(data)) {
-        data = [data]
+  #filterToolCalls (toolCalls) {
+    if (!Array.isArray(toolCalls)) {
+      toolCalls = [toolCalls]
+    }
+
+    const filteredToolCalls = []
+    for (const toolCall of toolCalls) {
+      if (typeof toolCall !== 'object') {
+        this.#handleFailure('Tool call must be an object.', 'invalid_io_messages')
+        continue
       }
 
-      const messages = data.map(message => {
-        if (typeof message === 'string') {
-          return { content: message }
-        }
+      const { name, arguments: args, toolId, type } = toolCall
+      const toolCallObj = {}
 
-        if (message == null || typeof message !== 'object') {
-          this._handleFailure('Messages must be a string, object, or list of objects')
-          return undefined
-        }
+      const condition1 = this.#tagConditionalString(name, 'Tool name', toolCallObj, 'name')
+      const condition2 = this.#tagConditionalObject(args, 'Tool arguments', toolCallObj, 'arguments')
+      const condition3 = this.#tagConditionalString(toolId, 'Tool ID', toolCallObj, 'tool_id')
+      const condition4 = this.#tagConditionalString(type, 'Tool type', toolCallObj, 'type')
 
-        let validMessage = true
-
-        const { content = '', role } = message
-        let toolCalls = message.toolCalls
-        const messageObj = { content }
-
-        if (typeof content !== 'string') {
-          this._handleFailure('Message content must be a string.')
-          validMessage = false
-        }
-
-        validMessage = this._tagConditionalString(role, 'Message role', messageObj, 'role') && validMessage
-
-        if (toolCalls) {
-          if (!Array.isArray(toolCalls)) {
-            toolCalls = [toolCalls]
-          }
-
-          const filteredToolCalls = toolCalls.map(toolCall => {
-            if (typeof toolCall !== 'object') {
-              this._handleFailure('Tool call must be an object.')
-              return undefined
-            }
-
-            let validTool = true
-
-            const { name, arguments: args, toolId, type } = toolCall
-            const toolCallObj = {}
-
-            validTool = this._tagConditionalString(name, 'Tool name', toolCallObj, 'name') && validTool
-            validTool = this._tagConditionalObject(args, 'Tool arguments', toolCallObj, 'arguments') && validTool
-            validTool = this._tagConditionalString(toolId, 'Tool ID', toolCallObj, 'tool_id') && validTool
-            validTool = this._tagConditionalString(type, 'Tool type', toolCallObj, 'type') && validTool
-
-            return validTool ? toolCallObj : undefined
-          }).filter(toolCall => !!toolCall)
-
-          if (filteredToolCalls.length) {
-            messageObj.tool_calls = filteredToolCalls
-          }
-        }
-
-        return validMessage ? messageObj : undefined
-      }).filter(msg => !!msg)
-
-      if (messages.length) {
-        this._setTag(span, key, messages)
+      if (condition1 && condition2 && condition3 && condition4) {
+        filteredToolCalls.push(toolCallObj)
       }
+    }
+    return filteredToolCalls
+  }
+
+  #tagMessages (span, data, key) {
+    if (!data) {
+      return
+    }
+    if (!Array.isArray(data)) {
+      data = [data]
+    }
+
+    const messages = []
+
+    for (const message of data) {
+      if (typeof message === 'string') {
+        messages.push({ content: message })
+        continue
+      }
+      if (message == null || typeof message !== 'object') {
+        this.#handleFailure('Messages must be a string, object, or list of objects', 'invalid_io_messages')
+        continue
+      }
+
+      const { content = '', role } = message
+      const toolCalls = message.toolCalls
+      const toolId = message.toolId
+      const messageObj = { content }
+
+      const valid = typeof content === 'string'
+      if (!valid) {
+        this.#handleFailure('Message content must be a string.', 'invalid_io_messages')
+      }
+
+      let condition = this.#tagConditionalString(role, 'Message role', messageObj, 'role')
+
+      if (toolCalls) {
+        const filteredToolCalls = this.#filterToolCalls(toolCalls)
+
+        if (filteredToolCalls.length) {
+          messageObj.tool_calls = filteredToolCalls
+        }
+      }
+
+      if (toolId) {
+        if (role === 'tool') {
+          condition = this.#tagConditionalString(toolId, 'Tool ID', messageObj, 'tool_id')
+        } else {
+          log.warn(`Tool ID for tool message not associated with a "tool" role, instead got "${role}"`)
+        }
+      }
+
+      if (valid && condition) {
+        messages.push(messageObj)
+      }
+    }
+
+    if (messages.length) {
+      this._setTag(span, key, messages)
     }
   }
 
-  _tagConditionalString (data, type, carrier, key) {
+  #tagConditionalString (data, type, carrier, key) {
     if (!data) return true
     if (typeof data !== 'string') {
-      this._handleFailure(`"${type}" must be a string.`)
+      this.#handleFailure(`"${type}" must be a string.`)
       return false
     }
     carrier[key] = data
     return true
   }
 
-  _tagConditionalNumber (data, type, carrier, key) {
+  #tagConditionalNumber (data, type, carrier, key) {
     if (!data) return true
     if (typeof data !== 'number') {
-      this._handleFailure(`"${type}" must be a number.`)
+      this.#handleFailure(`"${type}" must be a number.`)
       return false
     }
     carrier[key] = data
     return true
   }
 
-  _tagConditionalObject (data, type, carrier, key) {
+  #tagConditionalObject (data, type, carrier, key) {
     if (!data) return true
     if (typeof data !== 'object') {
-      this._handleFailure(`"${type}" must be an object.`)
+      this.#handleFailure(`"${type}" must be an object.`)
       return false
     }
     carrier[key] = data
@@ -297,18 +349,22 @@ class LLMObsTagger {
 
   // any public-facing LLMObs APIs using this tagger should not soft fail
   // auto-instrumentation should soft fail
-  _handleFailure (msg) {
+  #handleFailure (msg, errorTag) {
     if (this.softFail) {
       log.warn(msg)
     } else {
-      throw new Error(msg)
+      const err = new Error(msg)
+      if (errorTag) {
+        Object.defineProperty(err, 'ddErrorTag', { get () { return errorTag } })
+      }
+      throw err
     }
   }
 
   _register (span) {
     if (!this._config.llmobs.enabled) return
     if (registry.has(span)) {
-      this._handleFailure(`LLMObs Span "${span._name}" already registered.`)
+      this.#handleFailure(`LLMObs Span "${span._name}" already registered.`)
       return
     }
 
@@ -318,12 +374,12 @@ class LLMObsTagger {
   _setTag (span, key, value) {
     if (!this._config.llmobs.enabled) return
     if (!registry.has(span)) {
-      this._handleFailure(`Span "${span._name}" must be an LLMObs generated span.`)
+      this.#handleFailure(`Span "${span._name}" must be an LLMObs generated span.`)
       return
     }
 
     const tagsCarrier = registry.get(span)
-    Object.assign(tagsCarrier, { [key]: value })
+    tagsCarrier[key] = value
   }
 }
 

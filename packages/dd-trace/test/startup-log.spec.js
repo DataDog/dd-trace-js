@@ -2,12 +2,17 @@
 
 require('./setup/tap')
 
-const os = require('os')
+const assert = require('node:assert')
+const os = require('node:os')
+
+const Config = require('../src/config')
+const SamplingRule = require('../src/sampling_rule')
 const tracerVersion = require('../../../package.json').version
 
 describe('startup logging', () => {
   let firstStderrCall
   let secondStderrCall
+  let tracerInfoMethod
 
   before(() => {
     sinon.stub(console, 'info')
@@ -17,8 +22,10 @@ describe('startup logging', () => {
       setStartupLogConfig,
       setStartupLogPluginManager,
       setSamplingRules,
-      startupLog
+      startupLog,
+      tracerInfo
     } = require('../src/startup-log')
+    tracerInfoMethod = tracerInfo
     setStartupLogPluginManager({
       _pluginsByName: {
         http: { _enabled: true },
@@ -37,13 +44,17 @@ describe('startup logging', () => {
       sampler: {
         sampleRate: 1
       },
-      tags: { version: '1.2.3' },
+      tags: { version: '1.2.3', invalid_but_listed_due_to_mocking: 42n },
       logInjection: true,
       runtimeMetrics: true,
       startupLogs: true,
       appsec: { enabled: true }
     })
-    setSamplingRules(['rule1', 'rule2'])
+    setSamplingRules([
+      new SamplingRule({ name: 'rule1', sampleRate: 0.4 }),
+      'rule2',
+      new SamplingRule({ name: 'rule3', sampleRate: 1.4 })
+    ])
     startupLog({ agentError: { message: 'Error: fake error' } })
     firstStderrCall = console.info.firstCall /* eslint-disable-line no-console */
     secondStderrCall = console.warn.firstCall /* eslint-disable-line no-console */
@@ -53,15 +64,12 @@ describe('startup logging', () => {
 
   it('startupLog should be formatted correctly', () => {
     expect(firstStderrCall.args[0].startsWith('DATADOG TRACER CONFIGURATION - ')).to.equal(true)
-    const logObj = JSON.parse(firstStderrCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
-    expect(typeof logObj).to.equal('object')
-    expect(typeof logObj.date).to.equal('string')
-    expect(logObj.date.length).to.equal(new Date().toISOString().length)
-    expect(logObj.tags).to.deep.equal({ version: '1.2.3' })
-    expect(logObj.sampling_rules).to.deep.equal(['rule1', 'rule2'])
-    expect(logObj).to.deep.include({
+    const info = JSON.parse(String(tracerInfoMethod()))
+    assert.deepStrictEqual(info, {
+      date: info.date,
       os_name: os.type(),
       os_version: os.release(),
+      architecture: os.arch(),
       version: tracerVersion,
       lang: 'nodejs',
       lang_version: process.versions.node,
@@ -69,12 +77,19 @@ describe('startup logging', () => {
       enabled: true,
       service: 'test',
       agent_url: 'http://example.com:4321',
-      agent_error: 'Error: fake error',
       debug: true,
       sample_rate: 1,
+      sampling_rules: [
+        { matchers: [{ pattern: 'rule1' }], _sampler: { _rate: 0.4 } },
+        'rule2',
+        { matchers: [{ pattern: 'rule3' }], _sampler: { _rate: 1 } }
+      ],
+      tags: { version: '1.2.3', invalid_but_listed_due_to_mocking: '42' },
       dd_version: '1.2.3',
       log_injection_enabled: true,
       runtime_metrics_enabled: true,
+      profiling_enabled: false,
+      integrations_loaded: ['http', 'fs', 'semver'],
       appsec_enabled: true
     })
   })
@@ -82,12 +97,33 @@ describe('startup logging', () => {
   it('startupLog should correctly also output the diagnostic message', () => {
     expect(secondStderrCall.args[0]).to.equal('DATADOG TRACER DIAGNOSTIC - Agent Error: Error: fake error')
   })
+})
 
-  it('setStartupLogPlugins should add plugins to integrations_loaded', () => {
-    const logObj = JSON.parse(firstStderrCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
-    const integrationsLoaded = logObj.integrations_loaded
-    expect(integrationsLoaded).to.include('fs')
-    expect(integrationsLoaded).to.include('http')
-    expect(integrationsLoaded).to.include('semver')
+describe('profiling_enabled', () => {
+  it('should be correctly logged', () => {
+    [
+      [undefined, false],
+      ['false', false],
+      ['FileNotFound', false],
+      ['auto', true],
+      ['true', true]
+    ].forEach(([envVar, expected]) => {
+      sinon.stub(console, 'info')
+      delete require.cache[require.resolve('../src/startup-log')]
+      const {
+        setStartupLogConfig,
+        setStartupLogPluginManager,
+        startupLog
+      } = require('../src/startup-log')
+      process.env.DD_PROFILING_ENABLED = envVar
+      process.env.DD_TRACE_STARTUP_LOGS = 'true'
+      setStartupLogConfig(new Config())
+      setStartupLogPluginManager({ _pluginsByName: {} })
+      startupLog()
+      /* eslint-disable-next-line no-console */
+      const logObj = JSON.parse(console.info.firstCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
+      console.info.restore() /* eslint-disable-line no-console */
+      expect(logObj.profiling_enabled).to.equal(expected)
+    })
   })
 })

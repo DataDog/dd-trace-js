@@ -4,9 +4,7 @@ const sensitiveHandler = require('./evidence-redaction/sensitive-handler')
 const { stringifyWithRanges } = require('./utils')
 
 class VulnerabilityFormatter {
-  constructor () {
-    this._redactVulnearbilities = true
-  }
+  _redactVulnearbilities = true
 
   setRedactVulnerabilities (shouldRedactVulnerabilities, redactionNamePattern, redactionValuePattern) {
     this._redactVulnearbilities = shouldRedactVulnerabilities
@@ -45,6 +43,7 @@ class VulnerabilityFormatter {
 
     if (evidence.value == null) return { valueParts }
 
+    // eslint-disable-next-line eslint-rules/eslint-safe-typeof-object
     if (typeof evidence.value === 'object' && evidence.rangesToApply) {
       const { value, ranges } = stringifyWithRanges(evidence.value, evidence.rangesToApply)
       evidence.value = value
@@ -57,14 +56,14 @@ class VulnerabilityFormatter {
 
     evidence.ranges.forEach((range, rangeIndex) => {
       if (fromIndex < range.start) {
-        valueParts.push({ value: evidence.value.substring(fromIndex, range.start) })
+        valueParts.push({ value: evidence.value.slice(fromIndex, range.start) })
       }
-      valueParts.push({ value: evidence.value.substring(range.start, range.end), source: sourcesIndexes[rangeIndex] })
+      valueParts.push({ value: evidence.value.slice(range.start, range.end), source: sourcesIndexes[rangeIndex] })
       fromIndex = range.end
     })
 
     if (fromIndex < evidence.value.length) {
-      valueParts.push({ value: evidence.value.substring(fromIndex) })
+      valueParts.push({ value: evidence.value.slice(fromIndex) })
     }
 
     return { valueParts }
@@ -72,7 +71,7 @@ class VulnerabilityFormatter {
 
   formatEvidence (type, evidence, sourcesIndexes, sources) {
     if (evidence.value === undefined) {
-      return undefined
+      return
     }
 
     return this._redactVulnearbilities
@@ -81,21 +80,15 @@ class VulnerabilityFormatter {
   }
 
   formatVulnerability (vulnerability, sourcesIndexes, sources) {
+    const { type, hash, evidence, location } = vulnerability
+
     const formattedVulnerability = {
-      type: vulnerability.type,
-      hash: vulnerability.hash,
-      stackId: vulnerability.stackId,
-      evidence: this.formatEvidence(vulnerability.type, vulnerability.evidence, sourcesIndexes, sources),
-      location: {
-        spanId: vulnerability.location.spanId
-      }
+      type,
+      hash,
+      evidence: this.formatEvidence(type, evidence, sourcesIndexes, sources),
+      location
     }
-    if (vulnerability.location.path) {
-      formattedVulnerability.location.path = vulnerability.location.path
-    }
-    if (vulnerability.location.line) {
-      formattedVulnerability.location.line = vulnerability.location.line
-    }
+
     return formattedVulnerability
   }
 

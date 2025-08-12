@@ -4,6 +4,7 @@ const { expect } = require('chai')
 const semver = require('semver')
 const { storage } = require('../../../datadog-core')
 const agent = require('../../../dd-trace/test/plugins/agent')
+const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
 module.exports = (name, factory, versionRange) => {
   describe('Instrumentation', () => {
@@ -32,18 +33,18 @@ module.exports = (name, factory, versionRange) => {
 
           let promise = new Promise((resolve, reject) => {
             setImmediate(() => {
-              storage.run('promise', () => {
+              storage('legacy').run('promise', () => {
                 resolve()
               })
             })
           })
 
-          storage.run(store, () => {
+          storage('legacy').run(store, () => {
             for (let i = 0; i < promise.then.length; i++) {
               const args = new Array(i + 1)
 
               args[i] = () => {
-                expect(storage.getStore()).to.equal(store)
+                expect(storage('legacy').getStore()).to.equal(store)
               }
 
               promise = promise.then.apply(promise, args)
@@ -54,23 +55,23 @@ module.exports = (name, factory, versionRange) => {
         })
 
         it('should run the catch() callback in the context where catch() was called', () => {
-          const store = storage.getStore()
+          const store = storage('legacy').getStore()
 
           let promise = new Promise((resolve, reject) => {
             setImmediate(() => {
-              storage.run('promise', () => {
+              storage('legacy').run('promise', () => {
                 reject(new Error())
               })
             })
           })
 
-          storage.run(store, () => {
+          storage('legacy').run(store, () => {
             promise = promise
               .catch(err => {
                 throw err
               })
               .catch(() => {
-                expect(storage.getStore()).to.equal(store)
+                expect(storage('legacy').getStore()).to.equal(store)
               })
           })
 
@@ -78,7 +79,7 @@ module.exports = (name, factory, versionRange) => {
         })
 
         it('should allow to run without a scope if not available when calling then()', () => {
-          storage.run(null, () => {
+          storage('legacy').run(null, () => {
             const promise = new Promise((resolve, reject) => {
               setImmediate(() => {
                 resolve()
@@ -87,7 +88,7 @@ module.exports = (name, factory, versionRange) => {
 
             return promise
               .then(() => {
-                expect(storage.getStore()).to.be.null
+                expect(storage('legacy').getStore()).to.be.null
               })
           })
         })

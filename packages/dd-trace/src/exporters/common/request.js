@@ -15,12 +15,11 @@ const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
 
 const maxActiveRequests = 8
-const containerId = docker.id()
 
 let activeRequests = 0
 
 function parseUrl (urlObjOrString) {
-  if (typeof urlObjOrString === 'object') return urlToHttpOptions(urlObjOrString)
+  if (urlObjOrString !== null && typeof urlObjOrString === 'object') return urlToHttpOptions(urlObjOrString)
 
   const url = urlToHttpOptions(new URL(urlObjOrString))
 
@@ -57,15 +56,16 @@ function request (data, options, callback) {
   const timeout = options.timeout || 2000
   const isSecure = options.protocol === 'https:'
   const client = isSecure ? https : http
-  const dataArray = [].concat(data)
+  let dataArray = data
 
   if (!isReadable) {
+    if (!Array.isArray(data)) {
+      dataArray = [data]
+    }
     options.headers['Content-Length'] = byteLength(dataArray)
   }
 
-  if (containerId) {
-    options.headers['Datadog-Container-ID'] = containerId
-  }
+  docker.inject(options.headers)
 
   options.agent = isSecure ? httpsAgent : httpAgent
 
@@ -103,7 +103,7 @@ function request (data, options, callback) {
             options.url || options.hostname || `http://localhost:${options.port}`
           ).href
           errorMessage = `Error from ${fullUrl}: ${res.statusCode} ${http.STATUS_CODES[res.statusCode]}.`
-        } catch (e) {
+        } catch {
           // ignore error
         }
         const responseData = buffer.toString()
@@ -126,9 +126,9 @@ function request (data, options, callback) {
 
     activeRequests++
 
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
 
-    storage.enterWith({ noop: true })
+    storage('legacy').enterWith({ noop: true })
 
     const req = client.request(options, onResponse)
 
@@ -146,7 +146,7 @@ function request (data, options, callback) {
       req.end()
     }
 
-    storage.enterWith(store)
+    storage('legacy').enterWith(store)
   }
 
   // TODO: Figure out why setTimeout is needed to avoid losing the async context

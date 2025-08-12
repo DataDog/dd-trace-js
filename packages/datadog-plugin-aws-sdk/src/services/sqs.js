@@ -2,14 +2,12 @@
 
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
-const { storage } = require('../../../datadog-core')
-const { getHeadersSize } = require('../../../dd-trace/src/datastreams/processor')
-const { DsmPathwayCodec } = require('../../../dd-trace/src/datastreams/pathway')
+const { DsmPathwayCodec, getHeadersSize } = require('../../../dd-trace/src/datastreams')
 
 class Sqs extends BaseAwsSdkPlugin {
-  static get id () { return 'sqs' }
-  static get peerServicePrecursors () { return ['queuename'] }
-  static get isPayloadReporter () { return true }
+  static id = 'sqs'
+  static peerServicePrecursors = ['queuename']
+  static isPayloadReporter = true
 
   constructor (...args) {
     super(...args)
@@ -18,37 +16,39 @@ class Sqs extends BaseAwsSdkPlugin {
     // in the base class
     this.requestTags = new WeakMap()
 
-    this.addSub('apm:aws:response:start:sqs', obj => {
-      const { request, response } = obj
-      const store = storage.getStore()
-      const plugin = this
+    this.addBind('apm:aws:response:start:sqs', ctx => {
+      const { request, response } = ctx
       const contextExtraction = this.responseExtract(request.params, request.operation, response)
+
+      let store = this._parentMap.get(request)
       let span
       let parsedMessageAttributes = null
       if (contextExtraction && contextExtraction.datadogContext) {
-        obj.needsFinish = true
+        ctx.needsFinish = true
         const options = {
           childOf: contextExtraction.datadogContext,
-          tags: Object.assign(
-            {},
-            this.requestTags.get(request) || {},
-            { 'span.kind': 'server' }
-          )
+          meta: {
+            ...this.requestTags.get(request),
+            'span.kind': 'server'
+          },
+          integrationName: 'aws-sdk'
         }
         parsedMessageAttributes = contextExtraction.parsedAttributes
-        span = plugin.tracer.startSpan('aws.response', options)
-        this.enter(span, store)
+        span = this.startSpan('aws.response', options, ctx)
+        store = ctx.currentStore
       }
-      // extract DSM context after as we might not have a parent-child but may have a DSM context
 
+      // extract DSM context after as we might not have a parent-child but may have a DSM context
       this.responseExtractDSMContext(
         request.operation, request.params, response, span || null, { parsedAttributes: parsedMessageAttributes }
       )
+
+      return store
     })
 
-    this.addSub('apm:aws:response:finish:sqs', err => {
-      const { span } = storage.getStore()
-      this.finish(span, null, err)
+    this.addSub('apm:aws:response:finish:sqs', ctx => {
+      if (!ctx.needsFinish) return
+      this.finish(ctx)
     })
   }
 
@@ -91,20 +91,18 @@ class Sqs extends BaseAwsSdkPlugin {
   }
 
   generateTags (params, operation, response) {
-    const tags = {}
-
-    if (!params || (!params.QueueName && !params.QueueUrl)) return tags
+    if (!params || (!params.QueueName && !params.QueueUrl)) return {}
     // 'https://sqs.us-east-1.amazonaws.com/123456789012/my-queue';
     let queueName = params.QueueName
     if (params.QueueUrl) {
-      queueName = params.QueueUrl.split('/')[params.QueueUrl.split('/').length - 1]
+      queueName = params.QueueUrl.split('/').at(-1)
     }
 
-    Object.assign(tags, {
+    const tags = {
       'resource.name': `${operation} ${params.QueueName || params.QueueUrl}`,
       'aws.sqs.queue_name': params.QueueName || params.QueueUrl,
       queuename: queueName
-    })
+    }
 
     switch (operation) {
       case 'receiveMessage':
@@ -135,7 +133,7 @@ class Sqs extends BaseAwsSdkPlugin {
         if (body.Type === 'Notification') {
           message = body
         }
-      } catch (e) {
+      } catch {
         // SQS to SQS
       }
     }
@@ -187,7 +185,7 @@ class Sqs extends BaseAwsSdkPlugin {
             if (body.Type === 'Notification') {
               message = body
             }
-          } catch (e) {
+          } catch {
             // SQS to SQS
           }
         }

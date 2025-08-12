@@ -10,15 +10,16 @@ const BaseWriter = require('../common/writer')
 const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
 
 class Writer extends BaseWriter {
-  constructor ({ prioritySampler, lookup, protocolVersion, headers }) {
+  constructor ({ prioritySampler, lookup, protocolVersion, headers, config = {} }) {
     super(...arguments)
     const AgentEncoder = getEncoder(protocolVersion)
 
     this._prioritySampler = prioritySampler
     this._lookup = lookup
     this._protocolVersion = protocolVersion
-    this._encoder = new AgentEncoder(this)
     this._headers = headers
+    this._config = config
+    this._encoder = new AgentEncoder(this)
   }
 
   _sendPayload (data, count, done) {
@@ -68,11 +69,9 @@ function setHeader (headers, key, value) {
 }
 
 function getEncoder (protocolVersion) {
-  if (protocolVersion === '0.5') {
-    return require('../../encode/0.5').AgentEncoder
-  } else {
-    return require('../../encode/0.4').AgentEncoder
-  }
+  return protocolVersion === '0.5'
+    ? require('../../encode/0.5').AgentEncoder
+    : require('../../encode/0.4').AgentEncoder
 }
 
 function makeRequest (version, data, count, url, headers, lookup, needsStartupLog, cb) {
@@ -93,7 +92,7 @@ function makeRequest (version, data, count, url, headers, lookup, needsStartupLo
   setHeader(options.headers, 'Datadog-Meta-Lang-Version', process.version)
   setHeader(options.headers, 'Datadog-Meta-Lang-Interpreter', process.jsEngine || 'v8')
 
-  log.debug(() => `Request to the agent: ${JSON.stringify(options)}`)
+  log.debug('Request to the agent: %j', options)
 
   request(data, options, (err, res, status) => {
     if (needsStartupLog) {

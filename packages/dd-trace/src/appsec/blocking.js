@@ -2,6 +2,7 @@
 
 const log = require('../log')
 const blockedTemplates = require('./blocked_templates')
+const { updateBlockFailureMetric } = require('./telemetry')
 
 const detectedSpecificEndpoints = {}
 
@@ -92,34 +93,43 @@ function getBlockWithContentData (req, specificType, actionParameters) {
 }
 
 function getBlockingData (req, specificType, actionParameters) {
-  if (actionParameters?.location) {
-    return getBlockWithRedirectData(actionParameters)
-  } else {
-    return getBlockWithContentData(req, specificType, actionParameters)
-  }
+  return actionParameters?.location
+    ? getBlockWithRedirectData(actionParameters)
+    : getBlockWithContentData(req, specificType, actionParameters)
 }
 
 function block (req, res, rootSpan, abortController, actionParameters = defaultBlockingActionParameters) {
-  if (res.headersSent) {
-    log.warn('[ASM] Cannot send blocking response when headers have already been sent')
-    return
+  try {
+    if (res.headersSent) {
+      log.warn('[ASM] Cannot send blocking response when headers have already been sent')
+
+      throw new Error('Headers have already been sent')
+    }
+
+    const { body, headers, statusCode } = getBlockingData(req, null, actionParameters)
+
+    for (const headerName of res.getHeaderNames()) {
+      res.removeHeader(headerName)
+    }
+
+    res.writeHead(statusCode, headers)
+
+    // this is needed to call the original end method, since express-session replaces it
+    res.constructor.prototype.end.call(res, body)
+
+    rootSpan.setTag('appsec.blocked', 'true')
+
+    responseBlockedSet.add(res)
+    abortController?.abort()
+
+    return true
+  } catch (err) {
+    rootSpan?.setTag('_dd.appsec.block.failed', 1)
+    log.error('[ASM] Blocking error', err)
+
+    updateBlockFailureMetric(req)
+    return false
   }
-
-  const { body, headers, statusCode } = getBlockingData(req, null, actionParameters)
-
-  rootSpan.addTags({
-    'appsec.blocked': 'true'
-  })
-
-  for (const headerName of res.getHeaderNames()) {
-    res.removeHeader(headerName)
-  }
-
-  res.writeHead(statusCode, headers).end(body)
-
-  responseBlockedSet.add(res)
-
-  abortController?.abort()
 }
 
 function getBlockingAction (actions) {
@@ -128,23 +138,11 @@ function getBlockingAction (actions) {
 }
 
 function setTemplates (config) {
-  if (config.appsec.blockedTemplateHtml) {
-    templateHtml = config.appsec.blockedTemplateHtml
-  } else {
-    templateHtml = blockedTemplates.html
-  }
+  templateHtml = config.appsec.blockedTemplateHtml || blockedTemplates.html
 
-  if (config.appsec.blockedTemplateJson) {
-    templateJson = config.appsec.blockedTemplateJson
-  } else {
-    templateJson = blockedTemplates.json
-  }
+  templateJson = config.appsec.blockedTemplateJson || blockedTemplates.json
 
-  if (config.appsec.blockedTemplateGraphql) {
-    templateGraphqlJson = config.appsec.blockedTemplateGraphql
-  } else {
-    templateGraphqlJson = blockedTemplates.graphqlJson
-  }
+  templateGraphqlJson = config.appsec.blockedTemplateGraphql || blockedTemplates.graphqlJson
 }
 
 function isBlocked (res) {

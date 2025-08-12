@@ -5,6 +5,7 @@ require('../setup/tap')
 const { expect } = require('chai')
 const os = require('os')
 const path = require('path')
+
 const { AgentExporter } = require('../../src/profiling/exporters/agent')
 const { FileExporter } = require('../../src/profiling/exporters/file')
 const WallProfiler = require('../../src/profiling/profilers/wall')
@@ -55,6 +56,8 @@ describe('config', () => {
     expect(config.profilers[1]).to.be.an.instanceof(SpaceProfiler)
     expect(config.v8ProfilerBugWorkaroundEnabled).true
     expect(config.cpuProfilingEnabled).to.equal(samplingContextsAvailable)
+    expect(config.uploadCompression.method).to.equal('gzip')
+    expect(config.uploadCompression.level).to.be.undefined
   })
 
   it('should support configuration options', () => {
@@ -244,14 +247,6 @@ describe('config', () => {
 
     const config = new Config(options)
 
-    expect(warnings.length).to.equal(2)
-    expect(warnings[0]).to.equal(
-      'DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED is deprecated. ' +
-      'Use DD_PROFILING_ENDPOINT_COLLECTION_ENABLED instead.')
-    expect(warnings[1]).to.equal(
-      'DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED is deprecated. ' +
-      'Use DD_PROFILING_CODEHOTSPOTS_ENABLED instead.')
-
     expect(config.profilers).to.be.an('array')
     expect(config.profilers.length).to.equal(2)
     expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
@@ -412,4 +407,78 @@ describe('config', () => {
       })
     })
   }
+
+  describe('upload compression settings', () => {
+    const expectConfig = (env, method, level, warning) => {
+      process.env = {
+        DD_PROFILING_DEBUG_UPLOAD_COMPRESSION: env
+      }
+
+      const logger = {
+        warnings: [],
+        debug () {},
+        info () {},
+        warn (message) {
+          this.warnings.push(message)
+        },
+        error () {}
+      }
+      const config = new Config({ logger })
+
+      if (warning) {
+        expect(logger.warnings.length).to.equals(1)
+        expect(logger.warnings[0]).to.equal(warning)
+      } else {
+        expect(logger.warnings.length).to.equals(0)
+      }
+
+      expect(config.uploadCompression).to.deep.equal({ method, level })
+    }
+
+    it('should accept known methods', () => {
+      expectConfig(undefined, 'gzip', undefined)
+      expectConfig('off', 'off', undefined)
+      expectConfig('on', 'gzip', undefined)
+      expectConfig('gzip', 'gzip', undefined)
+      expectConfig('zstd', 'zstd', undefined)
+    })
+
+    it('should reject unknown methods', () => {
+      expectConfig('foo', 'gzip', undefined, 'Invalid profile upload compression method "foo". Will use "on".')
+    })
+
+    it('should accept supported compression levels in methods that support levels', () => {
+      [['gzip', 9], ['zstd', 22]].forEach(([method, maxLevel]) => {
+        for (let i = 1; i <= maxLevel; i++) {
+          expectConfig(`${method}-${i}`, method, i)
+        }
+      })
+    })
+
+    it('should reject invalid compression levels in methods that support levels', () => {
+      ['gzip', 'zstd'].forEach((method) => {
+        expectConfig(`${method}-foo`, method, undefined,
+          'Invalid compression level "foo". Will use default level.')
+      })
+    })
+
+    it('should reject compression levels in methods that do not support levels', () => {
+      ['on', 'off'].forEach((method) => {
+        const effectiveMethod = method === 'on' ? 'gzip' : method
+        expectConfig(`${method}-3`, effectiveMethod, undefined,
+          `Compression levels are not supported for "${method}".`)
+        expectConfig(`${method}-foo`, effectiveMethod, undefined,
+          `Compression levels are not supported for "${method}".`)
+      })
+    })
+
+    it('should normalize compression levels', () => {
+      expectConfig('gzip-0', 'gzip', 1, 'Invalid compression level 0. Will use 1.')
+      expectConfig('gzip-10', 'gzip', 9, 'Invalid compression level 10. Will use 9.')
+      expectConfig('gzip-3.14', 'gzip', 3)
+      expectConfig('zstd-0', 'zstd', 1, 'Invalid compression level 0. Will use 1.')
+      expectConfig('zstd-23', 'zstd', 22, 'Invalid compression level 23. Will use 22.')
+      expectConfig('zstd-3.14', 'zstd', 3)
+    })
+  })
 })

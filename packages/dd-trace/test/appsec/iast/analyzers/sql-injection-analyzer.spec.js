@@ -5,34 +5,56 @@ const proxyquire = require('proxyquire')
 const log = require('../../../../src/log')
 const dc = require('dc-polyfill')
 const { HTTP_REQUEST_PARAMETER } = require('../../../../src/appsec/iast/taint-tracking/source-types')
+const { SQL_INJECTION_MARK, COMMAND_INJECTION_MARK } =
+ require('../../../../src/appsec/iast/taint-tracking/secure-marks')
 
 describe('sql-injection-analyzer', () => {
   const NOT_TAINTED_QUERY = 'no vulnerable query'
   const TAINTED_QUERY = 'vulnerable query'
+  const TAINTED_SQLI_SECURED = 'sqli secure marked vulnerable query'
+  const TAINTED_CMDI_SECURED = 'cmdi secure marked vulnerable query'
+
+  function getRanges (string, secureMarks) {
+    const range = {
+      start: 0,
+      end: string.length,
+      iinfo: {
+        parameterName: 'param',
+        parameterValue: string,
+        type: HTTP_REQUEST_PARAMETER
+      },
+      secureMarks
+    }
+
+    return [range]
+  }
 
   const TaintTrackingMock = {
     getRanges: (iastContext, string) => {
-      return string === TAINTED_QUERY
-        ? [
-            {
-              start: 0,
-              end: string.length,
-              iinfo: {
-                parameterName: 'param',
-                parameterValue: string,
-                type: HTTP_REQUEST_PARAMETER
-              }
-            }
-          ]
-        : []
+      switch (string) {
+        case TAINTED_QUERY:
+          return getRanges(string)
+
+        case TAINTED_SQLI_SECURED:
+          return getRanges(string, SQL_INJECTION_MARK)
+
+        case TAINTED_CMDI_SECURED:
+          return getRanges(string, COMMAND_INJECTION_MARK)
+
+        default:
+          return []
+      }
     }
   }
 
   const InjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/injection-analyzer', {
     '../taint-tracking/operations': TaintTrackingMock
   })
-  const sqlInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/sql-injection-analyzer', {
+  const StoredInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/stored-injection-analyzer', {
     './injection-analyzer': InjectionAnalyzer
+  })
+  const sqlInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/sql-injection-analyzer', {
+    './stored-injection-analyzer': StoredInjectionAnalyzer
   })
 
   afterEach(() => {
@@ -42,18 +64,21 @@ describe('sql-injection-analyzer', () => {
   sqlInjectionAnalyzer.configure(true)
 
   it('should subscribe to mysql, mysql2 and pg start query channel', () => {
-    expect(sqlInjectionAnalyzer._subscriptions).to.have.lengthOf(11)
+    expect(sqlInjectionAnalyzer._subscriptions).to.have.lengthOf(7)
     expect(sqlInjectionAnalyzer._subscriptions[0]._channel.name).to.equals('apm:mysql:query:start')
-    expect(sqlInjectionAnalyzer._subscriptions[1]._channel.name).to.equals('apm:mysql2:query:start')
+    expect(sqlInjectionAnalyzer._subscriptions[1]._channel.name).to.equals('datadog:mysql2:outerquery:start')
     expect(sqlInjectionAnalyzer._subscriptions[2]._channel.name).to.equals('apm:pg:query:start')
-    expect(sqlInjectionAnalyzer._subscriptions[3]._channel.name).to.equals('datadog:sequelize:query:start')
-    expect(sqlInjectionAnalyzer._subscriptions[4]._channel.name).to.equals('datadog:sequelize:query:finish')
-    expect(sqlInjectionAnalyzer._subscriptions[5]._channel.name).to.equals('datadog:pg:pool:query:start')
-    expect(sqlInjectionAnalyzer._subscriptions[6]._channel.name).to.equals('datadog:pg:pool:query:finish')
-    expect(sqlInjectionAnalyzer._subscriptions[7]._channel.name).to.equals('datadog:mysql:pool:query:start')
-    expect(sqlInjectionAnalyzer._subscriptions[8]._channel.name).to.equals('datadog:mysql:pool:query:finish')
-    expect(sqlInjectionAnalyzer._subscriptions[9]._channel.name).to.equals('datadog:knex:raw:start')
-    expect(sqlInjectionAnalyzer._subscriptions[10]._channel.name).to.equals('datadog:knex:raw:finish')
+    expect(sqlInjectionAnalyzer._subscriptions[3]._channel.name).to.equals('datadog:sequelize:query:finish')
+    expect(sqlInjectionAnalyzer._subscriptions[4]._channel.name).to.equals('datadog:pg:pool:query:finish')
+    expect(sqlInjectionAnalyzer._subscriptions[5]._channel.name).to.equals('datadog:mysql:pool:query:start')
+    expect(sqlInjectionAnalyzer._subscriptions[6]._channel.name).to.equals('datadog:mysql:pool:query:finish')
+
+    expect(sqlInjectionAnalyzer._bindings).to.have.lengthOf(5)
+    expect(sqlInjectionAnalyzer._bindings[0]._channel.name).to.equals('datadog:sequelize:query:start')
+    expect(sqlInjectionAnalyzer._bindings[1]._channel.name).to.equals('datadog:pg:pool:query:start')
+    expect(sqlInjectionAnalyzer._bindings[2]._channel.name).to.equals('datadog:knex:raw:start')
+    expect(sqlInjectionAnalyzer._bindings[3]._channel.name).to.equals('datadog:knex:raw:subscribes')
+    expect(sqlInjectionAnalyzer._bindings[4]._channel.name).to.equals('datadog:knex:raw:finish')
   })
 
   it('should not detect vulnerability when no query', () => {
@@ -68,6 +93,16 @@ describe('sql-injection-analyzer', () => {
 
   it('should detect vulnerability when vulnerable query', () => {
     const isVulnerable = sqlInjectionAnalyzer._isVulnerable(TAINTED_QUERY)
+    expect(isVulnerable).to.be.true
+  })
+
+  it('should not detect vulnerability when vulnerable query with sqli secure mark', () => {
+    const isVulnerable = sqlInjectionAnalyzer._isVulnerable(TAINTED_SQLI_SECURED)
+    expect(isVulnerable).to.be.false
+  })
+
+  it('should detect vulnerability when vulnerable query with cmdi secure mark', () => {
+    const isVulnerable = sqlInjectionAnalyzer._isVulnerable(TAINTED_CMDI_SECURED)
     expect(isVulnerable).to.be.true
   })
 
@@ -98,9 +133,14 @@ describe('sql-injection-analyzer', () => {
       '../taint-tracking/operations': TaintTrackingMock,
       './vulnerability-analyzer': ProxyAnalyzer
     })
+
+    const StoredInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/stored-injection-analyzer', {
+      './injection-analyzer': InjectionAnalyzer
+    })
+
     const proxiedSqlInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/sql-injection-analyzer',
       {
-        './injection-analyzer': InjectionAnalyzer,
+        './stored-injection-analyzer': StoredInjectionAnalyzer,
         '../taint-tracking/operations': TaintTrackingMock,
         '../iast-context': {
           getIastContext: () => iastContext
@@ -133,8 +173,16 @@ describe('sql-injection-analyzer', () => {
       const getStore = sinon.stub().returns(store)
       const getIastContext = sinon.stub().returns(iastContext)
 
+      const datadogCore = {
+        storage: () => {
+          return {
+            getStore
+          }
+        }
+      }
+
       const iastPlugin = proxyquire('../../../../src/appsec/iast/iast-plugin', {
-        '../../../../datadog-core': { storage: { getStore } },
+        '../../../../datadog-core': datadogCore,
         './iast-context': { getIastContext }
       })
 
@@ -159,23 +207,23 @@ describe('sql-injection-analyzer', () => {
     it('should call analyze on apm:mysql:query:start', () => {
       const onMysqlQueryStart = sqlInjectionAnalyzer._subscriptions[0]._handler
 
-      onMysqlQueryStart({ sql: 'SELECT 1', name: 'apm:mysql:query:start' })
+      onMysqlQueryStart({ sql: 'SELECT 1' })
 
       expect(analyze).to.be.calledOnceWith('SELECT 1')
     })
 
     it('should call analyze on apm:mysql2:query:start', () => {
-      const onMysql2QueryStart = sqlInjectionAnalyzer._subscriptions[0]._handler
+      const onMysql2QueryStart = sqlInjectionAnalyzer._subscriptions[1]._handler
 
-      onMysql2QueryStart({ sql: 'SELECT 1', name: 'apm:mysql2:query:start' })
+      onMysql2QueryStart({ sql: 'SELECT 1' })
 
       expect(analyze).to.be.calledOnceWith('SELECT 1')
     })
 
     it('should call analyze on apm:pg:query:start', () => {
-      const onPgQueryStart = sqlInjectionAnalyzer._subscriptions[0]._handler
+      const onPgQueryStart = sqlInjectionAnalyzer._subscriptions[2]._handler
 
-      onPgQueryStart({ sql: 'SELECT 1', name: 'apm:pg:query:start' })
+      onPgQueryStart({ originalText: 'SELECT 1', query: { text: 'modified-query SELECT 1' } })
 
       expect(analyze).to.be.calledOnceWith('SELECT 1')
     })

@@ -21,7 +21,7 @@ function deepEqualWithMockValues (expected) {
     } else if (Array.isArray(expected[key])) {
       const sortedExpected = [...expected[key].sort()]
       const sortedActual = [...actual[key].sort()]
-      new chai.Assertion(sortedActual, `key: ${key}`).to.deep.equal(sortedExpected)
+      new chai.Assertion(sortedActual, `key: ${key}`).to.deepEqualWithMockValues(sortedExpected)
     } else if (typeof expected[key] === 'object') {
       new chai.Assertion(actual[key], `key: ${key}`).to.deepEqualWithMockValues(expected[key])
     } else {
@@ -120,7 +120,7 @@ function expectedLLMObsBaseEvent ({
   const spanEvent = {
     trace_id: MOCK_STRING,
     span_id: spanId,
-    parent_id: parentId?.buffer ? fromBuffer(parentId) : (parentId || 'undefined'),
+    parent_id: typeof parentId === 'bigint' ? fromBuffer(parentId) : (parentId || 'undefined'),
     name: spanName,
     tags: expectedLLMObsTags({ span, tags, error, errorType, sessionId }),
     start_ns: startNs,
@@ -186,8 +186,7 @@ function expectedLLMObsTags ({
 }
 
 function fromBuffer (spanProperty, isNumber = false) {
-  const { buffer, offset } = spanProperty
-  const strVal = buffer.readBigInt64BE(offset).toString()
+  const strVal = spanProperty.toString(10)
   return isNumber ? Number(strVal) : strVal
 }
 

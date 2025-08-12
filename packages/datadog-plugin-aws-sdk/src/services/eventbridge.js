@@ -3,12 +3,12 @@ const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 
 class EventBridge extends BaseAwsSdkPlugin {
-  static get id () { return 'eventbridge' }
-  static get isPayloadReporter () { return true }
+  static id = 'eventbridge'
+  static isPayloadReporter = true
 
   generateTags (params, operation, response) {
-    if (!params || !params.source) return {}
-    const rulename = params.Name ? params.Name : ''
+    if (!params?.source) return {}
+    const rulename = params.Name ?? ''
     return {
       'resource.name': operation ? `${operation} ${params.source}` : params.source,
       'aws.eventbridge.source': `${params.source}`,

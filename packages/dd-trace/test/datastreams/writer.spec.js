@@ -2,8 +2,7 @@
 require('../setup/tap')
 const pkg = require('../../../../package.json')
 const stubRequest = sinon.stub()
-const msgpack = require('msgpack-lite')
-const codec = msgpack.createCodec({ int64: true })
+const msgpack = require('@msgpack/msgpack')
 
 const stubZlib = {
   gzip: (payload, _opts, fn) => {
@@ -34,7 +33,7 @@ describe('DataStreamWriter unix', () => {
     writer = new DataStreamsWriter(unixConfig)
     writer.flush({})
     const stubRequestCall = stubRequest.getCalls()[0]
-    const decodedPayload = msgpack.decode(stubRequestCall?.args[0], { codec })
+    const decodedPayload = msgpack.decode(stubRequestCall?.args[0])
     const requestOptions = stubRequestCall?.args[1]
     expect(decodedPayload).to.deep.equal({})
     expect(requestOptions).to.deep.equal({

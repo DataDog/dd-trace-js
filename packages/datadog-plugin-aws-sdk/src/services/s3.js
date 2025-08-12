@@ -6,20 +6,18 @@ const { generatePointerHash } = require('../util')
 const { S3_PTR_KIND, SPAN_POINTER_DIRECTION } = require('../../../dd-trace/src/constants')
 
 class S3 extends BaseAwsSdkPlugin {
-  static get id () { return 's3' }
-  static get peerServicePrecursors () { return ['bucketname'] }
-  static get isPayloadReporter () { return true }
+  static id = 's3'
+  static peerServicePrecursors = ['bucketname']
+  static isPayloadReporter = true
 
   generateTags (params, operation, response) {
-    const tags = {}
+    if (!params?.Bucket) return {}
 
-    if (!params || !params.Bucket) return tags
-
-    return Object.assign(tags, {
+    return {
       'resource.name': `${operation} ${params.Bucket}`,
       'aws.s3.bucket_name': params.Bucket,
       bucketname: params.Bucket
-    })
+    }
   }
 
   addSpanPointers (span, response) {

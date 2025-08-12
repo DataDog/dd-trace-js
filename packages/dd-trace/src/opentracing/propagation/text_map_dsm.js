@@ -1,7 +1,9 @@
+'use strict'
+
 const pick = require('../../../../datadog-core/src/utils/src/pick')
 const log = require('../../log')
 
-const { DsmPathwayCodec } = require('../../datastreams/pathway')
+const { DsmPathwayCodec } = require('../../datastreams')
 
 const base64Key = 'dd-pathway-ctx-base64'
 const logKeys = [base64Key]

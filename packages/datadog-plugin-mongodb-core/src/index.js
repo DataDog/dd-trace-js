@@ -1,18 +1,41 @@
 'use strict'
 
+const { isTrue } = require('../../dd-trace/src/util')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
+const coalesce = require('koalas')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
 class MongodbCorePlugin extends DatabasePlugin {
-  static get id () { return 'mongodb-core' }
-  static get component () { return 'mongodb' }
+  static id = 'mongodb-core'
+  static component = 'mongodb'
   // avoid using db.name for peer.service since it includes the collection name
   // should be removed if one day this will be fixed
-  static get peerServicePrecursors () { return [] }
-  start ({ ns, ops, options = {}, name }) {
+  static peerServicePrecursors = []
+
+  configure (config) {
+    super.configure(config)
+
+    const heartbeatFromEnv = getEnvironmentVariable('DD_TRACE_MONGODB_HEARTBEAT_ENABLED')
+
+    this.config.heartbeatEnabled = coalesce(
+      config.heartbeatEnabled,
+      heartbeatFromEnv && isTrue(heartbeatFromEnv),
+      true
+    )
+  }
+
+  bindStart (ctx) {
+    const { ns, ops, options = {}, name } = ctx
+
+    // heartbeat commands can be disabled if this.config.heartbeatEnabled is false
+    if (!this.config.heartbeatEnabled && isHeartbeat(ops, this.config)) {
+      return
+    }
     const query = getQuery(ops)
     const resource = truncate(getResource(this, ns, query, name))
-    this.startSpan(this.operationName(), {
-      service: this.serviceName({ pluginConfig: this.config }),
+    const service = this.serviceName({ pluginConfig: this.config })
+    const span = this.startSpan(this.operationName(), {
+      service,
       resource,
       type: 'mongodb',
       kind: 'client',
@@ -23,7 +46,13 @@ class MongodbCorePlugin extends DatabasePlugin {
         'out.host': options.host,
         'out.port': options.port
       }
-    })
+    }, ctx)
+    const comment = this.injectDbmComment(span, ops.comment, service)
+    if (comment) {
+      ops.comment = comment
+    }
+
+    return ctx.currentStore
   }
 
   getPeerService (tags) {
@@ -33,6 +62,27 @@ class MongodbCorePlugin extends DatabasePlugin {
       tags['peer.service'] = ns.split('.', 1)[0]
     }
     return super.getPeerService(tags)
+  }
+
+  injectDbmComment (span, comment, serviceName) {
+    const dbmTraceComment = this.createDbmComment(span, serviceName)
+
+    if (!dbmTraceComment) {
+      return comment
+    }
+
+    if (comment) {
+      // if the command already has a comment, append the dbm trace comment
+      if (typeof comment === 'string') {
+        comment += `,${dbmTraceComment}`
+      } else if (Array.isArray(comment)) {
+        comment.push(dbmTraceComment)
+      } // do nothing if the comment is not a string or an array
+    } else {
+      comment = dbmTraceComment
+    }
+
+    return comment
   }
 }
 
@@ -44,6 +94,7 @@ function getQuery (cmd) {
   if (!cmd || typeof cmd !== 'object' || Array.isArray(cmd)) return
   if (cmd.query) return sanitizeBigInt(limitDepth(cmd.query))
   if (cmd.filter) return sanitizeBigInt(limitDepth(cmd.filter))
+  if (cmd.pipeline) return sanitizeBigInt(limitDepth(cmd.pipeline))
 }
 
 function getResource (plugin, ns, query, operationName) {
@@ -57,7 +108,7 @@ function getResource (plugin, ns, query, operationName) {
 }
 
 function truncate (input) {
-  return input.slice(0, Math.min(input.length, 10000))
+  return input.slice(0, Math.min(input.length, 10_000))
 }
 
 function shouldSimplify (input) {
@@ -124,6 +175,11 @@ function isBSON (val) {
 
 function isBinary (val) {
   return val && val._bsontype === 'Binary'
+}
+
+function isHeartbeat (ops, config) {
+  // Check if it's a heartbeat command hello: 1 or helloOk: 1
+  return ops && typeof ops === 'object' && (ops.hello === 1 || ops.helloOk === true)
 }
 
 module.exports = MongodbCorePlugin

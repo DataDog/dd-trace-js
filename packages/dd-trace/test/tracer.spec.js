@@ -3,12 +3,10 @@
 require('./setup/tap')
 
 const Span = require('../src/opentracing/span')
-const { storage } = require('../../datadog-core')
 const Config = require('../src/config')
 const tags = require('../../../ext/tags')
 const { expect } = require('chai')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const { DD_MAJOR } = require('../../../version')
 
 const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
@@ -16,14 +14,13 @@ const SERVICE_NAME = tags.SERVICE_NAME
 const EXPORT_SERVICE_NAME = 'service'
 const BASE_SERVICE = tags.BASE_SERVICE
 
-const describeOrphanable = DD_MAJOR < 4 ? describe : describe.skip
-
 describe('Tracer', () => {
   let Tracer
   let tracer
   let config
   let instrumenter
   let Instrumenter
+  let tracerConfigureCh
 
   beforeEach(() => {
     config = new Config({ service: 'service' })
@@ -34,7 +31,18 @@ describe('Tracer', () => {
     }
     Instrumenter = sinon.stub().returns(instrumenter)
 
+    tracerConfigureCh = {
+      publish: sinon.stub()
+    }
+
+    const channels = {
+      'datadog:tracer:configure': tracerConfigureCh
+    }
+
     Tracer = proxyquire('../src/tracer', {
+      'dc-polyfill': {
+        channel: (name) => channels[name]
+      },
       './instrumenter': Instrumenter
     })
 
@@ -283,64 +291,6 @@ describe('Tracer', () => {
         })
       })
     })
-
-    describeOrphanable('when there is no parent span', () => {
-      it('should not trace if `orphanable: false`', () => {
-        sinon.spy(tracer, 'startSpan')
-
-        tracer.trace('name', { orphanable: false }, () => {})
-
-        expect(tracer.startSpan).to.have.not.been.called
-      })
-
-      it('should trace if `orphanable: true`', () => {
-        sinon.spy(tracer, 'startSpan')
-
-        tracer.trace('name', { orhpanable: true }, () => {})
-
-        expect(tracer.startSpan).to.have.been.called
-      })
-
-      it('should trace if `orphanable: undefined`', () => {
-        sinon.spy(tracer, 'startSpan')
-
-        tracer.trace('name', {}, () => {})
-
-        expect(tracer.startSpan).to.have.been.called
-      })
-    })
-
-    describeOrphanable('when there is a parent span', () => {
-      it('should trace if `orphanable: false`', () => {
-        tracer.scope().activate(tracer.startSpan('parent'), () => {
-          sinon.spy(tracer, 'startSpan')
-
-          tracer.trace('name', { orhpanable: false }, () => {})
-
-          expect(tracer.startSpan).to.have.been.called
-        })
-      })
-
-      it('should trace if `orphanable: true`', () => {
-        tracer.scope().activate(tracer.startSpan('parent'), () => {
-          sinon.spy(tracer, 'startSpan')
-
-          tracer.trace('name', { orphanable: true }, () => {})
-
-          expect(tracer.startSpan).to.have.been.called
-        })
-      })
-
-      it('should trace if `orphanable: undefined`', () => {
-        tracer.scope().activate(tracer.startSpan('parent'), () => {
-          sinon.spy(tracer, 'startSpan')
-
-          tracer.trace('name', {}, () => {})
-
-          expect(tracer.startSpan).to.have.been.called
-        })
-      })
-    })
   })
 
   describe('getRumData', () => {
@@ -468,88 +418,6 @@ describe('Tracer', () => {
 
       expect(tracer.trace).to.have.been.calledWith('name', {
         tags: { sometag: 'somevalue', invocations: 2 }
-      })
-    })
-
-    it('should not trace in a noop context', () => {
-      const fn = tracer.wrap('name', {}, () => {})
-
-      sinon.spy(tracer, 'trace')
-
-      storage.enterWith({ noop: true })
-      fn()
-      storage.enterWith(null)
-
-      expect(tracer.trace).to.have.not.been.called
-    })
-
-    describeOrphanable('when there is no parent span', () => {
-      it('should not trace if `orphanable: false`', () => {
-        const fn = tracer.wrap('name', { orphanable: false }, () => {})
-
-        sinon.spy(tracer, 'trace')
-
-        fn()
-
-        expect(tracer.trace).to.have.not.been.called
-      })
-
-      it('should trace if `orphanable: true`', () => {
-        const fn = tracer.wrap('name', { orhpanable: true }, () => {})
-
-        sinon.spy(tracer, 'trace')
-
-        fn()
-
-        expect(tracer.trace).to.have.been.called
-      })
-
-      it('should trace if `orphanable: undefined`', () => {
-        const fn = tracer.wrap('name', {}, () => {})
-
-        sinon.spy(tracer, 'trace')
-
-        fn()
-
-        expect(tracer.trace).to.have.been.called
-      })
-    })
-
-    describeOrphanable('when there is a parent span', () => {
-      it('should trace if `orphanable: false`', () => {
-        tracer.scope().activate(tracer.startSpan('parent'), () => {
-          const fn = tracer.wrap('name', { orhpanable: false }, () => {})
-
-          sinon.spy(tracer, 'trace')
-
-          fn()
-
-          expect(tracer.trace).to.have.been.called
-        })
-      })
-
-      it('should trace if `orphanable: true`', () => {
-        tracer.scope().activate(tracer.startSpan('parent'), () => {
-          const fn = tracer.wrap('name', { orphanable: true }, () => {})
-
-          sinon.spy(tracer, 'trace')
-
-          fn()
-
-          expect(tracer.trace).to.have.been.called
-        })
-      })
-
-      it('should trace if `orphanable: undefined`', () => {
-        tracer.scope().activate(tracer.startSpan('parent'), () => {
-          const fn = tracer.wrap('name', {}, () => {})
-
-          sinon.spy(tracer, 'trace')
-
-          fn()
-
-          expect(tracer.trace).to.have.been.called
-        })
       })
     })
   })

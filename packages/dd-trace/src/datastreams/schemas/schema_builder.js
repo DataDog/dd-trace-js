@@ -1,4 +1,6 @@
-const LRUCache = require('lru-cache')
+'use strict'
+
+const { LRUCache } = require('lru-cache')
 const { fnv64 } = require('../fnv')
 const { Schema } = require('./schema')
 
@@ -13,22 +15,24 @@ class SchemaBuilder {
     this.properties = 0
   }
 
+  // TODO: This is only used in tests. Let's refactor the code and stop exposing the cache.
   static getCache () {
     return CACHE
   }
 
   static getSchemaDefinition (schema) {
-    const noNones = convertToJsonCompatible(schema)
-    const definition = jsonStringify(noNones)
-    const id = fnv64(Buffer.from(definition, 'utf-8')).toString()
+    const definition = toJSON(schema)
+    const id = fnv64(Buffer.from(definition, 'utf8')).toString()
     return new Schema(definition, id)
   }
 
   static getSchema (schemaName, iterator, builder) {
-    if (!CACHE.has(schemaName)) {
-      CACHE.set(schemaName, (builder ?? new SchemaBuilder(iterator)).build())
+    let entry = CACHE.get(schemaName)
+    if (!entry) {
+      entry = (builder ?? new SchemaBuilder(iterator)).build()
+      CACHE.set(schemaName, entry)
     }
-    return CACHE.get(schemaName)
+    return entry
   }
 
   build () {
@@ -62,17 +66,13 @@ class SchemaBuilder {
 }
 
 class OpenApiSchema {
-  constructor () {
-    this.openapi = '3.0.0'
-    this.components = new OpenApiComponents()
-  }
+  openapi = '3.0.0'
+  components = new OpenApiComponents()
 }
 
 OpenApiSchema.SCHEMA = class {
-  constructor () {
-    this.type = 'object'
-    this.properties = {}
-  }
+  type = 'object'
+  properties = {}
 }
 
 OpenApiSchema.PROPERTY = class {
@@ -92,42 +92,47 @@ class OpenApiComponents {
   }
 }
 
-function convertToJsonCompatible (obj) {
-  if (Array.isArray(obj)) {
-    return obj.filter(item => item !== null).map(item => convertToJsonCompatible(item))
-  } else if (obj && typeof obj === 'object') {
-    const jsonObj = {}
-    for (const [key, value] of Object.entries(obj)) {
-      if (value !== null) {
-        jsonObj[key] = convertToJsonCompatible(value)
+// This adds a single whitespace between entries without adding newlines.
+// This differs from JSON.stringify and is used to align with the output
+// in other platforms.
+// TODO: Add tests to verify this behavior. A couple of cases are not
+// covered by the existing tests.
+function toJSON (value) {
+  // eslint-disable-next-line eslint-rules/eslint-safe-typeof-object
+  if (typeof value === 'object') {
+    if (value === null) {
+      return 'null'
+    }
+    if (Array.isArray(value)) {
+      let result = '['
+      for (let i = 0; i < value.length; i++) {
+        if (value[i] !== null) {
+          if (i !== 0) {
+            result += ', '
+          }
+          result += value[i] === undefined ? 'null' : toJSON(value[i])
+        }
+      }
+      return `${result}]`
+    }
+    let result = '{'
+    for (const [key, objectValue] of Object.entries(value)) {
+      if (objectValue != null && typeof key === 'string') {
+        const converted = toJSON(objectValue)
+        if (converted !== undefined) {
+          if (result !== '{') {
+            result += ', '
+          }
+          result += `"${key}": ${converted}`
+        }
       }
     }
-    return jsonObj
+    return `${result}}`
   }
-  return obj
-}
-
-function convertKey (key) {
-  if (key === 'enumValues') {
-    return 'enum'
-  }
-  return key
-}
-
-function jsonStringify (obj, indent = 2) {
-  // made to stringify json exactly similar to python / java in order for hashing to be the same
-  const jsonString = JSON.stringify(obj, (_, value) => value, indent)
-  return jsonString.replace(/^ +/gm, ' ') // Replace leading spaces with single space
-    .replace(/\n/g, '') // Remove newlines
-    .replace(/{ /g, '{') // Remove space after '{'
-    .replace(/ }/g, '}') // Remove space before '}'
-    .replace(/\[ /g, '[') // Remove space after '['
-    .replace(/ \]/g, ']') // Remove space before ']'
+  return JSON.stringify(value)
 }
 
 module.exports = {
   SchemaBuilder,
   OpenApiSchema,
-  convertToJsonCompatible,
-  convertKey
 }

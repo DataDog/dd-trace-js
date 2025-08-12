@@ -13,7 +13,7 @@ const {
   CI_ENV_VARS,
   CI_NODE_LABELS,
   GIT_PULL_REQUEST_BASE_BRANCH,
-  GIT_PULL_REQUEST_BASE_BRANCH_SHA,
+  GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA,
   GIT_COMMIT_HEAD_SHA
 } = require('../../../src/plugins/util/tags')
 
@@ -51,17 +51,17 @@ describe('test environment data', () => {
         process.env.GITHUB_EVENT_PATH = path.join(__dirname, 'fixtures', 'github_event_payload.json')
         const {
           [GIT_PULL_REQUEST_BASE_BRANCH]: pullRequestBaseBranch,
-          [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseBranchSha,
+          [GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA]: pullRequestBaseBranchHeadSha,
           [GIT_COMMIT_HEAD_SHA]: headCommitSha
         } = getTestEnvironmentMetadata()
 
         expect({
           pullRequestBaseBranch,
-          pullRequestBaseBranchSha,
+          pullRequestBaseBranchHeadSha,
           headCommitSha
         }).to.eql({
           pullRequestBaseBranch: 'datadog:main',
-          pullRequestBaseBranchSha: '52e0974c74d41160a03d59ddc73bb9f5adab054b',
+          pullRequestBaseBranchHeadSha: '52e0974c74d41160a03d59ddc73bb9f5adab054b',
           headCommitSha: 'df289512a51123083a8e6931dd6f57bb3883d4c4'
         })
       })
@@ -71,12 +71,12 @@ describe('test environment data', () => {
         process.env.GITHUB_EVENT_PATH = path.join(__dirname, 'fixtures', 'github_event_payload_malformed.json')
         const {
           [GIT_PULL_REQUEST_BASE_BRANCH]: pullRequestBaseBranch,
-          [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseBranchSha,
+          [GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA]: pullRequestBaseBranchHeadSha,
           [GIT_COMMIT_HEAD_SHA]: headCommitSha
         } = getTestEnvironmentMetadata()
 
         expect(pullRequestBaseBranch).to.equal('datadog:main')
-        expect(pullRequestBaseBranchSha).to.be.undefined
+        expect(pullRequestBaseBranchHeadSha).to.be.undefined
         expect(headCommitSha).to.be.undefined
       })
     }
@@ -84,7 +84,7 @@ describe('test environment data', () => {
     assertions.forEach(([env, expectedSpanTags], index) => {
       it(`reads env info for spec ${index} from ${ciProvider}`, () => {
         process.env = env
-        const { DD_TEST_CASE_NAME: testCaseName } = env
+        const { TESTING_TEST_OPTIMIZATION_TEST_CASE_NAME: testCaseName } = env
         const { [CI_ENV_VARS]: envVars, [CI_NODE_LABELS]: nodeLabels, ...restOfTags } = getTestEnvironmentMetadata()
         const {
           [CI_ENV_VARS]: expectedEnvVars,

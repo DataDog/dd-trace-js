@@ -1,14 +1,15 @@
 'use strict'
 
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
-const { DsmPathwayCodec } = require('../../dd-trace/src/datastreams/pathway')
-const { getHeadersSize } = require('../../dd-trace/src/datastreams/processor')
+const { DsmPathwayCodec, getHeadersSize } = require('../../dd-trace/src/datastreams')
 
 class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
-  static get id () { return 'google-cloud-pubsub' }
-  static get operation () { return 'request' }
+  static id = 'google-cloud-pubsub'
+  static operation = 'request'
 
-  start ({ request, api, projectId }) {
+  bindStart (ctx) {
+    const { request, api, projectId } = ctx
+
     if (api !== 'publish') return
 
     const messages = request.messages || []
@@ -20,7 +21,7 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
         'pubsub.method': api, // TODO: remove
         'pubsub.topic': topic
       }
-    })
+    }, ctx)
 
     for (const msg of messages) {
       if (!msg.attributes) {
@@ -34,6 +35,8 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
         DsmPathwayCodec.encode(dataStreamsContext, msg.attributes)
       }
     }
+
+    return ctx.currentStore
   }
 }
 

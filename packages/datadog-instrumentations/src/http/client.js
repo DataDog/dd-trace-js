@@ -3,6 +3,7 @@
 /* eslint-disable no-fallthrough */
 
 const url = require('url')
+const { errorMonitor } = require('events')
 const { channel, addHook } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 
@@ -23,6 +24,19 @@ function hookFn (http) {
   patch(http, 'get')
 
   return http
+}
+
+function combineOptions (inputURL, inputOptions) {
+  return inputOptions !== null && typeof inputOptions === 'object'
+    ? Object.assign(inputURL || {}, inputOptions)
+    : inputURL
+}
+function normalizeHeaders (options) {
+  options.headers ??= {}
+}
+
+function normalizeCallback (inputOptions, callback, inputURL) {
+  return typeof inputOptions === 'function' ? [inputOptions, inputURL || {}] : [callback, inputOptions]
 }
 
 function patch (http, methodName) {
@@ -88,7 +102,7 @@ function patch (http, methodName) {
                 const res = arg
                 ctx.res = res
                 res.on('end', finish)
-                res.on('error', finish)
+                res.on(errorMonitor, finish)
                 break
               }
               case 'connect':
@@ -117,6 +131,11 @@ function patch (http, methodName) {
         } catch (e) {
           ctx.error = e
           errorChannel.publish(ctx)
+          // if the initial request failed, ctx.req will be unset, we must close the span here
+          // fix for: https://github.com/DataDog/dd-trace-js/issues/5016
+          if (!ctx.req) {
+            finish()
+          }
           throw e
         } finally {
           endChannel.publish(ctx)
@@ -137,30 +156,11 @@ function patch (http, methodName) {
     return { uri, options, callback, originalUrl }
   }
 
-  function combineOptions (inputURL, inputOptions) {
-    if (inputOptions !== null && typeof inputOptions === 'object') {
-      return Object.assign(inputURL || {}, inputOptions)
-    } else {
-      return inputURL
-    }
-  }
-  function normalizeHeaders (options) {
-    options.headers = options.headers || {}
-  }
-
-  function normalizeCallback (inputOptions, callback, inputURL) {
-    if (typeof inputOptions === 'function') {
-      return [inputOptions, inputURL || {}]
-    } else {
-      return [callback, inputOptions]
-    }
-  }
-
   function normalizeOptions (inputURL) {
     if (typeof inputURL === 'string') {
       try {
         return urlToOptions(new url.URL(inputURL))
-      } catch (e) {
+      } catch {
         // eslint-disable-next-line n/no-deprecated-api
         return url.parse(inputURL)
       }

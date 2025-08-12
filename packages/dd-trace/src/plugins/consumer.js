@@ -3,18 +3,18 @@
 const InboundPlugin = require('./inbound')
 
 class ConsumerPlugin extends InboundPlugin {
-  static get operation () { return 'receive' }
-  static get kind () { return 'consumer' }
-  static get type () { return 'messaging' }
+  static operation = 'receive'
+  static kind = 'consumer'
+  static type = 'messaging'
 
-  startSpan (options) {
+  startSpan (options, enterOrCtx) {
     if (!options.service) {
       options.service = this.config.service || this.serviceName()
     }
     if (!options.kind) {
       options.kind = this.constructor.kind
     }
-    return super.startSpan(this.operationName(), options)
+    return super.startSpan(this.operationName(), options, enterOrCtx)
   }
 }
 

@@ -1,9 +1,9 @@
-const { schemaDefinitions } = require('./schemas')
+'use strict'
 
 class SchemaManager {
   constructor () {
-    this.schemas = schemaDefinitions
-    this.config = { spanAttributeSchema: 'v0', spanRemoveIntegrationFromService: false }
+    this.schemas = {}
+    this.configure({ spanAttributeSchema: 'v0', spanRemoveIntegrationFromService: false })
   }
 
   get schema () {
@@ -31,6 +31,16 @@ class SchemaManager {
   }
 
   configure (config = {}) {
+    const { spanAttributeSchema, spanRemoveIntegrationFromService } = config
+
+    if (!this.schemas.v0 && spanAttributeSchema === 'v0') {
+      this.schemas.v0 = require('./schemas/v0')
+    }
+
+    if (!this.schemas.v1 && (spanAttributeSchema === 'v1' || spanRemoveIntegrationFromService)) {
+      this.schemas.v1 = require('./schemas/v1')
+    }
+
     this.config = config
   }
 }

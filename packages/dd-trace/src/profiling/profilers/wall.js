@@ -10,7 +10,8 @@ const {
   SPAN_ID_LABEL,
   LOCAL_ROOT_SPAN_ID_LABEL,
   getNonJSThreadsLabels,
-  getThreadLabels
+  getThreadLabels,
+  encodeProfileAsync
 } = require('./shared')
 
 const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('../webspan-utils')
@@ -25,7 +26,7 @@ const ProfilingContext = Symbol('NativeWallProfiler.ProfilingContext')
 let kSampleCount
 
 function getActiveSpan () {
-  const store = storage.getStore()
+  const store = storage('legacy').getStore()
   return store && store.span
 }
 
@@ -68,9 +69,13 @@ function ensureChannelsActivated () {
 }
 
 class NativeWallProfiler {
+  type = 'wall'
+  _mapper
+  _pprof
+  _started = false
+
   constructor (options = {}) {
-    this.type = 'wall'
-    this._samplingIntervalMicros = options.samplingInterval || 1e6 / 99 // 99hz
+    this._samplingIntervalMicros = (options.samplingInterval || 1e3 / 99) * 1000 // 99hz
     this._flushIntervalMillis = options.flushInterval || 60 * 1e3 // 60 seconds
     this._codeHotspotsEnabled = !!options.codeHotspotsEnabled
     this._endpointCollectionEnabled = !!options.endpointCollectionEnabled
@@ -85,20 +90,15 @@ class NativeWallProfiler {
     // cpu profiling is enabled.
     this._withContexts = this._captureSpanData || this._timelineEnabled || this._cpuProfilingEnabled
     this._v8ProfilerBugWorkaroundEnabled = !!options.v8ProfilerBugWorkaroundEnabled
-    this._mapper = undefined
-    this._pprof = undefined
 
     // Bind these to this so they can be used as callbacks
-    if (this._withContexts) {
-      if (this._captureSpanData) {
-        this._enter = this._enter.bind(this)
-        this._spanFinished = this._spanFinished.bind(this)
-      }
+    if (this._withContexts && this._captureSpanData) {
+      this._enter = this._enter.bind(this)
+      this._spanFinished = this._spanFinished.bind(this)
     }
     this._generateLabels = this._generateLabels.bind(this)
 
     this._logger = options.logger
-    this._started = false
   }
 
   codeHotspotsEnabled () {
@@ -111,8 +111,6 @@ class NativeWallProfiler {
 
   start ({ mapper } = {}) {
     if (this._started) return
-
-    ensureChannelsActivated()
 
     this._mapper = mapper
     this._pprof = require('@datadog/pprof')
@@ -142,6 +140,8 @@ class NativeWallProfiler {
       if (this._captureSpanData) {
         this._profilerState = this._pprof.time.getState()
         this._lastSampleCount = 0
+
+        ensureChannelsActivated()
 
         beforeCh.subscribe(this._enter)
         enterCh.subscribe(this._enter)
@@ -214,10 +214,10 @@ class NativeWallProfiler {
   }
 
   _updateContext (context) {
-    if (typeof context.spanId === 'object') {
+    if (context.spanId !== null && typeof context.spanId === 'object') {
       context.spanId = context.spanId.toString(10)
     }
-    if (typeof context.rootSpanId === 'object') {
+    if (context.rootSpanId !== null && typeof context.rootSpanId === 'object') {
       context.rootSpanId = context.rootSpanId.toString(10)
     }
     if (context.webTags !== undefined && context.endpoint === undefined) {
@@ -286,13 +286,24 @@ class NativeWallProfiler {
 
     const labels = { ...getThreadLabels() }
 
-    const { context: { ref }, timestamp } = context
-    const { spanId, rootSpanId, webTags, endpoint } = ref ?? {}
-
     if (this._timelineEnabled) {
       // Incoming timestamps are in microseconds, we emit nanos.
-      labels[END_TIMESTAMP_LABEL] = timestamp * 1000n
+      labels[END_TIMESTAMP_LABEL] = context.timestamp * 1000n
     }
+
+    const asyncId = context.asyncId
+    if (asyncId !== undefined && asyncId !== -1) {
+      labels['async id'] = asyncId
+    }
+
+    // Native profiler doesn't set context.context for some samples, such as idle samples or when
+    // the context was otherwise unavailable when the sample was taken.
+    const ref = context.context?.ref
+    if (typeof ref !== 'object') {
+      return labels
+    }
+
+    const { spanId, rootSpanId, webTags, endpoint } = ref
 
     if (spanId !== undefined) {
       labels[SPAN_ID_LABEL] = spanId
@@ -315,7 +326,7 @@ class NativeWallProfiler {
   }
 
   encode (profile) {
-    return this._pprof.encode(profile)
+    return encodeProfileAsync(profile)
   }
 
   stop () {

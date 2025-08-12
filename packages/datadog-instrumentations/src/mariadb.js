@@ -1,49 +1,39 @@
 'use strict'
 
-const { channel, addHook, AsyncResource } = require('./helpers/instrument')
+const { channel, addHook } = require('./helpers/instrument')
 
 const shimmer = require('../../datadog-shimmer')
 
+const commandAddCh = channel('apm:mariadb:command:add')
+const connectionStartCh = channel('apm:mariadb:connection:start')
+const connectionFinishCh = channel('apm:mariadb:connection:finish')
 const startCh = channel('apm:mariadb:query:start')
 const finishCh = channel('apm:mariadb:query:finish')
 const errorCh = channel('apm:mariadb:query:error')
 const skipCh = channel('apm:mariadb:pool:skip')
-const unskipCh = channel('apm:mariadb:pool:unskip')
 
-function wrapCommandStart (start, callbackResource) {
+function wrapCommandStart (start, ctx) {
   return shimmer.wrapFunction(start, start => function () {
     if (!startCh.hasSubscribers) return start.apply(this, arguments)
 
-    const resolve = callbackResource.bind(this.resolve)
-    const reject = callbackResource.bind(this.reject)
-
-    const asyncResource = callbackResource.runInAsyncScope(() => new AsyncResource('bound-anonymous-fn'))
-
+    const { reject, resolve } = this
     shimmer.wrap(this, 'resolve', function wrapResolve () {
       return function () {
-        asyncResource.runInAsyncScope(() => {
-          finishCh.publish()
-        })
-
-        return resolve.apply(this, arguments)
+        return finishCh.runStores(ctx, resolve, this, ...arguments)
       }
     })
 
     shimmer.wrap(this, 'reject', function wrapReject () {
       return function (error) {
-        asyncResource.runInAsyncScope(() => {
-          errorCh.publish(error)
-          finishCh.publish()
-        })
+        ctx.error = error
 
-        return reject.apply(this, arguments)
+        errorCh.publish(ctx)
+
+        return finishCh.runStores(ctx, reject, this, ...arguments)
       }
     })
 
-    return asyncResource.runInAsyncScope(() => {
-      startCh.publish({ sql: this.sql, conf: this.opts })
-      return start.apply(this, arguments)
-    })
+    return startCh.runStores(ctx, start, this, ...arguments)
   })
 }
 
@@ -52,11 +42,13 @@ function wrapCommand (Command) {
     constructor (...args) {
       super(...args)
 
-      const callbackResource = new AsyncResource('bound-anonymous-fn')
+      if (!this.start) return
 
-      if (this.start) {
-        this.start = wrapCommandStart(this.start, callbackResource)
-      }
+      const ctx = { sql: this.sql, conf: this.opts }
+
+      commandAddCh.publish(ctx)
+
+      this.start = wrapCommandStart(this.start, ctx)
     }
   }
 }
@@ -66,21 +58,19 @@ function createWrapQuery (options) {
     return function (sql) {
       if (!startCh.hasSubscribers) return query.apply(this, arguments)
 
-      const asyncResource = new AsyncResource('bound-anonymous-fn')
+      const ctx = { sql, conf: options }
 
-      return asyncResource.runInAsyncScope(() => {
-        startCh.publish({ sql, conf: options })
-
-        return query.apply(this, arguments)
-          .then(result => {
-            finishCh.publish()
-            return result
-          }, error => {
-            errorCh.publish(error)
-            finishCh.publish()
-            throw error
-          })
-      }, 'bound-anonymous-fn')
+      return startCh.runStores(ctx, query, this, ...arguments)
+        .then(result => {
+          ctx.result = result
+          finishCh.publish(ctx)
+          return result
+        }, error => {
+          ctx.error
+          errorCh.publish(ctx)
+          finishCh.publish(ctx)
+          throw error
+        })
     }
   }
 }
@@ -91,30 +81,24 @@ function createWrapQueryCallback (options) {
       if (!startCh.hasSubscribers) return query.apply(this, arguments)
 
       const cb = arguments[arguments.length - 1]
-      const asyncResource = new AsyncResource('bound-anonymous-fn')
-      const callbackResource = new AsyncResource('bound-anonymous-fn')
+      const ctx = { sql, conf: options }
 
       if (typeof cb !== 'function') {
-        arguments.length = arguments.length + 1
+        arguments.length += 1
       }
 
-      arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => asyncResource.bind(function (err) {
+      arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => function (err) {
         if (err) {
-          errorCh.publish(err)
+          ctx.error = err
+          errorCh.publish(ctx)
         }
 
-        finishCh.publish()
+        return typeof cb === 'function'
+          ? finishCh.runStores(ctx, cb, this, ...arguments)
+          : finishCh.publish(ctx)
+      })
 
-        if (typeof cb === 'function') {
-          return callbackResource.runInAsyncScope(() => cb.apply(this, arguments))
-        }
-      }))
-
-      return asyncResource.runInAsyncScope(() => {
-        startCh.publish({ sql, conf: options })
-
-        return query.apply(this, arguments)
-      }, 'bound-anonymous-fn')
+      return startCh.runStores(ctx, query, this, ...arguments)
     }
   }
 }
@@ -144,12 +128,24 @@ function wrapPoolBase (PoolBase) {
 // and/or orphan spans.
 function wrapPoolMethod (createConnection) {
   return function () {
-    skipCh.publish()
-    try {
-      return createConnection.apply(this, arguments)
-    } finally {
-      unskipCh.publish()
+    return skipCh.runStores({}, createConnection, this, ...arguments)
+  }
+}
+
+function wrapPoolGetConnectionMethod (getConnection) {
+  return function wrappedGetConnection () {
+    const cb = arguments[arguments.length - 1]
+    if (typeof cb !== 'function') return getConnection.apply(this, arguments)
+
+    const ctx = {}
+
+    arguments[arguments.length - 1] = function () {
+      return connectionFinishCh.runStores(ctx, cb, this, ...arguments)
     }
+
+    connectionStartCh.publish(ctx)
+
+    return getConnection.apply(this, arguments)
   }
 }
 
@@ -161,6 +157,13 @@ addHook({ name, file: 'lib/cmd/query.js', versions: ['>=3'] }, (Query) => {
 
 addHook({ name, file: 'lib/cmd/execute.js', versions: ['>=3'] }, (Execute) => {
   return wrapCommand(Execute)
+})
+
+// in 3.4.1 getConnection method start to use callbacks instead of promises
+addHook({ name, file: 'lib/pool.js', versions: ['>=3.4.1'] }, (Pool) => {
+  shimmer.wrap(Pool.prototype, 'getConnection', wrapPoolGetConnectionMethod)
+
+  return Pool
 })
 
 addHook({ name, file: 'lib/pool.js', versions: ['>=3'] }, (Pool) => {

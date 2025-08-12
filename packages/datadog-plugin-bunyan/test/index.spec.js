@@ -2,6 +2,7 @@
 
 const Writable = require('stream').Writable
 const agent = require('../../dd-trace/test/plugins/agent')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 describe('Plugin', () => {
   let logger
@@ -49,7 +50,7 @@ describe('Plugin', () => {
 
             const record = JSON.parse(stream.write.firstCall.args[0].toString())
 
-            expect(record).to.not.have.property('dd')
+            expect(record).to.have.property('dd')
           })
         })
       })
@@ -72,7 +73,7 @@ describe('Plugin', () => {
             const record = JSON.parse(stream.write.firstCall.args[0].toString())
 
             expect(record.dd).to.deep.include({
-              trace_id: span.context().toTraceId(),
+              trace_id: span.context().toTraceId(true),
               span_id: span.context().toSpanId()
             })
           })

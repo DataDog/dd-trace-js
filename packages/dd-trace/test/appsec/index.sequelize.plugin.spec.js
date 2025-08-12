@@ -5,6 +5,7 @@ const axios = require('axios')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
+const { withVersions } = require('../setup/mocha')
 
 describe('sequelize', () => {
   withVersions('sequelize', 'sequelize', sequelizeVersion => {
@@ -18,7 +19,7 @@ describe('sequelize', () => {
           appsec.enable(new Config({
             appsec: {
               enabled: true,
-              rules: path.join(__dirname, 'express-rules.json'),
+              rules: path.join(__dirname, 'rules-example.json'),
               apiSecurity: {
                 enabled: true,
                 sampleDelay: 10

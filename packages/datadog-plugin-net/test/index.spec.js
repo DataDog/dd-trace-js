@@ -1,9 +1,9 @@
 'use strict'
 
-const dns = require('dns')
+const dns = require('node:dns')
+const { withPeerService } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
-const { Int64BE } = require('int64-buffer') // TODO remove dependency
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 describe('Plugin', () => {
@@ -66,11 +66,12 @@ describe('Plugin', () => {
             'span.kind': 'client',
             'ipc.path': '/tmp/dd-trace.sock'
           },
-          parent_id: new Int64BE(parent.context()._spanId._buffer)
+          parent_id: BigInt(parent.context()._spanId.toString(10))
         }).then(done).catch(done)
 
         tracer.scope().activate(parent, () => {
-          net.connect('/tmp/dd-trace.sock')
+          const socket = net.connect('/tmp/dd-trace.sock')
+          expect(socket.listenerCount('error')).to.equal(0)
         })
       })
 
@@ -85,15 +86,17 @@ describe('Plugin', () => {
               resource: 'localhost'
             }, 2000).then(done).catch(done)
           })
+          expect(socket.listenerCount('error')).to.equal(0)
         })
       })
 
       withPeerService(
         () => tracer,
         'net',
-        () => {
+        (done) => {
           const socket = new net.Socket()
           socket.connect(port, 'localhost')
+          done()
         },
         'localhost',
         'out.host'
@@ -121,9 +124,10 @@ describe('Plugin', () => {
                 'tcp.remote.port': port,
                 'tcp.local.port': socket.localPort
               },
-              parent_id: new Int64BE(parent.context()._spanId._buffer)
+              parent_id: BigInt(parent.context()._spanId.toString(10))
             }, 2000).then(done).catch(done)
           })
+          expect(socket.listenerCount('error')).to.equal(0)
         })
       })
 
@@ -152,7 +156,7 @@ describe('Plugin', () => {
                 'tcp.remote.port': port,
                 'tcp.local.port': socket.localPort
               },
-              parent_id: new Int64BE(parent.context()._spanId._buffer)
+              parent_id: BigInt(parent.context()._spanId.toString(10))
             }).then(done).catch(done)
           })
         })
@@ -168,7 +172,7 @@ describe('Plugin', () => {
             'span.kind': 'client',
             'ipc.path': '/tmp/dd-trace.sock'
           },
-          parent_id: new Int64BE(parent.context()._spanId._buffer)
+          parent_id: BigInt(parent.context()._spanId.toString(10))
         }).then(done).catch(done)
 
         tracer.scope().activate(parent, () => {
@@ -184,7 +188,7 @@ describe('Plugin', () => {
         let error = null
 
         agent
-          .use(traces => {
+          .assertSomeTraces(traces => {
             expect(traces[0][0]).to.deep.include({
               name: 'tcp.connect',
               service: 'test',

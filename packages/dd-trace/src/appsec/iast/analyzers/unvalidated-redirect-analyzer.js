@@ -5,12 +5,19 @@ const { UNVALIDATED_REDIRECT } = require('../vulnerabilities')
 const { getNodeModulesPaths } = require('../path-line')
 const { getRanges } = require('../taint-tracking/operations')
 const {
-  HTTP_REQUEST_HEADER_VALUE,
-  HTTP_REQUEST_PATH_PARAM,
-  HTTP_REQUEST_URI
+  HTTP_REQUEST_BODY,
+  HTTP_REQUEST_PARAMETER
 } = require('../taint-tracking/source-types')
 
-const EXCLUDED_PATHS = getNodeModulesPaths('express/lib/response.js')
+const EXCLUDED_PATHS = [
+  getNodeModulesPaths('express/lib/response.js'),
+  getNodeModulesPaths('fastify/lib/reply.js'),
+]
+
+const VULNERABLE_SOURCE_TYPES = new Set([
+  HTTP_REQUEST_BODY,
+  HTTP_REQUEST_PARAMETER
+])
 
 class UnvalidatedRedirectAnalyzer extends InjectionAnalyzer {
   constructor () {
@@ -19,6 +26,7 @@ class UnvalidatedRedirectAnalyzer extends InjectionAnalyzer {
 
   onConfigure () {
     this.addSub('datadog:http:server:response:set-header:finish', ({ name, value }) => this.analyze(name, value))
+    this.addSub('datadog:fastify:set-header:finish', ({ name, value }) => this.analyze(name, value))
   }
 
   analyze (name, value) {
@@ -35,28 +43,17 @@ class UnvalidatedRedirectAnalyzer extends InjectionAnalyzer {
     if (!value) return false
 
     const ranges = getRanges(iastContext, value)
-    return ranges && ranges.length > 0 && !this._areSafeRanges(ranges)
+    return ranges?.length > 0 && this._hasUnsafeRange(ranges)
   }
 
-  // Do not report vulnerability if ranges sources are exclusively url,
-  // path params or referer header to avoid false positives.
-  _areSafeRanges (ranges) {
-    return ranges && ranges.every(
-      range => this._isPathParam(range) || this._isUrl(range) || this._isRefererHeader(range)
+  _hasUnsafeRange (ranges) {
+    return ranges.some(
+      range => this._isVulnerableRange(range)
     )
   }
 
-  _isRefererHeader (range) {
-    return range.iinfo.type === HTTP_REQUEST_HEADER_VALUE &&
-      range.iinfo.parameterName && range.iinfo.parameterName.toLowerCase() === 'referer'
-  }
-
-  _isPathParam (range) {
-    return range.iinfo.type === HTTP_REQUEST_PATH_PARAM
-  }
-
-  _isUrl (range) {
-    return range.iinfo.type === HTTP_REQUEST_URI
+  _isVulnerableRange (range) {
+    return VULNERABLE_SOURCE_TYPES.has(range.iinfo.type)
   }
 
   _getExcludedPaths () {

@@ -1,4 +1,8 @@
-if (process.env.MOCHA_WORKER_ID) {
+'use strict'
+
+const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
+
+if (getEnvironmentVariable('MOCHA_WORKER_ID')) {
   require('./mocha/worker')
 } else {
   require('./mocha/main')

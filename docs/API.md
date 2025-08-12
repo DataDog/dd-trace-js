@@ -30,6 +30,7 @@ tracer.use('pg', {
 <h5 id="aws-sdk-config"></h5>
 <h5 id="azure-functions"></h5>
 <h5 id="bunyan"></h5>
+<h5 id="confluentinc-kafka-javascript"></h5>
 <h5 id="couchbase"></h5>
 <h5 id="cucumber"></h5>
 <h5 id="dns"></h5>
@@ -56,6 +57,9 @@ tracer.use('pg', {
 <h5 id="ioredis"></h5>
 <h5 id="ioredis-tags"></h5>
 <h5 id="ioredis-config"></h5>
+<h5 id="iovalkey"></h5>
+<h5 id="iovalkey-tags"></h5>
+<h5 id="iovalkey-config"></h5>
 <h5 id="jest"></h5>
 <h5 id="kafkajs"></h5>
 <h5 id="koa"></h5>
@@ -82,13 +86,11 @@ tracer.use('pg', {
 <h5 id="next"></h5>
 <h5 id="opensearch"></h5>
 <h5 id="oracledb"></h5>
-<h5 id="paperplane"></h5>
-<h5 id="paperplane-tags"></h5>
-<h5 id="paperplane-config"></h5>
 <h5 id="pino"></h5>
 <h5 id="pg"></h5>
 <h5 id="pg-tags"></h5>
 <h5 id="pg-config"></h5>
+<h5 id="prisma"></h5>
 <h5 id="protobufjs"></h5>
 <h5 id="redis"></h5>
 <h5 id="redis-tags"></h5>
@@ -111,6 +113,7 @@ tracer.use('pg', {
 * [couchbase](./interfaces/export_.plugins.couchbase.html)
 * [cucumber](./interfaces/export_.plugins.cucumber.html)
 * [bunyan](./interfaces/export_.plugins.bunyan.html)
+* [confluentinc-kafka-javascript](./interfaces/export_.plugins.confluentinc_kafka_javascript.html)
 * [cassandra-driver](./interfaces/export_.plugins.cassandra_driver.html)
 * [connect](./interfaces/export_.plugins.connect.html)
 * [dns](./interfaces/export_.plugins.dns.html)
@@ -126,6 +129,7 @@ tracer.use('pg', {
 * [http](./interfaces/export_.plugins.http.html)
 * [http2](./interfaces/export_.plugins.http2.html)
 * [ioredis](./interfaces/export_.plugins.ioredis.html)
+* [iovalkey](./interfaces/export_.plugins.iovalkey.html)
 * [jest](./interfaces/export_.plugins.jest.html)
 * [kafkajs](./interfaces/export_.plugins.kafkajs.html)
 * [knex](./interfaces/export_.plugins.knex.html)
@@ -142,9 +146,9 @@ tracer.use('pg', {
 * [opensearch](./interfaces/export_.plugins.opensearch.html)
 * [openai](./interfaces/export_.plugins.openai.html)
 * [oracledb](./interfaces/export_.plugins.oracledb.html)
-* [paperplane](./interfaces/export_.plugins.paperplane.html)
 * [pino](./interfaces/export_.plugins.pino.html)
 * [pg](./interfaces/export_.plugins.pg.html)
+* [prisma](./interfaces/export_.plugins.prisma.html)
 * [promise](./interfaces/export_.plugins.promise.html)
 * [promise-js](./interfaces/export_.plugins.promise_js.html)
 * [protobufjs](./interfaces/export_.plugins.protobufjs.html)
@@ -377,7 +381,7 @@ The following attributes are available to override Datadog-specific options:
 
 <h3 id="tracer-settings">Tracer settings</h3>
 
-Options can be configured as a parameter to the [init()](./interfaces/tracer.html#init) method or as environment variables. These are documented over on [Configuring the NodeJS Tracing Library](https://docs.datadoghq.com/tracing/trace_collection/library_config/nodejs).
+Options can be configured as a parameter to the [init()](./interfaces/tracer.html#init) method or as environment variables. These are documented over on [Configuring the Node.js Tracing Library](https://docs.datadoghq.com/tracing/trace_collection/library_config/nodejs).
 
 <h3 id="custom-logging">Custom Logging</h3>
 

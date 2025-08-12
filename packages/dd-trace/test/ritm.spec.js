@@ -65,6 +65,24 @@ describe('Ritm', () => {
     assert.equal(a(), 'Called by AJ')
   })
 
+  it('should allow override original module', () => {
+    const onModuleLoadEnd = (payload) => {
+      if (payload.request === './ritm-tests/module-default') {
+        payload.module = function () {
+          return 'ho'
+        }
+      }
+    }
+
+    moduleLoadEndChannel.subscribe(onModuleLoadEnd)
+    try {
+      const hi = require('./ritm-tests/module-default')
+      assert.equal(hi(), 'ho')
+    } finally {
+      moduleLoadEndChannel.unsubscribe(onModuleLoadEnd)
+    }
+  })
+
   it('should fall back to monkey patched module', () => {
     assert.equal(require('http').foo, 1, 'normal hooking still works')
 

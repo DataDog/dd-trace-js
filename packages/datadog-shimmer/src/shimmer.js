@@ -1,235 +1,210 @@
 'use strict'
 
-const log = require('../../dd-trace/src/log')
+/**
+ * @type {Set<string | symbol>}
+ */
+const skipMethods = new Set([
+  'caller',
+  'arguments',
+  'name',
+  'length'
+])
+const skipMethodSize = skipMethods.size
 
-// Use a weak map to avoid polluting the wrapped function/method.
-const unwrappers = new WeakMap()
+const nonConfigurableModuleExports = new WeakMap()
 
+/**
+ * Copies properties from the original function to the wrapped function.
+ *
+ * @param {Function} original - The original function.
+ * @param {Function} wrapped - The wrapped function.
+ */
 function copyProperties (original, wrapped) {
-  // TODO getPrototypeOf is not fast. Should we instead do this in specific
-  // instrumentations where needed?
-  const proto = Object.getPrototypeOf(original)
-  if (proto !== Function.prototype) {
+  if (original.constructor !== wrapped.constructor) {
+    const proto = Object.getPrototypeOf(original)
     Object.setPrototypeOf(wrapped, proto)
   }
-  const props = Object.getOwnPropertyDescriptors(original)
-  const keys = Reflect.ownKeys(props)
 
-  for (const key of keys) {
-    try {
-      Object.defineProperty(wrapped, key, props[key])
-    } catch (e) {
-      // TODO: figure out how to handle this without a try/catch
+  const ownKeys = Reflect.ownKeys(original)
+  if (original.length !== wrapped.length) {
+    Object.defineProperty(wrapped, 'length', { value: original.length, configurable: true })
+  }
+  if (original.name !== wrapped.name) {
+    Object.defineProperty(wrapped, 'name', { value: original.name, configurable: true })
+  }
+  if (ownKeys.length !== 2) {
+    for (const key of ownKeys) {
+      if (skipMethods.has(key)) continue
+      const descriptor = /** @type {PropertyDescriptor} */ (Object.getOwnPropertyDescriptor(original, key))
+      if (descriptor.writable && descriptor.enumerable && descriptor.configurable) {
+        wrapped[key] = original[key]
+      } else if (descriptor.writable || descriptor.configurable || !Object.hasOwn(wrapped, key)) {
+        Object.defineProperty(wrapped, key, descriptor)
+      }
     }
   }
 }
 
+/**
+ * Copies properties from the original object to the wrapped object, skipping a specific key.
+ *
+ * @param {Record<string | symbol, unknown>} original - The original object.
+ * @param {Record<string | symbol, unknown>} wrapped - The wrapped object.
+ * @param {string | symbol} skipKey - The key to skip during copying.
+ */
+function copyObjectProperties (original, wrapped, skipKey) {
+  const ownKeys = Reflect.ownKeys(original)
+  for (const key of ownKeys) {
+    if (key === skipKey) continue
+    const descriptor = /** @type {PropertyDescriptor} */ (Object.getOwnPropertyDescriptor(original, key))
+    if (descriptor.writable && descriptor.enumerable && descriptor.configurable) {
+      wrapped[key] = original[key]
+    } else if (descriptor.writable || descriptor.configurable || !Object.hasOwn(wrapped, key)) {
+      Object.defineProperty(wrapped, key, descriptor)
+    }
+  }
+}
+
+/**
+ * Wraps a function with a wrapper function.
+ *
+ * @param {Function} original - The original function to wrap.
+ * @param {(original: Function) => Function} wrapper - The wrapper function.
+ * @returns {Function} The wrapped function.
+ */
 function wrapFunction (original, wrapper) {
-  if (typeof original === 'function') assertNotClass(original)
-  // TODO This needs to be re-done so that this and wrapMethod are distinct.
-  const target = { func: original }
-  wrapMethod(target, 'func', wrapper, typeof original !== 'function')
-  let delegate = target.func
+  const wrapped = wrapper(original)
 
-  const shim = function shim () {
-    return delegate.apply(this, arguments)
+  if (typeof original === 'function') {
+    assertNotClass(original)
+    copyProperties(original, wrapped)
   }
 
-  unwrappers.set(shim, () => {
-    delegate = original
-  })
-
-  if (typeof original === 'function') copyProperties(original, shim)
-
-  return shim
+  return wrapped
 }
 
-const wrapFn = function (original, delegate) {
-  throw new Error('calling `wrap()` with 2 args is deprecated. Use wrapFunction instead.')
-}
-
-// This is only used in safe mode. It's a simple state machine to track if the
-// original method was called and if it returned. We need this to determine if
-// an error was thrown by the original method, or by us. We'll use one of these
-// per call to a wrapped method.
-class CallState {
-  constructor () {
-    this.called = false
-    this.completed = false
-    this.retVal = undefined
+/**
+ * Wraps a method of an object with a wrapper function.
+ *
+ * @param {Record<string | symbol, unknown> | Function} target - The target
+ * object.
+ * @param {string | symbol} name - The property key of the method to wrap.
+ * @param {(original: Function) => (...args) => any} wrapper - The wrapper function.
+ * @param {{ replaceGetter?: boolean }} [options] - If `replaceGetter` is set to
+ * true, the getter is accessed and the getter is replaced with one that just
+ * returns the earlier retrieved value. Use with care! This may only be done in
+ * case the getter absolutely has no side effect and no setter is defined for the
+ * property.
+ * @returns {Record<string | symbol, unknown> | Function} The target object with
+ * the wrapped method.
+ */
+function wrap (target, name, wrapper, options) {
+  if (typeof wrapper !== 'function') {
+    throw new TypeError(wrapper ? 'Target is not a function' : 'No function provided')
   }
 
-  startCall () {
-    this.called = true
-  }
-
-  endCall (retVal) {
-    this.completed = true
-    this.retVal = retVal
-  }
-}
-
-function isPromise (obj) {
-  return obj && typeof obj === 'object' && typeof obj.then === 'function'
-}
-
-let safeMode = !!process.env.DD_INEJCTION_ENABLED
-function setSafe (value) {
-  safeMode = value
-}
-
-function wrapMethod (target, name, wrapper, noAssert) {
-  if (!noAssert) {
-    assertMethod(target, name)
-    assertFunction(wrapper)
-  }
-
-  const original = target[name]
-  let wrapped
-
-  if (safeMode && original) {
-    // In this mode, we make a best-effort attempt to handle errors that are thrown
-    // by us, rather than wrapped code. With such errors, we log them, and then attempt
-    // to return the result as if no wrapping was done at all.
-    //
-    // Caveats:
-    //   * If the original function is called in a later iteration of the event loop,
-    //     and we throw _then_, then it won't be caught by this. In practice, we always call
-    //     the original function synchronously, so this is not a problem.
-    //   * While async errors are dealt with here, errors in callbacks are not. This
-    //     is because we don't necessarily know _for sure_ that any function arguments
-    //     are wrapped by us. We could wrap them all anyway and just make that assumption,
-    //     or just assume that the last argument is always a callback set by us if it's a
-    //     function, but those don't seem like things we can rely on. We could add a
-    //     `shimmer.markCallbackAsWrapped()` function that's a no-op outside safe-mode,
-    //     but that means modifying every instrumentation. Even then, the complexity of
-    //     this code increases because then we'd need to effectively do the reverse of
-    //     what we're doing for synchronous functions. This is a TODO.
-
-    // We're going to hold on to current callState in this variable in this scope,
-    // which is fine because any time we reference it, we're referencing it synchronously.
-    // We'll use it in the our wrapper (which, again, is called syncrhonously), and in the
-    // errorHandler, which will already have been bound to this callState.
-    let currentCallState
-
-    // Rather than calling the original function directly from the shim wrapper, we wrap
-    // it again so that we can track if it was called and if it returned. This is because
-    // we need to know if an error was thrown by the original function, or by us.
-    // We could do this inside the `wrapper` function defined below, which would simplify
-    // managing the callState, but then we'd be calling `wrapper` on each invocation, so
-    // instead we do it here, once.
-    const innerWrapped = wrapper(function (...args) {
-      // We need to stash the callState here because of recursion.
-      const callState = currentCallState
-      callState.startCall()
-      const retVal = original.apply(this, args)
-      if (isPromise(retVal)) {
-        retVal.then(callState.endCall.bind(callState))
-      } else {
-        callState.endCall(retVal)
-      }
-      return retVal
-    })
-
-    // This is the crux of what we're doing in safe mode. It handles errors
-    // that _we_ cause, by logging them, and transparently providing results
-    // as if no wrapping was done at all. That means detecting (via callState)
-    // whether the function has already run or not, and if it has, returning
-    // the result, and otherwise calling the original function unwrapped.
-    const handleError = function (args, callState, e) {
-      if (callState.completed) {
-        // error was thrown after original function returned/resolved, so
-        // it was us. log it.
-        log.error('Shimmer error was thrown after original function returned/resolved', e)
-        // original ran and returned something. return it.
-        return callState.retVal
-      }
-
-      if (!callState.called) {
-        // error was thrown before original function was called, so
-        // it was us. log it.
-        log.error('Shimmer error was thrown before original function was called', e)
-        // original never ran. call it unwrapped.
-        return original.apply(this, args)
-      }
-
-      // error was thrown during original function execution, so
-      // it was them. throw.
-      throw e
-    }
-
-    // The wrapped function is the one that will be called by the user.
-    // It calls our version of the original function, which manages the
-    // callState. That way when we use the errorHandler, it can tell where
-    // the error originated.
-    wrapped = function (...args) {
-      currentCallState = new CallState()
-      const errorHandler = handleError.bind(this, args, currentCallState)
-
-      try {
-        const retVal = innerWrapped.apply(this, args)
-        return isPromise(retVal) ? retVal.catch(errorHandler) : retVal
-      } catch (e) {
-        return errorHandler(e)
-      }
-    }
-  } else {
-    // In non-safe mode, we just wrap the original function directly.
-    wrapped = wrapper(original)
-  }
-  const descriptor = Object.getOwnPropertyDescriptor(target, name)
-
-  const attributes = {
+  // No descriptor means original was on the prototype. This is not totally
+  // safe, since we define the property on the target. That could have an impact
+  // in case e.g., the own keys are checks.
+  const descriptor = Object.getOwnPropertyDescriptor(target, name) ?? {
+    value: target[name],
+    writable: true,
     configurable: true,
-    ...descriptor
+    enumerable: false
   }
 
-  if (typeof original === 'function') copyProperties(original, wrapped)
+  if (descriptor.set && (!descriptor.get || options?.replaceGetter)) {
+    // It is possible to support these cases by instrumenting both the getter
+    // and setter (or only the setter, in case that is a use case).
+    // For now, this is not supported due to the complexity and the fact that
+    // this is not a common use case.
+    throw new Error(options?.replaceGetter
+      ? 'Replacing a getter/setter pair is not supported. Implement if required.'
+      : 'Replacing setters is not supported. Implement if required.')
+  }
 
-  if (descriptor) {
-    unwrappers.set(wrapped, () => Object.defineProperty(target, name, descriptor))
+  const original = descriptor.value ?? options?.replaceGetter ? target[name] : descriptor.get
 
-    if (descriptor.get || descriptor.set) {
-      attributes.get = () => wrapped
+  assertMethod(target, name, original)
+
+  const wrapped = wrapper(original)
+
+  copyProperties(original, wrapped)
+
+  if (descriptor.writable) {
+    // Fast path for assigned properties.
+    if (descriptor.configurable && descriptor.enumerable) {
+      target[name] = wrapped
+      return target
+    }
+    descriptor.value = wrapped
+  } else {
+    if (descriptor.get) {
+      // `replaceGetter` may only be used when the getter has no side effect.
+      descriptor.get = options?.replaceGetter ? () => wrapped : wrapped
     } else {
-      attributes.value = wrapped
+      descriptor.value = wrapped
     }
 
-    // TODO: create a single object for multiple wrapped methods
     if (descriptor.configurable === false) {
-      return Object.create(target, {
-        [name]: attributes
-      })
+      // TODO(BridgeAR): This currently only works on the most outer part. The
+      // moduleExports object.
+      //
+      // It would be possible to also implement it for non moduleExports objects
+      // by passing through the moduleExports object and the property names that
+      // are accessed. That way it would be possible to redefine the complete
+      // property chain. Example:
+      //
+      // shimmer.wrap(hapi.Server.prototype, 'start', wrapStart)
+      // shimmer.wrap(hapi.Server.prototype, 'ext', wrapExt)
+      //
+      // shimmer.wrap(hapi, 'Server', 'prototype', 'start', wrapStart)
+      // shimmer.wrap(hapi, 'Server', 'prototype', 'ext', wrapExt)
+      //
+      // That would however still not resolve the issue about the user replacing
+      // the return value so that the hook picks up the new hapi moduleExports
+      // object. To safely fix that, we would have to couple the register helper
+      // with this code. That way it would be possible to directly pass through
+      // the entries.
+
+      // In case more than a single property is not configurable and writable,
+      // Just reuse the already created object.
+      let moduleExports = nonConfigurableModuleExports.get(target)
+      if (!moduleExports) {
+        if (typeof target === 'function') {
+          const original = target
+          moduleExports = function (...args) { return original.apply(original, args) }
+          // This is a rare case. Accept the slight performance hit.
+          skipMethods.add(name)
+          copyProperties(target, moduleExports)
+          if (skipMethods.size === skipMethodSize + 1) {
+            skipMethods.delete(name)
+          }
+        } else {
+          moduleExports = Object.create(target)
+          copyObjectProperties(target, moduleExports, name)
+        }
+        nonConfigurableModuleExports.set(target, moduleExports)
+      }
+      target = moduleExports
     }
-  } else { // no descriptor means original was on the prototype
-    unwrappers.set(wrapped, () => delete target[name])
-    attributes.value = wrapped
-    attributes.writable = true
   }
 
-  Object.defineProperty(target, name, attributes)
+  Object.defineProperty(target, name, descriptor)
 
   return target
 }
 
-function wrap (target, name, wrapper) {
-  return typeof name === 'function'
-    ? wrapFn(target, name)
-    : wrapMethod(target, name, wrapper)
-}
-
-function unwrap (target, name) {
-  if (!target) return target // no target to unwrap
-
-  const unwrapper = unwrappers.get(name ? target[name] : target)
-
-  if (!unwrapper) return target // target is already unwrapped or isn't wrapped
-
-  unwrapper()
-
-  return target
-}
-
+/**
+ * Wraps multiple methods and or multiple objects with a wrapper function.
+ * May also receive a single method or object or a single method name.
+ *
+ * @param {Array<Record<string | symbol, unknown> | Function> |
+ *         Record<string | symbol, unknown> |
+ *         Function} targets - The target objects.
+ * @param {Array<string | symbol> | string | symbol} names - The property keys of the methods to wrap.
+ * @param {(original: Function) => (...args) => any} wrapper - The wrapper function.
+ */
 function massWrap (targets, names, wrapper) {
   targets = toArray(targets)
   names = toArray(names)
@@ -241,60 +216,56 @@ function massWrap (targets, names, wrapper) {
   }
 }
 
-function massUnwrap (targets, names) {
-  targets = toArray(targets)
-  names = toArray(names)
-
-  for (const target of targets) {
-    for (const name of names) {
-      unwrap(target, name)
-    }
-  }
-}
-
+/**
+ * Converts a value to an array if it is not already an array.
+ *
+ * @template T
+ * @param {T | T[]} maybeArray - The value to convert.
+ * @returns {T[]} The value as an array.
+ */
 function toArray (maybeArray) {
   return Array.isArray(maybeArray) ? maybeArray : [maybeArray]
 }
 
-function assertMethod (target, name) {
-  if (!target) {
-    throw new Error('No target object provided.')
-  }
+/**
+ * Asserts that a method is a function.
+ *
+ * @param {Record<string | symbol, unknown> | Function} target - The target object.
+ * @param {string | symbol} name - The property key of the method.
+ * @param {unknown} method - The method to assert.
+ * @throws {Error} If the method is not a function.
+ */
+function assertMethod (target, name, method) {
+  if (typeof method !== 'function') {
+    let message = 'No target object provided'
 
-  if (typeof target !== 'object' && typeof target !== 'function') {
-    throw new Error('Invalid target.')
-  }
+    if (target) {
+      if (typeof target !== 'object' && typeof target !== 'function') {
+        message = 'Invalid target'
+      } else {
+        name = String(name)
+        message = method ? `Original method ${name} is not a function` : `No original method ${name}`
+      }
+    }
 
-  if (!target[name]) {
-    throw new Error(`No original method ${name}.`)
-  }
-
-  if (typeof target[name] !== 'function') {
-    throw new Error(`Original method ${name} is not a function.`)
-  }
-}
-
-function assertFunction (target) {
-  if (!target) {
-    throw new Error('No function provided.')
-  }
-
-  if (typeof target !== 'function') {
-    throw new Error('Target is not a function.')
+    throw new TypeError(message)
   }
 }
 
+/**
+ * Asserts that a target is not a class constructor.
+ *
+ * @param {Function} target - The target function.
+ * @throws {Error} If the target is a class constructor.
+ */
 function assertNotClass (target) {
   if (Function.prototype.toString.call(target).startsWith('class')) {
-    throw new Error('Target is a native class constructor and cannot be wrapped.')
+    throw new TypeError('Target is a native class constructor and cannot be wrapped.')
   }
 }
 
 module.exports = {
   wrap,
   wrapFunction,
-  massWrap,
-  unwrap,
-  massUnwrap,
-  setSafe
+  massWrap
 }

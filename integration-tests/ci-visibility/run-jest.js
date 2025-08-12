@@ -1,3 +1,5 @@
+'use strict'
+
 const jest = require('jest')
 
 const options = {
@@ -7,8 +9,7 @@ const options = {
   testRegex: process.env.TESTS_TO_RUN ? new RegExp(process.env.TESTS_TO_RUN) : /test\/ci-visibility-test/,
   coverage: !process.env.DISABLE_CODE_COVERAGE,
   runInBand: true,
-  shard: process.env.TEST_SHARD || undefined,
-  testSequencer: process.env.CUSTOM_TEST_SEQUENCER
+  shard: process.env.TEST_SHARD || undefined
 }
 
 if (process.env.RUN_IN_PARALLEL) {
@@ -31,8 +32,12 @@ if (process.env.COLLECT_COVERAGE_FROM) {
 jest.runCLI(
   options,
   options.projects
-).then(() => {
+).then((results) => {
   if (process.send) {
     process.send('finished')
+  }
+  if (process.env.SHOULD_CHECK_RESULTS) {
+    const exitCode = results.results.success ? 0 : 1
+    process.exit(exitCode)
   }
 })

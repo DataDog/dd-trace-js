@@ -36,6 +36,7 @@ describe('git_metadata', () => {
 
   after(() => {
     delete process.env.DD_API_KEY
+    delete process.env.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED
     fs.unlinkSync(temporaryPackFile)
     fs.unlinkSync(secondTemporaryPackFile)
   })
@@ -97,6 +98,25 @@ describe('git_metadata', () => {
     })
   })
 
+  it('should not unshallow if the parameter to enable unshallow is false', (done) => {
+    process.env.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED = false
+    const scope = nock('https://api.test.com')
+      .post('/api/v2/git/repository/search_commits')
+      .reply(200, JSON.stringify({ data: [] }))
+      .post('/api/v2/git/repository/search_commits') // calls a second time after unshallowing
+      .reply(200, JSON.stringify({ data: [] }))
+      .post('/api/v2/git/repository/packfile')
+      .reply(204)
+
+    isShallowRepositoryStub.returns(true)
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
+      expect(unshallowRepositoryStub).not.to.have.been.called
+      expect(err).to.be.null
+      expect(scope.isDone()).to.be.true
+      done()
+    })
+  })
+
   it('should request to /api/v2/git/repository/search_commits and /api/v2/git/repository/packfile', (done) => {
     const scope = nock('https://api.test.com')
       .post('/api/v2/git/repository/search_commits')
@@ -137,7 +157,6 @@ describe('git_metadata', () => {
       .reply(204)
 
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
-      // eslint-disable-next-line
       expect(err.message).to.contain('Error fetching commits to exclude: Error from https://api.test.com/api/v2/git/repository/search_commits: 404 Not Found. Response from the endpoint: "Not found SHA"')
       // to check that it is not called
       expect(scope.isDone()).to.be.false

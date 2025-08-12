@@ -120,31 +120,29 @@ describe('IastContextPlugin', () => {
     let getStore
 
     beforeEach(() => {
-      getStore = sinon.stub(storage, 'getStore')
+      getStore = sinon.stub(storage('legacy'), 'getStore')
       getStore.returns(store)
     })
 
     it('should obtain needed info from data before starting iast context', () => {
-      const data = {}
-
       sinon.stub(plugin, 'getTopContext').returns(topContext)
       sinon.stub(plugin, 'getRootSpan').returns(rootSpan)
 
-      plugin.startContext(data)
+      plugin.startContext()
 
       expect(plugin.getTopContext).to.be.calledOnce
       expect(plugin.getRootSpan).to.be.calledWith(store)
     })
 
     it('should call overheadController before starting iast context', () => {
-      plugin.startContext({})
+      plugin.startContext()
 
       expect(acquireRequest).to.be.calledOnceWith(rootSpan)
     })
 
     it('should add _dd.iast.enabled:0 tag in the rootSpan', () => {
       const addTags = sinon.stub(rootSpan, 'addTags')
-      plugin.startContext({})
+      plugin.startContext()
 
       expect(addTags).to.be.calledOnceWith({ [IAST_ENABLED_TAG_KEY]: 0 })
     })
@@ -152,7 +150,7 @@ describe('IastContextPlugin', () => {
     it('should not fail if store does not contain span', () => {
       getStore.returns({})
 
-      plugin.startContext({})
+      plugin.startContext()
 
       expect(acquireRequest).to.be.calledOnceWith(undefined)
     })
@@ -171,28 +169,26 @@ describe('IastContextPlugin', () => {
 
       it('should add _dd.iast.enabled: 1 tag in the rootSpan', () => {
         const addTags = sinon.stub(rootSpan, 'addTags')
-        plugin.startContext({})
+        plugin.startContext()
 
         expect(addTags).to.be.calledOnceWith({ [IAST_ENABLED_TAG_KEY]: 1 })
       })
 
       it('should create and save new IAST context and store it', () => {
-        const data = {}
-        plugin.startContext(data)
+        plugin.startContext()
 
         expect(newIastContext).to.be.calledOnceWith(rootSpan)
         expect(saveIastContext).to.be.calledOnceWith(store, topContext, context)
       })
 
       it('should create new taint-tracking transaction', () => {
-        const data = {}
-        plugin.startContext(data)
+        plugin.startContext()
 
         expect(createTransaction).to.be.calledOnceWith('span-id', context)
       })
 
       it('should obtain needed info from data before starting iast context', () => {
-        plugin.startContext({})
+        plugin.startContext()
 
         expect(initializeRequestContext).to.be.calledOnceWith(context)
       })
@@ -203,7 +199,7 @@ describe('IastContextPlugin', () => {
     const store = {}
 
     beforeEach(() => {
-      sinon.stub(storage, 'getStore').returns(store)
+      sinon.stub(storage('legacy'), 'getStore').returns(store)
     })
 
     it('should send the vulnerabilities if any', () => {

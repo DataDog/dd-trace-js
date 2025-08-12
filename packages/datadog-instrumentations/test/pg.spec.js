@@ -1,6 +1,7 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const dc = require('dc-polyfill')
 const { assert } = require('chai')
 
@@ -23,10 +24,6 @@ describe('pg instrumentation', () => {
     function abortQuery ({ abortController }) {
       const error = new Error('Test')
       abortController.abort(error)
-
-      if (!abortController.signal.reason) {
-        abortController.signal.reason = error
-      }
     }
 
     before(() => {

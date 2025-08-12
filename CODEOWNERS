@@ -49,6 +49,9 @@
 /integration-tests/vitest/vitest.spec.js @DataDog/ci-app-libraries
 /integration-tests/vitest.config.mjs @DataDog/ci-app-libraries
 /integration-tests/test-api-manual.spec.js @DataDog/ci-app-libraries
+/integration-tests/telemetry.spec.js @DataDog/apm-sdk-api-js
+/integration-tests/opentelemetry/ @DataDog/apm-sdk-api-js
+/integration-tests/remote_config.spec.js @DataDog/apm-sdk-api-js
 
 /packages/dd-trace/src/service-naming/ @Datadog/apm-idm-js
 /packages/dd-trace/test/service-naming/ @Datadog/apm-idm-js
@@ -57,19 +60,43 @@
 /packages/dd-trace/test/llmobs/ @DataDog/ml-observability
 /packages/datadog-plugin-openai/ @DataDog/ml-observability
 /packages/datadog-plugin-langchain/ @DataDog/ml-observability
+/packages/datadog-plugin-google-cloud-vertexai/ @DataDog/ml-observability
 /packages/datadog-instrumentations/src/openai.js @DataDog/ml-observability
 /packages/datadog-instrumentations/src/langchain.js @DataDog/ml-observability
+/packages/datadog-instrumentations/src/google-cloud-vertexai.js @DataDog/ml-observability
 /packages/datadog-plugin-aws-sdk/src/services/bedrockruntime @DataDog/ml-observability
 /packages/datadog-plugin-aws-sdk/test/bedrockruntime.spec.js @DataDog/ml-observability
 
+# API SDK
+/packages/dd-trace/src/telemetry/ @DataDog/apm-sdk-api-js
+/packages/dd-trace/test/telemetry/ @DataDog/apm-sdk-api-js
+/packages/dd-trace/src/config.js @DataDog/apm-sdk-api-js
+/packages/dd-trace/test/config.spec.js @DataDog/apm-sdk-api-js
+/packages/dd-trace/src/opentelemetry/ @DataDog/apm-sdk-api-js
+/packages/dd-trace/test/opentelemetry/ @DataDog/apm-sdk-api-js
+/packages/dd-trace/src/opentracing/ @DataDog/apm-sdk-api-js
+/packages/dd-trace/test/opentracing/ @DataDog/apm-sdk-api-js
+/packages/dd-trace/src/remote_config/ @DataDog/apm-sdk-api-js
+/packages/dd-trace/test/remote_config/ @DataDog/apm-sdk-api-js
+/packages/dd-trace/src/baggage.js @DataDog/apm-sdk-api-js
+/packages/dd-trace/src/sampler.js @DataDog/apm-sdk-api-js
+/packages/dd-trace/test/sampler.spec.js @DataDog/apm-sdk-api-js
+/packages/dd-trace/src/priority_sampler.js @DataDog/apm-sdk-api-js
+/packages/dd-trace/test/priority_sampler.spec.js @DataDog/apm-sdk-api-js
+/packages/dd-trace/src/sampling_rule.js @DataDog/apm-sdk-api-js
+/packages/dd-trace/test/sampling_rule.spec.js @DataDog/apm-sdk-api-js
+/packages/dd-trace/src/span_sampler.js @DataDog/apm-sdk-api-js
+/packages/dd-trace/test/span_sampler.spec.js @DataDog/apm-sdk-api-js
+
 # CI
+/.github/workflows/apm-capabilities.yml @DataDog/apm-sdk-api-js
+/.github/workflows/apm-integrations.yml @Datadog/apm-idm-js
 /.github/workflows/appsec.yml @DataDog/asm-js
-/.github/workflows/ci-visibility-performance.yml @DataDog/ci-app-libraries
 /.github/workflows/codeql-analysis.yml @DataDog/dd-trace-js
-/.github/workflows/core.yml @DataDog/dd-trace-js
-/.github/workflows/lambda.yml @DataDog/serverless-aws
-/.github/workflows/package-size.yml @DataDog/dd-trace-js
-/.github/workflows/plugins.yml @DataDog/dd-trace-js
+/.github/workflows/debugger.yml @DataDog/debugger
+/.github/workflows/serverless.yml @DataDog/serverless-aws
+/.github/workflows/llmobs.yml @DataDog/ml-observability
+/.github/workflows/platform.yml @DataDog/dd-trace-js
 /.github/workflows/pr-labels.yml @DataDog/dd-trace-js
 /.github/workflows/profiling.yml @DataDog/profiling-js
 /.github/workflows/project.yml @DataDog/dd-trace-js
@@ -77,9 +104,10 @@
 /.github/workflows/release-dev.yml @DataDog/dd-trace-js
 /.github/workflows/release-latest.yml @DataDog/dd-trace-js
 /.github/workflows/release-proposal.yml @DataDog/dd-trace-js
-/.github/workflows/serverless-integration-test.yml @DataDog/serverless-aws @DataDog/serverless
+/.github/workflows/release-validate.yml @DataDog/dd-trace-js
+/.github/workflows/stale.yml @DataDog/dd-trace-js @DataDog/dd-trace-js
 /.github/workflows/system-tests.yml @DataDog/dd-trace-js @DataDog/asm-js
 /.github/workflows/test-k8s-lib-injection.yaml @DataDog/dd-trace-js
-/.github/workflows/tracing.yml @DataDog/dd-trace-js
+/.github/workflows/test-optimization.yml @DataDog/ci-app-libraries
 /.gitlab/benchmarks.yml @DataDog/dd-trace-js
 /.gitlab-ci.yml @DataDog/dd-trace-js

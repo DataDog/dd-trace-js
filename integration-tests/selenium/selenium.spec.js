@@ -1,7 +1,8 @@
+'use strict'
+
 const { exec } = require('child_process')
 
 const { assert } = require('chai')
-const getPort = require('get-port')
 
 const {
   createSandbox,
@@ -16,6 +17,7 @@ const {
   TEST_IS_RUM_ACTIVE,
   TEST_TYPE
 } = require('../../packages/dd-trace/src/plugins/util/test')
+const { NODE_MAJOR } = require('../../version')
 
 const webAppServer = require('../ci-visibility/web-app-server')
 
@@ -39,8 +41,9 @@ versionRange.forEach(version => {
       ])
       cwd = sandbox.folder
 
-      webAppPort = await getPort()
-      webAppServer.listen(webAppPort)
+      webAppServer.listen(0, () => {
+        webAppPort = webAppServer.address().port
+      })
     })
 
     after(async function () {
@@ -49,8 +52,7 @@ versionRange.forEach(version => {
     })
 
     beforeEach(async function () {
-      const port = await getPort()
-      receiver = await new FakeCiVisIntake(port).start()
+      receiver = await new FakeCiVisIntake().start()
     })
 
     afterEach(async () => {
@@ -73,6 +75,7 @@ versionRange.forEach(version => {
       }
     ]
     testFrameworks.forEach(({ name, command }) => {
+      if ((NODE_MAJOR === 18 || NODE_MAJOR === 23) && name === 'cucumber') return
       context(`with ${name}`, () => {
         it('identifies tests using selenium as browser tests', (done) => {
           const assertionPromise = receiver

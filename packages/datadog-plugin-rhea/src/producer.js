@@ -2,19 +2,19 @@
 
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
-const { DsmPathwayCodec } = require('../../dd-trace/src/datastreams/pathway')
-const { getAmqpMessageSize } = require('../../dd-trace/src/datastreams/processor')
+const { getAmqpMessageSize, DsmPathwayCodec } = require('../../dd-trace/src/datastreams')
 
 class RheaProducerPlugin extends ProducerPlugin {
-  static get id () { return 'rhea' }
-  static get operation () { return 'send' }
+  static id = 'rhea'
+  static operation = 'send'
 
   constructor (...args) {
     super(...args)
     this.addTraceSub('encode', this.encode.bind(this))
   }
 
-  start ({ targetAddress, host, port }) {
+  bindStart (ctx) {
+    const { targetAddress, host, port } = ctx
     const name = targetAddress || 'amq.topic'
     this.startSpan({
       resource: name,
@@ -25,7 +25,9 @@ class RheaProducerPlugin extends ProducerPlugin {
         'out.host': host,
         [CLIENT_PORT_KEY]: port
       }
-    })
+    }, ctx)
+
+    return ctx.currentStore
   }
 
   encode (msg) {

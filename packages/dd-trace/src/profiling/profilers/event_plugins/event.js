@@ -1,37 +1,40 @@
-const { storage } = require('../../../../../datadog-core')
+'use strict'
+
 const TracingPlugin = require('../../../plugins/tracing')
 const { performance } = require('perf_hooks')
 
 // We are leveraging the TracingPlugin class for its functionality to bind
 // start/error/finish methods to the appropriate diagnostic channels.
+// TODO: Decouple this from TracingPlugin.
 class EventPlugin extends TracingPlugin {
   constructor (eventHandler, eventFilter) {
     super()
     this.eventHandler = eventHandler
     this.eventFilter = eventFilter
-    this.store = storage('profiling')
+    this.contextData = new WeakMap()
     this.entryType = this.constructor.entryType
   }
 
-  start (startEvent) {
-    this.store.enterWith({
-      startEvent,
+  start (ctx) {
+    this.contextData.set(ctx, {
+      startEvent: ctx,
       startTime: performance.now()
     })
   }
 
-  error () {
-    const store = this.store.getStore()
-    if (store) {
-      store.error = true
+  error (ctx) {
+    const data = this.contextData.get(ctx)
+    if (data) {
+      data.error = true
     }
   }
 
-  finish () {
-    const store = this.store.getStore()
-    if (!store) return
+  finish (ctx) {
+    const data = this.contextData.get(ctx)
 
-    const { startEvent, startTime, error } = store
+    if (!data) return
+
+    const { startEvent, startTime, error } = data
     if (error || this.ignoreEvent(startEvent)) {
       return // don't emit perf events for failed operations or ignored events
     }
@@ -47,7 +50,7 @@ class EventPlugin extends TracingPlugin {
       return
     }
 
-    const context = this.activeSpan?.context()
+    const context = (ctx.currentStore?.span || this.activeSpan)?.context()
     event._ddSpanId = context?.toSpanId()
     event._ddRootSpanId = context?._trace.started[0]?.context().toSpanId() || event._ddSpanId
 

@@ -2,8 +2,10 @@
 
 const { channel } = require('../src/helpers/instrument')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { assert } = require('chai')
 const semver = require('semver')
+const { once } = require('events')
 
 describe('mysql2 instrumentation', () => {
   withVersions('mysql2', 'mysql2', version => {
@@ -11,10 +13,6 @@ describe('mysql2 instrumentation', () => {
       assert.isString(sql)
       const error = new Error('Test')
       abortController.abort(error)
-
-      if (!abortController.signal.reason) {
-        abortController.signal.reason = error
-      }
     }
 
     function noop () {}
@@ -435,16 +433,17 @@ describe('mysql2 instrumentation', () => {
               query.on('end', () => done())
             })
 
-            it('should work without abortController.abort()', (done) => {
+            it('should work without abortController.abort()', async () => {
               startCh.subscribe(noop)
               const query = pool.query(sql)
 
-              query.on('error', err => done(err))
-              query.on('end', () => {
-                sinon.assert.called(apmQueryStart)
+              expect(query.listenerCount('error')).to.equal(0)
 
-                done()
-              })
+              await once(query, 'end')
+
+              expect(query.listenerCount('error')).to.equal(0)
+
+              sinon.assert.called(apmQueryStart)
             })
 
             it('should work without subscriptions', (done) => {

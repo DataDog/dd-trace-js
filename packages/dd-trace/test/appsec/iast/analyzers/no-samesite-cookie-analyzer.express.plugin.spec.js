@@ -1,9 +1,11 @@
 'use strict'
 
 const { prepareTestServerForIastInExpress } = require('../utils')
+const { withVersions } = require('../../../setup/mocha')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
+
 describe('no SameSite cookie vulnerability', () => {
   let setCookieFunctions
   const setCookieFunctionsFilename = 'set-cookie-express-functions.js'
@@ -36,7 +38,7 @@ describe('no SameSite cookie vulnerability', () => {
           setCookieFunctions.insecureWithResCookieMethod('insecure', 'cookie', res)
           setCookieFunctions.insecureWithResCookieMethod('insecure2', 'cookie2', res)
         }, 'NO_SAMESITE_COOKIE', {
-          occurrences: 2,
+          occurrences: 1,
           location: {
             path: setCookieFunctionsFilename,
             line: 4
@@ -56,7 +58,7 @@ describe('no SameSite cookie vulnerability', () => {
         testThatRequestHasVulnerability((req, res) => {
           setCookieFunctions.insecureWithResHeaderMethodWithArray('insecure', 'cookie', 'insecure2', 'cookie2', res)
         }, 'NO_SAMESITE_COOKIE', {
-          occurrences: 2,
+          occurrences: 1,
           location: {
             path: setCookieFunctionsFilename,
             line: 12

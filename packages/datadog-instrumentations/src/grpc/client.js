@@ -4,8 +4,6 @@ const types = require('./types')
 const { addHook, channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 
-const nodeMajor = parseInt(process.versions.node.split('.')[0])
-
 const patched = new WeakSet()
 const instances = new WeakMap()
 
@@ -98,7 +96,7 @@ function wrapMethod (method, path, type, hasPeer) {
   return wrapped
 }
 
-function wrapCallback (ctx, callback = () => { }) {
+function wrapCallback (ctx, callback = () => {}) {
   return shimmer.wrapFunction(callback, callback => function (err) {
     if (err) {
       ctx.error = err
@@ -112,18 +110,18 @@ function wrapCallback (ctx, callback = () => { }) {
   })
 }
 
+const onStatusWithPeer = function (ctx, arg1, thisArg) {
+  ctx.result = arg1
+  ctx.peer = thisArg.getPeer()
+  finishChannel.publish(ctx)
+}
+
+const onStatusWithoutPeer = function (ctx, arg1) {
+  ctx.result = arg1
+  finishChannel.publish(ctx)
+}
+
 function createWrapEmit (ctx, hasPeer = false) {
-  const onStatusWithPeer = function (ctx, arg1, thisArg) {
-    ctx.result = arg1
-    ctx.peer = thisArg.getPeer()
-    finishChannel.publish(ctx)
-  }
-
-  const onStatusWithoutPeer = function (ctx, arg1, thisArg) {
-    ctx.result = arg1
-    finishChannel.publish(ctx)
-  }
-
   const onStatus = hasPeer ? onStatusWithPeer : onStatusWithoutPeer
 
   return function wrapEmit (emit) {
@@ -243,16 +241,6 @@ function patch (hasPeer = false) {
 
     return grpc
   }
-}
-
-if (nodeMajor <= 14) {
-  addHook({ name: 'grpc', versions: ['>=1.24.3'] }, patch(true))
-
-  addHook({ name: 'grpc', versions: ['>=1.24.3'], file: 'src/client.js' }, client => {
-    shimmer.wrap(client, 'makeClientConstructor', createWrapMakeClientConstructor(true))
-
-    return client
-  })
 }
 
 addHook({ name: '@grpc/grpc-js', versions: ['>=1.0.3 <1.1.4'] }, patch(false))

@@ -1,5 +1,5 @@
 'use strict'
-const path = require('path')
+
 const {
   workerData: {
     breakpointSetChannel,
@@ -8,10 +8,11 @@ const {
   }
 } = require('worker_threads')
 const { randomUUID } = require('crypto')
-const sourceMap = require('source-map')
 
 // TODO: move debugger/devtools_client/session to common place
 const session = require('../../../debugger/devtools_client/session')
+// TODO: move debugger/devtools_client/source-maps to common place
+const { getGeneratedPosition } = require('../../../debugger/devtools_client/source-maps')
 // TODO: move debugger/devtools_client/snapshot to common place
 const { getLocalStateForCallFrame } = require('../../../debugger/devtools_client/snapshot')
 // TODO: move debugger/devtools_client/state to common place
@@ -29,7 +30,7 @@ const probeIdToBreakpointId = new Map()
 session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint], callFrames } }) => {
   const probe = breakpointIdToProbe.get(hitBreakpoint)
   if (!probe) {
-    log.warn(`No probe found for breakpoint ${hitBreakpoint}`)
+    log.warn('No probe found for breakpoint', hitBreakpoint)
     return session.post('Debugger.resume')
   }
 
@@ -74,12 +75,12 @@ breakpointSetChannel.on('message', async (probe) => {
 async function removeBreakpoint (probeId) {
   if (!sessionStarted) {
     // We should not get in this state, but abort if we do, so the code doesn't fail unexpected
-    throw Error(`Cannot remove probe ${probeId}: Debugger not started`)
+    throw new Error(`Cannot remove probe ${probeId}: Debugger not started`)
   }
 
   const breakpointId = probeIdToBreakpointId.get(probeId)
   if (!breakpointId) {
-    throw Error(`Unknown probe id: ${probeId}`)
+    throw new Error(`Unknown probe id: ${probeId}`)
   }
   await session.post('Debugger.removeBreakpoint', { breakpointId })
   probeIdToBreakpointId.delete(probeId)
@@ -93,74 +94,48 @@ async function addBreakpoint (probe) {
   probe.location = { file, lines: [String(line)] }
 
   const script = findScriptFromPartialPath(file)
-  if (!script) throw new Error(`No loaded script found for ${file}`)
+  if (!script) {
+    log.error('No loaded script found for', file)
+    throw new Error(`No loaded script found for ${file}`)
+  }
 
-  const [path, scriptId, sourceMapURL] = script
+  const { url, scriptId, sourceMapURL, source } = script
 
-  log.debug(`Adding breakpoint at ${path}:${line}`)
+  log.warn('Adding breakpoint at %s:%s', url, line)
 
   let lineNumber = line
+  let columnNumber = 0
 
-  if (sourceMapURL && sourceMapURL.startsWith('data:')) {
+  if (sourceMapURL) {
     try {
-      lineNumber = await processScriptWithInlineSourceMap({ file, line, sourceMapURL })
+      ({ line: lineNumber, column: columnNumber } = await getGeneratedPosition(url, source, line, sourceMapURL))
     } catch (err) {
-      log.error('Error processing script with inline source map', err)
+      log.error('Error processing script with source map', err)
+    }
+    if (lineNumber === null) {
+      log.error('Could not find generated position for %s:%s', url, line)
+      lineNumber = line
+      columnNumber = 0
     }
   }
 
-  const { breakpointId } = await session.post('Debugger.setBreakpoint', {
-    location: {
-      scriptId,
-      lineNumber: lineNumber - 1
-    }
-  })
+  try {
+    const { breakpointId } = await session.post('Debugger.setBreakpoint', {
+      location: {
+        scriptId,
+        lineNumber: lineNumber - 1,
+        columnNumber
+      }
+    })
 
-  breakpointIdToProbe.set(breakpointId, probe)
-  probeIdToBreakpointId.set(probe.id, breakpointId)
+    breakpointIdToProbe.set(breakpointId, probe)
+    probeIdToBreakpointId.set(probe.id, breakpointId)
+  } catch (e) {
+    log.error('Error setting breakpoint at %s:%s', url, line, e)
+  }
 }
 
 function start () {
   sessionStarted = true
   return session.post('Debugger.enable') // return instead of await to reduce number of promises created
-}
-
-async function processScriptWithInlineSourceMap (params) {
-  const { file, line, sourceMapURL } = params
-
-  // Extract the base64-encoded source map
-  const base64SourceMap = sourceMapURL.split('base64,')[1]
-
-  // Decode the base64 source map
-  const decodedSourceMap = Buffer.from(base64SourceMap, 'base64').toString('utf8')
-
-  // Parse the source map
-  const consumer = await new sourceMap.SourceMapConsumer(decodedSourceMap)
-
-  let generatedPosition
-
-  // Map to the generated position. We'll attempt with the full file path first, then with the basename.
-  // TODO: figure out why sometimes the full path doesn't work
-  generatedPosition = consumer.generatedPositionFor({
-    source: file,
-    line,
-    column: 0
-  })
-  if (generatedPosition.line === null) {
-    generatedPosition = consumer.generatedPositionFor({
-      source: path.basename(file),
-      line,
-      column: 0
-    })
-  }
-
-  consumer.destroy()
-
-  // If we can't find the line, just return the original line
-  if (generatedPosition.line === null) {
-    log.error(`Could not find generated position for ${file}:${line}`)
-    return line
-  }
-
-  return generatedPosition.line
 }

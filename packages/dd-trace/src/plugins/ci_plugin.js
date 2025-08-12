@@ -1,3 +1,6 @@
+'use strict'
+
+const { storage } = require('../../../datadog-core')
 const {
   getTestEnvironmentMetadata,
   getTestSessionName,
@@ -27,7 +30,11 @@ const {
   DI_DEBUG_ERROR_PREFIX,
   DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
   DI_DEBUG_ERROR_FILE_SUFFIX,
-  DI_DEBUG_ERROR_LINE_SUFFIX
+  DI_DEBUG_ERROR_LINE_SUFFIX,
+  getLibraryCapabilitiesTags,
+  getPullRequestDiff,
+  getModifiedTestsFromDiff,
+  getPullRequestBaseBranch
 } = require('./util/test')
 const Plugin = require('./plugin')
 const { COMPONENT } = require('../constants')
@@ -38,18 +45,44 @@ const {
   TELEMETRY_EVENT_CREATED,
   TELEMETRY_ITR_SKIPPED
 } = require('../ci-visibility/telemetry')
-const { CI_PROVIDER_NAME, GIT_REPOSITORY_URL, GIT_COMMIT_SHA, GIT_BRANCH, CI_WORKSPACE_PATH } = require('./util/tags')
+const {
+  CI_PROVIDER_NAME,
+  GIT_REPOSITORY_URL,
+  GIT_COMMIT_SHA,
+  GIT_BRANCH,
+  CI_WORKSPACE_PATH,
+  GIT_COMMIT_MESSAGE,
+  GIT_TAG,
+  GIT_PULL_REQUEST_BASE_BRANCH_SHA,
+  GIT_COMMIT_HEAD_SHA,
+  GIT_PULL_REQUEST_BASE_BRANCH,
+  GIT_COMMIT_HEAD_MESSAGE
+} = require('./util/tags')
 const { OS_VERSION, OS_PLATFORM, OS_ARCHITECTURE, RUNTIME_NAME, RUNTIME_VERSION } = require('./util/env')
+const getDiClient = require('../ci-visibility/dynamic-instrumentation')
+const { DD_MAJOR } = require('../../../../version')
+
+const FRAMEWORK_TO_TRIMMED_COMMAND = {
+  vitest: 'vitest run',
+  mocha: 'mocha',
+  cucumber: 'cucumber-js',
+  playwright: 'playwright test',
+  jest: 'jest'
+}
 
 module.exports = class CiPlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
+    this.fileLineToProbeId = new Map()
     this.rootDir = process.cwd() // fallback in case :session:start events are not emitted
 
-    this.addSub(`ci:${this.constructor.id}:library-configuration`, ({ onDone }) => {
+    this.addSub(`ci:${this.constructor.id}:library-configuration`, (ctx) => {
+      const { onDone, isParallel, frameworkVersion } = ctx
+      ctx.currentStore = storage('legacy').getStore()
+
       if (!this.tracer._exporter || !this.tracer._exporter.getLibraryConfiguration) {
-        return onDone({ err: new Error('CI Visibility was not initialized correctly') })
+        return onDone({ err: new Error('Test optimization was not initialized correctly') })
       }
       this.tracer._exporter.getLibraryConfiguration(this.testConfiguration, (err, libraryConfig) => {
         if (err) {
@@ -57,13 +90,25 @@ module.exports = class CiPlugin extends Plugin {
         } else {
           this.libraryConfig = libraryConfig
         }
+
+        const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id, isParallel, frameworkVersion)
+        const metadataTags = {
+          test: {
+            ...libraryCapabilitiesTags
+          }
+        }
+        this.tracer._exporter.addMetadataTags(metadataTags)
         onDone({ err, libraryConfig })
       })
     })
 
+    this.addBind(`ci:${this.constructor.id}:test-suite:skippable`, (ctx) => {
+      return ctx.currentStore
+    })
+
     this.addSub(`ci:${this.constructor.id}:test-suite:skippable`, ({ onDone }) => {
       if (!this.tracer._exporter?.getSkippableSuites) {
-        return onDone({ err: new Error('CI Visibility was not initialized correctly') })
+        return onDone({ err: new Error('Test optimization was not initialized correctly') })
       }
       this.tracer._exporter.getSkippableSuites(this.testConfiguration, (err, skippableSuites, itrCorrelationId) => {
         if (err) {
@@ -85,7 +130,11 @@ module.exports = class CiPlugin extends Plugin {
       // only for playwright
       this.rootDir = rootDir
 
-      const testSessionName = getTestSessionName(this.config, this.command, this.testEnvironmentMetadata)
+      const testSessionName = getTestSessionName(
+        this.config,
+        DD_MAJOR < 6 ? this.command : FRAMEWORK_TO_TRIMMED_COMMAND[this.constructor.id],
+        this.testEnvironmentMetadata
+      )
 
       const metadataTags = {}
       for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
@@ -94,8 +143,8 @@ module.exports = class CiPlugin extends Plugin {
         }
       }
       // tracer might not be initialized correctly
-      if (this.tracer._exporter.setMetadataTags) {
-        this.tracer._exporter.setMetadataTags(metadataTags)
+      if (this.tracer._exporter.addMetadataTags) {
+        this.tracer._exporter.addMetadataTags(metadataTags)
       }
 
       this.testSessionSpan = this.tracer.startSpan(`${this.constructor.id}.test_session`, {
@@ -104,7 +153,8 @@ module.exports = class CiPlugin extends Plugin {
           [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,
           ...testSessionSpanMetadata
-        }
+        },
+        integrationName: this.constructor.id
       })
       // TODO: add telemetry tag when we can add `is_agentless_log_submission_enabled` for agentless log submission
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'session')
@@ -115,13 +165,18 @@ module.exports = class CiPlugin extends Plugin {
           [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,
           ...testModuleSpanMetadata
-        }
+        },
+        integrationName: this.constructor.id
       })
       // only for vitest
       // These are added for the worker threads to use
       if (this.constructor.id === 'vitest') {
+        // TODO: Figure out alternative ways to pass this information to the worker threads
+        // eslint-disable-next-line eslint-rules/eslint-process-env
         process.env.DD_CIVISIBILITY_TEST_SESSION_ID = this.testSessionSpan.context().toTraceId()
+        // eslint-disable-next-line eslint-rules/eslint-process-env
         process.env.DD_CIVISIBILITY_TEST_MODULE_ID = this.testModuleSpan.context().toSpanId()
+        // eslint-disable-next-line eslint-rules/eslint-process-env
         process.env.DD_CIVISIBILITY_TEST_COMMAND = this.command
       }
 
@@ -144,15 +199,20 @@ module.exports = class CiPlugin extends Plugin {
             ...testSuiteMetadata,
             [TEST_STATUS]: 'skip',
             [TEST_SKIPPED_BY_ITR]: 'true'
-          }
+          },
+          integrationName: this.constructor.id
         }).finish()
       })
       this.telemetry.count(TELEMETRY_ITR_SKIPPED, { testLevel: 'suite' }, skippedSuites.length)
     })
 
+    this.addBind(`ci:${this.constructor.id}:known-tests`, (ctx) => {
+      return ctx.currentStore
+    })
+
     this.addSub(`ci:${this.constructor.id}:known-tests`, ({ onDone }) => {
       if (!this.tracer._exporter?.getKnownTests) {
-        return onDone({ err: new Error('CI Visibility was not initialized correctly') })
+        return onDone({ err: new Error('Test optimization was not initialized correctly') })
       }
       this.tracer._exporter.getKnownTests(this.testConfiguration, (err, knownTests) => {
         if (err) {
@@ -162,6 +222,48 @@ module.exports = class CiPlugin extends Plugin {
         }
         onDone({ err, knownTests })
       })
+    })
+
+    this.addBind(`ci:${this.constructor.id}:test-management-tests`, (ctx) => {
+      return ctx.currentStore
+    })
+
+    this.addSub(`ci:${this.constructor.id}:test-management-tests`, ({ onDone }) => {
+      if (!this.tracer._exporter?.getTestManagementTests) {
+        return onDone({ err: new Error('Test optimization was not initialized correctly') })
+      }
+      this.tracer._exporter.getTestManagementTests(this.testConfiguration, (err, testManagementTests) => {
+        if (err) {
+          log.error('Test management tests could not be fetched. %s', err.message)
+          this.libraryConfig.isTestManagementEnabled = false
+        }
+        onDone({ err, testManagementTests })
+      })
+    })
+
+    this.addBind(`ci:${this.constructor.id}:modified-tests`, (ctx) => {
+      return ctx.currentStore
+    })
+
+    this.addSub(`ci:${this.constructor.id}:modified-tests`, ({ onDone }) => {
+      const {
+        [GIT_PULL_REQUEST_BASE_BRANCH]: pullRequestBaseBranch,
+        [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseBranchSha,
+        [GIT_COMMIT_HEAD_SHA]: commitHeadSha
+      } = this.testEnvironmentMetadata
+
+      const baseBranchSha = pullRequestBaseBranchSha || getPullRequestBaseBranch(pullRequestBaseBranch)
+
+      if (baseBranchSha) {
+        const diff = getPullRequestDiff(baseBranchSha, commitHeadSha)
+        const modifiedTests = getModifiedTestsFromDiff(diff)
+        if (modifiedTests) {
+          return onDone({ err: null, modifiedTests })
+        }
+      }
+
+      // TODO: Add telemetry for this type of error
+      return onDone({ err: new Error('No modified tests could have been retrieved') })
     })
   }
 
@@ -188,13 +290,12 @@ module.exports = class CiPlugin extends Plugin {
   configure (config, shouldGetEnvironmentData = true) {
     super.configure(config)
 
-    if (config.isTestDynamicInstrumentationEnabled && !this.di) {
-      const testVisibilityDynamicInstrumentation = require('../ci-visibility/dynamic-instrumentation')
-      this.di = testVisibilityDynamicInstrumentation
-    }
-
     if (!shouldGetEnvironmentData) {
       return
+    }
+
+    if (config.isTestDynamicInstrumentationEnabled && !this.di) {
+      this.di = getDiClient()
     }
 
     this.testEnvironmentMetadata = getTestEnvironmentMetadata(this.constructor.id, this.config)
@@ -209,7 +310,12 @@ module.exports = class CiPlugin extends Plugin {
       [RUNTIME_VERSION]: runtimeVersion,
       [GIT_BRANCH]: branch,
       [CI_PROVIDER_NAME]: ciProviderName,
-      [CI_WORKSPACE_PATH]: repositoryRoot
+      [CI_WORKSPACE_PATH]: repositoryRoot,
+      [GIT_COMMIT_MESSAGE]: commitMessage,
+      [GIT_TAG]: tag,
+      [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseSha,
+      [GIT_COMMIT_HEAD_SHA]: commitHeadSha,
+      [GIT_COMMIT_HEAD_MESSAGE]: commitHeadMessage
     } = this.testEnvironmentMetadata
 
     this.repositoryRoot = repositoryRoot || process.cwd()
@@ -227,7 +333,12 @@ module.exports = class CiPlugin extends Plugin {
       runtimeName,
       runtimeVersion,
       branch,
-      testLevel: 'suite'
+      testLevel: 'suite',
+      commitMessage,
+      tag,
+      pullRequestBaseSha,
+      commitHeadSha,
+      commitHeadMessage
     }
   }
 
@@ -293,7 +404,8 @@ module.exports = class CiPlugin extends Plugin {
         tags: {
           ...this.testEnvironmentMetadata,
           ...testTags
-        }
+        },
+        integrationName: this.constructor.id
       })
 
     testSpan.context()._trace.origin = CI_APP_ORIGIN
@@ -335,19 +447,57 @@ module.exports = class CiPlugin extends Plugin {
     })
   }
 
-  removeDiProbe (probeId) {
+  removeAllDiProbes () {
+    if (this.fileLineToProbeId.size === 0) {
+      return Promise.resolve()
+    }
+    log.debug('Removing all Dynamic Instrumentation probes')
+    const promises = []
+    for (const fileLine of this.fileLineToProbeId.keys()) {
+      const [file, line] = fileLine.split(':')
+      promises.push(this.removeDiProbe({ file, line }))
+    }
+    return Promise.all(promises)
+  }
+
+  removeDiProbe ({ file, line }) {
+    const probeId = this.fileLineToProbeId.get(`${file}:${line}`)
+    log.warn('Removing probe from %s:%s, with id: %s', file, line, probeId)
+    this.fileLineToProbeId.delete(probeId)
     return this.di.removeProbe(probeId)
   }
 
   addDiProbe (err) {
+    if (!err?.stack) {
+      log.warn('Can not add breakpoint if the test error does not have a stack')
+      return
+    }
     const [file, line, stackIndex] = getFileAndLineNumberFromError(err, this.repositoryRoot)
 
     if (!file || !Number.isInteger(line)) {
       log.warn('Could not add breakpoint for dynamic instrumentation')
       return
     }
+    log.debug('Adding breakpoint for Dynamic Instrumentation')
+
+    this.testErrorStackIndex = stackIndex
+    const activeProbeKey = `${file}:${line}`
+
+    if (this.fileLineToProbeId.has(activeProbeKey)) {
+      log.warn('Probe already set for this line')
+      const oldProbeId = this.fileLineToProbeId.get(activeProbeKey)
+      return {
+        probeId: oldProbeId,
+        setProbePromise: Promise.resolve(),
+        stackIndex,
+        file,
+        line
+      }
+    }
 
     const [probeId, setProbePromise] = this.di.addLineProbe({ file, line }, this.onDiBreakpointHit.bind(this))
+
+    this.fileLineToProbeId.set(activeProbeKey, probeId)
 
     return {
       probeId,

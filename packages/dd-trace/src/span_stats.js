@@ -1,3 +1,5 @@
+'use strict'
+
 const os = require('os')
 const { version } = require('./pkg')
 const pkg = require('../../../package.json')
@@ -23,8 +25,8 @@ class SpanAggStats {
     this.topLevelHits = 0
     this.errors = 0
     this.duration = 0
-    this.okDistribution = new LogCollapsingLowestDenseDDSketch(0.00775)
-    this.errorDistribution = new LogCollapsingLowestDenseDDSketch(0.00775)
+    this.okDistribution = new LogCollapsingLowestDenseDDSketch()
+    this.errorDistribution = new LogCollapsingLowestDenseDDSketch()
   }
 
   record (span) {
@@ -127,7 +129,6 @@ class SpanStatsProcessor {
     url,
     env,
     tags,
-    appsec,
     version
   } = {}) {
     this.exporter = new SpanStatsExporter({
@@ -140,7 +141,7 @@ class SpanStatsProcessor {
     this.bucketSizeNs = interval * 1e9
     this.buckets = new TimeBuckets()
     this.hostname = os.hostname()
-    this.enabled = enabled && !appsec?.standalone?.enabled
+    this.enabled = enabled
     this.env = env
     this.tags = tags || {}
     this.sequence = 0

@@ -10,8 +10,8 @@ class HstsHeaderMissingAnalyzer extends MissingHeaderAnalyzer {
     super(HSTS_HEADER_MISSING, HSTS_HEADER_NAME)
   }
 
-  _isVulnerableFromRequestAndResponse (req, res) {
-    const headerValues = this._getHeaderValues(res, HSTS_HEADER_NAME)
+  _isVulnerableFromRequestAndResponse (req, res, storedHeaders) {
+    const headerValues = this._getHeaderValues(res, storedHeaders, HSTS_HEADER_NAME)
     return this._isHttpsProtocol(req) && (
       headerValues.length === 0 ||
       headerValues.some(headerValue => !this._isHeaderValid(headerValue))
@@ -19,26 +19,21 @@ class HstsHeaderMissingAnalyzer extends MissingHeaderAnalyzer {
   }
 
   _isHeaderValid (headerValue) {
-    if (!headerValue) {
-      return false
-    }
     headerValue = headerValue.trim()
 
-    if (!headerValue.startsWith(HEADER_VALID_PREFIX)) {
+    if (!headerValue?.startsWith(HEADER_VALID_PREFIX)) {
       return false
     }
 
     const semicolonIndex = headerValue.indexOf(';')
-    let timestampString
-    if (semicolonIndex > -1) {
-      timestampString = headerValue.substring(HEADER_VALID_PREFIX.length + 1, semicolonIndex)
-    } else {
-      timestampString = headerValue.substring(HEADER_VALID_PREFIX.length + 1)
-    }
+    const timestampString = headerValue.slice(
+      HEADER_VALID_PREFIX.length + 1,
+      semicolonIndex === -1 ? headerValue.length : semicolonIndex
+    )
 
-    const timestamp = parseInt(timestampString)
+    const timestamp = Number.parseInt(timestampString)
     // eslint-disable-next-line eqeqeq
-    return timestamp == timestampString && timestamp > 0
+    return timestamp > 0 && timestamp == timestampString
   }
 
   _isHttpsProtocol (req) {

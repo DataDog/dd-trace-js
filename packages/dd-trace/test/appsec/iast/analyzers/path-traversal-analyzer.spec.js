@@ -186,7 +186,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
     describe(description, () => {
       describe('vulnerable', () => {
         testThatRequestHasVulnerability(function () {
-          const store = storage.getStore()
+          const store = storage('legacy').getStore()
           const iastCtx = iastContextFunctions.getIastContext(store)
           const callArgs = [...args]
           if (vulnerableIndex > -1) {
@@ -477,6 +477,26 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
 
   describe('test stat', () => {
     runFsMethodTestThreeWay('stat', 0, null, __filename)
+
+    describe('with two calls to async method without waiting to the callback', () => {
+      const fsAsyncWayMethodPath = path.join(os.tmpdir(), 'fs-async-way-method.js')
+
+      before(() => {
+        fs.copyFileSync(path.join(__dirname, 'resources', 'fs-async-way-method.js'), fsAsyncWayMethodPath)
+      })
+
+      after(() => {
+        fs.unlinkSync(fsAsyncWayMethodPath)
+      })
+
+      testThatRequestHasVulnerability(function () {
+        const store = storage('legacy').getStore()
+        const iastCtx = iastContextFunctions.getIastContext(store)
+        const callArgs = [fsAsyncWayMethodPath]
+        callArgs[0] = newTaintedString(iastCtx, callArgs[0], 'param', 'Request')
+        return require(fsAsyncWayMethodPath).doubleCallIgnoringCb('stat', callArgs)
+      }, 'PATH_TRAVERSAL', { occurrences: 2 })
+    })
   })
 
   describe('test symlink', () => {

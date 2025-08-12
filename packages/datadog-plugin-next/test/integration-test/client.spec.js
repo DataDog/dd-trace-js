@@ -7,6 +7,7 @@ const {
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
+const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const { assert } = require('chai')
 
 const hookFile = 'dd-trace/loader-hook.mjs'
@@ -16,10 +17,10 @@ describe('esm', () => {
   let proc
   let sandbox
   // match versions tested with unit tests
-  withVersions('next', 'next', '>=11.1', version => {
+  withVersions('next', 'next', '>=11.1 <15.4.1', version => {
     before(async function () {
       // next builds slower in the CI, match timeout with unit tests
-      this.timeout(120 * 1000)
+      this.timeout(300 * 1000)
       sandbox = await createSandbox([`'next@${version}'`, 'react@^18.2.0', 'react-dom@^18.2.0'],
         false, ['./packages/datadog-plugin-next/test/integration-test/*'],
         'NODE_OPTIONS=--openssl-legacy-provider yarn exec next build')
@@ -47,6 +48,6 @@ describe('esm', () => {
         assert.isArray(payload)
         assert.strictEqual(checkSpansForServiceName(payload, 'next.request'), true)
       }, undefined, undefined, true)
-    }).timeout(120 * 1000)
+    }).timeout(300 * 1000)
   })
 })

@@ -5,7 +5,7 @@ require('dd-trace/init')
 const { randomBytes } = require('crypto')
 const Fastify = require('fastify')
 
-const fastify = Fastify()
+const fastify = Fastify({ logger: { level: 'error' } })
 
 const TARGET_SIZE = 1024 * 1024 // 1MB
 const LARGE_STRING = randomBytes(1024).toString('hex')
@@ -17,12 +17,12 @@ fastify.get('/:name', function handler (request) {
   return { hello: request.params.name } // BREAKPOINT: /foo
 })
 
-fastify.listen({ port: process.env.APP_PORT }, (err) => {
+fastify.listen({ port: process.env.APP_PORT || 0 }, (err) => {
   if (err) {
     fastify.log.error(err)
     process.exit(1)
   }
-  process.send({ port: process.env.APP_PORT })
+  process.send?.({ port: fastify.server.address().port })
 })
 
 function generateObjectWithJSONSizeLargerThan1MB () {

@@ -61,16 +61,22 @@
       "versions": ["^4"]
     }
   ],
+  "child_process": [
+    {
+      "name": "bluebird",
+      "versions": ["^3"]
+    }
+  ],
   "cookie-parser": [
     {
       "name": "express",
       "versions": ["^4"]
     }
   ],
-  "cypress": [
+  "confluentinc-kafka-javascript": [
     {
-      "name": "cypress",
-      "versions": [">=6.7.0"]
+      "name": "kafkajs",
+      "versions": [">=1.4.0"]
     }
   ],
   "express": [
@@ -93,6 +99,10 @@
     {
       "name": "multer",
       "versions": ["^1.4.4-lts.1"]
+    },
+    {
+      "name": "ejs",
+      "versions": ["3.1.10"]
     }
   ],
   "express-mongo-sanitize": [
@@ -113,7 +123,17 @@
       "versions": ["1.20.1"]
     }
   ],
+  "express-session": [
+    {
+      "name": "express",
+      "versions": [">=4.0.0"]
+    }
+  ],
   "mquery": [
+    {
+      "name": "express",
+      "versions": [">=4", ">=4.0.0 <4.3.0", ">=4.0.0 <5.0.0", ">=4.3.0 <5.0.0"]
+    },
     {
       "name": "mquery",
       "versions": [">=5.0.0"]
@@ -141,6 +161,14 @@
     {
       "name": "middie",
       "versions": ["5.1.0"]
+    },
+    {
+      "name": "@fastify/cookie",
+      "versions": [">=6"]
+    },
+    {
+      "name": "@fastify/multipart",
+      "versions": [">=6"]
     }
   ],
   "generic-pool": [
@@ -237,6 +265,12 @@
       "versions": ["9.1.4"]
     }
   ],
+  "hono": [
+    {
+      "name": "@hono/node-server",
+      "versions": ["1.15.0"]
+    }
+  ],
   "jest": [
     {
       "name": "jest",
@@ -285,7 +319,15 @@
       "versions": [">=0.1"]
     },
     {
+      "name": "@langchain/google-genai",
+      "versions": [">=0.1"]
+    },
+    {
       "name": "@langchain/cohere",
+      "versions": [">=0.1"]
+    },
+    {
+      "name": "langchain",
       "versions": [">=0.1"]
     }
   ],
@@ -308,7 +350,7 @@
   "mariadb": [
     {
       "name": "mariadb",
-      "versions": ["2.5.6", "3.0.0"]
+      "versions": ["2.5.6", "3.0.0", "3.4.0"]
     }
   ],
   "mocha": [
@@ -367,6 +409,20 @@
       "dep": true
     }
   ],
+  "passport": [
+    {
+      "name": "express",
+      "versions": [">=4.0.0"]
+    },
+    {
+      "name": "express-session",
+      "versions": [">=1.5.0"]
+    },
+    {
+      "name": "passport-local",
+      "versions": [">=1.0.0"]
+    }
+  ],
    "passport-http": [
      {
        "name": "passport",
@@ -399,6 +455,14 @@
     {
       "name": "express",
       "versions": [">=4"]
+    },
+    {
+      "name": "pg-query-stream",
+      "versions": [">=4"]
+    },
+    {
+      "name": "pg-cursor",
+      "versions": [">=2"]
     }
   ],
   "pino": [
@@ -406,6 +470,12 @@
       "name": "pino-pretty",
       "dep": true,
       "versions": ["8.0.0"]
+    }
+  ],
+  "@prisma/client": [
+    {
+      "name": "prisma",
+      "dep": "@prisma/client"
     }
   ],
   "q": [

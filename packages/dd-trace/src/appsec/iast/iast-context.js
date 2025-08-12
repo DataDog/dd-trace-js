@@ -1,3 +1,5 @@
+'use strict'
+
 const IAST_CONTEXT_KEY = Symbol('_dd.iast.context')
 const IAST_TRANSACTION_ID = Symbol('_dd.iast.transactionId')
 
@@ -10,14 +12,14 @@ function getIastContext (store, topContext) {
 }
 
 function getIastStackTraceId (iastContext) {
-  if (!iastContext) return 0
+  if (!iastContext) return '0'
 
   if (!iastContext.stackTraceId) {
     iastContext.stackTraceId = 0
   }
 
   iastContext.stackTraceId += 1
-  return iastContext.stackTraceId
+  return String(iastContext.stackTraceId)
 }
 
 /* TODO Fix storage problem when the close event is called without
@@ -52,7 +54,9 @@ function cleanIastContext (store, context, iastContext) {
     context[IAST_CONTEXT_KEY] = null
   }
   if (iastContext) {
-    Object.keys(iastContext).forEach(key => delete iastContext[key])
+    if (typeof iastContext === 'object') { // eslint-disable-line eslint-rules/eslint-safe-typeof-object
+      Object.keys(iastContext).forEach(key => delete iastContext[key])
+    }
     return true
   }
   return false

@@ -2,13 +2,13 @@
 
 const Axios = require('axios')
 const { assert } = require('chai')
-const getPort = require('get-port')
 const path = require('path')
+const zlib = require('node:zlib')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
 const { json } = require('../../src/appsec/blocked_templates')
-const zlib = require('zlib')
+const { withVersions } = require('../setup/mocha')
 
 withVersions('express', 'express', version => {
   describe('Suspicious request blocking - path parameters', () => {
@@ -46,11 +46,10 @@ withVersions('express', 'express', version => {
 
       app.param('callbackedParameter', paramCallbackSpy)
 
-      getPort().then((port) => {
-        server = app.listen(port, () => {
-          axios = Axios.create({ baseURL: `http://localhost:${port}` })
-          done()
-        })
+      server = app.listen(0, () => {
+        const port = server.address().port
+        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        done()
       })
     })
 
@@ -63,7 +62,7 @@ withVersions('express', 'express', version => {
       appsec.enable(new Config({
         appsec: {
           enabled: true,
-          rules: path.join(__dirname, 'express-rules.json')
+          rules: path.join(__dirname, 'rules-example.json')
         }
       }))
     })
@@ -196,11 +195,10 @@ withVersions('express', 'express', version => {
         res.end('DONE')
       })
 
-      getPort().then((port) => {
-        server = app.listen(port, () => {
-          axios = Axios.create({ baseURL: `http://localhost:${port}` })
-          done()
-        })
+      server = app.listen(0, () => {
+        const port = server.address().port
+        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        done()
       })
     })
 
@@ -214,7 +212,7 @@ withVersions('express', 'express', version => {
       appsec.enable(new Config({
         appsec: {
           enabled: true,
-          rules: path.join(__dirname, 'express-rules.json')
+          rules: path.join(__dirname, 'rules-example.json')
         }
       }))
     })
@@ -274,11 +272,10 @@ withVersions('express', 'express', version => {
         res.json({ jsonResKey: 'jsonResValue' })
       })
 
-      getPort().then((port) => {
-        server = app.listen(port, () => {
-          axios = Axios.create({ baseURL: `http://localhost:${port}` })
-          done()
-        })
+      server = app.listen(0, () => {
+        const port = server.address().port
+        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        done()
       })
     })
 
@@ -318,7 +315,7 @@ withVersions('express', 'express', version => {
 
         const res = await axios.post('/', { key: 'value' })
 
-        await agent.use((traces) => {
+        await agent.assertSomeTraces((traces) => {
           const span = traces[0][0]
           assert.property(span.meta, '_dd.appsec.s.req.body')
           assert.notProperty(span.meta, '_dd.appsec.s.res.body')
@@ -333,7 +330,7 @@ withVersions('express', 'express', version => {
         const expectedResponseBodySchema = formatSchema([{ sendResKey: [8] }])
         const res = await axios.post('/sendjson', { key: 'value' })
 
-        await agent.use((traces) => {
+        await agent.assertSomeTraces((traces) => {
           const span = traces[0][0]
           assert.equal(span.meta['_dd.appsec.s.res.body'], expectedResponseBodySchema)
         })
@@ -346,7 +343,7 @@ withVersions('express', 'express', version => {
         const expectedResponseBodySchema = formatSchema([{ jsonResKey: [8] }])
         const res = await axios.post('/json', { key: 'value' })
 
-        await agent.use((traces) => {
+        await agent.assertSomeTraces((traces) => {
           const span = traces[0][0]
           assert.equal(span.meta['_dd.appsec.s.res.body'], expectedResponseBodySchema)
         })
@@ -359,7 +356,7 @@ withVersions('express', 'express', version => {
         const expectedResponseBodySchema = formatSchema([{ jsonpResKey: [8] }])
         const res = await axios.post('/jsonp', { key: 'value' })
 
-        await agent.use((traces) => {
+        await agent.assertSomeTraces((traces) => {
           const span = traces[0][0]
           assert.equal(span.meta['_dd.appsec.s.res.body'], expectedResponseBodySchema)
         })
@@ -376,7 +373,7 @@ withVersions('express', 'express', version => {
 
       const res = await axios.post('/', { key: 'value' })
 
-      await agent.use((traces) => {
+      await agent.assertSomeTraces((traces) => {
         const span = traces[0][0]
         assert.notProperty(span.meta, '_dd.appsec.s.req.body')
         assert.notProperty(span.meta, '_dd.appsec.s.res.body')

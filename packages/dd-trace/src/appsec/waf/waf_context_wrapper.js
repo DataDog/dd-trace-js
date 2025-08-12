@@ -17,14 +17,18 @@ class WAFContextWrapper {
     this.wafTimeout = wafTimeout
     this.wafVersion = wafVersion
     this.rulesVersion = rulesVersion
-    this.addressesToSkip = new Set()
     this.knownAddresses = knownAddresses
-    this.cachedUserIdActions = new Map()
+    this.addressesToSkip = new Set()
+    this.cachedUserIdResults = new Map()
   }
 
   run ({ persistent, ephemeral }, raspRule) {
     if (this.ddwafContext.disposed) {
       log.warn('[ASM] Calling run on a disposed context')
+      if (raspRule) {
+        Reporter.reportRaspRuleSkipped(raspRule, 'after-request')
+      }
+
       return
     }
 
@@ -32,9 +36,9 @@ class WAFContextWrapper {
     // TODO: make this universal
     const userId = persistent?.[addresses.USER_ID] || ephemeral?.[addresses.USER_ID]
     if (userId) {
-      const cachedAction = this.cachedUserIdActions.get(userId)
-      if (cachedAction) {
-        return cachedAction
+      const cachedResults = this.cachedUserIdResults.get(userId)
+      if (cachedResults) {
+        return cachedResults
       }
     }
 
@@ -45,8 +49,10 @@ class WAFContextWrapper {
     if (persistent !== null && typeof persistent === 'object') {
       const persistentInputs = {}
 
+      let hasPersistentInputs = false
       for (const key of Object.keys(persistent)) {
         if (!this.addressesToSkip.has(key) && this.knownAddresses.has(key)) {
+          hasPersistentInputs = true
           persistentInputs[key] = persistent[key]
           if (preventDuplicateAddresses.has(key)) {
             newAddressesToSkip.add(key)
@@ -54,7 +60,7 @@ class WAFContextWrapper {
         }
       }
 
-      if (Object.keys(persistentInputs).length) {
+      if (hasPersistentInputs) {
         payload.persistent = persistentInputs
         payloadHasData = true
       }
@@ -63,13 +69,15 @@ class WAFContextWrapper {
     if (ephemeral !== null && typeof ephemeral === 'object') {
       const ephemeralInputs = {}
 
+      let hasEphemeral = false
       for (const key of Object.keys(ephemeral)) {
         if (this.knownAddresses.has(key)) {
+          hasEphemeral = true
           ephemeralInputs[key] = ephemeral[key]
         }
       }
 
-      if (Object.keys(ephemeralInputs).length) {
+      if (hasEphemeral) {
         payload.ephemeral = ephemeralInputs
         payloadHasData = true
       }
@@ -77,12 +85,43 @@ class WAFContextWrapper {
 
     if (!payloadHasData) return
 
+    const metrics = {
+      rulesVersion: this.rulesVersion,
+      wafVersion: this.wafVersion,
+      wafTimeout: false,
+      duration: 0,
+      durationExt: 0,
+      blockTriggered: false,
+      ruleTriggered: false,
+      errorCode: null,
+      maxTruncatedString: null,
+      maxTruncatedContainerSize: null,
+      maxTruncatedContainerDepth: null
+    }
+
     try {
       const start = process.hrtime.bigint()
 
       const result = this.ddwafContext.run(payload, this.wafTimeout)
 
       const end = process.hrtime.bigint()
+
+      metrics.durationExt = Number.parseInt(end - start) / 1e3
+
+      if (typeof result.errorCode === 'number' && result.errorCode < 0) {
+        const error = new Error('WAF code error')
+        error.errorCode = result.errorCode
+
+        throw error
+      }
+
+      if (result.metrics) {
+        const { maxTruncatedString, maxTruncatedContainerSize, maxTruncatedContainerDepth } = result.metrics
+
+        if (maxTruncatedString) metrics.maxTruncatedString = maxTruncatedString
+        if (maxTruncatedContainerSize) metrics.maxTruncatedContainerSize = maxTruncatedContainerSize
+        if (maxTruncatedContainerDepth) metrics.maxTruncatedContainerDepth = maxTruncatedContainerDepth
+      }
 
       this.addressesToSkip = newAddressesToSkip
 
@@ -96,29 +135,28 @@ class WAFContextWrapper {
         this.setUserIdCache(userId, result)
       }
 
-      Reporter.reportMetrics({
-        duration: result.totalRuntime / 1e3,
-        durationExt: parseInt(end - start) / 1e3,
-        rulesVersion: this.rulesVersion,
-        ruleTriggered,
-        blockTriggered,
-        wafVersion: this.wafVersion,
-        wafTimeout: result.timeout
-      }, raspRule)
+      metrics.duration = result.duration / 1e3
+      metrics.blockTriggered = blockTriggered
+      metrics.ruleTriggered = ruleTriggered
+      metrics.wafTimeout = result.timeout
 
       if (ruleTriggered) {
-        Reporter.reportAttack(JSON.stringify(result.events))
+        Reporter.reportAttack(result.events)
       }
 
-      Reporter.reportDerivatives(result.derivatives)
+      Reporter.reportAttributes(result.attributes)
 
+      return result
+    } catch (err) {
+      log.error('[ASM] Error while running the AppSec WAF', err)
+
+      metrics.errorCode = err.errorCode ?? -127
+    } finally {
       if (wafRunFinished.hasSubscribers) {
         wafRunFinished.publish({ payload })
       }
 
-      return result.actions
-    } catch (err) {
-      log.error('[ASM] Error while running the AppSec WAF', err)
+      Reporter.reportMetrics(metrics, raspRule)
     }
   }
 
@@ -134,7 +172,7 @@ class WAFContextWrapper {
           const parameter = match.parameters[k]
 
           if (parameter?.address === addresses.USER_ID) {
-            this.cachedUserIdActions.set(userId, result.actions)
+            this.cachedUserIdResults.set(userId, result)
             return
           }
         }

@@ -1,6 +1,6 @@
 'use strict'
 
-const { channel, addHook, AsyncResource } = require('./helpers/instrument')
+const { channel, addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
 const rrtypes = {
@@ -39,12 +39,12 @@ addHook({ name: names }, dns => {
 })
 
 function patchResolveShorthands (prototype) {
-  Object.keys(rrtypes)
-    .filter(method => !!prototype[method])
-    .forEach(method => {
+  for (const method of Object.keys(rrtypes)) {
+    if (prototype[method]) {
       rrtypeMap.set(prototype[method], rrtypes[method])
       shimmer.wrap(prototype, method, fn => wrap('apm:dns:resolve', fn, 2, rrtypes[method]))
-    })
+    }
+  }
 }
 
 function wrap (prefix, fn, expectedArgs, rrtype) {
@@ -53,7 +53,7 @@ function wrap (prefix, fn, expectedArgs, rrtype) {
   const errorCh = channel(prefix + ':error')
 
   const wrapped = function () {
-    const cb = AsyncResource.bind(arguments[arguments.length - 1])
+    const cb = arguments[arguments.length - 1]
     if (
       !startCh.hasSubscribers ||
       arguments.length < expectedArgs ||
@@ -62,30 +62,32 @@ function wrap (prefix, fn, expectedArgs, rrtype) {
       return fn.apply(this, arguments)
     }
 
-    const startArgs = Array.from(arguments)
-    startArgs.pop() // gets rid of the callback
+    const args = [...arguments]
+    args.pop() // gets rid of the callback
     if (rrtype) {
-      startArgs.push(rrtype)
+      args.push(rrtype)
     }
 
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-    return asyncResource.runInAsyncScope(() => {
-      startCh.publish(startArgs)
+    const ctx = { args }
 
-      arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => asyncResource.bind(function (error, result) {
+    return startCh.runStores(ctx, () => {
+      arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => function (error, result, ...args) {
         if (error) {
-          errorCh.publish(error)
+          ctx.error = error
+          errorCh.publish(ctx)
         }
-        finishCh.publish(result)
-        cb.apply(this, arguments)
-      }))
+
+        ctx.result = result
+        finishCh.runStores(ctx, cb, this, error, result, ...args)
+      })
 
       try {
         return fn.apply(this, arguments)
       // TODO deal with promise versions when we support `dns/promises`
       } catch (error) {
         error.stack // trigger getting the stack at the original throwing point
-        errorCh.publish(error)
+        ctx.error = error
+        errorCh.publish(ctx)
 
         throw error
       }

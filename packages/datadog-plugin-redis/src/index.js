@@ -5,26 +5,37 @@ const CachePlugin = require('../../dd-trace/src/plugins/cache')
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 
 class RedisPlugin extends CachePlugin {
-  static get id () { return 'redis' }
-  static get system () { return 'redis' }
+  static id = 'redis'
+  static system = 'redis'
 
-  start ({ db, command, args, connectionOptions = {}, connectionName }) {
+  constructor (...args) {
+    super(...args)
+    this._spanType = 'redis'
+  }
+
+  bindStart (ctx) {
+    const { db, command, args, connectionOptions, connectionName } = ctx
+
     const resource = command
     const normalizedCommand = command.toUpperCase()
-    if (!this.config.filter(normalizedCommand)) return this.skip()
+    if (!this.config.filter(normalizedCommand)) {
+      return { noop: true }
+    }
 
     this.startSpan({
       resource,
       service: this.serviceName({ pluginConfig: this.config, system: this.system, connectionName }),
-      type: 'redis',
+      type: this._spanType,
       meta: {
-        'db.type': 'redis',
+        'db.type': this._spanType,
         'db.name': db || '0',
-        'redis.raw_command': formatCommand(normalizedCommand, args),
+        [`${this._spanType}.raw_command`]: formatCommand(normalizedCommand, args),
         'out.host': connectionOptions.host,
         [CLIENT_PORT_KEY]: connectionOptions.port
       }
-    })
+    }, ctx)
+
+    return ctx.currentStore
   }
 
   configure (config) {
@@ -58,7 +69,7 @@ function formatArg (arg) {
 
 function trim (str, maxlen) {
   if (str.length > maxlen) {
-    str = str.substr(0, maxlen - 3) + '...'
+    str = str.slice(0, maxlen - 3) + '...'
   }
 
   return str
@@ -72,9 +83,7 @@ function normalizeConfig (config) {
 
   const filter = urlFilter.getFilter(config)
 
-  return Object.assign({}, config, {
-    filter
-  })
+  return { ...config, filter }
 }
 
 function uppercaseAllEntries (entries) {

@@ -6,6 +6,7 @@ const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
 const { json } = require('../../src/appsec/blocked_templates')
+const { withVersions } = require('../setup/mocha')
 
 withVersions('body-parser', 'body-parser', version => {
   describe('Suspicious request blocking - body-parser', () => {
@@ -64,5 +65,46 @@ withVersions('body-parser', 'body-parser', version => {
         expect(requestBody).not.to.be.called
       }
     })
+
+    it('should block the request when attack is detected and report truncation metrics', async () => {
+      try {
+        const longValue = 'testattack'.repeat(500)
+
+        const largeObject = {}
+        for (let i = 0; i < 300; ++i) {
+          largeObject[`key${i}`] = `value${i}`
+        }
+
+        const deepObject = createNestedObject(25, { value: 'a' })
+
+        const complexPayload = {
+          deepObject,
+          longValue,
+          largeObject
+        }
+
+        await axios.post(`http://localhost:${port}/`, { complexPayload })
+
+        return Promise.reject(new Error('Request should not return 200'))
+      } catch (e) {
+        expect(e.response.status).to.be.equals(403)
+        expect(e.response.data).to.be.deep.equal(JSON.parse(json))
+        expect(requestBody).not.to.be.called
+
+        await agent.assertSomeTraces((traces) => {
+          const span = traces[0][0]
+          expect(span.metrics['_dd.appsec.truncated.string_length']).to.equal(5000)
+          expect(span.metrics['_dd.appsec.truncated.container_size']).to.equal(300)
+          expect(span.metrics['_dd.appsec.truncated.container_depth']).to.equal(20)
+        })
+      }
+    })
   })
 })
+
+const createNestedObject = (n, obj) => {
+  if (n > 0) {
+    return { a: createNestedObject(n - 1, obj) }
+  }
+  return obj
+}

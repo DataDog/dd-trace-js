@@ -24,8 +24,8 @@ const HTTP2_HEADER_STATUS = ':status'
 const HTTP2_METHOD_GET = 'GET'
 
 class Http2ClientPlugin extends ClientPlugin {
-  static get id () { return 'http2' }
-  static get prefix () { return 'apm:http2:client:request' }
+  static id = 'http2'
+  static prefix = 'apm:http2:client:request'
 
   bindStart (message) {
     const { authority, options, headers = {} } = message
@@ -36,10 +36,11 @@ class Http2ClientPlugin extends ClientPlugin {
     const uri = `${sessionDetails.protocol}//${sessionDetails.host}:${sessionDetails.port}${pathname}`
     const allowed = this.config.filter(uri)
 
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
     const childOf = store && allowed ? store.span : null
     const span = this.startSpan(this.operationName(), {
       childOf,
+      integrationName: this.constructor.id,
       meta: {
         [COMPONENT]: this.constructor.id,
         [SPAN_KIND]: CLIENT,
@@ -51,7 +52,7 @@ class Http2ClientPlugin extends ClientPlugin {
         'out.host': sessionDetails.host
       },
       metrics: {
-        [CLIENT_PORT_KEY]: parseInt(sessionDetails.port)
+        [CLIENT_PORT_KEY]: Number.parseInt(sessionDetails.port)
       }
     }, false)
 
@@ -72,20 +73,25 @@ class Http2ClientPlugin extends ClientPlugin {
     return message.currentStore
   }
 
-  bindAsyncStart ({ eventName, eventData, currentStore, parentStore }) {
+  bindAsyncStart (ctx) {
+    const { eventName, eventData, currentStore, parentStore } = ctx
+
+    // Plugin wasn't enabled when the request started.
+    if (!currentStore) return storage('legacy').getStore()
+
     switch (eventName) {
       case 'response':
         this._onResponse(currentStore, eventData)
         return parentStore
       case 'error':
-        this._onError(currentStore, eventData)
+        this._onError(currentStore, eventData, ctx)
         return parentStore
       case 'close':
-        this._onClose(currentStore, eventData)
+        this._onClose(ctx)
         return parentStore
     }
 
-    return storage.getStore()
+    return storage('legacy').getStore()
   }
 
   configure (config) {
@@ -98,20 +104,19 @@ class Http2ClientPlugin extends ClientPlugin {
     store.span.setTag(HTTP_STATUS_CODE, status)
 
     if (!this.config.validateStatus(status)) {
-      storage.run(store, () => this.addError())
+      storage('legacy').run(store, () => this.addError())
     }
 
     addHeaderTags(store.span, headers, HTTP_RESPONSE_HEADERS, this.config)
   }
 
-  _onError ({ span }, error) {
+  _onError ({ span }, error, ctx) {
     span.setTag('error', error)
-    span.finish()
+    super.finish(ctx)
   }
 
-  _onClose ({ span }) {
-    this.tagPeerService(span)
-    span.finish()
+  _onClose (ctx) {
+    super.finish(ctx)
   }
 }
 
@@ -121,9 +126,9 @@ function extractSessionDetails (authority, options) {
   }
 
   const protocol = authority.protocol || options.protocol || 'https:'
-  let port = '' + (authority.port !== ''
-    ? authority.port
-    : (authority.protocol === 'http:' ? 80 : 443))
+  let port = authority.port === ''
+    ? authority.protocol === 'http:' ? '80' : '443'
+    : String(authority.port)
   let host = authority.hostname || authority.host || 'localhost'
 
   if (protocol === 'https:' && options) {
@@ -135,26 +140,26 @@ function extractSessionDetails (authority, options) {
 }
 
 function hasAmazonSignature (headers, path) {
+  if (path?.toLowerCase().includes('x-amz-signature=')) {
+    return true
+  }
+
   if (headers) {
-    headers = Object.keys(headers)
-      .reduce((prev, next) => Object.assign(prev, {
-        [next.toLowerCase()]: headers[next]
-      }), {})
-
-    if (headers['x-amz-signature']) {
-      return true
-    }
-
-    if ([].concat(headers.authorization).some(startsWith('AWS4-HMAC-SHA256'))) {
-      return true
+    for (const [key, value] of Object.entries(headers)) {
+      const lowerCaseKey = key.toLowerCase()
+      if (lowerCaseKey === 'x-amz-signature' && value) {
+        return true
+      }
+      if (lowerCaseKey === 'authorization' && value) {
+        const authorization = Array.isArray(value) ? value : [value]
+        if (authorization.some((val) => val.startsWith('AWS4-HMAC-SHA256'))) {
+          return true
+        }
+      }
     }
   }
 
-  return path && path.toLowerCase().indexOf('x-amz-signature=') !== -1
-}
-
-function startsWith (searchString) {
-  return value => String(value).startsWith(searchString)
+  return false
 }
 
 function getStatusValidator (config) {
@@ -171,17 +176,16 @@ function normalizeConfig (config) {
   const filter = getFilter(config)
   const headers = getHeaders(config)
 
-  return Object.assign({}, config, {
+  return {
+    ...config,
     validateStatus,
     filter,
     headers
-  })
+  }
 }
 
 function getFilter (config) {
-  config = Object.assign({}, config, {
-    blocklist: config.blocklist || []
-  })
+  config = { ...config, blocklist: config.blocklist || [] }
 
   return urlFilter.getFilter(config)
 }

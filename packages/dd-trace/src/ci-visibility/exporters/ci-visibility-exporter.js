@@ -6,6 +6,8 @@ const { sendGitMetadata: sendGitMetadataRequest } = require('./git/git_metadata'
 const { getLibraryConfiguration: getLibraryConfigurationRequest } = require('../requests/get-library-configuration')
 const { getSkippableSuites: getSkippableSuitesRequest } = require('../intelligent-test-runner/get-skippable-suites')
 const { getKnownTests: getKnownTestsRequest } = require('../early-flake-detection/get-known-tests')
+const { getTestManagementTests: getTestManagementTestsRequest } =
+  require('../test-management/get-test-management-tests')
 const log = require('../../log')
 const AgentInfoExporter = require('../../exporters/common/agent-info-exporter')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../../plugins/util/tags')
@@ -29,7 +31,7 @@ function getIsTestSessionTrace (trace) {
   )
 }
 
-const GIT_UPLOAD_TIMEOUT = 60000 // 60 seconds
+const GIT_UPLOAD_TIMEOUT = 60_000 // 60 seconds
 const CAN_USE_CI_VIS_PROTOCOL_TIMEOUT = GIT_UPLOAD_TIMEOUT
 
 class CiVisibilityExporter extends AgentInfoExporter {
@@ -92,6 +94,14 @@ class CiVisibilityExporter extends AgentInfoExporter {
     )
   }
 
+  shouldRequestTestManagementTests () {
+    return !!(
+      this._canUseCiVisProtocol &&
+      this._config.isTestManagementEnabled &&
+      this._libraryConfig?.isTestManagementEnabled
+    )
+  }
+
   shouldRequestLibraryConfiguration () {
     return this._config.isIntelligentTestRunnerEnabled
   }
@@ -136,6 +146,13 @@ class CiVisibilityExporter extends AgentInfoExporter {
       return callback(null)
     }
     getKnownTestsRequest(this.getRequestConfiguration(testConfiguration), callback)
+  }
+
+  getTestManagementTests (testConfiguration, callback) {
+    if (!this.shouldRequestTestManagementTests()) {
+      return callback(null)
+    }
+    getTestManagementTestsRequest(this.getRequestConfiguration(testConfiguration), callback)
   }
 
   /**
@@ -197,7 +214,10 @@ class CiVisibilityExporter extends AgentInfoExporter {
       earlyFlakeDetectionFaultyThreshold,
       isFlakyTestRetriesEnabled,
       isDiEnabled,
-      isKnownTestsEnabled
+      isKnownTestsEnabled,
+      isTestManagementEnabled,
+      testManagementAttemptToFixRetries,
+      isImpactedTestsEnabled
     } = remoteConfiguration
     return {
       isCodeCoverageEnabled,
@@ -210,7 +230,11 @@ class CiVisibilityExporter extends AgentInfoExporter {
       isFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled && this._config.isFlakyTestRetriesEnabled,
       flakyTestRetriesCount: this._config.flakyTestRetriesCount,
       isDiEnabled: isDiEnabled && this._config.isTestDynamicInstrumentationEnabled,
-      isKnownTestsEnabled
+      isKnownTestsEnabled,
+      isTestManagementEnabled: isTestManagementEnabled && this._config.isTestManagementEnabled,
+      testManagementAttemptToFixRetries:
+        testManagementAttemptToFixRetries ?? this._config.testManagementAttemptToFixRetries,
+      isImpactedTestsEnabled: isImpactedTestsEnabled && this._config.isImpactedTestsEnabled
     }
   }
 
@@ -314,7 +338,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
       this._writer,
       this._coverageWriter,
       this._logsWriter
-    ].filter(writer => writer)
+    ].filter(Boolean)
 
     let remaining = writers.length
 
@@ -356,14 +380,14 @@ class CiVisibilityExporter extends AgentInfoExporter {
     return this._url
   }
 
-  // By the time setMetadataTags is called, the agent info request might not have finished
-  setMetadataTags (tags) {
-    if (this._writer?.setMetadataTags) {
-      this._writer.setMetadataTags(tags)
+  // By the time addMetadataTags is called, the agent info request might not have finished
+  addMetadataTags (tags) {
+    if (this._writer?.addMetadataTags) {
+      this._writer.addMetadataTags(tags)
     } else {
       this._canUseCiVisProtocolPromise.then(() => {
-        if (this._writer?.setMetadataTags) {
-          this._writer.setMetadataTags(tags)
+        if (this._writer?.addMetadataTags) {
+          this._writer.addMetadataTags(tags)
         }
       })
     }

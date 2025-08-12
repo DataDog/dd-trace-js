@@ -27,8 +27,8 @@ fi
 
 (
   cd ../../ &&
-  npm install --global yarn \
-    && yarn install --ignore-engines \
+  npm install --global yarn || (sleep 60 && npm install --global yarn) \
+    && yarn install --ignore-engines || (sleep 60 && yarn install --ignore-engines) \
     && PLUGINS="bluebird|q|graphql|express" yarn services
 )
 
@@ -38,7 +38,7 @@ fi
 TOTAL_CPU_CORES=$(nproc 2>/dev/null || echo "24")
 export CPU_AFFINITY="${CPU_START_ID:-$TOTAL_CPU_CORES}" # Benchmarking Platform convention
 
-nvm use $MAJOR_VERSION # provided by each benchmark stage
+nvm install $MAJOR_VERSION # provided by each benchmark stage
 export VERSION=`nvm current`
 export ENABLE_AFFINITY=true
 echo "using Node.js ${VERSION}"

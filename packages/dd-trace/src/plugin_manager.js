@@ -1,20 +1,21 @@
 'use strict'
 
 const { channel } = require('dc-polyfill')
-const { isFalse } = require('./util')
+const { isFalse, isTrue, normalizePluginEnvName } = require('./util')
 const plugins = require('./plugins')
 const log = require('./log')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
 const loadChannel = channel('dd-trace:instrumentation:load')
 
 // instrument everything that needs Plugin System V2 instrumentation
 require('../../datadog-instrumentations')
-if (process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined) {
+if (getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined) {
   // instrument lambda environment
   require('./lambda')
 }
 
-const { DD_TRACE_DISABLED_PLUGINS } = process.env
+const DD_TRACE_DISABLED_PLUGINS = getEnvironmentVariable('DD_TRACE_DISABLED_PLUGINS')
 
 const disabledPlugins = new Set(
   DD_TRACE_DISABLED_PLUGINS && DD_TRACE_DISABLED_PLUGINS.split(',').map(plugin => plugin.trim())
@@ -28,24 +29,25 @@ loadChannel.subscribe(({ name }) => {
   maybeEnable(plugins[name])
 })
 
-// Globals
-maybeEnable(require('../../datadog-plugin-fetch/src'))
-
 function maybeEnable (Plugin) {
   if (!Plugin || typeof Plugin !== 'function') return
   if (!pluginClasses[Plugin.id]) {
-    const envName = `DD_TRACE_${Plugin.id.toUpperCase()}_ENABLED`
-    const enabled = process.env[envName.replace(/[^a-z0-9_]/ig, '_')]
+    const enabled = getEnvEnabled(Plugin)
 
     // TODO: remove the need to load the plugin class in order to disable the plugin
     if (isFalse(enabled) || disabledPlugins.has(Plugin.id)) {
-      log.debug(`Plugin "${Plugin.id}" was disabled via configuration option.`)
+      log.debug('Plugin "%s" was disabled via configuration option.', Plugin.id)
 
       pluginClasses[Plugin.id] = null
     } else {
       pluginClasses[Plugin.id] = Plugin
     }
   }
+}
+
+function getEnvEnabled (Plugin) {
+  const envName = `DD_TRACE_${Plugin.id.toUpperCase()}_ENABLED`
+  return getEnvironmentVariable(normalizePluginEnvName(envName))
 }
 
 // TODO this must always be a singleton.
@@ -76,7 +78,7 @@ module.exports = class PluginManager {
       this._pluginsByName[name] = new Plugin(this._tracer, this._tracerConfig)
     }
     const pluginConfig = this._configsByName[name] || {
-      enabled: this._tracerConfig.plugins !== false
+      enabled: this._tracerConfig.plugins !== false && (!Plugin.experimental || isTrue(getEnvEnabled(Plugin)))
     }
 
     // extracts predetermined configuration from tracer and combines it with plugin-specific config
@@ -133,25 +135,32 @@ module.exports = class PluginManager {
       site,
       url,
       headerTags,
+      codeOriginForSpans,
       dbmPropagationMode,
       dsmEnabled,
       clientIpEnabled,
+      clientIpHeader,
       memcachedCommandEnabled,
       ciVisibilityTestSessionName,
       ciVisAgentlessLogSubmissionEnabled,
-      isTestDynamicInstrumentationEnabled
+      isTestDynamicInstrumentationEnabled,
+      isServiceUserProvided,
+      middlewareTracingEnabled
     } = this._tracerConfig
 
     const sharedConfig = {
+      codeOriginForSpans,
       dbmPropagationMode,
       dsmEnabled,
       memcachedCommandEnabled,
       site,
       url,
       headers: headerTags || [],
+      clientIpHeader,
       ciVisibilityTestSessionName,
       ciVisAgentlessLogSubmissionEnabled,
-      isTestDynamicInstrumentationEnabled
+      isTestDynamicInstrumentationEnabled,
+      isServiceUserProvided
     }
 
     if (logInjection !== undefined) {
@@ -168,6 +177,13 @@ module.exports = class PluginManager {
 
     if (clientIpEnabled !== undefined) {
       sharedConfig.clientIpEnabled = clientIpEnabled
+    }
+
+    // For the global setting, we use the name `middlewareTracingEnabled`, but
+    // for the plugin-specific setting, we use `middleware`. They mean the same
+    // to an individual plugin, so we normalize them here.
+    if (middlewareTracingEnabled !== undefined) {
+      sharedConfig.middleware = middlewareTracingEnabled
     }
 
     return sharedConfig

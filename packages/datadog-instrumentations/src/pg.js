@@ -2,8 +2,7 @@
 
 const {
   channel,
-  addHook,
-  AsyncResource
+  addHook
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
@@ -13,6 +12,8 @@ const errorCh = channel('apm:pg:query:error')
 
 const startPoolQueryCh = channel('datadog:pg:pool:query:start')
 const finishPoolQueryCh = channel('datadog:pg:pool:query:finish')
+
+const { errorMonitor } = require('node:events')
 
 addHook({ name: 'pg', versions: ['>=8.0.3'] }, pg => {
   shimmer.wrap(pg.Client.prototype, 'query', query => wrapQuery(query))
@@ -31,48 +32,48 @@ function wrapQuery (query) {
       return query.apply(this, arguments)
     }
 
-    const callbackResource = new AsyncResource('bound-anonymous-fn')
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
     const processId = this.processID
 
     const pgQuery = arguments[0] !== null && typeof arguments[0] === 'object'
       ? arguments[0]
       : { text: arguments[0] }
 
-    const textProp = Object.getOwnPropertyDescriptor(pgQuery, 'text')
+    const textPropObj = pgQuery.cursor ?? pgQuery
+    const textProp = Object.getOwnPropertyDescriptor(textPropObj, 'text')
+    const stream = typeof textPropObj.read === 'function'
 
-    // Only alter `text` property if safe to do so.
+    // Only alter `text` property if safe to do so. Initially, it's a property, not a getter.
+    let originalText
     if (!textProp || textProp.configurable) {
-      const originalText = pgQuery.text
+      originalText = textPropObj.text
 
-      Object.defineProperty(pgQuery, 'text', {
+      Object.defineProperty(textPropObj, 'text', {
         get () {
           return this?.__ddInjectableQuery || originalText
         }
       })
     }
-
-    return asyncResource.runInAsyncScope(() => {
-      const abortController = new AbortController()
-
-      startCh.publish({
-        params: this.connectionParameters,
-        query: pgQuery,
-        processId,
-        abortController
-      })
-
-      const finish = asyncResource.bind(function (error, res) {
-        if (error) {
-          errorCh.publish(error)
-        }
-        finishCh.publish({ result: res?.rows })
-      })
-
+    const abortController = new AbortController()
+    const ctx = {
+      params: this.connectionParameters,
+      query: textPropObj,
+      originalText,
+      processId,
+      abortController,
+      stream
+    }
+    const finish = (error, res) => {
+      if (error) {
+        ctx.error = error
+        errorCh.publish(ctx)
+      }
+      ctx.result = res?.rows
+      return finishCh.publish(ctx)
+    }
+    return startCh.runStores(ctx, () => {
       if (abortController.signal.aborted) {
         const error = abortController.signal.reason || new Error('Aborted')
 
-        // eslint-disable-next-line @stylistic/js/max-len
         // Based on: https://github.com/brianc/node-postgres/blob/54eb0fa216aaccd727765641e7d1cf5da2bc483d/packages/pg/lib/client.js#L510
         const reusingQuery = typeof pgQuery.submit === 'function'
         const callback = arguments[arguments.length - 1]
@@ -110,86 +111,81 @@ function wrapQuery (query) {
       const queryQueue = this.queryQueue || this._queryQueue
       const activeQuery = this.activeQuery || this._activeQuery
 
-      const newQuery = queryQueue[queryQueue.length - 1] || activeQuery
+      const newQuery = queryQueue.at(-1) || activeQuery
 
       if (!newQuery) {
         return retval
       }
 
       if (newQuery.callback) {
-        const originalCallback = callbackResource.bind(newQuery.callback)
-        newQuery.callback = function (err, res) {
-          finish(err, res)
-          return originalCallback.apply(this, arguments)
+        const originalCallback = newQuery.callback
+        newQuery.callback = function (err, ...args) {
+          finish(err, ...args)
+          return finishCh.runStores(ctx, originalCallback, this, err, ...args)
         }
       } else if (newQuery.once) {
         newQuery
-          .once('error', finish)
+          .once(errorMonitor, finish)
           .once('end', (res) => finish(null, res))
       } else {
+        // TODO: This code is never reached in our tests.
+        // Internally, pg always uses callbacks or streams, even for promise based queries.
+        // Investigate if this code should just be removed.
         newQuery.then((res) => finish(null, res), finish)
       }
 
       try {
         return retval
-      } catch (err) {
-        errorCh.publish(err)
+      } catch (error) {
+        ctx.error = error
+        errorCh.publish(ctx)
       }
     })
   }
 }
-
+const finish = (ctx) => {
+  finishPoolQueryCh.publish(ctx)
+}
 function wrapPoolQuery (query) {
   return function () {
     if (!startPoolQueryCh.hasSubscribers) {
       return query.apply(this, arguments)
     }
 
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-
     const pgQuery = arguments[0] !== null && typeof arguments[0] === 'object' ? arguments[0] : { text: arguments[0] }
+    const abortController = new AbortController()
 
-    return asyncResource.runInAsyncScope(() => {
-      const abortController = new AbortController()
+    const ctx = { query: pgQuery, abortController }
 
-      startPoolQueryCh.publish({
-        query: pgQuery,
-        abortController
-      })
-
-      const finish = asyncResource.bind(function () {
-        finishPoolQueryCh.publish()
-      })
-
+    return startPoolQueryCh.runStores(ctx, () => {
       const cb = arguments[arguments.length - 1]
 
       if (abortController.signal.aborted) {
         const error = abortController.signal.reason || new Error('Aborted')
-        finish()
+        finish(ctx)
 
         if (typeof cb === 'function') {
           cb(error)
 
           return
-        } else {
-          return Promise.reject(error)
         }
+        return Promise.reject(error)
       }
 
       if (typeof cb === 'function') {
         arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => function () {
-          finish()
+          finish(ctx)
           return cb.apply(this, arguments)
         })
       }
 
       const retval = query.apply(this, arguments)
 
-      if (retval && retval.then) {
+      if (retval?.then) {
         retval.then(() => {
-          finish()
+          finish(ctx)
         }).catch(() => {
-          finish()
+          finish(ctx)
         })
       }
 

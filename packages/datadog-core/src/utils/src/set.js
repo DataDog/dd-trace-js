@@ -1,16 +1,14 @@
 'use strict'
 
-module.exports = (object, path, value) => {
-  const pathArr = path.split('.')
-  let property = object
-  let i
-  for (i = 0; i < pathArr.length - 1; i++) {
-    const n = pathArr[i]
-    if (property.hasOwnProperty(n)) {
-      property = property[n]
-    } else {
-      property[n] = property = {}
+module.exports = function set (object, path, value) {
+  let index = -1
+  while (true) {
+    const nextIndex = path.indexOf('.', index + 1)
+    if (nextIndex === -1) {
+      object[path.slice(index + 1)] = value
+      return
     }
+    object = object[path.slice(index + 1, nextIndex)] ??= {}
+    index = nextIndex
   }
-  property[pathArr[i]] = value
 }

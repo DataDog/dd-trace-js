@@ -1,5 +1,6 @@
 'use strict'
 
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 
@@ -64,14 +65,17 @@ describe('Plugin', () => {
           withPeerService(
             () => tracer,
             'amqp10',
-            () => sender.send({ key: 'value' }),
+            (done) => {
+              sender.send({ key: 'value' })
+              done()
+            },
             'localhost',
             'out.host'
           )
 
           it('should do automatic instrumentation', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
 
                 expect(span).to.have.property('name', expectedSchema.send.opName)
@@ -86,6 +90,7 @@ describe('Plugin', () => {
                 expect(span.meta).to.have.property('amqp.link.role', 'sender')
                 expect(span.meta['amqp.link.name']).to.match(/^amq\.topic_[0-9a-f-]+$/)
                 expect(span.meta).to.have.property('component', 'amqp10')
+                expect(span.meta).to.have.property('_dd.integration', 'amqp10')
                 expect(span.metrics).to.have.property('network.destination.port', 5673)
                 expect(span.metrics).to.have.property('amqp.connection.port', 5673)
                 expect(span.metrics).to.have.property('amqp.link.handle', 1)
@@ -100,7 +105,7 @@ describe('Plugin', () => {
             let error
 
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
 
                 expect(span.error).to.equal(1)
@@ -144,7 +149,7 @@ describe('Plugin', () => {
         describe('when consuming messages', () => {
           it('should do automatic instrumentation', done => {
             agent
-              .use(traces => {
+              .assertSomeTraces(traces => {
                 const span = traces[0][0]
                 expect(span).to.have.property('name', expectedSchema.receive.opName)
                 expect(span).to.have.property('service', expectedSchema.receive.serviceName)
@@ -210,7 +215,7 @@ describe('Plugin', () => {
 
         it('should be configured with the correct values', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const span = traces[0][0]
 
               expect(span).to.have.property('service', 'test-custom-name')

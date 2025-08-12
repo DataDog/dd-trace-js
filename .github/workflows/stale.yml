@@ -1,0 +1,26 @@
+name: 'Stale PR Bot'
+on:
+  schedule:
+    - cron: '0 4 * * *'
+
+permissions:
+  pull-requests: write
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@5bef64f19d7facfb25b37b414482c7164d639639 # v9.1.0
+        with:
+          days-before-issue-stale: -1 # disabled for issues
+
+          days-before-pr-stale: 90 # 3 months
+          days-before-pr-close: 14 # 2 weeks
+          stale-pr-label: "stale"
+          exempt-pr-labels: "keep-open"
+          exempt-draft-pr: true
+          stale-pr-message: |
+            This pull request has been marked as stale due to 90 days of inactivity.
+            If this is still relevant, please update or comment to keep it open.
+            If this should be kept open indefinitely, please apply the label `keep-open`.
+            Otherwise, it will be automatically closed after 14 days.

@@ -257,9 +257,9 @@ describe('SpanStatsProcessor', () => {
     expect(processor.version).to.equal(config.version)
   })
 
-  it('should construct a disabled instance if appsec standalone is enabled', () => {
-    const standaloneConfig = { appsec: { standalone: { enabled: true } }, ...config }
-    const processor = new SpanStatsProcessor(standaloneConfig)
+  it('should construct a disabled instance', () => {
+    const disabledConfig = { ...config, stats: { enabled: false, interval: 10 } }
+    const processor = new SpanStatsProcessor(disabledConfig)
 
     expect(processor.enabled).to.be.false
     expect(processor.timer).to.be.undefined

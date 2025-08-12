@@ -1,9 +1,10 @@
 'use strict'
 
-const { exec } = require('child_process')
+const { exec, execSync } = require('child_process')
 
-const getPort = require('get-port')
 const { assert } = require('chai')
+const fs = require('fs')
+const path = require('path')
 
 const {
   createSandbox,
@@ -42,9 +43,27 @@ const {
   DI_DEBUG_ERROR_FILE_SUFFIX,
   DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
   DI_DEBUG_ERROR_LINE_SUFFIX,
-  TEST_RETRY_REASON
+  TEST_RETRY_REASON,
+  DD_TEST_IS_USER_PROVIDED_SERVICE,
+  TEST_MANAGEMENT_ENABLED,
+  TEST_MANAGEMENT_IS_QUARANTINED,
+  TEST_MANAGEMENT_IS_DISABLED,
+  DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
+  DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
+  DD_CAPABILITIES_AUTO_TEST_RETRIES,
+  DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
+  DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
+  DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
+  DD_CAPABILITIES_FAILED_TEST_REPLAY,
+  TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
+  TEST_HAS_FAILED_ALL_RETRIES,
+  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
+  TEST_RETRY_REASON_TYPES,
+  TEST_IS_MODIFIED,
+  DD_CAPABILITIES_IMPACTED_TESTS
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
+const { NODE_MAJOR } = require('../../version')
 
 const versions = ['7.0.0', 'latest']
 
@@ -56,6 +75,8 @@ const featuresPath = 'ci-visibility/features/'
 const fileExtension = 'js'
 
 versions.forEach(version => {
+  if ((NODE_MAJOR === 18 || NODE_MAJOR === 23) && version === 'latest') return
+
   // TODO: add esm tests
   describe(`cucumber@${version} commonJS`, () => {
     let sandbox, cwd, receiver, childProcess, testOutput
@@ -76,8 +97,7 @@ versions.forEach(version => {
     })
 
     beforeEach(async function () {
-      const port = await getPort()
-      receiver = await new FakeCiVisIntake(port).start()
+      receiver = await new FakeCiVisIntake().start()
     })
 
     afterEach(async () => {
@@ -206,6 +226,7 @@ versions.forEach(version => {
                   assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
                   assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
                   assert.equal(meta[TEST_SOURCE_FILE].startsWith('ci-visibility/features'), true)
+                  assert.equal(meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'false')
                   // Can read DD_TAGS
                   assert.propertyVal(meta, 'test.customtag', 'customvalue')
                   assert.propertyVal(meta, 'test.customtag2', 'customvalue2')
@@ -213,11 +234,18 @@ versions.forEach(version => {
                     assert.propertyVal(meta, CUCUMBER_IS_PARALLEL, 'true')
                   }
                   assert.exists(metrics[DD_HOST_CPU_COUNT])
+                  if (!meta[TEST_NAME].includes('Say skip')) {
+                    assert.propertyVal(meta, 'custom_tag.before', 'hello before')
+                    assert.propertyVal(meta, 'custom_tag.after', 'hello after')
+                  }
                 })
 
                 stepEvents.forEach(stepEvent => {
                   assert.equal(stepEvent.content.name, 'cucumber.step')
                   assert.property(stepEvent.content.meta, 'cucumber.step')
+                  if (stepEvent.content.meta['cucumber.step'] === 'the greeter says greetings') {
+                    assert.propertyVal(stepEvent.content.meta, 'custom_tag.when', 'hello when')
+                  }
                 })
               }, 5000)
 
@@ -228,7 +256,8 @@ versions.forEach(version => {
                 env: {
                   ...envVars,
                   DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
-                  DD_TEST_SESSION_NAME: 'my-test-session'
+                  DD_TEST_SESSION_NAME: 'my-test-session',
+                  DD_SERVICE: undefined
                 },
                 stdio: 'pipe'
               }
@@ -882,7 +911,7 @@ versions.forEach(version => {
                 )
                 assert.equal(retriedTests.length, NUM_RETRIES_EFD)
                 retriedTests.forEach(test => {
-                  assert.propertyVal(test.meta, TEST_RETRY_REASON, 'efd')
+                  assert.propertyVal(test.meta, TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
                 })
                 // Test name does not change
                 newTests.forEach(test => {
@@ -1471,6 +1500,9 @@ versions.forEach(version => {
                   // All but the first one are retries
                   const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
                   assert.equal(retriedTests.length, 2)
+                  assert.equal(retriedTests.filter(
+                    test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+                  ).length, 2)
                 })
 
               childProcess = exec(
@@ -1508,7 +1540,9 @@ versions.forEach(version => {
 
                   assert.equal(tests.length, 1)
 
-                  const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+                  const retriedTests = tests.filter(
+                    test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+                  )
                   assert.equal(retriedTests.length, 0)
                 })
 
@@ -1557,7 +1591,9 @@ versions.forEach(version => {
                   assert.equal(passedTests.length, 0)
 
                   // All but the first one are retries
-                  const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+                  const retriedTests = tests.filter(
+                    test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+                  )
                   assert.equal(retriedTests.length, 1)
                 })
 
@@ -1582,7 +1618,7 @@ versions.forEach(version => {
           })
           // Dynamic instrumentation only supported from >=8.0.0
           context('dynamic instrumentation', () => {
-            it('does not activate if DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED is not set', (done) => {
+            it('does not activate if DD_TEST_FAILED_TEST_REPLAY_ENABLED is set to false', (done) => {
               receiver.setSettings({
                 flaky_test_retries_enabled: true,
                 di_enabled: true
@@ -1593,11 +1629,63 @@ versions.forEach(version => {
                   const events = payloads.flatMap(({ payload }) => payload.events)
 
                   const tests = events.filter(event => event.type === 'test').map(event => event.content)
-                  const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+                  const retriedTests = tests.filter(
+                    test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+                  )
 
                   assert.equal(retriedTests.length, 1)
                   const [retriedTest] = retriedTests
 
+                  const hasDebugTags = Object.keys(retriedTest.meta)
+                    .some(property =>
+                      property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED
+                    )
+
+                  assert.isFalse(hasDebugTags)
+                })
+              const logsPromise = receiver
+                .gatherPayloadsMaxTimeout(({ url }) => url === logsEndpoint, (payloads) => {
+                  if (payloads.length > 0) {
+                    throw new Error('Unexpected logs')
+                  }
+                }, 5000)
+
+              childProcess = exec(
+                './node_modules/.bin/cucumber-js ci-visibility/features-di/test-hit-breakpoint.feature --retry 1',
+                {
+                  cwd,
+                  env: {
+                    ...envVars,
+                    DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false'
+                  },
+                  stdio: 'pipe'
+                }
+              )
+
+              childProcess.on('exit', () => {
+                Promise.all([eventsPromise, logsPromise]).then(() => {
+                  done()
+                }).catch(done)
+              })
+            })
+
+            it('does not activate dynamic instrumentation if remote settings are disabled', (done) => {
+              receiver.setSettings({
+                flaky_test_retries_enabled: true,
+                di_enabled: false
+              })
+
+              const eventsPromise = receiver
+                .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+                  const events = payloads.flatMap(({ payload }) => payload.events)
+
+                  const tests = events.filter(event => event.type === 'test').map(event => event.content)
+                  const retriedTests = tests.filter(
+                    test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+                  )
+
+                  assert.equal(retriedTests.length, 1)
+                  const [retriedTest] = retriedTests
                   const hasDebugTags = Object.keys(retriedTest.meta)
                     .some(property =>
                       property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED
@@ -1628,54 +1716,6 @@ versions.forEach(version => {
               })
             })
 
-            it('does not activate dynamic instrumentation if remote settings are disabled', (done) => {
-              receiver.setSettings({
-                flaky_test_retries_enabled: true,
-                di_enabled: false
-              })
-
-              const eventsPromise = receiver
-                .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-                  const events = payloads.flatMap(({ payload }) => payload.events)
-
-                  const tests = events.filter(event => event.type === 'test').map(event => event.content)
-                  const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-
-                  assert.equal(retriedTests.length, 1)
-                  const [retriedTest] = retriedTests
-                  const hasDebugTags = Object.keys(retriedTest.meta)
-                    .some(property =>
-                      property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED
-                    )
-
-                  assert.isFalse(hasDebugTags)
-                })
-              const logsPromise = receiver
-                .gatherPayloadsMaxTimeout(({ url }) => url === logsEndpoint, (payloads) => {
-                  if (payloads.length > 0) {
-                    throw new Error('Unexpected logs')
-                  }
-                }, 5000)
-
-              childProcess = exec(
-                './node_modules/.bin/cucumber-js ci-visibility/features-di/test-hit-breakpoint.feature --retry 1',
-                {
-                  cwd,
-                  env: {
-                    ...envVars,
-                    DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true'
-                  },
-                  stdio: 'pipe'
-                }
-              )
-
-              childProcess.on('exit', () => {
-                Promise.all([eventsPromise, logsPromise]).then(() => {
-                  done()
-                }).catch(done)
-              })
-            })
-
             it('runs retries with dynamic instrumentation', (done) => {
               receiver.setSettings({
                 flaky_test_retries_enabled: true,
@@ -1691,7 +1731,9 @@ versions.forEach(version => {
 
                   const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
-                  const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+                  const retriedTests = tests.filter(
+                    test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+                  )
 
                   assert.equal(retriedTests.length, 1)
                   const [retriedTest] = retriedTests
@@ -1702,7 +1744,7 @@ versions.forEach(version => {
                     retriedTest.meta[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_FILE_SUFFIX}`]
                       .endsWith('ci-visibility/features-di/support/sum.js')
                   )
-                  assert.equal(retriedTest.metrics[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_LINE_SUFFIX}`], 4)
+                  assert.equal(retriedTest.metrics[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_LINE_SUFFIX}`], 6)
 
                   const snapshotIdKey = `${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`
                   assert.exists(retriedTest.meta[snapshotIdKey])
@@ -1720,7 +1762,7 @@ versions.forEach(version => {
                     level: 'error'
                   })
                   assert.equal(diLog.debugger.snapshot.language, 'javascript')
-                  assert.deepInclude(diLog.debugger.snapshot.captures.lines['4'].locals, {
+                  assert.deepInclude(diLog.debugger.snapshot.captures.lines['6'].locals, {
                     a: {
                       type: 'number',
                       value: '11'
@@ -1743,10 +1785,7 @@ versions.forEach(version => {
                 './node_modules/.bin/cucumber-js ci-visibility/features-di/test-hit-breakpoint.feature --retry 1',
                 {
                   cwd,
-                  env: {
-                    ...envVars,
-                    DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true'
-                  },
+                  env: envVars,
                   stdio: 'pipe'
                 }
               )
@@ -1772,7 +1811,9 @@ versions.forEach(version => {
                   const events = payloads.flatMap(({ payload }) => payload.events)
 
                   const tests = events.filter(event => event.type === 'test').map(event => event.content)
-                  const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+                  const retriedTests = tests.filter(
+                    test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+                  )
 
                   assert.equal(retriedTests.length, 1)
                   const [retriedTest] = retriedTests
@@ -1795,10 +1836,7 @@ versions.forEach(version => {
                 './node_modules/.bin/cucumber-js ci-visibility/features-di/test-not-hit-breakpoint.feature --retry 1',
                 {
                   cwd,
-                  env: {
-                    ...envVars,
-                    DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 'true'
-                  },
+                  env: envVars,
                   stdio: 'pipe'
                 }
               )
@@ -1993,6 +2031,694 @@ versions.forEach(version => {
           eventsPromise.then(() => {
             done()
           }).catch(done)
+        })
+      })
+    })
+
+    it('sets _dd.test.is_user_provided_service to true if DD_SERVICE is used', (done) => {
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          tests.forEach(test => {
+            assert.equal(test.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'true')
+          })
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            DD_SERVICE: 'my-service'
+          },
+          stdio: 'pipe'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
+
+    context('test management', () => {
+      context('attempt to fix', () => {
+        beforeEach(() => {
+          receiver.setTestManagementTests({
+            cucumber: {
+              suites: {
+                'ci-visibility/features-test-management/attempt-to-fix.feature': {
+                  tests: {
+                    'Say attempt to fix': {
+                      properties: {
+                        attempt_to_fix: true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          })
+        })
+
+        const getTestAssertions = ({
+          isAttemptToFix,
+          isQuarantined,
+          isDisabled,
+          shouldAlwaysPass,
+          shouldFailSometimes
+        }) =>
+          receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+
+              if (isAttemptToFix) {
+                assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
+              } else {
+                assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+              }
+
+              const retriedTests = tests.filter(
+                test => test.meta[TEST_NAME] === 'Say attempt to fix'
+              )
+
+              if (isAttemptToFix) {
+                // 3 retries + 1 initial run
+                assert.equal(retriedTests.length, 4)
+              } else {
+                assert.equal(retriedTests.length, 1)
+              }
+
+              for (let i = 0; i < retriedTests.length; i++) {
+                const isFirstAttempt = i === 0
+                const isLastAttempt = i === retriedTests.length - 1
+                const test = retriedTests[i]
+
+                assert.equal(
+                  test.resource,
+                  'ci-visibility/features-test-management/attempt-to-fix.feature.Say attempt to fix'
+                )
+
+                if (isDisabled) {
+                  assert.propertyVal(test.meta, TEST_MANAGEMENT_IS_DISABLED, 'true')
+                } else if (isQuarantined) {
+                  assert.propertyVal(test.meta, TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+                } else {
+                  assert.notProperty(test.meta, TEST_MANAGEMENT_IS_DISABLED)
+                  assert.notProperty(test.meta, TEST_MANAGEMENT_IS_QUARANTINED)
+                }
+
+                if (isAttemptToFix) {
+                  assert.propertyVal(test.meta, TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX, 'true')
+                  if (!isFirstAttempt) {
+                    assert.propertyVal(test.meta, TEST_IS_RETRY, 'true')
+                    assert.propertyVal(test.meta, TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atf)
+                  }
+                  if (isLastAttempt) {
+                    if (shouldFailSometimes) {
+                      assert.propertyVal(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
+                      assert.notProperty(test.meta, TEST_HAS_FAILED_ALL_RETRIES)
+                    } else if (shouldAlwaysPass) {
+                      assert.propertyVal(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
+                    } else {
+                      assert.propertyVal(test.meta, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
+                      assert.propertyVal(test.meta, TEST_HAS_FAILED_ALL_RETRIES, 'true')
+                    }
+                  }
+                } else {
+                  assert.notProperty(test.meta, TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX)
+                  assert.notProperty(test.meta, TEST_IS_RETRY)
+                  assert.notProperty(test.meta, TEST_RETRY_REASON)
+                }
+              }
+            })
+
+        const runTest = (done, {
+          isAttemptToFix,
+          isQuarantined,
+          isDisabled,
+          extraEnvVars,
+          shouldAlwaysPass,
+          shouldFailSometimes
+        } = {}) => {
+          const testAssertions = getTestAssertions({
+            isAttemptToFix,
+            isQuarantined,
+            isDisabled,
+            shouldAlwaysPass,
+            shouldFailSometimes
+          })
+          let stdout = ''
+
+          childProcess = exec(
+            './node_modules/.bin/cucumber-js ci-visibility/features-test-management/attempt-to-fix.feature',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                ...extraEnvVars,
+                ...(shouldAlwaysPass ? { SHOULD_ALWAYS_PASS: '1' } : {}),
+                ...(shouldFailSometimes ? { SHOULD_FAIL_SOMETIMES: '1' } : {})
+              },
+              stdio: 'inherit'
+            }
+          )
+
+          childProcess.stdout.on('data', (data) => {
+            stdout += data.toString()
+          })
+
+          childProcess.on('exit', exitCode => {
+            testAssertions.then(() => {
+              assert.include(stdout, 'I am running')
+              if (isQuarantined || isDisabled || shouldAlwaysPass) {
+                assert.equal(exitCode, 0)
+              } else {
+                assert.equal(exitCode, 1)
+              }
+              done()
+            }).catch(done)
+          })
+        }
+
+        it('can attempt to fix and mark last attempt as failed if every attempt fails', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+          runTest(done, { isAttemptToFix: true })
+        })
+
+        it('can attempt to fix and mark last attempt as passed if every attempt passes', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+          runTest(done, { isAttemptToFix: true, shouldAlwaysPass: true })
+        })
+
+        it('can attempt to fix and not mark last attempt if attempts both pass and fail', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+          runTest(done, { isAttemptToFix: true, shouldFailSometimes: true })
+        })
+
+        it('does not attempt to fix tests if test management is not enabled', (done) => {
+          receiver.setSettings({ test_management: { enabled: false, attempt_to_fix_retries: 3 } })
+
+          runTest(done)
+        })
+
+        it('does not enable attempt to fix tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+          runTest(done, {
+            extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' }
+          })
+        })
+
+        it('does not fail retry if a test is quarantined', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+          receiver.setTestManagementTests({
+            cucumber: {
+              suites: {
+                'ci-visibility/features-test-management/attempt-to-fix.feature': {
+                  tests: {
+                    'Say attempt to fix': {
+                      properties: {
+                        attempt_to_fix: true,
+                        quarantined: true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          })
+
+          runTest(done, {
+            isAttemptToFix: true,
+            isQuarantined: true
+          })
+        })
+
+        it('does not fail retry if a test is disabled', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+          receiver.setTestManagementTests({
+            cucumber: {
+              suites: {
+                'ci-visibility/features-test-management/attempt-to-fix.feature': {
+                  tests: {
+                    'Say attempt to fix': {
+                      properties: {
+                        attempt_to_fix: true,
+                        disabled: true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          })
+
+          runTest(done, {
+            isAttemptToFix: true,
+            isDisabled: true
+          })
+        })
+      })
+
+      context('disabled', () => {
+        beforeEach(() => {
+          receiver.setTestManagementTests({
+            cucumber: {
+              suites: {
+                'ci-visibility/features-test-management/disabled.feature': {
+                  tests: {
+                    'Say disabled': {
+                      properties: {
+                        disabled: true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          })
+        })
+
+        const getTestAssertions = (isDisabling) =>
+          receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.find(event => event.type === 'test').content
+              const testSession = events.find(event => event.type === 'test_session_end').content
+
+              if (isDisabling) {
+                assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
+                assert.propertyVal(testSession.meta, TEST_STATUS, 'pass')
+              } else {
+                assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+                assert.propertyVal(testSession.meta, TEST_STATUS, 'fail')
+              }
+
+              assert.equal(tests.resource, 'ci-visibility/features-test-management/disabled.feature.Say disabled')
+
+              if (isDisabling) {
+                assert.equal(tests.meta[TEST_STATUS], 'skip')
+                assert.propertyVal(tests.meta, TEST_MANAGEMENT_IS_DISABLED, 'true')
+              } else {
+                assert.equal(tests.meta[TEST_STATUS], 'fail')
+                assert.notProperty(tests.meta, TEST_MANAGEMENT_IS_DISABLED)
+              }
+            })
+
+        const runTest = (done, isDisabling, extraEnvVars) => {
+          const testAssertionsPromise = getTestAssertions(isDisabling)
+          let stdout = ''
+
+          childProcess = exec(
+            './node_modules/.bin/cucumber-js ci-visibility/features-test-management/disabled.feature',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                ...extraEnvVars
+              },
+              stdio: 'inherit'
+            }
+          )
+
+          childProcess.stdout.on('data', (data) => {
+            stdout += data.toString()
+          })
+
+          childProcess.on('exit', exitCode => {
+            testAssertionsPromise.then(() => {
+              if (isDisabling) {
+                assert.notInclude(stdout, 'I am running')
+                assert.equal(exitCode, 0)
+              } else {
+                assert.include(stdout, 'I am running')
+                assert.equal(exitCode, 1)
+              }
+              done()
+            }).catch(done)
+          })
+        }
+
+        it('can disable tests', (done) => {
+          receiver.setSettings({ test_management: { enabled: true } })
+
+          runTest(done, true)
+        })
+
+        it('pass if disable is not enabled', (done) => {
+          receiver.setSettings({ test_management: { enabled: false } })
+
+          runTest(done, false)
+        })
+
+        it('does not enable disable tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+          receiver.setSettings({ test_management: { enabled: true } })
+
+          runTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
+        })
+      })
+
+      context('quarantine', () => {
+        beforeEach(() => {
+          receiver.setTestManagementTests({
+            cucumber: {
+              suites: {
+                'ci-visibility/features-test-management/quarantine.feature': {
+                  tests: {
+                    'Say quarantine': {
+                      properties: {
+                        quarantined: true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          })
+        })
+
+        const getTestAssertions = (isQuarantining) =>
+          receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const failedTest = events.find(event => event.type === 'test').content
+              const testSession = events.find(event => event.type === 'test_session_end').content
+
+              if (isQuarantining) {
+                assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
+              } else {
+                assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+              }
+
+              assert.equal(failedTest.resource,
+                'ci-visibility/features-test-management/quarantine.feature.Say quarantine')
+
+              assert.equal(failedTest.meta[TEST_STATUS], 'fail')
+              if (isQuarantining) {
+                assert.propertyVal(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+              } else {
+                assert.notProperty(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED)
+              }
+            })
+
+        const runTest = (done, isQuarantining, extraEnvVars) => {
+          const testAssertionsPromise = getTestAssertions(isQuarantining)
+          let stdout = ''
+          childProcess = exec(
+            './node_modules/.bin/cucumber-js ci-visibility/features-test-management/quarantine.feature',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                ...extraEnvVars
+              },
+              stdio: 'inherit'
+            }
+          )
+
+          childProcess.stdout.on('data', (data) => {
+            stdout += data.toString()
+          })
+
+          childProcess.on('exit', exitCode => {
+            testAssertionsPromise.then(() => {
+              // Regardless of whether the test is quarantined or not, it will be run
+              assert.include(stdout, 'I am running as quarantine')
+              if (isQuarantining) {
+                // even though a test fails, the exit code is 1 because the test is quarantined
+                assert.equal(exitCode, 0)
+              } else {
+                assert.equal(exitCode, 1)
+              }
+              done()
+            }).catch(done)
+          })
+        }
+
+        it('can quarantine tests', (done) => {
+          receiver.setSettings({ test_management: { enabled: true } })
+
+          runTest(done, true)
+        })
+
+        it('fails if quarantine is not enabled', (done) => {
+          receiver.setSettings({ test_management: { enabled: false } })
+
+          runTest(done, false)
+        })
+
+        it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+          receiver.setSettings({ test_management: { enabled: true } })
+
+          runTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
+        })
+      })
+    })
+
+    context('libraries capabilities', () => {
+      const runModes = ['serial']
+
+      if (version !== '7.0.0') { // only on latest or 9 if node is old
+        runModes.push('parallel')
+      }
+
+      runModes.forEach((runMode) => {
+        it(`(${runMode}) adds capabilities to tests`, (done) => {
+          const runCommand = runMode === 'parallel' ? parallelModeCommand : runTestsCommand
+
+          const receiverPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+              const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+
+              assert.isNotEmpty(metadataDicts)
+              metadataDicts.forEach(metadata => {
+                if (runMode === 'parallel') {
+                  assert.equal(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], undefined)
+                } else {
+                  assert.equal(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], '1')
+                }
+                assert.equal(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')
+                assert.equal(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
+                assert.equal(metadata.test[DD_CAPABILITIES_IMPACTED_TESTS], '1')
+                assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
+                assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
+                assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
+                assert.equal(metadata.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], '1')
+                // capabilities logic does not overwrite test session name
+                assert.equal(metadata.test[TEST_SESSION_NAME], 'my-test-session-name')
+              })
+            })
+
+          childProcess = exec(
+            runCommand,
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                DD_TEST_SESSION_NAME: 'my-test-session-name'
+              },
+              stdio: 'pipe'
+            }
+          )
+
+          childProcess.on('exit', () => {
+            receiverPromise.then(() => done()).catch(done)
+          })
+        })
+      })
+    })
+
+    context('impacted tests', () => {
+      const NUM_RETRIES = 3
+
+      beforeEach(() => {
+        // By default, the test is not new
+        receiver.setKnownTests(
+          {
+            cucumber: {
+              'ci-visibility/features-impacted-test/impacted-test.feature': ['Say impacted test']
+            }
+          }
+        )
+      })
+
+      // Modify `impacted-test.feature` to mark it as impacted
+      before(() => {
+        execSync('git checkout -b feature-branch', { cwd, stdio: 'ignore' })
+        fs.writeFileSync(
+          path.join(cwd, 'ci-visibility/features-impacted-test/impacted-test.feature'),
+          `Feature: Impacted Test
+           Scenario: Say impacted test
+           When the greeter says impacted test
+           Then I should have heard "impactedd test"`
+        )
+        execSync('git add ci-visibility/features-impacted-test/impacted-test.feature', { cwd, stdio: 'ignore' })
+        execSync('git commit -m "modify impacted-test.feature"', { cwd, stdio: 'ignore' })
+      })
+
+      after(() => {
+        // We can't use main here because in CI it might be "master".
+        // We just use `-` which goes back to the previous branch
+        execSync('git checkout -', { cwd, stdio: 'ignore' })
+        execSync('git branch -D feature-branch', { cwd, stdio: 'ignore' })
+      })
+
+      const getTestAssertions = ({ isModified, isEfd, isNew, isParallel }) =>
+        receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+
+            if (isEfd) {
+              assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
+            } else {
+              assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
+            }
+
+            const resourceNames = tests.map(span => span.resource)
+
+            assert.includeMembers(resourceNames,
+              [
+                'ci-visibility/features-impacted-test/impacted-test.feature.Say impacted test'
+              ]
+            )
+
+            if (isParallel) {
+              assert.includeMembers(resourceNames, [
+                'ci-visibility/features-impacted-test/impacted-test.feature.Say impacted test',
+                'ci-visibility/features-impacted-test/impacted-test-2.feature.Say impacted test 2'
+              ])
+            }
+
+            const impactedTests = tests.filter(test =>
+              test.meta[TEST_SOURCE_FILE] === 'ci-visibility/features-impacted-test/impacted-test.feature' &&
+              test.meta[TEST_NAME] === 'Say impacted test'
+            )
+
+            if (isEfd) {
+              assert.equal(impactedTests.length, NUM_RETRIES + 1) // Retries + original test
+            } else {
+              assert.equal(impactedTests.length, 1)
+            }
+
+            for (const impactedTest of impactedTests) {
+              if (isModified) {
+                assert.propertyVal(impactedTest.meta, TEST_IS_MODIFIED, 'true')
+              } else {
+                assert.notProperty(impactedTest.meta, TEST_IS_MODIFIED)
+              }
+              if (isNew) {
+                assert.propertyVal(impactedTest.meta, TEST_IS_NEW, 'true')
+              } else {
+                assert.notProperty(impactedTest.meta, TEST_IS_NEW)
+              }
+            }
+
+            if (isEfd) {
+              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+              assert.equal(retriedTests.length, NUM_RETRIES)
+              let retriedTestNew = 0
+              let retriedTestsWithReason = 0
+              retriedTests.forEach(test => {
+                if (test.meta[TEST_IS_NEW] === 'true') {
+                  retriedTestNew++
+                }
+                if (test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd) {
+                  retriedTestsWithReason++
+                }
+              })
+              assert.equal(retriedTestNew, isNew ? NUM_RETRIES : 0)
+              assert.equal(retriedTestsWithReason, NUM_RETRIES)
+            }
+          })
+
+      const runImpactedTest = (
+        done,
+        { isModified, isEfd, isParallel, isNew },
+        extraEnvVars = {}
+      ) => {
+        const testAssertionsPromise = getTestAssertions({ isModified, isEfd, isParallel, isNew })
+
+        childProcess = exec(
+          isParallel
+            ? './node_modules/.bin/cucumber-js ci-visibility/features-impacted-test/*.feature --parallel 2'
+            : './node_modules/.bin/cucumber-js ci-visibility/features-impacted-test/impacted-test.feature',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              // we need to trick this process into not reading the event.json contents for GitHub,
+              // otherwise we'll take the diff from the base repository, not from the test project in `cwd`
+              GITHUB_BASE_REF: '',
+              ...extraEnvVars
+            },
+            stdio: 'inherit'
+          }
+        )
+
+        childProcess.on('exit', (code) => {
+          testAssertionsPromise.then(done).catch(done)
+        })
+      }
+
+      context('test is not new', () => {
+        it('should be detected as impacted', (done) => {
+          receiver.setSettings({ impacted_tests_enabled: true })
+
+          runImpactedTest(done, { isModified: true })
+        })
+
+        it('should not be detected as impacted if disabled', (done) => {
+          receiver.setSettings({ impacted_tests_enabled: false })
+
+          runImpactedTest(done, { isModified: false })
+        })
+
+        it('should not be detected as impacted if DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED is false',
+          (done) => {
+            receiver.setSettings({ impacted_tests_enabled: true })
+
+            runImpactedTest(done,
+              { isModified: false },
+              { DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0' }
+            )
+          })
+
+        if (version !== '7.0.0') {
+          it('can detect impacted tests in parallel mode', (done) => {
+            receiver.setSettings({ impacted_tests_enabled: true })
+
+            runImpactedTest(done, { isModified: true, isParallel: true })
+          })
+        }
+      })
+
+      context('test is new', () => {
+        it('should be retried and marked both as new and modified', (done) => {
+          receiver.setKnownTests({})
+
+          receiver.setSettings({
+            impacted_tests_enabled: true,
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': NUM_RETRIES
+              }
+            },
+            known_tests_enabled: true
+          })
+          runImpactedTest(done, { isModified: true, isEfd: true, isNew: true })
         })
       })
     })

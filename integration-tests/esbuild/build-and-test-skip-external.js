@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+'use strict'
+
 const fs = require('fs')
 const assert = require('assert')
 
@@ -21,8 +23,9 @@ esbuild.build({
   assert(output.includes('require("knex")'), 'bundle should contain a require call to non-bundled knex')
   assert(!output.includes('require("axios")'), 'bundle should not contain a require call to bundled axios')
   console.log('ok') // eslint-disable-line no-console
-  fs.rmSync('./skip-external-out.js')
 }).catch((err) => {
   console.error(err) // eslint-disable-line no-console
   process.exit(1)
+}).finally(() => {
+  fs.rmSync('./skip-external-out.js', { force: true })
 })

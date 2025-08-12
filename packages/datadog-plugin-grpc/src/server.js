@@ -6,9 +6,9 @@ const { TEXT_MAP } = require('../../../ext/formats')
 const { addMetadataTags, getFilter, getMethodMetadata } = require('./util')
 
 class GrpcServerPlugin extends ServerPlugin {
-  static get id () { return 'grpc' }
-  static get operation () { return 'server:request' }
-  static get prefix () { return 'apm:grpc:server:request' }
+  static id = 'grpc'
+  static operation = 'server:request'
+  static prefix = 'apm:grpc:server:request'
 
   constructor (...args) {
     super(...args)
@@ -27,7 +27,7 @@ class GrpcServerPlugin extends ServerPlugin {
   }
 
   bindStart (message) {
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
     const { name, metadata, type } = message
     const metadataFilter = this.config.metadataFilter
     const childOf = extract(this.tracer, metadata)

@@ -1,6 +1,9 @@
+'use strict'
+
 const request = require('../exporters/common/request')
 const log = require('../log')
 const { isTrue } = require('../util')
+const { getEnvironmentVariable } = require('../config-helper')
 
 let agentTelemetry = true
 
@@ -36,10 +39,9 @@ function getPayload (payload) {
   // 'logs' request type payload is meant to send library logs to Datadog’s backend.
   if (Array.isArray(payload)) {
     return payload
-  } else {
-    const { logger, tags, serviceMapping, ...trimmedPayload } = payload
-    return trimmedPayload
   }
+  const { logger, tags, serviceMapping, ...trimmedPayload } = payload
+  return trimmedPayload
 }
 
 function sendData (config, application, host, reqType, payload = {}, cb = () => {}) {
@@ -51,7 +53,8 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
 
   let url = config.url
 
-  const isCiVisibilityAgentlessMode = isCiVisibility && isTrue(process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED)
+  const isCiVisibilityAgentlessMode = isCiVisibility &&
+                                      isTrue(getEnvironmentVariable('DD_CIVISIBILITY_AGENTLESS_ENABLED'))
 
   if (isCiVisibilityAgentlessMode) {
     try {
@@ -74,7 +77,7 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
 
   const data = JSON.stringify({
     api_version: 'v2',
-    naming_schema_version: config.spanAttributeSchema ? config.spanAttributeSchema : '',
+    naming_schema_version: config.spanAttributeSchema ?? '',
     request_type: reqType,
     tracer_time: Math.floor(Date.now() / 1000),
     runtime_id: config.tags['runtime-id'],
@@ -85,14 +88,14 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
   })
 
   request(data, options, (error) => {
-    if (error && process.env.DD_API_KEY && config.site) {
+    if (error && getEnvironmentVariable('DD_API_KEY') && config.site) {
       if (agentTelemetry) {
         log.warn('Agent telemetry failed, started agentless telemetry')
         agentTelemetry = false
       }
       // figure out which data center to send to
       const backendUrl = getAgentlessTelemetryEndpoint(config.site)
-      const backendHeader = { ...options.headers, 'DD-API-KEY': process.env.DD_API_KEY }
+      const backendHeader = { ...options.headers, 'DD-API-KEY': getEnvironmentVariable('DD_API_KEY') }
       const backendOptions = {
         ...options,
         url: backendUrl,
@@ -100,7 +103,11 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
         path: '/api/v2/apmtelemetry'
       }
       if (backendUrl) {
-        request(data, backendOptions, (error) => { log.error('Error sending telemetry data', error) })
+        request(data, backendOptions, (error) => {
+          if (error) {
+            log.error('Error sending telemetry data', error)
+          }
+        })
       } else {
         log.error('Invalid Telemetry URL')
       }

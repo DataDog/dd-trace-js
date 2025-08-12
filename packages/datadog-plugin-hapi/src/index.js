@@ -5,9 +5,7 @@ const RouterPlugin = require('../../datadog-plugin-router/src')
 const web = require('../../dd-trace/src/plugins/util/web')
 
 class HapiPlugin extends RouterPlugin {
-  static get id () {
-    return 'hapi'
-  }
+  static id = 'hapi'
 
   constructor (...args) {
     super(...args)
@@ -15,7 +13,7 @@ class HapiPlugin extends RouterPlugin {
     this._requestSpans = new WeakMap()
 
     this.addSub('apm:hapi:request:handle', ({ req }) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const span = store && store.span
 
       this.setFramework(req, 'hapi', this.config)

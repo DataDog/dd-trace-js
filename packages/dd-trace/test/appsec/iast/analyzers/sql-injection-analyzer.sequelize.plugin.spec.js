@@ -6,6 +6,7 @@ const path = require('path')
 const semver = require('semver')
 const { prepareTestServerForIast } = require('../utils')
 const { storage } = require('../../../../../datadog-core')
+const { withVersions } = require('../../../setup/mocha')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
 const vulnerabilityReporter = require('../../../../src/appsec/iast/vulnerability-reporter')
@@ -33,8 +34,12 @@ describe('sql-injection-analyzer with sequelize', () => {
             return sequelize.authenticate()
           })
 
+          afterEach(() => {
+            sequelize.close()
+          })
+
           testThatRequestHasVulnerability(() => {
-            const store = storage.getStore()
+            const store = storage('legacy').getStore()
             const iastCtx = iastContextFunctions.getIastContext(store)
 
             let sql = 'SELECT 1'
@@ -45,27 +50,69 @@ describe('sql-injection-analyzer with sequelize', () => {
 
           const externalFileContent = `'use strict'
 
-module.exports = function (sequelize, sql) {
+function main (sequelize, sql) {
   return sequelize.query(sql)
 }
+
+function doubleCall (sequelize, sql) {
+  sequelize.query(sql)
+  return sequelize.query(sql)
+}
+
+async function doubleChainedCall (sequelize, sql) {
+  await sequelize.query(sql)
+  return sequelize.query(sql)
+}
+
+module.exports = { main, doubleCall, doubleChainedCall }
 `
           testThatRequestHasVulnerability(() => {
             const filepath = path.join(os.tmpdir(), 'test-sequelize-sqli.js')
             fs.writeFileSync(filepath, externalFileContent)
 
-            const store = storage.getStore()
+            const store = storage('legacy').getStore()
             const iastCtx = iastContextFunctions.getIastContext(store)
 
             let sql = 'SELECT 1'
             sql = newTaintedString(iastCtx, sql, 'param', 'Request')
 
-            return require(filepath)(sequelize, sql)
+            return require(filepath).main(sequelize, sql)
           }, 'SQL_INJECTION', {
             occurrences: 1,
             location: {
               path: 'test-sequelize-sqli.js',
               line: 4
             }
+          })
+
+          testThatRequestHasVulnerability(() => {
+            const filepath = path.join(os.tmpdir(), 'test-sequelize-sqli.js')
+            fs.writeFileSync(filepath, externalFileContent)
+
+            const store = storage('legacy').getStore()
+            const iastCtx = iastContextFunctions.getIastContext(store)
+
+            let sql = 'SELECT 1'
+            sql = newTaintedString(iastCtx, sql, 'param', 'Request')
+
+            return require(filepath).doubleCall(sequelize, sql)
+          }, 'SQL_INJECTION', {
+            occurrences: 2
+          })
+
+          testThatRequestHasVulnerability(() => {
+            const filepath = path.join(os.tmpdir(), 'test-sequelize-sqli.js')
+            fs.writeFileSync(filepath, externalFileContent)
+
+            const store = storage('legacy').getStore()
+            const iastCtx = iastContextFunctions.getIastContext(store)
+
+            let sql = 'SELECT 1'
+            sql = newTaintedString(iastCtx, sql, 'param', 'Request')
+
+            return require(filepath).doubleChainedCall(sequelize, sql)
+          }, 'SQL_INJECTION', {
+            occurrences: 2
           })
 
           testThatRequestHasNoVulnerability(() => {

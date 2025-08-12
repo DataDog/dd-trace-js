@@ -1,6 +1,6 @@
 'use strict'
 
-const { execSync, spawnSync } = require('child_process')
+const { spawnSync } = require('child_process')
 
 const { params, flags } = parse()
 
@@ -31,11 +31,12 @@ function run (cmd) {
 function prompt (question) {
   print(`${BOLD}${CYAN}?${RESET} ${BOLD}${question}${RESET} `)
 
-  const child = spawnSync('bash', ['-c', 'read answer && echo $answer'], {
+  const { stdout } = spawnSync('bash', ['-c', 'read answer && echo $answer'], {
+    encoding: 'utf8',
     stdio: ['inherit']
   })
 
-  return child.stdout.toString()
+  return stdout
 }
 
 // Ask whether to continue and otherwise exit the process.
@@ -59,13 +60,30 @@ function capture (cmd) {
     log(`${GRAY}> ${cmd}${RESET}`)
   }
 
-  const output = execSync(cmd, { encoding: 'utf8', stdio: 'pipe' }).toString().trim()
+  const result = spawnSync(cmd, { encoding: 'utf8', shell: true })
 
-  if (flags.debug) {
-    log(output)
+  if (result.error) throw result.error
+  if (result.status !== 0) {
+    const err = new Error(`Command failed: ${cmd}\n${result.stderr}`)
+    for (const [k, v] of Object.entries(result)) {
+      err[k] = v
+    }
+    throw err
   }
 
-  return output
+  const stdout = result.stdout.trim()
+  const stderr = result.stderr.trim()
+
+  if (flags.debug) {
+    log(stdout)
+    log(`${RED}${stderr}${RESET}`)
+  }
+
+  if (result.status) {
+    throw new Error(stderr)
+  }
+
+  return stdout
 }
 
 // Start an operation and show a spinner until it reports as passing or failing.
@@ -77,7 +95,7 @@ function start (title) {
 
 // Show a spinner for the current operation.
 function spin (index) {
-  if (flags.debug) return
+  if (flags.debug || process.env.CI) return
 
   print(`\r${CYAN}${frames[index]}${RESET} ${BOLD}${current}${RESET}`)
 
@@ -97,7 +115,9 @@ function pass (result) {
       print(`: ${BOLD}${CYAN}${result}${RESET}`)
     }
 
-    print('\n')
+    if (!process.env.CI) {
+      print('\n')
+    }
   }
 
   current = undefined
@@ -110,7 +130,11 @@ function fail (err) {
   clearTimeout(timer)
 
   if (!flags.debug) {
-    print(`\r${RED}✘${RESET} ${BOLD}${current}${RESET}\n`)
+    print(`\r${RED}✘${RESET} ${BOLD}${current}${RESET}`)
+
+    if (!process.env.CI) {
+      print('\n')
+    }
   }
 
   current = undefined

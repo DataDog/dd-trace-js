@@ -5,6 +5,7 @@ const os = require('os')
 const path = require('path')
 const { prepareTestServerForIast } = require('../utils')
 const { storage } = require('../../../../../datadog-core')
+const { withVersions } = require('../../../setup/mocha')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
 const vulnerabilityReporter = require('../../../../src/appsec/iast/vulnerability-reporter')
@@ -47,7 +48,7 @@ describe('sql-injection-analyzer with mysql', () => {
 
         testThatRequestHasVulnerability(() => {
           return new Promise((resolve, reject) => {
-            const store = storage.getStore()
+            const store = storage('legacy').getStore()
             const iastCtx = iastContextFunctions.getIastContext(store)
             let sql = 'SELECT 1'
             sql = newTaintedString(iastCtx, sql, 'param', 'Request')
@@ -97,7 +98,7 @@ describe('sql-injection-analyzer with mysql', () => {
 
         testThatRequestHasVulnerability(() => {
           return new Promise((resolve, reject) => {
-            const store = storage.getStore()
+            const store = storage('legacy').getStore()
             const iastCtx = iastContextFunctions.getIastContext(store)
             let sql = 'SELECT 1'
             sql = newTaintedString(iastCtx, sql, 'param', 'Request')

@@ -1,50 +1,55 @@
 'use strict'
 
-const constants = require('./constants')
 const log = require('./log')
-const ERROR_MESSAGE = constants.ERROR_MESSAGE
-const ERROR_STACK = constants.ERROR_STACK
-const ERROR_TYPE = constants.ERROR_TYPE
 
-const otelTagMap = {
-  'deployment.environment': 'env',
-  'service.name': 'service',
-  'service.version': 'version'
+function addNonEmpty (carrier, key, value) {
+  if (key !== '') {
+    carrier[key] = value
+  }
 }
 
-function add (carrier, keyValuePairs, parseOtelTags = false) {
-  if (!carrier || !keyValuePairs) return
+function add (carrier, keyValuePairs) {
+  if (!carrier) return
 
-  if (Array.isArray(keyValuePairs)) {
-    return keyValuePairs.forEach(tags => add(carrier, tags))
-  }
   try {
     if (typeof keyValuePairs === 'string') {
-      const segments = keyValuePairs.split(',')
-      for (const segment of segments) {
-        const separatorIndex = parseOtelTags ? segment.indexOf('=') : segment.indexOf(':')
-        if (separatorIndex === -1) continue
+      let valueStart = 0
+      let keyStart = 0
 
-        let key = segment.slice(0, separatorIndex)
-        const value = segment.slice(separatorIndex + 1)
+      for (let i = 0; i < keyValuePairs.length; i++) {
+        const char = keyValuePairs[i]
 
-        if (parseOtelTags && key in otelTagMap) {
-          key = otelTagMap[key]
+        if (char === ':') {
+          if (valueStart === 0) {
+            valueStart = i
+          }
+        } else if (char === ',') {
+          valueStart ||= i
+          addNonEmpty(
+            carrier,
+            keyValuePairs.slice(keyStart, valueStart).trim(),
+            keyValuePairs.slice(valueStart + 1, i).trim()
+          )
+          keyStart = i + 1
+          valueStart = 0
         }
-
-        carrier[key.trim()] = value.trim()
       }
+
+      if (keyValuePairs.at(-1) !== ',') {
+        valueStart ||= keyValuePairs.length
+        addNonEmpty(
+          carrier,
+          keyValuePairs.slice(keyStart, valueStart).trim(),
+          keyValuePairs.slice(valueStart + 1).trim()
+        )
+      }
+    } else if (Array.isArray(keyValuePairs)) {
+      return keyValuePairs.forEach(tags => add(carrier, tags))
     } else {
-      // HACK: to ensure otel.recordException does not influence trace.error
-      if (ERROR_MESSAGE in keyValuePairs || ERROR_STACK in keyValuePairs || ERROR_TYPE in keyValuePairs) {
-        if (!('doNotSetTraceError' in keyValuePairs)) {
-          carrier.setTraceError = true
-        }
-      }
       Object.assign(carrier, keyValuePairs)
     }
-  } catch (e) {
-    log.error('Error adding tags', e)
+  } catch (error) {
+    log.error('Error adding tags', error)
   }
 }
 

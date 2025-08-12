@@ -1,3 +1,5 @@
+'use strict'
+
 const commitSHARegex = /git\.commit\.sha=([a-f\d]{40})/
 const repositoryUrlRegex = /git\.repository_url=([\w\d:@/.-]+)/
 
@@ -9,7 +11,7 @@ function removeUserSensitiveInfo (repositoryUrl) {
       return `${parsedUrl.origin}${parsedUrl.pathname}`
     }
     return repositoryUrl
-  } catch (e) {
+  } catch {
     // if protocol isn't https, no password will be used
     return repositoryUrl
   }

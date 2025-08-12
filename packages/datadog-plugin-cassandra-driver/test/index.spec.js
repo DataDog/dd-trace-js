@@ -1,9 +1,11 @@
 'use strict'
 
 const semver = require('semver')
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_TYPE, ERROR_MESSAGE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 describe('Plugin', () => {
   let cassandra
@@ -46,26 +48,29 @@ describe('Plugin', () => {
         withPeerService(
           () => tracer,
           'cassandra-driver',
-          (done) => client.execute('SELECT now() FROM local;', err => err && done(err)),
-          '127.0.0.1', 'db.cassandra.contact.points'
+          (done) => client.execute('SELECT now() FROM local;', done),
+          '127.0.0.1',
+          'db.cassandra.contact.points'
         )
 
         it('should do automatic instrumentation', done => {
           const query = 'SELECT now() FROM local;'
           agent
-            .use(traces => {
-              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-              expect(traces[0][0]).to.have.property('resource', query)
-              expect(traces[0][0]).to.have.property('type', 'cassandra')
-              expect(traces[0][0].meta).to.have.property('db.type', 'cassandra')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('out.host', '127.0.0.1')
-              expect(traces[0][0].meta).to.have.property('cassandra.query', query)
-              expect(traces[0][0].meta).to.have.property('cassandra.keyspace', 'system')
-              expect(traces[0][0].meta).to.have.property('component', 'cassandra-driver')
-              expect(traces[0][0].meta).to.have.property('network.destination.port', '9042')
-              expect(traces[0][0].meta).to.have.property('db.cassandra.contact.points', '127.0.0.1')
+            .assertFirstTraceSpan({
+              name: expectedSchema.outbound.opName,
+              service: expectedSchema.outbound.serviceName,
+              resource: query,
+              type: 'cassandra',
+              meta: {
+                'db.type': 'cassandra',
+                'span.kind': 'client',
+                'out.host': '127.0.0.1',
+                'cassandra.query': query,
+                'cassandra.keyspace': 'system',
+                component: 'cassandra-driver',
+                'network.destination.port': '9042',
+                'db.cassandra.contact.points': '127.0.0.1'
+              }
             })
             .then(done)
             .catch(done)
@@ -81,8 +86,8 @@ describe('Plugin', () => {
           ]
 
           agent
-            .use(traces => {
-              expect(traces[0][0]).to.have.property('resource', `${queries[0].query}; ${queries[1]}`)
+            .assertFirstTraceSpan({
+              resource: `${queries[0].query}; ${queries[1]}`
             })
             .then(done)
             .catch(done)
@@ -98,8 +103,8 @@ describe('Plugin', () => {
           ]
 
           agent
-            .use(traces => {
-              expect(traces[0][0]).to.have.property('resource', `${queries[0].query}; ${queries[1]}`)
+            .assertFirstTraceSpan({
+              resource: `${queries[0].query}; ${queries[1]}`
             })
             .then(done)
             .catch(done)
@@ -115,11 +120,15 @@ describe('Plugin', () => {
           let error
 
           agent
-            .use(traces => {
-              expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
-              expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
-              expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
-              expect(traces[0][0].meta).to.have.property('component', 'cassandra-driver')
+            .assertFirstTraceSpan((trace) => {
+              assertObjectContains(trace, {
+                meta: {
+                  [ERROR_TYPE]: error.name,
+                  [ERROR_MESSAGE]: error.message,
+                  [ERROR_STACK]: error.stack,
+                  component: 'cassandra-driver'
+                }
+              })
             })
             .then(done)
             .catch(done)
@@ -189,10 +198,11 @@ describe('Plugin', () => {
         })
 
         it('should be configured with the correct values', done => {
-          agent.use(traces => {
-            expect(traces[0][0]).to.have.property('service', 'custom')
-            done()
+          agent.assertFirstTraceSpan({
+            service: 'custom'
           })
+            .then(done)
+            .catch(done)
 
           client.execute('SELECT now() FROM local;', err => err && done(err))
         })
@@ -247,18 +257,20 @@ describe('Plugin', () => {
             const query = 'SELECT now() FROM local;'
 
             agent
-              .use(traces => {
-                expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-                expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-                expect(traces[0][0]).to.have.property('resource', query)
-                expect(traces[0][0]).to.have.property('type', 'cassandra')
-                expect(traces[0][0].meta).to.have.property('db.type', 'cassandra')
-                expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-                expect(traces[0][0].meta).to.have.property('out.host', '127.0.0.1')
-                expect(traces[0][0].meta).to.have.property('cassandra.query', query)
-                expect(traces[0][0].meta).to.have.property('cassandra.keyspace', 'system')
-                expect(traces[0][0].meta).to.have.property('component', 'cassandra-driver')
-                expect(traces[0][0].meta).to.have.property('network.destination.port', '9042')
+              .assertFirstTraceSpan({
+                name: expectedSchema.outbound.opName,
+                service: expectedSchema.outbound.serviceName,
+                resource: query,
+                type: 'cassandra',
+                meta: {
+                  'db.type': 'cassandra',
+                  'span.kind': 'client',
+                  'out.host': '127.0.0.1',
+                  'cassandra.query': query,
+                  'cassandra.keyspace': 'system',
+                  component: 'cassandra-driver',
+                  'network.destination.port': '9042'
+                }
               })
               .then(done)
               .catch(done)
@@ -275,8 +287,8 @@ describe('Plugin', () => {
             ]
 
             agent
-              .use(traces => {
-                expect(traces[0][0]).to.have.property('resource', `${queries[0].query}; ${queries[1]}`)
+              .assertFirstTraceSpan({
+                resource: `${queries[0].query}; ${queries[1]}`
               })
               .then(done)
               .catch(done)

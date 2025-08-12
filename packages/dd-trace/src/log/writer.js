@@ -13,13 +13,14 @@ const defaultLogger = {
 let enabled = false
 let logger = defaultLogger
 let logChannel = new LogChannel()
+let stackTraceLimitFunction = onError
 
 function withNoop (fn) {
-  const store = storage.getStore()
+  const store = storage('legacy').getStore()
 
-  storage.enterWith({ noop: true })
+  storage('legacy').enterWith({ noop: true })
   fn()
-  storage.enterWith(store)
+  storage('legacy').enterWith(store)
 }
 
 function unsubscribeAll () {
@@ -41,7 +42,7 @@ function toggle (enable, level) {
 }
 
 function use (newLogger) {
-  if (newLogger && newLogger.debug instanceof Function && newLogger.error instanceof Function) {
+  if (typeof newLogger?.debug === 'function' && typeof newLogger.error === 'function') {
     logger = newLogger
   }
 }
@@ -53,12 +54,18 @@ function reset () {
 }
 
 function getErrorLog (err) {
-  if (err && typeof err.delegate === 'function') {
+  if (typeof err?.delegate === 'function') {
     const result = err.delegate()
     return Array.isArray(result) ? Log.parse(...result) : Log.parse(result)
-  } else {
-    return err
   }
+  return err
+}
+
+function setStackTraceLimitFunction (fn) {
+  if (typeof fn !== 'function') {
+    throw new TypeError('stackTraceLimitFunction must be a function')
+  }
+  stackTraceLimitFunction = fn
 }
 
 function onError (err) {
@@ -66,7 +73,16 @@ function onError (err) {
 
   // calling twice logger.error() because Error cause is only available in nodejs v16.9.0
   // TODO: replace it with Error(message, { cause }) when cause has broad support
-  if (formatted) withNoop(() => logger.error(new Error(formatted)))
+  if (formatted) {
+    withNoop(() => {
+      const l = Error.stackTraceLimit
+      Error.stackTraceLimit = 0
+      const e = new Error(formatted)
+      Error.stackTraceLimit = l
+      Error.captureStackTrace(e, stackTraceLimitFunction)
+      logger.error(e)
+    })
+  }
   if (cause) withNoop(() => logger.error(cause))
 }
 
@@ -122,4 +138,4 @@ function trace (...args) {
   onTrace(Log.parse(...args))
 }
 
-module.exports = { use, toggle, reset, error, warn, info, debug, trace }
+module.exports = { use, toggle, reset, error, warn, info, debug, trace, setStackTraceLimitFunction }

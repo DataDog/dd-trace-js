@@ -7,51 +7,60 @@ const config = require('./config')
 const JSONBuffer = require('./json-buffer')
 const request = require('../../exporters/common/request')
 const { GIT_COMMIT_SHA, GIT_REPOSITORY_URL } = require('../../plugins/util/tags')
-const log = require('../../log')
+const log = require('./log')
 const { version } = require('../../../../../package.json')
+const { getEnvironmentVariable } = require('../../config-helper')
 
 module.exports = send
 
-const MAX_LOG_PAYLOAD_SIZE = 1024 * 1024 // 1MB
+const MAX_MESSAGE_LENGTH = 8 * 1024 // 8KB
+const MAX_LOG_PAYLOAD_SIZE_MB = 1
+const MAX_LOG_PAYLOAD_SIZE_BYTES = MAX_LOG_PAYLOAD_SIZE_MB * 1024 * 1024
 
 const ddsource = 'dd_debugger'
 const hostname = getHostname()
 const service = config.service
 
 const ddtags = [
-  ['env', process.env.DD_ENV],
-  ['version', process.env.DD_VERSION],
+  ['env', getEnvironmentVariable('DD_ENV')],
+  ['version', getEnvironmentVariable('DD_VERSION')],
   ['debugger_version', version],
   ['host_name', hostname],
   [GIT_COMMIT_SHA, config.commitSHA],
   [GIT_REPOSITORY_URL, config.repositoryUrl]
-].map((pair) => pair.join(':')).join(',')
+].filter(([, value]) => value !== undefined).map((pair) => pair.join(':')).join(',')
 
 const path = `/debugger/v1/input?${stringify({ ddtags })}`
 
-const jsonBuffer = new JSONBuffer({ size: config.maxTotalPayloadSize, timeout: 1000, onFlush })
+const jsonBuffer = new JSONBuffer({
+  size: config.maxTotalPayloadSize,
+  timeout: config.dynamicInstrumentation.uploadIntervalSeconds * 1000,
+  onFlush
+})
 
 function send (message, logger, dd, snapshot) {
   const payload = {
     ddsource,
     hostname,
     service,
-    message,
+    message: message?.length > MAX_MESSAGE_LENGTH
+      ? message.slice(0, MAX_MESSAGE_LENGTH) + '…'
+      : message,
     logger,
     dd,
-    'debugger.snapshot': snapshot
+    debugger: { snapshot }
   }
 
   let json = JSON.stringify(payload)
   let size = Buffer.byteLength(json)
 
-  if (size > MAX_LOG_PAYLOAD_SIZE) {
+  if (size > MAX_LOG_PAYLOAD_SIZE_BYTES) {
     // TODO: This is a very crude way to handle large payloads. Proper pruning will be implemented later (DEBUG-2624)
-    const line = Object.values(payload['debugger.snapshot'].captures.lines)[0]
-    line.locals = {
-      notCapturedReason: 'Snapshot was too large',
-      size: Object.keys(line.locals).length
-    }
+    delete payload.debugger.snapshot.captures
+    payload.debugger.snapshot.captureError =
+      `Snapshot was too large (max allowed size is ${MAX_LOG_PAYLOAD_SIZE_MB} MiB). ` +
+      'Consider reducing the capture depth or turn off "Capture Variables" completely, ' +
+      'and instead include the variables of interest directly in the message template.'
     json = JSON.stringify(payload)
     size = Buffer.byteLength(json)
   }

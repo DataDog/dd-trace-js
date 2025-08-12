@@ -7,7 +7,7 @@ const { getIastContext } = require('../iast-context')
 const { storage } = require('../../../../../datadog-core')
 const { PATH_TRAVERSAL } = require('../vulnerabilities')
 
-const ignoredOperations = ['dir.close', 'close']
+const ignoredOperations = new Set(['dir.close', 'close'])
 
 class PathTraversalAnalyzer extends InjectionAnalyzer {
   constructor () {
@@ -20,23 +20,23 @@ class PathTraversalAnalyzer extends InjectionAnalyzer {
     this.internalExclusionList = [
       'node:fs',
       'node:internal/fs',
-      'node:internal\\fs',
+      String.raw`node:internal\fs`,
       'fs.js',
       'internal/fs',
-      'internal\\fs'
+      String.raw`internal\fs`
     ]
   }
 
   onConfigure () {
     this.addSub('apm:fs:operation:start', (obj) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const outOfReqOrChild = !store?.fs?.root
 
       // we could filter out all the nested fs.operations based on store.fs.root
       // but if we spect a store in the context to be present we are going to exclude
       // all out_of_the_request fs.operations
       // AppsecFsPlugin must be enabled
-      if (ignoredOperations.includes(obj.operation) || outOfReqOrChild) return
+      if (ignoredOperations.has(obj.operation) || outOfReqOrChild) return
 
       const pathArguments = []
       if (obj.dest) {
@@ -71,20 +71,17 @@ class PathTraversalAnalyzer extends InjectionAnalyzer {
   }
 
   _isExcluded (location) {
-    let ret = true
-    if (location && location.path) {
+    if (location?.path) {
       // Exclude from reporting those vulnerabilities which location is from an internal fs call
-      if (location.isInternal) {
-        ret = this.internalExclusionList.some(elem => location.path.includes(elem))
-      } else {
-        ret = this.exclusionList.some(elem => location.path.includes(elem))
-      }
+      return location.isInternal
+        ? this.internalExclusionList.some(elem => location.path.includes(elem))
+        : this.exclusionList.some(elem => location.path.includes(elem))
     }
-    return ret
+    return true
   }
 
   analyze (value) {
-    const iastContext = getIastContext(storage.getStore())
+    const iastContext = getIastContext(storage('legacy').getStore())
     if (!iastContext) {
       return
     }

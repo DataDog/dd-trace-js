@@ -55,23 +55,25 @@ function putTestRecord (kinesis, streamName, data, cb) {
 }
 
 function putTestRecords (kinesis, streamName, cb) {
-  kinesis.putRecords({
-    Records: [
-      {
-        PartitionKey: id().toString(),
-        Data: dataBufferCustom(1)
-      },
-      {
-        PartitionKey: id().toString(),
-        Data: dataBufferCustom(2)
-      },
-      {
-        PartitionKey: id().toString(),
-        Data: dataBufferCustom(3)
-      }
-    ],
-    StreamName: streamName
-  }, cb)
+  waitForActiveStream(kinesis, streamName, () => {
+    kinesis.putRecords({
+      Records: [
+        {
+          PartitionKey: id().toString(),
+          Data: dataBufferCustom(1)
+        },
+        {
+          PartitionKey: id().toString(),
+          Data: dataBufferCustom(2)
+        },
+        {
+          PartitionKey: id().toString(),
+          Data: dataBufferCustom(3)
+        }
+      ],
+      StreamName: streamName
+    }, cb)
+  })
 }
 
 function waitForActiveStream (kinesis, streamName, cb) {

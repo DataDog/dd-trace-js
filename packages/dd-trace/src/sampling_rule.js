@@ -41,10 +41,9 @@ function matcher (pattern, locator) {
     return new RegExpMatcher(pattern, locator)
   }
 
-  if (typeof pattern === 'string' && pattern !== '*') {
+  if (typeof pattern === 'string' && pattern !== '*' && pattern !== '**' && pattern !== '***') {
     return new GlobMatcher(pattern, locator)
   }
-
   return new AlwaysMatcher()
 }
 
@@ -63,8 +62,14 @@ function serviceLocator (span) {
     span.tracer()._service
 }
 
+function resourceLocator (span) {
+  const { _tags: tags } = span.context()
+  return tags.resource ||
+    tags['resource.name']
+}
+
 class SamplingRule {
-  constructor ({ name, service, resource, tags, sampleRate = 1.0, provenance = undefined, maxPerSecond } = {}) {
+  constructor ({ name, service, resource, tags, sampleRate = 1, provenance, maxPerSecond } = {}) {
     this.matchers = []
 
     if (name) {
@@ -74,7 +79,7 @@ class SamplingRule {
       this.matchers.push(matcher(service, serviceLocator))
     }
     if (resource) {
-      this.matchers.push(matcher(resource, makeTagLocator('resource.name')))
+      this.matchers.push(matcher(resource, resourceLocator))
     }
     for (const [key, value] of Object.entries(tags || {})) {
       this.matchers.push(matcher(value, makeTagLocator(key)))
@@ -107,6 +112,9 @@ class SamplingRule {
 
   match (span) {
     for (const matcher of this.matchers) {
+      // Rule is a special object with a .match() property.
+      // It has nothing to do with a regular expression.
+      // eslint-disable-next-line unicorn/prefer-regexp-test
       if (!matcher.match(span)) {
         return false
       }
@@ -115,8 +123,14 @@ class SamplingRule {
     return true
   }
 
-  sample () {
-    if (!this._sampler.isSampled()) {
+  /**
+   * Determines whether a span should be sampled based on the configured sampling rule.
+   *
+   * @param {Span|SpanContext} span - The span or span context to evaluate.
+   * @returns {boolean} `true` if the span should be sampled, otherwise `false`.
+   */
+  sample (span) {
+    if (!this._sampler.isSampled(span)) {
       return false
     }
 

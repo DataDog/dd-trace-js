@@ -2,9 +2,8 @@
 
 require('../../setup/tap')
 
-const { calculateDDBasePath } = require('../../../src/util')
+const { ddBasePath } = require('../../../src/util')
 
-const ddBasePath = calculateDDBasePath(__dirname)
 const EOL = '\n'
 
 describe('telemetry log collector', () => {
@@ -28,16 +27,14 @@ describe('telemetry log collector', () => {
     })
 
     it('should store logs with same message but different stack', () => {
-      const ddFrame =
-        `at T (${ddBasePath}packages/dd-trace/test/telemetry/logs/log-collector.spec.js:29:21)`
+      const ddFrame = `at T (${ddBasePath}path/to/dd/file.js:1:2)`
       expect(logCollector.add({ message: 'Error 1', level: 'ERROR', stack_trace: `stack 1\n${ddFrame}` })).to.be.true
       expect(logCollector.add({ message: 'Error 1', level: 'ERROR', stack_trace: `stack 2\n${ddFrame}` })).to.be.true
       expect(logCollector.add({ message: 'Error 1', level: 'ERROR', stack_trace: `stack 3\n${ddFrame}` })).to.be.true
     })
 
     it('should store logs with same message, same stack but different level', () => {
-      const ddFrame =
-        `at T (${ddBasePath}packages/dd-trace/test/telemetry/logs/log-collector.spec.js:29:21)`
+      const ddFrame = `at T (${ddBasePath}path/to/dd/file.js:1:2)`
       expect(logCollector.add({ message: 'Error 1', level: 'ERROR', stack_trace: `stack 1\n${ddFrame}` })).to.be.true
       expect(logCollector.add({ message: 'Error 1', level: 'WARN', stack_trace: `stack 1\n${ddFrame}` })).to.be.true
       expect(logCollector.add({ message: 'Error 1', level: 'DEBUG', stack_trace: `stack 1\n${ddFrame}` })).to.be.true
@@ -53,7 +50,7 @@ describe('telemetry log collector', () => {
     })
 
     it('should include original message and dd frames', () => {
-      const ddFrame = `at T (${ddBasePath}packages/dd-trace/test/telemetry/logs/log_collector.spec.js:29:21)`
+      const ddFrame = `at T (${ddBasePath}path/to/dd/file.js:1:2)`
       const stack = new TypeError('Error 1')
         .stack.replace(`Error 1${EOL}`, `Error 1${EOL}${ddFrame}${EOL}`)
 
@@ -79,7 +76,7 @@ describe('telemetry log collector', () => {
 
     it('should redact stack message if first frame is not a dd frame', () => {
       const thirdPartyFrame = `at callFn (/this/is/not/a/dd/frame/runnable.js:366:21)
-        at T (${ddBasePath}packages/dd-trace/test/telemetry/logs/log_collector.spec.js:29:21)`
+        at T (${ddBasePath}path/to/dd/file.js:1:2)`
       const stack = new TypeError('Error 1')
         .stack.replace(`Error 1${EOL}`, `Error 1${EOL}${thirdPartyFrame}${EOL}`)
 

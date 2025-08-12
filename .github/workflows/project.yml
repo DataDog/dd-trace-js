@@ -4,168 +4,124 @@ on:
   pull_request:
   push:
     branches: [master]
-  schedule:
-    - cron: "0 4 * * *"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
   cancel-in-progress: true
 
 jobs:
-  integration:
-    strategy:
-      # when one version fails, say 14, all the other versions are stopped
-      # setting fail-fast to false in an attempt to prevent this from happening
-      fail-fast: false
-      matrix:
-        version: [18, 20, 22, latest]
+  actionlint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.version }}
-      # Disable core dumps since some integration tests intentionally abort and core dump generation takes around 5-10s
-      - uses: ./.github/actions/install
-      - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
-      - run: yarn test:integration
-
-  # We'll run these separately for earlier (i.e. unsupported) versions
-  integration-guardrails:
-    strategy:
-      matrix:
-        version: [12, 14.0.0, 14, 16.0.0, 16, 18.0.0, 18.1.0, 20.0.0, 22.0.0]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.version }}
-      - uses: ./.github/actions/install
-      - run: node node_modules/.bin/mocha --colors --timeout 30000 integration-tests/init.spec.js
-
-  integration-guardrails-unsupported:
-    strategy:
-      matrix:
-        version: ['0.8', '0.10', '0.12', '4', '6', '8', '10', '12.0.0']
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.version }}
-      - run: node ./init
-      - run: node ./init
-        env:
-          DD_INJECTION_ENABLED: 'true'
-
-  integration-ci:
-    strategy:
-      matrix:
-        version: [18, latest]
-        framework: [cucumber, playwright, selenium, jest, mocha]
-    runs-on: ubuntu-latest
-    env:
-      DD_SERVICE: dd-trace-js-integration-tests
-      DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
-      DD_API_KEY: ${{ secrets.DD_API_KEY_CI_APP }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.version }}
-      - name: Install Google Chrome
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/node/active-lts
+      # NOTE: Ok this next bit seems unnecessary, right? The problem is that
+      # this repo is currently incompatible with npm, at least with the
+      # devDependencies. While this is intended to be corrected, it hasn't yet,
+      # so the easiest thing to do here is just use a fresh package.json. This
+      # is needed because actionlint runs an `npm install` at the beginning.
+      - name: Clear package.json
         run: |
-          sudo sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list'
-          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
-          if [ $? -ne 0 ]; then echo "Failed to add Google key"; exit 1; fi
-          sudo apt-get update
-          sudo apt-get install -y google-chrome-stable
-          if [ $? -ne 0 ]; then echo "Failed to install Google Chrome"; exit 1; fi
-        if: ${{ matrix.framework == 'selenium' }}
-      - name: Install ChromeDriver
+          rm package.json
+          npm init -y
+      - name: actionlint
+        id: actionlint
+        uses: raven-actions/actionlint@3a24062651993d40fed1019b58ac6fbdfbf276cc # v2.0.1
+        with:
+          matcher: true
+          fail-on-error: true
+          shellcheck: false # TODO should we enable this?
+      - name: actionlint Summary
+        if: ${{ steps.actionlint.outputs.exit-code != 0 }}
         run: |
-          export CHROME_VERSION=$(google-chrome --version)
-          CHROME_DRIVER_DOWNLOAD_URL=$(node --experimental-fetch scripts/get-chrome-driver-download-url.js)
-          wget -q "$CHROME_DRIVER_DOWNLOAD_URL"
-          if [ $? -ne 0 ]; then echo "Failed to download ChromeDriver"; exit 1; fi
-          unzip chromedriver-linux64.zip
-          sudo mv chromedriver-linux64/chromedriver /usr/bin/chromedriver
-          sudo chmod +x /usr/bin/chromedriver
-        if: ${{ matrix.framework == 'selenium' }}
-      - uses: ./.github/actions/install
-      - run: yarn test:integration:${{ matrix.framework }}
-        env:
-          NODE_OPTIONS: '-r ./ci/init'
-
-  integration-cypress:
-    strategy:
-      matrix:
-        # Important: This is outside the minimum supported version of dd-trace-js
-        # Node > 16 does not work with Cypress@6.7.0 (not even without our plugin)
-        # TODO: figure out what to do with this: we might have to deprecate support for cypress@6.7.0
-        version: [16, latest]
-        # 6.7.0 is the minimum version we support
-        cypress-version: [6.7.0, latest]
-        module-type: ['commonJS', 'esm']
-    runs-on: ubuntu-latest
-    env:
-      DD_SERVICE: dd-trace-js-integration-tests
-      DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
-      DD_API_KEY: ${{ secrets.DD_API_KEY_CI_APP }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/node/setup
-      - uses: ./.github/actions/install
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.version }}
-      - run: yarn config set ignore-engines true
-      - run: yarn test:integration:cypress --ignore-engines
-        env:
-          CYPRESS_VERSION: ${{ matrix.cypress-version }}
-          NODE_OPTIONS: '-r ./ci/init'
-          CYPRESS_MODULE_TYPE: ${{ matrix.module-type }}
-
-
-  integration-vitest:
-    runs-on: ubuntu-latest
-    env:
-      DD_SERVICE: dd-trace-js-integration-tests
-      DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
-      DD_API_KEY: ${{ secrets.DD_API_KEY_CI_APP }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/node/setup
-      - uses: ./.github/actions/install
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - run: yarn test:integration:vitest
-        env:
-          NODE_OPTIONS: '-r ./ci/init'
+          echo "Used actionlint version ${{ steps.actionlint.outputs.version-semver }}"
+          echo "Used actionlint release ${{ steps.actionlint.outputs.version-tag }}"
+          echo "actionlint ended with ${{ steps.actionlint.outputs.exit-code }} exit code"
+          echo "actionlint ended because '${{ steps.actionlint.outputs.exit-message }}'"
+          echo "actionlint found ${{ steps.actionlint.outputs.total-errors }} errors"
+          echo "actionlint checked ${{ steps.actionlint.outputs.total-files }} files"
+          echo "actionlint cache used: ${{ steps.actionlint.outputs.cache-hit }}"
+          exit ${{ steps.actionlint.outputs.exit-code }}
 
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/node/setup
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
       - run: yarn lint
+
+  package-size-report:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/install
+      - name: Compute module size tree and report
+        uses: qard/heaviest-objects-in-the-universe@e2af4ff3a88e5fe507bd2de1943b015ba2ddda66 # v1.0.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  static-analysis:
+    runs-on: ubuntu-latest
+    name: Datadog Static Analyzer
+    if: github.actor != 'dependabot[bot]'
+    steps:
+    - name: Checkout
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+    - name: Check code meets quality and security standards
+      id: datadog-static-analysis
+      uses: DataDog/datadog-static-analyzer-github-action@v1
+      with:
+        dd_api_key: ${{ secrets.DD_API_KEY }}
+        dd_app_key: ${{ secrets.DD_APP_KEY }}
+        dd_site: datadoghq.com
+        cpu_count: 2
 
   typescript:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/node/setup
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
       - run: yarn type:test
       - run: yarn type:doc
 
-  verify-yaml:
+  # TODO: Remove need for `npm show` before re-enabling to avoid rate limit errors.
+  # verify-yaml:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+  #     - uses: ./.github/actions/node/active-lts
+  #     - uses: ./.github/actions/install
+  #     - run: node scripts/verify-ci-config.js
+
+  yarn-dedupe:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/node/setup
-      - uses: ./.github/actions/install
-      - run: node scripts/verify-ci-config.js
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: ./.github/actions/node/active-lts
+
+      - name: Install dependencies
+        uses: ./.github/actions/install
+
+      - name: Run yarn dependencies:dedupe
+        run: yarn dependencies:dedupe
+
+      - name: Run yarn dedupe check
+        run: ./.github/scripts/yarn-dedupe.sh
+        env:
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_USER_TYPE: ${{ github.event.pull_request.user.type }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}

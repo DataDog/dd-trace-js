@@ -1,21 +1,22 @@
 'use strict'
 
+const { randomUUID } = require('crypto')
 const { expect } = require('chai')
 const semver = require('semver')
 const dc = require('dc-polyfill')
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 const { expectedSchema, rawExpectedSchema } = require('./naming')
-const DataStreamsContext = require('../../dd-trace/src/data_streams_context')
+const DataStreamsContext = require('../../dd-trace/src/datastreams/context')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
 
-const testTopic = 'test-topic'
 const testKafkaClusterId = '5L6g3nShT-eMCtK--X86sw'
 
-const getDsmPathwayHash = (clusterIdAvailable, isProducer, parentHash) => {
+const getDsmPathwayHash = (testTopic, clusterIdAvailable, isProducer, parentHash) => {
   let edgeTags
   if (isProducer) {
     edgeTags = ['direction:out', 'topic:' + testTopic, 'type:kafka']
@@ -40,20 +41,18 @@ describe('Plugin', () => {
     })
     withVersions('kafkajs', 'kafkajs', (version) => {
       let kafka
+      let admin
       let tracer
       let Kafka
+      let Broker
       let clusterIdAvailable
       let expectedProducerHash
       let expectedConsumerHash
-
-      before(() => {
-        clusterIdAvailable = semver.intersects(version, '>=1.13')
-        expectedProducerHash = getDsmPathwayHash(clusterIdAvailable, true, ENTRY_PARENT_HASH)
-        expectedConsumerHash = getDsmPathwayHash(clusterIdAvailable, false, expectedProducerHash)
-      })
+      let testTopic
 
       describe('without configuration', () => {
         const messages = [{ key: 'key1', value: 'test2' }]
+        const messages2 = [{ key: 'key2', value: 'test3' }]
 
         beforeEach(async () => {
           process.env.DD_DATA_STREAMS_ENABLED = 'true'
@@ -61,11 +60,24 @@ describe('Plugin', () => {
           await agent.load('kafkajs')
           const lib = require(`../../../versions/kafkajs@${version}`).get()
           Kafka = lib.Kafka
+          Broker = require(`../../../versions/kafkajs@${version}/node_modules/kafkajs/src/broker`)
           kafka = new Kafka({
             clientId: `kafkajs-test-${version}`,
             brokers: ['127.0.0.1:9092'],
             logLevel: lib.logLevel.WARN
           })
+          testTopic = `test-topic-${randomUUID()}`
+          admin = kafka.admin()
+          await admin.createTopics({
+            topics: [{
+              topic: testTopic,
+              numPartitions: 1,
+              replicationFactor: 1
+            }]
+          })
+          clusterIdAvailable = semver.intersects(version, '>=1.13')
+          expectedProducerHash = getDsmPathwayHash(testTopic, clusterIdAvailable, true, ENTRY_PARENT_HASH)
+          expectedConsumerHash = getDsmPathwayHash(testTopic, clusterIdAvailable, false, expectedProducerHash)
         })
 
         describe('producer', () => {
@@ -73,7 +85,9 @@ describe('Plugin', () => {
             const meta = {
               'span.kind': 'producer',
               component: 'kafkajs',
-              'pathway.hash': expectedProducerHash.readBigUInt64BE(0).toString()
+              'pathway.hash': expectedProducerHash.readBigUInt64LE(0).toString(),
+              'messaging.destination.name': testTopic,
+              'messaging.kafka.bootstrap.servers': '127.0.0.1:9092'
             }
             if (clusterIdAvailable) meta['kafka.cluster_id'] = testKafkaClusterId
 
@@ -97,9 +111,10 @@ describe('Plugin', () => {
           withPeerService(
             () => tracer,
             'kafkajs',
-            (done) => sendMessages(kafka, testTopic, messages).catch(done),
+            () => sendMessages(kafka, testTopic, messages),
             '127.0.0.1:9092',
-            'messaging.kafka.bootstrap.servers')
+            'messaging.kafka.bootstrap.servers'
+          )
 
           it('should be instrumented w/ error', async () => {
             const producer = kafka.producer()
@@ -107,7 +122,7 @@ describe('Plugin', () => {
 
             let error
 
-            const expectedSpanPromise = agent.use(traces => {
+            const expectedSpanPromise = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
 
               expect(span).to.include({
@@ -140,7 +155,7 @@ describe('Plugin', () => {
           // Dynamic broker list support added in 1.14/2.0 (https://github.com/tulios/kafkajs/commit/62223)
           if (semver.intersects(version, '>=1.14')) {
             it('should not extract bootstrap servers when initialized with a function', async () => {
-              const expectedSpanPromise = agent.use(traces => {
+              const expectedSpanPromise = agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
                 expect(span.meta).to.not.have.any.keys(['messaging.kafka.bootstrap.servers'])
               })
@@ -155,6 +170,62 @@ describe('Plugin', () => {
               return expectedSpanPromise
             })
           }
+
+          describe('when using a kafka broker version that does not support message headers', function () {
+            // kafkajs 1.4.0 is very slow when encountering errors
+            this.timeout(30000)
+
+            // we should stub the kafka producer send method to throw a KafkaJSProtocolError
+            class KafkaJSProtocolError extends Error {
+              constructor (message) {
+                super(message)
+                this.name = 'KafkaJSProtocolError'
+                this.type = 'UNKNOWN'
+              }
+            }
+            let sendRequestStub
+            let producer
+
+            const error = new KafkaJSProtocolError()
+            error.message = 'Simulated KafkaJSProtocolError UNKNOWN from Broker.sendRequest stub'
+
+            beforeEach(async () => {
+              // simulate a kafka error for the broker version not supporting message headers
+              const otherKafka = new Kafka({
+                clientId: `kafkajs-test-${version}`,
+                brokers: ['127.0.0.1:9092'],
+                retry: {
+                  retries: 0
+                }
+              })
+
+              sendRequestStub = sinon.stub(Broker.prototype, 'produce').rejects(error)
+
+              producer = otherKafka.producer({ transactionTimeout: 10 })
+              await producer.connect()
+            })
+
+            afterEach(() => {
+              sendRequestStub.restore()
+            })
+
+            it('should hit an error for the first send and not inject headers in later sends', async () => {
+              try {
+                await producer.send({ topic: testTopic, messages })
+                expect(true).to.be.false('First producer.send() should have thrown an error')
+              } catch (e) {
+                expect(e).to.equal(error)
+              }
+              expect(messages[0].headers).to.have.property('x-datadog-trace-id')
+
+              // restore the stub to allow the next send to succeed
+              sendRequestStub.restore()
+
+              const result2 = await producer.send({ topic: testTopic, messages: messages2 })
+              expect(messages2[0].headers).to.be.undefined
+              expect(result2[0].errorCode).to.equal(0)
+            })
+          })
 
           withNamingSchema(
             async () => sendMessages(kafka, testTopic, messages),
@@ -182,7 +253,8 @@ describe('Plugin', () => {
               meta: {
                 'span.kind': 'consumer',
                 component: 'kafkajs',
-                'pathway.hash': expectedConsumerHash.readBigUInt64BE(0).toString()
+                'pathway.hash': expectedConsumerHash.readBigUInt64LE(0).toString(),
+                'messaging.destination.name': testTopic
               },
               resource: testTopic,
               error: 0,
@@ -219,7 +291,7 @@ describe('Plugin', () => {
           })
 
           it('should propagate context', async () => {
-            const expectedSpanPromise = agent.use(traces => {
+            const expectedSpanPromise = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
 
               expect(span).to.include({
@@ -290,8 +362,8 @@ describe('Plugin', () => {
           it('should publish on afterStart channel', (done) => {
             const afterStart = dc.channel('dd-trace:kafkajs:consumer:afterStart')
 
-            const spy = sinon.spy(() => {
-              expect(tracer.scope().active()).to.not.be.null
+            const spy = sinon.spy((ctx) => {
+              expect(ctx.currentStore.span).to.not.be.null
               afterStart.unsubscribe(spy)
             })
             afterStart.subscribe(spy)
@@ -372,8 +444,8 @@ describe('Plugin', () => {
 
           before(() => {
             clusterIdAvailable = semver.intersects(version, '>=1.13')
-            expectedProducerHash = getDsmPathwayHash(clusterIdAvailable, true, ENTRY_PARENT_HASH)
-            expectedConsumerHash = getDsmPathwayHash(clusterIdAvailable, false, expectedProducerHash)
+            expectedProducerHash = getDsmPathwayHash(testTopic, clusterIdAvailable, true, ENTRY_PARENT_HASH)
+            expectedConsumerHash = getDsmPathwayHash(testTopic, clusterIdAvailable, false, expectedProducerHash)
           })
 
           afterEach(async () => {
@@ -467,7 +539,11 @@ describe('Plugin', () => {
               it('Should add backlog on consumer explicit commit', async () => {
                 // Send a message, consume it, and record the last consumed offset
                 let commitMeta
-                await sendMessages(kafka, testTopic, messages)
+                const deferred = {}
+                deferred.promise = new Promise((resolve, reject) => {
+                  deferred.resolve = resolve
+                  deferred.reject = reject
+                })
                 await consumer.run({
                   eachMessage: async payload => {
                     const { topic, partition, message } = payload
@@ -476,10 +552,12 @@ describe('Plugin', () => {
                       partition,
                       offset: Number(message.offset)
                     }
+                    deferred.resolve()
                   },
                   autoCommit: false
                 })
-                await new Promise(resolve => setTimeout(resolve, 50)) // Let eachMessage be called
+                await sendMessages(kafka, testTopic, messages)
+                await deferred.promise
                 await consumer.disconnect() // Flush ongoing `eachMessage` calls
                 for (const call of setOffsetSpy.getCalls()) {
                   expect(call.args[0]).to.not.have.property('type', 'kafka_commit')

@@ -1,11 +1,19 @@
+'use strict'
+
+/**
+ * @import { DogStatsD } from "../../../../index.d.ts"
+ * @implements {DogStatsD}
+ */
 module.exports = class NoopDogStatsDClient {
-  increment () { }
+  increment () {}
 
-  gauge () { }
+  decrement () {}
 
-  distribution () { }
+  gauge () {}
 
-  histogram () { }
+  distribution () {}
 
-  flush () { }
+  histogram () {}
+
+  flush () {}
 }

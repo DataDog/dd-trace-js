@@ -39,6 +39,7 @@ let promise: Promise<void>;
 
 ddTrace.init();
 tracer.init({
+  apmTracingEnabled: false,
   logInjection: true,
   startupLogs: false,
   env: 'test',
@@ -100,6 +101,11 @@ tracer.init({
 });
 
 tracer.init({
+  runtimeMetrics: {
+    enabled: true,
+    gc: true,
+    eventLoop: false
+  },
   appsec: {
     enabled: true,
     rules: './rules.json',
@@ -117,12 +123,18 @@ tracer.init({
       enabled: true,
     },
     rasp: {
-      enabled: true
+      enabled: true,
+      bodyCollection: true
     },
     stackTrace: {
       enabled: true,
       maxStackTraces: 5,
       maxDepth: 42
+    },
+    extendedHeadersCollection: {
+      enabled: true,
+      redaction: false,
+      maxHeaders: 42
     }
   },
   iast: {
@@ -169,15 +181,19 @@ tracer.init({
 tracer.dogstatsd.increment('foo')
 tracer.dogstatsd.increment('foo', 2)
 tracer.dogstatsd.increment('foo', 2, {a: 'b'})
+tracer.dogstatsd.increment('foo', 2, ['a:b'])
 tracer.dogstatsd.decrement('foo')
 tracer.dogstatsd.decrement('foo', 2)
 tracer.dogstatsd.decrement('foo', 2, {a: 'b'})
+tracer.dogstatsd.decrement('foo', 2, ['a:b'])
 tracer.dogstatsd.distribution('foo')
 tracer.dogstatsd.distribution('foo', 2)
 tracer.dogstatsd.distribution('foo', 2, {a: 'b'})
+tracer.dogstatsd.distribution('foo', 2, ['a:b'])
 tracer.dogstatsd.gauge('foo')
 tracer.dogstatsd.gauge('foo', 2)
 tracer.dogstatsd.gauge('foo', 2, {a: 'b'})
+tracer.dogstatsd.gauge('foo', 2, ['a:b'])
 tracer.dogstatsd.flush()
 
 const httpOptions = {
@@ -295,6 +311,7 @@ tracer.use('bunyan');
 tracer.use('couchbase');
 tracer.use('cassandra-driver');
 tracer.use('child_process');
+tracer.use('confluentinc-kafka-javascript');
 tracer.use('connect');
 tracer.use('connect', httpServerOptions);
 tracer.use('cypress');
@@ -311,6 +328,7 @@ tracer.use('fetch');
 tracer.use('fetch', httpClientOptions);
 tracer.use('generic-pool');
 tracer.use('google-cloud-pubsub');
+tracer.use('google-cloud-vertexai');
 tracer.use('graphql');
 tracer.use('graphql', graphqlOptions);
 tracer.use('graphql', { variables: ['foo', 'bar'] });
@@ -321,6 +339,8 @@ tracer.use('grpc', { client: { metadata: [] } });
 tracer.use('grpc', { server: { metadata: [] } });
 tracer.use('hapi');
 tracer.use('hapi', httpServerOptions);
+tracer.use('hono');
+tracer.use('hono', httpServerOptions);
 tracer.use('http');
 tracer.use('http', {
   server: httpServerOptions
@@ -341,6 +361,9 @@ tracer.use('http2', {
 tracer.use('ioredis');
 tracer.use('ioredis', redisOptions);
 tracer.use('ioredis', { splitByInstance: true });
+tracer.use('iovalkey');
+tracer.use('iovalkey', redisOptions);
+tracer.use('iovalkey', { splitByInstance: true });
 tracer.use('jest');
 tracer.use('jest', { service: 'jest-service' });
 tracer.use('kafkajs');
@@ -368,12 +391,12 @@ tracer.use('opensearch');
 tracer.use('opensearch', openSearchOptions);
 tracer.use('oracledb');
 tracer.use('oracledb', { service: params => `${params.host}-${params.database}` });
-tracer.use('paperplane');
-tracer.use('paperplane', httpServerOptions);
 tracer.use('playwright');
 tracer.use('pg');
 tracer.use('pg', { service: params => `${params.host}-${params.database}` });
+tracer.use('pg', { appendComment: true });
 tracer.use('pino');
+tracer.use('prisma');
 tracer.use('protobufjs');
 tracer.use('redis');
 tracer.use('redis', redisOptions);
@@ -471,6 +494,19 @@ tracer.appsec.trackUserLoginFailureEvent('user_id', false, meta)
 tracer.appsec.trackCustomEvent('event_name')
 tracer.appsec.trackCustomEvent('event_name', meta)
 
+tracer.appsec.eventTrackingV2.trackUserLoginSuccess('login')
+tracer.appsec.eventTrackingV2.trackUserLoginSuccess('login', user)
+tracer.appsec.eventTrackingV2.trackUserLoginSuccess('login', user, meta)
+tracer.appsec.eventTrackingV2.trackUserLoginSuccess('login', null, meta)
+
+tracer.appsec.eventTrackingV2.trackUserLoginSuccess('login', '123')
+tracer.appsec.eventTrackingV2.trackUserLoginSuccess('login', '123', meta)
+
+tracer.appsec.eventTrackingV2.trackUserLoginFailure('login')
+tracer.appsec.eventTrackingV2.trackUserLoginFailure('login', true)
+tracer.appsec.eventTrackingV2.trackUserLoginFailure('login', meta)
+tracer.appsec.eventTrackingV2.trackUserLoginFailure('login', false, meta)
+
 tracer.setUser(user)
 
 const resUserBlock: boolean = tracer.appsec.isUserBlocked(user)
@@ -559,7 +595,7 @@ const enabled = llmobs.enabled
 // manually enable
 llmobs.enable({
   mlApp: 'mlApp',
-  agentlessEnabled: true
+  agentlessEnabled: false
 })
 
 // manually disable
@@ -579,7 +615,7 @@ llmobs.wrap({ kind: 'llm' }, function myLLM () {})()
 llmobs.wrap({ kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, function myFunction () {})()
 
 // export a span
-llmobs.enable({ mlApp: 'myApp' })
+llmobs.enable({ mlApp: 'myApp', agentlessEnabled: false })
 llmobs.trace({ kind: 'llm', name: 'myLLM' }, (span) => {
   const llmobsSpanCtx = llmobs.exportSpan(span)
   llmobsSpanCtx.traceId;

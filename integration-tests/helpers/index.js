@@ -6,17 +6,23 @@ const { fork, spawn } = childProcess
 const exec = promisify(childProcess.exec)
 const http = require('http')
 const fs = require('fs')
+const { builtinModules } = require('module')
 const os = require('os')
 const path = require('path')
 const assert = require('assert')
 const rimraf = promisify(require('rimraf'))
 const FakeAgent = require('./fake-agent')
 const id = require('../../packages/dd-trace/src/id')
+const { version } = require('../../package.json')
+const { getCappedRange } = require('../../packages/dd-trace/test/plugins/versions')
 
 const hookFile = 'dd-trace/loader-hook.mjs'
 
-async function runAndCheckOutput (filename, cwd, expectedOut) {
-  const proc = spawn('node', [filename], { cwd, stdio: 'pipe' })
+// This is set by the setShouldKill function
+let shouldKill
+
+async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
+  const proc = spawn(process.execPath, [filename], { cwd, stdio: 'pipe' })
   const pid = proc.pid
   let out = await new Promise((resolve, reject) => {
     proc.on('error', reject)
@@ -26,9 +32,11 @@ async function runAndCheckOutput (filename, cwd, expectedOut) {
     })
     proc.stderr.pipe(process.stdout)
     proc.on('exit', () => resolve(out.toString('utf8')))
-    setTimeout(() => {
-      if (proc.exitCode === null) proc.kill()
-    }, 1000) // TODO this introduces flakiness. find a better way to end the process.
+    if (shouldKill) {
+      setTimeout(() => {
+        if (proc.exitCode === null) proc.kill()
+      }, 1000) // TODO this introduces flakiness. find a better way to end the process.
+    }
   })
   if (typeof expectedOut === 'function') {
     expectedOut(out)
@@ -37,7 +45,12 @@ async function runAndCheckOutput (filename, cwd, expectedOut) {
       // Debug adds this, which we don't care about in these tests
       out = out.replace('Flushing 0 metrics via HTTP\n', '')
     }
-    assert.strictEqual(out, expectedOut)
+    assert.match(out, new RegExp(expectedOut), `output "${out} does not contain expected output "${expectedOut}"`)
+  }
+
+  if (expectedSource) {
+    assert.match(out, new RegExp(`instrumentation source: ${expectedSource}`),
+    `Expected the process to output "${expectedSource}", but logs only contain: "${out}"`)
   }
   return pid
 }
@@ -46,36 +59,37 @@ async function runAndCheckOutput (filename, cwd, expectedOut) {
 let sandbox
 
 // This _must_ be used with the useSandbox function
-async function runAndCheckWithTelemetry (filename, expectedOut, ...expectedTelemetryPoints) {
+async function runAndCheckWithTelemetry (filename, expectedOut, expectedTelemetryPoints, expectedSource) {
   const cwd = sandbox.folder
-  const cleanup = telemetryForwarder(expectedTelemetryPoints)
-  const pid = await runAndCheckOutput(filename, cwd, expectedOut)
+  const cleanup = telemetryForwarder(expectedTelemetryPoints.length > 0)
+  const pid = await runAndCheckOutput(filename, cwd, expectedOut, expectedSource)
   const msgs = await cleanup()
   if (expectedTelemetryPoints.length === 0) {
     // assert no telemetry sent
-    try {
-      assert.deepStrictEqual(msgs.length, 0)
-    } catch (e) {
-      // This console.log is useful for debugging telemetry. Plz don't remove.
-      // eslint-disable-next-line no-console
-      console.error('Expected no telemetry, but got:\n', msgs.map(msg => JSON.stringify(msg[1].points)).join('\n'))
-      throw e
-    }
-    return
+    assert.strictEqual(msgs.length, 0, `Expected no telemetry, but got:\n${
+      msgs.map(msg => JSON.stringify(msg[1].points)).join('\n')
+    }`)
+  } else {
+    assertTelemetryPoints(pid, msgs, expectedTelemetryPoints)
   }
+}
+
+function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
   let points = []
   for (const [telemetryType, data] of msgs) {
     assert.strictEqual(telemetryType, 'library_entrypoint')
     assert.deepStrictEqual(data.metadata, meta(pid))
     points = points.concat(data.points)
   }
-  let expectedPoints = getPoints(...expectedTelemetryPoints)
-  // We now have to sort both the expected and actual telemetry points.
-  // This is because data can come in in any order.
-  // We'll just contatenate all the data together for each point and sort them.
-  points = points.map(p => p.name + '\t' + p.tags.join(',')).sort().join('\n')
-  expectedPoints = expectedPoints.map(p => p.name + '\t' + p.tags.join(',')).sort().join('\n')
-  assert.strictEqual(points, expectedPoints)
+  const expectedPoints = getPoints(...expectedTelemetryPoints)
+  // Sort since data can come in in any order.
+  assert.deepStrictEqual(points.sort(pointsSorter), expectedPoints.sort(pointsSorter))
+
+  function pointsSorter (a, b) {
+    a = a.name + '\t' + a.tags.join(',')
+    b = b.name + '\t' + b.tags.join(',')
+    return a === b ? 0 : a < b ? -1 : 1
+  }
 
   function getPoints (...args) {
     const expectedPoints = []
@@ -84,7 +98,7 @@ async function runAndCheckWithTelemetry (filename, expectedOut, ...expectedTelem
       if (!currentPoint.name) {
         currentPoint.name = 'library_entrypoint.' + arg
       } else {
-        currentPoint.tags = arg.split(',')
+        currentPoint.tags = arg.split(',').filter(Boolean)
         expectedPoints.push(currentPoint)
         currentPoint = {}
       }
@@ -99,23 +113,43 @@ async function runAndCheckWithTelemetry (filename, expectedOut, ...expectedTelem
       runtime_name: 'nodejs',
       runtime_version: process.versions.node,
       tracer_version: require('../../package.json').version,
-      pid: Number(pid)
+      pid: Number(pid),
+      result: 'unknown',
+      result_reason: 'unknown',
+      result_class: 'unknown'
     }
   }
 }
 
+/**
+ * Spawns a Node.js script in a child process and returns a promise that resolves when the process is ready.
+ *
+ * @param {string|URL} filename - The filename of the Node.js script to spawn in a child process.
+ * @param {childProcess.ForkOptions} [options] - The options to pass to the child process.
+ * @param {(data: Buffer) => void} [stdioHandler] - A function that's called with one data argument to handle the
+ *   standard output of the child process. If not provided, the output will be logged to the console.
+ * @param {(data: Buffer) => void} [stderrHandler] - A function that's called with one data argument to handle the
+ *   standard error of the child process. If not provided, the error will be logged to the console.
+ * @returns {Promise<childProcess.ChildProcess & { url?: string }|undefined>} A promise that resolves when the process
+ *   is either ready or terminated without an error. If the process is terminated without an error, the promise will
+ *   resolve with `undefined`.The returned process will have a `url` property if the process didn't terminate.
+ */
 function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
   const proc = fork(filename, { ...options, stdio: 'pipe' })
+
   return new Promise((resolve, reject) => {
     proc
       .on('message', ({ port }) => {
+        if (typeof port !== 'number' && typeof port !== 'string') {
+          return reject(new Error(`${filename} sent invalid port: ${port}. Expected a number or string.`))
+        }
         proc.url = `http://localhost:${port}`
         resolve(proc)
       })
       .on('error', reject)
       .on('exit', code => {
         if (code !== 0) {
-          reject(new Error(`Process exited with status code ${code}.`))
+          return reject(new Error(`Process exited with status code ${code}.`))
         }
         resolve()
       })
@@ -140,20 +174,39 @@ function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
 
 async function createSandbox (dependencies = [], isGitRepo = false,
   integrationTestsPaths = ['./integration-tests/*'], followUpCommand) {
-  /* To execute integration tests without a sandbox uncomment the next line
-   * and do `yarn link && yarn link dd-trace` */
-  // return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
-  const folder = path.join(os.tmpdir(), id().toString())
-  const out = path.join(folder, 'dd-trace.tgz')
-  const allDependencies = [`file:${out}`].concat(dependencies)
+  const cappedDependencies = dependencies.map(dep => {
+    if (builtinModules.includes(dep)) return dep
+
+    const match = dep.replaceAll(/['"]/g, '').match(/^(@?[^@]+)(@(.+))?$/)
+    const name = match[1]
+    const range = match[3] || ''
+    const cappedRange = getCappedRange(name, range)
+
+    return `"${name}@${cappedRange}"`
+  })
 
   // We might use NODE_OPTIONS to init the tracer. We don't want this to affect this operations
   const { NODE_OPTIONS, ...restOfEnv } = process.env
+  const noSandbox = String(process.env.TESTING_NO_INTEGRATION_SANDBOX)
+  if (noSandbox === '1' || noSandbox.toLowerCase() === 'true') {
+    // Execute integration tests without a sandbox. This is useful when you have other components
+    // yarn-linked into dd-trace and want to run the integration tests against them.
+
+    // Link dd-trace to itself, then...
+    await exec('yarn link')
+    await exec('yarn link dd-trace')
+    // ... run the tests in the current directory.
+    return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
+  }
+  const folder = path.join(os.tmpdir(), id().toString())
+  const out = path.join(folder, `dd-trace-${version}.tgz`)
+  const allDependencies = [`file:${out}`].concat(cappedDependencies)
 
   fs.mkdirSync(folder)
-  const addCommand = `yarn add ${allDependencies.join(' ')} --ignore-engines`
+  const preferOfflineFlag = process.env.OFFLINE === '1' || process.env.OFFLINE === 'true' ? ' --prefer-offline' : ''
+  const addCommand = `yarn add ${allDependencies.join(' ')} --ignore-engines${preferOfflineFlag}`
   const addOptions = { cwd: folder, env: restOfEnv }
-  await exec(`yarn pack --filename ${out}`, { env: restOfEnv }) // TODO: cache this
+  await exec(`npm pack --silent --pack-destination ${folder}`, { env: restOfEnv }) // TODO: cache this
 
   try {
     await exec(addCommand, addOptions)
@@ -185,10 +238,17 @@ async function createSandbox (dependencies = [], isGitRepo = false,
     await exec('git config user.email "john@doe.com"', { cwd: folder })
     await exec('git config user.name "John Doe"', { cwd: folder })
     await exec('git config commit.gpgsign false', { cwd: folder })
-    await exec(
-      'git add -A && git commit -m "first commit" --no-verify && git remote add origin git@git.com:datadog/example.git',
-      { cwd: folder }
-    )
+
+    // Create a unique local bare repo for this test
+    const localRemotePath = path.join(folder, '..', `${path.basename(folder)}-remote.git`)
+    if (!fs.existsSync(localRemotePath)) {
+      await exec(`git init --bare ${localRemotePath}`)
+    }
+
+    await exec('git add -A', { cwd: folder })
+    await exec('git commit -m "first commit" --no-verify', { cwd: folder })
+    await exec(`git remote add origin ${localRemotePath}`, { cwd: folder })
+    await exec('git push --set-upstream origin HEAD', { cwd: folder })
   }
 
   return {
@@ -197,7 +257,7 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   }
 }
 
-function telemetryForwarder (expectedTelemetryPoints) {
+function telemetryForwarder (shouldExpectTelemetryPoints = true) {
   process.env.DD_TELEMETRY_FORWARDER_PATH =
     path.join(__dirname, '..', 'telemetry-forwarder.sh')
   process.env.FORWARDER_OUT = path.join(__dirname, `forwarder-${Date.now()}.out`)
@@ -215,7 +275,7 @@ function telemetryForwarder (expectedTelemetryPoints) {
     try {
       msgs = fs.readFileSync(process.env.FORWARDER_OUT, 'utf8').trim().split('\n')
     } catch (e) {
-      if (expectedTelemetryPoints.length && e.code === 'ENOENT' && retries < 10) {
+      if (shouldExpectTelemetryPoints && e.code === 'ENOENT' && retries < 10) {
         return tryAgain()
       }
       return []
@@ -245,7 +305,7 @@ function telemetryForwarder (expectedTelemetryPoints) {
   return cleanup
 }
 
-async function curl (url, useHttp2 = false) {
+async function curl (url) {
   if (url !== null && typeof url === 'object') {
     if (url.then) {
       return curl(await url)
@@ -274,7 +334,8 @@ async function curlAndAssertMessage (agent, procOrUrl, fn, timeout, expectedMess
 
 function getCiVisAgentlessConfig (port) {
   // We remove GITHUB_WORKSPACE so the repository root is not assigned to dd-trace-js
-  const { GITHUB_WORKSPACE, ...rest } = process.env
+  // We remove MOCHA_OPTIONS so the test runner doesn't run the tests twice
+  const { GITHUB_WORKSPACE, MOCHA_OPTIONS, ...rest } = process.env
   return {
     ...rest,
     DD_API_KEY: '1',
@@ -287,7 +348,8 @@ function getCiVisAgentlessConfig (port) {
 
 function getCiVisEvpProxyConfig (port) {
   // We remove GITHUB_WORKSPACE so the repository root is not assigned to dd-trace-js
-  const { GITHUB_WORKSPACE, ...rest } = process.env
+  // We remove MOCHA_OPTIONS so the test runner doesn't run the tests twice
+  const { GITHUB_WORKSPACE, MOCHA_OPTIONS, ...rest } = process.env
   return {
     ...rest,
     DD_TRACE_AGENT_PORT: port,
@@ -339,10 +401,44 @@ function sandboxCwd () {
   return sandbox.folder
 }
 
-function assertObjectContains (actual, expected) {
+function setShouldKill (value) {
+  before(() => {
+    shouldKill = value
+  })
+  after(() => {
+    shouldKill = true
+  })
+}
+
+const assertObjectContains = assert.partialDeepStrictEqual || function assertObjectContains (actual, expected) {
+  if (Array.isArray(expected)) {
+    assert.ok(Array.isArray(actual), `Expected array but got ${typeof actual}`)
+    let startIndex = 0
+    for (const expectedItem of expected) {
+      let found = false
+      for (let i = startIndex; i < actual.length; i++) {
+        const actualItem = actual[i]
+        try {
+          if (expectedItem !== null && typeof expectedItem === 'object') {
+            assertObjectContains(actualItem, expectedItem)
+          } else {
+            assert.strictEqual(actualItem, expectedItem)
+          }
+          startIndex = i + 1
+          found = true
+          break
+        } catch {
+          continue
+        }
+      }
+      assert.ok(found, `Expected array to contain ${JSON.stringify(expectedItem)}`)
+    }
+    return
+  }
+
   for (const [key, val] of Object.entries(expected)) {
     if (val !== null && typeof val === 'object') {
-      assert.ok(key in actual)
+      assert.ok(Object.hasOwn(actual, key))
       assert.notStrictEqual(actual[key], null)
       assert.strictEqual(typeof actual[key], 'object')
       assertObjectContains(actual[key], val)
@@ -362,6 +458,8 @@ module.exports = {
   assertObjectContains,
   assertUUID,
   spawnProc,
+  telemetryForwarder,
+  assertTelemetryPoints,
   runAndCheckWithTelemetry,
   createSandbox,
   curl,
@@ -372,5 +470,6 @@ module.exports = {
   spawnPluginIntegrationTestProc,
   useEnv,
   useSandbox,
-  sandboxCwd
+  sandboxCwd,
+  setShouldKill
 }

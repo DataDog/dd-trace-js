@@ -1,12 +1,12 @@
 'use strict'
 
 const log = require('../../log')
-const { calculateDDBasePath } = require('../../util')
+const { ddBasePath } = require('../../util')
 
 const logs = new Map() // hash -> log
 
 // NOTE: Is this a reasonable number?
-let maxEntries = 10000
+let maxEntries = 10_000
 let overflowedCount = 0
 
 function hashCode (hashSource) {
@@ -20,9 +20,9 @@ function hashCode (hashSource) {
 
 function createHash (logEntry) {
   const prime = 31
-  let result = ((!logEntry.level) ? 0 : hashCode(logEntry.level))
-  result = (((prime * result) | 0) + ((!logEntry.message) ? 0 : hashCode(logEntry.message))) | 0
-  result = (((prime * result) | 0) + ((!logEntry.stack_trace) ? 0 : hashCode(logEntry.stack_trace))) | 0
+  let result = logEntry.level ? hashCode(logEntry.level) : 0
+  result = (((prime * result) | 0) + (logEntry.message ? hashCode(logEntry.message) : 0)) | 0
+  result = (((prime * result) | 0) + (logEntry.stack_trace ? hashCode(logEntry.stack_trace) : 0)) | 0
   return result
 }
 
@@ -30,7 +30,6 @@ function isValid (logEntry) {
   return logEntry?.level && logEntry.message
 }
 
-const ddBasePath = calculateDDBasePath(__dirname)
 const EOL = '\n'
 const STACK_FRAME_LINE_REGEX = /^\s*at\s/gm
 
@@ -42,7 +41,7 @@ function sanitize (logEntry) {
 
   const firstIndex = stackLines.findIndex(l => l.match(STACK_FRAME_LINE_REGEX))
 
-  const isDDCode = firstIndex > -1 && stackLines[firstIndex].includes(ddBasePath)
+  const isDDCode = firstIndex !== -1 && stackLines[firstIndex].includes(ddBasePath)
   stackLines = stackLines
     .filter((line, index) => (isDDCode && index < firstIndex) || line.includes(ddBasePath))
     .map(line => line.replace(ddBasePath, ''))
@@ -78,11 +77,11 @@ const logCollector = {
         return false
       }
       const hash = createHash(logEntry)
-      if (!logs.has(hash)) {
+      if (logs.has(hash)) {
+        logs.get(hash).count++
+      } else {
         logs.set(hash, logEntry)
         return true
-      } else {
-        logs.get(hash).count++
       }
     } catch (e) {
       log.error('Unable to add log to logCollector: %s', e.message)

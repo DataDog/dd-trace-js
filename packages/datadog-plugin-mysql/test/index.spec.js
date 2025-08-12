@@ -1,8 +1,10 @@
 'use strict'
 
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const proxyquire = require('proxyquire').noPreserveCache()
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
@@ -47,7 +49,6 @@ describe('Plugin', () => {
 
           tracer.scope().activate(span, () => {
             const span = tracer.scope().active()
-            // eslint-disable-next-line n/handle-callback-err
             connection.query('SELECT 1 + 1 AS solution', (err, results, fields) => {
               expect(results).to.not.be.null
               expect(fields).to.not.be.null
@@ -74,19 +75,23 @@ describe('Plugin', () => {
         })
 
         it('should do automatic instrumentation', done => {
-          agent.use(traces => {
-            expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-            expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-            expect(traces[0][0]).to.have.property('resource', 'SELECT 1 + 1 AS solution')
-            expect(traces[0][0]).to.have.property('type', 'sql')
-            expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-            expect(traces[0][0].meta).to.have.property('db.name', 'db')
-            expect(traces[0][0].meta).to.have.property('db.user', 'root')
-            expect(traces[0][0].meta).to.have.property('db.type', 'mysql')
-            expect(traces[0][0].meta).to.have.property('component', 'mysql')
-
-            done()
-          })
+          agent
+            .assertFirstTraceSpan({
+              name: expectedSchema.outbound.opName,
+              service: expectedSchema.outbound.serviceName,
+              resource: 'SELECT 1 + 1 AS solution',
+              type: 'sql',
+              meta: {
+                'span.kind': 'client',
+                'db.name': 'db',
+                'db.user': 'root',
+                'db.type': 'mysql',
+                component: 'mysql',
+                '_dd.integration': 'mysql'
+              }
+            })
+            .then(done)
+            .catch(done)
 
           connection.query('SELECT 1 + 1 AS solution', (error, results, fields) => {
             if (error) throw error
@@ -96,14 +101,19 @@ describe('Plugin', () => {
         it('should handle errors', done => {
           let error
 
-          agent.use(traces => {
-            expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
-            expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
-            expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
-            expect(traces[0][0].meta).to.have.property('component', 'mysql')
-
-            done()
-          })
+          agent
+            .assertFirstTraceSpan((trace) => {
+              assertObjectContains(trace, {
+                meta: {
+                  [ERROR_TYPE]: error.name,
+                  [ERROR_MESSAGE]: error.message,
+                  [ERROR_STACK]: error.stack,
+                  component: 'mysql'
+                }
+              })
+            })
+            .then(done)
+            .catch(done)
 
           connection.query('INVALID', (err, results, fields) => {
             error = err
@@ -111,7 +121,7 @@ describe('Plugin', () => {
         })
 
         it('should work without a callback', done => {
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             done()
           })
 
@@ -155,11 +165,13 @@ describe('Plugin', () => {
         )
 
         it('should be configured with the correct values', done => {
-          agent.use(traces => {
-            expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-            expect(traces[0][0]).to.have.property('service', 'custom')
-            done()
-          })
+          agent
+            .assertFirstTraceSpan({
+              name: expectedSchema.outbound.opName,
+              service: 'custom'
+            })
+            .then(done)
+            .catch(done)
 
           connection.query('SELECT 1 + 1 AS solution', () => {})
         })
@@ -202,7 +214,7 @@ describe('Plugin', () => {
         )
 
         it('should be configured with the correct values', done => {
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
             expect(traces[0][0]).to.have.property('service', 'custom')
             sinon.assert.calledWith(serviceSpy, sinon.match({
@@ -241,22 +253,27 @@ describe('Plugin', () => {
         withPeerService(
           () => tracer,
           'mysql',
-          () => pool.query('SELECT 1', (_) => {}),
-          'db', 'db.name')
+          (done) => pool.query('SELECT 1', (_) => done()),
+          'db',
+          'db.name'
+        )
 
         it('should do automatic instrumentation', done => {
-          agent.use(traces => {
-            expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-            expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-            expect(traces[0][0]).to.have.property('resource', 'SELECT 1 + 1 AS solution')
-            expect(traces[0][0]).to.have.property('type', 'sql')
-            expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-            expect(traces[0][0].meta).to.have.property('db.user', 'root')
-            expect(traces[0][0].meta).to.have.property('db.type', 'mysql')
-            expect(traces[0][0].meta).to.have.property('component', 'mysql')
-
-            done()
-          })
+          agent
+            .assertFirstTraceSpan({
+              name: expectedSchema.outbound.opName,
+              service: expectedSchema.outbound.serviceName,
+              resource: 'SELECT 1 + 1 AS solution',
+              type: 'sql',
+              meta: {
+                'span.kind': 'client',
+                'db.user': 'root',
+                'db.type': 'mysql',
+                component: 'mysql'
+              }
+            })
+            .then(done)
+            .catch(done)
 
           pool.query('SELECT 1 + 1 AS solution', () => {})
         })
@@ -391,10 +408,13 @@ describe('Plugin', () => {
         })
 
         it('trace query resource should not be changed when propagation is enabled', done => {
-          agent.use(traces => {
-            expect(traces[0][0]).to.have.property('resource', 'SELECT 1 + 1 AS solution')
-            done()
-          })
+          agent
+            .assertFirstTraceSpan({
+              resource: 'SELECT 1 + 1 AS solution'
+            })
+            .then(done)
+            .catch(done)
+
           connection.query('SELECT 1 + 1 AS solution', (err) => {
             if (err) return done(err)
             connection.end((err) => {
@@ -460,8 +480,8 @@ describe('Plugin', () => {
 
         it('query text should contain traceparent', done => {
           let queryText = ''
-          agent.use(traces => {
-            const expectedTimePrefix = Math.floor(clock.now / 1000).toString(16).padStart(8, '0').padEnd(16, '0')
+          agent.assertSomeTraces(traces => {
+            const expectedTimePrefix = traces[0][0].meta['_dd.p.tid'].toString(16).padStart(16, '0')
             const traceId = expectedTimePrefix + traces[0][0].trace_id.toString(16).padStart(16, '0')
             const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
 
@@ -469,15 +489,13 @@ describe('Plugin', () => {
               `/*dddb='db',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}',` +
               `traceparent='00-${traceId}-${spanId}-00'*/ SELECT 1 + 1 AS solution`)
           }).then(done, done)
-          const clock = sinon.useFakeTimers(new Date())
           connection.query('SELECT 1 + 1 AS solution', () => {
-            clock.restore()
             queryText = connection._protocol._queue[0].sql
           })
         })
 
         it('query should inject _dd.dbm_trace_injected into span', done => {
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             expect(traces[0][0].meta).to.have.property('_dd.dbm_trace_injected', 'true')
             done()
           })
@@ -542,8 +560,8 @@ describe('Plugin', () => {
 
         it('query text should contain traceparent', done => {
           let queryText = ''
-          agent.use(traces => {
-            const expectedTimePrefix = Math.floor(clock.now / 1000).toString(16).padStart(8, '0').padEnd(16, '0')
+          agent.assertSomeTraces(traces => {
+            const expectedTimePrefix = traces[0][0].meta['_dd.p.tid'].toString(16).padStart(16, '0')
             const traceId = expectedTimePrefix + traces[0][0].trace_id.toString(16).padStart(16, '0')
             const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
 
@@ -551,15 +569,13 @@ describe('Plugin', () => {
               `/*dddb='db',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}',` +
               `traceparent='00-${traceId}-${spanId}-00'*/ SELECT 1 + 1 AS solution`)
           }).then(done, done)
-          const clock = sinon.useFakeTimers(new Date())
           pool.query('SELECT 1 + 1 AS solution', () => {
-            clock.restore()
             queryText = pool._allConnections[0]._protocol._queue[0].sql
           })
         })
 
         it('query should inject _dd.dbm_trace_injected into span', done => {
-          agent.use(traces => {
+          agent.assertSomeTraces(traces => {
             expect(traces[0][0].meta).to.have.property('_dd.dbm_trace_injected', 'true')
             done()
           })

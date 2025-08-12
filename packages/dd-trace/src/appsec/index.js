@@ -2,22 +2,29 @@
 
 const log = require('../log')
 const RuleManager = require('./rule_manager')
-const remoteConfig = require('./remote_config')
+const remoteConfig = require('../remote_config')
 const {
   bodyParser,
   cookieParser,
   multerParser,
+  fastifyBodyParser,
+  fastifyCookieParser,
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
   passportVerify,
+  passportUser,
+  expressSession,
   queryParser,
   nextBodyParsed,
   nextQueryParsed,
   expressProcessParams,
+  fastifyQueryParams,
   responseBody,
   responseWriteHead,
   responseSetHeader,
-  routerParam
+  routerParam,
+  fastifyResponseChannel,
+  fastifyPathParams
 } = require('./channels')
 const waf = require('./waf')
 const addresses = require('./addresses')
@@ -32,8 +39,10 @@ const UserTracking = require('./user_tracking')
 const { storage } = require('../../../datadog-core')
 const graphql = require('./graphql')
 const rasp = require('./rasp')
+const { isInServerlessEnvironment } = require('../serverless')
 
 const responseAnalyzedSet = new WeakSet()
+const storedResponseHeaders = new WeakMap()
 
 let isEnabled = false
 let config
@@ -42,7 +51,7 @@ function enable (_config) {
   if (isEnabled) return
 
   try {
-    appsecTelemetry.enable(_config.telemetry)
+    appsecTelemetry.enable(_config)
     graphql.enable()
 
     if (_config.appsec.rasp.enabled) {
@@ -55,9 +64,9 @@ function enable (_config) {
 
     remoteConfig.enableWafUpdate(_config.appsec)
 
-    Reporter.setRateLimit(_config.appsec.rateLimit)
+    Reporter.init(_config.appsec)
 
-    apiSecuritySampler.configure(_config.appsec)
+    apiSecuritySampler.configure(_config)
 
     UserTracking.setCollectionMode(_config.appsec.eventTracking.mode, false)
 
@@ -67,19 +76,28 @@ function enable (_config) {
     incomingHttpRequestStart.subscribe(incomingHttpStartTranslator)
     incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
     passportVerify.subscribe(onPassportVerify) // possible optimization: only subscribe if collection mode is enabled
+    passportUser.subscribe(onPassportDeserializeUser)
+    expressSession.subscribe(onExpressSession)
     queryParser.subscribe(onRequestQueryParsed)
     nextBodyParsed.subscribe(onRequestBodyParsed)
     nextQueryParsed.subscribe(onRequestQueryParsed)
     expressProcessParams.subscribe(onRequestProcessParams)
+    fastifyBodyParser.subscribe(onRequestBodyParsed)
+    fastifyQueryParams.subscribe(onRequestQueryParsed)
+    fastifyCookieParser.subscribe(onRequestCookieParser)
+    fastifyPathParams.subscribe(onRequestProcessParams)
     routerParam.subscribe(onRequestProcessParams)
     responseBody.subscribe(onResponseBody)
+    fastifyResponseChannel.subscribe(onResponseBody)
     responseWriteHead.subscribe(onResponseWriteHead)
     responseSetHeader.subscribe(onResponseSetHeader)
 
     isEnabled = true
     config = _config
   } catch (err) {
-    log.error('[ASM] Unable to start AppSec', err)
+    if (!isInServerlessEnvironment()) {
+      log.error('[ASM] Unable to start AppSec', err)
+    }
 
     disable()
   }
@@ -89,7 +107,7 @@ function onRequestBodyParsed ({ req, res, body, abortController }) {
   if (body === undefined || body === null) return
 
   if (!req) {
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
     req = store?.req
   }
 
@@ -102,7 +120,7 @@ function onRequestBodyParsed ({ req, res, body, abortController }) {
     }
   }, req)
 
-  handleResults(results, req, res, rootSpan, abortController)
+  handleResults(results?.actions, req, res, rootSpan, abortController)
 }
 
 function onRequestCookieParser ({ req, res, abortController, cookies }) {
@@ -117,7 +135,7 @@ function onRequestCookieParser ({ req, res, abortController, cookies }) {
     }
   }, req)
 
-  handleResults(results, req, res, rootSpan, abortController)
+  handleResults(results?.actions, req, res, rootSpan, abortController)
 }
 
 function incomingHttpStartTranslator ({ req, res, abortController }) {
@@ -132,7 +150,7 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
     [HTTP_CLIENT_IP]: clientIp
   })
 
-  const requestHeaders = Object.assign({}, req.headers)
+  const requestHeaders = { ...req.headers }
   delete requestHeaders.cookie
 
   const persistent = {
@@ -145,9 +163,9 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
     persistent[addresses.HTTP_CLIENT_IP] = clientIp
   }
 
-  const actions = waf.run({ persistent }, req)
+  const results = waf.run({ persistent }, req)
 
-  handleResults(actions, req, res, rootSpan, abortController)
+  handleResults(results?.actions, req, res, rootSpan, abortController)
 }
 
 function incomingHttpEndTranslator ({ req, res }) {
@@ -180,11 +198,17 @@ function incomingHttpEndTranslator ({ req, res }) {
 
   waf.disposeContext(req)
 
-  Reporter.finishRequest(req, res)
+  const storedHeaders = storedResponseHeaders.get(req) || {}
+
+  Reporter.finishRequest(req, res, storedHeaders)
+
+  if (storedHeaders) {
+    storedResponseHeaders.delete(req)
+  }
 }
 
 function onPassportVerify ({ framework, login, user, success, abortController }) {
-  const store = storage.getStore()
+  const store = storage('legacy').getStore()
   const rootSpan = store?.req && web.root(store.req)
 
   if (!rootSpan) {
@@ -194,14 +218,47 @@ function onPassportVerify ({ framework, login, user, success, abortController })
 
   const results = UserTracking.trackLogin(framework, login, user, success, rootSpan)
 
-  handleResults(results, store.req, store.req.res, rootSpan, abortController)
+  handleResults(results?.actions, store.req, store.req.res, rootSpan, abortController)
+}
+
+function onPassportDeserializeUser ({ user, abortController }) {
+  const store = storage('legacy').getStore()
+  const rootSpan = store?.req && web.root(store.req)
+
+  if (!rootSpan) {
+    log.warn('[ASM] No rootSpan found in onPassportDeserializeUser')
+    return
+  }
+
+  const results = UserTracking.trackUser(user, rootSpan)
+
+  handleResults(results?.actions, store.req, store.req.res, rootSpan, abortController)
+}
+
+function onExpressSession ({ req, res, sessionId, abortController }) {
+  const rootSpan = web.root(req)
+  if (!rootSpan) {
+    log.warn('[ASM] No rootSpan found in onExpressSession')
+    return
+  }
+
+  const isSdkCalled = rootSpan.context()._tags['usr.session_id']
+  if (isSdkCalled) return
+
+  const results = waf.run({
+    persistent: {
+      [addresses.USER_SESSION_ID]: sessionId
+    }
+  }, req)
+
+  handleResults(results?.actions, req, res, rootSpan, abortController)
 }
 
 function onRequestQueryParsed ({ req, res, query, abortController }) {
   if (!query || typeof query !== 'object') return
 
   if (!req) {
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
     req = store?.req
   }
 
@@ -214,7 +271,7 @@ function onRequestQueryParsed ({ req, res, query, abortController }) {
     }
   }, req)
 
-  handleResults(results, req, res, rootSpan, abortController)
+  handleResults(results?.actions, req, res, rootSpan, abortController)
 }
 
 function onRequestProcessParams ({ req, res, abortController, params }) {
@@ -229,7 +286,7 @@ function onRequestProcessParams ({ req, res, abortController, params }) {
     }
   }, req)
 
-  handleResults(results, req, res, rootSpan, abortController)
+  handleResults(results?.actions, req, res, rootSpan, abortController)
 }
 
 function onResponseBody ({ req, res, body }) {
@@ -245,6 +302,10 @@ function onResponseBody ({ req, res, body }) {
 }
 
 function onResponseWriteHead ({ req, res, abortController, statusCode, responseHeaders }) {
+  if (Object.keys(responseHeaders).length) {
+    storedResponseHeaders.set(req, responseHeaders)
+  }
+
   // avoid "write after end" error
   if (isBlocked(res)) {
     abortController?.abort()
@@ -259,19 +320,19 @@ function onResponseWriteHead ({ req, res, abortController, statusCode, responseH
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
-  responseHeaders = Object.assign({}, responseHeaders)
+  responseHeaders = { ...responseHeaders }
   delete responseHeaders['set-cookie']
 
   const results = waf.run({
     persistent: {
-      [addresses.HTTP_INCOMING_RESPONSE_CODE]: '' + statusCode,
+      [addresses.HTTP_INCOMING_RESPONSE_CODE]: String(statusCode),
       [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: responseHeaders
     }
   }, req)
 
   responseAnalyzedSet.add(res)
 
-  handleResults(results, req, res, rootSpan, abortController)
+  handleResults(results?.actions, req, res, rootSpan, abortController)
 }
 
 function onResponseSetHeader ({ res, abortController }) {
@@ -310,12 +371,19 @@ function disable () {
   if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(incomingHttpStartTranslator)
   if (incomingHttpRequestEnd.hasSubscribers) incomingHttpRequestEnd.unsubscribe(incomingHttpEndTranslator)
   if (passportVerify.hasSubscribers) passportVerify.unsubscribe(onPassportVerify)
+  if (passportUser.hasSubscribers) passportUser.unsubscribe(onPassportDeserializeUser)
+  if (expressSession.hasSubscribers) expressSession.unsubscribe(onExpressSession)
   if (queryParser.hasSubscribers) queryParser.unsubscribe(onRequestQueryParsed)
   if (nextBodyParsed.hasSubscribers) nextBodyParsed.unsubscribe(onRequestBodyParsed)
   if (nextQueryParsed.hasSubscribers) nextQueryParsed.unsubscribe(onRequestQueryParsed)
   if (expressProcessParams.hasSubscribers) expressProcessParams.unsubscribe(onRequestProcessParams)
+  if (fastifyBodyParser.hasSubscribers) fastifyBodyParser.unsubscribe(onRequestBodyParsed)
+  if (fastifyQueryParams.hasSubscribers) fastifyQueryParams.unsubscribe(onRequestQueryParsed)
+  if (fastifyCookieParser.hasSubscribers) fastifyCookieParser.unsubscribe(onRequestCookieParser)
+  if (fastifyPathParams.hasSubscribers) fastifyPathParams.unsubscribe(onRequestProcessParams)
   if (routerParam.hasSubscribers) routerParam.unsubscribe(onRequestProcessParams)
   if (responseBody.hasSubscribers) responseBody.unsubscribe(onResponseBody)
+  if (fastifyResponseChannel.hasSubscribers) fastifyResponseChannel.unsubscribe(onResponseBody)
   if (responseWriteHead.hasSubscribers) responseWriteHead.unsubscribe(onResponseWriteHead)
   if (responseSetHeader.hasSubscribers) responseSetHeader.unsubscribe(onResponseSetHeader)
 }

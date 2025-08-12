@@ -6,11 +6,13 @@ const ClientPlugin = require('../../dd-trace/src/plugins/client')
 const { getResourceName } = require('./util')
 
 class AmqplibClientPlugin extends ClientPlugin {
-  static get id () { return 'amqplib' }
-  static get type () { return 'messaging' }
-  static get operation () { return 'command' }
+  static id = 'amqplib'
+  static type = 'messaging'
+  static operation = 'command'
 
-  start ({ channel = {}, method, fields }) {
+  bindStart (ctx) {
+    const { channel = {}, method, fields } = ctx
+
     if (method === 'basic.deliver' || method === 'basic.get') return
     if (method === 'basic.publish') return
 
@@ -29,11 +31,13 @@ class AmqplibClientPlugin extends ClientPlugin {
         'amqp.source': fields.source,
         'amqp.destination': fields.destination
       }
-    })
+    }, ctx)
 
     fields.headers = fields.headers || {}
 
     this.tracer.inject(span, TEXT_MAP, fields.headers)
+
+    return ctx.currentStore
   }
 }
 

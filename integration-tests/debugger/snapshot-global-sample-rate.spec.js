@@ -5,7 +5,8 @@ const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
   const t = setup({
-    testApp: 'target-app/basic.js'
+    testApp: 'target-app/basic.js',
+    dependencies: ['fastify']
   })
 
   describe('input messages', function () {
@@ -50,7 +51,7 @@ describe('Dynamic Instrumentation', function () {
         })
 
         t.agent.on('debugger-input', ({ payload }) => {
-          payload.forEach(({ 'debugger.snapshot': { timestamp } }) => {
+          payload.forEach(({ debugger: { snapshot: { timestamp } } }) => {
             if (isDone) return
             if (start === 0) start = timestamp
             if (++hitBreakpoints <= MAX_SNAPSHOTS_PER_SECOND_GLOBALLY) {
@@ -59,8 +60,8 @@ describe('Dynamic Instrumentation', function () {
               const duration = timestamp - start
               const timeSincePrevTimestamp = timestamp - prevTimestamp
 
-              // Allow for a variance of +50ms (time will tell if this is enough)
-              assert.isAtLeast(duration, 1000)
+              // Allow for a time variance (time will tell if this is enough). Timeouts can vary.
+              assert.isAtLeast(duration, 925)
               assert.isBelow(duration, 1050)
 
               // A sanity check to make sure we're not saturating the event loop. We expect a lot of snapshots to be

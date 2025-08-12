@@ -1,12 +1,13 @@
 'use strict'
 
 const agent = require('../../../plugins/agent')
+const { withVersions } = require('../../../setup/mocha')
 
 const nock = require('nock')
-const { expectedLLMObsLLMSpanEvent, deepEqualWithMockValues, MOCK_ANY } = require('../../util')
+const { expectedLLMObsLLMSpanEvent, deepEqualWithMockValues } = require('../../util')
 const { models, modelConfig } = require('../../../../../datadog-plugin-aws-sdk/test/fixtures/bedrockruntime')
 const chai = require('chai')
-const LLMObsAgentProxySpanWriter = require('../../../../src/llmobs/writers/spans/agentProxy')
+const LLMObsSpanWriter = require('../../../../src/llmobs/writers/spans')
 
 chai.Assertion.addMethod('deepEqualWithMockValues', deepEqualWithMockValues)
 
@@ -33,15 +34,16 @@ describe('Plugin', () => {
 
       describe('with configuration', () => {
         before(() => {
-          sinon.stub(LLMObsAgentProxySpanWriter.prototype, 'append')
+          sinon.stub(LLMObsSpanWriter.prototype, 'append')
 
           // reduce errors related to too many listeners
           process.removeAllListeners('beforeExit')
-          LLMObsAgentProxySpanWriter.prototype.append.reset()
+          LLMObsSpanWriter.prototype.append.reset()
 
           return agent.load('aws-sdk', {}, {
             llmobs: {
-              mlApp: 'test'
+              mlApp: 'test',
+              agentlessEnabled: false
             }
           })
         })
@@ -49,15 +51,20 @@ describe('Plugin', () => {
         before(done => {
           const requireVersion = version === '3.0.0' ? '3.422.0' : '>=3.422.0'
           AWS = require(`../../../../../../versions/${bedrockRuntimeClientName}@${requireVersion}`).get()
+          const NodeHttpHandler =
+            require(`../../../../../../versions/${bedrockRuntimeClientName}@${requireVersion}`)
+              .get('@smithy/node-http-handler')
+              .NodeHttpHandler
+
           bedrockRuntimeClient = new AWS.BedrockRuntimeClient(
-            { endpoint: 'http://127.0.0.1:4566', region: 'us-east-1', ServiceId: serviceName }
+            { endpoint: 'http://127.0.0.1:4566', region: 'us-east-1', ServiceId: serviceName, requestHandler: new NodeHttpHandler() }
           )
           done()
         })
 
         afterEach(() => {
           nock.cleanAll()
-          LLMObsAgentProxySpanWriter.prototype.append.reset()
+          LLMObsSpanWriter.prototype.append.reset()
         })
 
         after(() => {
@@ -78,29 +85,38 @@ describe('Plugin', () => {
 
             nock('http://127.0.0.1:4566')
               .post(`/model/${model.modelId}/invoke`)
-              .reply(200, response)
+              .reply(200, response, {
+                'x-amzn-bedrock-input-token-count': 50,
+                'x-amzn-bedrock-output-token-count': 70,
+                'x-amzn-requestid': Date.now().toString()
+              })
 
             const command = new AWS.InvokeModelCommand(request)
 
-            agent.use(traces => {
+            const expectedOutput = { content: model.output }
+            if (model.outputRole) expectedOutput.role = model.outputRole
+
+            agent.assertSomeTraces(traces => {
               const span = traces[0][0]
-              const spanEvent = LLMObsAgentProxySpanWriter.prototype.append.getCall(0).args[0]
+              const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
                 spanKind: 'llm',
                 name: 'bedrock-runtime.command',
-                inputMessages: [
-                  { content: model.userPrompt }
-                ],
-                outputMessages: MOCK_ANY,
-                tokenMetrics: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
+                inputMessages: [{ content: model.userPrompt }],
+                outputMessages: [expectedOutput],
+                tokenMetrics: {
+                  input_tokens: model.usage?.inputTokens ?? 50,
+                  output_tokens: model.usage?.outputTokens ?? 70,
+                  total_tokens: model.usage?.totalTokens ?? 120
+                },
                 modelName: model.modelId.split('.')[1].toLowerCase(),
                 modelProvider: model.provider.toLowerCase(),
                 metadata: {
                   temperature: modelConfig.temperature,
                   max_tokens: modelConfig.maxTokens
                 },
-                tags: { ml_app: 'test', language: 'javascript' }
+                tags: { ml_app: 'test', language: 'javascript', integration: 'bedrock' }
               })
 
               expect(spanEvent).to.deepEqualWithMockValues(expected)

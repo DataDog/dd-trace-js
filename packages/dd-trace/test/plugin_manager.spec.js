@@ -16,6 +16,7 @@ describe('Plugin Manager', () => {
   let Four
   let Five
   let Six
+  let Eight
   let pm
 
   beforeEach(() => {
@@ -33,27 +34,23 @@ describe('Plugin Manager', () => {
     const plugins = {
       one: {},
       two: class Two extends FakePlugin {
-        static get id () {
-          return 'two'
-        }
+        static id = 'two'
       },
       three: {},
       four: class Four extends FakePlugin {
-        static get id () {
-          return 'four'
-        }
+        static id = 'four'
       },
       five: class Five extends FakePlugin {
-        static get id () {
-          return 'five'
-        }
+        static id = 'five'
       },
       six: class Six extends FakePlugin {
-        static get id () {
-          return 'six'
-        }
+        static id = 'six'
       },
-      seven: {}
+      seven: {},
+      eight: class Eight extends FakePlugin {
+        static experimental = true
+        static id = 'eight'
+      }
     }
 
     Two = plugins.two
@@ -67,17 +64,26 @@ describe('Plugin Manager', () => {
     Six = plugins.six
     Six.prototype.configure = sinon.spy()
 
+    Eight = plugins.eight
+    Eight.prototype.configure = sinon.spy()
+
     process.env.DD_TRACE_DISABLED_PLUGINS = 'five,six,seven'
 
     PluginManager = proxyquire.noPreserveCache()('../src/plugin_manager', {
       './plugins': { ...plugins, '@noCallThru': true },
-      '../../datadog-instrumentations': {}
+      '../../datadog-instrumentations': {},
+      '../../dd-trace/src/config-helper': {
+        getEnvironmentVariable (name) {
+          return process.env[name]
+        }
+      }
     })
     pm = new PluginManager(tracer)
   })
 
   afterEach(() => {
     delete process.env.DD_TRACE_DISABLED_PLUGINS
+    delete process.env.DD_TRACE_EIGHT_ENABLED
     pm.destroy()
   })
 
@@ -265,6 +271,28 @@ describe('Plugin Manager', () => {
         pm.configurePlugin('two')
         expect(instantiated).to.be.empty
         expect(Two.prototype.configure).to.not.have.been.called
+      })
+    })
+
+    describe('with an experimental plugin', () => {
+      it('should disable the plugin by default', () => {
+        pm.configure()
+        loadChannel.publish({ name: 'eight' })
+        expect(Eight.prototype.configure).to.have.been.calledWithMatch({ enabled: false })
+      })
+
+      it('should enable the plugin when configured programmatically', () => {
+        pm.configure()
+        pm.configurePlugin('eight')
+        loadChannel.publish({ name: 'eight' })
+        expect(Eight.prototype.configure).to.have.been.calledWithMatch({ enabled: true })
+      })
+
+      it('should enable the plugin when configured with an environment variable', () => {
+        process.env.DD_TRACE_EIGHT_ENABLED = 'true'
+        pm.configure()
+        loadChannel.publish({ name: 'eight' })
+        expect(Eight.prototype.configure).to.have.been.calledWithMatch({ enabled: true })
       })
     })
 

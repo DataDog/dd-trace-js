@@ -2,24 +2,7 @@
 
 const { join, basename } = require('path')
 
-const inspector = require('../../../../src/debugger/devtools_client/inspector_promises_polyfill')
-const session = new inspector.Session()
-session.connect()
-
-session['@noCallThru'] = true
-proxyquire('../src/debugger/devtools_client/snapshot/collector', {
-  '../session': session
-})
-proxyquire('../src/debugger/devtools_client/snapshot/redaction', {
-  '../config': {
-    dynamicInstrumentation: {
-      redactedIdentifiers: [],
-      redactionExcludedIdentifiers: []
-    },
-    '@noCallThru': true
-  }
-})
-
+const session = require('./stub-session')
 const { getLocalStateForCallFrame } = require('../../../../src/debugger/devtools_client/snapshot')
 
 module.exports = {

@@ -1,5 +1,7 @@
 'use strict'
 
+const proxyquire = require('proxyquire')
+
 describe('blocking', () => {
   const defaultBlockedTemplate = {
     html: 'block test',
@@ -13,7 +15,7 @@ describe('blocking', () => {
     }
   }
 
-  let log
+  let log, telemetry
   let block, setTemplates
   let req, res, rootSpan
 
@@ -22,9 +24,14 @@ describe('blocking', () => {
       warn: sinon.stub()
     }
 
-    const blocking = proxyquire('../src/appsec/blocking', {
+    telemetry = {
+      updateBlockFailureMetric: sinon.stub()
+    }
+
+    const blocking = proxyquire('../../src/appsec/blocking', {
       '../log': log,
-      './blocked_templates': defaultBlockedTemplate
+      './blocked_templates': defaultBlockedTemplate,
+      './telemetry': telemetry
     })
 
     block = blocking.block
@@ -37,14 +44,17 @@ describe('blocking', () => {
     res = {
       setHeader: sinon.stub(),
       writeHead: sinon.stub(),
-      end: sinon.stub(),
       getHeaderNames: sinon.stub().returns([]),
-      removeHeader: sinon.stub()
+      removeHeader: sinon.stub(),
+      constructor: {
+        prototype: {
+          end: sinon.stub()
+        }
+      }
     }
-    res.writeHead.returns(res)
 
     rootSpan = {
-      addTags: sinon.stub()
+      setTag: sinon.stub()
     }
   })
 
@@ -55,69 +65,80 @@ describe('blocking', () => {
 
     it('should log warn and not send blocking response when headers have already been sent', () => {
       res.headersSent = true
-      block(req, res, rootSpan)
+      const blocked = block(req, res, rootSpan)
 
+      expect(blocked).to.be.false
       expect(log.warn).to.have.been
         .calledOnceWithExactly('[ASM] Cannot send blocking response when headers have already been sent')
-      expect(rootSpan.addTags).to.not.have.been.called
+      expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('_dd.appsec.block.failed', 1)
       expect(res.setHeader).to.not.have.been.called
-      expect(res.end).to.not.have.been.called
+      expect(res.constructor.prototype.end).to.not.have.been.called
+      expect(telemetry.updateBlockFailureMetric).to.be.calledOnceWithExactly(req)
     })
 
     it('should send blocking response with html type if present in the headers', () => {
       req.headers.accept = 'text/html'
-      block(req, res, rootSpan)
+      const blocked = block(req, res, rootSpan)
 
-      expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({ 'appsec.blocked': 'true' })
+      expect(blocked).to.be.true
+      expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('appsec.blocked', 'true')
       expect(res.writeHead).to.have.been.calledOnceWithExactly(403, {
         'Content-Type': 'text/html; charset=utf-8',
         'Content-Length': 12
       })
-      expect(res.end).to.have.been.calledOnceWithExactly('htmlBodyéé')
+      expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly('htmlBodyéé')
+      expect(telemetry.updateBlockFailureMetric).to.not.have.been.called
     })
 
     it('should send blocking response with json type if present in the headers in priority', () => {
       req.headers.accept = 'text/html, application/xhtml+xml, application/xml;q=0.9, */*;q=0.8, application/json'
-      block(req, res, rootSpan)
+      const blocked = block(req, res, rootSpan)
 
-      expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({ 'appsec.blocked': 'true' })
+      expect(blocked).to.be.true
+      expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('appsec.blocked', 'true')
       expect(res.writeHead).to.have.been.calledOnceWithExactly(403, {
         'Content-Type': 'application/json',
         'Content-Length': 8
       })
-      expect(res.end).to.have.been.calledOnceWithExactly('jsonBody')
+      expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly('jsonBody')
+      expect(telemetry.updateBlockFailureMetric).to.not.have.been.called
     })
 
     it('should send blocking response with json type if neither html or json is present in the headers', () => {
-      block(req, res, rootSpan)
+      const blocked = block(req, res, rootSpan)
 
-      expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({ 'appsec.blocked': 'true' })
+      expect(blocked).to.be.true
+      expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('appsec.blocked', 'true')
       expect(res.writeHead).to.have.been.calledOnceWithExactly(403, {
         'Content-Type': 'application/json',
         'Content-Length': 8
       })
-      expect(res.end).to.have.been.calledOnceWithExactly('jsonBody')
+      expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly('jsonBody')
+      expect(telemetry.updateBlockFailureMetric).to.not.have.been.called
     })
 
     it('should send blocking response and call abortController if passed in arguments', () => {
       const abortController = new AbortController()
-      block(req, res, rootSpan, abortController)
+      const blocked = block(req, res, rootSpan, abortController)
 
-      expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({ 'appsec.blocked': 'true' })
+      expect(blocked).to.be.true
+      expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('appsec.blocked', 'true')
       expect(res.writeHead).to.have.been.calledOnceWithExactly(403, {
         'Content-Type': 'application/json',
         'Content-Length': 8
       })
-      expect(res.end).to.have.been.calledOnceWithExactly('jsonBody')
+      expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly('jsonBody')
       expect(abortController.signal.aborted).to.be.true
+      expect(telemetry.updateBlockFailureMetric).to.not.have.been.called
     })
 
     it('should remove all headers before sending blocking response', () => {
       res.getHeaderNames.returns(['header1', 'header2'])
 
-      block(req, res, rootSpan)
+      const blocked = block(req, res, rootSpan)
 
-      expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({ 'appsec.blocked': 'true' })
+      expect(blocked).to.be.true
+      expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('appsec.blocked', 'true')
       expect(res.removeHeader).to.have.been.calledTwice
       expect(res.removeHeader.firstCall).to.have.been.calledWithExactly('header1')
       expect(res.removeHeader.secondCall).to.have.been.calledWithExactly('header2')
@@ -125,7 +146,8 @@ describe('blocking', () => {
         'Content-Type': 'application/json',
         'Content-Length': 8
       })
-      expect(res.end).to.have.been.calledOnceWithExactly('jsonBody')
+      expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly('jsonBody')
+      expect(telemetry.updateBlockFailureMetric).to.not.have.been.called
     })
   })
 
@@ -141,17 +163,19 @@ describe('blocking', () => {
       req.headers.accept = 'text/html'
       setTemplates(config)
 
-      block(req, res, rootSpan)
+      const blocked = block(req, res, rootSpan)
 
-      expect(res.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.html)
+      expect(blocked).to.be.true
+      expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.html)
     })
 
     it('should block with default json template', () => {
       setTemplates(config)
 
-      block(req, res, rootSpan)
+      const blocked = block(req, res, rootSpan)
 
-      expect(res.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.json)
+      expect(blocked).to.be.true
+      expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.json)
     })
   })
 
@@ -171,14 +195,15 @@ describe('blocking', () => {
       req.headers.accept = 'text/html'
       setTemplates(config)
 
-      block(req, res, rootSpan, null, actionParameters)
+      const blocked = block(req, res, rootSpan, null, actionParameters)
 
+      expect(blocked).to.be.true
       expect(res.writeHead).to.have.been.calledOnceWith(401)
-      expect(res.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.html)
+      expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.html)
     })
 
     it('should block with default json template and custom status ' +
-        'when type is forced to json and accept is html', () => {
+      'when type is forced to json and accept is html', () => {
       const actionParameters = {
         status_code: 401,
         type: 'json'
@@ -186,14 +211,15 @@ describe('blocking', () => {
       req.headers.accept = 'text/html'
       setTemplates(config)
 
-      block(req, res, rootSpan, null, actionParameters)
+      const blocked = block(req, res, rootSpan, null, actionParameters)
 
+      expect(blocked).to.be.true
       expect(res.writeHead).to.have.been.calledOnceWith(401)
-      expect(res.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.json)
+      expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.json)
     })
 
     it('should block with default html template and custom status ' +
-        'when type is forced to html and accept is html', () => {
+      'when type is forced to html and accept is html', () => {
       const actionParameters = {
         status_code: 401,
         type: 'html'
@@ -201,10 +227,11 @@ describe('blocking', () => {
       req.headers.accept = 'text/html'
       setTemplates(config)
 
-      block(req, res, rootSpan, null, actionParameters)
+      const blocked = block(req, res, rootSpan, null, actionParameters)
 
+      expect(blocked).to.be.true
       expect(res.writeHead).to.have.been.calledOnceWith(401)
-      expect(res.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.html)
+      expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.html)
     })
 
     it('should block with default json template and custom status', () => {
@@ -214,38 +241,41 @@ describe('blocking', () => {
       }
       setTemplates(config)
 
-      block(req, res, rootSpan, null, actionParameters)
+      const blocked = block(req, res, rootSpan, null, actionParameters)
 
+      expect(blocked).to.be.true
       expect(res.writeHead).to.have.been.calledOnceWith(401)
-      expect(res.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.json)
+      expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.json)
     })
 
     it('should block with default json template and custom status ' +
-        'when type is forced to json and accept is not defined', () => {
+      'when type is forced to json and accept is not defined', () => {
       const actionParameters = {
         status_code: 401,
         type: 'json'
       }
       setTemplates(config)
 
-      block(req, res, rootSpan, null, actionParameters)
+      const blocked = block(req, res, rootSpan, null, actionParameters)
 
+      expect(blocked).to.be.true
       expect(res.writeHead).to.have.been.calledOnceWith(401)
-      expect(res.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.json)
+      expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.json)
     })
 
     it('should block with default html template and custom status ' +
-        'when type is forced to html and accept is not defined', () => {
+      'when type is forced to html and accept is not defined', () => {
       const actionParameters = {
         status_code: 401,
         type: 'html'
       }
       setTemplates(config)
 
-      block(req, res, rootSpan, null, actionParameters)
+      const blocked = block(req, res, rootSpan, null, actionParameters)
 
+      expect(blocked).to.be.true
       expect(res.writeHead).to.have.been.calledOnceWith(401)
-      expect(res.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.html)
+      expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.html)
     })
 
     it('should block with custom redirect', () => {
@@ -255,12 +285,13 @@ describe('blocking', () => {
       }
       setTemplates(config)
 
-      block(req, res, rootSpan, null, actionParameters)
+      const blocked = block(req, res, rootSpan, null, actionParameters)
 
+      expect(blocked).to.be.true
       expect(res.writeHead).to.have.been.calledOnceWithExactly(301, {
         Location: '/you-have-been-blocked'
       })
-      expect(res.end).to.have.been.calledOnce
+      expect(res.constructor.prototype.end).to.have.been.calledOnce
     })
   })
 })

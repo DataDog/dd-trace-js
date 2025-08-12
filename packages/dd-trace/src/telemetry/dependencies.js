@@ -8,6 +8,7 @@ const dc = require('dc-polyfill')
 const { fileURLToPath } = require('url')
 const { isTrue } = require('../../src/util')
 
+/** @type {Set<string>} */
 const savedDependenciesToSend = new Set()
 const detectedDependencyKeys = new Set()
 const detectedDependencyVersions = new Set()
@@ -15,63 +16,66 @@ const detectedDependencyVersions = new Set()
 const FILE_URI_START = 'file://'
 const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
 
-let immediate, config, application, host, initialLoad
+let config, application, host, initialLoad
 let isFirstModule = true
 let getRetryData
 let updateRetryData
 
-function createBatchPayload (payload) {
-  const batchPayload = payload.map(item => {
-    return {
-      request_type: item.reqType,
-      payload: item.payload
-    }
-  })
-
-  return batchPayload
-}
 function waitAndSend (config, application, host) {
-  if (!immediate) {
-    immediate = setImmediate(() => {
-      immediate = null
-      if (savedDependenciesToSend.size > 0) {
-        const dependencies = Array.from(savedDependenciesToSend.values())
-          // if a depencdency is from the initial load, *always* send the event
-          // Otherwise, only send if dependencyCollection is enabled
-          .filter(dep => {
-            const initialLoadModule = isTrue(dep.split(' ')[2])
-            const sendModule = initialLoadModule || (config.telemetry?.dependencyCollection)
+  setImmediate(() => {
+    if (savedDependenciesToSend.size === 0) {
+      return
+    }
+    const dependencies = []
+    let send = 0
+    for (const dependency of savedDependenciesToSend) {
+      const [name, version, initialLoadModule] = dependency.split(' ')
+      // If a dependency is from the initial load, *always* send the event
+      // Otherwise, only send if dependencyCollection is enabled
+      const sendModule = isTrue(initialLoadModule) || config.telemetry?.dependencyCollection
 
-            if (!sendModule) savedDependenciesToSend.delete(dep) // we'll never send it
-            return sendModule
-          })
-          .splice(0, 2000) // v2 documentation specifies up to 2000 dependencies can be sent at once
-          .map(pair => {
-            savedDependenciesToSend.delete(pair)
-            const [name, version] = pair.split(' ')
-            return { name, version }
-          })
-        let currPayload
-        const retryData = getRetryData()
-        if (retryData) {
-          currPayload = { reqType: 'app-dependencies-loaded', payload: { dependencies } }
-        } else {
-          if (!dependencies.length) return // no retry data and no dependencies, nothing to send
-          currPayload = { dependencies }
-        }
+      savedDependenciesToSend.delete(dependency)
 
-        const payload = retryData ? createBatchPayload([currPayload, retryData]) : currPayload
-        const reqType = retryData ? 'message-batch' : 'app-dependencies-loaded'
-
-        sendData(config, application, host, reqType, payload, updateRetryData)
-
-        if (savedDependenciesToSend.size > 0) {
-          waitAndSend(config, application, host)
+      if (sendModule) {
+        dependencies.push({ name, version })
+        send++
+        if (send === 2000) {
+          // v2 documentation specifies up to 2000 dependencies can be sent at once
+          break
         }
       }
-    })
-    immediate.unref()
-  }
+    }
+
+    /**
+     * @type { { dependencies: typeof dependencies } | {
+     *   request_type: string,
+     *   payload: typeof dependencies
+     * }[]}
+     */
+    let payload = { dependencies }
+    let reqType = 'app-dependencies-loaded'
+    const retryData = getRetryData()
+
+    if (retryData) {
+      payload = [{
+        request_type: 'app-dependencies-loaded',
+        payload
+      }, {
+        request_type: retryData.reqType,
+        payload: retryData.payload
+      }]
+      reqType = 'message-batch'
+    } else if (!dependencies.length) {
+      // No retry data and no dependencies, nothing to send
+      return
+    }
+
+    sendData(config, application, host, reqType, payload, updateRetryData)
+
+    if (savedDependenciesToSend.size > 0) {
+      waitAndSend(config, application, host)
+    }
+  }).unref()
 }
 
 function loadAllTheLoadedModules () {
@@ -91,18 +95,18 @@ function onModuleLoad (data) {
 
   if (data) {
     let filename = data.filename
-    if (filename && filename.startsWith(FILE_URI_START)) {
+    if (filename?.startsWith(FILE_URI_START)) {
       try {
         filename = fileURLToPath(filename)
-      } catch (e) {
+      } catch {
         // cannot transform url to path
       }
     }
     const parseResult = filename && parse(filename)
-    const request = data.request || (parseResult && parseResult.name)
-    const dependencyKey = parseResult && parseResult.basedir ? parseResult.basedir : request
+    const request = data.request || parseResult?.name
+    const dependencyKey = parseResult?.basedir ?? request
 
-    if (filename && request && isDependency(filename, request) && !detectedDependencyKeys.has(dependencyKey)) {
+    if (filename && request && isDependency(request) && !detectedDependencyKeys.has(dependencyKey)) {
       detectedDependencyKeys.add(dependencyKey)
 
       if (parseResult) {
@@ -118,7 +122,7 @@ function onModuleLoad (data) {
 
               waitAndSend(config, application, host)
             }
-          } catch (e) {
+          } catch {
             // can not read the package.json, do nothing
           }
         }
@@ -135,20 +139,21 @@ function start (_config = {}, _application, _host, getRetryDataFunction, updateR
   updateRetryData = updateRetryDatafunction
   moduleLoadStartChannel.subscribe(onModuleLoad)
 
-  // try and capture intially loaded modules in the first tick
+  // Try and capture initially loaded modules in the first tick
   // since, ideally, the tracer (and this module) should be loaded first,
   // this should capture any first-tick dependencies
   queueMicrotask(() => { initialLoad = false })
 }
 
-function isDependency (filename, request) {
-  const isDependencyWithSlash = isDependencyWithSeparator(filename, request, '/')
+function isDependency (request) {
+  const isDependencyWithSlash = isDependencyWithSeparator(request, '/')
   if (isDependencyWithSlash && process.platform === 'win32') {
-    return isDependencyWithSeparator(filename, request, path.sep)
+    return isDependencyWithSeparator(request, path.sep)
   }
   return isDependencyWithSlash
 }
-function isDependencyWithSeparator (filename, request, sep) {
+
+function isDependencyWithSeparator (request, sep) {
   return request.indexOf(`..${sep}`) !== 0 &&
     request.indexOf(`.${sep}`) !== 0 &&
     request.indexOf(sep) !== 0 &&

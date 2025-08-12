@@ -22,6 +22,7 @@ module.exports = {
 
   USER_ID: 'usr.id',
   USER_LOGIN: 'usr.login',
+  USER_SESSION_ID: 'usr.session_id',
 
   WAF_CONTEXT_PROCESSOR: 'waf.context.processor',
 

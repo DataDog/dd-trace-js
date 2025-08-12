@@ -6,22 +6,15 @@ const {
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
+const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const { assert } = require('chai')
-const { NODE_MAJOR } = require('../../../../version')
-const semver = require('semver')
-
-// newer packages are not supported on older node versions
-const range = NODE_MAJOR < 16 ? '<5' : '>=4'
 
 describe('esm', () => {
   let agent
   let proc
   let sandbox
 
-  withVersions('mongoose', ['mongoose'], range, version => {
-    const specificVersion = require(`../../../../versions/mongoose@${version}`).version()
-    if (NODE_MAJOR === 14 && semver.satisfies(specificVersion, '>=8')) return
-
+  withVersions('mongoose', ['mongoose'], '>=4', version => {
     before(async function () {
       this.timeout(20000)
       sandbox = await createSandbox([`'mongoose@${version}'`], false, [

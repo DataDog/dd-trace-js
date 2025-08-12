@@ -6,6 +6,7 @@ const { storage } = require('../../../../../../datadog-core')
 const iast = require('../../../../../src/appsec/iast')
 const iastContextFunctions = require('../../../../../src/appsec/iast/iast-context')
 const { isTainted, getRanges } = require('../../../../../src/appsec/iast/taint-tracking/operations')
+const { withVersions } = require('../../../../setup/mocha')
 const {
   HTTP_REQUEST_COOKIE_NAME,
   HTTP_REQUEST_COOKIE_VALUE
@@ -16,7 +17,7 @@ describe('Cookies sourcing with cookies', () => {
   let cookie
   withVersions('cookie', 'cookie', version => {
     function app () {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const iastContext = iastContextFunctions.getIastContext(store)
 
       const rawCookies = 'cookie=value'

@@ -27,6 +27,7 @@ describe('AppsecFsPlugin', () => {
     beforeEach(() => {
       configure = sinon.stub()
       class PluginClass {
+        addBind (channelName, handler) {}
         addSub (channelName, handler) {}
 
         configure (config) {
@@ -93,50 +94,50 @@ describe('AppsecFsPlugin', () => {
   })
 
   describe('_onFsOperationStart', () => {
-    it('should mark fs root', () => {
+    it('should return fs root', () => {
       const origStore = {}
-      storage.enterWith(origStore)
+      storage('legacy').enterWith(origStore)
 
-      appsecFsPlugin._onFsOperationStart()
+      let store = appsecFsPlugin._onFsOperationStart()
 
-      let store = storage.getStore()
       assert.property(store, 'fs')
       assert.propertyVal(store.fs, 'parentStore', origStore)
       assert.propertyVal(store.fs, 'root', true)
 
-      appsecFsPlugin._onFsOperationFinishOrRenderEnd()
+      store = appsecFsPlugin._onFsOperationFinishOrRenderEnd()
 
-      store = storage.getStore()
       assert.equal(store, origStore)
       assert.notProperty(store, 'fs')
     })
 
     it('should mark fs children', () => {
       const origStore = { orig: true }
-      storage.enterWith(origStore)
+      storage('legacy').enterWith(origStore)
 
-      appsecFsPlugin._onFsOperationStart()
+      const rootStore = appsecFsPlugin._onFsOperationStart()
 
-      const rootStore = storage.getStore()
       assert.property(rootStore, 'fs')
       assert.propertyVal(rootStore.fs, 'parentStore', origStore)
       assert.propertyVal(rootStore.fs, 'root', true)
 
-      appsecFsPlugin._onFsOperationStart()
+      storage('legacy').enterWith(rootStore)
 
-      let store = storage.getStore()
+      let store = appsecFsPlugin._onFsOperationStart()
+
       assert.property(store, 'fs')
       assert.propertyVal(store.fs, 'parentStore', rootStore)
       assert.propertyVal(store.fs, 'root', false)
       assert.propertyVal(store, 'orig', true)
 
-      appsecFsPlugin._onFsOperationFinishOrRenderEnd()
+      storage('legacy').enterWith(store)
 
-      store = storage.getStore()
+      store = appsecFsPlugin._onFsOperationFinishOrRenderEnd()
+
       assert.equal(store, rootStore)
 
-      appsecFsPlugin._onFsOperationFinishOrRenderEnd()
-      store = storage.getStore()
+      storage('legacy').enterWith(store)
+
+      store = appsecFsPlugin._onFsOperationFinishOrRenderEnd()
       assert.equal(store, origStore)
     })
   })
@@ -146,18 +147,18 @@ describe('AppsecFsPlugin', () => {
       appsecFsPlugin.enable()
 
       const origStore = {}
-      storage.enterWith(origStore)
+      storage('legacy').enterWith(origStore)
 
-      appsecFsPlugin._onResponseRenderStart()
+      let store = appsecFsPlugin._onResponseRenderStart()
 
-      let store = storage.getStore()
       assert.property(store, 'fs')
       assert.propertyVal(store.fs, 'parentStore', origStore)
       assert.propertyVal(store.fs, 'opExcluded', true)
 
-      appsecFsPlugin._onFsOperationFinishOrRenderEnd()
+      storage('legacy').enterWith(store)
 
-      store = storage.getStore()
+      store = appsecFsPlugin._onFsOperationFinishOrRenderEnd()
+
       assert.equal(store, origStore)
       assert.notProperty(store, 'fs')
     })
@@ -176,7 +177,7 @@ describe('AppsecFsPlugin', () => {
       it('should mark root operations', () => {
         let count = 0
         const onStart = () => {
-          const store = storage.getStore()
+          const store = storage('legacy').getStore()
           assert.isNotNull(store.fs)
 
           count++
@@ -185,7 +186,7 @@ describe('AppsecFsPlugin', () => {
 
         try {
           const origStore = {}
-          storage.enterWith(origStore)
+          storage('legacy').enterWith(origStore)
 
           opStartCh.subscribe(onStart)
 
@@ -200,7 +201,7 @@ describe('AppsecFsPlugin', () => {
       it('should mark root even if op is excluded', () => {
         let count = 0
         const onStart = () => {
-          const store = storage.getStore()
+          const store = storage('legacy').getStore()
           assert.isNotNull(store.fs)
 
           count++
@@ -211,7 +212,7 @@ describe('AppsecFsPlugin', () => {
           const origStore = {
             fs: { opExcluded: true }
           }
-          storage.enterWith(origStore)
+          storage('legacy').enterWith(origStore)
 
           opStartCh.subscribe(onStart)
 
@@ -226,7 +227,7 @@ describe('AppsecFsPlugin', () => {
       it('should clean up store when finishing op', () => {
         let count = 4
         const onFinish = () => {
-          const store = storage.getStore()
+          const store = storage('legacy').getStore()
           count--
 
           if (count === 0) {
@@ -235,7 +236,7 @@ describe('AppsecFsPlugin', () => {
         }
         try {
           const origStore = {}
-          storage.enterWith(origStore)
+          storage('legacy').enterWith(origStore)
 
           opFinishCh.subscribe(onFinish)
 

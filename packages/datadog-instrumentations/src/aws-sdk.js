@@ -1,10 +1,6 @@
 'use strict'
 
-const {
-  channel,
-  addHook,
-  AsyncResource
-} = require('./helpers/instrument')
+const { channel, addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
 function wrapRequest (send) {
@@ -15,36 +11,44 @@ function wrapRequest (send) {
     const channelSuffix = getChannelSuffix(serviceIdentifier)
     const startCh = channel(`apm:aws:request:start:${channelSuffix}`)
     if (!startCh.hasSubscribers) return send.apply(this, arguments)
-    const innerAr = new AsyncResource('apm:aws:request:inner')
-    const outerAr = new AsyncResource('apm:aws:request:outer')
 
-    return innerAr.runInAsyncScope(() => {
-      this.on('complete', innerAr.bind(response => {
-        const cbExists = typeof cb === 'function'
-        channel(`apm:aws:request:complete:${channelSuffix}`).publish({ response, cbExists })
-      }))
+    const ctx = {
+      serviceIdentifier,
+      operation: this.operation,
+      awsRegion: this.service.config && this.service.config.region,
+      awsService: this.service.api && this.service.api.className,
+      request: this,
+      cbExists: typeof cb === 'function'
+    }
 
-      startCh.publish({
-        serviceIdentifier,
-        operation: this.operation,
-        awsRegion: this.service.config && this.service.config.region,
-        awsService: this.service.api && this.service.api.className,
-        request: this
-      })
-
-      if (typeof cb === 'function') {
-        arguments[0] = wrapCb(cb, channelSuffix, this, outerAr)
-      }
-      return send.apply(this, arguments)
+    this.on('complete', response => {
+      ctx.response = response
+      channel(`apm:aws:request:complete:${channelSuffix}`).publish(ctx)
     })
+
+    if (ctx.cbExists) {
+      arguments[0] = wrapCb(cb, channelSuffix, ctx)
+    }
+
+    return startCh.runStores(ctx, send, this, ...arguments)
+  }
+}
+
+function wrapDeserialize (deserialize, channelSuffix) {
+  const headersCh = channel(`apm:aws:response:deserialize:${channelSuffix}`)
+
+  return function (response) {
+    if (headersCh.hasSubscribers) {
+      headersCh.publish({ headers: response.headers })
+    }
+
+    return deserialize.apply(this, arguments)
   }
 }
 
 function wrapSmithySend (send) {
   return function (command, ...args) {
-    const cb = args[args.length - 1]
-    const innerAr = new AsyncResource('apm:aws:request:inner')
-    const outerAr = new AsyncResource('apm:aws:request:outer')
+    const cb = args.at(-1)
     const serviceIdentifier = this.config.serviceId.toLowerCase()
     const channelSuffix = getChannelSuffix(serviceIdentifier)
     const commandName = command.constructor.name
@@ -61,46 +65,49 @@ function wrapSmithySend (send) {
     const responseStartChannel = channel(`apm:aws:response:start:${channelSuffix}`)
     const responseFinishChannel = channel(`apm:aws:response:finish:${channelSuffix}`)
 
-    return innerAr.runInAsyncScope(() => {
-      startCh.publish({
-        serviceIdentifier,
-        operation,
-        awsService: clientName,
-        request
-      })
+    if (typeof command.deserialize === 'function') {
+      shimmer.wrap(command, 'deserialize', deserialize => wrapDeserialize(deserialize, channelSuffix))
+    }
 
+    const ctx = {
+      serviceIdentifier,
+      operation,
+      awsService: clientName,
+      request
+    }
+
+    return startCh.runStores(ctx, () => {
       // When the region is not set this never resolves so we can't await.
       this.config.region().then(region => {
-        regionCh.publish(region)
+        ctx.region = region
+        regionCh.publish(ctx)
       })
 
       if (typeof cb === 'function') {
         args[args.length - 1] = shimmer.wrapFunction(cb, cb => function (err, result) {
-          const message = getMessage(request, err, result)
+          addResponse(ctx, err, result)
 
-          completeChannel.publish(message)
+          completeChannel.publish(ctx)
 
-          outerAr.runInAsyncScope(() => {
-            responseStartChannel.publish(message)
+          const responseCtx = { request, response: ctx.response }
 
+          responseStartChannel.runStores(responseCtx, () => {
             cb.apply(this, arguments)
 
-            if (message.needsFinish) {
-              responseFinishChannel.publish(message.response.error)
-            }
+            responseFinishChannel.publish(responseCtx)
           })
         })
       } else { // always a promise
         return send.call(this, command, ...args)
           .then(
             result => {
-              const message = getMessage(request, null, result)
-              completeChannel.publish(message)
+              addResponse(ctx, null, result)
+              completeChannel.publish(ctx)
               return result
             },
             error => {
-              const message = getMessage(request, error)
-              completeChannel.publish(message)
+              addResponse(ctx, error)
+              completeChannel.publish(ctx)
               throw error
             }
           )
@@ -111,52 +118,50 @@ function wrapSmithySend (send) {
   }
 }
 
-function wrapCb (cb, serviceName, request, ar) {
+function wrapCb (cb, serviceName, ctx) {
   // eslint-disable-next-line n/handle-callback-err
   return shimmer.wrapFunction(cb, cb => function wrappedCb (err, response) {
-    const obj = { request, response }
-    return ar.runInAsyncScope(() => {
-      channel(`apm:aws:response:start:${serviceName}`).publish(obj)
-      // TODO(bengl) make this work without needing a needsFinish property added to the object
-      if (!obj.needsFinish) {
-        return cb.apply(this, arguments)
-      }
+    ctx = { request: ctx.request, response }
+    return channel(`apm:aws:response:start:${serviceName}`).runStores(ctx, () => {
       const finishChannel = channel(`apm:aws:response:finish:${serviceName}`)
       try {
         let result = cb.apply(this, arguments)
         if (result && result.then) {
           result = result.then(x => {
-            finishChannel.publish()
+            finishChannel.publish(ctx)
             return x
           }, e => {
-            finishChannel.publish(e)
+            ctx.error = e
+            finishChannel.publish(ctx)
             throw e
           })
         } else {
-          finishChannel.publish()
+          finishChannel.publish(ctx)
         }
         return result
       } catch (e) {
-        finishChannel.publish(e)
+        ctx.error = e
+        finishChannel.publish(ctx)
         throw e
       }
     })
   })
 }
 
-function getMessage (request, error, result) {
+function addResponse (ctx, error, result) {
+  const request = ctx.request
   const response = { request, error, ...result }
 
   if (result && result.$metadata) {
     response.requestId = result.$metadata.requestId
   }
 
-  return { request, response }
+  ctx.response = response
 }
 
 function getChannelSuffix (name) {
   // some resource identifiers have spaces between ex: bedrock runtime
-  name = name.replaceAll(' ', '')
+  name = String(name).replaceAll(' ', '')
   return [
     'cloudwatchlogs',
     'dynamodb',

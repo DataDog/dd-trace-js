@@ -2,9 +2,15 @@
 
 const Analyzer = require('./vulnerability-analyzer')
 const { getNodeModulesPaths } = require('../path-line')
-const log = require('../../../log')
 
-const EXCLUDED_PATHS = getNodeModulesPaths('express/lib/response.js')
+const EXCLUDED_PATHS = [
+  // Express
+  getNodeModulesPaths('express/lib/response.js'),
+  // Fastify
+  getNodeModulesPaths('fastify/lib/reply.js'),
+  getNodeModulesPaths('fastify/lib/hooks.js'),
+  getNodeModulesPaths('@fastify/cookie/plugin.js')
+]
 
 class CookieAnalyzer extends Analyzer {
   constructor (type, propertyToBeSafe) {
@@ -12,14 +18,7 @@ class CookieAnalyzer extends Analyzer {
     this.propertyToBeSafe = propertyToBeSafe.toLowerCase()
   }
 
-  onConfigure (config) {
-    try {
-      this.cookieFilterRegExp = new RegExp(config.iast.cookieFilterPattern)
-    } catch {
-      log.error('[ASM] Invalid regex in cookieFilterPattern')
-      this.cookieFilterRegExp = /.{32,}/
-    }
-
+  onConfigure () {
     this.addSub(
       { channelName: 'datadog:iast:set-cookie', moduleName: 'http' },
       (cookieInfo) => this.analyze(cookieInfo)
@@ -33,14 +32,6 @@ class CookieAnalyzer extends Analyzer {
 
   _getEvidence ({ cookieName }) {
     return { value: cookieName }
-  }
-
-  _createHashSource (type, evidence, location) {
-    if (typeof evidence.value === 'string' && evidence.value.match(this.cookieFilterRegExp)) {
-      return 'FILTERED_' + this._type
-    }
-
-    return `${type}:${evidence.value}`
   }
 
   _getExcludedPaths () {

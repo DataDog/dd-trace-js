@@ -1,3 +1,5 @@
+'use strict'
+
 const { identityService, awsServiceV0 } = require('../util')
 
 function amqpServiceName ({ tracerService }) {
@@ -14,11 +16,19 @@ const messaging = {
       opName: () => 'amqp.send',
       serviceName: amqpServiceName
     },
+    'azure-service-bus': {
+      opName: () => 'azure.servicebus.send',
+      serviceName: ({ tracerService }) => `${tracerService}-azure-service-bus`
+    },
     'google-cloud-pubsub': {
       opName: () => 'pubsub.request',
       serviceName: ({ tracerService }) => `${tracerService}-pubsub`
     },
     kafkajs: {
+      opName: () => 'kafka.produce',
+      serviceName: ({ tracerService }) => `${tracerService}-kafka`
+    },
+    'confluentinc-kafka-javascript': {
       opName: () => 'kafka.produce',
       serviceName: ({ tracerService }) => `${tracerService}-kafka`
     },
@@ -49,6 +59,10 @@ const messaging = {
       serviceName: identityService
     },
     kafkajs: {
+      opName: () => 'kafka.consume',
+      serviceName: ({ tracerService }) => `${tracerService}-kafka`
+    },
+    'confluentinc-kafka-javascript': {
       opName: () => 'kafka.consume',
       serviceName: ({ tracerService }) => `${tracerService}-kafka`
     },

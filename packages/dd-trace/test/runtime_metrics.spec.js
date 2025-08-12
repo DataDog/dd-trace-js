@@ -9,6 +9,108 @@ const isWindows = os.platform() === 'win32'
 
 const suiteDescribe = isWindows ? describe.skip : describe
 
+suiteDescribe('runtimeMetrics (proxy)', () => {
+  let runtimeMetrics
+  let proxy
+  let config
+
+  beforeEach(() => {
+    config = {
+      runtimeMetrics: {
+        enabled: false
+      }
+    }
+
+    runtimeMetrics = sinon.spy({
+      start () {},
+      stop () {},
+      track () {},
+      boolean () {},
+      histogram () {},
+      count () {},
+      gauge () {},
+      increment () {},
+      decrement () {}
+    })
+
+    proxy = proxyquire('../src/runtime_metrics', {
+      './runtime_metrics': runtimeMetrics
+    })
+  })
+
+  it('should be noop when disabled', () => {
+    proxy.start()
+    proxy.track()
+    proxy.boolean()
+    proxy.histogram()
+    proxy.count()
+    proxy.gauge()
+    proxy.increment()
+    proxy.decrement()
+    proxy.stop()
+
+    expect(runtimeMetrics.start).to.not.have.been.called
+    expect(runtimeMetrics.track).to.not.have.been.called
+    expect(runtimeMetrics.boolean).to.not.have.been.called
+    expect(runtimeMetrics.histogram).to.not.have.been.called
+    expect(runtimeMetrics.count).to.not.have.been.called
+    expect(runtimeMetrics.gauge).to.not.have.been.called
+    expect(runtimeMetrics.increment).to.not.have.been.called
+    expect(runtimeMetrics.decrement).to.not.have.been.called
+    expect(runtimeMetrics.stop).to.not.have.been.called
+  })
+
+  it('should proxy when enabled', () => {
+    config.runtimeMetrics.enabled = true
+
+    proxy.start(config)
+    proxy.track()
+    proxy.boolean()
+    proxy.histogram()
+    proxy.count()
+    proxy.gauge()
+    proxy.increment()
+    proxy.decrement()
+    proxy.stop()
+
+    expect(runtimeMetrics.start).to.have.been.calledWith(config)
+    expect(runtimeMetrics.track).to.have.been.called
+    expect(runtimeMetrics.boolean).to.have.been.called
+    expect(runtimeMetrics.histogram).to.have.been.called
+    expect(runtimeMetrics.count).to.have.been.called
+    expect(runtimeMetrics.gauge).to.have.been.called
+    expect(runtimeMetrics.increment).to.have.been.called
+    expect(runtimeMetrics.decrement).to.have.been.called
+    expect(runtimeMetrics.stop).to.have.been.called
+  })
+
+  it('should be noop when disabled after being enabled', () => {
+    config.runtimeMetrics.enabled = true
+    proxy.start(config)
+    proxy.stop()
+    config.runtimeMetrics.enabled = false
+    proxy.start(config)
+    proxy.track()
+    proxy.boolean()
+    proxy.histogram()
+    proxy.count()
+    proxy.gauge()
+    proxy.increment()
+    proxy.decrement()
+    proxy.stop()
+
+    expect(runtimeMetrics.start).to.have.been.calledOnce
+    expect(runtimeMetrics.track).to.not.have.been.called
+    expect(runtimeMetrics.boolean).to.not.have.been.called
+    expect(runtimeMetrics.histogram).to.not.have.been.called
+    expect(runtimeMetrics.count).to.not.have.been.called
+    expect(runtimeMetrics.gauge).to.not.have.been.called
+    expect(runtimeMetrics.increment).to.not.have.been.called
+    expect(runtimeMetrics.decrement).to.not.have.been.called
+    expect(runtimeMetrics.stop).to.have.been.calledOnce
+  })
+})
+
 suiteDescribe('runtimeMetrics', () => {
   let runtimeMetrics
   let config
@@ -18,8 +120,22 @@ suiteDescribe('runtimeMetrics', () => {
   let Client
 
   beforeEach(() => {
+    // This is needed because sinon spies keep references to arguments which
+    // breaks tests because the tags parameter is now mutated right after the
+    // call.
+    const wrapSpy = (client, spy) => {
+      return function (stat, value, tags) {
+        return spy.call(client, stat, value, [].concat(tags))
+      }
+    }
+
     Client = sinon.spy(function () {
-      return client
+      return {
+        gauge: wrapSpy(client, client.gauge),
+        increment: wrapSpy(client, client.increment),
+        histogram: wrapSpy(client, client.histogram),
+        flush: client.flush.bind(client)
+      }
     })
 
     Client.generateClientConfig = DogStatsDClient.generateClientConfig
@@ -31,8 +147,8 @@ suiteDescribe('runtimeMetrics', () => {
       flush: sinon.spy()
     }
 
-    runtimeMetrics = proxyquire('../src/runtime_metrics', {
-      './dogstatsd': {
+    runtimeMetrics = proxyquire('../src/runtime_metrics/runtime_metrics', {
+      '../dogstatsd': {
         DogStatsDClient: Client
       }
     })
@@ -44,6 +160,11 @@ suiteDescribe('runtimeMetrics', () => {
         hostname: 'localhost',
         port: 8125
       },
+      runtimeMetrics: {
+        enabled: true,
+        eventLoop: true,
+        gc: true
+      },
       tags: {
         str: 'bar',
         obj: {},
@@ -51,7 +172,7 @@ suiteDescribe('runtimeMetrics', () => {
       }
     }
 
-    setImmediate = globalThis.setImmediate
+    setImmediate = require('timers/promises').setImmediate
     clock = sinon.useFakeTimers()
 
     runtimeMetrics.start(config)
@@ -93,79 +214,97 @@ suiteDescribe('runtimeMetrics', () => {
       })
     })
 
-    it('should start collecting runtimeMetrics every 10 seconds', (done) => {
+    it('should start collecting runtimeMetrics every 10 seconds', async () => {
       runtimeMetrics.stop()
       runtimeMetrics.start(config)
 
       global.gc()
 
-      setImmediate(() => setImmediate(() => { // Wait for GC observer to trigger.
-        clock.tick(10000)
+      // Wait for GC observer to trigger.
+      await setImmediate()
+      await setImmediate()
 
-        try {
-          expect(client.gauge).to.have.been.calledWith('runtime.node.cpu.user')
-          expect(client.gauge).to.have.been.calledWith('runtime.node.cpu.system')
-          expect(client.gauge).to.have.been.calledWith('runtime.node.cpu.total')
+      clock.tick(10000)
 
-          expect(client.gauge).to.have.been.calledWith('runtime.node.mem.rss')
-          expect(client.gauge).to.have.been.calledWith('runtime.node.mem.heap_total')
-          expect(client.gauge).to.have.been.calledWith('runtime.node.mem.heap_used')
+      expect(client.gauge).to.have.been.calledWith('runtime.node.cpu.user')
+      expect(client.gauge).to.have.been.calledWith('runtime.node.cpu.system')
+      expect(client.gauge).to.have.been.calledWith('runtime.node.cpu.total')
 
-          expect(client.gauge).to.have.been.calledWith('runtime.node.process.uptime')
+      expect(client.gauge).to.have.been.calledWith('runtime.node.mem.rss')
+      expect(client.gauge).to.have.been.calledWith('runtime.node.mem.heap_total')
+      expect(client.gauge).to.have.been.calledWith('runtime.node.mem.heap_used')
 
-          expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_heap_size')
-          expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_heap_size_executable')
-          expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_physical_size')
-          expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_available_size')
-          expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_heap_size')
-          expect(client.gauge).to.have.been.calledWith('runtime.node.heap.heap_size_limit')
+      expect(client.gauge).to.have.been.calledWith('runtime.node.process.uptime')
 
-          expect(client.gauge).to.have.been.calledWith('runtime.node.heap.malloced_memory')
-          expect(client.gauge).to.have.been.calledWith('runtime.node.heap.peak_malloced_memory')
+      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_heap_size')
+      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_heap_size_executable')
+      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_physical_size')
+      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_available_size')
+      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_heap_size')
+      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.heap_size_limit')
 
-          expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.max')
-          expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.min')
-          expect(client.increment).to.have.been.calledWith('runtime.node.event_loop.delay.sum')
-          expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.avg')
-          expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.median')
-          expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.95percentile')
-          expect(client.increment).to.have.been.calledWith('runtime.node.event_loop.delay.count')
+      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.malloced_memory')
+      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.peak_malloced_memory')
 
-          expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.utilization')
+      expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.max', sinon.match.number)
+      expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.min', sinon.match.number)
+      expect(client.increment).to.have.been.calledWith('runtime.node.event_loop.delay.sum', sinon.match.number)
+      expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.avg', sinon.match.number)
+      expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.median', sinon.match.number)
+      expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.95percentile', sinon.match.number)
+      expect(client.increment).to.have.been.calledWith('runtime.node.event_loop.delay.count', sinon.match.number)
 
-          expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.max')
-          expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.min')
-          expect(client.increment).to.have.been.calledWith('runtime.node.gc.pause.sum')
-          expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.avg')
-          expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.median')
-          expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.95percentile')
-          expect(client.increment).to.have.been.calledWith('runtime.node.gc.pause.count')
+      expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.utilization')
 
-          expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.max')
-          expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.min')
-          expect(client.increment).to.have.been.calledWith('runtime.node.gc.pause.by.type.sum')
-          expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.avg')
-          expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.median')
-          expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.95percentile')
-          expect(client.increment).to.have.been.calledWith('runtime.node.gc.pause.by.type.count')
-          expect(client.increment).to.have.been.calledWith(
-            'runtime.node.gc.pause.by.type.count', sinon.match.any, sinon.match(val => {
-              return val && /^gc_type:[a-z_]+$/.test(val[0])
-            })
-          )
+      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.max', sinon.match.number)
+      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.min', sinon.match.number)
+      expect(client.increment).to.have.been.calledWith('runtime.node.gc.pause.sum', sinon.match.number)
+      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.avg', sinon.match.number)
+      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.median', sinon.match.number)
+      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.95percentile', sinon.match.number)
+      expect(client.increment).to.have.been.calledWith('runtime.node.gc.pause.count', sinon.match.number)
 
-          expect(client.gauge).to.have.been.calledWith('runtime.node.heap.size.by.space')
-          expect(client.gauge).to.have.been.calledWith('runtime.node.heap.used_size.by.space')
-          expect(client.gauge).to.have.been.calledWith('runtime.node.heap.available_size.by.space')
-          expect(client.gauge).to.have.been.calledWith('runtime.node.heap.physical_size.by.space')
+      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.max', sinon.match.number)
+      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.min', sinon.match.number)
+      expect(client.increment).to.have.been.calledWith('runtime.node.gc.pause.by.type.sum', sinon.match.number)
+      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.avg', sinon.match.number)
+      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.median', sinon.match.number)
+      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.95percentile', sinon.match.number)
+      expect(client.increment).to.have.been.calledWith('runtime.node.gc.pause.by.type.count', sinon.match.number)
+      expect(client.increment).to.have.been.calledWith(
+        'runtime.node.gc.pause.by.type.count', sinon.match.any, sinon.match(val => {
+          return val && /^gc_type:[a-z_]+$/.test(val[0])
+        })
+      )
 
-          expect(client.flush).to.have.been.called
+      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.size.by.space')
+      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.used_size.by.space')
+      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.available_size.by.space')
+      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.physical_size.by.space')
 
-          done()
-        } catch (e) {
-          done(e)
-        }
-      }))
+      expect(client.flush).to.have.been.called
+    })
+
+    it('should collect individual metrics only once every 10 seconds', async () => {
+      runtimeMetrics.stop()
+      runtimeMetrics.start(config)
+
+      global.gc()
+
+      // Wait for GC observer to trigger.
+      await setImmediate()
+      await setImmediate()
+
+      clock.tick(60 * 60 * 1000)
+
+      // If a metric is leaking, it will leak expontentially because it will
+      // be sent one more time each flush, in addition to the previous
+      // flushes that also had the metric multiple times in them, so after
+      // 1 hour even if a single metric is leaking it would get over
+      // 64980 calls on its own without any other metric. A slightly lower
+      // value is used here to be on the safer side.
+      expect(client.gauge.callCount).to.be.lt(60000)
+      expect(client.increment.callCount).to.be.lt(60000)
     })
   })
 
@@ -182,6 +321,7 @@ suiteDescribe('runtimeMetrics', () => {
 
     describe('histogram', () => {
       it('should add a record to a histogram', () => {
+        runtimeMetrics.histogram('test', 0)
         runtimeMetrics.histogram('test', 1)
         runtimeMetrics.histogram('test', 2)
         runtimeMetrics.histogram('test', 3)
@@ -189,13 +329,13 @@ suiteDescribe('runtimeMetrics', () => {
         clock.tick(10000)
 
         expect(client.gauge).to.have.been.calledWith('test.max', 3)
-        expect(client.gauge).to.have.been.calledWith('test.min', 1)
+        expect(client.gauge).to.have.been.calledWith('test.min', 0)
         expect(client.increment).to.have.been.calledWith('test.sum', 6)
         expect(client.increment).to.have.been.calledWith('test.total', 6)
-        expect(client.gauge).to.have.been.calledWith('test.avg', 2)
+        expect(client.gauge).to.have.been.calledWith('test.avg', 1.5)
         expect(client.gauge).to.have.been.calledWith('test.median', sinon.match.number)
         expect(client.gauge).to.have.been.calledWith('test.95percentile', sinon.match.number)
-        expect(client.increment).to.have.been.calledWith('test.count', 3)
+        expect(client.increment).to.have.been.calledWith('test.count', 4)
       })
     })
 
@@ -301,8 +441,8 @@ suiteDescribe('runtimeMetrics', () => {
 
     describe('without native runtimeMetrics', () => {
       beforeEach(() => {
-        runtimeMetrics = proxyquire('../src/runtime_metrics', {
-          './dogstatsd': Client,
+        runtimeMetrics = proxyquire('../src/runtime_metrics/runtime_metrics', {
+          '../dogstatsd': Client,
           'node-gyp-build': sinon.stub().returns(null)
         })
       })

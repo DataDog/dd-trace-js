@@ -6,7 +6,7 @@ const { storage } = require('../../../datadog-core') // TODO: noop storage?
 
 class NoopSpan {
   constructor (tracer, parent) {
-    this._store = storage.getHandle()
+    this._store = storage('legacy').getHandle()
     this._noopTracer = tracer
     this._noopContext = this._createContext(parent)
   }
@@ -30,21 +30,19 @@ class NoopSpan {
   _createContext (parent) {
     const spanId = id()
 
-    if (parent) {
-      return new NoopSpanContext({
+    return parent
+      ? new NoopSpanContext({
         noop: this,
         traceId: parent._traceId,
         spanId,
         parentId: parent._spanId,
-        baggageItems: Object.assign({}, parent._baggageItems)
+        baggageItems: { ...parent._baggageItems }
       })
-    } else {
-      return new NoopSpanContext({
+      : new NoopSpanContext({
         noop: this,
         traceId: spanId,
         spanId
       })
-    }
   }
 }
 

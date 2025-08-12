@@ -4,7 +4,7 @@ require('../../dd-trace/test/setup/tap')
 
 const { expect } = require('chai')
 const { executionAsyncResource } = require('async_hooks')
-const storage = require('../src/storage')
+const { storage } = require('../src/storage')
 
 describe('storage', () => {
   let testStorage

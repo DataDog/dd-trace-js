@@ -1,4 +1,3 @@
-/* eslint-disable */
 // file mostly untouched from apollo-graphql
 
 "use strict";

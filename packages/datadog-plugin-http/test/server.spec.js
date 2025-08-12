@@ -1,5 +1,6 @@
 'use strict'
 
+const { withNamingSchema } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const axios = require('axios')
 const { incomingHttpRequestStart } = require('../../dd-trace/src/appsec/channels')
@@ -60,7 +61,7 @@ describe('Plugin', () => {
         it('should send traces to agent', (done) => {
           app = sinon.stub()
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(app).not.to.have.been.called // request should be cancelled before call to app
               expect(traces[0][0]).to.have.property('name', 'web.request')
               expect(traces[0][0]).to.have.property('service', 'test')
@@ -71,6 +72,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('http.method', 'GET')
               expect(traces[0][0].meta).to.have.property('http.status_code', '200')
               expect(traces[0][0].meta).to.have.property('component', 'http')
+              expect(traces[0][0].meta).to.have.property('_dd.integration', 'http')
             })
             .then(done)
             .catch(done)
@@ -104,7 +106,7 @@ describe('Plugin', () => {
 
         it('should do automatic instrumentation', done => {
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('name', 'web.request')
               expect(traces[0][0]).to.have.property('service', 'test')
               expect(traces[0][0]).to.have.property('type', 'web')
@@ -216,7 +218,7 @@ describe('Plugin', () => {
 
         // see https://github.com/DataDog/dd-trace-js/issues/2453
         it('should not have disabled tracing', (done) => {
-          agent.use(() => {})
+          agent.assertSomeTraces(() => {})
             .then(done)
             .catch(done)
 
@@ -242,7 +244,7 @@ describe('Plugin', () => {
           const spy = sinon.spy(() => {})
 
           agent
-            .use((traces) => {
+            .assertSomeTraces((traces) => {
               spy()
             })
             .catch(done)

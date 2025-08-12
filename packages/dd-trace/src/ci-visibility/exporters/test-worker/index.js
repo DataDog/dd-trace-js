@@ -6,32 +6,37 @@ const {
   JEST_WORKER_TRACE_PAYLOAD_CODE,
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
-  JEST_WORKER_LOGS_PAYLOAD_CODE
+  JEST_WORKER_LOGS_PAYLOAD_CODE,
+  PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE
 } = require('../../../plugins/util/test')
+const { getEnvironmentVariable } = require('../../../config-helper')
 
 function getInterprocessTraceCode () {
-  if (process.env.JEST_WORKER_ID) {
+  if (getEnvironmentVariable('JEST_WORKER_ID')) {
     return JEST_WORKER_TRACE_PAYLOAD_CODE
   }
-  if (process.env.CUCUMBER_WORKER_ID) {
+  if (getEnvironmentVariable('CUCUMBER_WORKER_ID')) {
     return CUCUMBER_WORKER_TRACE_PAYLOAD_CODE
   }
-  if (process.env.MOCHA_WORKER_ID) {
+  if (getEnvironmentVariable('MOCHA_WORKER_ID')) {
     return MOCHA_WORKER_TRACE_PAYLOAD_CODE
+  }
+  if (getEnvironmentVariable('DD_PLAYWRIGHT_WORKER')) {
+    return PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE
   }
   return null
 }
 
 // TODO: make it available with cucumber
 function getInterprocessCoverageCode () {
-  if (process.env.JEST_WORKER_ID) {
+  if (getEnvironmentVariable('JEST_WORKER_ID')) {
     return JEST_WORKER_COVERAGE_PAYLOAD_CODE
   }
   return null
 }
 
 function getInterprocessLogsCode () {
-  if (process.env.JEST_WORKER_ID) {
+  if (getEnvironmentVariable('JEST_WORKER_ID')) {
     return JEST_WORKER_LOGS_PAYLOAD_CODE
   }
   return null
@@ -65,8 +70,9 @@ class TestWorkerCiVisibilityExporter {
     this._logsWriter.append({ testConfiguration, logMessage })
   }
 
-  flush () {
-    this._writer.flush()
+  // TODO: add to other writers
+  flush (onDone) {
+    this._writer.flush(onDone)
     this._coverageWriter.flush()
     this._logsWriter.flush()
   }

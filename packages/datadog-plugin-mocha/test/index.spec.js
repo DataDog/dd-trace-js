@@ -7,6 +7,7 @@ const nock = require('nock')
 const semver = require('semver')
 
 const agent = require('../../dd-trace/test/plugins/agent')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { ORIGIN_KEY, COMPONENT, ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const {
   TEST_FRAMEWORK,
@@ -120,7 +121,7 @@ describe('Plugin', () => {
           'mocha-test-pass-two can pass two'
         ]
         const assertionPromises = testNames.map(testName => {
-          return agent.use(trace => {
+          return agent.assertSomeTraces(trace => {
             const testSpan = trace[0][0]
             expect(testSpan.parent_id.toString()).to.equal('0')
             expect(testSpan.meta[TEST_STATUS]).to.equal('pass')
@@ -148,7 +149,7 @@ describe('Plugin', () => {
         const testFilePath = path.join(__dirname, 'mocha-test-fail.js')
         const testSuite = testFilePath.replace(`${process.cwd()}/`, '')
         agent
-          .use(traces => {
+          .assertSomeTraces(traces => {
             const testSpan = traces[0][0]
             expect(testSpan.meta).to.contain({
               [COMPONENT]: 'mocha',
@@ -190,7 +191,7 @@ describe('Plugin', () => {
           'mocha-test-programmatic-skip can skip too'
         ]
         const assertionPromises = testNames.map(testName => {
-          return agent.use(trace => {
+          return agent.assertSomeTraces(trace => {
             const testSpan = trace[0][0]
             expect(testSpan.parent_id.toString()).to.equal('0')
             expect(testSpan.meta[TEST_STATUS]).to.equal('skip')
@@ -215,7 +216,7 @@ describe('Plugin', () => {
           const testFilePath = path.join(__dirname, test.fileName)
           const testSuite = testFilePath.replace(`${process.cwd()}/`, '')
           agent
-            .use(traces => {
+            .assertSomeTraces(traces => {
               const testSpan = traces[0][0]
               expect(testSpan.meta).to.contain({
                 language: 'javascript',
@@ -255,7 +256,7 @@ describe('Plugin', () => {
         const testFilePath = path.join(__dirname, 'mocha-test-parameterized.js')
         const testSuite = testFilePath.replace(`${process.cwd()}/`, '')
         agent
-          .use(traces => {
+          .assertSomeTraces(traces => {
             const testSpan = traces[0][0]
             expect(testSpan.meta).to.contain({
               language: 'javascript',
@@ -288,7 +289,7 @@ describe('Plugin', () => {
         const testFilePath = path.join(__dirname, 'mocha-test-integration.js')
         const testSuite = testFilePath.replace(`${process.cwd()}/`, '')
 
-        agent.use(trace => {
+        agent.assertSomeTraces(trace => {
           const httpSpan = trace[0].find(span => span.name === 'http.request')
           const testSpan = trace[0].find(span => span.type === 'test')
           expect(testSpan.parent_id.toString()).to.equal('0')
@@ -319,7 +320,7 @@ describe('Plugin', () => {
       it('works with sync errors in the hooks', (done) => {
         const testFilePath = path.join(__dirname, 'mocha-fail-hook-sync.js')
 
-        agent.use(traces => {
+        agent.assertSomeTraces(traces => {
           const testSpan = traces[0][0]
           expect(testSpan.meta).to.contain({
             [ERROR_TYPE]: 'TypeError'
@@ -352,7 +353,7 @@ describe('Plugin', () => {
         ]
 
         const assertionPromises = testNames.map(({ name, status }) => {
-          return agent.use(trace => {
+          return agent.assertSomeTraces(trace => {
             const testSpan = trace[0][0]
             expect(testSpan.meta[TEST_NAME]).to.equal(name)
             expect(testSpan.meta[TEST_STATUS]).to.equal(status)
@@ -403,7 +404,7 @@ describe('Plugin', () => {
         ]
 
         const assertionPromises = testNames.map(({ name, status, errorMsg }) => {
-          return agent.use(trace => {
+          return agent.assertSomeTraces(trace => {
             const testSpan = trace[0][0]
             expect(testSpan.meta[TEST_NAME]).to.equal(name)
             expect(testSpan.meta[TEST_STATUS]).to.equal(status)
@@ -433,7 +434,7 @@ describe('Plugin', () => {
         // first and not the one for mocha-test-done-fail-badly.js (test we are testing).
         process.removeAllListeners('uncaughtException')
         const testFilePath = path.join(__dirname, 'mocha-test-done-fail-badly.js')
-        agent.use(traces => {
+        agent.assertSomeTraces(traces => {
           const testSpan = traces[0][0]
           expect(testSpan.meta[ERROR_TYPE]).to.equal('AssertionError')
           expect(testSpan.meta[ERROR_MESSAGE]).to.equal('expected true to equal false')
@@ -472,7 +473,7 @@ describe('Plugin', () => {
         const testFilePath = path.join(__dirname, 'mocha-test-retries.js')
 
         const assertionPromises = testNames.map(([testName, status]) => {
-          return agent.use(trace => {
+          return agent.assertSomeTraces(trace => {
             const testSpan = trace[0][0]
             expect(testSpan.meta[TEST_STATUS]).to.equal(status)
             expect(testSpan.meta[TEST_NAME]).to.equal(testName)
@@ -500,7 +501,7 @@ describe('Plugin', () => {
         ]
 
         const assertionPromises = testNames.map(([testName, status]) => {
-          return agent.use(trace => {
+          return agent.assertSomeTraces(trace => {
             const testSpan = trace[0][0]
             expect(testSpan.meta[TEST_STATUS]).to.equal(status)
             expect(testSpan.meta[TEST_NAME]).to.equal(testName)
@@ -535,7 +536,7 @@ describe('Plugin', () => {
               'packages/datadog-plugin-mocha/test/mocha-test-suite-level-pass.js'
             ]
 
-            agent.use((agentlessPayload, request) => {
+            agent.assertSomeTraces((agentlessPayload, request) => {
               if (option === 'evp proxy') {
                 expect(request.headers['x-datadog-evp-subdomain']).to.equal('citestcycle-intake')
                 expect(request.path).to.equal('/evp_proxy/v2/api/v2/citestcycle')

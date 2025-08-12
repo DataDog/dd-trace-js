@@ -49,14 +49,14 @@ class MsgpackEncoder {
     const offset = bytes.length
 
     bytes.reserve(1)
-    bytes.buffer[offset] = 0xc0
+    bytes.buffer[offset] = 0xC0
   }
 
   encodeBoolean (bytes, value) {
     const offset = bytes.length
 
     bytes.reserve(1)
-    bytes.buffer[offset] = value ? 0xc3 : 0xc2
+    bytes.buffer[offset] = value ? 0xC3 : 0xC2
   }
 
   encodeString (bytes, value) {
@@ -75,7 +75,7 @@ class MsgpackEncoder {
     const offset = bytes.length
 
     bytes.reserve(5)
-    bytes.buffer[offset] = 0xdd
+    bytes.buffer[offset] = 0xDD
     bytes.buffer[offset + 1] = length >> 24
     bytes.buffer[offset + 2] = length >> 16
     bytes.buffer[offset + 3] = length >> 8
@@ -105,7 +105,7 @@ class MsgpackEncoder {
     const offset = bytes.length
 
     bytes.reserve(5)
-    bytes.buffer[offset] = 0xdf
+    bytes.buffer[offset] = 0xDF
     bytes.buffer[offset + 1] = keysLength >> 24
     bytes.buffer[offset + 2] = keysLength >> 16
     bytes.buffer[offset + 3] = keysLength >> 8
@@ -122,16 +122,16 @@ class MsgpackEncoder {
 
     if (value.byteLength < 256) {
       bytes.reserve(2)
-      bytes.buffer[offset] = 0xc4
+      bytes.buffer[offset] = 0xC4
       bytes.buffer[offset + 1] = value.byteLength
-    } else if (value.byteLength < 65536) {
+    } else if (value.byteLength < 65_536) {
       bytes.reserve(3)
-      bytes.buffer[offset] = 0xc5
+      bytes.buffer[offset] = 0xC5
       bytes.buffer[offset + 1] = value.byteLength >> 8
       bytes.buffer[offset + 2] = value.byteLength
     } else {
       bytes.reserve(5)
-      bytes.buffer[offset] = 0xc6
+      bytes.buffer[offset] = 0xC6
       bytes.buffer[offset + 1] = value.byteLength >> 24
       bytes.buffer[offset + 2] = value.byteLength >> 16
       bytes.buffer[offset + 3] = value.byteLength >> 8
@@ -145,7 +145,7 @@ class MsgpackEncoder {
     const offset = bytes.length
 
     bytes.reserve(5)
-    bytes.buffer[offset] = 0xce
+    bytes.buffer[offset] = 0xCE
     bytes.buffer[offset + 1] = value >> 24
     bytes.buffer[offset + 2] = value >> 16
     bytes.buffer[offset + 3] = value >> 8
@@ -156,18 +156,18 @@ class MsgpackEncoder {
     const offset = bytes.length
 
     bytes.reserve(3)
-    bytes.buffer[offset] = 0xcd
+    bytes.buffer[offset] = 0xCD
     bytes.buffer[offset + 1] = value >> 8
     bytes.buffer[offset + 2] = value
   }
 
   encodeLong (bytes, value) {
     const offset = bytes.length
-    const hi = (value / Math.pow(2, 32)) >> 0
+    const hi = (value / 2 ** 32) >> 0
     const lo = value >>> 0
 
     bytes.reserve(9)
-    bytes.buffer[offset] = 0xcf
+    bytes.buffer[offset] = 0xCF
     bytes.buffer[offset + 1] = hi >> 24
     bytes.buffer[offset + 2] = hi >> 16
     bytes.buffer[offset + 3] = hi >> 8
@@ -201,26 +201,26 @@ class MsgpackEncoder {
       bytes.buffer[offset] = value
     } else if (value >= -0x80) {
       bytes.reserve(2)
-      bytes.buffer[offset] = 0xd0
+      bytes.buffer[offset] = 0xD0
       bytes.buffer[offset + 1] = value
-    } else if (value >= -0x8000) {
+    } else if (value >= -0x80_00) {
       bytes.reserve(3)
-      bytes.buffer[offset] = 0xd1
+      bytes.buffer[offset] = 0xD1
       bytes.buffer[offset + 1] = value >> 8
       bytes.buffer[offset + 2] = value
-    } else if (value >= -0x80000000) {
+    } else if (value >= -0x80_00_00_00) {
       bytes.reserve(5)
-      bytes.buffer[offset] = 0xd2
+      bytes.buffer[offset] = 0xD2
       bytes.buffer[offset + 1] = value >> 24
       bytes.buffer[offset + 2] = value >> 16
       bytes.buffer[offset + 3] = value >> 8
       bytes.buffer[offset + 4] = value
     } else {
-      const hi = Math.floor(value / Math.pow(2, 32))
+      const hi = Math.floor(value / 2 ** 32)
       const lo = value >>> 0
 
       bytes.reserve(9)
-      bytes.buffer[offset] = 0xd3
+      bytes.buffer[offset] = 0xD3
       bytes.buffer[offset + 1] = hi >> 24
       bytes.buffer[offset + 2] = hi >> 16
       bytes.buffer[offset + 3] = hi >> 8
@@ -235,31 +235,31 @@ class MsgpackEncoder {
   encodeUnsigned (bytes, value) {
     const offset = bytes.length
 
-    if (value <= 0x7f) {
+    if (value <= 0x7F) {
       bytes.reserve(1)
       bytes.buffer[offset] = value
-    } else if (value <= 0xff) {
+    } else if (value <= 0xFF) {
       bytes.reserve(2)
-      bytes.buffer[offset] = 0xcc
+      bytes.buffer[offset] = 0xCC
       bytes.buffer[offset + 1] = value
-    } else if (value <= 0xffff) {
+    } else if (value <= 0xFF_FF) {
       bytes.reserve(3)
-      bytes.buffer[offset] = 0xcd
+      bytes.buffer[offset] = 0xCD
       bytes.buffer[offset + 1] = value >> 8
       bytes.buffer[offset + 2] = value
-    } else if (value <= 0xffffffff) {
+    } else if (value <= 0xFF_FF_FF_FF) {
       bytes.reserve(5)
-      bytes.buffer[offset] = 0xce
+      bytes.buffer[offset] = 0xCE
       bytes.buffer[offset + 1] = value >> 24
       bytes.buffer[offset + 2] = value >> 16
       bytes.buffer[offset + 3] = value >> 8
       bytes.buffer[offset + 4] = value
     } else {
-      const hi = (value / Math.pow(2, 32)) >> 0
+      const hi = (value / 2 ** 32) >> 0
       const lo = value >>> 0
 
       bytes.reserve(9)
-      bytes.buffer[offset] = 0xcf
+      bytes.buffer[offset] = 0xCF
       bytes.buffer[offset + 1] = hi >> 24
       bytes.buffer[offset + 2] = hi >> 16
       bytes.buffer[offset + 3] = hi >> 8
@@ -278,10 +278,10 @@ class MsgpackEncoder {
     bytes.reserve(9)
 
     if (value >= 0n) {
-      bytes.buffer[offset] = 0xcf
+      bytes.buffer[offset] = 0xCF
       bytes.view.setBigUint64(offset + 1, value)
     } else {
-      bytes.buffer[offset] = 0xd3
+      bytes.buffer[offset] = 0xD3
       bytes.view.setBigInt64(offset + 1, value)
     }
   }
@@ -301,7 +301,7 @@ class MsgpackEncoder {
     const offset = bytes.length
 
     bytes.reserve(9)
-    bytes.buffer[offset] = 0xcb
+    bytes.buffer[offset] = 0xCB
     bytes.view.setFloat64(offset + 1, value)
   }
 }

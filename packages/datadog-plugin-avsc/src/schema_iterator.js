@@ -1,3 +1,5 @@
+'use strict'
+
 const AVRO = 'avro'
 const {
   SCHEMA_DEFINITION,
@@ -10,7 +12,7 @@ const {
 const log = require('../../dd-trace/src/log')
 const {
   SchemaBuilder
-} = require('../../dd-trace/src/datastreams/schemas/schema_builder')
+} = require('../../dd-trace/src/datastreams')
 
 class SchemaExtractor {
   constructor (schema) {
@@ -104,21 +106,21 @@ class SchemaExtractor {
         }
       }
       return true
-    } else {
-      if (!builder.shouldExtractSchema(schemaName, depth)) {
-        return false
-      }
-      if (schema.fields?.[Symbol.iterator]) {
-        for (const field of schema.fields) {
-          if (!this.extractProperty(field, schemaName, field.name, builder, depth)) {
-            log.warn('DSM: Unable to extract field with name: %s from Avro schema with name: %s', field.name,
-              schemaName)
-          }
-        }
-      } else {
-        log.warn('DSM: schema.fields is not iterable from Avro schema with name: %s', schemaName)
-      }
     }
+    if (!builder.shouldExtractSchema(schemaName, depth)) {
+      return false
+    }
+    if (schema.fields?.[Symbol.iterator]) {
+      for (const field of schema.fields) {
+        if (!this.extractProperty(field, schemaName, field.name, builder, depth)) {
+          log.warn('DSM: Unable to extract field with name: %s from Avro schema with name: %s', field.name,
+            schemaName)
+        }
+      }
+    } else {
+      log.warn('DSM: schema.fields is not iterable from Avro schema with name: %s', schemaName)
+    }
+
     return true
   }
 

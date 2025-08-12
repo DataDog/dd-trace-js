@@ -1,10 +1,11 @@
 'use strict'
 
 const { createCoverageMap } = require('istanbul-lib-coverage')
-const { addHook, channel, AsyncResource } = require('../helpers/instrument')
+const { addHook, channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 const { isMarkedAsUnskippable } = require('../../../datadog-plugin-jest/src/util')
 const log = require('../../../dd-trace/src/log')
+const { getEnvironmentVariable } = require('../../../dd-trace/src/config-helper')
 const {
   getTestSuitePath,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
@@ -17,6 +18,7 @@ const {
 
 const {
   isNewTest,
+  getTestProperties,
   getSuitesByTestFile,
   runnableWrapper,
   getOnTestHandler,
@@ -25,15 +27,17 @@ const {
   getOnHookEndHandler,
   getOnFailHandler,
   getOnPendingHandler,
-  testFileToSuiteAr,
+  testFileToSuiteCtx,
   newTests,
+  testsQuarantined,
   getTestFullName,
-  getRunTestsWrapper
+  getRunTestsWrapper,
+  testsAttemptToFix,
+  testsStatuses
 } = require('./utils')
 
 require('./common')
 
-const testSessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 const patched = new WeakSet()
 
 const unskippableSuites = []
@@ -49,7 +53,7 @@ const originalCoverageMap = createCoverageMap()
 let untestedCoverage
 
 // test channels
-const testStartCh = channel('ci:mocha:test:start')
+const testFinishCh = channel('ci:mocha:test:finish')
 
 // test suite channels
 const testSuiteStartCh = channel('ci:mocha:test-suite:start')
@@ -61,6 +65,10 @@ const testSuiteCodeCoverageCh = channel('ci:mocha:test-suite:code-coverage')
 const libraryConfigurationCh = channel('ci:mocha:library-configuration')
 const knownTestsCh = channel('ci:mocha:known-tests')
 const skippableSuitesCh = channel('ci:mocha:test-suite:skippable')
+const mochaGlobalRunCh = channel('ci:mocha:global:run')
+
+const testManagementTestsCh = channel('ci:mocha:test-management-tests')
+const impactedTestsCh = channel('ci:mocha:modified-tests')
 const workerReportTraceCh = channel('ci:mocha:worker-report:trace')
 const testSessionStartCh = channel('ci:mocha:session:start')
 const testSessionFinishCh = channel('ci:mocha:session:finish')
@@ -74,7 +82,7 @@ function isTestFailed (test) {
     return test.isFailed()
   }
   if (test.isPending) {
-    return !test.isPending() && test.state !== 'failed'
+    return !test.isPending() && test.state === 'failed'
   }
   return false
 }
@@ -94,18 +102,18 @@ function getFilteredSuites (originalSuites) {
 }
 
 function getOnStartHandler (isParallel, frameworkVersion) {
-  return testSessionAsyncResource.bind(function () {
+  return function () {
     const processArgv = process.argv.slice(2).join(' ')
     const command = `mocha ${processArgv}`
     testSessionStartCh.publish({ command, frameworkVersion })
     if (!isParallel && skippedSuites.length) {
       itrSkippedSuitesCh.publish({ skippedSuites, frameworkVersion })
     }
-  })
+  }
 }
 
 function getOnEndHandler (isParallel) {
-  return testSessionAsyncResource.bind(function () {
+  return function () {
     let status = 'pass'
     let error
     if (this.stats) {
@@ -135,11 +143,33 @@ function getOnEndHandler (isParallel) {
       }
     }
 
+    // We substract the errors of attempt to fix tests (quarantined or disabled) from the total number of failures
+    // We subtract the errors from quarantined tests from the total number of failures
+    if (config.isTestManagementTestsEnabled) {
+      let numFailedQuarantinedTests = 0
+      let numFailedRetriedQuarantinedOrDisabledTests = 0
+      for (const test of testsAttemptToFix) {
+        const testName = getTestFullName(test)
+        const testProperties = getTestProperties(test, config.testManagementTests)
+        if (isTestFailed(test) && (testProperties.isQuarantined || testProperties.isDisabled)) {
+          const numFailedTests = testsStatuses.get(testName).filter(status => status === 'fail').length
+          numFailedRetriedQuarantinedOrDisabledTests += numFailedTests
+        }
+      }
+      for (const test of testsQuarantined) {
+        if (isTestFailed(test)) {
+          numFailedQuarantinedTests++
+        }
+      }
+      this.stats.failures -= numFailedQuarantinedTests + numFailedRetriedQuarantinedOrDisabledTests
+      this.failures -= numFailedQuarantinedTests + numFailedRetriedQuarantinedOrDisabledTests
+    }
+
     if (status === 'fail') {
       error = new Error(`Failed tests: ${this.failures}.`)
     }
 
-    testFileToSuiteAr.clear()
+    testFileToSuiteCtx.clear()
 
     let testCodeCoverageLinesTotal
     if (global.__coverage__) {
@@ -148,7 +178,7 @@ function getOnEndHandler (isParallel) {
           originalCoverageMap.merge(fromCoverageMapToCoverage(untestedCoverage))
         }
         testCodeCoverageLinesTotal = originalCoverageMap.getCoverageSummary().lines.pct
-      } catch (e) {
+      } catch {
         // ignore errors
       }
       // restore the original coverage
@@ -165,13 +195,17 @@ function getOnEndHandler (isParallel) {
       error,
       isEarlyFlakeDetectionEnabled: config.isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty: config.isEarlyFlakeDetectionFaulty,
+      isTestManagementEnabled: config.isTestManagementTestsEnabled,
       isParallel
     })
-  })
+  }
 }
 
-function getExecutionConfiguration (runner, isParallel, onFinishRequest) {
-  const mochaRunAsyncResource = new AsyncResource('bound-anonymous-fn')
+function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFinishRequest) {
+  const ctx = {
+    isParallel,
+    frameworkVersion
+  }
 
   const onReceivedSkippableSuites = ({ err, skippableSuites, itrCorrelationId: responseItrCorrelationId }) => {
     if (err) {
@@ -192,9 +226,49 @@ function getExecutionConfiguration (runner, isParallel, onFinishRequest) {
 
     runner.suite.suites = suitesToRun
 
-    skippedSuites = Array.from(filteredSuites.skippedSuites)
+    skippedSuites = [...filteredSuites.skippedSuites]
 
-    onFinishRequest()
+    mochaGlobalRunCh.runStores(ctx, () => {
+      onFinishRequest()
+    })
+  }
+
+  const onReceivedImpactedTests = ({ err, modifiedTests: receivedModifiedTests }) => {
+    if (err) {
+      config.modifiedTests = []
+      config.isImpactedTestsEnabled = false
+    } else {
+      config.modifiedTests = receivedModifiedTests
+    }
+    if (config.isSuitesSkippingEnabled) {
+      ctx.onDone = onReceivedSkippableSuites
+      skippableSuitesCh.runStores(ctx, () => {})
+    } else {
+      mochaGlobalRunCh.runStores(ctx, () => {
+        onFinishRequest()
+      })
+    }
+  }
+
+  const onReceivedTestManagementTests = ({ err, testManagementTests: receivedTestManagementTests }) => {
+    if (err) {
+      config.testManagementTests = {}
+      config.isTestManagementTestsEnabled = false
+      config.testManagementAttemptToFixRetries = 0
+    } else {
+      config.testManagementTests = receivedTestManagementTests
+    }
+    if (config.isImpactedTestsEnabled) {
+      ctx.onDone = onReceivedImpactedTests
+      impactedTestsCh.runStores(ctx, () => {})
+    } else if (config.isSuitesSkippingEnabled) {
+      ctx.onDone = onReceivedSkippableSuites
+      skippableSuitesCh.runStores(ctx, () => {})
+    } else {
+      mochaGlobalRunCh.runStores(ctx, () => {
+        onFinishRequest()
+      })
+    }
   }
 
   const onReceivedKnownTests = ({ err, knownTests }) => {
@@ -205,46 +279,62 @@ function getExecutionConfiguration (runner, isParallel, onFinishRequest) {
     } else {
       config.knownTests = knownTests
     }
-
-    if (config.isSuitesSkippingEnabled) {
-      skippableSuitesCh.publish({
-        onDone: mochaRunAsyncResource.bind(onReceivedSkippableSuites)
-      })
+    if (config.isTestManagementTestsEnabled) {
+      ctx.onDone = onReceivedTestManagementTests
+      testManagementTestsCh.runStores(ctx, () => {})
+    } if (config.isImpactedTestsEnabled) {
+      ctx.onDone = onReceivedImpactedTests
+      impactedTestsCh.runStores(ctx, () => {})
+    } else if (config.isSuitesSkippingEnabled) {
+      ctx.onDone = onReceivedSkippableSuites
+      skippableSuitesCh.runStores(ctx, () => {})
     } else {
-      onFinishRequest()
+      mochaGlobalRunCh.runStores(ctx, () => {
+        onFinishRequest()
+      })
     }
   }
 
   const onReceivedConfiguration = ({ err, libraryConfig }) => {
     if (err || !skippableSuitesCh.hasSubscribers || !knownTestsCh.hasSubscribers) {
-      return onFinishRequest()
+      return mochaGlobalRunCh.runStores(ctx, () => {
+        onFinishRequest()
+      })
     }
-
     config.isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
     config.earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
     config.earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
     config.isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
+    config.isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
+    config.testManagementAttemptToFixRetries = libraryConfig.testManagementAttemptToFixRetries
+    config.isImpactedTestsEnabled = libraryConfig.isImpactedTestsEnabled
     // ITR and auto test retries are not supported in parallel mode yet
     config.isSuitesSkippingEnabled = !isParallel && libraryConfig.isSuitesSkippingEnabled
     config.isFlakyTestRetriesEnabled = !isParallel && libraryConfig.isFlakyTestRetriesEnabled
     config.flakyTestRetriesCount = !isParallel && libraryConfig.flakyTestRetriesCount
 
     if (config.isKnownTestsEnabled) {
-      knownTestsCh.publish({
-        onDone: mochaRunAsyncResource.bind(onReceivedKnownTests)
-      })
+      ctx.onDone = onReceivedKnownTests
+      knownTestsCh.runStores(ctx, () => {})
+    } else if (config.isTestManagementTestsEnabled) {
+      ctx.onDone = onReceivedTestManagementTests
+      testManagementTestsCh.runStores(ctx, () => {})
+    } else if (config.isImpactedTestsEnabled) {
+      ctx.onDone = onReceivedImpactedTests
+      impactedTestsCh.runStores(ctx, () => {})
     } else if (config.isSuitesSkippingEnabled) {
-      skippableSuitesCh.publish({
-        onDone: mochaRunAsyncResource.bind(onReceivedSkippableSuites)
-      })
+      ctx.onDone = onReceivedSkippableSuites
+      skippableSuitesCh.runStores(ctx, () => {})
     } else {
-      onFinishRequest()
+      mochaGlobalRunCh.runStores(ctx, () => {
+        onFinishRequest()
+      })
     }
   }
 
-  libraryConfigurationCh.publish({
-    onDone: mochaRunAsyncResource.bind(onReceivedConfiguration)
-  })
+  ctx.onDone = onReceivedConfiguration
+
+  libraryConfigurationCh.runStores(ctx, () => {})
 }
 
 // In this hook we delay the execution with options.delay to grab library configuration,
@@ -254,10 +344,10 @@ addHook({
   name: 'mocha',
   versions: ['>=5.2.0'],
   file: 'lib/mocha.js'
-}, (Mocha) => {
+}, (Mocha, frameworkVersion) => {
   shimmer.wrap(Mocha.prototype, 'run', run => function () {
     // Workers do not need to request any data, just run the tests
-    if (!testStartCh.hasSubscribers || process.env.MOCHA_WORKER_ID || this.options.parallel) {
+    if (!testFinishCh.hasSubscribers || getEnvironmentVariable('MOCHA_WORKER_ID') || this.options.parallel) {
       return run.apply(this, arguments)
     }
 
@@ -274,7 +364,7 @@ addHook({
       }
     })
 
-    getExecutionConfiguration(runner, false, () => {
+    getExecutionConfiguration(runner, false, frameworkVersion, () => {
       if (config.isKnownTestsEnabled) {
         const testSuites = this.files.map(file => getTestSuitePath(file, process.cwd()))
         const isFaulty = getIsFaultyEarlyFlakeDetection(
@@ -310,8 +400,9 @@ addHook({
   versions: ['>=5.2.0'],
   file: 'lib/cli/run-helpers.js'
 }, (run) => {
-  shimmer.wrap(run, 'runMocha', runMocha => async function () {
-    if (!testStartCh.hasSubscribers) {
+  // `runMocha` is an async function
+  shimmer.wrap(run, 'runMocha', runMocha => function () {
+    if (!testFinishCh.hasSubscribers) {
       return runMocha.apply(this, arguments)
     }
     const mocha = arguments[0]
@@ -347,7 +438,7 @@ addHook({
   shimmer.wrap(Runner.prototype, 'runTests', runTests => getRunTestsWrapper(runTests, config))
 
   shimmer.wrap(Runner.prototype, 'run', run => function () {
-    if (!testStartCh.hasSubscribers) {
+    if (!testFinishCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
 
@@ -357,11 +448,11 @@ addHook({
 
     this.once('end', getOnEndHandler(false))
 
-    this.on('test', getOnTestHandler(true, newTests))
+    this.on('test', getOnTestHandler(true))
 
-    this.on('test end', getOnTestEndHandler())
+    this.on('test end', getOnTestEndHandler(config))
 
-    this.on('retry', getOnTestRetryHandler())
+    this.on('retry', getOnTestRetryHandler(config))
 
     // If the hook passes, 'hook end' will be emitted. Otherwise, 'fail' will be emitted
     this.on('hook end', getOnHookEndHandler())
@@ -374,20 +465,18 @@ addHook({
       if (suite.root || !suite.tests.length) {
         return
       }
-      let asyncResource = testFileToSuiteAr.get(suite.file)
-      if (!asyncResource) {
-        asyncResource = new AsyncResource('bound-anonymous-fn')
-        testFileToSuiteAr.set(suite.file, asyncResource)
+      let ctx = testFileToSuiteCtx.get(suite.file)
+      if (!ctx) {
         const isUnskippable = unskippableSuites.includes(suite.file)
         isForcedToRun = isUnskippable && suitesToSkip.includes(getTestSuitePath(suite.file, process.cwd()))
-        asyncResource.runInAsyncScope(() => {
-          testSuiteStartCh.publish({
-            testSuiteAbsolutePath: suite.file,
-            isUnskippable,
-            isForcedToRun,
-            itrCorrelationId
-          })
-        })
+        ctx = {
+          testSuiteAbsolutePath: suite.file,
+          isUnskippable,
+          isForcedToRun,
+          itrCorrelationId
+        }
+        testFileToSuiteCtx.set(suite.file, ctx)
+        testSuiteStartCh.runStores(ctx, () => {})
       }
     })
 
@@ -429,13 +518,11 @@ addHook({
         resetCoverage(global.__coverage__)
       }
 
-      const asyncResource = testFileToSuiteAr.get(suite.file)
-      if (asyncResource) {
-        asyncResource.runInAsyncScope(() => {
-          testSuiteFinishCh.publish(status)
-        })
+      const ctx = testFileToSuiteCtx.get(suite.file)
+      if (ctx) {
+        testSuiteFinishCh.publish({ status, ...ctx.currentStore }, () => {})
       } else {
-        log.warn(() => `No AsyncResource found for suite ${suite.file}`)
+        log.warn('No ctx found for suite', suite.file)
       }
     })
 
@@ -453,6 +540,15 @@ addHook({
   file: 'lib/runnable.js'
 }, (runnablePackage) => runnableWrapper(runnablePackage, config))
 
+function onMessage (message) {
+  if (Array.isArray(message)) {
+    const [messageCode, payload] = message
+    if (messageCode === MOCHA_WORKER_TRACE_PAYLOAD_CODE) {
+      workerReportTraceCh.publish(payload)
+    }
+  }
+}
+
 // Only used in parallel mode (--parallel flag is passed)
 // Used to generate suite events and receive test payloads from workers
 addHook({
@@ -464,58 +560,40 @@ addHook({
   file: 'src/WorkerHandler.js'
 }, (workerHandlerPackage) => {
   shimmer.wrap(workerHandlerPackage.prototype, 'exec', exec => function (_, path) {
-    if (!testStartCh.hasSubscribers) {
+    if (!testFinishCh.hasSubscribers) {
       return exec.apply(this, arguments)
     }
     if (!path?.length) {
       return exec.apply(this, arguments)
     }
     const [testSuiteAbsolutePath] = path
-    const testSuiteAsyncResource = new AsyncResource('bound-anonymous-fn')
-
-    function onMessage (message) {
-      if (Array.isArray(message)) {
-        const [messageCode, payload] = message
-        if (messageCode === MOCHA_WORKER_TRACE_PAYLOAD_CODE) {
-          testSuiteAsyncResource.runInAsyncScope(() => {
-            workerReportTraceCh.publish(payload)
-          })
-        }
-      }
-    }
+    const testSuiteContext = {}
 
     this.worker.on('message', onMessage)
 
-    testSuiteAsyncResource.runInAsyncScope(() => {
-      testSuiteStartCh.publish({
-        testSuiteAbsolutePath
-      })
-    })
+    testSuiteContext.testSuiteAbsolutePath = testSuiteAbsolutePath
+    testSuiteStartCh.runStores(testSuiteContext, () => {})
 
     try {
       const promise = exec.apply(this, arguments)
       promise.then(
         (result) => {
           const status = result.failureCount === 0 ? 'pass' : 'fail'
-          testSuiteAsyncResource.runInAsyncScope(() => {
-            testSuiteFinishCh.publish(status)
-          })
+          testSuiteFinishCh.publish({ status, ...testSuiteContext.currentStore }, () => {})
           this.worker.off('message', onMessage)
         },
         (err) => {
-          testSuiteAsyncResource.runInAsyncScope(() => {
-            testSuiteErrorCh.publish(err)
-            testSuiteFinishCh.publish('fail')
-          })
+          testSuiteContext.error = err
+          testSuiteErrorCh.runStores(testSuiteContext, () => {})
+          testSuiteFinishCh.publish({ status: 'fail', ...testSuiteContext.currentStore }, () => {})
           this.worker.off('message', onMessage)
         }
       )
       return promise
     } catch (err) {
-      testSuiteAsyncResource.runInAsyncScope(() => {
-        testSuiteErrorCh.publish(err)
-        testSuiteFinishCh.publish('fail')
-      })
+      testSuiteContext.error = err
+      testSuiteErrorCh.runStores(testSuiteContext, () => {})
+      testSuiteFinishCh.publish({ status: 'fail', ...testSuiteContext.currentStore }, () => {})
       this.worker.off('message', onMessage)
       throw err
     }
@@ -532,14 +610,14 @@ addHook({
   file: 'lib/nodejs/parallel-buffered-runner.js'
 }, (ParallelBufferedRunner, frameworkVersion) => {
   shimmer.wrap(ParallelBufferedRunner.prototype, 'run', run => function (cb, { files }) {
-    if (!testStartCh.hasSubscribers) {
+    if (!testFinishCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
 
     this.once('start', getOnStartHandler(true, frameworkVersion))
     this.once('end', getOnEndHandler(true))
 
-    getExecutionConfiguration(this, true, () => {
+    getExecutionConfiguration(this, true, frameworkVersion, () => {
       if (config.isKnownTestsEnabled) {
         const testSuites = files.map(file => getTestSuitePath(file, process.cwd()))
         const isFaulty = getIsFaultyEarlyFlakeDetection(
@@ -573,46 +651,77 @@ addHook({
   const { BufferedWorkerPool } = BufferedWorkerPoolPackage
 
   shimmer.wrap(BufferedWorkerPool.prototype, 'run', run => async function (testSuiteAbsolutePath, workerArgs) {
-    if (!testStartCh.hasSubscribers || !config.isKnownTestsEnabled) {
+    if (!testFinishCh.hasSubscribers ||
+        (!config.isKnownTestsEnabled &&
+         !config.isTestManagementTestsEnabled &&
+         !config.isImpactedTestsEnabled)) {
       return run.apply(this, arguments)
     }
 
     const testPath = getTestSuitePath(testSuiteAbsolutePath, process.cwd())
-    const testSuiteKnownTests = config.knownTests.mocha?.[testPath] || []
+
+    const newWorkerArgs = { ...workerArgs }
+
+    if (config.isKnownTestsEnabled) {
+      const testSuiteKnownTests = config.knownTests.mocha?.[testPath] || []
+      newWorkerArgs._ddEfdNumRetries = config.earlyFlakeDetectionNumRetries
+      newWorkerArgs._ddIsEfdEnabled = config.isEarlyFlakeDetectionEnabled
+      newWorkerArgs._ddIsKnownTestsEnabled = true
+      newWorkerArgs._ddKnownTests = {
+        mocha: {
+          [testPath]: testSuiteKnownTests
+        }
+      }
+    }
+    if (config.isTestManagementTestsEnabled) {
+      const testSuiteTestManagementTests = config.testManagementTests?.mocha?.suites?.[testPath] || {}
+      newWorkerArgs._ddIsTestManagementTestsEnabled = true
+      // TODO: attempt to fix does not work in parallel mode yet
+      // newWorkerArgs._ddTestManagementAttemptToFixRetries = config.testManagementAttemptToFixRetries
+      newWorkerArgs._ddTestManagementTests = {
+        mocha: {
+          suites: {
+            [testPath]: testSuiteTestManagementTests
+          }
+        }
+      }
+    }
+
+    if (config.isImpactedTestsEnabled) {
+      const testSuiteImpactedTests = config.modifiedTests || {}
+      newWorkerArgs._ddIsImpactedTestsEnabled = true
+      newWorkerArgs._ddModifiedTests = testSuiteImpactedTests
+    }
 
     // We pass the known tests for the test file to the worker
     const testFileResult = await run.apply(
       this,
       [
         testSuiteAbsolutePath,
-        {
-          ...workerArgs,
-          _ddEfdNumRetries: config.earlyFlakeDetectionNumRetries,
-          _ddIsEfdEnabled: config.isEarlyFlakeDetectionEnabled,
-          _ddKnownTests: {
-            mocha: {
-              [testPath]: testSuiteKnownTests
-            }
-          }
-        }
+        newWorkerArgs
       ]
     )
+
     const tests = testFileResult
       .events
       .filter(event => event.eventName === 'test end')
       .map(event => event.data)
 
-    // `newTests` is filled in the worker process, so we need to use the test results to fill it here too.
     for (const test of tests) {
-      if (isNewTest(test, config.knownTests)) {
+      // `newTests` is filled in the worker process, so we need to use the test results to fill it here too.
+      if (config.isKnownTestsEnabled && isNewTest(test, config.knownTests)) {
         const testFullName = getTestFullName(test)
         const tests = newTests[testFullName]
 
-        if (!tests) {
-          newTests[testFullName] = [test]
-        } else {
+        if (tests) {
           tests.push(test)
+        } else {
+          newTests[testFullName] = [test]
         }
+      }
+      // `testsQuarantined` is filled in the worker process, so we need to use the test results to fill it here too.
+      if (config.isTestManagementTestsEnabled && getTestProperties(test, config.testManagementTests).isQuarantined) {
+        testsQuarantined.add(test)
       }
     }
     return testFileResult

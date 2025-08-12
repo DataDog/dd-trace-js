@@ -91,7 +91,7 @@ describe('OuboundPlugin', () => {
 
     it('should use specific tags in order of precedence if they are available', () => {
       class WithPrecursors extends OutboundPlugin {
-        static get peerServicePrecursors () { return ['foo', 'bar'] }
+        static peerServicePrecursors = ['foo', 'bar']
       }
       const res = new WithPrecursors().getPeerService({
         fooIsNotAPrecursor: 'bar',
@@ -174,35 +174,49 @@ describe('OuboundPlugin', () => {
       instance = new OutboundPlugin(tracerStub)
     })
 
-    it('should not add exit tags to span if codeOriginForSpans.enabled is false', () => {
-      sinon.stub(instance, '_tracerConfig').value({ codeOriginForSpans: { enabled: false } })
-      const span = instance.startSpan('test')
-      expect(span.addTags).to.not.have.been.called
+    describe('disabled', () => {
+      const configs = [
+        { codeOriginForSpans: { enabled: false, experimental: { exit_spans: { enabled: false } } } },
+        { codeOriginForSpans: { enabled: false, experimental: { exit_spans: { enabled: true } } } },
+        { codeOriginForSpans: { enabled: true, experimental: { exit_spans: { enabled: false } } } }
+      ]
+
+      for (const config of configs) {
+        it(`should not add exit tags to span if ${JSON.stringify(config)}`, () => {
+          sinon.stub(instance, '_tracerConfig').value(config)
+          const span = instance.startSpan('test')
+          expect(span.addTags).to.not.have.been.called
+        })
+      }
     })
 
-    it('should add exit tags to span if codeOriginForSpans.enabled is true', () => {
-      sinon.stub(instance, '_tracerConfig').value({ codeOriginForSpans: { enabled: true } })
+    describe('enabled', () => {
+      const config = { codeOriginForSpans: { enabled: true, experimental: { exit_spans: { enabled: true } } } }
 
-      const lineNumber = String(getNextLineNumber())
-      const span = instance.startSpan('test')
+      it(`should add exit tags to span if ${JSON.stringify(config)}`, () => {
+        sinon.stub(instance, '_tracerConfig').value(config)
 
-      expect(span.addTags).to.have.been.calledOnce
-      const args = span.addTags.args[0]
-      expect(args).to.have.property('length', 1)
-      const tags = parseTags(args[0])
+        const lineNumber = String(getNextLineNumber())
+        const span = instance.startSpan('test')
 
-      expect(tags).to.nested.include({ '_dd.code_origin.type': 'exit' })
-      expect(tags._dd.code_origin).to.have.property('frames').to.be.an('array').with.length.above(0)
+        expect(span.addTags).to.have.been.calledOnce
+        const args = span.addTags.args[0]
+        expect(args).to.have.property('length', 1)
+        const tags = parseTags(args[0])
 
-      for (const frame of tags._dd.code_origin.frames) {
-        expect(frame).to.have.property('file', __filename)
-        expect(frame).to.have.property('line').to.match(/^\d+$/)
-        expect(frame).to.have.property('column').to.match(/^\d+$/)
-        expect(frame).to.have.property('type').to.a('string')
-      }
+        expect(tags).to.nested.include({ '_dd.code_origin.type': 'exit' })
+        expect(tags._dd.code_origin).to.have.property('frames').to.be.an('array').with.length.above(0)
 
-      const topFrame = tags._dd.code_origin.frames[0]
-      expect(topFrame).to.have.property('line', lineNumber)
+        for (const frame of tags._dd.code_origin.frames) {
+          expect(frame).to.have.property('file', __filename)
+          expect(frame).to.have.property('line').to.match(/^\d+$/)
+          expect(frame).to.have.property('column').to.match(/^\d+$/)
+          expect(frame).to.have.property('type').to.a('string')
+        }
+
+        const topFrame = tags._dd.code_origin.frames[0]
+        expect(topFrame).to.have.property('line', lineNumber)
+      })
     })
   })
 })

@@ -22,11 +22,34 @@ describe('tagger', () => {
   })
 
   it('should add tags as a string', () => {
-    tagger.add(carrier, 'foo:bar,baz:qux:quxx,invalid')
+    tagger.add(carrier, 'foo: bar,def,abc:,,baz:qux:quxx,  valid')
 
     expect(carrier).to.have.property('foo', 'bar')
     expect(carrier).to.have.property('baz', 'qux:quxx')
-    expect(carrier).to.not.have.property('invalid')
+    expect(carrier).to.have.property('def', '')
+    expect(carrier).to.have.property('abc', '')
+    expect(carrier).to.not.have.property('')
+    expect(carrier).to.have.property('valid', '')
+
+    tagger.add(carrier, ':')
+
+    expect(carrier).to.not.have.property('')
+  })
+
+  it('should not add empty tags', () => {
+    tagger.add(carrier, '  ')
+
+    expect(carrier).to.not.have.property('')
+
+    tagger.add(carrier, 'a:true,\t')
+
+    expect(carrier).to.have.property('a', 'true')
+    expect(carrier).to.not.have.property('')
+
+    tagger.add(carrier, 'a:true,')
+
+    expect(carrier).to.have.property('a', 'true')
+    expect(carrier).to.not.have.property('')
   })
 
   it('should add tags as an array', () => {
@@ -61,6 +84,7 @@ describe('tagger', () => {
     expect(carrier).to.have.property(ERROR_TYPE, 'foo')
     expect(carrier).to.have.property(ERROR_MESSAGE, 'foo')
     expect(carrier).to.have.property(ERROR_STACK, 'foo')
+    expect(carrier).to.have.property('doNotSetTraceError', true)
     expect(carrier).to.not.have.property('setTraceError')
 
     tagger.add(carrier, {
@@ -72,6 +96,6 @@ describe('tagger', () => {
     expect(carrier).to.have.property(ERROR_TYPE, 'foo')
     expect(carrier).to.have.property(ERROR_MESSAGE, 'foo')
     expect(carrier).to.have.property(ERROR_STACK, 'foo')
-    expect(carrier).to.have.property('setTraceError', true)
+    expect(carrier).to.not.have.property('setTraceError')
   })
 })

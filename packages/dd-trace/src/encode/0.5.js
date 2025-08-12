@@ -4,10 +4,16 @@ const { truncateSpan, normalizeSpan } = require('./tags-processors')
 const { AgentEncoder: BaseEncoder } = require('./0.4')
 
 const ARRAY_OF_TWO = 0x92
-const ARRAY_OF_TWELVE = 0x9c
+const ARRAY_OF_TWELVE = 0x9C
 
 function formatSpan (span) {
-  return normalizeSpan(truncateSpan(span, false))
+  span = normalizeSpan(truncateSpan(span, false))
+  // ensure span events are encoded as tags
+  if (span.span_events) {
+    span.meta.events = JSON.stringify(span.span_events)
+    delete span.span_events
+  }
+  return span
 }
 
 class AgentEncoder extends BaseEncoder {
@@ -17,12 +23,10 @@ class AgentEncoder extends BaseEncoder {
     const traceSize = this._traceBytes.length + 5
     const buffer = Buffer.allocUnsafe(prefixSize + stringSize + traceSize)
 
-    let offset = 0
+    buffer[0] = ARRAY_OF_TWO
 
-    buffer[offset++] = ARRAY_OF_TWO
-
-    offset = this._writeStrings(buffer, offset)
-    offset = this._writeTraces(buffer, offset)
+    const offset = this._writeStrings(buffer, 1)
+    this._writeTraces(buffer, offset)
 
     this._reset()
 

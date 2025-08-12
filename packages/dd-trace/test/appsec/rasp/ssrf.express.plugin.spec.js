@@ -4,6 +4,7 @@ const Axios = require('axios')
 const agent = require('../../plugins/agent')
 const appsec = require('../../../src/appsec')
 const Config = require('../../../src/config')
+const { withVersions } = require('../../setup/mocha')
 const path = require('path')
 const { assert } = require('chai')
 const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
@@ -121,11 +122,11 @@ describe('RASP - ssrf', () => {
 
           it('Should not detect threat', async () => {
             app = (req, res) => {
-              axiosToTest.get(`https://${req.query.host}`)
+              axiosToTest.get(`https://${req.query.host}`).catch(noop) // swallow network error
               res.end('end')
             }
 
-            axios.get('/?host=www.datadoghq.com')
+            await axios.get('/?host=www.datadoghq.com')
 
             return checkRaspExecutedAndNotThreat(agent)
           })

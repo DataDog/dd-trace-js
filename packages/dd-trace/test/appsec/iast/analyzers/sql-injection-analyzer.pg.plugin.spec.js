@@ -1,11 +1,11 @@
 'use strict'
 
-const semver = require('semver')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const { prepareTestServerForIast } = require('../utils')
 const { storage } = require('../../../../../datadog-core')
+const { withVersions } = require('../../../setup/mocha')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
 const vulnerabilityReporter = require('../../../../src/appsec/iast/vulnerability-reporter')
@@ -18,11 +18,9 @@ if (process.env.PG_TEST_NATIVE === 'true') {
   clients['pg.native'] = pg => pg.native.Client
 }
 
-const range = semver.satisfies(process.versions.node, '^12.0.0') ? '>=4.5.5' : '>=8.0.3'
-
 describe('sql-injection-analyzer with pg', () => {
   let pg
-  withVersions('pg', 'pg', range, version => {
+  withVersions('pg', 'pg', '>=8.0.3', version => {
     Object.keys(clients).forEach(implementation => {
       describe(`when using ${implementation}.Client`, () => {
         prepareTestServerForIast('pg', (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
@@ -60,7 +58,7 @@ describe('sql-injection-analyzer with pg', () => {
             })
 
             testThatRequestHasVulnerability(() => {
-              const store = storage.getStore()
+              const store = storage('legacy').getStore()
               const iastCtx = iastContextFunctions.getIastContext(store)
               let sql = 'SELECT 1'
               sql = newTaintedString(iastCtx, sql, 'param', 'Request')
@@ -95,7 +93,7 @@ describe('sql-injection-analyzer with pg', () => {
             })
 
             testThatRequestHasVulnerability(() => {
-              const store = storage.getStore()
+              const store = storage('legacy').getStore()
               const iastCtx = iastContextFunctions.getIastContext(store)
               let sql = 'SELECT 1'
               sql = newTaintedString(iastCtx, sql, 'param', 'Request')
@@ -107,7 +105,7 @@ describe('sql-injection-analyzer with pg', () => {
             })
 
             testThatRequestHasVulnerability(() => {
-              const store = storage.getStore()
+              const store = storage('legacy').getStore()
               const iastCtx = iastContextFunctions.getIastContext(store)
               let sql = 'SELECT 1'
               sql = newTaintedString(iastCtx, sql, 'param', 'Request')

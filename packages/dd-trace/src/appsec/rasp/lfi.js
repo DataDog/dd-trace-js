@@ -47,21 +47,21 @@ function onFirstReceivedRequest () {
 }
 
 function analyzeLfi (ctx) {
-  const store = storage.getStore()
+  const store = storage('legacy').getStore()
   if (!store) return
 
   const { req, fs, res } = store
   if (!req || !fs) return
 
   getPaths(ctx, fs).forEach(path => {
-    const persistent = {
+    const ephemeral = {
       [FS_OPERATION_PATH]: path
     }
 
     const raspRule = { type: RULE_TYPES.LFI }
 
-    const result = waf.run({ persistent }, req, raspRule)
-    handleResult(result, req, res, ctx.abortController, config)
+    const result = waf.run({ ephemeral }, req, raspRule)
+    handleResult(result, req, res, ctx.abortController, config, raspRule)
   })
 }
 
@@ -88,6 +88,7 @@ function pathToStr (path) {
   if (!path) return
 
   if (typeof path === 'string' ||
+      // eslint-disable-next-line unicorn/no-instanceof-builtins
       path instanceof String ||
       path instanceof Buffer ||
       path instanceof URL) {
@@ -104,7 +105,7 @@ function shouldAnalyze (path, fs) {
 
 function shouldAnalyzeURLFile (path, fs) {
   if (path.startsWith('file://')) {
-    return shouldAnalyze(path.substring(7), fs)
+    return shouldAnalyze(path.slice(7), fs)
   }
 }
 

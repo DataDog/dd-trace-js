@@ -54,14 +54,18 @@ describe('Attacker fingerprinting', () => {
         res.end()
       }
 
-      agent.use(traces => {
+      agent.assertSomeTraces(traces => {
         assert.property(traces[0][0].meta, '_dd.appsec.fp.http.header')
-        assert.equal(traces[0][0].meta['_dd.appsec.fp.http.header'], 'hdr-0110000010-6431a3e6-3-98425651')
+        assert.equal(traces[0][0].meta['_dd.appsec.fp.http.header'], 'hdr-0110000010-74c2908f-3-98425651')
         assert.property(traces[0][0].meta, '_dd.appsec.fp.http.network')
         assert.equal(traces[0][0].meta['_dd.appsec.fp.http.network'], 'net-0-0000000000')
       }).then(done).catch(done)
 
-      axios.get(`http://localhost:${port}/`)
+      axios.get(`http://localhost:${port}/`, {
+        headers: {
+          'User-Agent': 'test-user-agent'
+        }
+      })
     })
 
     it('should provide fingerprinting on failed user login track', (done) => {
@@ -70,14 +74,18 @@ describe('Attacker fingerprinting', () => {
         res.end()
       }
 
-      agent.use(traces => {
+      agent.assertSomeTraces(traces => {
         assert.property(traces[0][0].meta, '_dd.appsec.fp.http.header')
-        assert.equal(traces[0][0].meta['_dd.appsec.fp.http.header'], 'hdr-0110000010-6431a3e6-3-98425651')
+        assert.equal(traces[0][0].meta['_dd.appsec.fp.http.header'], 'hdr-0110000010-74c2908f-3-98425651')
         assert.property(traces[0][0].meta, '_dd.appsec.fp.http.network')
         assert.equal(traces[0][0].meta['_dd.appsec.fp.http.network'], 'net-0-0000000000')
       }).then(done).catch(done)
 
-      axios.get(`http://localhost:${port}/`)
+      axios.get(`http://localhost:${port}/`, {
+        headers: {
+          'User-Agent': 'test-user-agent'
+        }
+      })
     })
   })
 })

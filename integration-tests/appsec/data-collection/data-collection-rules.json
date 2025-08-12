@@ -1,0 +1,69 @@
+{
+  "version": "2.1",
+  "metadata": {
+    "rules_version": "1.2.6"
+  },
+  "rules": [
+    {
+      "id": "arachni_rule",
+      "name": "Arachni",
+      "tags": {
+        "type": "security_scanner",
+        "category": "attack_attempt"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "user-agent"
+                ]
+              }
+            ],
+            "regex": "^Arachni\\/v"
+          },
+          "operator": "match_regex"
+        }
+      ]
+    },
+    {
+      "id": "trace_tagging_rule",
+      "name": "Trace tagging test rule",
+      "tags": {
+        "type": "security_scanner",
+        "category": "attack_attempt"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "user-agent"
+                ]
+              }
+            ],
+            "regex": "^TraceTaggingTest\\/v"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "output": {
+        "event": false,
+        "keep": true,
+        "attributes": {
+          "_dd.appsec.trace.integer": {
+            "value": 1234
+          },
+          "_dd.appsec.trace.agent": {
+            "address": "server.request.headers.no_cookies",
+            "key_path": ["user-agent"]
+          }
+        }
+      }
+    }
+  ]
+}

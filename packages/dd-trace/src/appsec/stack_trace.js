@@ -1,8 +1,6 @@
 'use strict'
 
-const { calculateDDBasePath } = require('../util')
-
-const ddBasePath = calculateDDBasePath(__dirname)
+const { ddBasePath } = require('../util')
 
 const LIBRARY_FRAMES_BUFFER = 20
 
@@ -11,36 +9,36 @@ const STACK_TRACE_NAMESPACES = {
   IAST: 'vulnerability'
 }
 
-function getCallSiteList (maxDepth = 100) {
+function prepareStackTrace (_, callsites) {
+  return callsites
+}
+
+function getCallSiteList (maxDepth = 100, constructorOpt) {
   const previousPrepareStackTrace = Error.prepareStackTrace
   const previousStackTraceLimit = Error.stackTraceLimit
-  let callsiteList
   // Since some frames will be discarded because they come from tracer codebase, a buffer is added
   // to the limit in order to get as close as `maxDepth` number of frames.
   Error.stackTraceLimit = maxDepth + LIBRARY_FRAMES_BUFFER
 
   try {
-    Error.prepareStackTrace = function (_, callsites) {
-      callsiteList = callsites
-    }
-    const e = new Error()
-    e.stack
+    Error.prepareStackTrace = prepareStackTrace
+    const obj = {}
+    Error.captureStackTrace(obj, constructorOpt)
+    return obj.stack
   } finally {
     Error.prepareStackTrace = previousPrepareStackTrace
     Error.stackTraceLimit = previousStackTraceLimit
   }
-
-  return callsiteList
 }
 
 function filterOutFramesFromLibrary (callSiteList) {
   return callSiteList.filter(callSite => !callSite.getFileName()?.startsWith(ddBasePath))
 }
 
-function getCallsiteFrames (maxDepth = 32, callSiteListGetter = getCallSiteList) {
+function getCallsiteFrames (maxDepth = 32, constructorOpt = getCallsiteFrames, callSiteListGetter = getCallSiteList) {
   if (maxDepth < 1) maxDepth = Infinity
 
-  const callSiteList = callSiteListGetter(maxDepth)
+  const callSiteList = callSiteListGetter(maxDepth, constructorOpt)
   const filteredFrames = filterOutFramesFromLibrary(callSiteList)
 
   const half = filteredFrames.length > maxDepth ? Math.round(maxDepth / 2) : Infinity

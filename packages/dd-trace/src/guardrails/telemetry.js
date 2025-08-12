@@ -1,8 +1,5 @@
 'use strict'
 
-/* eslint-disable no-var */
-/* eslint-disable object-shorthand */
-
 var fs = require('fs')
 var spawn = require('child_process').spawn
 var tracerVersion = require('../../../../package.json').version
@@ -11,15 +8,12 @@ var log = require('./log')
 module.exports = sendTelemetry
 
 if (!process.env.DD_INJECTION_ENABLED) {
-  module.exports = function () {}
+  module.exports = function noop () {}
 }
 
-if (!process.env.DD_TELEMETRY_FORWARDER_PATH) {
-  module.exports = function () {}
-}
-
-if (!fs.existsSync(process.env.DD_TELEMETRY_FORWARDER_PATH)) {
-  module.exports = function () {}
+var telemetryForwarderPath = process.env.DD_TELEMETRY_FORWARDER_PATH
+if (typeof telemetryForwarderPath !== 'string' || !fs.existsSync(telemetryForwarderPath)) {
+  module.exports = function noop () {}
 }
 
 var metadata = {
@@ -28,21 +22,29 @@ var metadata = {
   runtime_name: 'nodejs',
   runtime_version: process.versions.node,
   tracer_version: tracerVersion,
-  pid: process.pid
+  pid: process.pid,
+  result: 'unknown',
+  result_reason: 'unknown',
+  result_class: 'unknown'
 }
 
-var seen = []
-function hasSeen (point) {
+var seen = {}
+function shouldSend (point) {
   if (point.name === 'abort') {
     // This one can only be sent once, regardless of tags
-    return seen.includes('abort')
-  }
-  if (point.name === 'abort.integration') {
+    if (seen.abort) {
+      return false
+    }
+    seen.abort = true
+  } else if (point.name === 'abort.integration') {
     // For now, this is the only other one we want to dedupe
     var compiledPoint = point.name + point.tags.join('')
-    return seen.includes(compiledPoint)
+    if (seen[compiledPoint]) {
+      return false
+    }
+    seen[compiledPoint] = true
   }
-  return false
+  return true
 }
 
 function sendTelemetry (name, tags) {
@@ -51,9 +53,9 @@ function sendTelemetry (name, tags) {
     points = [{ name: name, tags: tags || [] }]
   }
   if (['1', 'true', 'True'].indexOf(process.env.DD_INJECT_FORCE) !== -1) {
-    points = points.filter(function (p) { return ['error', 'complete'].includes(p.name) })
+    points = points.filter(function (p) { return ['error', 'complete'].indexOf(p.name) !== -1 })
   }
-  points = points.filter(function (p) { return !hasSeen(p) })
+  points = points.filter(function (p) { return shouldSend(p) })
   for (var i = 0; i < points.length; i++) {
     points[i].name = 'library_entrypoint.' + points[i].name
   }
@@ -65,14 +67,27 @@ function sendTelemetry (name, tags) {
   })
   proc.on('error', function () {
     log.error('Failed to spawn telemetry forwarder')
+    metadata.result = 'error'
+    metadata.result_class = 'internal_error'
+    metadata.result_reason = 'Failed to spawn telemetry forwarder'
   })
   proc.on('exit', function (code) {
-    if (code !== 0) {
-      log.error('Telemetry forwarder exited with code ' + code)
+    if (code === 0) {
+      metadata.result = 'success'
+      metadata.result_class = 'success'
+      metadata.result_reason = 'Successfully configured ddtrace package'
+    } else {
+      log.error('Telemetry forwarder exited with code', code)
+      metadata.result = 'error'
+      metadata.result_class = 'internal_error'
+      metadata.result_reason = 'Telemetry forwarder exited with code ' + code
     }
   })
   proc.stdin.on('error', function () {
     log.error('Failed to write telemetry data to telemetry forwarder')
+    metadata.result = 'error'
+    metadata.result_class = 'internal_error'
+    metadata.result_reason = 'Failed to write telemetry data to telemetry forwarder'
   })
   proc.stdin.end(JSON.stringify({ metadata: metadata, points: points }))
 }

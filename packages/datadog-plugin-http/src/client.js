@@ -16,12 +16,12 @@ const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 
 class HttpClientPlugin extends ClientPlugin {
-  static get id () { return 'http' }
-  static get prefix () { return 'apm:http:client:request' }
+  static id = 'http'
+  static prefix = 'apm:http:client:request'
 
   bindStart (message) {
     const { args, http = {} } = message
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
     const options = args.options
     const agent = options.agent || options._defaultAgent || http.globalAgent || {}
     const protocol = options.protocol || agent.protocol || 'http:'
@@ -38,6 +38,7 @@ class HttpClientPlugin extends ClientPlugin {
     // TODO delegate to super.startspan
     const span = this.startSpan(this.operationName(), {
       childOf,
+      integrationName: this.constructor.id,
       meta: {
         [COMPONENT]: this.constructor.id,
         'span.kind': 'client',
@@ -49,7 +50,7 @@ class HttpClientPlugin extends ClientPlugin {
         'out.host': hostname
       },
       metrics: {
-        [CLIENT_PORT_KEY]: parseInt(options.port)
+        [CLIENT_PORT_KEY]: Number.parseInt(options.port)
       }
     }, false)
 
@@ -63,7 +64,7 @@ class HttpClientPlugin extends ClientPlugin {
       // Implemented due to aws-sdk issue where request signing is broken if we mutate the headers
       // Explained further in:
       // https://github.com/open-telemetry/opentelemetry-js-contrib/issues/1609#issuecomment-1826167348
-      options.headers = Object.assign({}, options.headers)
+      options.headers = { ...options.headers }
       this.tracer.inject(span, HTTP_HEADERS, options.headers)
     }
 
@@ -88,7 +89,8 @@ class HttpClientPlugin extends ClientPlugin {
     return parentStore
   }
 
-  finish ({ req, res, span }) {
+  finish (ctx) {
+    const { req, res, span } = ctx
     if (!span) return
     if (res) {
       const status = res.status || res.statusCode
@@ -102,13 +104,13 @@ class HttpClientPlugin extends ClientPlugin {
       addResponseHeaders(res, span, this.config)
     }
 
-    addRequestHeaders(req, span, this.config)
+    if (req) {
+      addRequestHeaders(req, span, this.config)
+    }
 
     this.config.hooks.request(span, req, res)
 
-    this.tagPeerService(span)
-
-    span.finish()
+    super.finish(ctx)
   }
 
   error ({ span, error, args, customRequestTimeout }) {
@@ -171,13 +173,14 @@ function normalizeClientConfig (config) {
   const headers = getHeaders(config)
   const hooks = getHooks(config)
 
-  return Object.assign({}, config, {
+  return {
+    ...config,
     validateStatus,
     filter,
     propagationFilter,
     headers,
     hooks
-  })
+  }
 }
 
 function getStatusValidator (config) {
@@ -190,9 +193,7 @@ function getStatusValidator (config) {
 }
 
 function getFilter (config) {
-  config = Object.assign({}, config, {
-    blocklist: config.blocklist || []
-  })
+  config = { ...config, blocklist: config.blocklist || [] }
 
   return urlFilter.getFilter(config)
 }
@@ -200,15 +201,26 @@ function getFilter (config) {
 function getHeaders (config) {
   if (!Array.isArray(config.headers)) return []
 
-  return config.headers
-    .filter(key => typeof key === 'string')
-    .map(h => h.split(':'))
-    .map(([key, tag]) => [key.toLowerCase(), tag])
+  const result = []
+  for (const header of config.headers) {
+    if (typeof header === 'string') {
+      const separatorIndex = header.indexOf(':')
+      result.push(separatorIndex === -1
+        ? [header, undefined]
+        : [
+            header.slice(0, separatorIndex).toLowerCase(),
+            header.slice(separatorIndex + 1)
+          ]
+      )
+    }
+  }
+  return result
 }
 
+const noop = () => {}
+
 function getHooks (config) {
-  const noop = () => {}
-  const request = (config.hooks && config.hooks.request) || noop
+  const request = config.hooks?.request ?? noop
 
   return { request }
 }

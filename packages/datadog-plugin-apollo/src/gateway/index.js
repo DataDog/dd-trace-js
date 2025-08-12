@@ -10,7 +10,7 @@ const ApolloGatewayValidatePlugin = require('./validate')
 const ApolloGatewayFetchPlugin = require('./fetch')
 
 class ApolloGatewayPlugin extends CompositePlugin {
-  static get id () { return 'gateway' }
+  static id = 'gateway'
   static get plugins () {
     return {
       execute: ApolloGatewayExecutePlugin,
@@ -25,7 +25,7 @@ class ApolloGatewayPlugin extends CompositePlugin {
   constructor (...args) {
     super(...args)
     this.addSub('apm:apollo:gateway:general:error', (ctx) => {
-      const store = storage.getStore()
+      const store = storage('legacy').getStore()
       const span = store?.span
       if (!span) return
       span.setTag('error', ctx.error)

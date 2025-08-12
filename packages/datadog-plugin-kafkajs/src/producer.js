@@ -1,19 +1,19 @@
 'use strict'
 
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
-const { DsmPathwayCodec } = require('../../dd-trace/src/datastreams/pathway')
-const { getMessageSize } = require('../../dd-trace/src/datastreams/processor')
+const { DsmPathwayCodec, getMessageSize } = require('../../dd-trace/src/datastreams')
 
 const BOOTSTRAP_SERVERS_KEY = 'messaging.kafka.bootstrap.servers'
+const MESSAGING_DESTINATION_KEY = 'messaging.destination.name'
 
 class KafkajsProducerPlugin extends ProducerPlugin {
-  static get id () { return 'kafkajs' }
-  static get operation () { return 'produce' }
-  static get peerServicePrecursors () { return [BOOTSTRAP_SERVERS_KEY] }
+  static id = 'kafkajs'
+  static operation = 'produce'
+  static peerServicePrecursors = [BOOTSTRAP_SERVERS_KEY]
 
   constructor () {
     super(...arguments)
-    this.addSub('apm:kafkajs:produce:commit', message => this.commit(message))
+    this.addSub(`apm:${this.constructor.id}:produce:commit`, message => this.commit(message))
   }
 
   /**
@@ -52,8 +52,11 @@ class KafkajsProducerPlugin extends ProducerPlugin {
    * @param {ProducerResponseItem[]} commitList
    * @returns {void}
    */
-  commit (commitList) {
+  commit (ctx) {
+    const commitList = ctx.result
+
     if (!this.config.dsmEnabled) return
+    if (!commitList || !Array.isArray(commitList)) return
     const keys = [
       'type',
       'partition',
@@ -66,24 +69,30 @@ class KafkajsProducerPlugin extends ProducerPlugin {
     }
   }
 
-  start ({ topic, messages, bootstrapServers, clusterId }) {
+  bindStart (ctx) {
+    const { topic, messages, bootstrapServers, clusterId, disableHeaderInjection } = ctx
     const span = this.startSpan({
       resource: topic,
       meta: {
-        component: 'kafkajs',
+        component: this.constructor.id,
         'kafka.topic': topic,
-        'kafka.cluster_id': clusterId
+        'kafka.cluster_id': clusterId,
+        [MESSAGING_DESTINATION_KEY]: topic
       },
       metrics: {
         'kafka.batch_size': messages.length
       }
-    })
+    }, ctx)
     if (bootstrapServers) {
       span.setTag(BOOTSTRAP_SERVERS_KEY, bootstrapServers)
     }
     for (const message of messages) {
       if (message !== null && typeof message === 'object') {
-        this.tracer.inject(span, 'text_map', message.headers)
+        // message headers are not supported for kafka broker versions <0.11
+        if (!disableHeaderInjection) {
+          message.headers ??= {}
+          this.tracer.inject(span, 'text_map', message.headers)
+        }
         if (this.config.dsmEnabled) {
           const payloadSize = getMessageSize(message)
           const edgeTags = ['direction:out', `topic:${topic}`, 'type:kafka']
@@ -93,10 +102,14 @@ class KafkajsProducerPlugin extends ProducerPlugin {
           }
 
           const dataStreamsContext = this.tracer.setCheckpoint(edgeTags, span, payloadSize)
-          DsmPathwayCodec.encode(dataStreamsContext, message.headers)
+          if (!disableHeaderInjection) {
+            DsmPathwayCodec.encode(dataStreamsContext, message.headers)
+          }
         }
       }
     }
+
+    return ctx.currentStore
   }
 }
 

@@ -4,12 +4,15 @@ const { join } = require('path')
 const { Worker, threadId: parentThreadId } = require('worker_threads')
 const { randomUUID } = require('crypto')
 const log = require('../../log')
+const { getEnvironmentVariables } = require('../../config-helper')
+const getDebuggerConfig = require('../../debugger/config')
 
 const probeIdToResolveBreakpointSet = new Map()
 const probeIdToResolveBreakpointRemove = new Map()
 
 class TestVisDynamicInstrumentation {
-  constructor () {
+  constructor (config) {
+    this._config = config
     this.worker = null
     this._readyPromise = new Promise(resolve => {
       this._onReady = resolve
@@ -32,6 +35,9 @@ class TestVisDynamicInstrumentation {
   // 1. Probe ID
   // 2. Promise that's resolved when the breakpoint is set
   addLineProbe ({ file, line }, onHitBreakpoint) {
+    if (!this.worker) { // not init yet
+      this.start()
+    }
     const probeId = randomUUID()
 
     this.breakpointSetChannel.port2.postMessage(
@@ -52,12 +58,12 @@ class TestVisDynamicInstrumentation {
     return this._readyPromise
   }
 
-  start (config) {
+  start () {
     if (this.worker) return
 
     log.debug('Starting Test Visibility - Dynamic Instrumentation client...')
 
-    const rcChannel = new MessageChannel() // mock channel
+    const probeChannel = new MessageChannel() // mock channel
     const configChannel = new MessageChannel() // mock channel
 
     this.worker = new Worker(
@@ -68,21 +74,25 @@ class TestVisDynamicInstrumentation {
         // for PnP support, hence why we deviate from the DI pattern here.
         // To avoid infinite initialization loops, we're disabling DI and tracing in the worker.
         env: {
-          ...process.env,
-          DD_TRACE_ENABLED: 0,
-          DD_TEST_DYNAMIC_INSTRUMENTATION_ENABLED: 0
+          ...getEnvironmentVariables(),
+          DD_CIVISIBILITY_ENABLED: 'false',
+          DD_TRACE_ENABLED: 'false',
+          DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false',
+          DD_CIVISIBILITY_MANUAL_API_ENABLED: 'false',
+          DD_TRACING_ENABLED: 'false',
+          DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false'
         },
         workerData: {
-          config: config.serialize(),
+          config: getDebuggerConfig(this._config),
           parentThreadId,
-          rcPort: rcChannel.port1,
+          probePort: probeChannel.port1,
           configPort: configChannel.port1,
           breakpointSetChannel: this.breakpointSetChannel.port1,
           breakpointHitChannel: this.breakpointHitChannel.port1,
           breakpointRemoveChannel: this.breakpointRemoveChannel.port1
         },
         transferList: [
-          rcChannel.port1,
+          probeChannel.port1,
           configChannel.port1,
           this.breakpointSetChannel.port1,
           this.breakpointHitChannel.port1,
@@ -119,6 +129,8 @@ class TestVisDynamicInstrumentation {
       const onHit = this.onHitBreakpointByProbeId.get(probeId)
       if (onHit) {
         onHit({ snapshot })
+      } else {
+        log.warn('Received a breakpoint hit for an unknown probe')
       }
     }).unref()
 
@@ -132,4 +144,12 @@ class TestVisDynamicInstrumentation {
   }
 }
 
-module.exports = new TestVisDynamicInstrumentation()
+let dynamicInstrumentation
+
+module.exports = function createAndGetTestVisDynamicInstrumentation (config) {
+  if (dynamicInstrumentation) {
+    return dynamicInstrumentation
+  }
+  dynamicInstrumentation = new TestVisDynamicInstrumentation(config)
+  return dynamicInstrumentation
+}

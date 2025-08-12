@@ -79,4 +79,18 @@ describe('id', () => {
 
     expect(spanId.toString(10)).to.equal('1234')
   })
+
+  it('should return the ID as BigInt', () => {
+    const ids = [
+      ['13835058055282163712', 13835058055282163712n],
+      ['10', 10n],
+      ['9007199254740991', 9007199254740991n]
+    ]
+
+    for (const [tid, expected] of ids) {
+      const spanId = id(tid, 10)
+
+      expect(spanId.toBigInt()).to.equal(expected)
+    }
+  })
 })

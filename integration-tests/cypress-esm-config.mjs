@@ -1,10 +1,9 @@
-// eslint-disable-next-line import/no-extraneous-dependencies
 import cypress from 'cypress'
 
 async function runCypress () {
-  await cypress.run({
+  const results = await cypress.run({
     config: {
-      defaultCommandTimeout: 100,
+      defaultCommandTimeout: 1000,
       e2e: {
         setupNodeEvents (on, config) {
           if (process.env.CYPRESS_ENABLE_INCOMPATIBLE_PLUGIN) {
@@ -40,6 +39,9 @@ async function runCypress () {
       screenshotOnRunFailure: false
     }
   })
+  if (results.totalFailed !== 0) {
+    process.exit(1)
+  }
 }
 
 runCypress()

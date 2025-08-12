@@ -1,28 +1,41 @@
 'use strict'
 
+const { storage } = require('../../datadog-core')
 const CLIENT_PORT_KEY = require('../../dd-trace/src/constants')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 
 class MySQLPlugin extends DatabasePlugin {
-  static get id () { return 'mysql' }
-  static get system () { return 'mysql' }
+  static id = 'mysql'
+  static system = 'mysql'
 
-  start (payload) {
-    const service = this.serviceName({ pluginConfig: this.config, dbConfig: payload.conf, system: this.system })
+  constructor () {
+    super(...arguments)
+
+    this.addSub(`apm:${this.component}:connection:start`, ctx => {
+      ctx.parentStore = storage('legacy').getStore()
+    })
+
+    this.addBind(`apm:${this.component}:connection:finish`, ctx => ctx.parentStore)
+  }
+
+  bindStart (ctx) {
+    const service = this.serviceName({ pluginConfig: this.config, dbConfig: ctx.conf, system: this.system })
     const span = this.startSpan(this.operationName(), {
       service,
-      resource: payload.sql,
+      resource: ctx.sql,
       type: 'sql',
       kind: 'client',
       meta: {
         'db.type': this.system,
-        'db.user': payload.conf.user,
-        'db.name': payload.conf.database,
-        'out.host': payload.conf.host,
-        [CLIENT_PORT_KEY]: payload.conf.port
+        'db.user': ctx.conf.user,
+        'db.name': ctx.conf.database,
+        'out.host': ctx.conf.host,
+        [CLIENT_PORT_KEY]: ctx.conf.port
       }
-    })
-    payload.sql = this.injectDbmQuery(span, payload.sql, service)
+    }, ctx)
+    ctx.sql = this.injectDbmQuery(span, ctx.sql, service)
+
+    return ctx.currentStore
   }
 }
 

@@ -23,7 +23,7 @@ describe('CI Visibility Writer', () => {
     encoder = {
       encode: sinon.stub(),
       count: sinon.stub().returns(0),
-      makePayload: sinon.stub().returns([])
+      makePayload: sinon.stub().returns(Buffer.from(''))
     }
 
     url = {
@@ -89,10 +89,10 @@ describe('CI Visibility Writer', () => {
       const expectedData = Buffer.from('prefixed')
 
       encoder.count.returns(2)
-      encoder.makePayload.returns([expectedData])
+      encoder.makePayload.returns(expectedData)
 
       writer.flush(() => {
-        expect(request).to.have.been.calledWithMatch([expectedData], {
+        expect(request).to.have.been.calledWithMatch(expectedData, {
           url,
           path: '/api/v2/citestcycle',
           method: 'POST',

@@ -1,6 +1,7 @@
 'use strict'
 
-const Writable = require('stream').Writable
+const Writable = require('node:stream').Writable
+const { withExports, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const semver = require('semver')
 const { NODE_MAJOR } = require('../../../version')
@@ -64,7 +65,7 @@ describe('Plugin', () => {
 
               const record = JSON.parse(stream.write.firstCall.args[0].toString())
 
-              expect(record).to.not.have.property('dd')
+              expect(record).to.have.property('dd')
               expect(record).to.have.deep.property('msg', 'message')
             })
           })
@@ -80,8 +81,8 @@ describe('Plugin', () => {
 
                 const record = stream.write.firstCall.args[0].toString()
 
-                expect(record).to.not.include('trace_id')
-                expect(record).to.not.include('span_id')
+                expect(record).to.include('trace_id')
+                expect(record).to.include('span_id')
                 expect(record).to.include('message')
               })
             })
@@ -110,7 +111,7 @@ describe('Plugin', () => {
               const record = JSON.parse(stream.write.firstCall.args[0].toString())
 
               expect(record.dd).to.deep.include({
-                trace_id: span.context().toTraceId(),
+                trace_id: span.context().toTraceId(true),
                 span_id: span.context().toSpanId()
               })
 
@@ -184,7 +185,7 @@ describe('Plugin', () => {
                 const record = JSON.parse(stream.write.firstCall.args[0].toString())
 
                 expect(record.dd).to.deep.include({
-                  trace_id: span.context().toTraceId(),
+                  trace_id: span.context().toTraceId(true),
                   span_id: span.context().toSpanId()
                 })
 
@@ -207,7 +208,7 @@ describe('Plugin', () => {
 
                 const record = stream.write.firstCall.args[0].toString()
 
-                expect(record).to.match(new RegExp(`trace_id\\W+?${span.context().toTraceId()}`))
+                expect(record).to.match(new RegExp(`trace_id\\W+?${span.context().toTraceId(true)}`))
                 expect(record).to.match(new RegExp(`span_id\\W+?${span.context().toSpanId()}`))
 
                 expect(record).to.include('message')

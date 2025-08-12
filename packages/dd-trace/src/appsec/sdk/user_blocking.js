@@ -9,8 +9,8 @@ const { setUserTags } = require('./set_user')
 const log = require('../../log')
 
 function isUserBlocked (user) {
-  const actions = waf.run({ persistent: { [USER_ID]: user.id } })
-  return !!getBlockingAction(actions)
+  const results = waf.run({ persistent: { [USER_ID]: user.id } })
+  return !!getBlockingAction(results?.actions)
 }
 
 function checkUserAndSetUser (tracer, user) {
@@ -33,7 +33,7 @@ function checkUserAndSetUser (tracer, user) {
 
 function blockRequest (tracer, req, res) {
   if (!req || !res) {
-    const store = storage.getStore()
+    const store = storage('legacy').getStore()
     if (store) {
       req = req || store.req
       res = res || store.res
@@ -51,9 +51,7 @@ function blockRequest (tracer, req, res) {
     return false
   }
 
-  block(req, res, rootSpan)
-
-  return true
+  return block(req, res, rootSpan)
 }
 
 module.exports = {

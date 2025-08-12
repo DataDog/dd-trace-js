@@ -3,18 +3,16 @@
 const BaseAwsSdkPlugin = require('../base')
 
 class CloudwatchLogs extends BaseAwsSdkPlugin {
-  static get id () { return 'cloudwatchlogs' }
+  static id = 'cloudwatchlogs'
 
   generateTags (params, operation) {
-    const tags = {}
+    if (!params?.logGroupName) return {}
 
-    if (!params || !params.logGroupName) return tags
-
-    return Object.assign(tags, {
+    return {
       'resource.name': `${operation} ${params.logGroupName}`,
       'aws.cloudwatch.logs.log_group_name': params.logGroupName,
       loggroupname: params.logGroupName
-    })
+    }
   }
 }
 

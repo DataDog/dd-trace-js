@@ -1,20 +1,21 @@
 'use strict'
 
 const { oomExportStrategies } = require('../constants')
-const { getThreadLabels } = require('./shared')
+const { encodeProfileAsync, getThreadLabels } = require('./shared')
 
 function strategiesToCallbackMode (strategies, callbackMode) {
   return strategies.includes(oomExportStrategies.ASYNC_CALLBACK) ? callbackMode.Async : 0
 }
 
 class NativeSpaceProfiler {
+  type = 'space'
+  _pprof
+  _started = false
+
   constructor (options = {}) {
-    this.type = 'space'
-    this._samplingInterval = options.samplingInterval || 512 * 1024
+    this._samplingInterval = options.heapSamplingInterval || 512 * 1024
     this._stackDepth = options.stackDepth || 64
-    this._pprof = undefined
     this._oomMonitoring = options.oomMonitoring || {}
-    this._started = false
   }
 
   start ({ mapper, nearOOMCallback } = {}) {
@@ -47,7 +48,7 @@ class NativeSpaceProfiler {
   }
 
   encode (profile) {
-    return this._pprof.encode(profile)
+    return encodeProfileAsync(profile)
   }
 
   stop () {

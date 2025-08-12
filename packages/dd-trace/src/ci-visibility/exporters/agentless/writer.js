@@ -2,6 +2,7 @@
 const request = require('../../../exporters/common/request')
 const { safeJSONStringify } = require('../../../exporters/common/util')
 const log = require('../../../log')
+const { getEnvironmentVariable } = require('../../../config-helper')
 
 const { AgentlessCiVisibilityEncoder } = require('../../../encode/agentless-ci-visibility')
 const BaseWriter = require('../../../exporters/common/writer')
@@ -29,10 +30,10 @@ class Writer extends BaseWriter {
       path: '/api/v2/citestcycle',
       method: 'POST',
       headers: {
-        'dd-api-key': process.env.DATADOG_API_KEY || process.env.DD_API_KEY,
+        'dd-api-key': getEnvironmentVariable('DD_API_KEY'),
         'Content-Type': 'application/msgpack'
       },
-      timeout: 15000,
+      timeout: 15_000,
       url: this._url
     }
 
@@ -47,7 +48,7 @@ class Writer extends BaseWriter {
     const startRequestTime = Date.now()
 
     incrementCountMetric(TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS, { endpoint: 'test_cycle' })
-    distributionMetric(TELEMETRY_ENDPOINT_PAYLOAD_BYTES, { endpoint: 'test_cycle' }, data.length)
+    distributionMetric(TELEMETRY_ENDPOINT_PAYLOAD_BYTES, { endpoint: 'test_cycle' }, Buffer.byteLength(data))
 
     request(data, options, (err, res, statusCode) => {
       distributionMetric(
@@ -68,13 +69,13 @@ class Writer extends BaseWriter {
         done()
         return
       }
-      log.debug(`Response from the intake: ${res}`)
+      log.debug('Response from the intake:', res)
       done()
     })
   }
 
-  setMetadataTags (tags) {
-    this._encoder.setMetadataTags(tags)
+  addMetadataTags (tags) {
+    this._encoder.addMetadataTags(tags)
   }
 }
 
