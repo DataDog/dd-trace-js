@@ -1,6 +1,7 @@
 'use strict'
 
 const { expect } = require('chai')
+const assert = require('node:assert')
 const getPort = require('get-port')
 const os = require('node:os')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
@@ -352,7 +353,7 @@ describe('Plugin', () => {
                     a: 'John'
                   }
                 })
-                expect(ctx.meta.a).to.equal('Doe')
+                return ctx.meta.a
               },
               second (ctx) {
                 ctx.meta.a = 'Doe'
@@ -368,7 +369,12 @@ describe('Plugin', () => {
         after(() => agent.close({ ritmReset: false }))
 
         it('should propagate meta from child to parent', done => {
-          broker.call('test.first').then(() => done()).catch(done)
+          broker.call('test.first')
+            .then(value => {
+              assert.strictEqual(value, 'Doe')
+              done()
+            })
+            .catch(done)
         })
       })
     })
