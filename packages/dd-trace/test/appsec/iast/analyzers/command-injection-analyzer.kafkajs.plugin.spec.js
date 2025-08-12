@@ -1,6 +1,7 @@
 'use strict'
 
 const { testOutsideRequestHasVulnerability } = require('../utils')
+const { withVersions } = require('../../../setup/mocha')
 
 const topic = 'test-topic'
 

@@ -2,6 +2,7 @@
 
 const path = require('path')
 const agent = require('../../../../plugins/agent')
+const { withVersions } = require('../../../../setup/mocha')
 const {
   schema,
   resolvers,

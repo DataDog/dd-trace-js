@@ -5,6 +5,7 @@ const {
   createSandbox,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
+const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const { expect } = require('chai')
 
 describe('esm', () => {
