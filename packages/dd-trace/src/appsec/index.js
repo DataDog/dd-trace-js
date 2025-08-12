@@ -312,7 +312,7 @@ function onResponseWriteHead ({ req, res, abortController, statusCode, responseH
   // }
 
   // avoid "write after end" error
-  if (blockDelegates(res) || isBlocked(res)) {
+  if (isBlocked(res) || blockDelegates(res)) {
     abortController?.abort()
     return
   }
