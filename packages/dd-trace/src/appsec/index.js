@@ -306,8 +306,12 @@ function onResponseWriteHead ({ req, res, abortController, statusCode, responseH
     storedResponseHeaders.set(req, responseHeaders)
   }
 
-  // avoid "write after end" error
   // TODO: do not call waf if inside block()
+  // if (isBlocking()) {
+  //   return
+  // }
+
+  // avoid "write after end" error
   if (blockDelegates(res) || isBlocked(res)) {
     abortController?.abort()
     return
