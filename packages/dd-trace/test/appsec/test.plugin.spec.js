@@ -7,6 +7,8 @@ const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
 
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
+
 function assertFingerprintInTraces (traces) {
   const span = traces[0][0]
   assert.property(span.meta, '_dd.appsec.fp.http.header')
@@ -77,8 +79,6 @@ withVersions('passport-local', 'passport-local', version => {
     })
 
     it('should report http fingerprints on login fail', async () => {
-      throw 'CI SHOULD FAIL'
-
       try {
         await axios.post(
           `http://localhost:${port}/login`,
@@ -90,6 +90,8 @@ withVersions('passport-local', 'passport-local', version => {
       } catch (e) {}
 
       await agent.use(assertFingerprintInTraces)
+
+      throw new Error('CI SHOULD FAIL')
     })
 
     it('should report http fingerprints on login successful', async () => {

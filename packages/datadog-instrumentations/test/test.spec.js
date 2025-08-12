@@ -4,6 +4,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const axios = require('axios').create({ validateStatus: null })
 const dc = require('dc-polyfill')
 const { storage } = require('../../datadog-core')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 withVersions('passport-http', 'passport-http', version => {
   describe('passport-http instrumentation', () => {
@@ -142,9 +143,6 @@ withVersions('passport-http', 'passport-http', version => {
         }
       })
 
-      throw 'CI SHOULD FAIL'
-
-
       expect(res.status).to.equal(200)
       expect(res.data).to.equal('Granted')
       expect(subscriberStub).to.be.calledOnceWithExactly({
@@ -154,6 +152,8 @@ withVersions('passport-http', 'passport-http', version => {
         success: true,
         abortController: new AbortController()
       })
+
+      throw new Error('CI SHOULD FAIL')
     })
 
     it('should call subscriber with proper arguments on failure', async () => {
