@@ -47,7 +47,7 @@ function checkPlugins (yamlPath) {
     if (!job.env || !job.env.PLUGINS) continue
 
     const pluginName = job.env.PLUGINS
-    if (!yamlPath.includes('appsec')) { // remove this line ?
+    if (true) //!yamlPath.includes('appsec')) { // remove this line ?
       pluginName.split('|').forEach(plugin => allTestedPlugins.add(plugin))
     }
     if (Module.isBuiltin(pluginName)) continue
