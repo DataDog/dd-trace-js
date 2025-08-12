@@ -21,7 +21,7 @@ function wrapCall (call) {
       ctx.promiseCtx = promise.ctx
       ctx.broker = broker
 
-      return promise
+      promise
         .then(
           result => {
             finishChannel.publish(ctx)
@@ -34,6 +34,7 @@ function wrapCall (call) {
             throw error
           }
         )
+      return promise
     })
   }
 }

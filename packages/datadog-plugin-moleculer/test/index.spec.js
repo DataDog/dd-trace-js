@@ -331,6 +331,46 @@ describe('Plugin', () => {
           expect(spanId.toString()).to.equal(parentId.toString())
         })
       })
+      describe('meta propagation', () => {
+        before(() => agent.load('moleculer', {
+          meta: true
+        }))
+
+        before(async () => {
+          const { ServiceBroker } = require(`../../../versions/moleculer@${version}`).get()
+          broker = new ServiceBroker({
+            nodeID: `server-${process.pid}`,
+            logger: false
+          })
+
+          broker.createService({
+            name: 'test',
+            actions: {
+              async first (ctx) {
+                await ctx.call('test.second', null, {
+                  meta: {
+                    a: 'John'
+                  }
+                })
+                expect(ctx.meta.a).to.equal('Doe')
+              },
+              second (ctx) {
+                ctx.meta.a = 'Doe'
+              }
+            }
+          })
+
+          return broker.start()
+        })
+
+        after(() => broker.stop())
+
+        after(() => agent.close({ ritmReset: false }))
+
+        it('should propagate meta from child to parent', done => {
+          broker.call('test.first').then(() => done()).catch(done)
+        })
+      })
     })
   })
 })
