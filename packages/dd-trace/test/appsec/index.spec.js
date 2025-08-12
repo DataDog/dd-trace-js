@@ -663,7 +663,6 @@ describe('AppSec Index', function () {
       }
 
       web.root.returns(span)
-      web._prioritySampler.isSampled.returns(true)
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
