@@ -23,7 +23,7 @@ class AzureFunctionsPlugin extends WebPlugin {
   bindStart (ctx) {
     const childOf = extractTraceContext(this._tracer, ctx)
     const meta = getMetaForTrigger(ctx)
-    const span = this.startSpan(this.operationName(), {
+    const span = this.startSpan(this.operationName(), null, {
       childOf,
       service: this.serviceName(),
       type: 'serverless',

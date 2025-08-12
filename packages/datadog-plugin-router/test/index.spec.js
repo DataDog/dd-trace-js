@@ -6,7 +6,6 @@ const axios = require('axios')
 const http = require('http')
 const { once } = require('events')
 const agent = require('../../dd-trace/test/plugins/agent')
-const web = require('../../datadog-plugin-web/src')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
@@ -25,9 +24,9 @@ describe('Plugin', () => {
 
   function server (router, errorHandler = defaultErrorHandler) {
     return http.createServer((req, res) => {
-      const config = web.normalizeConfig({})
+      const web = tracer._pluginManager._pluginsByName.router
 
-      web.instrument(tracer, config, req, res, 'web.request')
+      web.instrument(req, res, 'web.request')
 
       return router(req, res, errorHandler(req, res))
     })
