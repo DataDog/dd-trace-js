@@ -38,11 +38,8 @@ function recordEndpoint (method, path) {
 }
 
 function onFastifyRoute (routeData) {
-  if (!routeData) return
-
-  const { routeOptions } = routeData
-  if (!routeOptions) return
-  if (!routeOptions.path) return
+  const routeOptions = routeData?.routeOptions
+  if (!routeOptions?.path) return
 
   const methods = Array.isArray(routeOptions.method) ? routeOptions.method : [routeOptions.method]
 
@@ -107,13 +104,13 @@ function flushAndSend () {
 }
 
 function start (_config = {}, _application, _host, getRetryDataFunction, updateRetryDatafunction) {
-  if (!config.appsec?.apiSecurity?.endpointCollectionEnabled) return
-
   config = _config
   application = _application
   host = _host
   getRetryData = getRetryDataFunction
   updateRetryData = updateRetryDatafunction
+
+  if (!config?.appsec?.apiSecurity?.endpointCollectionEnabled) return
 
   fastifyRouteCh.subscribe(onFastifyRoute)
 }
