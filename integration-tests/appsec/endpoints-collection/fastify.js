@@ -33,6 +33,7 @@ app.all('/wildcard', async (_, reply) => reply.send('ok'))
 // Nested routes with Router
 app.register(async function (router) {
   router.put('/nested/:id', async (_, reply) => reply.send('ok'))
+  router.all('/nested', async (_, reply) => reply.send('ok'))
 }, { prefix: '/v1' })
 
 // Deeply nested routes

@@ -9,6 +9,7 @@ const originalSetImmediate = global.setImmediate
 
 describe('endpoints telemetry', () => {
   const fastifyRouteCh = dc.channel('apm:fastify:route:added')
+  const expressRouteCh = dc.channel('apm:express:route:added')
   const application = 'test'
   const host = 'host'
 
@@ -23,7 +24,7 @@ describe('endpoints telemetry', () => {
       const config = { appsec: { apiSecurity: { endpointCollectionEnabled: true } } }
       endpoints.start(config)
 
-      expect(subscribe).to.have.been.calledOnce
+      expect(subscribe).to.have.been.calledTwice
     })
   })
 
@@ -99,6 +100,31 @@ describe('endpoints telemetry', () => {
 
       expect(firstPayload).to.have.property('is_first', true)
       expect(Boolean(secondPayload.is_first)).to.equal(false)
+    })
+
+    it('should record express route and add HEAD for GET', () => {
+      expressRouteCh.publish({ method: 'GET', path: '/test' })
+
+      scheduledCallbacks.forEach(cb => cb())
+
+      expect(sendData).to.have.been.calledOnce
+      const payload = sendData.firstCall.args[4]
+      const resources = payload.endpoints.map(e => e.resource_name)
+      expect(resources).to.include('GET /test')
+      expect(resources).to.include('HEAD /test')
+    })
+
+    it('should record express wildcard and ignore subsequent specific methods for same path', () => {
+      expressRouteCh.publish({ method: '*', path: '/all' })
+      expressRouteCh.publish({ method: 'GET', path: '/all' })
+      expressRouteCh.publish({ method: 'POST', path: '/all' })
+
+      scheduledCallbacks.forEach(cb => cb())
+
+      expect(sendData).to.have.been.calledOnce
+      const payload = sendData.firstCall.args[4]
+      const resources = payload.endpoints.map(e => e.resource_name)
+      expect(resources).to.deep.equal(['* /all'])
     })
 
     it('should record fastify wildcard when all methods provided', () => {

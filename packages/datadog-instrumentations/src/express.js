@@ -5,7 +5,10 @@ const shimmer = require('../../datadog-shimmer')
 const { addHook, channel } = require('./helpers/instrument')
 const tracingChannel = require('dc-polyfill').tracingChannel
 
+const METHODS = require('http').METHODS.map(v => v.toLowerCase())
+
 const handleChannel = channel('apm:express:request:handle')
+const routeAddedChannel = channel('apm:express:route:added')
 
 function wrapHandle (handle) {
   return function handleWithTrace (req, res) {
@@ -57,8 +60,121 @@ function wrapResponseRender (render) {
   }
 }
 
+function wrapAppAll (all) {
+  return function wrappedAll (path) {
+    if (routeAddedChannel.hasSubscribers) {
+      routeAddedChannel.publish({
+        method: '*',
+        path
+      })
+    }
+
+    return all.apply(this, arguments)
+  }
+}
+
+// Wrap app.route() to instrument Route object
+function wrapAppRoute (route) {
+  return function wrappedRoute (path) {
+    const routeObj = route.apply(this, arguments)
+
+    if (routeAddedChannel.hasSubscribers && typeof path === 'string') {
+      // Wrap the .all() first
+      if (typeof routeObj.all === 'function') {
+        shimmer.wrap(routeObj, 'all', (original) => function wrappedRouteAll () {
+          routeAddedChannel.publish({
+            method: '*',
+            path
+          })
+
+          return original.apply(this, arguments)
+        })
+      }
+
+      // Wrap each HTTP method
+      METHODS.forEach(method => {
+        if (typeof routeObj[method] === 'function') {
+          shimmer.wrap(routeObj, method, (original) => function wrapMethod () {
+            routeAddedChannel.publish({
+              method,
+              path
+            })
+
+            return original.apply(this, arguments)
+          })
+        }
+      })
+    }
+
+    return routeObj
+  }
+}
+
+function joinPath (base, path) {
+  if (!base || base === '/') return path || '/'
+  if (!path || path === '/') return base
+  return base + path
+}
+
+function wrapAppUse (use) {
+  return function wrappedUse () {
+    if (arguments.length < 2) {
+      return use.apply(this, arguments)
+    }
+
+    // Check if second argument has a stack (likely a router)
+    const mountPath = arguments[0]
+    const router = arguments[1]
+
+    if (typeof mountPath === 'string' && router?.stack?.length && routeAddedChannel.hasSubscribers) {
+      collectRoutesFromRouter(router, mountPath)
+    }
+
+    return use.apply(this, arguments)
+  }
+}
+
+function collectRoutesFromRouter (router, prefix) {
+  if (!router?.stack?.length) return
+
+  router.stack.forEach(layer => {
+    if (layer.route) {
+      // This layer has a direct route
+      const route = layer.route
+      const fullPath = joinPath(prefix, route.path)
+
+      Object.keys(route.methods).forEach(method => {
+        if (route.methods[method] && method !== '_all') {
+          routeAddedChannel.publish({
+            method,
+            path: fullPath
+          })
+        }
+      })
+
+      if (route.methods._all) {
+        routeAddedChannel.publish({
+          method: '*',
+          path: fullPath
+        })
+      }
+    } else if (layer.handle?.stack?.length) {
+      // This layer contains a nested router
+      // Prefer matchers (from router.js) when available to resolve the exact mount path
+      const matchers = layer.ddMatchers
+      const mountPath = (Array.isArray(matchers) && matchers.length) ? matchers[0].path : ''
+
+      const nestedPrefix = joinPath(prefix, mountPath)
+      collectRoutesFromRouter(layer.handle, nestedPrefix)
+    }
+  })
+}
+
 addHook({ name: 'express', versions: ['>=4'] }, express => {
   shimmer.wrap(express.application, 'handle', wrapHandle)
+  shimmer.wrap(express.application, 'all', wrapAppAll)
+  shimmer.wrap(express.application, 'route', wrapAppRoute)
+  shimmer.wrap(express.application, 'use', wrapAppUse)
 
   shimmer.wrap(express.response, 'json', wrapResponseJson)
   shimmer.wrap(express.response, 'jsonp', wrapResponseJson)
