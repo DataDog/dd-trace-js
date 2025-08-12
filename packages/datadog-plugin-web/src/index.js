@@ -81,7 +81,6 @@ class WebPlugin extends TracingPlugin {
     return WebPlugin.normalizeConfig(config)
   }
 
-
   static normalizeConfig (config) {
     const headers = getHeadersToRecord(config)
     const validateStatus = getStatusValidator(config)
@@ -101,7 +100,6 @@ class WebPlugin extends TracingPlugin {
       middleware,
       queryStringObfuscation
     }
-  }
   }
 
   setFramework (req, name) {
