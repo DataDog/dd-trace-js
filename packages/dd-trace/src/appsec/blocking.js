@@ -166,7 +166,7 @@ function setTemplates (config) {
 }
 
 function isBlocked (res) {
-  return responseBlockedSet.has(res) || blockDelegations.has(res)
+  return responseBlockedSet.has(res)
 }
 
 function setDefaultBlockingActionParameters (actions) {

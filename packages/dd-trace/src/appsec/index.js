@@ -34,7 +34,7 @@ const apiSecuritySampler = require('./api_security_sampler')
 const web = require('../plugins/util/web')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
-const { blockDelegates, isBlocked, block, setTemplates, getBlockingAction } = require('./blocking')
+const { isBlocked, blockDelegates, block, setTemplates, getBlockingAction } = require('./blocking')
 const UserTracking = require('./user_tracking')
 const { storage } = require('../../../datadog-core')
 const graphql = require('./graphql')
@@ -307,6 +307,7 @@ function onResponseWriteHead ({ req, res, abortController, statusCode, responseH
   }
 
   // avoid "write after end" error
+  // TODO: do not call waf if inside block()
   if (blockDelegates(res) || isBlocked(res)) {
     abortController?.abort()
     return
