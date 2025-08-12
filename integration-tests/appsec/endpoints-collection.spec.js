@@ -40,8 +40,15 @@ describe('Endpoints collection', () => {
       // Using app.route()
       { method: 'POST', path: '/multi-method' },
 
-      // Wildcard route
-      { method: '*', path: '/wildcard' },
+      // Wildcard route expanded (fastify does not support CONNECT)
+      { method: 'GET', path: '/wildcard' },
+      { method: 'POST', path: '/wildcard' },
+      { method: 'PUT', path: '/wildcard' },
+      { method: 'DELETE', path: '/wildcard' },
+      { method: 'HEAD', path: '/wildcard' },
+      { method: 'PATCH', path: '/wildcard' },
+      { method: 'OPTIONS', path: '/wildcard' },
+      { method: 'TRACE', path: '/wildcard' },
 
       // Nested routes with Router
       { method: 'PUT', path: '/v1/nested/:id' },
@@ -91,7 +98,7 @@ describe('Endpoints collection', () => {
             })
           }
         }
-      }, 'app-endpoints', 5_000, 2)
+      }, 'app-endpoints', 5_000, 3)
 
       const trueCount = isFirstFlags.filter(v => v === true).length
       expect(trueCount).to.equal(1)
