@@ -20,7 +20,7 @@ let flushScheduled = false
 let isFirstPayload = true
 
 function endpointKey (method, path) {
-  return `${method} ${path}`
+  return `${method.toUpperCase()} ${path}`
 }
 
 function scheduleFlush () {
@@ -30,8 +30,6 @@ function scheduleFlush () {
 }
 
 function recordEndpoint (method, path) {
-  if (!method || !path) return
-
   const key = endpointKey(method, path)
   if (pendingEndpoints.has(key)) return
 
@@ -109,21 +107,19 @@ function flushAndSend () {
 }
 
 function start (_config = {}, _application, _host, getRetryDataFunction, updateRetryDatafunction) {
+  if (!config.appsec?.apiSecurity?.endpointCollectionEnabled) return
+
   config = _config
   application = _application
   host = _host
   getRetryData = getRetryDataFunction
   updateRetryData = updateRetryDatafunction
 
-  if (config.appsec?.apiSecurity?.endpointCollectionEnabled) {
-    fastifyRouteCh.subscribe(onFastifyRoute)
-  }
+  fastifyRouteCh.subscribe(onFastifyRoute)
 }
 
 function stop () {
-  if (fastifyRouteCh.hasSubscribers) {
-    fastifyRouteCh.unsubscribe(onFastifyRoute)
-  }
+  fastifyRouteCh.unsubscribe(onFastifyRoute)
 
   pendingEndpoints.clear()
   flushScheduled = false
