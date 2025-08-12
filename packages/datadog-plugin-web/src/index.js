@@ -463,7 +463,7 @@ function _addRequestTags (context) {
     [HTTP_URL]: _obfuscateQs(url, context.config),
     [HTTP_METHOD]: req.method,
     [SPAN_KIND]: SERVER,
-    [SPAN_TYPE]: SPAN_TYPE,
+    [SPAN_TYPE]: WebPlugin.constructor.type,
     [HTTP_USERAGENT]: req.headers['user-agent']
   })
 
