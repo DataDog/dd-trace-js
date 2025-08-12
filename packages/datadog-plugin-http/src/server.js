@@ -20,7 +20,7 @@ class HttpServerPlugin extends WebPlugin {
   start ({ req, res, abortController }) {
     const store = storage('legacy').getStore()
 
-    this.config.service = this.config.service || this.getServiceName()
+    this.config.service = this.config.service || this.serviceName()
 
     const span = this.startSpan(
       req,
