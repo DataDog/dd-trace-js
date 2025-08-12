@@ -1,7 +1,7 @@
 'use strict'
 
 const ServerPlugin = require('../../dd-trace/src/plugins/server')
-const WebPlugin = require('../../datadog-plugin-web/src')
+const web = require('../../datadog-plugin-web/src/utils')
 const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -63,15 +63,15 @@ class NextPlugin extends ServerPlugin {
     if (requestError) {
       // prioritize user-set errors from API routes
       span.setTag('error', requestError)
-      WebPlugin.addError(req, requestError)
+      web.addError(req, requestError)
     } else if (error) {
       // general error handling
       span.setTag('error', error)
-      WebPlugin.addError(req, requestError || error)
+      web.addError(req, requestError || error)
     } else if (!this.config.validateStatus(res.statusCode)) {
       // where there's no error, we still need to validate status
       span.setTag('error', true)
-      WebPlugin.addError(req, true)
+      web.addError(req, true)
     }
 
     span.addTags({
@@ -119,7 +119,7 @@ class NextPlugin extends ServerPlugin {
       'resource.name': `${req.method} ${page}`.trim(),
       'next.page': page
     })
-    WebPlugin.setRoute(req, page)
+    web.setRoute(req, page)
   }
 
   configure (config) {

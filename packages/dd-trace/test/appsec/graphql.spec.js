@@ -2,7 +2,7 @@
 
 const proxyquire = require('proxyquire')
 const waf = require('../../src/appsec/waf')
-const web = require('../../../datadog-plugin-web/src')
+const web = require('../../../datadog-plugin-web/src/utils')
 const { storage } = require('../../../datadog-core')
 const addresses = require('../../src/appsec/addresses')
 
