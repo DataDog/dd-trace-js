@@ -101,7 +101,7 @@ describe('endpoints telemetry', () => {
       expect(Boolean(secondPayload.is_first)).to.equal(false)
     })
 
-    it('should record fastify wildcard when all methods provided', () => {
+    it('should record all methods when fastify.all() is used', () => {
       fastifyRouteCh.publish({
         routeOptions: {
           method: ['GET', 'POST', 'PUT', 'DELETE', 'HEAD', 'PATCH', 'OPTIONS', 'TRACE'],
@@ -114,7 +114,16 @@ describe('endpoints telemetry', () => {
       expect(sendData).to.have.been.calledOnce
       const payload = sendData.firstCall.args[4]
       const resources = payload.endpoints.map(e => e.resource_name)
-      expect(resources).to.deep.equal(['* /all'])
+      expect(resources).to.have.members([
+        'GET /all',
+        'POST /all',
+        'PUT /all',
+        'DELETE /all',
+        'HEAD /all',
+        'PATCH /all',
+        'OPTIONS /all',
+        'TRACE /all'
+      ])
     })
   })
 

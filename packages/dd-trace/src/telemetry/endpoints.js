@@ -43,13 +43,8 @@ function onFastifyRoute (routeData) {
 
   const methods = Array.isArray(routeOptions.method) ? routeOptions.method : [routeOptions.method]
 
-  // Check if this is a wildcard route fastify.all()
-  if (methods.length === 8) {
-    recordEndpoint('*', routeOptions.path)
-  } else {
-    for (const method of methods) {
-      recordEndpoint(method, routeOptions.path)
-    }
+  for (const method of methods) {
+    recordEndpoint(method, routeOptions.path)
   }
 }
 
