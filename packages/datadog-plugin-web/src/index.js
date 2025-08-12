@@ -373,6 +373,10 @@ class WebPlugin extends TracingPlugin {
   }
 
   finishSpan (context) {
+    WebPlugin.finishSpan(context)
+  }
+
+  static finishSpan (context) {
     const { req, res } = context
 
     if (context.finished && !req.stream) return

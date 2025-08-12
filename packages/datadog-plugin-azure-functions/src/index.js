@@ -1,6 +1,7 @@
 'use strict'
 
 const WebPlugin = require('../../datadog-plugin-web/src')
+const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
 const triggerMap = {
   deleteRequest: 'Http',
@@ -13,7 +14,7 @@ const triggerMap = {
   serviceBusTopic: 'ServiceBus',
 }
 
-class AzureFunctionsPlugin extends WebPlugin {
+class AzureFunctionsPlugin extends TracingPlugin {
   static id = 'azure-functions'
   static operation = 'invoke'
   static kind = 'server'
@@ -23,7 +24,7 @@ class AzureFunctionsPlugin extends WebPlugin {
   bindStart (ctx) {
     const childOf = extractTraceContext(this._tracer, ctx)
     const meta = getMetaForTrigger(ctx)
-    const span = this.startSpan(this.operationName(), null, {
+    const span = this.startSpan(this.operationName(), {
       childOf,
       service: this.serviceName(),
       type: 'serverless',
@@ -49,13 +50,13 @@ class AzureFunctionsPlugin extends WebPlugin {
         headers: Object.fromEntries(httpRequest.headers),
         url: path
       }
-      const context = this.patch(req)
+      const context = WebPlugin.patch(req)
       context.config = this.config
       context.paths = [path]
       context.res = { statusCode: result.status }
       context.span = ctx.currentStore.span
 
-      this.finishSpan(context)
+      WebPlugin.finishSpan(context)
     // Fallback for other trigger types
     } else {
       super.finish()
@@ -63,7 +64,7 @@ class AzureFunctionsPlugin extends WebPlugin {
   }
 
   configure (config) {
-    return super.configure(this.normalizeConfig(config))
+    return super.configure(WebPlugin.normalizeConfig(config))
   }
 }
 
