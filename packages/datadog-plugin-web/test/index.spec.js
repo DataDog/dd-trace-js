@@ -24,6 +24,7 @@ const HTTP_CLIENT_IP = tags.HTTP_CLIENT_IP
 
 describe('Plugin', () => {
   let web
+  let webUtils
   let tracer
   let span
   let req
@@ -57,11 +58,13 @@ describe('Plugin', () => {
     tracer = require('../../..').init({ plugins: false })
     const WebPlugin = require('../src')
     web = new WebPlugin(tracer, config)
+
+    webUtils = require('../src/utils')
   })
 
   describe('normalizeConfig', () => {
     it('should set the correct defaults', () => {
-      const config = web.normalizeConfig({})
+      const config = webUtils.normalizeConfig({})
 
       expect(config).to.have.property('headers')
       expect(config.headers).to.be.an('array')
@@ -77,7 +80,7 @@ describe('Plugin', () => {
     })
 
     it('should use the shared config if set', () => {
-      const config = web.normalizeConfig({
+      const config = webUtils.normalizeConfig({
         headers: ['test'],
         validateStatus: code => false,
         hooks: {
@@ -93,7 +96,7 @@ describe('Plugin', () => {
 
     describe('queryStringObfuscation', () => {
       it('should keep booleans as is', () => {
-        const config = web.normalizeConfig({
+        const config = webUtils.normalizeConfig({
           queryStringObfuscation: false
         })
 
@@ -101,7 +104,7 @@ describe('Plugin', () => {
       })
 
       it('should change to false when passed empty string', () => {
-        const config = web.normalizeConfig({
+        const config = webUtils.normalizeConfig({
           queryStringObfuscation: ''
         })
 
@@ -109,7 +112,7 @@ describe('Plugin', () => {
       })
 
       it('should change to true when passed ".*"', () => {
-        const config = web.normalizeConfig({
+        const config = webUtils.normalizeConfig({
           queryStringObfuscation: '.*'
         })
 
@@ -117,7 +120,7 @@ describe('Plugin', () => {
       })
 
       it('should convert to regex when passed valid string', () => {
-        const config = web.normalizeConfig({
+        const config = webUtils.normalizeConfig({
           queryStringObfuscation: 'a*'
         })
 
@@ -125,7 +128,7 @@ describe('Plugin', () => {
       })
 
       it('should default to true when passed a bad regex', () => {
-        const config = web.normalizeConfig({
+        const config = webUtils.normalizeConfig({
           queryStringObfuscation: '(?)'
         })
 

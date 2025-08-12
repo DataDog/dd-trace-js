@@ -31,7 +31,7 @@ const addresses = require('./addresses')
 const Reporter = require('./reporter')
 const appsecTelemetry = require('./telemetry')
 const apiSecuritySampler = require('./api_security_sampler')
-const WebPlugin = require('../../../datadog-plugin-web/src')
+const web = require('../../../datadog-plugin-web/src/utils')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
 const { isBlocked, block, setTemplates, getBlockingAction } = require('./blocking')
@@ -111,7 +111,7 @@ function onRequestBodyParsed ({ req, res, body, abortController }) {
     req = store?.req
   }
 
-  const rootSpan = WebPlugin.root(req)
+  const rootSpan = web.root(req)
   if (!rootSpan) return
 
   const results = waf.run({
@@ -126,7 +126,7 @@ function onRequestBodyParsed ({ req, res, body, abortController }) {
 function onRequestCookieParser ({ req, res, abortController, cookies }) {
   if (!cookies || typeof cookies !== 'object') return
 
-  const rootSpan = WebPlugin.root(req)
+  const rootSpan = web.root(req)
   if (!rootSpan) return
 
   const results = waf.run({
@@ -139,7 +139,7 @@ function onRequestCookieParser ({ req, res, abortController, cookies }) {
 }
 
 function incomingHttpStartTranslator ({ req, res, abortController }) {
-  const rootSpan = WebPlugin.root(req)
+  const rootSpan = web.root(req)
   if (!rootSpan) return
 
   const clientIp = extractIp(config, req)
@@ -209,7 +209,7 @@ function incomingHttpEndTranslator ({ req, res }) {
 
 function onPassportVerify ({ framework, login, user, success, abortController }) {
   const store = storage('legacy').getStore()
-  const rootSpan = store?.req && WebPlugin.root(store.req)
+  const rootSpan = store?.req && web.root(store.req)
 
   if (!rootSpan) {
     log.warn('[ASM] No rootSpan found in onPassportVerify')
@@ -223,7 +223,7 @@ function onPassportVerify ({ framework, login, user, success, abortController })
 
 function onPassportDeserializeUser ({ user, abortController }) {
   const store = storage('legacy').getStore()
-  const rootSpan = store?.req && WebPlugin.root(store.req)
+  const rootSpan = store?.req && web.root(store.req)
 
   if (!rootSpan) {
     log.warn('[ASM] No rootSpan found in onPassportDeserializeUser')
@@ -236,7 +236,7 @@ function onPassportDeserializeUser ({ user, abortController }) {
 }
 
 function onExpressSession ({ req, res, sessionId, abortController }) {
-  const rootSpan = WebPlugin.root(req)
+  const rootSpan = web.root(req)
   if (!rootSpan) {
     log.warn('[ASM] No rootSpan found in onExpressSession')
     return
@@ -262,7 +262,7 @@ function onRequestQueryParsed ({ req, res, query, abortController }) {
     req = store?.req
   }
 
-  const rootSpan = WebPlugin.root(req)
+  const rootSpan = web.root(req)
   if (!rootSpan) return
 
   const results = waf.run({
@@ -275,7 +275,7 @@ function onRequestQueryParsed ({ req, res, query, abortController }) {
 }
 
 function onRequestProcessParams ({ req, res, abortController, params }) {
-  const rootSpan = WebPlugin.root(req)
+  const rootSpan = web.root(req)
   if (!rootSpan) return
 
   if (!params || typeof params !== 'object' || !Object.keys(params).length) return
@@ -317,7 +317,7 @@ function onResponseWriteHead ({ req, res, abortController, statusCode, responseH
     return
   }
 
-  const rootSpan = WebPlugin.root(req)
+  const rootSpan = web.root(req)
   if (!rootSpan) return
 
   responseHeaders = { ...responseHeaders }

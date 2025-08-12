@@ -59,7 +59,7 @@ describe('reporter', () => {
     }
 
     Reporter = proxyquire('../../src/appsec/reporter', {
-      '../../../datadog-plugin-web/src/index': web,
+      '../../../datadog-plugin-web/src/utils': web,
       './telemetry': telemetry
     })
   })

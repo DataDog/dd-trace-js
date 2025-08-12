@@ -6,7 +6,7 @@ const Reporter = require('../reporter')
 const Limiter = require('../../rate_limiter')
 const { keepTrace } = require('../../priority_sampler')
 const { ASM } = require('../../standalone/product')
-const WebPlugin = require('../../../../datadog-plugin-web/src')
+const web = require('../../../../datadog-plugin-web/src/utils')
 const { updateRateLimitedMetric } = require('../telemetry')
 
 class WafUpdateError extends Error {
@@ -112,7 +112,7 @@ function run (data, req, raspRule) {
 
   if (result?.keep) {
     if (limiter.isAllowed()) {
-      const rootSpan = WebPlugin.root(req)
+      const rootSpan = web.root(req)
       keepTrace(rootSpan, ASM)
     } else {
       updateRateLimitedMetric(req)

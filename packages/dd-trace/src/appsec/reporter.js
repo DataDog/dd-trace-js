@@ -4,7 +4,7 @@ const dc = require('dc-polyfill')
 const zlib = require('zlib')
 
 const { storage } = require('../../../datadog-core')
-const WebPlugin = require('../../../datadog-plugin-web/src')
+const web = require('../../../datadog-plugin-web/src/utils')
 const { ipHeaderList } = require('../plugins/util/ip_extractor')
 const {
   incrementWafInitMetric,
@@ -276,7 +276,7 @@ function reportWafConfigUpdate (product, rcConfigId, diagnostics, wafVersion) {
 
 function reportMetrics (metrics, raspRule) {
   const store = storage('legacy').getStore()
-  const rootSpan = store?.req && WebPlugin.root(store.req)
+  const rootSpan = store?.req && web.root(store.req)
 
   if (!rootSpan) return
 
@@ -310,7 +310,7 @@ function reportTruncationMetrics (rootSpan, metrics) {
 function reportAttack (attackData) {
   const store = storage('legacy').getStore()
   const req = store?.req
-  const rootSpan = WebPlugin.root(req)
+  const rootSpan = web.root(req)
   if (!rootSpan) return
 
   const currentTags = rootSpan.context()._tags
@@ -426,7 +426,7 @@ function reportAttributes (attributes) {
   if (!attributes) return
 
   const req = storage('legacy').getStore()?.req
-  const rootSpan = WebPlugin.root(req)
+  const rootSpan = web.root(req)
 
   if (!rootSpan) return
 
@@ -443,7 +443,7 @@ function reportAttributes (attributes) {
 }
 
 function finishRequest (req, res, storedResponseHeaders) {
-  const rootSpan = WebPlugin.root(req)
+  const rootSpan = web.root(req)
   if (!rootSpan) return
 
   if (metricsQueue.size) {

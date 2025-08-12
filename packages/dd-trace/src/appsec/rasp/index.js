@@ -1,6 +1,6 @@
 'use strict'
 
-const WebPlugin = require('../../../../datadog-plugin-web/src')
+const web = require('../../../../datadog-plugin-web/src/utils')
 const { setUncaughtExceptionCaptureCallbackStart, expressMiddlewareError } = require('../channels')
 const { block, isBlocked } = require('../blocking')
 const ssrf = require('./ssrf')
@@ -87,7 +87,7 @@ function blockOnDatadogRaspAbortError ({ error }) {
 
   const { req, res, blockingAction, raspRule, ruleTriggered } = abortError
   if (!isBlocked(res)) {
-    const blocked = block(req, res, WebPlugin.root(req), null, blockingAction)
+    const blocked = block(req, res, web.root(req), null, blockingAction)
     if (ruleTriggered) {
       updateRaspRuleMatchMetricTags(req, raspRule, true, blocked)
     }

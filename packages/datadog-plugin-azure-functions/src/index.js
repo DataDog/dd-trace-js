@@ -1,6 +1,6 @@
 'use strict'
 
-const WebPlugin = require('../../datadog-plugin-web/src')
+const web = require('../../datadog-plugin-web/src/utils')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
 const triggerMap = {
@@ -50,13 +50,13 @@ class AzureFunctionsPlugin extends TracingPlugin {
         headers: Object.fromEntries(httpRequest.headers),
         url: path
       }
-      const context = WebPlugin.patch(req)
+      const context = web.patch(req)
       context.config = this.config
       context.paths = [path]
       context.res = { statusCode: result.status }
       context.span = ctx.currentStore.span
 
-      WebPlugin.finishSpan(context)
+      web.finishSpan(context)
     // Fallback for other trigger types
     } else {
       super.finish()
@@ -64,7 +64,7 @@ class AzureFunctionsPlugin extends TracingPlugin {
   }
 
   configure (config) {
-    return super.configure(WebPlugin.normalizeConfig(config))
+    return super.configure(web.normalizeConfig(config))
   }
 }
 

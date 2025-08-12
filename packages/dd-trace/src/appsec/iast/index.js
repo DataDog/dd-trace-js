@@ -2,7 +2,7 @@
 
 const vulnerabilityReporter = require('./vulnerability-reporter')
 const { enableAllAnalyzers, disableAllAnalyzers } = require('./analyzers')
-const WebPlugin = require('../../../../datadog-plugin-web/src')
+const web = require('../../../../datadog-plugin-web/src/utils')
 const { storage } = require('../../../../datadog-core')
 const overheadController = require('./overhead-controller')
 const dc = require('dc-polyfill')
@@ -65,7 +65,7 @@ function onIncomingHttpRequestStart (data) {
   if (data?.req) {
     const store = storage('legacy').getStore()
     if (store) {
-      const topContext = WebPlugin.getContext(data.req)
+      const topContext = web.getContext(data.req)
       if (topContext) {
         const rootSpan = topContext.span
         const isRequestAcquired = overheadController.acquireRequest(rootSpan)
@@ -89,7 +89,7 @@ function onIncomingHttpRequestStart (data) {
 function onIncomingHttpRequestEnd (data) {
   if (data?.req) {
     const store = storage('legacy').getStore()
-    const topContext = WebPlugin.getContext(data.req)
+    const topContext = web.getContext(data.req)
     const iastContext = iastContextFunctions.getIastContext(store, topContext)
     if (iastContext?.rootSpan) {
       const storedHeaders = collectedResponseHeaders.get(data.res) || {}

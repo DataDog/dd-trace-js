@@ -91,10 +91,7 @@ describe('AppSec Index', function () {
 
     web = {
       root: sinon.stub(),
-      getContext: sinon.stub(),
-      _prioritySampler: {
-        isSampled: sinon.stub()
-      }
+      getContext: sinon.stub()
     }
 
     blocking = {
@@ -124,7 +121,7 @@ describe('AppSec Index', function () {
     }
 
     apiSecuritySampler = proxyquire('../../src/appsec/api_security_sampler', {
-      '../../../datadog-plugin-web/src/index': web
+      '../../../datadog-plugin-web/src/utils': web
     })
     sinon.spy(apiSecuritySampler, 'sampleRequest')
 
@@ -145,7 +142,7 @@ describe('AppSec Index', function () {
 
     AppSec = proxyquire('../../src/appsec', {
       '../log': log,
-      '../../../datadog-plugin-web/src/index': web,
+      '../../../datadog-plugin-web/src/utils': web,
       './blocking': blocking,
       './user_tracking': UserTracking,
       './telemetry': appsecTelemetry,
