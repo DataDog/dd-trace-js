@@ -90,13 +90,13 @@ jobs:
       - run: yarn type:doc
 
   # TODO: Remove need for `npm show` before re-enabling to avoid rate limit errors.
-  # verify-yaml:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-  #     - uses: ./.github/actions/node/active-lts
-  #     - uses: ./.github/actions/install
-  #     - run: node scripts/verify-ci-config.js
+  verify-yaml:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/install
+      - run: node scripts/verify-ci-config.js
 
   yarn-dedupe:
     runs-on: ubuntu-latest
