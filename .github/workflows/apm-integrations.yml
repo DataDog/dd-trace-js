@@ -824,6 +824,10 @@ jobs:
       - uses: ./.github/actions/plugins/test
 
   restify:
+    strategy:
+      matrix:
+        # Restify isn't compatible with Node.js v24: https://github.com/restify/node-restify/issues/1984
+        node-version: [oldest, 'active-lts']
     runs-on: ubuntu-latest
     env:
       PLUGINS: restify
