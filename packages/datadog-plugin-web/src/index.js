@@ -184,6 +184,10 @@ class WebPlugin extends TracingPlugin {
   }
 
   setRoute (req, path) {
+    WebPlugin.setRoute(req, path)
+  }
+
+  static setRoute (req, path) {
     const context = contexts.get(req)
 
     if (!context) return
@@ -345,6 +349,10 @@ class WebPlugin extends TracingPlugin {
 
   // Add an error to the request
   addError (req, error) {
+    WebPlugin.addError(req, error)
+  }
+
+  static addError (req, error) {
     if (error instanceof Error) {
       const context = contexts.get(req)
 

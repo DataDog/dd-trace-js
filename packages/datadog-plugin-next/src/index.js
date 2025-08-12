@@ -1,5 +1,6 @@
 'use strict'
 
+const ServerPlugin = require('../../dd-trace/src/plugins/server')
 const WebPlugin = require('../../datadog-plugin-web/src')
 const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
@@ -7,7 +8,7 @@ const { COMPONENT } = require('../../dd-trace/src/constants')
 
 const errorPages = new Set(['/404', '/500', '/_error', '/_not-found', '/_not-found/page'])
 
-class NextPlugin extends WebPlugin {
+class NextPlugin extends ServerPlugin {
   static id = 'next'
 
   constructor (...args) {
@@ -62,15 +63,15 @@ class NextPlugin extends WebPlugin {
     if (requestError) {
       // prioritize user-set errors from API routes
       span.setTag('error', requestError)
-      this.addError(req, requestError)
+      WebPlugin.addError(req, requestError)
     } else if (error) {
       // general error handling
       span.setTag('error', error)
-      this.addError(req, requestError || error)
+      WebPlugin.addError(req, requestError || error)
     } else if (!this.config.validateStatus(res.statusCode)) {
       // where there's no error, we still need to validate status
       span.setTag('error', true)
-      this.addError(req, true)
+      WebPlugin.addError(req, true)
     }
 
     span.addTags({
@@ -118,7 +119,7 @@ class NextPlugin extends WebPlugin {
       'resource.name': `${req.method} ${page}`.trim(),
       'next.page': page
     })
-    this.setRoute(req, page)
+    WebPlugin.setRoute(req, page)
   }
 
   configure (config) {
