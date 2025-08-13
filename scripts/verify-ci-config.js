@@ -47,7 +47,7 @@ function checkPlugins (yamlPath) {
     if (!job.env || !job.env.PLUGINS) continue
 
     const pluginName = job.env.PLUGINS
-    if (pluginName) { // !yamlPath.includes('appsec')) { // remove this line ?
+    if (!yamlPath.includes('appsec')) { // appsec has their own plugin tests yes i know i know
       pluginName.split('|').forEach(plugin => allTestedPlugins.add(plugin))
     }
     if (Module.isBuiltin(pluginName)) continue
@@ -63,26 +63,27 @@ function checkPlugins (yamlPath) {
     }
   }
 
-  for (const pluginName in rangesPerPluginFromYaml) {
-    const yamlRanges = Array.from(rangesPerPluginFromYaml[pluginName])
-    const instRanges = Array.from(rangesPerPluginFromInst[pluginName])
-    const yamlVersions = getMatchingVersions(pluginName, yamlRanges)
-    const instVersions = getMatchingVersions(pluginName, instRanges)
-    if (pluginName !== 'next' && !util.isDeepStrictEqual(yamlVersions, instVersions)) {
-      const opts = { colors: true }
-      const colors = x => util.inspect(x, opts)
-      pluginErrorMsg(pluginName, 'Mismatch', `
-Valid version ranges from YAML: ${colors(yamlRanges)}
-Valid version ranges from INST: ${colors(instRanges)}
-${mismatching(yamlVersions, instVersions)}
-Note that versions may be dependent on Node.js version. This is Node.js v${colors(nodeMajor)}
+// DISABLED FOR NOW BECAUSE NPM SHOW GETS RATE LIMITED
+//   for (const pluginName in rangesPerPluginFromYaml) {
+//     const yamlRanges = Array.from(rangesPerPluginFromYaml[pluginName])
+//     const instRanges = Array.from(rangesPerPluginFromInst[pluginName])
+//     const yamlVersions = getMatchingVersions(pluginName, yamlRanges)
+//     const instVersions = getMatchingVersions(pluginName, instRanges)
+//     if (pluginName !== 'next' && !util.isDeepStrictEqual(yamlVersions, instVersions)) {
+//       const opts = { colors: true }
+//       const colors = x => util.inspect(x, opts)
+//       pluginErrorMsg(pluginName, 'Mismatch', `
+// Valid version ranges from YAML: ${colors(yamlRanges)}
+// Valid version ranges from INST: ${colors(instRanges)}
+// ${mismatching(yamlVersions, instVersions)}
+// Note that versions may be dependent on Node.js version. This is Node.js v${colors(nodeMajor)}
 
-> These don't match the same sets of versions in npm.
->
-> Please check ${yamlPath} and the instrumentations
-> for ${pluginName} to see that the version ranges match.`.trim())
-    }
-  }
+// > These don't match the same sets of versions in npm.
+// >
+// > Please check ${yamlPath} and the instrumentations
+// > for ${pluginName} to see that the version ranges match.`.trim())
+//     }
+//   }
 }
 
 function getRangesFromYaml (job) {
