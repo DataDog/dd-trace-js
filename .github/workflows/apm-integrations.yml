@@ -50,7 +50,7 @@ jobs:
       aerospike:
         image: aerospike:${{ matrix.aerospike-image }}
         ports:
-          - "127.0.0.1:3000-3002:3000-3002"
+          - '127.0.0.1:3000-3002:3000-3002'
     env:
       PLUGINS: aerospike
       SERVICES: aerospike
@@ -172,7 +172,12 @@ jobs:
     strategy:
       matrix:
         # using node versions matrix since this plugin testing fails due to install differences between node versions
-        node-version: ['18', '20', '22', '24']
+        node-version: [18, 20, 22]
+        range: ['>=1.0.0']
+        include:
+          - node-version: 24
+            range: '>=1.4.0'
+            range_clean: gte.1.4.0
     runs-on: ubuntu-latest
     services:
       kafka:
@@ -622,7 +627,17 @@ jobs:
         version:
           - 18
           - latest
-        range: ['>=10.2.0 <11', '>=11.0.0 <13', '11.1.4', '>=13.0.0 <14', '13.2.0', '>=14.0.0 <=14.2.6', '>=14.2.7 <15', '>=15.0.0 <15.4.1']
+        range:
+          [
+            '>=10.2.0 <11',
+            '>=11.0.0 <13',
+            '11.1.4',
+            '>=13.0.0 <14',
+            '13.2.0',
+            '>=14.0.0 <=14.2.6',
+            '>=14.2.7 <15',
+            '>=15.0.0 <15.4.1',
+          ]
         include:
           - range: '>=10.2.0 <11'
             range_clean: gte.10.2.0.and.lt.11
