@@ -14,6 +14,8 @@ let defaultBlockingActionParameters
 
 const responseBlockedSet = new WeakSet()
 
+const blockDelegations = new WeakMap()
+
 const specificBlockingTypes = {
   GRAPHQL: 'graphql'
 }
@@ -99,6 +101,7 @@ function getBlockingData (req, specificType, actionParameters) {
 }
 
 function block (req, res, rootSpan, abortController, actionParameters = defaultBlockingActionParameters) {
+  // synchronous blocking overrides previously created delegations
   blockDelegations.delete(res)
 
   try {
@@ -129,25 +132,20 @@ function block (req, res, rootSpan, abortController, actionParameters = defaultB
     rootSpan?.setTag('_dd.appsec.block.failed', 1)
     log.error('[ASM] Blocking error', err)
 
-    // TODO: if blocking fails, then the response will never be sent
+    // TODO: if blocking fails, then the response will never be sent ?
 
     updateBlockFailureMetric(req)
     return false
   }
 }
 
-const blockDelegations = new WeakMap()
-const noop = () => {}
-
 function delegateBlock (req, res) {
-  if (blockDelegations.has(res)) {
-    // ignore all subsequent delegations
-    return new Promise(noop)
-  }
-
   const args = arguments
 
   return new Promise((resolve) => {
+    // ignore subsequent delegations by never calling their resolve()
+    if (blockDelegations.has(res)) return
+
     blockDelegations.set(res, { args, resolve })
   })
 }
