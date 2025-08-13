@@ -5,6 +5,7 @@ const proxyquire = require('proxyquire')
 const Config = require('../../../src/config')
 const rules = require('../../../src/appsec/recommended.json')
 const Reporter = require('../../../src/appsec/reporter')
+const { match } = require('sinon')
 
 describe('WAF Manager', () => {
   const knownAddresses = new Set([
@@ -455,7 +456,7 @@ describe('WAF Manager', () => {
 
         wafContextWrapper.run(params)
 
-        expect(Reporter.reportAttack).to.be.calledOnceWithExactly(['ATTACK DATA'])
+        expect(Reporter.reportAttack).to.be.calledOnceWith(match({ events: ['ATTACK DATA'] }))
       })
 
       it('should report if rule is triggered', () => {
