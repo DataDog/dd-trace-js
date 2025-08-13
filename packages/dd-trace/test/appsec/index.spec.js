@@ -1140,7 +1140,7 @@ describe('AppSec Index', function () {
 
         responseWriteHead.publish({ req, res, abortController, statusCode: 404, responseHeaders: {} })
 
-        expect(blocking.blockDelegates).to.have.been.calledOnce
+        expect(blocking.blockDelegates).to.have.been.calledOnceWithExactly(res)
         expect(abortController.abort).to.have.been.calledOnce
         expect(waf.run).to.not.have.been.called
       })
