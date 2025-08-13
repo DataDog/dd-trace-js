@@ -1,0 +1,43 @@
+{
+  "version": "2.2",
+  "metadata": {
+    "rules_version": "1.5.0"
+  },
+  "rules": [
+    {
+      "id": "test-rule-id-1",
+      "name": "test-rule-name-1",
+      "tags": {
+        "type": "a",
+        "category": "custom"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.body"
+              }
+            ],
+            "list": [
+              "collect"
+            ]
+          },
+          "operator": "phrase_match"
+        }
+      ],
+      "transformers": ["lowercase"],
+      "on_match": ["extended_data_collection_example"]
+    }
+  ],
+  "actions": [
+    {
+      "id": "extended_data_collection_example",
+      "parameters": {
+        "redaction": false,
+        "max_collected_headers": 50
+      },
+      "type": "extended_data_collection"
+    }
+  ]
+}
