@@ -33,6 +33,7 @@ class EventPlugin extends TracingPlugin {
     const data = this.contextData.get(ctx)
 
     if (!data) return
+    this.contextData.delete(ctx)
 
     const { startEvent, startTime, error } = data
     if (error || this.ignoreEvent(startEvent)) {

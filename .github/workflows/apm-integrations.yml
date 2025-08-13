@@ -166,8 +166,6 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-        env:
-          OPTIONS_OVERRIDE: 1
       - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
 
   confluentinc-kafka-javascript:
