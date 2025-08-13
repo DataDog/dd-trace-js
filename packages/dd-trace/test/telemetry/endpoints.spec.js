@@ -9,7 +9,7 @@ const originalSetImmediate = global.setImmediate
 
 describe('endpoints telemetry', () => {
   const fastifyRouteCh = dc.channel('apm:fastify:route:added')
-  const expressRouteCh = dc.channel('apm:express:route:added')
+  const expressRouteCh = dc.channel('apm:express:add:route')
   const application = 'test'
   const host = 'host'
 

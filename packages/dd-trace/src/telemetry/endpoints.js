@@ -4,7 +4,7 @@ const dc = require('dc-polyfill')
 const { sendData } = require('./send-data')
 
 const fastifyRouteCh = dc.channel('apm:fastify:route:added')
-const expressRouteCh = dc.channel('apm:express:route:added')
+const expressRouteCh = dc.channel('apm:express:add:route')
 
 let config
 let application

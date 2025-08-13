@@ -8,7 +8,7 @@ const tracingChannel = require('dc-polyfill').tracingChannel
 const METHODS = require('http').METHODS.map(v => v.toLowerCase())
 
 const handleChannel = channel('apm:express:request:handle')
-const routeAddedChannel = channel('apm:express:route:added')
+const routeAddedChannel = channel('apm:express:add:route')
 
 function wrapHandle (handle) {
   return function handleWithTrace (req, res) {
