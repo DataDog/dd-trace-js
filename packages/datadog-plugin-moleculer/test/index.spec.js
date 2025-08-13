@@ -31,14 +31,23 @@ describe('Plugin', () => {
         broker.createService({
           name: 'math',
           actions: {
-            add (ctx) {
+            async add (ctx) {
               const numerify = this.actions.numerify
 
-              return numerify(ctx.params.a) + numerify(ctx.params.b)
+              return await numerify(ctx.params.a) + await numerify(ctx.params.b)
             },
 
             numerify (ctx) {
               return Number(ctx.params)
+            }
+          }
+        })
+
+        broker.createService({
+          name: 'error',
+          actions: {
+            async error (ctx) {
+              throw new Error('Invalid number')
             }
           }
         })
@@ -178,7 +187,32 @@ describe('Plugin', () => {
               expect(spans[0].metrics).to.have.property('network.destination.port', port)
             }).then(done, done)
 
-            broker.call('math.add', { a: 5, b: 3 }).catch(done)
+            broker.call('math.add', { a: 5, b: 3 }).then(value => {
+              assert.strictEqual(value, 8)
+            }).catch(done)
+          })
+
+          it('should handle error cases', done => {
+            agent.assertSomeTraces(traces => {
+              const spans = sort(traces[0])
+
+              expect(spans[0]).to.have.property('name', expectedSchema.client.opName)
+              expect(spans[0]).to.have.property('service', expectedSchema.client.serviceName)
+              expect(spans[0]).to.have.property('resource', 'error.error')
+              expect(spans[0].meta).to.have.property('span.kind', 'client')
+              expect(spans[0].meta).to.have.property('out.host', hostname)
+              expect(spans[0].meta).to.have.property('moleculer.context.action', 'error.error')
+              expect(spans[0].meta).to.have.property('moleculer.context.node_id', `server-${process.pid}`)
+              expect(spans[0].meta).to.have.property('moleculer.context.request_id')
+              expect(spans[0].meta).to.have.property('moleculer.context.service', 'error')
+              expect(spans[0].meta).to.have.property('moleculer.namespace', 'multi')
+              expect(spans[0].meta).to.have.property('moleculer.node_id', `server-${process.pid}`)
+              expect(spans[0].metrics).to.have.property('network.destination.port', port)
+            }).then(done, done)
+
+            broker.call('error.error').catch(error => {
+              assert.strictEqual(error.message, 'Invalid number')
+            })
           })
 
           withNamingSchema(

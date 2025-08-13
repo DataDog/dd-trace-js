@@ -25,13 +25,11 @@ function wrapCall (call) {
         .then(
           result => {
             finishChannel.publish(ctx)
-            return result
           },
           error => {
             ctx.error = error
             errorChannel.publish(ctx)
             finishChannel.publish(ctx)
-            throw error
           }
         )
       return promise
