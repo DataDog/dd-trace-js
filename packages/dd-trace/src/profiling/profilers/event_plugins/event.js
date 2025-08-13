@@ -7,29 +7,34 @@ const { performance } = require('perf_hooks')
 // start/error/finish methods to the appropriate diagnostic channels.
 // TODO: Decouple this from TracingPlugin.
 class EventPlugin extends TracingPlugin {
+  #eventHandler
+  #eventFilter
+  #dataSymbol
+  #entryType
+
   constructor (eventHandler, eventFilter) {
     super()
-    this.eventHandler = eventHandler
-    this.eventFilter = eventFilter
-    this.entryType = this.constructor.entryType
-    this.dataSymbol = Symbol(`dd-trace.profiling.event.${this.entryType}.${this.constructor.operation}`)
+    this.#eventHandler = eventHandler
+    this.#eventFilter = eventFilter
+    this.#entryType = this.constructor.entryType
+    this.#dataSymbol = Symbol(`dd-trace.profiling.event.${this.#entryType}.${this.constructor.operation}`)
   }
 
   start (ctx) {
-    ctx[this.dataSymbol] = performance.now()
+    ctx[this.#dataSymbol] = performance.now()
   }
 
   error (ctx) {
     // We don't emit perf events for failed operations
-    ctx[this.dataSymbol] = undefined
+    ctx[this.#dataSymbol] = undefined
   }
 
   finish (ctx) {
-    const startTime = ctx[this.dataSymbol]
+    const startTime = ctx[this.#dataSymbol]
     if (startTime === undefined) {
       return
     }
-    ctx[this.dataSymbol] = undefined
+    ctx[this.#dataSymbol] = undefined
 
     if (this.ignoreEvent(ctx)) {
       return // don't emit perf events for ignored events
@@ -37,12 +42,12 @@ class EventPlugin extends TracingPlugin {
 
     const duration = performance.now() - startTime
     const event = {
-      entryType: this.entryType,
+      entryType: this.#entryType,
       startTime,
       duration
     }
 
-    if (!this.eventFilter(event)) {
+    if (!this.#eventFilter(event)) {
       return
     }
 
@@ -50,7 +55,7 @@ class EventPlugin extends TracingPlugin {
     event._ddSpanId = context?.toSpanId()
     event._ddRootSpanId = context?._trace.started[0]?.context().toSpanId() || event._ddSpanId
 
-    this.eventHandler(this.extendEvent(event, ctx))
+    this.#eventHandler(this.extendEvent(event, ctx))
   }
 
   ignoreEvent () {
