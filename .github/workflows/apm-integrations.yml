@@ -307,7 +307,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/latest
+      - uses: ./.github/actions/node/active-lts # TODO: change this to latest once we figure out the `fresh` bug
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
 
