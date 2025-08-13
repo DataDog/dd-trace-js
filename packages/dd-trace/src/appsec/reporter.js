@@ -158,7 +158,10 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders, storedRespons
 
   // TODO headersExtendedCollectionEnabled and headersRedaction properties should be deprecated to deleted in next major
   // should be standard if !redaction and no headers enabled
-  if ((!config.headersExtendedCollectionEnabled || config.headersRedaction) && (!extendedDataCollection || extendedDataCollection.redaction)) {
+  if (
+    (!config.headersExtendedCollectionEnabled || config.headersRedaction) &&
+    (!extendedDataCollection || extendedDataCollection.redaction)
+  ) {
     // Standard collection
     return Object.assign(
       mandatoryCollectedHeaders,
@@ -509,7 +512,9 @@ function finishRequest (req, res, storedResponseHeaders) {
   const tags = rootSpan.context()._tags
 
   const extendedDataCollection = extendedDataCollectionRequest.get(req)
-  const newTags = getCollectedHeaders(req, res, shouldCollectEventHeaders(tags), storedResponseHeaders, extendedDataCollection)
+  const newTags = getCollectedHeaders(
+    req, res, shouldCollectEventHeaders(tags), storedResponseHeaders, extendedDataCollection
+  )
 
   if (extendedDataCollection) {
     // TODO add support for fastify, req.body is not available in fastify
