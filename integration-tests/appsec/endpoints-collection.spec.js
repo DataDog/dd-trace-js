@@ -10,7 +10,7 @@ describe('Endpoints collection', () => {
     this.timeout(process.platform === 'win32' ? 90000 : 30000)
 
     sandbox = await createSandbox(
-      ['fastify'],
+      ['express', 'fastify'],
       false
     )
 
@@ -45,12 +45,20 @@ describe('Endpoints collection', () => {
 
       // Nested routes with Router
       { method: 'PUT', path: '/v1/nested/:id' },
+      { method: '*', path: '/v1/nested' },
 
       // Deeply nested routes
       { method: 'GET', path: '/api/sub/deep' },
       { method: 'HEAD', path: '/api/sub/deep' },
       { method: 'POST', path: '/api/sub/deep/:id' },
     ]
+
+    if (framework === 'express') {
+      expectedEndpoints.push({ method: 'CONNECT', path: '/connect-test' })
+      expectedEndpoints.push({ method: '*', path: '/multi-method' })
+      expectedEndpoints.push({ method: '*', path: '/wildcard/*name' })
+      expectedEndpoints.push({ method: '*', path: '/^\\/login\\/.*$/i' })
+    }
 
     return expectedEndpoints
   }
@@ -73,6 +81,9 @@ describe('Endpoints collection', () => {
       const expectedEndpoints = getExpectedEndpoints(framework)
       const endpointsFound = []
       const isFirstFlags = []
+      // Express: 3 messages (adds routes at runtime)
+      // Fastify: 2 messages (routes at startup)
+      const expectedMessageCount = framework === 'express' ? 3 : 2
 
       await agent.assertTelemetryReceived(msg => {
         const { payload } = msg
@@ -91,7 +102,7 @@ describe('Endpoints collection', () => {
             })
           }
         }
-      }, 'app-endpoints', 5_000, 2)
+      }, 'app-endpoints', 10_000, expectedMessageCount)
 
       const trueCount = isFirstFlags.filter(v => v === true).length
       expect(trueCount).to.equal(1)
@@ -111,6 +122,10 @@ describe('Endpoints collection', () => {
       await agent?.stop()
     }
   }
+
+  it('should send express endpoints via telemetry', async () => {
+    await runEndpointTest('express')
+  })
 
   it('should send fastify endpoints via telemetry', async () => {
     await runEndpointTest('fastify')
