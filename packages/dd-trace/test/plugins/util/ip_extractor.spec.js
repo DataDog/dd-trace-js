@@ -290,4 +290,206 @@ describe('ip extractor', () => {
       }
     }).catch(done)
   })
+
+  describe('Forwarded header', () => {
+    it('should detect ip in header \'Forwarded\' in for', (done) => {
+      const expectedIp = '1.2.3.4'
+      controller = function (req) {
+        const ip = extractIp({}, req)
+        try {
+          expect(ip).to.be.equal(expectedIp)
+          done()
+        } catch (e) {
+          done(e)
+        }
+      }
+      axios.get(`http://localhost:${port}/`, {
+        headers: {
+          Forwarded: `for=${expectedIp}`
+        }
+      }).catch(done)
+    })
+
+    it('should detect ip in header \'Forwarded\' in by', (done) => {
+      const expectedIp = '1.2.3.4'
+      controller = function (req) {
+        const ip = extractIp({}, req)
+        try {
+          expect(ip).to.be.equal(expectedIp)
+          done()
+        } catch (e) {
+          done(e)
+        }
+      }
+      axios.get(`http://localhost:${port}/`, {
+        headers: {
+          Forwarded: `by=${expectedIp}`
+        }
+      }).catch(done)
+    })
+
+    it('should detect ipv6 in header \'Forwarded\' in for', (done) => {
+      const expectedIp = '5a54:f844:006c:b8f1:0e96:9e54:54ac:4a2d'
+      controller = function (req) {
+        const ip = extractIp({}, req)
+        try {
+          expect(ip).to.be.equal(expectedIp)
+          done()
+        } catch (e) {
+          done(e)
+        }
+      }
+      axios.get(`http://localhost:${port}/`, {
+        headers: {
+          Forwarded: `for="[${expectedIp}]"`
+        }
+      }).catch(done)
+    })
+
+    it('should detect ipv6 in header \'Forwarded\' in by', (done) => {
+      const expectedIp = '5a54:f844:006c:b8f1:0e96:9e54:54ac:4a2d'
+      controller = function (req) {
+        const ip = extractIp({}, req)
+        try {
+          expect(ip).to.be.equal(expectedIp)
+          done()
+        } catch (e) {
+          done(e)
+        }
+      }
+      axios.get(`http://localhost:${port}/`, {
+        headers: {
+          Forwarded: `by="[${expectedIp}]"`
+        }
+      }).catch(done)
+    })
+
+    it('should detect ip in header \'Forwarded\' in by when for is private', (done) => {
+      const expectedIp = '1.2.3.4'
+      controller = function (req) {
+        const ip = extractIp({}, req)
+        try {
+          expect(ip).to.be.equal(expectedIp)
+          done()
+        } catch (e) {
+          done(e)
+        }
+      }
+      axios.get(`http://localhost:${port}/`, {
+        headers: {
+          Forwarded: `for=192.168.0.1;by=${expectedIp}`
+        }
+      }).catch(done)
+    })
+
+    it('should detect ip in header \'Forwarded\' in for when for and by are public', (done) => {
+      const expectedIp = '1.2.3.4'
+      controller = function (req) {
+        const ip = extractIp({}, req)
+        try {
+          expect(ip).to.be.equal(expectedIp)
+          done()
+        } catch (e) {
+          done(e)
+        }
+      }
+      axios.get(`http://localhost:${port}/`, {
+        headers: {
+          Forwarded: `by=5.6.7.8;for=${expectedIp}`
+        }
+      }).catch(done)
+    })
+
+    it('should detect ip in header \'x-client-ip\' when \'Forwarded\' is also set', (done) => {
+      const expectedIp = '1.2.3.4'
+      controller = function (req) {
+        const ip = extractIp({}, req)
+        try {
+          expect(ip).to.be.equal(expectedIp)
+          done()
+        } catch (e) {
+          done(e)
+        }
+      }
+      axios.get(`http://localhost:${port}/`, {
+        headers: {
+          'x-client-ip': expectedIp,
+          Forwarded: 'for=5.6.7.8'
+        }
+      }).catch(done)
+    })
+
+    it('should detect ip in header \'Forwarded\' when \'forwarded-for\' is also set', (done) => {
+      const expectedIp = '1.2.3.4'
+      controller = function (req) {
+        const ip = extractIp({}, req)
+        try {
+          expect(ip).to.be.equal(expectedIp)
+          done()
+        } catch (e) {
+          done(e)
+        }
+      }
+      axios.get(`http://localhost:${port}/`, {
+        headers: {
+          'forwarded-for': '5.6.7.8',
+          Forwarded: `for=${expectedIp}`
+        }
+      }).catch(done)
+    })
+
+    it('should detect ip in header \'Forwarded\' when \'host\' and \'proto\' are also set', (done) => {
+      const expectedIp = '1.2.3.4'
+      controller = function (req) {
+        const ip = extractIp({}, req)
+        try {
+          expect(ip).to.be.equal(expectedIp)
+          done()
+        } catch (e) {
+          done(e)
+        }
+      }
+      axios.get(`http://localhost:${port}/`, {
+        headers: {
+          Forwarded: `for=${expectedIp};proto=http;host=testhost`
+        }
+      }).catch(done)
+    })
+
+    it('should detect ip in header \'Forwarded\' when port is included in the IP', (done) => {
+      const expectedIp = '1.2.3.4'
+      controller = function (req) {
+        const ip = extractIp({}, req)
+        try {
+          expect(ip).to.be.equal(expectedIp)
+          done()
+        } catch (e) {
+          done(e)
+        }
+      }
+      axios.get(`http://localhost:${port}/`, {
+        headers: {
+          Forwarded: `for=${expectedIp}:8080`
+        }
+      }).catch(done)
+    })
+
+    it('should detect ip in header \'Forwarded\' when port is included in the IPv6', (done) => {
+      const expectedIp = '5a54:f844:006c:b8f1:0e96:9e54:54ac:4a2d'
+      controller = function (req) {
+        const ip = extractIp({}, req)
+        try {
+          expect(ip).to.be.equal(expectedIp)
+          done()
+        } catch (e) {
+          done(e)
+        }
+      }
+      axios.get(`http://localhost:${port}/`, {
+        headers: {
+          Forwarded: `for=[${expectedIp}]:8080`
+        }
+      }).catch(done)
+    })
+  })
 })

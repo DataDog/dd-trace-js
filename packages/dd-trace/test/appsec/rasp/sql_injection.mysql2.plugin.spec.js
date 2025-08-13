@@ -3,6 +3,7 @@
 const agent = require('../../plugins/agent')
 const appsec = require('../../../src/appsec')
 const Config = require('../../../src/config')
+const { withVersions } = require('../../setup/mocha')
 const path = require('path')
 const Axios = require('axios')
 const { assert } = require('chai')
