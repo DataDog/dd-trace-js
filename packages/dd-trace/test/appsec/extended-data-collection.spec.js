@@ -8,9 +8,10 @@ const WAFManager = require('../../src/appsec/waf/waf_manager')
 
 describe('extended data collection', () => {
   let wafManager
+
   before(() => {
     const rulesPath = path.join(__dirname, './extended-data-collection.rules.json')
-    const config = new Config({ appsec: { enabled: true, rules: rulesPath }})
+    const config = new Config({ appsec: { enabled: true, rules: rulesPath } })
     RuleManager.loadRules(config.appsec)
     wafManager = new WAFManager(rules, config.appsec)
   })
@@ -25,6 +26,5 @@ describe('extended data collection', () => {
       }
     }
     const result = wafContext.run(data)
-    console.log('result', result)
   })
 })
