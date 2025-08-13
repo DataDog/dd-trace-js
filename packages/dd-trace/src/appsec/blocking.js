@@ -150,7 +150,7 @@ function delegateBlock (req, res) {
   })
 }
 
-function blockDelegates (res) {
+function blockDelegate (res) {
   const delegation = blockDelegations.get(res)
   if (delegation) {
     const result = block.apply(this, delegation.args)
@@ -186,7 +186,7 @@ module.exports = {
   addSpecificEndpoint,
   block,
   delegateBlock,
-  blockDelegates,
+  blockDelegate,
   specificBlockingTypes,
   getBlockingData,
   getBlockingAction,
