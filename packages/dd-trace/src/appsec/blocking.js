@@ -99,6 +99,8 @@ function getBlockingData (req, specificType, actionParameters) {
 }
 
 function block (req, res, rootSpan, abortController, actionParameters = defaultBlockingActionParameters) {
+  blockDelegations.delete(res)
+
   try {
     if (res.headersSent) {
       log.warn('[ASM] Cannot send blocking response when headers have already been sent')
@@ -127,6 +129,8 @@ function block (req, res, rootSpan, abortController, actionParameters = defaultB
     rootSpan?.setTag('_dd.appsec.block.failed', 1)
     log.error('[ASM] Blocking error', err)
 
+    // TODO: if blocking fails, then the response will never be sent
+
     updateBlockFailureMetric(req)
     return false
   }
@@ -151,10 +155,9 @@ function delegateBlock (req, res) {
 function blockDelegates (res) {
   const delegation = blockDelegations.get(res)
   if (delegation) {
-    blockDelegations.delete(res)
-
     const result = block.apply(this, delegation.args)
     delegation.resolve(result)
+    return result
   }
 }
 
