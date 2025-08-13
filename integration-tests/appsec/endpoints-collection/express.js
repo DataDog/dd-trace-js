@@ -29,6 +29,14 @@ app.route('/multi-method')
 // Wildcard route
 app.all('/wildcard', (_, res) => res.send('ok'))
 
+// Wildcard routes via array
+app.all(['/wildcard/*name'], (_, res) => res.send('ok'))
+
+// RegExp wildcard route
+app.all(/^\/login\/.*$/i, (req, res) => {
+  res.send('ok')
+})
+
 // Nested routes with Router
 const apiRouter = express.Router()
 apiRouter.put('/nested/:id', (_, res) => res.send('ok'))

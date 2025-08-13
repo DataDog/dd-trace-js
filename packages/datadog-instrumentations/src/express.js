@@ -63,10 +63,14 @@ function wrapResponseRender (render) {
 function wrapAppAll (all) {
   return function wrappedAll (path) {
     if (routeAddedChannel.hasSubscribers) {
-      routeAddedChannel.publish({
-        method: '*',
-        path
-      })
+      const paths = Array.isArray(path) ? path : [path]
+
+      for (const p of paths) {
+        routeAddedChannel.publish({
+          method: '*',
+          path: p instanceof RegExp ? p.toString() : p
+        })
+      }
     }
 
     return all.apply(this, arguments)

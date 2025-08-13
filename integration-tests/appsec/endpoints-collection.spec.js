@@ -56,6 +56,8 @@ describe('Endpoints collection', () => {
     if (framework === 'express') {
       expectedEndpoints.push({ method: 'CONNECT', path: '/connect-test' })
       expectedEndpoints.push({ method: '*', path: '/multi-method' })
+      expectedEndpoints.push({ method: '*', path: '/wildcard/*name' })
+      expectedEndpoints.push({ method: '*', path: '/^\\/login\\/.*$/i' })
     }
 
     return expectedEndpoints
