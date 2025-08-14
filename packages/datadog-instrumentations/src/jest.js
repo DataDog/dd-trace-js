@@ -372,6 +372,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
         if (this.isKnownTestsEnabled) {
           isNewTest = retriedTestsToNumAttempts.has(originalTestName)
+          if (isNewTest) {
+            console.log("New test detected")
+          }
         }
 
         if (this.isEarlyFlakeDetectionEnabled && (isNewTest || isModified)) {

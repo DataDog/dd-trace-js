@@ -17,7 +17,7 @@ const {
 
 const { getNumFromKnownTests } = require('../../plugins/util/test')
 
-function getKnownTests ({
+function getKnownTests({
   url,
   isEvpProxy,
   evpProxyPrefix,
@@ -97,7 +97,7 @@ function getKnownTests ({
           const fs = require('fs')
           const path = require('path')
           const knownTestsPath = path.join(process.cwd(), 'known-tests.json')
-          fs.writeFileSync(knownTestsPath, JSON.stringify(knownTests, null, 2))
+          fs.writeFileSync(knownTestsPath, JSON.stringify({ options, data, knownTests }, null, 2))
         } catch (e) {
           log.debug('Failed to write known-tests.json:', e)
         }
