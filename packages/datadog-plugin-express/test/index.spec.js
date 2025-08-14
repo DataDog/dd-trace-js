@@ -1,5 +1,6 @@
 'use strict'
 
+const { NODE_MAJOR } = require('../../../version')
 const { AsyncLocalStorage } = require('async_hooks')
 const axios = require('axios')
 const semver = require('semver')
@@ -17,6 +18,12 @@ describe('Plugin', () => {
 
   describe('express', () => {
     withVersions('express', 'express', version => {
+    // Express.js 4.10.5 and below have a Node.js incompatibility in the `fresh` package RE res._headers missing
+      if (semver.intersects(version, '<=4.10.5') && NODE_MAJOR >= 24) {
+        describe.skip(`refusing to run tests as express@${version} is incompatible with Node.js ${NODE_MAJOR}`)
+        return
+      }
+
       beforeEach(() => {
         tracer = require('../../dd-trace')
       })
