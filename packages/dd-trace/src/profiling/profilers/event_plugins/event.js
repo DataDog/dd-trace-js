@@ -52,8 +52,8 @@ class EventPlugin extends TracingPlugin {
     }
 
     const context = (ctx.currentStore?.span || this.activeSpan)?.context()
-    event._ddSpanId = context?.toSpanId()
-    event._ddRootSpanId = context?._trace.started[0]?.context().toSpanId() || event._ddSpanId
+    event._ddSpanId = context?.toBigIntSpanId()
+    event._ddRootSpanId = context?._trace.started[0]?.context().toBigIntSpanId() || event._ddSpanId
 
     this.#eventHandler(this.extendEvent(event, ctx))
   }
