@@ -157,10 +157,16 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders, storedRespons
   const responseEventCollectedHeaders = filterHeaders(responseHeaders, RESPONSE_HEADERS_MAP)
 
   // TODO headersExtendedCollectionEnabled and headersRedaction properties should be deprecated to deleted in next major
+
+  // TODO remove when libddwaf start returning non string data in actions
+  const isTrue = (val) => {
+    return typeof val === 'string' ? val.toLowerCase() === 'true' : val
+  }
+
   // should be standard if !redaction and no headers enabled
   if (
     (!config.headersExtendedCollectionEnabled || config.headersRedaction) &&
-    (!extendedDataCollection || extendedDataCollection.redaction)
+    (!extendedDataCollection || isTrue(extendedDataCollection.headers_redaction))
   ) {
     // Standard collection
     return Object.assign(
@@ -170,13 +176,16 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders, storedRespons
     )
   }
 
-  const maxHeadersCollected = extendedDataCollection?.max_collected_headers || config.maxHeadersCollected
+  let maxHeadersCollected = extendedDataCollection?.max_collected_headers || config.maxHeadersCollected
+  // TODO remove when libddwaf start returning non string data in actions
+  maxHeadersCollected = parseInt(maxHeadersCollected)
 
   // Extended collection
+  const collectedHeaders = new Set(Object.keys(mandatoryCollectedHeaders).concat(Object.keys(requestEventCollectedHeaders)))
+
   const requestExtendedHeadersAvailableCount =
     maxHeadersCollected -
-    Object.keys(mandatoryCollectedHeaders).length -
-    Object.keys(requestEventCollectedHeaders).length
+    collectedHeaders.size
 
   const requestEventExtendedCollectedHeaders =
     filterExtendedHeaders(
