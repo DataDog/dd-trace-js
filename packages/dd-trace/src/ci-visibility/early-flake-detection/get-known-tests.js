@@ -95,7 +95,7 @@ function getKnownTests ({
 
         const numTests = getNumFromKnownTests(knownTests)
 
-        console.log('Known tests:', JSON.stringify(knownTests, null, 2))
+        console.error('Known tests:', JSON.stringify(knownTests, null, 2))
 
         incrementCountMetric(TELEMETRY_KNOWN_TESTS_RESPONSE_TESTS, {}, numTests)
         distributionMetric(TELEMETRY_KNOWN_TESTS_RESPONSE_BYTES, {}, res.length)
