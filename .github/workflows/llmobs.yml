@@ -132,7 +132,7 @@ jobs:
       - run: yarn test:plugins:ci
       - run: yarn test:llmobs:plugins:ci
         shell: bash
-      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - run: yarn test:llmobs:plugins:ci
         shell: bash
