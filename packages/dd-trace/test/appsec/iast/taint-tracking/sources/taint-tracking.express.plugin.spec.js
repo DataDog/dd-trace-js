@@ -84,6 +84,11 @@ describe('Path params sourcing with express', () => {
   let appListener
 
   withVersions('express', 'express', version => {
+    if (semver.intersects(version, '<=4.10.5') && NODE_MAJOR >= 24) {
+      describe.skip(`refusing to run tests as express@${version} is incompatible with Node.js ${NODE_MAJOR}`)
+      return
+    }
+
     const checkParamIsTaintedAndNext = (req, res, next, param, name) => {
       const store = storage('legacy').getStore()
       const iastContext = iastContextFunctions.getIastContext(store)
