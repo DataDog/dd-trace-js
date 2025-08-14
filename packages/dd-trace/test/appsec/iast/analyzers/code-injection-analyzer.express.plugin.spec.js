@@ -1,5 +1,7 @@
 'use strict'
 
+const { NODE_MAJOR } = require('../../../../../../version')
+const semver = require('semver')
 const { prepareTestServerForIastInExpress } = require('../utils')
 const axios = require('axios')
 const path = require('path')
@@ -14,6 +16,11 @@ const { withVersions } = require('../../../setup/mocha')
 
 describe('Code injection vulnerability', () => {
   withVersions('express', 'express', version => {
+    if (semver.intersects(version, '<=4.10.5') && NODE_MAJOR >= 24) {
+      describe.skip(`refusing to run tests as express@${version} is incompatible with Node.js ${NODE_MAJOR}`)
+      return
+    }
+
     describe('Eval', () => {
       let i = 0
       let evalFunctionsPath
