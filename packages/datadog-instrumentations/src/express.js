@@ -60,23 +60,12 @@ function wrapResponseRender (render) {
 addHook({ name: 'express', versions: ['>=4'] }, express => {
   shimmer.wrap(express.application, 'handle', wrapHandle)
 
-  shimmer.wrap(express.response, 'json', wrapResponseJson)
-  shimmer.wrap(express.response, 'jsonp', wrapResponseJson)
-  shimmer.wrap(express.response, 'render', wrapResponseRender)
-
-  return express
-})
-
-addHook({ name: 'express', versions: ['4'] }, express => {
   shimmer.wrap(express.Router, 'use', wrapRouterMethod)
   shimmer.wrap(express.Router, 'route', wrapRouterMethod)
 
-  return express
-})
-
-addHook({ name: 'express', versions: ['>=5.0.0'] }, express => {
-  shimmer.wrap(express.Router.prototype, 'use', wrapRouterMethod)
-  shimmer.wrap(express.Router.prototype, 'route', wrapRouterMethod)
+  shimmer.wrap(express.response, 'json', wrapResponseJson)
+  shimmer.wrap(express.response, 'jsonp', wrapResponseJson)
+  shimmer.wrap(express.response, 'render', wrapResponseRender)
 
   return express
 })
