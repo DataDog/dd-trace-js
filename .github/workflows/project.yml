@@ -89,7 +89,6 @@ jobs:
       - run: yarn type:test
       - run: yarn type:doc
 
-  # TODO: Remove need for `npm show` before re-enabling to avoid rate limit errors.
   verify-yaml:
     runs-on: ubuntu-latest
     steps:
