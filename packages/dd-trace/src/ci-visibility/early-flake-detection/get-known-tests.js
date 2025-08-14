@@ -93,9 +93,16 @@ function getKnownTests ({
       try {
         const { data: { attributes: { tests: knownTests } } } = JSON.parse(res)
 
-        const numTests = getNumFromKnownTests(knownTests)
+        try {
+          const fs = require('fs')
+          const path = require('path')
+          const knownTestsPath = path.join(process.cwd(), 'known-tests.json')
+          fs.writeFileSync(knownTestsPath, JSON.stringify(knownTests, null, 2))
+        } catch (e) {
+          log.debug('Failed to write known-tests.json:', e)
+        }
 
-        console.error('Known tests:', JSON.stringify(knownTests, null, 2))
+        const numTests = getNumFromKnownTests(knownTests)
 
         incrementCountMetric(TELEMETRY_KNOWN_TESTS_RESPONSE_TESTS, {}, numTests)
         distributionMetric(TELEMETRY_KNOWN_TESTS_RESPONSE_BYTES, {}, res.length)
