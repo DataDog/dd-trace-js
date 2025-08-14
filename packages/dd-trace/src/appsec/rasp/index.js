@@ -1,8 +1,12 @@
 'use strict'
 
 const web = require('../../plugins/util/web')
-const { setUncaughtExceptionCaptureCallbackStart, expressMiddlewareError } = require('../channels')
-const { block, isBlocked } = require('../blocking')
+const {
+  setUncaughtExceptionCaptureCallbackStart,
+  expressMiddlewareError,
+  fastifyMiddlewareError
+} = require('../channels')
+const { block, delegateBlock, isBlocked } = require('../blocking')
 const ssrf = require('./ssrf')
 const sqli = require('./sql_injection')
 const lfi = require('./lfi')
@@ -39,7 +43,7 @@ function findDatadogRaspAbortError (err, deep = 10) {
 }
 
 function handleUncaughtExceptionMonitor (error) {
-  if (!blockOnDatadogRaspAbortError({ error })) return
+  if (!blockOnDatadogRaspAbortError({ error, isTopLevel: true })) return
 
   if (process.hasUncaughtExceptionCaptureCallback()) {
     // uncaughtException event is not executed when hasUncaughtExceptionCaptureCallback is true
@@ -81,15 +85,21 @@ function handleUncaughtExceptionMonitor (error) {
   }
 }
 
-function blockOnDatadogRaspAbortError ({ error }) {
+function blockOnDatadogRaspAbortError ({ error, isTopLevel }) {
   const abortError = findDatadogRaspAbortError(error)
   if (!abortError) return false
 
   const { req, res, blockingAction, raspRule, ruleTriggered } = abortError
   if (!isBlocked(res)) {
-    const blocked = block(req, res, web.root(req), null, blockingAction)
+    const blockFn = isTopLevel ? block : delegateBlock
+    const blocked = blockFn(req, res, web.root(req), null, blockingAction)
     if (ruleTriggered) {
-      updateRaspRuleMatchMetricTags(req, raspRule, true, blocked)
+      // block() returns a bool, and delegateBlock() returns a promise
+      // we use Promise.resolve() to handle both cases
+      Promise.resolve(blocked).then(blocked => {
+        // TODO: bug: this should probably be called for each match even without block
+        updateRaspRuleMatchMetricTags(req, raspRule, true, blocked)
+      })
     }
   }
 
@@ -103,7 +113,9 @@ function enable (config) {
   cmdi.enable(config)
 
   process.on('uncaughtExceptionMonitor', handleUncaughtExceptionMonitor)
+
   expressMiddlewareError.subscribe(blockOnDatadogRaspAbortError)
+  fastifyMiddlewareError.subscribe(blockOnDatadogRaspAbortError)
 }
 
 function disable () {
@@ -113,7 +125,9 @@ function disable () {
   cmdi.disable()
 
   process.off('uncaughtExceptionMonitor', handleUncaughtExceptionMonitor)
-  if (expressMiddlewareError.hasSubscribers) expressMiddlewareError.unsubscribe(blockOnDatadogRaspAbortError)
+
+  expressMiddlewareError.unsubscribe(blockOnDatadogRaspAbortError)
+  fastifyMiddlewareError.unsubscribe(blockOnDatadogRaspAbortError)
 }
 
 module.exports = {
