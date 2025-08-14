@@ -7,6 +7,7 @@ const os = require('node:os')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
 const sort = trace => trace.sort((a, b) => Number(a.start - b.start))
 
@@ -193,31 +194,31 @@ describe('Plugin', () => {
           })
 
           it('should handle error cases', async () => {
-            const tracePromise = agent.assertSomeTraces(traces => {
-              const spans = sort(traces[0])
+            await assert.rejects(broker.call('error.error'), { message: 'Invalid number' })
 
-              expect(spans[0]).to.have.property('name', expectedSchema.client.opName)
-              expect(spans[0]).to.have.property('service', expectedSchema.client.serviceName)
-              expect(spans[0]).to.have.property('resource', 'error.error')
-              expect(spans[0].meta).to.have.property('span.kind', 'client')
-              expect(spans[0].meta).to.have.property('out.host', hostname)
-              expect(spans[0].meta).to.have.property('moleculer.context.action', 'error.error')
-              expect(spans[0].meta).to.have.property('moleculer.context.node_id', `server-${process.pid}`)
-              expect(spans[0].meta).to.have.property('moleculer.context.request_id')
-              expect(spans[0].meta).to.have.property('moleculer.context.service', 'error')
-              expect(spans[0].meta).to.have.property('moleculer.namespace', 'multi')
-              expect(spans[0].meta).to.have.property('moleculer.node_id', `server-${process.pid}`)
-              expect(spans[0].metrics).to.have.property('network.destination.port', port)
+            agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+
+              assertObjectContains(span, {
+                name: expectedSchema.client.opName,
+                service: expectedSchema.client.serviceName,
+                resource: 'error.error',
+                meta: {
+                  'span.kind': 'client',
+                  'out.host': hostname,
+                  'moleculer.context.action': 'error.error',
+                  'moleculer.context.node_id': `server-${process.pid}`,
+                  'moleculer.context.service': 'error',
+                  'moleculer.namespace': 'multi',
+                  'moleculer.node_id': `server-${process.pid}`,
+                },
+                metrics: {
+                  'network.destination.port': port
+                }
+              })
+
+              assert.strictEqual(typeof span.meta['moleculer.context.request_id'], 'string')
             })
-
-            try {
-              await broker.call('error.error')
-              throw new Error('Should not be called.')
-            } catch (error) {
-              assert.strictEqual(error.message, 'Invalid number')
-            }
-
-            await tracePromise
           })
 
           withNamingSchema(
