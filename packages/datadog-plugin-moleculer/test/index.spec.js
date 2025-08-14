@@ -192,8 +192,8 @@ describe('Plugin', () => {
             }).catch(done)
           })
 
-          it('should handle error cases', done => {
-            agent.assertSomeTraces(traces => {
+          it('should handle error cases', async () => {
+            const tracePromise = agent.assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               expect(spans[0]).to.have.property('name', expectedSchema.client.opName)
@@ -208,11 +208,16 @@ describe('Plugin', () => {
               expect(spans[0].meta).to.have.property('moleculer.namespace', 'multi')
               expect(spans[0].meta).to.have.property('moleculer.node_id', `server-${process.pid}`)
               expect(spans[0].metrics).to.have.property('network.destination.port', port)
-            }).then(done, done)
-
-            broker.call('error.error').catch(error => {
-              assert.strictEqual(error.message, 'Invalid number')
             })
+
+            try {
+              await broker.call('error.error')
+              throw new Error('Should not be called.')
+            } catch (error) {
+              assert.strictEqual(error.message, 'Invalid number')
+            }
+
+            await tracePromise
           })
 
           withNamingSchema(
@@ -402,13 +407,9 @@ describe('Plugin', () => {
 
         after(() => agent.close({ ritmReset: false }))
 
-        it('should propagate meta from child to parent', done => {
-          broker.call('test.first')
-            .then(value => {
-              assert.strictEqual(value, 'Doe')
-              done()
-            })
-            .catch(done)
+        it('should propagate meta from child to parent', async () => {
+          const result = await broker.call('test.first')
+          assert.strictEqual(result, 'Doe')
         })
       })
     })
