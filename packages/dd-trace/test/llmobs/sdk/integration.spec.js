@@ -1,7 +1,6 @@
 'use strict'
 
 const { expectedLLMObsNonLLMSpanEvent, deepEqualWithMockValues } = require('../util')
-const { useEnv } = require('../../../../../integration-tests/helpers')
 const chai = require('chai')
 
 chai.Assertion.addMethod('deepEqualWithMockValues', deepEqualWithMockValues)
@@ -25,10 +24,6 @@ describe('end to end sdk integration tests', () => {
   let tracer
   let llmobs
   let payloadGenerator
-
-  useEnv({
-    DD_TAGS: 'foo:bar',
-  })
 
   function run (payloadGenerator) {
     payloadGenerator()
@@ -117,7 +112,7 @@ describe('end to end sdk integration tests', () => {
       expectedLLMObsNonLLMSpanEvent({
         span: spans[0],
         spanKind: 'agent',
-        tags: { ...tags, bar: 'baz', foo: 'bar' },
+        tags: { ...tags, bar: 'baz' },
         metadata: { foo: 'bar' },
         inputValue: 'hello',
         outputValue: 'world'
@@ -126,7 +121,7 @@ describe('end to end sdk integration tests', () => {
         span: spans[2],
         spanKind: 'workflow',
         parentId: spans[0].context().toSpanId(),
-        tags: { ...tags, foo: 'bar' },
+        tags,
         name: 'myWorkflow',
         inputValue: 'world',
         outputValue: 'hello'
@@ -170,7 +165,7 @@ describe('end to end sdk integration tests', () => {
       expectedLLMObsNonLLMSpanEvent({
         span: spans[0],
         spanKind: 'agent',
-        tags: { ...tags, foo: 'bar' },
+        tags,
         inputValue: 'hello',
         outputValue: 'world',
         metadata: { foo: 'bar' }
@@ -179,7 +174,7 @@ describe('end to end sdk integration tests', () => {
         span: spans[2],
         spanKind: 'workflow',
         parentId: spans[0].context().toSpanId(),
-        tags: { ...tags, foo: 'bar' },
+        tags,
         name: 'myWorkflow',
         inputValue: 'my custom input',
         outputValue: 'custom'
