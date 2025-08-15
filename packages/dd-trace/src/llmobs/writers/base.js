@@ -120,7 +120,11 @@ class BaseLLMObsWriter {
     }
 
     const { hostname, port } = this._config
-    const base = this._config.url || new URL(format({
+
+    const overrideOriginEnv = getEnvironmentVariable('_DD_LLMOBS_OVERRIDE_ORIGIN')
+    const overrideOriginUrl = overrideOriginEnv && new URL(overrideOriginEnv)
+
+    const base = overrideOriginUrl ?? this._config.url ?? new URL(format({
       protocol: 'http:',
       hostname,
       port
