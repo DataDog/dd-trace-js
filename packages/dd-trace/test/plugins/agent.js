@@ -110,12 +110,20 @@ function unformatSpanEvents (span) {
   return [] // Return an empty array if no events are found
 }
 
-function addEnvironmentVariablesToHeaders (headers) {
+function addEnvironmentVariablesToHeaders (headers, testConfig) {
   // get all environment variables that start with "DD_"
   const ddEnvVars = new Map(
     Object.entries(process.env)
       .filter(([key]) => key.startsWith('DD_'))
   )
+
+  if (testConfig) {
+    for (const key in testConfig) {
+      if (!ddEnvVars.has(key)) {
+        ddEnvVars.set(key, testConfig[key])
+      }
+    }
+  }
 
   // add plugin name and plugin version to headers, this is used for verifying tested
   // integration version ranges
@@ -127,18 +135,21 @@ function addEnvironmentVariablesToHeaders (headers) {
 
   // add the DD environment variables to the header if any exist
   // to send with trace to final agent destination
-  if (ddEnvVars.length > 0) {
-    headers['X-Datadog-Trace-Env-Variables'] = ddEnvVars.join(',')
+  if (ddEnvVars.size > 0) {
+    // serialize the DD environment variables into a string of k=v pairs separated by comma
+    const serializedEnvVars = Array.from(ddEnvVars.entries())
+      .map(([key, value]) => {
+        if (typeof value === 'object' && value !== null) {
+          return `${key}=${JSON.stringify(value)}`
+        }
+        return `${key}=${value}`
+      })
+      .join(',')
+
+    // add the serialized DD environment variables to the header
+    // to send with trace to the final agent destination
+    headers['X-Datadog-Trace-Env-Variables'] = serializedEnvVars
   }
-
-  // serialize the DD environment variables into a string of k=v pairs separated by comma
-  const serializedEnvVars = Array.from(ddEnvVars.entries())
-    .map(([key, value]) => `${key}=${value}`)
-    .join(',')
-
-  // add the serialized DD environment variables to the header
-  // to send with trace to the final agent destination
-  headers['X-Datadog-Trace-Env-Variables'] = serializedEnvVars
 }
 
 function handleTraceRequest (req, res, sendToTestAgent) {
@@ -153,14 +164,15 @@ function handleTraceRequest (req, res, sendToTestAgent) {
     delete req.headers['content-length']
 
     // add current environment variables to trace headers
-    addEnvironmentVariablesToHeaders(req.headers)
+    const testConfig = req.body[0]?.[0]?.meta?.['_dd.ci.test_config']
+    addEnvironmentVariablesToHeaders(req.headers, testConfig)
 
     const testAgentReq = http.request(
       `${testAgentUrl}/v0.4/traces`, {
         method: 'PUT',
         headers: {
           ...req.headers,
-          'X-Datadog-Agent-Proxy-Disabled': 'True',
+          'X-Datadog-Agent-Proxy-Disabled': 'False',
           'Content-Type': 'application/json'
         }
       })
@@ -396,7 +408,8 @@ module.exports = {
           env: 'tester',
           port,
           flushInterval: 0,
-          plugins: false
+          plugins: false,
+          isCiVisibility: true
         }, tracerConfig))
 
         tracer.setUrl(`http://127.0.0.1:${port}`)

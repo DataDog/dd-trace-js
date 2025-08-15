@@ -74,6 +74,21 @@ class DatadogTracer {
       links: options.links
     }, this._debug)
 
+    if (this._config.isCiVisibility) {
+      const tracer = require('../..')
+      const pluginManager = tracer._pluginManager
+      let effectiveConfig = this._config
+
+      if (options.integrationName) {
+        const plugin = pluginManager._pluginsByName[options.integrationName]
+        if (plugin) {
+          effectiveConfig = { ...this._config, ...plugin.config }
+        }
+      }
+      // Deep clone the config to prevent mutations during the span's lifecycle
+      span.context()._config = JSON.parse(JSON.stringify(effectiveConfig))
+    }
+
     span.addTags(this._config.tags)
     span.addTags(options.tags)
 

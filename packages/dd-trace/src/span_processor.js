@@ -31,6 +31,31 @@ class SpanProcessor {
 
   process (span) {
     const spanContext = span.context()
+    if (spanContext._trace.record === false) return
+
+    if (this._config.isCiVisibility) {
+      const {
+        effectiveConfig
+      } = require('./ci-visibility/test-config')()
+      const testConfig = effectiveConfig(span)
+      const rootSpan = spanContext._trace.started[0]
+
+      if (rootSpan === span) { // Only log for the root span to avoid noise
+        console.log(`[SpanProcessor] Reporting config for ${span.context().toSpanId()}:`,
+          JSON.stringify({ dbmPropagationMode: testConfig.DD_DBM_PROPAGATION_MODE }))
+      }
+
+      if (rootSpan) {
+        rootSpan.setTag('_dd.ci.test_config', JSON.stringify(testConfig))
+      }
+
+      if (
+        testConfig.DD_DBM_PROPAGATION_MODE === 'full' && !rootSpan.context()._tags['_dd.dbm_trace_injected']
+      ) {
+        console.log('race condition')
+      }
+    }
+
     const active = []
     const formatted = []
     const trace = spanContext._trace
