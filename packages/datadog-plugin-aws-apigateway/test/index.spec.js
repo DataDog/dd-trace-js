@@ -1,8 +1,6 @@
 'use strict'
 
-require('../../setup/tap')
-
-const agent = require('../agent')
+const agent = require('../../dd-trace/test/plugins/agent')
 const { expect } = require('chai')
 const axios = require('axios')
 const { Agent } = require('http')
@@ -13,62 +11,22 @@ const httpClient = axios.create({
   timeout: 5000
 })
 
-describe('Inferred Proxy Spans', function () {
+describe('Plugin', function () {
   let http
   let appListener
   let controller
   let port
 
-  // tap was throwing timeout errors when trying to use hooks like `before`, so instead we just use this function
-  // and call before the test starts
-  const loadTest = async function ({ inferredProxyServicesEnabled = true } = {}) {
-    const options = {
-      inferredProxyServicesEnabled,
-      service: 'aws-server'
-    }
-
-    await agent.load(
-      ['http', 'dns', 'net'],
-      [{ client: false }, { enabled: false }, { enabled: false }],
-      options
-    )
-
-    // we can't force re-init the tracer, so we have to set the config manually
-    const tracer = require('../../../../dd-trace').init(options)
-    tracer._tracer._config.inferredProxyServicesEnabled = inferredProxyServicesEnabled
-
-    http = require('http')
-
-    const server = new http.Server(async (req, res) => {
-      controller && await controller(req, res)
-      if (req.url === '/error') {
-        res.statusCode = 500
-        res.end(JSON.stringify({ message: 'ERROR' }))
-      } else {
-        res.writeHead(200)
-        res.end(JSON.stringify({ message: 'OK' }))
-      }
-    })
-
-    // Force close connections when server closes
-    const connections = new Set()
-    server.on('connection', (connection) => {
-      connections.add(connection)
-      connection.on('close', () => {
-        connections.delete(connection)
-      })
-    })
-
-    return new Promise((resolve, reject) => {
-      appListener = server.listen(0, '127.0.0.1', () => {
-        port = server.address().port
-        appListener._connections = connections
-        resolve()
-      })
-    })
+  const inferredHeaders = {
+    'x-dd-proxy': 'aws-apigateway',
+    'x-dd-proxy-request-time-ms': '1729780025473',
+    'x-dd-proxy-path': '/test',
+    'x-dd-proxy-httpmethod': 'GET',
+    'x-dd-proxy-domain-name': 'example.com',
+    'x-dd-proxy-stage': 'dev'
   }
 
-  const cleanupTest = async function () {
+  afterEach(async () => {
     controller = null
 
     if (appListener) {
@@ -92,25 +50,54 @@ describe('Inferred Proxy Spans', function () {
     }
 
     await agent.close()
-  }
-
-  const inferredHeaders = {
-    'x-dd-proxy': 'aws-apigateway',
-    'x-dd-proxy-request-time-ms': '1729780025473',
-    'x-dd-proxy-path': '/test',
-    'x-dd-proxy-httpmethod': 'GET',
-    'x-dd-proxy-domain-name': 'example.com',
-    'x-dd-proxy-stage': 'dev'
-  }
-
-  afterEach(async () => {
-    await cleanupTest()
   })
 
   describe('without configuration', () => {
-    it('should create a parent span and a child span for a 200', async () => {
-      await loadTest({})
+    beforeEach(async () => {
+      const options = {
+        inferredProxyServicesEnabled: true,
+        service: 'aws-server'
+      }
 
+      await agent.load(
+        ['http', 'dns', 'net', 'tcp', 'aws-apigateway'],
+        [{ client: false }, { enabled: false }, { enabled: false }, { enabled: false }, { enabled: true }],
+        options
+      )
+
+      require('../../dd-trace').init(options)
+      http = require('http')
+
+      const server = new http.Server(async (req, res) => {
+        controller && await controller(req, res)
+        if (req.url === '/error') {
+          res.statusCode = 500
+          res.end(JSON.stringify({ message: 'ERROR' }))
+        } else {
+          res.writeHead(200)
+          res.end(JSON.stringify({ message: 'OK' }))
+        }
+      })
+
+      // Force close connections when server closes
+      const connections = new Set()
+      server.on('connection', (connection) => {
+        connections.add(connection)
+        connection.on('close', () => {
+          connections.delete(connection)
+        })
+      })
+
+      return new Promise((resolve, reject) => {
+        appListener = server.listen(0, '127.0.0.1', () => {
+          port = server.address().port
+          appListener._connections = connections
+          resolve()
+        })
+      })
+    })
+
+    it('should create a parent span and a child span for a 200', async () => {
       await httpClient.get(`http://127.0.0.1:${port}/`, {
         headers: inferredHeaders
       })
@@ -148,8 +135,6 @@ describe('Inferred Proxy Spans', function () {
     })
 
     it('should create a parent span and a child span for an error', async () => {
-      await loadTest({})
-
       await httpClient.get(`http://127.0.0.1:${port}/error`, {
         headers: inferredHeaders,
         validateStatus: function (status) {
@@ -188,8 +173,6 @@ describe('Inferred Proxy Spans', function () {
     })
 
     it('should not create an API Gateway span if all necessary headers are missing', async () => {
-      await loadTest({})
-
       await httpClient.get(`http://127.0.0.1:${port}/no-aws-headers`, {
         headers: {}
       })
@@ -213,8 +196,6 @@ describe('Inferred Proxy Spans', function () {
     })
 
     it('should not create an API Gateway span if missing the proxy system header', async () => {
-      await loadTest({})
-
       // remove x-dd-proxy from headers
       const { 'x-dd-proxy': _, ...newHeaders } = inferredHeaders
 
@@ -242,9 +223,54 @@ describe('Inferred Proxy Spans', function () {
   })
 
   describe('with configuration', function () {
-    it('should not create a span when configured to be off', async () => {
-      await loadTest({ inferredProxyServicesEnabled: false })
+    beforeEach(async () => {
+      const options = {
+        inferredProxyServicesEnabled: false,
+        service: 'aws-server'
+      }
 
+      // we can't force re-init the tracer, so we have to set the config manually
+      const tracer = require('../../dd-trace').init(options)
+      tracer._tracer._config.inferredProxyServicesEnabled = false
+
+      await agent.load(
+        ['http', 'dns', 'net', 'aws-apigateway'],
+        [{ client: false }, { enabled: false }, { enabled: false }, { enabled: true }],
+        options
+      )
+
+      http = require('http')
+
+      const server = new http.Server(async (req, res) => {
+        controller && await controller(req, res)
+        if (req.url === '/error') {
+          res.statusCode = 500
+          res.end(JSON.stringify({ message: 'ERROR' }))
+        } else {
+          res.writeHead(200)
+          res.end(JSON.stringify({ message: 'OK' }))
+        }
+      })
+
+      // Force close connections when server closes
+      const connections = new Set()
+      server.on('connection', (connection) => {
+        connections.add(connection)
+        connection.on('close', () => {
+          connections.delete(connection)
+        })
+      })
+
+      return new Promise((resolve, reject) => {
+        appListener = server.listen(0, '127.0.0.1', () => {
+          port = server.address().port
+          appListener._connections = connections
+          resolve()
+        })
+      })
+    })
+
+    it('should not create a span when configured to be off', async () => {
       await httpClient.get(`http://127.0.0.1:${port}/configured-off`, {
         headers: inferredHeaders
       })

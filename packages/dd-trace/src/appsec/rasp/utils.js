@@ -1,6 +1,6 @@
 'use strict'
 
-const web = require('../../plugins/util/web')
+const web = require('../../../../datadog-plugin-web/src/utils')
 const { getCallsiteFrames, reportStackTrace, canReportStackTrace } = require('../stack_trace')
 const { getBlockingAction } = require('../blocking')
 const log = require('../../log')

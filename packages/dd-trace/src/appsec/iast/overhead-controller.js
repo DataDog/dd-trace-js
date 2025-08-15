@@ -1,7 +1,7 @@
 'use strict'
 
 const { LRUCache } = require('lru-cache')
-const web = require('../../plugins/util/web')
+const web = require('../../../../datadog-plugin-web/src/utils')
 const vulnerabilities = require('./vulnerabilities')
 
 const OVERHEAD_CONTROLLER_CONTEXT_KEY = 'oce'

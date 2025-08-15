@@ -1,10 +1,9 @@
 'use strict'
 
 const { entryTags } = require('../../datadog-code-origin')
-const Plugin = require('../../dd-trace/src/plugins/plugin')
-const web = require('../../dd-trace/src/plugins/util/web')
+const WebPlugin = require('../../datadog-plugin-web/src')
 
-class ExpressCodeOriginForSpansPlugin extends Plugin {
+class ExpressCodeOriginForSpansPlugin extends WebPlugin {
   static id = 'express'
 
   constructor (...args) {
@@ -15,7 +14,7 @@ class ExpressCodeOriginForSpansPlugin extends Plugin {
     this.addSub('apm:express:middleware:enter', ({ req, layer }) => {
       const tags = layerTags.get(layer)
       if (!tags) return
-      web.getContext(req).span?.addTags(tags)
+      this.getContext(req).span?.addTags(tags)
     })
 
     this.addSub('apm:express:route:added', ({ topOfStackFunc, layer }) => {

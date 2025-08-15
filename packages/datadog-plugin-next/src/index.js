@@ -1,10 +1,10 @@
 'use strict'
 
 const ServerPlugin = require('../../dd-trace/src/plugins/server')
+const web = require('../../datadog-plugin-web/src/utils')
 const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { COMPONENT } = require('../../dd-trace/src/constants')
-const web = require('../../dd-trace/src/plugins/util/web')
 
 const errorPages = new Set(['/404', '/500', '/_error', '/_not-found', '/_not-found/page'])
 
