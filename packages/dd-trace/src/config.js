@@ -823,8 +823,12 @@ class Config {
     const env = setHiddenProperty(this, '_env', {})
     setHiddenProperty(this, '_envUnprocessed', {})
 
+    const ddTags = {}
+    tagger.add(ddTags, parseSpaceSeparatedTags(DD_TAGS))
+    setHiddenProperty(this, '_ddTags', ddTags) // usable as a standalone tag set for other products
+
     tagger.add(tags, parseSpaceSeparatedTags(handleOtel(OTEL_RESOURCE_ATTRIBUTES)))
-    tagger.add(tags, parseSpaceSeparatedTags(DD_TAGS))
+    tagger.add(tags, ddTags)
     tagger.add(tags, DD_TRACE_TAGS)
     tagger.add(tags, DD_TRACE_GLOBAL_TAGS)
 
