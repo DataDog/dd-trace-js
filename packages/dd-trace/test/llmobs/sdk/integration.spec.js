@@ -21,7 +21,7 @@ function getTag (llmobsSpan, tagName) {
   return tag?.split(':')[1]
 }
 
-describe.only('end to end sdk integration tests', () => {
+describe('end to end sdk integration tests', () => {
   let tracer
   let llmobs
   let payloadGenerator
