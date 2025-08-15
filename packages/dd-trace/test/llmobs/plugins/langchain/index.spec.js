@@ -4,6 +4,7 @@ const LLMObsSpanWriter = require('../../../../src/llmobs/writers/spans')
 const { useEnv } = require('../../../../../../integration-tests/helpers')
 const agent = require('../../../../../dd-trace/test/plugins/agent')
 const iastFilter = require('../../../../src/appsec/iast/taint-tracking/filter')
+const { withVersions } = require('../../../setup/mocha')
 
 const {
   expectedLLMObsLLMSpanEvent,
@@ -14,45 +15,9 @@ const {
 } = require('../../util')
 const chai = require('chai')
 
-const semver = require('semver')
-
 chai.Assertion.addMethod('deepEqualWithMockValues', deepEqualWithMockValues)
 
-const nock = require('nock')
-function stubCall ({ base = '', path = '', code = 200, response = {} }) {
-  const responses = Array.isArray(response) ? response : [response]
-  const times = responses.length
-  nock(base).post(path).times(times).reply(() => {
-    return [code, responses.shift()]
-  })
-}
-
-const openAiBaseCompletionInfo = { base: 'https://api.openai.com', path: '/v1/completions' }
-const openAiBaseChatInfo = { base: 'https://api.openai.com', path: '/v1/chat/completions' }
-const openAiBaseEmbeddingInfo = { base: 'https://api.openai.com', path: '/v1/embeddings' }
-
 const isDdTrace = iastFilter.isDdTrace
-
-function stubSingleEmbedding (langchainOpenaiOpenAiVersion) {
-  if (semver.satisfies(langchainOpenaiOpenAiVersion, '>=4.91.0')) {
-    stubCall({
-      ...openAiBaseEmbeddingInfo,
-      response: require('../../../../../datadog-plugin-langchain/test/fixtures/single-embedding.json')
-    })
-  } else {
-    stubCall({
-      ...openAiBaseEmbeddingInfo,
-      response: {
-        object: 'list',
-        data: [{
-          object: 'embedding',
-          index: 0,
-          embedding: Array(1536).fill(0)
-        }]
-      }
-    })
-  }
-}
 
 describe('integrations', () => {
   let langchainOpenai
@@ -66,23 +31,49 @@ describe('integrations', () => {
   let tool
   let MemoryVectorStore
 
-  /**
-   * In OpenAI 4.91.0, the default response format for embeddings was changed from `float` to `base64`.
-   * We do not have control in @langchain/openai embeddings to change this for an individual call,
-   * so we need to check the version and stub the response accordingly. If the OpenAI version installed with
-   * @langchain/openai is less than 4.91.0, we stub the response to be a float array of zeros.
-   * If it is 4.91.0 or greater, we stub with a pre-recorded fixture of a 1536 base64 encoded embedding.
-   */
-  let langchainOpenaiOpenAiVersion
-
   let llmobs
 
-  // so we can verify it gets tagged properly
   useEnv({
     OPENAI_API_KEY: '<not-a-real-key>',
     ANTHROPIC_API_KEY: '<not-a-real-key>',
     COHERE_API_KEY: '<not-a-real-key>'
   })
+
+  function getLangChainOpenAiClient (type = 'llm', options = {}) {
+    Object.assign(options, {
+      configuration: {
+        baseURL: 'http://127.0.0.1:9126/vcr/openai'
+      }
+    })
+
+    if (type === 'llm') {
+      return new langchainOpenai.OpenAI(options)
+    }
+
+    if (type === 'chat') {
+      return new langchainOpenai.ChatOpenAI(options)
+    }
+
+    if (type === 'embedding') {
+      return new langchainOpenai.OpenAIEmbeddings(options)
+    }
+
+    throw new Error(`Invalid type: ${type}`)
+  }
+
+  function getLangChainAnthropicClient (type = 'chat', options = {}) {
+    Object.assign(options, {
+      clientOptions: {
+        baseURL: 'http://127.0.0.1:9126/vcr/anthropic'
+      }
+    })
+
+    if (type === 'chat') {
+      return new langchainAnthropic.ChatAnthropic(options)
+    }
+
+    throw new Error(`Invalid type: ${type}`)
+  }
 
   describe('langchain', () => {
     before(async () => {
@@ -111,7 +102,6 @@ describe('integrations', () => {
     })
 
     afterEach(() => {
-      nock.cleanAll()
       LLMObsSpanWriter.prototype.append.reset()
     })
 
@@ -122,8 +112,7 @@ describe('integrations', () => {
       return agent.close({ ritmReset: false, wipe: true })
     })
 
-    // TODO(sabrenner): remove this once we have the more robust mocking merged
-    withVersions('langchain', ['@langchain/core'], '<0.3.60', version => {
+    withVersions('langchain', ['@langchain/core'], version => {
       describe('langchain', () => {
         beforeEach(() => {
           langchainOpenai = require(`../../../../../../versions/langchain@${version}`)
@@ -148,28 +137,11 @@ describe('integrations', () => {
           MemoryVectorStore = require(`../../../../../../versions/@langchain/core@${version}`)
             .get('langchain/vectorstores/memory')
             .MemoryVectorStore
-
-          langchainOpenaiOpenAiVersion =
-            require(`../../../../../../versions/langchain@${version}`)
-              .get('openai/version')
-              .VERSION
         })
 
         describe('llm', () => {
           it('submits an llm span for an openai llm call', async () => {
-            stubCall({
-              ...openAiBaseCompletionInfo,
-              response: {
-                choices: [
-                  {
-                    text: 'Hello, world!'
-                  }
-                ],
-                usage: { prompt_tokens: 8, completion_tokens: 12, otal_tokens: 20 }
-              }
-            })
-
-            const llm = new langchainOpenai.OpenAI({ model: 'gpt-3.5-turbo-instruct' })
+            const llm = getLangChainOpenAiClient('llm', { model: 'gpt-3.5-turbo-instruct' })
 
             const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
@@ -181,24 +153,22 @@ describe('integrations', () => {
                 modelName: 'gpt-3.5-turbo-instruct',
                 modelProvider: 'openai',
                 name: 'langchain.llms.openai.OpenAI',
-                inputMessages: [{ content: 'Hello!' }],
-                outputMessages: [{ content: 'Hello, world!' }],
+                inputMessages: [{ content: 'What is 2 + 2?' }],
+                outputMessages: [{ content: '\n\n4' }],
                 metadata: MOCK_ANY,
-                tokenMetrics: { input_tokens: 8, output_tokens: 12, total_tokens: 20 },
+                tokenMetrics: { input_tokens: 8, output_tokens: 2, total_tokens: 10 },
                 tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               expect(spanEvent).to.deepEqualWithMockValues(expected)
             })
 
-            await llm.invoke('Hello!')
+            await llm.invoke('What is 2 + 2?')
 
             await checkTraces
           })
 
           it('does not tag output if there is an error', async () => {
-            nock('https://api.openai.com').post('/v1/completions').reply(500)
-
             const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
               const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
@@ -206,7 +176,7 @@ describe('integrations', () => {
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
                 spanKind: 'llm',
-                modelName: 'gpt-3.5-turbo-instruct',
+                modelName: 'text-embedding-3-small',
                 modelProvider: 'openai',
                 name: 'langchain.llms.openai.OpenAI',
                 inputMessages: [{ content: 'Hello!' }],
@@ -223,7 +193,7 @@ describe('integrations', () => {
               expect(spanEvent).to.deepEqualWithMockValues(expected)
             })
 
-            const llm = new langchainOpenai.OpenAI({ model: 'gpt-3.5-turbo-instruct', maxRetries: 0 })
+            const llm = new langchainOpenai.OpenAI({ model: 'text-embedding-3-small', maxRetries: 0 })
 
             try {
               await llm.invoke('Hello!')
@@ -286,22 +256,7 @@ describe('integrations', () => {
 
         describe('chat model', () => {
           it('submits an llm span for an openai chat model call', async () => {
-            stubCall({
-              ...openAiBaseChatInfo,
-              response: {
-                choices: [
-                  {
-                    message: {
-                      content: 'Hello, world!',
-                      role: 'assistant'
-                    }
-                  }
-                ],
-                usage: { prompt_tokens: 8, completion_tokens: 12, total_tokens: 20 }
-              }
-            })
-
-            const chat = new langchainOpenai.ChatOpenAI({ model: 'gpt-3.5-turbo' })
+            const chat = getLangChainOpenAiClient('chat', { model: 'gpt-3.5-turbo' })
 
             const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
@@ -313,24 +268,22 @@ describe('integrations', () => {
                 modelName: 'gpt-3.5-turbo',
                 modelProvider: 'openai',
                 name: 'langchain.chat_models.openai.ChatOpenAI',
-                inputMessages: [{ content: 'Hello!', role: 'user' }],
-                outputMessages: [{ content: 'Hello, world!', role: 'assistant' }],
+                inputMessages: [{ content: 'What is 2 + 2?', role: 'user' }],
+                outputMessages: [{ content: '2 + 2 = 4', role: 'assistant' }],
                 metadata: MOCK_ANY,
-                tokenMetrics: { input_tokens: 8, output_tokens: 12, total_tokens: 20 },
+                tokenMetrics: { input_tokens: 15, output_tokens: 7, total_tokens: 22 },
                 tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               expect(spanEvent).to.deepEqualWithMockValues(expected)
             })
 
-            await chat.invoke('Hello!')
+            await chat.invoke('What is 2 + 2?')
 
             await checkTraces
           })
 
           it('does not tag output if there is an error', async () => {
-            nock('https://api.openai.com').post('/v1/chat/completions').reply(500)
-
             const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
               const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
@@ -338,7 +291,7 @@ describe('integrations', () => {
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
                 spanKind: 'llm',
-                modelName: 'gpt-3.5-turbo',
+                modelName: 'gpt-3.5-turbo-instruct',
                 modelProvider: 'openai',
                 name: 'langchain.chat_models.openai.ChatOpenAI',
                 inputMessages: [{ content: 'Hello!', role: 'user' }],
@@ -355,7 +308,7 @@ describe('integrations', () => {
               expect(spanEvent).to.deepEqualWithMockValues(expected)
             })
 
-            const chat = new langchainOpenai.ChatOpenAI({ model: 'gpt-3.5-turbo', maxRetries: 0 })
+            const chat = new langchainOpenai.ChatOpenAI({ model: 'gpt-3.5-turbo-instruct', maxRetries: 0 })
 
             try {
               await chat.invoke('Hello!')
@@ -365,23 +318,6 @@ describe('integrations', () => {
           })
 
           it('submits an llm span for an anthropic chat model call', async () => {
-            stubCall({
-              base: 'https://api.anthropic.com',
-              path: '/v1/messages',
-              response: {
-                id: 'msg_01NE2EJQcjscRyLbyercys6p',
-                type: 'message',
-                role: 'assistant',
-                model: 'claude-2.1',
-                content: [
-                  { type: 'text', text: 'Hello!' }
-                ],
-                stop_reason: 'end_turn',
-                stop_sequence: null,
-                usage: { input_tokens: 11, output_tokens: 6 }
-              }
-            })
-
             const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
               const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
@@ -389,20 +325,20 @@ describe('integrations', () => {
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
                 spanKind: 'llm',
-                modelName: 'claude-2.1', // overriden langchain for older versions
+                modelName: 'claude-3-5-sonnet-20241022',
                 modelProvider: 'anthropic',
                 name: 'langchain.chat_models.anthropic.ChatAnthropic',
                 inputMessages: [{ content: 'Hello!', role: 'user' }],
-                outputMessages: [{ content: 'Hello!', role: 'assistant' }],
+                outputMessages: [{ content: 'Hi there! How can I help you today?', role: 'assistant' }],
                 metadata: MOCK_ANY,
-                tokenMetrics: { input_tokens: 11, output_tokens: 6, total_tokens: 17 },
+                tokenMetrics: { input_tokens: 9, output_tokens: 13, total_tokens: 22 },
                 tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
               expect(spanEvent).to.deepEqualWithMockValues(expected)
             })
 
-            const chatModel = new langchainAnthropic.ChatAnthropic({ model: 'claude-2.1' })
+            const chatModel = getLangChainAnthropicClient('chat', { modelName: 'claude-3-5-sonnet-20241022' })
 
             await chatModel.invoke('Hello!')
 
@@ -410,31 +346,6 @@ describe('integrations', () => {
           })
 
           it('submits an llm span with tool calls', async () => {
-            stubCall({
-              ...openAiBaseChatInfo,
-              response: {
-                model: 'gpt-4',
-                choices: [{
-                  message: {
-                    role: 'assistant',
-                    content: null,
-                    tool_calls: [
-                      {
-                        id: 'tool-1',
-                        type: 'function',
-                        function: {
-                          name: 'extract_fictional_info',
-                          arguments: '{"name":"SpongeBob","origin":"Bikini Bottom"}'
-                        }
-                      }
-                    ]
-                  },
-                  finish_reason: 'tool_calls',
-                  index: 0
-                }]
-              }
-            })
-
             const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
               const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
@@ -458,8 +369,7 @@ describe('integrations', () => {
                   }]
                 }],
                 metadata: MOCK_ANY,
-                // also tests tokens not sent on llm-type spans should be 0
-                tokenMetrics: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
+                tokenMetrics: { input_tokens: 82, output_tokens: 31, total_tokens: 113 },
                 tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
@@ -468,19 +378,22 @@ describe('integrations', () => {
 
             const tools = [
               {
-                name: 'extract_fictional_info',
-                description: 'Get the fictional information from the body of the input text',
-                parameters: {
-                  type: 'object',
-                  properties: {
-                    name: { type: 'string', description: 'Name of the character' },
-                    origin: { type: 'string', description: 'Where they live' }
+                type: 'function',
+                function: {
+                  name: 'extract_fictional_info',
+                  description: 'Get the fictional information from the body of the input text',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      name: { type: 'string', description: 'Name of the character' },
+                      origin: { type: 'string', description: 'Where they live' }
+                    }
                   }
                 }
               }
             ]
 
-            const model = new langchainOpenai.ChatOpenAI({ model: 'gpt-4' })
+            const model = getLangChainOpenAiClient('chat', { model: 'gpt-4' })
             const modelWithTools = model.bindTools(tools)
 
             await modelWithTools.invoke('My name is SpongeBob and I live in Bikini Bottom.')
@@ -491,26 +404,7 @@ describe('integrations', () => {
 
         describe('embedding', () => {
           it('submits an embedding span for an `embedQuery` call', async () => {
-            if (semver.satisfies(langchainOpenaiOpenAiVersion, '>=4.91.0')) {
-              stubCall({
-                ...openAiBaseEmbeddingInfo,
-                response: require('../../../../../datadog-plugin-langchain/test/fixtures/single-embedding.json')
-              })
-            } else {
-              stubCall({
-                ...openAiBaseEmbeddingInfo,
-                response: {
-                  object: 'list',
-                  data: [{
-                    object: 'embedding',
-                    index: 0,
-                    embedding: Array(1536).fill(0)
-                  }]
-                }
-              })
-            }
-
-            const embeddings = new langchainOpenai.OpenAIEmbeddings()
+            const embeddings = getLangChainOpenAiClient('embedding')
 
             const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
@@ -522,7 +416,7 @@ describe('integrations', () => {
                 modelName: 'text-embedding-ada-002',
                 modelProvider: 'openai',
                 name: 'langchain.embeddings.openai.OpenAIEmbeddings',
-                inputDocuments: [{ text: 'Hello!' }],
+                inputDocuments: [{ text: 'Hello, world!' }],
                 outputValue: '[1 embedding(s) returned with size 1536]',
                 metadata: MOCK_ANY,
                 tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
@@ -531,14 +425,12 @@ describe('integrations', () => {
               expect(spanEvent).to.deepEqualWithMockValues(expected)
             })
 
-            await embeddings.embedQuery('Hello!')
+            await embeddings.embedQuery('Hello, world!')
 
             await checkTraces
           })
 
           it('does not tag output if there is an error', async () => {
-            nock('https://api.openai.com').post('/v1/embeddings').reply(500)
-
             const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
               const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
@@ -546,10 +438,10 @@ describe('integrations', () => {
               const expected = expectedLLMObsLLMSpanEvent({
                 span,
                 spanKind: 'embedding',
-                modelName: 'text-embedding-ada-002',
+                modelName: 'gpt-3.5-turbo-instruct',
                 modelProvider: 'openai',
                 name: 'langchain.embeddings.openai.OpenAIEmbeddings',
-                inputDocuments: [{ text: 'Hello!' }],
+                inputDocuments: [{ text: 'Hello, world!' }],
                 outputValue: '',
                 metadata: MOCK_ANY,
                 tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' },
@@ -562,40 +454,17 @@ describe('integrations', () => {
               expect(spanEvent).to.deepEqualWithMockValues(expected)
             })
 
-            const embeddings = new langchainOpenai.OpenAIEmbeddings({ maxRetries: 0 })
+            const embeddings = getLangChainOpenAiClient('embedding', { model: 'gpt-3.5-turbo-instruct' })
 
             try {
-              await embeddings.embedQuery('Hello!')
+              await embeddings.embedQuery('Hello, world!')
             } catch {}
 
             await checkTraces
           })
 
           it('submits an embedding span for an `embedDocuments` call', async () => {
-            if (semver.satisfies(langchainOpenaiOpenAiVersion, '>=4.91.0')) {
-              stubCall({
-                ...openAiBaseEmbeddingInfo,
-                response: require('../../../../../datadog-plugin-langchain/test/fixtures/double-embedding.json')
-              })
-            } else {
-              stubCall({
-                ...openAiBaseEmbeddingInfo,
-                response: {
-                  object: 'list',
-                  data: [{
-                    object: 'embedding',
-                    index: 0,
-                    embedding: Array(1536).fill(0)
-                  }, {
-                    object: 'embedding',
-                    index: 1,
-                    embedding: Array(1536).fill(0)
-                  }]
-                }
-              })
-            }
-
-            const embeddings = new langchainOpenai.OpenAIEmbeddings()
+            const embeddings = getLangChainOpenAiClient('embedding')
 
             const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
@@ -607,7 +476,7 @@ describe('integrations', () => {
                 modelName: 'text-embedding-ada-002',
                 modelProvider: 'openai',
                 name: 'langchain.embeddings.openai.OpenAIEmbeddings',
-                inputDocuments: [{ text: 'Hello!' }, { text: 'World!' }],
+                inputDocuments: [{ text: 'Hello, world!' }, { text: 'Goodbye, world!' }],
                 outputValue: '[2 embedding(s) returned with size 1536]',
                 metadata: MOCK_ANY,
                 tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
@@ -616,7 +485,7 @@ describe('integrations', () => {
               expect(spanEvent).to.deepEqualWithMockValues(expected)
             })
 
-            await embeddings.embedDocuments(['Hello!', 'World!'])
+            await embeddings.embedDocuments(['Hello, world!', 'Goodbye, world!'])
 
             await checkTraces
           })
@@ -624,24 +493,12 @@ describe('integrations', () => {
 
         describe('chain', () => {
           it('submits a workflow and llm spans for a simple chain call', async () => {
-            stubCall({
-              ...openAiBaseCompletionInfo,
-              response: {
-                choices: [
-                  {
-                    text: 'LangSmith can help with testing in several ways.'
-                  }
-                ],
-                usage: { prompt_tokens: 8, completion_tokens: 12, otal_tokens: 20 }
-              }
-            })
-
             const prompt = langchainPrompts.ChatPromptTemplate.fromMessages([
               ['system', 'You are a world class technical documentation writer'],
               ['user', '{input}']
             ])
 
-            const llm = new langchainOpenai.OpenAI({ model: 'gpt-3.5-turbo-instruct' })
+            const llm = getLangChainOpenAiClient('llm', { model: 'gpt-3.5-turbo-instruct' })
 
             const chain = prompt.pipe(llm)
 
@@ -653,12 +510,19 @@ describe('integrations', () => {
               const workflowSpanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
               const llmSpanEvent = LLMObsSpanWriter.prototype.append.getCall(1).args[0]
 
+              const expectedOutput = '\n\nSystem: LangSmith is a top-of-the-line software that caters to the needs ' +
+              'of technical writers like you. It offers a user-friendly interface, advanced formatting tools, and ' +
+              'collaboration features to help you create high-quality technical documents with ease. With LangSmith, ' +
+              'you can produce professional-looking manuals, guides, and tutorials that will impress even the most ' +
+              'discerning clients. Its robust features and intuitive design make it the go-to tool for ' +
+              'technical writers all over the world.'
+
               const expectedWorkflow = expectedLLMObsNonLLMSpanEvent({
                 span: workflowSpan,
                 spanKind: 'workflow',
                 name: 'langchain_core.runnables.RunnableSequence',
                 inputValue: JSON.stringify({ input: 'Can you tell me about LangSmith?' }),
-                outputValue: 'LangSmith can help with testing in several ways.',
+                outputValue: expectedOutput,
                 metadata: MOCK_ANY,
                 tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
@@ -670,14 +534,13 @@ describe('integrations', () => {
                 modelName: 'gpt-3.5-turbo-instruct',
                 modelProvider: 'openai',
                 name: 'langchain.llms.openai.OpenAI',
-                // this is how LangChain formats these IOs for LLMs
                 inputMessages: [{
                   content: 'System: You are a world class technical documentation writer\n' +
                   'Human: Can you tell me about LangSmith?'
                 }],
-                outputMessages: [{ content: 'LangSmith can help with testing in several ways.' }],
+                outputMessages: [{ content: expectedOutput }],
                 metadata: MOCK_ANY,
-                tokenMetrics: { input_tokens: 8, output_tokens: 12, total_tokens: 20 },
+                tokenMetrics: { input_tokens: 21, output_tokens: 94, total_tokens: 115 },
                 tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
@@ -692,8 +555,6 @@ describe('integrations', () => {
           })
 
           it('does not tag output if there is an error', async () => {
-            nock('https://api.openai.com').post('/v1/completions').reply(500)
-
             const checkTraces = agent.assertSomeTraces(traces => {
               const spans = traces[0]
 
@@ -718,7 +579,7 @@ describe('integrations', () => {
               expect(workflowSpanEvent).to.deepEqualWithMockValues(expectedWorkflow)
             })
 
-            const llm = new langchainOpenai.OpenAI({ model: 'gpt-3.5-turbo-instruct', maxRetries: 0 })
+            const llm = getLangChainOpenAiClient('llm', { model: 'text-embedding-3-small', maxRetries: 0 })
             const parser = new langchainOutputParsers.StringOutputParser()
             const chain = llm.pipe(parser)
 
@@ -730,40 +591,12 @@ describe('integrations', () => {
           })
 
           it('submits workflow and llm spans for a nested chain', async () => {
-            stubCall({
-              ...openAiBaseChatInfo,
-              response: [
-                {
-                  choices: [
-                    {
-                      message: {
-                        content: 'Springfield, Illinois',
-                        role: 'assistant'
-                      }
-                    }
-                  ],
-                  usage: { prompt_tokens: 8, completion_tokens: 12, total_tokens: 20 }
-                },
-                {
-                  choices: [
-                    {
-                      message: {
-                        content: 'Springfield, Illinois está en los Estados Unidos.',
-                        role: 'assistant'
-                      }
-                    }
-                  ],
-                  usage: { prompt_tokens: 8, completion_tokens: 12, total_tokens: 20 }
-                }
-              ]
-            })
-
             const firstPrompt = langchainPrompts.ChatPromptTemplate.fromTemplate('what is the city {person} is from?')
             const secondPrompt = langchainPrompts.ChatPromptTemplate.fromTemplate(
               'what country is the city {city} in? respond in {language}'
             )
 
-            const model = new langchainOpenai.ChatOpenAI({ model: 'gpt-3.5-turbo' })
+            const model = getLangChainOpenAiClient('chat', { model: 'gpt-3.5-turbo' })
             const parser = new langchainOutputParsers.StringOutputParser()
 
             const firstChain = firstPrompt.pipe(model).pipe(parser)
@@ -792,12 +625,15 @@ describe('integrations', () => {
               const secondSubWorkflowSpanEvent = LLMObsSpanWriter.prototype.append.getCall(3).args[0]
               const secondLLMSpanEvent = LLMObsSpanWriter.prototype.append.getCall(4).args[0]
 
+              const expectedOutput = 'Abraham Lincoln nació en Hodgenville, Kentucky. ' +
+              'Más tarde vivió en Springfield, Illinois, que se asocia frecuentemente con él como su ciudad natal.'
+
               const expectedTopLevelWorkflow = expectedLLMObsNonLLMSpanEvent({
                 span: topLevelWorkflow,
                 spanKind: 'workflow',
                 name: 'langchain_core.runnables.RunnableSequence',
                 inputValue: JSON.stringify({ person: 'Abraham Lincoln', language: 'Spanish' }),
-                outputValue: 'Springfield, Illinois está en los Estados Unidos.',
+                outputValue: expectedOutput,
                 tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
@@ -807,7 +643,8 @@ describe('integrations', () => {
                 spanKind: 'workflow',
                 name: 'langchain_core.runnables.RunnableSequence',
                 inputValue: JSON.stringify({ person: 'Abraham Lincoln', language: 'Spanish' }),
-                outputValue: 'Springfield, Illinois',
+                outputValue: 'Abraham Lincoln was born in Hodgenville, Kentucky. He later lived ' +
+                'in Springfield, Illinois, which is often associated with him as his home city.',
                 tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
@@ -821,9 +658,13 @@ describe('integrations', () => {
                 inputMessages: [
                   { content: 'what is the city Abraham Lincoln is from?', role: 'user' }
                 ],
-                outputMessages: [{ content: 'Springfield, Illinois', role: 'assistant' }],
+                outputMessages: [{
+                  content: 'Abraham Lincoln was born in Hodgenville, Kentucky. He later lived ' +
+                'in Springfield, Illinois, which is often associated with him as his home city.',
+                  role: 'assistant'
+                }],
                 metadata: MOCK_ANY,
-                tokenMetrics: { input_tokens: 8, output_tokens: 12, total_tokens: 20 },
+                tokenMetrics: { input_tokens: 16, output_tokens: 30, total_tokens: 46 },
                 tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
@@ -832,8 +673,12 @@ describe('integrations', () => {
                 parentId: topLevelWorkflow.span_id,
                 spanKind: 'workflow',
                 name: 'langchain_core.runnables.RunnableSequence',
-                inputValue: JSON.stringify({ language: 'Spanish', city: 'Springfield, Illinois' }),
-                outputValue: 'Springfield, Illinois está en los Estados Unidos.',
+                inputValue: JSON.stringify({
+                  language: 'Spanish',
+                  city: 'Abraham Lincoln was born in Hodgenville, Kentucky. He later lived in ' +
+                  'Springfield, Illinois, which is often associated with him as his home city.'
+                }),
+                outputValue: expectedOutput,
                 tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
@@ -845,11 +690,16 @@ describe('integrations', () => {
                 modelProvider: 'openai',
                 name: 'langchain.chat_models.openai.ChatOpenAI',
                 inputMessages: [
-                  { content: 'what country is the city Springfield, Illinois in? respond in Spanish', role: 'user' }
+                  {
+                    content: 'what country is the city Abraham Lincoln was born in Hodgenville, Kentucky. ' +
+                    'He later lived in Springfield, Illinois, which is often associated with him as his home city. ' +
+                    'in? respond in Spanish',
+                    role: 'user'
+                  }
                 ],
-                outputMessages: [{ content: 'Springfield, Illinois está en los Estados Unidos.', role: 'assistant' }],
+                outputMessages: [{ content: expectedOutput, role: 'assistant' }],
                 metadata: MOCK_ANY,
-                tokenMetrics: { input_tokens: 8, output_tokens: 12, total_tokens: 20 },
+                tokenMetrics: { input_tokens: 46, output_tokens: 37, total_tokens: 83 },
                 tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
@@ -861,51 +711,17 @@ describe('integrations', () => {
             })
 
             const result = await completeChain.invoke({ person: 'Abraham Lincoln', language: 'Spanish' })
-            expect(result).to.equal('Springfield, Illinois está en los Estados Unidos.')
+            expect(result).to.exist
 
             await checkTraces
           })
 
           it('submits workflow and llm spans for a batched chain', async () => {
-            stubCall({
-              ...openAiBaseChatInfo,
-              response: [
-                {
-                  model: 'gpt-4',
-                  usage: {
-                    prompt_tokens: 37,
-                    completion_tokens: 10,
-                    total_tokens: 47
-                  },
-                  choices: [{
-                    message: {
-                      role: 'assistant',
-                      content: 'Why did the chicken cross the road? To get to the other side!'
-                    }
-                  }]
-                },
-                {
-                  model: 'gpt-4',
-                  usage: {
-                    prompt_tokens: 37,
-                    completion_tokens: 10,
-                    total_tokens: 47
-                  },
-                  choices: [{
-                    message: {
-                      role: 'assistant',
-                      content: 'Why was the dog confused? It was barking up the wrong tree!'
-                    }
-                  }]
-                }
-              ]
-            })
-
             const prompt = langchainPrompts.ChatPromptTemplate.fromTemplate(
               'Tell me a joke about {topic}'
             )
             const parser = new langchainOutputParsers.StringOutputParser()
-            const model = new langchainOpenai.ChatOpenAI({ model: 'gpt-4' })
+            const model = getLangChainOpenAiClient('chat', { model: 'gpt-4' })
 
             const chain = langchainRunnables.RunnableSequence.from([
               {
@@ -933,9 +749,9 @@ describe('integrations', () => {
                 name: 'langchain_core.runnables.RunnableSequence',
                 inputValue: JSON.stringify(['chickens', 'dogs']),
                 outputValue: JSON.stringify([
-                  'Why did the chicken cross the road? To get to the other side!',
-                  'Why was the dog confused? It was barking up the wrong tree!'
-                ]),
+                  "Why don't chickens use Facebook?\n\nBecause they already know what everyone's clucking about!",
+                  'Why did the scarecrow adopt a dog?\n\nBecause he needed a "barking" buddy!']
+                ),
                 tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
@@ -948,11 +764,12 @@ describe('integrations', () => {
                 name: 'langchain.chat_models.openai.ChatOpenAI',
                 inputMessages: [{ content: 'Tell me a joke about chickens', role: 'user' }],
                 outputMessages: [{
-                  content: 'Why did the chicken cross the road? To get to the other side!',
+                  content: "Why don't chickens use Facebook?\n\nBecause " +
+                  "they already know what everyone's clucking about!",
                   role: 'assistant'
                 }],
                 metadata: MOCK_ANY,
-                tokenMetrics: { input_tokens: 37, output_tokens: 10, total_tokens: 47 },
+                tokenMetrics: { input_tokens: 13, output_tokens: 18, total_tokens: 31 },
                 tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
@@ -965,11 +782,11 @@ describe('integrations', () => {
                 name: 'langchain.chat_models.openai.ChatOpenAI',
                 inputMessages: [{ content: 'Tell me a joke about dogs', role: 'user' }],
                 outputMessages: [{
-                  content: 'Why was the dog confused? It was barking up the wrong tree!',
+                  content: 'Why did the scarecrow adopt a dog?\n\nBecause he needed a "barking" buddy!',
                   role: 'assistant'
                 }],
                 metadata: MOCK_ANY,
-                tokenMetrics: { input_tokens: 37, output_tokens: 10, total_tokens: 47 },
+                tokenMetrics: { input_tokens: 13, output_tokens: 19, total_tokens: 32 },
                 tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
@@ -984,28 +801,13 @@ describe('integrations', () => {
           })
 
           it('submits a workflow and llm spans for different schema IO', async () => {
-            stubCall({
-              ...openAiBaseChatInfo,
-              response: {
-                choices: [
-                  {
-                    message: {
-                      content: 'Mitochondria',
-                      role: 'assistant'
-                    }
-                  }
-                ],
-                usage: { prompt_tokens: 8, completion_tokens: 12, total_tokens: 20 }
-              }
-            })
-
             const prompt = langchainPrompts.ChatPromptTemplate.fromMessages([
               ['system', 'You are an assistant who is good at {ability}. Respond in 20 words or fewer'],
               new langchainPrompts.MessagesPlaceholder('history'),
               ['human', '{input}']
             ])
 
-            const model = new langchainOpenai.ChatOpenAI({ model: 'gpt-3.5-turbo' })
+            const model = getLangChainOpenAiClient('chat', { model: 'gpt-3.5-turbo' })
             const chain = prompt.pipe(model)
 
             const checkTraces = agent.assertSomeTraces(traces => {
@@ -1070,7 +872,7 @@ describe('integrations', () => {
                 ],
                 outputMessages: [{ content: 'Mitochondria', role: 'assistant' }],
                 metadata: MOCK_ANY,
-                tokenMetrics: { input_tokens: 8, output_tokens: 12, total_tokens: 20 },
+                tokenMetrics: { input_tokens: 54, output_tokens: 3, total_tokens: 57 },
                 tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
@@ -1091,21 +893,6 @@ describe('integrations', () => {
           })
 
           it('traces a manually-instrumented step', async () => {
-            stubCall({
-              ...openAiBaseChatInfo,
-              response: {
-                choices: [
-                  {
-                    message: {
-                      content: '3 squared is 9',
-                      role: 'assistant'
-                    }
-                  }
-                ],
-                usage: { prompt_tokens: 8, completion_tokens: 12, total_tokens: 20 }
-              }
-            })
-
             let lengthFunction = (input = { foo: '' }) => {
               llmobs.annotate({ inputData: input }) // so we don't try and tag `config` with auto-annotation
               return {
@@ -1114,7 +901,7 @@ describe('integrations', () => {
             }
             lengthFunction = llmobs.wrap({ kind: 'task' }, lengthFunction)
 
-            const model = new langchainOpenai.ChatOpenAI({ model: 'gpt-4o' })
+            const model = getLangChainOpenAiClient('chat', { model: 'gpt-4o' })
 
             const prompt = langchainPrompts.ChatPromptTemplate.fromTemplate('What is {length} squared?')
 
@@ -1140,7 +927,7 @@ describe('integrations', () => {
                 spanKind: 'workflow',
                 name: 'langchain_core.runnables.RunnableSequence',
                 inputValue: JSON.stringify({ foo: 'bar' }),
-                outputValue: '3 squared is 9',
+                outputValue: '3 squared is 9.',
                 tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
@@ -1162,9 +949,9 @@ describe('integrations', () => {
                 modelProvider: 'openai',
                 name: 'langchain.chat_models.openai.ChatOpenAI',
                 inputMessages: [{ content: 'What is 3 squared?', role: 'user' }],
-                outputMessages: [{ content: '3 squared is 9', role: 'assistant' }],
+                outputMessages: [{ content: '3 squared is 9.', role: 'assistant' }],
                 metadata: MOCK_ANY,
-                tokenMetrics: { input_tokens: 8, output_tokens: 12, total_tokens: 20 },
+                tokenMetrics: { input_tokens: 13, output_tokens: 6, total_tokens: 19 },
                 tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })
 
@@ -1268,9 +1055,7 @@ describe('integrations', () => {
           let vectorstore
 
           beforeEach(() => {
-            stubSingleEmbedding(langchainOpenaiOpenAiVersion)
-
-            const embeddings = new langchainOpenai.OpenAIEmbeddings()
+            const embeddings = getLangChainOpenAiClient('embedding')
             vectorstore = new MemoryVectorStore(embeddings)
 
             const document = {
@@ -1282,8 +1067,6 @@ describe('integrations', () => {
           })
 
           it('submits a retrieval span with a child embedding span for similaritySearch', async () => {
-            stubSingleEmbedding(langchainOpenaiOpenAiVersion)
-
             const checkTraces = agent.assertSomeTraces(traces => {
               const spans = traces[0] // first trace is the embedding call from the beforeEach
 
@@ -1319,8 +1102,6 @@ describe('integrations', () => {
           })
 
           it('submits a retrieval span with a child embedding span for similaritySearchWithScore', async () => {
-            stubSingleEmbedding(langchainOpenaiOpenAiVersion)
-
             const checkTraces = agent.assertSomeTraces(traces => {
               const spans = traces[0] // first trace is the embedding call from the beforeEach
 
@@ -1343,7 +1124,7 @@ describe('integrations', () => {
                 outputDocuments: [{
                   text: 'The powerhouse of the cell is the mitochondria',
                   name: 'https://example.com',
-                  score: 1
+                  score: 0.7882083567178202
                 }],
                 tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
               })

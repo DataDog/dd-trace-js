@@ -6,6 +6,7 @@ const path = require('path')
 const semver = require('semver')
 const { prepareTestServerForIast } = require('../utils')
 const { storage } = require('../../../../../datadog-core')
+const { withVersions } = require('../../../setup/mocha')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
 const vulnerabilityReporter = require('../../../../src/appsec/iast/vulnerability-reporter')
@@ -14,7 +15,7 @@ describe('sql-injection-analyzer with knex', () => {
   withVersions('knex', 'knex', knexVersion => {
     if (!semver.satisfies(knexVersion, '>=2')) return
 
-    withVersions('pg', 'pg', pgVersion => {
+    withVersions('pg', 'pg', () => {
       let knex
 
       prepareTestServerForIast('knex + pg',
@@ -88,6 +89,26 @@ describe('sql-injection-analyzer with knex', () => {
             })
           })
 
+          describe('nested raw query - using async instead of then', () => {
+            testThatRequestHasVulnerability(() => {
+              const store = storage('legacy').getStore()
+              const iastCtx = iastContextFunctions.getIastContext(store)
+
+              let taintedSql = 'SELECT 1'
+              taintedSql = newTaintedString(iastCtx, taintedSql, 'param', 'Request')
+
+              const notTaintedSql = 'SELECT 1'
+
+              return queryMethods.executeKnexAsyncNestedRawQuery(knex, taintedSql, notTaintedSql)
+            }, 'SQL_INJECTION', {
+              occurrences: 1,
+              location: {
+                path: 'knex-sql-injection-methods.js',
+                line: 40
+              }
+            })
+          })
+
           describe('nested raw query - onRejected as then argument', () => {
             testThatRequestHasVulnerability(() => {
               const store = storage('legacy').getStore()
@@ -124,6 +145,26 @@ describe('sql-injection-analyzer with knex', () => {
               location: {
                 path: 'knex-sql-injection-methods.js',
                 line: 28
+              }
+            })
+          })
+
+          describe('nested raw query - async try catch', () => {
+            testThatRequestHasVulnerability(() => {
+              const store = storage('legacy').getStore()
+              const iastCtx = iastContextFunctions.getIastContext(store)
+
+              let taintedSql = 'SELECT 1'
+              taintedSql = newTaintedString(iastCtx, taintedSql, 'param', 'Request')
+
+              const sqlToFail = 'SELECT * FROM NON_EXISTSING_TABLE'
+
+              return queryMethods.executeKnexAsyncNestedRawQueryAsAsyncTryCatch(knex, taintedSql, sqlToFail)
+            }, 'SQL_INJECTION', {
+              occurrences: 1,
+              location: {
+                path: 'knex-sql-injection-methods.js',
+                line: 47
               }
             })
           })

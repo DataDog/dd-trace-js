@@ -3,6 +3,7 @@
 const axios = require('axios')
 const http = require('http')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { AsyncLocalStorage } = require('async_hooks')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 

@@ -77,8 +77,8 @@ versions.forEach((version) => {
     let sandbox, cwd, receiver, childProcess, webAppPort, webPortWithRedirect
 
     before(async function () {
-      // bump from 60 to 90 seconds because playwright is heavy
-      this.timeout(90000)
+      // Usually takes under 30 seconds but sometimes the server is really slow.
+      this.timeout(300_000)
       sandbox = await createSandbox([`@playwright/test@${version}`, 'typescript'], true)
       cwd = sandbox.folder
       const { NODE_OPTIONS, ...restOfEnv } = process.env

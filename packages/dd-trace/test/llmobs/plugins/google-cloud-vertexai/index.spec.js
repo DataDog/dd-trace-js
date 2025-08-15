@@ -2,6 +2,7 @@
 
 const LLMObsSpanWriter = require('../../../../src/llmobs/writers/spans')
 const agent = require('../../../plugins/agent')
+const { withVersions } = require('../../../setup/mocha')
 const {
   expectedLLMObsLLMSpanEvent,
   deepEqualWithMockValues

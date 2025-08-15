@@ -4,6 +4,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const nock = require('nock')
 const { setup } = require('./spec_helpers')
 const { models } = require('./fixtures/bedrockruntime')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 const serviceName = 'bedrock-service-name-test'
 

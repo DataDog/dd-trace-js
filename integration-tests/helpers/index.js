@@ -113,7 +113,10 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
       runtime_name: 'nodejs',
       runtime_version: process.versions.node,
       tracer_version: require('../../package.json').version,
-      pid: Number(pid)
+      pid: Number(pid),
+      result: 'unknown',
+      result_reason: 'unknown',
+      result_class: 'unknown'
     }
   }
 }

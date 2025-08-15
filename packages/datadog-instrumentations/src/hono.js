@@ -17,8 +17,14 @@ function wrapFetch (fetch) {
   }
 }
 
+function onErrorFn (error, _context_) {
+  throw error
+}
+
 function wrapCompose (compose) {
-  return function (middleware, onError, onNotFound) {
+  return function (middlewares, onError, onNotFound) {
+    onError ??= onErrorFn
+
     const instrumentedOnError = (...args) => {
       const [error, context] = args
       const req = context.env.incoming
@@ -26,23 +32,20 @@ function wrapCompose (compose) {
       return onError(...args)
     }
 
-    const instrumentedMiddlewares = middleware.map(h => {
+    const instrumentedMiddlewares = middlewares.map(h => {
       const [[fn, meta], params] = h
 
-      // TODO: handle middleware instrumentation
       const instrumentedFn = (...args) => {
         const context = args[0]
-        const req = context.env.incoming
-        const route = meta.path
         routeChannel.publish({
-          req,
-          route
+          req: context.env.incoming,
+          route: meta?.path
         })
         return fn(...args)
       }
       return [[instrumentedFn, meta], params]
     })
-    return compose.apply(this, [instrumentedMiddlewares, instrumentedOnError, onNotFound])
+    return compose.call(this, instrumentedMiddlewares, instrumentedOnError, onNotFound)
   }
 }
 

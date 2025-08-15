@@ -389,8 +389,8 @@ describe('profiler', () => {
         for (const label of sample.label) {
           switch (label.key) {
             case tsKey: ts = label.num; break
-            case spanKey: spanId = label.str; break
-            case rootSpanKey: rootSpanId = label.str; break
+            case spanKey: spanId = label.num; break
+            case rootSpanKey: rootSpanId = label.num; break
             case endpointKey: endpoint = label.str; break
             case threadNameKey: threadName = label.str; break
             case threadIdKey: threadId = label.str; break

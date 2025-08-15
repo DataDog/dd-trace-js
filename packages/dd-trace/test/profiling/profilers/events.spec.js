@@ -17,7 +17,7 @@ describe('profilers/events', () => {
     // Set up a mock span to simulate tracing context
     const span = {
       context: () => ({
-        toSpanId: () => '1234',
+        toBigIntSpanId: () => 1234n,
         _trace: {
           started: [span]
         }

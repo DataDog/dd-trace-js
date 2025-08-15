@@ -1,0 +1,132 @@
+interactions:
+- request:
+    body: "{\n  \"model\": \"gpt-3.5-turbo-instruct\",\n  \"temperature\": 0.7,\n
+      \ \"max_tokens\": 256,\n  \"top_p\": 1,\n  \"frequency_penalty\": 0,\n  \"presence_penalty\":
+      0,\n  \"n\": 1,\n  \"stream\": false,\n  \"prompt\": [\n    \"System: You are
+      a world class technical documentation writer\\nHuman: Can you tell me about
+      LangSmith?\"\n  ]\n}"
+    headers:
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Encoding
+      : - gzip,deflate
+      ? !!python/object/apply:multidict._multidict.istr
+      - Connection
+      : - keep-alive
+      Content-Length:
+      - '303'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - User-Agent
+      : - OpenAI/JS 4.104.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-arch
+      : - arm64
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-lang
+      : - js
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-os
+      : - MacOS
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-package-version
+      : - 4.104.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-retry-count
+      : - '0'
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-runtime
+      : - node
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-runtime-version
+      : - v22.17.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-timeout
+      : - '600'
+    method: POST
+    uri: https://api.openai.com/v1/completions
+  response:
+    body:
+      string: "{\n  \"id\": \"cmpl-C1wv3A4pgdxOEH1Ws7Nye2dnwvF9I\",\n  \"object\":
+        \"text_completion\",\n  \"created\": 1754580849,\n  \"model\": \"gpt-3.5-turbo-instruct:20230824-v2\",\n
+        \ \"choices\": [\n    {\n      \"text\": \"\\n\\nSystem: LangSmith is a top-of-the-line
+        software that caters to the needs of technical writers like you. It offers
+        a user-friendly interface, advanced formatting tools, and collaboration features
+        to help you create high-quality technical documents with ease. With LangSmith,
+        you can produce professional-looking manuals, guides, and tutorials that will
+        impress even the most discerning clients. Its robust features and intuitive
+        design make it the go-to tool for technical writers all over the world.\",\n
+        \     \"index\": 0,\n      \"logprobs\": null,\n      \"finish_reason\": \"stop\"\n
+        \   }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 21,\n    \"completion_tokens\":
+        94,\n    \"total_tokens\": 115\n  }\n}\n"
+    headers:
+      CF-RAY:
+      - 96b7d6248cf58797-IAD
+      Cache-Control:
+      - no-cache, must-revalidate
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 07 Aug 2025 15:34:10 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=K9..ho56q1yzWrwN9lNqx0gYKMvSgU4Y9Uqa6GZGbn0-1754580850-1.0.1.1-tX7senOGRI4QHLpRL.SCoWjAVQIjiWLDxLDVtBT4qPQBU4n7lq0zlKQNy3MFCRZ2zVPr3ZTyoLhY6SDEfB2uSzt_bXR0nnZx82L5d6tjUOA;
+        path=/; expires=Thu, 07-Aug-25 16:04:10 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=0wPL3MvpRq_mu1abbgVQr0JKJn.QmSxTur7SW1LtUZ8-1754580850296-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-allow-origin:
+      - '*'
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-model:
+      - gpt-3.5-turbo-instruct:20230824-v2
+      openai-organization:
+      - datadog-staging
+      openai-processing-ms:
+      - '849'
+      openai-project:
+      - proj_gt6TQZPRbZfoY2J9AQlEJMpd
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains; preload
+      via:
+      - envoy-router-667b55c4ff-2thzh
+      x-envoy-upstream-service-time:
+      - '871'
+      x-ratelimit-limit-requests:
+      - '3500'
+      x-ratelimit-limit-tokens:
+      - '90000'
+      x-ratelimit-remaining-requests:
+      - '3499'
+      x-ratelimit-remaining-tokens:
+      - '89974'
+      x-ratelimit-reset-requests:
+      - 17ms
+      x-ratelimit-reset-tokens:
+      - 17ms
+      x-request-id:
+      - req_460f9cea41574528b35c927f909e5e9b
+    status:
+      code: 200
+      message: OK
+version: 1

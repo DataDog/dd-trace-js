@@ -10,7 +10,7 @@ runs:
       shell: bash
     - run: yarn test:plugins:upstream
       shell: bash
-    - uses: ./.github/actions/node/active-lts
+    - uses: ./.github/actions/node/latest
     - run: yarn test:plugins:ci
       shell: bash
     - run: yarn test:plugins:upstream

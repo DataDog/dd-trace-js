@@ -4,6 +4,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const helpers = require('./kinesis_helpers')
 const { promisify } = require('util')
 const { setup } = require('./spec_helpers')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 describe('Plugin', () => {
   describe('Serverless', function () {

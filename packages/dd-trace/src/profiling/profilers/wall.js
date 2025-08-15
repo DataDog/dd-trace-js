@@ -215,10 +215,10 @@ class NativeWallProfiler {
 
   _updateContext (context) {
     if (context.spanId !== null && typeof context.spanId === 'object') {
-      context.spanId = context.spanId.toString(10)
+      context.spanId = context.spanId.toBigInt()
     }
     if (context.rootSpanId !== null && typeof context.rootSpanId === 'object') {
-      context.rootSpanId = context.rootSpanId.toString(10)
+      context.rootSpanId = context.rootSpanId.toBigInt()
     }
     if (context.webTags !== undefined && context.endpoint === undefined) {
       // endpoint may not be determined yet, but keep it as fallback

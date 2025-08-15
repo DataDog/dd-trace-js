@@ -162,14 +162,16 @@ function instrument (req, res, handler, error) {
 
       // promise should only reject when propagateError is true:
       // https://github.com/vercel/next.js/blob/cee656238a/packages/next/server/api-utils/node.ts#L547
-      return promise.then(
+      promise.then(
         result => finish(ctx, result),
         err => finish(ctx, null, err)
       )
+      return promise
     } catch (e) {
       // this will probably never happen as the handler caller is an async function:
       // https://github.com/vercel/next.js/blob/cee656238a/packages/next/server/api-utils/node.ts#L420
-      return finish(ctx, null, e)
+      finish(ctx, null, e)
+      throw e
     }
   })
 }
@@ -198,12 +200,6 @@ function finish (ctx, result, err) {
   }
 
   finishChannel.publish(ctx)
-
-  if (err) {
-    throw err
-  }
-
-  return result
 }
 
 // also wrapped in dist/server/future/route-handlers/app-route-route-handler.js

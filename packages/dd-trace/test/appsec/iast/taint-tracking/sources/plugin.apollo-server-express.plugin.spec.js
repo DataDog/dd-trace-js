@@ -1,6 +1,7 @@
 'use strict'
 
 const agent = require('../../../../plugins/agent')
+const { withVersions } = require('../../../../setup/mocha')
 const {
   schema,
   resolvers,

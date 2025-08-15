@@ -1,0 +1,142 @@
+interactions:
+- request:
+    body: '{"model":"gpt-4o-mini","input":[{"role":"system","content":"You are a helpful
+      assistant"},{"role":"user","content":[{"type":"input_text","text":"What is the
+      weather in Tokyo?"}]}],"tools":[{"type":"function","name":"weather","description":"Get
+      the weather in a given location","parameters":{"type":"object","properties":{"location":{"type":"string","description":"The
+      location to get the weather for"}},"required":["location"]},"strict":false}],"tool_choice":"auto","stream":true}'
+    headers:
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept
+      : - '*/*'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Encoding
+      : - gzip, deflate
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Language
+      : - '*'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Connection
+      : - keep-alive
+      Content-Length:
+      - '480'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - User-Agent
+      : - node
+      ? !!python/object/apply:multidict._multidict.istr
+      - sec-fetch-mode
+      : - cors
+    method: POST
+    uri: https://api.openai.com/v1/responses
+  response:
+    body:
+      string: 'event: response.created
+
+        data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_6890dda70538819d94f77b41f8b51d970e05ce72e10c4463","object":"response","created_at":1754324391,"status":"in_progress","background":false,"error":null,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4o-mini-2024-07-18","output":[],"parallel_tool_calls":true,"previous_response_id":null,"prompt_cache_key":null,"reasoning":{"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":false,"temperature":1.0,"text":{"format":{"type":"text"}},"tool_choice":"auto","tools":[{"type":"function","description":"Get
+        the weather in a given location","name":"weather","parameters":{"type":"object","properties":{"location":{"type":"string","description":"The
+        location to get the weather for"}},"required":["location"]},"strict":false}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}}}
+
+
+        event: response.in_progress
+
+        data: {"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_6890dda70538819d94f77b41f8b51d970e05ce72e10c4463","object":"response","created_at":1754324391,"status":"in_progress","background":false,"error":null,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4o-mini-2024-07-18","output":[],"parallel_tool_calls":true,"previous_response_id":null,"prompt_cache_key":null,"reasoning":{"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":false,"temperature":1.0,"text":{"format":{"type":"text"}},"tool_choice":"auto","tools":[{"type":"function","description":"Get
+        the weather in a given location","name":"weather","parameters":{"type":"object","properties":{"location":{"type":"string","description":"The
+        location to get the weather for"}},"required":["location"]},"strict":false}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}}}
+
+
+        event: response.output_item.added
+
+        data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"id":"fc_6890dda84358819d92119532b61decc40e05ce72e10c4463","type":"function_call","status":"in_progress","arguments":"","call_id":"call_ofJIFWUReiB7SptNdB9Tj0Hx","name":"weather"}}
+
+
+        event: response.function_call_arguments.delta
+
+        data: {"type":"response.function_call_arguments.delta","sequence_number":3,"item_id":"fc_6890dda84358819d92119532b61decc40e05ce72e10c4463","output_index":0,"delta":"{\""}
+
+
+        event: response.function_call_arguments.delta
+
+        data: {"type":"response.function_call_arguments.delta","sequence_number":4,"item_id":"fc_6890dda84358819d92119532b61decc40e05ce72e10c4463","output_index":0,"delta":"location"}
+
+
+        event: response.function_call_arguments.delta
+
+        data: {"type":"response.function_call_arguments.delta","sequence_number":5,"item_id":"fc_6890dda84358819d92119532b61decc40e05ce72e10c4463","output_index":0,"delta":"\":\""}
+
+
+        event: response.function_call_arguments.delta
+
+        data: {"type":"response.function_call_arguments.delta","sequence_number":6,"item_id":"fc_6890dda84358819d92119532b61decc40e05ce72e10c4463","output_index":0,"delta":"Tokyo"}
+
+
+        event: response.function_call_arguments.delta
+
+        data: {"type":"response.function_call_arguments.delta","sequence_number":7,"item_id":"fc_6890dda84358819d92119532b61decc40e05ce72e10c4463","output_index":0,"delta":"\"}"}
+
+
+        event: response.function_call_arguments.done
+
+        data: {"type":"response.function_call_arguments.done","sequence_number":8,"item_id":"fc_6890dda84358819d92119532b61decc40e05ce72e10c4463","output_index":0,"arguments":"{\"location\":\"Tokyo\"}"}
+
+
+        event: response.output_item.done
+
+        data: {"type":"response.output_item.done","sequence_number":9,"output_index":0,"item":{"id":"fc_6890dda84358819d92119532b61decc40e05ce72e10c4463","type":"function_call","status":"completed","arguments":"{\"location\":\"Tokyo\"}","call_id":"call_ofJIFWUReiB7SptNdB9Tj0Hx","name":"weather"}}
+
+
+        event: response.completed
+
+        data: {"type":"response.completed","sequence_number":10,"response":{"id":"resp_6890dda70538819d94f77b41f8b51d970e05ce72e10c4463","object":"response","created_at":1754324391,"status":"completed","background":false,"error":null,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4o-mini-2024-07-18","output":[{"id":"fc_6890dda84358819d92119532b61decc40e05ce72e10c4463","type":"function_call","status":"completed","arguments":"{\"location\":\"Tokyo\"}","call_id":"call_ofJIFWUReiB7SptNdB9Tj0Hx","name":"weather"}],"parallel_tool_calls":true,"previous_response_id":null,"prompt_cache_key":null,"reasoning":{"effort":null,"summary":null},"safety_identifier":null,"service_tier":"default","store":false,"temperature":1.0,"text":{"format":{"type":"text"}},"tool_choice":"auto","tools":[{"type":"function","description":"Get
+        the weather in a given location","name":"weather","parameters":{"type":"object","properties":{"location":{"type":"string","description":"The
+        location to get the weather for"}},"required":["location"]},"strict":false}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":63,"input_tokens_details":{"cached_tokens":0},"output_tokens":14,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":77},"user":null,"metadata":{}}}
+
+
+        '
+    headers:
+      CF-RAY:
+      - 969f60f34f60541a-IAD
+      Connection:
+      - keep-alive
+      Content-Type:
+      - text/event-stream; charset=utf-8
+      Date:
+      - Mon, 04 Aug 2025 16:19:51 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=pvcshZZa8yO1uhSaF9dIW92G7dqy6hciv2nCdHB69sk-1754324391-1.0.1.1-qpEh4T0XzB5.gXTF9T2JWjWoRautepoXyntBLht357FB.7403jQ38MK7qonZpEqsZepOvxq9cRp8DndKdqYHv7yeJmP8k3KshEJRDxFxApI;
+        path=/; expires=Mon, 04-Aug-25 16:49:51 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=9m_pYfhbNM_2v0GDWn3CgRZf33vA2h69DaFZ_Ol31Ic-1754324391056-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - datadog-staging
+      openai-processing-ms:
+      - '43'
+      openai-project:
+      - proj_gt6TQZPRbZfoY2J9AQlEJMpd
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains; preload
+      x-envoy-decorator-operation:
+      - tasksapi.openai.svc.cluster.local:8081/*
+      x-envoy-upstream-service-time:
+      - '48'
+      x-request-id:
+      - req_45c8fa64c7dd82ee93c1dcb4b078522a
+    status:
+      code: 200
+      message: OK
+version: 1

@@ -6,6 +6,7 @@ const { storage } = require('../../../../../../datadog-core')
 const iast = require('../../../../../src/appsec/iast')
 const iastContextFunctions = require('../../../../../src/appsec/iast/iast-context')
 const { isTainted, getRanges } = require('../../../../../src/appsec/iast/taint-tracking/operations')
+const { withVersions } = require('../../../../setup/mocha')
 const {
   HTTP_REQUEST_COOKIE_NAME,
   HTTP_REQUEST_COOKIE_VALUE

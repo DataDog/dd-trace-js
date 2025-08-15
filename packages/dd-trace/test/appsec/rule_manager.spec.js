@@ -191,9 +191,7 @@ describe('AppSec Rule Manager', () => {
         }]
       }
 
-      assert.doesNotThrow(() => {
-        RuleManager.updateWafFromRC(rcConfigsForNonAsmProducts)
-      })
+      RuleManager.updateWafFromRC(rcConfigsForNonAsmProducts)
 
       assert.strictEqual(rcConfigsForNonAsmProducts.toUnapply[0].apply_state, UNACKNOWLEDGED)
       assert.notProperty(rcConfigsForNonAsmProducts.toUnapply[0], 'apply_error')
@@ -367,7 +365,7 @@ describe('AppSec Rule Manager', () => {
               id: 'asm_dd.test.failed',
               product: 'ASM_DD',
               path: 'test/rule_manager/updateWafFromRC/ASM_DD/01',
-              file: {}
+              file: { rules: [{ name: 'rule_with_missing_id' }] }
             }
           ],
           toModify: [],

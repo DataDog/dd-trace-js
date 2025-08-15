@@ -1,6 +1,7 @@
 'use strict'
 
 const { prepareTestServerForIast } = require('../../utils')
+const { withVersions } = require('../../../../setup/mocha')
 
 describe('db sources with sequelize', () => {
   withVersions('sequelize', 'sequelize', sequelizeVersion => {

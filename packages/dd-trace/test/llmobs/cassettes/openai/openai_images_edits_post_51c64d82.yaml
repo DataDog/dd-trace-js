@@ -1,0 +1,137 @@
+interactions:
+- request:
+    body: !!binary |
+      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
+      Tn0MWtvjpBuH7WULwOGzZ3V/f79cpgBsjoccHR+Ouxx1pbs8N15jOR6T+ijJcMmiNS+lfOYMF+iY
+      5P7zv0/5OVRv1lpP+yFakvwjyWFLi/onhd9rb7zhry0AAAAASUVORK5CYIINCi0tLS0tLWZvcm1k
+      YXRhLXVuZGljaS0wMzI3OTI4MTgwMDANCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsg
+      bmFtZT0icHJvbXB0Ig0KDQpDaGFuZ2UgYWxsIHJlZCB0byBibHVlDQotLS0tLS1mb3JtZGF0YS11
+      bmRpY2ktMDMyNzkyODE4MDAwDQpDb250ZW50LURpc3Bvc2l0aW9uOiBmb3JtLWRhdGE7IG5hbWU9
+      Im4iDQoNCjENCi0tLS0tLWZvcm1kYXRhLXVuZGljaS0wMzI3OTI4MTgwMDANCkNvbnRlbnQtRGlz
+      cG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0ic2l6ZSINCg0KMjU2eDI1Ng0KLS0tLS0tZm9ybWRh
+      dGEtdW5kaWNpLTAzMjc5MjgxODAwMA0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBu
+      YW1lPSJyZXNwb25zZV9mb3JtYXQiDQoNCnVybA0KLS0tLS0tZm9ybWRhdGEtdW5kaWNpLTAzMjc5
+      MjgxODAwMC0tDQo=
+    headers:
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Encoding
+      : - gzip, deflate
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Language
+      : - '*'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Connection
+      : - keep-alive
+      Content-Length:
+      - '2234'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - multipart/form-data; boundary=----formdata-undici-032792818000
+      ? !!python/object/apply:multidict._multidict.istr
+      - User-Agent
+      : - OpenAI/JS 5.12.2
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Arch
+      : - arm64
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Lang
+      : - js
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-OS
+      : - MacOS
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Package-Version
+      : - 5.12.2
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Retry-Count
+      : - '0'
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Runtime
+      : - node
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Runtime-Version
+      : - v24.5.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - sec-fetch-mode
+      : - cors
+    method: POST
+    uri: https://api.openai.com/v1/images/edits
+  response:
+    body:
+      string: "{\n  \"created\": 1755094032,\n  \"data\": [\n    {\n      \"url\":
+        \"https://oaidalleapiprodscus.blob.core.windows.net/private/org-GKgUkEpTs8iJbqUCqnL6JW5H/user-DoUONI1dg5wtyS7luFo7MncN/img-iIK79iphcc5ltrW9hKTBwYik.png?st=2025-08-13T13%3A07%3A12Z&se=2025-08-13T15%3A07%3A12Z&sp=r&sv=2024-08-04&sr=b&rscd=inline&rsct=image/png&skoid=8b33a531-2df9-46a3-bc02-d4b1430a422c&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-08-13T01%3A04%3A31Z&ske=2025-08-14T01%3A04%3A31Z&sks=b&skv=2024-08-04&sig=JqiKbJbncQcVOBoo0AkbuUQ8Dtqo757pY9p0nOCHk4U%3D\"\n
+        \   }\n  ]\n}"
+    headers:
+      CF-RAY:
+      - 96e8c6babcf9de6d-EWR
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Wed, 13 Aug 2025 14:07:12 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - _cfuvid=VAE.SnROFh9PxSaovFQToS6KWzg2wYuhwEZyfvvNu5M-1755094032470-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - datadog-staging
+      openai-processing-ms:
+      - '11891'
+      openai-project:
+      - proj_gt6TQZPRbZfoY2J9AQlEJMpd
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains; preload
+      x-envoy-upstream-service-time:
+      - '11899'
+      x-request-id:
+      - req_2ca6a51d07267478f3c3e12808959a39
+    status:
+      code: 200
+      message: OK
+version: 1

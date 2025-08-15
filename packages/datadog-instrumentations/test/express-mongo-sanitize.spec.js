@@ -3,6 +3,8 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const { channel } = require('dc-polyfill')
 const axios = require('axios')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
+
 describe('express-mongo-sanitize', () => {
   withVersions('express-mongo-sanitize', 'express-mongo-sanitize', version => {
     describe('middleware', () => {
