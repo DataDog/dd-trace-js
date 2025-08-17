@@ -24,7 +24,7 @@
     "@koa/router": "*",
     "aws-sdk": "*",
     "axios": "*",
-    "esbuild": "*",
+    "esbuild": "^0.16.12",
     "express": "^4.16.2",
     "knex": "*",
     "koa": "*",
