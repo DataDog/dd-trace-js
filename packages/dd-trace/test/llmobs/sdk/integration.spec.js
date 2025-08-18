@@ -324,7 +324,7 @@ describe('end to end sdk integration tests', () => {
     })
   })
 
-  describe.only('with user span processor', () => {
+  describe('with user span processor', () => {
     afterEach(() => {
       llmobs.registerProcessor(null)
     })
@@ -394,7 +394,7 @@ describe('end to end sdk integration tests', () => {
         llmobs.registerProcessor(processor)
       })
 
-      it.only('redacts the input and output', () => {
+      it('redacts the input and output', () => {
         payloadGenerator = function () {
           llmobs.trace({ kind: 'workflow', name: 'redact-input' }, () => {
             llmobs.annotate({ tags: { redact_input: true }, inputData: 'hello' })
