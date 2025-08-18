@@ -177,10 +177,8 @@ class LLMObsSpanProcessor {
   }
 
   _processTags (span, mlApp, sessionId, error) {
-    const ddTags = this._config._ddTags ?? {}
-
     let tags = {
-      ...ddTags,
+      ...this._config.parsedDdTags,
       version: this._config.version,
       env: this._config.env,
       service: this._config.service,

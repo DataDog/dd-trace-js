@@ -252,6 +252,12 @@ const sourcesOrder = [
 ]
 
 class Config {
+  /**
+   * parsed DD_TAGS, usable as a standalone tag set across products
+   * @type {Record<string, string> | undefined}
+   */
+  #parsedDdTags = {}
+
   constructor (options = {}) {
     if (!isInServerlessEnvironment()) {
       // Bail out early if we're in a serverless environment, stable config isn't supported
@@ -429,6 +435,10 @@ class Config {
         }
       }
     }
+  }
+
+  get parsedDdTags () {
+    return this.#parsedDdTags
   }
 
   // Supports only a subset of options for now.
@@ -823,12 +833,10 @@ class Config {
     const env = setHiddenProperty(this, '_env', {})
     setHiddenProperty(this, '_envUnprocessed', {})
 
-    const ddTags = {}
-    tagger.add(ddTags, parseSpaceSeparatedTags(DD_TAGS))
-    setHiddenProperty(this, '_ddTags', ddTags) // usable as a standalone tag set for other products
+    tagger.add(this.#parsedDdTags, parseSpaceSeparatedTags(DD_TAGS))
 
     tagger.add(tags, parseSpaceSeparatedTags(handleOtel(OTEL_RESOURCE_ATTRIBUTES)))
-    tagger.add(tags, ddTags)
+    tagger.add(tags, this.#parsedDdTags)
     tagger.add(tags, DD_TRACE_TAGS)
     tagger.add(tags, DD_TRACE_GLOBAL_TAGS)
 
