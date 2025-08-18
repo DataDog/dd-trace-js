@@ -1,5 +1,7 @@
 'use strict'
 
+const { NODE_MAJOR } = require('../../../../../version')
+const semver = require('semver')
 const Axios = require('axios')
 const os = require('os')
 const fs = require('fs')
@@ -31,6 +33,11 @@ describe('RASP - lfi', () => {
   }
 
   withVersions('express', 'express', expressVersion => {
+    if (semver.intersects(expressVersion, '<=4.10.5') && NODE_MAJOR >= 24) {
+      describe.skip(`refusing to run tests as express@${expressVersion} is incompatible with Node.js ${NODE_MAJOR}`)
+      return
+    }
+
     withVersions('express', 'ejs', ejsVersion => {
       let app, server
 
