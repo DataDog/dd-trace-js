@@ -431,7 +431,10 @@ describe('TextMapPropagator', () => {
 
         propagator.inject(undefined, carrier)
 
-        expect(tracerMetrics.count).to.have.been.calledWith('context_header.truncated', ['truncation_reason:baggage_item_count_exceeded'])
+        expect(tracerMetrics.count).to.have.been.calledWith(
+          'context_header.truncated',
+          ['truncation_reason:baggage_item_count_exceeded']
+        )
         expect(tracerMetrics.count().inc).to.have.been.called
 
         // Restore original config
@@ -448,7 +451,10 @@ describe('TextMapPropagator', () => {
 
         propagator.inject(undefined, carrier)
 
-        expect(tracerMetrics.count).to.have.been.calledWith('context_header.truncated', ['truncation_reason:baggage_byte_count_exceeded'])
+        expect(tracerMetrics.count).to.have.been.calledWith(
+          'context_header.truncated',
+          ['truncation_reason:baggage_byte_count_exceeded']
+        )
         expect(tracerMetrics.count().inc).to.have.been.called
 
         // Restore original config
