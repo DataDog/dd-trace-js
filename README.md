@@ -22,11 +22,6 @@ Most of the documentation for `dd-trace` is available on these webpages:
 
 ## Version Release Lines and Maintenance
 
-> **Node.js v24 Notice**: We're currently adding compatibility for Node.js v24. To use the tracer with your application either continue to use Node.js v22 (LTS), or do both of the following as a workaround:
-> * Install v5.52.0 (or newer) of the tracer
-> * Set `--no-async-context-frame` either using a CLI argument or via `NODE_OPTIONS`
-> Once support for Node.js v24 is complete this flag will no longer be needed.
-
 | Release Line                                             | Latest Version                                                                                         | Node.js  | [SSI](https://docs.datadoghq.com/tracing/trace_collection/automatic_instrumentation/single-step-apm/?tab=linuxhostorvm) | [K8s Injection](https://docs.datadoghq.com/tracing/trace_collection/library_injection_local/?tab=kubernetes) |Status          |Initial Release | End of Life |
 | :---:                                                    | :---:                                                                                                  | :---:    | :---:  | :---:  | :---:           | :---:          | :---:       |
 | [`v1`](https://github.com/DataDog/dd-trace-js/tree/v1.x) | ![npm v1](https://img.shields.io/npm/v/dd-trace/legacy-v1?color=white&label=%20&style=flat-square)     | `>= v12` | NO | NO | **EOL** | 2021-07-13     | 2022-02-25  |
