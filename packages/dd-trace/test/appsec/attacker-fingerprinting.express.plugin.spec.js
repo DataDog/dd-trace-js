@@ -7,6 +7,7 @@ const path = require('path')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
+const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
 withVersions('express', 'express', expressVersion => {
   describe('Attacker fingerprinting', () => {

@@ -67,7 +67,8 @@ describe('PoissonProcessSamplingFilter', () => {
     })
     assert.strictEqual(callCount, 1)
     const event = { startTime: 0, duration: Number.POSITIVE_INFINITY }
-    assert.doesNotThrow(() => filter.filter(event))
+    // Make sure that filtering events does not throw and calls now() once
+    filter.filter(event)
     assert.strictEqual(callCount, 2)
   })
 

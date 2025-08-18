@@ -1,6 +1,7 @@
 'use strict'
 
 const { prepareTestServerForIastInExpress } = require('../utils')
+const { withVersions } = require('../../../setup/mocha')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')

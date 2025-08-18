@@ -273,10 +273,11 @@ class EventSerializer {
       new Label({ key: this.timestampLabelKey, num: dateOffset + BigInt(Math.round(endTime * MS_TO_NS)) })
     ]
     if (_ddSpanId) {
-      label.push(labelFromStr(this.stringTable, this.spanIdKey, _ddSpanId))
+      label.push(
+        new Label({ key: this.spanIdKey, num: _ddSpanId }))
     }
     if (_ddRootSpanId) {
-      label.push(labelFromStr(this.stringTable, this.rootSpanIdKey, _ddRootSpanId))
+      label.push(new Label({ key: this.rootSpanIdKey, num: _ddRootSpanId }))
     }
 
     const sampleInput = {
