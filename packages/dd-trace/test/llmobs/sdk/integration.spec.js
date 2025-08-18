@@ -323,4 +323,93 @@ describe('end to end sdk integration tests', () => {
       expect(llmobsSpans).to.have.lengthOf(0)
     })
   })
+
+  describe.only('with user span processor', () => {
+    afterEach(() => {
+      llmobs.registerProcessor(null)
+    })
+
+    describe('with a processor that returns null', () => {
+      function processor (span) {
+        const dropSpan = span.getTag('drop_span')
+        if (dropSpan) return null
+
+        return span
+      }
+
+      beforeEach(() => {
+        llmobs.registerProcessor(processor)
+      })
+
+      it('does not submit dropped spans', () => {
+        payloadGenerator = function () {
+          llmobs.trace({ kind: 'workflow', name: 'keep' }, () => {
+            llmobs.trace({ kind: 'workflow', name: 'drop' }, () => {
+              llmobs.annotate({ tags: { drop_span: true } })
+            })
+          })
+        }
+
+        const { llmobsSpans } = run(payloadGenerator)
+        expect(llmobsSpans).to.have.lengthOf(1)
+        expect(llmobsSpans[0].name).to.equal('keep')
+      })
+    })
+
+    describe('with a processor that returns an invalid type', () => {
+      function processor (span) {
+        return {}
+      }
+
+      beforeEach(() => {
+        llmobs.registerProcessor(processor)
+      })
+
+      it('does not submit the span', () => {
+        payloadGenerator = function () {
+          llmobs.trace({ kind: 'workflow', name: 'myWorkflow' }, () => {})
+        }
+
+        const { llmobsSpans } = run(payloadGenerator)
+        expect(llmobsSpans).to.have.lengthOf(0)
+      })
+    })
+
+    describe('with a processor that returns a valid LLMObservabilitySpan', () => {
+      function processor (span) {
+        const redactInput = span.getTag('redact_input')
+        if (redactInput) {
+          span.input = span.input.map(message => ({ ...message, content: 'REDACTED' }))
+        }
+
+        const redactOutput = span.getTag('redact_output')
+        if (redactOutput) {
+          span.output = span.output.map(message => ({ ...message, content: 'REDACTED' }))
+        }
+
+        return span
+      }
+
+      beforeEach(() => {
+        llmobs.registerProcessor(processor)
+      })
+
+      it.only('redacts the input and output', () => {
+        payloadGenerator = function () {
+          llmobs.trace({ kind: 'workflow', name: 'redact-input' }, () => {
+            llmobs.annotate({ tags: { redact_input: true }, inputData: 'hello' })
+            llmobs.trace({ kind: 'llm', name: 'redact-output' }, () => {
+              llmobs.annotate({ tags: { redact_output: true }, outputData: 'world' })
+            })
+          })
+        }
+
+        const { llmobsSpans } = run(payloadGenerator)
+        expect(llmobsSpans).to.have.lengthOf(2)
+
+        expect(llmobsSpans[0].meta.input.value).to.equal('REDACTED')
+        expect(llmobsSpans[1].meta.output.messages[0].content).to.equal('REDACTED')
+      })
+    })
+  })
 })

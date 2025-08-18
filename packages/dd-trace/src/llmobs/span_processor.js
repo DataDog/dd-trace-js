@@ -34,9 +34,28 @@ const LLMObsTagger = require('./tagger')
 const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
 
+const util = require('node:util')
+
+class LLMObservabilitySpan {
+  constructor () {
+    this.input = []
+    this.output = []
+
+    this._tags = {}
+  }
+
+  getTag (key) {
+    return this._tags[key]
+  }
+}
+
 class LLMObsSpanProcessor {
   constructor (config) {
     this._config = config
+  }
+
+  registerProcessor (processor) {
+    this._processor = processor
   }
 
   setWriter (writer) {
@@ -52,6 +71,8 @@ class LLMObsSpanProcessor {
     try {
       const formattedEvent = this.format(span)
       telemetry.incrementLLMObsSpanFinishedCount(span)
+      if (formattedEvent == null) return
+
       this._writer.append(formattedEvent)
     } catch (e) {
       // this should be a rare case
@@ -65,6 +86,9 @@ class LLMObsSpanProcessor {
   }
 
   format (span) {
+    const llmObsSpan = new LLMObservabilitySpan()
+    let inputType, outputType
+
     const spanTags = span.context()._tags
     const mlObsTags = LLMObsTagger.tagMap.get(span)
 
@@ -78,24 +102,35 @@ class LLMObsSpanProcessor {
       meta.model_name = mlObsTags[MODEL_NAME] || 'custom'
       meta.model_provider = (mlObsTags[MODEL_PROVIDER] || 'custom').toLowerCase()
     }
+
     if (mlObsTags[METADATA]) {
-      this._addObject(mlObsTags[METADATA], meta.metadata = {})
+      this.#addObject(mlObsTags[METADATA], meta.metadata = {})
     }
+
     if (spanKind === 'llm' && mlObsTags[INPUT_MESSAGES]) {
-      input.messages = mlObsTags[INPUT_MESSAGES]
+      llmObsSpan.input = this.#enforceMessageRole(mlObsTags[INPUT_MESSAGES])
+      inputType = 'messages'
     }
+
     if (mlObsTags[INPUT_VALUE]) {
-      input.value = mlObsTags[INPUT_VALUE]
+      llmObsSpan.input = [{ role: '', content: mlObsTags[INPUT_VALUE] }]
+      inputType = 'value'
     }
+
     if (spanKind === 'llm' && mlObsTags[OUTPUT_MESSAGES]) {
-      output.messages = mlObsTags[OUTPUT_MESSAGES]
+      llmObsSpan.output = this.#enforceMessageRole(mlObsTags[OUTPUT_MESSAGES])
+      outputType = 'messages'
     }
+
     if (spanKind === 'embedding' && mlObsTags[INPUT_DOCUMENTS]) {
       input.documents = mlObsTags[INPUT_DOCUMENTS]
     }
+
     if (mlObsTags[OUTPUT_VALUE]) {
-      output.value = mlObsTags[OUTPUT_VALUE]
+      llmObsSpan.output = [{ role: '', content: mlObsTags[OUTPUT_VALUE] }]
+      outputType = 'value'
     }
+
     if (spanKind === 'retrieval' && mlObsTags[OUTPUT_DOCUMENTS]) {
       output.documents = mlObsTags[OUTPUT_DOCUMENTS]
     }
@@ -107,9 +142,6 @@ class LLMObsSpanProcessor {
       meta[ERROR_STACK] = spanTags[ERROR_STACK] || error.stack
     }
 
-    if (input) meta.input = input
-    if (output) meta.output = output
-
     const metrics = mlObsTags[METRICS] || {}
 
     const mlApp = mlObsTags[ML_APP]
@@ -118,12 +150,38 @@ class LLMObsSpanProcessor {
 
     const name = mlObsTags[NAME] || span._name
 
+    const tags = this.#getTags(span, mlApp, sessionId, error)
+    llmObsSpan._tags = tags
+
+    const processedSpan = this.#runProcessor(llmObsSpan)
+
+    if (processedSpan == null) return null
+
+    if (processedSpan.input) {
+      if (inputType === 'messages') {
+        input.messages = processedSpan.input
+      } else if (inputType === 'value') {
+        input.value = processedSpan.input[0].content
+      }
+    }
+
+    if (processedSpan.output) {
+      if (outputType === 'messages') {
+        output.messages = processedSpan.output
+      } else if (outputType === 'value') {
+        output.value = processedSpan.output[0].content
+      }
+    }
+
+    if (input) meta.input = input
+    if (output) meta.output = output
+
     const llmObsSpanEvent = {
       trace_id: span.context().toTraceId(true),
       span_id: span.context().toSpanId(),
       parent_id: parentId,
       name,
-      tags: this._processTags(span, mlApp, sessionId, error),
+      tags: this.#stringifyTags(tags),
       start_ns: Math.round(span._startTime * 1e6),
       duration: Math.round(span._duration * 1e6),
       status: error ? 'error' : 'ok',
@@ -144,7 +202,7 @@ class LLMObsSpanProcessor {
   // However, we want to protect against circular references or BigInts (unserializable)
   // This function can be reused for other fields if needed
   // Messages, Documents, and Metrics are safeguarded in `llmobs/tagger.js`
-  _addObject (obj, carrier) {
+  #addObject (obj, carrier) {
     const seenObjects = new WeakSet()
     seenObjects.add(obj) // capture root object
 
@@ -176,7 +234,7 @@ class LLMObsSpanProcessor {
     add(obj, carrier)
   }
 
-  _processTags (span, mlApp, sessionId, error) {
+  #getTags (span, mlApp, sessionId, error) {
     let tags = {
       version: this._config.version,
       env: this._config.env,
@@ -187,14 +245,59 @@ class LLMObsSpanProcessor {
       error: Number(!!error) || 0,
       language: 'javascript'
     }
+
     const errType = span.context()._tags[ERROR_TYPE] || error?.name
     if (errType) tags.error_type = errType
+
     if (sessionId) tags.session_id = sessionId
+
     const integration = LLMObsTagger.tagMap.get(span)?.[INTEGRATION]
     if (integration) tags.integration = integration
+
     const existingTags = LLMObsTagger.tagMap.get(span)?.[TAGS] || {}
     if (existingTags) tags = { ...tags, ...existingTags }
+
+    return tags
+  }
+
+  #stringifyTags (tags) {
     return Object.entries(tags).map(([key, value]) => `${key}:${value ?? ''}`)
+  }
+
+  #runProcessor (span) {
+    const processor = this._processor
+    if (!processor) return span
+
+    let error = false
+
+    try {
+      const processedLLMObsSpan = processor(span)
+      if (!processedLLMObsSpan) return null
+
+      if (!(processedLLMObsSpan instanceof LLMObservabilitySpan)) {
+        throw new TypeError(
+          'User span processor must return an instance of an LLMObservabilitySpan or null/undefined'
+        )
+      }
+
+      return processedLLMObsSpan
+    } catch (e) {
+      logger.error(`[LLMObs] Error in LLMObs span processor (${util.inspect(processor)}): ${e.message}`)
+      error = true
+    } finally {
+      telemetry.recordLLMObsUserProcessorCalled(error)
+    }
+  }
+
+  /**
+   * @param {(Record<string, unknown> & { role?: string })[]} messages
+   * @returns {(Record<string, unknown> & { role: string })[]}
+   */
+  #enforceMessageRole (messages) {
+    return messages.map(message => {
+      message.role = message.role || ''
+      return message
+    })
   }
 }
 
