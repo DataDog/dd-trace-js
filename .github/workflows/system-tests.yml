@@ -31,7 +31,7 @@ jobs:
   main:
     needs:
       - build-artifacts
-    uses: DataDog/system-tests/.github/workflows/system-tests.yml@ff4b9940d83fa07bc5c826c59b3f20486f6f5fb1
+    uses: DataDog/system-tests/.github/workflows/system-tests.yml@7f8b939fa1849474c1edd91edab799b34fcc6271
     secrets: inherit
     permissions:
       contents: read
