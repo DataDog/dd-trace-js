@@ -10,6 +10,7 @@ updates:
       - "/"
       - "/.github/actions/*"
       - "/.github/actions/*/*"
+      - "/.github/workflows/*"
     schedule:
       interval: "weekly"
     groups:
