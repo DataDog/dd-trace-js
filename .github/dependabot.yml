@@ -89,6 +89,10 @@ updates:
       - dependencies
       - javascript
       - semver-patch
+    ignore:
+      - dependency-name: "express"
+        # Update express manually for now due to esbuild breaking otherwise
+        update-types: ["version-update:semver-major"]
     groups:
       test-versions:
         patterns:
