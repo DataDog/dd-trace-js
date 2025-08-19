@@ -178,6 +178,7 @@ class LLMObsSpanProcessor {
 
   _processTags (span, mlApp, sessionId, error) {
     let tags = {
+      ...this._config.parsedDdTags,
       version: this._config.version,
       env: this._config.env,
       service: this._config.service,
@@ -187,6 +188,7 @@ class LLMObsSpanProcessor {
       error: Number(!!error) || 0,
       language: 'javascript'
     }
+
     const errType = span.context()._tags[ERROR_TYPE] || error?.name
     if (errType) tags.error_type = errType
     if (sessionId) tags.session_id = sessionId
