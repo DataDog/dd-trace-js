@@ -156,7 +156,7 @@ describe('Plugin', () => {
         it('should include database connection attributes in db_query spans', async () => {
           // Set up database config that should be parsed from connection URL
           const dbConfig = {
-            user: 'postgres',
+            user: 'foo',
             host: 'localhost',
             port: '5432',
             database: 'postgres'
@@ -170,7 +170,7 @@ describe('Plugin', () => {
 
             // Verify database connection attributes are present
             expect(dbQuerySpan.meta).to.have.property('db.name', 'postgres')
-            expect(dbQuerySpan.meta).to.have.property('db.user', 'postgres')
+            expect(dbQuerySpan.meta).to.have.property('db.user', 'foo')
             expect(dbQuerySpan.meta).to.have.property('out.host', 'localhost')
             expect(dbQuerySpan.meta).to.have.property('network.destination.port', '5432')
             expect(dbQuerySpan.meta).to.have.property('db.type', 'postgres')
