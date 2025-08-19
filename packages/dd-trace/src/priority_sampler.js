@@ -200,7 +200,7 @@ class PrioritySampler {
   /**
    *
    * @param span {DatadogSpan}
-   * @returns {SamplingPriority|undefined}
+   * @returns {SamplingPriority}
    */
   _getPriorityFromAuto (span) {
     const context = this._getContext(span)
