@@ -62,11 +62,12 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
       const { modelProvider, modelName } = parseModelId(modelId)
 
       const response = coerceResponseChunks(chunks, modelProvider, modelName)
-      Object.assign(ctx.response, { body: response })
+      ctx.response.body = response
     })
   }
 
   setLLMObsTags ({ request, span, response, modelProvider, modelName }) {
+    const isStream = request?.operation?.toLowerCase().includes('stream')
     telemetry.incrementLLMObsSpanStartCount({ autoinstrumented: true, integration: 'bedrock' })
 
     const parent = llmobsStore.getStore()?.span
@@ -80,7 +81,10 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
     })
 
     const requestParams = extractRequestParams(request.params, modelProvider)
-    const textAndResponseReason = extractTextAndResponseReason(response, modelProvider, modelName)
+    // for streamed responses, we'll use the coerced response object we formed in the stream handler
+    const textAndResponseReason = isStream
+      ? response.body
+      : extractTextAndResponseReason(response, modelProvider, modelName)
 
     // add metadata tags
     this._tagger.tagMetadata(span, {

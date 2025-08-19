@@ -31,8 +31,6 @@ const PROVIDER = {
  * @returns {Object}
  */
 function coerceResponseChunks (chunks, provider, modelId) {
-  let response = {}
-
   // streaming unsupported for AI21, AMAZON embedding models, COHERE embedding models, STABILITY
   if (
     provider.toUpperCase() === PROVIDER.AI21 ||
@@ -40,62 +38,55 @@ function coerceResponseChunks (chunks, provider, modelId) {
     (provider.toUpperCase() === PROVIDER.COHERE && modelId.includes('embed')) ||
     provider.toUpperCase() === PROVIDER.STABILITY
   ) {
-    return response
+    return {}
   }
 
-  const choices = new Map() // map choice indices to choice objects
+  // const choices = new Map() // map choice indices to choice objects
   // const usage = {}
+
+  let message = ''
+  let inputTokens = 0
+  let outputTokens = 0
 
   for (const { chunk: { bytes } } of chunks) {
     const body = JSON.parse(Buffer.from(bytes).toString('utf8'))
 
-    Object.assign(response, body)
-
     if (provider.toUpperCase() === PROVIDER.AMAZON) {
-      const choiceText = choices.get(body?.index) ?? ''
-      choices.set(body?.index, choiceText + body?.outputText)
+      message += body?.outputText
+
+      inputTokens = body?.inputTextTokenCount
+      outputTokens = body?.totalOutputTextTokenCount
     } else if (provider.toUpperCase() === PROVIDER.ANTHROPIC) {
-      const { type } = body // for the whole response, we'll only ever hit one of these cases
-      if (type === 'content_block_delta' && body?.delta?.type === 'text_delta') {
-        const choiceText = choices.get(body?.index) ?? ''
-        choices.set(body?.index, choiceText + body?.delta?.text)
-      } else if (type === 'completion') { // completions do not have choices
-        const choiceText = choices.get(0) ?? ''
-        choices.set(0, choiceText + body?.completion)
+      if (body.completion) {
+        message += body.completion
+      } else if (body.delta) {
+        message += body.delta.text
       }
+
+      if (body.message?.usage?.input_tokens) inputTokens = body.message.usage.input_tokens
+      if (body.message?.usage?.output_tokens) outputTokens = body.message.usage.output_tokens
     } else if (provider.toUpperCase() === PROVIDER.COHERE && body?.event_type === 'stream-end') {
-      response = body.response
+      message = body.response
     } else if (provider.toUpperCase() === PROVIDER.META) {
-      const index = body?.index ?? 0
-      const choiceText = choices.get(index) ?? ''
-      choices.set(index, choiceText + body?.generation)
+      message += body?.generation
     } else if (provider.toUpperCase() === PROVIDER.MISTRAL) {
-      const outputs = body?.outputs ?? []
-      for (const [index, output] of outputs.entries()) {
-        if (!output?.text) continue
-        const choiceText = choices.get(index) ?? ''
-        choices.set(index, choiceText + output?.text)
-      }
+      message += body?.outputs?.[0]?.text
+    }
+
+    // by default, it seems newer versions of the AWS SDK include the input/output token counts in the response body
+    const invocationMetrics = body['amazon-bedrock-invocationMetrics']
+    if (invocationMetrics) {
+      inputTokens = invocationMetrics.inputTokenCount
+      outputTokens = invocationMetrics.outputTokenCount
     }
   }
 
-  if (provider.toUpperCase() === PROVIDER.AMAZON) {
-    response.results = [...choices.values()]
-  } else if (provider.toUpperCase() === PROVIDER.ANTHROPIC) {
-    if (choices.size < 2) {
-      response.completion = choices.get(0)
-    } else {
-      response.content = [...choices.values()] // TODO: check this
-    }
-  } else if (provider.toUpperCase() === PROVIDER.META) {
-    response.generation = choices.get(0)
-  } else if (provider.toUpperCase() === PROVIDER.MISTRAL) {
-    response.outputs = [...choices.values()].map(choice => ({
-      text: choice
-    }))
-  }
-
-  return response
+  return new Generation({
+    message,
+    role: 'assistant',
+    inputTokens,
+    outputTokens
+  })
 }
 
 class Generation {
@@ -280,7 +271,6 @@ function extractRequestParams (params, provider) {
 
 function extractTextAndResponseReason (response, provider, modelName) {
   const body = Buffer.isBuffer(response.body) ? JSON.parse(Buffer.from(response.body).toString('utf8')) : response.body
-  console.log('body in extractTextAndResponseReason', body)
   const shouldSetChoiceIds = provider.toUpperCase() === PROVIDER.COHERE && !modelName.includes('embed')
   try {
     switch (provider.toUpperCase()) {
