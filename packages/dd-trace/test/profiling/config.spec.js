@@ -176,6 +176,30 @@ describe('config', () => {
     expect(config.profilers[0]).to.be.an.instanceOf(SpaceProfiler)
   })
 
+  it('should be able to read some env vars', () => {
+    const oldenv = process.env
+    process.env = {
+      DD_PROFILING_DEBUG_SOURCE_MAPS: '1',
+      DD_PROFILING_HEAP_SAMPLING_INTERVAL: '1000',
+      DD_PROFILING_PPROF_PREFIX: 'test-prefix',
+      DD_PROFILING_UPLOAD_TIMEOUT: '10000',
+      DD_PROFILING_TIMELINE_ENABLED: '0'
+    }
+
+    const options = {
+      logger: nullLogger
+    }
+
+    const config = new Config(options)
+    expect(config.debugSourceMaps).to.be.true
+    expect(config.heapSamplingInterval).to.equal(1000)
+    expect(config.pprofPrefix).to.equal('test-prefix')
+    expect(config.uploadTimeout).to.equal(10000)
+    expect(config.timelineEnabled).to.be.false
+
+    process.env = oldenv
+  })
+
   it('should deduplicate profilers', () => {
     process.env = {
       DD_PROFILING_PROFILERS: 'wall,wall',
