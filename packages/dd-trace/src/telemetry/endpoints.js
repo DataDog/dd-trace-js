@@ -98,14 +98,14 @@ function flushAndSend () {
   if (pendingEndpoints.size) scheduleFlush()
 }
 
-function start (_config = {}, _application, _host, getRetryDataFunction, updateRetryDatafunction) {
+function start (_config = {}, _application, _host, getRetryDataFunction, updateRetryDataFunction) {
   if (!_config?.appsec?.apiSecurity?.endpointCollectionEnabled) return
 
   config = _config
   application = _application
   host = _host
   getRetryData = getRetryDataFunction
-  updateRetryData = updateRetryDatafunction
+  updateRetryData = updateRetryDataFunction
 
   fastifyRouteCh.subscribe(onFastifyRoute)
 }
