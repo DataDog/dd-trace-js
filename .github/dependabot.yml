@@ -6,6 +6,10 @@
 version: 2
 updates:
   - package-ecosystem: "github-actions"
+    ignore:
+      - dependency-name: "actions/checkout"
+        # actions/checkout v5 requires Node.js 24 while we need to use an older version at times.
+        update-types: ["version-update:semver-major"]
     directories:
       - "/"
       - "/.github/actions/*"
