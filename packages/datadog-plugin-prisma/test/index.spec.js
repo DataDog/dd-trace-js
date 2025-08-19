@@ -152,6 +152,49 @@ describe('Plugin', () => {
             tracingPromise
           ])
         })
+
+        it('should include database connection attributes in db_query spans', async () => {
+          // Set up database config that should be parsed from connection URL
+          const dbConfig = {
+            user: 'postgres',
+            host: 'localhost',
+            port: '5432',
+            database: 'postgres'
+          }
+          tracingHelper.setDbString(dbConfig)
+
+          const tracingPromise = agent.assertSomeTraces(traces => {
+            // Find the db_query span
+            const dbQuerySpan = traces[0].find(span => span.meta['prisma.name'] === 'db_query')
+            expect(dbQuerySpan).to.exist
+
+            // Verify database connection attributes are present
+            expect(dbQuerySpan.meta).to.have.property('db.name', 'postgres')
+            expect(dbQuerySpan.meta).to.have.property('db.user', 'postgres')
+            expect(dbQuerySpan.meta).to.have.property('out.host', 'localhost')
+            expect(dbQuerySpan.meta).to.have.property('network.destination.port', '5432')
+            expect(dbQuerySpan.meta).to.have.property('db.type', 'postgres')
+          })
+
+          const engineSpans = [
+            {
+              id: '1',
+              parentId: null,
+              name: 'prisma:engine:db_query',
+              startTime: [1745340876, 436861000],
+              endTime: [1745340876, 438601541],
+              kind: 'client',
+              attributes: {
+                'db.system': 'postgresql',
+                'db.query.text': 'SELECT 1'
+              }
+            }
+          ]
+          tracingHelper.dispatchEngineSpans(engineSpans)
+          await Promise.all([
+            tracingPromise
+          ])
+        })
       })
 
       describe('with configuration', () => {
