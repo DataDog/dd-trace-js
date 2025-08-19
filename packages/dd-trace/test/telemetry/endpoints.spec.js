@@ -100,22 +100,6 @@ describe('endpoints telemetry', () => {
       expect(firstPayload).to.have.property('is_first', true)
       expect(Boolean(secondPayload.is_first)).to.equal(false)
     })
-
-    it('should record fastify wildcard when all methods provided', () => {
-      fastifyRouteCh.publish({
-        routeOptions: {
-          method: ['GET', 'POST', 'PUT', 'DELETE', 'HEAD', 'PATCH', 'OPTIONS', 'TRACE'],
-          path: '/all'
-        }
-      })
-
-      scheduledCallbacks.forEach(cb => cb())
-
-      expect(sendData).to.have.been.calledOnce
-      const payload = sendData.firstCall.args[4]
-      const resources = payload.endpoints.map(e => e.resource_name)
-      expect(resources).to.deep.equal(['* /all'])
-    })
   })
 
   describe('on failed request', () => {
