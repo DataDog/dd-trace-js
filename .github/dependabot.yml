@@ -78,7 +78,9 @@ updates:
           - "@datadog/wasm-js-rewriter"
           - "@opentelemetry/api"
   - package-ecosystem: "npm"
-    directory: "/packages/dd-trace/test/plugins/versions"
+    directories:
+      - "/packages/dd-trace/test/plugins/versions"
+      - "/integration-tests/esbuild"
     schedule:
       interval: "daily"
     open-pull-requests-limit: 1
