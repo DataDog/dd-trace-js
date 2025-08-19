@@ -527,49 +527,4 @@ describe('PrioritySampler', () => {
       expect(setPriority).to.be.calledOnceWithExactly(span, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
     })
   })
-
-  describe('resource-based rule deferral', () => {
-    beforeEach(() => {
-      span.tracer = sinon.stub().returns({ _service: 'test-service' })
-    })
-
-    it('should defer sampling when resource rules exist but resource name is not set', () => {
-      prioritySampler.configure('test', {
-        sampleRate: 0,
-        rules: [{ resource: 'GET /api/*', sampleRate: 1 }]
-      })
-
-      span.context()._tags = {}
-
-      prioritySampler.sample(span)
-
-      expect(span.context()._sampling.priority).to.be.undefined
-    })
-
-    it('should sample normally when resource rules exist and resource name is set', () => {
-      prioritySampler.configure('test', {
-        sampleRate: 0,
-        rules: [{ resource: 'GET /api/*', sampleRate: 1 }]
-      })
-
-      span.context()._tags = { resource: 'GET /api/users' }
-
-      prioritySampler.sample(span)
-
-      expect(span.context()._sampling.priority).to.equal(USER_KEEP)
-    })
-
-    it('should sample normally when no resource rules exist', () => {
-      prioritySampler.configure('test', {
-        sampleRate: 1,
-        rules: [{ service: 'my-service', sampleRate: 1 }]
-      })
-
-      span.context()._tags = {}
-
-      prioritySampler.sample(span)
-
-      expect(span.context()._sampling.priority).to.equal(USER_KEEP)
-    })
-  })
 })

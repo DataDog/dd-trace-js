@@ -143,4 +143,3 @@ class SamplingRule {
 }
 
 module.exports = SamplingRule
-module.exports.resourceLocator = resourceLocator
