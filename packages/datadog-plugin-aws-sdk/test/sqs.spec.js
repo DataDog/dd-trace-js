@@ -146,7 +146,8 @@ describe('Plugin', () => {
 
             expect(span.resource.startsWith('sendMessage')).to.equal(true)
             expect(span.meta).to.include({
-              queuename: queueName
+              queuename: queueName,
+              queue_url: QueueUrl
             })
 
             parentId = span.span_id.toString()
@@ -196,7 +197,8 @@ describe('Plugin', () => {
 
             expect(span.resource.startsWith('sendMessageBatch')).to.equal(true)
             expect(span.meta).to.include({
-              queuename: queueName
+              queuename: queueName,
+              queue_url: QueueUrl
             })
 
             parentId = span.span_id.toString()
@@ -369,6 +371,7 @@ describe('Plugin', () => {
 
             expect(span.meta).to.include({
               queuename: queueName,
+              queue_url: QueueUrl,
               aws_service: 'SQS',
               region: 'us-east-1'
             })
