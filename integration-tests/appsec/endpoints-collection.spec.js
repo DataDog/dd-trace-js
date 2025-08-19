@@ -27,29 +27,50 @@ describe('Endpoints collection', () => {
       // Basic routes
       { method: 'GET', path: '/users' },
       { method: 'HEAD', path: '/users' },
-      { method: 'POST', path: '/users' },
+      { method: 'POST', path: '/users/' },
       { method: 'PUT', path: '/users/:id' },
       { method: 'DELETE', path: '/users/:id' },
-      { method: 'PATCH', path: '/users/:id' },
-      { method: 'OPTIONS', path: '/users' },
+      { method: 'PATCH', path: '/users/:id/:name' },
+      { method: 'OPTIONS', path: '/users/:id?' },
+
+      // Route with regex
+      { method: 'DELETE', path: '/regex/:hour(^\\d{2})h:minute(^\\d{2})m' },
 
       // Additional methods
       { method: 'TRACE', path: '/trace-test' },
       { method: 'HEAD', path: '/head-test' },
 
+      // Custom method
+      { method: 'MKCOL', path: '/example/near/:lat-:lng/radius/:r' },
+
       // Using app.route()
       { method: 'POST', path: '/multi-method' },
+      { method: 'PUT', path: '/multi-method' },
+      { method: 'PATCH', path: '/multi-method' },
 
-      // Wildcard route
-      { method: '*', path: '/wildcard' },
+      // All supported methods route
+      { method: 'GET', path: '/all-methods' },
+      { method: 'HEAD', path: '/all-methods' },
+      { method: 'TRACE', path: '/all-methods' },
+      { method: 'DELETE', path: '/all-methods' },
+      { method: 'OPTIONS', path: '/all-methods' },
+      { method: 'PATCH', path: '/all-methods' },
+      { method: 'PUT', path: '/all-methods' },
+      { method: 'POST', path: '/all-methods' },
+      { method: 'MKCOL', path: '/all-methods' }, // Added with addHttpMethod
 
       // Nested routes with Router
       { method: 'PUT', path: '/v1/nested/:id' },
 
       // Deeply nested routes
+      { method: 'GET', path: '/api/nested' },
       { method: 'GET', path: '/api/sub/deep' },
       { method: 'HEAD', path: '/api/sub/deep' },
       { method: 'POST', path: '/api/sub/deep/:id' },
+
+      // Wildcard routes
+      { method: 'GET', path: '/wildcard/*' },
+      { method: 'GET', path: '/*' },
     ]
 
     return expectedEndpoints
@@ -91,7 +112,7 @@ describe('Endpoints collection', () => {
             })
           }
         }
-      }, 'app-endpoints', 5_000, 2)
+      }, 'app-endpoints', 5_000, 4)
 
       const trueCount = isFirstFlags.filter(v => v === true).length
       expect(trueCount).to.equal(1)
