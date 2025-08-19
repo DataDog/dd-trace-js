@@ -5,6 +5,7 @@ const RateLimiter = require('./rate_limiter')
 const Sampler = require('./sampler')
 const { setSamplingRules } = require('./startup-log')
 const SamplingRule = require('./sampling_rule')
+const { resourceLocator } = SamplingRule
 
 const {
   SAMPLING_MECHANISM_DEFAULT,
@@ -116,7 +117,11 @@ class PrioritySampler {
       context._sampling.priority = tag
       context._sampling.mechanism = SAMPLING_MECHANISM_MANUAL
     } else if (auto) {
-      context._sampling.priority = this._getPriorityFromAuto(root)
+      const priority = this._getPriorityFromAuto(root)
+      if (priority === undefined) {
+        return // Defer sampling until resource information is available
+      }
+      context._sampling.priority = priority
     } else {
       return
     }
@@ -200,10 +205,18 @@ class PrioritySampler {
   /**
    *
    * @param span {DatadogSpan}
-   * @returns {SamplingPriority}
+   * @returns {SamplingPriority|undefined}
    */
   _getPriorityFromAuto (span) {
     const context = this._getContext(span)
+
+    // Check if resource name is available and if we have resource-based rules
+    const { _tags: tags } = context
+    const hasResource = tags.resource || tags['resource.name']
+    if (!hasResource && this.#hasResourceBasedRules()) {
+      return // Defer sampling until resource is available
+    }
+
     const rule = this.#findRule(span)
 
     return rule
@@ -336,6 +349,16 @@ class PrioritySampler {
       // eslint-disable-next-line unicorn/prefer-regexp-test
       if (rule.match(span)) return rule
     }
+  }
+
+  /**
+   * Check if any sampling rules depend on resource names
+   * @returns {boolean}
+   */
+  #hasResourceBasedRules () {
+    return this._rules.some(rule =>
+      rule.matchers.some(matcher => matcher.locator === resourceLocator)
+    )
   }
 
   /**
