@@ -148,13 +148,13 @@ class TextMapPropagator {
 
         // Check for item count limit exceeded
         if (itemCounter > this._config.baggageMaxItems) {
-          tracerMetrics.count('context_header_style.truncated', ['truncation_reason:baggage_item_count_exceeded']).inc()
+          tracerMetrics.count('context_header.truncated', ['truncation_reason:baggage_item_count_exceeded']).inc()
           break
         }
 
         // Check for byte count limit exceeded
         if (byteCounter > this._config.baggageMaxBytes) {
-          tracerMetrics.count('context_header_style.truncated', ['truncation_reason:baggage_byte_count_exceeded']).inc()
+          tracerMetrics.count('context_header.truncated', ['truncation_reason:baggage_byte_count_exceeded']).inc()
           break
         }
 
