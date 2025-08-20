@@ -1802,7 +1802,7 @@ describe('jest CommonJS', () => {
     it('retries flaky tests', (done) => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       // Tests from ci-visibility/test/occasionally-failing-test will be considered new
-      receiver.setKnownTests({})
+      receiver.setKnownTests({ jest: {} })
 
       const NUM_RETRIES_EFD = 5
       receiver.setSettings({
@@ -1866,7 +1866,7 @@ describe('jest CommonJS', () => {
     it('does not retry new tests that are skipped', (done) => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       // Tests from ci-visibility/test/skipped-and-todo-test will be considered new
-      receiver.setKnownTests({})
+      receiver.setKnownTests({ jest: {} })
 
       const NUM_RETRIES_EFD = 5
       receiver.setSettings({
@@ -2036,7 +2036,7 @@ describe('jest CommonJS', () => {
     it('retries flaky tests and sets exit code to 0 as long as one attempt passes', (done) => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       // Tests from ci-visibility/test/occasionally-failing-test will be considered new
-      receiver.setKnownTests({})
+      receiver.setKnownTests({ jest: {} })
 
       const NUM_RETRIES_EFD = 3
       receiver.setSettings({
@@ -2110,7 +2110,7 @@ describe('jest CommonJS', () => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       // Tests from ci-visibility/test-early-flake-detection/jest-snapshot.js will be considered new
       // but we don't retry them because they have snapshots
-      receiver.setKnownTests({})
+      receiver.setKnownTests({ jest: {} })
 
       const NUM_RETRIES_EFD = 3
       receiver.setSettings({
@@ -2164,7 +2164,7 @@ describe('jest CommonJS', () => {
     it('bails out of EFD if the percentage of new tests is too high', (done) => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       // Tests from ci-visibility/test/ci-visibility-test* will be considered new
-      receiver.setKnownTests({})
+      receiver.setKnownTests({ jest: {} })
 
       const NUM_RETRIES_EFD = 3
       receiver.setSettings({
@@ -3774,7 +3774,7 @@ describe('jest CommonJS', () => {
 
     context('test is new', () => {
       it('should be retried and marked both as new and modified', (done) => {
-        receiver.setKnownTests({})
+        receiver.setKnownTests({ jest: {} })
         receiver.setSettings({
           impacted_tests_enabled: true,
           early_flake_detection: {
