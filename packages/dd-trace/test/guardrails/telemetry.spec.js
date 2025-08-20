@@ -68,45 +68,4 @@ describe('sendTelemetry', () => {
       assertTelemetryPoints(process.pid, msgs, ['abort.integration', '1'])
     })
   })
-
-  describe('Error scenarios and metadata', () => {
-    let mockProc, telemetryModule, capturedStdinData
-
-    function createMockProcess () {
-      const proc = new EventEmitter()
-      proc.stdin = new EventEmitter()
-      proc.stdin.end = (data) => {
-        capturedStdinData = data
-      }
-      return proc
-    }
-
-    function loadTelemetryModuleWithMockProc () {
-      return proxyquire('../src/guardrails/telemetry', {
-        child_process: { spawn: () => mockProc }
-      })
-    }
-
-    function runTelemetry (eventType, value) {
-      const originalStringify = JSON.stringify
-      JSON.stringify = function (obj) {
-        if (obj && obj.metadata && obj.points) {
-          if (eventType === 'spawn-error') {
-            mockProc.emit('error', new Error(value))
-          } else if (eventType === 'exit') {
-            mockProc.emit('exit', value)
-          } else if (eventType === 'stdin-error') {
-            mockProc.stdin.emit('error', new Error(value))
-          }
-        }
-        return originalStringify.apply(this, arguments)
-      }
-
-      try {
-        telemetryModule([{ name: 'test', tags: [] }])
-      } finally {
-        JSON.stringify = originalStringify
-      }
-    }
-  })
 })

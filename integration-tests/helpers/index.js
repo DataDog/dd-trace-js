@@ -78,7 +78,7 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
   let points = []
   for (const [telemetryType, data] of msgs) {
     assert.strictEqual(telemetryType, 'library_entrypoint')
-    assert.deepStrictEqual(data.metadata, meta(pid))
+    assert.deepStrictEqual(data.metadata, meta(pid, expectedTelemetryPoints))
     points = points.concat(data.points)
   }
   const expectedPoints = getPoints(...expectedTelemetryPoints)
@@ -106,14 +106,48 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
     return expectedPoints
   }
 
-  function meta (pid) {
-    return {
+  function meta (pid, telemetryPoints) {
+    const baseMetadata = {
       language_name: 'nodejs',
       language_version: process.versions.node,
       runtime_name: 'nodejs',
       runtime_version: process.versions.node,
       tracer_version: require('../../package.json').version,
-      pid: Number(pid),
+      pid: Number(pid)
+    }
+
+    // Check if this is an integration test scenario by looking at the format
+    // Integration tests use arrays like ['complete', 'injection_forced:false']
+    // Unit tests use arrays like ['abort', '1', 'abort.integration', '2']
+    const isIntegrationTest = telemetryPoints && telemetryPoints.length > 0 && 
+      !telemetryPoints.some((point, index) => index % 2 === 1 && !point.includes(':'))
+
+    if (isIntegrationTest) {
+      // Check if this is an abort scenario
+      if (telemetryPoints.includes('abort')) {
+        return {
+          ...baseMetadata,
+          result: 'abort',
+          result_class: 'incompatible_runtime',
+          result_reason: `Node.js ${process.versions.node.split('.')[0]} is incompatible with SII`
+        }
+      }
+
+      // Check if this is a complete scenario (success)
+      if (telemetryPoints.includes('complete')) {
+        const isForced = telemetryPoints.includes('injection_forced:true')
+        return {
+          ...baseMetadata,
+          result: 'success',
+          result_class: isForced ? 'success_forced' : 'success',
+          result_reason: 'Successfully configured ddtrace package'
+        }
+      }
+    }
+
+    // Default to unknown for unit tests or other scenarios
+    return {
+      ...baseMetadata,
       result: 'unknown',
       result_reason: 'unknown',
       result_class: 'unknown'
