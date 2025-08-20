@@ -1,7 +1,6 @@
 'use strict'
 
 const { FakeAgent, createSandbox, spawnProc, curlAndAssertMessage, assertObjectContains } = require('./helpers')
-const { assert } = require('chai')
 const path = require('path')
 const { USER_KEEP } = require('../ext/priority')
 
@@ -48,7 +47,7 @@ describe('Log Injection', () => {
         // Bug: previously got USER_REJECT instead of USER_KEEP when log injection is enabled,
         // meaning resource rules are not applied & instead global sampling is applied
         // Now gets USER_KEEP because resource rules are applied
-        assertObjectContains(payload, [[{ metrics: { _sampling_priority_v1: USER_KEEP }}]])
+        assertObjectContains(payload, [[{ metrics: { _sampling_priority_v1: USER_KEEP } }]])
       }, 20000, 1)
     })
 
@@ -60,9 +59,7 @@ describe('Log Injection', () => {
       proc = await spawnProc(app, { cwd, env, execArgv: [] })
       const url = proc.url + '/sampled'
       return curlAndAssertMessage(agent, url, ({ headers, payload }) => {
-        assert.isArray(payload)
-        assert.strictEqual(payload.length, 1)
-        assertObjectContains(payload[0][0].metrics, { _sampling_priority_v1: USER_KEEP })
+        assertObjectContains(payload, [[{ metrics: { _sampling_priority_v1: USER_KEEP } }]])
       }, 20000, 1)
     })
   })
