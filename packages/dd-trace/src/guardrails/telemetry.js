@@ -52,10 +52,14 @@ function sendTelemetry (name, tags, resultMetadata) {
   if (typeof name === 'string') {
     points = [{ name: name, tags: tags || [] }]
   }
-  
   var currentMetadata = metadata
   if (resultMetadata) {
-    currentMetadata = Object.assign({}, metadata, resultMetadata)
+    for (var key in metadata) {
+      currentMetadata[key] = metadata[key]
+    }
+    for (var key in resultMetadata) {
+      currentMetadata[key] = resultMetadata[key]
+    }
   }
   if (['1', 'true', 'True'].indexOf(process.env.DD_INJECT_FORCE) !== -1) {
     points = points.filter(function (p) { return ['error', 'complete'].indexOf(p.name) !== -1 })
@@ -74,7 +78,7 @@ function sendTelemetry (name, tags, resultMetadata) {
     log.error('Failed to spawn telemetry forwarder')
   })
   proc.on('exit', function (code) {
-    if (code != 0) {
+    if (code !== 0) {
       log.error('Telemetry forwarder exited with code', code)
     }
   })
