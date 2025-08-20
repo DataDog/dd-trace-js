@@ -235,16 +235,23 @@ function useLlmobs ({
 
   beforeEach(() => {
     apmTracesPromise = agent.assertSomeTraces(apmTraces => {
-      return apmTraces
-        .flatMap(trace => trace)
-        .sort((a, b) => a.start < b.start ? -1 : (a.start > b.start ? 1 : 0))
+      console.log('apmTracesPromise resolved')
+      const flattened = apmTraces.flatMap(trace => trace)
+      console.log('flattened', flattened)
+      const sorted = flattened.sort((a, b) => a.start < b.start ? -1 : (a.start > b.start ? 1 : 0))
+      console.log('sorted', sorted)
+      return sorted
     })
 
     llmobsTracesPromise = agent.useLlmobsTraces(llmobsTraces => {
-      return llmobsTraces
-        .flatMap(trace => trace)
-        .map(trace => trace.spans[0])
-        .sort((a, b) => a.start_ns - b.start_ns)
+      console.log('llmobsTracesPromise resolved')
+      const flattened = llmobsTraces.flatMap(trace => trace)
+      console.log('flattened', flattened)
+      const firstSpans = flattened.map(trace => trace.spans[0])
+      console.log('first spans', firstSpans)
+      const sorted = firstSpans.sort((a, b) => a.start_ns - b.start_ns)
+      console.log('sorted', sorted)
+      return sorted
     })
   })
 
