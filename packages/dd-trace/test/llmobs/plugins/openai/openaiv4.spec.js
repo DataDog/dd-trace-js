@@ -52,7 +52,7 @@ describe('integrations', () => {
       return agent.close({ ritmReset: false, wipe: true })
     })
 
-    withVersions('openai', 'openai', '>=4 <5', version => {
+    withVersions('openai', 'openai', '>=4', version => {
       const moduleRequirePath = `../../../../../../versions/openai@${version}`
       let realVersion
 
