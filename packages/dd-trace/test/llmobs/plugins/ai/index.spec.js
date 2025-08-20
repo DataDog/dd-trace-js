@@ -30,7 +30,7 @@ function getAiSdkOpenAiPackage (vercelAiVersion) {
 describe('Plugin', () => {
   useEnv({
     OPENAI_API_KEY: '<not-a-real-key>',
-    _DD_LLMOBS_FLUSH_INTERVAL: 10 // 10ms
+    _DD_LLMOBS_FLUSH_INTERVAL: 0
   })
 
   withVersions('ai', 'ai', range, (version, _, realVersion) => {
@@ -57,8 +57,10 @@ describe('Plugin', () => {
         maxTokens: 100,
         temperature: 0.5
       })
+      console.log('after ai.generateText promise')
 
       const { apmSpans, llmobsSpans } = await getEvents()
+      console.log('after getEvents promise')
 
       const expectedWorkflowSpan = expectedLLMObsNonLLMSpanEvent({
         span: apmSpans[0],
@@ -116,8 +118,10 @@ describe('Plugin', () => {
         schema,
         prompt: 'Invent a character for a video game'
       })
+      console.log('after ai.generateObject promise')
 
       const { apmSpans, llmobsSpans } = await getEvents()
+      console.log('after getEvents promise')
 
       const expectedWorkflowSpan = expectedLLMObsNonLLMSpanEvent({
         span: apmSpans[0],
@@ -156,8 +160,10 @@ describe('Plugin', () => {
         model: openai.embedding('text-embedding-ada-002'),
         value: 'hello world'
       })
+      console.log('after ai.embed promise')
 
       const { apmSpans, llmobsSpans } = await getEvents()
+      console.log('after getEvents promise')
 
       const expectedWorkflowSpan = expectedLLMObsNonLLMSpanEvent({
         span: apmSpans[0],
@@ -194,8 +200,10 @@ describe('Plugin', () => {
         model: openai.embedding('text-embedding-ada-002'),
         values: ['hello world', 'goodbye world']
       })
+      console.log('after ai.embedMany promise')
 
       const { apmSpans, llmobsSpans } = await getEvents()
+      console.log('after getEvents promise')
 
       const expectedWorkflowSpan = expectedLLMObsNonLLMSpanEvent({
         span: apmSpans[0],
@@ -235,13 +243,15 @@ describe('Plugin', () => {
         maxTokens: 100,
         temperature: 0.5
       })
-
+      console.log('after ai.streamText promise')
       const textStream = result.textStream
 
       for await (const part of textStream) {} // eslint-disable-line
+      console.log('after textStream promise')
 
       const { apmSpans, llmobsSpans } = await getEvents()
 
+      console.log('after getEvents promise')
       const expectedWorkflowSpan = expectedLLMObsNonLLMSpanEvent({
         span: apmSpans[0],
         name: 'streamText',
@@ -295,12 +305,15 @@ describe('Plugin', () => {
         schema,
         prompt: 'Invent a character for a video game'
       })
+      console.log('after ai.streamObject promise')
 
       const partialObjectStream = result.partialObjectStream
 
       for await (const part of partialObjectStream) {} // eslint-disable-line
+      console.log('after partialObjectStream promise')
 
       const { apmSpans, llmobsSpans } = await getEvents()
+      console.log('after getEvents promise')
 
       const expectedCharacter = { name: 'Zara Nightshade', age: 28, height: "5'7\"" }
 
@@ -383,8 +396,10 @@ describe('Plugin', () => {
         tools,
         ...maxStepsArg,
       })
+      console.log('after ai.generateText promise')
 
       const { apmSpans, llmobsSpans } = await getEvents()
+      console.log('after getEvents promise')
 
       const workflowSpan = llmobsSpans[0]
       const llmSpan = llmobsSpans[1]
@@ -538,12 +553,15 @@ describe('Plugin', () => {
         tools,
         ...maxStepsArg,
       })
+      console.log('after ai.streamText promise')
 
       const textStream = result.textStream
 
       for await (const part of textStream) {} // eslint-disable-line
+      console.log('after textStream for loop promise')
 
       const { apmSpans, llmobsSpans } = await getEvents()
+      console.log('after getEvents promise')
 
       const workflowSpan = llmobsSpans[0]
       const llmSpan = llmobsSpans[1]

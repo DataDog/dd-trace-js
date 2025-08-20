@@ -253,7 +253,9 @@ function useLlmobs ({
   })
 
   return async function () {
+    console.log('before getEvents Promise.all')
     const [apmSpans, llmobsSpans] = await Promise.all([apmTracesPromise, llmobsTracesPromise])
+    console.log('after getEvents Promise.all')
 
     return { apmSpans, llmobsSpans }
   }
