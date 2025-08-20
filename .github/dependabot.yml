@@ -80,6 +80,20 @@ updates:
   - package-ecosystem: "npm"
     directories:
       - "/packages/dd-trace/test/plugins/versions"
+    schedule:
+      interval: "daily"
+    open-pull-requests-limit: 1
+    labels:
+      - dependabot
+      - dependencies
+      - javascript
+      - semver-patch
+    groups:
+      test-versions:
+        patterns:
+          - "*"
+  - package-ecosystem: "npm"
+    directories:
       - "/integration-tests/esbuild"
     schedule:
       interval: "daily"
