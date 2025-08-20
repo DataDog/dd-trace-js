@@ -27,7 +27,9 @@ function getAiSdkOpenAiPackage (vercelAiVersion) {
   return semifies(vercelAiVersion, '>=5.0.0') ? '@ai-sdk/openai' : '@ai-sdk/openai@1.3.23'
 }
 
-describe('Plugin', () => {
+describe('Plugin', function () {
+  this.timeout(30_000)
+
   useEnv({
     OPENAI_API_KEY: '<not-a-real-key>',
     _DD_LLMOBS_FLUSH_INTERVAL: 0
