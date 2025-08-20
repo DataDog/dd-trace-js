@@ -26,7 +26,7 @@ jobs:
         test-image: [ubuntu-22.04]
         include:
           - node-version: 18
-            range: '>=5.2.0'
+            range: '>=5.2.0 <6.3.0'
             range_clean: gte.5.2.0
             aerospike-image: ce-6.4.0.3
             test-image: ubuntu-latest
@@ -50,7 +50,7 @@ jobs:
       aerospike:
         image: aerospike:${{ matrix.aerospike-image }}
         ports:
-          - "127.0.0.1:3000-3002:3000-3002"
+          - '127.0.0.1:3000-3002:3000-3002'
     env:
       PLUGINS: aerospike
       SERVICES: aerospike
@@ -121,65 +121,6 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/plugins/test-and-upstream
 
-  aws-sdk:
-    strategy:
-      matrix:
-        include:
-          - node-version: latest
-            node-opts: --no-async-context-frame
-          - node-version: oldest
-            node-opts: ''
-    runs-on: ubuntu-latest
-    services:
-      localstack:
-        image: localstack/localstack:3.0.2
-        env:
-          LOCALSTACK_SERVICES: dynamodb,kinesis,s3,sqs,sns,redshift,route53,logs,serverless,lambda,stepfunctions,events
-          EXTRA_CORS_ALLOWED_HEADERS: x-amz-request-id,x-amzn-requestid,x-amz-id-2
-          EXTRA_CORS_EXPOSE_HEADERS: x-amz-request-id,x-amzn-requestid,x-amz-id-2
-          AWS_DEFAULT_REGION: us-east-1
-          FORCE_NONINTERACTIVE: 'true'
-          LAMBDA_EXECUTOR: local
-          START_WEB: '0'
-        ports:
-          - 4566:4566
-      # we have two localstacks since upgrading localstack was causing lambda & S3 tests to fail
-      # To-Do: Debug localstack / lambda and localstack / S3
-      localstack-legacy:
-        image: localstack/localstack:1.1.0
-        ports:
-          - "127.0.0.1:4567:4567" # Edge
-        env:
-          LOCALSTACK_SERVICES: dynamodb,kinesis,s3,sqs,sns,redshift,route53,logs,serverless
-          EXTRA_CORS_ALLOWED_HEADERS: x-amz-request-id,x-amzn-requestid,x-amz-id-2
-          EXTRA_CORS_EXPOSE_HEADERS: x-amz-request-id,x-amzn-requestid,x-amz-id-2
-          AWS_DEFAULT_REGION: us-east-1
-          FORCE_NONINTERACTIVE: 'true'
-          LAMBDA_EXECUTOR: local
-          START_WEB: '0'
-          GATEWAY_LISTEN: 127.0.0.1:4567
-          EDGE_PORT: 4567
-          EDGE_PORT_HTTP: 4567
-    env:
-      PLUGINS: aws-sdk
-      SERVICES: localstack localstack-legacy
-      DD_DATA_STREAMS_ENABLED: true
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node
-        with:
-          version: ${{ matrix.node-version }}
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-        env:
-          NODE_OPTIONS: ${{ matrix.node-opts }}
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: plugins-${{ github.job }}-${{ matrix.node-version }}
-      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
-
   axios:
     runs-on: ubuntu-latest
     env:
@@ -187,58 +128,6 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/plugins/upstream
-
-  azure-functions:
-    runs-on: ubuntu-latest
-    services:
-        azureservicebusemulator:
-          image: mcr.microsoft.com/azure-messaging/servicebus-emulator:1.1.2
-          ports:
-              - "127.0.0.1:5672:5672"
-              - "127.0.0.1:5300:5300"
-          env:
-              ACCEPT_EULA: "Y"
-              MSSQL_SA_PASSWORD: "Localtestpass1!"
-              SQL_SERVER: azuresqledge
-        azuresqledge:
-          image: mcr.microsoft.com/azure-sql-edge:1.0.7
-          ports:
-              - "127.0.0.1:1433:1433"
-          env:
-              ACCEPT_EULA: "Y"
-              MSSQL_SA_PASSWORD: "Localtestpass1!"
-    env:
-      PLUGINS: azure-functions
-      SERVICES: azureservicebusemulator,azuresqledge
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/plugins/test
-
-  azure-service-bus:
-    runs-on: ubuntu-latest
-    services:
-        azureservicebusemulator:
-          image: mcr.microsoft.com/azure-messaging/servicebus-emulator:1.1.2
-          ports:
-              - "127.0.0.1:5672:5672"
-              - "127.0.0.1:5300:5300"
-          env:
-              ACCEPT_EULA: "Y"
-              MSSQL_SA_PASSWORD: "Localtestpass1!"
-              SQL_SERVER: azuresqledge
-        azuresqledge:
-          image: mcr.microsoft.com/azure-sql-edge:1.0.7
-          ports:
-              - "127.0.0.1:1433:1433"
-          env:
-              ACCEPT_EULA: "Y"
-              MSSQL_SA_PASSWORD: "Localtestpass1!"
-    env:
-      PLUGINS: azure-service-bus
-      SERVICES: azureservicebusemulator,azuresqledge
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/plugins/test
 
   bunyan:
     runs-on: ubuntu-latest
@@ -277,15 +166,18 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-        env:
-          OPTIONS_OVERRIDE: 1
       - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
 
   confluentinc-kafka-javascript:
     strategy:
       matrix:
         # using node versions matrix since this plugin testing fails due to install differences between node versions
-        node-version: ['18', '20', '22']
+        node-version: [18, 20, 22]
+        range: ['>=1.0.0']
+        include:
+          - node-version: 24
+            range: '>=1.4.0'
+            range_clean: gte.1.4.0
     runs-on: ubuntu-latest
     services:
       kafka:
@@ -308,6 +200,7 @@ jobs:
     env:
       PLUGINS: confluentinc-kafka-javascript
       SERVICES: kafka
+      PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/testagent/start
@@ -361,14 +254,6 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/plugins/test-and-upstream
 
-  dd-trace-api:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: dd-trace-api
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/plugins/test
-
   dns:
     runs-on: ubuntu-latest
     env:
@@ -406,7 +291,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
       - if: always()
@@ -421,7 +306,10 @@ jobs:
       PLUGINS: express
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/plugins/test
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/latest
+      - uses: ./.github/actions/install
+      - run: yarn test:plugins:ci
 
   fastify:
     runs-on: ubuntu-latest
@@ -443,20 +331,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PLUGINS: fs
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/plugins/test
-
-  google-cloud-pubsub:
-    runs-on: ubuntu-latest
-    services:
-      pubsub:
-        image: ghcr.io/ridedott/pubsub-emulator
-        ports:
-          - 8081:8081
-    env:
-      PLUGINS: google-cloud-pubsub
-      SERVICES: gpubsub
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/plugins/test
@@ -757,7 +631,15 @@ jobs:
         version:
           - 18
           - latest
-        range: ['>=10.2.0 <11', '>=11.0.0 <13', '11.1.4', '>=13.0.0 <14', '13.2.0', '>=14.0.0 <=14.2.6', '>=14.2.7 <15', '>=15.0.0 <15.4.1']
+        range:
+          - '>=10.2.0 <11'
+          - '>=11.0.0 <13'
+          - '11.1.4'
+          - '>=13.0.0 <14'
+          - '13.2.0'
+          - '>=14.0.0 <=14.2.6'
+          - '>=14.2.7 <15'
+          - '>=15.0.0 <15.4.1'
         include:
           - range: '>=10.2.0 <11'
             range_clean: gte.10.2.0.and.lt.11
@@ -782,7 +664,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
       - if: always()
@@ -866,7 +748,7 @@ jobs:
       - uses: ./.github/actions/node/newest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       # - run: yarn test:plugins:upstream
       - if: always()
@@ -958,13 +840,20 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/plugins/test
 
+  # Restify isn't compatible with Node.js v24 so we don't run against latest Node.js
+  # see: https://github.com/restify/node-restify/issues/1984
   restify:
     runs-on: ubuntu-latest
     env:
       PLUGINS: restify
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/plugins/test
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/install
+      - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/oldest-maintenance-lts
+      - run: yarn test:plugins:ci
 
   rhea:
     runs-on: ubuntu-latest
@@ -999,7 +888,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
       - if: always()
@@ -1025,7 +914,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream

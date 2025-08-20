@@ -1,5 +1,6 @@
 'use strict'
 
+const { NODE_MAJOR } = require('../../../../../../../version')
 const axios = require('axios')
 const semver = require('semver')
 const agent = require('../../../../plugins/agent')
@@ -8,6 +9,7 @@ const { storage } = require('../../../../../../datadog-core')
 const iast = require('../../../../../src/appsec/iast')
 const iastContextFunctions = require('../../../../../src/appsec/iast/iast-context')
 const { isTainted, getRanges } = require('../../../../../src/appsec/iast/taint-tracking/operations')
+const { withVersions } = require('../../../../setup/mocha')
 const {
   HTTP_REQUEST_PATH_PARAM,
   HTTP_REQUEST_URI
@@ -18,6 +20,11 @@ describe('URI sourcing with express', () => {
   let appListener
 
   withVersions('express', 'express', version => {
+    if (semver.intersects(version, '<=4.10.5') && NODE_MAJOR >= 24) {
+      describe.skip(`refusing to run tests as express@${version} is incompatible with Node.js ${NODE_MAJOR}`)
+      return
+    }
+
     before(() => {
       return agent.load(['http', 'express'], { client: false })
     })
@@ -77,6 +84,11 @@ describe('Path params sourcing with express', () => {
   let appListener
 
   withVersions('express', 'express', version => {
+    if (semver.intersects(version, '<=4.10.5') && NODE_MAJOR >= 24) {
+      describe.skip(`refusing to run tests as express@${version} is incompatible with Node.js ${NODE_MAJOR}`)
+      return
+    }
+
     const checkParamIsTaintedAndNext = (req, res, next, param, name) => {
       const store = storage('legacy').getStore()
       const iastContext = iastContextFunctions.getIastContext(store)

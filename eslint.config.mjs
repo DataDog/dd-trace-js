@@ -543,7 +543,6 @@ export default [
         sinon: 'readonly',
         expect: 'readonly',
         proxyquire: 'readonly',
-        withVersions: 'readonly',
       }
     },
     plugins: {

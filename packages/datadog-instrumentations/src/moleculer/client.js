@@ -21,19 +21,18 @@ function wrapCall (call) {
       ctx.promiseCtx = promise.ctx
       ctx.broker = broker
 
-      return promise
+      promise
         .then(
           result => {
             finishChannel.publish(ctx)
-            return result
           },
           error => {
             ctx.error = error
             errorChannel.publish(ctx)
             finishChannel.publish(ctx)
-            throw error
           }
         )
+      return promise
     })
   }
 }

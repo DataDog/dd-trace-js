@@ -2,6 +2,7 @@
 
 require('../src/knex')
 const { storage } = require('../../datadog-core')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 describe('Instrumentation', () => {
   let knex

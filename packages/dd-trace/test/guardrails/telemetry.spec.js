@@ -108,5 +108,6 @@ describe('sendTelemetry', () => {
         JSON.stringify = originalStringify
       }
     }
+
   })
 })

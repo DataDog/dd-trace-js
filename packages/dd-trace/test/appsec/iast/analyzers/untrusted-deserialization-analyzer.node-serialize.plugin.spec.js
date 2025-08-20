@@ -1,6 +1,7 @@
 'use strict'
 
 const { prepareTestServerForIast } = require('../utils')
+const { withVersions } = require('../../../setup/mocha')
 const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')

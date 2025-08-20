@@ -65,8 +65,10 @@ describe('PoissonProcessSamplingFilter', () => {
       resetInterval: 20,
       now: constantNow
     })
-    const event = { startTime: 0, duration: 100 }
-    assert.doesNotThrow(() => filter.filter(event))
+    assert.strictEqual(callCount, 1)
+    const event = { startTime: 0, duration: Number.POSITIVE_INFINITY }
+    // Make sure that filtering events does not throw and calls now() once
+    filter.filter(event)
     assert.strictEqual(callCount, 2)
   })
 
