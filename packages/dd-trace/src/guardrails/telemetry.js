@@ -54,11 +54,12 @@ function sendTelemetry (name, tags, resultMetadata) {
   }
   var currentMetadata = metadata
   if (resultMetadata) {
+    currentMetadata = {}
     for (var key in metadata) {
       currentMetadata[key] = metadata[key]
     }
-    for (var key in resultMetadata) {
-      currentMetadata[key] = resultMetadata[key]
+    for (var curr in resultMetadata) {
+      currentMetadata[curr] = resultMetadata[curr]
     }
   }
   if (['1', 'true', 'True'].indexOf(process.env.DD_INJECT_FORCE) !== -1) {
