@@ -166,6 +166,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           this.knownTestsForThisSuite = hasKnownTests
             ? (knownTests?.jest?.[this.testSuite] || [])
             : this.getKnownTestsForSuite(this.testEnvironmentOptions._ddKnownTests)
+          log.debug(`this.knownTestsForThisSuite is an array: ${Array.isArray(this.knownTestsForThisSuite)}`)
+          log.debug(`this.knownTestsForThisSuite is null: ${this.knownTestsForThisSuite === null}`)
+          log.debug(`this.knownTestsForThisSuite is undefined: ${this.knownTestsForThisSuite === undefined}`)
         } catch {
           // If there has been an error parsing the tests, we'll disable Early Flake Deteciton
           this.isEarlyFlakeDetectionEnabled = false
@@ -469,7 +472,10 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           }
         }
         if (this.isKnownTestsEnabled) {
-          const isNew = !this.knownTestsForThisSuite?.includes(originalTestName)
+          // Check if knownTestsForThisSuite is an array, since the worker may not have provided this information.
+          // If it's null or undefined, we can't determine if the test is new.
+          const isNew = Array.isArray(this.knownTestsForThisSuite) &&
+            !this.knownTestsForThisSuite.includes(originalTestName)
           if (isNew && !isSkipped && !retriedTestsToNumAttempts.has(originalTestName)) {
             retriedTestsToNumAttempts.set(originalTestName, 0)
             if (this.isEarlyFlakeDetectionEnabled) {
