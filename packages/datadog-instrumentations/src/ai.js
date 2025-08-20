@@ -105,8 +105,11 @@ function wrapWithTracer (fn) {
 
     if (experimentalTelemetry == null) {
       options.experimental_telemetry = { isEnabled: true, tracer: noopTracer }
-    } else if (experimentalTelemetry.tracer == null) {
-      experimentalTelemetry.tracer = noopTracer
+    } else {
+      experimentalTelemetry.isEnabled = true
+      if (experimentalTelemetry.tracer == null) {
+        experimentalTelemetry.tracer = noopTracer
+      }
     }
 
     wrapTracer(options.experimental_telemetry.tracer)

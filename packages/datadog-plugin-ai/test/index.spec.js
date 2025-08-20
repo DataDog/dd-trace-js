@@ -15,6 +15,32 @@ function getAiSdkOpenAiPackage (vercelAiVersion) {
   return semifies(vercelAiVersion, '>=5.0.0') ? '@ai-sdk/openai' : '@ai-sdk/openai@1.3.23'
 }
 
+// making a different reference from the default no-op tracer in the instrumentation
+// attempted to use the DD tracer provider, but it double-traces the request
+// in practice, there is no need to pass in the DD OTel tracer provider, so this
+// case shouldn't be an issue in practice
+const myTracer = {
+  startActiveSpan () {
+    const fn = arguments[arguments.length - 1]
+
+    const span = {
+      spanContext () { return { traceId: '', spanId: '', traceFlags: 0 } },
+      setAttribute () { return this },
+      setAttributes () { return this },
+      addEvent () { return this },
+      addLink () { return this },
+      addLinks () { return this },
+      setStatus () { return this },
+      updateName () { return this },
+      end () { return this },
+      isRecording () { return false },
+      recordException () { return this }
+    }
+
+    return fn(span)
+  }
+}
+
 describe('Plugin', () => {
   useEnv({
     OPENAI_API_KEY: '<not-a-real-key>'
@@ -87,6 +113,40 @@ describe('Plugin', () => {
         await checkTraces
       })
 
+      it('should not error when only a `tracer` is not passed in', async () => {
+        const checkTraces = agent.assertSomeTraces(traces => {
+          const generateTextSpan = traces[0][0]
+          const doGenerateSpan = traces[0][1]
+
+          assert.strictEqual(generateTextSpan.name, 'ai.generateText')
+          assert.strictEqual(generateTextSpan.resource, 'ai.generateText')
+          assert.strictEqual(generateTextSpan.meta['ai.request.model'], 'gpt-4o-mini')
+          assert.strictEqual(generateTextSpan.meta['ai.request.model_provider'], 'openai')
+
+          assert.strictEqual(doGenerateSpan.name, 'ai.generateText.doGenerate')
+          assert.strictEqual(doGenerateSpan.resource, 'ai.generateText.doGenerate')
+          assert.strictEqual(doGenerateSpan.meta['ai.request.model'], 'gpt-4o-mini')
+          assert.strictEqual(doGenerateSpan.meta['ai.request.model_provider'], 'openai')
+        })
+
+        const experimentalTelemetry = { tracer: myTracer }
+
+        const result = await ai.generateText({
+          model: openai('gpt-4o-mini'),
+          system: 'You are a helpful assistant',
+          prompt: 'Hello, OpenAI!',
+          maxTokens: 100,
+          temperature: 0.5,
+          experimental_telemetry: experimentalTelemetry
+        })
+
+        assert.ok(result.text, 'Expected result to be truthy')
+        assert.ok(experimentalTelemetry.isEnabled, 'isEnabled should be set to true')
+        assert.ok(experimentalTelemetry.tracer === myTracer, 'Tracer should be set when `isEnabled` is true')
+
+        await checkTraces
+      })
+
       it('should use the passed in `tracer`', async () => {
         const checkTraces = agent.assertSomeTraces(traces => {
           const generateTextSpan = traces[0][0]
@@ -103,33 +163,7 @@ describe('Plugin', () => {
           assert.strictEqual(doGenerateSpan.meta['ai.request.model_provider'], 'openai')
         })
 
-        // making a different reference from the default no-op tracer in the instrumentation
-        // attempted to use the DD tracer provider, but it double-traces the request
-        // in practice, there is no need to pass in the DD OTel tracer provider, so this
-        // case shouldn't be an issue in practice
-        const tracer = {
-          startActiveSpan () {
-            const fn = arguments[arguments.length - 1]
-
-            const span = {
-              spanContext () { return { traceId: '', spanId: '', traceFlags: 0 } },
-              setAttribute () { return this },
-              setAttributes () { return this },
-              addEvent () { return this },
-              addLink () { return this },
-              addLinks () { return this },
-              setStatus () { return this },
-              updateName () { return this },
-              end () { return this },
-              isRecording () { return false },
-              recordException () { return this }
-            }
-
-            return fn(span)
-          }
-        }
-
-        const experimentalTelemetry = { isEnabled: true, tracer }
+        const experimentalTelemetry = { isEnabled: true, tracer: myTracer }
 
         const result = await ai.generateText({
           model: openai('gpt-4o-mini'),
@@ -141,7 +175,7 @@ describe('Plugin', () => {
         })
 
         assert.ok(result.text, 'Expected result to be truthy')
-        assert.ok(experimentalTelemetry.tracer === tracer, 'Tracer should not override provided tracer')
+        assert.ok(experimentalTelemetry.tracer === myTracer, 'Tracer should not override provided tracer')
 
         await checkTraces
       })
