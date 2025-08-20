@@ -45,7 +45,11 @@ function guard (fn) {
     telemetry([
       { name: 'abort', tags: ['reason:incompatible_runtime'] },
       { name: 'abort.runtime', tags: [] }
-    ])
+    ], {
+      result: 'abort',
+      result_class: 'incompatible_runtime',
+      result_reason: 'Node.js ' + NODE_MAJOR + ' is incompatible with SII'
+    })
     log.info('Aborting application instrumentation due to incompatible_runtime.')
     log.info('Found incompatible runtime nodejs %s, Supported runtimes: nodejs %s.', version, engines.node)
     if (forced) {
@@ -56,7 +60,12 @@ function guard (fn) {
   if (!clobberBailout && (!initBailout || forced)) {
     // Ensure the instrumentation source is set for the current process and potential child processes.
     var result = fn()
-    telemetry('complete', ['injection_forced:' + (forced && initBailout ? 'true' : 'false')])
+    
+    telemetry('complete', ['injection_forced:' + (forced && initBailout ? 'true' : 'false')], {
+      result: 'success',
+      result_class: initBailout ? 'success_forced' : 'success',
+      result_reason: 'Successfully configured ddtrace package'
+    })
     log.info('Application instrumentation bootstrapping complete')
     return result
   }

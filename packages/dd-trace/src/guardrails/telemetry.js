@@ -47,10 +47,15 @@ function shouldSend (point) {
   return true
 }
 
-function sendTelemetry (name, tags) {
+function sendTelemetry (name, tags, resultMetadata) {
   var points = name
   if (typeof name === 'string') {
     points = [{ name: name, tags: tags || [] }]
+  }
+  
+  var currentMetadata = metadata
+  if (resultMetadata) {
+    currentMetadata = Object.assign({}, metadata, resultMetadata)
   }
   if (['1', 'true', 'True'].indexOf(process.env.DD_INJECT_FORCE) !== -1) {
     points = points.filter(function (p) { return ['error', 'complete'].indexOf(p.name) !== -1 })
@@ -67,27 +72,14 @@ function sendTelemetry (name, tags) {
   })
   proc.on('error', function () {
     log.error('Failed to spawn telemetry forwarder')
-    metadata.result = 'error'
-    metadata.result_class = 'internal_error'
-    metadata.result_reason = 'Failed to spawn telemetry forwarder'
   })
   proc.on('exit', function (code) {
-    if (code === 0) {
-      metadata.result = 'success'
-      metadata.result_class = 'success'
-      metadata.result_reason = 'Successfully configured ddtrace package'
-    } else {
+    if (code != 0) {
       log.error('Telemetry forwarder exited with code', code)
-      metadata.result = 'error'
-      metadata.result_class = 'internal_error'
-      metadata.result_reason = 'Telemetry forwarder exited with code ' + code
     }
   })
   proc.stdin.on('error', function () {
     log.error('Failed to write telemetry data to telemetry forwarder')
-    metadata.result = 'error'
-    metadata.result_class = 'internal_error'
-    metadata.result_reason = 'Failed to write telemetry data to telemetry forwarder'
   })
-  proc.stdin.end(JSON.stringify({ metadata: metadata, points: points }))
+  proc.stdin.end(JSON.stringify({ metadata: currentMetadata, points: points }))
 }
