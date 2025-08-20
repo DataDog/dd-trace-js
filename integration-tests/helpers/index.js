@@ -381,7 +381,7 @@ function checkSpansForServiceName (spans, name) {
 
 async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdioHandler, additionalEnvArgs = {}) {
   let env = {
-    NODE_OPTIONS: `--loader=${hookFile}`,
+    NODE_OPTIONS: `--no-warnings --loader=${hookFile}`,
     DD_TRACE_AGENT_PORT: agentPort
   }
   env = { ...process.env, ...env, ...additionalEnvArgs }

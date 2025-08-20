@@ -34,20 +34,22 @@ describe('esm', () => {
   })
 
   context('http2', () => {
-    it('is instrumented', async () => {
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
-      const resultPromise = agent.assertMessageReceived(({ headers, payload }) => {
-        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-        assert.isArray(payload)
-        assert.strictEqual(payload.length, 1)
-        assert.isArray(payload[0])
-        assert.strictEqual(payload[0].length, 1)
-        assert.propertyVal(payload[0][0], 'name', 'web.request')
-        assert.propertyVal(payload[0][0].meta, 'component', 'http2')
-      })
-      await curl(proc)
-      return resultPromise
-    }).timeout(50000)
+    for (const variant of ['default', 'destructure', 'star']) {
+      it(`is instrumented (${variant})`, async () => {
+        proc = await spawnPluginIntegrationTestProc(sandbox.folder, `server-${variant}.mjs`, agent.port)
+        const resultPromise = agent.assertMessageReceived(({ headers, payload }) => {
+          assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
+          assert.isArray(payload)
+          assert.strictEqual(payload.length, 1)
+          assert.isArray(payload[0])
+          assert.strictEqual(payload[0].length, 1)
+          assert.propertyVal(payload[0][0], 'name', 'web.request')
+          assert.propertyVal(payload[0][0].meta, 'component', 'http2')
+        })
+        await curl(proc)
+        return resultPromise
+      }).timeout(50000)
+    }
   })
 })
 
