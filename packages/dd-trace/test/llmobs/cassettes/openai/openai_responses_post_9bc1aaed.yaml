@@ -1,0 +1,127 @@
+interactions:
+- request:
+    body: '{"model":"gpt-4o-mini","input":[{"role":"system","content":"You are a helpful
+      assistant"},{"role":"user","content":[{"type":"input_text","text":"What is the
+      weather in Tokyo?"}]},{"type":"function_call","call_id":"call_ofJIFWUReiB7SptNdB9Tj0Hx","name":"weather","arguments":"{\"location\":\"Tokyo\"}","id":"fc_6890dda84358819d92119532b61decc40e05ce72e10c4463"},{"type":"function_call_output","call_id":"call_ofJIFWUReiB7SptNdB9Tj0Hx","output":"{\"location\":\"Tokyo\",\"temperature\":72}"}],"tools":[{"type":"function","name":"weather","description":"Get
+      the weather in a given location","parameters":{"type":"object","properties":{"location":{"type":"string","description":"The
+      location to get the weather for"}},"required":["location"]},"strict":false}],"tool_choice":"auto","stream":true}'
+    headers:
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept
+      : - '*/*'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Encoding
+      : - gzip, deflate
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Language
+      : - '*'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Connection
+      : - keep-alive
+      Content-Length:
+      - '791'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - User-Agent
+      : - node
+      ? !!python/object/apply:multidict._multidict.istr
+      - sec-fetch-mode
+      : - cors
+    method: POST
+    uri: https://api.openai.com/v1/responses
+  response:
+    body:
+      string: "event: response.created\ndata: {\"type\":\"response.created\",\"sequence_number\":0,\"response\":{\"id\":\"resp_6890dda88a90819d9dc61e47baaac7c00e05ce72e10c4463\",\"object\":\"response\",\"created_at\":1754324392,\"status\":\"in_progress\",\"background\":false,\"error\":null,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"output\":[],\"parallel_tool_calls\":true,\"previous_response_id\":null,\"prompt_cache_key\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":false,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"}},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get
+        the weather in a given location\",\"name\":\"weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\",\"description\":\"The
+        location to get the weather for\"}},\"required\":[\"location\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}}}\n\nevent:
+        response.in_progress\ndata: {\"type\":\"response.in_progress\",\"sequence_number\":1,\"response\":{\"id\":\"resp_6890dda88a90819d9dc61e47baaac7c00e05ce72e10c4463\",\"object\":\"response\",\"created_at\":1754324392,\"status\":\"in_progress\",\"background\":false,\"error\":null,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"output\":[],\"parallel_tool_calls\":true,\"previous_response_id\":null,\"prompt_cache_key\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":false,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"}},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get
+        the weather in a given location\",\"name\":\"weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\",\"description\":\"The
+        location to get the weather for\"}},\"required\":[\"location\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}}}\n\nevent:
+        response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"sequence_number\":2,\"output_index\":0,\"item\":{\"id\":\"msg_6890dda94450819d8c27ac27d90e05bc0e05ce72e10c4463\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"role\":\"assistant\"}}\n\nevent:
+        response.content_part.added\ndata: {\"type\":\"response.content_part.added\",\"sequence_number\":3,\"item_id\":\"msg_6890dda94450819d8c27ac27d90e05bc0e05ce72e10c4463\",\"output_index\":0,\"content_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"\"}}\n\nevent:
+        response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":4,\"item_id\":\"msg_6890dda94450819d8c27ac27d90e05bc0e05ce72e10c4463\",\"output_index\":0,\"content_index\":0,\"delta\":\"The\",\"logprobs\":[]}\n\nevent:
+        response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":5,\"item_id\":\"msg_6890dda94450819d8c27ac27d90e05bc0e05ce72e10c4463\",\"output_index\":0,\"content_index\":0,\"delta\":\"
+        current\",\"logprobs\":[]}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":6,\"item_id\":\"msg_6890dda94450819d8c27ac27d90e05bc0e05ce72e10c4463\",\"output_index\":0,\"content_index\":0,\"delta\":\"
+        temperature\",\"logprobs\":[]}\n\nevent: response.output_text.delta\ndata:
+        {\"type\":\"response.output_text.delta\",\"sequence_number\":7,\"item_id\":\"msg_6890dda94450819d8c27ac27d90e05bc0e05ce72e10c4463\",\"output_index\":0,\"content_index\":0,\"delta\":\"
+        in\",\"logprobs\":[]}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":8,\"item_id\":\"msg_6890dda94450819d8c27ac27d90e05bc0e05ce72e10c4463\",\"output_index\":0,\"content_index\":0,\"delta\":\"
+        Tokyo\",\"logprobs\":[]}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":9,\"item_id\":\"msg_6890dda94450819d8c27ac27d90e05bc0e05ce72e10c4463\",\"output_index\":0,\"content_index\":0,\"delta\":\"
+        is\",\"logprobs\":[]}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":10,\"item_id\":\"msg_6890dda94450819d8c27ac27d90e05bc0e05ce72e10c4463\",\"output_index\":0,\"content_index\":0,\"delta\":\"
+        \",\"logprobs\":[]}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":11,\"item_id\":\"msg_6890dda94450819d8c27ac27d90e05bc0e05ce72e10c4463\",\"output_index\":0,\"content_index\":0,\"delta\":\"72\",\"logprobs\":[]}\n\nevent:
+        response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":12,\"item_id\":\"msg_6890dda94450819d8c27ac27d90e05bc0e05ce72e10c4463\",\"output_index\":0,\"content_index\":0,\"delta\":\"\xB0F\",\"logprobs\":[]}\n\nevent:
+        response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":13,\"item_id\":\"msg_6890dda94450819d8c27ac27d90e05bc0e05ce72e10c4463\",\"output_index\":0,\"content_index\":0,\"delta\":\".\",\"logprobs\":[]}\n\nevent:
+        response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":14,\"item_id\":\"msg_6890dda94450819d8c27ac27d90e05bc0e05ce72e10c4463\",\"output_index\":0,\"content_index\":0,\"delta\":\"
+        If\",\"logprobs\":[]}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":15,\"item_id\":\"msg_6890dda94450819d8c27ac27d90e05bc0e05ce72e10c4463\",\"output_index\":0,\"content_index\":0,\"delta\":\"
+        you\",\"logprobs\":[]}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":16,\"item_id\":\"msg_6890dda94450819d8c27ac27d90e05bc0e05ce72e10c4463\",\"output_index\":0,\"content_index\":0,\"delta\":\"
+        need\",\"logprobs\":[]}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":17,\"item_id\":\"msg_6890dda94450819d8c27ac27d90e05bc0e05ce72e10c4463\",\"output_index\":0,\"content_index\":0,\"delta\":\"
+        more\",\"logprobs\":[]}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":18,\"item_id\":\"msg_6890dda94450819d8c27ac27d90e05bc0e05ce72e10c4463\",\"output_index\":0,\"content_index\":0,\"delta\":\"
+        details\",\"logprobs\":[]}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":19,\"item_id\":\"msg_6890dda94450819d8c27ac27d90e05bc0e05ce72e10c4463\",\"output_index\":0,\"content_index\":0,\"delta\":\"
+        or\",\"logprobs\":[]}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":20,\"item_id\":\"msg_6890dda94450819d8c27ac27d90e05bc0e05ce72e10c4463\",\"output_index\":0,\"content_index\":0,\"delta\":\"
+        specific\",\"logprobs\":[]}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":21,\"item_id\":\"msg_6890dda94450819d8c27ac27d90e05bc0e05ce72e10c4463\",\"output_index\":0,\"content_index\":0,\"delta\":\"
+        forecasts\",\"logprobs\":[]}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":22,\"item_id\":\"msg_6890dda94450819d8c27ac27d90e05bc0e05ce72e10c4463\",\"output_index\":0,\"content_index\":0,\"delta\":\",\",\"logprobs\":[]}\n\nevent:
+        response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":23,\"item_id\":\"msg_6890dda94450819d8c27ac27d90e05bc0e05ce72e10c4463\",\"output_index\":0,\"content_index\":0,\"delta\":\"
+        feel\",\"logprobs\":[]}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":24,\"item_id\":\"msg_6890dda94450819d8c27ac27d90e05bc0e05ce72e10c4463\",\"output_index\":0,\"content_index\":0,\"delta\":\"
+        free\",\"logprobs\":[]}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":25,\"item_id\":\"msg_6890dda94450819d8c27ac27d90e05bc0e05ce72e10c4463\",\"output_index\":0,\"content_index\":0,\"delta\":\"
+        to\",\"logprobs\":[]}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":26,\"item_id\":\"msg_6890dda94450819d8c27ac27d90e05bc0e05ce72e10c4463\",\"output_index\":0,\"content_index\":0,\"delta\":\"
+        ask\",\"logprobs\":[]}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":27,\"item_id\":\"msg_6890dda94450819d8c27ac27d90e05bc0e05ce72e10c4463\",\"output_index\":0,\"content_index\":0,\"delta\":\"!\",\"logprobs\":[]}\n\nevent:
+        response.output_text.done\ndata: {\"type\":\"response.output_text.done\",\"sequence_number\":28,\"item_id\":\"msg_6890dda94450819d8c27ac27d90e05bc0e05ce72e10c4463\",\"output_index\":0,\"content_index\":0,\"text\":\"The
+        current temperature in Tokyo is 72\xB0F. If you need more details or specific
+        forecasts, feel free to ask!\",\"logprobs\":[]}\n\nevent: response.content_part.done\ndata:
+        {\"type\":\"response.content_part.done\",\"sequence_number\":29,\"item_id\":\"msg_6890dda94450819d8c27ac27d90e05bc0e05ce72e10c4463\",\"output_index\":0,\"content_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"The
+        current temperature in Tokyo is 72\xB0F. If you need more details or specific
+        forecasts, feel free to ask!\"}}\n\nevent: response.output_item.done\ndata:
+        {\"type\":\"response.output_item.done\",\"sequence_number\":30,\"output_index\":0,\"item\":{\"id\":\"msg_6890dda94450819d8c27ac27d90e05bc0e05ce72e10c4463\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"The
+        current temperature in Tokyo is 72\xB0F. If you need more details or specific
+        forecasts, feel free to ask!\"}],\"role\":\"assistant\"}}\n\nevent: response.completed\ndata:
+        {\"type\":\"response.completed\",\"sequence_number\":31,\"response\":{\"id\":\"resp_6890dda88a90819d9dc61e47baaac7c00e05ce72e10c4463\",\"object\":\"response\",\"created_at\":1754324392,\"status\":\"completed\",\"background\":false,\"error\":null,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"output\":[{\"id\":\"msg_6890dda94450819d8c27ac27d90e05bc0e05ce72e10c4463\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"The
+        current temperature in Tokyo is 72\xB0F. If you need more details or specific
+        forecasts, feel free to ask!\"}],\"role\":\"assistant\"}],\"parallel_tool_calls\":true,\"previous_response_id\":null,\"prompt_cache_key\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":false,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"}},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get
+        the weather in a given location\",\"name\":\"weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\",\"description\":\"The
+        location to get the weather for\"}},\"required\":[\"location\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":90,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":26,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":116},\"user\":null,\"metadata\":{}}}\n\n"
+    headers:
+      CF-RAY:
+      - 969f60fd1af4d739-IAD
+      Connection:
+      - keep-alive
+      Content-Type:
+      - text/event-stream; charset=utf-8
+      Date:
+      - Mon, 04 Aug 2025 16:19:52 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=t2U2930CYPIB7hssslOAgLfo8ALNoVd0S_DK1B6TJA8-1754324392-1.0.1.1-fhdboqiAZ0Kqgyw9DYtsE0HYFv6F_5d1wmU9kEdISNtNtCIwErrLH4oNLE3z23I9yU6sto4CDgmngETlk4rLnM.OJImZ0imEDZy1ELL11AY;
+        path=/; expires=Mon, 04-Aug-25 16:49:52 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=j.pOIOXsgBSA1dJJ9nzTDzb.01UhDr2zP0VT6fe9hek-1754324392609-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - datadog-staging
+      openai-processing-ms:
+      - '66'
+      openai-project:
+      - proj_gt6TQZPRbZfoY2J9AQlEJMpd
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains; preload
+      x-envoy-decorator-operation:
+      - tasksapi.openai.svc.cluster.local:8081/*
+      x-envoy-upstream-service-time:
+      - '72'
+      x-request-id:
+      - req_ec8565c29ff6c23550fb734905307311
+    status:
+      code: 200
+      message: OK
+version: 1

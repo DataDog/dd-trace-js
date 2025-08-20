@@ -55,7 +55,9 @@ const testCases = [
           spanKind: 'agent',
           tags: {
             ml_app: 'test',
-            language: 'javascript'
+            language: 'javascript',
+            foo: 'bar',
+            bar: 'baz'
           },
           inputValue: 'this is a',
           outputValue: 'test'
@@ -113,7 +115,7 @@ describe('typescript', () => {
 
           proc = await spawnProc(
             path.join(cwd, `${file}.js`),
-            { cwd, env: { DD_TRACE_AGENT_PORT: agent.port } }
+            { cwd, env: { DD_TRACE_AGENT_PORT: agent.port, DD_TAGS: 'foo:bar, bar:baz' } }
           )
 
           await Promise.all(waiters)

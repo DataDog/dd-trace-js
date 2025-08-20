@@ -9,6 +9,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { ORIGIN_KEY, COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
 const { SAMPLING_PRIORITY } = require('../../../ext/tags')
 const { AUTO_KEEP } = require('../../../ext/priority')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const {
   TEST_FRAMEWORK,
   TEST_TYPE,
