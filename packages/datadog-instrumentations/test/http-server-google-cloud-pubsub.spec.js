@@ -6,7 +6,9 @@ const dc = require('dc-polyfill')
 const http = require('http')
 
 // Create plugin instance for testing
-const GoogleCloudPubsubHttpHandlerPlugin = require('../../datadog-plugin-google-cloud-pubsub/src/http-handler')
+const GoogleCloudPubsubTransitHandlerPlugin = require(
+  '../../datadog-plugin-google-cloud-pubsub/src/pubsub-transit-handler'
+)
 const mockTracer = {
   startSpan: sinon.spy(() => ({
     setTag: sinon.stub(),
@@ -24,7 +26,7 @@ const mockTracer = {
     activate: sinon.stub().callsArg(1)
   })
 }
-const pluginInstance = new GoogleCloudPubsubHttpHandlerPlugin(mockTracer)
+const pluginInstance = new GoogleCloudPubsubTransitHandlerPlugin(mockTracer)
 
 // Extract the functions we want to test
 const isPubSubRequest = pluginInstance.isPubSubRequest.bind(pluginInstance)
@@ -495,7 +497,7 @@ describe('HTTP Server Google Cloud Pub/Sub Integration Tests', () => {
       delete global._ddtrace
     })
 
-    it('should create PubSub span for traditional PubSub requests', () => {
+    it('should create delivery span for traditional PubSub requests', () => {
       // Test the span creation logic directly using a mock JSON payload
       const json = {
         message: {
@@ -509,22 +511,19 @@ describe('HTTP Server Google Cloud Pub/Sub Integration Tests', () => {
         subscription: 'projects/test/subscriptions/test-sub'
       }
 
-      // Create a span directly using the plugin's createSpan method
-      const message = pluginInstance.parsePubSubMessage(json, mockReq)
-      const { projectId, topicName } = pluginInstance.extractProjectAndTopic(json.message.attributes, json.subscription)
+      const attrs = json.message.attributes
+      const { projectId, topicName } = pluginInstance.extractProjectAndTopic(attrs, json.subscription)
       const subscription = json.subscription
 
-      // Simulate creating a span
-      const span = pluginInstance.createSpan(
-        mockTracer, null, topicName, projectId, subscription, message, json.message.attributes, mockReq, false
+      const deliverySpan = pluginInstance.createAndFinishDeliverySpan(
+        mockTracer, attrs, topicName, projectId, subscription, false
       )
 
-      // Verify span was created
-      expect(span).to.exist
-      expect(mockTracer.startSpan).to.have.been.called
+      expect(deliverySpan).to.exist
+      sinon.assert.calledWith(mockTracer.startSpan, 'pubsub.delivery', sinon.match.object)
     })
 
-    it('should create Cloud Event span for Eventarc requests', () => {
+    it('should create delivery span for Eventarc requests', () => {
       // Set up Cloud Event headers
       mockReq.headers['ce-specversion'] = '1.0'
       mockReq.headers['ce-type'] = 'google.cloud.pubsub.topic.v1.messagePublished'
@@ -542,19 +541,16 @@ describe('HTTP Server Google Cloud Pub/Sub Integration Tests', () => {
         subscription: 'projects/test/subscriptions/eventarc-sub'
       }
 
-      // Create a span directly using the plugin's createSpan method for Cloud Events
-      const message = pluginInstance.parseCloudEventMessage(json, mockReq)
-      const { projectId, topicName } = pluginInstance.extractProjectAndTopic(json.message.attributes, json.subscription)
+      const attrs = json.message.attributes
+      const { projectId, topicName } = pluginInstance.extractProjectAndTopic(attrs, json.subscription)
       const subscription = json.subscription
 
-      // Simulate creating a span for Cloud Event
-      const span = pluginInstance.createSpan(
-        mockTracer, null, topicName, projectId, subscription, message, json.message.attributes, mockReq, true
+      const deliverySpan = pluginInstance.createAndFinishDeliverySpan(
+        mockTracer, attrs, topicName, projectId, subscription, true
       )
 
-      // Verify span was created
-      expect(span).to.exist
-      expect(mockTracer.startSpan).to.have.been.called
+      expect(deliverySpan).to.exist
+      sinon.assert.calledWith(mockTracer.startSpan, 'pubsub.delivery', sinon.match.object)
     })
   })
 

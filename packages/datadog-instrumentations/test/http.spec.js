@@ -7,13 +7,15 @@ const dc = require('dc-polyfill')
 const agent = require('../../dd-trace/test/plugins/agent')
 
 // Create plugin instance for testing PubSub detection functions
-const GoogleCloudPubsubHttpHandlerPlugin = require('../../datadog-plugin-google-cloud-pubsub/src/http-handler')
+const GoogleCloudPubsubTransitHandlerPlugin = require(
+  '../../datadog-plugin-google-cloud-pubsub/src/pubsub-transit-handler'
+)
 const mockTracer = {
   startSpan: () => ({ setTag: () => {}, finish: () => {} }),
   extract: () => null,
   scope: () => ({ activate: (span, cb) => cb() })
 }
-const pluginInstance = new GoogleCloudPubsubHttpHandlerPlugin(mockTracer)
+const pluginInstance = new GoogleCloudPubsubTransitHandlerPlugin(mockTracer)
 const isPubSubRequest = pluginInstance.isPubSubRequest.bind(pluginInstance)
 const isCloudEventRequest = pluginInstance.isCloudEventRequest.bind(pluginInstance)
 

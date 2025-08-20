@@ -1,13 +1,14 @@
 'use strict'
 
 try {
-  // Load the HttpHandler plugin directly to ensure it gets instantiated
-  const HttpHandlerPlugin = require('../../datadog-plugin-google-cloud-pubsub/src/http-handler')
+  // Load the Pub/Sub Transit Handler plugin directly to ensure it gets instantiated
+  const TransitHandlerPlugin = require('../../datadog-plugin-google-cloud-pubsub/src/pubsub-transit-handler')
 
   // Get tracer instance and instantiate the plugin
   const tracer = require('../../dd-trace')
-  if (tracer && tracer._tracer) {
-    new HttpHandlerPlugin(tracer) // eslint-disable-line no-new
+  if (tracer && tracer._tracer && !global._dd_gcp_pubsub_transit_handler) {
+    // Keep a reference to avoid GC and satisfy no-new side-effect rule
+    global._dd_gcp_pubsub_transit_handler = new TransitHandlerPlugin(tracer)
   }
 } catch {
   // Silently handle plugin loading errors

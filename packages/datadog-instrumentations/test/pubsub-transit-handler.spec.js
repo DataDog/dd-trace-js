@@ -4,11 +4,13 @@ const { expect } = require('chai')
 const sinon = require('sinon')
 const http = require('http')
 
-describe('Google Cloud Pub/Sub HTTP Handler Plugin', () => {
+describe('Google Cloud Pub/Sub Transit Handler Plugin', () => {
   let server, port
 
   // Create plugin instance for testing
-  const GoogleCloudPubsubHttpHandlerPlugin = require('../../datadog-plugin-google-cloud-pubsub/src/http-handler')
+  const GoogleCloudPubsubTransitHandlerPlugin = require(
+    '../../datadog-plugin-google-cloud-pubsub/src/pubsub-transit-handler'
+  )
   const mockTracer = {
     startSpan: sinon.spy(() => ({
       setTag: sinon.stub(),
@@ -20,7 +22,7 @@ describe('Google Cloud Pub/Sub HTTP Handler Plugin', () => {
       activate: sinon.stub().callsArg(1)
     })
   }
-  const pluginInstance = new GoogleCloudPubsubHttpHandlerPlugin(mockTracer)
+  const pluginInstance = new GoogleCloudPubsubTransitHandlerPlugin(mockTracer)
 
   // Extract the methods we want to test
   const isPubSubRequest = pluginInstance.isPubSubRequest.bind(pluginInstance)
