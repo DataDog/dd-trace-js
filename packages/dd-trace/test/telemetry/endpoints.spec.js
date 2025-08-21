@@ -130,6 +130,7 @@ describe('endpoints telemetry', () => {
       }
 
       scheduledCallbacks.forEach(cb => cb())
+      scheduledCallbacks.forEach(cb => cb())
 
       expect(sendData.callCount).to.equal(2)
       const firstPayload = sendData.firstCall.args[4]
