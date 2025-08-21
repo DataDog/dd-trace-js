@@ -64,13 +64,16 @@ describe('Endpoints collection', () => {
 
       // Deeply nested routes
       { method: 'GET', path: '/api/nested' },
+      { method: 'HEAD', path: '/api/nested' },
       { method: 'GET', path: '/api/sub/deep' },
       { method: 'HEAD', path: '/api/sub/deep' },
       { method: 'POST', path: '/api/sub/deep/:id' },
 
       // Wildcard routes
       { method: 'GET', path: '/wildcard/*' },
+      { method: 'HEAD', path: '/wildcard/*' },
       { method: 'GET', path: '/*' },
+      { method: 'HEAD', path: '/*' }
     ]
 
     return expectedEndpoints
@@ -127,6 +130,10 @@ describe('Endpoints collection', () => {
         expect(found.operation_name).to.equal('http.request')
         expect(found.resource_name).to.equal(`${expected.method} ${expected.path}`)
       })
+
+      // check that no additional endpoints were found
+      expect(endpointsFound.length).to.equal(expectedEndpoints.length)
+
     } finally {
       proc?.kill()
       await agent?.stop()
