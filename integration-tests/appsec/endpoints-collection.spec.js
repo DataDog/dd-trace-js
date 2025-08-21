@@ -72,8 +72,8 @@ describe('Endpoints collection', () => {
       // Wildcard routes
       { method: 'GET', path: '/wildcard/*' },
       { method: 'HEAD', path: '/wildcard/*' },
-      { method: 'GET', path: '/*' },
-      { method: 'HEAD', path: '/*' }
+      { method: 'GET', path: '*' },
+      { method: 'HEAD', path: '*' }
     ]
 
     return expectedEndpoints

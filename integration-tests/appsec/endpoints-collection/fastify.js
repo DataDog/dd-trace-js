@@ -53,7 +53,7 @@ app.register(async function (router) {
 
 // Wildcard routes
 app.get('/wildcard/*', async (_, reply) => reply.send('ok'))
-app.get('/*', async (_, reply) => reply.send('ok'))
+app.get('*', async (_, reply) => reply.send('ok'))
 
 const start = async () => {
   await app.listen({ port: 0, host: '127.0.0.1' })
