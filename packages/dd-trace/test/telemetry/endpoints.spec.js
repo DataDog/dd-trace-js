@@ -136,7 +136,7 @@ describe('endpoints telemetry', () => {
       const secondPayload = sendData.secondCall.args[4]
 
       expect(firstPayload.endpoints).to.have.length(100)
-      expect(firstPayload.endpoints).to.have.length(50)
+      expect(secondPayload.endpoints).to.have.length(50)
     })
 
     describe('on failed request', () => {
@@ -144,7 +144,7 @@ describe('endpoints telemetry', () => {
 
       beforeEach(() => {
         capturedRequestType = undefined
-        
+
         sendData.callsFake((config, application, host, reqType, payload, cb = () => {}) => {
           capturedRequestType = reqType
           cb(new Error('HTTP request error'), { payload, reqType })
