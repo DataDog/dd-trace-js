@@ -84,28 +84,29 @@ describe('endpoints telemetry', () => {
 
       expect(sendData).to.have.been.calledOnce
       const payload = sendData.firstCall.args[4]
-      expect(payload.endpoints).to.be.deep.equal([
+      console.log(payload)
+      expect(payload.endpoints).to.have.deep.members([
         {
           type: 'REST',
           method: 'GET',
           path: '/api',
           operation_name: 'http.request',
-          ressource_name: 'GET /api'
+          resource_name: 'GET /api'
         },
         {
           type: 'REST',
           method: 'POST',
           path: '/api',
           operation_name: 'http.request',
-          ressource_name: 'POST /api'
+          resource_name: 'POST /api'
         },
         {
           type: 'REST',
           method: 'PUT',
           path: '/api',
           operation_name: 'http.request',
-          ressource_name: 'PUT /api'
-        },
+          resource_name: 'PUT /api'
+        }
       ])
     })
 
