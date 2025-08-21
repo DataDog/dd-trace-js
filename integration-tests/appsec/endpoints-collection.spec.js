@@ -133,7 +133,6 @@ describe('Endpoints collection', () => {
 
       // check that no additional endpoints were found
       expect(endpointsFound.length).to.equal(expectedEndpoints.length)
-
     } finally {
       proc?.kill()
       await agent?.stop()
