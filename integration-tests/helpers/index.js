@@ -114,9 +114,9 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
       runtime_version: process.versions.node,
       tracer_version: require('../../package.json').version,
       pid: Number(pid),
-      result: 'unknown',
-      result_reason: 'unknown',
-      result_class: 'unknown'
+      result: 'success',
+      result_reason: 'Successfully configured ddtrace package',
+      result_class: 'success'
     }
   }
 }
@@ -259,7 +259,7 @@ async function createSandbox (dependencies = [], isGitRepo = false,
 
 function telemetryForwarder (shouldExpectTelemetryPoints = true) {
   process.env.DD_TELEMETRY_FORWARDER_PATH =
-    path.join(__dirname, '..', 'telemetry-forwarder.sh')
+  path.join(__dirname, '..', 'telemetry-forwarder.sh')
   process.env.FORWARDER_OUT = path.join(__dirname, `forwarder-${Date.now()}.out`)
 
   let retries = 0
