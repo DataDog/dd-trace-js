@@ -2565,7 +2565,7 @@ declare namespace tracer {
        * To deregister the processor, call `llmobs.registerProcessor(null)`
        * @param processor A function that will be called for each span.
        */
-      registerProcessor (processor: (span: LLMObservabilitySpan) => LLMObservabilitySpan | undefined | null): void
+      registerProcessor (processor?: ((span: LLMObservabilitySpan) => LLMObservabilitySpan | undefined | null) | null): void
 
       /**
        * Submits a custom evaluation metric for a given span ID and trace ID.
