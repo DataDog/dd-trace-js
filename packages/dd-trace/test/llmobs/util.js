@@ -260,28 +260,14 @@ function useLlmobs ({
   })
 
   return async function () {
-    console.log('before getEvents Promise.allSettled')
+    console.log('before awaiting apmTracesPromise')
+    const apmSpans = await apmTracesPromise
+    console.log('apmSpans', apmSpans)
+    console.log('before awaiting llmobsTracesPromise')
+    const llmobsSpans = await llmobsTracesPromise
+    console.log('llmobsSpans', llmobsSpans)
 
-    const results = await Promise.allSettled([
-      apmTracesPromise.then(result => { console.log('apmTracesPromise resolved'); return result }),
-      llmobsTracesPromise.then(result => { console.log('llmobsTracesPromise resolved'); return result })
-    ])
-
-    console.log('after getEvents Promise.allSettled')
-
-    const [apmResult, llmobsResult] = results
-
-    if (apmResult.status === 'rejected') {
-      console.log('apmTracesPromise was rejected:', apmResult.reason)
-      throw apmResult.reason
-    }
-
-    if (llmobsResult.status === 'rejected') {
-      console.log('llmobsTracesPromise was rejected:', llmobsResult.reason)
-      throw llmobsResult.reason
-    }
-
-    return { apmSpans: apmResult.value, llmobsSpans: llmobsResult.value }
+    return { apmSpans, llmobsSpans }
   }
 }
 
