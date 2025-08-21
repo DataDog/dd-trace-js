@@ -84,7 +84,7 @@ describe('endpoints telemetry', () => {
 
       expect(sendData).to.have.been.calledOnce
       const payload = sendData.firstCall.args[4]
-      expect(payload.endpoints).to.be.deep.strict.equal([
+      expect(payload.endpoints).to.be.deep.equal([
         {
           type: 'REST',
           method: 'GET',
