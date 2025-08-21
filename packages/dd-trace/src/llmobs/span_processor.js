@@ -108,7 +108,7 @@ class LLMObsSpanProcessor {
     }
 
     if (spanKind === 'llm' && mlObsTags[INPUT_MESSAGES]) {
-      llmObsSpan.input = this.#enforceMessageRole(mlObsTags[INPUT_MESSAGES])
+      llmObsSpan.input = mlObsTags[INPUT_MESSAGES]
       inputType = 'messages'
     }
 
@@ -118,7 +118,7 @@ class LLMObsSpanProcessor {
     }
 
     if (spanKind === 'llm' && mlObsTags[OUTPUT_MESSAGES]) {
-      llmObsSpan.output = this.#enforceMessageRole(mlObsTags[OUTPUT_MESSAGES])
+      llmObsSpan.output = mlObsTags[OUTPUT_MESSAGES]
       outputType = 'messages'
     }
 
@@ -287,17 +287,6 @@ class LLMObsSpanProcessor {
     } finally {
       telemetry.recordLLMObsUserProcessorCalled(error)
     }
-  }
-
-  /**
-   * @param {(Record<string, unknown> & { role?: string })[]} messages
-   * @returns {(Record<string, unknown> & { role: string })[]}
-   */
-  #enforceMessageRole (messages) {
-    return messages.map(message => {
-      message.role = message.role || ''
-      return message
-    })
   }
 }
 

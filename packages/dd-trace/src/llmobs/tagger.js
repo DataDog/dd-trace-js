@@ -279,7 +279,7 @@ class LLMObsTagger {
         continue
       }
 
-      const { content = '', role = '' } = message
+      const { content = '', role } = message
       const toolCalls = message.toolCalls
       const toolId = message.toolId
       const messageObj = { content }

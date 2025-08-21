@@ -2582,14 +2582,14 @@ declare namespace tracer {
 
     interface LLMObservabilitySpan {
       /**
-       * The input messages associated with the span.
+       * The input content associated with the span.
        */
-      input: Message[]
+      input: { content: string, role?: string }[]
 
       /**
-       * The output messages associated with the span.
+       * The output content associated with the span.
        */
-      output: Message[]
+      output: { content: string, role?: string }[]
 
       /**
        * Get a tag from the span.
