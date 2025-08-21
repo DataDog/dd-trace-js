@@ -13,17 +13,28 @@ describe('endpoints telemetry', () => {
   const host = 'host'
 
   describe('start', () => {
-    it('should subscribe', () => {
-      const subscribe = sinon.stub()
-      const dc = { channel () { return { subscribe } } }
-      const endpoints = proxyquire('../../src/telemetry/endpoints', {
-        'dc-polyfill': dc
-      })
+    const subscribe = sinon.stub()
+    const dc = { channel () { return { subscribe } } }
+    const endpoints = proxyquire('../../src/telemetry/endpoints', {
+      'dc-polyfill': dc
+    })
 
+    beforeEach(() => {
+      sinon.reset()
+    })
+
+    it('should subscribe', () => {
       const config = { appsec: { apiSecurity: { endpointCollectionEnabled: true } } }
       endpoints.start(config)
 
       expect(subscribe).to.have.been.calledOnce
+    })
+
+    it('should not subscribe', () => {
+      const config = { appsec: { apiSecurity: { endpointCollectionEnabled: false } } }
+      endpoints.start(config)
+
+      expect(subscribe).to.not.have.been.called
     })
   })
 
@@ -84,7 +95,6 @@ describe('endpoints telemetry', () => {
 
       expect(sendData).to.have.been.calledOnce
       const payload = sendData.firstCall.args[4]
-      console.log(payload)
       expect(payload.endpoints).to.have.deep.members([
         {
           type: 'REST',
