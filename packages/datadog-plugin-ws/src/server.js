@@ -35,9 +35,7 @@ class WSServerPlugin extends TracingPlugin {
         'http.url': uri,
         'resource.name': `${options.method} ${path}`,
         'span.kind': 'server'
-
       }
-
     }, ctx)
     ctx.span = span
 
@@ -60,9 +58,7 @@ class WSServerPlugin extends TracingPlugin {
 
 function getRequestProtocol (req, fallback = 'ws') {
   // 1. Check if the underlying TLS socket has 'encrypted'
-  if (req.socket && req.socket.encrypted) {
-    return 'wss'
-  }
+  if (req.socket && req.socket.encrypted) return 'wss'
 
   // 2. Check for a trusted header set by a proxy
   if (req.headers && req.headers['x-forwarded-proto']) {

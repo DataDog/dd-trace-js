@@ -18,9 +18,7 @@ class WSClosePlugin extends TracingPlugin {
         'resource.name': `websocket ${path}`,
         'span.type': 'ws',
         'span.kind': spanKind
-
       }
-
     }, ctx)
 
     ctx.span = span

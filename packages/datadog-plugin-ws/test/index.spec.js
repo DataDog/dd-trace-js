@@ -10,13 +10,13 @@ describe('Plugin', () => {
   let WebSocket
   let wsServer
   let httpServer
-  let tracer
+  // let tracer
 
   describe('ws', () => {
     withVersions('ws', 'ws', version => {
-      beforeEach(() => {
-        tracer = require('../../dd-trace')
-      })
+      // beforeEach(() => {
+      //   tracer = require('../../dd-trace')
+      // })
 
       describe('when using WebSocket', () => {
         before(() => {
@@ -36,7 +36,7 @@ describe('Plugin', () => {
 
           wsServer.on('connection', ws => {
             ws.on('message', msg => {
-              console.log('echo')
+              // console.log('echo')
               // Echo back the message with "server:" prefix
               ws.send('echo')
             })
@@ -57,7 +57,7 @@ describe('Plugin', () => {
         })
 
         it('should do automatic instrumentatio', done => {
-          console.log('trace', agent.assertFirstTraceSpan())
+          // console.log('trace', agent.assertFirstTraceSpan())
           agent.assertSomeTraces(traces => {
             // expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
             // expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
@@ -80,7 +80,7 @@ describe('Plugin', () => {
           })
 
           client.on('message', msg => {
-            console.log('message', msg.toString())
+            // console.log('message', msg.toString())
             expect(msg.toString()).to.equal('echo')
             done()
           })
@@ -211,7 +211,7 @@ describe('Plugin', () => {
 
         it('should work with custom service configuration', done => {
           agent.assertSomeTraces(traces => {
-            console.log('assert some')
+            // console.log('assert some')
             expect(traces[0][0]).to.have.property('service', 'custom-ws-service')
             expect(traces[0][0]).to.have.property('name', 'websocket.request')
             expect(traces[0][0]).to.have.property('type', 'websocket')
@@ -219,7 +219,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          let messageReceived = false
+          // let messageReceived = false
 
           wsServer.on('connection', (ws) => {
             ws.send('test message')
@@ -230,7 +230,7 @@ describe('Plugin', () => {
 
           client.on('message', (data) => {
             expect(data.toString()).to.equal('test message')
-            messageReceived = true
+            // messageReceived = true
           })
 
           client.on('error', done)

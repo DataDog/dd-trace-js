@@ -98,25 +98,6 @@ addHook({
   versions: ['>=8.0.0']
 }, ws => {
   shimmer.wrap(ws.prototype, 'handleUpgrade', wrapHandleUpgrade)
-
-  return ws
-})
-
-addHook({
-  name: 'ws',
-  file: 'lib/websocket.js',
-  versions: ['>=8.0.0']
-}, ws => {
-  shimmer.wrap(ws.prototype, 'send', wrapSend)
-
-  return ws
-})
-
-addHook({
-  name: 'ws',
-  file: 'lib/websocket-server.js',
-  versions: ['>=8.0.0']
-}, ws => {
   shimmer.wrap(ws.prototype, 'emit', createWrapEmit)
 
   return ws
@@ -127,30 +108,16 @@ addHook({
   file: 'lib/websocket.js',
   versions: ['>=8.0.0']
 }, ws => {
+  shimmer.wrap(ws.prototype, 'send', wrapSend)
   shimmer.wrap(ws.prototype, 'on', wrapListener)
-  return ws
-})
-
-addHook({
-  name: 'ws',
-  file: 'lib/websocket.js',
-  versions: ['>=8.0.0']
-}, ws => {
   shimmer.wrap(ws.prototype, 'close', wrapClose)
+
   return ws
 })
-
-function detectType (data) {
-  if (typeof Blob !== 'undefined' && data instanceof Blob) return 'Blob'
-  if (typeof Buffer !== 'undefined' && Buffer.isBuffer(data)) return 'Buffer'
-  if (typeof data === 'string') return 'string'
-  return 'Unknown'
-}
 
 function dataLength (data) {
-  const type = detectType(data)
-  if (type === 'Blob') return data.size
-  if (type === 'Buffer') return data.length
-  if (type === 'string') return Buffer.byteLength(data)
+  if (data instanceof Blob) return data.size
+  if (Buffer.isBuffer(data)) return data.length
+  if (typeof data === 'string') return Buffer.byteLength(data)
   return 0
 }

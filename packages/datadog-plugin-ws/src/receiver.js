@@ -28,7 +28,6 @@ class WSReceiverPlugin extends TracingPlugin {
         '_dd.dm.service': spanTags['service.name'],
         '_dd.dm.resource': spanTags['resource.name']
       }
-
     }, ctx)
 
     ctx.span = span

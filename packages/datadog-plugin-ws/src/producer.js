@@ -15,9 +15,7 @@ class WSProducerPlugin extends TracingPlugin {
         'resource.name': 'websocket.send',
         'span.type': 'websocket',
         'span.kind': 'producer'
-
       }
-
     }, ctx)
 
     ctx.span = span
