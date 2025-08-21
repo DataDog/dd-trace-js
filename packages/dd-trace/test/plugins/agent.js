@@ -43,14 +43,19 @@ function ciVisRequestHandler (request, response) {
 function dsmStatsExist (agent, expectedHash, expectedEdgeTags) {
   const dsmStats = agent.getDsmStats()
   let hashFound = false
+  const foundHashes = new Set()
   if (dsmStats.length !== 0) {
     for (const statsTimeBucket of dsmStats) {
       for (const statsBucket of statsTimeBucket.Stats) {
         for (const stats of statsBucket.Stats) {
-          if (stats.Hash.toString() === expectedHash) {
+          const currentHash = stats.Hash.toString()
+          foundHashes.add(currentHash)
+          if (currentHash === expectedHash) {
             if (expectedEdgeTags) {
               if (expectedEdgeTags.length !== stats.EdgeTags.length) {
-                return false
+                const msg = `EdgeTags length mismatch. Expected ${expectedEdgeTags.length}, ` +
+                  `got ${stats.EdgeTags.length}`
+                throw new Error(msg)
               }
 
               const expected = expectedEdgeTags.slice().sort()
@@ -58,7 +63,7 @@ function dsmStatsExist (agent, expectedHash, expectedEdgeTags) {
 
               for (let i = 0; i < expected.length; i++) {
                 if (expected[i] !== actual[i]) {
-                  return false
+                  throw new Error(`EdgeTags mismatch at index ${i}. Expected "${expected[i]}", got "${actual[i]}"`)
                 }
               }
             }
@@ -68,6 +73,10 @@ function dsmStatsExist (agent, expectedHash, expectedEdgeTags) {
         }
       }
     }
+  }
+  if (!hashFound) {
+    const foundHashesStr = Array.from(foundHashes).join(', ')
+    throw new Error(`Hash not found. Expected: ${expectedHash}, Found hashes: [${foundHashesStr}]`)
   }
   return hashFound
 }
