@@ -189,6 +189,7 @@ function handleTraceRequest (req, res, sendToTestAgent) {
 
   res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
   traceHandlers.forEach(({ handler, spanResourceMatch }) => {
+    console.log('calling trace handler')
     const trace = req.body
     const spans = trace.flatMap(span => span)
     if (isMatchingTrace(spans, spanResourceMatch)) {
@@ -360,6 +361,7 @@ module.exports = {
     })
 
     agent.put('/v0.4/traces', (req, res) => {
+      console.log('received trace', req.body)
       handleTraceRequest(req, res, useTestAgent)
     })
 
@@ -371,8 +373,11 @@ module.exports = {
 
     // LLM Observability traces endpoint
     agent.post('/evp_proxy/v2/api/v2/llmobs', (req, res) => {
+      const parsed = JSON.parse(req.body)
+      console.log('received llmobs trace', parsed)
       llmobsHandlers.forEach(({ handler }) => {
-        handler(JSON.parse(req.body))
+        console.log('calling llmobs handler')
+        handler(parsed)
       })
       res.status(200).send()
     })
