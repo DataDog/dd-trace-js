@@ -93,22 +93,19 @@ describe('Endpoints collection', () => {
       const endpointsFound = []
       const isFirstFlags = []
 
-      const telemetryPromise = agent.assertTelemetryReceived(msg => {
-        const { payload } = msg
-        if (payload.request_type === 'app-endpoints') {
-          isFirstFlags.push(Boolean(payload.payload.is_first))
+      const telemetryPromise = agent.assertTelemetryReceived(({ payload }) => {
+        isFirstFlags.push(Boolean(payload.payload.is_first))
 
-          if (payload.payload.endpoints) {
-            payload.payload.endpoints.forEach(endpoint => {
-              endpointsFound.push({
-                method: endpoint.method,
-                path: endpoint.path,
-                type: endpoint.type,
-                operation_name: endpoint.operation_name,
-                resource_name: endpoint.resource_name
-              })
+        if (payload.payload.endpoints) {
+          payload.payload.endpoints.forEach(endpoint => {
+            endpointsFound.push({
+              method: endpoint.method,
+              path: endpoint.path,
+              type: endpoint.type,
+              operation_name: endpoint.operation_name,
+              resource_name: endpoint.resource_name
             })
-          }
+          })
         }
       }, 'app-endpoints', 5_000, 4)
 
