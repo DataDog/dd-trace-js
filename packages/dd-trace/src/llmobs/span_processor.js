@@ -110,9 +110,9 @@ class LLMObsSpanProcessor {
     if (spanKind === 'llm' && mlObsTags[INPUT_MESSAGES]) {
       llmObsSpan.input = mlObsTags[INPUT_MESSAGES]
       inputType = 'messages'
-    }
-
-    if (mlObsTags[INPUT_VALUE]) {
+    } else if (spanKind === 'embedding' && mlObsTags[INPUT_DOCUMENTS]) {
+      input.documents = mlObsTags[INPUT_DOCUMENTS]
+    } else if (mlObsTags[INPUT_VALUE]) {
       llmObsSpan.input = [{ role: '', content: mlObsTags[INPUT_VALUE] }]
       inputType = 'value'
     }
@@ -120,19 +120,11 @@ class LLMObsSpanProcessor {
     if (spanKind === 'llm' && mlObsTags[OUTPUT_MESSAGES]) {
       llmObsSpan.output = mlObsTags[OUTPUT_MESSAGES]
       outputType = 'messages'
-    }
-
-    if (spanKind === 'embedding' && mlObsTags[INPUT_DOCUMENTS]) {
-      input.documents = mlObsTags[INPUT_DOCUMENTS]
-    }
-
-    if (mlObsTags[OUTPUT_VALUE]) {
+    } else if (spanKind === 'retrieval' && mlObsTags[OUTPUT_DOCUMENTS]) {
+      output.documents = mlObsTags[OUTPUT_DOCUMENTS]
+    } else if (mlObsTags[OUTPUT_VALUE]) {
       llmObsSpan.output = [{ role: '', content: mlObsTags[OUTPUT_VALUE] }]
       outputType = 'value'
-    }
-
-    if (spanKind === 'retrieval' && mlObsTags[OUTPUT_DOCUMENTS]) {
-      output.documents = mlObsTags[OUTPUT_DOCUMENTS]
     }
 
     const error = spanTags.error || spanTags[ERROR_TYPE]
@@ -154,7 +146,6 @@ class LLMObsSpanProcessor {
     llmObsSpan._tags = tags
 
     const processedSpan = this.#runProcessor(llmObsSpan)
-
     if (processedSpan == null) return null
 
     if (processedSpan.input) {
@@ -181,7 +172,7 @@ class LLMObsSpanProcessor {
       span_id: span.context().toSpanId(),
       parent_id: parentId,
       name,
-      tags: this.#stringifyTags(tags),
+      tags: this.#objectTagsToStringArrayTags(tags),
       start_ns: Math.round(span._startTime * 1e6),
       duration: Math.round(span._duration * 1e6),
       status: error ? 'error' : 'ok',
@@ -260,7 +251,7 @@ class LLMObsSpanProcessor {
     return tags
   }
 
-  #stringifyTags (tags) {
+  #objectTagsToStringArrayTags (tags) {
     return Object.entries(tags).map(([key, value]) => `${key}:${value ?? ''}`)
   }
 
@@ -276,7 +267,7 @@ class LLMObsSpanProcessor {
 
       if (!(processedLLMObsSpan instanceof LLMObservabilitySpan)) {
         throw new TypeError(
-          'User span processor must return an instance of an LLMObservabilitySpan or null/undefined'
+          'User span processor must return an instance of an LLMObservabilitySpan or null'
         )
       }
 
