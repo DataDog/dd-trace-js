@@ -73,7 +73,10 @@ describe('Endpoints collection', () => {
       { method: 'GET', path: '/wildcard/*' },
       { method: 'HEAD', path: '/wildcard/*' },
       { method: 'GET', path: '*' },
-      { method: 'HEAD', path: '*' }
+      { method: 'HEAD', path: '*' },
+
+      { method: 'GET', path: '/later' },
+      { method: 'HEAD', path: '/later' },
     ]
 
     return expectedEndpoints
@@ -85,20 +88,12 @@ describe('Endpoints collection', () => {
 
     try {
       agent = await new FakeAgent().start()
-      proc = await spawnProc(appFile, {
-        cwd,
-        env: {
-          DD_TRACE_AGENT_PORT: agent.port,
-          DD_TELEMETRY_HEARTBEAT_INTERVAL: 1,
-          DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT: '10'
-        }
-      })
 
       const expectedEndpoints = getExpectedEndpoints(framework)
       const endpointsFound = []
       const isFirstFlags = []
 
-      await agent.assertTelemetryReceived(msg => {
+      const telemetryPromise = agent.assertTelemetryReceived(msg => {
         const { payload } = msg
         if (payload.request_type === 'app-endpoints') {
           isFirstFlags.push(Boolean(payload.payload.is_first))
@@ -116,6 +111,17 @@ describe('Endpoints collection', () => {
           }
         }
       }, 'app-endpoints', 5_000, 4)
+
+      proc = await spawnProc(appFile, {
+        cwd,
+        env: {
+          DD_TRACE_AGENT_PORT: agent.port,
+          DD_TELEMETRY_HEARTBEAT_INTERVAL: 1,
+          DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT: '10'
+        }
+      })
+
+      await telemetryPromise
 
       const trueCount = isFirstFlags.filter(v => v === true).length
       expect(trueCount).to.equal(1)
