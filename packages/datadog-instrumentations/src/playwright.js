@@ -656,7 +656,11 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
 }
 
 function runnerHook (runnerExport, playwrightVersion) {
-  shimmer.wrap(runnerExport.Runner.prototype, 'runAllTests', runAllTests => runAllTestsWrapper(runAllTests, playwrightVersion))
+  shimmer.wrap(
+    runnerExport.Runner.prototype,
+    'runAllTests',
+    runAllTests => runAllTestsWrapper(runAllTests, playwrightVersion)
+  )
 }
 
 function runnerHookNew (runnerExport, playwrightVersion) {
