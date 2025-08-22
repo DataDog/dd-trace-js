@@ -5,6 +5,12 @@ const {
   addHook
 } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
+const { getSharedChannel } = require('../shared-channels')
+
+const httpNames = ['http', 'node:http']
+const httpsNames = ['https', 'node:https']
+
+// Generic HTTP server instrumentation - no product-specific logic
 
 const startServerCh = channel('apm:http:server:request:start')
 const exitServerCh = channel('apm:http:server:request:exit')
@@ -14,14 +20,16 @@ const startWriteHeadCh = channel('apm:http:server:response:writeHead:start')
 const finishSetHeaderCh = channel('datadog:http:server:response:set-header:finish')
 const startSetHeaderCh = channel('datadog:http:server:response:set-header:start')
 
-const requestFinishedSet = new WeakSet()
+// Generic channel for request interception - use shared channel to ensure same instance
+const requestInterceptCh = getSharedChannel('apm:http:server:request:intercept')
 
-const httpNames = ['http', 'node:http']
-const httpsNames = ['https', 'node:https']
+const requestFinishedSet = new WeakSet()
 
 addHook({ name: httpNames }, http => {
   shimmer.wrap(http.ServerResponse.prototype, 'emit', wrapResponseEmit)
+  shimmer.wrap(http.Server.prototype, 'emit', wrapEmitForInterception)
   shimmer.wrap(http.Server.prototype, 'emit', wrapEmit)
+
   shimmer.wrap(http.ServerResponse.prototype, 'writeHead', wrapWriteHead)
   shimmer.wrap(http.ServerResponse.prototype, 'write', wrapWrite)
   shimmer.wrap(http.ServerResponse.prototype, 'end', wrapEnd)
@@ -36,6 +44,7 @@ addHook({ name: httpNames }, http => {
 
 addHook({ name: httpsNames }, http => {
   // http.ServerResponse not present on https
+  shimmer.wrap(http.Server.prototype, 'emit', wrapEmitForInterception)
   shimmer.wrap(http.Server.prototype, 'emit', wrapEmit)
   return http
 })
@@ -54,6 +63,40 @@ function wrapResponseEmit (emit) {
     return emit.apply(this, arguments)
   }
 }
+
+// Generic request interceptor - allows any plugin to intercept requests
+function wrapEmitForInterception (emit) {
+  return function (eventName, req, res) {
+    // Only process 'request' events
+    if (eventName !== 'request') {
+      return emit.apply(this, arguments)
+    }
+
+    // Check if any plugin wants to intercept this request
+    if (requestInterceptCh.hasSubscribers) {
+      const interceptData = {
+        req,
+        res,
+        emit,
+        server: this,
+        originalArgs: arguments,
+        handled: false // Plugin sets this to true if it handles the request
+      }
+
+      // Publish to generic intercept channel - any plugin can subscribe
+      requestInterceptCh.publish(interceptData)
+
+      // If a plugin handled it, don't continue with normal processing
+      if (interceptData.handled) {
+        return true
+      }
+    }
+
+    // No plugin intercepted, continue with normal HTTP processing
+    return emit.apply(this, arguments)
+  }
+}
+
 function wrapEmit (emit) {
   return function (eventName, req, res) {
     if (!startServerCh.hasSubscribers) {
@@ -62,9 +105,12 @@ function wrapEmit (emit) {
 
     if (eventName === 'request') {
       res.req = req
+      if (req._isPubSubPush || req._isCloudEvent) {
+        return emit.apply(this, arguments)
+      }
 
+      // Normal HTTP request processing (not PubSub/Cloud Events)
       const abortController = new AbortController()
-
       startServerCh.publish({ req, res, abortController })
 
       try {
@@ -221,3 +267,6 @@ function wrapEnd (end) {
     return end.apply(this, arguments)
   }
 }
+
+// Export the channel for plugins to use the same instance
+module.exports = { requestInterceptCh }
