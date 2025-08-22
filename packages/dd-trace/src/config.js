@@ -323,12 +323,6 @@ class Config {
       }
     }
 
-    if (typeof options.runtimeMetrics?.gc === 'boolean') {
-      options.runtimeMetrics.gc = {
-        enabled: options.runtimeMetrics.gc
-      }
-    }
-
     const DD_INSTRUMENTATION_INSTALL_ID = coalesce(
       getEnvironmentVariable('DD_INSTRUMENTATION_INSTALL_ID'),
       null
@@ -1190,7 +1184,7 @@ class Config {
     this._setBoolean(opts, 'reportHostname', options.reportHostname)
     this._setBoolean(opts, 'runtimeMetrics.enabled', options.runtimeMetrics?.enabled)
     this._setBoolean(opts, 'runtimeMetrics.eventLoop', options.runtimeMetrics?.eventLoop)
-    this._setBoolean(opts, 'runtimeMetrics.gc', options.runtimeMetrics?.gc?.enabled)
+    this._setBoolean(opts, 'runtimeMetrics.gc', options.runtimeMetrics?.gc)
     this._setBoolean(opts, 'runtimeMetricsRuntimeId', options.runtimeMetricsRuntimeId)
     this._setArray(opts, 'sampler.spanSamplingRules', reformatSpanSamplingRules(options.spanSamplingRules))
     this._setUnit(opts, 'sampleRate', coalesce(options.sampleRate, options.ingestion.sampleRate))
