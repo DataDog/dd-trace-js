@@ -1,12 +1,14 @@
 'use strict'
 
+const { randomUUID } = require('crypto')
 const sinon = require('sinon')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const semver = require('semver')
 const { rawExpectedSchema } = require('./sqs-naming')
-// Removed unused imports
+const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
+const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
 
 const getQueueParams = (queueName) => {
   return {
@@ -38,17 +40,19 @@ describe('Plugin', () => {
       const sqsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sqs' : 'aws-sdk'
 
       beforeEach(() => {
-        queueName = 'SQS_QUEUE_NAME'
-        queueNameDSM = 'SQS_QUEUE_NAME_DSM'
-        queueNameDSMConsumerOnly = 'SQS_QUEUE_NAME_DSM_CONSUMER_ONLY'
+        const id = randomUUID()
+
+        queueName = `SQS_QUEUE_NAME-${id}`
+        queueNameDSM = `SQS_QUEUE_NAME_DSM-${id}`
+        queueNameDSMConsumerOnly = `SQS_QUEUE_NAME_DSM_CONSUMER_ONLY-${id}`
 
         queueOptions = getQueueParams(queueName)
         queueOptionsDsm = getQueueParams(queueNameDSM)
         queueOptionsDsmConsumerOnly = getQueueParams(queueNameDSMConsumerOnly)
 
-        QueueUrl = 'http://127.0.0.1:4566/00000000000000000000/SQS_QUEUE_NAME'
-        QueueUrlDsm = 'http://127.0.0.1:4566/00000000000000000000/SQS_QUEUE_NAME_DSM'
-        QueueUrlDsmConsumerOnly = 'http://127.0.0.1:4566/00000000000000000000/SQS_QUEUE_NAME_DSM_CONSUMER_ONLY'
+        QueueUrl = `http://127.0.0.1:4566/00000000000000000000/SQS_QUEUE_NAME-${id}`
+        QueueUrlDsm = `http://127.0.0.1:4566/00000000000000000000/SQS_QUEUE_NAME_DSM-${id}`
+        QueueUrlDsmConsumerOnly = `http://127.0.0.1:4566/00000000000000000000/SQS_QUEUE_NAME_DSM_CONSUMER_ONLY-${id}`
       })
 
       describe('without configuration', () => {
@@ -429,8 +433,20 @@ describe('Plugin', () => {
         })
 
         beforeEach(() => {
-          expectedProducerHash = '14505097977387867200'
-          expectedConsumerHash = '5729017594448858503'
+          const producerHash = computePathwayHash(
+            'test',
+            'tester',
+            ['direction:out', 'topic:' + queueNameDSM, 'type:sqs'],
+            ENTRY_PARENT_HASH
+          )
+
+          expectedProducerHash = producerHash.readBigUInt64LE(0).toString()
+          expectedConsumerHash = computePathwayHash(
+            'test',
+            'tester',
+            ['direction:in', 'topic:' + queueNameDSM, 'type:sqs'],
+            producerHash
+          ).readBigUInt64LE(0).toString()
         })
 
         beforeEach(done => {
