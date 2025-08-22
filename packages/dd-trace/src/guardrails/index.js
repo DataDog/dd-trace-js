@@ -38,35 +38,46 @@ function guard (fn) {
     }
   }
 
-  // If the runtime doesn't match the engines field in package.json, then we
-  // should not initialize the tracer.
-  if (!clobberBailout && NODE_MAJOR < minMajor) {
-    initBailout = true
+  if (clobberBailout) {
     telemetry([
-      { name: 'abort', tags: ['reason:incompatible_runtime'] },
+      { name: 'abort', tags: ['reason:already_instrumented'] },
       { name: 'abort.runtime', tags: [] }
     ], {
       result: 'abort',
-      result_class: 'incompatible_runtime',
-      result_reason: 'Node.js ' + NODE_MAJOR + ' is incompatible with SII'
+      result_class: 'already_instrumented',
+      result_reason: 'Node.js is already instrumented'
     })
-    log.info('Aborting application instrumentation due to incompatible_runtime.')
-    log.info('Found incompatible runtime nodejs %s, Supported runtimes: nodejs %s.', version, engines.node)
-    if (forced) {
-      log.info('DD_INJECT_FORCE enabled, allowing unsupported runtimes and continuing.')
+  } else {
+    // If the runtime doesn't match the engines field in package.json, then we
+    // should not initialize the tracer.
+    if (!clobberBailout && NODE_MAJOR < minMajor) {
+      initBailout = true
+      telemetry([
+        { name: 'abort', tags: ['reason:incompatible_runtime'] },
+        { name: 'abort.runtime', tags: [] }
+      ], {
+        result: 'abort',
+        result_class: 'incompatible_runtime',
+        result_reason: 'Node.js ' + NODE_MAJOR + ' is incompatible with SII'
+      })
+      log.info('Aborting application instrumentation due to incompatible_runtime.')
+      log.info('Found incompatible runtime nodejs %s, Supported runtimes: nodejs %s.', version, engines.node)
+      if (forced) {
+        log.info('DD_INJECT_FORCE enabled, allowing unsupported runtimes and continuing.')
+      }
     }
-  }
 
-  if (!clobberBailout && (!initBailout || forced)) {
-    // Ensure the instrumentation source is set for the current process and potential child processes.
-    var result = fn()
-    telemetry('complete', ['injection_forced:' + (forced && initBailout ? 'true' : 'false')], {
-      result: 'success',
-      result_class: initBailout ? 'success_forced' : 'success',
-      result_reason: 'Successfully configured ddtrace package'
-    })
-    log.info('Application instrumentation bootstrapping complete')
-    return result
+    if (!clobberBailout && (!initBailout || forced)) {
+      // Ensure the instrumentation source is set for the current process and potential child processes.
+      var result = fn()
+      telemetry('complete', ['injection_forced:' + (forced && initBailout ? 'true' : 'false')], {
+        result: 'success',
+        result_class: initBailout ? 'success_forced' : 'success',
+        result_reason: 'Successfully configured ddtrace package'
+      })
+      log.info('Application instrumentation bootstrapping complete')
+      return result
+    }
   }
 }
 

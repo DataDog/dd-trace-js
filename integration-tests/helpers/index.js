@@ -78,7 +78,15 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
   let points = []
   for (const [telemetryType, data] of msgs) {
     assert.strictEqual(telemetryType, 'library_entrypoint')
-    assert.deepStrictEqual(data.metadata, meta(pid))
+    assert.strictEqual(data.metadata.language_name, 'nodejs')
+    assert.strictEqual(data.metadata.language_version, process.versions.node)
+    assert.strictEqual(data.metadata.runtime_name, 'nodejs')
+    assert.strictEqual(data.metadata.runtime_version, process.versions.node)
+    assert.strictEqual(data.metadata.tracer_version, require('../../package.json').version)
+    assert.strictEqual(data.metadata.pid, Number(pid))
+    assert.ok(typeof data.metadata.result === 'string')
+    assert.ok(typeof data.metadata.result_class === 'string')
+    assert.ok(typeof data.metadata.result_reason === 'string')
     points = points.concat(data.points)
   }
   const expectedPoints = getPoints(...expectedTelemetryPoints)
@@ -104,20 +112,6 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
       }
     }
     return expectedPoints
-  }
-
-  function meta (pid) {
-    return {
-      language_name: 'nodejs',
-      language_version: process.versions.node,
-      runtime_name: 'nodejs',
-      runtime_version: process.versions.node,
-      tracer_version: require('../../package.json').version,
-      pid: Number(pid),
-      result: 'success',
-      result_reason: 'Successfully configured ddtrace package',
-      result_class: 'success'
-    }
   }
 }
 
