@@ -61,7 +61,7 @@ const start = async () => {
   process.send({ port })
 }
 
-setTimeout(() => {  
-    app.get('/later', async (_, reply) => reply.send('ok'))  
-    start()
+setTimeout(() => {
+  app.get('/later', async (_, reply) => reply.send('ok'))
+  start()
 }, 2e3)
