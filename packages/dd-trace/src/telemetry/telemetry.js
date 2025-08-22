@@ -3,6 +3,7 @@ const tracerVersion = require('../../../../package.json').version
 const dc = require('dc-polyfill')
 const os = require('os')
 const dependencies = require('./dependencies')
+const endpoints = require('./endpoints')
 const { sendData } = require('./send-data')
 const { errors } = require('../startup-log')
 const { manager: metricsManager } = require('./metrics')
@@ -254,6 +255,7 @@ function start (aConfig, thePluginManager) {
 
   dependencies.start(config, application, host, getRetryData, updateRetryData)
   telemetryLogger.start(config)
+  endpoints.start(config, application, host, getRetryData, updateRetryData)
 
   sendData(config, application, host, 'app-started', appStarted(config))
 
@@ -280,6 +282,7 @@ function stop () {
 
   telemetryStopChannel.publish(getTelemetryData())
 
+  endpoints.stop()
   config = undefined
 }
 
