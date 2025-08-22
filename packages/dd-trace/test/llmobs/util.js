@@ -260,12 +260,12 @@ function useLlmobs ({
   })
 
   return async function () {
-    console.log('before awaiting apmTracesPromise')
-    const apmSpans = await apmTracesPromise
-    console.log('apmSpans', apmSpans)
     console.log('before awaiting llmobsTracesPromise')
     const llmobsSpans = await llmobsTracesPromise
     console.log('llmobsSpans', llmobsSpans)
+    console.log('before awaiting apmTracesPromise')
+    const apmSpans = await apmTracesPromise
+    console.log('apmSpans', apmSpans)
 
     return { apmSpans, llmobsSpans }
   }
