@@ -148,8 +148,8 @@ function getPlaywrightConfig (playwrightRunner) {
   }
 }
 
-function getRootDir (playwrightRunner) {
-  const config = getPlaywrightConfig(playwrightRunner)
+function getRootDir (playwrightRunner, configArg) {
+  const config = configArg ? configArg.config : getPlaywrightConfig(playwrightRunner)
   if (config.rootDir) {
     return config.rootDir
   }
@@ -162,8 +162,8 @@ function getRootDir (playwrightRunner) {
   return process.cwd()
 }
 
-function getProjectsFromRunner (runner) {
-  const config = getPlaywrightConfig(runner)
+function getProjectsFromRunner (runner, configArg) {
+  const config = configArg || getPlaywrightConfig(runner)
   return config.projects?.map((project) => {
     if (project.project) {
       return project.project
@@ -509,11 +509,12 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
   return dispatcherExport
 }
 
-function runnerHook (runnerExport, playwrightVersion) {
-  shimmer.wrap(runnerExport.Runner.prototype, 'runAllTests', runAllTests => async function () {
+function runAllTestsWrapper (runAllTests, playwrightVersion) {
+  // Config parameter is only available from >=1.55.0
+  return async function (config) {
     let onDone
 
-    rootDir = getRootDir(this)
+    rootDir = getRootDir(this, config)
 
     const processArgv = process.argv.slice(2).join(' ')
     const command = `playwright ${processArgv}`
@@ -586,7 +587,7 @@ function runnerHook (runnerExport, playwrightVersion) {
       }
     }
 
-    const projects = getProjectsFromRunner(this)
+    const projects = getProjectsFromRunner(this, config)
 
     const shouldSetRetries = isFlakyTestRetriesEnabled &&
       flakyTestRetriesCount > 0 &&
@@ -651,6 +652,23 @@ function runnerHook (runnerExport, playwrightVersion) {
     // TODO: we can trick playwright into thinking the session passed by returning
     // 'passed' here. We might be able to use this for both EFD and Test Management tests.
     return runAllTestsReturn
+  }
+}
+
+function runnerHook (runnerExport, playwrightVersion) {
+  shimmer.wrap(
+    runnerExport.Runner.prototype,
+    'runAllTests',
+    runAllTests => runAllTestsWrapper(runAllTests, playwrightVersion)
+  )
+}
+
+function runnerHookNew (runnerExport, playwrightVersion) {
+  runnerExport = shimmer.wrap(runnerExport, 'runAllTestsWithConfig', function (originalGetter) {
+    const originalFunction = originalGetter.call(this)
+    return function () {
+      return runAllTestsWrapper(originalFunction, playwrightVersion)
+    }
   })
 
   return runnerExport
@@ -693,6 +711,12 @@ addHook({
   file: 'lib/runner/runner.js',
   versions: ['>=1.38.0']
 }, runnerHook)
+
+addHook({
+  name: 'playwright',
+  file: 'lib/runner/testRunner.js',
+  versions: ['>=1.55.0']
+}, runnerHookNew)
 
 addHook({
   name: 'playwright',
