@@ -10,7 +10,7 @@ const {
 const log = require('../log')
 const waf = require('./waf')
 const addresses = require('./addresses')
-const web = require('../plugins/util/web')
+const web = require('../../../datadog-plugin-web/src/utils')
 const {
   startGraphqlResolve,
   graphqlMiddlewareChannel,

@@ -1,6 +1,5 @@
 'use strict'
 
-const web = require('../../dd-trace/src/plugins/util/web')
 const WebPlugin = require('../../datadog-plugin-web/src')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { storage } = require('../../datadog-core')
@@ -31,8 +30,8 @@ class RouterPlugin extends WebPlugin {
       this._storeStack.push(store)
       this.enter(span, store)
 
-      web.patch(req)
-      web.setRoute(req, context.route)
+      this.patch(req)
+      this.setRoute(req, context.route)
     })
 
     this.addSub(`apm:${this.constructor.id}:middleware:next`, ({ req }) => {
@@ -58,7 +57,7 @@ class RouterPlugin extends WebPlugin {
     })
 
     this.addSub(`apm:${this.constructor.id}:middleware:error`, ({ req, error }) => {
-      web.addError(req, error)
+      this.addError(req, error)
 
       if (!this.config.middleware) return
 

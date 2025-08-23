@@ -10,7 +10,9 @@ const path = require('path')
 const hooks = require('../../../datadog-instrumentations/src/helpers/hooks')
 
 const abstractPlugins = [
-  'web' // web is an abstract plugin, and will not have an instrumentation file
+  'web', // web is an abstract plugin, and will not have an instrumentation file
+  'aws-apigateway', // aws-apigateway is an inferred proxy plugin, and will not have an instrumentation file
+  'inferred-proxy' // inferred-proxy is an inferred proxy plugin, and will not have an instrumentation file
 ]
 
 // we have some plugin directories that we don't actually have a tracing plugin for, but exist for special cases
@@ -18,7 +20,6 @@ const abstractPlugins = [
 const missingPlugins = [
   'datadog-plugin-axios', // we test axios to ensure our functionality works with axios, see: https://github.com/DataDog/dd-trace-js/pull/1469
   'datadog-plugin-limitd-client', // limitd-client instrumentation handles trace context propagation, no tracing is done
-  'datadog-plugin-mongoose' // mongoose tracing is done through mongodb-core instrumentation
 ]
 
 // instrumentations that do not have a hook, but are still instrumented
